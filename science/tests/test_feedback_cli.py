@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+from datetime import datetime, timedelta, timezone
 
 import pytest
 import yaml
@@ -10,6 +11,17 @@ from click.testing import CliRunner
 
 from science_tool.cli import main
 from science_tool.telemetry import append_event
+
+
+def recent_timestamp() -> str:
+    """A telemetry timestamp inside the default 14-day lookback window.
+
+    The window is measured from `date.today()`, so a hardcoded fixture date is a
+    time bomb: it ages out of the window and the test starts failing on a date
+    nobody chose. Worse, a negative test ("no eligible events") keeps passing
+    while silently testing the window instead of what it claims to test.
+    """
+    return (datetime.now(timezone.utc) - timedelta(days=1)).isoformat()
 
 
 @pytest.fixture
@@ -85,7 +97,7 @@ class TestFeedbackAdd:
             telemetry_dir,
             {
                 "event_id": "err1",
-                "timestamp": "2026-06-27T10:00:00-04:00",
+                "timestamp": recent_timestamp(),
                 "event_type": "command_error",
                 "command": "dataset verify-access",
                 "argv_shape": [
@@ -126,7 +138,7 @@ class TestFeedbackAdd:
             telemetry_dir,
             {
                 "event_id": "val1",
-                "timestamp": "2026-06-27T10:00:00-04:00",
+                "timestamp": recent_timestamp(),
                 "event_type": "validation_summary",
                 "surface": "validation",
                 "command": "validate",
@@ -169,7 +181,7 @@ class TestFeedbackAdd:
             telemetry_dir,
             {
                 "event_id": "ok1",
-                "timestamp": "2026-06-27T10:00:00-04:00",
+                "timestamp": recent_timestamp(),
                 "event_type": "command_finish",
                 "command": "feedback list",
                 "exit_code": 0,
@@ -334,7 +346,7 @@ class TestFeedbackTriage:
             telemetry_dir,
             {
                 "event_id": "v1",
-                "timestamp": "2026-06-27T10:00:00-04:00",
+                "timestamp": recent_timestamp(),
                 "event_type": "validation_summary",
                 "surface": "validation",
                 "command": "validate",
@@ -365,7 +377,7 @@ class TestFeedbackTriage:
             telemetry_dir,
             {
                 "event_id": "v1",
-                "timestamp": "2026-06-27T10:00:00-04:00",
+                "timestamp": recent_timestamp(),
                 "event_type": "validation_summary",
                 "surface": "validation",
                 "command": "validate",
