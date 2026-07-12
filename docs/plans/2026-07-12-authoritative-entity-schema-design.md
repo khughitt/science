@@ -361,10 +361,20 @@ one of them.
   isolation**; it cannot resolve a successor ID, cannot confirm an archive record exists, and
   cannot check that a verdict's evidence is real. Those are **cross-record** facts.
 
-  | layer | enforces | example |
-  |---|---|---|
-  | **JSON Schema** (§4) — local shape & presence | *"if `status` is terminal and the basis KEY is absent, `closure_basis` is required"* | `status: superseded` with no `superseded_by:`/`resynthesized_into:` key ⇒ `closure_basis` required |
-  | **Enumerated D3 escape-hatch validator** — structural resolution | *"the basis key is present, but does it RESOLVE?"* | `superseded_by: hypothesis:9999` (dangling); an `archived` entity with no archive-index row; `complete` + a `verdict` whose evidence does not exist |
+  | layer | when | enforces | example |
+  |---|---|---|---|
+  | **JSON Schema** (§4) | load | local shape & **presence** | `status: superseded` with no `superseded_by:`/`resynthesized_into:` key ⇒ `closure_basis` required |
+  | **Enumerated D3 escape-hatch validator** | load | structural **resolution** *(cross-record)* | `superseded_by: hypothesis:9999` (dangling); an `archived` entity with no archive-index row |
+  | **Graph check** | **materialize** | evidential **sufficiency** | `complete` + a `verdict` whose qualifying evidence does not exist |
+
+  > **Three layers, not two — corrected while writing D5.** An earlier draft put
+  > *"`complete` + a verdict whose evidence does not exist"* in the load-time validator. **It
+  > cannot live there.** Qualifying evidence is carried by *evidence-line edges*, which exist only
+  > **after materialization** — a load-time validator reading one file at a time cannot see them.
+  > Leaving it in that row would have had the design promising an invariant the implementation
+  > structurally could not deliver, which is how §7.4's *first* draft went wrong (asserting
+  > structure it never checked). It is a **graph** check, and it is named here rather than
+  > quietly dropped.
 
   This is exactly the D3 escape hatch, used as designed: an invariant JSON Schema genuinely
   cannot express, declared explicitly and backed by a contract test — **not** an open-ended
