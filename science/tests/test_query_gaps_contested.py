@@ -1,19 +1,26 @@
 from pathlib import Path
 
-from rdflib import RDF, Dataset, Literal, URIRef
+from rdflib import RDF, Dataset, Literal, Namespace, URIRef
 
 from science_tool.graph.io import CITO_NS, SCHEMA_NS, SCI_NS
 from science_tool.graph.store import _graph_uri, query_gaps
 
+# These URIs are project-namespaced because a materialized graph's entities ALWAYS are
+# (`materialize._entity_uri` mints PROJECT_NS["<kind>/<slug>"]). The fixture previously used
+# ad-hoc `https://example.org/prop/...` URIs, which no real project produces. `query_gaps` now
+# walks the ENTITY graph and emits canonical CURIEs, so a non-entity center has no citable
+# neighborhood -- the fixture was the unrealistic part, not the check.
+PROJECT_NS = Namespace("http://example.org/project/")
+
 # Claim whose only dispute is circular: count-based logic would flag contested; belief does not.
-CIRC = URIRef("https://example.org/prop/circular")
-CIRC_SUP = URIRef("https://example.org/el/circ-sup")
-CIRC_DIS = URIRef("https://example.org/el/circ-dispute")
+CIRC = URIRef(PROJECT_NS["proposition/circular"])
+CIRC_SUP = URIRef(PROJECT_NS["evidence-line/circ-sup"])
+CIRC_DIS = URIRef(PROJECT_NS["evidence-line/circ-dispute"])
 
 # Claim with a genuine independent dispute: belief flags contested.
-REAL = URIRef("https://example.org/prop/real")
-REAL_SUP = URIRef("https://example.org/el/real-sup")
-REAL_DIS = URIRef("https://example.org/el/real-dispute")
+REAL = URIRef(PROJECT_NS["proposition/real"])
+REAL_SUP = URIRef(PROJECT_NS["evidence-line/real-sup"])
+REAL_DIS = URIRef(PROJECT_NS["evidence-line/real-dispute"])
 
 
 def _support_line(k, p, line: URIRef, claim: URIRef, group: str) -> None:
@@ -58,14 +65,15 @@ def _write_graph(tmp_path: Path) -> Path:
 def test_gaps_contested_is_belief_derived_not_count_based(tmp_path: Path):
     graph_path = _write_graph(tmp_path)
 
+    # Rows are canonical CURIEs, not IRIs -- an IRI row cannot be cited (fb-2026-07-11-011).
     # Circular dispute: support_count>0 and dispute_count>0 under the old rule, but belief
     # excludes the circular line, so query_gaps must NOT flag contested.
-    circ_rows = query_gaps(graph_path=graph_path, center=str(CIRC), hops=1, limit=50).rows
-    circ_row = next((r for r in circ_rows if r["entity"] == str(CIRC)), None)
+    circ_rows = query_gaps(graph_path=graph_path, center="proposition:circular", hops=1, limit=50).rows
+    circ_row = next((r for r in circ_rows if r["entity"] == "proposition:circular"), None)
     if circ_row is not None:
         assert "evidential_fragility(contested)" not in circ_row["issues"]
 
     # Independent dispute: belief keeps it, so query_gaps flags contested.
-    real_rows = query_gaps(graph_path=graph_path, center=str(REAL), hops=1, limit=50).rows
-    real_row = next(r for r in real_rows if r["entity"] == str(REAL))
+    real_rows = query_gaps(graph_path=graph_path, center="proposition:real", hops=1, limit=50).rows
+    real_row = next(r for r in real_rows if r["entity"] == "proposition:real")
     assert "evidential_fragility(contested)" in real_row["issues"]
