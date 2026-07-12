@@ -73,7 +73,7 @@ def test_cli_promote_theme_dry_run_excludes_project_scope(tmp_path, monkeypatch)
         lambda slug: projects[slug],
     )
     monkeypatch.setattr(
-        "science_tool.commons.promote.prompt_resolve",
+        "science_tool.commons.cli.prompt_resolve",
         lambda conflict: sorted(conflict.candidates.items())[0][1],
     )
     monkeypatch.setattr(

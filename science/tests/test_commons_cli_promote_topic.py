@@ -58,7 +58,7 @@ def test_cli_promote_topic_dry_run_lists_candidates(tmp_path, monkeypatch) -> No
         lambda slug: proj,
     )
     monkeypatch.setattr(
-        "science_tool.commons.promote.prompt_resolve",
+        "science_tool.commons.cli.prompt_resolve",
         lambda conflict: sorted(conflict.candidates.items())[0][1],
     )
     monkeypatch.setattr(

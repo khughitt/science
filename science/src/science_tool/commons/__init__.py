@@ -97,7 +97,6 @@ from science_tool.commons.promote import (
     apply_promote,
     discover_candidates,
     plan_promote,
-    prompt_resolve,
 )
 from science_tool.commons.query import CommonsQuery
 from science_tool.commons.registry import RebuildReport, RegistryBuilder
@@ -171,7 +170,6 @@ __all__ = [
     "parse_member_of",
     "parse_resource_hash",
     "plan_promote",
-    "prompt_resolve",
     "read_datapackage",
     "resolve",
     "resolve_commons_data_root",

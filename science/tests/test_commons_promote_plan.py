@@ -681,7 +681,8 @@ def test_field_conflict_carries_kind() -> None:
 
 
 def test_prompt_resolve_uses_kind_in_display(monkeypatch, capsys) -> None:
-    from science_tool.commons.promote import FieldConflict, prompt_resolve
+    from science_tool.commons.cli import prompt_resolve
+    from science_tool.commons.promote import FieldConflict
 
     c = FieldConflict(
         slug="my-theme",

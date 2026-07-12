@@ -7,6 +7,7 @@ This module owns:
 - Dataclasses for the public surface (PromoteCandidate, PromotePlan, …).
 - `discover_candidates(project_slugs, kind) -> DiscoveryResult`.
 - `plan_promote(discovery, *, commons_root, kind, from_order, resolve_conflict, mixin_extensions) -> PromotePlan`.
+  `resolve_conflict` defaults to `abort_on_conflict`; `cli.py` passes `prompt_resolve`.
 - `apply_promote(plan, commons_root, *, invocation) -> PromoteResult` (Tasks 16–17).
 """
 
@@ -22,7 +23,6 @@ from importlib import import_module
 from pathlib import Path
 from typing import Any, Callable, Literal, Mapping
 
-import click
 import yaml
 from science_model.entity_schema import (
     MergePolicy,
@@ -288,73 +288,16 @@ def discover_candidates(
     return DiscoveryResult(candidates_by_slug=grouped, failed_candidates=failures)
 
 
-def prompt_resolve(conflict: FieldConflict | ExistingCanonicalConflict) -> Any:
-    """Interactive terminal prompt — the default `resolve_conflict` callback.
+def abort_on_conflict(conflict: FieldConflict | ExistingCanonicalConflict) -> Any:
+    """Default conflict resolver: refuse to guess.
 
-    UI mirrors design §7.1. Returns the resolved value (a candidate value, a
-    user-entered manual value, or raises `PromoteConflictAbort` on 'a' / Ctrl-C).
-
-    For an `ExistingCanonicalConflict` (source-vs-committed divergence) the only
-    non-abort outcome is keep-existing: returns the `KEEP_EXISTING` sentinel on
-    'k', raises `PromoteConflictAbort` on 'a' / Ctrl-C. No candidate enumeration
-    and no manual-entry branch (design §3a).
+    Resolving a field conflict needs a human. A caller that wants one wires an
+    interactive resolver in (`cli.py` passes `prompt_resolve`); a caller that has
+    no human — a test, a script, a piped run — aborts the batch instead.
     """
-    if isinstance(conflict, ExistingCanonicalConflict):
-        click.echo(
-            f"\nExisting canonical {conflict.kind}:{conflict.slug} "
-            f"(version {conflict.existing_version}) diverges on "
-            f'field "{conflict.field}":'
-        )
-        click.echo(f"  source : {conflict.source_value!r}")
-        click.echo(f"  existing: {conflict.existing_value!r}")
-        click.echo("  [k] keep existing (overlay)")
-        click.echo("  [a] abort batch")
-        while True:
-            try:
-                choice = click.prompt(
-                    "Choose [k/a]",
-                    type=str,
-                    show_default=False,
-                ).strip()
-            except (click.Abort, KeyboardInterrupt) as exc:
-                raise PromoteConflictAbort(
-                    "user aborted at existing-canonical conflict prompt"
-                ) from exc
-            if choice.lower() == "k":
-                return KEEP_EXISTING
-            if choice.lower() == "a":
-                raise PromoteConflictAbort(
-                    "user chose 'abort batch' at existing-canonical conflict prompt"
-                )
-            click.echo("invalid selection")
-
-    click.echo(f'\nConflict for {conflict.kind}:{conflict.slug}, field "{conflict.field}":')
-    ordered = sorted(conflict.candidates.items())
-    for idx, (slug, value) in enumerate(ordered, start=1):
-        click.echo(f"  [{idx}] {slug}: {value!r}")
-    click.echo(f"  [{len(ordered) + 1}] enter value manually")
-    click.echo("  [a] abort batch")
-    while True:
-        try:
-            choice = click.prompt(
-                f"Choose [1-{len(ordered) + 1}/a]",
-                type=str,
-                show_default=False,
-            ).strip()
-        except (click.Abort, KeyboardInterrupt) as exc:
-            raise PromoteConflictAbort("user aborted at conflict prompt") from exc
-        if choice.lower() == "a":
-            raise PromoteConflictAbort("user chose 'abort batch' at conflict prompt")
-        try:
-            n = int(choice)
-        except ValueError:
-            click.echo("invalid selection")
-            continue
-        if 1 <= n <= len(ordered):
-            return ordered[n - 1][1]
-        if n == len(ordered) + 1:
-            return click.prompt("Manual value", type=str)
-        click.echo("out of range")
+    raise PromoteConflictAbort(
+        f"conflict for {conflict.kind}:{conflict.slug} needs an interactive resolver"
+    )
 
 
 def plan_promote(
@@ -362,7 +305,9 @@ def plan_promote(
     *,
     commons_root: Path,
     kind: PromoteKindConfig,
-    resolve_conflict: Callable[[FieldConflict | ExistingCanonicalConflict], Any] | None = None,
+    resolve_conflict: Callable[
+        [FieldConflict | ExistingCanonicalConflict], Any
+    ] = abort_on_conflict,
     from_order: list[str] | None = None,
     mixin_extensions: tuple["ProfileComponent", ...] = (),
     verify_digests: bool = False,
@@ -380,11 +325,8 @@ def plan_promote(
       5. Build PromoteDecision (canonical artifacts rendered, overlays planned).
 
     `from_order` defaults to the discovery's project_slug encounter order.
-    `resolve_conflict` defaults to `prompt_resolve`.
+    `resolve_conflict` defaults to `abort_on_conflict`; `cli.py` passes `prompt_resolve`.
     """
-    if resolve_conflict is None:
-        resolve_conflict = prompt_resolve
-
     # Stacking-rule guard is enforced HERE too, not just in cli.py, because
     # plan_promote is also a public-ish Python API: direct callers from
     # tests or future code paths must not bypass the <=1-structural /

@@ -24,6 +24,7 @@ from science_tool.commons.dataset_lifecycle import (
 from science_tool.commons.errors import (
     CommonsError,
     CommonsRootNotFoundError,
+    PromoteConflictAbort,
     PromoteInputError,
     PromoteWriteError,
 )
@@ -48,6 +49,11 @@ from science_tool.commons.promote import (
     discover_candidates,
     plan_promote,
 )
+from science_tool.commons.promote_types import (
+    KEEP_EXISTING,
+    ExistingCanonicalConflict,
+    FieldConflict,
+)
 from science_tool.commons.query import CommonsQuery
 from science_tool.commons.reference_graph_identity import (
     ReferenceGraphIdentityError,
@@ -69,6 +75,75 @@ COMMONS_TEXT_FORMATS: tuple[str, str] = ("text", "json")
 
 def _wants_json(*, as_json: bool, output_format: str) -> bool:
     return as_json or output_format == "json"
+
+
+def prompt_resolve(conflict: FieldConflict | ExistingCanonicalConflict) -> Any:
+    """Interactive terminal prompt — the default `resolve_conflict` callback.
+
+    UI mirrors design §7.1. Returns the resolved value (a candidate value, a
+    user-entered manual value, or raises `PromoteConflictAbort` on 'a' / Ctrl-C).
+
+    For an `ExistingCanonicalConflict` (source-vs-committed divergence) the only
+    non-abort outcome is keep-existing: returns the `KEEP_EXISTING` sentinel on
+    'k', raises `PromoteConflictAbort` on 'a' / Ctrl-C. No candidate enumeration
+    and no manual-entry branch (design §3a).
+    """
+    if isinstance(conflict, ExistingCanonicalConflict):
+        click.echo(
+            f"\nExisting canonical {conflict.kind}:{conflict.slug} "
+            f"(version {conflict.existing_version}) diverges on "
+            f'field "{conflict.field}":'
+        )
+        click.echo(f"  source : {conflict.source_value!r}")
+        click.echo(f"  existing: {conflict.existing_value!r}")
+        click.echo("  [k] keep existing (overlay)")
+        click.echo("  [a] abort batch")
+        while True:
+            try:
+                choice = click.prompt(
+                    "Choose [k/a]",
+                    type=str,
+                    show_default=False,
+                ).strip()
+            except (click.Abort, KeyboardInterrupt) as exc:
+                raise PromoteConflictAbort(
+                    "user aborted at existing-canonical conflict prompt"
+                ) from exc
+            if choice.lower() == "k":
+                return KEEP_EXISTING
+            if choice.lower() == "a":
+                raise PromoteConflictAbort(
+                    "user chose 'abort batch' at existing-canonical conflict prompt"
+                )
+            click.echo("invalid selection")
+
+    click.echo(f'\nConflict for {conflict.kind}:{conflict.slug}, field "{conflict.field}":')
+    ordered = sorted(conflict.candidates.items())
+    for idx, (slug, value) in enumerate(ordered, start=1):
+        click.echo(f"  [{idx}] {slug}: {value!r}")
+    click.echo(f"  [{len(ordered) + 1}] enter value manually")
+    click.echo("  [a] abort batch")
+    while True:
+        try:
+            choice = click.prompt(
+                f"Choose [1-{len(ordered) + 1}/a]",
+                type=str,
+                show_default=False,
+            ).strip()
+        except (click.Abort, KeyboardInterrupt) as exc:
+            raise PromoteConflictAbort("user aborted at conflict prompt") from exc
+        if choice.lower() == "a":
+            raise PromoteConflictAbort("user chose 'abort batch' at conflict prompt")
+        try:
+            n = int(choice)
+        except ValueError:
+            click.echo("invalid selection")
+            continue
+        if 1 <= n <= len(ordered):
+            return ordered[n - 1][1]
+        if n == len(ordered) + 1:
+            return click.prompt("Manual value", type=str)
+        click.echo("out of range")
 
 
 @click.group("commons")
@@ -1218,6 +1293,7 @@ def _promote_kind_cmd(
             from_order=list(from_),
             mixin_extensions=mixin_extensions,
             verify_digests=verify_digests,
+            resolve_conflict=prompt_resolve,
             skip_on_conflict=non_interactive,
             skip_on_invalid=non_interactive,
         )
