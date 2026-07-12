@@ -37,19 +37,30 @@ def _check_modules() -> list[Path]:
 def _imports_health(tree: ast.Module) -> bool:
     """True if the module imports from science_tool.graph.health (the cycle).
 
-    Covers both the absolute form (`from science_tool.graph.health import X`,
-    `import science_tool.graph.health`) and relative-import escapes
-    (`from ..health import X`, `from .. import health`), including
-    function-local imports — `ast.walk` descends into function bodies, so a
-    deferred import is caught the same as a module-level one.
+    Covers every spelling that reaches the module:
+      from science_tool.graph.health import X     (absolute, dotted)
+      import science_tool.graph.health            (absolute, plain)
+      from science_tool.graph import health       (absolute, module as alias)
+      from ..health import X                      (relative)
+      from .. import health                       (relative, module as alias)
+
+    including function-local ones — `ast.walk` descends into function bodies, so
+    a deferred import is caught the same as a module-level one. That matters:
+    a module-level back-edge would blow up at import time anyway, but a
+    function-local one is deferred and silently works, so the guard is its only
+    backstop.
     """
     for node in ast.walk(tree):
         if isinstance(node, ast.ImportFrom):
             if node.module == "science_tool.graph.health":
                 return True
-            if node.level > 0 and (
-                node.module == "health" or "health" in {alias.name for alias in node.names}
-            ):
+            imported = {alias.name for alias in node.names}
+            # `from science_tool.graph import health` — the package is the module,
+            # `health` is the name. Idiomatic here, and level 0, so it evades any
+            # check gated on a relative import.
+            if node.level == 0 and node.module == "science_tool.graph" and "health" in imported:
+                return True
+            if node.level > 0 and (node.module == "health" or "health" in imported):
                 return True
         if isinstance(node, ast.Import):
             if any(alias.name == "science_tool.graph.health" for alias in node.names):
