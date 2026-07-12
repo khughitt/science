@@ -46,6 +46,31 @@ When researching computational methods or tools:
 - Compare alternative approaches systematically
 - Include practical resources (libraries, frameworks, example code)
 
+## plan-analysis
+
+### Additional section: Numerical Accuracy
+
+(insert after: Model / Test Assumptions)
+
+When the workflow integrates an ODE, or otherwise discretises:
+
+- **An independent reference means a different error-generating mechanism.** Comparing two
+  implementations of the *same* scheme is an invariance check, not an accuracy check — they are
+  equivariant at any step size and will agree to machine precision while both are wrong. Name a
+  different scheme family, or an adaptive solver with error control 2–3 orders tighter than the
+  target.
+- **Refinement alone is not evidence.** A finer step of the same scheme shares the leading truncation
+  term and the stability boundary, and is blind to every error that is not a function of the step. If
+  you refine, report the **observed order of accuracy** against the theoretical order — if they
+  disagree, you are outside the asymptotic regime, or you have a bug.
+- **Assert stability.** Evaluate the Jacobian spectrum along the trajectory and assert the step stays
+  inside the scheme's stability region at every step. This needs no reference at all.
+- **State the tolerance on the decision statistic**, propagated — not on a trajectory, and not on an
+  absolute likelihood. Certifying a trajectory to a tolerance says nothing about the difference the
+  inference actually reads.
+
+See [`statistics-estimator-certification`](../../skills/statistics/estimator-certification.md).
+
 ## plan-pipeline
 
 ### Additional section: QA Checkpoints

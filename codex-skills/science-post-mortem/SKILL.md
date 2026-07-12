@@ -90,6 +90,8 @@ Follow the Science Codex Command Preamble before executing this skill. Use the `
 
 Use this after the fact, when something did not go as planned: a QA issue surfaced late, an analysis design did not fit the data's constraints, a statistical method was applied in violation of its assumptions, or a result contradicted a pre-registered expectation. The goal is not to fix the one analysis — it is to improve the guidance so the next analysis surfaces the issue sooner.
 
+Also use it when **a gate fired and nothing was lost** — a pre-registered check stopped the analysis before any observed data was read. Nothing surfaced late, and no result exists: that is the system working. **A post-mortem on a gate that fired is the cheapest kind, and its lessons are the most transferable, because nothing is entangled with a finding anyone wants to defend.** In this mode, read step 1's "gap between expectation and outcome" as *the gap between what the plan assumed about its own instruments and what was true*.
+
 ## Reflection
 
 Work through these steps with the user. Keep the project-specific incident in the project (as an interpretation, note, or task); only a cross-project lesson goes to the global feedback store.
@@ -102,7 +104,9 @@ Work through these steps with the user. Keep the project-specific incident in th
 
 4. **Generalize gate.** Is the lesson cross-project, or specific to this project? If it is purely project-local, **stop**: record it in the project and file nothing globally. Only continue for lessons that should change shared guidance.
 
-5. **Target the surface.** Which guidance artifact should change so the earlier signal becomes routine — a skill (`skill:statistics`, `skill:research`, `skill:data`), a command (`command:plan-analysis`, `command:review-pipeline`, `command:pre-register`), a template, or a CLI check? Pick the `concern`:
+   Then separate **the failing thing** (usually local — a specific model, a specific optimiser) from **the reason it was not caught sooner** (usually global — a check that could not fail, a threshold with no stated domain, a probe confounded with its own target). **File on the latter.** The mechanism generalises to nothing; the blind spot generalises to everyone.
+
+5. **Target the surface.** Which guidance artifact should change so the earlier signal becomes routine? `--target` is **free text**; the resolvable namespaces are `skill:`, `command:`, `aspect:`, `template:`, and `cli:` — e.g. `skill:statistics`, `command:plan-analysis`, `aspect:computational-analysis`, `template:pre-registration`, `cli:validate`. Name the surface that should have caught it, not the nearest one on a list. Pick the `concern`:
    - `methodology:statistics` — assumptions, inference validity, model/finite-sample choices
    - `methodology:qa` — data/quality checks that should have caught it
    - `methodology:design` — analysis/study design vs. the question or data constraints

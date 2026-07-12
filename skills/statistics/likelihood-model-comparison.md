@@ -69,8 +69,15 @@ Likelihoods that sum over rare events or large state spaces underflow silently.
   summed probability.
 - Check for underflow / `-inf` contributions and for terms dominated by a single
   state.
-- Confirm optimizer convergence (gradient norm / relative tolerance), not just a
-  returned value. Re-fit from multiple starts for multimodal likelihoods.
+- **Convergence is the optimizer's self-report, and is not evidence about the
+  optimizer.** A converged, multi-start optimum can be reproducibly wrong. Before the
+  comparison is read, certify the estimator: reproducibility under perturbation of every
+  inferentially irrelevant choice, *and* accuracy against a reference with a different
+  error-generating mechanism. See
+  [`estimator-certification`](./estimator-certification.md).
+- In a likelihood **ratio**, optimizer error does **not** cancel. Both terms carry
+  one-sided upward error, and the larger model is systematically the harder one to fit —
+  so the error has a sign. Match the inner tolerance between the compared models.
 - Record the minimum representable likelihood contribution and whether any
   verdict-bearing term is near it.
 
@@ -92,6 +99,11 @@ Likelihoods that sum over rare events or large state spaces underflow silently.
   or selection stability.
 - **Unconverged or single-start optimization.** A local optimum reported as the
   MLE.
+- **Converged, multi-start, and reproducibly wrong.** The twin of the above, and the
+  one that bites. Any operation that smooths the objective — a large finite-difference
+  step, a loose inner tolerance, coarse integration — reduces seed spread *while
+  increasing bias*. Selecting an optimizer on reproducibility alone therefore selects
+  **for** bias.
 - **Counting unidentified parameters.** Inflated or deflated penalties.
 
 ## Reporting
@@ -103,6 +115,10 @@ diagnostics. State any verdict downgrade caused by incomparability,
 non-identifiability, or selection instability.
 
 ## Companion Skills
+
+- [`estimator-certification.md`](./estimator-certification.md) — certify the estimator
+  before the comparison is read; this leaf's numerical-precision audit assumes what that
+  one establishes.
 
 - [`sensitivity-arbitration.md`](./sensitivity-arbitration.md) — pre-commit which comparison metric is verdict-bearing and which are reported alongside.
 - [`power-floor-acknowledgement.md`](./power-floor-acknowledgement.md) — the minimum effect a likelihood comparison can resolve at the available n.
