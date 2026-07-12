@@ -1,7 +1,7 @@
 # The authoritative entity schema
 
-**Date:** 2026-07-12 (rev 2 — rewritten after review; see §10 for what changed and why)
-**Status:** Design, for review.
+**Date:** 2026-07-12 (rev 3 — D1–D5 RULED; see §10 for the revision history)
+**Status:** Architecture accepted. D1–D5 ruled (§9). Ready for an implementation plan.
 **Subsumes:** the field-vocabulary (`extra="ignore"`) and status-vocabulary tracks — two
 symptoms of one root.
 
@@ -153,8 +153,20 @@ superseded and formerly supported**; one value silently overwrites the other.
 no lifecycle words left. It is a hand-rolled lifecycle axis, which is why it was never
 declared and never wired.
 
-**Therefore: `status` means the document lifecycle, uniformly, on every kind.** The semantic
-axis moves to an explicitly named field per kind.
+**Therefore: `status` means the entity lifecycle, uniformly, on every kind.** Domain-specific
+state moves to explicitly named fields per kind.
+
+**They are not all one category.** Calling every named field a "semantic verdict" was a
+flattening error. The domain axes are of *different kinds*, and conflating them is how the
+collapse happened in the first place:
+
+| category | asks | kinds |
+|---|---|---|
+| **verdict** (epistemic) | what does the evidence conclude? | `hypothesis.verdict`, `proposition.belief` |
+| **answeredness** | is the question resolved? | `question.answer_state` |
+| **execution outcome** | how did the run terminate? | `workflow-run.outcome` |
+| **maturity** | how developed is the artifact? | `story.maturity` |
+| **commitment** | is the plan frozen? | `pre-registration.commitment` |
 
 This is the low-churn *and* the truthful choice: 22 of 33 kinds already use `status` this way,
 and it means **natural-systems writing `status: active` on a hypothesis was correct all
@@ -164,44 +176,93 @@ inversion is deliberate and is called out in §9 as decision D1.
 
 ### 7.3 The field contract (all 10 mixed kinds)
 
-`status` (lifecycle) is **always present**, default `active`. Semantic fields are **absent =
-not yet assessed**, which is *distinct* from any explicit value.
+`status` (lifecycle) is **always present**, default `active`. Domain fields are **absent = not
+yet assessed**, which is *distinct* from every explicit value.
 
-| kind | today's status values | → `status` (lifecycle) | → semantic field | default |
+**That absence rule is load-bearing, and it disqualifies values that merely restate
+"unassessed."** A `verdict` of `proposed` or `under-investigation` says nothing about what the
+evidence concludes — it says the evidence has not spoken. Admitting them would make
+`verdict: proposed`, `verdict: under-investigation`, and *absent* three spellings of the same
+state, re-collapsing the axis this design exists to split. **They are lifecycle, not verdict.**
+The same pass is applied to every other domain axis: `deferred` is workflow, not answeredness;
+`running` is execution state, not an outcome.
+
+| kind | today's status values | → `status` (lifecycle) | → domain field (category) | default |
 |---|---|---|---|---|
-| `hypothesis` | proposed, under-investigation, partially-supported, supported, weakened, refuted, archived | draft/active/superseded/retired/archived | **`verdict`**: proposed \| under-investigation \| partially-supported \| supported \| weakened \| refuted | absent |
-| `proposition` | draft, active, supported, contested, weakened, retired, superseded, archived | draft/active/superseded/retired/archived | **`belief`**: supported \| contested \| weakened | absent |
-| `question` | active, partially-answered, answered, deferred, retired, archived | active/retired/archived | **`answer_state`**: answered \| partially-answered \| deferred | absent |
-| `workflow-run` | complete, running, failed | active/superseded/archived | **`outcome`**: running \| complete \| failed | required |
-| `story` | draft, developing, mature | draft/active/superseded/archived | **`maturity`**: developing \| mature | absent |
-| `dataset` | active, retired, candidate, deprecated, proposed | draft(←candidate,proposed)/active/retired(←deprecated) | *none* — these are lifecycle synonyms | — |
-| `pre-registration` | active, committed, amended, superseded, retired | draft/active/superseded/retired | **`commitment`**: committed \| amended | absent |
-| `concept` | active, deprecated | active/retired(←deprecated) | *none* | — |
-| `decision` | active, archived, superseded, abandoned | active/archived/superseded/retired(←abandoned) | *none* | — |
-| `workflow` | active, retired, deprecated, planned | draft(←planned)/active/retired(←deprecated) | *none* | — |
+| `hypothesis` | proposed, under-investigation, partially-supported, supported, weakened, refuted, archived | **draft**(←proposed) / **active**(←under-investigation) / **complete** / superseded / retired / archived | **`verdict`** *(epistemic)*: partially-supported \| supported \| weakened \| refuted | **absent** |
+| `proposition` | draft, active, supported, contested, weakened, retired, superseded, archived | draft / active / complete / superseded / retired / archived | **`belief`** *(epistemic)*: supported \| contested \| weakened | **absent** |
+| `question` | active, partially-answered, answered, deferred, retired, archived | active / **deferred** / complete / retired / archived | **`answer_state`** *(answeredness)*: answered \| partially-answered | **absent** |
+| `workflow-run` | complete, running, failed | active *(while running)* / superseded / archived | **`outcome`** *(execution)*: complete \| failed | **absent = still running** |
+| `story` | draft, developing, mature | draft / active / complete / superseded / archived | **`maturity`**: developing \| mature | absent |
+| `pre-registration` | active, committed, amended, superseded, retired | draft / active / complete / superseded / retired | **`commitment`**: committed \| amended | absent |
+| `dataset` | active, retired, candidate, deprecated, proposed | draft(←candidate, proposed) / active / retired(←deprecated) | *none* — lifecycle synonyms | — |
+| `concept` | active, deprecated | active / retired(←deprecated) | *none* | — |
+| `decision` | active, archived, superseded, abandoned | active / archived / superseded / retired(←abandoned) | *none* | — |
+| `workflow` | active, retired, deprecated, planned | draft(←planned) / active / retired(←deprecated) | *none* | — |
 
-**Four of the ten have no real semantic axis at all** — `dataset`, `concept`, `decision`,
-`workflow` were only ever using lifecycle *synonyms*. They collapse to pure-lifecycle kinds,
-and their odd values migrate. Only **six** kinds carry a genuine second axis.
+Three consequences worth stating plainly:
 
-**Allowed combinations.** The axes are orthogonal by construction: `verdict: under-investigation`
-+ `status: retired` is the load-bearing cell (epistemically undecided, pragmatically closed) —
-the exact state `status: retired` could not express without lying. No combination is forbidden;
-that is the point of separating them.
+- **Four of the ten have no domain axis at all.** `dataset`, `concept`, `decision`, `workflow`
+  were only ever using lifecycle *synonyms* (`deprecated`, `abandoned`, `planned`, `candidate`).
+  They collapse to pure-lifecycle kinds. Only **six** kinds carry a genuine second axis.
+- **`complete` is mandatory on every kind that can conclude.** Without it, a successfully
+  concluded hypothesis is forced into `retired`, which elsewhere means abandoned or
+  indefinitely blocked — and `disposition` cannot be declared redundant until that hole is
+  closed. Rev 2 omitted `complete` from hypothesis; that was a defect.
+- **`deferred` needs a home on the lifecycle axis**, not on answeredness. It is a *paused* state
+  and none of `{draft, active, complete, superseded, retired, archived}` means paused. This is a
+  genuine gap in the lifecycle vocabulary and is exactly the sort of thing the D4 excavation must
+  settle — provisionally, `deferred` is proposed as a lifecycle capability, not forced into an
+  existing word.
 
-### 7.4 What this does to `phase` and `disposition`
+**Allowed combinations.** The axes are orthogonal by construction; no combination is forbidden.
+The load-bearing cells:
+
+| lifecycle + domain | means |
+|---|---|
+| `active` + `verdict: refuted` | refuted, but still being worked (writing it up) |
+| `complete` + `verdict: supported` | supported and concluded |
+| `retired` + `verdict` **absent** | pragmatically stopped while epistemically undecided |
+| `superseded` + `verdict: supported` | *formerly* supported, now replaced — **the cell `proposition` literally could not express** |
+
+That last row is the whole argument: under the old collapsed field, `superseded` overwrote
+`supported` and the belief was silently lost.
+
+### 7.4 `phase` is deleted; `disposition` is deleted; the *basis* survives
 
 - **`phase`** (candidate|active) is the hand-rolled lifecycle. It **folds into `status`**:
   `phase: candidate` → `status: draft`; `phase: active` → `status: active`. The `phase:` key is
   then **deleted from the templates** (P0's "declare or delete" rule), not migrated forward.
   ⚠️ This changes `/science:big-picture`'s "Candidate frames" selector, which reads
-  `phase == "candidate"`.
-- **`disposition`** (open|closed, shipped in `d2fc4d13`) is **likely subsumed** by
-  `status: retired` + `verdict`. If `status` carries the lifecycle and `verdict` the epistemics,
-  "closed for pragmatic reasons while epistemically undecided" is exactly
-  `status: retired` + `verdict: under-investigation`. Retaining `disposition` would then be a
-  *third* axis restating the first two. **Decision D2 in §9.** I shipped `disposition` two days
-  ago; that is not a reason to keep it.
+  `phase == "candidate"`; it becomes `status == "draft"`.
+
+- **`disposition` is DELETED** (shipped in `d2fc4d13`; two days old is not an argument for
+  keeping it). Openness is **derived** from the lifecycle, not stored:
+
+  | lifecycle | open? |
+  |---|---|
+  | `draft`, `active` | **open** |
+  | `complete`, `superseded`, `retired`, `archived` | **closed** |
+
+  Every fb-005 cell survives without a third state field — see the combination table in §7.3.
+  A stored boolean that is a pure function of `status` is a denormalization waiting to
+  disagree with its source.
+
+- **`disposition_basis` SURVIVES, renamed `closure_basis`.** This is the asymmetry that
+  matters: **the state is derivable; the authored reason is not.** `closure_basis` is required
+  on a terminal transition that has **no structural basis** — where "structural basis" means
+  the record already carries the reason in machine-readable form:
+
+  | terminal transition | structural basis | `closure_basis` required? |
+  |---|---|---|
+  | → `superseded` | `supersedes:` / supersession lineage | **no** — lineage *is* the reason |
+  | → `archived` | archive/consolidation record | **no** |
+  | → `complete` | the verdict + its evidence | **no** |
+  | → `retired` | *nothing* | **YES** — otherwise closure hides research debt |
+
+  `retired` is precisely the transition that records no reason anywhere else, which is why it
+  is the one that must carry an authored one. This preserves the fb-005 guarantee that
+  retirement cannot silently bury a live question.
 
 ## 8. Phasing
 
@@ -224,26 +285,104 @@ that is the point of separating them.
   is certified and its projects migrated. Severity is a property of the **kind**, never of
   `layout_version` (the axis that already failed).
 
-## 9. Decisions required before implementation
+## 9. Decisions — RULED (2026-07-12)
 
-- **D1.** Adopt `status` = universal lifecycle, semantic axis → named field (§7.2)? This
-  inverts part of the fb-005 ruling. *Recommend: yes* — 22/33 kinds already work this way, and
-  it makes the authors right.
-- **D2.** Does `disposition` survive, or is it subsumed by `status: retired` + `verdict` (§7.4)?
-  *Recommend: subsumed*, unless a case exists that the two-axis form cannot express.
-- **D3.** Is the Pydantic model **generated** from JSON Schema, or **reconciled** against it by
-  a gate? *Recommend: projection + reconciliation gate* — matches `SharedEntity` and the
-  existing 3-way gate, and avoids a codegen step in the build.
-- **D4.** How uniform is the lifecycle, really? `test_reference_kind_does_not_gain_archived`
-  pins `paper`/`book`/`talk` as deliberately non-consolidatable — so **some** per-kind variation
-  is real intent. A first draft of this design proposed steamrolling all 22 pure-lifecycle
-  kinds into one uniform set; that guard test would have caught it. **The variation must be
-  excavated kind by kind, not assumed to be noise** — "certify before depending", applied to
-  this design itself.
-- **D5.** Migration cost. Splitting `status` is **not additive-only**: it rewrites authored
-  values across every project and needs a real migration command plus a per-kind ratchet.
+### D1 — `status` is the lifecycle. **Adopted.**
 
-## 10. What changed in rev 2, and why
+With the correction that disqualifies non-verdict values from `verdict` (§7.3): `proposed` and
+`under-investigation` are lifecycle, not epistemic conclusions, and admitting them would make
+three spellings of "unassessed". Same pass applied to `deferred` (workflow, not answeredness)
+and `running` (execution state, not an outcome). Domain axes are **categorised**, not lumped
+(§7.2).
+
+### D2 — Delete `disposition`; keep the reason. **Adopted.**
+
+Openness is derived from lifecycle. `disposition_basis` → **`closure_basis`**, required on
+terminal transitions with **no structural basis** — in practice, `retired` (§7.4). `complete`
+is added to every kind that can conclude; without it the deletion would be unsound, because a
+concluded hypothesis would be forced into `retired` (= abandoned). fb-005 is **retained as
+history with its superseded portion explicitly marked**, not rewritten away.
+
+### D3 — Projection + reconciliation. **Adopted**, with a five-point contract:
+
+1. Raw frontmatter is validated against its **composed JSON Schema first**.
+2. The Pydantic projection is constructed **only after** schema validation passes.
+3. **Projections MUST preserve schema-valid extension fields.** Never return to
+   `extra="ignore"` — that is the original defect, and re-introducing it at the projection
+   layer would silently undo the whole design.
+4. A **CI reconciliation check** verifies every projected field against the effective composed
+   schema.
+5. Any invariant JSON Schema cannot express is an **enumerated escape hatch with a contract
+   test** — not an open-ended second authority.
+
+Generation is rejected: it adds build machinery without removing the need for methods,
+ergonomic nested types, and runtime checks.
+
+### D4 — Excavate, then factor into **lifecycle capabilities**. **Adopted.**
+
+Do **not** replace 22 arbitrary lists with one arbitrary universal list. Audit each kind, then
+encode the recovered intent as composable named capabilities rather than 33 copied
+vocabularies:
+
+```
+draftable · completable · supersedable · retirable · archivable(consolidatable) · deferrable?
+```
+
+A kind's lifecycle vocabulary is then *derived* from the capabilities it declares.
+
+**`entity_class` must NOT automatically imply capabilities.** The existing
+`test_reference_kind_does_not_gain_archived` guard is the proof: `paper`/`book`/`talk` are
+deliberately non-consolidatable, and that intent is *more specific* than their broad
+classification. Exact capability names follow the excavation, not the other way round.
+
+### D5 — Versioned, report-before-apply, fail-early migration. **Adopted.**
+
+Not additive-only. **No heuristic compatibility layer.**
+
+1. Inventory raw values per kind and per project.
+2. Separate **deterministic** mappings from **ambiguous** ones.
+3. Introduce target schema **versions**; update templates and consumers.
+4. Migrate **one kind at a time**, with graph/output diffs.
+5. **Refuse ambiguous rewrites** and request authored adjudication — do not guess.
+6. Ratchet **WARN → ERROR per kind**, only after that kind's sources *and* consumers are
+   certified.
+
+Two named information-loss traps, to be reported rather than papered over:
+
+- **Do not** mechanically map `disposition: closed` → `status: retired`. The author must
+  distinguish `complete` (concluded), `retired` (abandoned) and `superseded` (replaced). Those
+  are three different facts and the boolean does not carry which.
+- An existing `status: archived` **has already destroyed its prior verdict.** Leave `verdict`
+  **absent** and **report the information loss**. Inventing a verdict to fill the column would
+  be fabricating an epistemic conclusion — the precise failure the InstrumentResult ruling
+  exists to prevent.
+
+## 10. Revision history
+
+### rev 3 (2026-07-12) — D1–D5 ruled
+
+All five decisions ruled (§9). Three substantive corrections came out of the ruling, each
+fixing a defect in rev 2:
+
+- **`verdict` must not contain `proposed`/`under-investigation`.** They say the evidence has
+  not spoken, not what it concluded — so they would have made `verdict: proposed`,
+  `verdict: under-investigation` and *absent* three spellings of one state, re-collapsing the
+  axis the design exists to split. Same pass applied to `deferred` and `running`. Domain axes
+  are now **categorised** (verdict / answeredness / execution / maturity / commitment), not
+  flattened into one "semantic" bucket.
+- **rev 2 omitted `complete` from the hypothesis lifecycle.** That was a real defect: without
+  it, a successfully concluded hypothesis is forced into `retired` (= abandoned), and
+  `disposition` could not be soundly deleted. `complete` is now mandatory on every kind that
+  can conclude.
+- **`disposition_basis` survives as `closure_basis`.** The state is derivable; **the authored
+  reason is not.** Required on terminal transitions carrying no structural basis — i.e.
+  `retired`, which is exactly the transition that records its reason nowhere else.
+
+fb-005 is retained as history with its superseded portion explicitly marked in
+`2026-07-11-big-picture-identity-design.md` §5.2.
+
+### rev 2 (2026-07-12) — what changed after the six-issue review
+
 
 Rev 1 was reviewed and six issues were raised; all six were verified against the code and all
 six were correct.

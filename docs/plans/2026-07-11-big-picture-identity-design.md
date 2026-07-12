@@ -220,6 +220,36 @@ prose.
 
 ### 5.2 `fb-005` — RULING: epistemic verdict and workflow disposition are two axes
 
+> ## ⚠️ PARTIALLY SUPERSEDED (2026-07-12)
+>
+> **The two-axis diagnosis below stands and was correct.** What is superseded is its
+> *realization* — specifically **which field carries which axis**, and the introduction of
+> `disposition` as a third state field.
+>
+> Superseded by
+> [`2026-07-12-authoritative-entity-schema-design.md`](2026-07-12-authoritative-entity-schema-design.md)
+> (decisions D1/D2):
+>
+> | this ruling said | now superseded by |
+> |---|---|
+> | `status` = the epistemic verdict | **`status` = the entity LIFECYCLE**, uniformly on all kinds |
+> | (no field for lifecycle) | the verdict moves to a named `verdict:` field |
+> | add `disposition: open\|closed` | **`disposition` is DELETED** — openness is *derived* from lifecycle |
+> | `disposition_basis` | **renamed `closure_basis`**, and retained: the state is derivable, the authored reason is not |
+>
+> **Why:** `phase` (`candidate`/`active` in the wild) turned out to be a *hand-rolled
+> lifecycle*, invented because `hypothesis.status` had no lifecycle words left — it declares
+> exactly one (`archived`). Once `status` carries the lifecycle, every load-bearing cell below
+> is expressible without a third field: `active` + `verdict: refuted` = refuted but still being
+> worked; `retired` + `verdict` absent = pragmatically stopped while undecided.
+>
+> That also means **this ruling misjudged the projects.** It treated `status: active` on a
+> hypothesis as author drift. It was not: those authors needed a lifecycle word and the schema
+> offered none. They were right; the schema was wrong.
+>
+> The analysis below is **retained as history, not rewritten** — it is how the two-axis
+> insight was reached, and the insight is what survived.
+
 **This section replaces an earlier draft that proposed adding `phase: retired`. That proposal
 was a category error and is withdrawn.** The reasoning is recorded here rather than deleted,
 because the mistake is the same one the projects made.
