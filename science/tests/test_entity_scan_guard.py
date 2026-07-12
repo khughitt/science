@@ -28,7 +28,7 @@ ALLOWLIST: set[str] = {
     "big_picture/validator.py",             # tasks/ rglob (entities branch routed)
     "graph/storage_adapters/markdown.py",   # research/packages else-branch (entities branch routed)
     "graph/storage_adapters/task.py",       # tasks/ root
-    "graph/health.py",                      # health/datasets/runs roots
+    "graph/health_checks/dataset_anomalies.py",  # health/datasets/runs roots
     "graph/health_checks/lingering_tags.py",  # doc/entities frontmatter + tasks scan
     "graph/materialize.py",                 # doc/data-packages migration gate
     "graph/migrate.py",                     # migration roots

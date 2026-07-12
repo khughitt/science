@@ -18,7 +18,7 @@ from science_tool.annotation.model import (
     TextQuoteSelector,
     TextualBody,
 )
-from science_tool.graph.health import check_dataset_anomalies
+from science_tool.graph.health_checks.dataset_anomalies import check_dataset_anomalies
 
 
 _CREATED = datetime(2026, 6, 30, tzinfo=timezone.utc)
@@ -1802,7 +1802,7 @@ def test_build_health_report_has_no_legacy_structured_literature_check(tmp_path)
 
 
 def test_dataset_anomaly_codes_registered() -> None:
-    from science_tool.graph.health import DATASET_ANOMALY_CODES
+    from science_tool.graph.health_checks.dataset_anomalies import DATASET_ANOMALY_CODES
 
     expected = {
         "dataset_consumed_but_unverified",
