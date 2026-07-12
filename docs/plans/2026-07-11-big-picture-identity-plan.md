@@ -515,13 +515,57 @@ def test_out_of_vocabulary_status_is_flagged(tmp_path: Path) -> None:
     assert any("retired" in i.message and "hypothesis" in i.message for i in issues)
 ```
 
-- [ ] **Step 2: Run — expect FAIL.** **Step 3:** implement the check against
-  `entities.allowed_statuses(kind, project_root)` (`entities.py:270-277`), which already returns
-  the declared vocabulary and returns `None` for open-set kinds (skip those). **Step 4:** run —
-  expect PASS.
+- [ ] **Step 2: Run — expect FAIL.**
 
-- [ ] **Step 5: Run the full suite and expect real projects' fixtures to trip.** If a fixture
-  carries an out-of-vocabulary status, that is a **finding**, not a test to relax.
+- [ ] **Step 3: Derive the vocabulary from the Kind Descriptors. Do NOT write a second table.**
+
+`entities.allowed_statuses(kind, project_root)` (`entities.py:270-277`) is already the single
+derivation and must be the **only** source:
+
+- **core kinds** → `_STATUS_VALUES`, which is itself built from `_KIND_DESCRIPTORS`
+  (`entities.py:187`) — the Kind Descriptor *is* the SSOT;
+- **local-profile kinds** → `_local_entity_kind(project_root, kind)`;
+- **a kind declaring no `statuses`** → returns `None`, meaning an **open set**. Skip it. An open
+  vocabulary is a deliberate declaration, not a gap, and flagging it would make the check fire on
+  kinds that never promised a closed set.
+- **an unknown kind** → `allowed_statuses` raises `KeyError`. That is **not this check's job** —
+  unknown kinds are already reported as `unknown_entity_kind` by the source loader
+  (`sources.py:151`). Catch it and skip, so `validate` does not crash on an entity another check
+  already owns. Two checks reporting the same defect is worse than one.
+
+A hard-coded kind→status table in this check would be the same defect as the per-kind lists in
+`document_structure.py` that the estimator doctrine's follow-on already indicts. Do not add a
+fourth one.
+
+- [ ] **Step 4: Add the tests that pin the derivation, not just the happy path**
+
+```python
+def test_local_profile_kind_status_vocabulary_is_enforced(tmp_path) -> None:
+    """A project-declared kind's statuses come from its profile manifest, not from a
+    table in this check."""
+    _write_local_profile(tmp_path, kind="protocol", statuses=["drafted", "ratified"])
+    _write_entity(tmp_path, "protocols/0001-x.md", id="protocol:0001-x", status="bogus")
+    assert any("bogus" in i.message for i in run_status_vocabulary_check(tmp_path))
+
+
+def test_open_vocabulary_kind_is_skipped(tmp_path) -> None:
+    """A kind declaring NO statuses has an OPEN set. That is a declaration, not a gap --
+    any status is legal and the check must stay silent."""
+    _write_local_profile(tmp_path, kind="note", statuses=[])
+    _write_entity(tmp_path, "notes/0001-x.md", id="note:0001-x", status="whatever")
+    assert not run_status_vocabulary_check(tmp_path)
+
+
+def test_unknown_kind_does_not_crash_the_check(tmp_path) -> None:
+    """`allowed_statuses` raises KeyError for an unregistered kind. That defect is
+    already owned by `unknown_entity_kind` in the source loader -- this check must skip,
+    not crash and not double-report."""
+    _write_entity(tmp_path, "aliens/0001-x.md", id="alien:0001-x", status="green")
+    assert not run_status_vocabulary_check(tmp_path)  # and no exception
+```
+
+- [ ] **Step 5: Run — expect PASS. Then run the full suite and expect real fixtures to trip.**
+  If a fixture carries an out-of-vocabulary status, that is a **finding**, not a test to relax.
 
 - [ ] **Step 6: Commit**
 
@@ -539,11 +583,103 @@ state; neither may be inferred from the other.** Do **not** add `retired` to `ph
 is the *commitment* axis (`candidate` | `active`) and a lifecycle value there is a category
 error.
 
+### 6b.0 Adoption semantics — decide these BEFORE writing code
+
+**Migration: `disposition` defaults to `open`. Existing hypotheses are NOT migrated.**
+
+The default is not a convenience — it is the *correct* value. An existing hypothesis that nobody
+has closed **is** open. There is no fact to migrate.
+
+**The default MUST NOT be inferred from `status`.** A hypothesis with `status: refuted` and no
+`disposition` becomes `disposition: open` — **not** `closed`. Inferring closure from a terminal
+epistemic status would re-collapse the two axes this task exists to separate, and would silently
+close hypotheses whose authors never said to. *Refuted and still being worked* is a legitimate,
+common state (you are writing it up; you are probing why it failed).
+
+Closure is therefore always an **explicit authored act**, and `disposition: closed` requires
+`disposition_basis`. Nothing in this task closes anything on an author's behalf.
+
+**Round-trip: the field must survive every hop, or it does not exist.**
+
+`Entity` (`model/src/science_model/entities.py:299`) declares **no `model_config`**, so Pydantic
+defaults to `extra="ignore"`. Frontmatter is loaded through `schema.model_validate(raw)`
+(`graph/sources.py:377`), which **silently drops every key that is not a model field**.
+
+**This has already happened, to `phase` itself.** `phase` is in the template known-keys set
+(`templates.py:31`) but is **not a field on `Entity`** — so it is dropped at load and **never
+reaches the graph**. The big-picture command only "sees" it by reading frontmatter directly. It
+is decoration, not data. (This is also the mechanical reason the withdrawn `phase: retired`
+proposal could never have worked: attention ranking is **graph**-based, and the graph cannot see
+`phase`.)
+
+So `disposition` must be wired at **five** layers, and the last one is the one that gets
+forgotten:
+
+1. a field on the **hypothesis kind** (`profiles/core.py`);
+2. a field on **`Entity`** (`model/src/science_model/entities.py`) — *without this it is dropped
+   at `model_validate` and nothing downstream ever sees it*;
+3. the **template known-keys** set (`templates.py`);
+4. **both** template copies — `templates/hypothesis.md` **and** the packaged
+   `science/model/src/science_model/templates/hypothesis.md`, which is the one `Renderer` reads;
+5. **materialized to a triple** in `materialize.py`, so graph consumers (attention ranking) can
+   act on it.
+
+**Validation:** `disposition` is a closed vocabulary (`open` | `closed`) and `disposition_basis`
+is required when `closed`. Both are enforced at load, so an invalid value fails loudly rather
+than being ignored.
+
+- [ ] **Step 0: Write the round-trip test FIRST. It is the test that would have caught `phase`.**
+
+```python
+def test_disposition_round_trips_from_frontmatter_to_graph(tmp_path: Path) -> None:
+    """Author -> Entity -> graph -> query. Every hop.
+
+    `Entity` is `extra="ignore"`, so a field that is not declared on the model is
+    SILENTLY DROPPED at `schema.model_validate(raw)`. That is exactly what happened to
+    `phase`: it lives in the template known-keys set, is absent from `Entity`, and
+    therefore never reaches the graph. A field that does not survive this test does not
+    exist, however correct it looks in the template.
+    """
+    _write_hypothesis(tmp_path, id="hypothesis:0009-x", status="refuted",
+                      disposition="closed", disposition_basis="pre-registration:0004-t078")
+
+    sources = load_project_sources(tmp_path)
+    entity = next(e for e in sources.entities if e.id == "hypothesis:0009-x")
+    assert entity.disposition == "closed"          # survived model_validate
+
+    graph = materialize(sources)
+    assert _has_triple(graph, "hypothesis:0009-x", SCI_NS.disposition, "closed")  # survived emit
+
+
+def test_disposition_defaults_to_open_and_is_never_inferred_from_status(tmp_path) -> None:
+    """A refuted hypothesis with no authored disposition is OPEN. Inferring closure from
+    a terminal epistemic status would re-collapse the two axes this field separates --
+    and would close hypotheses whose authors never said to.
+    """
+    _write_hypothesis(tmp_path, id="hypothesis:0009-x", status="refuted")  # no disposition
+    entity = _load_one(tmp_path, "hypothesis:0009-x")
+    assert entity.disposition == "open"
+
+
+def test_closed_requires_a_basis(tmp_path) -> None:
+    with pytest.raises(ValidationError):
+        _write_and_load_hypothesis(tmp_path, disposition="closed")  # no disposition_basis
+```
+
+- [ ] **Step 0b: Prove the round-trip test can fail.** Add the field to `Entity` *last*: first
+  wire layers 1, 3, 4, 5 and confirm the round-trip test **FAILS at the `model_validate` hop**
+  with the field silently absent. That failure is `phase`'s bug, reproduced on demand. Only then
+  add the `Entity` field and watch it pass. A round-trip test you have not seen fail at the drop
+  point does not guard the drop point.
+
 **Files:**
 - Modify: `science/model/src/science_model/profiles/core.py` (hypothesis kind)
+- Modify: `science/model/src/science_model/entities.py` (**the `Entity` field — layer 2**)
+- Modify: `science/model/src/science_model/templates.py` (known-keys)
 - Modify: **both** `templates/hypothesis.md` **and**
   `science/model/src/science_model/templates/hypothesis.md` — the packaged copy is what
   `Renderer` reads; a root-only edit changes nothing an author sees
+- Modify: `science/src/science_tool/graph/materialize.py` (**emit the triple — layer 5**)
 - Modify: `science/src/science_tool/graph/attention.py` (terminal exclusion; re-homing debt)
 - Modify: the Candidate-frames selection in `commands/big-picture.md:208`
 
