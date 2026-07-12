@@ -29,20 +29,27 @@ from science_tool.validate.context import ValidateContext
 from science_tool.validate.result import Result, Severity
 
 
-def _severity(ctx: ValidateContext) -> Severity:
-    """ERROR on v3 projects, WARN on older layouts.
+def _result(path: Path, message: str) -> Result:
+    """Always WARN.
 
-    Enforcement here is RETROACTIVE: a project may already hold entities whose status was
-    never in the vocabulary, and turning on a hard error would fail its whole corpus at
-    once. This graded rollout is the codebase's existing answer to that (see
-    `entity_conformance._severity`), so use it rather than inventing a second policy.
+    This check first shipped grading severity by `layout_version >= 3`, copying
+    `entity_conformance`. That was the wrong axis and it failed immediately: layout
+    version says whether a project's LAYOUT is modern, not whether a KIND's status
+    vocabulary is trustworthy. All five projects were v3, so the gate graded nothing, and
+    472 entities errored the moment the check landed -- ~3 in 4 of them because the
+    vocabulary was wrong, not the entity (`report` had no terminal state; `plan` had no
+    `draft`; `pre-registration` had no `committed`, the very state our own template and
+    command prescribe).
+
+    The doctrine we already hold covers this: an UNCERTIFIED instrument cannot refute.
+    A vocabulary that has never been reconciled against what the toolkit scaffolds and
+    what projects author is an uncertified instrument, and it may not fail anyone's
+    build. So this check advises, and only advises, until each kind's vocabulary is
+    certified and its projects migrated -- at which point severity ratchets up PER KIND
+    (see docs/plans/2026-07-12-status-vocabulary-certification-design.md), which is the
+    axis that actually carries the meaning.
     """
-    version = ctx.manifest.get("layout_version")
-    return Severity.ERROR if isinstance(version, int) and version >= 3 else Severity.WARN
-
-
-def _result(severity: Severity, path: Path, message: str) -> Result:
-    return Result(severity, path, None, message, "status-vocabulary", None)
+    return Result(Severity.WARN, path, None, message, "status-vocabulary", None)
 
 
 @Check(section="entity status vocabulary", order=20)
@@ -73,7 +80,6 @@ def check_status_vocabulary(ctx: ValidateContext) -> Iterator[Result]:
 
         if status not in allowed:
             yield _result(
-                _severity(ctx),
                 path,
                 f"status {status!r} is not in the declared vocabulary for kind {kind!r} "
                 f"({', '.join(sorted(allowed))}).",

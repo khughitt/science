@@ -221,6 +221,10 @@ _LIVE_STATUSES: frozenset[str] = frozenset(
         "refuted",
         "complete",
         "contested",
+        # Pre-registration lifecycle. `committed` is the freeze point -- emphatically
+        # LIVE: a committed pre-registration is the one thing a study must not lose
+        # sight of.
+        "committed",
         "amended",
         "deprecated",
         "abandoned",

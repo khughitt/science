@@ -173,7 +173,11 @@ CORE_PROFILE = ProfileManifest(
             home="entities/reports",
             strategy="numeric",
             default_status="active",
-            statuses=["active", "superseded", "retired", "archived"],
+            # `draft`/`complete` are the report lifecycle. Their absence was an omission,
+            # not a policy: a report had no way to say it was FINISHED -- `plan` and
+            # `interpretation` both declare `complete`, `report` simply never got it. So
+            # 112 reports across five projects said `complete` anyway, and 8 said `draft`.
+            statuses=["draft", "active", "complete", "superseded", "retired", "archived"],
         ),
         EntityKind(
             name="validation-report",
@@ -404,7 +408,21 @@ CORE_PROFILE = ProfileManifest(
             home="entities/pre-registrations",
             strategy="numeric",
             default_status="active",
-            statuses=["active", "amended", "superseded", "retired"],
+            # `committed` is the FREEZE POINT -- the state the entire pre-registration
+            # doctrine exists to name, and the one the vocabulary omitted. Both
+            # `templates/pre-registration.md` and `commands/pre-register.md` prescribe
+            # `status: "committed"` on sign-off, so every pre-registration the toolkit
+            # itself told authors to write was out of vocabulary (40 of them).
+            # `draft` precedes the freeze; `complete` follows the study.
+            statuses=[
+                "draft",
+                "active",
+                "committed",
+                "amended",
+                "complete",
+                "superseded",
+                "retired",
+            ],
         ),
         EntityKind(
             name="plan",
@@ -416,7 +434,18 @@ CORE_PROFILE = ProfileManifest(
             home="entities/plans",
             strategy="numeric",
             default_status="active",
-            statuses=["active", "complete", "superseded", "retired", "archived"],
+            # A plan is DRAFTED before it is active, and `proposed` before it is agreed.
+            # The vocabulary admitted neither, so `draft` (102) and `proposed` (25) were
+            # the two most common plan statuses in the wild and both were illegal.
+            statuses=[
+                "draft",
+                "proposed",
+                "active",
+                "complete",
+                "superseded",
+                "retired",
+                "archived",
+            ],
         ),
         EntityKind(
             name="search",

@@ -117,11 +117,21 @@ FROZEN_STATUS_VALUES = {
     "mechanism": frozenset({"active", "superseded", "retired", "archived"}),
     "synthesis": frozenset({"active", "superseded", "retired", "archived"}),
     "story": frozenset({"draft", "developing", "mature"}),
-    "report": frozenset({"active", "superseded", "retired", "archived"}),
-    "plan": frozenset({"active", "complete", "superseded", "retired", "archived"}),
+    # `draft`/`complete` added: a report had no way to say it was FINISHED.
+    "report": frozenset({"draft", "active", "complete", "superseded", "retired", "archived"}),
+    # `draft`/`proposed` added: they were the two commonest plan statuses in the wild,
+    # and both were illegal.
+    "plan": frozenset(
+        {"draft", "proposed", "active", "complete", "superseded", "retired", "archived"}
+    ),
     "search": frozenset({"active", "complete", "retired", "archived"}),
     "method": frozenset({"active", "superseded", "retired", "archived"}),
-    "pre-registration": frozenset({"active", "amended", "superseded", "retired"}),
+    # `committed` added: the freeze point, and the status both templates/pre-registration.md
+    # and commands/pre-register.md tell authors to write. `draft` precedes the freeze;
+    # `complete` follows the study.
+    "pre-registration": frozenset(
+        {"draft", "active", "committed", "amended", "complete", "superseded", "retired"}
+    ),
     "paper": frozenset({"active", "retired"}),
     "prose-source": frozenset({"active", "retired"}),
     "book": frozenset({"active", "retired"}),
