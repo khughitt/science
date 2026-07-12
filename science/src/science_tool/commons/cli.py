@@ -78,7 +78,11 @@ def _wants_json(*, as_json: bool, output_format: str) -> bool:
 
 
 def prompt_resolve(conflict: FieldConflict | ExistingCanonicalConflict) -> Any:
-    """Interactive terminal prompt — the default `resolve_conflict` callback.
+    """Interactive terminal prompt — the `resolve_conflict` callback the CLI passes.
+
+    `plan_promote` defaults to `abort_on_conflict`; interactivity is opt-in, and
+    this is what the CLI opts in with. It lives here, not in the domain module,
+    because it is the one thing in the promote pipeline that needs click.
 
     UI mirrors design §7.1. Returns the resolved value (a candidate value, a
     user-entered manual value, or raises `PromoteConflictAbort` on 'a' / Ctrl-C).
