@@ -1,10 +1,16 @@
 # D5 — Entity Schema Convergence: Implementation Plan
 
-> **rev 3.** Rev 1 was rejected as not executable (seven contract defects, all confirmed). Rev 2
-> rebuilt it, and review then ruled two more things that rev 2 had left open and gotten wrong:
-> the **six-field "belief cluster" is three unrelated ownership patterns**, and **`verdict` is an
-> authored adjudication by contract** — not "authored for now". Both are now design rev 8.
-> The rev-7 mapping is unchanged and stands. See "What earlier revisions got wrong" at the end.
+> **rev 4.** Rev 1 was rejected as not executable (seven contract defects, all confirmed). Rev 2
+> rebuilt it. Review then ruled two more things rev 2 had gotten wrong: the **six-field "belief
+> cluster" is three unrelated ownership patterns**, and **`verdict` is an authored adjudication by
+> contract** — not "authored for now" (design rev 8, rev 3 of this plan).
+>
+> **Rev 4 is the first revision corrected by an instrument rather than by review.** Task 1 shipped,
+> ran, and **stopped the plan**: the corpus numbers were right, but the **9-repo rollout roster was
+> not** — it covers **85 of 147 hypotheses (58%)**, it double-counts two symlinks, and it omits the
+> one project that owns every file the belief ruling was written for. Task 11 now **derives** its
+> roster (18 roots) instead of listing it. **The rev-7 mapping is unchanged and now certified
+> cell-for-cell by that instrument.** See "What rev 3 got wrong" at the end.
 
 > **For agentic workers:** implement task-by-task. Steps use checkbox (`- [ ]`) syntax.
 > **Every task ends green.** A task that ends with a red suite is a broken task, not a slice.
@@ -62,11 +68,53 @@ concepts that share a word. *(Open question below: whether they should eventuall
 
 ---
 
-## What the corpus actually says (measured — this part is unchanged from rev 1)
+## What the corpus actually says (re-measured in rev 4 by the Task 1 instrument)
 
-147 authored hypotheses across `~/d/*` (excluding the `natural-systems--t664` worktree dupe),
-in **9 repos**: `natural-systems` (14), `r/mm30` (30), `r/cbioportal` (12), `protein-landscape` (7),
-`science/meta` (7), `health/meta` (6), `seq-feats` (4), `cancer/therapeutics` (3), `3d-attention-bias` (2).
+**147 authored hypotheses — across 18 project roots, not 9 repos.**
+
+> ### ⛔ rev 4 corrected the roster. Every rev through 3 carried a roster that contradicted its own total.
+> Rev 1–3 said *"147 hypotheses in **9 repos**"* and then listed per-repo counts that **sum to 85**.
+> Both numbers appeared in one sentence and neither was ever added up. The `147` was right (it was
+> measured across all of `~/d`); the **repo list** was the uncertified artifact — and it is the one
+> Task 11 would have *executed*. It covers **85 of 147 (58%)**.
+>
+> Two independent causes, both of which a hand-maintained list invites:
+> - **`~/d/r/mm30` and `~/d/r/cbioportal` are symlinks**, into `cancer/cancer-types/multiple-myeloma`
+>   and `cancer/data-sources/cbioportal`. They are not separate repos. Migrating "both" is migrating
+>   one repo twice, and Task 11's graph-diff would have diffed a repo against itself.
+> - **Six real projects were simply never listed**, holding **58 hypotheses** — including
+>   `cancer/mechanisms/evolution`, which owns **every one of the 13 belief-cluster files** that
+>   design rev 8's ruling and Task 2b's corruption fix exist to handle. The blast radius of the
+>   headline defect sat entirely outside the rollout.
+> - **Three of the 18 roots are fixture projects inside this toolkit's own `science/tests/`.** They
+>   hold 4 hypotheses and they are *not* optional: closing the schema breaks our own suite if they
+>   are not migrated with everything else.
+>
+> **Derive the roster; never list it.** (Same lesson as the Phase-6 import guard: *a guard that LISTS
+> its scope has a hole by construction.*) The roster below is produced by globbing `science.yaml`,
+> `.resolve()`-ing to collapse symlinks, and running `science entity field-inventory`.
+
+| project | n | in rev 1–3's list? |
+|---|---|---|
+| `cancer/cancer-types/multiple-myeloma` *(= the `r/mm30` symlink)* | 30 | yes |
+| `health/processes/post-acute-infection` | 20 | **NO** |
+| `cancer/mechanisms/evolution` ← **owns all 13 belief-cluster files** | 20 | **NO** |
+| `natural-systems` ← owns `0009` | 14 | yes |
+| `cancer/data-sources/cbioportal` *(= the `r/cbioportal` symlink)* | 12 | yes |
+| `health/comparisons/pan-disease` | 8 | **NO** |
+| `science/meta` · `protein-landscape` | 7 each | yes |
+| `health/meta` | 6 | yes |
+| `health/processes/cycles` | 5 | **NO** |
+| `seq-feats` · `health/processes/immunity` | 4 each | seq-feats only |
+| `cancer/therapeutics` | 3 | yes |
+| `3d-attention-bias` | 2 | yes |
+| `cancer/conditions/pre-cancer` | 1 | **NO** |
+| `science/tests/fixtures/{big_picture/minimal_project, spec_y_kitchen_sink, commons_mm30_canary/project}` | 2+1+1 | **NO** |
+| **total** | **147** | **85** |
+
+The `status` × `phase` cross-tab and the 36-key vocabulary below were **already measured over the
+full 147** — the Task 1 instrument reproduces both cell-for-cell — so the rev-7 mapping stands
+exactly as ruled. **Only the roster was wrong, and only Task 11 consumed it.**
 
 | `status` × `phase` | n |
 |---|---|
@@ -121,7 +169,7 @@ it. Phase 0 below is that work.
 | **0 — Declare the fields (P0)** | 1, 2, **2b** | **No** *(2b fixes a live bug)* | every authored key given one of four dispositions; the `_authored_magnitude` chain deleted |
 | **1 — Certify the mapping** | 3–4 | **No** | inventory + adjudication artifact; writes nothing |
 | **2 — Schema substrate (P2)** | 5, 6, **6b**, 7 | **No** | base 2.0, core mixin, **project extensions**, D3 validator + verdict-evidence graph check — all **wired**, strict, green |
-| **3 — The atomic slice (P2m)** | 8–11 | **YES** | all 9 repos migrated, graph-diffed, validate exit 0 |
+| **3 — The atomic slice (P2m)** | 8–11 | **YES** | all 18 roots migrated, graph-diffed, validate exit 0 |
 | **4 — Ratchet (P3)** | 12 | No | `hypothesis` → ERROR |
 
 **Ownership partition (design rev 8) runs through the whole plan.** A field is **core**,
@@ -238,20 +286,26 @@ Expected: `2 passed`
 - [ ] **Step 5: Wire a report-only CLI command** on `entity_group`, mirroring Task 3's shape
   (`--json` flag; prints `key  count`). No writes.
 
-- [ ] **Step 6: Run it across all 9 repos and reconcile to the 36-key list above**
-
-```bash
-for p in ~/d/natural-systems ~/d/r/mm30 ~/d/r/cbioportal ~/d/protein-landscape \
-         ~/d/science/meta ~/d/health/meta ~/d/seq-feats ~/d/cancer/therapeutics ~/d/3d-attention-bias; do
-  (cd "$p" && uv run science entity field-inventory --kind hypothesis --json)
-done | uv run python -c "import sys,json,collections; c=collections.Counter()
-for line in sys.stdin.read().split('\n\n'):
-    pass"   # merge however you like; the union must equal the 36 keys listed above
-```
+- [x] **Step 6: Run it across the DERIVED roster and reconcile to the 36-key list above.**
+  Use Task 11 Step 0's derivation — **not** a hand-written repo list. That is what this step caught.
 
 **If the union is not exactly those 36 keys, STOP** and update this document. The mixin in Task 6
 is generated from this list, and a key missing from it becomes a hard validation failure on real
 files the moment Task 6 closes the schema.
+
+> **✅ EXECUTED 2026-07-12 — and it stopped the plan, exactly as designed.**
+>
+> The **36-key union reconciled exactly**, and the instrument reproduced the `status` × `phase`
+> cross-tab **cell for cell** (60 / 36 / 28 / …, 88-file contradiction cohort). The rev-7 mapping is
+> now certified against the corpus by the sanctioned scanner rather than an ad-hoc grep.
+>
+> **But the hand-written 9-repo list resolved to 85 files, not 147** — see the rev-4 correction at
+> the top of this document. The step was written to reconcile the *key union*; what it actually
+> caught was a bad *population*. Both numbers had been sitting in one sentence since rev 1.
+>
+> The instrument only found it because it was run over `~/d/**/science.yaml` rather than the list —
+> i.e. **because it derived its own scope.** Had it been run over the nine repos it was told to run
+> over, the union would still have been ~32 keys and might well have been waved through.
 
 - [ ] **Step 7: Commit**
 
@@ -670,17 +724,17 @@ def inventory(
 - [ ] **Step 5: Wire the report-only CLI** (`science entity status-inventory [--json]`), printing
   the deterministic count and each refused file with its `ambiguity`.
 
-- [ ] **Step 6: Run against all 9 repos**
+- [ ] **Step 6: Run against the DERIVED roster** (Task 11 Step 0 — all 18 roots, not a hand list)
 
 ```bash
-for p in ~/d/natural-systems ~/d/r/mm30 ~/d/r/cbioportal ~/d/protein-landscape \
-         ~/d/science/meta ~/d/health/meta ~/d/seq-feats ~/d/cancer/therapeutics ~/d/3d-attention-bias; do
+for p in $(cat /tmp/claude-1000/roster.txt); do
   echo "=== $p"; (cd "$p" && uv run science entity status-inventory)
 done
 ```
-Expected across the 9: **145 deterministic, 1 refused** (`natural-systems/0009`; the second
-refusal is a toolkit test fixture, not a project). **Any other refusal ⇒ the mapping is not
-certified. STOP.**
+Expected across all 18 roots: **145 of 147 deterministic, 2 refused** — `natural-systems/0009`, and
+one toolkit test fixture. The fixture **is** one of the 18 roots and **does** get migrated (rev 4);
+it is refused here because it authors no `status`, not because it is exempt. **Any other refusal ⇒
+the mapping is not certified. STOP.**
 
 - [ ] **Step 7: Commit.**
 
@@ -1210,7 +1264,7 @@ which may *add* fields to a core kind but never redefine a core one.
 - Modify: `science/model/src/science_model/entity_schema/loader.py` — search a project schema dir before package resources
 - Modify: `science/model/src/science_model/entity_schema/profile.py` — `resolve_profile(kind, extensions)`
 - Modify: `science/src/science_tool/` — read `entity_extensions` from `science.yaml`
-- Create: `~/d/r/mm30/schemas/extension-mm30.assessment-1.0.json` *(in mm30, not the toolkit)*
+- Create: `~/d/cancer/cancer-types/multiple-myeloma/schemas/extension-mm30.assessment-1.0.json` *(in mm30, not the toolkit)*
 - Test: `science/model/tests/test_project_extensions.py`
 
 **Interfaces:**
@@ -1271,7 +1325,7 @@ entity_extensions:
   hypothesis: ["mm30.assessment/1.0"]   # resolves to schemas/extension-mm30-assessment-1.0.json
 ```
 
-- [ ] **Step 4: Green** — model suite + a real mm30 dry run (`science validate` in `~/d/r/mm30`
+- [ ] **Step 4: Green** — model suite + a real mm30 dry run (`science validate` in `~/d/cancer/cancer-types/multiple-myeloma`
   with the extension declared: **exit 0**; with it removed: the 12 files **fail loudly**, which is
   the proof the field is genuinely project-scoped and not silently core).
 
@@ -1531,7 +1585,7 @@ def check_verdict_has_evidence(ctx: ValidateContext) -> Iterator[Result]:
 > selects the hypothesis mixin **only** for pinned projects; unpinned projects keep today's
 > behaviour (no schema validation for `hypothesis`, WARN-only vocabulary check). The migration
 > command **sets the pin as its final act**, atomically with the file rewrites. So each *project*
-> migrates atomically, and the *kind* is migrated when all 9 are pinned (Task 11's ratchet
+> migrates atomically, and the *kind* is migrated when all 18 roots are pinned (Task 11's ratchet
 > requires exactly that).
 >
 > **This is not the forbidden compatibility layer.** That layer is code that *guesses* which
@@ -2015,15 +2069,37 @@ re-raises `EntityValidationError` as `EntityCommandError`.
 
 ---
 
-### Task 11: Roll out across all 9 repos, with a graph diff
+### Task 11: Roll out across every project that authors a hypothesis, with a graph diff
 
-- [ ] **Step 1: For EACH of the 9 repos, in this order** (smallest first — a mistake is cheapest
-  in `3d-attention-bias`):
+> **The roster is DERIVED, not listed** (see the rev-4 correction at the top). Rev 1–3 hardcoded
+> nine repos and would have migrated **85 of 147** hypotheses, leaving 62 on the old meaning while
+> `default_profile_for_kind` flipped globally — the exact non-atomic split this whole phase exists
+> to prevent. Re-derive at execution time; do not trust the table, and do not trust this list either
+> if the corpus has moved since.
 
+- [ ] **Step 0: Derive the roster.** Symlinks (`~/d/r/*`) must collapse or a repo migrates twice.
+
+```bash
+uv run python - <<'PY'
+from pathlib import Path
+from science_tool.field_inventory import field_inventory
+D = Path.home() / "d"
+roots = sorted({p.parent.resolve() for p in D.glob("**/science.yaml")
+                if not any(s in {".venv",".git",".claude",".worktrees","node_modules","templates"}
+                           for s in p.parts) and "--" not in p.parent.name})
+rows = [(field_inventory(r, "hypothesis").get("id", 0), r) for r in roots]
+for n, r in sorted(x for x in rows if x[0]):
+    print(f"{n:4d}  {r}")
+print("total:", sum(n for n, _ in rows))
+PY
 ```
-3d-attention-bias (2) → cancer/therapeutics (3) → seq-feats (4) → health/meta (6) →
-science/meta (7) → protein-landscape (7) → r/cbioportal (12) → natural-systems (14) → r/mm30 (30)
-```
+
+Expect **18 roots / 147 hypotheses** as of 2026-07-12. **If the total is not 147, stop** — the
+cross-tab and the 36-key mixin were both certified against exactly that corpus.
+
+- [ ] **Step 1: Migrate each root, smallest first** (a mistake is cheapest in `pre-cancer` (1)).
+  The three `science/tests/fixtures/**` roots are migrated **in this repo, as part of this task** —
+  they are 4 real hypotheses and our own suite fails on them the moment Task 6 closes the schema.
 
 For each:
 
@@ -2037,6 +2113,12 @@ uv run science graph build --output /tmp/claude-1000/after-$(basename $PWD).trig
 uv run science validate; echo "exit=$?"             # MUST be 0
 ```
 
+> **`cancer/mechanisms/evolution` is the hard one — do it LAST, not by size.** It owns all 13
+> `belief_state`/`evidence_stance`/`author_stated_evidence` files, so it is the only repo where
+> Task 2b's deletion and Task 6b's `evidence_scope` extension actually bite. It is also the repo
+> where a field-order mistake silently promotes 13 hypotheses `speculative` → `supported`.
+> **Task 2b must already be merged before this repo is touched.**
+
 - [ ] **Step 2: Diff the graph and account for every triple.** Expected, and nothing else:
   - `sci:projectStatus` values change per the rev-7 mapping
   - **new** `sci:verdict` triples on exactly the hypotheses that carry one
@@ -2046,18 +2128,21 @@ uv run science validate; echo "exit=$?"             # MUST be 0
 
   **Any unexplained triple means the slice is not atomic. Stop and find it.**
 
-- [ ] **Step 3: With all 9 pinned, run validate everywhere one more time.**
+- [ ] **Step 3: With every root pinned, re-derive the roster and validate all of it.**
 
 ```bash
-for p in ~/d/natural-systems ~/d/r/mm30 ~/d/r/cbioportal ~/d/protein-landscape \
-         ~/d/science/meta ~/d/health/meta ~/d/seq-feats ~/d/cancer/therapeutics ~/d/3d-attention-bias; do
+# re-derive (Step 0), then:
+for p in $(cat /tmp/claude-1000/roster.txt); do
   echo -n "$p: "; (cd "$p" && uv run science validate >/dev/null 2>&1; echo "exit=$?")
 done
+cd ~/d/science/science && uv run --frozen pytest -q   # the fixture roots live here
 ```
-**All nine exit 0.** This is the step whose absence caused the original incident.
+**Every root exits 0, and our own suite is green.** This is the step whose absence caused the
+original incident — and rev 1–3 would have run it over 58% of the corpus and called it clean.
 
 - [ ] **Step 4: Commit each repo separately** (they are separate git repos; several are
-  Dropbox-only with no remote — **do not push**).
+  Dropbox-only with no remote — **do not push**). `r/mm30` and `r/cbioportal` are **symlinks**;
+  commit in the real repos (`cancer/cancer-types/multiple-myeloma`, `cancer/data-sources/cbioportal`).
 
 ---
 
@@ -2088,10 +2173,39 @@ def _severity(kind: str) -> Severity:
     return Severity.ERROR if kind in _CERTIFIED_KINDS else Severity.WARN
 ```
 
-- [ ] **Step 3:** Re-run validate across all 9 repos. **All exit 0.**
+- [ ] **Step 3:** Re-run validate across the derived roster (all 18 roots). **All exit 0.**
 - [ ] **Step 4: Commit.**
 
 ---
+
+## What rev 3 got wrong (caught by Task 1, its own first instrument)
+
+13. **Every rev carried a roster that contradicted its own total, and no rev added it up.** "147
+    hypotheses in **9 repos**", followed by nine per-repo counts summing to **85**. The two numbers
+    sat in a single sentence from rev 1 through rev 3. A second tell was equally public: the
+    cross-tab needs ≥96 files carrying `phase` (60 `active` + 36 `candidate`), but the 9-repo
+    inventory finds only 64. **Neither required new data to catch — only arithmetic on data already
+    in the document.**
+14. **The corpus claims were certified; the roster was not.** The `147`, the cross-tab and the
+    36 keys were all measured across `~/d`. The **repo list** was typed by hand — and it was the
+    only one of those artifacts that Task 11 would have *executed*. So the plan's most-verified
+    numbers guarded its least-verified one, and the mismatch read as detail rather than defect.
+15. **The consequence was precisely the non-atomicity the phase exists to prevent.** Migrating the
+    nine would have moved 85 of 147 files while `default_profile_for_kind` flipped **globally** —
+    62 hypotheses left on the old meaning, in projects nobody was watching, with `validate` green
+    across all nine and the slice declared done. That is finding #6 (rev 1's cross-project defect)
+    **reintroduced through the data instead of the code**: rev 2 fixed the *mechanism* (a per-project
+    `entity_schema_version` pin) and left the *scope* uncertified.
+16. **And the headline defect was outside the rollout entirely.** All 13 `belief_state` /
+    `evidence_stance` / `author_stated_evidence` files — design rev 8's belief ruling, Task 2b's
+    `speculative` → `supported` corruption — live in `cancer/mechanisms/evolution`, which the plan
+    never listed. **Two `~/d/r/*` entries were symlinks** into `cancer/`, so the plan also counted
+    two repos twice and would have graph-diffed them against themselves.
+
+> **The lesson, and it is the same one twice:** *a scope that is **listed** has a hole by
+> construction; derive it.* Phase 6's import guard taught this about code. Task 1 just taught it
+> about **corpora** — and the instrument only caught it because it globbed `science.yaml` instead of
+> reading the list it was handed. **Certify the population, not just the measurement.**
 
 ## What rev 2 got wrong (ruled in design rev 8)
 
@@ -2141,7 +2255,7 @@ survive review by looking like schedule rather than substance.
    any failure — two meanings of `status` live at once, the exact state that forces the forbidden
    compatibility layer. Now: render + schema-validate **everything**, then write.
 6. **It migrated one repo and expected eight others to keep working.** `default_profile_for_kind`
-   is global; wiring it flips every project at once. There are **9 repos** and 147 files. Fixed by
+   is global; wiring it flips every project at once. There are **18 project roots** and 147 files. Fixed by
    an explicit per-project `entity_schema_version` pin — a *declaration*, not a heuristic.
 7. **It rebuilt the second authority D3 abolishes.** It duplicated `complete requires a verdict`
    as a Pydantic `model_validator` alongside the JSON Schema `if/then`. Two authorities always
