@@ -1076,7 +1076,8 @@ Proposed.
         de-duplication, not new behavior — and that the report dict does NOT
         carry a redundant `archive_lag_total` key.
         """
-        from science_tool.graph.health import archive_lag_total, build_health_report
+        from science_tool.graph.health import build_health_report
+        from science_tool.graph.health_checks.archive_lag import archive_lag_total
 
         (tmp_path / "science.yaml").write_text("name: test\n", encoding="utf-8")
         tasks_dir = tmp_path / "tasks"

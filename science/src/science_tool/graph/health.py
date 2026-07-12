@@ -13,19 +13,19 @@ from typing import NotRequired, TypedDict, cast
 
 import yaml as _yaml
 
-from science_tool.annotation.cross_paper_evidence import (
-    build_cross_paper_evidence_report,
-    proposition_source_refs_map,
-)
 from science_tool.data_root import project_config_path
 from science_tool.graph.health_checks.agent_context import CHECK as AGENT_CONTEXT_CHECK
 from science_tool.graph.health_checks.agent_context import AgentContextFinding
+from science_tool.graph.health_checks.archive_lag import CHECK as ARCHIVE_LAG_CHECK
+from science_tool.graph.health_checks.archive_lag import TaskArchiveLag, archive_lag_total
 from science_tool.graph.health_checks.base import (
     HealthCheck,
     HealthContext,
     HealthTiming,
     context_sources,
 )
+from science_tool.graph.health_checks.cross_paper_evidence import CHECK as CROSS_PAPER_EVIDENCE_CHECK
+from science_tool.graph.health_checks.cross_paper_evidence import CrossPaperEvidenceHealthReport
 from science_tool.graph.health_checks.dataset_anomalies import CHECK as DATASET_ANOMALIES_CHECK
 from science_tool.graph.health_checks.entity_identity import CHECK as ENTITY_IDENTITY_CHECK
 from science_tool.graph.health_checks.entity_identity import EntityIdentityFinding
@@ -33,10 +33,13 @@ from science_tool.graph.health_checks.identity_policy import CHECK as IDENTITY_P
 from science_tool.graph.health_checks.identity_policy import IdentityPolicyFinding
 from science_tool.graph.health_checks.invalid_entity_aspects import CHECK as INVALID_ENTITY_ASPECTS_CHECK
 from science_tool.graph.health_checks.invalid_entity_aspects import InvalidEntityAspectsFinding
+from science_tool.graph.health_checks.layered_claim_migration import CHECK as LAYERED_CLAIM_MIGRATION_CHECK
 from science_tool.graph.health_checks.legacy_task_type import CHECK as LEGACY_TASK_TYPE_CHECK
 from science_tool.graph.health_checks.legacy_task_type import LegacyTaskTypeFinding
 from science_tool.graph.health_checks.lingering_tags import CHECK as LINGERING_TAGS_CHECK
 from science_tool.graph.health_checks.lingering_tags import LingeringTagsRecord
+from science_tool.graph.health_checks.managed_artifacts import CHECK as MANAGED_ARTIFACTS_CHECK
+from science_tool.graph.health_checks.prose_epistemics import CHECK as PROSE_EPISTEMICS_CHECK
 from science_tool.graph.health_checks.tooling_scaffold import CHECK as TOOLING_SCAFFOLD_CHECK
 from science_tool.graph.health_checks.tooling_scaffold import ToolingScaffoldFinding
 from science_tool.graph.health_checks.unregistered_ref_kinds import CHECK as UNREGISTERED_REF_KINDS_CHECK
@@ -45,26 +48,9 @@ from science_tool.graph.health_checks.unresolved_refs import CHECK as UNRESOLVED
 from science_tool.graph.health_checks.unresolved_refs import UnresolvedRef
 from science_tool.graph.health_checks.validate import CHECK as VALIDATE_CHECK
 from science_tool.graph.health_checks.validate import ValidationFinding
-from science_tool.graph.migrate import (
-    LayeredClaimMigrationReport,
-    build_layered_claim_migration_report,
-)
+from science_tool.graph.migrate import LayeredClaimMigrationReport
 from science_tool.graph.sources import load_project_sources
 from science_tool.instruments import InstrumentResult
-
-
-class TaskArchiveLag(TypedDict):
-    done_in_active: int
-    retired_in_active: int
-    missing_completed: int
-
-
-def archive_lag_total(archive_lag: TaskArchiveLag) -> int:
-    return (
-        archive_lag["done_in_active"]
-        + archive_lag["retired_in_active"]
-        + archive_lag["missing_completed"]
-    )
 
 
 class AcceptedValidationFinding(ValidationFinding):
@@ -250,23 +236,6 @@ class LayeredClaimHealthReport(TypedDict):
     migration_issues: list[LayeredClaimIssue]
 
 
-class CrossPaperEvidenceFinding(TypedDict):
-    code: str
-    severity: str
-    sidecar: str
-    annotation: str
-    reason: str
-    detail: str
-
-
-class CrossPaperEvidenceHealthReport(TypedDict):
-    status: str
-    empty_state: str
-    summary: dict[str, object]
-    findings: list[CrossPaperEvidenceFinding]
-    propositions: list[dict[str, object]]
-
-
 def _health_check_names() -> frozenset[str]:
     return frozenset(check.name for check in HEALTH_CHECKS)
 
@@ -303,37 +272,6 @@ def _select_health_checks(
         raise ValueError(f"unknown health check(s): {names}; known checks: {known}")
     selected_names = requested - skipped
     return tuple(check for check in HEALTH_CHECKS if check.name in selected_names)
-
-
-def _empty_layered_claim_migration_report(project_root: Path) -> LayeredClaimMigrationReport:
-    return {
-        "project_root": str(project_root),
-        "rows": [],
-        "summary": {
-            "proposition_count": 0,
-            "authored_claim_layer_count": 0,
-            "authored_identification_strength_count": 0,
-            "warning_count": 0,
-            "todo_count": 0,
-        },
-    }
-
-
-def _empty_cross_paper_evidence_health() -> CrossPaperEvidenceHealthReport:
-    return {
-        "status": "ok",
-        "empty_state": "no_propositions",
-        "summary": {
-            "propositions": 0,
-            "propositions_with_units": 0,
-            "units": 0,
-            "faults": 0,
-            "faults_by_reason": {},
-            "contested": 0,
-        },
-        "findings": [],
-        "propositions": [],
-    }
 
 
 def _empty_check_results(project_root: Path) -> dict[str, object]:
@@ -527,193 +465,16 @@ def _coverage_metric(*, numerator: int, denominator: int) -> CoverageMetric:
     }
 
 
-def _collect_archive_lag(context: HealthContext) -> TaskArchiveLag:
-    from science_tool.tasks_archive import count_archivable
-
-    return cast("TaskArchiveLag", count_archivable(context.project_root / "tasks"))
-
-
-def _cross_paper_empty_state(summary: dict[str, object]) -> str:
-    if summary.get("propositions") == 0:
-        return "no_propositions"
-    if summary.get("units") == 0:
-        return "no_cross_paper_evidence"
-    return "active"
-
-
-def _collect_cross_paper_evidence(context: HealthContext) -> CrossPaperEvidenceHealthReport:
-    report = build_cross_paper_evidence_report(
-        context.project_root,
-        proposition_source_refs=proposition_source_refs_map(context_sources(context).entities),
-    )
-    summary = cast("dict[str, object]", report["summary"])
-    findings: list[CrossPaperEvidenceFinding] = [
-        {
-            "code": f"cross_paper_evidence.{row['reason']}",
-            "severity": "error",
-            "sidecar": _project_relative_sidecar(context.project_root, row["sidecar"]),
-            "annotation": row["annotation"],
-            "reason": row["reason"],
-            "detail": row["detail"],
-        }
-        for row in cast("list[dict[str, str]]", report["faults"])
-    ]
-    return {
-        "status": "fail" if findings else "ok",
-        "empty_state": _cross_paper_empty_state(summary),
-        "summary": summary,
-        "findings": findings,
-        "propositions": cast("list[dict[str, object]]", report["propositions"]),
-    }
-
-
-def _project_relative_sidecar(project_root: Path, sidecar: str) -> str:
-    path = Path(sidecar)
-    try:
-        return path.resolve().relative_to(project_root.resolve()).as_posix()
-    except ValueError:
-        return sidecar
-
-
-def _collect_managed_artifacts(context: HealthContext) -> list[dict]:
-    from science_tool.project_artifacts.health_integration import health_findings
-
-    return cast("list[dict]", health_findings(context.project_root))
-
-
-def _empty_prose_epistemics() -> dict[str, object]:
-    return {
-        "applicable": False,
-        "summary": {},
-        "coverage": {},
-        "sources": [],
-        "findings": [],
-    }
-
-
-def _collect_prose_epistemics(context: HealthContext) -> dict[str, object]:
-    from science_tool.annotation.prose_health import (
-        ProseHealthError,
-        load_prose_health_artifact,
-        load_prose_health_manifest,
-        prose_health_manifest_path,
-        prose_health_path,
-    )
-
-    manifest_path = prose_health_manifest_path(context.project_root)
-    artifact_path = prose_health_path(context.project_root)
-    if not manifest_path.exists() and not artifact_path.exists():
-        return _empty_prose_epistemics()
-    if manifest_path.exists():
-        try:
-            load_prose_health_manifest(context.project_root)
-        except ProseHealthError as exc:
-            return {
-                "applicable": True,
-                "summary": {},
-                "coverage": {},
-                "sources": [],
-                "findings": [
-                    {
-                        "code": "manifest_invalid",
-                        "severity": "error",
-                        "counts_as_issue": True,
-                        "source_ref": None,
-                        "path": manifest_path.relative_to(context.project_root).as_posix(),
-                        "message": str(exc),
-                    }
-                ],
-            }
-    if not artifact_path.exists():
-        return {
-            "applicable": True,
-            "summary": {},
-            "coverage": {},
-            "sources": [],
-            "findings": [
-                {
-                    "code": "prose_health_artifact_missing",
-                    "severity": "warning",
-                    "counts_as_issue": True,
-                    "source_ref": None,
-                    "path": artifact_path.relative_to(context.project_root).as_posix(),
-                    "message": (
-                        "Prose health manifest exists but prose-health.json is missing; "
-                        "run science annotate build-prose-health --write."
-                    ),
-                }
-            ],
-        }
-    try:
-        artifact = load_prose_health_artifact(context.project_root)
-    except ProseHealthError as exc:
-        return {
-            "applicable": True,
-            "summary": {},
-            "coverage": {},
-            "sources": [],
-            "findings": [
-                {
-                    "code": "prose_health_artifact_invalid",
-                    "severity": "error",
-                    "counts_as_issue": True,
-                    "source_ref": None,
-                    "path": artifact_path.relative_to(context.project_root).as_posix(),
-                    "message": str(exc),
-                }
-            ],
-        }
-    return {
-        "applicable": True,
-        "summary": artifact.get("summary", {}),
-        "coverage": artifact.get("coverage", {}),
-        "sources": artifact.get("sources", []),
-        "findings": artifact.get("findings", []),
-    }
-
-
 HEALTH_CHECKS: tuple[HealthCheck, ...] = (
     IDENTITY_POLICY_CHECK,
     ENTITY_IDENTITY_CHECK,
-    HealthCheck(
-        name="layered_claim_migration",
-        description="Report layered-claim adoption gaps and migration issues.",
-        requires_sources=True,
-        run=lambda context: build_layered_claim_migration_report(
-            context.project_root, sources=context_sources(context)
-        ),
-        empty=_empty_layered_claim_migration_report,
-    ),
-    HealthCheck(
-        name="cross_paper_evidence",
-        description="Report derived cross-paper literature evidence and scanner faults.",
-        requires_sources=True,
-        run=_collect_cross_paper_evidence,
-        empty=lambda _root: _empty_cross_paper_evidence_health(),
-    ),
-    HealthCheck(
-        name="archive_lag",
-        description="Count completed tasks that should be archived.",
-        requires_sources=False,
-        run=_collect_archive_lag,
-        empty=lambda _root: {"done_in_active": 0, "retired_in_active": 0, "missing_completed": 0},
-    ),
-    HealthCheck(
-        name="managed_artifacts",
-        description="Check installed managed artifacts against canonical versions.",
-        requires_sources=False,
-        run=_collect_managed_artifacts,
-        empty=lambda _root: [],
-    ),
+    LAYERED_CLAIM_MIGRATION_CHECK,
+    CROSS_PAPER_EVIDENCE_CHECK,
+    ARCHIVE_LAG_CHECK,
+    MANAGED_ARTIFACTS_CHECK,
     TOOLING_SCAFFOLD_CHECK,
     VALIDATE_CHECK,
-    HealthCheck(
-        name="prose_epistemics",
-        description="Read the project-level prose epistemics health artifact.",
-        requires_sources=False,
-        run=_collect_prose_epistemics,
-        empty=lambda _root: _empty_prose_epistemics(),
-    ),
+    PROSE_EPISTEMICS_CHECK,
     AGENT_CONTEXT_CHECK,
     UNRESOLVED_REFS_CHECK,
     UNREGISTERED_REF_KINDS_CHECK,
