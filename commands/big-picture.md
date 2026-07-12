@@ -138,7 +138,14 @@ The prompt passed to each sub-agent includes:
 - Project root path.
 - Hypothesis ID and `hypothesis_path`.
 - The bundle (inlined in the prompt as structured text — the sub-agent does not have access to your in-memory bundle directly).
-- Target output path: `entities/synthesis/<hyp-id>.md`.
+- Target output path: **resolve it, do not compose it.** Run
+  `science big-picture synthesis-path <hyp-id> --project-root <root>` and pass the result
+  verbatim. An existing `report_kind: hypothesis-synthesis` entity whose `hypothesis:`
+  frontmatter names this hypothesis wins, *whatever its filename* — numbered-entity projects
+  store it as e.g. `entities/synthesis/0022-epigenetic-commitment.md`. Composing
+  `<hyp-id>.md` in such a project creates a DUPLICATE synthesis entity beside the canonical
+  one, with the rollup pointing at one and the graph at the other. The fallback to
+  `<hyp-id>.md` applies only when no prior file exists — partial coverage is normal.
 - Frontmatter: emit `kind: synthesis` + `title: "Synthesis: <hyp-id>"` + `report_kind: hypothesis-synthesis` + `id: synthesis:<hyp-id>` + `hypothesis: hypothesis:<hyp-id>` + `generated_at` + `source_commit` + `provenance_coverage`. Do *not* emit `synthesized_from:` (the rollup carries that). `title` is required because projects may register `synthesis` as a profile kind. See `agents/hypothesis-synthesizer.md` for the full output spec.
 - `generated_at` and `source_commit` values.
 - `provenance_coverage` value.

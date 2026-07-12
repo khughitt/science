@@ -1,6 +1,6 @@
 ---
 name: hypothesis-synthesizer
-description: Synthesize one per-hypothesis section of a /science:big-picture report. Accepts a bundle describing a single hypothesis (its file, related questions, tasks, interpretations, and .edges.yaml if present) and writes one markdown file to doc/reports/synthesis/<hyp-id>.md. Use when the main /science:big-picture command dispatches per-hypothesis work in parallel.
+description: Synthesize one per-hypothesis section of a /science:big-picture report. Accepts a bundle describing a single hypothesis (its file, related questions, tasks, interpretations, and .edges.yaml if present) and writes one markdown file to the synthesis entity path supplied by the orchestrator. Use when the main /science:big-picture command dispatches per-hypothesis work in parallel.
 model: claude-sonnet-4-6
 tools: Read, Write, Glob, Grep, Bash
 ---
@@ -21,7 +21,11 @@ The dispatcher gives you:
   - related interpretation IDs (via interpretation frontmatter `related:`)
   - matching `.edges.yaml` files under `doc/figures/dags/` if any
   - filtered graph uncertainty/gaps output for this hypothesis
-- Target output path: `doc/reports/synthesis/<hyp-id>.md`
+- Target output path: **supplied by the orchestrator.** Write to exactly that path.
+  Do NOT compose one from the hypothesis ID: in a numbered-entity project the synthesis
+  entity is `entities/synthesis/0022-epigenetic-commitment.md`, bound to its hypothesis by
+  frontmatter, and composing `<hyp-id>.md` would create a DUPLICATE synthesis entity beside
+  the canonical one.
 - `provenance_coverage` value to record in frontmatter (`high` | `partial` | `thin`), pre-computed by the dispatcher.
 
 Read the hypothesis file, the .edges.yaml if present, and each related interpretation. Do not read beyond the bundle — the dispatcher chose what is relevant. If something critical appears missing, report back rather than searching further.

@@ -1,13 +1,14 @@
 ---
 name: emergent-threads-synthesizer
-description: Synthesize the cross-cutting and orphan material for a /science:big-picture report. Produces doc/reports/synthesis/_emergent-threads.md. Use when /science:big-picture dispatches emergent-thread analysis alongside per-hypothesis sub-agents.
+description: Synthesize the cross-cutting and orphan material for a /science:big-picture report. Produces the emergent-threads synthesis entity at the path supplied by the orchestrator. Use when /science:big-picture dispatches emergent-thread analysis alongside per-hypothesis sub-agents.
 model: claude-sonnet-4-6
 tools: Read, Write, Glob, Grep, Bash
 ---
 
 # Emergent Threads Synthesizer
 
-You are a dispatched subagent. Your sole job is to produce `doc/reports/synthesis/_emergent-threads.md`.
+You are a dispatched subagent. Your sole job is to produce the emergent-threads synthesis
+entity at the path the orchestrator supplies.
 
 ## Input you receive
 
@@ -15,7 +16,8 @@ The dispatcher gives you:
 
 - Path to the project root.
 - The full question→hypothesis resolver output as JSON.
-- Path to the target output file: `doc/reports/synthesis/_emergent-threads.md`.
+- Path to the target output file: **supplied by the orchestrator.** Write to exactly that
+  path; do not compose one.
 - `generated_at` and `source_commit` values.
 
 ## Output you produce
