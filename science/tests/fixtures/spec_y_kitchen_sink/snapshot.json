@@ -98,7 +98,9 @@
     "dataset_usage": [],
     "blocked_by": [],
     "evidence_role": null,
-    "rival_model_packet": null
+    "rival_model_packet": null,
+    "disposition": "open",
+    "disposition_basis": null
   },
   {
     "canonical_id": "spec:research-question",

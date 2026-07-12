@@ -3,6 +3,8 @@ id: "hypothesis:{{nn}}-{{slug}}"
 kind: "hypothesis"
 title: "{{title}}"
 status: "proposed"
+disposition: "open"  # open | closed. WORKFLOW state, orthogonal to `status`. `closed` = no longer an object of active work; it says NOTHING about truth. Never inferred from status.
+# disposition_basis: required when disposition is `closed` -- a pre-registration ref, or authored prose for a pragmatic close.
 phase: "active"  # candidate | active. `candidate` for trial framings being promoted to organize work but not yet committed; `active` (default) for committed frames.
 # aspects: ["hypothesis-testing"]  # optional override; omitted entities inherit project aspects
 source_refs: []
@@ -18,6 +20,7 @@ _template:
     kind: { default: "hypothesis" }
     title: { from: title }
     status: { from: status }
+    disposition: { default: "open" }
     phase: { from: phase, default: "active" }
     source_refs: { from: source_refs }
     origins: { from: origins, default: [] }

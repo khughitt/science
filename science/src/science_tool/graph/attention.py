@@ -122,6 +122,20 @@ def compute_attention_candidates(
         if kinds is not None and kind not in kinds:
             continue
 
+        # A TERMINAL entity is not a work item, so it is not ranked.
+        #
+        # This is not cosmetic. Every term that drives the weight below is HIGHEST for a
+        # hypothesis that just died: it accumulated the most incoming bears_on and the most
+        # open questions precisely BECAUSE it was the organizing frame. natural-systems'
+        # refuted hypothesis:0009 led its ranking on open_question_debt=10 and 27 incoming
+        # bears_on -- so being disproved made it MORE attention-worthy, and the system
+        # recommended working hardest on the thing it believed least (fb-2026-07-11-005).
+        #
+        # It stays in the graph: queryable, provenance-visible, lineage intact. Closure is
+        # not hiding. Its orphaned questions do not vanish with it -- see `list_rehoming_debt`.
+        if (entity_uri, SCI_NS.disposition, Literal("closed")) in knowledge:
+            continue
+
         freshness_state = str(state_literal)
         incoming_bears_on = _count_uri_objects(knowledge.triples((None, SCI_NS.bearsOn, entity_uri)))
         days_since_last_review = _days_since_last_review(knowledge, entity_uri, current_date)
@@ -519,6 +533,67 @@ def _open_question_debt(knowledge, entity_uri: URIRef) -> int:
         if status_literal is not None and str(status_literal) in DEBT_QUESTION_STATUSES:
             debt += 1
     return debt
+
+
+def list_rehoming_debt(graph_path: Path) -> InstrumentResult[dict[str, str]]:
+    """Debt-status questions still resolving to a TERMINAL hypothesis.
+
+    Closing a hypothesis does NOT close its questions -- it UNHOUSES them. natural-systems'
+    refuted hypothesis:0009 still carried 10 open questions; they did not become
+    uninteresting because their frame died, they became homeless.
+
+    This exists because the attention exclusion is dangerous on its own. Dropping a terminal
+    hypothesis from the ranking also drops its questions' debt from view, which would convert
+    a VISIBLE debt into an INVISIBLE one -- strictly worse than the bug being fixed
+    (fb-2026-07-11-005). Retirement CREATES work, and the system must show it.
+
+    The dead hypothesis is not ranked. Its re-homing debt is.
+
+    `unwired` when the graph declares no dispositions at all: a project whose hypotheses
+    predate the field cannot be said to have "no re-homing debt" -- nothing has been closed
+    because nothing CAN be closed, and reporting a confident zero would be the silent-
+    instrument bug.
+    """
+    dataset = Dataset()
+    dataset.parse(source=str(graph_path), format="trig")
+    knowledge = dataset.graph(PROJECT_NS["graph/knowledge"])
+
+    if not any(knowledge.triples((None, SCI_NS.disposition, None))):
+        return InstrumentResult.unwired(
+            code="no_disposition_declared",
+            reason=(
+                "graph/knowledge carries no sci:disposition triples -- no hypothesis can be "
+                "terminal, so re-homing debt cannot be assessed. Zero here would not mean "
+                "'no debt'."
+            ),
+        )
+
+    rows: list[dict[str, str]] = []
+    for hypothesis_uri in sorted(knowledge.subjects(SCI_NS.disposition, Literal("closed")), key=str):
+        if not isinstance(hypothesis_uri, URIRef):
+            continue
+        hypothesis_id = canonical_id_from_entity_uri(str(hypothesis_uri))
+        if hypothesis_id is None:
+            continue
+
+        for question_uri in sorted(_related_neighbors(knowledge, hypothesis_uri), key=str):
+            if _entity_kind_of(question_uri) != "question":
+                continue
+            status_literal = next(knowledge.objects(question_uri, SCI_NS.projectStatus), None)
+            if status_literal is None or str(status_literal) not in DEBT_QUESTION_STATUSES:
+                continue
+            question_id = canonical_id_from_entity_uri(str(question_uri))
+            if question_id is None:
+                continue
+            rows.append(
+                {
+                    "question": question_id,
+                    "terminal_hypothesis": hypothesis_id,
+                    "question_status": str(status_literal),
+                }
+            )
+
+    return InstrumentResult.from_rows(rows)
 
 
 def _days_since_last_review(knowledge, entity_uri: URIRef, today: date) -> float:

@@ -794,6 +794,51 @@ class TaskEntity(ProjectEntity):
     completed: date | None = None
 
 
+class HypothesisEntity(ProjectEntity):
+    """Hypothesis — carries the two orthogonal lifecycle axes.
+
+    `status` (inherited) is the EPISTEMIC VERDICT: what the evidence says. Its vocabulary
+    already distinguishes `refuted` (met a rejection criterion) from `weakened` (failed to
+    confirm, did not reject).
+
+    `disposition` is the WORKFLOW STATE: whether this hypothesis is still an object of
+    active work. It says nothing about truth.
+
+    The two are ORTHOGONAL, and neither may be inferred from the other. All four
+    combinations are meaningful:
+
+    - `refuted` + `open`              — disproved, still being worked (writing it up, probing why)
+    - `supported` + `closed`          — confirmed and done
+    - `under-investigation` + `closed` — closed for PRAGMATIC reasons; epistemically undecided
+    - `refuted` + `closed`            — disproved and closed
+
+    That third case is why a single field cannot carry both. natural-systems had no workflow
+    axis, so it wrote `status: retired` — a TASK status — onto a hypothesis, destroying the
+    epistemic verdict and recording a refutation that never happened: the confirmatory null
+    was NON-significant (z = -0.889), which is `weakened`, not `refuted` (fb-2026-07-11-005).
+
+    `disposition` defaults to `open` and is NEVER inferred from `status`. An existing
+    hypothesis that nobody has closed IS open — there is no fact to migrate. Inferring
+    closure from a terminal epistemic status would re-collapse the two axes and silently
+    close hypotheses whose authors never said to.
+    """
+
+    disposition: Literal["open", "closed"] = "open"
+    disposition_basis: str | None = None
+
+    @model_validator(mode="after")
+    def _closed_requires_a_basis(self) -> "HypothesisEntity":
+        # Closure is always an EXPLICIT authored act. Without a basis, retirement is an
+        # unexplained disappearance -- and the whole point of the axis is that closing is
+        # something a person DID, for a reason that can be named.
+        if self.disposition == "closed" and not (self.disposition_basis or "").strip():
+            raise ValueError(
+                "disposition: closed requires disposition_basis (a pre-registration ref, "
+                "or authored prose for a pragmatic close)"
+            )
+        return self
+
+
 class DatasetEntity(ProjectEntity):
     """Dataset — typed entity with rev 2.2 invariants (origin/access/derivation).
 

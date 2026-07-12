@@ -578,6 +578,35 @@ def graph_inquiry_summary(top: int, output_format: str, graph_path: Path) -> Non
     )
 
 
+@graph_group.command("rehoming-debt")
+@click.option("--format", "output_format", type=click.Choice(OUTPUT_FORMATS), default="table", show_default=True)
+@click.option(
+    "--path", "graph_path", default=str(DEFAULT_GRAPH_PATH), show_default=True, type=click.Path(path_type=Path)
+)
+def graph_rehoming_debt(output_format: str, graph_path: Path) -> None:
+    """Open questions still attached to a TERMINAL (disposition: closed) hypothesis.
+
+    Closing a hypothesis does not close its questions -- it UNHOUSES them. They are dropped
+    from the attention ranking along with their dead hypothesis, so without this surface a
+    VISIBLE debt would become an INVISIBLE one. Retirement creates work; this is where that
+    work shows up (fb-2026-07-11-005).
+    """
+    from science_tool.graph.attention import list_rehoming_debt
+
+    result = list_rehoming_debt(graph_path)
+    rows = unwrap_instrument(result, what="graph rehoming-debt")
+    emit_query_rows(
+        output_format=output_format,
+        title="Re-homing debt (open questions on terminal hypotheses)",
+        columns=[
+            ("question", "Question"),
+            ("terminal_hypothesis", "Terminal Hypothesis"),
+            ("question_status", "Status"),
+        ],
+        rows=rows,
+    )
+
+
 @graph_group.command("attention-sample")
 @click.option("--limit", type=int, default=5, show_default=True)
 @click.option("--seed", type=int, default=None, help="Seed for reproducible weighted sampling.")
