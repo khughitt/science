@@ -928,6 +928,36 @@ an injected violation -- including all four spellings of the back-edge import."
 
 ---
 
+## Outcome (2026-07-12)
+
+Shipped. `promote.py` 3,490 → 2,193 lines, on four extracted modules
+(`promote_types.py` 313, `git.py` 214, `promote_render.py` 308,
+`promote_dataset.py` 547). `commons/cli.py` is the only module under `commons/`
+that imports `click`. 8,076 tests pass; snapshot byte-identity gate green.
+
+The whole-branch review AST-diffed all 98 top-level symbols of `promote.py`
+against their landing sites and found **zero** body differences — the moves were
+byte-for-byte, as required. It then broke the guard three ways (see `b32ae0ba`);
+both back-edge checks now derive their scope from the import closure rather than
+a hand-written list.
+
+**Behavior-change residual — the neutrality claim was narrower than Task 5 stated.**
+Task 5 argued `abort_on_conflict` is behavior-neutral because a *non-interactive*
+caller hitting a conflict already ended in `PromoteConflictAbort`. That holds, and
+it covers every caller in this repo. It does not cover two paths that have no
+callers today but are reachable through the public API (`plan_promote` is exported
+from `commons/__init__.py`):
+
+- A **library caller on a live tty** that omitted `resolve_conflict` used to get an
+  interactive prompt. It now gets an immediate `PromoteConflictAbort`. Interactivity
+  is opt-in now; only `cli.py` opts in.
+- `resolve_conflict=None` passed **explicitly** used to mean "use the prompt". It is
+  now a `TypeError`.
+
+Both are intended consequences of making the domain layer non-interactive. They are
+recorded here because "behavior-neutral" was the phase's contract, and these are the
+two places it bends.
+
 ## Self-review notes
 
 - **Task 1 must land alone and first.** Tasks 2-4 all import `promote_types`; running them
