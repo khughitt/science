@@ -157,10 +157,18 @@ superseded and formerly supported**; one value silently overwrites the other.
 
 ### 7.2 The naming decision: `status` **is** the lifecycle
 
-`phase` in the wild is `candidate` (14) / `active` (10), on hypotheses and synthesis — a
-**lifecycle-shaped vocabulary**. It was invented precisely *because* `hypothesis.status` had
-no lifecycle words left. It is a hand-rolled lifecycle axis, which is why it was never
+`phase` in the wild is `candidate` / `active`, on hypotheses and synthesis — a
+**lifecycle-shaped vocabulary**. It is a hand-rolled lifecycle axis, which is why it was never
 declared and never wired.
+
+> **Corrected in rev 7.** This section used to add: *"it was invented because `hypothesis.status`
+> had no lifecycle words left."* The cross-tab refutes the second clause. `status` had no
+> lifecycle words **because it never held any** — `proposed` and `under-investigation` only *look*
+> like lifecycle; they are the collapsed field's way of saying *"the evidence has not spoken,"*
+> which D1 already ruled is `verdict`-absent, not a state. So the authors who reached for `phase`
+> were **not** working around a vocabulary gap. **They were separating the two axes by hand,
+> correctly, before this design existed.** `phase` is the lifecycle; `status` was only ever the
+> verdict. See §10 rev 7 for the data and the corrected mapping.
 
 **Therefore: `status` means the entity lifecycle, uniformly, on every kind.** Domain-specific
 state moves to explicitly named fields per kind.
@@ -231,7 +239,7 @@ annotated — a warning above contradictory contract text is unsafe input to a p
 
 | kind | → `status` (lifecycle) | → domain field (category) | default | audit note |
 |---|---|---|---|---|
-| `hypothesis` | **draft**(←proposed) / **active**(←under-investigation) / **complete** / superseded / retired / archived | **`verdict`** *(epistemic)*: partially-supported \| supported \| weakened \| refuted | **absent** | only `refuted` has a reader (`dataset_capabilities.py:46`) |
+| `hypothesis` | **draft** / **active** / **complete** / superseded / retired / archived — **sourced from `phase`, NOT from `status`** (see rev 7) | **`verdict`** *(epistemic)*: partially-supported \| supported \| weakened \| refuted | **absent** | only `refuted` has a reader (`dataset_capabilities.py:46`) |
 | `proposition` | draft / active / complete / superseded / retired / archived | ***none*** | — | **CORRECTED (rev 6).** `supported`/`contested`/`weakened` are **dropped, not migrated** — 0 authored instances, 0 readers. Belief is **derived**, and stays derived. |
 | `question` | active / **deferred** / complete / retired / archived | **`answer_state`** *(answeredness)*: answered \| partially-answered | **absent** | the **only** kind whose values drive behaviour; both selectors are two-axis (§2 of the audit) |
 | `pre-registration` | draft / active / complete / superseded / retired | **`commitment`**: committed \| amended | **absent** | `committed` is **INERT** — the freeze is enforced nowhere (fb-2026-07-12-009) |
@@ -572,7 +580,64 @@ source never recorded.
 
 ## 10. Revision history
 
-### rev 6 (2026-07-12) — **FINAL.** The design is closed; D5 may be written.
+### rev 7 (2026-07-12) — the corpus refuted the hypothesis mapping
+
+Writing D5 required cross-tabulating `status` × `phase` across all **147 authored hypotheses**.
+That cross-tab **refutes a mapping every revision since rev 2 has asserted**, and it would have
+mis-migrated 88 files.
+
+Rev 6 asserted two mappings that are **jointly unsatisfiable on 41% of the corpus**:
+
+> `status: proposed` → `draft`  ·  `phase: active` → `active`
+
+**60 hypotheses carry `status: proposed` AND `phase: active`.** One rule says `draft`, the other
+says `active`. Both were called deterministic. Both cannot be.
+
+| status × phase | n | rev-6 verdict |
+|---|---|---|
+| `proposed` + `active` | **60** | **CONTRADICTION** — the two rules disagree |
+| `proposed` + `candidate` | 36 | agree → `draft` |
+| `proposed` + *(absent)* | 28 | `draft` — **also wrong**; absent `phase` **defaults to `active`** |
+
+**The resolution — and it follows from D1, which we already ruled.** `proposed` and
+`under-investigation` are not lifecycle states *and never were*. They are the old collapsed
+field's way of saying **"the evidence has not spoken"** — which is precisely the property D1
+disqualified from `verdict`, because **absence already means it**. They therefore map to
+**`verdict: absent`**, and they contribute **nothing** to the lifecycle.
+
+> **`phase` IS the hypothesis lifecycle. `status` was only ever the verdict.**
+
+That is the reverse of what rev 2 said (*"`phase` is a hand-rolled lifecycle invented because
+`status` had no lifecycle words left"*). The first half was right; the second half was
+backwards. `status` had no lifecycle words left **because it never held any** — `proposed` and
+`under-investigation` only look like lifecycle. The authors who wrote `phase` were not working
+around a gap; **they were correctly separating the two axes by hand**, years before this design
+named them. The data is unambiguous: `phase` varies meaningfully (36 `candidate` / 60+ `active`),
+while `status: proposed` is the untouched template default on **77 of 147** files.
+
+**Corrected migration mapping (this is what D5 implements):**
+
+| source | → target |
+|---|---|
+| `phase: candidate` | `status: draft` |
+| `phase: active` **or absent** | `status: active` *(absent defaults to `active` — template, `hypotheses_cli.py:28`, `commands/big-picture.md:62`)* |
+| `status: proposed` \| `under-investigation` | **`verdict` absent.** Contributes nothing to lifecycle. |
+| `status: supported` \| `weakened` \| `partially-supported` \| `refuted` | `verdict: <same>` — lifecycle still from `phase` |
+
+**Result: 145 of 147 deterministic; 2 refused for authored adjudication.** And the two are
+exactly right: a test fixture with no `status` at all, and
+**`natural-systems/hypotheses/0009`** — `status: retired` + `phase: candidate`, the *very file
+whose corruption opened this arc* (fb-2026-07-11-005). Its lifecycle, its closure reason, and
+its verdict were all destroyed by the collapsed field, and **no rule can recover them**. The
+migration must stop and ask. That it stops on 0009, and on essentially nothing else, is the
+strongest available evidence that the axis model is right.
+
+**Why no revision caught this:** every one reasoned about the *vocabularies* and never
+cross-tabulated the *corpus*. The D4 audit counted values per field, one field at a time — so a
+contradiction that only exists in the **joint** distribution was invisible to it. Certify the
+mapping against the data, not just the vocabulary against the readers.
+
+### rev 6 (2026-07-12) — the design is closed on its own terms
 
 Four corrections, two of them substantive enough to have changed the first P2m schema:
 
