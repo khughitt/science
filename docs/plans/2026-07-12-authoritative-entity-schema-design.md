@@ -344,7 +344,7 @@ one of them.
 
   | terminal | structural basis that discharges the requirement | if that basis is ABSENT |
   |---|---|---|
-  | `superseded` | valid lineage (`supersedes:` / `superseded_by` / `resynthesized_into`) resolving to a live successor | **`closure_basis` required** |
+  | `superseded` | valid **local** lineage (`superseded_by` / `resynthesized_into`) resolving to a live successor — **not** top-level `supersedes:`, which is silently dropped (fb-2026-07-11-017); the *canonical* `relations:` edge lives on the **other** record, where a single-record schema cannot see it (rev 10) | **`closure_basis` required** |
   | `archived` | ***(none exists)*** — **CORRECTED 2026-07-13** | **`closure_basis` ALWAYS required** |
   | `complete` | a verdict **plus** qualifying evidence | **PROHIBITED** — not basis-discharged. See the rev-6 ruling below. |
   | `retired` | *(none exists)* | **`closure_basis` ALWAYS required** |
@@ -581,10 +581,12 @@ is not a gate;** this one is now derived from `CORE_PROFILE` and executed (D5 Ta
 **does not declare `superseded` at all**: its `EntityKind.statuses` are
 `[proposed, under-investigation, partially-supported, supported, weakened, refuted, archived]` —
 the **verdict** vocabulary, which is the conflation this entire arc exists to end. So across the
-whole corpus: **150 hypotheses, 0 superseded, 0 archived, 0 authoring `relations:`, 0 authoring
-any lineage field.** The hypothesis supersession triangle has **never been exercised**, in any
-project, which is precisely why all three of its legs could be broken at once and stay silent.
-That makes D5's fix greenfield — there is nothing to migrate, and no reason to get it wrong.
+certified roster (**18 roots, 147 hypotheses** — `field_inventory`, D5 Task 11 Step 0): **0
+superseded, 0 archived, 0 authoring `relations:`, and 0 authoring `superseded_by`,
+`resynthesized_into`, `supersedes`, `closure_basis`, or `archive_ref`.** The hypothesis
+supersession triangle has **never been exercised**, in any project, which is precisely why all
+three of its legs could be broken at once and stay silent. That makes D5's fix greenfield — there
+is nothing to migrate, and no reason to get it wrong.
 
 **`entity_class` must NOT imply capabilities** — confirmed by the audit, which found it does
 not track them today (REFERENCE `topic`/`decision` are consolidatable; OPERATIONAL
