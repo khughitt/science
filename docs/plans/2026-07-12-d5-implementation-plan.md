@@ -1091,7 +1091,7 @@ separately** — and **no task may end red.**
   frontmatter; it is derived from `kind`. Tasks 8–10 call this.
 - Produces `default_profile_for_kind("hypothesis")` → `science-entity-base/2.0+hypothesis/1.0`.
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 ```python
 # science/model/tests/test_project_profiles.py
@@ -1534,9 +1534,9 @@ def test_the_INHERITED_admissions_actually_validate() -> None:
 > xfailed, and *an xfail is a red suite wearing a hat.* It travels with the change it gates; do not
 > import `CORE_PROFILE` in Task 6.
 
-- [ ] **Step 2: Run and fail.**
+- [x] **Step 2: Run and fail.**
 
-- [ ] **Step 3: Implement the profile plumbing.** In `profile.py` replace line 16 and lines 75–102:
+- [x] **Step 3: Implement the profile plumbing.** In `profile.py` replace line 16 and lines 75–102:
 
 ```python
 BASE_NAME = "science-entity-base"
@@ -1637,7 +1637,7 @@ In `validator.py`, add `validate_as`, make `validate` delegate, and **close the 
 > and 369 records rely on it; closing commons is a separate decision with a separate blast radius.
 > `strict` is gated on `PROJECT_MIXIN_NAMES` so each kind opts in **as it migrates**.
 
-- [ ] **Step 3b: Write `mixin-hypothesis-1.0.json` — GENERATED FROM TASK 2'S ARTIFACT, not from this
+- [x] **Step 3b: Write `mixin-hypothesis-1.0.json` — GENERATED FROM TASK 2'S ARTIFACT, not from this
   plan's prose.** `docs/plans/2026-07-12-hypothesis-field-adjudication.md` is the authority; every
   key below traces to a disposition there. The mixin is **materially smaller** than the pre-Task-2
   draft: nine keys left core (`identification`, `tags`, `priority`, `role`, `promoted_from`,
@@ -1921,7 +1921,7 @@ In `validator.py`, add `validate_as`, make `validate` delegate, and **close the 
 > | `description`, `ontology_terms`, `status` | **admitted** | Core (Task 2 §3/§6). The mixin *narrows* `status` from the base's free string to the ruled enum — `allOf` intersects, so narrowing is exactly what it can do. |
 > | `schema_profile`, `version` | **`false`** | Derived / commons-only. See Task 5 — the base cannot forbid them (commons authors both), so the mixin must. |
 
-- [ ] **Step 3c: The single-rival form on `RivalModelPacket`** (`reasoning.py:189`) — **in THIS task,
+- [x] **Step 3c: The single-rival form on `RivalModelPacket`** (`reasoning.py:189`) — **in THIS task,
   because Step 3b's `$def` closed the object in this task.**
 
 ```python
@@ -1952,7 +1952,7 @@ In `validator.py`, add `validate_as`, make `validate` delegate, and **close the 
 > `_model_to_json`, is *worse*: today's literals already serialize `"target_hypothesis": null` and
 > friends, so it would rewrite **both** packets. The narrow fix is the only zero-churn one.
 
-- [ ] **Step 3d: The survival test** (`science/model/tests/test_mixin_hypothesis.py`):
+- [x] **Step 3d: The survival test** (`science/model/tests/test_mixin_hypothesis.py`):
 
 ```python
 def test_the_single_rival_packet_SURVIVES_the_projection() -> None:
@@ -1991,7 +1991,7 @@ def test_a_LIST_form_packet_serializes_BYTE_IDENTICALLY() -> None:
     assert "discriminator_status" not in serialized
 ```
 
-- [ ] **Step 4: Green — BOTH suites, whole, plus lint and types.** Task 6 changes
+- [x] **Step 4: Green — BOTH suites, whole, plus lint and types.** Task 6 changes
   `science_model.reasoning`, and Step 4c's guard lives in the **toolkit** package — so a run of only
   the model suite never executes the very test that proves the packet reaches the graph.
 
@@ -2001,7 +2001,7 @@ cd science       && uv run --frozen pytest      # the TOOLKIT suite -- this is w
 cd science       && uv run ruff check && uv run pyright
 ```
 
-- [ ] **Step 4b: Prove it in the ARTIFACT, not only the unit test.** The corpus holds **exactly 2
+- [x] **Step 4b: Prove it in the ARTIFACT, not only the unit test.** The corpus holds **exactly 2
   packets, in 2 projects** — `protein-landscape` (1 hypothesis) and `multiple-myeloma` (1
   **proposition**). *(An earlier count of 3 was wrong: `~/d/r/mm30` is a **symlink** to
   `cancer/cancer-types/multiple-myeloma`, so a path-glob counts its proposition twice. Dedupe by
@@ -2088,7 +2088,7 @@ diff "$SNAP/before-mm.trig" "$SNAP/after-mm.trig"    # required: EMPTY
 >    consciously excluded and the roster re-certified at 17 — *and a silently skipped diff is the one
 >    outcome not available*, because it looks exactly like a clean one.
 
-- [ ] **Step 4c: The hermetic materialization test** — it does not depend on any project, so it
+- [x] **Step 4c: The hermetic materialization test** — it does not depend on any project, so it
   still runs while protein-landscape's graph is red (`science/tests/test_graph_materialize.py`):
 
 ```python
@@ -2125,7 +2125,7 @@ def test_a_LIST_form_packet_emits_NO_new_keys() -> None:
     assert "discriminator_status" not in emitted
 ```
 
-- [ ] **Step 5: Commit.**
+- [x] **Step 5: Commit.**
 
 ---
 
