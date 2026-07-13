@@ -100,7 +100,11 @@
     "evidence_role": null,
     "rival_model_packet": null,
     "disposition": "open",
-    "disposition_basis": null
+    "disposition_basis": null,
+    "verdict": null,
+    "closure_basis": null,
+    "superseded_by": null,
+    "resynthesized_into": []
   },
   {
     "canonical_id": "spec:research-question",

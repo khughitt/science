@@ -69,9 +69,16 @@ def _lineage_refs(entity: dict[str, Any]) -> list[tuple[str, str]]:
 # protocols as-is (extra keyword-only params with defaults are compatible), so there is nothing to
 # adapt and no second implementation to keep in step.
 class Resolved(Protocol):
-    status: str  # "resolved" | "unresolved" | "scope_ambiguous" | "ambiguous" | "tag"
-    canonical_id: str | None
-    candidates: tuple[str, ...]
+    @property
+    def status(self) -> str:
+        """Resolution state: resolved, unresolved, scope_ambiguous, ambiguous, or tag."""
+        ...
+
+    @property
+    def canonical_id(self) -> str | None: ...
+
+    @property
+    def candidates(self) -> tuple[str, ...]: ...
 
 
 class LineageTargets(Protocol):

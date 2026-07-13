@@ -14,11 +14,8 @@ from pathlib import Path
 from typing import Any
 
 import yaml
-from science_model.entity_schema.resolution import check_resolution
 
 from science_tool.entity_scan import iter_entity_markdown
-from science_tool.graph.identity_table import build_identity_table
-from science_tool.graph.reference_resolution import ReferenceResolver
 from science_tool.validate.checks import Check
 from science_tool.validate.context import ValidateContext
 from science_tool.validate.result import Result, Severity
@@ -175,50 +172,29 @@ def check_dangling_lineage(ctx: ValidateContext) -> Iterator[Result]:
     The schema validates one record in isolation, so it can only see that `superseded_by:` is
     PRESENT. Whether it resolves is a cross-record fact, and this is where it is asked.
 
-    The resolver is built HERE, not in `load_project_sources`. That was the first design, and it is
-    wrong: `ReferenceResolver.from_entities` raises `AliasCollisionError` on a corpus with a
-    duplicated alias, so constructing it inside the loader turns a REPORTABLE fault into an
-    UNLOADABLE project -- for every consumer of the loader, including the ones that never look at a
-    hypothesis. `annotation/proposition_archive.py` exists precisely to report and unblock those
-    collisions and calls `load_project_sources` on a colliding corpus on purpose. Resolution is
-    ANALYSIS over a loaded corpus; the loader loads. Every other call site in the tree builds its
-    own resolver for the same reason.
-
-    Same three arguments as `materialize.py` -- same entities, same manual aliases, same identity
-    table -- because a validator that resolves a reference differently from the materializer is a
-    second authority for one fact.
+    The loader owns the second pass because it has the complete loaded corpus, manual aliases, and
+    identity declarations needed to build the same resolver basis materialization uses. Validation
+    only projects the typed carrier into user-facing results.
 
     WARN, hard-coded, until the `hypothesis` kind is certified (Task 12's ratchet flips it per kind).
     """
     sources = ctx.project_sources()
-    resolver = ReferenceResolver.from_entities(
-        sources.entities,
-        manual_aliases=sources.manual_aliases,
-        identity_table=build_identity_table(sources),
-    )
-    # LIVE and LOCAL. Keyed on `canonical_id`, NOT `id`: the resolver ANSWERS in canonical ids, so a
-    # set keyed on the authored `id` would fail to contain its own resolver's answers for every
-    # entity whose canonical id differs from the one on disk.
-    live_ids = {entity.canonical_id for entity in sources.entities}
     path_by_id = {
         str(document.frontmatter.get("id")): document.path
         for document in sources.markdown_documents
         if document.frontmatter.get("id")
     }
 
-    for entity in sources.entities:
-        for violation in check_resolution(
-            entity.model_dump(mode="json"), targets=resolver, live_ids=live_ids
-        ):
-            path = path_by_id.get(violation.entity_id)
-            yield Result(
-                Severity.WARN,
-                Path(path) if path else None,
-                None,
-                violation.message,
-                RULE_DANGLING_LINEAGE,
-                None,
-            )
+    for violation in sources.resolution_violations:
+        path = path_by_id.get(violation.entity_id)
+        yield Result(
+            Severity.WARN,
+            Path(path) if path else None,
+            None,
+            violation.message,
+            RULE_DANGLING_LINEAGE,
+            None,
+        )
 
 
 def _review_horizon_days(frontmatter: dict[str, Any]) -> float | None:

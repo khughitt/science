@@ -644,6 +644,9 @@ def _add_entity(
         knowledge.add((uri, SCI_NS.domain, Literal(entity.domain)))
     if entity.status:
         knowledge.add((uri, SCI_NS.projectStatus, Literal(entity.status)))
+    verdict = getattr(entity, "verdict", None)
+    if verdict:
+        knowledge.add((uri, SCI_NS.verdict, Literal(verdict)))
     # The WORKFLOW axis, orthogonal to the epistemic `status` above. It MUST reach the graph:
     # attention ranking and candidate-frame selection are graph consumers, so a field that
     # stops at the model can never exclude a terminal hypothesis from either. (`phase` stops

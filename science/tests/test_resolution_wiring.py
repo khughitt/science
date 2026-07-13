@@ -78,12 +78,7 @@ def run_validate(root: Path):
 
 
 def lineage_violations(root: Path):
-    """The check IS the wiring. It builds the real resolver from the real loaded corpus.
-
-    (The resolver is deliberately NOT built inside `load_project_sources` -- see
-    `check_dangling_lineage`'s docstring: doing so makes an alias collision unloadable rather than
-    reportable.)
-    """
+    """The validation check projects the loader's real cross-record resolution carrier."""
     ctx = ValidateContext.from_project_root(root, strict=False, verbose=False)
     return list(check_dangling_lineage(ctx))
 
@@ -228,5 +223,8 @@ def test_the_LOADER_can_actually_SEE_the_terminal_fields(tmp_project: Path) -> N
     assert isinstance(entity, HypothesisEntity)  # it projected to the TYPED subclass...
     assert entity.superseded_by == "hypothesis:9999-nope"  # ...and the field SURVIVED
 
-    # ...and the check, reading those projected entities, SAW it.
+    # ...and the loader's second pass, reading those projected entities, SAW it.
+    assert [v.ref for v in sources.resolution_violations] == ["hypothesis:9999-nope"]
+
+    # ...and the validation check consumes the carrier rather than rebuilding a second resolver.
     assert ["9999-nope" in v.message for v in lineage_violations(tmp_project)] == [True]

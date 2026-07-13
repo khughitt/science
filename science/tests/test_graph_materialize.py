@@ -213,6 +213,27 @@ def test_materialize_graph_includes_task_nodes_and_canonical_links(tmp_path: Pat
     assert (task_uri, SCI.tests, question_uri) in knowledge
 
 
+def test_materialize_emits_hypothesis_verdict(tmp_path: Path) -> None:
+    project = tmp_path / "demo"
+    _write_demo_project(project)
+    _write_minimal_entity(
+        project / "entities" / "hypotheses" / "h02-verdict.md",
+        "hypothesis:h02-verdict",
+        "hypothesis",
+        "Hypothesis with verdict",
+        extra_frontmatter=['verdict: "supported"'],
+    )
+
+    trig_path = materialize_graph(project)
+
+    dataset = Dataset()
+    dataset.parse(source=str(trig_path), format="trig")
+    knowledge = dataset.graph(PROJECT_NS["graph/knowledge"])
+
+    hypothesis_uri = PROJECT_NS["hypothesis/h02-verdict"]
+    assert (hypothesis_uri, SCI.verdict, Literal("supported")) in knowledge
+
+
 def test_materialize_emits_inquiry_target_from_frontmatter(tmp_path: Path) -> None:
     """A doc-authored inquiry's `target:` frontmatter must materialize as
     sci:target so the target_exists graph audit can resolve it."""
