@@ -1076,6 +1076,10 @@ separately** — and **no task may end red.**
 **Files:**
 - Modify: `science/model/src/science_model/entity_schema/profile.py`, `validator.py`
 - Create: `science/model/src/science_model/schemas/mixin-hypothesis-1.0.json`
+- **Modify: `science/model/src/science_model/reasoning.py:189` (`RivalModelPacket`)** — the
+  single-rival form (Step 3c). It lands **here, not in Task 8**: Step 3b closes the packet `$def`,
+  and a closed `$def` with no model fields fails `protein-landscape/0001` for as long as the two are
+  apart.
 - Test: `science/model/tests/test_project_profiles.py`, `test_mixin_hypothesis.py`
 
 **Interfaces:**
@@ -1780,7 +1784,7 @@ In `validator.py`, add `validate_as`, make `validate` delegate, and **close the 
       }
     },
     "rival_model_packet": {
-      "$comment": "`RivalModelPacket` (reasoning.py:189) — CLOSED, and extended with the SINGLE-RIVAL form the corpus actually authors. Task 8 adds the same four fields to the model; schema and model move together or the drop just changes hiding place.",
+      "$comment": "`RivalModelPacket` (reasoning.py:189) — CLOSED, and extended with the SINGLE-RIVAL form the corpus actually authors. Step 3c of THIS task adds the same four fields to the model, with `exclude_if` so existing packets do not churn. Schema and model move together, in one commit, or `protein-landscape/0001` fails validation in the gap.",
       "type": "object",
       "additionalProperties": false,
       "required": ["packet_id"],
@@ -1914,11 +1918,100 @@ In `validator.py`, add `validate_as`, make `validate` delegate, and **close the 
 > | `description`, `ontology_terms`, `status` | **admitted** | Core (Task 2 §3/§6). The mixin *narrows* `status` from the base's free string to the ruled enum — `allOf` intersects, so narrowing is exactly what it can do. |
 > | `schema_profile`, `version` | **`false`** | Derived / commons-only. See Task 5 — the base cannot forbid them (commons authors both), so the mixin must. |
 
+- [ ] **Step 3c: The single-rival form on `RivalModelPacket`** (`reasoning.py:189`) — **in THIS task,
+  because Step 3b's `$def` closed the object in this task.**
+
+```python
+    rival_id: str | None = Field(default=None, exclude_if=lambda v: v is None)
+    rival_name: str | None = Field(default=None, exclude_if=lambda v: v is None)
+    rival_claim: str | None = Field(default=None, exclude_if=lambda v: v is None)
+    discriminator_status: str | None = Field(default=None, exclude_if=lambda v: v is None)
+```
+
+> **Why it cannot wait for Task 8.** Step 3 ships `validate_as` and the hypothesis profile, so from
+> the moment this task lands, *the mismatch is observable*: a closed `$def` with no model fields
+> means `protein-landscape/0001` **fails validation** for two tasks — the schema forbids the four
+> keys and nothing declares them. "Schema and model move together" is not a slogan about tidiness;
+> **it names the window in which the corpus is broken, and the window has to be zero.**
+
+> ### `exclude_if` is not a style choice — a plain `| None = None` churns the graph
+>
+> `_model_to_json` (`materialize.py:1897`) is `json.dumps(value.model_dump(mode="json"))` —
+> **inclusive**. Four plain optional fields therefore add `"rival_id": null` ×4 to the serialized
+> literal of **every** packet, not just protein-landscape's. There are **3 packets** in the corpus
+> (1 hypothesis, **2 propositions**), so a lifecycle migration would silently rewrite
+> `sci:rivalModelPacket` on two proposition entities it has no business touching — landing inside
+> the very before/after graph diff Task 11 uses to detect exactly that.
+>
+> `exclude_if=lambda v: v is None` on **the four new fields only** makes the existing literals
+> **byte-identical** (verified). The obvious alternative, `model_dump(exclude_none=True)` in
+> `_model_to_json`, is *worse*: today's literals already serialize `"target_hypothesis": null` and
+> friends, so it would rewrite **all three** packets. The narrow fix is the only zero-churn one.
+
+- [ ] **Step 3d: The survival test** (`science/model/tests/test_mixin_hypothesis.py`):
+
+```python
+def test_the_single_rival_packet_SURVIVES_the_projection() -> None:
+    # The whole point of Step 3c, and the property `extra="ignore"` silently violated: the model
+    # ACCEPTED this packet all along and `model_dump()` dropped all four keys. Acceptance was never
+    # the property worth asserting.
+    from science_model.entities import HypothesisEntity
+
+    packet = {"packet_id": "platonic-vs-multimanifold", "rival_id": "platonic-representation-hypothesis",
+              "rival_name": "PRH", "rival_claim": "representations converge",
+              "discriminator_status": "pre-registered via question:0018"}
+
+    V.validate_as(_h(rival_model_packet=packet), PROFILE)          # the SCHEMA admits it...
+
+    dumped = HypothesisEntity.model_validate(
+        {"project": "p", "file_path": "h.md", "content_preview": "", "ontology_terms": [],
+         "related": [], "source_refs": [], **_h(rival_model_packet=packet)}
+    ).model_dump(mode="json")["rival_model_packet"]
+
+    for key, value in packet.items():                              # ...and the MODEL keeps it.
+        assert dumped[key] == value, f"{key} validated and then evaporated"
+
+
+def test_a_LIST_form_packet_serializes_BYTE_IDENTICALLY() -> None:
+    # The collateral-churn guard. `_model_to_json` is an inclusive `model_dump`, so four plain
+    # optionals would add four `null` keys to the serialized literal of every EXISTING packet --
+    # two of which are on PROPOSITIONS, entities this migration must not touch at all.
+    import json
+
+    from science_model.reasoning import RivalModelPacket
+
+    packet = RivalModelPacket(packet_id="p", alternative_models=["m"], shared_observables=["o"])
+    serialized = json.dumps(packet.model_dump(mode="json"))
+
+    assert "rival_id" not in serialized
+    assert "discriminator_status" not in serialized
+```
+
 - [ ] **Step 4: Green** — the whole model suite, including Task 5's fourth test.
 
 ```bash
 cd science/model && uv run --frozen pytest -q
 ```
+
+- [ ] **Step 4b: Prove the graph diff, on the two projects that own the 3 packets.** The unit test
+  above pins the serialization; this pins the *artifact*. `protein-landscape` owns the hypothesis
+  packet; grep for the two proposition packets and do the same there.
+
+```bash
+cd ~/d/protein-landscape
+uv run science graph build --output /tmp/claude-1000/before-pl.trig     # BEFORE this task's commit
+# ...apply Task 6, then:
+uv run science graph build --output /tmp/claude-1000/after-pl.trig
+diff <(grep rivalModelPacket /tmp/claude-1000/before-pl.trig) \
+     <(grep rivalModelPacket /tmp/claude-1000/after-pl.trig)
+```
+
+  Two required outcomes, and **one without the other is a failure**:
+  - protein-landscape's **four authored values newly APPEAR** in `sci:rivalModelPacket` — they have
+    never been in the graph, which is the defect being fixed;
+  - **every other packet literal is byte-identical** — no `null` keys, no reordering. A
+    lifecycle migration that rewrote two propositions' provenance would be doing something nobody
+    asked it to do, in a diff nobody was reading for it.
 
 - [ ] **Step 5: Commit.**
 
@@ -2580,8 +2673,8 @@ def test_missing_basis_stays_WARN_even_when_the_KIND_is_certified() -> None:
 - Modify: `science/model/src/science_model/profiles/core.py:32-51`
 - Modify: `science/model/src/science_model/entities.py:797-839` (`HypothesisEntity`) **and `Entity`
   (`description`, Step 3b-ii — a base-declared field that no model could hold)**
-- **Modify: `science/model/src/science_model/reasoning.py:189` (`RivalModelPacket`)** — the
-  single-rival form (Step 3b-iii), landing with the closed `$def` from Task 6
+  *(`RivalModelPacket` is **not** modified here — its four fields landed in Task 6, Step 3c, with
+  the closed `$def` that requires them.)*
 - Modify: `science/src/science_tool/entities.py` (`_LIVE_STATUSES`)
 - Modify: `science/model/src/science_model/templates/hypothesis.md` **and** `templates/hypothesis.md` — **two copies; the packaged one is what the Renderer reads**
 - Modify: the `science.yaml` schema to admit `entity_schema_version: int`
@@ -3004,25 +3097,17 @@ a live silent drop** found by `test_every_field_the_schema_ADMITS_is_REPRESENTAB
 > migration's diff — exactly what Task 11's before/after graph diff exists to detect. **Ending the
 > drop is this plan's business; deciding what a description *means* to the graph is not.**
 
-**Step 3b-iii — the single-rival form on `RivalModelPacket`** (`reasoning.py:189`). Four optional
-fields, ruled in Task 6 and **required to land in the same task as the closed schema `$def`**:
-
-```python
-    rival_id: str | None = None
-    rival_name: str | None = None
-    rival_claim: str | None = None
-    discriminator_status: str | None = None
-```
-
-> **Schema and model move together here, or the drop simply changes hiding place.** Closing the
-> `$def` without these four fields makes `protein-landscape/0001` fail validation; adding the fields
-> without closing the `$def` leaves the next undeclared key to be silently dropped exactly as these
-> four were. The pair is the fix; either half alone is a new bug.
+> **The single-rival `RivalModelPacket` fields are NOT here — they landed in Task 6, Step 3c**, with
+> the closed `$def` that requires them. Splitting the pair across tasks would leave
+> `protein-landscape/0001` failing validation for the whole interval: Task 6 already ships
+> `validate_as` and the hypothesis profile, so the mismatch would be **observable**, not theoretical.
+> *Schema and model move together* names a window that must be zero, and a plan that opens it has
+> already lost the argument.
 >
-> `test_every_value_the_schema_ADMITS_SURVIVES_the_projection` is what proves it, and it is worth
-> being explicit about why the obvious test would **not** have: Pydantic *accepted* that packet all
-> along. `extra="ignore"` accepts and discards. **Acceptance was never the property worth
-> asserting** — survival is.
+> What remains true here: `test_every_value_the_schema_ADMITS_SURVIVES_the_projection` is what proves
+> the packet survives, and it is worth being explicit about why the obvious test would **not** have.
+> Pydantic *accepted* that packet all along — `extra="ignore"` accepts and discards. **Acceptance was
+> never the property worth asserting**; survival is.
 
 **Step 3c — `_LIVE_STATUSES`** (`science/src/science_tool/entities.py:193-243`): remove the six
 verdict words **only if no other kind still declares them**:
