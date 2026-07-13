@@ -54,8 +54,9 @@ def test_new_research_document_checks_register_after_hypotheses() -> None:
     importlib.reload(hypothesis_comparisons)
     importlib.reload(bias_audits)
 
-    assert [(entry.section, entry.order) for entry in CANONICAL_CHECKS[-6:]] == [
+    assert [(entry.section, entry.order) for entry in CANONICAL_CHECKS[-7:]] == [
         ("hypotheses...", 5),
+        ("hypotheses...", 6),  # check_dangling_lineage -- the cross-record lineage layer
         ("project README conventions...", 10),
         ("discussion documents...", 11),
         ("discussion documents...", 12),

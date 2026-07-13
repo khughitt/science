@@ -826,6 +826,19 @@ class HypothesisEntity(ProjectEntity):
     disposition: Literal["open", "closed"] = "open"
     disposition_basis: str | None = None
 
+    # The four TERMINAL fields. `Entity` is `extra="ignore"`, so until a field is DECLARED here it
+    # is silently dropped at `model_validate` -- and any consumer reading a projected entity sees a
+    # record with no lineage and no adjudication at all. `check_resolution` reads projected
+    # entities, so without these four it would inspect a stripped record, find no reference, and
+    # report clean forever: a green resolver over a blind loader.
+    #
+    # Their CERTIFICATION against the schema (the reconciliation battery) is Task 8's. This task
+    # owns their EXISTENCE, because it is the first that reads them.
+    verdict: Literal["partially-supported", "supported", "weakened", "refuted"] | None = None
+    closure_basis: str | None = None
+    superseded_by: str | None = None
+    resynthesized_into: list[str] = Field(default_factory=list)
+
     @model_validator(mode="after")
     def _closed_requires_a_basis(self) -> "HypothesisEntity":
         # Closure is always an EXPLICIT authored act. Without a basis, retirement is an

@@ -39,6 +39,11 @@ from science_model.entity_schema.resolve import (
     ExtensionRedefinesCoreField,
     resolve_profile,
 )
+from science_model.entity_schema.resolution import (
+    LineageTargets,
+    ResolutionViolation,
+    check_resolution,
+)
 from science_model.entity_schema.validator import (
     EntityValidationError,
     EntityValidator,
@@ -53,13 +58,16 @@ __all__ = [
     "ExtensionContractError",
     "ExtensionRedefinesCoreField",
     "FrontmatterField",
+    "LineageTargets",
     "MergePolicy",
     "ProfileComponent",
     "ProfileParseError",
     "ProfileString",
+    "ResolutionViolation",
     "SchemaLoader",
     "SchemaNotFoundError",
     "SharedEntity",
+    "check_resolution",
     "default_profile_for_kind",
     "filename_for",
     "parse_component",
