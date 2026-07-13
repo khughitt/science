@@ -2932,7 +2932,16 @@ def test_an_ARCHIVED_successor_RESOLVES_and_is_still_a_violation(tmp_project) ->
     assert "not a live entity" in violations[0].message      # NOT "does not resolve"
 
 
-def test_a_SCOPED_lineage_ref_is_REJECTED_BY_THE_SCHEMA(tmp_project) -> None:
+@pytest.mark.parametrize(
+    ("field", "value"),
+    [
+        ("superseded_by", "demo:hypothesis:0002-y"),
+        ("resynthesized_into", ["demo:hypothesis:0002-y"]),
+    ],
+)
+def test_a_SCOPED_lineage_ref_is_REJECTED_BY_THE_SCHEMA(
+    field: str, value: str | list[str]
+) -> None:
     # Lineage is UNSCOPED. `superseded_by` and `resynthesized_into` are `pattern: "^hypothesis:"`
     # (mixin-hypothesis-1.0.json:27,31), so `demo:hypothesis:0002-y` never reaches the resolver --
     # it fails schema validation first.
@@ -2942,11 +2951,10 @@ def test_a_SCOPED_lineage_ref_is_REJECTED_BY_THE_SCHEMA(tmp_project) -> None:
     # pattern to keep it alive -- tuning the contract to serve a test -- the ban is made EXPLICIT
     # here, and it is what the corpus already says: ZERO hypotheses author lineage at all, and ZERO
     # scoped refs (`scope:kind:slug`) exist anywhere in the 18 roots.
-    write_hypothesis(tmp_project, "0002-y")
     with pytest.raises(EntityValidationError):
         validate_hypothesis(
             _hypothesis(id="hypothesis:0001-x", status="superseded",
-                        superseded_by="demo:hypothesis:0002-y")
+                        **{field: value})
         )
 
 
@@ -3423,6 +3431,8 @@ from science_tool.graph.identity_table import (
 
 ```python
 # science/tests/validate/test_check_registry_is_complete.py
+from pathlib import Path
+
 
 def test_EVERY_check_module_on_disk_is_REGISTERED() -> None:
     # Derived from the FILESYSTEM, not from a list. A check module that exists but is not named in
@@ -3444,8 +3454,17 @@ def test_EVERY_check_module_on_disk_is_REGISTERED() -> None:
 def test_the_verdict_check_runs_through_RUN_VALIDATE(tmp_project) -> None:
     # End-to-end, through the REAL entry point -- NOT by importing the module (which would run the
     # decorator and conceal the omission this test exists to catch).
+    #
+    # The check reads `knowledge/graph.trig`; writing source alone leaves `_load_belief_graphs`
+    # returning `(None, None)` and the registered check correctly emitting NOTHING. Build the
+    # artifact first, or this test fails without ever exercising the verdict surface.
+    from science_tool.graph.materialize import materialize_graph
+
     write_hypothesis(tmp_project, "0001-x", status="complete",
                      extra={"verdict": "supported"})          # no basis -> missing-basis
+    graph_path = materialize_graph(tmp_project)
+    assert graph_path.is_file()                               # prove the check has something to read
+
     rules = {r.rule for r in run_validate(tmp_project)}
     assert "verdict.missing-basis" in rules
 ```
