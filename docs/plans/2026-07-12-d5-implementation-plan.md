@@ -3523,12 +3523,13 @@ class IdResolution:
         so an alias resolves to its canonical id whether or not any record backs that id. Such a
         target is dangling with extra steps: we know nothing about it, we cannot ask whether the edge
         is legal, and it must BLOCK rather than settle into benign `unmanaged` debt.
+
+        `""` IS A DIFFERENT ANSWER FROM `None`: a record backs the id, but declares no kind (an
+        archive row predating the field). Materialize resolves that to `""` too, and `""` satisfies no
+        `allowed_kind_pairs` entry -- so the edge is MISMATCHED, not dangling. Distinguishing the two
+        is what keeps this authority's refusals identical to materialize's.
         """
         return self.kind_by_id.get(canonical_id)
-
-    def canonical(self, raw: str) -> str | None:
-        res = self.resolver.resolve(raw)
-        return res.canonical_id if res.status == "resolved" else None
 ```
 
 ```python
@@ -3615,18 +3616,38 @@ class IdResolution:
 #
 # SO THE TOKEN CARRIES A SEAL, because a frozen dataclass alone is NOT unforgeable -- a plain
 # `_PreparedWrite(entity_id=..., path=..., text="<anything>", warnings=())` is one call, and privacy by
-# underscore is a convention the interpreter does not enforce. `__post_init__` identity-checks a
-# module-private sentinel that only `_prepare_write` holds, so the ONLY way to get a value
-# `_commit_write` accepts is to have gone through validation.
+# underscore is a convention the interpreter does not enforce.
 #
-# THE HONEST CLAIM, since Python has no private constructors: this does not make forgery
-# *impossible* -- `entities._SEAL` is reachable by anyone willing to import a private name from
-# another module. It makes forgery **inexpressible by accident**: it cannot be reached by a plausible
-# refactor, a helpful import, or a caller who thought this was the supported path. Naming `_SEAL` is
-# an unmistakable, deliberate act, and no reviewer would read it as anything else. That is the
-# strongest form the guarantee takes in this language, and it is stated as such rather than as the
-# absolute the earlier draft implied.
-_SEAL = object()   # module-private; never exported, never a parameter default
+# AND THE SEAL IS BOUND TO THE PAYLOAD, not merely POSSESSED. A bare sentinel -- "hold this object and
+# you are trusted" -- is a BEARER token, and a bearer token can be carried onto content it never
+# vouched for, WITHOUT any private import at all:
+#
+#     dataclasses.replace(legitimately_prepared, text="<anything>")   # <- copies the sentinel; passes
+#
+# `replace()` re-runs `__post_init__`, so an identity check on a sentinel sees the SAME trusted object
+# and waves through text that never met `_schema_validate_or_raise`. The seal must therefore be a
+# statement ABOUT THE TEXT: an HMAC over the payload, keyed by a per-process secret. Mutate any field
+# it covers and the seal no longer matches what it seals -- `replace()` recomputes nothing, so it
+# carries the OLD seal onto NEW text and `__post_init__` refuses it.
+#
+# THE HONEST CLAIM, since Python has no private constructors: this does not make forgery *impossible*
+# -- `entities._SEAL_KEY` is reachable by anyone willing to import a private name from another module
+# and recompute the digest. It makes forgery **inexpressible by accident**: not by a plausible
+# refactor, not by a helpful `replace()`, not by a caller who thought this was the supported path.
+# That is the strongest form the guarantee takes in this language, and it is stated as such rather
+# than as the absolute an earlier draft implied.
+import hashlib
+import hmac
+import secrets
+
+_SEAL_KEY = secrets.token_bytes(32)   # module-private, per-process; never exported, never persisted
+
+
+def _seal(entity_id: str, path: Path, text: str) -> str:
+    """An HMAC over EVERY field the write actually consists of. Covering `text` alone would leave
+    `replace(prepared, path=<elsewhere>)` free to redirect validated bytes at an unvalidated file."""
+    payload = "\0".join((entity_id, str(path), text)).encode("utf-8")
+    return hmac.new(_SEAL_KEY, payload, hashlib.sha256).hexdigest()
 
 
 @dataclass(frozen=True)
@@ -3635,13 +3656,15 @@ class _PreparedWrite:
     path: Path
     text: str                      # fully rendered, fully validated -- nothing left to decide
     warnings: tuple[str, ...]
-    seal: object                   # must BE `_SEAL` -- identity, not equality
+    seal: str                      # HMAC of (entity_id, path, text). No default: see the guard test.
 
     def __post_init__(self) -> None:
-        if self.seal is not _SEAL:
+        # `compare_digest`, not `==`: this is a MAC check, and constant-time comparison is what a MAC
+        # check is. Runs on `replace()` too, which is the entire point.
+        if not hmac.compare_digest(self.seal, _seal(self.entity_id, self.path, self.text)):
             raise TypeError(
-                "_PreparedWrite is not constructible: it is the proof that _prepare_write validated "
-                "this text. Call _prepare_write."
+                "_PreparedWrite is not constructible, and its seal does not travel: it is the proof "
+                "that _prepare_write validated THIS text for THIS path. Call _prepare_write."
             )
 
 
@@ -3849,15 +3872,24 @@ def _id_resolution(project_root: Path, entries: list[tuple[Path, dict[str, Any]]
     #   1. `sources.entities`  -- commons overlay, non-markdown adapters. Carries `.kind`. This is
     #      literally the population `materialize` reads `object_entity.kind` from.
     #   2. the ARCHIVE INDEX   -- archived markdown is NOT loaded as an entity (`sources.py:610-613`),
-    #      so it is in NEITHER `sources.entities` nor the live scan. `ArchiveRow.kind` is nullable
-    #      (`archive.py:32`), so fall back to the id prefix -- the same rule `_kind_of` already uses.
-    #   3. the LIVE SCAN       -- authoritative for what exists now.
+    #      so it is in NEITHER `sources.entities` nor the live scan. `ArchiveRow.kind` is NULLABLE
+    #      (`archive.py:32`), and the empty string is what materialize makes of that:
+    #      `_ArchivedEndpoint(..., kind=arow.kind or "")` (`materialize.py:1626`). MIRROR IT EXACTLY --
+    #      do NOT fall back to the id prefix. `supersedes` declares `allowed_kind_pairs`, which is an
+    #      authoritative allow-list, so `""` matches no pair and materialize RAISES on the edge. A
+    #      prefix fallback here would ADMIT and STAMP an edge the graph then refuses to build: the
+    #      write would succeed and the corpus would break at materialization, which is the worst of
+    #      both. The two authorities must refuse the SAME corpus, so a kind-less archive row lands in
+    #      `mismatched` and BLOCKS -- exactly as it does downstream.
+    #   3. the LIVE SCAN       -- authoritative for what exists now. Prefix fallback is right HERE:
+    #      it is what `_kind_of` already does, and a live entity's `kind` is required by the model, so
+    #      the fallback only ever covers frontmatter the loader would have rejected anyway.
     archive = load_archive_index(project_root)
     kind_by_id: dict[str, str] = {}
     for entity in sources.entities:
         kind_by_id[entity.canonical_id] = entity.kind
     for cid, row in archive.active_by_id.items():
-        kind_by_id[cid] = _kind_or_prefix(cid, row.kind)
+        kind_by_id[cid] = row.kind or ""        # <- materialize.py:1626, verbatim
     for _path, fm in entries:
         eid = canon_or_self(str(fm["id"]))
         kind_by_id[eid] = _kind_or_prefix(eid, fm.get("kind"))
@@ -3977,11 +4009,16 @@ def _kind_or_prefix(entity_id: str, declared: str | None) -> str:
             # `object_entity.kind` and never asks who can write the file (`materialize.py:1721`).
             # Ask ownership first and this check never runs on an archived or commons target -- an
             # illegal edge would be filed as benign and apply would proceed. It BLOCKS.
+            #
+            # `dst_kind` may be "" -- an ARCHIVED ROW WITH NO `kind` (`archive.py:32`). That is not a
+            # lookup miss (which is `None`, handled above); it is what materialize itself computes,
+            # and `""` matches no `allowed_kind_pairs` entry, so it lands here and BLOCKS. Same
+            # corpus refused by both authorities.
             src_kind = resolution.kind_of(src) or _kind_or_prefix(src, fm.get("kind"))
             if not relation_allows_kinds(_supersedes_kind(), src_kind, dst_kind):
                 mismatched.append({"id": dst, "superseder": src,
-                                   "reason": f"{src_kind} -> {dst_kind} is not an allowed "
-                                             f"sci:supersedes pair"})
+                                   "reason": f"{src_kind} -> {dst_kind or '(no kind)'} is not an "
+                                             f"allowed sci:supersedes pair"})
                 continue
 
             # The edge is REAL. Now, and only now, the question the WRITER cares about: can we stamp
@@ -4535,6 +4572,32 @@ def test_an_ILLEGAL_pair_into_the_ARCHIVE_is_MISMATCHED_not_benign(tmp_path: Pat
         mark_superseded(tmp_path, apply=True)
 
 
+def test_an_ARCHIVE_ROW_WITH_NO_KIND_is_refused_EXACTLY_AS_MATERIALIZE_refuses_it(tmp_path: Path) -> None:
+    # `ArchiveRow.kind` is nullable (`archive.py:32`) -- an archive row written before the field
+    # existed carries none. Materialize turns that into `_ArchivedEndpoint(kind=arow.kind or "")`
+    # (`materialize.py:1626`), and because `supersedes` declares `allowed_kind_pairs` -- an
+    # authoritative allow-list -- `""` matches NO pair, so materialize RAISES on the edge.
+    #
+    # A draft here derived the kind from the ID PREFIX instead, which would have read `interpretation`
+    # off `interpretation:i-old` and ADMITTED the edge: consolidation stamps the file, and the graph
+    # then refuses to build. A write that succeeds and leaves the corpus unmaterializable is worse
+    # than either authority refusing alone. So this mirrors `or ""` verbatim, and the row BLOCKS.
+    _archive(tmp_path, "interpretations", "i-old", {"id": "interpretation:i-old",
+                                                    "status": "superseded"})   # NO `kind`
+    _write(tmp_path, "interpretations", "i-new", {"id": "interpretation:i-new",
+                                                  "kind": "interpretation",
+                                                  "relations": [_supersedes("interpretation:i-old")]})
+
+    report = mark_superseded(tmp_path, apply=False)
+
+    assert report["archived_targets"] == []       # NOT waved through as a benign historical edge
+    assert [m["id"] for m in report["mismatched_kinds"]] == ["interpretation:i-old"]
+    assert "(no kind)" in report["mismatched_kinds"][0]["reason"]
+
+    with pytest.raises(SupersessionError):
+        mark_superseded(tmp_path, apply=True)
+
+
 def test_an_ALIAS_to_an_id_NOTHING_BACKS_is_DANGLING_and_BLOCKS(tmp_path: Path) -> None:
     # ROW 2, and the trap in the fixture that used to "prove" the unmanaged case. `build_alias_map`
     # registers a manual alias UNCONDITIONALLY (`sources.py:660-662`), so this token RESOLVES -- to an
@@ -4703,6 +4766,8 @@ CANONICAL_CHECK_MODULES = (
 # gate the WARN findings of every UNCERTIFIED kind too -- promoting the whole vocabulary the moment
 # one kind earns it, which is the precise mistake the status-vocabulary incident was: severity graded
 # on the wrong axis. Kind-scoped names let the gate advance one certified kind at a time.
+from collections.abc import Iterator          # <- the check YIELDS; a registered module that cannot
+                                             #    import breaks EVERY check, not just this one
 from science_tool.consolidation import _id_resolution, build_supersedes_graph, iter_entity_frontmatter
 from science_tool.validate.checks import Check
 from science_tool.validate.context import ValidateContext
@@ -5781,21 +5846,42 @@ def test_a_PreparedWrite_cannot_be_CONSTRUCTED_only_earned() -> None:
     #     _commit_write(_PreparedWrite(entity_id=..., path=..., text="<anything>", warnings=()))
     #
     # So the constructor is the third guard, and it is the one that does not depend on where the code
-    # lives. NOTE THE HONEST SCOPE: `_SEAL` is importable by anyone who names it. This does not make
-    # forgery impossible -- Python has no private constructors -- it makes forgery impossible to
+    # lives. NOTE THE HONEST SCOPE: `_SEAL_KEY` is importable by anyone who names it. This does not
+    # make forgery impossible -- Python has no private constructors -- it makes forgery impossible to
     # commit by ACCIDENT.
     with pytest.raises(TypeError, match="not constructible"):
         _PreparedWrite(entity_id="hypothesis:0001-x", path=Path("x.md"),
-                       text="anything at all", warnings=(), seal=object())
+                       text="anything at all", warnings=(), seal="not-a-seal")
+
+
+def test_the_seal_does_NOT_TRAVEL_to_content_it_never_vouched_for(tmp_project) -> None:
+    # THE BEARER-TOKEN HOLE, and it needed no private import at all. A seal that is merely POSSESSED
+    # can be carried onto other content by `dataclasses.replace`, which copies every field it is not
+    # given and re-runs `__post_init__` -- so a sentinel-identity check sees the SAME trusted object
+    # and blesses text that never met the schema. The seal is an HMAC over (entity_id, path, text)
+    # precisely so that the copy no longer matches what it seals.
+    prepared = _prepare_write(tmp_project, "hypothesis:0001-x", {"title": "legitimate"})
+
+    with pytest.raises(TypeError, match="does not travel"):
+        dataclasses.replace(prepared, text="superseded_by: whatever-i-like\n")
+
+    # ...and it does not travel to another FILE either: validated bytes must not be redirectable at an
+    # unvalidated path. This is why the MAC covers more than `text`.
+    with pytest.raises(TypeError, match="does not travel"):
+        dataclasses.replace(prepared, path=tmp_project / "entities/hypotheses/0002-y.md")
+
+    # The control: untouched, it still commits. A guard that rejected the legitimate value too would
+    # pass both assertions above and be worthless.
+    assert _commit_write(prepared).entity_id == "hypothesis:0001-x"
 
 
 def test_the_SEAL_is_never_a_default_and_never_exported() -> None:
     # A seal with a default value is not a seal -- `_PreparedWrite(...)` would supply it for free and
-    # the guard above would pass while proving nothing. And `__all__` must not carry the private
+    # the guards above would pass while proving nothing. And `__all__` must not carry the private
     # names out of the module, or "private" is only true of the underscore.
     assert signature(_PreparedWrite).parameters["seal"].default is Parameter.empty
     exported = set(getattr(entities, "__all__", ()))
-    assert {"_SEAL", "_PreparedWrite", "_prepare_write", "_commit_write"} & exported == set()
+    assert {"_SEAL_KEY", "_seal", "_PreparedWrite", "_prepare_write", "_commit_write"} & exported == set()
 
 
 def test_a_CORRUPTED_inverse_is_caught_by_the_net_that_MATCHES_ITS_FAILURE(tmp_project) -> None:
@@ -5884,9 +5970,11 @@ def _prepare_write(project_root: Path, ref: str, fields: Mapping[str, object]) -
         text=text, target_entity_id=location.entity_id,
     )
     # The seal is applied HERE and nowhere else. It is not a field a caller fills in; it is this
-    # function's signature on the text -- the assertion that everything above actually ran.
+    # function's signature ON THIS TEXT, FOR THIS PATH -- the assertion that everything above actually
+    # ran, against exactly these bytes.
     return _PreparedWrite(entity_id=location.entity_id, path=location.path,
-                          text=text, warnings=tuple(warnings), seal=_SEAL)
+                          text=text, warnings=tuple(warnings),
+                          seal=_seal(location.entity_id, location.path, text))
 ```
 
 > **Why `superseded_by` is settable HERE and expressible on neither writer.**
@@ -6284,11 +6372,23 @@ def severity_for_kind(kind: str) -> Severity:
     return Severity.ERROR if kind in _CERTIFIED_KINDS else Severity.WARN
 ```
 
-- [ ] **Step 2b: Route BOTH kind-level emitters through it.** In `validate/checks/hypotheses.py`,
-  the `hypothesis.status-vocabulary` finding and the `hypothesis.dangling-lineage` finding (Task 7,
-  which hard-coded `Severity.WARN`) both take `severity_for_kind("hypothesis")`. Add
-  `hypothesis.dangling-lineage` to the `hygiene` tier in `validate/gates.py` — a severity with no
-  tier fails nobody's build, and Task 7 pinned its absence precisely so this task must invert it.
+- [ ] **Step 2b: Route ALL THREE kind-level emitters through it.** Two are in
+  `validate/checks/hypotheses.py` — the `hypothesis.status-vocabulary` finding and the
+  `hypothesis.dangling-lineage` finding (Task 7, which hard-coded `Severity.WARN`). **The third is in
+  `validate/checks/supersession.py`** (Task 7a), which hard-codes `Severity.WARN` on
+  `<kind>.unbacked-inverse` with a comment pointing at this step. All three take
+  `severity_for_kind(...)` — and the third takes it **per finding**, `severity_for_kind(kind)`, not
+  `severity_for_kind("hypothesis")`: it emits for every kind, and only the certified ones may ERROR.
+
+  Then add **both** new rules to the `hygiene` tier in `validate/gates.py`:
+  `hypothesis.dangling-lineage` **and `hypothesis.unbacked-inverse`** — kind-scoped names, because
+  `gated_findings` keys on rule name alone (`gates.py:59-62`) and a generic name would gate every
+  uncertified kind's WARNs along with them. A severity with no tier fails nobody's build; Task 7 and
+  Task 7a each pinned their absence precisely so this task must invert both.
+
+  **Omitting the third emitter is how the first two got stranded.** Task 7 wrote "ERROR is Task 12's
+  ratchet" in a comment and Task 12 never touched it. This step is the only thing that closes that
+  loop, and its own tests (Step 2c) fail if any of the three still hard-codes `WARN`.
 
 - [ ] **Step 3: Re-assert the manifest, then validate.** Re-derive the roster and require **exact
   `(root, n)` set equality** against `/tmp/claude-1000/roster.json` (Task 11 Step 0). Totals are not
