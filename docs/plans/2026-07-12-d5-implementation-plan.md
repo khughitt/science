@@ -1263,6 +1263,13 @@ _TYPED_KEYS = {
     "created": "2026-07-12", "updated": "2026-07-12",   # `format: date` from base 2.0
     "superseded_by": "hypothesis:0002-y",               # `pattern: ^hypothesis:`
     "verdict": "supported",                             # an ENUM -- "x" is not in it
+    # Constrained by THIS task. Every contract added above is a new way for `"x"` to be wrong,
+    # so every contract added above owes a sample here. That coupling is the point of the
+    # docstring below -- and it is why the four lines went in with the four contracts.
+    "composition_rule": "conjunctive",                  # an ENUM
+    "capability_scope": "methodological",               # an ENUM
+    "review_state": {"last_reviewed": "2026-07-12"},    # an OBJECT, closed
+    "rival_model_packet": {"packet_id": "p"},           # an OBJECT, `packet_id` required
 }
 
 
@@ -1682,7 +1689,7 @@ In `validator.py`, add `validate_as`, make `validate` delegate, and **close the 
     "lens_views": { "type": "array", "items": { "$ref": "#/$defs/lens_view" } },
     "review_state": { "$ref": "#/$defs/review_state" },
     "rival_model_packet": { "$ref": "#/$defs/rival_model_packet" },
-    "composition_rule": { "enum": ["all_steps", "conjunctive", "evidence_union", "faceted_support"] },
+    "composition_rule": { "enum": ["all_steps", "conjunctive"], "$comment": "The IMPLEMENTED rules (`WEAKEST_LINK_COMPOSITION_RULES`), NOT all of `CompositionRule`. `evidence_union` and `faceted_support` are RESERVED — declared so the names are stable, and rejected at load by `Entity._validate_composition_rule` (entities.py:494). Enumerating all four would admit two values the model refuses: an authored `evidence_union` would pass schema validation and then crash the loader, which is the schema pointing at the wrong file." },
 
     "required_capabilities": { "type": "array", "items": { "$ref": "#/$defs/capability_map" }, "$comment": "38 files, 3 projects. P1 subsystem — DECLARED, not yet absorbed. Reaches its readers through a raw-frontmatter re-parse today; undeclared, strictness hard-fails all 38. NO `minItems`: `[]` is `missing` to `_capability_shape_issue`, which is a WARN — the schema must not promote it to a hard failure." },
     "capability_scope": { "enum": ["reference-substrate", "derived-product", "methodological", "model-system", "clinical-outcome", "epidemiological", "behavioral-instrument"] },
@@ -1773,15 +1780,20 @@ In `validator.py`, add `validate_as`, make `validate` delegate, and **close the 
       }
     },
     "rival_model_packet": {
-      "$comment": "`RivalModelPacket` (reasoning.py:189). NOTE the ABSENT `additionalProperties: false` — it is absent BY MEASUREMENT, not by oversight. `protein-landscape/0001` authors `rival_id`, `rival_name`, `rival_claim` and `discriminator_status`: a SINGLE-rival form the model does not declare and, being `extra=ignore`, silently DROPS today. Closing this object would convert that silent data loss into a hard preflight failure in a project this migration is not about. The drop is a real defect and it is filed as one; it is not this plan's to fix by breaking the file that reveals it.",
+      "$comment": "`RivalModelPacket` (reasoning.py:189) — CLOSED, and extended with the SINGLE-RIVAL form the corpus actually authors. Task 8 adds the same four fields to the model; schema and model move together or the drop just changes hiding place.",
       "type": "object",
+      "additionalProperties": false,
       "required": ["packet_id"],
       "properties": {
         "packet_id": { "type": "string", "minLength": 1 },
         "target_hypothesis": { "type": "string" },
         "target_inquiry": { "type": "string" },
         "current_working_model": { "type": "string" },
-        "alternative_models": { "type": "array", "items": { "type": "string" } },
+        "alternative_models": { "type": "array", "items": { "type": "string" }, "$comment": "The LIST form. Authored by ZERO files." },
+        "rival_id": { "type": "string" },
+        "rival_name": { "type": "string" },
+        "rival_claim": { "type": "string" },
+        "discriminator_status": { "type": "string" },
         "shared_observables": { "type": "array", "items": { "type": "string" } },
         "discriminating_predictions": { "type": "array", "items": { "type": "string" } },
         "adjudication_rule": { "type": "string" }
@@ -1830,14 +1842,32 @@ In `validator.py`, add `validate_as`, make `validate` delegate, and **close the 
 > (**165 files / 22 roots**, vs. the roster's 147/18), because for this question over-inclusion can
 > only produce false alarms, never false confidence: *if the superset passes, the roster passes.*
 >
-> **Result: one violation, and it changed the schema.** `protein-landscape/0001` authors a
+> **Result: one violation, and it forced an ADJUDICATION.** `protein-landscape/0001` authors a
 > `rival_model_packet` with four keys `RivalModelPacket` does not declare — `rival_id`, `rival_name`,
-> `rival_claim`, `discriminator_status` — a *single-rival* form where the model declares a *list*
-> form (`alternative_models`). Because the model is `extra="ignore"`, **those four authored keys are
-> silently dropped today and never reach the graph.** So `additionalProperties: false` on that one
-> `$def` was removed: it would have turned a silent data-loss bug in a project *this migration is
-> not about* into a hard preflight failure that blocks all 18 roots. **The corpus overruled the
-> design, which is the entire reason for looking.**
+> `rival_claim`, `discriminator_status` — a *single structured rival* where the model declares a
+> *list of strings* (`alternative_models`). Because the model is `extra="ignore"`, **those four
+> authored keys are silently dropped at `model_validate` and never reach the graph.**
+>
+> A first pass "solved" this by leaving the object **open** — which *preserves the defect it
+> found*. The file would validate, Pydantic would accept the object, and `model_dump()` would still
+> lose all four keys. **"The model accepted it" is not the property that matters; "the value
+> survived" is** — and no test in this plan was checking the second one. `protein-landscape` is
+> **inside the 147-file roster**, so this is not somebody else's problem deferred; it is a file this
+> migration will rewrite.
+>
+> **Ruled: declare the single-rival form, in BOTH authorities** (schema here, model in Task 8), and
+> **close the object**. The corpus decides which spelling is real, and the count is not close:
+>
+> | form | declared by the model | authored in the corpus |
+> |---|---|---|
+> | `alternative_models: list[str]` | yes | **0 files** |
+> | `rival_id` / `rival_name` / `rival_claim` / `discriminator_status` | **no** | 1 file (every packet there is) |
+>
+> **The model declares a form nobody writes and drops the form the only author uses.** Declaring it
+> preserves the file byte-for-byte, ends the drop, keeps the schema authoritative (closed), and
+> blocks nothing. `alternative_models` stays — it is not this plan's business to delete a field on a
+> model shared with other kinds — but *"a packet now has two spellings of a rival"* is a real design
+> question, and it is filed as one rather than answered by a migration.
 >
 > The other closures survive because the corpus *earned* them: `origins` (34 files), `lens_views`
 > (28), `review_state` (7), `required_capabilities` (38), `capability_scope` (1), `composition_rule`
@@ -2550,6 +2580,8 @@ def test_missing_basis_stays_WARN_even_when_the_KIND_is_certified() -> None:
 - Modify: `science/model/src/science_model/profiles/core.py:32-51`
 - Modify: `science/model/src/science_model/entities.py:797-839` (`HypothesisEntity`) **and `Entity`
   (`description`, Step 3b-ii — a base-declared field that no model could hold)**
+- **Modify: `science/model/src/science_model/reasoning.py:189` (`RivalModelPacket`)** — the
+  single-rival form (Step 3b-iii), landing with the closed `$def` from Task 6
 - Modify: `science/src/science_tool/entities.py` (`_LIVE_STATUSES`)
 - Modify: `science/model/src/science_model/templates/hypothesis.md` **and** `templates/hypothesis.md` — **two copies; the packaged one is what the Renderer reads**
 - Modify: the `science.yaml` schema to admit `entity_schema_version: int`
@@ -2582,8 +2614,102 @@ def test_the_capability_scope_vocabulary_is_not_a_SECOND_authority() -> None:
 
 ```python
 # science/model/tests/test_hypothesis_entity.py
+import json
+from importlib.resources import files
+from typing import Any
+
+import pytest
+from pydantic import ValidationError
+
 from science_model.entities import HypothesisEntity
+from science_model.entity_schema import (
+    EntityValidationError,
+    EntityValidator,
+    default_profile_for_kind,
+)
 from science_model.profiles.core import CORE_PROFILE
+
+MIXIN = json.loads(
+    (files("science_model.schemas") / "mixin-hypothesis-1.0.json").read_text(encoding="utf-8")
+)
+BASE_2 = json.loads(
+    (files("science_model.schemas") / "science-entity-base-2.0.json").read_text(encoding="utf-8")
+)["properties"]
+_PROFILE = default_profile_for_kind("hypothesis")
+_V = EntityValidator()
+
+# Admitted by the COMPOSED profile = what the base declares (minus what the mixin forbids) plus what
+# the mixin declares. Deriving this from the mixin ALONE is how `description` hid for four drafts:
+# it is CORE (Task 2 §4), authored by 3 files, declared in base 2.0 -- and on no model.
+_ADMITTED = (
+    {n for n in BASE_2 if MIXIN["properties"].get(n) is not False}
+    | {n for n, s in MIXIN["properties"].items() if s is not False}
+)
+
+# Admitted by the schema, absent from the model, and CORRECT -- for exactly one reason: these two
+# are the P1 capability subsystem, whose readers re-parse RAW frontmatter
+# (`dataset_prioritize.py:511,525`; `validate/checks/dataset_capabilities.py:113,141`) and never go
+# through the model at all. The value is not dropped; it is read by another path. Absorbing them is
+# P1, and P1 DELETES this exception -- it must never grow a third member without a reader named
+# beside it.
+_NOT_ON_THE_MODEL = {"required_capabilities", "capability_scope"}
+
+# The fields BOTH authorities describe. Derived from `_ADMITTED`, so the base surface
+# (`created`, `updated`, `title`, `description`, `ontology_terms`, `same_as`, `dataset_usage`) is
+# reconciled too. `false` properties are excluded by `_ADMITTED`: the schema rejects them outright,
+# so "at least as strict" holds trivially and there is nothing to compare.
+_SHARED_FIELDS = _ADMITTED & set(HypothesisEntity.model_fields)
+
+# Model-only required fields. NOT frontmatter -- the loader stamps them -- so they never appear in
+# a schema payload, and every direct model construction in this file goes through `_model_payload`
+# rather than hand-listing them (and forgetting three).
+_MODEL_ONLY: dict[str, Any] = {"project": "p", "file_path": "h.md", "content_preview": "",
+                               "ontology_terms": [], "related": [], "source_refs": []}
+
+
+def _payload(**over: Any) -> dict[str, Any]:
+    return {"id": "hypothesis:0001-x", "kind": "hypothesis", "title": "T",
+            "created": "2026-07-13", "updated": "2026-07-13", "status": "active", **over}
+
+
+def _model_payload(**over: Any) -> dict[str, Any]:
+    return _MODEL_ONLY | _payload(**over)
+
+
+def _schema_accepts(field: str, value: Any) -> bool:
+    try:
+        _V.validate_as(_payload(**{field: value}), _PROFILE)
+        return True
+    except EntityValidationError:
+        return False
+
+
+def _model_accepts(field: str, value: Any) -> bool:
+    try:
+        HypothesisEntity.model_validate(_model_payload(**{field: value}))
+        return True
+    except ValidationError:
+        return False
+
+
+def _survives(authored: Any, dumped: Any) -> bool:
+    """Every authored path is still present, with its value, after the round trip.
+
+    NOT `dumped == authored`: a dump legitimately carries defaults the author never wrote. The
+    claim is one-directional -- nothing the author WROTE may vanish.
+    """
+    if isinstance(authored, dict):
+        return all(k in dumped and _survives(v, dumped[k]) for k, v in authored.items())
+    if isinstance(authored, list):
+        return len(authored) == len(dumped) and all(map(_survives, authored, dumped))
+    return authored == dumped
+
+
+def _model_preserves(field: str, value: Any) -> bool:
+    dumped = HypothesisEntity.model_validate(_model_payload(**{field: value})).model_dump(
+        mode="json"  # dates -> ISO strings, enums -> values, so it compares to AUTHORED yaml
+    )
+    return field in dumped and _survives(value, dumped[field])
 
 
 def _kind():
@@ -2598,8 +2724,7 @@ def test_descriptor_declares_the_lifecycle_not_the_verdict() -> None:
 
 
 def test_verdict_and_closure_basis_are_first_class_fields() -> None:
-    h = HypothesisEntity(id="hypothesis:1", kind="hypothesis", title="T", project="p",
-                         status="active", verdict="refuted")
+    h = HypothesisEntity.model_validate(_model_payload(verdict="refuted"))
     assert h.verdict == "refuted"
 
 
@@ -2610,29 +2735,11 @@ def test_disposition_is_gone() -> None:
 
 def test_the_projection_does_NOT_reimplement_the_schema_invariants() -> None:
     # D3: JSON Schema is THE authority; Pydantic is a PROJECTION. Rev 1 duplicated
-    # `complete requires a verdict` as a model_validator -- which recreates the second
-    # authority D3 exists to abolish, and guarantees the two eventually disagree. The
-    # projection must be able to REPRESENT anything the schema admits, and must not
-    # independently police it. `test_schema_and_projection_agree` is what keeps them honest.
-    HypothesisEntity(id="hypothesis:1", kind="hypothesis", title="T", project="p",
-                     status="complete")  # no verdict -- the SCHEMA rejects this, not Pydantic
-
-
-# Admitted by the composed profile = what the BASE declares, minus what the mixin forbids, plus
-# what the mixin declares. Checking the mixin ALONE is how `description` hid: it is a CORE field
-# (Task 2 §4), it is authored by 3 files, it is declared in base 2.0 -- and it was on no model.
-_ADMITTED = (
-    {n for n, s in BASE_2.items() if MIXIN["properties"].get(n) is not False}
-    | {n for n, s in MIXIN["properties"].items() if s is not False}
-)
-
-# Admitted by the schema, absent from the model, and that is CORRECT -- for exactly one reason:
-# these two are the P1 capability subsystem, whose readers re-parse RAW frontmatter
-# (`dataset_prioritize.py:511,525`; `validate/checks/dataset_capabilities.py:113,141`) and never go
-# through the model at all. So the value is not dropped; it is read by another path. Absorbing them
-# into the model is P1, and P1 DELETES this exception -- it must never grow a third member without
-# a reader named next to it.
-_NOT_ON_THE_MODEL = {"required_capabilities", "capability_scope"}
+    # `complete requires a verdict` as a model_validator -- which recreates the second authority D3
+    # exists to abolish, and guarantees the two eventually disagree. The projection must be able to
+    # REPRESENT anything the schema admits, and must not independently police it.
+    HypothesisEntity.model_validate(_model_payload(status="complete"))  # SCHEMA rejects; model must not
+    assert not _schema_accepts("status", "complete")  # ...and the schema DOES. Both halves, or neither.
 
 
 def test_every_field_the_schema_ADMITS_is_REPRESENTABLE_in_the_projection() -> None:
@@ -2679,6 +2786,28 @@ def test_the_schema_is_at_least_as_strict_as_the_projection(field: str) -> None:
     )
 
 
+@pytest.mark.parametrize("field", sorted(_SHARED_FIELDS))
+def test_every_value_the_schema_ADMITS_SURVIVES_the_projection(field: str) -> None:
+    """D3 point 4, half three — the half that "the model accepted it" cannot see.
+
+    Acceptance and preservation are DIFFERENT properties, and `extra="ignore"` is exactly the gap
+    between them: the model accepts the object, and `model_dump()` loses the keys it did not
+    declare. `rival_model_packet` sat in that gap -- schema admits the four single-rival keys,
+    Pydantic accepts the object, four authored values gone. Every test in the earlier draft passed.
+
+    A field that validates on disk and evaporates on load is not a contract; it is a **trap**, and
+    it is precisely `phase`'s failure mode reappearing one nesting level down. So the claim is not
+    "the model tolerated it" but "the author's value is still there afterwards."
+    """
+    for value in _BATTERY[field]:
+        if not _schema_accepts(field, value):
+            continue  # the schema already refused it; nothing is owed
+        assert _model_preserves(field, value), (
+            f"{field}={value!r}: the SCHEMA admits it, the MODEL accepts it, and `model_dump()` "
+            f"DROPS it. The value validates and then evaporates."
+        )
+
+
 def test_the_lens_vocabulary_is_not_a_SECOND_authority() -> None:
     # The mixin hard-codes the lens enum because JSON Schema cannot call Python. That duplication
     # is only safe while THIS test exists: add a lens to `LENS_SLUGS` without regenerating the
@@ -2694,107 +2823,80 @@ def test_the_status_vocabulary_is_not_a_SECOND_authority() -> None:
 
 
 def test_the_composition_rule_vocabulary_is_not_a_SECOND_authority() -> None:
-    from science_model.reasoning import CompositionRule
+    # The IMPLEMENTED rules, not every name `CompositionRule` declares. `evidence_union` and
+    # `faceted_support` are RESERVED and rejected by `Entity._validate_composition_rule` -- so a
+    # schema enumerating all four would admit two values the model refuses, which is the exact
+    # schema-is-not-authoritative defect this test exists to prevent, committed BY this test.
+    from science_model.reasoning import WEAKEST_LINK_COMPOSITION_RULES
 
     assert sorted(MIXIN["properties"]["composition_rule"]["enum"]) == sorted(
-        r.value for r in CompositionRule
+        r.value for r in WEAKEST_LINK_COMPOSITION_RULES
     )
 
 
-def test_the_BATTERY_covers_every_SHARED_field() -> None:
-    # `_SHARED_FIELDS` is DERIVED (schema ∩ model), the battery is hand-written -- so the battery is
-    # the half that can silently fall behind. Add a field to both authorities, forget the battery,
-    # and the reconciliation quietly stops covering it while every test still passes.
+def test_the_BATTERY_is_EXACTLY_the_shared_surface() -> None:
+    # EQUALITY, not coverage. `_SHARED_FIELDS` is derived; the battery is hand-written -- so the
+    # battery is the half that falls behind, and it falls behind in BOTH directions:
     #
-    # This is the same defect shape as a guard that hard-codes the list of things it guards: the
-    # hole appears by CONSTRUCTION, at the moment someone adds the thing it should have caught.
-    missing = _SHARED_FIELDS - set(_BATTERY)
-    assert not missing, f"no battery for {sorted(missing)}: the field is declared but unreconciled"
+    #   missing  -> a field is declared by both authorities and reconciled by neither, while every
+    #              test still passes. (`description` and the whole base surface lived here.)
+    #   spurious -> a battery entry for a field nobody declares. It never runs, and it reads like
+    #              coverage that does not exist -- which is worse than no entry at all.
+    assert set(_BATTERY) == _SHARED_FIELDS, (
+        f"unreconciled: {sorted(_SHARED_FIELDS - set(_BATTERY))}; "
+        f"stale: {sorted(set(_BATTERY) - _SHARED_FIELDS)}"
+    )
 ```
 
-**The battery and the two adapters** (same file — this is the machinery the parametrized test runs
-on). Every value below is a payload the *model* has an opinion about; the point is to make the
-schema hold the same opinions.
+**The battery** (same file, above the tests). Every value is one the *model* has an opinion about;
+the point is to make the schema hold the same opinions. **It must equal `_SHARED_FIELDS` exactly** —
+`test_the_BATTERY_is_EXACTLY_the_shared_surface` enforces that, in both directions.
 
 ```python
-import json
-from datetime import date
-from importlib.resources import files
-from typing import Any
-
-import pytest
-from pydantic import ValidationError
-
-from science_model.entities import HypothesisEntity
-from science_model.entity_schema import EntityValidationError, EntityValidator, default_profile_for_kind
-from science_model.profiles.core import CORE_PROFILE
-
-MIXIN = json.loads(
-    (files("science_model.schemas") / "mixin-hypothesis-1.0.json").read_text(encoding="utf-8")
-)
-BASE_2 = json.loads(
-    (files("science_model.schemas") / "science-entity-base-2.0.json").read_text(encoding="utf-8")
-)["properties"]
-_PROFILE = default_profile_for_kind("hypothesis")
-_V = EntityValidator()
-
-# Fields BOTH authorities describe. `false` properties are excluded: the schema rejects them
-# outright, so "at least as strict" holds trivially and there is nothing to compare.
-_SHARED_FIELDS = {
-    name for name, spec in MIXIN["properties"].items() if spec is not False
-} & set(HypothesisEntity.model_fields)
-
-# Model-only required fields. They are NOT frontmatter -- `project`/`file_path`/`content_preview`
-# are stamped by the loader -- so they never appear in a schema payload.
-_MODEL_ONLY = {"project": "p", "file_path": "h.md", "content_preview": "",
-               "ontology_terms": [], "related": [], "source_refs": []}
-
-
-def _payload(field: str, value: Any) -> dict[str, Any]:
-    return {"id": "hypothesis:0001-x", "kind": "hypothesis", "title": "T",
-            "created": "2026-07-13", "updated": "2026-07-13", "status": "active", field: value}
-
-
-def _schema_accepts(field: str, value: Any) -> bool:
-    try:
-        _V.validate_as(_payload(field, value), _PROFILE)
-        return True
-    except EntityValidationError:
-        return False
-
-
-def _model_accepts(field: str, value: Any) -> bool:
-    try:
-        HypothesisEntity.model_validate(_MODEL_ONLY | _payload(field, value))
-        return True
-    except ValidationError:
-        return False
-
-
 _LEGAL_ORIGIN = {"type": "literature", "ref": "paper:Smith2024"}
 _LEGAL_LENS = {"lens": "mechanism", "rationale": "r"}
 
 _BATTERY: dict[str, list[Any]] = {
-    # The five that shipped vacuous. Each first value is the one the old mixin ADMITTED.
+    # The five that shipped VACUOUS. Each leading value is one the old mixin admitted.
     "origins": [[42], 42, [{}], [{"type": "nope"}], [{"type": "literature"}],
                 [{"type": "literature", "ref": "topic:x"}],   # ref must be paper:/cite:
                 [dict(_LEGAL_ORIGIN, bogus=1)],               # extra="forbid"
-                [dict(_LEGAL_ORIGIN, date="2026-02-31")],     # a real calendar date
-                [_LEGAL_ORIGIN]],                             # the control: must pass BOTH
+                [dict(_LEGAL_ORIGIN, date="2026-02-31")],     # must be a real calendar date
+                [_LEGAL_ORIGIN]],                             # the control: passes BOTH
     "review_state": [42, "x", {"review_horizon_days": 0}, {"review_horizon_days": "x"},
-                     {"last_reviewed": "nope"}, {"last_reviewed": "2026-07-13"}],
-    "composition_rule": [42, "nope", "conjunctive"],
+                     {"last_reviewed": "nope"}, {"bogus": 1},
+                     {"last_reviewed": "2026-07-13", "review_horizon_days": 90}],
+    # The RESERVED rules are the point: `Entity._validate_composition_rule` rejects both, so a
+    # schema that enumerated all four of `CompositionRule` would admit values the model refuses.
+    "composition_rule": [42, "nope", "evidence_union", "faceted_support", "conjunctive"],
+    # The single-rival form (ruled in Task 6) must SURVIVE, not merely validate -- this entry is
+    # what `test_every_value_the_schema_ADMITS_SURVIVES_the_projection` runs on.
     "rival_model_packet": [42, {}, {"packet_id": ""}, {"packet_id": "p", "alternative_models": [42]},
+                           {"packet_id": "p", "bogus": 1},
+                           {"packet_id": "p", "rival_id": "platonic", "rival_name": "PRH",
+                            "rival_claim": "representations converge",
+                            "discriminator_status": "pre-registered"},
                            {"packet_id": "p"}],
     "datasets": [[42], 42, ["dataset:x"]],
-    # The rest of the shared surface -- cheap, and it keeps a future `{}` from sneaking in here.
     "lens_views": [[42], [{"lens": "nope", "rationale": "r"}], [{"lens": "mechanism"}],
                    [{"lens": "mechanism", "rationale": " "}], [dict(_LEGAL_LENS, bogus=1)],
                    [_LEGAL_LENS]],
+    # The BASE surface. Omitting it is how `description` stayed unreconciled: it is declared by
+    # base 2.0, never by the mixin, so a battery derived from mixin properties could not see it.
+    "title": [42, "T"],
+    "description": [42, "a description"],
+    "created": [42, "x", "2026-13-01", "2026-07-13"],
+    "updated": [42, "x", "2026-07-13"],
+    "ontology_terms": [42, [42], ["GO:0008150"]],
+    "same_as": [42, [42], ["hypothesis:0002-y"]],
+    "dataset_usage": [42, [{"ref": "x", "role": "analyzed"}],          # ref must be `^dataset:`
+                      [{"ref": "dataset:x", "role": "nope"}],          # role is an enum
+                      [{"ref": "dataset:x"}],                          # role is required
+                      [{"ref": "dataset:x", "role": "analyzed"}]],
+    # The rest of the mixin surface.
     "related": [42, [42], ["hypothesis:0002-y"]],
     "source_refs": [42, [42], ["papers/x.md"]],
     "aliases": [42, [42], ["alias"]],
-    "ontology_terms": [42, [42], ["GO:0008150"]],
     "added_by": [42, "science:explore-ideas"],
     "profile": [42, "core"],
     "id": [42, "topic:x", "hypothesis:0001-x"],
@@ -2892,11 +2994,35 @@ a live silent drop** found by `test_every_field_the_schema_ADMITS_is_REPRESENTAB
 > every kind has been dropping it equally — including the commons kinds, whose records are the ones
 > that most obviously *have* descriptions.
 >
+> Precisely: the *body prose* is read pre-validation into `content_preview`, so a hypothesis is not
+> wholly unread — but the **`description` field itself** is dropped, and `materialize.py:639` emits
+> `summary`, **not** `description`. So the authored key reaches no model attribute and no triple.
+>
 > The field is now **representable**; it is **not yet materialized** to the graph (no triple, no
 > consumer). That is a deliberate stopping point, not an oversight: this arc migrates a lifecycle,
 > and quietly adding a new predicate to `graph.trig` would put an unrelated change inside the
 > migration's diff — exactly what Task 11's before/after graph diff exists to detect. **Ending the
 > drop is this plan's business; deciding what a description *means* to the graph is not.**
+
+**Step 3b-iii — the single-rival form on `RivalModelPacket`** (`reasoning.py:189`). Four optional
+fields, ruled in Task 6 and **required to land in the same task as the closed schema `$def`**:
+
+```python
+    rival_id: str | None = None
+    rival_name: str | None = None
+    rival_claim: str | None = None
+    discriminator_status: str | None = None
+```
+
+> **Schema and model move together here, or the drop simply changes hiding place.** Closing the
+> `$def` without these four fields makes `protein-landscape/0001` fail validation; adding the fields
+> without closing the `$def` leaves the next undeclared key to be silently dropped exactly as these
+> four were. The pair is the fix; either half alone is a new bug.
+>
+> `test_every_value_the_schema_ADMITS_SURVIVES_the_projection` is what proves it, and it is worth
+> being explicit about why the obvious test would **not** have: Pydantic *accepted* that packet all
+> along. `extra="ignore"` accepts and discards. **Acceptance was never the property worth
+> asserting** — survival is.
 
 **Step 3c — `_LIVE_STATUSES`** (`science/src/science_tool/entities.py:193-243`): remove the six
 verdict words **only if no other kind still declares them**:
@@ -3580,14 +3706,11 @@ later.
 - **`science:graph` / `science:axis`** (design §3, §5). Not needed to migrate `hypothesis`.
 - **The 6 filed defects**, notably **`fb-2026-07-12-006`: every commons dataset is on a crashing
   overlay path today.** Independent of this arc; worth fixing sooner.
-- **`fb-2026-07-13-001` (found by Task 6's contract certification): `rival_model_packet` silently
-  drops authored keys.** `protein-landscape/0001` authors `rival_id`, `rival_name`, `rival_claim`
-  and `discriminator_status` — a **single-rival** packet — where `RivalModelPacket` declares only a
-  **list** form (`alternative_models`). The model is `extra="ignore"`, so all four are dropped at
-  `model_validate` and never reach the graph: the author's rival is invisible to every consumer,
-  including the discriminating-evidence machinery the packet exists to feed. **This is the same
-  defect class as `phase`** — authored content, silently discarded by an `extra`-permissive model —
-  and it wants the same answer: decide whether the single-rival form is legitimate (declare it) or
-  not (reject it). The one answer that is *not* available is the status quo, where it is neither.
-  **Not fixed here:** the migration must not hard-fail a project it is not about.
+- **A packet now has TWO spellings of a rival.** Task 6/8 declare the single-rival form
+  (`rival_id`/`rival_name`/`rival_claim`/`discriminator_status`) because the corpus authors it and
+  the model was silently dropping it — while `alternative_models: list[str]`, which the model
+  declares and **nobody authors**, stays. That ends the data loss and leaves a design question:
+  the right shape is probably `alternative_models: list[RivalModel]`, collapsing both. **Deleting a
+  field on a model shared with other kinds is not a migration's business**, so the question is filed
+  rather than answered here. The *drop* is fixed; the *duplication* is not.
 - **The 169 residual status-vocabulary WARNs** on other kinds. They stay WARNs until their slices.
