@@ -67,17 +67,16 @@ is configured per package — run it from the package you changed.
 
 Worktrees of *this* repo are safe: the `science-model` / `science-qa` uv sources
 are **in-repo** (`model/`, `qa/`), so a linked worktree carries its own copies
-and `uv run` resolves normally wherever the worktree lives.
+and `uv run` resolves normally wherever the worktree lives. The `meta/` project
+is safe for the same reason: its editable Science source stays within this Git
+worktree.
 
-Science-managed **consumer** projects are not. They reference this toolkit via a
-*relative* editable source (e.g. `science = { path = "../../../science/science" }`),
-which does not resolve from the default nested `.worktrees/<name>/` worktree — the
-worktree sits two directory levels deeper than the project's main checkout, so
-the relative path under-resolves and every `uv run` (the pre-commit hook,
-`validate.sh`, tests) fails with `Distribution not found`. The constraint and its
-two work-arounds are shipped to adopters in
-[`templates/agents-md.md`](templates/agents-md.md) — mirror any change to the
-phrasing there.
+Science-managed external consumers install this toolkit from its public Git
+source, with the exact revision pinned in their `uv.lock`. Their dependency is
+location-independent, so nested `.worktrees/<name>/` directories are the normal
+default and support `uv sync --frozen`, tests, and `validate.sh` directly. This
+rule is shipped to adopters in [`templates/agents-md.md`](templates/agents-md.md)
+— mirror any change to the phrasing there.
 
 ## Conventions
 

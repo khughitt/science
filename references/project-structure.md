@@ -127,14 +127,22 @@ requires-python = ">=3.11"
 dependencies = []
 
 [dependency-groups]
-dev = []
+dev = ["science"]
+
+[tool.uv.sources]
+science = { git = "https://github.com/khughitt/science.git", subdirectory = "science" }
 ```
 
-Install `science` into it with:
+Resolve and install it with:
 
 ```bash
-uv add --dev --editable "$SCIENCE_TOOL_PATH"
+uv lock
+uv sync --frozen
+uv run --frozen science --version
 ```
+
+Commit `uv.lock`; it records the exact Science Git revision selected for the
+project.
 
 ### `archive/` — Optional Archived Material
 

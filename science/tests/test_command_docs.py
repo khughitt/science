@@ -6,16 +6,18 @@ import pytest
 
 ROOT = Path(__file__).resolve().parents[2]
 
-TOOL_MANIFEST_SNIPPET = """```toml
-[project]
-name = "<project-slug>-sciences"
-version = "0.1.0"
-requires-python = ">=3.11"
-dependencies = []
-
-[dependency-groups]
-dev = []
-```"""
+SCIENCE_GIT_SOURCE = (
+    'science = { git = "https://github.com/khughitt/science.git", '
+    'subdirectory = "science" }'
+)
+RETIRED_TOOLING_GUIDANCE = (
+    'uv add --dev --editable "$SCIENCE_TOOL_PATH"',
+    "SCIENCE_TOOL_PATH=<absolute-path-to-science>",
+    "same filesystem depth",
+    "git worktree add ../<project>--<branch>",
+    "UV_PROJECT=$MAIN",
+    "$MAIN/.venv/bin/science",
+)
 
 USER_GUIDE_DOC = "docs/" + "user-guide.md"
 PROJECT_ORGANIZATION_DOC = "docs/" + "project-organization-profiles.md"
@@ -889,57 +891,48 @@ def test_needs_review_resolution_docs_cover_amendment_workflow() -> None:
 
 
 @pytest.mark.parametrize(
-    ("path", "expected_strings"),
+    "path",
     [
-        (
-            "commands/create-project.md",
-            (
-                TOOL_MANIFEST_SNIPPET,
-                'uv add --dev --editable "$SCIENCE_TOOL_PATH"',
-                "non-Python repos",
-            ),
-        ),
-        (
-            "commands/import-project.md",
-            (
-                TOOL_MANIFEST_SNIPPET,
-                'uv add --dev --editable "$SCIENCE_TOOL_PATH"',
-                "non-Python repos",
-            ),
-        ),
-        (
-            "references/project-structure.md",
-            (
-                TOOL_MANIFEST_SNIPPET,
-                "tool-only manifest",
-                "science",
-            ),
-        ),
-        (
-            "references/command-preamble.md",
-            (
-                "uv run science <command>",
-                "project-local install",
-                "uv add --dev --editable",
-            ),
-        ),
-        (
-            "README.md",
-            (
-                "pyproject.toml",
-                "science",
-                "project-local tooling",
-            ),
-        ),
+        "commands/create-project.md",
+        "commands/import-project.md",
+        "references/project-structure.md",
     ],
 )
-def test_project_bootstrap_docs_cover_science_tool_install_contract(
-    path: str,
-    expected_strings: tuple[str, ...],
-) -> None:
+def test_project_bootstrap_docs_use_canonical_git_source(path: str) -> None:
     text = _read(path)
-    for expected in expected_strings:
-        assert expected in text
+
+    assert SCIENCE_GIT_SOURCE in text
+    assert 'dev = ["science"]' in text
+    assert "uv lock" in text
+
+
+def test_active_tooling_docs_drop_relative_editable_workarounds() -> None:
+    paths = [
+        "commands/create-project.md",
+        "commands/import-project.md",
+        "references/project-structure.md",
+        "references/command-preamble.md",
+        "templates/agents-md.md",
+        "AGENTS.md",
+    ]
+
+    offenders = {
+        path: token
+        for path in paths
+        for token in RETIRED_TOOLING_GUIDANCE
+        if token in _read(path)
+    }
+    assert offenders == {}
+
+
+def test_agents_template_recommends_nested_worktrees_and_local_overlay() -> None:
+    text = _read("templates/agents-md.md")
+
+    assert ".worktrees/<name>/" in text
+    assert "location-independent" in text
+    assert "uv sync --frozen" in text
+    assert "uv run --with-editable ~/d/science/science <command>" in text
+    assert "--no-verify" not in text
 
 
 @pytest.mark.parametrize("path", ["commands/create-project.md", "commands/import-project.md"])

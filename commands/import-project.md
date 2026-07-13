@@ -166,24 +166,28 @@ requires-python = ">=3.11"
 dependencies = []
 
 [dependency-groups]
-dev = []
+dev = ["science"]
+
+[tool.uv.sources]
+science = { git = "https://github.com/khughitt/science.git", subdirectory = "science" }
 ```
 
-Install `science` into the manifest with:
+Resolve and install the project-local tooling environment:
 
 ```bash
-uv add --dev --editable "$SCIENCE_TOOL_PATH"
+uv lock
+uv sync --frozen
+uv run --frozen science --version
 ```
+
+Commit `uv.lock`: it records the exact Science Git revision selected for this
+project.
 
 ### `.env`
 
-Create or update `.env` with the **resolved absolute path** to `science`:
-
-```env
-SCIENCE_TOOL_PATH=<absolute-path-to-science>
-```
-
-Resolve `${CLAUDE_PLUGIN_ROOT}/science` to its absolute path at creation time. Ensure `.env` is in `.gitignore`.
+Preserve or create `.env` only for unrelated secrets or environment
+configuration, and ensure it remains in `.gitignore`. Science itself is resolved
+from the tracked manifest and lock.
 
 ### `AGENTS.md`
 

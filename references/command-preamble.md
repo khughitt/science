@@ -97,6 +97,11 @@ then
 fi
 ```
 
+After the gate succeeds, run the command through the consumer's project-local
+environment as `uv run science <command>`. Missing dependency, missing or stale
+lock, and Git fetch failures are surfaced directly and must be fixed in the
+consumer project.
+
 A CLI that answers `--help` but rejects `--version` predates the baseline;
 malformed successful output and a version below the floor are likewise
 compatibility failures, and all three stop with the upgrade command. A CLI that
