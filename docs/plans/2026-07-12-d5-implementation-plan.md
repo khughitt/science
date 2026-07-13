@@ -852,43 +852,95 @@ is not certified. STOP.**
 > would be fabrication in reverse — erasing an author's conclusion because our schema cannot yet see
 > its reasons. **Migrate the verdict; report the missing basis.**
 >
-> ### Consequences — needs a ruling
+> ### Consequences — RULED 2026-07-13
 >
-> 1. **`verdict.missing-basis` ships as WARN**, and joins `_CERTIFIED_KINDS`/ERROR only when the
->    corpus is certified to satisfy it. The basis contract is **aspirational relative to today's
->    corpus**, and saying so out loud is the whole doctrine: *certify before depending.*
+> 1. **`verdict.missing-basis` ships as WARN.** The basis contract stays **normative**; only its
+>    *enforcement* is transitional. It carries its own **rule-specific ratchet**, separate from the
+>    kind ratchet: **it remains WARN even after Task 12 adds `hypothesis` to `_CERTIFIED_KINDS`.**
+>    *Kind certification and verdict-basis certification are independent facts* — the kind is
+>    certified when every root is pinned and renders; the basis rule is certified when the corpus
+>    actually carries bases. Neither implies the other, and collapsing them is how an uncertified
+>    rule rides in on a certified one's coattails.
 > 2. **`verdict.refutation-masked` is unaffected** — it fires only on `supported` + a decisive
 >    refutation, and needs no basis to exist. It stays an **ERROR** and stays gated. The hard
->    invariant survives; only the coverage rule is downgraded.
-> 3. **Backfilling the 11 bases is real research work**, not a migration step. It is the *content* of
->    the D5 follow-through, and it is what makes `verdict` mean anything. **Track it; do not fake it.**
+>    invariant survives; only the coverage rule is downgraded. *(And see Task 7 Step 3c: a missing
+>    basis must **not** `continue` past this check — a verdict can lack a supporting basis **and**
+>    mask decisive contrary evidence at the same time. Both findings are emitted.)*
+> 3. **Backfilling the deficit is real research work**, not a migration step. It is the *content* of
+>    the D5 follow-through, and it is what makes `verdict` mean anything. **Track it; do not fake
+>    it** — and do not block the migration on it.
+>
+> ### The "11" is a LOWER BOUND, not the ratchet's target
+>
+> This sweep counted **evidence units**, which is a *surrogate* for a basis, not the basis predicate
+> itself. It establishes 11 hypotheses with **no units at all** — those cannot possibly have a basis.
+> The remaining **4 are unadjudicated**: `_qualifying_basis` (Task 7) additionally demands **polarity
+> agreement**, **admissibility under the belief policy**, and **core-member scope**, and any of the 4
+> may fail one of those. The true deficit is therefore **≥ 11, ≤ 15**, and *only the shipped
+> validator can say which*.
+>
+> **So the ratchet's precondition is the shipped validator's own findings — never this unit count.**
+> When `verdict.missing-basis` is eventually promoted to ERROR, the gate is `science validate`
+> emitting **zero** `verdict.missing-basis` findings across all 18 roots. Substituting the surrogate
+> would certify against a number the instrument never produced — which is the same error, one level
+> up, as grading severity on `layout_version`.
 
 ---
 
-### Task 4: Adjudicate `natural-systems/0009`
+### Task 4: Adjudicate `natural-systems/0009` — **ADJUDICATED BY THE AUTHOR 2026-07-13**
 
 **Not a code task.** The one real file no rule can migrate — and the file whose corruption opened
 this arc (fb-2026-07-11-005).
 
-- [ ] **Step 1:** Read the hypothesis and its interpretations. The record says the confirmatory
-  null was **non-significant (z = −0.889)** — which is `weakened` (failed to confirm), **not**
-  `refuted` (met a rejection criterion). It carries `status: retired`, a **task** status, which
-  destroyed that distinction.
-- [ ] **Step 2:** Have **the author** (not the implementer, not this plan) write
+> **This plan guessed, and it guessed wrong.** Revs 1–5 prescribed `retired` + `weakened`, reasoning
+> that a non-significant confirmatory null "failed to confirm" rather than "met a rejection
+> criterion." **The author ruled `complete` + `refuted`,** and the reasoning is not a matter of
+> taste — it is exactly the two-axis split this whole design exists to restore:
+>
+> - **`complete`, not `retired`.** The pre-registered decisive test **ran** and produced an
+>   unambiguous conclusion. This is *concluded research*, not pragmatically abandoned work.
+>   `retired` would have asserted "stopped for non-epistemic reasons" — which is **false here**, and
+>   is precisely the falsehood the collapsed `status: retired` had been telling all along.
+> - **`refuted`, not `weakened`.** The hypothesis's **organizing conjecture** — not a peripheral
+>   proposition — was rejected on its **sole confirmatory survival arm**, far outside the stated
+>   inconclusive band and pointing the wrong way (interpretation `0192`: primary z = −0.889,
+>   p = 0.819, *"null, wrong direction"*; the stratified confound control and the exploratory
+>   substrate lenses are null too). `weakened` would **understate** it. P1's descriptive pattern
+>   survives, but the record is explicit that any narrower claim must become a **separate
+>   successor** rather than rescue 0009 as written.
+>
+> **The lesson for the plan, not just the file:** the implementer's inference was defensible from the
+> statistics *alone* and still wrong, because the adjudication turns on what the test was **for** —
+> which lives in the pre-registration and the author's judgment, not in the p-value. **This is why
+> the instrument REFUSES instead of guessing.** Had `status_inventory` shipped a "reasonable
+> default" here, it would have written this plan's error into the corpus and called it a migration.
+
+- [x] **Step 1:** Read the hypothesis and its interpretations. → Done; the author adjudicated (above).
+- [x] **Step 2:** **The author** (not the implementer, not this plan) supplies
   `~/d/natural-systems/.science/hypothesis-lifecycle.adjudication.yaml`:
 
 ```yaml
 # Explicit authored decisions for hypotheses whose collapsed `status` destroyed the
 # information needed to migrate them. Consumed by `science entity migrate-hypothesis`.
 "hypothesis:0009-local-structure-globalization-obstruction":
-  status: retired            # lifecycle: no longer an object of active work
-  verdict: weakened          # epistemic: the confirmatory null was NON-significant (z=-0.889)
-  closure_basis: "Stopped after the confirmatory null failed to reach significance; the
-    globalization-obstruction framing was folded into the h5 reframing rather than pursued."
+  status: complete           # lifecycle: the decisive test RAN and concluded
+  verdict: refuted           # epistemic: the organizing conjecture was rejected on its sole
+                             # confirmatory arm (interpretation:0192)
 ```
 
-- [ ] **Step 3:** Re-run `science entity status-inventory` in natural-systems → **0 refused**.
-- [ ] **Step 4:** Commit the adjudication file **in natural-systems**, not in the toolkit.
+**No `closure_basis`.** That field records why a hypothesis was closed **without** a verdict. Here
+the evidence spoke, and **the verdict *is* the reason** — a `closure_basis` would be a second,
+weaker copy of the adjudication.
+
+- [x] **Step 3:** Re-run `science entity status-inventory` in natural-systems → **0 refused**.
+- [ ] **Step 4:** Commit the adjudication file **in natural-systems**, not in the toolkit. Commit
+  *only* that file — the repo has an unrelated unstaged fetch log.
+
+> **Step 5 is a representation obligation, and it is Task 3b's, not Task 4's.** `interpretation:0192`
+> is **not graph-representable as a verdict basis** under the rev-9 contract (`interpretation` is not
+> an entity kind). So this file will migrate to `verdict: refuted` and *then* be reported by
+> `verdict.missing-basis` — correctly, and at **WARN**. The adjudication is settled; the *basis* is
+> owed. **Do not fabricate the basis to silence the warning, and do not block the migration on it.**
 
 ---
 
@@ -1682,7 +1734,7 @@ def check_resolution(
 > | rule | severity | what it is |
 > |---|---|---|
 > | **`verdict.refutation-masked`** | **ERROR**, re-gated in `gates.py` | **The hard invariant.** `supported` while an unresolved decisive whole-hypothesis or **core-conjunction** refutation stands. |
-> | **`verdict.missing-basis`** | ERROR | An authored verdict with **no qualifying basis at all**. |
+> | **`verdict.missing-basis`** | **WARN** (ruled 2026-07-13; see Task 3b) | An authored verdict with **no qualifying basis at all**. The contract is normative; **enforcement is transitional** — ≥11 of the 15 migrating verdicts cannot satisfy it today. It has its **own** ratchet, and stays WARN even after Task 12 certifies the *kind*. |
 > | **`verdict.disagrees-with-computed`** | WARN, report-only | The authored adjudication and the composed belief disagree. **Explanatory, not a ceiling.** |
 >
 > The last two are **explanatory disagreement reports**, not ports of the deleted ordinal rules.
@@ -1788,16 +1840,19 @@ def check_verdict_agreement(ctx: ValidateContext) -> Iterator[Result]:
         # decisive whole-hypothesis refutation that `verdict.refutation-masked` exists to catch.
         direct = collect_evidence_units(knowledge, provenance, [hyp_uri])
 
+        # NOTE: no `continue`. A missing basis does NOT short-circuit the checks below -- the two
+        # findings are INDEPENDENT, and a `supported` hypothesis can lack any supporting basis AND
+        # simultaneously mask a decisive refutation. Skipping the invariant for exactly the files
+        # with the weakest evidentiary footing would suppress it where it matters most.
         basis = _qualifying_basis(knowledge, provenance, hyp_uri, composed, direct, verdict)
         if not basis:
             yield Result(
-                Severity.ERROR, _path_for(ctx, hyp_uri), None,
+                Severity.WARN, _path_for(ctx, hyp_uri), None,
                 f"{hyp_uri}: verdict {verdict!r} has no qualifying basis "
                 f"(no admissible, polarity-agreeing evidence line or falsification on the "
                 f"hypothesis or any core member). A verdict is an adjudication OF something.",
                 "verdict.missing-basis", None,
             )
-            continue
 
         # THE HARD INVARIANT. `supported` cannot stand on top of an unresolved decisive refutation
         # of the whole hypothesis or of its core conjunction. Note `partially-supported` is NOT
@@ -1836,11 +1891,28 @@ def check_verdict_agreement(ctx: ValidateContext) -> Iterator[Result]:
 | `weakened` | **no** disputing evidence and no negative adjudication basis. **Never infer a historical trajectory from one snapshot** — a true weakening claim needs a prior `belief_snapshot`; absent one, only report the *absence of any dispute*, never the absence of *change*. |
 | `refuted` | no decisive refutation and no linked falsification. **No single-source ceiling** — one decisive independent test is a legitimate refutation. |
 
-- [ ] **Step 3d: Re-gate the hard invariant.** Add **`verdict.refutation-masked`** to the `hygiene`
-  tier in `validate/gates.py` — it inherits the gated ERROR that `belief.refutation-masked` held
-  before Task 2b removed it. `verdict.missing-basis` is an ERROR but **ungated for one release**
-  (it is new authoring surface; do not break a commit on day one).
-  `verdict.disagrees-with-computed` is **never gated** — a disagreement is information, not a fault.
+- [ ] **Step 3d: Re-gate the hard invariant — and ONLY it.** Add **`verdict.refutation-masked`** to
+  the `hygiene` tier in `validate/gates.py`; it inherits the gated ERROR that
+  `belief.refutation-masked` held before Task 2b removed it.
+
+  **`verdict.missing-basis` is WARN and ungated** (ruled 2026-07-13 — Task 3b). Not "ERROR, ungated
+  for one release": at least 11 of the 15 migrating verdicts **cannot satisfy it**, so an ERROR would
+  be an uncertified instrument failing real builds — the original incident, verbatim.
+
+  **`verdict.disagrees-with-computed` is never gated** — a disagreement is information, not a fault.
+
+  Add the regression that keeps the two ratchets apart, because nothing else will:
+
+```python
+def test_missing_basis_stays_WARN_even_when_the_KIND_is_certified() -> None:
+    # Kind certification and verdict-basis certification are INDEPENDENT facts. `hypothesis` being
+    # in _CERTIFIED_KINDS says every root is pinned and renders; it says NOTHING about whether the
+    # corpus carries verdict bases (>=11 of 15 do not). Coupling them would let an uncertified rule
+    # ride in on a certified one's coattails.
+    assert _severity("hypothesis") is Severity.ERROR
+    assert severity_of_rule("verdict.missing-basis") is Severity.WARN
+    assert "verdict.missing-basis" not in gates.TIERS["hygiene"]
+```
 
 - [ ] **Step 4: Green** — unit + wiring, both packages, plus `ruff` and `pyright`.
 
@@ -2509,6 +2581,11 @@ def test_severity_is_a_property_of_the_KIND() -> None:
 ```python
 # A kind joins this set at the END of its P2m slice -- never before. An uncertified
 # instrument may not fail anyone's build.
+#
+# THIS SET CERTIFIES THE KIND, NOT EVERY RULE ABOUT IT. `hypothesis` here means: all 18 roots are
+# pinned, render, and validate. It does NOT mean the corpus carries verdict BASES -- >=11 of the 15
+# migrating verdicts do not, so `verdict.missing-basis` has its OWN ratchet and stays WARN. Two
+# independent facts; do not let one certify the other.
 _CERTIFIED_KINDS: frozenset[str] = frozenset({"hypothesis"})
 
 
@@ -2524,7 +2601,18 @@ def _severity(kind: str) -> Severity:
   certification is precisely the original incident.
 - [ ] **Step 4: Commit** (15 repos, grouped by `git rev-parse --show-toplevel`).
 
----
+> ### Out of scope: the verdict-basis ratchet (deferred, not forgotten)
+>
+> **`verdict.missing-basis` does NOT flip here.** It is a *rule*-level ratchet, and its precondition
+> is a different fact about a different thing: **`science validate` emitting zero
+> `verdict.missing-basis` findings across all 18 roots** — as reported by the **shipped validator**,
+> never by Task 3b's surrogate unit count (the sweep bounds the deficit at **≥11, ≤15**; only
+> `_qualifying_basis` can adjudicate polarity, admissibility, and core-member scope).
+>
+> That precondition is **research work**: authoring the evidence-lines and falsifications that 11+
+> real adjudications currently rest on only in their authors' heads. It is the *content* of D5's
+> follow-through, and it is what makes `verdict` mean anything. When it is done, this same Step 3
+> discipline applies to it — **re-assert the manifest, then check the instrument's own output.**
 
 ## What rev 3 got wrong (caught by Task 1, its own first instrument)
 

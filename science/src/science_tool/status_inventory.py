@@ -77,10 +77,25 @@ class StatusInventory:
         return [row for row in self.rows if row.ambiguity is not None]
 
 
+# THE canonical interface. The inventory, the CLI and the Task 11 migration all read this one path
+# -- an adjudication an author writes must be found by every consumer, or it is not an escape hatch,
+# it is a second corpus.
+ADJUDICATION_PATH = Path(".science/hypothesis-lifecycle.adjudication.yaml")
+
+
+def adjudication_for(project_root: Path) -> dict[str, Adjudicated]:
+    """The project's canonical adjudication artifact. Absent is normal — most projects need none."""
+    path = project_root / ADJUDICATION_PATH
+    return load_adjudication(path) if path.is_file() else {}
+
+
 def load_adjudication(path: Path) -> dict[str, Adjudicated]:
-    """Read an adjudication file: ``{entity_id: {status, verdict?, closure_basis?}}``."""
-    if not path.is_file():
-        return {}
+    """Read an adjudication file: ``{entity_id: {status, verdict?, closure_basis?}}``.
+
+    A path that does not exist is an ERROR, not an empty result: silently ignoring a mistyped
+    adjudication would refuse the very files the artifact was written to discharge, and report the
+    refusal as if the author had never spoken. Use `adjudication_for` for the may-be-absent case.
+    """
     raw = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
     return {
         entity_id: Adjudicated(

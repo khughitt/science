@@ -235,8 +235,8 @@ def entity_field_inventory(kind: str, output_format: str) -> None:
 @click.option(
     "--adjudication",
     type=click.Path(path_type=Path, exists=True),
-    help="YAML of explicit author decisions for files no rule can migrate: "
-    "{entity_id: {status, verdict?, closure_basis?}}.",
+    help="Override the canonical .science/hypothesis-lifecycle.adjudication.yaml with another "
+    "YAML of explicit author decisions: {entity_id: {status, verdict?, closure_basis?}}.",
 )
 @click.option("--format", "output_format", type=click.Choice(OUTPUT_FORMATS), default="table", show_default=True)
 def entity_status_inventory(adjudication: Path | None, output_format: str) -> None:
@@ -244,12 +244,17 @@ def entity_status_inventory(adjudication: Path | None, output_format: str) -> No
 
     `phase` is the lifecycle; `status` was only ever the verdict (design rev 7). A file whose
     `status` is terminal lost its lifecycle, its verdict AND its closure reason at once, so it is
-    REFUSED rather than guessed — and escapes only via an explicit `--adjudication` entry.
+    REFUSED rather than guessed — and escapes only via an authored adjudication entry.
+
+    The adjudication is read from `.science/hypothesis-lifecycle.adjudication.yaml` — the same
+    path the migration consumes, so what discharges a refusal here discharges it there.
     """
 
-    from science_tool.status_inventory import inventory, load_adjudication
+    from science_tool.status_inventory import adjudication_for, inventory, load_adjudication
 
-    decisions = load_adjudication(adjudication) if adjudication else {}
+    decisions = (
+        load_adjudication(adjudication) if adjudication else adjudication_for(Path.cwd())
+    )
     try:
         result = inventory(Path.cwd(), adjudication=decisions)
     except KeyError as exc:

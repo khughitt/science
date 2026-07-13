@@ -148,17 +148,47 @@ def test_the_checked_in_canary_fixture_is_discharged_by_its_adjudication() -> No
     artifact. A classifier that special-cased test data would be an instrument certified against a
     corpus it cannot see.
     """
-    from science_tool.status_inventory import load_adjudication
+    from science_tool.status_inventory import adjudication_for
 
     root = Path(__file__).parent / "fixtures" / "commons_mm30_canary" / "project"
 
     assert inventory(root).ambiguous, "the canary must be REFUSED without an adjudication"
 
-    inv = inventory(root, adjudication=load_adjudication(root / "hypothesis-adjudication.yaml"))
+    # Resolved from the CANONICAL path, not a hand-passed one -- this is the same lookup the
+    # migration performs, so the artifact that discharges the refusal here discharges it there.
+    inv = inventory(root, adjudication=adjudication_for(root))
 
     assert inv.ambiguous == []
     row = inv.deterministic[0]
     assert (row.target_status, row.target_verdict) == ("draft", None)
+
+
+def test_the_adjudication_path_is_ONE_canonical_interface() -> None:
+    """Two consumers reading two paths is not an escape hatch -- it is a second corpus.
+
+    The plan's migration hard-codes `.science/hypothesis-lifecycle.adjudication.yaml`. If the
+    inventory looked anywhere else, an author could discharge a refusal in the report and still
+    have the migration refuse the same file -- or, worse, migrate it by guessing.
+    """
+    from science_tool.status_inventory import ADJUDICATION_PATH
+
+    assert ADJUDICATION_PATH == Path(".science/hypothesis-lifecycle.adjudication.yaml")
+
+
+def test_a_mistyped_adjudication_path_FAILS_rather_than_reading_as_empty(tmp_path: Path) -> None:
+    """Fail early. A silently-empty load would refuse the very files the artifact discharges,
+    and report the refusal as if the author had never spoken."""
+    from science_tool.status_inventory import load_adjudication
+
+    with pytest.raises(FileNotFoundError):
+        load_adjudication(tmp_path / "typo.yaml")
+
+
+def test_a_project_with_no_adjudication_artifact_is_normal(tmp_path: Path) -> None:
+    """Most projects need none -- absence is not an error, only a mistyped explicit path is."""
+    from science_tool.status_inventory import adjudication_for
+
+    assert adjudication_for(tmp_path) == {}
 
 
 def test_only_hypotheses_are_inventoried(tmp_path: Path) -> None:
