@@ -59,7 +59,14 @@ CORE = {
 }
 
 # NEW core -- 0 authored today; core BEFORE any reader ships (design rev 8/9).
-NEW_CORE = {"verdict", "closure_basis", "superseded_by", "resynthesized_into", "archive_ref"}
+#
+# `archive_ref` was a fifth member and is DELETED (ruled 2026-07-13). It had no reader anywhere in
+# the toolkit, no author in the corpus, and -- decisively -- no resolvable namespace: `archive.py`
+# keys its index by the archived entity's OWN id (`ArchiveIndex.active_by_id`) and mints no record
+# identifier, so nothing could ever have been on the other end of the ref. An `archived` entity's
+# archive record is reachable from its `id` alone; authoring a pointer to it would be a second,
+# unversioned spelling of a derivable fact. `archived` now requires `closure_basis`, like `retired`.
+NEW_CORE = {"verdict", "closure_basis", "superseded_by", "resynthesized_into"}
 
 # §5 PROJECT-EXTENSION -- real fields, owned by ONE project. Must be UNDECLARED in core: admission
 # is Task 6b's to grant, and `false` here would make the extension unsatisfiable.
@@ -129,6 +136,10 @@ _TYPED_KEYS: dict[str, Any] = {
     "capability_scope": "methodological",               # an ENUM
     "review_state": {"last_reviewed": "2026-07-12"},    # an OBJECT, closed
     "rival_model_packet": {"packet_id": "p"},           # an OBJECT, `packet_id` required
+    # A TERMINAL BASIS, so `minItems: 1` -- the empty list is exactly the fail-open the schema now
+    # rejects, and a `[]` sample here would send the admission test red for the right reason at the
+    # wrong field.
+    "resynthesized_into": ["hypothesis:0002-y"],
 }
 
 
@@ -140,10 +151,15 @@ def _sample(key: str) -> Any:
     reason that has nothing to do with whether the property is DECLARED -- and it goes red looking
     exactly like a schema defect while actually being a fixture defect. That misdirection is the
     whole cost: the test would be pointing at the wrong file.
+
+    `_TYPED_KEYS` is consulted BEFORE `_LIST_KEYS`, so a list field with a real item contract can
+    override the generic `[]`.
     """
+    if key in _TYPED_KEYS:
+        return _TYPED_KEYS[key]
     if key in _LIST_KEYS:
         return []
-    return _TYPED_KEYS.get(key, "x")
+    return "x"
 
 
 def test_lifecycle_vocabulary_is_the_ruled_one() -> None:
@@ -195,12 +211,45 @@ def test_superseded_requires_lineage_or_a_basis() -> None:
     V.validate_as(_h(status="superseded", closure_basis="folded into h5"), PROFILE)
 
 
-def test_archived_requires_a_basis() -> None:
-    # The `archived` half of the terminal contract -- the one with no other test in this file.
+def test_archived_requires_an_AUTHORED_basis() -> None:
+    # `archived` takes the same discharge as `retired`: an authored reason, and only that. It once
+    # also took `archive_ref` -- see NEW_CORE for why a field with no referent is not a basis.
     with pytest.raises(EntityValidationError):
         V.validate_as(_h(status="archived"), PROFILE)
-    V.validate_as(_h(status="archived", archive_ref="archive/2026/h1.md"), PROFILE)
     V.validate_as(_h(status="archived", closure_basis="folded into the h5 reframing"), PROFILE)
+
+
+def test_archive_ref_is_GONE_and_cannot_come_back_as_an_unknown_key() -> None:
+    # Deleting it from `properties` is not enough on its own to say anything -- prove the composed
+    # schema actually rejects it, which is `unevaluatedProperties: false` doing its job.
+    assert "archive_ref" not in MIXIN["properties"]
+    with pytest.raises(EntityValidationError):
+        V.validate_as(_h(status="archived", archive_ref="archive/2026/h1.md"), PROFILE)
+
+
+# ---- the terminal bases must be NON-EMPTY: presence is not a basis ----
+#
+# The terminal conditionals key off PRESENCE (`required`), and presence is satisfied by an empty
+# value. So each of these payloads CLOSED a hypothesis while naming nothing: the schema passed, and
+# the cross-record resolver (Task 7) would then find no reference to dangle and report NOTHING --
+# the hole surviving inside the check built to close it. All three were accepted by the first
+# shipped mixin.
+
+
+@pytest.mark.parametrize(
+    "payload",
+    [
+        {"status": "superseded", "resynthesized_into": []},   # a list of no successors
+        {"status": "superseded", "superseded_by": ""},        # `^hypothesis:` already caught this
+        {"status": "retired", "closure_basis": " "},          # length 1, and says nothing
+        {"status": "retired", "closure_basis": ""},
+        {"status": "archived", "closure_basis": "\t\n"},
+        {"status": "complete", "verdict": ""},                # not in the enum -- belt and braces
+    ],
+)
+def test_an_EMPTY_terminal_basis_does_not_discharge_the_requirement(payload: dict[str, Any]) -> None:
+    with pytest.raises(EntityValidationError):
+        V.validate_as(_h(**payload), PROFILE)
 
 
 def test_phase_and_disposition_are_FORBIDDEN() -> None:

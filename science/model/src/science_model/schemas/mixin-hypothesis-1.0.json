@@ -20,16 +20,17 @@
     "closure_basis": {
       "description": "The AUTHORED reason a terminal entity closed, required when no structural basis exists. The state is derivable; the reason is not.",
       "type": "string",
-      "minLength": 1
+      "pattern": "\\S",
+      "$comment": "`\\S`, NOT `minLength: 1` — a single space has length 1. `closure_basis: \" \"` satisfied the `retired` conditional and closed the entity with a reason that says nothing, which is the fail-open this field exists to prevent."
     },
 
     "superseded_by": { "type": "string", "pattern": "^hypothesis:" },
     "resynthesized_into": {
       "type": "array",
+      "minItems": 1,
       "items": { "type": "string", "pattern": "^hypothesis:" },
-      "$comment": "A LIST — see archive.py:38 and materialize.py:155."
+      "$comment": "A LIST — see archive.py:38 and materialize.py:155. `minItems: 1` because the terminal conditionals key off PRESENCE: `resynthesized_into: []` is present, so it discharged `superseded` while naming no successor at all — and the cross-record resolver (Task 7) would then find no reference to dangle and report nothing. An empty basis is not a basis."
     },
-    "archive_ref": { "type": "string" },
 
     "related": { "type": "array", "items": { "type": "string" } },
     "source_refs": { "type": "array", "items": { "type": "string" } },
@@ -101,13 +102,9 @@
       }
     },
     {
+      "$comment": "`archived` requires an AUTHORED basis, exactly like `retired`. An earlier draft also admitted `archive_ref` as a structural discharge — a field with no reader anywhere in the toolkit, no author in the corpus, and NO RESOLVABLE NAMESPACE: the archive index (archive.py) is keyed by the archived entity's OWN id and mints no record identifier, so `archive_ref` could only ever have restated a fact derivable from `id`. A second, unversioned spelling of a derivable fact is the exact collapse this arc exists to undo, so it is gone.",
       "if": { "properties": { "status": { "const": "archived" } }, "required": ["status"] },
-      "then": {
-        "anyOf": [
-          { "required": ["archive_ref"] },
-          { "required": ["closure_basis"] }
-        ]
-      }
+      "then": { "required": ["closure_basis"] }
     }
   ],
 
