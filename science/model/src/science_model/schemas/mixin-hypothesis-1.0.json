@@ -156,7 +156,10 @@
       "additionalProperties": false,
       "required": ["packet_id"],
       "properties": {
-        "packet_id": { "type": "string", "minLength": 1 },
+        "packet_id": {
+          "type": "string", "pattern": "\\S",
+          "$comment": "`\\S`, NOT `minLength: 1` — a single space has length 1, so `packet_id: \" \"` would satisfy the packet's one required field while naming nothing. Same correction as `closure_basis`; this instance was missed when that one was fixed."
+        },
         "target_hypothesis": { "type": "string" },
         "target_inquiry": { "type": "string" },
         "current_working_model": { "type": "string" },

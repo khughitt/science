@@ -1883,7 +1883,7 @@ In `validator.py`, add `validate_as`, make `validate` delegate, and **close the 
       "additionalProperties": false,
       "required": ["packet_id"],
       "properties": {
-        "packet_id": { "type": "string", "minLength": 1 },
+        "packet_id": { "type": "string", "pattern": "\\S" },   // NOT minLength: 1 -- a space has length 1
         "target_hypothesis": { "type": "string" },
         "target_inquiry": { "type": "string" },
         "current_working_model": { "type": "string" },
