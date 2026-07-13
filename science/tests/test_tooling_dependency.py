@@ -79,6 +79,41 @@ def test_present_dependency_without_uv_source_reports_missing_source(tmp_path: P
     assert result.source_kind is ScienceSourceKind.MISSING
 
 
+def test_non_table_dependency_groups_reports_missing_dependency(tmp_path: Path) -> None:
+    tmp_path.joinpath("pyproject.toml").write_text(
+        'dependency-groups = 1\n[project]\nname = "fixture"\nversion = "0.1.0"\n',
+        encoding="utf-8",
+    )
+
+    result = inspect_science_dependency(tmp_path)
+
+    assert result.dev_dependency_present is False
+    assert result.source_kind is ScienceSourceKind.MISSING
+
+
+@pytest.mark.parametrize(
+    "source_shape",
+    [
+        "tool = 1\n",
+        "[tool]\nuv = 1\n",
+        "[tool.uv]\nsources = 1\n",
+        '[tool.uv.sources]\nscience = "unsupported"\n',
+    ],
+)
+def test_wrong_shaped_uv_source_tables_report_missing_source(tmp_path: Path, source_shape: str) -> None:
+    tmp_path.joinpath("pyproject.toml").write_text(
+        f"{source_shape}"
+        '[project]\nname = "fixture"\nversion = "0.1.0"\n'
+        '[dependency-groups]\ndev = ["science"]\n',
+        encoding="utf-8",
+    )
+
+    result = inspect_science_dependency(tmp_path)
+
+    assert result.dev_dependency_present is True
+    assert result.source_kind is ScienceSourceKind.MISSING
+
+
 def test_malformed_pyproject_fails_parsing(tmp_path: Path) -> None:
     tmp_path.joinpath("pyproject.toml").write_text("[project\n", encoding="utf-8")
 

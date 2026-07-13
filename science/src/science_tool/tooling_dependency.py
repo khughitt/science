@@ -33,7 +33,8 @@ def inspect_science_dependency(project_root: Path) -> ScienceDependency:
     with pyproject_path.open("rb") as stream:
         data = tomllib.load(stream)
 
-    dev_group = data.get("dependency-groups", {}).get("dev", [])
+    dependency_groups = data.get("dependency-groups")
+    dev_group = dependency_groups.get("dev", []) if isinstance(dependency_groups, dict) else []
     dev_dependency_present = isinstance(dev_group, list) and any(
         isinstance(entry, str) and _requirement_name(entry) == "science"
         for entry in dev_group

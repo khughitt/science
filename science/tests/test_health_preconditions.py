@@ -255,6 +255,18 @@ def test_tooling_scaffold_reports_missing_science_source(tmp_path: Path) -> None
     assert CANONICAL_SCIENCE_SOURCE in result.rows[0]["fix"]
 
 
+def test_tooling_scaffold_handles_wrong_shaped_dependency_groups(tmp_path: Path) -> None:
+    (tmp_path / "pyproject.toml").write_text(
+        'dependency-groups = 1\n[project]\nname = "t"\nversion = "0.0"\n',
+        encoding="utf-8",
+    )
+
+    result = collect_tooling_scaffold_findings(tmp_path)
+
+    assert [row["code"] for row in result.rows] == ["science_tool_dep_missing"]
+    assert CANONICAL_SCIENCE_SOURCE in result.rows[0]["fix"]
+
+
 def test_tooling_scaffold_reports_external_science_source(tmp_path: Path) -> None:
     consumer = tmp_path / "consumer"
     (consumer / ".git").mkdir(parents=True)

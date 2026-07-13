@@ -113,6 +113,22 @@ def test_tooling_reports_malformed_pyproject_once(tmp_path: Path) -> None:
     assert "could not be parsed" in warnings[0].message
 
 
+def test_tooling_handles_wrong_shaped_dependency_groups(tmp_path: Path) -> None:
+    from science_tool.validate.checks.tooling import check_tooling
+
+    ctx = _ctx(tmp_path)
+    tmp_path.joinpath("pyproject.toml").write_text(
+        'dependency-groups = 1\n[project]\nname = "demo"\nversion = "0.1.0"\n',
+        encoding="utf-8",
+    )
+
+    results = list(check_tooling(ctx))
+
+    warnings = [result for result in results if result.severity is Severity.WARN]
+    assert len(warnings) == 1
+    assert "does not list science" in warnings[0].message
+
+
 def test_tooling_rejects_external_path_source(tmp_path: Path) -> None:
     from science_tool.validate.checks.tooling import check_tooling
 
