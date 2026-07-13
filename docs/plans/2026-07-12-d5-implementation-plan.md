@@ -1938,15 +1938,16 @@ In `validator.py`, add `validate_as`, make `validate` delegate, and **close the 
 >
 > `_model_to_json` (`materialize.py:1897`) is `json.dumps(value.model_dump(mode="json"))` —
 > **inclusive**. Four plain optional fields therefore add `"rival_id": null` ×4 to the serialized
-> literal of **every** packet, not just protein-landscape's. There are **3 packets** in the corpus
-> (1 hypothesis, **2 propositions**), so a lifecycle migration would silently rewrite
-> `sci:rivalModelPacket` on two proposition entities it has no business touching — landing inside
-> the very before/after graph diff Task 11 uses to detect exactly that.
+> literal of **every** packet, not just protein-landscape's. There are **2 packets** in the corpus
+> (1 hypothesis in `protein-landscape`, **1 proposition** in `multiple-myeloma`), so a
+> hypothesis-lifecycle migration would silently rewrite `sci:rivalModelPacket` on a **proposition**
+> it has no business touching — landing inside the very before/after graph diff Task 11 uses to
+> detect exactly that.
 >
 > `exclude_if=lambda v: v is None` on **the four new fields only** makes the existing literals
 > **byte-identical** (verified). The obvious alternative, `model_dump(exclude_none=True)` in
 > `_model_to_json`, is *worse*: today's literals already serialize `"target_hypothesis": null` and
-> friends, so it would rewrite **all three** packets. The narrow fix is the only zero-churn one.
+> friends, so it would rewrite **both** packets. The narrow fix is the only zero-churn one.
 
 - [ ] **Step 3d: The survival test** (`science/model/tests/test_mixin_hypothesis.py`):
 
@@ -1993,25 +1994,103 @@ def test_a_LIST_form_packet_serializes_BYTE_IDENTICALLY() -> None:
 cd science/model && uv run --frozen pytest -q
 ```
 
-- [ ] **Step 4b: Prove the graph diff, on the two projects that own the 3 packets.** The unit test
-  above pins the serialization; this pins the *artifact*. `protein-landscape` owns the hypothesis
-  packet; grep for the two proposition packets and do the same there.
+- [ ] **Step 4b: Prove it in the ARTIFACT, not only the unit test.** The corpus holds **exactly 2
+  packets, in 2 projects** — `protein-landscape` (1 hypothesis) and `multiple-myeloma` (1
+  **proposition**). *(An earlier count of 3 was wrong: `~/d/r/mm30` is a **symlink** to
+  `cancer/cancer-types/multiple-myeloma`, so a path-glob counts its proposition twice. Dedupe by
+  `Path.resolve()` — this is the duplicate-root trap that also makes `science/meta` and `health/meta`
+  collide on `basename`.)*
+
+> ### `uv run science` inside a consumer runs the MAIN checkout, **not this worktree**
+>
+> Every Science project depends on the toolkit through a *relative editable source*
+> (`science = { path = "../science/science", editable = true }`), which resolves to
+> **`~/d/science/science`** — the main checkout. Verified: from `~/d/protein-landscape`, plain
+> `uv run` imports `science_tool` from `/mnt/ssd/Dropbox/science/science/src/`.
+>
+> **So a naive `uv run science graph build` would build the "after" graph with Task 6 absent**, show
+> no diff, and report zero churn — from an instrument that never ran the change. *That is a
+> fabricated verification*, and it is the exact failure this whole arc exists to end: an instrument
+> reporting on a thing it cannot see. Point `uv` at the worktree explicitly:
 
 ```bash
-cd ~/d/protein-landscape
-uv run science graph build --output /tmp/claude-1000/before-pl.trig     # BEFORE this task's commit
-# ...apply Task 6, then:
-uv run science graph build --output /tmp/claude-1000/after-pl.trig
-diff <(grep rivalModelPacket /tmp/claude-1000/before-pl.trig) \
-     <(grep rivalModelPacket /tmp/claude-1000/after-pl.trig)
+WT=~/d/science/.claude/worktrees/instrument-result/science
+SNAP=/tmp/claude-1000
+
+# `graph build` has NO `--output`; it writes `knowledge/graph.trig` in place. Snapshot by copying,
+# and restore afterwards so the consumer repo is left exactly as found.
+for P in ~/d/protein-landscape ~/d/cancer/cancer-types/multiple-myeloma; do
+  N=$(basename "$P"); cd "$P"
+  git status --short knowledge/            # MUST be clean, or the "before" is already somebody else's
+  uv run --project "$WT" science graph build --local-only
+  cp knowledge/graph.trig "$SNAP/before-$N.trig"
+  git checkout -- knowledge/graph.trig
+done
+# ...apply Task 6, re-run the loop into after-$N.trig, then:
+diff <(grep -o 'rivalModelPacket "[^"]*"' "$SNAP/before-$N.trig") \
+     <(grep -o 'rivalModelPacket "[^"]*"' "$SNAP/after-$N.trig")
 ```
 
   Two required outcomes, and **one without the other is a failure**:
-  - protein-landscape's **four authored values newly APPEAR** in `sci:rivalModelPacket` — they have
-    never been in the graph, which is the defect being fixed;
-  - **every other packet literal is byte-identical** — no `null` keys, no reordering. A
-    lifecycle migration that rewrote two propositions' provenance would be doing something nobody
-    asked it to do, in a diff nobody was reading for it.
+  - protein-landscape's **four authored values newly APPEAR** in `sci:rivalModelPacket`. Measured
+    today: `rival_id`, `rival_name`, `rival_claim`, `discriminator_status` appear **0 times** in that
+    project's committed `graph.trig`. The drop is not hypothetical — it is visible in the artifact.
+  - multiple-myeloma's proposition literal is **byte-identical** — no `null` keys, no reordering. A
+    hypothesis-lifecycle migration that rewrote a proposition's provenance would be doing something
+    nobody asked for, inside the diff nobody was reading for it.
+
+> ### ⚠️ `protein-landscape`'s graph build is RED **today**, and that blocks Task 11 too
+>
+> `science graph build` fails there — `Cannot materialize graph with unresolved references:
+> question:0004-mega-cluster-split aliases -> q04` — and it fails identically on the **main
+> checkout**, so it is pre-existing and not caused by this arc. Two consequences, and the second is
+> the one that matters:
+>
+> 1. **Step 4b's protein-landscape half cannot run until that alias resolves.** Until it does, the
+>    packet claim is carried by the hermetic materialization test below (a fixture entity, no
+>    project), and `multiple-myeloma` — which builds clean — carries the byte-identical half.
+> 2. **`protein-landscape` is one of the 18 roots in Task 11**, and Task 11 gates every root on a
+>    before/after `graph.trig` diff. **A root whose graph cannot build cannot be gated.** So this is
+>    a Task 11 **prerequisite**, not a footnote: either the alias is fixed first, or the root is
+>    consciously excluded and the roster re-certified at 17 — *and a silently skipped diff is the one
+>    outcome not available*, because it looks exactly like a clean one.
+
+- [ ] **Step 4c: The hermetic materialization test** — it does not depend on any project, so it
+  still runs while protein-landscape's graph is red (`science/tests/test_graph_materialize.py`):
+
+```python
+def test_the_single_rival_packet_REACHES_the_graph() -> None:
+    # `_model_to_json` (materialize.py:1897) is what carries the packet into `sci:rivalModelPacket`.
+    # The four keys are absent from protein-landscape's graph TODAY -- 0 occurrences -- because the
+    # model dropped them before serialization ever saw them.
+    import json
+
+    from science_model.reasoning import RivalModelPacket
+    from science_tool.graph.materialize import _model_to_json
+
+    packet = RivalModelPacket(packet_id="p", rival_id="platonic", rival_name="PRH",
+                              rival_claim="representations converge",
+                              discriminator_status="pre-registered")
+
+    emitted = json.loads(_model_to_json(packet))
+
+    assert emitted["rival_id"] == "platonic"
+    assert emitted["discriminator_status"] == "pre-registered"
+
+
+def test_a_LIST_form_packet_emits_NO_new_keys() -> None:
+    # The collateral-churn guard, at the layer that writes the artifact. Two packets exist in the
+    # corpus and ONE of them is on a proposition -- an entity this migration must not touch.
+    import json
+
+    from science_model.reasoning import RivalModelPacket
+    from science_tool.graph.materialize import _model_to_json
+
+    emitted = json.loads(_model_to_json(RivalModelPacket(packet_id="p", alternative_models=["m"])))
+
+    assert "rival_id" not in emitted
+    assert "discriminator_status" not in emitted
+```
 
 - [ ] **Step 5: Commit.**
 
@@ -3578,17 +3657,34 @@ uv run science entity migrate-hypothesis --preflight-all --manifest /tmp/claude-
 
 For each root (order per above):
 
+> **Two things every command here gets wrong if copied naively.** `graph build` has **no `--output`**
+> — it writes `knowledge/graph.trig` **in place**, so a snapshot is a `cp` and the working tree must
+> be restored afterwards. And a bare `uv run` inside a consumer resolves the editable `science`
+> source to **`~/d/science/science` (the MAIN checkout)**, so it would migrate and diff using
+> toolkit code *that does not contain this plan*. Both were live defects in this document.
+
 ```bash
+WT=~/d/science/.claude/worktrees/instrument-result/science   # ...or drop --project once merged
 SLUG=$(...)                                          # from the manifest -- NOT basename $PWD:
                                                      # science/meta and health/meta both basename
-                                                     # to "meta" and would clobber each other's .trig
+                                                     # to "meta", and ~/d/r/mm30 is a SYMLINK to
+                                                     # multiple-myeloma -- resolve() or double-count
 cd "$ROOT"
-uv run science graph build --output /tmp/claude-1000/before-$SLUG.trig
-uv run science entity status-inventory               # 0 refused, or adjudicate first
-uv run science entity migrate-hypothesis --apply     # two-phase; sets entity_schema_version: 2
-uv run science graph build --output /tmp/claude-1000/after-$SLUG.trig
-uv run science validate; echo "exit=$?"              # MUST be 0
+git status --short knowledge/                        # clean, or the "before" is somebody else's
+uv run --project "$WT" science graph build --local-only
+cp knowledge/graph.trig /tmp/claude-1000/before-$SLUG.trig
+uv run --project "$WT" science entity status-inventory   # 0 refused, or adjudicate first
+uv run --project "$WT" science entity migrate-hypothesis --apply   # sets entity_schema_version: 2
+uv run --project "$WT" science graph build --local-only
+cp knowledge/graph.trig /tmp/claude-1000/after-$SLUG.trig
+uv run --project "$WT" science validate; echo "exit=$?"            # MUST be 0
 ```
+
+> **A root whose graph cannot BUILD cannot be gated.** `protein-landscape` fails
+> `graph build` today (`unresolved references: question:0004-mega-cluster-split aliases -> q04`),
+> pre-existing and reproducible on main. Fix the alias, or drop the root and re-certify the roster at
+> 17 — **but do not let the `graph build` step fail and carry on**, because a skipped diff is
+> indistinguishable from a clean one, and this whole gate exists to tell those two apart.
 
 > **Task 2b must be merged before `evolution` is written**, in either ordering. It is the repo where
 > a field-order mistake silently promotes 13 hypotheses `speculative` → `supported`.
