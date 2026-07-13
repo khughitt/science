@@ -3261,7 +3261,7 @@ cd science       && uv run ruff check && uv run pyright
   the module is imported, and `_load_canonical_checks` importing this tuple is the only importer.
   Decorated-but-unlisted = never registered = never run.
 - Test: `science/model/tests/test_supersedable_gate.py`, `science/model/tests/test_mixin_hypothesis.py`,
-  `science/tests/test_consolidation_mark_superseded.py`,
+  `science/tests/test_entity_commands.py`, `science/tests/test_consolidation_mark_superseded.py`,
   `science/tests/validate/test_check_supersession.py`
 - **Snapshot:** `science/tests/validate/snapshots/text_default.txt` — the check count moves. Regenerate
   it in the same commit; a stale snapshot has already been left red on main once (`5c2b44f1`).
@@ -3273,8 +3273,10 @@ cd science       && uv run ruff check && uv run pyright
   — the SAME CALL `materialize` makes (`materialize.py:349`), not a reimplementation of it
 - Produces: `_prepare_write(project_root, ref, fields) -> _PreparedWrite` and
   `_commit_write(prepared) -> EntityWriteResult` — **both private, and so is `_PreparedWrite`**, which
-  carries a module-private `seal` its `__post_init__` identity-checks, so the commit half cannot be
-  handed text nobody validated (privacy by underscore is a convention; the seal is a check);
+  carries a module-private HMAC its `__post_init__` verifies and `_commit_write` **re-verifies at the
+  write boundary**, so the commit half rejects both a mutated token and a duck-typed substitute
+  (privacy by underscore and a Python type annotation are conventions; the runtime MAC check is the
+  enforcement);
   `IdResolution` — `.canonical(raw)`, `.kind_of(canonical_id)` (**every** backed population, because
   legality is a question about the resolved entity), `.mutable`, `.archived`;
   `SupersedesGraph.path_by_id` (the check reports a *file*: `Result` has no `entity_id` field);
@@ -3630,6 +3632,13 @@ class IdResolution:
 # it covers and the seal no longer matches what it seals -- `replace()` recomputes nothing, so it
 # carries the OLD seal onto NEW text and `__post_init__` refuses it.
 #
+# CONSTRUCTION-TIME VERIFICATION IS NOT THE WRITE BOUNDARY. Python erases the `_PreparedWrite` type
+# annotation at runtime, so `_commit_write` can otherwise be handed a duck-typed object that never
+# ran `__post_init__`. And a legitimately prepared frozen instance can still be changed deliberately
+# with `object.__setattr__` after its constructor check ran. `_commit_write` therefore requires the
+# concrete token type AND recomputes the HMAC immediately before the atomic replace. The constructor
+# check fails early; the commit check is authoritative for the bytes about to be written.
+#
 # THE HONEST CLAIM, since Python has no private constructors: this does not make forgery *impossible*
 # -- `entities._SEAL_KEY` is reachable by anyone willing to import a private name from another module
 # and recompute the digest. It makes forgery **inexpressible by accident**: not by a plausible
@@ -3674,10 +3683,18 @@ def _prepare_write(project_root: Path, ref: str, fields: Mapping[str, object]) -
 
 
 def _commit_write(prepared: _PreparedWrite) -> EntityWriteResult:
-    """PRIVATE. Atomically replace the file. Decides nothing; validates nothing -- which is exactly
-    why it must not be public: its contract is `write this text`, and it keeps that contract. It is
-    safe only because the seal means every `_PreparedWrite` it can be handed came from
-    `_prepare_write`."""
+    """PRIVATE. Authenticate the prepared value, then atomically replace the file. It performs no
+    schema or resolution decisions; it re-verifies the proof that those decisions covered THESE
+    bytes for THIS path. A type annotation alone is not a runtime capability check."""
+    if not isinstance(prepared, _PreparedWrite):
+        raise TypeError("a prepared write must be earned from _prepare_write")
+    if not hmac.compare_digest(
+        prepared.seal, _seal(prepared.entity_id, prepared.path, prepared.text)
+    ):
+        raise TypeError("prepared-write seal does not cover the bytes and path being committed")
+    _atomic_replace_text(prepared.path, prepared.text)
+    return EntityWriteResult(entity_id=prepared.entity_id, path=prepared.path,
+                             warnings=list(prepared.warnings))
 
 
 # THE AUTHORED SURFACE. Explicit, keyword-only, and it must NEVER grow a `**kwargs` -- see Task 10
@@ -3698,6 +3715,70 @@ def _prepare_supersession(project_root: Path, graph: SupersedesGraph, member: st
          "superseded_by": graph.superseder_by_id[member]},   # <- from the edge; never from a caller
     )
 ```
+
+**At the start of Step 5, write these failing authentication tests before implementing the boundary.**
+They land in this task, beside the boundary they exercise — not in Task 10, two commits after the
+unchecked writer first exists:
+
+```python
+# science/tests/test_entity_commands.py
+import dataclasses
+from inspect import Parameter, signature
+from types import SimpleNamespace
+
+
+def test_a_PreparedWrite_cannot_be_CONSTRUCTED_only_earned() -> None:
+    # The AST guards pin call sites inside this repo. They say nothing about a caller that constructs
+    # the token itself. Python has no absolute privacy, but an invalid token must fail immediately.
+    with pytest.raises(TypeError, match="not constructible"):
+        _PreparedWrite(entity_id="hypothesis:0001-x", path=Path("x.md"),
+                       text="anything at all", warnings=(), seal="not-a-seal")
+
+
+def test_the_seal_does_NOT_TRAVEL_to_content_it_never_vouched_for(tmp_project) -> None:
+    prepared = _prepare_write(tmp_project, "hypothesis:0001-x", {"title": "legitimate"})
+
+    with pytest.raises(TypeError, match="does not travel"):
+        dataclasses.replace(prepared, text="superseded_by: whatever-i-like\n")
+    with pytest.raises(TypeError, match="does not travel"):
+        dataclasses.replace(prepared, path=tmp_project / "entities/hypotheses/0002-y.md")
+
+    # Control: the guard admits the value whose payload is unchanged.
+    assert _commit_write(prepared).entity_id == "hypothesis:0001-x"
+
+
+def test_commit_refuses_an_object_that_only_LOOKS_prepared(tmp_project) -> None:
+    # The annotation is erased at runtime. Attribute compatibility is not authentication.
+    fake = SimpleNamespace(
+        entity_id="hypothesis:0001-x",
+        path=tmp_project / "entities/hypotheses/0001-x.md",
+        text="superseded_by: whatever-i-like\n",
+        warnings=(),
+    )
+    with pytest.raises(TypeError, match="earned from _prepare_write"):
+        _commit_write(fake)  # type: ignore[arg-type] -- the runtime boundary is the subject
+
+
+def test_commit_RECHECKS_the_seal_after_construction(tmp_project) -> None:
+    # `frozen=True` blocks ordinary assignment, not mutation through Python's object protocol. The
+    # commit boundary must authenticate the state it consumes, not trust a check that ran earlier.
+    prepared = _prepare_write(tmp_project, "hypothesis:0001-x", {"title": "legitimate"})
+    object.__setattr__(prepared, "text", "superseded_by: whatever-i-like\n")
+
+    with pytest.raises(TypeError, match="seal does not cover"):
+        _commit_write(prepared)
+
+
+def test_the_SEAL_is_never_a_default_and_never_exported() -> None:
+    assert signature(_PreparedWrite).parameters["seal"].default is Parameter.empty
+    exported = set(getattr(entities, "__all__", ()))
+    assert {"_SEAL_KEY", "_seal", "_PreparedWrite", "_prepare_write", "_commit_write"} & exported == set()
+```
+
+Construction-time and consumption-time checks are deliberately separate. `__post_init__` makes
+ordinary construction and `dataclasses.replace` fail early; `_commit_write` is authoritative for
+the concrete object, payload, and path at the instant the write occurs. A test introduced later
+cannot protect the interval in which the writer already exists.
 
 It goes through the same `find_entity` / render / validate path `edit_entity` uses, so **Task 10's
 schema boundary governs it too** — one boundary, two entry points. What it does *not* do is give the
@@ -5828,60 +5909,14 @@ def test_the_unrestricted_MECHANISM_has_exactly_the_call_sites_we_sanctioned() -
 
 
 def test_the_COMMIT_half_has_exactly_the_call_sites_we_sanctioned() -> None:
-    # `_commit_write` writes `.text` without validating it -- by contract. That contract is only safe
-    # while `_PreparedWrite` cannot be forged, i.e. while nothing outside these two call sites can hand
-    # it one. `mark_superseded` is a sanctioned caller because it commits a batch that
-    # `_prepare_supersession` prepared and `_prepare_write` validated.
+    # `_commit_write` does not repeat schema or resolution validation -- by contract. It DOES
+    # authenticate the concrete token and its payload at the write boundary. `mark_superseded` is a
+    # sanctioned caller because it commits a batch that `_prepare_supersession` prepared and
+    # `_prepare_write` validated.
     assert _call_sites("_commit_write") == {
         ("entities.py", "edit_entity"),
         ("consolidation.py", "mark_superseded"),
     }
-
-
-def test_a_PreparedWrite_cannot_be_CONSTRUCTED_only_earned() -> None:
-    # The AST guards above pin the call sites INSIDE THIS REPO. They say nothing about a caller who
-    # simply builds the token itself -- and until the seal, that caller was one line away from the
-    # unvalidated writer:
-    #
-    #     _commit_write(_PreparedWrite(entity_id=..., path=..., text="<anything>", warnings=()))
-    #
-    # So the constructor is the third guard, and it is the one that does not depend on where the code
-    # lives. NOTE THE HONEST SCOPE: `_SEAL_KEY` is importable by anyone who names it. This does not
-    # make forgery impossible -- Python has no private constructors -- it makes forgery impossible to
-    # commit by ACCIDENT.
-    with pytest.raises(TypeError, match="not constructible"):
-        _PreparedWrite(entity_id="hypothesis:0001-x", path=Path("x.md"),
-                       text="anything at all", warnings=(), seal="not-a-seal")
-
-
-def test_the_seal_does_NOT_TRAVEL_to_content_it_never_vouched_for(tmp_project) -> None:
-    # THE BEARER-TOKEN HOLE, and it needed no private import at all. A seal that is merely POSSESSED
-    # can be carried onto other content by `dataclasses.replace`, which copies every field it is not
-    # given and re-runs `__post_init__` -- so a sentinel-identity check sees the SAME trusted object
-    # and blesses text that never met the schema. The seal is an HMAC over (entity_id, path, text)
-    # precisely so that the copy no longer matches what it seals.
-    prepared = _prepare_write(tmp_project, "hypothesis:0001-x", {"title": "legitimate"})
-
-    with pytest.raises(TypeError, match="does not travel"):
-        dataclasses.replace(prepared, text="superseded_by: whatever-i-like\n")
-
-    # ...and it does not travel to another FILE either: validated bytes must not be redirectable at an
-    # unvalidated path. This is why the MAC covers more than `text`.
-    with pytest.raises(TypeError, match="does not travel"):
-        dataclasses.replace(prepared, path=tmp_project / "entities/hypotheses/0002-y.md")
-
-    # The control: untouched, it still commits. A guard that rejected the legitimate value too would
-    # pass both assertions above and be worthless.
-    assert _commit_write(prepared).entity_id == "hypothesis:0001-x"
-
-
-def test_the_SEAL_is_never_a_default_and_never_exported() -> None:
-    # A seal with a default value is not a seal -- `_PreparedWrite(...)` would supply it for free and
-    # the guards above would pass while proving nothing. And `__all__` must not carry the private
-    # names out of the module, or "private" is only true of the underscore.
-    assert signature(_PreparedWrite).parameters["seal"].default is Parameter.empty
-    exported = set(getattr(entities, "__all__", ()))
-    assert {"_SEAL_KEY", "_seal", "_PreparedWrite", "_prepare_write", "_commit_write"} & exported == set()
 
 
 def test_a_CORRUPTED_inverse_is_caught_by_the_net_that_MATCHES_ITS_FAILURE(tmp_project) -> None:
@@ -6017,9 +6052,18 @@ def edit_entity(
 
 
 def _commit_write(prepared: _PreparedWrite) -> EntityWriteResult:
-    """PRIVATE. Atomic replace. Decides nothing, validates nothing -- everything was settled in
-    prepare, which is precisely why a PUBLIC version of this would be a second, unvalidated writer.
-    It needs no check of its own: the SEAL on `_PreparedWrite` is the check, and it already ran."""
+    """PRIVATE. Authenticate, then atomically replace; schema and resolution were settled in prepare.
+
+    The `isinstance` check is required because Python does not enforce the annotation at runtime.
+    The HMAC check is repeated HERE because this is the trust boundary: `__post_init__` proves only
+    what was true when the value was constructed, not what is true when its bytes are consumed.
+    """
+    if not isinstance(prepared, _PreparedWrite):
+        raise TypeError("a prepared write must be earned from _prepare_write")
+    if not hmac.compare_digest(
+        prepared.seal, _seal(prepared.entity_id, prepared.path, prepared.text)
+    ):
+        raise TypeError("prepared-write seal does not cover the bytes and path being committed")
     _atomic_replace_text(prepared.path, prepared.text)
     return EntityWriteResult(entity_id=prepared.entity_id, path=prepared.path,
                              warnings=list(prepared.warnings))
