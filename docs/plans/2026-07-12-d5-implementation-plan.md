@@ -933,8 +933,8 @@ the evidence spoke, and **the verdict *is* the reason** — a `closure_basis` wo
 weaker copy of the adjudication.
 
 - [x] **Step 3:** Re-run `science entity status-inventory` in natural-systems → **0 refused**.
-- [ ] **Step 4:** Commit the adjudication file **in natural-systems**, not in the toolkit. Commit
-  *only* that file — the repo has an unrelated unstaged fetch log.
+- [x] **Step 4:** Commit the adjudication file **in natural-systems**, not in the toolkit. Commit
+  *only* that file — the repo has an unrelated unstaged fetch log. → `bb4b61142`, artifact only.
 
 > **Step 5 is a representation obligation, and it is Task 3b's, not Task 4's.** `interpretation:0192`
 > is **not graph-representable as a verdict basis** under the rev-9 contract (`interpretation` is not
@@ -1007,20 +1007,15 @@ def test_base_1_0_is_byte_untouched() -> None:
     base1 = _load("science-entity-base-1.0.json")
     assert base1["properties"]["kind"]["enum"] == ["dataset", "paper", "topic", "theme"]
     assert "version" in base1["required"]
-
-
-def test_a_mixin_const_still_narrows_the_kind_under_base_2() -> None:
-    # The safety argument, executed.
-    with pytest.raises(EntityValidationError):
-        EntityValidator().validate_as(
-            {"id": "dataset:x", "kind": "hypothesis", "title": "T",
-             "created": "2026-07-12", "updated": "2026-07-12",
-             "origin": "external", "tier": "raw"},
-            parse_profile("science-entity-base/2.0+dataset/1.0"),
-        )
 ```
 
-- [ ] **Step 2: Run and fail** — `SchemaNotFoundError` / no `validate_as`.
+> **The mixin-`const` safety argument is tested in Task 6, not here.** Executing it needs
+> `validate_as`, which Task 6 introduces — so committing it in Task 5 would leave the **full suite
+> red** at Task 5's commit while Step 4 ran only a green subset and declared victory. A task that
+> ships a failing test has not "phased" anything; it has **broken the build and hidden it behind a
+> narrow test selection.** A task ends green on `pytest`, not on `pytest -k`.
+
+- [ ] **Step 2: Run and fail** — `SchemaNotFoundError`: the file does not exist.
 
 - [ ] **Step 3: Create the schema.** Copy `science-entity-base-1.0.json`, keep `$defs`,
   `licenses`, `contributors`, `dataset_usage` and **every `science:merge` annotation** byte-identical,
@@ -1055,8 +1050,9 @@ for project kinds) and `version` (a commons concept); **(c)** `kind` becomes a p
 `id` becomes prefix-agnostic, with the suffix widened to 127 chars — hypothesis slugs like
 `0009-local-structure-globalization-obstruction` exceed base 1.0's 64.
 
-- [ ] **Step 4: Green** — run the three tests that do not need `validate_as`; the fourth goes
-  green at the end of Task 6, in the same commit as `validate_as`.
+- [ ] **Step 4: Green — the WHOLE suite**, not a selection. `cd science/model && uv run --frozen
+  pytest`, then `cd science && uv run --frozen pytest`. Task 5 adds a schema file and three
+  file-shape tests; nothing it commits can be red.
 
 - [ ] **Step 5: Commit.**
 
@@ -1064,8 +1060,8 @@ for project kinds) and `version` (a commons concept); **(c)** `kind` becomes a p
 
 ### Task 6: Profile plumbing, `validate_as`, and `mixin-hypothesis-1.0`
 
-**One task, because the four tests in Task 5 and the mixin's invariants cannot go green
-separately** — and no task may end red.
+**One task, because the mixin's invariants and the machinery that executes them cannot go green
+separately** — and **no task may end red.**
 
 **Files:**
 - Modify: `science/model/src/science_model/entity_schema/profile.py`, `validator.py`
@@ -1101,6 +1097,22 @@ def test_commons_kinds_stay_on_base_1() -> None:
 def test_unknown_mixin_still_rejected() -> None:
     with pytest.raises(ProfileParseError):
         parse_profile("science-entity-base/2.0+nonsense/1.0")
+
+
+def test_a_mixin_const_still_narrows_the_kind_under_base_2() -> None:
+    # MOVED HERE FROM TASK 5: it needs `validate_as`, which lands in this task.
+    #
+    # Base 2.0's `kind` is a PATTERN, so the base alone would accept any lowercase word. The
+    # entire safety argument for widening it is that the mixin re-pins the kind with a `const`.
+    # Untested, that argument is a comment. Here it is, executed: a `hypothesis` payload cannot
+    # ride in on the dataset mixin.
+    with pytest.raises(EntityValidationError):
+        EntityValidator().validate_as(
+            {"id": "dataset:x", "kind": "hypothesis", "title": "T",
+             "created": "2026-07-12", "updated": "2026-07-12",
+             "origin": "external", "tier": "raw"},
+            parse_profile("science-entity-base/2.0+dataset/1.0"),
+        )
 ```
 
 ```python
@@ -1187,6 +1199,32 @@ def test_an_arbitrary_unknown_key_is_REJECTED() -> None:
     # and silently DROPS anything undeclared. This is the test that actually pins it.
     with pytest.raises(EntityValidationError):
         V.validate_as(_h(role_typo="oops"), PROFILE)
+
+
+@pytest.mark.parametrize("derived", ["schema_profile", "version"])
+def test_DERIVED_fields_cannot_be_AUTHORED_on_a_project_kind(derived: str) -> None:
+    # "`schema_profile` is derived; `version` is a commons concept" is only DOCUMENTATION until
+    # something rejects the authored spelling. Base 2.0 keeps both as optional generic properties
+    # (commons records on base 1.0 still author them), so the base cannot be where this is said --
+    # `mixin-hypothesis` must set BOTH to `false`.
+    #
+    # Otherwise the failure is silent and self-inflicted: an author writes
+    # `schema_profile: science-entity-base/1.0+hypothesis/1.0`, the schema accepts it, and the
+    # entity is now validated against a profile it chose for itself. A derived field an author can
+    # set is not derived -- it is a second, unversioned source of truth. That is the exact shape of
+    # the `status`/`phase` collapse this whole arc exists to undo.
+    with pytest.raises(EntityValidationError):
+        V.validate_as(_h(**{derived: "1.0.0"}), PROFILE)
+
+
+def test_the_mixin_says_so_STRUCTURALLY_not_just_behaviorally() -> None:
+    # Pin the mechanism, so a later refactor cannot make the two tests above pass by accident
+    # (e.g. via `unevaluatedProperties: false` alone) and then regress when the base changes.
+    mixin = json.loads(
+        (files("science_model.schemas") / "mixin-hypothesis-1.0.json").read_text(encoding="utf-8")
+    )
+    assert mixin["properties"]["schema_profile"] is False
+    assert mixin["properties"]["version"] is False
 
 
 def test_every_authored_field_in_the_corpus_is_DECLARED() -> None:
@@ -1329,6 +1367,16 @@ In `validator.py`, add `validate_as`, make `validate` delegate, and **close the 
   list from Task 2's doc, and `test_every_authored_field_in_the_corpus_is_DECLARED` enforces that
   every corpus key is covered by the mixin *or* by a composed project extension:**
 
+> **`schema_profile: false` and `version: false` are load-bearing, not decoration.** Base 2.0 keeps
+> both as **optional generic properties** — commons records (base 1.0) legitimately author them, and
+> the base is shared — so **the base cannot forbid them and the MIXIN must.** Without those two
+> lines, `default_profile_for_kind` is merely a *suggestion*: an author writes
+> `schema_profile: science-entity-base/1.0+hypothesis/1.0` in frontmatter and **the entity chooses
+> the schema it is judged by.** *A derived field an author can set is not derived — it is a second,
+> unversioned source of truth,* which is the exact collapse (`status` vs `phase`) this arc exists to
+> undo. Note `unevaluatedProperties: false` alone would **not** catch this: the base *declares* both
+> keys, so they are evaluated and permitted. The mixin's `false` is the only thing that says no.
+
 ```json
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
@@ -1386,7 +1434,10 @@ In `validator.py`, add `validate_as`, make `validate` delegate, and **close the 
     "phase": false,
     "disposition": false,
     "disposition_basis": false,
-    "profile": false
+    "profile": false,
+
+    "schema_profile": false,
+    "version": false
   },
 
   "allOf": [

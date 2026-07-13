@@ -84,9 +84,11 @@ def test_a_lifecycle_word_in_status_is_accepted_when_phase_agrees(tmp_path: Path
 
 
 def test_terminal_status_is_refused_not_guessed(tmp_path: Path) -> None:
-    # natural-systems/0009 -- the file whose corruption opened this whole arc. A terminal word in
-    # the collapsed field destroyed the lifecycle, the verdict AND the closure reason at once.
-    _hyp(tmp_path, "0009-g", status="retired", phase="candidate")
+    # The shape of natural-systems/0009, the file whose corruption opened this whole arc: a terminal
+    # word in the collapsed field destroyed the lifecycle, the verdict AND the closure reason at
+    # once. Synthetic id -- the real 0009 was adjudicated `complete` + `refuted`, and a fixture that
+    # looked like it while carrying different values would read as a second, contradicting record.
+    _hyp(tmp_path, "0042-terminal", status="retired", phase="candidate")
 
     inv = inventory(tmp_path)
 
@@ -116,12 +118,15 @@ def test_an_unknown_phase_is_refused(tmp_path: Path) -> None:
 
 def test_an_adjudication_lets_a_refused_file_through(tmp_path: Path) -> None:
     # THE escape from the refusal loop. Without an artifact, `_classify` re-reads the same terminal
-    # status forever and 0009 can NEVER migrate, no matter what an author does to the file -- the
+    # status forever and the file can NEVER migrate, no matter what an author does to it -- the
     # author's edit is indistinguishable from the corruption. Rev 1 shipped exactly that loop.
-    _hyp(tmp_path, "0009-g", status="retired", phase="candidate")
+    #
+    # This is the closed-WITHOUT-a-verdict shape: work stopped for non-epistemic reasons, so the
+    # verdict stays absent and `closure_basis` carries the reason.
+    _hyp(tmp_path, "0042-terminal", status="retired", phase="candidate")
     adjudication = {
-        "hypothesis:0009-g": Adjudicated(
-            status="retired", verdict="weakened", closure_basis="confirmatory null, z=-0.889"
+        "hypothesis:0042-terminal": Adjudicated(
+            status="retired", closure_basis="the assay was discontinued; no samples remain"
         )
     }
 
@@ -129,8 +134,28 @@ def test_an_adjudication_lets_a_refused_file_through(tmp_path: Path) -> None:
 
     assert inv.ambiguous == []
     row = inv.deterministic[0]
-    assert (row.target_status, row.target_verdict) == ("retired", "weakened")
-    assert row.target_closure_basis == "confirmatory null, z=-0.889"
+    assert (row.target_status, row.target_verdict) == ("retired", None)
+    assert row.target_closure_basis == "the assay was discontinued; no samples remain"
+
+
+def test_an_adjudication_can_supply_a_verdict(tmp_path: Path) -> None:
+    # The other shape: the evidence SPOKE. `complete` + a verdict, and no `closure_basis` -- that
+    # field records why something closed WITHOUT one, so here the verdict IS the reason.
+    _hyp(tmp_path, "0043-concluded", status="retired", phase="candidate")
+
+    inv = inventory(
+        tmp_path,
+        adjudication={
+            "hypothesis:0043-concluded": Adjudicated(status="complete", verdict="refuted")
+        },
+    )
+
+    row = inv.deterministic[0]
+    assert (row.target_status, row.target_verdict, row.target_closure_basis) == (
+        "complete",
+        "refuted",
+        None,
+    )
 
 
 def test_adjudication_for_an_unknown_id_is_an_error(tmp_path: Path) -> None:
