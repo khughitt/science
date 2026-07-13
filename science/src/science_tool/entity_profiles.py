@@ -22,14 +22,21 @@ from pathlib import Path
 
 from science_model.entity_schema import (
     EntityValidator,
+    ProfileParseError,
     ProfileString,
     SchemaLoader,
+    filename_for,
+    parse_component,
     resolve_profile,
 )
 
 from science_tool.project_config import ProjectConfig, load_project_config
 
 SCHEMAS_DIRNAME = "schemas"
+
+
+class EntityExtensionsError(ValueError):
+    """`science.yaml` declares an entity extension that cannot be honored."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -50,11 +57,55 @@ class ProjectSchema:
 def load_project_schema(
     project_root: Path, config: ProjectConfig | None = None
 ) -> ProjectSchema:
-    """Load the schema view for `project_root`, reading `entity_extensions` from science.yaml."""
+    """Load the schema view for `project_root`, reading `entity_extensions` from science.yaml.
+
+    Every declared entry is resolved EAGERLY. A stanza is a claim about how this project's entities
+    are validated; a claim nobody reads is not a claim. `hypothsis:` -- one letter out -- would
+    otherwise sit in `science.yaml` forever, matching no kind, silently validating nothing, and
+    looking exactly like a project whose fields are protected.
+    """
     config = config or load_project_config(project_root)
-    loader = SchemaLoader(project_dir=project_root / SCHEMAS_DIRNAME)
-    return ProjectSchema(
+    schemas_dir = project_root / SCHEMAS_DIRNAME
+    loader = SchemaLoader(project_dir=schemas_dir)
+    schema = ProjectSchema(
         validator=EntityValidator(loader),
         _extensions=config.entity_extensions,
         _loader=loader,
     )
+    _certify_declarations(config.entity_extensions, schemas_dir, schema)
+    return schema
+
+
+def _certify_declarations(
+    extensions: dict[str, list[str]], schemas_dir: Path, schema: ProjectSchema
+) -> None:
+    for kind, components in extensions.items():
+        for raw in components:
+            try:
+                component = parse_component(raw)
+            except ProfileParseError as exc:
+                raise EntityExtensionsError(
+                    f"science.yaml: entity_extensions[{kind!r}] entry {raw!r} is malformed: {exc}"
+                ) from exc
+
+            # A project's extension MUST be a schema the project OWNS. There is deliberately no
+            # fallback to a packaged extension: the loader searches the project dir first, so a
+            # silent fallback would mean a project whose schema file is missing or misnamed quietly
+            # validates against a TOOLKIT schema of the same name -- a field it does not own,
+            # governed by a contract it cannot see. Packaged extensions (`bio.*`) belong to commons
+            # records, which carry their own `schema_profile` and never come through here.
+            path = schemas_dir / filename_for(component)
+            if not path.is_file():
+                raise EntityExtensionsError(
+                    f"science.yaml declares entity extension {raw!r} for kind {kind!r}, but "
+                    f"{path} does not exist. A project extension must be a schema this project "
+                    "owns; there is no fallback to a packaged extension."
+                )
+
+        try:
+            schema.profile_for(kind)
+        except ProfileParseError as exc:
+            raise EntityExtensionsError(
+                f"science.yaml: entity_extensions declares kind {kind!r}, which is not a known "
+                f"entity kind ({exc})."
+            ) from exc

@@ -5,24 +5,24 @@ import pytest
 from science_model.entity_schema.loader import (
     SchemaLoader,
     SchemaNotFoundError,
-    _filename_for,
+    filename_for,
 )
 from science_model.entity_schema.profile import ProfileComponent
 
 
 def test_filename_for_base() -> None:
     component = ProfileComponent(name="science-entity-base", version="1.0")
-    assert _filename_for(component) == "science-entity-base-1.0.json"
+    assert filename_for(component) == "science-entity-base-1.0.json"
 
 
 def test_filename_for_mixin() -> None:
-    assert _filename_for(ProfileComponent(name="dataset", version="1.0")) == "mixin-dataset-1.0.json"
-    assert _filename_for(ProfileComponent(name="paper", version="1.0")) == "mixin-paper-1.0.json"
+    assert filename_for(ProfileComponent(name="dataset", version="1.0")) == "mixin-dataset-1.0.json"
+    assert filename_for(ProfileComponent(name="paper", version="1.0")) == "mixin-paper-1.0.json"
 
 
 def test_filename_for_extension_flattens_dots() -> None:
     component = ProfileComponent(name="bio.rnaseq", version="1.0")
-    assert _filename_for(component) == "extension-bio-rnaseq-1.0.json"
+    assert filename_for(component) == "extension-bio-rnaseq-1.0.json"
 
 
 def test_loader_raises_schema_not_found_for_unknown_component() -> None:

@@ -14,6 +14,7 @@ satisfy. That is rejected at resolve time, by name.
 from __future__ import annotations
 
 import json
+import re
 from pathlib import Path
 from typing import Any
 
@@ -22,6 +23,7 @@ import pytest
 from science_model.entity_schema import (
     EntityValidationError,
     EntityValidator,
+    ExtensionContractError,
     ExtensionRedefinesCoreField,
     SchemaLoader,
     default_profile_for_kind,
@@ -179,6 +181,89 @@ def test_zero_extensions_is_exactly_the_default_profile() -> None:
     assert resolve_profile("hypothesis", extensions=[]).render() == (
         default_profile_for_kind("hypothesis").render()
     )
+
+
+@pytest.mark.parametrize(
+    ("keyword", "body"),
+    [
+        # Each of these NARROWS the composed record from inside its own allOf branch, WITHOUT ever
+        # naming a core property -- so a `properties`-only check waves every one of them through.
+        ("required", {"properties": {"x": {"type": "string"}}, "required": ["verdict"]}),
+        ("not", {"properties": {"x": {"type": "string"}}, "not": {"required": ["status"]}}),
+        (
+            "if",
+            {
+                "properties": {"x": {"type": "string"}},
+                "if": {"properties": {"status": {"const": "active"}}},
+                "then": {"required": ["x"]},
+            },
+        ),
+        # `additionalProperties` inside an allOf branch cannot see its SIBLING branches, so it
+        # rejects every field the base and the mixin declare -- the whole reason the validator
+        # composes with `unevaluatedProperties` instead.
+        (
+            "additionalProperties",
+            {"properties": {"x": {"type": "string"}}, "additionalProperties": False},
+        ),
+        ("$ref", {"properties": {"x": {"type": "string"}}, "$ref": "#/$defs/anything"}),
+        (
+            "allOf",
+            {"properties": {"x": {"type": "string"}}, "allOf": [{"required": ["verdict"]}]},
+        ),
+        (
+            "dependentRequired",
+            {"properties": {"x": {"type": "string"}}, "dependentRequired": {"x": ["verdict"]}},
+        ),
+    ],
+)
+def test_a_root_applicator_cannot_narrow_the_composed_record(
+    tmp_schema_dir: Path, keyword: str, body: dict[str, Any]
+) -> None:
+    # "Additive only" is NOT enforced by checking `properties` against core. Every payload here
+    # leaves `properties` perfectly clean and still constrains the composed record -- `required:
+    # ["verdict"]` makes a core field mandatory for one project; `not`/`if` forbid records the core
+    # admits. The contract is an ALLOW-list precisely so a keyword nobody thought of cannot slip
+    # through the gap a deny-list would leave.
+    _write_extension(tmp_schema_dir, "extension-bad-root-1.0.json", body)
+    with pytest.raises(ExtensionContractError, match=re.escape(keyword)):
+        resolve_profile(
+            "hypothesis",
+            extensions=["bad.root/1.0"],
+            loader=SchemaLoader(project_dir=tmp_schema_dir),
+        )
+
+
+def test_two_extensions_may_not_both_own_one_field(tmp_schema_dir: Path) -> None:
+    # The core-collision defect one level out: two extensions declaring `shared` INTERSECT their
+    # constraints, and neither owner can see the other's. There is no rule for merging two owners,
+    # so the second claimant is an error.
+    _write_extension(
+        tmp_schema_dir, "extension-a-one-1.0.json", {"properties": {"shared": {"type": "string"}}}
+    )
+    _write_extension(
+        tmp_schema_dir, "extension-b-two-1.0.json", {"properties": {"shared": {"type": "integer"}}}
+    )
+    with pytest.raises(ExtensionContractError, match="shared"):
+        resolve_profile(
+            "hypothesis",
+            extensions=["a.one/1.0", "b.two/1.0"],
+            loader=SchemaLoader(project_dir=tmp_schema_dir),
+        )
+
+
+def test_an_extension_MAY_require_a_field_it_owns(tmp_schema_dir: Path) -> None:
+    # The control. The contract forbids requiring a CORE field, not requiring your own -- a project
+    # is entitled to say "if you use my extension, this field of mine is mandatory."
+    _write_extension(
+        tmp_schema_dir,
+        "extension-ok-own-1.0.json",
+        {"properties": {"mine": {"type": "string"}}, "required": ["mine"]},
+    )
+    loader = SchemaLoader(project_dir=tmp_schema_dir)
+    profile = resolve_profile("hypothesis", extensions=["ok.own/1.0"], loader=loader)
+    EntityValidator(loader).validate_as(_h(mine="present"), profile)
+    with pytest.raises(EntityValidationError):
+        EntityValidator(loader).validate_as(_h(), profile)
 
 
 def test_a_project_schema_dir_does_not_shadow_a_PACKAGE_schema(tmp_schema_dir: Path) -> None:

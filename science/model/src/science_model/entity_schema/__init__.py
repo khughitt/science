@@ -12,6 +12,7 @@ from __future__ import annotations
 from science_model.entity_schema.loader import (
     SchemaLoader,
     SchemaNotFoundError,
+    filename_for,
 )
 from science_model.entity_schema.introspection import (
     FrontmatterField,
@@ -34,6 +35,7 @@ from science_model.entity_schema.profile import (
     parse_profile,
 )
 from science_model.entity_schema.resolve import (
+    ExtensionContractError,
     ExtensionRedefinesCoreField,
     resolve_profile,
 )
@@ -48,6 +50,7 @@ __all__ = [
     "TYPE_MIXIN_NAMES",
     "EntityValidationError",
     "EntityValidator",
+    "ExtensionContractError",
     "ExtensionRedefinesCoreField",
     "FrontmatterField",
     "MergePolicy",
@@ -58,6 +61,7 @@ __all__ = [
     "SchemaNotFoundError",
     "SharedEntity",
     "default_profile_for_kind",
+    "filename_for",
     "parse_component",
     "parse_profile",
     "read_canonical_body_sections",

@@ -46,7 +46,7 @@ class SchemaLoader:
         key = (component.name, component.version)
         if key in self._cache:
             return self._cache[key]
-        filename = _filename_for(component)
+        filename = filename_for(component)
         schema = self._load(component, filename)
         self._cache[key] = schema
         return schema
@@ -59,7 +59,7 @@ class SchemaLoader:
         return _load_resource(filename)
 
 
-def _filename_for(component: ProfileComponent) -> str:
+def filename_for(component: ProfileComponent) -> str:
     if component.name == BASE_NAME:
         return f"{component.name}-{component.version}.json"
     if component.name == "overlay":
