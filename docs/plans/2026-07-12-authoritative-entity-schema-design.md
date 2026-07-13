@@ -359,11 +359,22 @@ one of them.
   > `closure_basis`, always. **`superseded` is the ONLY terminal with resolvable structure**, and
   > it is the only one the cross-record validator below has anything to resolve.
 
-  `retired` is the only terminal with no structural basis available to it, so it always
-  requires an authored one. `superseded` and `archived` require one **exactly when their
-  structure is missing**. `complete` is the exception in the other direction: for a
-  verdict-bearing kind its structure is **mandatory** and no authored reason substitutes (ruled
-  below).
+  `retired` **and `archived`** have no structural basis available to them, so they **always**
+  require an authored one. `superseded` is the **only** terminal with resolvable structure, and
+  it requires an authored basis **exactly when that structure is missing**. `complete` is the
+  exception in the other direction: for a verdict-bearing kind its structure is **mandatory** and
+  no authored reason substitutes (ruled below).
+
+  > **Superseded rev 10 — where the lineage actually LIVES.** `superseded` has structure, but
+  > that structure is authored on the **successor**, not on the entity it closes: the canonical
+  > edge is a `relations:` entry with `predicate: sci:supersedes` (`consolidation.py:7-12`),
+  > pointing newer → older. A JSON Schema sees **one record in isolation**, so it can never read
+  > it. `superseded_by` on the closed record is therefore the **derived inverse** — materialized
+  > *by the tool* (`mark_superseded`) from the canonical edge, so that the closed record carries
+  > its own reason and is valid on its own terms. It is **not** a second authored spelling of
+  > supersession, and it is **not** the deleted top-level `supersedes:` (fb-2026-07-11-017); it
+  > is the projection that makes single-record validation possible at all. **Author the edge;
+  > the inverse is written for you.**
 
   ### Where the invariant is ENFORCED — two layers, not one
 
@@ -556,10 +567,24 @@ consolidatable ⇔ schema admits `archived`
                ⇔ the archive/consolidation machinery handles the kind
 ```
 
-The first gate fails **today**: `topic`/`decision`/`theme` declare `superseded` and are
-auto-stamped by `consolidation.mark_superseded`, but `sci:supersedes` (`core.py:687-701`)
-**forbids them as endpoints**, so authoring the canonical edge raises `ValueError` in
-`materialize`. The vocabulary and the relation model disagree, and nothing notices.
+The first gate fails **today** — and **this doc understated it by a factor of four.** It named
+three kinds. The gate, executed against `CORE_PROFILE`, names **twelve**: `decision`, `inquiry`,
+`mechanism`, `method`, `observation`, `plan`, `pre-registration`, `proposition`, `synthesis`,
+`theme`, `topic`, `workflow-step`. All twelve declare `superseded` and are auto-stamped by
+`consolidation.mark_superseded`, but `sci:supersedes` (`core.py:687-701`) admits only
+`interpretation`/`finding`/`discussion`/`report` (plus three status-less kinds), so **authoring
+the canonical edge raises `ValueError` in `materialize`**. The vocabulary and the relation model
+disagree, and nothing notices — *because the number was never computed.* **A gate stated in prose
+is not a gate;** this one is now derived from `CORE_PROFILE` and executed (D5 Task 7a).
+
+**`hypothesis` fails it in a fourth, worse way.** It does not appear in the twelve because it
+**does not declare `superseded` at all**: its `EntityKind.statuses` are
+`[proposed, under-investigation, partially-supported, supported, weakened, refuted, archived]` —
+the **verdict** vocabulary, which is the conflation this entire arc exists to end. So across the
+whole corpus: **150 hypotheses, 0 superseded, 0 archived, 0 authoring `relations:`, 0 authoring
+any lineage field.** The hypothesis supersession triangle has **never been exercised**, in any
+project, which is precisely why all three of its legs could be broken at once and stay silent.
+That makes D5's fix greenfield — there is nothing to migrate, and no reason to get it wrong.
 
 **`entity_class` must NOT imply capabilities** — confirmed by the audit, which found it does
 not track them today (REFERENCE `topic`/`decision` are consolidatable; OPERATIONAL

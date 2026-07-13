@@ -182,7 +182,7 @@ it. Phase 0 below is that work.
 |---|---|---|---|
 | **0 — Declare the fields (P0)** | 1, 2, **2b** | **No** *(2b fixes a live bug)* | every authored key given one of four dispositions; the `_authored_magnitude` chain deleted |
 | **1 — Certify the mapping** | 3–4 | **No** | inventory + adjudication artifact; writes nothing |
-| **2 — Schema substrate (P2)** | 5, 6, **6b**, 7 | **No** | base 2.0, core mixin, **project extensions**, D3 validator + verdict-evidence graph check — all **wired**, strict, green |
+| **2 — Schema substrate (P2)** | 5, 6, **6b**, 7, **7a** | **No** | base 2.0, core mixin, **project extensions**, D3 validator + verdict-evidence graph check — all **wired**, strict, green; **the D4 supersedable triangle closed and computed** |
 | **3 — The atomic slice (P2m)** | 8–11 | **YES** | all 18 roots migrated, graph-diffed, validate exit 0 |
 | **4 — Ratchet (P3)** | 12 | No | `hypothesis` → ERROR |
 
@@ -192,6 +192,13 @@ saw it." Task 2 decides; Task 6 encodes core; **Task 6b composes project extensi
 applies renames and deletions. Strictness (`unevaluatedProperties: false`) cannot land before 6b,
 because closing the schema without project extensions would force mm30's one-project fields into
 the core mixin for all 22 projects.
+
+**A vocabulary is not a capability (design D4).** Declaring `superseded` in a status enum does not
+make a kind *supersedable*: the lineage relation must admit it as an endpoint, and the supersession
+operation must produce a record that satisfies the schema. **All three, or the terminal is a dead
+letter.** Task 7a closes that triangle for `hypothesis` and — for the first time — *executes* the
+D4 gate instead of stating it, which is how we learned it fails for **twelve** other kinds and not
+the three the design named.
 
 ---
 
@@ -2451,12 +2458,21 @@ KNOWN = {"hypothesis:0002-y"}
 def test_dangling_successor_is_caught() -> None:
     # The whole reason this module exists: the schema is satisfied, the entity is closed,
     # and the reason it closed does not exist.
+    #
+    # NOTE the assertions are on FIELDS. `check_resolution` returns `list[ResolutionViolation]`,
+    # and `"9999-nope" in v[0]` -- what rev 1 wrote -- is not a substring test on a Pydantic model:
+    # `__iter__` yields (field_name, value) PAIRS, so the expression is simply False and the test
+    # would fail against a CORRECT implementation. That is the cost of a typed carrier, and it is
+    # the point of one: the violation's parts are addressable instead of buried in a sentence.
     v = check_resolution(
         {"id": "hypothesis:0001-x", "status": "superseded",
          "superseded_by": "hypothesis:9999-nope"},
         known_ids=KNOWN,
     )
-    assert len(v) == 1 and "9999-nope" in v[0]
+    assert len(v) == 1
+    assert v[0].entity_id == "hypothesis:0001-x"
+    assert v[0].field == "superseded_by"
+    assert v[0].ref == "hypothesis:9999-nope"
 
 
 def test_resolving_successor_passes() -> None:
@@ -2468,21 +2484,32 @@ def test_resolving_successor_passes() -> None:
 
 
 def test_resynthesized_into_is_a_LIST_and_every_member_must_resolve() -> None:
+    # One good member does not discharge the list. A resolver that returned on first success --
+    # or that reported the FIELD rather than the REF -- passes a suite that only counts findings.
+    # The typed carrier is what lets this assert WHICH member dangled.
     v = check_resolution(
         {"id": "hypothesis:0001-x", "status": "superseded",
          "resynthesized_into": ["hypothesis:0002-y", "hypothesis:9999-nope"]},
         known_ids=KNOWN,
     )
-    assert len(v) == 1 and "9999-nope" in v[0]
+    assert len(v) == 1
+    assert v[0].field == "resynthesized_into"
+    assert v[0].ref == "hypothesis:9999-nope"       # the BAD member, not the good one
 
 
 def test_self_supersession_is_caught() -> None:
+    # Resolvable, and still meaningless: an entity cannot be its own successor. `known_ids`
+    # contains it, so a pure membership check reports CLEAN here -- which is why this is a
+    # separate rule and not a special case of the one above.
     v = check_resolution(
         {"id": "hypothesis:0002-y", "status": "superseded",
          "superseded_by": "hypothesis:0002-y"},
         known_ids=KNOWN,
     )
-    assert len(v) == 1 and "itself" in v[0]
+    assert len(v) == 1
+    assert v[0].entity_id == "hypothesis:0002-y"
+    assert v[0].ref == "hypothesis:0002-y"
+    assert "itself" in v[0].message
 
 
 def test_an_ARCHIVED_entity_has_NOTHING_to_resolve() -> None:
@@ -2516,7 +2543,11 @@ def test_validate_reports_a_dangling_successor(tmp_project) -> None:
                      extra={"superseded_by": "hypothesis:9999-nope"})
     findings = [r for r in run_validate(tmp_project) if r.rule == "hypothesis.dangling-lineage"]
     assert len(findings) == 1
-    assert findings[0].severity == "warn"        # ERROR is Task 12's ratchet, per kind
+    # WARN, hard-coded, until the kind is certified. Task 12 Step 2b routes this emitter through
+    # `severity_for_kind` and `test_dangling_lineage_FLIPS_to_error_with_the_kind` inverts this
+    # exact assertion -- so if that step is skipped, THAT test fails. The promise has a test now,
+    # not a comment: rev 1 pointed at Task 12, and Task 12 graded only `status-vocabulary`.
+    assert findings[0].severity == "warn"
     assert "9999-nope" in findings[0].message
 
 
@@ -2956,31 +2987,69 @@ def test_an_ABSENT_verdict_is_not_a_finding(tmp_project) -> None:
 
 # ---- a basis is not merely an EDGE: three ways to have one and still have nothing ----
 
+# > **NO SUPPRESSION — and that is why these expect TWO rules, not one.**
+# >
+# > Rev 1 asserted `== ["verdict.missing-basis"]` on all three. That is not what a correct
+# > implementation emits. Evidence that fails polarity, admissibility, or scope fails it for
+# > `_qualifying_basis` AND for the composition -- so the verdict has no basis *and* disagrees with
+# > the belief the corpus actually composes to. **Both are true, and the matrix above says both
+# > must be said.** Exact-equality on one rule rejects the implementation this plan specifies.
+# >
+# > The alternative -- suppress `disagrees-with-computed` whenever `missing-basis` fires -- is
+# > **rejected.** It is precisely the masking forbidden two tests below, where the same collapse is
+# > called out for `missing-basis`/`refutation-masked`: the rules carry different severities and
+# > different gate tiers, so folding them silently re-grades whichever one loses. A third authority
+# > deciding which true finding an author is allowed to see is the collapse this arc exists to undo.
+# >
+# > So each test below asserts the **whole rule set**, and each is paired with a **matched control**
+# > differing in exactly the property under test. Without the control, a check that always yielded
+# > both rules would pass every one of them.
+
 def test_an_edge_of_the_WRONG_POLARITY_is_not_a_basis() -> None:
     # A `supports` line is not a basis for `refuted`. `if not units` -- the drafted body -- passes.
+    # `disagrees-with-computed` also fires (matrix, `refuted` row: no decisive refutation and no
+    # linked falsification -- a lone `supports` unit is neither).
     results = _verdict_results(_graph(verdict="refuted", basis=_unit(stance="supports")))
-    assert [r.rule for r in results] == ["verdict.missing-basis"]
+    assert {r.rule for r in results} == {
+        "verdict.missing-basis", "verdict.disagrees-with-computed",
+    }
+
+
+def test_a_REFUTING_edge_IS_a_basis_for_refuted() -> None:
+    # The POLARITY control: identical but for the stance. Silence here is what proves the test
+    # above is about polarity and not about `refuted` being unsatisfiable.
+    assert _verdict_results(_graph(verdict="refuted", basis=_unit(stance="refutes"))) == []
 
 
 def test_an_INADMISSIBLE_unit_is_not_a_basis() -> None:
-    # Excluded by the belief policy => it does not compose => it cannot adjudicate.
+    # Excluded by the belief policy => it does not compose => it cannot adjudicate. And because it
+    # does not compose, the composed belief does not support `supported` either.
     results = _verdict_results(_graph(verdict="supported", basis=_unit(admissible=False)))
-    assert [r.rule for r in results] == ["verdict.missing-basis"]
+    assert {r.rule for r in results} == {
+        "verdict.missing-basis", "verdict.disagrees-with-computed",
+    }
+
+
+def test_an_ADMISSIBLE_unit_IS_a_basis() -> None:
+    # The ADMISSIBILITY control: same unit, same polarity, same scope -- admitted by the policy.
+    assert _verdict_results(_graph(verdict="supported", basis=_unit(admissible=True))) == []
 
 
 def test_evidence_on_a_RIVAL_member_is_not_a_basis() -> None:
     # Scope: the hypothesis or its CORE members. A rival/background member adjudicates nothing
     # about THIS hypothesis -- and `belief_for_entity` already excludes them from the conjunction
     # (`MembershipRole`, bundle_belief.py), so a check that counted them would contradict the
-    # composition it claims to read.
+    # composition it claims to read. It is excluded from the composition too, hence both rules.
     results = _verdict_results(
         _graph(verdict="supported", basis=_unit(on_member="rival"))
     )
-    assert [r.rule for r in results] == ["verdict.missing-basis"]
+    assert {r.rule for r in results} == {
+        "verdict.missing-basis", "verdict.disagrees-with-computed",
+    }
 
 
 def test_evidence_on_a_CORE_member_IS_a_basis() -> None:
-    # The control. Without it the three tests above pass for a payload that has no basis at all.
+    # The SCOPE control. Without it the tests above pass for a payload that has no basis at all.
     assert _verdict_results(_graph(verdict="supported", basis=_unit(on_member="core"))) == []
 
 
@@ -3059,9 +3128,10 @@ def test_weakened_is_never_inferred_from_ONE_snapshot() -> None:
   **`verdict.disagrees-with-computed` is never gated** — a disagreement is information, not a fault.
 
   Assert what **exists at this task**, using the API that exists: `cumulative_rules(tier)`
-  (`gates.py:50`). `_severity("hypothesis")`, `severity_of_rule` and `gates.TIERS` are **Task 12's**
-  — an earlier draft of this step called all three, so the regression it "added" could not have run.
-  *A test written against an API that does not exist is not a weaker gate; it is not a gate.*
+  (`gates.py:50`). `severity_for_kind` is **Task 12's**, and `severity_of_rule` / `gates.TIERS` are
+  nobody's — they do not exist anywhere. An earlier draft of this step called all three, so the
+  regression it "added" could not have run. *A test written against an API that does not exist is
+  not a weaker gate; it is not a gate.*
 
 ```python
 def test_missing_basis_is_WARN_and_UNGATED() -> None:
@@ -3105,6 +3175,263 @@ cd science       && uv run ruff check && uv run pyright
 
 ---
 
+### Task 7a: The D4 supersedable gate — close the triangle, and **compute** it
+
+> **D5 shipped a `superseded` terminal for a kind that cannot be superseded.** The design states a
+> bidirectional gate (§D4) and D5 implemented **none** of it:
+>
+> ```
+> supersedable ⇔ schema admits `superseded`
+>              ⇔ the lineage RelationKind admits the kind as an endpoint
+>              ⇔ the supersession operation handles the kind
+> ```
+>
+> All three legs are broken for `hypothesis`, and each one alone is enough to make the terminal a
+> dead letter:
+>
+> | leg | state today | consequence |
+> |---|---|---|
+> | **schema** | `mixin-hypothesis-1.0` does not admit `relations:`, and `unevaluatedProperties: false` is ON | the **canonical** supersession edge cannot be authored on a hypothesis **at all** |
+> | **relation** | `sci:supersedes` (`core.py:687-701`) admits only `interpretation`/`finding`/`discussion`/`report` (+3 status-less kinds) | authoring it anyway raises **`ValueError` in `materialize`** |
+> | **operation** | `mark_superseded` writes `edit_entity(..., status="superseded")` — **status and nothing else** (`consolidation.py:238`) | Task 10's schema boundary **rejects the tool's own write**: no lineage, no `closure_basis` |
+>
+> **The corpus proves the triangle has never been exercised.** Across all 18 roots: **150
+> hypotheses — 0 superseded, 0 archived, 0 authoring `relations:`, 0 authoring `superseded_by`,
+> `resynthesized_into`, `supersedes`, or `closure_basis`.** Not one. Three broken legs stayed
+> silent because nobody has ever superseded a hypothesis — *they couldn't.* **Nothing to migrate,
+> and therefore no excuse to get it wrong.**
+>
+> **And the design understated its own gate by a factor of four.** It named `topic`/`decision`/
+> `theme`. Executed against `CORE_PROFILE`, the gate names **twelve** half-wired kinds: `decision`,
+> `inquiry`, `mechanism`, `method`, `observation`, `plan`, `pre-registration`, `proposition`,
+> `synthesis`, `theme`, `topic`, `workflow-step`. **A gate stated in prose is not a gate** — this
+> one is derived from `CORE_PROFILE` and executed, which is the only reason we know the number.
+
+**Files:**
+- Modify: `science/model/src/science_model/schemas/mixin-hypothesis-1.0.json` (admit `relations:`)
+- Modify: `science/model/src/science_model/profiles/core.py:687` (`supersedes` endpoints)
+- Modify: `science/src/science_tool/entities.py:935` (`edit_entity` gains `superseded_by`)
+- Modify: `science/src/science_tool/consolidation.py:238` (`mark_superseded` writes the inverse)
+- Test: `science/model/tests/test_supersedable_gate.py`, `science/model/tests/test_mixin_hypothesis.py`,
+  `science/tests/test_consolidation_mark_superseded.py`
+
+**Interfaces:**
+- Consumes: `PROFILE`, `V.validate_as` (Task 6); `check_resolution` (Task 7)
+- Produces: `edit_entity(..., superseded_by: str | None = None)`
+
+> #### The lineage ruling — where supersession actually LIVES (design rev 10)
+>
+> The canonical edge is a **`relations:` entry** with `predicate: sci:supersedes`, authored on the
+> **successor**, pointing newer → older (`consolidation.py:7-12`). It is **not** top-level
+> `supersedes:` — that spelling is silently dropped (fb-2026-07-11-017).
+>
+> But **JSON Schema sees one record in isolation**, so it can never read an edge authored in
+> *another file*. That is why `superseded_by` on the closed record is the **derived inverse**:
+> written by `mark_superseded` from the canonical edge, so the closed record carries its own reason
+> and validates on its own terms. **Author the edge; the inverse is written for you.** It is not a
+> second authored spelling — it is the projection that makes single-record validation *possible*.
+
+- [ ] **Step 1: Write the failing gate — derived, not listed.**
+
+```python
+# science/model/tests/test_supersedable_gate.py
+from science_model.profiles.core import CORE_PROFILE
+
+# The twelve kinds that declare `superseded` while `sci:supersedes` forbids them as endpoints.
+# A SHRINKING allowlist of known-broken kinds -- never a list of what to CHECK. The population is
+# DERIVED below; freezing the scope instead of the debt is how a guard grows a hole by construction.
+_KNOWN_HALF_WIRED: frozenset[str] = frozenset({
+    "decision", "inquiry", "mechanism", "method", "observation", "plan",
+    "pre-registration", "proposition", "synthesis", "theme", "topic", "workflow-step",
+})
+
+
+def _supersedes() -> object:
+    return next(r for r in CORE_PROFILE.relation_kinds if r.name == "supersedes")
+
+
+def test_every_supersedable_kind_can_author_the_CANONICAL_edge() -> None:
+    # THE GATE. A kind that declares `superseded` and is auto-stamped by `mark_superseded`, but is
+    # forbidden as a `sci:supersedes` endpoint, raises ValueError in materialize the moment anyone
+    # authors the edge the tool itself calls canonical. The vocabulary and the relation model
+    # disagree, and until this test existed, nothing noticed.
+    declares = {k.name for k in CORE_PROFILE.entity_kinds if "superseded" in (k.statuses or [])}
+    rk = _supersedes()
+    admits = set(rk.source_kinds) & set(rk.target_kinds)
+
+    assert declares - admits == _KNOWN_HALF_WIRED     # exact: the debt may SHRINK, never grow
+    assert "hypothesis" not in _KNOWN_HALF_WIRED      # this task's whole point
+
+
+def test_hypothesis_is_a_supersedes_ENDPOINT() -> None:
+    rk = _supersedes()
+    assert "hypothesis" in rk.source_kinds and "hypothesis" in rk.target_kinds
+    assert any(
+        p.source_kind == "hypothesis" and p.target_kind == "hypothesis"
+        for p in rk.allowed_kind_pairs
+    )
+
+
+def test_the_hypothesis_SCHEMA_admits_the_canonical_edge() -> None:
+    # Leg 1. `unevaluatedProperties: false` (Task 6) rejects every key the mixin does not declare --
+    # including the ONE field D4 requires as supersession's canonical carrier. Closing the schema
+    # against `relations:` would have made the terminal unreachable through the supported path.
+    V.validate_as(
+        _h(status="superseded", superseded_by="hypothesis:0002-y",
+           relations=[{"predicate": "sci:supersedes", "target": "hypothesis:0000-old"}]),
+        PROFILE,
+    )
+
+
+def test_a_relation_entry_is_CLOSED() -> None:
+    # AuthoredTargetedRelation (source_contracts.py:18) is predicate/target/graph_layer. A typo'd
+    # key inside a relation is silently dropped today -- the class of defect this arc exists to end.
+    with pytest.raises(EntityValidationError):
+        V.validate_as(
+            _h(status="active",
+               relations=[{"predicate": "sci:supersedes", "target": "hypothesis:0000-old",
+                           "tarrget": "typo"}]),
+            PROFILE,
+        )
+```
+
+- [ ] **Step 2: Run — expect three failures.** `test_hypothesis_is_a_supersedes_ENDPOINT` and
+  `test_the_hypothesis_SCHEMA_admits_the_canonical_edge` fail; `test_a_relation_entry_is_CLOSED`
+  passes **for the wrong reason** (`relations` is rejected wholesale by `unevaluatedProperties`, not
+  because the typo was caught) — which is exactly why it is paired with the admission test above it.
+
+- [ ] **Step 3: Leg 1 — the schema admits `relations:`.** Add to `mixin-hypothesis-1.0.json`
+  `properties`, with a **closed** `$def` faithful to `AuthoredTargetedRelation`:
+
+```json
+"relations": { "type": "array", "items": { "$ref": "#/$defs/authored_relation" } }
+```
+
+```json
+"authored_relation": {
+  "$comment": "AuthoredTargetedRelation (source_contracts.py:18-23). The CANONICAL supersession carrier (consolidation.py:7-12) -- and `unevaluatedProperties: false` would have rejected it, making `superseded` unreachable through the only path the toolkit supports. `graph_layer` defaults to `graph/knowledge` in the model; it is optional here, never required.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["predicate", "target"],
+  "properties": {
+    "predicate": { "type": "string", "pattern": "\\S" },
+    "target": { "type": "string", "pattern": "\\S" },
+    "graph_layer": { "type": "string" }
+  }
+}
+```
+
+- [ ] **Step 4: Leg 2 — the relation admits the endpoint.** In `core.py`, add `hypothesis` to the
+  `supersedes` `RelationKind`'s `source_kinds`/`target_kinds` and add the
+  `RelationEndpointPair(source_kind="hypothesis", target_kind="hypothesis")` pair. **Only
+  hypothesis** — the other twelve are this task's declared, frozen debt, not its scope.
+
+- [ ] **Step 5: Leg 3 — the operation supplies the lineage it derives.**
+
+> **The inverse is the IMMEDIATE superseder, not the chain's survivor.** Edges are
+> `(superseder, superseded)` (`consolidation.py:167-172`), and a *linear* chain is a path — so in
+> `A → B → C`, `A` is the survivor but the edge that closed `C` was authored by **`B`**.
+> `superseded_by` is the **mechanical inversion of the authored edge**, so `C.superseded_by == B`.
+> Stamping the survivor onto every member would **collapse the chain** — lossy, and an
+> *interpretation* rather than an inversion. A two-node fixture cannot tell the two apart, which is
+> exactly why the three-node test below exists.
+>
+> `SupersedesGraph` exposes `linear`/`non_linear`/`status_by_id`/`kind_by_id` and **no edge map**,
+> so the inversion has to be carried out of the builder rather than reconstructed by the caller.
+
+```python
+# consolidation.py: SupersedesGraph gains the inversion it already computes and throws away.
+@dataclass(frozen=True)
+class SupersedesGraph:
+    linear: tuple[SupersededChain, ...]
+    non_linear: tuple[NonLinearComponent, ...]
+    status_by_id: Mapping[str, str | None]
+    kind_by_id: Mapping[str, str]
+    superseder_by_id: Mapping[str, str]   # superseded id -> its IMMEDIATE superseder (linear only)
+```
+
+```python
+# ...built from the same edges, for linear chains only. Non-linear components have an ambiguous
+# survivor -- they are already skipped, and they must not acquire a lineage claim here.
+    superseder_by_id: dict[str, str] = {}
+    for chain in linear:
+        members = {chain.survivor, *chain.superseded}
+        for src, dst in edges:
+            if src in members and dst in members:
+                superseder_by_id[dst] = src   # a linear chain is a path: exactly one in-edge
+```
+
+```python
+# entities.py: edit_entity gains the lineage parameter. `superseded_by` is DERIVED -- inverted from
+# the canonical edge by the tool, never guessed and never authored by hand.
+    superseded_by: str | None = None,
+...
+    if superseded_by is not None:
+        frontmatter["superseded_by"] = superseded_by
+```
+
+```python
+# consolidation.py: mark_superseded writes the INVERSE alongside the status. Without it, the tool
+# emits a `superseded` record with no lineage and no basis -- which Task 10's schema boundary
+# rejects. The tool would have been the first thing to violate its own contract.
+    if apply:
+        for member in to_mark:
+            edit_entity(project_root, member, status=_SUPERSEDED,
+                        superseded_by=graph.superseder_by_id[member])
+            report["applied"].append(member)
+```
+
+- [ ] **Step 5b: The closure test — the tool's own write must VALIDATE.**
+
+```python
+# science/tests/test_consolidation_mark_superseded.py
+def test_the_stamped_record_SATISFIES_the_hypothesis_schema(tmp_path: Path) -> None:
+    # The triangle, closed. `mark_superseded` derives `status: superseded` from the canonical edge;
+    # the record it leaves behind must be valid on its OWN terms -- lineage present, resolvable, and
+    # schema-clean. Rev 1 wrote `status` alone, so the toolkit's own supersession produced a record
+    # that Task 10's boundary would refuse. A tool that cannot satisfy the schema it enforces has
+    # not implemented supersession; it has renamed it.
+    _write_hypothesis(tmp_path, "0001-old", status="active")
+    _write_hypothesis(tmp_path, "0002-new", status="active",
+                      relations=[{"predicate": "sci:supersedes", "target": "hypothesis:0001-old"}])
+
+    mark_superseded(tmp_path, apply=True)
+    fm = read_frontmatter(tmp_path / "entities/hypotheses/0001-old.md")
+
+    assert fm["status"] == "superseded"
+    assert fm["superseded_by"] == "hypothesis:0002-new"
+    V.validate_as(fm, PROFILE)                                     # leg 1 + leg 3 agree
+    assert check_resolution(fm, known_ids={"hypothesis:0002-new"}) == []   # and it RESOLVES
+
+
+def test_a_CHAIN_records_the_immediate_superseder_not_the_survivor(tmp_path: Path) -> None:
+    # A -> B -> C. The survivor is A, but the edge that closed C was authored by B. `superseded_by`
+    # INVERTS the authored edge; it does not summarize the chain. Stamping A onto C would discard
+    # B's supersession entirely -- and the two-node test above cannot tell the difference, which is
+    # the only reason this one exists.
+    _write_hypothesis(tmp_path, "0003-c", status="active")
+    _write_hypothesis(tmp_path, "0002-b", status="active",
+                      relations=[{"predicate": "sci:supersedes", "target": "hypothesis:0003-c"}])
+    _write_hypothesis(tmp_path, "0001-a", status="active",
+                      relations=[{"predicate": "sci:supersedes", "target": "hypothesis:0002-b"}])
+
+    mark_superseded(tmp_path, apply=True)
+
+    c = read_frontmatter(tmp_path / "entities/hypotheses/0003-c.md")
+    b = read_frontmatter(tmp_path / "entities/hypotheses/0002-b.md")
+    assert c["superseded_by"] == "hypothesis:0002-b"    # NOT 0001-a
+    assert b["superseded_by"] == "hypothesis:0001-a"
+    assert "superseded_by" not in read_frontmatter(tmp_path / "entities/hypotheses/0001-a.md")
+```
+
+- [ ] **Step 6: Full gates.** `cd science/model && uv run --frozen pytest` / `cd science && uv run
+  --frozen pytest`, both whole; `uv run ruff check` and `uv run pyright`. The `materialize` path is
+  the one at risk: leg 2 changes a `RelationKind`, and the graph builders read it.
+- [ ] **Step 7: Commit** — **all three legs in ONE commit.** A bidirectional gate exists to catch
+  half-wiring; landing half of it would be the defect it was written to detect.
+
+---
+
 ## Phase 3 — The `hypothesis` P2m slice (this is where meaning changes)
 
 > **ATOMIC PER KIND, ACROSS ALL 9 REPOS.** `default_profile_for_kind` is **global** — the instant
@@ -3125,6 +3452,15 @@ cd science       && uv run ruff check && uv run pyright
 > nothing here infers anything.
 
 ### Task 8: Descriptor, model, template — and the version pin
+
+> **Task 7a's gate is load-bearing HERE.** `hypothesis` does not declare `superseded` today — its
+> `EntityKind.statuses` are `[proposed, under-investigation, partially-supported, supported,
+> weakened, refuted, archived]`, the **verdict** vocabulary. **This task is where it joins the
+> "declares `superseded`" population.** Land it without Task 7a and
+> `test_every_supersedable_kind_can_author_the_CANONICAL_edge` goes from twelve half-wired kinds to
+> **thirteen** and fails — which is exactly what a bidirectional gate is for. It is the one
+> instrument that would have caught this plan shipping a terminal status for a kind that could not
+> reach it.
 
 **Files:**
 - Modify: `science/model/src/science_model/profiles/core.py:32-51`
@@ -4143,17 +4479,62 @@ cannot produce a duplicate repo. Several repos are **Dropbox-only with no remote
 
 ### Task 12: `hypothesis` → ERROR
 
+**Files:**
+- Create: `science/src/science_tool/validate/kind_severity.py` — **the shared interface.**
+- Modify: `science/src/science_tool/validate/checks/hypotheses.py` — **both** kind-level emitters
+  (`hypothesis.status-vocabulary` **and** `hypothesis.dangling-lineage`) call it.
+- Test: `science/tests/test_kind_severity.py`, `science/tests/test_resolution_wiring.py`
+
+**Interfaces:**
+- Produces: `severity_for_kind(kind: str) -> Severity`; `_CERTIFIED_KINDS: frozenset[str]`
+
+> **`_severity` was a private local, and it certified exactly one of the two rules that need it.**
+> Rev 1 defined it inside `checks/hypotheses.py` for `status-vocabulary`, while Task 7 emitted
+> `hypothesis.dangling-lineage` at a **hard-coded** WARN and promised — in a comment — that "ERROR
+> is Task 12's ratchet, per kind." **Task 12 never touched it.** The kind would have been certified
+> and the lineage violation would have stayed WARN forever, with the plan asserting otherwise in
+> two places. A promise kept in prose by neither module is not a ratchet.
+>
+> So severity for **kind-level** rules is one named function in one module, and both emitters call
+> it. (**Rule**-level ratchets — `verdict.missing-basis` — are a different axis and deliberately do
+> **not** consult it; see the independence test below and the deferred-ratchet box.)
+
 - [ ] **Step 1: Write the failing test**
 
 ```python
+# science/tests/test_kind_severity.py
+from science_tool.validate.kind_severity import severity_for_kind
+
+
 def test_severity_is_a_property_of_the_KIND() -> None:
     # The original incident: severity graded on `layout_version >= 3`. All five projects were
     # v3, so the gate graded NOTHING and 472 entities errored the moment the check landed.
-    assert _severity("hypothesis") is Severity.ERROR   # sources AND consumers certified
-    assert _severity("report") is Severity.WARN        # not migrated
-    assert _severity("question") is Severity.WARN
+    assert severity_for_kind("hypothesis") is Severity.ERROR   # sources AND consumers certified
+    assert severity_for_kind("report") is Severity.WARN        # not migrated
+    assert severity_for_kind("question") is Severity.WARN
+```
+
+```python
+# science/tests/test_resolution_wiring.py -- the flip this task actually OWES.
+def test_dangling_lineage_FLIPS_to_error_with_the_kind(tmp_project) -> None:
+    # Task 7 pinned this finding at "warn" and pointed HERE. If `checks/hypotheses.py` still
+    # hard-codes WARN, this fails -- which is the only thing that makes Task 7's comment true.
+    write_hypothesis(tmp_project, "0001-x", status="superseded",
+                     extra={"superseded_by": "hypothesis:9999-nope"})
+    findings = [r for r in run_validate(tmp_project) if r.rule == "hypothesis.dangling-lineage"]
+
+    assert [f.severity for f in findings] == ["error"]
 
 
+def test_dangling_lineage_is_GATED_once_it_is_an_error(tmp_project) -> None:
+    # Severity without a tier fails nobody's build. Task 7 pinned its ABSENCE from `hygiene`;
+    # this task inverts it, and the inversion is the deliverable.
+    from science_tool.validate.gates import cumulative_rules
+
+    assert "hypothesis.dangling-lineage" in cumulative_rules("hygiene")
+```
+
+```python
 def test_missing_basis_stays_WARN_even_when_the_KIND_is_certified() -> None:
     # MOVED HERE FROM TASK 7, which could not state it: `_severity` and `_CERTIFIED_KINDS` are born
     # in THIS task, so the claim had nothing to constrain and the test could not have run.
@@ -4165,27 +4546,41 @@ def test_missing_basis_stays_WARN_even_when_the_KIND_is_certified() -> None:
     # failing 472 entities.
     from science_tool.validate.gates import cumulative_rules
 
-    assert _severity("hypothesis") is Severity.ERROR
+    assert severity_for_kind("hypothesis") is Severity.ERROR
     assert "verdict.missing-basis" not in cumulative_rules("hygiene")
     assert "verdict.refutation-masked" in cumulative_rules("hygiene")   # the one that IS gated
 ```
 
-- [ ] **Step 2: Implement**
+- [ ] **Step 2: Implement — the shared interface**
 
 ```python
-# A kind joins this set at the END of its P2m slice -- never before. An uncertified
-# instrument may not fail anyone's build.
-#
-# THIS SET CERTIFIES THE KIND, NOT EVERY RULE ABOUT IT. `hypothesis` here means: all 18 roots are
-# pinned, render, and validate. It does NOT mean the corpus carries verdict BASES -- >=11 of the 15
-# migrating verdicts do not, so `verdict.missing-basis` has its OWN ratchet and stays WARN. Two
-# independent facts; do not let one certify the other.
+# science/src/science_tool/validate/kind_severity.py
+"""Severity for KIND-level rules. One authority, consulted by every emitter that grades a kind.
+
+A kind joins `_CERTIFIED_KINDS` at the END of its P2m slice -- never before. An uncertified
+instrument may not fail anyone's build.
+
+THIS SET CERTIFIES THE KIND, NOT EVERY RULE ABOUT IT. `hypothesis` here means: all 18 roots are
+pinned, render, and validate. It does NOT mean the corpus carries verdict BASES -- >=11 of the 15
+migrating verdicts do not, so `verdict.missing-basis` has its OWN ratchet, on its OWN axis, and
+stays WARN. Two independent facts; do not let one certify the other. Rule-level ratchets do not
+call this function.
+"""
+
+from science_model.validation import Severity
+
 _CERTIFIED_KINDS: frozenset[str] = frozenset({"hypothesis"})
 
 
-def _severity(kind: str) -> Severity:
+def severity_for_kind(kind: str) -> Severity:
     return Severity.ERROR if kind in _CERTIFIED_KINDS else Severity.WARN
 ```
+
+- [ ] **Step 2b: Route BOTH kind-level emitters through it.** In `validate/checks/hypotheses.py`,
+  the `hypothesis.status-vocabulary` finding and the `hypothesis.dangling-lineage` finding (Task 7,
+  which hard-coded `Severity.WARN`) both take `severity_for_kind("hypothesis")`. Add
+  `hypothesis.dangling-lineage` to the `hygiene` tier in `validate/gates.py` — a severity with no
+  tier fails nobody's build, and Task 7 pinned its absence precisely so this task must invert it.
 
 - [ ] **Step 3: Re-assert the manifest, then validate.** Re-derive the roster and require **exact
   `(root, n)` set equality** against `/tmp/claude-1000/roster.json` (Task 11 Step 0). Totals are not
