@@ -1081,6 +1081,9 @@ separately** — and **no task may end red.**
   and a closed `$def` with no model fields fails `protein-landscape/0001` for as long as the two are
   apart.
 - Test: `science/model/tests/test_project_profiles.py`, `test_mixin_hypothesis.py`
+- **Test: `science/tests/test_graph_materialize.py`** — Step 4c, and it is in the **toolkit**
+  package, not the model one. That is the whole reason Step 4 below runs *both* suites: a gate that
+  lives in a suite the task never runs is not a gate.
 
 **Interfaces:**
 - Produces `EntityValidator.validate_as(entity: dict, profile: ProfileString) -> None` — validate
@@ -1988,10 +1991,14 @@ def test_a_LIST_form_packet_serializes_BYTE_IDENTICALLY() -> None:
     assert "discriminator_status" not in serialized
 ```
 
-- [ ] **Step 4: Green** — the whole model suite, including Task 5's fourth test.
+- [ ] **Step 4: Green — BOTH suites, whole, plus lint and types.** Task 6 changes
+  `science_model.reasoning`, and Step 4c's guard lives in the **toolkit** package — so a run of only
+  the model suite never executes the very test that proves the packet reaches the graph.
 
 ```bash
-cd science/model && uv run --frozen pytest -q
+cd science/model && uv run --frozen pytest      # the model suite, whole
+cd science       && uv run --frozen pytest      # the TOOLKIT suite -- this is where Step 4c runs
+cd science       && uv run ruff check && uv run pyright
 ```
 
 - [ ] **Step 4b: Prove it in the ARTIFACT, not only the unit test.** The corpus holds **exactly 2
@@ -2000,6 +2007,21 @@ cd science/model && uv run --frozen pytest -q
   `cancer/cancer-types/multiple-myeloma`, so a path-glob counts its proposition twice. Dedupe by
   `Path.resolve()` — this is the duplicate-root trap that also makes `science/meta` and `health/meta`
   collide on `basename`.)*
+>
+> **Only `multiple-myeloma` is buildable, so only it is gated here.** `protein-landscape`'s
+> `graph build` is red today (box below), and the loop this step used to carry ran *both* roots, then
+> `cp`'d `knowledge/graph.trig` whether or not the build succeeded — so a failed build would have
+> snapshotted the **stale committed graph** and diffed it against itself. That is the silent success
+> this task exists to forbid, reintroduced in the step meant to prove its absence. It also left `$N`
+> holding the last root, so the `diff` it printed only ever compared one project anyway.
+>
+> The split of claims:
+> - **multiple-myeloma** — buildable, so it carries the real artifact half: **byte-identical**.
+> - **protein-landscape's four-key emission** — carried by **Step 4c**, hermetically, at
+>   `_model_to_json`, the exact function that writes `sci:rivalModelPacket`.
+> - **protein-landscape's real artifact diff** — **deferred to Task 11**, after the alias defect is
+>   fixed. It is that task's prerequisite already; it does not become achievable by being asserted
+>   harder here.
 
 > ### `uv run science` inside a consumer runs the MAIN checkout, **not this worktree**
 >
@@ -2014,30 +2036,38 @@ cd science/model && uv run --frozen pytest -q
 > reporting on a thing it cannot see. Point `uv` at the worktree explicitly:
 
 ```bash
+set -euo pipefail        # NOT optional: it is the only thing that stops a failed build from being
+                         # followed by a `cp` of the stale committed graph.
+
 WT=~/d/science/.claude/worktrees/instrument-result/science
 SNAP=/tmp/claude-1000
+P=~/d/cancer/cancer-types/multiple-myeloma      # the one buildable packet-bearing root
 
-# `graph build` has NO `--output`; it writes `knowledge/graph.trig` in place. Snapshot by copying,
-# and restore afterwards so the consumer repo is left exactly as found.
-for P in ~/d/protein-landscape ~/d/cancer/cancer-types/multiple-myeloma; do
-  N=$(basename "$P"); cd "$P"
-  git status --short knowledge/            # MUST be clean, or the "before" is already somebody else's
-  uv run --project "$WT" science graph build --local-only
-  cp knowledge/graph.trig "$SNAP/before-$N.trig"
+snapshot() {   # $1 = destination. Build in place, copy out, restore -- leave the repo as found.
+  cd "$P"
+  git status --short knowledge/    # MUST be clean, or the "before" is already somebody else's diff
+  uv run --project "$WT" science graph build --local-only   # a failure ABORTS here, not silently
+  cp knowledge/graph.trig "$1"
   git checkout -- knowledge/graph.trig
-done
-# ...apply Task 6, re-run the loop into after-$N.trig, then:
-diff <(grep -o 'rivalModelPacket "[^"]*"' "$SNAP/before-$N.trig") \
-     <(grep -o 'rivalModelPacket "[^"]*"' "$SNAP/after-$N.trig")
+}
+
+snapshot "$SNAP/before-mm.trig"     # BEFORE editing anything (already captured)
+# ...apply Task 6...
+snapshot "$SNAP/after-mm.trig"
+
+diff "$SNAP/before-mm.trig" "$SNAP/after-mm.trig"    # required: EMPTY
 ```
 
-  Two required outcomes, and **one without the other is a failure**:
-  - protein-landscape's **four authored values newly APPEAR** in `sci:rivalModelPacket`. Measured
-    today: `rival_id`, `rival_name`, `rival_claim`, `discriminator_status` appear **0 times** in that
-    project's committed `graph.trig`. The drop is not hypothetical — it is visible in the artifact.
-  - multiple-myeloma's proposition literal is **byte-identical** — no `null` keys, no reordering. A
-    hypothesis-lifecycle migration that rewrote a proposition's provenance would be doing something
-    nobody asked for, inside the diff nobody was reading for it.
+  The required outcome: multiple-myeloma's proposition literal is **byte-identical** — no `null`
+  keys, no reordering. A hypothesis-lifecycle migration that rewrote a **proposition's** provenance
+  would be doing something nobody asked for, inside the diff nobody was reading for it. Diff the
+  whole file, not a `grep` of the packet line: the `null`-key churn `exclude_if` exists to prevent
+  would land on *every* serialized packet, and a grep narrowed to the field you expect to change is
+  blind to exactly the collateral you are looking for.
+
+  The **four-key appearance** is proven by Step 4c, not here — see the box below for why it cannot
+  be proven in protein-landscape's artifact yet, and why asserting it anyway would produce a green
+  that means nothing.
 
 > ### ⚠️ `protein-landscape`'s graph build is RED **today**, and that blocks Task 11 too
 >
@@ -2046,9 +2076,12 @@ diff <(grep -o 'rivalModelPacket "[^"]*"' "$SNAP/before-$N.trig") \
 > checkout**, so it is pre-existing and not caused by this arc. Two consequences, and the second is
 > the one that matters:
 >
-> 1. **Step 4b's protein-landscape half cannot run until that alias resolves.** Until it does, the
->    packet claim is carried by the hermetic materialization test below (a fixture entity, no
->    project), and `multiple-myeloma` — which builds clean — carries the byte-identical half.
+> 1. **So protein-landscape is OUT of Step 4b entirely** — not "attempted, and skipped if it fails".
+>    A build that cannot run has no "after" graph, and `cp`-ing the committed one produces a diff
+>    that is empty *because nothing was measured*, which reads identically to a diff that is empty
+>    because nothing changed. The packet claim is carried instead by the hermetic materialization
+>    test below (a fixture entity, no project), and `multiple-myeloma` — which builds clean — carries
+>    the byte-identical half.
 > 2. **`protein-landscape` is one of the 18 roots in Task 11**, and Task 11 gates every root on a
 >    before/after `graph.trig` diff. **A root whose graph cannot build cannot be gated.** So this is
 >    a Task 11 **prerequisite**, not a footnote: either the alias is fixed first, or the root is
@@ -3664,6 +3697,11 @@ For each root (order per above):
 > toolkit code *that does not contain this plan*. Both were live defects in this document.
 
 ```bash
+set -euo pipefail                                    # the ONLY thing that stops a failed `graph
+                                                     # build` from being followed by a `cp` of the
+                                                     # STALE committed graph -- which diffs clean,
+                                                     # exactly like a root that was really untouched
+
 WT=~/d/science/.claude/worktrees/instrument-result/science   # ...or drop --project once merged
 SLUG=$(...)                                          # from the manifest -- NOT basename $PWD:
                                                      # science/meta and health/meta both basename
@@ -3677,7 +3715,8 @@ uv run --project "$WT" science entity status-inventory   # 0 refused, or adjudic
 uv run --project "$WT" science entity migrate-hypothesis --apply   # sets entity_schema_version: 2
 uv run --project "$WT" science graph build --local-only
 cp knowledge/graph.trig /tmp/claude-1000/after-$SLUG.trig
-uv run --project "$WT" science validate; echo "exit=$?"            # MUST be 0
+uv run --project "$WT" science validate            # MUST exit 0 -- under `set -e` a nonzero exit
+                                                   # ABORTS the root rather than printing itself
 ```
 
 > **A root whose graph cannot BUILD cannot be gated.** `protein-landscape` fails
