@@ -8,6 +8,27 @@
 
 **Tech Stack:** Python 3.13, Snakemake, SQLite, gzip VCF parsing, pytest, YAML datapackage metadata.
 
+**Status update 2026-07-13:** Implemented and merged into `main` in
+`~/d/science-commons` and `~/d/science`. The original final `merge_dataset`
+SQLite materialization was superseded after repeated multi-day/OOM runs. The
+accepted artifact is now `rsid-shards.yaml` plus the durable shard SQLite files
+under the commons data root; Snakemake publishes the manifest and build summary
+without copying all rows into one monolithic `rsid_mappings.sqlite`. The
+`science_tool.commons.rsid` resolver reads the manifest and opens only the shard
+needed for the queried rsID, while retaining explicit single-SQLite resolution
+for tests and operator diagnostics.
+
+Follow-up verification completed:
+- `publish_dataset` completed against the full dbSNP b157 shard set.
+- A final Snakemake dry-run reported no work remaining.
+- Real-artifact `resolve_rsid(...)` smoke succeeded against the published
+  manifest and shard files.
+- Focused recipe and resolver tests, ruff, and pyright passed before commit.
+
+Key commits:
+- `~/d/science-commons`: `1ab3d75 feat: publish dbsnp rsids as shard manifest`
+- `~/d/science`: `36f50a14 feat: resolve dbsnp rsids from shard manifests`
+
 ---
 
 ### Task 1: Preserve Existing State

@@ -31,13 +31,19 @@ Current state:
 
 Residual backlog:
 
-- Run the full dbSNP b157 Snakemake workflow in `~/d/science-commons`.
-- Inspect retained row count, SQLite byte size, build time, and skipped bucket
-  counts before treating the artifact as production-ready.
-- Commit the full-source `recipe/lockfile.yaml`.
-- Refresh `datapackage.yaml` with non-zero hashes, byte counts, and final
-  resource metadata.
-- Smoke `resolve_rsid(...)` against the real commons artifact.
+- Completed 2026-07-13: the full dbSNP b157 Snakemake workflow now publishes
+  `rsid-shards.yaml` plus durable shard SQLite files instead of a monolithic
+  `rsid_mappings.sqlite`. This supersedes the original single-SQLite production
+  criterion after repeated multi-day/OOM final merge attempts.
+- Completed 2026-07-13: retained/skipped counts and shard byte totals were
+  captured in `build-summary.yaml`; the accepted full-source retained allele
+  count is `2,892,721,560` across `128` shard SQLite files.
+- Completed 2026-07-13: `recipe/lockfile.yaml` is committed in
+  `~/d/science-commons`.
+- Completed 2026-07-13: `datapackage.yaml` now records non-zero hashes, byte
+  counts, and final metadata for the `rsid_shards` manifest and build summary.
+- Completed 2026-07-13: `resolve_rsid(...)` was smoked against the real commons
+  sharded artifact through the manifest-aware resolver.
 - Treat transcript/protein HGVS projection as a separate future C4c increment,
   not as unfinished C4c-1 framework work.
 
