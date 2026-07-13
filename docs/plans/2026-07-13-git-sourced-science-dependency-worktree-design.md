@@ -80,11 +80,20 @@ Agent commands call specific CLI subcommands, so compatibility between these
 interfaces is a public contract. This change establishes a unified `0.3.0`
 baseline in `science/pyproject.toml`, `.claude-plugin/plugin.json`, and the
 minimum CLI version declared by `references/command-preamble.md`. The CLI gains
-a root `science --version` option backed by installed package metadata.
+a root `science --version` option backed by installed package metadata, with the
+stable output shape `science <version>`.
 
-Before an agent command invokes the CLI, the shared command preamble checks the
-installed version. If it is below the declared floor, the command stops before
-doing project work and reports:
+Before an agent command invokes the CLI, the shared command preamble runs an
+executable compatibility block. The block captures
+`uv run --frozen science --version`, parses and compares its semantic version
+deterministically, and proceeds only when the installed version meets the floor.
+The agent executes the block; it does not perform the comparison by judgment.
+
+The `--version` option itself begins at the `0.3.0` baseline. Therefore a
+non-zero probe, missing output, or unparseable output means "older than or
+incompatible with the baseline" and follows the same controlled failure path as
+a parseable below-floor version. The preamble suppresses the underlying Click
+error and reports:
 
 ```text
 This Science agent command requires science >=0.3.0, but this project pins
@@ -92,9 +101,53 @@ This Science agent command requires science >=0.3.0, but this project pins
 then retry.
 ```
 
+The authoritative preamble carries the shell implementation, including the
+version floor and a Python-standard-library numeric release comparison. Its
+behavior is tested for a failed probe, malformed output, a below-floor version,
+the exact floor, and a newer version. The probe remains a root option whose
+failure is data handled by this block; it must not be replaced with a new
+preflight subcommand that older CLIs cannot recognize.
+
+The block has this behavior (the implementation may factor the comparison for
+testability, but not defer it to agent reasoning):
+
+```bash
+SCIENCE_REQUIRED_VERSION=0.3.0
+if output=$(uv run --frozen science --version 2>/dev/null); then
+  SCIENCE_INSTALLED_VERSION=${output##* }
+else
+  SCIENCE_INSTALLED_VERSION=
+fi
+
+if ! SCIENCE_INSTALLED_VERSION="$SCIENCE_INSTALLED_VERSION" \
+     SCIENCE_REQUIRED_VERSION="$SCIENCE_REQUIRED_VERSION" \
+     uv run --no-project python - <<'PY'
+import os
+import re
+import sys
+
+def release(name: str) -> tuple[int, int, int] | None:
+    match = re.fullmatch(r"(\d+)\.(\d+)\.(\d+)", name)
+    return tuple(map(int, match.groups())) if match else None
+
+installed = release(os.environ["SCIENCE_INSTALLED_VERSION"])
+required = release(os.environ["SCIENCE_REQUIRED_VERSION"])
+sys.exit(0 if installed is not None and required is not None and installed >= required else 1)
+PY
+then
+  display=${SCIENCE_INSTALLED_VERSION:-unknown-or-pre-0.3.0}
+  echo "This Science agent command requires science >=$SCIENCE_REQUIRED_VERSION; found $display." >&2
+  echo "upgrade with: uv lock --upgrade-package science && uv sync --frozen" >&2
+  exit 1
+fi
+```
+
 Generated Codex skills embed the same preamble and therefore the same floor.
 Tests require every command that invokes `science` to load the shared preamble
-or perform the equivalent check explicitly.
+or perform the equivalent executable check explicitly. A separate command-tree
+test extracts `uv run science <subcommand>` invocations from `commands/*.md` and
+asserts that every referenced top-level subcommand exists in the current Click
+command tree.
 
 After the baseline, any change to an agent command that depends on a new or
 changed CLI interface must bump the package version, plugin version, and
@@ -119,6 +172,13 @@ uv lock --upgrade-package science
 uv sync --frozen
 bash validate.sh --verbose
 ```
+
+The Git pin provides reproducibility, not insulation from upgrades. When an
+agent command adopts a newer CLI interface, it ratchets the compatibility floor
+and consumers must advance their lock before using that command. Given the
+toolkit's current development pace, these upgrades may be frequent; they remain
+explicit and reviewable rather than happening implicitly through an editable
+checkout.
 
 No update helper is added initially. A helper that only wraps this stable uv
 command would add another maintained surface without removing meaningful
@@ -186,8 +246,10 @@ The implementation updates the authoritative surfaces together:
    its explanation that this toolkit's in-repository package sources are safe.
 4. `references/command-preamble.md` removes the `UV_PROJECT=$MAIN` and main
    checkout environment workarounds, declares the minimum compatible CLI
-   version, and checks `science --version` before command execution. Generated
-   Codex skills are regenerated from the authoritative command inputs.
+   version, and executes the compatibility block before command execution. A
+   failed or unparseable `science --version` probe takes the controlled upgrade
+   path. Generated Codex skills are regenerated from the authoritative command
+   inputs.
 5. Tooling health and validation parse `pyproject.toml` structurally. They
    continue to require `science` in `[dependency-groups].dev`, accept a Git
    source, accept a path source that resolves within the same Git repository,
@@ -238,11 +300,6 @@ above. Do not silently skip registered entries. Keep each downstream repository
 change separate from the toolkit commit, and do not write an unpublished local
 SHA into consumer locks.
 
-For each downstream `.env`, remove the vestigial `SCIENCE_TOOL_PATH` assignment.
-Preserve files containing any other configuration, including placeholders and
-secrets. Delete the file only when removing that assignment leaves no
-non-comment content.
-
 ## Failure Behavior
 
 - A missing `science` dev dependency remains a tooling-scaffold finding.
@@ -253,9 +310,10 @@ non-comment content.
 - A Git fetch failure remains visible as a uv error. There is no silent fallback
   to a local checkout or a different Science revision. A fresh no-egress
   environment therefore requires a pre-populated uv/Git cache.
-- A plugin command whose required CLI floor exceeds the consumer's installed
-  version stops in the shared preamble with the explicit Science upgrade
-  command, rather than continuing to a bare Click `No such command` error.
+- A failed or unparseable version probe, or a plugin command whose required CLI
+  floor exceeds the consumer's installed version, stops in the shared preamble
+  with the explicit Science upgrade command. The underlying Click `No such
+  option` or `No such command` error is not surfaced as the diagnosis.
 - `uv sync --frozen` continues to fail when the lock is absent or stale.
 - An unpushed Science commit cannot be selected by normal consumers; use the
   explicit `--with-editable` overlay while developing it.
@@ -268,8 +326,15 @@ Toolkit verification includes:
    path-source manifests.
 2. Documentation tests for the canonical Git source and the absence of retired
    editable-install and sibling-worktree guidance.
-3. Generated Codex skill parity checks after regeneration.
-4. An integration fixture that reproduces the real nested-source shape: a local
+3. Executable compatibility-check tests for a failed `--version` probe,
+   malformed output, a below-floor version, the exact floor, and a newer
+   version, plus synchronization checks for the package, plugin, and preamble
+   release versions.
+4. A command-tree contract test that extracts every
+   `uv run science <subcommand>` invocation from `commands/*.md` and asserts
+   that the referenced top-level command exists in the current Click tree.
+5. Generated Codex skill parity checks after regeneration.
+6. An integration fixture that reproduces the real nested-source shape: a local
    Git repository contains the primary package in `science/` and that package
    declares an editable runtime path source in `science/model/`. A consumer
    locks the primary package from the Git repository's `science/` subdirectory.
@@ -279,7 +344,7 @@ Toolkit verification includes:
    proves that frozen sync, CLI execution, tests, and validation work there.
    The fixture uses a local Git URL so it is deterministic and
    network-independent.
-5. The normal toolkit gates from `science/`: pytest, Ruff, and Pyright.
+7. The normal toolkit gates from `science/`: pytest, Ruff, and Pyright.
 
 During the downstream pass, every changed project runs its normal validation.
 Representative shallow and deep consumer layouts also receive an actual nested
