@@ -50,6 +50,35 @@ taken after schema validation — **never a second authority**.
 
 Apply to **every** task; not restated per-task.
 
+0. ### ☠️ EVERY `science` COMMAND RUN INSIDE A CONSUMER MUST NAME THIS WORKTREE
+   Consumer projects install the toolkit from the **public Git source**, revision pinned in their
+   `uv.lock`:
+   ```toml
+   [tool.uv.sources]
+   science = { git = "https://github.com/khughitt/science.git", subdirectory = "science" }
+   ```
+   So a bare `uv run science …` inside a consumer runs **a published revision that contains none of
+   this plan** — no `mixin-hypothesis-1.0`, no `entity_extensions`, no new checks. It does not
+   error. **It passes, on the old toolkit, and the green is meaningless.** This is the silent
+   instrument the whole arc exists to abolish, wearing its most convincing disguise: a real command,
+   in the real repo, exiting 0.
+
+   Every consumer-side invocation therefore **names the worktree** and **asserts what it loaded**:
+   ```bash
+   WT=~/d/science/.claude/worktrees/instrument-result/science   # ...or drop --project once merged
+
+   # ASSERT, don't assume. A typo'd --project silently falls back to the pinned revision.
+   uv run --project "$WT" python -c "
+   import pathlib, science_tool
+   p = pathlib.Path(science_tool.__file__).resolve()
+   assert '.worktrees' in p.parts or 'science/src' in str(p), f'WRONG TOOLKIT: {p}'
+   print('toolkit OK:', p)"
+
+   uv run --project "$WT" science validate      # ...and every other command
+   ```
+   If `science_tool` resolves into the **consumer's own `.venv`**, it is the pinned revision, **not
+   this branch.** Applies to Task 11 Steps 0/1/3, Task 12 Step 3, and any ad-hoc check.
+
 1. **No "legacy"/"compatibility" layer.** No heuristic dual-read of `status`.
    **A *versioned* boundary is not a compatibility layer.** The forbidden thing is code that
    *guesses* which meaning applies. An explicit, authored version pin that *declares* it is
@@ -2263,33 +2292,41 @@ project-local fields must arrive together, or strictness cannot arrive at all.**
 Design §6 already names the mechanism: an **additive-only extension component** in the profile,
 which may *add* fields to a core kind but never redefine a core one.
 
+> ### ⚠️ The filename is `extension-<name>-<ver>.json` — HYPHENS, and the dots are FLATTENED
+>
+> `loader.filename_for` has always done `component.name.replace(".", "-")`, which is why all 13
+> packaged extensions are `extension-bio-rnaseq-1.0.json` and not `extension-bio.rnaseq-…`. So the
+> component `mm30.assessment/1.0` resolves to the file **`extension-mm30-assessment-1.0.json`**.
+> A dotted filename is never found, and the failure is a `SchemaNotFoundError` at first use.
+
 **Files:**
-- Modify: `science/model/src/science_model/entity_schema/loader.py` — search a project schema dir before package resources
-- Modify: `science/model/src/science_model/entity_schema/profile.py` — `resolve_profile(kind, extensions)`
-- Modify: `science/src/science_tool/` — read `entity_extensions` from `science.yaml`
-- Create: `~/d/cancer/cancer-types/multiple-myeloma/schemas/extension-mm30.assessment-1.0.json` *(in mm30, not the toolkit)*
-- **Create: `~/d/cancer/mechanisms/evolution/schemas/extension-evolution.provenance-1.0.json`** *(in evolution, not the toolkit)*
-- Test: `science/model/tests/test_project_extensions.py`
+- Modify: `science/model/src/science_model/entity_schema/loader.py` — `SchemaLoader(project_dir)`, searching the project dir for **extensions only** (below), and `filename_for` made public
+- **Create: `science/model/src/science_model/entity_schema/resolve.py`** — `resolve_profile` + the root contract. **Not `profile.py`:** `resolve_profile` needs `SchemaLoader`, and `loader` already imports `profile`, so putting it there makes the package **cyclic**. `resolve` is the genuine third layer — *profile parses, loader fetches, resolve composes*.
+- Modify: `science/src/science_tool/project_config.py` — `entity_extensions` as a **declared** field (`ProjectConfig` is `extra="allow"`, so an undeclared stanza would be accepted, ignored, and silently do nothing — the very failure this arc exists to close)
+- **Create: `science/src/science_tool/entity_profiles.py`** — `load_project_schema`, which hands out the profile and the loader **together** (they are only correct together) and **eagerly certifies every declaration**
+- Create: `~/d/cancer/cancer-types/multiple-myeloma/schemas/extension-mm30-assessment-1.0.json` *(in mm30, not the toolkit)*
+- **Create: `~/d/cancer/mechanisms/evolution/schemas/extension-evolution-provenance-1.0.json`** *(in evolution, not the toolkit)*
+- Test: `science/model/tests/test_project_extensions.py`, `science/tests/test_entity_profiles.py`
 
 **Both project repos need a `science.yaml` stanza** — the extension file alone does nothing:
 
 ```yaml
 # ~/d/cancer/cancer-types/multiple-myeloma/science.yaml
 entity_extensions:
-  hypothesis: ["mm30.assessment/1.0"]
+  hypothesis: ["mm30.assessment/1.0"]   # -> schemas/extension-mm30-assessment-1.0.json
 ```
 
 ```yaml
 # ~/d/cancer/mechanisms/evolution/science.yaml
 entity_extensions:
-  hypothesis: ["evolution.provenance/1.0"]
+  hypothesis: ["evolution.provenance/1.0"]   # -> schemas/extension-evolution-provenance-1.0.json
 ```
 
 ```json
-// ~/d/cancer/mechanisms/evolution/schemas/extension-evolution.provenance-1.0.json
+// ~/d/cancer/mechanisms/evolution/schemas/extension-evolution-provenance-1.0.json
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://schemas.science/extension-evolution.provenance-1.0.json",
+  "$id": "https://schemas.science/extension-evolution-provenance-1.0.json",
   "title": "evolution: authored source provenance (no epistemic force)",
   "type": "object",
   "properties": {
@@ -2298,24 +2335,77 @@ entity_extensions:
       "$comment": "13 files. An external system's key. Zero toolkit readers — declared so the field survives strictness, not because anything acts on it."
     },
     "source_stated_evidence": {
-      "type": "string", "minLength": 1,
-      "$comment": "The RENAME TARGET of `author_stated_evidence` (13 files), preserved byte-for-byte. PROVENANCE ONLY: what the SOURCE said about its own evidence. It is not a magnitude, not a coverage claim, and not an input to belief — Task 2b deleted the `_authored_magnitude` chain that once made it one, so this is now structurally true and not merely documented."
+      "type": "string", "pattern": "\\S",
+      "$comment": "The RENAME TARGET of `author_stated_evidence` (13 files), preserved byte-for-byte. `\\S`, NOT `minLength: 1` — a single space has length 1, which is the exact defect Task 6 was already corrected for. PROVENANCE ONLY: what the SOURCE said about its own evidence. It is not a magnitude, not a coverage claim, and not an input to belief — Task 2b deleted the `_authored_magnitude` chain that once made it one, so this is now structurally true and not merely documented."
     }
   }
 }
 ```
 
+> ### The PROJECT-EXTENSION ROOT CONTRACT — an ALLOW-list, because a deny-list has a hole
+>
+> *"Additive only" is not enforced by checking `properties` against core.* A root-level applicator
+> narrows the **composed** record from inside its own `allOf` branch **without ever naming a core
+> property**, so a `properties`-clean extension can still do all of this:
+>
+> | root key | what it does to the composed record |
+> |---|---|
+> | `required: ["verdict"]` | makes a **core** field mandatory for this one project |
+> | `not` / `if`-`then` | forbids composed records the core **admits** |
+> | `additionalProperties` | inside an `allOf` it **cannot see sibling branches**, so it rejects every field the base and the mixin declare — the exact reason the validator composes with `unevaluatedProperties` instead |
+> | `$ref` | pulls in arbitrary constraints from anywhere |
+> | `dependentRequired` | conditions a core field on a project field |
+>
+> **These are not hypothetical.** `extension-bio-geneset-member-1.0.json` **already uses root `not`
+> AND root `additionalProperties`.** That is legal for a *commons* extension — authored in this repo,
+> reviewed beside the mixin it extends. It is **not** legal for a *project* extension, authored in a
+> repo the toolkit never sees.
+>
+> So the contract is stated **positively**. A project extension may declare `properties`, mark its
+> **own** properties `required`, and carry `$schema`/`$id`/`$comment`/`$defs`/`title`/`description`/
+> `type: object`. **Nothing else.** Enumerating what is *forbidden* would leave a hole for every
+> keyword JSON Schema adds after today — the same *"a scope that is LISTED has a hole by
+> construction"* lesson the import guard taught. Enforced by `_certify_root_contract`, plus:
+> **`required ⊆ owned`**, **no collision with base or mixin properties**, and **no two extensions
+> owning one field** (their constraints would silently intersect and neither owner could see the
+> other).
+
+> ### A project's schema dir is searched for EXTENSIONS ONLY — never a base, never a mixin
+>
+> "Search `project_dir` first, then fall back to package resources" — taken literally — lets a
+> project drop its own `mixin-hypothesis-1.0.json` into `schemas/` and **silently redefine the core
+> kind for itself**, re-opening, *through the mechanism built to close it*, the per-project
+> divergence this whole arc exists to end. **A project may OWN fields; it may not REDEFINE the
+> kind.** `SchemaLoader._load` consults `project_dir` only when `is_extension(component)`.
+>
+> And there is **no fallback to a packaged extension** either: `bio.rnaseq` *is* a packaged
+> extension, so a silent fallback would let a project whose own file is missing or misnamed quietly
+> validate against a **toolkit** schema of the same name — a field it does not own, under a contract
+> it cannot see. A project extension **must** be a schema the project owns. (Packaged `bio.*`
+> extensions belong to **commons** records, which carry their own `schema_profile` and never come
+> through `entity_extensions`.)
+
 **Interfaces:**
-- Produces `resolve_profile(kind: str, *, extensions: list[str]) -> ProfileString` — the default
-  base+mixin plus the project's declared extensions. **Tasks 7, 9 and 10 call this, not
-  `default_profile_for_kind`.** (`default_profile_for_kind` remains the zero-extension case.)
+- Produces `resolve_profile(kind: str, *, extensions: list[str], loader: SchemaLoader | None) -> ProfileString`
+  — the default base+mixin plus the project's declared extensions, each certified against the root
+  contract. **Tasks 7, 9 and 10 call this, not `default_profile_for_kind`.**
+  (`default_profile_for_kind` remains the zero-extension case, and `resolve_profile(kind,
+  extensions=[])` is required to equal it exactly.)
+- Produces `load_project_schema(project_root) -> ProjectSchema` (`.validator`, `.profile_for(kind)`)
+  — the **project boundary**. It binds the profile to a loader that can find the project's schemas,
+  because a profile resolved *with* extensions but validated through a package-only loader raises
+  `SchemaNotFoundError` on a schema the project does own. **It certifies every declared entry
+  eagerly**: malformed component, unknown kind, missing file, broken root contract. A stanza is a
+  *claim* about how this project's entities are validated — and `hypothsis:`, one letter out, would
+  otherwise sit in `science.yaml` forever, matching no kind, validating nothing, and **looking
+  exactly like a project whose fields are protected.**
 
 - [x] **Step 1: Write the failing test**
 
 ```python
 # science/model/tests/test_project_extensions.py
 def test_an_extension_ADDS_a_field_without_touching_the_core_mixin(tmp_schema_dir) -> None:
-    _write_extension(tmp_schema_dir, "extension-mm30.assessment-1.0.json", {
+    _write_extension(tmp_schema_dir, "extension-mm30-assessment-1.0.json", {
         "properties": {"confidence_mechanistic_label": {"type": "string"}}
     })
     profile = resolve_profile("hypothesis", extensions=["mm30.assessment/1.0"])
@@ -2350,7 +2440,7 @@ def test_an_extension_may_NOT_redefine_a_core_field(tmp_schema_dir) -> None:
     # Additive ONLY (design §6). An allOf can only narrow, so a redefinition would silently
     # INTERSECT with the core enum rather than replace it -- producing an unsatisfiable schema
     # rather than an error. Catch it at load, loudly.
-    _write_extension(tmp_schema_dir, "extension-bad.x-1.0.json", {
+    _write_extension(tmp_schema_dir, "extension-bad-x-1.0.json", {
         "properties": {"status": {"enum": ["whatever"]}}
     })
     with pytest.raises(ExtensionRedefinesCoreField, match="status"):
@@ -2362,10 +2452,10 @@ def test_the_evolution_extension_declares_BOTH_of_its_fields(tmp_schema_dir) -> 
     # `external_hypothesis_id` (evicted from core) and `source_stated_evidence` (the rename target of
     # `author_stated_evidence`). Two projects, two extensions -- and 13 + 13 authored values that
     # vanish the moment the schema closes if either is missing.
-    _write_extension(tmp_schema_dir, "extension-evolution.provenance-1.0.json", {
+    _write_extension(tmp_schema_dir, "extension-evolution-provenance-1.0.json", {
         "properties": {
             "external_hypothesis_id": {"type": "string", "pattern": "^EH-[0-9]+$"},
-            "source_stated_evidence": {"type": "string", "minLength": 1},
+            "source_stated_evidence": {"type": "string", "pattern": "\\S"},
         }
     })
     profile = resolve_profile("hypothesis", extensions=["evolution.provenance/1.0"],
@@ -2379,7 +2469,7 @@ def test_the_OLD_key_is_dead_even_WITH_the_extension(tmp_schema_dir) -> None:
     # THE test that makes the rename a rename. `author_stated_evidence` is `false` in the core mixin,
     # and `false` inside an allOf is absolute -- no extension can re-admit it. If this ever passes,
     # the corpus has two spellings of one field and the migration silently became optional.
-    _write_extension(tmp_schema_dir, "extension-evolution.provenance-1.0.json", {
+    _write_extension(tmp_schema_dir, "extension-evolution-provenance-1.0.json", {
         "properties": {"source_stated_evidence": {"type": "string"}}
     })
     profile = resolve_profile("hypothesis", extensions=["evolution.provenance/1.0"],
@@ -2395,12 +2485,42 @@ def test_the_OLD_key_is_dead_even_WITH_the_extension(tmp_schema_dir) -> None:
 > schema nothing can satisfy. The failure would surface as *"this valid file is invalid"* with no
 > hint why. **Reject redefinition at load time**, by name.
 
+**And the tests the root contract requires, which the block above does not reach** — a
+`properties`-only check passes every one of these, so each is a distinct hole
+(`test_project_extensions.py` / `test_entity_profiles.py`):
+
+| test | the hole it closes |
+|---|---|
+| `test_a_root_applicator_cannot_narrow_the_composed_record` (7 params: `required`, `not`, `if`, `additionalProperties`, `$ref`, `allOf`, `dependentRequired`) | each narrows the composed record **without naming a core field** |
+| `test_an_extension_MAY_require_a_field_it_owns` | the **control** — a project *is* entitled to require its own field |
+| `test_two_extensions_may_not_both_own_one_field` | two owners → constraints silently intersect |
+| `test_an_extension_may_not_redefine_a_BASE_field_either` | the check must span **both** allOf branches, not just the mixin |
+| `test_a_project_schema_dir_does_not_shadow_a_PACKAGE_schema` | a project redefining the core **kind** for itself |
+| `test_a_MISSPELLED_kind_is_an_error_not_a_silent_no_op` | `hypothsis:` — a stanza nobody reads |
+| `test_a_declared_extension_with_NO_schema_file_is_an_error` | declared, never written |
+| `test_a_project_extension_does_NOT_fall_back_to_a_PACKAGED_schema` | the ownership ruling, made executable |
+| `test_zero_extensions_is_exactly_the_default_profile` | `resolve_profile` must not fork from the default |
+
 - [x] **Step 2: Run and fail.**
 
-- [x] **Step 3: Implement.** `SchemaLoader(project_dir: Path | None)` checks `project_dir` first,
-  then falls back to `importlib.resources` (package schemas). `resolve_profile` appends the parsed
-  extension components and raises `ExtensionRedefinesCoreField` if any extension's `properties`
-  intersect the base's or mixin's. `science.yaml` gains:
+- [x] **Step 3: Implement — four pieces, each closing a way the contract could be believed but not held.**
+
+  1. **`SchemaLoader(project_dir: Path | None)`** consults `project_dir` **only when
+     `is_extension(component)`**, then falls back to `importlib.resources`. A base or a mixin is
+     **never** read from a project dir (see the box above — that is how a project would redefine the
+     core kind for itself).
+  2. **`resolve_profile(kind, *, extensions, loader)`** in the new `resolve.py`. For each component:
+     `_certify_root_contract` (the allow-list; `required ⊆ owned`; `type: object`), then **no
+     collision with base or mixin `properties`** (`ExtensionRedefinesCoreField`), then **no second
+     owner for any field** (`ExtensionContractError`). With `extensions=[]` it must return exactly
+     `default_profile_for_kind(kind)` — it is not permitted to become a second, subtly different
+     spelling of the default, since 20 of the 22 projects go through it declaring nothing.
+  3. **`entity_extensions: dict[str, list[str]]` as a DECLARED field on `ProjectConfig`.** It is
+     `extra="allow"`, so an undeclared stanza parses, is ignored, and does nothing.
+  4. **`load_project_schema(project_root)`** — the project boundary. It pairs the validator with a
+     project-aware loader, and **certifies every declared entry eagerly**: malformed component →
+     unknown kind → missing file → root contract. Nothing about a declaration may wait until some
+     entity happens to be validated.
 
 ```yaml
 entity_extensions:
@@ -2465,33 +2585,27 @@ entity_extensions:
 >   run against the Git-pinned revision would be validating the corpus with a toolkit that has
 >   neither `mixin-hypothesis-1.0` nor `entity_extensions`, and would pass while proving nothing.
 
-> ### Where the implementation departed from this task's text, and why
+> ### What this task's FIRST draft got wrong — corrected in place above, not appended below
 >
-> **1. The extension filenames above are wrong — they would never have been found.** The Files list
-> spells them `extension-mm30.assessment-1.0.json` (a **dot**), but the shipped loader has always
-> flattened dots to hyphens (`loader._filename_for`: `component.name.replace(".", "-")`), which is
-> why all 13 bio extensions are `extension-bio-rnaseq-1.0.json` and not `extension-bio.rnaseq-…`.
-> This task's own `science.yaml` comment says hyphens. The **hyphen** spelling shipped; the Files
-> list was the typo, and a dotted file would have raised `SchemaNotFoundError` at first use.
+> The executable text above **is** the contract; there is no second one. Recorded here only so the
+> same four mistakes are not re-derived: it spelled the extension filenames with a **dot** (the
+> loader has always flattened dots to hyphens — those files would never have been found); it put
+> `resolve_profile` in `profile.py` (**cyclic**); it said "search `project_dir` first" full stop
+> (which lets a project **redefine the core kind for itself**); and it said `minLength: 1` (**a
+> single space has length 1** — the very defect Task 6 had already been corrected for).
 >
-> **2. `resolve_profile` lives in a new `resolve.py`, not in `profile.py`.** It needs `SchemaLoader`
-> to read each extension's `properties` — but `loader` already imports `profile`, so putting it
-> there makes the package **cyclic**. `resolve` is a genuine third layer over the existing two:
-> `profile` parses, `loader` fetches, `resolve` composes a kind + a project's extensions.
->
-> **3. The project schema dir is searched for extensions ONLY — never the base or a mixin.** Step 3
-> said "checks `project_dir` first, then falls back to package resources," full stop. Taken
-> literally, a project could drop its own `mixin-hypothesis-1.0.json` into `schemas/` and **silently
-> redefine the core kind for itself** — re-opening, through the very mechanism built to close it,
-> the per-project divergence this arc exists to end. A project may **own** fields; it may not
-> **redefine** the kind. Regression: `test_a_project_schema_dir_does_not_shadow_a_PACKAGE_schema`.
->
-> **4. `source_stated_evidence` ships as `pattern: "\S"`, not `minLength: 1`.** This task's text
-> still said `minLength: 1` — the exact constraint Task 6 had already been corrected for, because
-> **a single space has length 1**. Applying Task 6's own lesson here rather than re-shipping the bug
-> it fixed.
+> A fifth was found on review, and it is the sharpest: **checking `properties` against core does not
+> enforce "additive only" at all.** `required: ["verdict"]`, `not`, `if`/`then`,
+> `additionalProperties`, `$ref` and `dependentRequired` each narrow the composed record **from
+> inside the extension's own allOf branch, without ever naming a core field** — so a
+> `properties`-clean extension sailed through. Hence the **allow-list** root contract above. *A
+> contract enforced on one keyword is a contract enforced on nothing.*
 
-> ### mm30's three labels are typed and non-empty, but deliberately NOT enum-locked
+> ### mm30's three labels are typed and non-empty, but NOT enum-locked — **RULED BY THE OWNER 2026-07-13**
+>
+> *"Keep the three labels non-empty strings for now. Do not infer an enum from twelve observations;
+> closing that vocabulary belongs to its owner."*
+>
 >
 > The corpus is perfectly consistent — `confidence_label` and `confidence_mechanistic_label` are
 > each one of `{high, moderate, low}`, and `identification` is `observational` (11) or
@@ -2508,17 +2622,27 @@ entity_extensions:
 
 ### Task 7: `resolution.py` — the cross-record layer, **wired**
 
-Schema validates **one record in isolation**. It cannot resolve a successor ID or confirm an
-archive record exists. **Presence is schema; resolution is a validator.** Without this, a
-*present but dangling* `superseded_by:` satisfies the schema and closes the entity with no real
-reason behind it — the hole in a subtler dress.
+Schema validates **one record in isolation**. It cannot resolve a successor ID. **Presence is
+schema; resolution is a validator.** Without this, a *present but dangling* `superseded_by:`
+satisfies the schema and closes the entity with no real reason behind it — the hole in a subtler
+dress.
 
-> **Scope, stated honestly — and one of the two moved.** Design §7.4 lists three cross-record
-> invariants. This module ships **two at load time**: successor resolution and archive-record
-> existence. The third — **every authored verdict has qualifying, resolvable evidence** — is a
-> **graph-time** fact (it needs evidence-line edges, which exist only after materialization), so
-> it ships as a **graph check** (Step 3c below), not here. Rev 1 claimed all three and
-> implemented one; rev 2 deferred the third; **rev 3 implements it, in the right layer.**
+> **Scope — ONE load-time invariant, not two.** Design §7.4 listed three cross-record invariants.
+> Rev 1 claimed all three and implemented one; rev 2 deferred the third; and rev 3's *"two at load
+> time: successor resolution **and archive-record existence**"* is **now down to one, because the
+> second no longer exists.** `archive_ref` was **deleted** in Task 6: it appears in zero source
+> files, is authored by zero corpus files, and — decisively — **has no resolvable namespace**, since
+> `archive.py` keys its index by the archived entity's **own id** (`ArchiveIndex.active_by_id`) and
+> mints no record identifier. There is nothing on the other end of the reference to confirm the
+> existence of. An archived entity's archive record is already reachable **from its `id` alone**.
+> **`archived` now requires `closure_basis`, exactly like `retired`, and this module never
+> constructs `known_archive_refs`.**
+>
+> So: **lineage is the sole load-time resolution invariant** — `superseded_by` and
+> `resynthesized_into` must resolve to a real, live, local entity that is not the entity itself.
+> The third invariant — **every authored verdict has qualifying, resolvable evidence** — is a
+> **graph-time** fact (it needs evidence-line edges, which exist only after materialization), so it
+> ships as a **graph check** (Step 3c below), not here.
 >
 > **And its trigger is corrected (design rev 8).** Rev 2 scoped it to `status: complete`. **Wrong
 > — it applies to EVERY authored verdict.** A `draft` hypothesis asserting `verdict: refuted` with
@@ -2566,9 +2690,51 @@ reason behind it — the hole in a subtler dress.
 
 ```python
 # science/model/tests/test_resolution.py
+from dataclasses import dataclass, field
+
 from science_model.entity_schema.resolution import check_resolution
 
-KNOWN = {"hypothesis:0002-y"}
+
+@dataclass(frozen=True)
+class _Res:
+    status: str
+    canonical_id: str | None = None
+    candidates: tuple[str, ...] = field(default_factory=tuple)
+
+
+class _Targets:
+    """A stand-in with ReferenceResolver's EXACT semantics: alias -> canonical, else unresolved.
+
+    The real wiring passes the real `ReferenceResolver` (Step 3a). This exists so the unit tests can
+    state each alias case in one line -- NOT so they can invent a different resolution rule. If the
+    two ever disagree, the wiring test (`test_resolution_wiring.py`, real resolver, real corpus) is
+    the authority.
+    """
+
+    def __init__(self, aliases: dict[str, str]) -> None:
+        self._aliases = aliases
+
+    def resolve(self, raw: str) -> _Res:
+        canonical = self._aliases.get(raw)
+        if canonical is None:
+            return _Res(status="unresolved")
+        return _Res(status="resolved", canonical_id=canonical)
+
+
+# `0009` is an ALIAS of the live `0009-successor`; `0003-gone` resolves but is ARCHIVED.
+TARGETS = _Targets({
+    "hypothesis:0001-x": "hypothesis:0001-x",
+    "hypothesis:0002-y": "hypothesis:0002-y",
+    "hypothesis:0009": "hypothesis:0009-successor",       # <- the alias
+    "hypothesis:0009-successor": "hypothesis:0009-successor",
+    "hypothesis:0003-gone": "hypothesis:0003-gone",       # <- resolves, but NOT live
+    "hypothesis:x-alias": "hypothesis:0001-x",            # <- an alias OF the entity itself
+})
+LIVE = {"hypothesis:0001-x", "hypothesis:0002-y", "hypothesis:0009-successor"}
+
+
+def _check(entity: dict[str, object]):
+    return check_resolution(entity, targets=TARGETS, live_ids=LIVE)
 
 
 def test_dangling_successor_is_caught() -> None:
@@ -2580,11 +2746,8 @@ def test_dangling_successor_is_caught() -> None:
     # `__iter__` yields (field_name, value) PAIRS, so the expression is simply False and the test
     # would fail against a CORRECT implementation. That is the cost of a typed carrier, and it is
     # the point of one: the violation's parts are addressable instead of buried in a sentence.
-    v = check_resolution(
-        {"id": "hypothesis:0001-x", "status": "superseded",
-         "superseded_by": "hypothesis:9999-nope"},
-        known_ids=KNOWN,
-    )
+    v = _check({"id": "hypothesis:0001-x", "status": "superseded",
+                "superseded_by": "hypothesis:9999-nope"})
     assert len(v) == 1
     assert v[0].entity_id == "hypothesis:0001-x"
     assert v[0].field == "superseded_by"
@@ -2592,39 +2755,56 @@ def test_dangling_successor_is_caught() -> None:
 
 
 def test_resolving_successor_passes() -> None:
-    assert check_resolution(
-        {"id": "hypothesis:0001-x", "status": "superseded",
-         "superseded_by": "hypothesis:0002-y"},
-        known_ids=KNOWN,
-    ) == []
+    assert _check({"id": "hypothesis:0001-x", "status": "superseded",
+                   "superseded_by": "hypothesis:0002-y"}) == []
+
+
+def test_a_LIVE_ALIAS_resolves_and_is_CLEAN() -> None:
+    # ☠️ The case raw membership BLOCKS. `hypothesis:0009` is an alias of the live
+    # `hypothesis:0009-successor`; it is a perfectly good successor, and `ref not in known_ids`
+    # would have called it dangling and refused a CORRECT corpus.
+    assert _check({"id": "hypothesis:0001-x", "status": "superseded",
+                   "superseded_by": "hypothesis:0009"}) == []
+
+
+def test_a_SELF_ALIAS_is_caught() -> None:
+    # ☠️ The case raw `ref == entity_id` MISSES. `hypothesis:x-alias` is an alias OF
+    # `hypothesis:0001-x`, so as a STRING it differs from the entity's id, resolves cleanly, and
+    # sails through as a valid successor -- a closed loop, wearing the check's green.
+    # Identity must be decided AFTER resolution, on canonical ids, on both sides.
+    v = _check({"id": "hypothesis:0001-x", "status": "superseded",
+                "superseded_by": "hypothesis:x-alias"})
+    assert len(v) == 1
+    assert "itself" in v[0].message
+
+
+def test_an_ARCHIVED_target_RESOLVES_and_is_still_a_violation() -> None:
+    # Resolution and liveness are TWO questions. `0003-gone` resolves perfectly -- and naming a
+    # dead entity as the reason you closed is not a reason.
+    v = _check({"id": "hypothesis:0001-x", "status": "superseded",
+                "superseded_by": "hypothesis:0003-gone"})
+    assert len(v) == 1
+    assert "not a live entity" in v[0].message
 
 
 def test_resynthesized_into_is_a_LIST_and_every_member_must_resolve() -> None:
     # One good member does not discharge the list. A resolver that returned on first success --
     # or that reported the FIELD rather than the REF -- passes a suite that only counts findings.
     # The typed carrier is what lets this assert WHICH member dangled.
-    v = check_resolution(
-        {"id": "hypothesis:0001-x", "status": "superseded",
-         "resynthesized_into": ["hypothesis:0002-y", "hypothesis:9999-nope"]},
-        known_ids=KNOWN,
-    )
+    v = _check({"id": "hypothesis:0001-x", "status": "superseded",
+                "resynthesized_into": ["hypothesis:0002-y", "hypothesis:9999-nope"]})
     assert len(v) == 1
     assert v[0].field == "resynthesized_into"
     assert v[0].ref == "hypothesis:9999-nope"       # the BAD member, not the good one
 
 
 def test_self_supersession_is_caught() -> None:
-    # Resolvable, and still meaningless: an entity cannot be its own successor. `known_ids`
-    # contains it, so a pure membership check reports CLEAN here -- which is why this is a
-    # separate rule and not a special case of the one above.
-    v = check_resolution(
-        {"id": "hypothesis:0002-y", "status": "superseded",
-         "superseded_by": "hypothesis:0002-y"},
-        known_ids=KNOWN,
-    )
+    # The literal spelling. Kept BESIDE the alias case above, not replaced by it: they fail
+    # differently, and a check that catches one is not a check that catches the other.
+    v = _check({"id": "hypothesis:0002-y", "status": "superseded",
+                "superseded_by": "hypothesis:0002-y"})
     assert len(v) == 1
     assert v[0].entity_id == "hypothesis:0002-y"
-    assert v[0].ref == "hypothesis:0002-y"
     assert "itself" in v[0].message
 
 
@@ -2632,23 +2812,18 @@ def test_an_ARCHIVED_entity_has_NOTHING_to_resolve() -> None:
     # `archived` is NOT in `_TERMINALS_WITH_STRUCTURE` (design §7.4, corrected): the archive index
     # mints no record id, so there is nothing a ref could point at. It is discharged by
     # `closure_basis` -- which is SHAPE, and shape is Task 6's. This module must not restate it.
-    assert check_resolution(
-        {"id": "hypothesis:0001-x", "status": "archived", "closure_basis": "folded into h5"},
-        known_ids=KNOWN,
-    ) == []
+    assert _check({"id": "hypothesis:0001-x", "status": "archived",
+                   "closure_basis": "folded into h5"}) == []
 
 
 def test_a_basis_closed_entity_needs_no_structure() -> None:
-    assert check_resolution(
-        {"id": "hypothesis:0001-x", "status": "superseded", "closure_basis": "folded into h5"},
-        known_ids=KNOWN,
-    ) == []
+    assert _check({"id": "hypothesis:0001-x", "status": "superseded",
+                   "closure_basis": "folded into h5"}) == []
 
 
 def test_a_live_entity_is_not_checked() -> None:
     assert check_resolution(
-        {"id": "hypothesis:0001-x", "status": "active"},
-        known_ids=set(),
+        {"id": "hypothesis:0001-x", "status": "active"}, targets=TARGETS, live_ids=set()
     ) == []
 ```
 
@@ -2786,37 +2961,114 @@ def _lineage_refs(entity: dict[str, Any]) -> list[tuple[str, str]]:
     return refs
 
 
+# ⚠️ LAYERING. `ReferenceResolver` lives in `science_tool.graph.reference_resolution`, and
+# `science_tool` depends on `science_model` -- NOT the other way round. Importing it here would
+# invert the package dependency and make the two cyclic. So this module states what it NEEDS,
+# structurally, and `science_tool` passes the real resolver in. `ReferenceResolver` satisfies both
+# protocols as-is (extra keyword-only params with defaults are compatible), so there is nothing to
+# adapt and no second implementation to keep in step.
+class Resolved(Protocol):
+    status: str                       # "resolved" | "unresolved" | "scope_ambiguous" | "tag"
+    canonical_id: str | None
+    candidates: tuple[str, ...]
+
+
+class LineageTargets(Protocol):
+    """What this module needs of a resolver. `ReferenceResolver` satisfies it as-is."""
+
+    def resolve(self, raw: str) -> Resolved: ...
+
+
 def check_resolution(
-    entity: dict[str, Any], *, known_ids: set[str]
+    entity: dict[str, Any], *, targets: LineageTargets, live_ids: set[str]
 ) -> list[ResolutionViolation]:
     """Cross-record terminal violations. Empty == clean.
 
     RESOLUTION only. Whether a basis is PRESENT and NON-EMPTY is shape, and shape is the schema's
     (Task 6: `minItems: 1`, `pattern: "\\S"`). Re-checking it here would be a second authority for
     the same fact, which is the collapse this arc exists to undo.
+
+    RESOLVE, then CHECK -- in that order, and never `raw in some_set`. See the box below.
     """
     if entity.get("status") not in _TERMINALS_WITH_STRUCTURE:
         return []
 
-    entity_id = str(entity.get("id") or "<unknown>")
+    raw_id = str(entity.get("id") or "<unknown>")
+    # The entity's OWN id must go through the same resolver, or a self-reference written in any
+    # spelling other than the canonical one slips past the identity check below.
+    self_res = targets.resolve(raw_id)
+    self_canonical = self_res.canonical_id if self_res.status == "resolved" else raw_id
+
     violations: list[ResolutionViolation] = []
 
     for field, ref in _lineage_refs(entity):
-        if ref == entity_id:
-            message = f"{entity_id}: {field} points at itself"
-        elif ref not in known_ids:
+        resolution = targets.resolve(ref)
+
+        if resolution.status == "scope_ambiguous":
             message = (
-                f"{entity_id}: {field} -> {ref!r} does not resolve to any known entity; "
+                f"{raw_id}: {field} -> {ref!r} is owned in more than one loaded scope "
+                f"({', '.join(resolution.candidates)}); a scoped form is required"
+            )
+        elif resolution.status != "resolved" or resolution.canonical_id is None:
+            message = (
+                f"{raw_id}: {field} -> {ref!r} does not resolve to any known entity; "
                 f"the entity is closed and the reason it closed does not exist"
+            )
+        elif resolution.canonical_id == self_canonical:
+            # Catches BOTH the literal self-reference and the alias that resolves BACK to the
+            # entity itself -- which reads as a valid successor and is a closed loop.
+            message = (
+                f"{raw_id}: {field} -> {ref!r} resolves to the entity itself "
+                f"({self_canonical}); an entity cannot be its own successor"
+            )
+        elif resolution.canonical_id not in live_ids:
+            # Resolvable is not enough. An ARCHIVED successor resolves perfectly well and is still
+            # not a reason: the entity it points at is no longer part of the live corpus.
+            message = (
+                f"{raw_id}: {field} -> {ref!r} resolves to {resolution.canonical_id}, which is not "
+                f"a live entity in this project; a closed entity's successor must be one that exists"
             )
         else:
             continue
         violations.append(
-            ResolutionViolation(entity_id=entity_id, field=field, ref=ref, message=message)
+            ResolutionViolation(entity_id=raw_id, field=field, ref=ref, message=message)
         )
 
     return violations
 ```
+
+> ### ⚠️ `ref not in known_ids` is the WRONG QUESTION — it fails in both directions
+>
+> Raw string membership against a set of canonical ids is not resolution, and rev 3's
+> `known_ids: set[str]` was **wrong in both directions at once**:
+>
+> - **It rejects a valid alias.** `superseded_by: hypothesis:0009` — an alias, or a scoped
+>   `evolution:hypothesis:0009`, or any spelling in `aliases:` / the manual alias map — resolves
+>   perfectly under `ReferenceResolver` and is a **real, live successor**. Raw membership calls it
+>   dangling and **blocks a correct corpus.**
+> - **It misses an alias that resolves back to the entity itself.** The self-check was
+>   `ref == entity_id`, a *string* comparison. An alias of `0009` written on `0009` is not equal to
+>   `0009` as a string, resolves fine, and sails through as a valid successor — **a closed loop the
+>   check exists to catch.**
+>
+> **Materialization already resolves these references** through `ReferenceResolver` (`materialize.py`
+> builds it via `ReferenceResolver.from_entities(sources.entities, manual_aliases=…,
+> identity_table=…)`). A validator that answers the question differently from the materializer is a
+> **second authority for one fact** — precisely the collapse this arc exists to undo, and precisely
+> the defect Task 6b's ownership check had one layer up. So: **resolve through the same semantics,
+> then require the CANONICAL target to be in the live local set.**
+>
+> Resolution and liveness are **two questions, and both must be asked.** An *archived* successor
+> resolves perfectly and is still not a reason — the entity it names is no longer in the live corpus.
+>
+> **Four cases, all four tested** (`test_resolution.py`), because each is a different failure:
+>
+> | case | resolves? | canonical target | verdict |
+> |---|---|---|---|
+> | **live alias** (`hypothesis:0009` → `hypothesis:0009-local-…`) | yes | live, ≠ self | **clean** — raw membership would have blocked it |
+> | **self-alias** (an alias of the entity, written on the entity) | yes | **== self** | **violation** — raw `==` would have missed it |
+> | **archived alias** | yes | not live | **violation** — resolvable ≠ a reason |
+> | **unresolved token** (`hypothesis:9999-nope`) | no | — | **violation** |
 
 - [ ] **Step 3b: WIRE it — two call sites, neither optional, and ONE declared carrier between them**
 
@@ -2836,19 +3088,32 @@ class ProjectSources(BaseModel):
     resolution_violations: list[ResolutionViolation] = Field(default_factory=list)
 ```
 
-  Populate it in a **second pass**, after the whole corpus is loaded — it needs `known_ids`, so it
-  cannot be per-file:
+  Populate it in a **second pass**, after the whole corpus is loaded — it needs the resolver and the
+  live set, so it cannot be per-file. **Build the resolver exactly as `materialize` does**, from the
+  same inputs: a validator that resolves differently from the materializer is a second authority for
+  one fact.
 
 ```python
-    known_ids = {entity.id for entity in entities}
+    # The SAME construction as materialize.py -- same entities, same manual aliases, same identity
+    # table. Anything less is a different resolver wearing the same name.
+    resolver = ReferenceResolver.from_entities(
+        entities,
+        manual_aliases=manual_aliases,
+        identity_table=build_identity_table(sources),
+    )
+    live_ids = {entity.canonical_id for entity in entities}   # LIVE and LOCAL: the loaded corpus
     resolution_violations = [
         violation
         for entity in entities
         for violation in check_resolution(
-            entity.model_dump(mode="json"), known_ids=known_ids
+            entity.model_dump(mode="json"), targets=resolver, live_ids=live_ids
         )
     ]
 ```
+
+  > `live_ids` is built from `canonical_id`, **not** `id` — the resolver returns canonical ids, so a
+  > set keyed on raw `id` would fail to contain its own resolver's answers for every entity whose
+  > canonical id differs from its authored one.
 
   **It reads the four fields Step 3 put on the model** — before that, `model_dump` yields a record
   with no lineage at all and this pass reports clean forever.
@@ -5107,7 +5372,12 @@ def test_a_stamped_HYPOTHESIS_satisfies_its_own_schema(tmp_path: Path) -> None:
     assert fm["status"] == "superseded"
     assert fm["superseded_by"] == "hypothesis:0002-new"
     _V.validate_as(fm, _PROFILE)                                           # schema agrees
-    assert check_resolution(fm, known_ids={"hypothesis:0002-new"}) == []   # and it RESOLVES
+    # ...and it RESOLVES. Through the SAME resolver semantics the loader and materialize use --
+    # not a raw id set, which would both reject a valid alias and miss a self-alias (Task 7).
+    targets = ReferenceResolver.from_entities(_load_entities(tmp_path))
+    assert check_resolution(
+        fm, targets=targets, live_ids={"hypothesis:0002-new"}
+    ) == []
 
 
 def test_a_hypothesis_CHAIN_records_the_immediate_superseder(tmp_path: Path) -> None:
@@ -6219,10 +6489,21 @@ committing any of them, and so keep the all-or-none promise it makes (Task 7a).
   that only prints is a step whose output the next step cannot check. Symlinks (`~/d/r/*`) must
   collapse via `.resolve()` or a repo migrates twice.
 
+  **`--project "$WT"` and the import assertion are mandatory here too** (Global constraint 0):
+  `field_inventory` is *this branch's* instrument, and a bare `uv run` resolves a toolkit that does
+  not have it — or, worse, an older one that does and counts differently.
+
 ```bash
-uv run python - <<'PY'
-import json, subprocess
+WT=~/d/science/.claude/worktrees/instrument-result/science   # ...or drop --project once merged
+
+uv run --project "$WT" python - <<'PY'
+import json, pathlib, subprocess
 from pathlib import Path
+
+import science_tool
+_p = pathlib.Path(science_tool.__file__).resolve()
+assert ".worktrees" in _p.parts or "science/src" in str(_p), f"WRONG TOOLKIT: {_p}"
+
 from science_tool.field_inventory import field_inventory
 
 D = Path.home() / "d"
@@ -6261,8 +6542,13 @@ Expect **18 roots / 147 hypotheses / 15 git repos** as of 2026-07-12.
   slice atomic across 15 repositories rather than merely ordered.
 
 ```bash
-uv run science entity migrate-hypothesis --preflight-all --manifest /tmp/claude-1000/roster.json
+uv run --project "$WT" science entity migrate-hypothesis \
+    --preflight-all --manifest /tmp/claude-1000/roster.json
 ```
+
+> **Bare `uv run` here would preflight the corpus against the PINNED toolkit** — one with no
+> `mixin-hypothesis-1.0` and no `entity_extensions` — which cannot fail the way this gate needs to
+> fail, and would certify all 147 files by **not looking at them**. Global constraint 0.
 
 - **Preflight must include `cancer/mechanisms/evolution`.** It is the only root where Task 2b's
   deletion and Task 6b's **`evolution.provenance`** extension actually bite — and the only root
@@ -6280,9 +6566,12 @@ For each root (order per above):
 
 > **Two things every command here gets wrong if copied naively.** `graph build` has **no `--output`**
 > — it writes `knowledge/graph.trig` **in place**, so a snapshot is a `cp` and the working tree must
-> be restored afterwards. And a bare `uv run` inside a consumer resolves the editable `science`
-> source to **`~/d/science/science` (the MAIN checkout)**, so it would migrate and diff using
-> toolkit code *that does not contain this plan*. Both were live defects in this document.
+> be restored afterwards. And a bare `uv run` inside a consumer resolves the toolkit from its
+> **pinned public Git revision** (`science = { git = "…/science.git" }` in the consumer's
+> `pyproject.toml`, revision locked in its `uv.lock`) — *not* from any local checkout — so it would
+> migrate and diff using toolkit code that **does not contain this plan**, and would not error while
+> doing it. `--project "$WT"` plus the import assertion is Global constraint 0. Both were live
+> defects in this document.
 
 ```bash
 set -euo pipefail                                    # the ONLY thing that stops a failed `graph
@@ -6328,18 +6617,49 @@ uv run --project "$WT" science validate            # MUST exit 0 -- under `set -
 - [ ] **Step 3: With every root pinned, re-derive and validate the whole roster.**
 
 ```bash
-uv run python - <<'PY'
-import json, subprocess
+WT=~/d/science/.claude/worktrees/instrument-result/science
+
+uv run --project "$WT" python - <<'PY'
+import json, os, pathlib, subprocess, sys
 from pathlib import Path
+
+WT = os.path.expanduser("~/d/science/.claude/worktrees/instrument-result/science")
+
+def _toolkit_of(root: str) -> str:
+    """Which science_tool does a run in `root` actually load? ASSERT it; never assume."""
+    r = subprocess.run(
+        ["uv", "run", "--project", WT, "python", "-c",
+         "import pathlib, science_tool; print(pathlib.Path(science_tool.__file__).resolve())"],
+        cwd=root, capture_output=True, text=True, check=True,
+    )
+    return r.stdout.strip()
+
 manifest = json.loads(Path("/tmp/claude-1000/roster.json").read_text())
+failed = []
 for m in manifest:
-    r = subprocess.run(["uv", "run", "science", "validate"], cwd=m["root"], capture_output=True)
+    tk = _toolkit_of(m["root"])
+    if ".worktrees" not in tk and "science/src" not in tk:
+        # The pinned PUBLIC revision. It has none of this plan, so it CANNOT fail the way this
+        # gate needs to fail -- it would certify the corpus by not looking at it.
+        sys.exit(f"WRONG TOOLKIT in {m['root']}: {tk}")
+    r = subprocess.run(["uv", "run", "--project", WT, "science", "validate"],
+                       cwd=m["root"], capture_output=True)
     print(f"exit={r.returncode}  {m['root']}")
+    if r.returncode:
+        failed.append(m["root"])
+if failed:
+    sys.exit(f"{len(failed)} root(s) failed validate: {failed}")
 PY
 cd ~/d/science/science && uv run --frozen pytest -q   # the 3 fixture roots live in THIS repo
 ```
 **Every root exits 0, and our own suite is green.** This is the step whose absence caused the
 original incident — and rev 1–3 would have run it over 58% of the corpus and called it clean.
+
+> **The loop must ASSERT the toolkit and EXIT NONZERO.** The earlier form ran bare
+> `uv run science validate` — the **pinned public revision**, which contains none of this plan — and
+> merely *printed* each exit code into a scroll nobody diffs. A run that validates 147 files with a
+> toolkit that has no `mixin-hypothesis-1.0` prints `exit=0` eighteen times and has **checked
+> nothing.** Assert the import path per root, and fail the step, not the reader's attention.
 
 - [ ] **Step 4: Commit per GIT REPOSITORY — 15 commits, not 18.**
 
@@ -6542,6 +6862,13 @@ def severity_for_kind(kind: str) -> Severity:
   run `science validate` across all 18 roots — **all exit 0** — plus our own suite for the three
   fixture roots. Flipping `hypothesis` to ERROR against a corpus that has drifted since
   certification is precisely the original incident.
+
+  **Reuse Task 11 Step 3's loop verbatim** — `--project "$WT"`, the per-root import assertion, and
+  a nonzero exit on any failure (Global constraint 0). This step decides whether a rule becomes
+  **ERROR** for 147 files across 15 repositories. Certifying that against the **pinned public
+  toolkit** — which has neither the mixin nor the checks — would arm the ratchet on the strength of
+  a run that never looked at a single migrated file. *A gate certified by the wrong instrument is
+  not a gate.*
 - [ ] **Step 4: Commit** (15 repos, grouped by `git rev-parse --show-toplevel`).
 
 > ### Out of scope: the verdict-basis ratchet (deferred, not forgotten)
