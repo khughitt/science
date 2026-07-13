@@ -842,9 +842,21 @@ is not certified. STOP.**
   (`graph/store/evidence_signals.py:192-195`) explicitly special-cases `sci:Hypothesis`, and the
   corpus already carries `target: hypothesis:…` lines. **This is the light path, and it is sufficient.**
 
-- [ ] **Step 1: Author one evidence-line in `natural-systems`** — `stance: disputes`, targeting
+- [x] **Step 1: Author one evidence-line in `natural-systems`** — **DONE 2026-07-13**, ruled by the
+  author, `natural-systems@0ccdeffee`:
+  `evidence-line:t585-h09-p3-cycle-lens-bridge-null`. `stance: disputes`, targeting
   `hypothesis:0009-local-structure-globalization-obstruction`, sourced from
   `pipeline/t585/bridge-test-results.json` (the same source `interpretation:0192` cites).
+  `strength: strong`, `evidence_role: direct_test`, `dispute_scope: whole_claim`,
+  **`independence: shared-source`** (group `t585-h03-t164-instrument`), `evidence_type: simulation`,
+  `belief_eligible: true`.
+
+> **The metadata transcribes `0192`; it does not negotiate with the policy.** `simulation` is the
+> classification `0192` already authors (*"simulation_evidence (structural, over the frozen
+> `hypothesis:0003` cycle complex and the t164 lens matrices)"*, `0192:46`) — computational structural
+> evidence over derived artifacts, so no `dataset_usage` and no `evidence.empirical.requires_dataset_usage`
+> ERROR. `shared-source` is what `0192`'s own threats section says: *a single instrument; a genuinely
+> independent re-derivation was out of scope.*
 
 > **⚠️ The epistemic metadata is an AUTHOR'S judgment — do not invent it.** `evidence_role`,
 > `strength`, `independence`, and whether the dispute is **whole-claim/decisive** are exactly the
@@ -852,8 +864,38 @@ is not certified. STOP.**
 > manufacturing the evidence for the verdict it is migrating — the precise fabrication this design
 > exists to prevent. **Ask; do not default.**
 
-- [ ] **Step 2: Verify the basis resolves** — `belief_for_entity` on 0009 now sees a disputing unit,
-  and `verdict.missing-basis` does **not** fire on the file.
+- [x] **Step 2: Verify the basis resolves — DONE 2026-07-13, through the SHIPPED machinery.**
+  `collect_evidence_units(k, p, _evidence_targets_for_uri(k, <0009>))` returns **1 unit**:
+  `stance=disputes`, `is_qualifying_direct_test=True`, `is_proxy_gated=False`. So `0009`'s verdict now
+  has an **admissible, polarity-agreeing basis** and `verdict.missing-basis` will not fire on it.
+
+> ### The basis is REAL and the computed disagreement is REAL. Both. Do not "fix" the second.
+>
+> `is_decisive_refutation` returns **`False`** on this unit — and that is the correct, intended
+> outcome, not a defect to be tuned away. The rule requires an **`independent`** strong whole-claim
+> direct test (`belief.py:258-271`); this instrument is `shared-source`, so the line **contests but
+> cannot eliminate**. `verdict.disagrees-with-computed` (WARN, report-only) is therefore *expected* to
+> fire on `0009`, and it will be telling the truth about two **compatible** facts:
+>
+> 1. the author adjudicated `0009` as `refuted` under **its own pre-registered decision rule**; and
+> 2. Science's **generic** belief policy cannot *independently* reproduce that adjudication from one
+>    shared-source instrument.
+>
+> **Adjusting `independence` to `independent` would silence the warning by manufacturing the evidence
+> for the verdict it is recording** — the exact fabrication this design exists to prevent, and the
+> reason the ⚠️ box above says *ask, do not default*. The honest closures are an independent
+> re-derivation of the cycle complex, or the heavier path (promote P3 to a proposition + author a
+> `falsification`). Neither is Task 3b's.
+>
+> **This is also the first live demonstration that the two rules are independent instruments** —
+> `missing-basis` is satisfied while `disagrees-with-computed` fires. A single "verdict is wrong" rule
+> could not have expressed this state, and would have forced a false choice between deleting the
+> adjudication and faking the evidence.
+
+**Provenance debt, logged not paid:** `natural-systems`' **model catalog is not a `dataset:` entity**
+(all seven of its datasets are external — arXiv, SNAP, SocioPatterns, USGS). That is why an
+`empirical_data` classification could not have declared `dataset_usage` honestly. Real gap; **not this
+task's**, and not a reason to misclassify the evidentiary modality.
 - [x] **Step 3: Generalize the sweep — RUN 2026-07-12. The answer is "most of them."**
 
 > ## ☠️ `verdict.missing-basis` CANNOT SHIP AS AN ERROR. It would break 11 real hypotheses on day one.
