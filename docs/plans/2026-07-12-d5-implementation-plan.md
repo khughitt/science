@@ -356,7 +356,7 @@ Every key gets **exactly one** of four dispositions:
 `related`, `source_refs`, `origins`, `added_by`, `tags`, `ontology_terms`, `datasets`,
 `description`, `aliases`, `priority`, `domain`, `role`, `lens_views`, `review_state`,
 `promoted_from`, `promotion_criteria`, `rival_model_packet`, `external_hypothesis_id`,
-`identification`, `superseded_by`, `resynthesized_into`, `archive_ref`.
+`identification`, `superseded_by`, `resynthesized_into`.
 
 **Core, but owned by the deferred P1 capability subsystem (3):** `required_capabilities`,
 `capability_scope`, `composition_rule` — declared, not absorbed.
@@ -1208,7 +1208,7 @@ CORE = {
 }
 
 # NEW core -- 0 authored today; core BEFORE any reader ships (design rev 8/9).
-NEW_CORE = {"verdict", "closure_basis", "superseded_by", "resynthesized_into", "archive_ref"}
+NEW_CORE = {"verdict", "closure_basis", "superseded_by", "resynthesized_into"}
 
 # §5 PROJECT-EXTENSION -- real fields, owned by ONE project. Must be UNDECLARED in core: admission
 # is Task 6b's to grant, and `false` here would make the extension unsatisfiable.
@@ -1457,7 +1457,7 @@ def test_CORE_keys_are_admitted() -> None:
 
 def test_the_NEW_core_fields_are_admitted_AS_A_SET() -> None:
     # `verdict` and `closure_basis` get their own conditional tests below, and that is exactly how
-    # `archive_ref` and `resynthesized_into` could quietly vanish from the schema while the suite
+    # `resynthesized_into` and `superseded_by` could quietly vanish from the schema while the suite
     # stayed green. They are core BEFORE any reader ships (rev 8/9); nothing else asserts they exist.
     for key in NEW_CORE:
         assert key in MIXIN["properties"], f"{key} is core and undeclared"
@@ -1468,7 +1468,6 @@ def test_archived_requires_a_basis() -> None:
     # The `archived` half of the terminal contract -- the one with no other test in this file.
     with pytest.raises(EntityValidationError):
         V.validate_as(_h(status="archived"), PROFILE)
-    V.validate_as(_h(status="archived", archive_ref="archive/2026/h1.md"), PROFILE)
     V.validate_as(_h(status="archived", closure_basis="folded into the h5 reframing"), PROFILE)
 
 
@@ -1675,15 +1674,15 @@ In `validator.py`, add `validate_as`, make `validate` delegate, and **close the 
     },
     "closure_basis": {
       "description": "The AUTHORED reason a terminal entity closed, required when no structural basis exists. The state is derivable; the reason is not.",
-      "type": "string", "minLength": 1
+      "type": "string", "pattern": "\\S",
+      "$comment": "`\\S`, NOT `minLength: 1` — a single space has length 1, so `closure_basis: \" \"` discharged `retired` while saying nothing."
     },
 
     "superseded_by": { "type": "string", "pattern": "^hypothesis:" },
     "resynthesized_into": {
-      "type": "array", "items": { "type": "string", "pattern": "^hypothesis:" },
-      "$comment": "A LIST — see archive.py:38 and materialize.py:155."
+      "type": "array", "minItems": 1, "items": { "type": "string", "pattern": "^hypothesis:" },
+      "$comment": "A LIST — see archive.py:38 and materialize.py:155. `minItems: 1` because the terminal conditionals key off PRESENCE: `resynthesized_into: []` is present, so it closed a hypothesis naming no successor."
     },
-    "archive_ref": { "type": "string" },
 
     "related": { "type": "array", "items": { "type": "string" } },
     "source_refs": { "type": "array", "items": { "type": "string" } },
@@ -1740,7 +1739,7 @@ In `validator.py`, add `validate_as`, make `validate` delegate, and **close the 
     },
     {
       "if": { "properties": { "status": { "const": "archived" } }, "required": ["status"] },
-      "then": { "anyOf": [ { "required": ["archive_ref"] }, { "required": ["closure_basis"] } ] }
+      "then": { "required": ["closure_basis"] }
     }
   ],
 
@@ -1817,6 +1816,40 @@ In `validator.py`, add `validate_as`, make `validate` delegate, and **close the 
 }
 ```
 
+> ### PRESENCE is not a BASIS — the four terminal conditionals fail open unless the VALUE is constrained
+>
+> The terminal rules are `required`, and **`required` is satisfied by an empty value.** The first
+> shipped mixin therefore accepted every one of these:
+>
+> | payload | why it passed | what it means |
+> |---|---|---|
+> | `superseded` + `resynthesized_into: []` | the key is present | closed, naming **no successor** |
+> | `archived` + `archive_ref: ""` | `{"type": "string"}` admits `""` | closed, pointing **nowhere** |
+> | `retired` + `closure_basis: " "` | **`minLength: 1` — a space has length 1** | closed, **saying nothing** |
+>
+> Each closes a hypothesis while naming nothing, and **the second-order damage is the part that
+> matters**: Task 7's cross-record resolver then finds **no reference to dangle**, and reports
+> nothing. *The hole survives inside the check built to close it, wearing that check's green as
+> evidence.* `minItems: 1` and `pattern: "\S"` are what make the basis a basis — and the six
+> payloads are parametrized as regressions, **with controls**, so a later relaxation cannot pass.
+
+> ### `archive_ref` is DELETED — a field whose referent nobody can name is not a basis
+>
+> Asked what a valid `archive_ref` would even point *at*, the codebase has no answer. It appears in
+> **zero source files**, is authored by **zero corpus files**, and — decisively — **has no resolvable
+> namespace**: `archive.py` keys its index by the archived entity's **own id**
+> (`ArchiveIndex.active_by_id`) and mints no record identifier, so there is nothing on the other end
+> of the reference. Path-like (`archive/2026/h1.md`) and `arc:*` spellings both appeared in earlier
+> drafts of this plan; **neither resolves to anything**, which is exactly why Task 7 could not have
+> built `known_archive_refs` faithfully.
+>
+> An archived entity's archive record is **already reachable from its `id` alone**. An authored
+> pointer to it would be a *second, unversioned spelling of a derivable fact* — the precise collapse
+> (`status` vs `phase`) this whole arc exists to undo. **I invented this field in the plan and never
+> certified it against the archive layer.** It fails that certification, so `archived` now requires
+> `closure_basis`, exactly like `retired`. `NEW_CORE` drops to four, and **Task 7 no longer
+> constructs `known_archive_refs` at all.**
+
 > ### The schema is authoritative for SHAPE — so it must actually *have* one
 >
 > The first draft of this mixin declared `"review_state": {}`, `"composition_rule": {}`,
@@ -1882,7 +1915,7 @@ In `validator.py`, add `validate_as`, make `validate` delegate, and **close the 
 > closing them is a faithful translation rather than added strictness.
 >
 > Two facts fell out of the sweep for free, and both corroborate Task 2: `superseded_by`,
-> `resynthesized_into` and `archive_ref` are authored by **0 files** (`NEW_CORE` is genuinely new),
+> `superseded_by` and `resynthesized_into` are authored by **0 files** (`NEW_CORE` is genuinely new),
 > and **165/165 ids already match `^hypothesis:`** — so the mixin's new id pin costs nothing.
 >
 > **The `rival_model_packet` silent drop is a real defect and is filed as one** (see *Deferred*, end
@@ -2370,9 +2403,35 @@ reason behind it — the hole in a subtler dress.
 > have left the front door open. **`verdict` is an evidence-constrained adjudication** (rev 8's
 > contract), and the constraint is not conditional on the lifecycle.
 
+> ### ⚠️ A CHECK CANNOT SHIP BEFORE THE SURFACE IT OBSERVES — three of this task's claims were inert
+>
+> Task 6 established the rule when the packet `$def` and its model fields had to move together:
+> *"schema and model move together" names **the window in which the corpus is broken**, and the
+> window has to be zero.* The same rule, applied to a **check**, says: **a check and the surface it
+> reads ship in the same commit.** A check that runs against a surface which does not exist yet does
+> not fail — **it passes, silently, on nothing.** That is the silent instrument this entire arc
+> exists to abolish, and it is *worse* than no check, because its green reads as coverage.
+>
+> Three of this task's claims were exactly that, and the fix is to **pull the substrate forward, not
+> to push the checks back** — the checks are the deliverable:
+>
+> | inert claim | surface it needs | was landing in | now lands in |
+> |---|---|---|---|
+> | loader second pass reads `superseded_by` / `resynthesized_into` / `closure_basis` / `verdict` | those four fields **on `HypothesisEntity`** — the model drops them today, so the pass would inspect already-projected entities and see **nothing** | Task 8 | **here** (Step 3a) |
+> | the verdict-agreement **graph** check | **`sci:verdict` in the graph** — materialization emits `projectStatus` and `disposition`, and no verdict at all, so the check reads `None` for every hypothesis and finds no disagreement, ever | Task 10 | **here** (Step 3b) — *emission only; the `sci:disposition` **deletion** stays in Task 10, where `attention.py` is rewired* |
+> | `edit_entity` refuses a dangling successor | **`edit_entity(…, superseded_by=…)`** — the signature does not accept it (`entities.py:935`), so the test cannot even be written | here | **Task 10**, which owns the write boundary |
+>
+> The `edit_entity` guard is the one that moves *out*: Task 10 already ships that boundary, its
+> atomic `closure_basis` contract and its test. Task 7 stops claiming a call site it cannot build.
+
 **Files:**
 - Create: `science/model/src/science_model/entity_schema/resolution.py`
-- Modify: `science/src/science_tool/graph/sources.py`, `entities.py` (`edit_entity`), `validate/checks/`
+- **Modify: `science/model/src/science_model/entities.py` (`HypothesisEntity`)** — the four
+  projection fields (`verdict`, `closure_basis`, `superseded_by`, `resynthesized_into`), **moved
+  forward from Task 8**: the loader pass below cannot observe what the model drops.
+- **Modify: `science/src/science_tool/graph/materialize.py:646`** — emit `sci:verdict` beside
+  `sci:projectStatus`. **Additive only.**
+- Modify: `science/src/science_tool/graph/sources.py`, `validate/checks/`
 - Test: `science/model/tests/test_resolution.py`, `science/tests/test_resolution_wiring.py`
 
 - [ ] **Step 1: Write the failing tests** — unit **and wiring**. Rev 1 shipped the module unwired
@@ -2391,7 +2450,7 @@ def test_dangling_successor_is_caught() -> None:
     v = check_resolution(
         {"id": "hypothesis:0001-x", "status": "superseded",
          "superseded_by": "hypothesis:9999-nope"},
-        known_ids=KNOWN, known_archive_refs=set(),
+        known_ids=KNOWN,
     )
     assert len(v) == 1 and "9999-nope" in v[0]
 
@@ -2400,7 +2459,7 @@ def test_resolving_successor_passes() -> None:
     assert check_resolution(
         {"id": "hypothesis:0001-x", "status": "superseded",
          "superseded_by": "hypothesis:0002-y"},
-        known_ids=KNOWN, known_archive_refs=set(),
+        known_ids=KNOWN,
     ) == []
 
 
@@ -2408,7 +2467,7 @@ def test_resynthesized_into_is_a_LIST_and_every_member_must_resolve() -> None:
     v = check_resolution(
         {"id": "hypothesis:0001-x", "status": "superseded",
          "resynthesized_into": ["hypothesis:0002-y", "hypothesis:9999-nope"]},
-        known_ids=KNOWN, known_archive_refs=set(),
+        known_ids=KNOWN,
     )
     assert len(v) == 1 and "9999-nope" in v[0]
 
@@ -2417,30 +2476,32 @@ def test_self_supersession_is_caught() -> None:
     v = check_resolution(
         {"id": "hypothesis:0002-y", "status": "superseded",
          "superseded_by": "hypothesis:0002-y"},
-        known_ids=KNOWN, known_archive_refs=set(),
+        known_ids=KNOWN,
     )
     assert len(v) == 1 and "itself" in v[0]
 
 
-def test_dangling_archive_ref_is_caught() -> None:
-    v = check_resolution(
-        {"id": "hypothesis:0001-x", "status": "archived", "archive_ref": "arc:nope"},
-        known_ids=KNOWN, known_archive_refs={"arc:real"},
+def test_an_EMPTY_lineage_list_is_not_a_lineage() -> None:
+    # The schema's `minItems: 1` already rejects this, so the resolver should never SEE it -- but
+    # the resolver is also called from `edit_entity` (Task 10) on payloads that have not been
+    # schema-validated yet. A basis that names nothing must not resolve to "clean".
+    assert check_resolution(
+        {"id": "hypothesis:0001-x", "status": "superseded", "resynthesized_into": []},
+        known_ids=KNOWN,
     )
-    assert len(v) == 1 and "arc:nope" in v[0]
 
 
 def test_a_basis_closed_entity_needs_no_structure() -> None:
     assert check_resolution(
         {"id": "hypothesis:0001-x", "status": "superseded", "closure_basis": "folded into h5"},
-        known_ids=KNOWN, known_archive_refs=set(),
+        known_ids=KNOWN,
     ) == []
 
 
 def test_a_live_entity_is_not_checked() -> None:
     assert check_resolution(
         {"id": "hypothesis:0001-x", "status": "active"},
-        known_ids=set(), known_archive_refs=set(),
+        known_ids=set(),
     ) == []
 ```
 
@@ -2453,18 +2514,44 @@ def test_validate_reports_a_dangling_successor(tmp_project) -> None:
     assert any("9999-nope" in f.message for f in findings)
 
 
-def test_edit_entity_refuses_a_dangling_successor(tmp_project) -> None:
-    write_hypothesis(tmp_project, "0001-x", status="active")
-    with pytest.raises(EntityCommandError, match="9999-nope"):
-        edit_entity(tmp_project, "hypothesis:0001-x",
-                    status="superseded", superseded_by="hypothesis:9999-nope")
-    # FAILS BEFORE WRITING.
-    assert 'status: "active"' in (tmp_project / "entities/hypotheses/0001-x.md").read_text()
+def test_the_LOADER_can_actually_SEE_the_terminal_fields(tmp_project) -> None:
+    # The test that would have caught the inert wiring. `check_resolution` reads PROJECTED
+    # entities, and `HypothesisEntity` dropped all four terminal fields until Step 3 -- so the
+    # second pass would have inspected a stripped record, found no reference, and reported clean.
+    # Assert the SUBSTRATE, not just the finding: a green resolver over a blind loader is the
+    # silent instrument this arc exists to abolish.
+    from science_model.entities import HypothesisEntity
+
+    for field in ("verdict", "closure_basis", "superseded_by", "resynthesized_into"):
+        assert field in HypothesisEntity.model_fields, f"{field}: the check cannot see what the model drops"
+
+    write_hypothesis(tmp_project, "0001-x", status="superseded",
+                     extra={"superseded_by": "hypothesis:9999-nope"})
+    entity = load_project_sources(tmp_project).entities["hypothesis:0001-x"]
+    assert entity.superseded_by == "hypothesis:9999-nope"   # it SURVIVED the projection
 ```
+
+> `edit_entity`'s refusal has **moved to Task 10** — `edit_entity` does not accept `superseded_by`
+> today (`entities.py:935`), so the test could not be written here, let alone pass. Task 10 owns
+> that signature, its atomic `closure_basis` contract, and this guard.
 
 - [ ] **Step 2: Run and fail.**
 
-- [ ] **Step 3: Implement**
+- [ ] **Step 3: The four projection fields — MOVED FORWARD from Task 8.** Without them the loader
+  pass below reads a stripped record. `science/model/src/science_model/entities.py`,
+  `HypothesisEntity`:
+
+```python
+    verdict: Literal["partially-supported", "supported", "weakened", "refuted"] | None = None
+    closure_basis: str | None = None
+    superseded_by: str | None = None
+    resynthesized_into: list[str] = Field(default_factory=list)
+```
+
+  Task 8 still owns their **certification** (the reconciliation battery against the schema); this
+  task owns their **existence**, because it is the first task that reads them.
+
+- [ ] **Step 3a: Implement `resolution.py`**
 
 ```python
 # science/model/src/science_model/entity_schema/resolution.py
@@ -2504,9 +2591,7 @@ def _lineage_refs(entity: dict[str, Any]) -> list[tuple[str, str]]:
     return refs
 
 
-def check_resolution(
-    entity: dict[str, Any], *, known_ids: set[str], known_archive_refs: set[str]
-) -> list[str]:
+def check_resolution(entity: dict[str, Any], *, known_ids: set[str]) -> list[str]:
     """Violations of cross-record terminal invariants. Empty == clean."""
     if entity.get("status") not in _TERMINALS_WITH_STRUCTURE:
         return []
@@ -2523,23 +2608,41 @@ def check_resolution(
                 f"the entity is closed and the reason it closed does not exist"
             )
 
-    archive_ref = entity.get("archive_ref")
-    if isinstance(archive_ref, str) and archive_ref and archive_ref not in known_archive_refs:
-        violations.append(
-            f"{entity_id}: archive_ref -> {archive_ref!r} does not resolve to any archive record"
-        )
     return violations
 ```
 
-- [ ] **Step 3b: WIRE it — three call sites, none optional**
+- [ ] **Step 3b: WIRE it — two call sites, neither optional**
   1. **`graph/sources.py`**, after the whole corpus is loaded (it needs `known_ids`, so it is a
-     *second pass*, not per-file): collect all entity ids and archive refs
-     (`archive.py`'s index), then `check_resolution` each terminal entity; append a
-     `SourceFailure`/warning per violation.
+     *second pass*, not per-file): collect all entity ids, then `check_resolution` each terminal
+     entity; append a `SourceFailure`/warning per violation. **It reads the four fields Step 3 put
+     on the model** — before that, this pass sees a stripped record and reports clean forever.
   2. **`validate/checks/`** — a new check surfacing those violations as `Result`s at **WARN**
      (ERROR arrives with Task 12's ratchet, per kind).
-  3. **`entities.edit_entity`** — before writing, so a terminal transition with a dangling
-     successor **fails before a byte is written** (Task 10).
+
+  *(The third call site — `edit_entity` — is **Task 10's**. It does not accept `superseded_by`
+  today, so there is nothing here to wire into.)*
+
+- [ ] **Step 3b-ii: Emit `sci:verdict`** — **without this, Step 3c's check is inert.**
+  `materialize.py:646` emits `projectStatus` and `disposition` and **no verdict at all**, so the
+  graph check below would read `None` for every hypothesis and find a disagreement **never**. One
+  triple, beside the status:
+
+```python
+    knowledge.add((uri, SCI_NS.projectStatus, Literal(entity.status)))
+    verdict = getattr(entity, "verdict", None)
+    if verdict:
+        knowledge.add((uri, SCI_NS.verdict, Literal(verdict)))
+```
+
+  **Additive only.** Deleting `sci:disposition` stays in **Task 10**, where `attention.py:125-137`
+  (its only consumer) is rewired in the same commit — removing a predicate while a reader still
+  queries it is the same class of gap in the other direction.
+
+  Gate it in the artifact, not just the unit test: the graph diff must show **new `sci:verdict`
+  triples on exactly the hypotheses that carry one, and no other triple changed.** Until Task 9
+  migrates the corpus, zero hypotheses carry a verdict — **so the expected diff here is EMPTY**,
+  and that is a real result only because the emission is proven by a fixture test that *does*
+  carry one. A green from a corpus with nothing to emit proves nothing on its own.
 
 > ### ⚠️ Task 2b orphaned three guarantees — but a VERDICT IS NOT AN ORDINAL BELIEF LADDER.
 >
@@ -2754,7 +2857,23 @@ def test_missing_basis_stays_WARN_even_when_the_KIND_is_certified() -> None:
     assert "verdict.missing-basis" not in gates.TIERS["hygiene"]
 ```
 
-- [ ] **Step 4: Green** — unit + wiring, both packages, plus `ruff` and `pyright`.
+- [ ] **Step 4: Green** — unit + wiring, **both suites whole**, plus `ruff` and `pyright`. Task 7
+  now touches `science_model.entities` (Step 3) and `science_tool.graph.materialize` (Step 3b-ii),
+  so neither suite is optional.
+
+```bash
+cd science/model && uv run --frozen pytest
+cd science       && uv run --frozen pytest
+cd science       && uv run ruff check && uv run pyright
+```
+
+- [ ] **Step 4b: Prove the emission in the ARTIFACT.** Rebuild `multiple-myeloma` through this
+  worktree (`uv run --project "$WT" science graph build --local-only`, `set -euo pipefail`, `cp`,
+  restore — the Task 6 Step 4b procedure verbatim) and diff against the saved "before" graph.
+  **Expected: byte-identical**, because no corpus hypothesis carries a `verdict` until Task 9. That
+  green is only worth anything alongside the fixture test that proves the triple *is* emitted when a
+  verdict exists — a diff over a corpus with nothing to emit cannot distinguish "additive and
+  correct" from "does nothing at all."
 
 - [ ] **Step 5: Commit.**
 
@@ -3110,8 +3229,7 @@ _BATTERY: dict[str, list[Any]] = {
     "verdict": [42, "nope", "refuted"],
     "closure_basis": [42, "", "the assay was discontinued"],
     "superseded_by": [42, "topic:x", "hypothesis:0002-y"],
-    "resynthesized_into": [42, [42], ["topic:x"], ["hypothesis:0002-y"]],
-    "archive_ref": [42, "archive/0001.md"],
+    "resynthesized_into": [42, [42], ["topic:x"], [], ["hypothesis:0002-y"]],
 }
 ```
 
@@ -3182,8 +3300,13 @@ class HypothesisEntity(ProjectEntity):
     closure_basis: str | None = None
     superseded_by: str | None = None
     resynthesized_into: list[str] = Field(default_factory=list)
-    archive_ref: str | None = None
 ```
+
+> **These four fields land in TASK 7, not here** — Task 7's loader pass reads them, and a check
+> cannot observe a field the model drops. They are shown here because Task 8's reconciliation
+> battery is what *certifies* them against the schema; by the time this task runs they already
+> exist. **`archive_ref` is gone entirely** (Task 6 — no reader, no author, no resolvable
+> namespace).
 
 **Step 3b-ii — `description` on `Entity`** (`entities.py`, beside `title`). **One line, and it closes
 a live silent drop** found by `test_every_field_the_schema_ADMITS_is_REPRESENTABLE_in_the_projection`:
@@ -3460,9 +3583,15 @@ def migrate(project_root: Path, *, apply: bool) -> list[Path]:
 **Files:**
 - `science/src/science_tool/hypotheses_cli.py:28-34,62-64` — `--phase` → `--status`; the `promotion-criteria` section now triggers on `status == "draft"`
 - `science/src/science_tool/entities_cli.py:94-125` — add `--verdict`, `--closure-basis`, `--superseded-by`
-- `science/src/science_tool/entities.py:935-969` (`edit_entity`) — **the lifecycle boundary**
+- `science/src/science_tool/entities.py:935-969` (`edit_entity`) — **the lifecycle boundary**, and
+  **the `check_resolution` guard MOVED HERE from Task 7**: a terminal transition with a dangling
+  successor must fail **before a byte is written**. Task 7 could not host it — `edit_entity` does not
+  accept `superseded_by` until this task adds it, so the guard had nothing to guard.
 - `science/src/science_tool/entities.py:1377-1379` (`_validate_status`) — also fix its raw `KeyError` (it indexes `_STATUS_VALUES[kind]` and ignores project-local manifests, unlike `valid_statuses`)
-- `science/src/science_tool/graph/materialize.py` — emit `sci:verdict`; **delete** `sci:disposition`
+- `science/src/science_tool/graph/materialize.py` — **delete** `sci:disposition` (its emission of
+  `sci:verdict` landed in **Task 7**, which needed it to make the verdict check observable). The
+  deletion belongs *here* because `attention.py` below is its only reader, and predicate and reader
+  must go in one commit.
 - `science/src/science_tool/graph/attention.py:125-137` — delete the `sci:disposition` terminal-exclusion; use the lifecycle instead
 - `science/src/science_tool/validate/checks/dataset_capabilities.py:24-54` — **hypothesis branch only**
 - `science/src/science_tool/validate/checks/hypotheses.py:23,64-70,127-136` — delete the `phase` check
@@ -3511,6 +3640,17 @@ def test_edit_status_is_the_lifecycle_boundary(tmp_project) -> None:
     edit_entity(tmp_project, "hypothesis:0001-x", status="retired", closure_basis="no samples")
     t = (tmp_project / "entities/hypotheses/0001-x.md").read_text()
     assert 'status: "retired"' in t and 'closure_basis: "no samples"' in t
+
+
+def test_edit_entity_refuses_a_DANGLING_successor(tmp_project) -> None:
+    # MOVED HERE FROM TASK 7, which could not host it: `edit_entity` had no `superseded_by`
+    # parameter until this task, so the guard had nothing to guard and the test would not run.
+    # `check_resolution` (Task 7) is the checker; this is its write-boundary call site.
+    with pytest.raises(EntityCommandError, match="9999-nope"):
+        edit_entity(tmp_project, "hypothesis:0001-x",
+                    status="superseded", superseded_by="hypothesis:9999-nope")
+    # FAILS BEFORE WRITING -- the whole point of putting it at the boundary.
+    assert 'status: "active"' in (tmp_project / "entities/hypotheses/0001-x.md").read_text()
 ```
 
 - [ ] **Step 2: Run and fail.**
