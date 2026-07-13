@@ -182,7 +182,7 @@ it. Phase 0 below is that work.
 |---|---|---|---|
 | **0 — Declare the fields (P0)** | 1, 2, **2b** | **No** *(2b fixes a live bug)* | every authored key given one of four dispositions; the `_authored_magnitude` chain deleted |
 | **1 — Certify the mapping** | 3–4 | **No** | inventory + adjudication artifact; writes nothing |
-| **2 — Schema substrate (P2)** | 5, 6, **6b**, 7, **7a** | **No** | base 2.0, core mixin, **project extensions**, D3 validator + verdict-evidence graph check — all **wired**, strict, green; **the D4 supersedable triangle closed and computed** |
+| **2 — Schema substrate (P2)** | 5, 6, **6b**, 7, **7a** | **No** | base 2.0, core mixin, **project extensions**, D3 validator + verdict-evidence graph check — all **wired**, strict, green; **the D4 gate executed, and three of its four legs landed** |
 | **3 — The atomic slice (P2m)** | 8–11 | **YES** | all 18 roots migrated, graph-diffed, validate exit 0 |
 | **4 — Ratchet (P3)** | 12 | No | `hypothesis` → ERROR |
 
@@ -196,9 +196,23 @@ the core mixin for all 22 projects.
 **A vocabulary is not a capability (design D4).** Declaring `superseded` in a status enum does not
 make a kind *supersedable*: the lineage relation must admit it as an endpoint, and the supersession
 operation must produce a record that satisfies the schema. **All three, or the terminal is a dead
-letter.** Task 7a closes that triangle for `hypothesis` and — for the first time — *executes* the
-D4 gate instead of stating it, which is how we learned it fails for **twelve** other kinds and not
-the three the design named.
+letter.**
+
+The triangle for `hypothesis` is closed across **two** tasks, and it matters which:
+
+- **Task 7a** *executes* the D4 gate instead of stating it — which is how we learned it fails for
+  **twelve** other kinds and not the three the design named — and lands the legs it can while
+  Phase 2 is still meaning-neutral: the schema admits the canonical `relations:` edge, the
+  `sci:supersedes` relation admits `hypothesis` as an endpoint, and the *operation* is fixed
+  generically (exercised on `interpretation`, which is supersedable today).
+- **Task 8** lands the **vocabulary** leg — `superseded` in the hypothesis descriptor — and that is
+  the act that closes the triangle. Until it lands, `_supports_superseded("hypothesis")` is `False`,
+  `mark_superseded` routes every hypothesis to `skipped_kinds`, and the derived gate cannot even
+  *see* `hypothesis` (it is absent from the `declares superseded` population). Task 8 is therefore
+  also where the hypothesis apply-tests live.
+
+Landing the vocabulary leg **first** would have taken the half-wired count from twelve to thirteen
+and failed the gate — which is precisely what the gate is for.
 
 ---
 
@@ -2583,12 +2597,15 @@ def test_the_LOADER_can_actually_SEE_the_terminal_fields(tmp_project) -> None:
 ```
 
 > The write-boundary refusal has **moved to Task 10** — `edit_entity` validates nothing today
-> (`entities.py:935`), so there was no boundary here to hang a guard on. **Task 7a adds the derived
-> writer** `stamp_supersession` (the operation leg of the D4 triangle: `mark_superseded` must write
-> the inverse it derives). **Task 10 adds the ENFORCEMENT** over *both* entry points — schema
-> validation at the write boundary, the atomic `closure_basis` contract, and the dangling-successor
-> refusal. `edit_entity` never gains a `superseded_by` parameter; a derived field with an authored
-> spelling is the thing rev 10 deleted.
+> (`entities.py:935`), so there was no boundary here to hang a guard on. **Task 7a splits that
+> boundary into `prepare_entity_write` / `commit_entity_write`** and adds the derived writer
+> `consolidation._prepare_supersession` on top of it (the operation leg of the D4 triangle:
+> `mark_superseded` must write the inverse it derives). **Task 10 adds the ENFORCEMENT** inside
+> `prepare_entity_write`, so *both* entry points inherit it — schema validation, the atomic
+> `closure_basis` contract, and the dangling-successor refusal. `edit_entity` never gains a
+> `superseded_by` parameter, and neither does the derived writer: **it takes the graph and reads the
+> superseder off the canonical edge.** A derived field with any caller-supplied spelling — authored
+> or not — is the thing rev 10 deleted.
 
 - [ ] **Step 2: Run and fail.**
 
@@ -2740,10 +2757,12 @@ class ProjectSources(BaseModel):
      projection and not a re-parse — a `list[str]` would have forced the check to recover
      `entity_id` and `field` out of an English sentence.
 
-  *(The third call site — the **write boundary** — is **Task 10's**. Task 7a adds the derived writer
-  `stamp_supersession`; Task 10 wraps both it and `edit_entity` in schema validation + this
-  resolution guard. `edit_entity` never gains a `superseded_by` parameter: the field is **derived**,
-  and an authored spelling of it is exactly what rev 10 deleted.)*
+  *(The third call site — the **write boundary** — is **Task 10's**. Task 7a splits that boundary
+  into `prepare_entity_write` / `commit_entity_write` and builds the derived writer
+  `consolidation._prepare_supersession` on it; Task 10 puts schema validation + this resolution guard
+  **inside `prepare_entity_write`**, so both entry points inherit them. Neither writer takes a
+  `superseded_by` parameter: the field is **derived**, and a caller-supplied spelling of it — from a
+  CLI flag or from Python — is exactly what rev 10 deleted.)*
 
 - [ ] **Step 3b-ii: Emit `sci:verdict`** — **without this, Step 3c's check is inert.**
   `materialize.py:646` emits `projectStatus` and `disposition` and **no verdict at all**, so the
@@ -3181,7 +3200,7 @@ cd science       && uv run ruff check && uv run pyright
 
 ---
 
-### Task 7a: The D4 supersedable gate — close the triangle, and **compute** it
+### Task 7a: The D4 supersedable gate — **compute** it, and land three of its four legs
 
 > **D5 shipped a `superseded` terminal for a kind that cannot be superseded.** The design states a
 > bidirectional gate (§D4) and D5 implemented **none** of it:
@@ -3224,19 +3243,28 @@ cd science       && uv run ruff check && uv run pyright
 **Files:**
 - Modify: `science/model/src/science_model/schemas/mixin-hypothesis-1.0.json` (admit `relations:`)
 - Modify: `science/model/src/science_model/profiles/core.py:687` (`supersedes` endpoints)
-- Modify: `science/src/science_tool/entities.py:935` — add `stamp_supersession`, the **derived**
-  writer. **`edit_entity` is NOT touched:** `superseded_by` is derived, and putting it on the
-  authored-edit surface would re-mint the second spelling rev 10 deleted.
-- Modify: `science/src/science_tool/consolidation.py:195-240` (`SupersedesGraph.superseder_by_id` /
-  `.superseded_by_id`; the kind-pair refusal; the idempotent reconciliation)
+- Modify: `science/src/science_tool/entities.py:935` — **split `edit_entity` into
+  `prepare_entity_write` (find + merge + render + validate; writes nothing) and
+  `commit_entity_write` (atomic replace)**. `edit_entity` becomes prepare-then-commit and is
+  otherwise unchanged. **It gains no `superseded_by` parameter** — that field is derived, and
+  putting it on the authored-edit surface would re-mint the second spelling rev 10 deleted.
+- Modify: `science/src/science_tool/consolidation.py:195-240` — the graph carries every edge-admission
+  outcome and both inverses; `_prepare_supersession` is the derived writer and it is **module-private**;
+  the kind-pair refusal; the idempotent reconciliation.
 - Test: `science/model/tests/test_supersedable_gate.py`, `science/model/tests/test_mixin_hypothesis.py`,
   `science/tests/test_consolidation_mark_superseded.py`
 
 **Interfaces:**
-- Consumes: `PROFILE`, `V.validate_as` (Task 6); `relation_allows_kinds` (`relations.py:19`)
-- Produces: `stamp_supersession(project_root, ref, *, superseded_by) -> EntityWriteResult` (the
-  **derived** writer — **not** a parameter on `edit_entity`, and reachable from no CLI flag);
-  `SupersessionError`; `report["mismatched_kinds"]`, `report["to_repair"]`, `report["repaired"]`
+- Consumes: `PROFILE`, `V.validate_as` (Task 6); `relation_allows_kinds` (`relations.py:19`);
+  `load_archive_index` (`archive.py`, already used by `entities._reject_if_archived`)
+- Produces: `prepare_entity_write(project_root, ref, **fields) -> PreparedWrite` and
+  `commit_entity_write(prepared) -> EntityWriteResult` (the two halves of the one write boundary);
+  `SupersessionError`; `report["mismatched_kinds"]`, `report["unresolved_targets"]`,
+  `report["archived_targets"]`, `report["to_repair"]`, `report["repaired"]`
+- **Does NOT produce a public `stamp_supersession`.** The derived writer is
+  `consolidation._prepare_supersession(project_root, graph, member)` — it takes the **graph**, not a
+  lineage string, so the superseder is read from `graph.superseder_by_id` (i.e. from the canonical
+  edge) and **there is no argument a caller could corrupt.** See the box below.
 
 ```python
 # consolidation.py -- the relation kind, resolved ONCE from the profile. Used by the edge-admission
@@ -3250,14 +3278,15 @@ def _supersedes_kind() -> RelationKind:
 
 
 class SupersessionError(RuntimeError):
-    """An authored `sci:supersedes` edge the relation model forbids. Apply is all-or-none."""
+    """An authored `sci:supersedes` edge that is not admissible as an edge -- the relation model
+    forbids the kind pair, or the target resolves nowhere. Apply is all-or-none over these."""
 
-    def __init__(self, mismatched: list[dict[str, str]]) -> None:
+    def __init__(self, blocking: list[dict[str, str]]) -> None:
         super().__init__(
             "refusing to apply: "
-            + "; ".join(f"{m['superseder']} -> {m['id']} ({m['reason']})" for m in mismatched)
+            + "; ".join(f"{b['superseder']} -> {b['id']} ({b['reason']})" for b in blocking)
         )
-        self.mismatched = mismatched
+        self.blocking = blocking
 ```
 
 > **Meaning-neutral, and it must stay that way.** Legs 1 and 2 are pure *admission* — they let a
@@ -3397,7 +3426,10 @@ def test_a_relation_entry_is_CLOSED() -> None:
 > so the inversion has to be carried out of the builder rather than reconstructed by the caller.
 
 ```python
-# consolidation.py: SupersedesGraph gains the inversion it already computes and throws away.
+# consolidation.py: SupersedesGraph carries everything the builder computes and today throws away --
+# the inversion, the authored inverse it must reconcile AGAINST, and all three edge-admission
+# outcomes. The builder is the SOLE authority on which edges are real; nothing downstream recomputes
+# an admission decision, and nothing downstream consults `known` again.
 @dataclass(frozen=True)
 class SupersedesGraph:
     linear: tuple[SupersededChain, ...]
@@ -3405,6 +3437,10 @@ class SupersedesGraph:
     status_by_id: Mapping[str, str | None]
     kind_by_id: Mapping[str, str]
     superseder_by_id: Mapping[str, str]   # superseded id -> its IMMEDIATE superseder (linear only)
+    superseded_by_id: Mapping[str, str]   # superseded id -> the AUTHORED inverse found on disk
+    mismatched: tuple[dict[str, str], ...]        # edge the RELATION MODEL forbids
+    archived_targets: tuple[dict[str, str], ...]  # edge resolves INTO the archive -- historical
+    unresolved_targets: tuple[dict[str, str], ...]  # edge resolves NOWHERE -- dangling
 ```
 
 ```python
@@ -3418,7 +3454,9 @@ class SupersedesGraph:
                 superseder_by_id[dst] = src   # a linear chain is a path: exactly one in-edge
 ```
 
-> **`edit_entity` does NOT gain a `superseded_by` parameter.** An earlier draft added one — and
+> #### A derived field must not be *expressible* as caller input
+>
+> **`edit_entity` does not gain a `superseded_by` parameter.** An earlier draft added one — and
 > `edit_entity` is the **authored**-edit surface, reached from `science entity edit`. Putting a
 > *derived* field on it would recreate, in the same commit that rules it derived, the **second
 > authored spelling** rev 10 exists to eliminate: an author could write a resolvable
@@ -3427,20 +3465,67 @@ class SupersedesGraph:
 > lineage would be true and groundless at once — which is the precise failure `supersedes:` was
 > deleted for.
 >
-> The derivation gets its **own** writer, sharing the same validation boundary and reachable from
-> **no CLI flag**:
+> **A second draft moved the field to its own writer, `stamp_supersession(project_root, ref, *,
+> superseded_by: str)`, and called the problem solved. It was not.** "No CLI flag reaches it" is a
+> statement about *one* caller. The signature still takes the derived fact **as caller input**, so
+> any Python caller — a script, a future consumer, **and Task 10's own test, which did exactly
+> this** — can hand it an existing, resolvable id with no canonical edge behind it. Schema passes.
+> `check_resolution` passes. The lineage is groundless, and the guard we wrote against the *authored*
+> spelling has been walked around by the *derived* one. **A field nobody can author is not the same
+> as a field nobody can pass.**
+>
+> Verifying the backing edge inside the writer would only paper over it: the builder is already the
+> sole authority on which edges are real (it is the thing that admits, refuses, and classifies them),
+> and a second check there would be a duplicate authority that can disagree with the first.
+>
+> **So the derived writer takes the graph, not the string.** It is module-private to
+> `consolidation`, and it reads the superseder out of `graph.superseder_by_id` — which is populated
+> from the admitted canonical edges and nothing else. There is no argument to corrupt, so the
+> violation is **unexpressible**, not merely unreached.
 
 ```python
-# entities.py: the DERIVED-projection writer. Not on `edit_entity`, not on any CLI surface. Its only
-# caller is `mark_superseded`, which computes `superseded_by` by inverting the canonical edge.
-# A field nobody can author cannot drift from the fact it projects.
-def stamp_supersession(project_root: Path, ref: str, *, superseded_by: str) -> EntityWriteResult:
-    """Stamp `status: superseded` + its derived inverse. DERIVED -- never authored."""
+# entities.py -- ONE boundary, split into its two halves. Behaviour-neutral here: `edit_entity`
+# becomes `commit_entity_write(prepare_entity_write(...))` and does exactly what it did. The split
+# exists so a caller can learn that a write WOULD be rejected without a byte hitting the disk --
+# which is what makes `mark_superseded`'s all-or-none claim true rather than aspirational. Task 10
+# adds the schema + resolution checks INSIDE `prepare_entity_write`, so both entry points inherit
+# them and neither can be validated after the fact.
+@dataclass(frozen=True)
+class PreparedWrite:
+    entity_id: str
+    path: Path
+    text: str                      # fully rendered, fully validated -- nothing left to decide
+    warnings: tuple[str, ...]
+
+
+def prepare_entity_write(project_root: Path, ref: str, **fields: object) -> PreparedWrite:
+    """Find, merge, render, validate. Writes NOTHING. Raises if the result would be invalid."""
+
+
+def commit_entity_write(prepared: PreparedWrite) -> EntityWriteResult:
+    """Atomically replace the file. Decides nothing; validates nothing; cannot fail on content."""
 ```
 
-It goes through the same `find_entity` / validate / write path `edit_entity` uses, so **Task 10's
-schema boundary governs it too** — one write boundary, two entry points, and only one of them is
-reachable by a human.
+```python
+# consolidation.py -- the DERIVED-projection writer. Private, and it takes the GRAPH.
+# `superseded_by` is never a parameter: it is READ from the admitted canonical edge. That is the
+# whole guarantee -- a derived value that no caller can supply cannot drift from the fact it projects.
+def _prepare_supersession(project_root: Path, graph: SupersedesGraph, member: str) -> PreparedWrite:
+    """Prepare `status: superseded` + its derived inverse for one member. Writes NOTHING."""
+    return prepare_entity_write(
+        project_root, member,
+        status=_SUPERSEDED,
+        superseded_by=graph.superseder_by_id[member],   # <- from the edge; never from a caller
+    )
+```
+
+It goes through the same `find_entity` / render / validate path `edit_entity` uses, so **Task 10's
+schema boundary governs it too** — one boundary, two entry points. What it does *not* do is give the
+boundary a groundless input to reject, because no such input can be constructed. That is a
+strengthening, not a gap: **the strongest form of a guard is a signature in which the violation
+cannot be written.** (Task 10's `test_the_DERIVED_writer_is_governed_by_the_same_boundary` is
+rewritten accordingly — it asserted the weaker property by *performing the violation*, which was
+only possible because the signature allowed it.)
 
 > #### An illegal edge must be rejected BEFORE the topology is classified — not inside it
 >
@@ -3460,29 +3545,96 @@ reachable by a human.
 > *"branched or cyclic supersedes chain"* when nothing branched: **one of its edges was not a
 > supersession at all.** A guard that runs downstream of the corruption it detects is not a guard.
 >
-> So the pair rule is applied **in the builder, at edge admission**, exactly where the "edges to
-> unknown ids are ignored" filter already lives. An edge the relation model forbids is **not an
-> edge**: it is excluded from the topology, carried out on the graph, and the remaining legal edges
-> classify normally — so the legal chain above is correctly linear, and the illegal edge is
-> *reported* rather than absorbed into a misdiagnosis.
+> So the pair rule is applied **in the builder, at edge admission** — which is also where the
+> pre-existing `if dst not in known: continue` filter lives, and that filter is the next thing to
+> fix. An edge the relation model forbids is **not an edge**: it is excluded from the topology,
+> carried out on the graph, and the remaining legal edges classify normally — so the legal chain
+> above is correctly linear, and the illegal edge is *reported* rather than absorbed into a
+> misdiagnosis.
+
+> #### `if dst not in known: continue` — the filter that made a claim true by deleting its
+> counterexamples
 >
-> **Apply is ALL-OR-NONE.** Any mismatch and `apply=True` writes **nothing** — not the unaffected
-> components either. `mark_superseded` derives corpus-wide state from an authored graph; if part of
-> that graph is not a graph, the derivation is not trustworthy anywhere, and a partial write leaves
-> a corpus that is neither the old state nor the new one. Report mode (`apply=False`) always
-> enumerates everything — mismatches, chains, repairs — because *diagnosis must never be gated on
-> the thing being diagnosable.* (Fail early; no silent fallbacks. And it composes with Task 9's
-> two-phase all-or-none migration rather than fighting it.)
+> Today the builder drops any edge whose target is not in the live scan, **silently**. It is why
+> Task 10 could assert that a derived inverse "always resolves and cannot dangle" — the *canonical
+> edge* that would have dangled never became an edge, so the invariant held by **deleting the
+> evidence against it**, with no finding anywhere. That directly contradicts this task's own
+> contract that report mode "always enumerates everything", and it contradicts all-or-none: a
+> corpus with a supersession pointing at nothing applies cleanly and reports green.
+>
+> **`not in known` is not one state. It is three**, and the live scan cannot tell them apart because
+> `iter_entity_frontmatter` calls `iter_entity_markdown` **without** `include_archived`
+> (`entity_scan.py:19`) — so the archive is invisible to it, exactly like a typo:
+>
+> | target | what it is | admission | apply |
+> |---|---|---|---|
+> | **live** | an ordinary entity | **admit** — classify it | mutable |
+> | **archived** (`entities/_archive/`, in the archive index) | a **valid historical** supersession; the record exists, and it is **frozen** | **refuse the edge** — report it under `archived_targets` | **no mutation** (`entities._reject_if_archived` would refuse the write anyway — better to never plan it) |
+> | **nowhere** (neither live nor archived) | a **dangling canonical edge** — the relation names an id that does not exist | **refuse the edge** — report it under `unresolved_targets` | **refuse: apply writes nothing** |
+>
+> The archive index is the authority for the middle row — `load_archive_index(project_root)`, the
+> same one `entities._reject_if_archived` (`entities.py:908-918`) already consults. Two lookups, three
+> answers, and **no state is silent.**
+>
+> **The middle row is not hypothetical — it is the sanctioned path's own output.** `archive_entities`
+> selects candidates *by status* (`archive.py:118-128`), and `superseded` is one of them. So the
+> ordinary end of a lineage is: author the edge → `mark_superseded` stamps `i-old` → `science entities
+> archive` relocates it under `_archive/`. The superseder keeps its canonical `sci:supersedes` edge,
+> pointing at a record that is now invisible to `iter_entity_frontmatter`. **Every project that
+> archives a superseded entity produces this state**, and today the very next `mark_superseded` run
+> drops that edge without a word. There is also nothing left to do about it: the archive row *carries*
+> `superseded_by` (`archive.py:140`), so the lineage went into the archive intact.
+>
+> **Archived is therefore not an error.** The edge is true, the record exists, its projection is
+> already correct, and it is frozen. It reports and does not block. **Unresolved is an error**, and it
+> blocks apply for the same reason a mismatch does.
+>
+> **Apply is ALL-OR-NONE over graph-admission errors.** If any edge is `mismatched` or `unresolved`,
+> `apply=True` writes **nothing** — not the unaffected components either. `mark_superseded` derives
+> corpus-wide state from an authored graph; if part of that graph is not a graph, the derivation is
+> not trustworthy anywhere, and a partial write leaves a corpus that is neither the old state nor the
+> new one. Report mode (`apply=False`) always enumerates everything — mismatches, unresolved,
+> archived, chains, repairs — because *diagnosis must never be gated on the thing being diagnosable.*
+> (Fail early; no silent fallbacks. And it composes with Task 9's two-phase all-or-none migration
+> rather than fighting it.) **The precise scope of "all-or-none" — and what it does *not* promise —
+> is pinned in its own box below; it is a claim that has to be earned by the write loop, not just
+> asserted here.**
 
 ```python
-# consolidation.py -- build_supersedes_graph: the pair rule joins the EDGE-ADMISSION filter.
+# consolidation.py -- iter_entity_frontmatter's sibling: the ARCHIVE INDEX, read once.
+# Live entities and archived entities are BOTH "known"; only live ones are mutable. Conflating
+# "not live" with "does not exist" is what made a dangling supersession invisible.
+def _archived_ids(project_root: Path) -> frozenset[str]:
+    from science_tool.archive import load_archive_index
+    return frozenset(load_archive_index(project_root).active_by_id)
+```
+
+```python
+# consolidation.py -- build_supersedes_graph(entries, archived): edge admission resolves THREE ways,
+# and every one of them is recorded. `continue` without a record is how the old filter lied.
     edges: list[tuple[str, str]] = []
     mismatched: list[dict[str, str]] = []
+    archived_targets: list[dict[str, str]] = []
+    unresolved_targets: list[dict[str, str]] = []
     for _path, fm in entries:
         src = str(fm["id"])
         for dst in _supersedes_targets(fm):
             if dst not in known:
-                continue                      # unknown id -- the pre-existing filter
+                if dst in archived:
+                    # A VALID historical supersession into a frozen record. Not an error, and not a
+                    # mutation: the target is out of the live corpus and `_reject_if_archived` would
+                    # refuse the write. Report it; do not classify it; do not block apply.
+                    archived_targets.append({"id": dst, "superseder": src,
+                                             "reason": "target is archived (frozen); "
+                                                       "no live record to stamp"})
+                else:
+                    # DANGLING. The canonical edge names an id that exists nowhere. The old filter
+                    # deleted this case, which is the only reason "a derived inverse cannot dangle"
+                    # was ever true. It BLOCKS apply.
+                    unresolved_targets.append({"id": dst, "superseder": src,
+                                               "reason": "sci:supersedes target resolves to no "
+                                                         "live or archived entity"})
+                continue
             src_kind, dst_kind = kind_by_id[src], kind_by_id[dst]
             if not relation_allows_kinds(_supersedes_kind(), src_kind, dst_kind):
                 # NOT an edge. `materialize` raises ValueError on this pair, and this write path
@@ -3508,6 +3660,9 @@ reachable by a human.
 #
 # `to_mark`/`applied` KEEP THEIR MEANING (status stamping, already-superseded excluded); repairs get
 # their OWN fields. See the report-contract box below.
+    graph = build_supersedes_graph(iter_entity_frontmatter(project_root),
+                                   archived=_archived_ids(project_root))
+
     for chain in graph.linear:
         for member in chain.superseded:
             superseder = graph.superseder_by_id[member]
@@ -3520,19 +3675,62 @@ reachable by a human.
                 to_repair.append(member)                                  # status fine, inverse STALE
             # else: fully reconciled -- touch nothing.
 
+    # THE ADMISSION OUTCOMES COME OFF THE GRAPH -- they are not recomputed here, and `mismatched` is
+    # NOT a local name in this function (an earlier draft read it as though it were, which is a
+    # NameError at best and a second, divergent classification at worst). The builder decided; this
+    # function reports what it decided.
+    report["mismatched_kinds"] = [dict(m) for m in graph.mismatched]
+    report["unresolved_targets"] = [dict(u) for u in graph.unresolved_targets]
+    report["archived_targets"] = [dict(a) for a in graph.archived_targets]
+    report["to_repair"] = list(to_repair)
+
     if apply:
-        if mismatched:            # ALL-OR-NONE: not one byte while the authored graph is invalid.
-            raise SupersessionError(mismatched)
-        for member in to_mark + to_repair:
-            stamp_supersession(project_root, member,
-                               superseded_by=graph.superseder_by_id[member])
+        # ALL-OR-NONE, PHASE 1: the authored graph must BE a graph. `archived_targets` is not an
+        # error and does not appear here -- an archived target is a valid historical edge.
+        blocking = [*graph.mismatched, *graph.unresolved_targets]
+        if blocking:
+            raise SupersessionError(blocking)
+
+        # ALL-OR-NONE, PHASE 2: PREPARE EVERY WRITE BEFORE COMMITTING ANY OF THEM. Task 10 puts
+        # schema + resolution validation on the write boundary, and a member can fail it for reasons
+        # this function never looked at -- an unrelated invalid field already on the record. With a
+        # sequential write-and-validate loop, member 1 lands on disk and member 2 raises, leaving a
+        # corpus that is neither the old state nor the new one -- while this box promised otherwise.
+        # `prepare_entity_write` renders and validates and writes NOTHING, so every rejection lands
+        # before the first byte does.
+        prepared = [_prepare_supersession(project_root, graph, m) for m in to_mark + to_repair]
+        for write in prepared:                    # validation is BEHIND us; this loop only commits
+            commit_entity_write(write)
+
         report["applied"] = list(to_mark)
         report["repaired"] = list(to_repair)
 ```
 
-`SupersedesGraph` gains `superseder_by_id` (the **derived** inverse, from the legal edges) and
+> #### What "all-or-none" promises — and what it does not
+>
+> It promises exactly this: **no `superseded` write is committed if any planned write would be
+> rejected.** Graph-admission errors (mismatched pairs, unresolved targets) are refused before
+> anything is prepared; per-record schema/resolution failures are refused before anything is
+> committed. There is no input, valid or invalid, for which this operation writes *some* of its
+> planned records and then raises.
+>
+> It does **not** promise atomicity against a process kill or an I/O error partway through the commit
+> loop. Individual writes are atomic (`_atomic_replace_text`), the loop is not, and claiming
+> otherwise would need a corpus-wide transaction we do not have. **What makes that survivable is the
+> reconciliation this task adds**: the operation is idempotent and it *repairs* — a re-run recomputes
+> the graph, sees the members whose projection is missing or stale, and finishes the job. A crash
+> leaves a corpus that the next run converges; it does not leave one that no run will ever touch
+> again, which is precisely what rev 1's status-only short-circuit did.
+>
+> Stating the boundary is the point. An unqualified "all-or-none" over a non-transactional loop is a
+> claim the code cannot keep, and a promise the reader will rely on.
+
+`SupersedesGraph` gains `superseder_by_id` (the **derived** inverse, from the admitted edges),
 `superseded_by_id` (the **authored** `superseded_by` per id, read in the same frontmatter pass as
-`status_by_id`, so a stale inverse is visible without a second scan) plus `mismatched`.
+`status_by_id`, so a stale inverse is visible without a second scan), and the three edge-admission
+outcomes: `mismatched`, `archived_targets`, `unresolved_targets`. `build_supersedes_graph` takes
+`archived` as an argument rather than reading the index itself — the builder stays a pure function of
+its inputs, which is what lets every test above construct one without an archive on disk.
 
 > #### The report is a PUBLIC contract — extend it, do not redefine it
 >
@@ -3545,8 +3743,11 @@ reachable by a human.
 > a field that disappears** — the disappearance is at least loud.
 >
 > So repairs get **`to_repair` / `repaired`**, and the two existing keys keep their exact meanings.
-> `report["skipped_kinds"]` is unchanged; `report["mismatched_kinds"]` is new. All four are
-> additive.
+> `report["skipped_kinds"]` is unchanged. **`mismatched_kinds`, `unresolved_targets`, and
+> `archived_targets` are new**, and each is its own key precisely because the three carry different
+> obligations — refuse-and-block, refuse-and-block, and refuse-but-proceed. Folding them into one
+> "problems" list would put an ordinary archived lineage next to a dangling edge and make a consumer
+> guess which one stops a release. All five additions are additive; nothing existing changes meaning.
 
 - [ ] **Step 5b: Test the operation on a kind that is supersedable TODAY — `interpretation`.**
 
@@ -3570,6 +3771,42 @@ reachable by a human.
 
 ```python
 # science/tests/test_consolidation_mark_superseded.py  -- all on `interpretation`, all green TODAY.
+#
+# THE FIXTURE HELPERS. Earlier drafts used all of these without defining any of them.
+
+def _supersedes(target: str) -> dict[str, str]:
+    """One canonical supersession edge, in the ONLY spelling the toolkit reads."""
+    return {"predicate": "sci:supersedes", "target": target}
+
+
+def _write(tmp_path: Path, subdir: str, slug: str, fm: dict) -> Path:
+    """Write one entity markdown file under `entities/<subdir>/<slug>.md`."""
+    path = tmp_path / "entities" / subdir / f"{slug}.md"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(f"---\n{yaml.safe_dump(fm, sort_keys=False)}---\n\nbody\n", encoding="utf-8")
+    return path
+
+
+def _relate(tmp_path: Path, slug: str, *, supersedes: str) -> None:
+    """Append a canonical supersedes edge to an entity written by `_write`."""
+    path = next(tmp_path.glob(f"entities/*/{slug}.md"))
+    fm = read_frontmatter(path)
+    fm.setdefault("relations", []).append(_supersedes(supersedes))
+    _write(tmp_path, path.parent.name, slug, fm)
+
+
+def _archive(tmp_path: Path, subdir: str, slug: str, fm: dict) -> None:
+    """Write an entity and archive it THROUGH THE REAL OP -- never by hand-building the index.
+
+    `archive_entities` selects by status, relocates the file under `entities/_archive/`, and appends
+    the index row (`archive.py:213`). A hand-written `_archive/` file with no index row, or an index
+    row with no file, is a state the tool cannot produce -- and a fixture that fabricates one tests
+    the fixture. The status must be archivable (`superseded`/`archived`), which is exactly the state
+    a real superseded-then-archived record is in.
+    """
+    from science_tool.archive import archive_entities
+    _write(tmp_path, subdir, slug, fm)
+    archive_entities(tmp_path, apply=True)
 
 def test_the_stamped_record_CARRIES_its_lineage(tmp_path: Path) -> None:
     # Rev 1 wrote `status` alone, so the toolkit's own supersession produced a record with no
@@ -3659,6 +3896,103 @@ def test_an_ILLEGAL_edge_does_not_SUPPRESS_a_legal_chain(tmp_path: Path) -> None
     assert report["to_mark"] == ["interpretation:i-v1"]
 
 
+def test_a_mixed_corpus_writes_NOTHING_on_apply(tmp_path: Path) -> None:
+    # THE ALL-OR-NONE REGRESSION -- and it is a separate test from the one above ON PURPOSE.
+    #
+    # The dry-run test proves the illegal edge is REPORTED and the legal chain SURVIVES. It says
+    # nothing about apply, because it never calls it. So the property the box actually promises --
+    # "any blocking error and apply writes NOTHING, not the unaffected components either" -- was
+    # asserted in prose and tested nowhere. An implementation that raises AFTER stamping i-v1 (the
+    # legal, unaffected member) passes every other test in this file.
+    #
+    # It asserts the BYTES of the legal target, not the report: the report is what the operation says
+    # it did.
+    _write(tmp_path, "interpretations", "i-v1", {"id": "interpretation:i-v1",
+                                                 "kind": "interpretation", "status": "active"})
+    _write(tmp_path, "interpretations", "i-v2", {"id": "interpretation:i-v2",
+                                                 "kind": "interpretation",
+                                                 "relations": [_supersedes("interpretation:i-v1")]})
+    _write(tmp_path, "interpretations", "i-w1", {"id": "interpretation:i-w1",
+                                                 "kind": "interpretation", "status": "active"})
+    _write(tmp_path, "workflow-runs", "wr-1", {"id": "workflow-run:wr-1", "kind": "workflow-run",
+                                               "relations": [_supersedes("interpretation:i-w1")]})
+    legal = tmp_path / "entities/interpretations/i-v1.md"
+    before = legal.read_bytes()
+
+    with pytest.raises(SupersessionError):
+        mark_superseded(tmp_path, apply=True)
+
+    # i-v1's supersession is legal, linear, and would have been stamped. It is NOT stamped, because
+    # ANOTHER component's edge is invalid. Corpus-wide derivation from a corpus that is not a graph.
+    assert legal.read_bytes() == before
+
+
+def test_an_ARCHIVED_target_is_a_VALID_edge_with_no_live_mutation(tmp_path: Path) -> None:
+    # THE MIDDLE STATE. Superseding a record and later archiving it is the normal end of a lineage:
+    # the canonical edge is TRUE, the record exists, and it is frozen. `iter_entity_frontmatter` does
+    # not scan `_archive/`, so before this task the edge was indistinguishable from a typo and was
+    # dropped in silence.
+    #
+    # It REPORTS and it does NOT BLOCK: an ordinary historical lineage must not stop an unrelated
+    # supersession from applying.
+    _archive(tmp_path, "interpretations", "i-old", {"id": "interpretation:i-old",
+                                                    "kind": "interpretation",
+                                                    "status": "superseded"})
+    _write(tmp_path, "interpretations", "i-new", {"id": "interpretation:i-new",
+                                                  "kind": "interpretation",
+                                                  "relations": [_supersedes("interpretation:i-old")]})
+    _write(tmp_path, "interpretations", "j-v1", {"id": "interpretation:j-v1",
+                                                 "kind": "interpretation", "status": "active"})
+    _write(tmp_path, "interpretations", "j-v2", {"id": "interpretation:j-v2",
+                                                 "kind": "interpretation",
+                                                 "relations": [_supersedes("interpretation:j-v1")]})
+
+    report = mark_superseded(tmp_path, apply=True)       # does NOT raise
+
+    assert report["archived_targets"] == [
+        {"id": "interpretation:i-old", "superseder": "interpretation:i-new",
+         "reason": "target is archived (frozen); no live record to stamp"},
+    ]
+    assert report["unresolved_targets"] == []
+    # The archived target is not a chain member and is never stamped...
+    assert report["chains"] == [{"survivor": "interpretation:j-v2",
+                                 "members": ["interpretation:j-v1"], "linear": True}]
+    # ...and the unrelated live chain applies normally. An archived edge is not an error.
+    assert report["applied"] == ["interpretation:j-v1"]
+
+
+def test_an_UNRESOLVED_target_is_REPORTED_and_BLOCKS_apply(tmp_path: Path) -> None:
+    # THE THIRD STATE, and the one the old `if dst not in known: continue` erased. A canonical
+    # supersession edge pointing at an id that exists NOWHERE -- not live, not archived -- is a
+    # dangling authored relation. The old filter made "a derived inverse can never dangle" true by
+    # DELETING the counterexample: no edge, no chain, no finding, clean report, green apply.
+    #
+    # It blocks apply for the same reason a mismatched pair does: the derivation is corpus-wide, and
+    # part of this corpus is not a graph.
+    _write(tmp_path, "interpretations", "i-v1", {"id": "interpretation:i-v1",
+                                                 "kind": "interpretation", "status": "active"})
+    _write(tmp_path, "interpretations", "i-v2", {"id": "interpretation:i-v2",
+                                                 "kind": "interpretation",
+                                                 "relations": [_supersedes("interpretation:i-v1"),
+                                                               _supersedes("interpretation:i-GONE")]})
+    target = tmp_path / "entities/interpretations/i-v1.md"
+    before = target.read_bytes()
+
+    report = mark_superseded(tmp_path, apply=False)
+
+    assert report["unresolved_targets"] == [
+        {"id": "interpretation:i-GONE", "superseder": "interpretation:i-v2",
+         "reason": "sci:supersedes target resolves to no live or archived entity"},
+    ]
+    assert report["archived_targets"] == []
+    # Report mode still enumerates EVERYTHING -- the legal chain is fully diagnosed alongside it.
+    assert report["to_mark"] == ["interpretation:i-v1"]
+
+    with pytest.raises(SupersessionError):
+        mark_superseded(tmp_path, apply=True)
+    assert target.read_bytes() == before          # all-or-none, again
+
+
 def test_a_STALE_inverse_is_REPAIRED(tmp_path: Path) -> None:
     # The status is already `superseded`, so rev 1 `continue`d -- conflating "the status is right"
     # with "the projection is right". A record whose `superseded_by` is missing or points at the
@@ -3718,8 +4052,17 @@ def test_a_RECONCILED_record_is_BYTE_IDENTICAL_afterwards(tmp_path: Path) -> Non
 - [ ] **Step 6: Full gates.** `cd science/model && uv run --frozen pytest` / `cd science && uv run
   --frozen pytest`, both whole; `uv run ruff check` and `uv run pyright`. The `materialize` path is
   the one at risk: leg 2 changes a `RelationKind`, and the graph builders read it.
-- [ ] **Step 7: Commit** — **all three legs in ONE commit.** A bidirectional gate exists to catch
-  half-wiring; landing half of it would be the defect it was written to detect.
+- [ ] **Step 7: Commit** — **this task's three legs in ONE commit**: the schema admission (Step 3),
+  the relation endpoint (Step 4), and the operation (Step 5). A bidirectional gate exists to catch
+  half-wiring; landing half of *these* would be the defect it was written to detect.
+
+  **The triangle is still open when this commit lands, and that is correct.** The fourth leg —
+  `superseded` in the hypothesis descriptor, the *vocabulary* — is **Task 8's**, and it is
+  deliberately last: it is the leg that admits `hypothesis` into the gate's derived `declares
+  superseded` population, so landing it before the other three would take the half-wired count from
+  twelve to thirteen and fail `test_every_supersedable_kind_can_author_the_CANONICAL_edge`. Phase 2
+  stays meaning-neutral; **Task 8 closes the triangle**, and it is where the hypothesis apply-tests
+  live, because that is the first moment they can pass.
 
 ---
 
@@ -4515,13 +4858,14 @@ def migrate(project_root: Path, *, apply: bool) -> list[Path]:
   `sci:supersedes` edge by `mark_superseded`). An author flag for it would recreate the second
   authored spelling rev 10 deleted — a user could write a resolvable `superseded_by` with **no
   canonical edge behind it**, and schema *and* `check_resolution` would both report green over a
-  supersession grounded in nothing. The derived writer `stamp_supersession` has no CLI surface.
-- `science/src/science_tool/entities.py:935-969` (`edit_entity`) — **the lifecycle boundary**, and
-  **the `check_resolution` guard MOVED HERE from Task 7**: a terminal transition with a dangling
-  successor must fail **before a byte is written**. Task 7 could not host it — there was no write
-  boundary to hang it on. **This task ships that boundary, and it governs BOTH entry points:**
-  `edit_entity` (authored fields) and `stamp_supersession` (the derived inverse, Task 7a). A
-  boundary that governs only the path nobody was going to corrupt is decoration.
+  supersession grounded in nothing. **And no Python caller can do it either:** the derived writer
+  (`consolidation._prepare_supersession`) takes the *graph*, not a lineage string (Task 7a).
+- `science/src/science_tool/entities.py` — put schema validation and the `check_resolution` guard
+  **inside `prepare_entity_write`** (the boundary Task 7a split out): a terminal transition with a
+  dangling successor must fail **before a byte is written**. Task 7 could not host this — there was
+  no write boundary to hang it on. **Both entry points inherit it**, because both go through
+  `prepare_entity_write`: `edit_entity` (authored fields) and `_prepare_supersession` (the derived
+  inverse). A boundary that governs only the path nobody was going to corrupt is decoration.
 - `science/src/science_tool/entities.py:1377-1379` (`_validate_status`) — also fix its raw `KeyError` (it indexes `_STATUS_VALUES[kind]` and ignores project-local manifests, unlike `valid_statuses`)
 - `science/src/science_tool/graph/materialize.py` — **delete** `sci:disposition` (its emission of
   `sci:verdict` landed in **Task 7**, which needed it to make the verdict check observable). The
@@ -4582,26 +4926,75 @@ def test_edit_entity_refuses_a_DANGLING_successor(tmp_project) -> None:
     # `check_resolution` (Task 7) is the checker; this is its write-boundary call site.
     #
     # THE LINEAGE FIELD HERE IS `resynthesized_into`, NOT `superseded_by` -- and that is not a
-    # detail. `superseded_by` is DERIVED (Task 7a): `build_supersedes_graph` drops edges to unknown
-    # ids, so a derived inverse ALWAYS resolves and CANNOT dangle at this boundary. It has no
-    # authored spelling to arrive by. `resynthesized_into` has no canonical relation behind it --
-    # it is genuinely authored -- so it is the one lineage field a human can dangle, and the only
-    # one this guard can be written against. A guard aimed at the unreachable case is decoration.
+    # detail. `superseded_by` is DERIVED (Task 7a) and there is no parameter, on any writer, that
+    # could carry a dangling one to this boundary: `_prepare_supersession` reads it from
+    # `graph.superseder_by_id`, i.e. from an ADMITTED canonical edge.
+    #
+    # (An earlier draft justified this with "the builder drops edges to unknown ids, so the inverse
+    # always resolves." That was true, and it was a BUG -- the invariant held because the dangling
+    # canonical edge was silently deleted. Task 7a stopped deleting it: an unresolved target is now
+    # REPORTED and BLOCKS apply. The conclusion here survives, but on a completely different footing:
+    # the inverse cannot dangle because the edge behind it was ADMITTED, not because a dangling edge
+    # was thrown away unseen.)
+    #
+    # `resynthesized_into` has no canonical relation behind it -- it is genuinely authored -- so it
+    # is the one lineage field a human can dangle, and the only one this guard can be written
+    # against. A guard aimed at the unreachable case is decoration.
     with pytest.raises(EntityCommandError, match="9999-nope"):
         edit_entity(tmp_project, "hypothesis:0001-x", status="superseded",
                     resynthesized_into=["hypothesis:9999-nope"])
 
 
-def test_the_DERIVED_writer_is_governed_by_the_same_boundary(tmp_project) -> None:
-    # One boundary, two entry points. `stamp_supersession` (Task 7a) is not a side door: a
-    # hand-edited file whose `superseded_by` points nowhere must be refused when the tool next
-    # writes it, or the boundary only governs the path that was never going to break.
-    _corrupt(tmp_project, "hypothesis:0001-x", superseded_by="hypothesis:9999-nope")
-    with pytest.raises(EntityCommandError, match="9999-nope"):
-        stamp_supersession(tmp_project, "hypothesis:0001-x",
-                           superseded_by="hypothesis:9999-nope")
-    # FAILS BEFORE WRITING -- the whole point of putting it at the boundary.
-    assert 'status: "active"' in (tmp_project / "entities/hypotheses/0001-x.md").read_text()
+def _corrupt(project_root: Path, entity_id: str, **fields: object) -> None:
+    """Hand-edit an entity's frontmatter, BYPASSING every writer.
+
+    It has to bypass them -- that is the state under test. `edit_entity` would refuse most of these,
+    which is the point: this simulates a human with a text editor, or a file that predates a rule.
+    """
+    location = find_entity(project_root, entity_id)
+    fm = dict(location.frontmatter) | fields
+    location.path.write_text(
+        f"---\n{yaml.safe_dump(fm, sort_keys=False)}---\n\n{location.body}", encoding="utf-8"
+    )
+
+
+def test_no_writer_can_be_HANDED_a_groundless_lineage() -> None:
+    # An earlier draft of this test called `stamp_supersession(ref, superseded_by="hypothesis:9999-
+    # nope")` and asserted the boundary refused it. It PASSED -- and it was the bug. To assert the
+    # guard, the test had to PERFORM the violation, which was only possible because the signature
+    # accepted the derived fact AS CALLER INPUT. "No CLI flag reaches it" was a claim about one
+    # caller; the test itself was the counterexample. A resolvable id with no canonical edge behind
+    # it passes schema AND `check_resolution`, and the supersession is grounded in nothing.
+    #
+    # The fix was the signature, not another check (a check here would duplicate the builder's
+    # authority over which edges are real). So the property is now asserted the only way a
+    # signature-level guarantee CAN be: the violation is UNTYPEABLE.
+    assert "superseded_by" not in inspect.signature(edit_entity).parameters
+    assert "superseded_by" not in inspect.signature(_prepare_supersession).parameters
+    # `_prepare_supersession(project_root, graph, member)` reads the superseder from
+    # `graph.superseder_by_id` -- populated from ADMITTED canonical edges and nothing else.
+
+
+def test_a_CORRUPTED_inverse_is_caught_by_the_TWO_nets_that_can_see_it(tmp_project) -> None:
+    # And this is where the deleted test's real subject went. A hand-edited `superseded_by` pointing
+    # nowhere is NOT caught at the write boundary -- nothing can hand it to a writer, so no writer
+    # ever sees it. Saying "the boundary catches it" would be false. Two things DO catch it, and the
+    # plan is explicit about which:
+    #
+    #   1. `mark_superseded` RECONCILES it (Task 7a leg 3) whenever a canonical edge exists -- the
+    #      stale projection is `to_repair`, and the next run overwrites it with the derived truth.
+    #   2. `check_resolution` (Task 7) FAILS `validate` when no canonical edge exists -- there is
+    #      nothing to reconcile toward, so it is reported as dangling lineage, not silently repaired.
+    _corrupt(tmp_project, "hypothesis:0001-x", status="superseded",
+             superseded_by="hypothesis:9999-nope")
+    _corrupt(tmp_project, "hypothesis:0002-y",
+             relations=[{"predicate": "sci:supersedes", "target": "hypothesis:0001-x"}])
+
+    report = mark_superseded(tmp_project, apply=True)
+
+    assert report["repaired"] == ["hypothesis:0001-x"]
+    fm = read_frontmatter(tmp_project / "entities/hypotheses/0001-x.md")
+    assert fm["superseded_by"] == "hypothesis:0002-y"     # the EDGE won, not the hand edit
 ```
 
 - [ ] **Step 2: Run and fail.**
@@ -4630,21 +5023,20 @@ def is_demand_closed(*, kind: str, status: str | None, verdict: str | None = Non
     return status in _QUESTION_CLOSED        # <- questions: UNCHANGED
 ```
 
-`edit_entity` — the generic lifecycle boundary (D4):
+`prepare_entity_write` — the generic lifecycle boundary (D4). **Task 7a split it out of
+`edit_entity`; this task is what puts the enforcement inside it.** Both entry points go through it,
+so neither can be validated after the fact:
 
 ```python
-def edit_entity(
+def prepare_entity_write(
     project_root: Path, ref: str, *,
     title: str | None = None, status: str | None = None,
     verdict: str | None = None, closure_basis: str | None = None,
     resynthesized_into: list[str] | None = None,   # AUTHORED -- no canonical relation behind it
-    # NO `superseded_by`. It is DERIVED (Task 7a), and `stamp_supersession` is its only writer.
-    # An authored spelling of a derived field is what rev 10 deleted; re-adding it HERE, on the
-    # surface `science entity edit` reaches, would let an author mint a resolvable lineage with no
-    # canonical edge behind it -- green schema, green resolution, supersession grounded in nothing.
+    superseded_by: str | None = None,              # DERIVED -- see below; NOT on `edit_entity`
     related: list[str] | None = None, source_refs: list[str] | None = None,
     updated: date | None = None, today: date | None = None,
-) -> EntityWriteResult:
+) -> PreparedWrite:
     project_root = project_root.resolve()
     _reject_if_archived(project_root, ref)
     location = find_entity(project_root, ref)
@@ -4660,6 +5052,8 @@ def edit_entity(
         frontmatter["closure_basis"] = closure_basis
     if resynthesized_into:
         frontmatter["resynthesized_into"] = resynthesized_into
+    if superseded_by is not None:
+        frontmatter["superseded_by"] = superseded_by
     if related:
         frontmatter["related"] = _append_unique_string_values(frontmatter.get("related"), related)
     if source_refs:
@@ -4680,28 +5074,46 @@ def edit_entity(
         project_root=project_root, rel_path=Path(location.rel_path),
         text=text, target_entity_id=location.entity_id,
     )
-    _atomic_replace_text(location.path, text)
-    return EntityWriteResult(entity_id=location.entity_id, path=location.path, warnings=warnings)
+    return PreparedWrite(entity_id=location.entity_id, path=location.path,
+                         text=text, warnings=tuple(warnings))
 ```
 
-**And `stamp_supersession` (Task 7a) is brought under the SAME boundary** — one gate, two entry
-points. It is a separate function only so that the derived field has no authored spelling; it is
-**not** a separate write path, and if it were, the boundary would govern exactly the door nobody was
-going to force:
+> **Why `superseded_by` is a parameter HERE and on neither public writer.**
+> `prepare_entity_write` is the shared *mechanism* — it renders and validates whatever frontmatter it
+> is given. The **policy** is enforced by the two functions that call it, and by the fact that they
+> are the only two:
+>
+> | writer | `superseded_by` | who supplies it |
+> |---|---|---|
+> | `edit_entity` (authored surface, reached by `science entity edit`) | **not a parameter** | nobody — it cannot be expressed |
+> | `consolidation._prepare_supersession(project_root, graph, member)` | **not a parameter** | `graph.superseder_by_id[member]` — the admitted canonical edge |
+>
+> So the derived field has exactly one source in the entire codebase: the inversion of an edge the
+> builder admitted. There is no flag for it, and no argument for it. `test_no_writer_can_be_HANDED_a_
+> groundless_lineage` (above) pins both halves against the signatures themselves.
 
 ```python
-def stamp_supersession(project_root: Path, ref: str, *, superseded_by: str) -> EntityWriteResult:
-    """Stamp `status: superseded` + its DERIVED inverse. Called only by `mark_superseded`.
+def edit_entity(project_root: Path, ref: str, **fields: object) -> EntityWriteResult:
+    """The AUTHORED-edit surface. Prepare, then commit. No `superseded_by` -- it is derived."""
+    return commit_entity_write(prepare_entity_write(project_root, ref, **fields))
 
-    Shares `edit_entity`'s boundary: same `find_entity`, same `_schema_validate_or_raise`, same
-    `_resolution_check_or_raise`, same atomic replace. The ONLY difference is the field it may set
-    and the fact that no CLI flag reaches it.
-    """
+
+def commit_entity_write(prepared: PreparedWrite) -> EntityWriteResult:
+    """Atomic replace. Decides nothing, validates nothing -- everything was settled in prepare."""
+    _atomic_replace_text(prepared.path, prepared.text)
+    return EntityWriteResult(entity_id=prepared.entity_id, path=prepared.path,
+                             warnings=list(prepared.warnings))
 ```
 
 where `_schema_validate_or_raise` derives the profile via `default_profile_for_kind`, **skips
 kinds not yet in `PROJECT_MIXIN_NAMES`** (an explicit "not migrated", not a fallback), and
 re-raises `EntityValidationError` as `EntityCommandError`.
+
+**The derived writer inherits all of this for free** — `consolidation._prepare_supersession` calls
+`prepare_entity_write`, so the same `find_entity`, the same `_schema_validate_or_raise`, the same
+`_resolution_check_or_raise`. One gate, two entry points, and the enforcement lives in the half that
+**writes nothing** — which is also what lets `mark_superseded` prepare every planned write before
+committing any of them, and so keep the all-or-none promise it makes (Task 7a).
 
 - [ ] **Step 4: Green — everything, both packages, ruff, pyright.**
 
