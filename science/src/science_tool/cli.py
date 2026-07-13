@@ -166,6 +166,11 @@ def _error_message_template(exc: BaseException) -> str:
 
 
 @click.group(cls=TelemetryGroup)
+@click.version_option(
+    package_name="science",
+    prog_name="science",
+    message="%(prog)s %(version)s",
+)
 @click.option(
     "--color",
     "color_policy",
