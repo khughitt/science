@@ -30,7 +30,12 @@ from science_model.entity_schema.profile import (
     ProfileParseError,
     ProfileString,
     default_profile_for_kind,
+    parse_component,
     parse_profile,
+)
+from science_model.entity_schema.resolve import (
+    ExtensionRedefinesCoreField,
+    resolve_profile,
 )
 from science_model.entity_schema.validator import (
     EntityValidationError,
@@ -43,6 +48,7 @@ __all__ = [
     "TYPE_MIXIN_NAMES",
     "EntityValidationError",
     "EntityValidator",
+    "ExtensionRedefinesCoreField",
     "FrontmatterField",
     "MergePolicy",
     "ProfileComponent",
@@ -52,8 +58,10 @@ __all__ = [
     "SchemaNotFoundError",
     "SharedEntity",
     "default_profile_for_kind",
+    "parse_component",
     "parse_profile",
     "read_canonical_body_sections",
+    "resolve_profile",
     "read_effective_frontmatter_fields",
     "read_merge_policy",
     "read_overlay_merge_policy",

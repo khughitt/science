@@ -216,6 +216,7 @@ class ProjectConfig(BaseModel):
     data: ProjectDataConfig | None = None
     data_policy: DataPolicyConfig | None = None
     reproducibility_policy: ReproducibilityPolicyConfig | None = None
+    entity_extensions: dict[str, list[str]] = Field(default_factory=dict)
 
     @model_validator(mode="before")
     @classmethod

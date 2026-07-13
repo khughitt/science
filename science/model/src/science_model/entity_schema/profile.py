@@ -56,7 +56,7 @@ class ProfileString:
 def parse_profile(raw: str) -> ProfileString:
     if not raw:
         raise ProfileParseError("schema_profile is empty")
-    components = [_parse_component(token) for token in raw.split("+")]
+    components = [parse_component(token) for token in raw.split("+")]
     base = components[0]
     if base.name != BASE_NAME:
         raise ProfileParseError(
@@ -73,7 +73,8 @@ def parse_profile(raw: str) -> ProfileString:
     return ProfileString(base=base, mixin=mixin, extensions=tuple(components[2:]))
 
 
-def _parse_component(token: str) -> ProfileComponent:
+def parse_component(token: str) -> ProfileComponent:
+    """Parse one rendered `name/version` profile component."""
     if "/" not in token:
         raise ProfileParseError(f"profile component {token!r} missing version (expected 'name/version')")
     name, version = token.split("/", 1)

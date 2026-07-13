@@ -2225,7 +2225,7 @@ def test_a_LIST_form_packet_emits_NO_new_keys() -> None:
 
 ---
 
-### Task 6b: Project extensions — compose them BEFORE closing the schema
+### Task 6b: Project extensions — compose them BEFORE closing the schema — **DONE 2026-07-13**
 
 **Without this, `unevaluatedProperties: false` rejects mm30's `confidence_mechanistic_label` — so
 the only way to keep mm30 validating would be to promote a one-project field into the core mixin
@@ -2310,7 +2310,7 @@ entity_extensions:
   base+mixin plus the project's declared extensions. **Tasks 7, 9 and 10 call this, not
   `default_profile_for_kind`.** (`default_profile_for_kind` remains the zero-extension case.)
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 ```python
 # science/model/tests/test_project_extensions.py
@@ -2395,9 +2395,9 @@ def test_the_OLD_key_is_dead_even_WITH_the_extension(tmp_schema_dir) -> None:
 > schema nothing can satisfy. The failure would surface as *"this valid file is invalid"* with no
 > hint why. **Reject redefinition at load time**, by name.
 
-- [ ] **Step 2: Run and fail.**
+- [x] **Step 2: Run and fail.**
 
-- [ ] **Step 3: Implement.** `SchemaLoader(project_dir: Path | None)` checks `project_dir` first,
+- [x] **Step 3: Implement.** `SchemaLoader(project_dir: Path | None)` checks `project_dir` first,
   then falls back to `importlib.resources` (package schemas). `resolve_profile` appends the parsed
   extension components and raises `ExtensionRedefinesCoreField` if any extension's `properties`
   intersect the base's or mixin's. `science.yaml` gains:
@@ -2415,7 +2415,7 @@ entity_extensions:
 > extension file and the `entity_extensions` stanza are **inert at version 1**: they may land now,
 > and must, because Task 9 cannot migrate a field whose owner does not yet exist.
 
-- [ ] **Step 4: Green — the model suite.** That is the whole gate for this task.
+- [x] **Step 4: Green — the model suite.** That is the whole gate for this task.
 
 > ### The corpus gate CANNOT run here — and putting it here is what would have broken the migration
 >
@@ -2437,12 +2437,51 @@ entity_extensions:
 > is an instruction to the implementer to skip it, and the one thing they will remember is that
 > this step is skippable.*
 
-- [ ] **Step 5: Commit — THREE repos, separately:** the toolkit, mm30, and **evolution**
+- [x] **Step 5: Commit — THREE repos, separately:** the toolkit, mm30, and **evolution**
   (`~/d/cancer/mechanisms/evolution` — the project that owns 13 of the corpus's hypotheses and every
   file in the belief cluster, and which this plan managed not to list at all until Task 1 derived it).
   Each project repo gets **the extension schema + the `entity_extensions` stanza, and nothing
   else** — no `entity_schema_version`, so the commit is behavior-neutral there and `science validate`
   keeps passing exactly as it does today.
+
+> ### Where the implementation departed from this task's text, and why
+>
+> **1. The extension filenames above are wrong — they would never have been found.** The Files list
+> spells them `extension-mm30.assessment-1.0.json` (a **dot**), but the shipped loader has always
+> flattened dots to hyphens (`loader._filename_for`: `component.name.replace(".", "-")`), which is
+> why all 13 bio extensions are `extension-bio-rnaseq-1.0.json` and not `extension-bio.rnaseq-…`.
+> This task's own `science.yaml` comment says hyphens. The **hyphen** spelling shipped; the Files
+> list was the typo, and a dotted file would have raised `SchemaNotFoundError` at first use.
+>
+> **2. `resolve_profile` lives in a new `resolve.py`, not in `profile.py`.** It needs `SchemaLoader`
+> to read each extension's `properties` — but `loader` already imports `profile`, so putting it
+> there makes the package **cyclic**. `resolve` is a genuine third layer over the existing two:
+> `profile` parses, `loader` fetches, `resolve` composes a kind + a project's extensions.
+>
+> **3. The project schema dir is searched for extensions ONLY — never the base or a mixin.** Step 3
+> said "checks `project_dir` first, then falls back to package resources," full stop. Taken
+> literally, a project could drop its own `mixin-hypothesis-1.0.json` into `schemas/` and **silently
+> redefine the core kind for itself** — re-opening, through the very mechanism built to close it,
+> the per-project divergence this arc exists to end. A project may **own** fields; it may not
+> **redefine** the kind. Regression: `test_a_project_schema_dir_does_not_shadow_a_PACKAGE_schema`.
+>
+> **4. `source_stated_evidence` ships as `pattern: "\S"`, not `minLength: 1`.** This task's text
+> still said `minLength: 1` — the exact constraint Task 6 had already been corrected for, because
+> **a single space has length 1**. Applying Task 6's own lesson here rather than re-shipping the bug
+> it fixed.
+
+> ### mm30's three labels are typed and non-empty, but deliberately NOT enum-locked
+>
+> The corpus is perfectly consistent — `confidence_label` and `confidence_mechanistic_label` are
+> each one of `{high, moderate, low}`, and `identification` is `observational` (11) or
+> `methodological` (1). Enum-locking was tempting and is **not** what shipped.
+>
+> A vocabulary is only enforceable once its **owner** has ruled on it, and mm30's author has not.
+> Enum-locking on 12 observations would be enforcing an **uncertified vocabulary** — precisely how
+> the status check earlier in this same arc broke `validate` across five projects and produced 472
+> findings. `pattern: "\S"` is a real contract (the field must be present and say something); the
+> closed vocabulary is a **one-line change to a project-owned file** whenever mm30 wants to make it.
+> That it can be made *there*, without touching the toolkit, is what ownership is for.
 
 ---
 
