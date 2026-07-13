@@ -3256,6 +3256,10 @@ cd science       && uv run ruff check && uv run pyright
   **WARN** (ERROR at Task 12's ratchet, which lists this file). Kind-scoped rule names, because the
   gate keys on rule name alone. It *consumes* `SupersedesGraph` rather than re-deriving edges: one
   authority, several readers.
+- Modify: `science/src/science_tool/validate/checks/__init__.py:25-76` — add `"supersession"` to
+  `CANONICAL_CHECK_MODULES`. **This is not bookkeeping; it is half the check.** `@Check` only runs when
+  the module is imported, and `_load_canonical_checks` importing this tuple is the only importer.
+  Decorated-but-unlisted = never registered = never run.
 - Test: `science/model/tests/test_supersedable_gate.py`, `science/model/tests/test_mixin_hypothesis.py`,
   `science/tests/test_consolidation_mark_superseded.py`,
   `science/tests/validate/test_check_supersession.py`
@@ -3268,11 +3272,17 @@ cd science       && uv run ruff check && uv run pyright
   `load_project_sources` + `ReferenceResolver.from_entities(..., identity_table=build_identity_table(sources))`
   — the SAME CALL `materialize` makes (`materialize.py:349`), not a reimplementation of it
 - Produces: `_prepare_write(project_root, ref, fields) -> _PreparedWrite` and
-  `_commit_write(prepared) -> EntityWriteResult` — **both private, and so is `_PreparedWrite`**: an
-  unforgeable token, so the commit half cannot be reached with text nobody validated;
-  `IdResolution`; `SupersessionError`; `report["mismatched_kinds"]`, `report["unresolved_targets"]`,
+  `_commit_write(prepared) -> EntityWriteResult` — **both private, and so is `_PreparedWrite`**, which
+  carries a module-private `seal` its `__post_init__` identity-checks, so the commit half cannot be
+  handed text nobody validated (privacy by underscore is a convention; the seal is a check);
+  `IdResolution` — `.canonical(raw)`, `.kind_of(canonical_id)` (**every** backed population, because
+  legality is a question about the resolved entity), `.mutable`, `.archived`;
+  `SupersedesGraph.path_by_id` (the check reports a *file*: `Result` has no `entity_id` field);
+  `SupersessionError`; `report["mismatched_kinds"]`, `report["unresolved_targets"]`,
   `report["archived_targets"]`, `report["unmanaged_targets"]`, `report["unbacked_inverses"]`,
   `report["to_repair"]`, `report["repaired"]`
+- Produces: a **registered** `validate` check — `checks/supersession.py` decorated with `@Check`, and
+  `"supersession"` in `CANONICAL_CHECK_MODULES`. Both, or it never runs.
 - **Does NOT produce a public `stamp_supersession`, and does NOT produce a public prepare.** The
   derived writer is `consolidation._prepare_supersession(project_root, graph, member)` — it takes the
   **graph**, not a lineage string, so the superseder is read from `graph.superseder_by_id` (i.e. from
@@ -3449,7 +3459,8 @@ class SupersedesGraph:
     linear: tuple[SupersededChain, ...]
     non_linear: tuple[NonLinearComponent, ...]
     status_by_id: Mapping[str, str | None]
-    kind_by_id: Mapping[str, str]
+    kind_by_id: Mapping[str, str]         # LIVE entities -- the population `mark_superseded` stamps
+    path_by_id: Mapping[str, Path]        # LIVE entities -- `Result` reports a FILE, not an id
     edges: frozenset[tuple[str, str]]     # every ADMITTED (superseder, superseded) edge, canonical
     superseder_by_id: Mapping[str, str]   # superseded id -> its IMMEDIATE superseder (linear only)
     superseded_by_id: Mapping[str, str]   # superseded id -> the AUTHORED inverse, CANONICALIZED
@@ -3459,6 +3470,11 @@ class SupersedesGraph:
     unresolved_targets: tuple[dict[str, str], ...]  # edge resolves NOWHERE -- dangling
     unbacked_inverses: tuple[dict[str, str], ...]   # authored inverse with NO admitted edge behind it
 ```
+
+> `kind_by_id` and `path_by_id` are **live-only, and deliberately so** — they are the writer's map of
+> what it can stamp. The *legality* question needs kinds for targets we will never stamp (archived
+> rows, commons entities), and that map is a different map, on `IdResolution`, spanning a different
+> population. Merging them would be the whole bug in finding 2 again, wearing a dataclass field.
 
 > `edges` is on the graph because the **unbacked-inverse** rule and the `validate` check are both
 > *consumers* of the admission decision, not second opinions about it. Exposing the admitted set is
@@ -3481,11 +3497,34 @@ class IdResolution:
     fixes. `mutable` is the LIVE MARKDOWN scan -- not `sources.entities`, which also carries
     commons-overlay and non-markdown entities that `iter_entity_frontmatter` never saw and
     `kind_by_id` has no key for.
+
+    And LEGALITY is orthogonal to BOTH, which is the third. `kind_of` spans EVERY population the
+    resolver can reach -- live, archived, and everything else in `sources.entities` -- because that is
+    the population `materialize` validates a relation endpoint against: it reads `object_entity.kind`
+    for whatever the reference resolved to, live or not (`materialize.py:1721`). A kind map that
+    stopped at the live scan could not ask the legality question about the very targets we decline to
+    stamp -- so those edges would skip the check entirely. See the box below.
     """
 
     resolver: ReferenceResolver    # the SAME object, with the SAME args, that `materialize` uses
     mutable: frozenset[str]        # canonical ids of LIVE MARKDOWN entities -- the only stampable set
     archived: frozenset[str]       # canonical ids of ACTIVE archived rows
+    kind_by_id: Mapping[str, str]  # kind of EVERY id ANY population backs -- live, archived, or other
+
+    def canonical(self, raw: str) -> str | None:
+        res = self.resolver.resolve(raw)
+        return res.canonical_id if res.status == "resolved" and res.canonical_id else None
+
+    def kind_of(self, canonical_id: str) -> str | None:
+        """The kind of a RESOLVED id, or None if NOTHING backs it.
+
+        `None` is a real answer, not a lookup miss. `build_alias_map` registers manual aliases
+        UNCONDITIONALLY -- `_register_alias(alias_map, alias, canonical_id)` (`sources.py:660-662`) --
+        so an alias resolves to its canonical id whether or not any record backs that id. Such a
+        target is dangling with extra steps: we know nothing about it, we cannot ask whether the edge
+        is legal, and it must BLOCK rather than settle into benign `unmanaged` debt.
+        """
+        return self.kind_by_id.get(canonical_id)
 
     def canonical(self, raw: str) -> str | None:
         res = self.resolver.resolve(raw)
@@ -3572,24 +3611,50 @@ class IdResolution:
 #     commit_entity_write(PreparedWrite(entity_id=..., path=..., text="<anything>", warnings=()))
 #
 # A boundary whose "already validated, nothing left to check" half is reachable from outside has
-# simply moved the front door. The unforgeable-token shape is the point: `_PreparedWrite` can only
-# come from `_prepare_write`, and `_commit_write` accepts nothing else.
+# simply moved the front door.
+#
+# SO THE TOKEN CARRIES A SEAL, because a frozen dataclass alone is NOT unforgeable -- a plain
+# `_PreparedWrite(entity_id=..., path=..., text="<anything>", warnings=())` is one call, and privacy by
+# underscore is a convention the interpreter does not enforce. `__post_init__` identity-checks a
+# module-private sentinel that only `_prepare_write` holds, so the ONLY way to get a value
+# `_commit_write` accepts is to have gone through validation.
+#
+# THE HONEST CLAIM, since Python has no private constructors: this does not make forgery
+# *impossible* -- `entities._SEAL` is reachable by anyone willing to import a private name from
+# another module. It makes forgery **inexpressible by accident**: it cannot be reached by a plausible
+# refactor, a helpful import, or a caller who thought this was the supported path. Naming `_SEAL` is
+# an unmistakable, deliberate act, and no reviewer would read it as anything else. That is the
+# strongest form the guarantee takes in this language, and it is stated as such rather than as the
+# absolute the earlier draft implied.
+_SEAL = object()   # module-private; never exported, never a parameter default
+
+
 @dataclass(frozen=True)
 class _PreparedWrite:
     entity_id: str
     path: Path
     text: str                      # fully rendered, fully validated -- nothing left to decide
     warnings: tuple[str, ...]
+    seal: object                   # must BE `_SEAL` -- identity, not equality
+
+    def __post_init__(self) -> None:
+        if self.seal is not _SEAL:
+            raise TypeError(
+                "_PreparedWrite is not constructible: it is the proof that _prepare_write validated "
+                "this text. Call _prepare_write."
+            )
 
 
 def _prepare_write(project_root: Path, ref: str, fields: Mapping[str, object]) -> _PreparedWrite:
-    """PRIVATE. Merge, render, validate. Writes NOTHING. Callers: `edit_entity` (which cannot
+    """PRIVATE. Merge, render, validate, SEAL. Writes NOTHING. Callers: `edit_entity` (which cannot
     express `superseded_by`) and `consolidation._prepare_supersession` (which derives it)."""
 
 
 def _commit_write(prepared: _PreparedWrite) -> EntityWriteResult:
     """PRIVATE. Atomically replace the file. Decides nothing; validates nothing -- which is exactly
-    why it must not be public: its contract is `write this text`, and it keeps that contract."""
+    why it must not be public: its contract is `write this text`, and it keeps that contract. It is
+    safe only because the seal means every `_PreparedWrite` it can be handed came from
+    `_prepare_write`."""
 
 
 # THE AUTHORED SURFACE. Explicit, keyword-only, and it must NEVER grow a `**kwargs` -- see Task 10
@@ -3773,21 +3838,48 @@ def _id_resolution(project_root: Path, entries: list[tuple[Path, dict[str, Any]]
         identity_table=build_identity_table(sources),   # <- materialize passes this; so do we
     )
 
-    def canonical(raw: str) -> str:
+    def canon_or_self(raw: str) -> str:
         res = resolver.resolve(raw)
         return res.canonical_id if res.status == "resolved" and res.canonical_id else raw
 
+    # THE KIND MAP SPANS EVERY POPULATION THE RESOLVER CAN REACH, because the LEGALITY question is
+    # about the resolved ENTITY, not about whether we can write to it. Three sources, live last so it
+    # wins -- it is the only one that reflects what is on disk right now:
+    #
+    #   1. `sources.entities`  -- commons overlay, non-markdown adapters. Carries `.kind`. This is
+    #      literally the population `materialize` reads `object_entity.kind` from.
+    #   2. the ARCHIVE INDEX   -- archived markdown is NOT loaded as an entity (`sources.py:610-613`),
+    #      so it is in NEITHER `sources.entities` nor the live scan. `ArchiveRow.kind` is nullable
+    #      (`archive.py:32`), so fall back to the id prefix -- the same rule `_kind_of` already uses.
+    #   3. the LIVE SCAN       -- authoritative for what exists now.
+    archive = load_archive_index(project_root)
+    kind_by_id: dict[str, str] = {}
+    for entity in sources.entities:
+        kind_by_id[entity.canonical_id] = entity.kind
+    for cid, row in archive.active_by_id.items():
+        kind_by_id[cid] = _kind_or_prefix(cid, row.kind)
+    for _path, fm in entries:
+        eid = canon_or_self(str(fm["id"]))
+        kind_by_id[eid] = _kind_or_prefix(eid, fm.get("kind"))
+
     # MUTABLE = the MARKDOWN SCAN, canonicalized. NOT `sources.entities`: that list also carries
     # commons-overlay and non-markdown entities which `iter_entity_frontmatter` never yielded, so
-    # `kind_by_id` has no key for them -- classify one as stampable and the next line KeyErrors.
+    # the graph's live `kind_by_id`/`path_by_id` have no key for them -- classify one as stampable and
+    # the next line KeyErrors.
     return IdResolution(
         resolver=resolver,
-        mutable=frozenset(canonical(str(fm["id"])) for _path, fm in entries),
-        archived=frozenset(load_archive_index(project_root).active_by_id),
+        mutable=frozenset(canon_or_self(str(fm["id"])) for _path, fm in entries),
+        archived=frozenset(archive.active_by_id),
+        kind_by_id=kind_by_id,
     )
+
+
+def _kind_or_prefix(entity_id: str, declared: str | None) -> str:
+    """The declared kind, else the id prefix. `_kind_of` delegates here; ids are `<kind>:<slug>`."""
+    return str(declared or entity_id.split(":", 1)[0])
 ```
 
-> #### Resolvable ≠ ours. They are two questions, and one `else` was answering both.
+> #### Resolvable ≠ ours ≠ legal. THREE questions, and each draft has collapsed a different pair.
 >
 > An earlier draft classified with `if dst not in resolution.live:` and treated everything that fell
 > through as **archived** — "an id cannot resolve to neither." **It can.** A project's manual aliases,
@@ -3795,22 +3887,63 @@ def _id_resolution(project_root: Path, entries: list[tuple[Path, dict[str, Any]]
 > the live markdown scan nor the archive index. The draft would have filed such a target as a frozen
 > archived record — and, one line later, indexed `kind_by_id[dst]` for a key that was never there.
 >
-> So the two questions are asked separately: **the resolver** says whether a reference *denotes*
-> anything; **`mutable` / `archived`** say whether we *own* what it denotes. Four outcomes, and the
-> fourth is not an error:
+> The draft that *fixed* that then collapsed the other pair: it answered **ownership first** and
+> `continue`d, so `relation_allows_kinds` was **downstream of the archived and unmanaged branches and
+> could never fire on them**:
 >
-> | resolves? | owned by | outcome | blocks apply? |
-> |---|---|---|---|
-> | yes | the live markdown scan | **admit** — classify it | — |
-> | yes | the archive index | `archived_targets` — historical, frozen | **no** |
-> | yes | **neither** (commons overlay, manual alias, non-markdown source) | `unmanaged_targets` — the graph resolves it; there is no markdown file *here* to stamp | **no** |
-> | no | — | `unresolved_targets` — dangling | **yes** |
+> ```
+> interpretation:new  sci:supersedes  dataset:commons-thing     # ILLEGAL PAIR
+>   -> resolves (commons overlay) -> not mutable -> `unmanaged_targets` -> reported BENIGN, apply proceeds
+> ```
+>
+> **`materialize` rejects that edge** (`_validate_authored_relation_endpoint`, `materialize.py:1721`,
+> `ValueError`) — and it does so against `object_entity.kind` for *whatever the reference resolved to*,
+> live or not. Ownership is not one of its inputs. So an illegal edge into the archive or into commons
+> would sail past the one check written to catch it, and the corpus would only break later, at graph
+> build, with no finding from the surface that had the edge in its hand.
+>
+> **This is the plan's own lesson, one layer up.** Three boxes above, an illegal edge had to be
+> refused *before* `_connected_components` because "a guard that runs downstream of the corruption it
+> detects is not a guard." Putting the ownership `continue` in front of the pair check moved the same
+> guard downstream of the same corruption. The fix is the same fix: **decide legality first, on the
+> resolved entity — then decide who owns it.**
+>
+> | resolves? | backed by a record? | pair legal? | outcome | blocks apply? |
+> |---|---|---|---|---|
+> | no | — | — | `unresolved_targets` — dangling | **yes** |
+> | yes | **nothing** (a manual alias to an id no record backs) | *unanswerable* | `unresolved_targets` — dangling with extra steps | **yes** |
+> | yes | yes | **no** | `mismatched` — the relation model forbids it | **yes** |
+> | yes | live markdown | yes | **admit** — classify it | — |
+> | yes | the archive index | yes | `archived_targets` — historical, frozen | **no** |
+> | yes | neither (commons, non-markdown) | yes | `unmanaged_targets` — resolves; no markdown file *here* to stamp | **no** |
+>
+> Row 2 is the reviewer's alias-with-no-record, and it blocks: with no record we have no kind, with no
+> kind the legality question is *unanswerable*, and an unanswerable guard must not report **benign**.
+> Note what rows 5 and 6 now mean — they are `archived`/`unmanaged` **and legal**. "We won't stamp it"
+> is a statement about our write scope; it was never a licence to skip the edge's own validity.
 
 ```python
-# consolidation.py -- build_supersedes_graph(entries, resolution): RESOLVE, then classify OWNERSHIP.
-# Edge admission resolves FIVE ways and every one of them is recorded. `continue` without a record is
-# how the old filter lied; raw string membership is how the draft that fixed it would have lied back,
-# by refusing an alias the graph resolves.
+# consolidation.py -- build_supersedes_graph's preamble. The LIVE maps, canonicalized. `consolidation.py:158-165`
+# builds `status_by_id`/`kind_by_id` today keyed on the RAW id and drops `path` on the floor; both change.
+# `path_by_id` exists because `Result` reports a FILE (`result.py:24-30`), and the validate check must not
+# re-derive the canonicalization that produced the key it looks up.
+    status_by_id: dict[str, str | None] = {}
+    kind_by_id: dict[str, str] = {}
+    path_by_id: dict[str, Path] = {}
+    for path, fm in entries:
+        eid = resolution.canonical(str(fm["id"])) or str(fm["id"])
+        status_by_id[eid] = fm.get("status")
+        kind_by_id[eid] = _kind_or_prefix(eid, fm.get("kind"))
+        path_by_id[eid] = path
+```
+
+```python
+# consolidation.py -- build_supersedes_graph(entries, resolution).
+# RESOLVE -> is it BACKED? -> is the pair LEGAL? -> and only THEN, who OWNS it?
+# Edge admission resolves SIX ways and every one of them is recorded. `continue` without a record is
+# how the original filter lied; raw string membership is how the first fix would have lied back, by
+# refusing an alias the graph resolves; and an ownership `continue` ABOVE the pair check is how the
+# second one would have -- by waving through an illegal edge as benign, unstampable debt.
     edges: list[tuple[str, str]] = []
     mismatched: list[dict[str, str]] = []
     archived_targets: list[dict[str, str]] = []
@@ -3826,34 +3959,59 @@ def _id_resolution(project_root: Path, entries: list[tuple[Path, dict[str, Any]]
                 unresolved_targets.append({"id": raw, "superseder": src,
                                            "reason": "sci:supersedes target resolves to nothing"})
                 continue
+
+            # BACKED? A manual alias resolves to its canonical id whether or not any RECORD backs that
+            # id -- `build_alias_map` registers the mapping unconditionally (`sources.py:660-662`). No
+            # record means no kind; no kind means the legality question below is UNANSWERABLE. An
+            # unanswerable guard must not return "benign", so this is dangling, and it BLOCKS.
+            dst_kind = resolution.kind_of(dst)
+            if dst_kind is None:
+                unresolved_targets.append({"id": dst, "superseder": src,
+                                           "reason": "sci:supersedes target resolves through an alias "
+                                                     "to an id that no live, archived, or source "
+                                                     "record backs"})
+                continue
+
+            # LEGAL? -- BEFORE ownership, and before `_connected_components`. `materialize` raises
+            # ValueError on a forbidden pair for ANY resolved target, live or not: it reads
+            # `object_entity.kind` and never asks who can write the file (`materialize.py:1721`).
+            # Ask ownership first and this check never runs on an archived or commons target -- an
+            # illegal edge would be filed as benign and apply would proceed. It BLOCKS.
+            src_kind = resolution.kind_of(src) or _kind_or_prefix(src, fm.get("kind"))
+            if not relation_allows_kinds(_supersedes_kind(), src_kind, dst_kind):
+                mismatched.append({"id": dst, "superseder": src,
+                                   "reason": f"{src_kind} -> {dst_kind} is not an allowed "
+                                             f"sci:supersedes pair"})
+                continue
+
+            # The edge is REAL. Now, and only now, the question the WRITER cares about: can we stamp
+            # the thing it points at?
             if dst in resolution.archived:
                 # A VALID historical supersession into a frozen record. Not an error, and not a
-                # mutation: `_reject_if_archived` would refuse the write anyway. Report it; do not
-                # classify it; do not block apply.
+                # mutation: `_reject_if_archived` would refuse the write anyway. Report it; keep it
+                # out of the topology; do not block apply.
                 archived_targets.append({"id": dst, "superseder": src,
                                          "reason": "target is archived (frozen); "
                                                    "no live record to stamp"})
                 continue
             if dst not in resolution.mutable:
-                # RESOLVED, and OURS TO STAMP -- no. A commons-overlay entity, a manual alias out of
-                # the project, a non-markdown source. `materialize` builds this edge happily; we
-                # simply have no markdown file here to write. Report; do not classify; do not block.
+                # RESOLVED, LEGAL, and ours to stamp -- no. A commons-overlay entity, a non-markdown
+                # source. `materialize` builds this edge happily; we simply have no markdown file here
+                # to write. Report; keep it out of the topology; do not block.
                 unmanaged_targets.append({"id": dst, "superseder": src,
                                          "reason": "target resolves but is not a live markdown "
                                                    "entity of this project; nothing here to stamp"})
                 continue
-            src_kind, dst_kind = kind_by_id[src], kind_by_id[dst]
-            if not relation_allows_kinds(_supersedes_kind(), src_kind, dst_kind):
-                # NOT an edge. `materialize` raises ValueError on this pair, and this write path
-                # never calls materialize -- so if it is admitted here, nothing stops it. Excluding
-                # it BEFORE `_connected_components` is what keeps one bad edge from poisoning a
-                # legal chain's linearity and taking both down silently.
-                mismatched.append({"id": dst, "superseder": src,
-                                   "reason": f"{src_kind} -> {dst_kind} is not an allowed "
-                                             f"sci:supersedes pair"})
-                continue
             edges.append((src, dst))
 ```
+
+> **Why `archived`/`unmanaged` edges stay out of the topology even though they are now *validated*.**
+> Legality and topology are still separate: an admitted edge is one whose *superseded* endpoint is a
+> file we can stamp, and the point of `edges` is to drive the stamping. An archived target is frozen;
+> a commons target is not ours. Including either would put a node in a component that
+> `_classify` would then count in-degree for — and `mark_superseded` would plan a write against a
+> record that has no file here. They are *reported*, in full, and they are *checked*; they are simply
+> not stampable, which is a different sentence.
 
 ```python
 # consolidation.py -- the FOURTH outcome, derived from the admitted edges and nothing else.
@@ -4039,7 +4197,10 @@ def _manual_alias(tmp_path: Path, alias: str, canonical: str) -> None:
     """Register a project manual alias -- `knowledge/sources/<profile>/mappings.yaml`
     (`commons/aliases.py:11-23`), which `load_project_sources` folds into the resolver.
 
-    This is how a reference RESOLVES to something the project does not own a markdown file for.
+    `build_alias_map` registers the mapping UNCONDITIONALLY (`sources.py:660-662`), so this is how a
+    reference RESOLVES to an id that NO RECORD BACKS -- which is a dangling edge, not an unmanaged
+    one. (For a target that resolves AND is backed but is not ours to stamp -- the commons overlay,
+    a non-markdown source -- construct the `IdResolution` directly; see `_resolution`.)
     """
     path = tmp_path / "knowledge" / "sources" / "local" / "mappings.yaml"
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -4236,7 +4397,7 @@ def test_an_UNRESOLVED_target_is_REPORTED_and_BLOCKS_apply(tmp_path: Path) -> No
 
     assert report["unresolved_targets"] == [
         {"id": "interpretation:i-GONE", "superseder": "interpretation:i-v2",
-         "reason": "sci:supersedes target resolves to no live or archived entity"},
+         "reason": "sci:supersedes target resolves to nothing"},
     ]
     assert report["archived_targets"] == []
     # Report mode still enumerates EVERYTHING -- the legal chain is fully diagnosed alongside it.
@@ -4293,32 +4454,109 @@ def test_an_ARCHIVED_ALIAS_target_resolves_to_the_ARCHIVE_not_to_nowhere(tmp_pat
     ]
 
 
-def test_a_RESOLVABLE_target_WE_DO_NOT_OWN_is_reported_and_does_not_BLOCK(tmp_path: Path) -> None:
-    # THE FOURTH OWNERSHIP STATE, and the one an earlier draft's `else` swallowed. It classified with
-    # `if dst not in live: -> archived`, on the theory that "an id cannot resolve to neither." It can:
-    # manual aliases, the commons overlay, and non-markdown sources all put ids into the resolver that
-    # are in NEITHER the live markdown scan NOR the archive index. That draft would have filed this
-    # target as a frozen archived record and then, one line later, indexed `kind_by_id[dst]` for a key
-    # that was never there -- a KeyError on a corpus the graph handles fine.
+def _resolution(*, mutable: set[str], archived: set[str], kinds: dict[str, str]) -> IdResolution:
+    """Construct the resolution bundle DIRECTLY. The builder is a pure function of its inputs -- that
+    is the whole reason it takes an `IdResolution` -- so the commons/non-markdown populations, which
+    would otherwise need a commons repo on disk, are expressible as the data they actually are."""
+    entities = [Entity(canonical_id=cid, kind=kind, title=cid) for cid, kind in kinds.items()]
+    return IdResolution(resolver=ReferenceResolver.from_entities(entities),
+                        mutable=frozenset(mutable), archived=frozenset(archived), kind_by_id=kinds)
+
+
+def test_a_RESOLVABLE_LEGAL_target_WE_DO_NOT_OWN_is_reported_and_does_not_BLOCK() -> None:
+    # THE SIXTH ROW. An earlier draft's `else` swallowed this one: it classified with
+    # `if dst not in live: -> archived`, on the theory that "an id cannot resolve to neither." It can --
+    # the commons overlay and non-markdown sources put ids into the resolver that are in NEITHER the
+    # live markdown scan NOR the archive index -- and that draft would have filed this target as a
+    # frozen archived record, then indexed `kind_by_id[dst]` for a key that was never there.
     #
-    # RESOLVABLE and OURS are different questions. The resolver answers the first; `mutable`/`archived`
-    # answer the second. Not ours -> nothing to stamp -> report, and do not block.
+    # RESOLVABLE, LEGAL, and OURS are three questions. Resolvable-and-legal but not ours -> nothing to
+    # stamp -> report, and do not block. NOTE the target is a `conclusion`, not a `dataset`: an
+    # unmanaged target must still be a LEGAL endpoint to land here. The illegal one is the next test.
+    entries = [
+        (Path("i-v2.md"), {"id": "interpretation:i-v2", "kind": "interpretation",
+                           "relations": [_supersedes("conclusion:commons-thing")]}),
+        (Path("j-v1.md"), {"id": "interpretation:j-v1", "kind": "interpretation", "status": "active"}),
+        (Path("j-v2.md"), {"id": "interpretation:j-v2", "kind": "interpretation",
+                           "relations": [_supersedes("interpretation:j-v1")]}),
+    ]
+    graph = build_supersedes_graph(entries, _resolution(
+        mutable={"interpretation:i-v2", "interpretation:j-v1", "interpretation:j-v2"},
+        archived=set(),
+        kinds={"interpretation:i-v2": "interpretation", "interpretation:j-v1": "interpretation",
+               "interpretation:j-v2": "interpretation",
+               "conclusion:commons-thing": "conclusion"},   # backed by a source; not live markdown
+    ))
+
+    assert graph.unresolved_targets == ()                  # it RESOLVES
+    assert graph.archived_targets == ()                    # ...and it is NOT archived
+    assert graph.mismatched == ()                          # ...and the pair is LEGAL
+    assert [u["id"] for u in graph.unmanaged_targets] == ["conclusion:commons-thing"]
+    assert graph.linear == (SupersededChain(survivor="interpretation:j-v2",
+                                            superseded=("interpretation:j-v1",)),)
+
+
+def test_an_ILLEGAL_pair_into_an_UNMANAGED_target_is_MISMATCHED_not_benign() -> None:
+    # THE ORDERING BUG, stated as a corpus. `dataset` is not an endpoint of `supersedes` at ANY
+    # position (core.py:687 -- `allowed_kind_pairs` is workflow-run + the conclusion pairs), so
+    # `materialize` RAISES on this edge. But the draft that answered OWNERSHIP first saw "resolves,
+    # not mutable" and `continue`d into `unmanaged_targets` -- benign, unstampable, apply proceeds --
+    # WITHOUT EVER REACHING `relation_allows_kinds`. The pair check sat downstream of the corruption
+    # it was written to detect, which is the same defect this task already fixed one layer up (the
+    # kind guard inside `graph.linear`).
+    entries = [(Path("i.md"), {"id": "interpretation:new", "kind": "interpretation",
+                               "relations": [_supersedes("dataset:commons-thing")]})]
+    graph = build_supersedes_graph(entries, _resolution(
+        mutable={"interpretation:new"}, archived=set(),
+        kinds={"interpretation:new": "interpretation", "dataset:commons-thing": "dataset"},
+    ))
+
+    assert graph.unmanaged_targets == ()                   # NOT waved through as benign debt
+    assert [m["id"] for m in graph.mismatched] == ["dataset:commons-thing"]
+    assert "interpretation -> dataset" in graph.mismatched[0]["reason"]
+
+
+def test_an_ILLEGAL_pair_into_the_ARCHIVE_is_MISMATCHED_not_benign(tmp_path: Path) -> None:
+    # Same bug, other population, and end-to-end: an archived row carries a KIND (`archive.py:32`), so
+    # the pair is answerable -- and it is wrong. "We won't stamp it" was never a licence to skip the
+    # edge's own validity. It BLOCKS, exactly as a live illegal pair does.
+    _archive(tmp_path, "datasets", "d-old", {"id": "dataset:d-old", "kind": "dataset",
+                                             "status": "archived"})
+    _write(tmp_path, "interpretations", "i-new", {"id": "interpretation:i-new",
+                                                  "kind": "interpretation",
+                                                  "relations": [_supersedes("dataset:d-old")]})
+
+    report = mark_superseded(tmp_path, apply=False)
+
+    assert report["archived_targets"] == []                # NOT filed as a benign historical edge
+    assert [m["id"] for m in report["mismatched_kinds"]] == ["dataset:d-old"]
+
+    with pytest.raises(SupersessionError):
+        mark_superseded(tmp_path, apply=True)
+
+
+def test_an_ALIAS_to_an_id_NOTHING_BACKS_is_DANGLING_and_BLOCKS(tmp_path: Path) -> None:
+    # ROW 2, and the trap in the fixture that used to "prove" the unmanaged case. `build_alias_map`
+    # registers a manual alias UNCONDITIONALLY (`sources.py:660-662`), so this token RESOLVES -- to an
+    # id that no live entity, no archive row, and no source record backs. The draft that keyed
+    # ownership off `mutable`/`archived` alone would have called that `unmanaged`: benign, no block.
+    #
+    # But with no record there is no KIND, and with no kind the legality question is UNANSWERABLE. An
+    # unanswerable guard must not report "benign". This is a dangling edge with extra steps, and it
+    # blocks like one.
     _write(tmp_path, "interpretations", "i-v2", {"id": "interpretation:i-v2",
                                                  "kind": "interpretation",
-                                                 "relations": [_supersedes("dataset:external-thing")]})
-    _manual_alias(tmp_path, "dataset:external-thing", "dataset:external-thing")   # resolves; not ours
-    _write(tmp_path, "interpretations", "j-v1", {"id": "interpretation:j-v1",
-                                                 "kind": "interpretation", "status": "active"})
-    _write(tmp_path, "interpretations", "j-v2", {"id": "interpretation:j-v2",
-                                                 "kind": "interpretation",
-                                                 "relations": [_supersedes("interpretation:j-v1")]})
+                                                 "relations": [_supersedes("interpretation:ghost")]})
+    _manual_alias(tmp_path, "interpretation:ghost", "interpretation:ghost-canonical")
 
-    report = mark_superseded(tmp_path, apply=True)      # does NOT raise, and does NOT KeyError
+    report = mark_superseded(tmp_path, apply=False)
 
-    assert report["unresolved_targets"] == []           # it RESOLVES
-    assert report["archived_targets"] == []             # ...and it is NOT archived
-    assert [u["id"] for u in report["unmanaged_targets"]] == ["dataset:external-thing"]
-    assert report["applied"] == ["interpretation:j-v1"]  # the unrelated live chain still applies
+    assert report["unmanaged_targets"] == []               # NOT benign debt
+    assert [u["id"] for u in report["unresolved_targets"]] == ["interpretation:ghost-canonical"]
+    assert "no live, archived, or source record backs" in report["unresolved_targets"][0]["reason"]
+
+    with pytest.raises(SupersessionError):
+        mark_superseded(tmp_path, apply=True)
 
 
 def test_a_RESOLVABLE_but_GROUNDLESS_inverse_is_REPORTED_and_BLOCKS_apply(tmp_path: Path) -> None:
@@ -4434,8 +4672,27 @@ def test_a_RECONCILED_record_is_BYTE_IDENTICAL_afterwards(tmp_path: Path) -> Non
   inverse, but it is an *opt-in* command — a corpus can carry a groundless lineage indefinitely
   without anyone running it. `validate` is the pass everyone runs.
 
+**A check module is inert until it is BOTH decorated and imported.** `@Check` is what appends to
+`CANONICAL_CHECKS` (`checks/__init__.py:84-87`), and `_load_canonical_checks` — which iterates
+`CANONICAL_CHECK_MODULES` (`checks/__init__.py:25-76`) — is the only thing that *imports* the module
+and therefore the only thing that ever *runs* the decorator. An earlier draft of this step wrote a
+bare `def run(...)` and never touched the tuple, so `science validate` would not have imported the
+file, would not have registered the check, and **would not have moved the snapshot count** — the very
+signal this step tells you to regenerate. The instrument would have sat dead until Task 12's flip test
+failed against a rule that had never once been emitted. **Both legs, or the check does not exist:**
+
 ```python
-# science/src/science_tool/validate/checks/supersession.py
+# science/src/science_tool/validate/checks/__init__.py -- the SECOND leg. Without this line the
+# module is never imported, so `@Check` never runs and `CANONICAL_CHECKS` never learns about it.
+CANONICAL_CHECK_MODULES = (
+    ...,
+    "methods",
+    "supersession",      # <- Task 7a
+)
+```
+
+```python
+# science/src/science_tool/validate/checks/supersession.py -- the FIRST leg.
 # CONSUMES the graph. It does not re-derive edges -- `build_supersedes_graph` is the sole authority on
 # what an edge is, and a check that recomputed them could disagree with the thing it is checking.
 #
@@ -4446,20 +4703,30 @@ def test_a_RECONCILED_record_is_BYTE_IDENTICAL_afterwards(tmp_path: Path) -> Non
 # gate the WARN findings of every UNCERTIFIED kind too -- promoting the whole vocabulary the moment
 # one kind earns it, which is the precise mistake the status-vocabulary incident was: severity graded
 # on the wrong axis. Kind-scoped names let the gate advance one certified kind at a time.
-def run(ctx: CheckContext) -> list[Result]:
+from science_tool.consolidation import _id_resolution, build_supersedes_graph, iter_entity_frontmatter
+from science_tool.validate.checks import Check
+from science_tool.validate.context import ValidateContext
+from science_tool.validate.result import Result, Severity
+
+
+@Check(section="supersession lineage", order=29)
+def check_supersession(ctx: ValidateContext) -> Iterator[Result]:
     entries = iter_entity_frontmatter(ctx.project_root)
     graph = build_supersedes_graph(entries, resolution=_id_resolution(ctx.project_root, entries))
-    results = []
     for u in graph.unbacked_inverses:
         kind = graph.kind_by_id[u["id"]]
-        results.append(Result(
-            rule=f"{kind}.unbacked-inverse",
-            severity=Severity.WARN,   # <- TASK 12 REPLACES THIS with `severity_for_kind(kind)`.
-            entity_id=u["id"],
-            message=f"superseded_by: {u['superseder']} has no canonical sci:supersedes edge behind "
-                    f"it; author the edge on {u['superseder']} or drop the field",
-        ))
-    return results
+        # `Result` is (severity, path, line, message, rule, task) -- there is NO `entity_id` field
+        # (`result.py:24-30`), which is why the graph carries `path_by_id`: the check must report the
+        # FILE, and it must not re-derive the canonicalization that produced the id.
+        yield Result(
+            Severity.WARN,   # <- TASK 12 REPLACES THIS with `severity_for_kind(kind)`.
+            graph.path_by_id[u["id"]],
+            None,
+            f"superseded_by: {u['superseder']} has no canonical sci:supersedes edge behind "
+            f"it; author the edge on {u['superseder']} or drop the field",
+            f"{kind}.unbacked-inverse",
+            None,
+        )
 ```
 
   **WARN here, and Task 12 owes the flip.** The reason it is WARN *in this task* is the one the
@@ -4473,6 +4740,44 @@ def run(ctx: CheckContext) -> list[Result]:
   never touched the emitter. So this task does not merely leave a comment: **Task 12's Files list, its
   ratchet function, and its flip test all name this emitter**, and its suite fails if the `WARN` above
   survives. See Task 12.
+
+  **And the WARN is proved to fire HERE, through `run_validate` — not through a direct call to
+  `check_supersession`.** Calling the function directly would pass with the registration missing,
+  which is precisely the failure this step was rewritten to close: the assertion has to travel the
+  path a user travels, so that a check that is decorated-but-not-listed (or listed-but-not-decorated)
+  fails *this* task rather than surviving to Task 12.
+
+```python
+# science/tests/validate/test_check_supersession.py -- reuses the `_write` / `_supersedes` helpers.
+def test_the_check_is_REGISTERED_and_fires_through_run_validate(tmp_path: Path) -> None:
+    # THROUGH `run_validate`, i.e. through `CANONICAL_CHECKS`. A direct `check_supersession(ctx)` call
+    # cannot tell a registered check from an unregistered one -- and an unregistered check is the
+    # entire defect. `interpretation` is the kind used because it can carry the field TODAY: no
+    # migration, no pin, and it stays WARN through Task 12 (the uncertified-kind control there).
+    _write(tmp_path, "interpretations", "i1", {"id": "interpretation:i1", "kind": "interpretation",
+                                               "status": "superseded",
+                                               "superseded_by": "interpretation:i2"})  # no edge behind it
+    _write(tmp_path, "interpretations", "i2", {"id": "interpretation:i2",
+                                               "kind": "interpretation"})   # resolves; grounds nothing
+
+    findings = [r for r in run_validate(tmp_path) if r.rule == "interpretation.unbacked-inverse"]
+
+    assert len(findings) == 1
+    assert findings[0].severity is Severity.WARN
+    assert findings[0].path == tmp_path / "entities/interpretations/i1.md"
+
+
+def test_a_BACKED_inverse_is_silent(tmp_path: Path) -> None:
+    # The control that makes the check falsifiable. Same corpus, one edge added -- and the finding has
+    # to disappear, or the rule is just "any superseded_by is a finding" wearing a better name.
+    _write(tmp_path, "interpretations", "i1", {"id": "interpretation:i1", "kind": "interpretation",
+                                               "status": "superseded",
+                                               "superseded_by": "interpretation:i2"})
+    _write(tmp_path, "interpretations", "i2", {"id": "interpretation:i2", "kind": "interpretation",
+                                               "relations": [_supersedes("interpretation:i1")]})
+
+    assert [r for r in run_validate(tmp_path) if r.rule.endswith(".unbacked-inverse")] == []
+```
 
   **Regenerate `science/tests/validate/snapshots/text_default.txt` in the same commit** — the check
   count moves. A new check landed without its snapshot once already (`5c2b44f1`), and the byte-identity
@@ -5459,13 +5764,38 @@ def test_the_unrestricted_MECHANISM_has_exactly_the_call_sites_we_sanctioned() -
 
 def test_the_COMMIT_half_has_exactly_the_call_sites_we_sanctioned() -> None:
     # `_commit_write` writes `.text` without validating it -- by contract. That contract is only safe
-    # while `_PreparedWrite` is unforgeable, i.e. while nothing outside these two call sites can hand
+    # while `_PreparedWrite` cannot be forged, i.e. while nothing outside these two call sites can hand
     # it one. `mark_superseded` is a sanctioned caller because it commits a batch that
     # `_prepare_supersession` prepared and `_prepare_write` validated.
     assert _call_sites("_commit_write") == {
         ("entities.py", "edit_entity"),
         ("consolidation.py", "mark_superseded"),
     }
+
+
+def test_a_PreparedWrite_cannot_be_CONSTRUCTED_only_earned() -> None:
+    # The AST guards above pin the call sites INSIDE THIS REPO. They say nothing about a caller who
+    # simply builds the token itself -- and until the seal, that caller was one line away from the
+    # unvalidated writer:
+    #
+    #     _commit_write(_PreparedWrite(entity_id=..., path=..., text="<anything>", warnings=()))
+    #
+    # So the constructor is the third guard, and it is the one that does not depend on where the code
+    # lives. NOTE THE HONEST SCOPE: `_SEAL` is importable by anyone who names it. This does not make
+    # forgery impossible -- Python has no private constructors -- it makes forgery impossible to
+    # commit by ACCIDENT.
+    with pytest.raises(TypeError, match="not constructible"):
+        _PreparedWrite(entity_id="hypothesis:0001-x", path=Path("x.md"),
+                       text="anything at all", warnings=(), seal=object())
+
+
+def test_the_SEAL_is_never_a_default_and_never_exported() -> None:
+    # A seal with a default value is not a seal -- `_PreparedWrite(...)` would supply it for free and
+    # the guard above would pass while proving nothing. And `__all__` must not carry the private
+    # names out of the module, or "private" is only true of the underscore.
+    assert signature(_PreparedWrite).parameters["seal"].default is Parameter.empty
+    exported = set(getattr(entities, "__all__", ()))
+    assert {"_SEAL", "_PreparedWrite", "_prepare_write", "_commit_write"} & exported == set()
 
 
 def test_a_CORRUPTED_inverse_is_caught_by_the_net_that_MATCHES_ITS_FAILURE(tmp_project) -> None:
@@ -5553,8 +5883,10 @@ def _prepare_write(project_root: Path, ref: str, fields: Mapping[str, object]) -
         project_root=project_root, rel_path=Path(location.rel_path),
         text=text, target_entity_id=location.entity_id,
     )
+    # The seal is applied HERE and nowhere else. It is not a field a caller fills in; it is this
+    # function's signature on the text -- the assertion that everything above actually ran.
     return _PreparedWrite(entity_id=location.entity_id, path=location.path,
-                          text=text, warnings=tuple(warnings))
+                          text=text, warnings=tuple(warnings), seal=_SEAL)
 ```
 
 > **Why `superseded_by` is settable HERE and expressible on neither writer.**
@@ -5598,8 +5930,8 @@ def edit_entity(
 
 def _commit_write(prepared: _PreparedWrite) -> EntityWriteResult:
     """PRIVATE. Atomic replace. Decides nothing, validates nothing -- everything was settled in
-    prepare, which is precisely why a PUBLIC version of this would be a second, unvalidated writer:
-    `_PreparedWrite` is a plain dataclass, so a public commit could be handed a forged one."""
+    prepare, which is precisely why a PUBLIC version of this would be a second, unvalidated writer.
+    It needs no check of its own: the SEAL on `_PreparedWrite` is the check, and it already ran."""
     _atomic_replace_text(prepared.path, prepared.text)
     return EntityWriteResult(entity_id=prepared.entity_id, path=prepared.path,
                              warnings=list(prepared.warnings))
