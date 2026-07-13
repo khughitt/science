@@ -63,19 +63,38 @@ Apply to **every** task; not restated per-task.
    instrument the whole arc exists to abolish, wearing its most convincing disguise: a real command,
    in the real repo, exiting 0.
 
-   Every consumer-side invocation therefore **names the worktree** and **asserts what it loaded**:
+   Every consumer-side invocation therefore **names the worktree** and **asserts what it loaded** —
+   by **exact path equality**, against a path derived from `$WT` itself:
    ```bash
-   WT=~/d/science/.claude/worktrees/instrument-result/science   # ...or drop --project once merged
+   WT=$(realpath ~/d/science/.claude/worktrees/instrument-result/science)
+   EXPECT="$WT/src/science_tool"
 
    # ASSERT, don't assume. A typo'd --project silently falls back to the pinned revision.
-   uv run --project "$WT" python -c "
-   import pathlib, science_tool
-   p = pathlib.Path(science_tool.__file__).resolve()
-   assert '.worktrees' in p.parts or 'science/src' in str(p), f'WRONG TOOLKIT: {p}'
-   print('toolkit OK:', p)"
+   uv run --project "$WT" python - <<PY
+   import pathlib, sys, science_tool
+   got = pathlib.Path(science_tool.__file__).resolve().parent
+   want = pathlib.Path("$EXPECT").resolve()
+   if got != want:
+       sys.exit(f"WRONG TOOLKIT\n  loaded:   {got}\n  expected: {want}")
+   print("toolkit OK:", got)
+   PY
 
    uv run --project "$WT" science validate      # ...and every other command
    ```
+
+   > **Substring tests on the path are FAIL-OPEN, and every one I first wrote was.** `'.worktrees'
+   > in p.parts` passes for **any other worktree** — including a stale one from a different branch,
+   > which is exactly the mix-up worth catching. `'science/src' in str(p)` passes for the **main
+   > checkout**, which does not contain this branch either. A check that admits the two nearest
+   > wrong answers is not a check. **Compare the resolved path to the one derived from `$WT`, and
+   > require equality.**
+
+   > **`--project` may be dropped only after the CONSUMER RE-PINS — not merely after merge.** A
+   > consumer's toolkit revision is frozen in **its own `uv.lock`**. Merging to `main`, or even
+   > pushing, changes nothing for that consumer until its lock is updated (`uv lock --upgrade-package
+   > science`) and the new revision is committed **there**. Until then a bare `uv run` still loads
+   > the old revision, and the assertion above is the only thing that will say so.
+
    If `science_tool` resolves into the **consumer's own `.venv`**, it is the pinned revision, **not
    this branch.** Applies to Task 11 Steps 0/1/3, Task 12 Step 3, and any ad-hoc check.
 
@@ -2164,7 +2183,8 @@ cd science       && uv run ruff check && uv run pyright
 set -euo pipefail        # NOT optional: it is the only thing that stops a failed build from being
                          # followed by a `cp` of the stale committed graph.
 
-WT=~/d/science/.claude/worktrees/instrument-result/science
+WT=$(realpath ~/d/science/.claude/worktrees/instrument-result/science)   # Global constraint 0:
+                                                                        # assert the import path too
 SNAP=/tmp/claude-1000
 P=~/d/cancer/cancer-types/multiple-myeloma      # the one buildable packet-bearing root
 
@@ -2842,6 +2862,67 @@ def test_validate_reports_a_dangling_successor(tmp_project) -> None:
     assert "9999-nope" in findings[0].message
 
 
+> ### ⚠️ The four resolution cases must be re-tested through the REAL loader, not just the stub
+>
+> `_Targets` in the unit test proves `check_resolution`'s *logic*. It proves **nothing about the
+> resolver the loader actually builds** — and that construction is where the wiring can silently
+> rot. Drop `manual_aliases=` or `identity_table=` from `ReferenceResolver.from_entities` and every
+> unit test still passes, because the stub was never wired to either.
+>
+> **Worse, a count-only assertion hides it.** Omit `manual_aliases` and an archived successor stops
+> resolving — so it becomes an *unresolved* violation instead of a *not-live* one. **Still one
+> finding. Still green.** The test must assert the **message**, which is the only thing that
+> distinguishes "the resolver could not find it" from "the resolver found it, and it is dead."
+
+```python
+def test_a_LIVE_ALIAS_resolves_through_the_REAL_loader(tmp_project) -> None:
+    # `aliases:` frontmatter -> `build_alias_map` (sources.py:656). Raw membership on a set of ids
+    # would call this dangling and REFUSE A CORRECT CORPUS.
+    write_hypothesis(tmp_project, "0002-y", aliases=["hypothesis:0002"])
+    write_hypothesis(tmp_project, "0001-x", status="superseded",
+                     extra={"superseded_by": "hypothesis:0002"})
+    assert load_project_sources(tmp_project).resolution_violations == []
+
+
+def test_a_SELF_ALIAS_is_caught_through_the_REAL_loader(tmp_project) -> None:
+    # An alias OF the entity, written ON the entity. As a STRING it differs from the id, so the
+    # `ref == entity_id` check never fires; it resolves cleanly and reads as a valid successor.
+    write_hypothesis(tmp_project, "0001-x", status="superseded", aliases=["hypothesis:x-alias"],
+                     extra={"superseded_by": "hypothesis:x-alias"})
+    violations = load_project_sources(tmp_project).resolution_violations
+    assert len(violations) == 1
+    assert "itself" in violations[0].message
+
+
+def test_an_ARCHIVED_successor_RESOLVES_and_is_still_a_violation(tmp_project) -> None:
+    # ☠️ THE test that pins `manual_aliases=`. Archived ids are folded into `manual_aliases`
+    # (sources.py:618) and are deliberately NOT loaded as live entities -- so an archived successor
+    # RESOLVES and is absent from `live_ids`.
+    #
+    # Assert the MESSAGE, not the count. Omit `manual_aliases=` from `from_entities` and this ref
+    # simply fails to resolve: still exactly one violation, still green, and the wiring defect is
+    # invisible. The message is the only witness that the resolver FOUND it and found it DEAD.
+    write_hypothesis(tmp_project, "0003-gone")
+    archive_entity(tmp_project, "hypothesis:0003-gone")        # index-only; markdown not loaded
+    write_hypothesis(tmp_project, "0001-x", status="superseded",
+                     extra={"superseded_by": "hypothesis:0003-gone"})
+    violations = load_project_sources(tmp_project).resolution_violations
+    assert len(violations) == 1
+    assert "not a live entity" in violations[0].message      # NOT "does not resolve"
+
+
+def test_a_SCOPED_reference_resolves_through_the_REAL_loader(tmp_project) -> None:
+    # ☠️ THE test that pins `identity_table=`. `_split_scope` only recognises a scope prefix when
+    # `scope_names` is populated, and `scope_names` comes from the identity table
+    # (reference_resolution.py:66-68). Omit `identity_table=` and `scope_names` is empty, the
+    # scoped form is never split, resolution fails, and a VALID scoped successor is reported as
+    # dangling -- blocking a correct corpus, with no other test noticing.
+    write_hypothesis(tmp_project, "0002-y")
+    write_hypothesis(tmp_project, "0001-x", status="superseded",
+                     extra={"superseded_by": f"{project_id(tmp_project)}:hypothesis:0002-y"})
+    assert load_project_sources(tmp_project).resolution_violations == []
+
+
 def test_the_dangling_lineage_rule_is_NOT_GATED_yet(tmp_project) -> None:
     # WARN that fails no build. The rule's absence from every gate tier is the whole content of
     # "ungated" -- and it is the claim Task 12 later inverts, so it needs to be pinned HERE.
@@ -2907,23 +2988,29 @@ def test_the_LOADER_can_actually_SEE_the_terminal_fields(tmp_project) -> None:
 """Cross-record invariants — the D3 escape hatch, ENUMERATED.
 
 JSON Schema is the authority for a record's SHAPE and for the PRESENCE of a structural basis.
-It validates one record in isolation, so it structurally cannot answer: does this successor ID
-resolve? does that archive record exist? Those are cross-record facts.
+It validates one record in isolation, so it structurally cannot answer the ONE cross-record
+question this layer exists for: does this LINEAGE reference resolve to a real, live entity that
+is not the entity itself?
 
-This is that second layer, and it is deliberately a CLOSED LIST rather than an open-ended
-second authority (design §9, D3). Getting the split wrong re-opens the hole it was built to
-close: a PRESENT but DANGLING `superseded_by:` satisfies the schema, closes the entity, and
-records no real reason for the closure.
+That is the whole list. It is deliberately a CLOSED one rather than an open-ended second
+authority (design §9, D3). Getting the split wrong re-opens the hole it was built to close: a
+PRESENT but DANGLING `superseded_by:` satisfies the schema, closes the entity, and records no
+real reason for the closure.
 
-NOT HERE: "a verdict has qualifying evidence". That needs the evidence-line EDGES, which exist
-only after materialization -- it is a graph-time invariant, and this runs at load time. Design
-§7.4 names it; it belongs to a graph check, not to this module. Said plainly so nobody assumes
-it is covered.
+NOT HERE, and neither is an oversight:
+
+  * "does an archive record exist?" -- there is NO SUCH RECORD to exist. `archive_ref` was
+    deleted: the archive index is keyed by the archived entity's own id and mints no record
+    identifier, so there is nothing on the other end of such a reference. `archived` is
+    discharged by `closure_basis`, which is SHAPE, and shape is the schema's.
+  * "does a verdict have qualifying evidence?" -- that needs the evidence-line EDGES, which
+    exist only after materialization. It is a graph-time invariant and this runs at load time;
+    it belongs to a graph check. Said plainly so nobody assumes it is covered here.
 """
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, Protocol
 
 from pydantic import BaseModel
 
@@ -3093,22 +3180,47 @@ class ProjectSources(BaseModel):
   same inputs: a validator that resolves differently from the materializer is a second authority for
   one fact.
 
+  **Two mechanical traps, both of which stop the naive version compiling:**
+
+  > **(a) `sources` does not exist yet.** `load_project_sources` ends with a bare
+  > `return ProjectSources(...)` (`sources.py:628`) — there is no local bundle to hand to
+  > `build_identity_table(sources)`, which needs `.identity_declarations`. **Construct the bundle
+  > first, then compute, then return an updated copy.**
+  >
+  > **(b) A top-level `from …reference_resolution import ReferenceResolver` in `sources.py` is a
+  > CYCLE.** `reference_resolution.py:11` already does `from science_tool.graph.sources import
+  > build_alias_map`. Import it **inside the function**, and say why in a comment — otherwise the
+  > next reader "tidies" it to the top and breaks the package.
+
 ```python
-    # The SAME construction as materialize.py -- same entities, same manual aliases, same identity
-    # table. Anything less is a different resolver wearing the same name.
-    resolver = ReferenceResolver.from_entities(
-        entities,
-        manual_aliases=manual_aliases,
-        identity_table=build_identity_table(sources),
+    # Everything above is unchanged, up to and including the manual_aliases block.
+    bundle = ProjectSources(
+        project_name=str(config["name"]),
+        ...,                                   # exactly as today
     )
-    live_ids = {entity.canonical_id for entity in entities}   # LIVE and LOCAL: the loaded corpus
-    resolution_violations = [
+
+    # Local import: reference_resolution imports `build_alias_map` FROM this module, so a
+    # top-level import here would make graph/ cyclic. Do not hoist this.
+    from science_tool.graph.reference_resolution import ReferenceResolver
+
+    # The SAME construction as materialize.py (`materialize.py:348`) -- same entities, same manual
+    # aliases, same identity table. Anything less is a different resolver wearing the same name,
+    # and a validator that resolves differently from the materializer is the second authority for
+    # one fact that this whole arc exists to abolish.
+    resolver = ReferenceResolver.from_entities(
+        bundle.entities,
+        manual_aliases=bundle.manual_aliases,
+        identity_table=build_identity_table(bundle),
+    )
+    live_ids = {entity.canonical_id for entity in bundle.entities}   # LIVE and LOCAL
+    violations = [
         violation
-        for entity in entities
+        for entity in bundle.entities
         for violation in check_resolution(
             entity.model_dump(mode="json"), targets=resolver, live_ids=live_ids
         )
     ]
+    return bundle.model_copy(update={"resolution_violations": violations})
 ```
 
   > `live_ids` is built from `canonical_id`, **not** `id` — the resolver returns canonical ids, so a
@@ -6494,15 +6606,19 @@ committing any of them, and so keep the all-or-none promise it makes (Task 7a).
   not have it — or, worse, an older one that does and counts differently.
 
 ```bash
-WT=~/d/science/.claude/worktrees/instrument-result/science   # ...or drop --project once merged
+WT=$(realpath ~/d/science/.claude/worktrees/instrument-result/science)
 
-uv run --project "$WT" python - <<'PY'
-import json, pathlib, subprocess
+uv run --project "$WT" python - "$WT" <<'PY'
+import json, pathlib, subprocess, sys
 from pathlib import Path
 
 import science_tool
-_p = pathlib.Path(science_tool.__file__).resolve()
-assert ".worktrees" in _p.parts or "science/src" in str(_p), f"WRONG TOOLKIT: {_p}"
+# EXACT path equality (Global constraint 0). A substring test is fail-open: `.worktrees` admits any
+# OTHER worktree, and `science/src` admits the main checkout -- the two nearest wrong answers.
+_got = pathlib.Path(science_tool.__file__).resolve().parent
+_want = (Path(sys.argv[1]) / "src" / "science_tool").resolve()
+if _got != _want:
+    sys.exit(f"WRONG TOOLKIT\n  loaded:   {_got}\n  expected: {_want}")
 
 from science_tool.field_inventory import field_inventory
 
@@ -6579,7 +6695,7 @@ set -euo pipefail                                    # the ONLY thing that stops
                                                      # STALE committed graph -- which diffs clean,
                                                      # exactly like a root that was really untouched
 
-WT=~/d/science/.claude/worktrees/instrument-result/science   # ...or drop --project once merged
+WT=$(realpath ~/d/science/.claude/worktrees/instrument-result/science)   # see Global constraint 0
 SLUG=$(...)                                          # from the manifest -- NOT basename $PWD:
                                                      # science/meta and health/meta both basename
                                                      # to "meta", and ~/d/r/mm30 is a SYMLINK to
@@ -6617,32 +6733,34 @@ uv run --project "$WT" science validate            # MUST exit 0 -- under `set -
 - [ ] **Step 3: With every root pinned, re-derive and validate the whole roster.**
 
 ```bash
-WT=~/d/science/.claude/worktrees/instrument-result/science
+WT=$(realpath ~/d/science/.claude/worktrees/instrument-result/science)
 
-uv run --project "$WT" python - <<'PY'
-import json, os, pathlib, subprocess, sys
+uv run --project "$WT" python - "$WT" <<'PY'
+import json, pathlib, subprocess, sys
 from pathlib import Path
 
-WT = os.path.expanduser("~/d/science/.claude/worktrees/instrument-result/science")
+WT = Path(sys.argv[1]).resolve()
+WANT = (WT / "src" / "science_tool").resolve()      # the EXACT path, not a substring
 
-def _toolkit_of(root: str) -> str:
+def _toolkit_of(root: str) -> Path:
     """Which science_tool does a run in `root` actually load? ASSERT it; never assume."""
     r = subprocess.run(
-        ["uv", "run", "--project", WT, "python", "-c",
-         "import pathlib, science_tool; print(pathlib.Path(science_tool.__file__).resolve())"],
+        ["uv", "run", "--project", str(WT), "python", "-c",
+         "import pathlib, science_tool; print(pathlib.Path(science_tool.__file__).resolve().parent)"],
         cwd=root, capture_output=True, text=True, check=True,
     )
-    return r.stdout.strip()
+    return Path(r.stdout.strip())
 
 manifest = json.loads(Path("/tmp/claude-1000/roster.json").read_text())
 failed = []
 for m in manifest:
-    tk = _toolkit_of(m["root"])
-    if ".worktrees" not in tk and "science/src" not in tk:
-        # The pinned PUBLIC revision. It has none of this plan, so it CANNOT fail the way this
-        # gate needs to fail -- it would certify the corpus by not looking at it.
-        sys.exit(f"WRONG TOOLKIT in {m['root']}: {tk}")
-    r = subprocess.run(["uv", "run", "--project", WT, "science", "validate"],
+    got = _toolkit_of(m["root"])
+    if got != WANT:
+        # Anything else is the pinned PUBLIC revision, the main checkout, or a STALE worktree from
+        # another branch -- none of which contain this plan, so none of them can fail the way this
+        # gate needs to fail. They would certify the corpus by not looking at it.
+        sys.exit(f"WRONG TOOLKIT in {m['root']}\n  loaded:   {got}\n  expected: {WANT}")
+    r = subprocess.run(["uv", "run", "--project", str(WT), "science", "validate"],
                        cwd=m["root"], capture_output=True)
     print(f"exit={r.returncode}  {m['root']}")
     if r.returncode:
