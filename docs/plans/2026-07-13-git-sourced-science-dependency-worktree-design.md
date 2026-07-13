@@ -89,11 +89,13 @@ executable compatibility block. The block captures
 deterministically, and proceeds only when the installed version meets the floor.
 The agent executes the block; it does not perform the comparison by judgment.
 
-The `--version` option itself begins at the `0.3.0` baseline. Therefore a
-non-zero probe, missing output, or unparseable output means "older than or
-incompatible with the baseline" and follows the same controlled failure path as
-a parseable below-floor version. The preamble suppresses the underlying Click
-error and reports:
+The `--version` option itself begins at the `0.3.0` baseline. The deployed older
+CLI identifies that bootstrap case with `Error: No such option: --version`.
+Only that recognized Click response is converted into the controlled
+below-floor path. Any other probe failure—such as a missing or stale lock, a Git
+fetch failure, or a runtime/import error—is emitted verbatim and stops without
+advising an upgrade. Successful but missing or unparseable version output still
+takes the controlled compatibility-failure path.
 
 ```text
 This Science agent command requires science >=0.3.0, but this project pins
@@ -103,20 +105,25 @@ then retry.
 
 The authoritative preamble carries the shell implementation, including the
 version floor and a Python-standard-library numeric release comparison. Its
-behavior is tested for a failed probe, malformed output, a below-floor version,
-the exact floor, and a newer version. The probe remains a root option whose
-failure is data handled by this block; it must not be replaced with a new
-preflight subcommand that older CLIs cannot recognize.
+behavior is tested for the recognized pre-baseline Click response, an unrelated
+uv/environment failure, malformed output, a below-floor version, the exact
+floor, suffixed development/release versions, and a newer version. The probe
+remains a root option whose recognized bootstrap failure is data handled by this
+block; it must not be replaced with a new preflight subcommand that older CLIs
+cannot recognize.
 
 The block has this behavior (the implementation may factor the comparison for
 testability, but not defer it to agent reasoning):
 
 ```bash
 SCIENCE_REQUIRED_VERSION=0.3.0
-if output=$(uv run --frozen science --version 2>/dev/null); then
+if output=$(uv run --frozen science --version 2>&1); then
   SCIENCE_INSTALLED_VERSION=${output##* }
-else
+elif printf '%s\n' "$output" | grep -Fq 'Error: No such option: --version'; then
   SCIENCE_INSTALLED_VERSION=
+else
+  printf '%s\n' "$output" >&2
+  exit 1
 fi
 
 if ! SCIENCE_INSTALLED_VERSION="$SCIENCE_INSTALLED_VERSION" \
@@ -127,7 +134,7 @@ import re
 import sys
 
 def release(name: str) -> tuple[int, int, int] | None:
-    match = re.fullmatch(r"(\d+)\.(\d+)\.(\d+)", name)
+    match = re.match(r"(\d+)\.(\d+)\.(\d+)", name)
     return tuple(map(int, match.groups())) if match else None
 
 installed = release(os.environ["SCIENCE_INSTALLED_VERSION"])
@@ -142,6 +149,11 @@ then
 fi
 ```
 
+The extra frozen CLI startup measured about 1.4 seconds during review; the
+comparison itself was negligible. That per-command cost is accepted for the
+initial contract. If it becomes material, cache a successful check for the
+agent session rather than weakening or removing the probe.
+
 Generated Codex skills embed the same preamble and therefore the same floor.
 Tests require every command that invokes `science` to load the shared preamble
 or perform the equivalent executable check explicitly. A separate command-tree
@@ -153,7 +165,10 @@ After the baseline, any change to an agent command that depends on a new or
 changed CLI interface must bump the package version, plugin version, and
 preamble floor together. CLI interfaces remain additive within a major version;
 removing or incompatibly changing a command requires a coordinated major-version
-migration. Tests assert that the three current release versions agree.
+migration. Ordinary releases keep the package and plugin versions equal, while
+the preamble floor moves only when an agent command requires a newer CLI
+interface. Tests assert `plugin_version == package_version` and
+`preamble_floor <= package_version`.
 
 ## Dependency Operations
 
@@ -246,10 +261,11 @@ The implementation updates the authoritative surfaces together:
    its explanation that this toolkit's in-repository package sources are safe.
 4. `references/command-preamble.md` removes the `UV_PROJECT=$MAIN` and main
    checkout environment workarounds, declares the minimum compatible CLI
-   version, and executes the compatibility block before command execution. A
-   failed or unparseable `science --version` probe takes the controlled upgrade
-   path. Generated Codex skills are regenerated from the authoritative command
-   inputs.
+   version, and executes the compatibility block before command execution. The
+   recognized pre-`0.3.0` Click response and successful-but-unparseable version
+   output take the controlled upgrade path; unrelated probe failures pass
+   through verbatim. Generated Codex skills are regenerated from the
+   authoritative command inputs.
 5. Tooling health and validation parse `pyproject.toml` structurally. They
    continue to require `science` in `[dependency-groups].dev`, accept a Git
    source, accept a path source that resolves within the same Git repository,
@@ -268,7 +284,8 @@ The implementation updates the authoritative surfaces together:
    linked worktrees without a shim change.
 8. The plugin manifest and Python package establish the shared `0.3.0`
    compatibility baseline. The root CLI exposes `science --version`, and tests
-   keep the plugin, package, and preamble versions synchronized.
+   keep plugin and package release versions equal while requiring the preamble
+   floor not to exceed them.
 
 No migration guide is added. The repository has not yet been distributed to
 external users, so maintaining a public migration surface would be premature.
@@ -310,10 +327,11 @@ SHA into consumer locks.
 - A Git fetch failure remains visible as a uv error. There is no silent fallback
   to a local checkout or a different Science revision. A fresh no-egress
   environment therefore requires a pre-populated uv/Git cache.
-- A failed or unparseable version probe, or a plugin command whose required CLI
-  floor exceeds the consumer's installed version, stops in the shared preamble
-  with the explicit Science upgrade command. The underlying Click `No such
-  option` or `No such command` error is not surfaced as the diagnosis.
+- The recognized pre-`0.3.0` Click response, successful-but-unparseable output,
+  or an installed version below the required CLI floor stops in the shared
+  preamble with the explicit Science upgrade command. Any other probe failure
+  is emitted verbatim, so missing locks, Git/network errors, and runtime errors
+  retain their real diagnosis and do not advise moving the Science pin.
 - `uv sync --frozen` continues to fail when the lock is absent or stale.
 - An unpushed Science commit cannot be selected by normal consumers; use the
   explicit `--with-editable` overlay while developing it.
@@ -326,10 +344,12 @@ Toolkit verification includes:
    path-source manifests.
 2. Documentation tests for the canonical Git source and the absence of retired
    editable-install and sibling-worktree guidance.
-3. Executable compatibility-check tests for a failed `--version` probe,
-   malformed output, a below-floor version, the exact floor, and a newer
-   version, plus synchronization checks for the package, plugin, and preamble
-   release versions.
+3. Executable compatibility-check tests for the recognized pre-baseline Click
+   response; an absent-lock uv failure that must pass through verbatim;
+   malformed output; a below-floor version; the exact floor; suffixed release,
+   development, and local versions; and a newer version. Version-contract tests
+   assert `plugin_version == package_version` and
+   `preamble_floor <= package_version`.
 4. A command-tree contract test that extracts every
    `uv run science <subcommand>` invocation from `commands/*.md` and asserts
    that the referenced top-level command exists in the current Click tree.
