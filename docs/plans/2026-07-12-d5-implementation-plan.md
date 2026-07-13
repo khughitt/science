@@ -787,6 +787,84 @@ is not certified. STOP.**
 
 ---
 
+### Task 3b: Discharge the verdict-BASIS obligation — 0009 has an adjudication but no representable basis
+
+> **Found by adjudicating `0009` (2026-07-12).** The two refusals are now closed by artifacts and the
+> corpus is **147/147 deterministic**. But `hypothesis:0009` is adjudicated **`complete` + `refuted`**,
+> and under the rev-9 contract a verdict needs a **qualifying, resolvable basis at graph time** —
+> an admissible, polarity-agreeing **evidence-line** unit, or a **`falsification`** record.
+>
+> **`interpretation:0192` is neither.** `interpretation` is not a graph kind (design rev 9). So the
+> moment Task 7's `verdict.missing-basis` ships, it would **ERROR on the flagship file of this entire
+> arc** — the one whose corruption started it. *The adjudication is sound; the graph simply cannot yet
+> represent what it rests on.* **A representation obligation, not adjudicative ambiguity.**
+
+**Measured (do not re-derive):**
+
+- `hypothesis:0009` has **zero proposition entities**. Its `P3` exists only as prose in the body
+  (`entities/hypotheses/0009-…md:103` — *"P3 (empirical_regularity) — …cycle vertices carry elevated
+  cross-lens disagreement"*). `natural-systems` has **no `falsification` entities at all.**
+- **`FalsificationEntity.falsifies` must resolve to a `sci:Proposition`** (`entities.py:1158`,
+  validated at materialization). So the falsification route **requires first promoting P3 into a
+  proposition entity** — the heavier path.
+- **An evidence-line CAN target a hypothesis directly.** `_evidence_targets_for_uri`
+  (`graph/store/evidence_signals.py:192-195`) explicitly special-cases `sci:Hypothesis`, and the
+  corpus already carries `target: hypothesis:…` lines. **This is the light path, and it is sufficient.**
+
+- [ ] **Step 1: Author one evidence-line in `natural-systems`** — `stance: disputes`, targeting
+  `hypothesis:0009-local-structure-globalization-obstruction`, sourced from
+  `pipeline/t585/bridge-test-results.json` (the same source `interpretation:0192` cites).
+
+> **⚠️ The epistemic metadata is an AUTHOR'S judgment — do not invent it.** `evidence_role`,
+> `strength`, `independence`, and whether the dispute is **whole-claim/decisive** are exactly the
+> knobs that decide whether `is_decisive_refutation` fires. A migration that guessed them would be
+> manufacturing the evidence for the verdict it is migrating — the precise fabrication this design
+> exists to prevent. **Ask; do not default.**
+
+- [ ] **Step 2: Verify the basis resolves** — `belief_for_entity` on 0009 now sees a disputing unit,
+  and `verdict.missing-basis` does **not** fire on the file.
+- [x] **Step 3: Generalize the sweep — RUN 2026-07-12. The answer is "most of them."**
+
+> ## ☠️ `verdict.missing-basis` CANNOT SHIP AS AN ERROR. It would break 11 real hypotheses on day one.
+>
+> Measured through the graph (`_evidence_targets_for_uri` → `collect_evidence_units`, so a
+> hypothesis's evidence is counted via its linked propositions, not just lines aimed at the
+> hypothesis IRI):
+>
+> | | n |
+> |---|---|
+> | hypotheses migrating to a non-null `verdict` | **15** |
+> | …with evidence units in the graph | **4** *(mm30 `0001`, `0002`, `0004`, `0013`)* |
+> | …**with NO representable basis** | **11** |
+>
+> The 11 include **`0009` itself** — the file we just adjudicated — and **5 of mm30's 6 `weakened`
+> hypotheses**, in a project holding **392 evidence-lines and 334 propositions**. So this is not "the
+> project lacks evidence infrastructure": those specific hypotheses have no linked propositions
+> carrying evidence.
+>
+> **This is the original incident, about to repeat itself.** An ERROR-severity check, landing on a
+> corpus never certified to satisfy it — exactly the shape that produced 472 findings and broke
+> `validate` in 5 projects. *An uncertified instrument may not fail anyone's build.*
+>
+> **And the obvious "fix" is worse.** Refusing to migrate a verdict that has no basis would **destroy
+> 11 authored adjudications**. `status: weakened` on `0026-winner-s-curse` is a real judgment its
+> author made; the graph simply never recorded what it rested on. Deleting it to satisfy a check
+> would be fabrication in reverse — erasing an author's conclusion because our schema cannot yet see
+> its reasons. **Migrate the verdict; report the missing basis.**
+>
+> ### Consequences — needs a ruling
+>
+> 1. **`verdict.missing-basis` ships as WARN**, and joins `_CERTIFIED_KINDS`/ERROR only when the
+>    corpus is certified to satisfy it. The basis contract is **aspirational relative to today's
+>    corpus**, and saying so out loud is the whole doctrine: *certify before depending.*
+> 2. **`verdict.refutation-masked` is unaffected** — it fires only on `supported` + a decisive
+>    refutation, and needs no basis to exist. It stays an **ERROR** and stays gated. The hard
+>    invariant survives; only the coverage rule is downgraded.
+> 3. **Backfilling the 11 bases is real research work**, not a migration step. It is the *content* of
+>    the D5 follow-through, and it is what makes `verdict` mean anything. **Track it; do not fake it.**
+
+---
+
 ### Task 4: Adjudicate `natural-systems/0009`
 
 **Not a code task.** The one real file no rule can migrate — and the file whose corruption opened
