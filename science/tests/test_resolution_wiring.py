@@ -78,7 +78,12 @@ def run_validate(root: Path):
 
 
 def lineage_violations(root: Path):
-    """The validation check projects the loader's real cross-record resolution carrier."""
+    """The check IS the wiring: it builds the REAL resolver over the REAL loaded corpus.
+
+    The resolver is deliberately NOT built inside `load_project_sources` -- see
+    `check_dangling_lineage`'s docstring. Doing so makes an alias collision UNLOADABLE rather than
+    reportable, and breaks `proposition_archive`, whose whole job is to report them.
+    """
     ctx = ValidateContext.from_project_root(root, strict=False, verbose=False)
     return list(check_dangling_lineage(ctx))
 
@@ -223,8 +228,26 @@ def test_the_LOADER_can_actually_SEE_the_terminal_fields(tmp_project: Path) -> N
     assert isinstance(entity, HypothesisEntity)  # it projected to the TYPED subclass...
     assert entity.superseded_by == "hypothesis:9999-nope"  # ...and the field SURVIVED
 
-    # ...and the loader's second pass, reading those projected entities, SAW it.
-    assert [v.ref for v in sources.resolution_violations] == ["hypothesis:9999-nope"]
-
-    # ...and the validation check consumes the carrier rather than rebuilding a second resolver.
+    # ...and the check, reading those projected entities through the REAL resolver, SAW it.
     assert ["9999-nope" in v.message for v in lineage_violations(tmp_project)] == [True]
+
+
+def test_the_LOADER_does_not_build_a_RESOLVER(tmp_path: Path) -> None:
+    # ☠️ THE regression that keeps coming back. Putting the lineage resolver inside
+    # `load_project_sources` is tempting -- the loader has the whole corpus right there -- and it is
+    # wrong, because `ReferenceResolver.from_entities` RAISES `AliasCollisionError` on a corpus with
+    # a duplicated alias. Build it in the loader and a REPORTABLE fault becomes an UNLOADABLE
+    # project, for every caller of the loader, including the ones that never touch a hypothesis.
+    #
+    # `annotation/proposition_archive.py` exists to REPORT and unblock exactly these collisions, and
+    # it calls `load_project_sources` on a colliding corpus ON PURPOSE. The loader-side pass breaks
+    # it. So: the loader must LOAD a colliding corpus without complaint, and resolution -- which is
+    # analysis, not loading -- happens in the check.
+    (tmp_path / "science.yaml").write_text(yaml.safe_dump({"name": "demo", "id": "demo"}), encoding="utf-8")
+    (tmp_path / "entities" / "hypotheses").mkdir(parents=True)
+    # two entities claiming ONE alias -> AliasCollisionError the instant a resolver is built
+    write_hypothesis(tmp_path, "0001-x", aliases=["hypothesis:shared"])
+    write_hypothesis(tmp_path, "0002-y", aliases=["hypothesis:shared"])
+
+    sources = load_project_sources(tmp_path)  # must NOT raise
+    assert {e.canonical_id for e in sources.entities} == {"hypothesis:0001-x", "hypothesis:0002-y"}

@@ -20,7 +20,6 @@ from science_model.entities import (
     ProjectEntity,
     core_entity_type_for_kind,
 )
-from science_model.entity_schema.resolution import ResolutionViolation, check_resolution
 from science_model.identity import EntityClass
 from science_model.ontologies import load_catalogs_for_names
 from science_model.ontologies.schema import OntologyCatalog
@@ -50,7 +49,6 @@ from science_tool.graph.errors import EntityIdentityCollisionError
 from science_tool.graph.identity_table import (
     IdentityDeclaration,
     ParticipationMode,
-    build_identity_table,
     classify_owner_scope,
 )
 from science_tool.graph.source_records import MarkdownSourceDocument
@@ -175,7 +173,6 @@ class ProjectSources(BaseModel):
     registry: EntityRegistry
     markdown_documents: list[MarkdownSourceDocument] = Field(default_factory=list)
     skipped_entities: list[SkippedEntity] = Field(default_factory=list)
-    resolution_violations: list[ResolutionViolation] = Field(default_factory=list)
     commons_overlay_paths: dict[str, str] = Field(default_factory=dict)
     identity_declarations: list[IdentityDeclaration] = Field(default_factory=list)
     freshness_enabled: bool = True
@@ -628,7 +625,7 @@ def load_project_sources(
             )
         manual_aliases[token] = canonical
 
-    bundle = ProjectSources(
+    return ProjectSources(
         project_name=str(config["name"]),
         project_root=str(project_root),
         profiles=profiles,
@@ -648,25 +645,6 @@ def load_project_sources(
         peer_ids=frozenset(config.get("peer_ids") or []),  # type: ignore[arg-type]
         dataset_parents=dataset_parents,
     )
-
-    # Local import: reference_resolution imports build_alias_map from this module, so hoisting this
-    # would make graph/sources.py and graph/reference_resolution.py cyclic.
-    from science_tool.graph.reference_resolution import ReferenceResolver
-
-    resolver = ReferenceResolver.from_entities(
-        bundle.entities,
-        manual_aliases=bundle.manual_aliases,
-        identity_table=build_identity_table(bundle),
-    )
-    live_ids = {entity.canonical_id for entity in bundle.entities}
-    resolution_violations = [
-        violation
-        for entity in bundle.entities
-        for violation in check_resolution(
-            entity.model_dump(mode="json"), targets=resolver, live_ids=live_ids
-        )
-    ]
-    return bundle.model_copy(update={"resolution_violations": resolution_violations})
 
 
 def build_alias_map(entities: list[Entity], manual_aliases: dict[str, str] | None = None) -> dict[str, str]:
