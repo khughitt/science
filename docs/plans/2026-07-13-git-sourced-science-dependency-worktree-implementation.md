@@ -14,7 +14,9 @@
 - The consumer's tracked `uv.lock`, not `pyproject.toml`, owns the exact Science commit pin.
 - The package and Claude plugin release versions become `0.3.0` and remain equal; the command-preamble floor begins at `0.3.0` and must never exceed the package version.
 - Root version output is exactly `science <version>`; the compatibility probe remains a root `--version` option, never a new subcommand.
-- Only the exact pre-baseline Click diagnostic `Error: No such option: --version` is converted to an upgrade diagnosis. Every unrelated uv, lock, Git, import, or runtime error passes through verbatim.
+- The compatibility gate distinguishes "CLI too old" from "environment broken" **semantically, never by matching a Click error string**: if `science --version` fails but `science --help` succeeds, the CLI runs and simply lacks `--version`, so it predates the baseline and gets the upgrade diagnosis. If `--help` also fails, the captured output passes through verbatim. Click's wording is version-dependent (8.1–8.3 emit `Error: No such option: --version`; 8.4 emits ``Error: No such option '--version'.``) and `science` requires `click>=8.1` unpinned, so a freshly locked consumer resolves the newest Click — a string match would miss the bootstrap case on exactly the consumers this plan creates.
+- Compatibility-gate tests run against a **real** pre-baseline CLI (a Click group with no `version_option`). No test may assert against an error string it fabricated itself.
+- `.env` is gitignored in consumer projects. Removing `SCIENCE_TOOL_PATH` from it is filesystem hygiene that produces no committable change, and `.env` must never appear in a `git add` list — staging an ignored or absent path fails and aborts the entire `git add`, staging nothing.
 - Successful version strings accept numeric `major.minor.patch` prefixes plus release-candidate, development, and local suffixes.
 - Git fetch failures are reported directly. Do not fall back to a local checkout, alternate revision, shared environment, `UV_PROJECT`, or sibling worktree.
 - Deliberate local toolkit development uses `uv run --with-editable ~/d/science/science <command>` without changing the consumer manifest or lock.
@@ -59,20 +61,28 @@ from science_tool.cli import main
 ROOT = Path(__file__).resolve().parents[2]
 
 
-def test_root_version_option_has_stable_output() -> None:
+def _package_version() -> str:
+    package = tomllib.loads((ROOT / "science" / "pyproject.toml").read_text(encoding="utf-8"))
+    return package["project"]["version"]
+
+
+def test_root_version_option_reports_the_declared_package_version() -> None:
     result = CliRunner().invoke(main, ["--version"])
 
     assert result.exit_code == 0
-    assert result.output == "science 0.3.0\n"
+    assert result.output == f"science {_package_version()}\n"
 
 
 def test_package_and_plugin_establish_0_3_0_baseline() -> None:
-    package = tomllib.loads((ROOT / "science" / "pyproject.toml").read_text(encoding="utf-8"))
     plugin = json.loads((ROOT / ".claude-plugin" / "plugin.json").read_text(encoding="utf-8"))
 
-    assert package["project"]["version"] == "0.3.0"
-    assert plugin["version"] == package["project"]["version"]
+    assert _package_version() == "0.3.0"
+    assert plugin["version"] == _package_version()
 ```
+
+The output assertion is derived from the manifest, not hardcoded, so a future
+version bump does not break the shape test. Only the baseline test names `0.3.0`,
+and it is the single place to edit when the baseline moves.
 
 - [ ] **Step 2: Run the tests and confirm the current release surfaces fail**
 
@@ -159,10 +169,16 @@ git commit -m "feat: establish Science CLI compatibility baseline"
 - Modify: `commands/wander.md`
 
 **Interfaces:**
-- Consumes: `science --version` from Task 1.
+- Consumes: `science --version` from Task 1, plus `science --help` as the pre-baseline discriminator.
 - Produces: `SCIENCE_REQUIRED_VERSION=0.3.0` compatibility block in the authoritative preamble.
 - Produces: deterministic failure copy with `uv lock --upgrade-package science && uv sync --frozen` only for old, malformed, or below-floor CLI versions.
+- Produces: verbatim passthrough for any failure in which the CLI itself cannot run.
 - Produces: command-tree contract requiring each literal `uv run science <top-level-command>` in `commands/*.md` to exist in `science_tool.cli.main.commands`.
+
+The eight command files listed above are exactly the `commands/*.md` that invoke
+the CLI without already referencing the shared preamble (15 invoke it; 7 already
+reference it). The preamble test below is therefore satisfied by this list with
+no remainder.
 
 - [ ] **Step 1: Write the failing executable compatibility and command-contract tests**
 
@@ -206,19 +222,73 @@ def _compatibility_block() -> str:
     return textwrap.dedent(text[start:end]) + "\n"
 
 
+# A REAL pre-baseline CLI: a Click group with no version_option. Click — not this
+# test — produces the resulting `--version` diagnostic, so the gate is exercised
+# against whatever wording the installed Click actually emits.
+PREBASELINE_CLI = """import click
+
+
+@click.group()
+@click.option("--color")
+def main(color: str | None = None) -> None:
+    pass
+
+
+main()
+"""
+
+# A REAL baseline CLI, matching the option Task 1 adds.
+BASELINE_CLI = """import click
+
+
+@click.group()
+@click.version_option(version="{version}", prog_name="science", message="%(prog)s %(version)s")
+@click.option("--color")
+def main(color: str | None = None) -> None:
+    pass
+
+
+main()
+"""
+
+# A CLI whose --version succeeds but prints something unparseable.
+MALFORMED_CLI = """import sys
+
+if "--version" in sys.argv:
+    print("science malformed")
+    sys.exit(0)
+sys.exit(0)
+"""
+
+
 def _fake_uv(tmp_path: Path) -> Path:
+    # Stands in for uv only as a dispatcher. It never fabricates CLI output:
+    # `science` invocations exec a real Python CLI whose behavior the test selects
+    # by choosing which CLI source to install, not by echoing canned strings.
     executable = tmp_path / "bin" / "uv"
-    executable.parent.mkdir()
+    executable.parent.mkdir(parents=True)
     executable.write_text(
         """#!/usr/bin/env bash
 set -u
-if [ "$*" = "run --frozen science --version" ]; then
-  printf '%s\\n' "$SCIENCE_TEST_PROBE_OUTPUT"
-  exit "$SCIENCE_TEST_PROBE_EXIT"
-fi
-if [ "$*" = "run --no-project python -" ]; then
-  exec "$SCIENCE_TEST_PYTHON" -
-fi
+case "$*" in
+  "run --frozen science --version")
+    if [ -n "${SCIENCE_TEST_UV_ERROR:-}" ]; then
+      printf '%s\\n' "$SCIENCE_TEST_UV_ERROR" >&2
+      exit 2
+    fi
+    exec "$SCIENCE_TEST_PYTHON" "$SCIENCE_TEST_CLI" --version
+    ;;
+  "run --frozen science --help")
+    if [ -n "${SCIENCE_TEST_UV_ERROR:-}" ]; then
+      printf '%s\\n' "$SCIENCE_TEST_UV_ERROR" >&2
+      exit 2
+    fi
+    exec "$SCIENCE_TEST_PYTHON" "$SCIENCE_TEST_CLI" --help
+    ;;
+  "run --no-project python -")
+    exec "$SCIENCE_TEST_PYTHON" -
+    ;;
+esac
 printf 'unexpected fake uv invocation: %s\\n' "$*" >&2
 exit 99
 """,
@@ -228,17 +298,27 @@ exit 99
     return executable
 
 
-def _run_gate(tmp_path: Path, *, output: str, exit_code: int) -> subprocess.CompletedProcess[str]:
+def _run_gate(
+    tmp_path: Path,
+    *,
+    cli_source: str | None = None,
+    uv_error: str | None = None,
+) -> subprocess.CompletedProcess[str]:
     fake_uv = _fake_uv(tmp_path)
+    cli_path = tmp_path / "science_cli.py"
+    cli_path.write_text(cli_source or PREBASELINE_CLI, encoding="utf-8")
+
     env = os.environ.copy()
     env.update(
         {
             "PATH": f"{fake_uv.parent}{os.pathsep}{env['PATH']}",
-            "SCIENCE_TEST_PROBE_OUTPUT": output,
-            "SCIENCE_TEST_PROBE_EXIT": str(exit_code),
             "SCIENCE_TEST_PYTHON": sys.executable,
+            "SCIENCE_TEST_CLI": str(cli_path),
         }
     )
+    if uv_error is not None:
+        env["SCIENCE_TEST_UV_ERROR"] = uv_error
+
     return subprocess.run(
         ["bash"],
         input=_compatibility_block(),
@@ -249,12 +329,10 @@ def _run_gate(tmp_path: Path, *, output: str, exit_code: int) -> subprocess.Comp
     )
 
 
-def test_prebaseline_click_failure_becomes_upgrade_message(tmp_path: Path) -> None:
-    result = _run_gate(
-        tmp_path,
-        output="Usage: science [OPTIONS] COMMAND [ARGS]...\nError: No such option: --version",
-        exit_code=2,
-    )
+def test_real_prebaseline_cli_becomes_upgrade_message(tmp_path: Path) -> None:
+    # The CLI runs (--help works) but has no --version. Click emits whatever
+    # diagnostic the installed version emits; the gate must not depend on it.
+    result = _run_gate(tmp_path, cli_source=PREBASELINE_CLI)
 
     assert result.returncode == 1
     assert "requires science >=0.3.0" in result.stderr
@@ -263,17 +341,25 @@ def test_prebaseline_click_failure_becomes_upgrade_message(tmp_path: Path) -> No
 
 
 def test_uv_environment_failure_passes_through_verbatim(tmp_path: Path) -> None:
+    # Both probes fail, because the environment — not the CLI's age — is broken.
     message = "error: Unable to find lockfile at `uv.lock`, but `--frozen` was provided."
-    result = _run_gate(tmp_path, output=message, exit_code=2)
+    result = _run_gate(tmp_path, uv_error=message)
 
     assert result.returncode == 1
-    assert result.stderr == message + "\n"
+    assert message in result.stderr
     assert "upgrade-package" not in result.stderr
 
 
-@pytest.mark.parametrize("output", ["science malformed", "science 0.2.0"])
-def test_malformed_or_below_floor_version_is_blocked(tmp_path: Path, output: str) -> None:
-    result = _run_gate(tmp_path, output=output, exit_code=0)
+def test_malformed_version_output_is_blocked(tmp_path: Path) -> None:
+    result = _run_gate(tmp_path, cli_source=MALFORMED_CLI)
+
+    assert result.returncode == 1
+    assert "requires science >=0.3.0" in result.stderr
+    assert "upgrade-package science" in result.stderr
+
+
+def test_below_floor_version_is_blocked(tmp_path: Path) -> None:
+    result = _run_gate(tmp_path, cli_source=BASELINE_CLI.format(version="0.2.0"))
 
     assert result.returncode == 1
     assert "requires science >=0.3.0" in result.stderr
@@ -285,7 +371,7 @@ def test_malformed_or_below_floor_version_is_blocked(tmp_path: Path, output: str
     ["0.3.0", "0.3.1rc1", "0.3.0.dev1", "0.3.0+g8bf7829", "0.4.0", "1.0.0"],
 )
 def test_floor_and_newer_suffixed_versions_pass(tmp_path: Path, version: str) -> None:
-    result = _run_gate(tmp_path, output=f"science {version}", exit_code=0)
+    result = _run_gate(tmp_path, cli_source=BASELINE_CLI.format(version=version))
 
     assert result.returncode == 0
     assert result.stderr == ""
@@ -346,9 +432,13 @@ In `references/command-preamble.md`, replace the current editable-path, main-env
 SCIENCE_REQUIRED_VERSION=0.3.0
 if output=$(uv run --frozen science --version 2>&1); then
   SCIENCE_INSTALLED_VERSION=${output##* }
-elif printf '%s\n' "$output" | grep -Fq 'Error: No such option: --version'; then
+elif uv run --frozen science --help >/dev/null 2>&1; then
+  # The CLI runs but has no --version option, so it predates the baseline.
+  # Decided by behavior, never by matching Click's version-dependent wording.
   SCIENCE_INSTALLED_VERSION=
 else
+  # The CLI cannot run at all: missing/stale lock, Git fetch failure, import
+  # error. Report the real diagnosis; never advise moving the Science pin.
   printf '%s\n' "$output" >&2
   exit 1
 fi
@@ -376,10 +466,17 @@ then
 fi
 ```
 
-A recognized pre-`0.3.0` Click response, malformed successful output, or a
-version below the floor stops with the upgrade command. Any other failure is
-printed verbatim and must be fixed as reported. The root `--version` probe is
-the permanent bootstrap surface; do not replace it with a preflight subcommand.
+A CLI that answers `--help` but rejects `--version` predates the baseline;
+malformed successful output and a version below the floor are likewise
+compatibility failures, and all three stop with the upgrade command. A CLI that
+cannot run at all is an environment failure: its output is printed verbatim and
+must be fixed as reported.
+
+The `--help` probe is what separates those two classes. Do not substitute a match
+against Click's error text — its wording changed in Click 8.4, and `science`
+allows any `click>=8.1`, so a freshly locked consumer can emit either form. The
+root `--version` probe is the permanent bootstrap surface; do not replace it with
+a preflight subcommand, which an older CLI could not recognize either.
 ````
 
 - [ ] **Step 4: Make every CLI-invoking command load the authoritative preamble**
@@ -400,7 +497,7 @@ Run:
 cd science && uv run --frozen pytest tests/test_agent_cli_compatibility.py -q
 ```
 
-Expected: all compatibility and command-contract tests pass. The executable tests parse and run the exact fenced block, which subsumes a syntax-only `bash -n` check.
+Expected: all compatibility and command-contract tests pass. The executable tests parse and run the exact fenced block against real Click CLIs, which subsumes a syntax-only `bash -n` check. Because the gate discriminates by `--help` rather than by error text, these tests hold for any `click>=8.1` the consumer resolves; no Click-version matrix is required.
 
 - [ ] **Step 6: Commit the compatibility gate**
 
@@ -1099,6 +1196,8 @@ git commit -m "build: regenerate compatibility-aware Codex skills"
 - Produces: regression proof that a consumer Git source at subdirectory `science/` rewrites an editable nested `model/` source to `subdirectory=science/model` at the same commit.
 - Produces: regression proof that `uv sync --frozen`, CLI execution, standard-library tests, and `validate.sh` all run from `.worktrees/feature/`.
 
+This test is **not fully offline**: the fixture packages declare `requires = ["hatchling"]`, so a cold uv cache still fetches the build backend from PyPI. Only the *Science* source is local. It also performs two real `uv lock`/`uv sync` runs plus a worktree add, so it is slow. Register a `git_source` marker in `science/pyproject.toml` and exclude it from the default run alongside `snapshot` and `real_projects`; opt in with `-m git_source`.
+
 - [ ] **Step 1: Create the local-Git integration fixture**
 
 Create `science/tests/test_git_source_worktree.py`:
@@ -1109,6 +1208,10 @@ from __future__ import annotations
 import subprocess
 import tomllib
 from pathlib import Path
+
+import pytest
+
+pytestmark = pytest.mark.git_source
 
 
 def _run(*args: str, cwd: Path) -> subprocess.CompletedProcess[str]:
@@ -1256,20 +1359,21 @@ def test_git_source_with_nested_editable_source_runs_in_nested_worktree(tmp_path
     assert validation.stdout.strip() == "validated:same-sha-model"
 ```
 
-- [ ] **Step 2: Run the integration fixture**
+- [ ] **Step 2: Register the marker and run the integration fixture**
 
-Run:
+Add `git_source` to the `markers` list in `science/pyproject.toml` and to the default deselection alongside `snapshot` and `real_projects`, then run it explicitly:
 
 ```bash
-cd science && uv run --frozen pytest tests/test_git_source_worktree.py -q
+cd science && uv run --frozen pytest tests/test_git_source_worktree.py -m git_source -q
+cd science && uv run --frozen pytest tests/test_git_source_worktree.py -q --collect-only
 ```
 
-Expected: PASS. The fixture's Science Git source is local and deterministic; the lock assertions prove both packages use the fixture commit and the nested model source uses `subdirectory=science%2Fmodel`.
+Expected: the first command PASSES. The fixture's Science Git source is local and deterministic; the lock assertions prove both packages use the fixture commit and the nested model source uses `subdirectory=science%2Fmodel`. The second command collects nothing, confirming the slow fixture is excluded from the default run.
 
 - [ ] **Step 3: Commit the uv regression fixture**
 
 ```bash
-git add science/tests/test_git_source_worktree.py
+git add science/tests/test_git_source_worktree.py science/pyproject.toml
 git commit -m "test: cover Git-sourced nested worktrees"
 ```
 
@@ -1284,13 +1388,14 @@ git commit -m "test: cover Git-sourced nested worktrees"
 - Consumes: all toolkit work from Tasks 1–6.
 - Produces: a clean, validated toolkit commit that is eligible to publish.
 
-- [ ] **Step 1: Run the full Python test suite**
+- [ ] **Step 1: Run the full Python test suite, then the deselected integration fixture**
 
 ```bash
 cd science && uv run --frozen pytest
+cd science && uv run --frozen pytest -m git_source
 ```
 
-Expected: PASS with the default `snapshot` and `real_projects` exclusions.
+Expected: both PASS. The first runs with the default `snapshot`, `real_projects`, and `git_source` exclusions; the second explicitly opts the slow Git-source fixture back in, so it is still gated before publication.
 
 - [ ] **Step 2: Run lint and type checking**
 
@@ -1359,8 +1464,9 @@ Expected: `merge-base --is-ancestor` exits 0. Only then continue.
 ### Task 9: Pilot the downstream conversion in shallow and deep layouts
 
 **Files:**
-- Modify in `~/d/cats`: `pyproject.toml`, `uv.lock`, `AGENTS.md` when stale guidance exists, `.env` only when it contains `SCIENCE_TOOL_PATH`.
-- Modify in `~/d/cancer/cancer-types/multiple-myeloma`: the same file set.
+- Commit in `~/d/cats`: `pyproject.toml`, `uv.lock`, and `AGENTS.md` when stale guidance exists.
+- Commit in `~/d/cancer/cancer-types/multiple-myeloma`: the same file set.
+- Edit on disk but never stage: `.env`, only when it contains `SCIENCE_TOOL_PATH`. It is gitignored.
 - Create transiently: `.worktrees/science-git-source-smoke/` in each pilot; remove it with `git worktree remove` after verification.
 
 **Interfaces:**
@@ -1415,11 +1521,16 @@ Expected: all three commands run from the nested checkout without an external-pa
 - [ ] **Step 4: Commit the shallow pilot independently**
 
 ```bash
-git -C ~/d/cats add pyproject.toml uv.lock AGENTS.md .env
+git -C ~/d/cats add pyproject.toml uv.lock
+git -C ~/d/cats diff --name-only
+git -C ~/d/cats add AGENTS.md   # only if the preceding diff listed it
 git -C ~/d/cats commit -m "chore: pin Science to its Git source"
 ```
 
-If `.env` was absent or deleted, adjust the explicit `git add` paths to the files actually changed; do not use `git add -A`.
+Never add `.env` to this list. It is gitignored (and in `~/d/cats` it does not
+exist at all), so `git add .env` fails — either "paths are ignored by one of your
+.gitignore files" or "pathspec did not match any files" — and a failing pathspec
+aborts the whole `git add`, staging nothing. Do not use `git add -A`.
 
 - [ ] **Step 5: Convert and validate the deep multiple-myeloma pilot**
 
@@ -1443,18 +1554,21 @@ cd ~/d/cancer/cancer-types/multiple-myeloma/.worktrees/science-git-source-smoke 
 cd ~/d/cancer/cancer-types/multiple-myeloma/.worktrees/science-git-source-smoke && bash validate.sh --verbose
 git -C ~/d/cancer/cancer-types/multiple-myeloma worktree remove ~/d/cancer/cancer-types/multiple-myeloma/.worktrees/science-git-source-smoke
 git -C ~/d/cancer/cancer-types/multiple-myeloma branch -D science-git-source-smoke
-git -C ~/d/cancer/cancer-types/multiple-myeloma add pyproject.toml uv.lock AGENTS.md .env
+git -C ~/d/cancer/cancer-types/multiple-myeloma add pyproject.toml uv.lock
+git -C ~/d/cancer/cancer-types/multiple-myeloma diff --name-only
+git -C ~/d/cancer/cancer-types/multiple-myeloma add AGENTS.md   # only if listed above
 git -C ~/d/cancer/cancer-types/multiple-myeloma commit -m "chore: pin Science to its Git source"
 ```
 
-Expected: nested worktree verification passes and the deep pilot has its own conversion commit. Adjust the explicit `git add` list for absent/deleted `.env` exactly as in Step 4.
+Expected: nested worktree verification passes and the deep pilot has its own conversion commit. This project's `.env` is present and gitignored; strip its `SCIENCE_TOOL_PATH` line on disk but never stage it, exactly as in Step 4.
 
 ---
 
 ### Task 10: Convert the remaining 18 persistent external consumers
 
 **Files:**
-- Modify in each repository: `pyproject.toml`, `uv.lock`, `AGENTS.md` only when stale guidance exists, `.env` only when it contains `SCIENCE_TOOL_PATH`.
+- Commit in each repository: `pyproject.toml`, `uv.lock`, and `AGENTS.md` only when stale guidance exists.
+- Edit on disk but never stage: `.env`, only when it contains `SCIENCE_TOOL_PATH`. It is gitignored.
 
 **Interfaces:**
 - Consumes: the pilot procedure proven in Task 9.
@@ -1538,21 +1652,38 @@ uv run --frozen science --version
 bash validate.sh --verbose
 ```
 
-Expected: every command passes and the reported Science version is at least `0.3.0`. If one fails, keep that repository uncommitted, diagnose it independently, and do not obscure the error with a local editable overlay.
+Then assert the floor rather than eyeballing it across eighteen repositories:
+
+```bash
+cd "$repo"
+installed=$(uv run --frozen science --version | awk '{print $NF}')
+printf '%s\n' "$installed"
+uv run --no-project python - "$installed" <<'PY'
+import re, sys
+
+def release(name: str) -> tuple[int, int, int]:
+    match = re.match(r"(\d+)\.(\d+)\.(\d+)", name)
+    assert match is not None, f"unparseable science version: {name!r}"
+    return tuple(map(int, match.groups()))
+
+assert release(sys.argv[1]) >= (0, 3, 0), f"{sys.argv[1]} is below the 0.3.0 floor"
+PY
+```
+
+Expected: every command passes and the version assertion exits 0. If one fails, keep that repository uncommitted, diagnose it independently, and do not obscure the error with a local editable overlay.
 
 - [ ] **Step 4: Commit each validated repository independently**
 
-For each repository, keep `repo` set to its exact path, explicitly stage the two required files, add an optional file only when `git -C "$repo" diff --name-only` shows it changed, and commit:
+For each repository, keep `repo` set to its exact path, explicitly stage the two required files, add `AGENTS.md` only when `git -C "$repo" diff --name-only` shows it changed, and commit:
 
 ```bash
 git -C "$repo" add pyproject.toml uv.lock
 git -C "$repo" diff --name-only
-git -C "$repo" add AGENTS.md
-git -C "$repo" add -u .env
+git -C "$repo" add AGENTS.md   # only if the preceding diff listed it
 git -C "$repo" commit -m "chore: pin Science to its Git source"
 ```
 
-Run the `AGENTS.md` or `.env` add line only when that path appears in the preceding diff. `git add -u .env` records deletion without staging unrelated files. Do not use `git add -A`, and do not combine repositories into a shared commit operation.
+`.env` is deliberately absent from this list. It is gitignored in consumer projects, so the `SCIENCE_TOOL_PATH` cleanup is a filesystem-only change with nothing to commit, and naming an ignored path in `git add` fails and aborts the entire invocation. Do not use `git add -A`, and do not combine repositories into a shared commit operation.
 
 - [ ] **Step 5: Verify the 18-repository checklist is complete**
 

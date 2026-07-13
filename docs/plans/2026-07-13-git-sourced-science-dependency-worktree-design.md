@@ -89,13 +89,25 @@ executable compatibility block. The block captures
 deterministically, and proceeds only when the installed version meets the floor.
 The agent executes the block; it does not perform the comparison by judgment.
 
-The `--version` option itself begins at the `0.3.0` baseline. The deployed older
-CLI identifies that bootstrap case with `Error: No such option: --version`.
-Only that recognized Click response is converted into the controlled
-below-floor path. Any other probe failure—such as a missing or stale lock, a Git
-fetch failure, or a runtime/import error—is emitted verbatim and stops without
-advising an upgrade. Successful but missing or unparseable version output still
-takes the controlled compatibility-failure path.
+The `--version` option itself begins at the `0.3.0` baseline, so the probe must
+survive a CLI that does not recognize it. The block distinguishes the two failure
+classes **semantically, never by matching a Click error string**: when the probe
+fails, it re-runs `science --help`. If `--help` succeeds, the CLI runs but has no
+`--version` option, which means it predates the baseline and takes the controlled
+below-floor path. If `--help` also fails, the failure belongs to the
+environment—a missing or stale lock, a Git fetch failure, a runtime or import
+error—and the captured output is emitted verbatim, stopping without advising an
+upgrade. Successful but missing or unparseable version output still takes the
+controlled compatibility-failure path.
+
+Matching Click's human-readable diagnostic is explicitly rejected. That text is
+version-dependent: Click 8.1–8.3 emit `Error: No such option: --version` while
+Click 8.4 emits ``Error: No such option '--version'.`` The `science` package
+requires `click>=8.1` with no upper bound, so a freshly locked consumer resolves
+the newest Click. A string-matching gate would therefore fail to recognize the
+bootstrap case on exactly the consumers this design creates, and would print the
+raw Click error it exists to suppress. The `--help` probe is stable across Click
+versions, rewordings, and locales.
 
 ```text
 This Science agent command requires science >=0.3.0, but this project pins
@@ -105,12 +117,17 @@ then retry.
 
 The authoritative preamble carries the shell implementation, including the
 version floor and a Python-standard-library numeric release comparison. Its
-behavior is tested for the recognized pre-baseline Click response, an unrelated
-uv/environment failure, malformed output, a below-floor version, the exact
-floor, suffixed development/release versions, and a newer version. The probe
-remains a root option whose recognized bootstrap failure is data handled by this
-block; it must not be replaced with a new preflight subcommand that older CLIs
-cannot recognize.
+behavior is tested against a **real pre-baseline CLI** — a Click group built
+without `version_option` — rather than a fixture that echoes a hand-written error
+string. A test that asserts against its own fabricated diagnostic cannot detect a
+diagnostic that changed, which is precisely how the Click-string approach would
+have shipped broken. Coverage spans that real pre-baseline CLI, an unrelated
+uv/environment failure, malformed output, a below-floor version, the exact floor,
+suffixed development/release versions, and a newer version.
+
+The probe remains a root option whose failure is data handled by this block; it
+must not be replaced with a new preflight subcommand that older CLIs cannot
+recognize.
 
 The block has this behavior (the implementation may factor the comparison for
 testability, but not defer it to agent reasoning):
@@ -119,7 +136,7 @@ testability, but not defer it to agent reasoning):
 SCIENCE_REQUIRED_VERSION=0.3.0
 if output=$(uv run --frozen science --version 2>&1); then
   SCIENCE_INSTALLED_VERSION=${output##* }
-elif printf '%s\n' "$output" | grep -Fq 'Error: No such option: --version'; then
+elif uv run --frozen science --help >/dev/null 2>&1; then
   SCIENCE_INSTALLED_VERSION=
 else
   printf '%s\n' "$output" >&2
@@ -150,9 +167,10 @@ fi
 ```
 
 The extra frozen CLI startup measured about 1.4 seconds during review; the
-comparison itself was negligible. That per-command cost is accepted for the
-initial contract. If it becomes material, cache a successful check for the
-agent session rather than weakening or removing the probe.
+comparison itself was negligible. The `--help` disambiguation runs only on the
+failure path, so the healthy path pays one probe. That per-command cost is
+accepted for the initial contract. If it becomes material, cache a successful
+check for the agent session rather than weakening or removing the probe.
 
 Generated Codex skills embed the same preamble and therefore the same floor.
 Tests require every command that invokes `science` to load the shared preamble
@@ -261,10 +279,10 @@ The implementation updates the authoritative surfaces together:
    its explanation that this toolkit's in-repository package sources are safe.
 4. `references/command-preamble.md` removes the `UV_PROJECT=$MAIN` and main
    checkout environment workarounds, declares the minimum compatible CLI
-   version, and executes the compatibility block before command execution. The
-   recognized pre-`0.3.0` Click response and successful-but-unparseable version
-   output take the controlled upgrade path; unrelated probe failures pass
-   through verbatim. Generated Codex skills are regenerated from the
+   version, and executes the compatibility block before command execution. A CLI
+   that runs but has no `--version`, and successful-but-unparseable version
+   output, take the controlled upgrade path; failures where the CLI itself cannot
+   run pass through verbatim. Generated Codex skills are regenerated from the
    authoritative command inputs.
 5. Tooling health and validation parse `pyproject.toml` structurally. They
    continue to require `science` in `[dependency-groups].dev`, accept a Git
@@ -274,6 +292,10 @@ The implementation updates the authoritative surfaces together:
    invocation, and new scaffolds do not create the variable. During the
    downstream pass, remove only the vestigial `SCIENCE_TOOL_PATH` line. Preserve
    every other entry; delete `.env` only if no non-comment content remains.
+   `.env` is gitignored in consumer projects, so this cleanup is a filesystem
+   hygiene step that produces no committable change. It must never appear in a
+   `git add` list — staging an ignored path fails and aborts the whole `git add`,
+   staging nothing.
 7. The managed `validate.sh` shim remains:
 
    ```bash
@@ -327,11 +349,12 @@ SHA into consumer locks.
 - A Git fetch failure remains visible as a uv error. There is no silent fallback
   to a local checkout or a different Science revision. A fresh no-egress
   environment therefore requires a pre-populated uv/Git cache.
-- The recognized pre-`0.3.0` Click response, successful-but-unparseable output,
-  or an installed version below the required CLI floor stops in the shared
-  preamble with the explicit Science upgrade command. Any other probe failure
-  is emitted verbatim, so missing locks, Git/network errors, and runtime errors
-  retain their real diagnosis and do not advise moving the Science pin.
+- A pre-`0.3.0` CLI (one that runs `--help` but rejects `--version`),
+  successful-but-unparseable output, or an installed version below the required
+  CLI floor stops in the shared preamble with the explicit Science upgrade
+  command. Any failure where the CLI cannot run at all is emitted verbatim, so
+  missing locks, Git/network errors, and runtime errors retain their real
+  diagnosis and do not advise moving the Science pin.
 - `uv sync --frozen` continues to fail when the lock is absent or stale.
 - An unpushed Science commit cannot be selected by normal consumers; use the
   explicit `--with-editable` overlay while developing it.
@@ -344,12 +367,12 @@ Toolkit verification includes:
    path-source manifests.
 2. Documentation tests for the canonical Git source and the absence of retired
    editable-install and sibling-worktree guidance.
-3. Executable compatibility-check tests for the recognized pre-baseline Click
-   response; an absent-lock uv failure that must pass through verbatim;
-   malformed output; a below-floor version; the exact floor; suffixed release,
-   development, and local versions; and a newer version. Version-contract tests
-   assert `plugin_version == package_version` and
-   `preamble_floor <= package_version`.
+3. Executable compatibility-check tests driven against a real pre-baseline CLI
+   (a Click group built without `version_option`), not a fabricated error string;
+   an absent-lock uv failure that must pass through verbatim; malformed output; a
+   below-floor version; the exact floor; suffixed release, development, and local
+   versions; and a newer version. Version-contract tests assert
+   `plugin_version == package_version` and `preamble_floor <= package_version`.
 4. A command-tree contract test that extracts every
    `uv run science <subcommand>` invocation from `commands/*.md` and asserts
    that the referenced top-level command exists in the current Click tree.
