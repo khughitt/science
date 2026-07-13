@@ -2860,19 +2860,40 @@ def test_validate_reports_a_dangling_successor(tmp_project) -> None:
     # not a comment: rev 1 pointed at Task 12, and Task 12 graded only `status-vocabulary`.
     assert findings[0].severity == "warn"
     assert "9999-nope" in findings[0].message
+```
 
-
-> ### ⚠️ The four resolution cases must be re-tested through the REAL loader, not just the stub
+> ### ⚠️ The resolution cases must be re-tested through the REAL loader, not just the stub
 >
 > `_Targets` in the unit test proves `check_resolution`'s *logic*. It proves **nothing about the
 > resolver the loader actually builds** — and that construction is where the wiring can silently
-> rot. Drop `manual_aliases=` or `identity_table=` from `ReferenceResolver.from_entities` and every
-> unit test still passes, because the stub was never wired to either.
+> rot. Drop `manual_aliases=` from `ReferenceResolver.from_entities` and every unit test still
+> passes, because the stub was never wired to it.
 >
 > **Worse, a count-only assertion hides it.** Omit `manual_aliases` and an archived successor stops
 > resolving — so it becomes an *unresolved* violation instead of a *not-live* one. **Still one
 > finding. Still green.** The test must assert the **message**, which is the only thing that
 > distinguishes "the resolver could not find it" from "the resolver found it, and it is dead."
+>
+> #### `identity_table=` is passed for parity, and is NOT pinned by any test. Say so.
+>
+> An earlier draft claimed a scoped-successor test pinned it. **That test could not have run** — the
+> schema's `^hypothesis:` pattern rejects `demo:hypothesis:0002-y` before the resolver ever sees it.
+>
+> And no test *can* pin it, because for a lineage ref `identity_table` is provably **inert**:
+> `identity_table` feeds only `owner_scopes` / `scope_names` / `owner_scopes_by_root`, so it changes
+> an answer only via `scope_ambiguous` — which needs an id owned in **two** owner scopes. A load has
+> exactly **one** project scope (`classify_owner_scope`, identity_table.py:96), so the second scope
+> can only be `commons` — and **commons owns no hypotheses** (274 paper, 41 dataset, 40 topic, 14
+> theme, 0 hypothesis). A `hypothesis:` id therefore has exactly one owner scope, always.
+>
+> It is passed anyway, because **`materialize.py:348` passes it**, and materialize is what builds the
+> lineage edges. Its inertness rests on what commons currently *contains* — data, not contract — and
+> a check whose correctness depends on that is the same fragility as the raw-`known_ids` set this
+> task replaced. **Parity with the materializer is the invariant; keep the argument.**
+>
+> Note the codebase does **not** already have one canonical construction: of the seven
+> `ReferenceResolver.from_entities` call sites, only `materialize.py:348` passes `identity_table`.
+> Do not "harmonize" the other six as a drive-by — they resolve different things.
 
 ```python
 def test_a_LIVE_ALIAS_resolves_through_the_REAL_loader(tmp_project) -> None:
@@ -2911,16 +2932,22 @@ def test_an_ARCHIVED_successor_RESOLVES_and_is_still_a_violation(tmp_project) ->
     assert "not a live entity" in violations[0].message      # NOT "does not resolve"
 
 
-def test_a_SCOPED_reference_resolves_through_the_REAL_loader(tmp_project) -> None:
-    # ☠️ THE test that pins `identity_table=`. `_split_scope` only recognises a scope prefix when
-    # `scope_names` is populated, and `scope_names` comes from the identity table
-    # (reference_resolution.py:66-68). Omit `identity_table=` and `scope_names` is empty, the
-    # scoped form is never split, resolution fails, and a VALID scoped successor is reported as
-    # dangling -- blocking a correct corpus, with no other test noticing.
+def test_a_SCOPED_lineage_ref_is_REJECTED_BY_THE_SCHEMA(tmp_project) -> None:
+    # Lineage is UNSCOPED. `superseded_by` and `resynthesized_into` are `pattern: "^hypothesis:"`
+    # (mixin-hypothesis-1.0.json:27,31), so `demo:hypothesis:0002-y` never reaches the resolver --
+    # it fails schema validation first.
+    #
+    # This test exists because an earlier draft asserted the OPPOSITE: that a scoped successor
+    # resolves cleanly through the loader. That test could not have passed. Rather than widen the
+    # pattern to keep it alive -- tuning the contract to serve a test -- the ban is made EXPLICIT
+    # here, and it is what the corpus already says: ZERO hypotheses author lineage at all, and ZERO
+    # scoped refs (`scope:kind:slug`) exist anywhere in the 18 roots.
     write_hypothesis(tmp_project, "0002-y")
-    write_hypothesis(tmp_project, "0001-x", status="superseded",
-                     extra={"superseded_by": f"{project_id(tmp_project)}:hypothesis:0002-y"})
-    assert load_project_sources(tmp_project).resolution_violations == []
+    with pytest.raises(EntityValidationError):
+        validate_hypothesis(
+            _hypothesis(id="hypothesis:0001-x", status="superseded",
+                        superseded_by="demo:hypothesis:0002-y")
+        )
 
 
 def test_the_dangling_lineage_rule_is_NOT_GATED_yet(tmp_project) -> None:
@@ -3187,10 +3214,31 @@ class ProjectSources(BaseModel):
   > `build_identity_table(sources)`, which needs `.identity_declarations`. **Construct the bundle
   > first, then compute, then return an updated copy.**
   >
-  > **(b) A top-level `from …reference_resolution import ReferenceResolver` in `sources.py` is a
-  > CYCLE.** `reference_resolution.py:11` already does `from science_tool.graph.sources import
-  > build_alias_map`. Import it **inside the function**, and say why in a comment — otherwise the
-  > next reader "tidies" it to the top and breaks the package.
+  > **(b) The two new imports go in OPPOSITE places, for opposite reasons.** Get this backwards and
+  > it does not compile.
+  >
+  > - **`ReferenceResolver` must be FUNCTION-LOCAL.** A top-level
+  >   `from …reference_resolution import ReferenceResolver` in `sources.py` is a **cycle**:
+  >   `reference_resolution.py:11` already does `from science_tool.graph.sources import
+  >   build_alias_map`. Say why in a comment — otherwise the next reader "tidies" it to the top and
+  >   breaks the package. (`load_archive_index` is already imported locally in this same function
+  >   for exactly this reason; follow it.)
+  > - **`build_identity_table` goes TOP-LEVEL**, appended to the import block `sources.py` already
+  >   has from that module (`sources.py:49` imports `IdentityDeclaration`, `ParticipationMode`,
+  >   `classify_owner_scope` — but *not* `build_identity_table`, which is the omission that stopped
+  >   the earlier draft compiling). There is **no** cycle: `identity_table.py` imports nothing from
+  >   `graph.sources` — it takes a structural `_DeclaredSources` Protocol (identity_table.py:122)
+  >   precisely so that it never has to.
+
+```python
+# At the TOP of sources.py -- extend the EXISTING import from this module (sources.py:49):
+from science_tool.graph.identity_table import (
+    IdentityDeclaration,
+    ParticipationMode,
+    build_identity_table,          # <- ADD. No cycle: identity_table never imports sources.
+    classify_owner_scope,
+)
+```
 
 ```python
     # Everything above is unchanged, up to and including the manual_aliases block.
@@ -3349,6 +3397,58 @@ class ProjectSources(BaseModel):
 > slice: interpretation must become a graph kind with a typed edge to the hypothesis) or **amend
 > design rev 8 point 2 to say evidence-line-and-falsification basis.** Do not ship a check whose
 > docstring claims a basis it cannot read. *(File as a defect against rev 8.)*
+
+- [ ] **Step 3c-0: REGISTER the check — or it never runs, and every test still passes.**
+
+  Writing `verdict_agreement.py` does **not** enable it. `validate` runs only what
+  `CANONICAL_CHECK_MODULES` names (`checks/__init__.py:25`): `_load_canonical_checks` imports each
+  listed module, and the `@Check` decorator appends to `CANONICAL_CHECKS` **as an import side
+  effect**. A module nobody imports registers nothing.
+
+  Add `"verdict_agreement"` to that tuple. **Do it in the same commit as the module** — the registry
+  is eagerly loaded, so a name listed before its file exists is an immediate `ModuleNotFoundError`
+  that breaks the entire package.
+
+  > ### ☠️ Why the unit tests CANNOT catch this, and what does
+  >
+  > `test_verdict_agreement.py` imports `verdict_agreement` to get at its helpers. **That import runs
+  > the decorator.** So the check registers itself *inside the test process* and every unit test
+  > passes — while `science validate` in a real project runs 75 checks and never calls it. The suite
+  > is green and the feature is off. This is the silent-instrument failure verbatim, one layer up.
+  >
+  > The registry fails **loud** in one direction (listed-but-missing → `ModuleNotFoundError`) and
+  > **silent** in the other (present-but-unlisted → never runs). Only the silent direction needs a
+  > guard, and it must be **derived from the directory, not hand-listed** — a guard that enumerates
+  > its own scope has a hole by construction, which is the very hole it would be closing.
+
+```python
+# science/tests/validate/test_check_registry_is_complete.py
+
+def test_EVERY_check_module_on_disk_is_REGISTERED() -> None:
+    # Derived from the FILESYSTEM, not from a list. A check module that exists but is not named in
+    # CANONICAL_CHECK_MODULES is dead code that looks exactly like a working check -- it has a
+    # @Check decorator, it has passing unit tests, and `validate` never calls it.
+    from science_tool.validate import checks
+
+    on_disk = {
+        path.stem
+        for path in Path(checks.__file__).parent.glob("*.py")
+        if path.stem != "__init__"
+    }
+    assert on_disk == set(checks.CANONICAL_CHECK_MODULES), (
+        f"unregistered: {sorted(on_disk - set(checks.CANONICAL_CHECK_MODULES))}; "
+        f"listed but absent: {sorted(set(checks.CANONICAL_CHECK_MODULES) - on_disk)}"
+    )
+
+
+def test_the_verdict_check_runs_through_RUN_VALIDATE(tmp_project) -> None:
+    # End-to-end, through the REAL entry point -- NOT by importing the module (which would run the
+    # decorator and conceal the omission this test exists to catch).
+    write_hypothesis(tmp_project, "0001-x", status="complete",
+                     extra={"verdict": "supported"})          # no basis -> missing-basis
+    rules = {r.rule for r in run_validate(tmp_project)}
+    assert "verdict.missing-basis" in rules
+```
 
 - [ ] **Step 3c: The verdict-agreement GRAPH check** (design rev 8, contract point 2 — *as amended*)
 
@@ -3559,18 +3659,34 @@ def test_evidence_on_a_CORE_member_IS_a_basis() -> None:
 
 # ---- the two rules are INDEPENDENT: one may not mask the other ----
 
-def test_missing_basis_and_refutation_masked_fire_INDEPENDENTLY() -> None:
-    # A `supported` verdict, no qualifying basis, AND an unresolved decisive refutation. Both are
-    # true and both must be said: they have different severities and different gate tiers, so
-    # collapsing them into one finding silently re-grades whichever one loses.
+def test_the_three_rules_fire_INDEPENDENTLY() -> None:
+    # A `supported` verdict, no qualifying basis, AND an unresolved decisive refutation.
+    #
+    # ALL THREE fire, and this is the strictest statement of the no-suppression rule in the suite.
+    # The emitter has no `continue` between the rules, so each is evaluated on its own facts:
+    #   - no qualifying basis at all                       -> missing-basis        (WARN)
+    #   - `supported` over a decisive refutation           -> refutation-masked    (ERROR)
+    #   - and the composed belief plainly is not `supported` -> disagrees-with-computed (WARN)
+    #
+    # An earlier draft expected only the first two. That is not what the specified emitter produces,
+    # and it contradicts this suite's own adjacent tests: `test_an_INADMISSIBLE_unit_is_not_a_basis`
+    # already expects `disagrees-with-computed` for a `supported` verdict whose evidence does not
+    # compose. Here NOTHING composes AND a decisive refutation stands -- so it disagrees at least as
+    # hard. Expecting two rules would reject a correct implementation, and the only way to make the
+    # two-rule oracle true is to SUPPRESS the third -- the masking this box forbids.
     results = _verdict_results(
         _graph(verdict="supported", basis=None, refutation=_decisive())
     )
 
-    assert {r.rule for r in results} == {"verdict.missing-basis", "verdict.refutation-masked"}
+    assert {r.rule for r in results} == {
+        "verdict.missing-basis",
+        "verdict.refutation-masked",
+        "verdict.disagrees-with-computed",
+    }
     assert {r.rule: r.severity for r in results} == {
-        "verdict.missing-basis": Severity.WARN,      # >= 11 of 15 cannot satisfy it -- never ERROR
-        "verdict.refutation-masked": Severity.ERROR, # the one hard invariant
+        "verdict.missing-basis": Severity.WARN,           # >=11 of 15 cannot satisfy it -- never ERROR
+        "verdict.refutation-masked": Severity.ERROR,      # the one hard invariant
+        "verdict.disagrees-with-computed": Severity.WARN, # explanatory, never a ceiling
     }
 
 
@@ -3641,9 +3757,15 @@ def test_weakened_is_never_inferred_from_ONE_snapshot() -> None:
 def test_missing_basis_is_WARN_and_UNGATED() -> None:
     # >= 11 of the 15 migrating verdicts CANNOT satisfy this rule. An ERROR here would be an
     # uncertified instrument failing real builds -- the original incident, verbatim.
+    #
+    # FILTER for the rule under test. `supported` + no basis emits `disagrees-with-computed` too
+    # (nothing composes, so the composed belief is not `supported`) -- so asserting over the WHOLE
+    # result list tests the OTHER rule's existence as a side effect and fails on a correct emitter.
+    # Assert the severity of the rule this test is named after, and nothing else.
     results = run_verdict_checks(graph_with(verdict="supported", basis=None))
 
-    assert [r.severity for r in results] == ["warn"]
+    missing = [r for r in results if r.rule == "verdict.missing-basis"]
+    assert [r.severity for r in missing] == [Severity.WARN]
     assert "verdict.missing-basis" not in cumulative_rules("hygiene")
 
 
