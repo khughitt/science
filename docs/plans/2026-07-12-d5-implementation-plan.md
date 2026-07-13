@@ -1019,7 +1019,7 @@ weaker copy of the adjudication.
 
 ## Phase 2 — The schema substrate
 
-### Task 5: `science-entity-base-2.0` — syntactic kind, so it never needs editing again
+### Task 5: `science-entity-base-2.0` — syntactic kind, so it never needs editing again — **DONE** (`c83c964c`)
 
 **Why a new base:** composition is a pure `allOf` (`validator.py:82-87`), and **an `allOf` can
 only narrow.** Base 1.0 pins `kind` to `{"enum": [dataset,paper,topic,theme]}` and `id` to
@@ -1043,7 +1043,7 @@ versions coexist — that is what versioning is *for*. **Zero commons churn.**
 - Create: `science/model/src/science_model/schemas/science-entity-base-2.0.json`
 - Test: `science/model/tests/test_base_2_0.py`
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 ```python
 # science/model/tests/test_base_2_0.py
@@ -1088,9 +1088,9 @@ def test_base_1_0_is_byte_untouched() -> None:
 > ships a failing test has not "phased" anything; it has **broken the build and hidden it behind a
 > narrow test selection.** A task ends green on `pytest`, not on `pytest -k`.
 
-- [ ] **Step 2: Run and fail** — `SchemaNotFoundError`: the file does not exist.
+- [x] **Step 2: Run and fail** — `SchemaNotFoundError`: the file does not exist.
 
-- [ ] **Step 3: Create the schema.** Copy `science-entity-base-1.0.json`, keep `$defs`,
+- [x] **Step 3: Create the schema.** Copy `science-entity-base-1.0.json`, keep `$defs`,
   `licenses`, `contributors`, `dataset_usage` and **every `science:merge` annotation** byte-identical,
   and change exactly these:
 
@@ -1123,11 +1123,11 @@ for project kinds) and `version` (a commons concept); **(c)** `kind` becomes a p
 `id` becomes prefix-agnostic, with the suffix widened to 127 chars — hypothesis slugs like
 `0009-local-structure-globalization-obstruction` exceed base 1.0's 64.
 
-- [ ] **Step 4: Green — the WHOLE suite**, not a selection. `cd science/model && uv run --frozen
+- [x] **Step 4: Green — the WHOLE suite**, not a selection. `cd science/model && uv run --frozen
   pytest`, then `cd science && uv run --frozen pytest`. Task 5 adds a schema file and three
   file-shape tests; nothing it commits can be red.
 
-- [ ] **Step 5: Commit.**
+- [x] **Step 5: Commit.**
 
 ---
 
