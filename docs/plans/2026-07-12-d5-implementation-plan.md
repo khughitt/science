@@ -2444,6 +2444,27 @@ entity_extensions:
   else** — no `entity_schema_version`, so the commit is behavior-neutral there and `science validate`
   keeps passing exactly as it does today.
 
+> ### Behavior-neutrality was MEASURED, not asserted — and it exposed the delivery channel
+>
+> `science validate` was run in both repos with and without the new stanza: **evolution 70 findings
+> → 70; mm30 216 → 216.** Byte-identical. The extension schema and the `entity_extensions` stanza
+> are inert at version 1, exactly as this step claims.
+>
+> The measurement turned up something the plan had not registered. **Both repos install the toolkit
+> from the public Git source** (`science = { git = "https://github.com/khughitt/science.git" }`,
+> revision pinned in `uv.lock`) — *not* from a local path. So a consumer project does not see this
+> branch's work until it is **pushed and re-pinned**. Two consequences, both load-bearing for the
+> tasks ahead:
+>
+> - Evolution's 11 `[status-vocabulary]` ERRORs (and mm30's) are **pre-existing**, produced by the
+>   pinned revision's *uncertified* status check — the very defect this branch's first commit
+>   (`e462b5f7`) fixes. They are not caused by Task 6b, and they will not clear in the consumer
+>   repos until the branch ships.
+> - **Task 11's corpus preflight cannot run against the pinned toolkit.** It must run against this
+>   branch's `science` — either from the toolkit checkout, or after the consumers re-pin. A preflight
+>   run against the Git-pinned revision would be validating the corpus with a toolkit that has
+>   neither `mixin-hypothesis-1.0` nor `entity_extensions`, and would pass while proving nothing.
+
 > ### Where the implementation departed from this task's text, and why
 >
 > **1. The extension filenames above are wrong — they would never have been found.** The Files list
