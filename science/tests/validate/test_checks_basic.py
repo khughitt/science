@@ -66,7 +66,7 @@ def test_importing_checks_registers_first_canonical_checks_in_order() -> None:
     ]
 
 
-def test_tooling_warns_when_pyproject_and_env_are_missing(tmp_path: Path) -> None:
+def test_tooling_warns_when_pyproject_is_missing(tmp_path: Path) -> None:
     from science_tool.validate.checks.tooling import check_tooling
 
     ctx = _ctx(tmp_path)
@@ -76,101 +76,65 @@ def test_tooling_warns_when_pyproject_and_env_are_missing(tmp_path: Path) -> Non
     assert (Severity.WARN, "pyproject.toml missing") in [
         (result.severity, result.message.split(" — ")[0]) for result in results
     ]
-    assert (
-        Severity.WARN,
-        ".env missing — SCIENCE_TOOL_PATH is unset (fix: create .env with `SCIENCE_TOOL_PATH=<absolute-path-to-science>`)",
-    ) in [(result.severity, result.message) for result in results]
+    assert len(results) == 1
 
 
-def test_tooling_reports_present_pyproject_science_reference_and_env(tmp_path: Path) -> None:
+def test_tooling_accepts_git_source(tmp_path: Path) -> None:
     from science_tool.validate.checks.tooling import check_tooling
 
     ctx = _ctx(tmp_path)
-    tmp_path.joinpath("pyproject.toml").write_text("[project]\nname = 'science-demo'\n", encoding="utf-8")
-    tmp_path.joinpath(".env").write_text("SCIENCE_TOOL_PATH=/tmp/science\n", encoding="utf-8")
+    tmp_path.joinpath("pyproject.toml").write_text(
+        '[project]\nname = "demo"\nversion = "0.1.0"\n'
+        '[dependency-groups]\ndev = ["science"]\n'
+        '[tool.uv.sources]\n'
+        'science = { git = "https://github.com/khughitt/science.git", subdirectory = "science" }\n',
+        encoding="utf-8",
+    )
 
     results = list(check_tooling(ctx))
 
     assert _messages(results) == [
         "pyproject.toml present",
-        "  science reference present",
-        ".env defines SCIENCE_TOOL_PATH",
+        "  science Git source is worktree-safe",
     ]
-    assert [result.severity for result in results] == [Severity.INFO, Severity.INFO, Severity.INFO]
+    assert all(result.severity is Severity.INFO for result in results)
 
 
-def test_tooling_accepts_environment_science_tool_path_without_env_file(
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
+def test_tooling_reports_malformed_pyproject_once(tmp_path: Path) -> None:
     from science_tool.validate.checks.tooling import check_tooling
 
     ctx = _ctx(tmp_path)
-    tmp_path.joinpath("pyproject.toml").write_text("[project]\nname = 'science-demo'\n", encoding="utf-8")
-    monkeypatch.setenv("SCIENCE_TOOL_PATH", "/tmp/science")
+    tmp_path.joinpath("pyproject.toml").write_text("[project\n", encoding="utf-8")
 
     results = list(check_tooling(ctx))
 
-    assert ".env missing" not in "\n".join(_messages(results))
-    assert _messages(results) == [
-        "pyproject.toml present",
-        "  science reference present",
-        "SCIENCE_TOOL_PATH set in environment",
-    ]
-    assert [result.severity for result in results] == [Severity.INFO, Severity.INFO, Severity.INFO]
+    warnings = [result for result in results if result.severity is Severity.WARN]
+    assert len(warnings) == 1
+    assert "could not be parsed" in warnings[0].message
 
 
-def test_tooling_warns_when_pyproject_does_not_reference_science(tmp_path: Path) -> None:
+def test_tooling_rejects_external_path_source(tmp_path: Path) -> None:
     from science_tool.validate.checks.tooling import check_tooling
 
-    ctx = _ctx(tmp_path)
-    tmp_path.joinpath("pyproject.toml").write_text("[project]\nname = 'demo'\n", encoding="utf-8")
+    consumer = tmp_path / "consumer"
+    (consumer / ".git").mkdir(parents=True)
+    external = tmp_path / "external-toolkit"
+    (external / ".git").mkdir(parents=True)
+    (external / "science").mkdir()
+    ctx = _ctx(consumer)
+    consumer.joinpath("pyproject.toml").write_text(
+        '[project]\nname = "demo"\nversion = "0.1.0"\n'
+        '[dependency-groups]\ndev = ["science"]\n'
+        '[tool.uv.sources]\nscience = { path = "../external-toolkit/science", editable = true }\n',
+        encoding="utf-8",
+    )
 
     results = list(check_tooling(ctx))
 
-    assert (
-        Severity.WARN,
-        'pyproject.toml does not reference science (fix: `uv add --dev --editable "$SCIENCE_TOOL_PATH"`)',
-    ) in [(result.severity, result.message) for result in results]
-
-
-def test_tooling_warns_when_env_lacks_science_tool_path(tmp_path: Path) -> None:
-    from science_tool.validate.checks.tooling import check_tooling
-
-    ctx = _ctx(tmp_path)
-    tmp_path.joinpath(".env").write_text("OTHER=value\nexport SCIENCE_TOOL_PATH=/tmp/science\n", encoding="utf-8")
-
-    results = list(check_tooling(ctx))
-
-    assert (
-        Severity.WARN,
-        ".env exists but does not define SCIENCE_TOOL_PATH (fix: add `SCIENCE_TOOL_PATH=<absolute-path>` to .env)",
-    ) in [(result.severity, result.message) for result in results]
-
-
-def test_tooling_infos_when_env_cannot_be_read(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    from science_tool.validate.checks.tooling import check_tooling
-
-    ctx = _ctx(tmp_path)
-    tmp_path.joinpath(".env").write_text("SCIENCE_TOOL_PATH=/tmp/science\n", encoding="utf-8")
-
-    original_read_text = Path.read_text
-
-    def fake_read_text(self: Path, *args, **kwargs):
-        if self.name == ".env":
-            raise PermissionError("simulated denied .env")
-        return original_read_text(self, *args, **kwargs)
-
-    monkeypatch.setattr(Path, "read_text", fake_read_text)
-
-    results = list(check_tooling(ctx))
-
-    assert (
-        Severity.INFO,
-        ".env exists but could not be inspected; skipping secret file contents: simulated denied .env",
-    ) in [(result.severity, result.message) for result in results]
-    assert not any(result.severity is Severity.WARN and result.path == Path(".env") for result in results)
-    assert not any(result.rule == "validate.check-error" for result in results)
+    assert any(
+        result.severity is Severity.WARN and "breaks in nested worktrees" in result.message
+        for result in results
+    )
 
 
 def test_manifest_reports_missing_required_fields_and_bad_knowledge_profiles(tmp_path: Path) -> None:

@@ -2,10 +2,15 @@
 
 from __future__ import annotations
 
-import os
+import tomllib
 from collections.abc import Iterator
 from pathlib import Path
 
+from science_tool.tooling_dependency import (
+    CANONICAL_SCIENCE_SOURCE,
+    ScienceSourceKind,
+    inspect_science_dependency,
+)
 from science_tool.validate.checks import Check
 from science_tool.validate.context import ValidateContext
 from science_tool.validate.result import Result, Severity
@@ -28,46 +33,41 @@ def check_tooling(ctx: ValidateContext) -> Iterator[Result]:
         yield _result(
             Severity.WARN,
             "pyproject.toml",
-            'pyproject.toml missing — `uv run science ...` cannot resolve (fix: see commands/create-project.md, then `uv add --dev --editable "$SCIENCE_TOOL_PATH"`)',
+            "pyproject.toml missing — `uv run science ...` cannot resolve "
+            f"(fix: see commands/create-project.md and configure `{CANONICAL_SCIENCE_SOURCE}`)",
         )
     else:
         yield _result(Severity.INFO, "pyproject.toml", "pyproject.toml present")
-        if "science" not in ctx.read_text_cached(pyproject_path):
+        try:
+            dependency = inspect_science_dependency(ctx.project_root)
+        except (OSError, tomllib.TOMLDecodeError) as exc:
             yield _result(
                 Severity.WARN,
                 "pyproject.toml",
-                'pyproject.toml does not reference science (fix: `uv add --dev --editable "$SCIENCE_TOOL_PATH"`)',
+                f"pyproject.toml could not be parsed: {exc}",
             )
         else:
-            yield _result(Severity.INFO, "pyproject.toml", "  science reference present")
-
-    env_path = ctx.project_root / ".env"
-    if not env_path.is_file():
-        if os.environ.get("SCIENCE_TOOL_PATH"):
-            yield _result(Severity.INFO, ".env", "SCIENCE_TOOL_PATH set in environment")
-            return
-        yield _result(
-            Severity.WARN,
-            ".env",
-            ".env missing — SCIENCE_TOOL_PATH is unset (fix: create .env with `SCIENCE_TOOL_PATH=<absolute-path-to-science>`)",
-        )
-        return
-
-    try:
-        env_lines = ctx.read_text_cached(env_path).splitlines()
-    except OSError as exc:
-        yield _result(
-            Severity.INFO,
-            ".env",
-            f".env exists but could not be inspected; skipping secret file contents: {exc}",
-        )
-        return
-
-    if not any(line.startswith("SCIENCE_TOOL_PATH=") for line in env_lines):
-        yield _result(
-            Severity.WARN,
-            ".env",
-            ".env exists but does not define SCIENCE_TOOL_PATH (fix: add `SCIENCE_TOOL_PATH=<absolute-path>` to .env)",
-        )
-    else:
-        yield _result(Severity.INFO, ".env", ".env defines SCIENCE_TOOL_PATH")
+            if not dependency.dev_dependency_present:
+                yield _result(
+                    Severity.WARN,
+                    "pyproject.toml",
+                    "pyproject.toml does not list science under [dependency-groups].dev "
+                    f"(fix: add the dependency and configure `{CANONICAL_SCIENCE_SOURCE}`)",
+                )
+            elif dependency.source_kind is ScienceSourceKind.MISSING:
+                yield _result(
+                    Severity.WARN,
+                    "pyproject.toml",
+                    f"science has no supported uv source (fix: `{CANONICAL_SCIENCE_SOURCE}`)",
+                )
+            elif dependency.source_kind is ScienceSourceKind.EXTERNAL_PATH:
+                yield _result(
+                    Severity.WARN,
+                    "pyproject.toml",
+                    "science uses an external path source that breaks in nested worktrees "
+                    f"(fix: `{CANONICAL_SCIENCE_SOURCE}`)",
+                )
+            elif dependency.source_kind is ScienceSourceKind.GIT:
+                yield _result(Severity.INFO, "pyproject.toml", "  science Git source is worktree-safe")
+            else:
+                yield _result(Severity.INFO, "pyproject.toml", "  science same-repository path source is worktree-safe")

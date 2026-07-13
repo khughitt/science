@@ -1619,8 +1619,8 @@ class TestHealthCLI:
     def test_clean_project_exits_zero(self, tmp_path: Path) -> None:
         """A project that is clean BECAUSE EVERY CHECK RAN AND FOUND NOTHING.
 
-        The old fixture was a bare directory with a science.yaml, a pyproject and a
-        .env: no entities/, no tasks/, no agent-context file, no entities/datasets/.
+        The old fixture was a bare directory with a science.yaml and a pyproject:
+        no entities/, no tasks/, no agent-context file, no entities/datasets/.
         Eight checks had no input to scan, and the report called that "clean" — the
         silent-instrument bug, asserted as the expected behaviour. The fixture now
         supplies the inputs, so this exercises the real clean path; the unscannable
@@ -1635,9 +1635,11 @@ class TestHealthCLI:
         (tmp_path / "science.yaml").write_text("name: test\n")
         # Tooling scaffold required for a "clean" project.
         (tmp_path / "pyproject.toml").write_text(
-            '[project]\nname = "t"\nversion = "0.0"\n[dependency-groups]\ndev = ["science"]\n'
+            '[project]\nname = "t"\nversion = "0.0"\n'
+            '[dependency-groups]\ndev = ["science"]\n'
+            '[tool.uv.sources]\n'
+            'science = { git = "https://github.com/khughitt/science.git", subdirectory = "science" }\n'
         )
-        (tmp_path / ".env").write_text("SCIENCE_TOOL_PATH=/dev/null\n")
         # Inputs the checks scan. Without these they cannot run, and a report of a
         # sweep in which nothing ran is not a clean bill of health.
         (tmp_path / "tasks").mkdir()
@@ -1658,28 +1660,6 @@ class TestHealthCLI:
         assert result.exit_code == 0, result.output
         assert "Project is clean" in result.output
         assert "COULD NOT RUN" not in result.output
-
-    def test_tooling_scaffold_skips_unreadable_env(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-        from science_tool.graph.health_checks.tooling_scaffold import collect_tooling_scaffold_findings
-
-        (tmp_path / "pyproject.toml").write_text(
-            '[project]\nname = "t"\nversion = "0.0"\n[dependency-groups]\ndev = ["science"]\n',
-            encoding="utf-8",
-        )
-        (tmp_path / ".env").write_text("SCIENCE_TOOL_PATH=/dev/null\n", encoding="utf-8")
-
-        original_read_text = Path.read_text
-
-        def fake_read_text(self: Path, *args, **kwargs):
-            if self.name == ".env":
-                raise PermissionError("simulated denied .env")
-            return original_read_text(self, *args, **kwargs)
-
-        monkeypatch.setattr(Path, "read_text", fake_read_text)
-
-        findings = collect_tooling_scaffold_findings(tmp_path).rows
-
-        assert findings == []
 
     def test_table_output_includes_identity_policy_section(self, tmp_path: Path) -> None:
         from click.testing import CliRunner

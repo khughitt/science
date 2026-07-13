@@ -24,6 +24,7 @@ from science_tool.graph.health_checks.invalid_entity_aspects import collect_inva
 from science_tool.graph.health_checks.legacy_task_type import collect_legacy_task_type
 from science_tool.graph.health_checks.lingering_tags import collect_lingering_tags
 from science_tool.graph.health_checks.tooling_scaffold import collect_tooling_scaffold_findings
+from science_tool.tooling_dependency import CANONICAL_SCIENCE_SOURCE
 from science_tool.graph.health_checks.unregistered_ref_kinds import collect_unregistered_ref_kinds
 from science_tool.graph.health_checks.unresolved_refs import collect_unresolved_refs
 from science_tool.graph.health_checks.validate import collect_validation_findings
@@ -66,10 +67,12 @@ def _scaffold_valid_project(root: Path) -> None:
         encoding="utf-8",
     )
     (root / "pyproject.toml").write_text(
-        '[project]\nname = "t"\nversion = "0.0"\n[dependency-groups]\ndev = ["science"]\n',
+        '[project]\nname = "t"\nversion = "0.0"\n'
+        '[dependency-groups]\ndev = ["science"]\n'
+        '[tool.uv.sources]\n'
+        'science = { git = "https://github.com/khughitt/science.git", subdirectory = "science" }\n',
         encoding="utf-8",
     )
-    (root / ".env").write_text("SCIENCE_TOOL_PATH=/dev/null\n", encoding="utf-8")
 
 
 # --------------------------------------------------------------------------
@@ -209,14 +212,16 @@ def test_dataset_anomalies_empty_when_datasets_dir_is_empty(tmp_path: Path) -> N
 
 
 def test_tooling_scaffold_empty_on_a_scaffolded_project(tmp_path: Path) -> None:
-    """The ABSENCE of pyproject.toml/.env IS this check's finding, so it can always run.
-    A compliant scaffold is a TRUE zero, never unwired."""
+    """The absence of pyproject.toml is this check's finding, so it can always run.
+    A compliant dependency source is a true zero, never unwired."""
     _seed_manifest(tmp_path)
     (tmp_path / "pyproject.toml").write_text(
-        '[project]\nname = "t"\nversion = "0.0"\n[dependency-groups]\ndev = ["science"]\n',
+        '[project]\nname = "t"\nversion = "0.0"\n'
+        '[dependency-groups]\ndev = ["science"]\n'
+        '[tool.uv.sources]\n'
+        'science = { git = "https://github.com/khughitt/science.git", subdirectory = "science" }\n',
         encoding="utf-8",
     )
-    (tmp_path / ".env").write_text("SCIENCE_TOOL_PATH=/dev/null\n", encoding="utf-8")
 
     result = collect_tooling_scaffold_findings(tmp_path)
 
@@ -227,7 +232,46 @@ def test_tooling_scaffold_reports_the_bare_directory_as_findings(tmp_path: Path)
     result = collect_tooling_scaffold_findings(tmp_path)
 
     assert result.status == "ok"
-    assert {row["code"] for row in result.rows} == {"pyproject_missing", "env_missing"}
+    assert {row["code"] for row in result.rows} == {"pyproject_missing"}
+
+
+def test_tooling_scaffold_reports_malformed_pyproject_once(tmp_path: Path) -> None:
+    (tmp_path / "pyproject.toml").write_text("[project\n", encoding="utf-8")
+
+    result = collect_tooling_scaffold_findings(tmp_path)
+
+    assert [row["code"] for row in result.rows] == ["pyproject_unreadable"]
+
+
+def test_tooling_scaffold_reports_missing_science_source(tmp_path: Path) -> None:
+    (tmp_path / "pyproject.toml").write_text(
+        '[project]\nname = "t"\nversion = "0.0"\n[dependency-groups]\ndev = ["science"]\n',
+        encoding="utf-8",
+    )
+
+    result = collect_tooling_scaffold_findings(tmp_path)
+
+    assert [row["code"] for row in result.rows] == ["science_source_missing"]
+    assert CANONICAL_SCIENCE_SOURCE in result.rows[0]["fix"]
+
+
+def test_tooling_scaffold_reports_external_science_source(tmp_path: Path) -> None:
+    consumer = tmp_path / "consumer"
+    (consumer / ".git").mkdir(parents=True)
+    external = tmp_path / "external-toolkit"
+    (external / ".git").mkdir(parents=True)
+    (external / "science").mkdir()
+    (consumer / "pyproject.toml").write_text(
+        '[project]\nname = "t"\nversion = "0.0"\n'
+        '[dependency-groups]\ndev = ["science"]\n'
+        '[tool.uv.sources]\nscience = { path = "../external-toolkit/science", editable = true }\n',
+        encoding="utf-8",
+    )
+
+    result = collect_tooling_scaffold_findings(consumer)
+
+    assert [row["code"] for row in result.rows] == ["science_source_external_path"]
+    assert CANONICAL_SCIENCE_SOURCE in result.rows[0]["fix"]
 
 
 def test_validation_context_error_is_a_finding_not_unwired(tmp_path: Path) -> None:
