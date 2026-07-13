@@ -2431,8 +2431,12 @@ reason behind it — the hole in a subtler dress.
   forward from Task 8**: the loader pass below cannot observe what the model drops.
 - **Modify: `science/src/science_tool/graph/materialize.py:646`** — emit `sci:verdict` beside
   `sci:projectStatus`. **Additive only.**
-- Modify: `science/src/science_tool/graph/sources.py`, `validate/checks/`
-- Test: `science/model/tests/test_resolution.py`, `science/tests/test_resolution_wiring.py`
+- Modify: `science/src/science_tool/graph/sources.py` (`ProjectSources.resolution_violations` — the
+  **declared carrier**; `SourceFailure` does not exist), `validate/checks/hypotheses.py`
+- Create: `science/src/science_tool/validate/checks/verdict_agreement.py`
+- Test: `science/model/tests/test_resolution.py`, `science/tests/test_resolution_wiring.py`,
+  **`science/tests/test_verdict_agreement.py`** (Step 3c-i — the verdict subsystem had **no** tests
+  at all, and its artifact diff is empty by construction, so it could not have had them)
 
 - [ ] **Step 1: Write the failing tests** — unit **and wiring**. Rev 1 shipped the module unwired
   and admitted it in its own self-review. **The wiring tests are the point.**
@@ -2481,14 +2485,14 @@ def test_self_supersession_is_caught() -> None:
     assert len(v) == 1 and "itself" in v[0]
 
 
-def test_an_EMPTY_lineage_list_is_not_a_lineage() -> None:
-    # The schema's `minItems: 1` already rejects this, so the resolver should never SEE it -- but
-    # the resolver is also called from `edit_entity` (Task 10) on payloads that have not been
-    # schema-validated yet. A basis that names nothing must not resolve to "clean".
+def test_an_ARCHIVED_entity_has_NOTHING_to_resolve() -> None:
+    # `archived` is NOT in `_TERMINALS_WITH_STRUCTURE` (design §7.4, corrected): the archive index
+    # mints no record id, so there is nothing a ref could point at. It is discharged by
+    # `closure_basis` -- which is SHAPE, and shape is Task 6's. This module must not restate it.
     assert check_resolution(
-        {"id": "hypothesis:0001-x", "status": "superseded", "resynthesized_into": []},
+        {"id": "hypothesis:0001-x", "status": "archived", "closure_basis": "folded into h5"},
         known_ids=KNOWN,
-    )
+    ) == []
 
 
 def test_a_basis_closed_entity_needs_no_structure() -> None:
@@ -2510,8 +2514,18 @@ def test_a_live_entity_is_not_checked() -> None:
 def test_validate_reports_a_dangling_successor(tmp_project) -> None:
     write_hypothesis(tmp_project, "0001-x", status="superseded",
                      extra={"superseded_by": "hypothesis:9999-nope"})
-    findings = run_validate(tmp_project)
-    assert any("9999-nope" in f.message for f in findings)
+    findings = [r for r in run_validate(tmp_project) if r.rule == "hypothesis.dangling-lineage"]
+    assert len(findings) == 1
+    assert findings[0].severity == "warn"        # ERROR is Task 12's ratchet, per kind
+    assert "9999-nope" in findings[0].message
+
+
+def test_the_dangling_lineage_rule_is_NOT_GATED_yet(tmp_project) -> None:
+    # WARN that fails no build. The rule's absence from every gate tier is the whole content of
+    # "ungated" -- and it is the claim Task 12 later inverts, so it needs to be pinned HERE.
+    from science_tool.validate.gates import cumulative_rules
+
+    assert "hypothesis.dangling-lineage" not in cumulative_rules("hygiene")
 
 
 def test_the_LOADER_can_actually_SEE_the_terminal_fields(tmp_project) -> None:
@@ -2527,8 +2541,14 @@ def test_the_LOADER_can_actually_SEE_the_terminal_fields(tmp_project) -> None:
 
     write_hypothesis(tmp_project, "0001-x", status="superseded",
                      extra={"superseded_by": "hypothesis:9999-nope"})
-    entity = load_project_sources(tmp_project).entities["hypothesis:0001-x"]
+    sources = load_project_sources(tmp_project)
+
+    # `ProjectSources.entities` is a LIST[Entity], not a mapping (sources.py:155).
+    entity = next(e for e in sources.entities if e.id == "hypothesis:0001-x")
     assert entity.superseded_by == "hypothesis:9999-nope"   # it SURVIVED the projection
+
+    # ...and the loader CARRIED the violation out, typed.
+    assert [v.ref for v in sources.resolution_violations] == ["hypothesis:9999-nope"]
 ```
 
 > `edit_entity`'s refusal has **moved to Task 10** — `edit_entity` does not accept `superseded_by`
@@ -2576,7 +2596,28 @@ from __future__ import annotations
 
 from typing import Any
 
-_TERMINALS_WITH_STRUCTURE = frozenset({"superseded", "archived"})
+from pydantic import BaseModel
+
+# `superseded` is the ONLY terminal with resolvable structure (design §7.4, corrected 2026-07-13).
+# `archived` was in this set for two revisions and had NO archive check behind it -- because none
+# can be written: the archive index is keyed by the archived entity's own id and mints no record
+# identifier, so there is nothing to resolve. A status listed here with no check is a promise the
+# module does not keep. `retired` and `archived` are discharged by `closure_basis`, which is SHAPE,
+# and shape is Task 6's -- this module must not restate it.
+_TERMINALS_WITH_STRUCTURE = frozenset({"superseded"})
+
+
+class ResolutionViolation(BaseModel):
+    """One cross-record failure, typed -- the contract between checker, loader and validation.
+
+    A bare `list[str]` would have forced `validate/` to re-parse a sentence to recover the id and
+    the field it needs for a `Result`. The message is for humans; these fields are for code.
+    """
+
+    entity_id: str
+    field: str          # "superseded_by" | "resynthesized_into"
+    ref: str
+    message: str
 
 
 def _lineage_refs(entity: dict[str, Any]) -> list[tuple[str, str]]:
@@ -2591,33 +2632,78 @@ def _lineage_refs(entity: dict[str, Any]) -> list[tuple[str, str]]:
     return refs
 
 
-def check_resolution(entity: dict[str, Any], *, known_ids: set[str]) -> list[str]:
-    """Violations of cross-record terminal invariants. Empty == clean."""
+def check_resolution(
+    entity: dict[str, Any], *, known_ids: set[str]
+) -> list[ResolutionViolation]:
+    """Cross-record terminal violations. Empty == clean.
+
+    RESOLUTION only. Whether a basis is PRESENT and NON-EMPTY is shape, and shape is the schema's
+    (Task 6: `minItems: 1`, `pattern: "\\S"`). Re-checking it here would be a second authority for
+    the same fact, which is the collapse this arc exists to undo.
+    """
     if entity.get("status") not in _TERMINALS_WITH_STRUCTURE:
         return []
 
     entity_id = str(entity.get("id") or "<unknown>")
-    violations: list[str] = []
+    violations: list[ResolutionViolation] = []
 
     for field, ref in _lineage_refs(entity):
         if ref == entity_id:
-            violations.append(f"{entity_id}: {field} points at itself")
+            message = f"{entity_id}: {field} points at itself"
         elif ref not in known_ids:
-            violations.append(
+            message = (
                 f"{entity_id}: {field} -> {ref!r} does not resolve to any known entity; "
                 f"the entity is closed and the reason it closed does not exist"
             )
+        else:
+            continue
+        violations.append(
+            ResolutionViolation(entity_id=entity_id, field=field, ref=ref, message=message)
+        )
 
     return violations
 ```
 
-- [ ] **Step 3b: WIRE it — two call sites, neither optional**
-  1. **`graph/sources.py`**, after the whole corpus is loaded (it needs `known_ids`, so it is a
-     *second pass*, not per-file): collect all entity ids, then `check_resolution` each terminal
-     entity; append a `SourceFailure`/warning per violation. **It reads the four fields Step 3 put
-     on the model** — before that, this pass sees a stripped record and reports clean forever.
-  2. **`validate/checks/`** — a new check surfacing those violations as `Result`s at **WARN**
-     (ERROR arrives with Task 12's ratchet, per kind).
+- [ ] **Step 3b: WIRE it — two call sites, neither optional, and ONE declared carrier between them**
+
+> **`SourceFailure` does not exist.** An earlier draft of this step told the implementer to
+> "append a `SourceFailure`" — a type nowhere in the codebase — and gave `ProjectSources` no field
+> to hold violations either. **The checker had no contract with either end.** The precedent is
+> already there: `SkippedEntity` (`sources.py:140`) is exactly this shape — a typed row the loader
+> collects and `validate` surfaces, so that something dropped at load is *visible* rather than only
+> logged. Follow it.
+
+  1. **`graph/sources.py`** — add the carrier beside `skipped_entities`:
+
+```python
+class ProjectSources(BaseModel):
+    ...
+    skipped_entities: list[SkippedEntity] = Field(default_factory=list)
+    resolution_violations: list[ResolutionViolation] = Field(default_factory=list)
+```
+
+  Populate it in a **second pass**, after the whole corpus is loaded — it needs `known_ids`, so it
+  cannot be per-file:
+
+```python
+    known_ids = {entity.id for entity in entities}
+    resolution_violations = [
+        violation
+        for entity in entities
+        for violation in check_resolution(
+            entity.model_dump(mode="json"), known_ids=known_ids
+        )
+    ]
+```
+
+  **It reads the four fields Step 3 put on the model** — before that, `model_dump` yields a record
+  with no lineage at all and this pass reports clean forever.
+
+  2. **`validate/checks/hypotheses.py`** — a new check that *consumes the carrier*, rather than
+     re-deriving anything: one `Result` per violation, rule `hypothesis.dangling-lineage`, severity
+     **WARN**. (ERROR arrives with Task 12's ratchet, per kind.) The typed fields are why this is a
+     projection and not a re-parse — a `list[str]` would have forced the check to recover
+     `entity_id` and `field` out of an English sentence.
 
   *(The third call site — `edit_entity` — is **Task 10's**. It does not accept `superseded_by`
   today, so there is nothing here to wire into.)*
@@ -2775,7 +2861,14 @@ def check_verdict_agreement(ctx: ValidateContext) -> Iterator[Result]:
             continue                        # absent == no adjudication recorded. Legal, and common.
         verdict = str(verdict)
 
-        composed = belief_for_entity(knowledge, provenance, hyp_uri, scalar_enabled=...)
+        # The REAL config path -- `scalar_enabled` is not a knob this check invents. It reads an
+        # ACTIVE decision in `core/decisions.md` (`belief_scalar.py:184`), and `belief_profile.py:294`
+        # resolves it exactly this way. An earlier draft wrote `scalar_enabled=...` -- a literal
+        # ellipsis, which is a `TypeError` at the first hypothesis and a lie in a code review.
+        composed = belief_for_entity(
+            knowledge, provenance, hyp_uri,
+            scalar_enabled=belief_scalar_enabled(ctx.project_root),
+        )
 
         # Direct whole-hypothesis evidence is checked SEPARATELY: when core members exist,
         # belief_for_entity takes the bundle branch and never looks at evidence attached to the
@@ -2834,6 +2927,127 @@ def check_verdict_agreement(ctx: ValidateContext) -> Iterator[Result]:
 | `weakened` | **no** disputing evidence and no negative adjudication basis. **Never infer a historical trajectory from one snapshot** — a true weakening claim needs a prior `belief_snapshot`; absent one, only report the *absence of any dispute*, never the absence of *change*. |
 | `refuted` | no decisive refutation and no linked falsification. **No single-source ceiling** — one decisive independent test is a legitimate refutation. |
 
+- [ ] **Step 3c-i: The verdict subsystem's FAILING TESTS — written BEFORE 3b-ii and 3c, not after.**
+
+> **The whole subsystem had no Step-1 tests.** Every claim in the two tables above — polarity,
+> admissibility, core-member scope, the non-ordinal matrix, the two rules firing independently —
+> was asserted in **prose** and gated by **nothing**. And the artifact diff cannot stand in for
+> them: **no corpus hypothesis carries a verdict until Task 9**, so that diff is *empty by
+> construction* and would go green over a `check_verdict_agreement` that returned `[]` on every
+> input. *A test suite that cannot distinguish a working check from a check that does nothing is
+> not a suite.* These are fixture-built graphs, so they run today.
+
+```python
+# science/tests/test_verdict_agreement.py
+
+def test_a_verdict_REACHES_the_graph(tmp_project) -> None:
+    # Step 3b-ii's gate. Without the triple, every test below passes vacuously -- the check reads
+    # `None`, `continue`s, and yields nothing, forever.
+    write_hypothesis(tmp_project, "0001-x", status="complete", extra={"verdict": "supported"})
+    knowledge = _knowledge_graph(materialize_graph(tmp_project))
+
+    assert str(next(knowledge.objects(_uri("hypothesis:0001-x"), SCI_NS.verdict))) == "supported"
+
+
+def test_an_ABSENT_verdict_is_not_a_finding(tmp_project) -> None:
+    # Absence == "not yet assessed" (D1). The common case, and it must be silent.
+    assert _verdict_results(_graph(verdict=None, basis=None)) == []
+
+
+# ---- a basis is not merely an EDGE: three ways to have one and still have nothing ----
+
+def test_an_edge_of_the_WRONG_POLARITY_is_not_a_basis() -> None:
+    # A `supports` line is not a basis for `refuted`. `if not units` -- the drafted body -- passes.
+    results = _verdict_results(_graph(verdict="refuted", basis=_unit(stance="supports")))
+    assert [r.rule for r in results] == ["verdict.missing-basis"]
+
+
+def test_an_INADMISSIBLE_unit_is_not_a_basis() -> None:
+    # Excluded by the belief policy => it does not compose => it cannot adjudicate.
+    results = _verdict_results(_graph(verdict="supported", basis=_unit(admissible=False)))
+    assert [r.rule for r in results] == ["verdict.missing-basis"]
+
+
+def test_evidence_on_a_RIVAL_member_is_not_a_basis() -> None:
+    # Scope: the hypothesis or its CORE members. A rival/background member adjudicates nothing
+    # about THIS hypothesis -- and `belief_for_entity` already excludes them from the conjunction
+    # (`MembershipRole`, bundle_belief.py), so a check that counted them would contradict the
+    # composition it claims to read.
+    results = _verdict_results(
+        _graph(verdict="supported", basis=_unit(on_member="rival"))
+    )
+    assert [r.rule for r in results] == ["verdict.missing-basis"]
+
+
+def test_evidence_on_a_CORE_member_IS_a_basis() -> None:
+    # The control. Without it the three tests above pass for a payload that has no basis at all.
+    assert _verdict_results(_graph(verdict="supported", basis=_unit(on_member="core"))) == []
+
+
+# ---- the two rules are INDEPENDENT: one may not mask the other ----
+
+def test_missing_basis_and_refutation_masked_fire_INDEPENDENTLY() -> None:
+    # A `supported` verdict, no qualifying basis, AND an unresolved decisive refutation. Both are
+    # true and both must be said: they have different severities and different gate tiers, so
+    # collapsing them into one finding silently re-grades whichever one loses.
+    results = _verdict_results(
+        _graph(verdict="supported", basis=None, refutation=_decisive())
+    )
+
+    assert {r.rule for r in results} == {"verdict.missing-basis", "verdict.refutation-masked"}
+    assert {r.rule: r.severity for r in results} == {
+        "verdict.missing-basis": Severity.WARN,      # >= 11 of 15 cannot satisfy it -- never ERROR
+        "verdict.refutation-masked": Severity.ERROR, # the one hard invariant
+    }
+
+
+def test_a_refutation_DIRECTLY_on_the_hypothesis_is_caught_despite_bundle_members() -> None:
+    # THE trap named in the box above: with core members, `belief_for_entity` takes the bundle
+    # branch and NEVER calls `collect_evidence_units([uri])` -- so a decisive refutation attached
+    # to the hypothesis ITSELF is invisible to the composition. Bundle dispatch would hide the very
+    # thing `refutation-masked` exists to catch, and the suite would be green.
+    results = _verdict_results(
+        _graph(verdict="supported", members=["core"], refutation=_decisive(on="hypothesis"))
+    )
+    assert "verdict.refutation-masked" in {r.rule for r in results}
+
+
+# ---- the matrix is NOT a ladder ----
+
+def test_partially_supported_with_a_refuted_CORE_member_is_NOT_a_disagreement() -> None:
+    # On an ordinal reading this is a contradiction. It is not: a decisively refuted constituent
+    # is exactly what `partially-supported` asserts. Ordinalizing the verdict produces this
+    # false positive, which is why the check reports a MATRIX and never compares rungs.
+    results = _verdict_results(
+        _graph(verdict="partially-supported", members=["core"], refutation=_decisive())
+    )
+    assert "verdict.disagrees-with-computed" not in {r.rule for r in results}
+
+
+def test_partially_supported_with_NOTHING_partial_IS_a_disagreement() -> None:
+    # The other side, or the test above is satisfied by a check that never fires at all.
+    results = _verdict_results(
+        _graph(verdict="partially-supported", basis=_unit(), members=[], refutation=None)
+    )
+    assert "verdict.disagrees-with-computed" in {r.rule for r in results}
+
+
+def test_refuted_from_ONE_decisive_test_is_NOT_ceilinged() -> None:
+    # A single-source ceiling applied to `refuted` would flag the STRONGEST POSSIBLE refutation as
+    # unfounded. This is the shipped rule `belief.single-source-ceiling` NOT coming back.
+    results = _verdict_results(
+        _graph(verdict="refuted", basis=_unit(stance="disputes", sources=1), refutation=_decisive())
+    )
+    assert results == []
+
+
+def test_weakened_is_never_inferred_from_ONE_snapshot() -> None:
+    # `weakened` asserts a CHANGE. With no prior `belief_snapshot` there is no trajectory to read,
+    # so the check may report only "no dispute exists" -- never "no weakening occurred".
+    results = _verdict_results(_graph(verdict="weakened", basis=_unit(stance="disputes")))
+    assert results == []
+```
+
 - [ ] **Step 3d: Re-gate the hard invariant — and ONLY it.** Add **`verdict.refutation-masked`** to
   the `hygiene` tier in `validate/gates.py`; it inherits the gated ERROR that
   `belief.refutation-masked` held before Task 2b removed it.
@@ -2844,18 +3058,30 @@ def check_verdict_agreement(ctx: ValidateContext) -> Iterator[Result]:
 
   **`verdict.disagrees-with-computed` is never gated** — a disagreement is information, not a fault.
 
-  Add the regression that keeps the two ratchets apart, because nothing else will:
+  Assert what **exists at this task**, using the API that exists: `cumulative_rules(tier)`
+  (`gates.py:50`). `_severity("hypothesis")`, `severity_of_rule` and `gates.TIERS` are **Task 12's**
+  — an earlier draft of this step called all three, so the regression it "added" could not have run.
+  *A test written against an API that does not exist is not a weaker gate; it is not a gate.*
 
 ```python
-def test_missing_basis_stays_WARN_even_when_the_KIND_is_certified() -> None:
-    # Kind certification and verdict-basis certification are INDEPENDENT facts. `hypothesis` being
-    # in _CERTIFIED_KINDS says every root is pinned and renders; it says NOTHING about whether the
-    # corpus carries verdict bases (>=11 of 15 do not). Coupling them would let an uncertified rule
-    # ride in on a certified one's coattails.
-    assert _severity("hypothesis") is Severity.ERROR
-    assert severity_of_rule("verdict.missing-basis") is Severity.WARN
-    assert "verdict.missing-basis" not in gates.TIERS["hygiene"]
+def test_missing_basis_is_WARN_and_UNGATED() -> None:
+    # >= 11 of the 15 migrating verdicts CANNOT satisfy this rule. An ERROR here would be an
+    # uncertified instrument failing real builds -- the original incident, verbatim.
+    results = run_verdict_checks(graph_with(verdict="supported", basis=None))
+
+    assert [r.severity for r in results] == ["warn"]
+    assert "verdict.missing-basis" not in cumulative_rules("hygiene")
+
+
+def test_refutation_masked_IS_gated_at_hygiene() -> None:
+    # The one hard invariant, inheriting the ERROR `belief.refutation-masked` held before Task 2b.
+    assert "verdict.refutation-masked" in cumulative_rules("hygiene")
 ```
+
+> **The kind/rule independence regression moves to Task 12**, which is where `_severity` and
+> `_CERTIFIED_KINDS` are born. The claim it makes — *`hypothesis` being certified as a KIND says
+> nothing about whether the corpus carries verdict bases, so `verdict.missing-basis` must stay WARN
+> even then* — cannot be stated before the thing it constrains exists.
 
 - [ ] **Step 4: Green** — unit + wiring, **both suites whole**, plus `ruff` and `pyright`. Task 7
   now touches `science_model.entities` (Step 3) and `science_tool.graph.materialize` (Step 3b-ii),
@@ -3926,6 +4152,22 @@ def test_severity_is_a_property_of_the_KIND() -> None:
     assert _severity("hypothesis") is Severity.ERROR   # sources AND consumers certified
     assert _severity("report") is Severity.WARN        # not migrated
     assert _severity("question") is Severity.WARN
+
+
+def test_missing_basis_stays_WARN_even_when_the_KIND_is_certified() -> None:
+    # MOVED HERE FROM TASK 7, which could not state it: `_severity` and `_CERTIFIED_KINDS` are born
+    # in THIS task, so the claim had nothing to constrain and the test could not have run.
+    #
+    # Kind certification and verdict-basis certification are INDEPENDENT facts. `hypothesis` being
+    # in _CERTIFIED_KINDS says every root is pinned and renders; it says NOTHING about whether the
+    # corpus carries verdict bases (>= 11 of 15 do not). Coupling them would let an uncertified rule
+    # ride in on a certified one's coattails -- which is how a check that cannot pass ends up
+    # failing 472 entities.
+    from science_tool.validate.gates import cumulative_rules
+
+    assert _severity("hypothesis") is Severity.ERROR
+    assert "verdict.missing-basis" not in cumulative_rules("hygiene")
+    assert "verdict.refutation-masked" in cumulative_rules("hygiene")   # the one that IS gated
 ```
 
 - [ ] **Step 2: Implement**

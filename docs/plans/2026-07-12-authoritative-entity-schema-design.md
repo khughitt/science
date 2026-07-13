@@ -333,8 +333,9 @@ one of them.
 
   The condition is the **presence of the structure**, never the status word. An earlier draft
   keyed the requirement off the terminal value alone — assuming `superseded` *has* lineage,
-  `archived` *has* an archive record, `complete` *has* a verdict. **None of those is
-  guaranteed**, and one is explicitly guaranteed false: the live-lineage contract
+  `archived` *has a referenceable archive record*, `complete` *has* a verdict. **None of those is
+  guaranteed** — the middle one is not even expressible (see the correction below) — and one is
+  explicitly guaranteed false: the live-lineage contract
   (`2026-07-02-phase4e-live-lineage-visibility-design.md`) states that *"live `status:
   superseded` without lineage emits no lineage edge and **does not fail**."* So a lineage-less
   `superseded` would have slipped through with no reason recorded anywhere — the exact hole
@@ -344,9 +345,19 @@ one of them.
   | terminal | structural basis that discharges the requirement | if that basis is ABSENT |
   |---|---|---|
   | `superseded` | valid lineage (`supersedes:` / `superseded_by` / `resynthesized_into`) resolving to a live successor | **`closure_basis` required** |
-  | `archived` | an archive / consolidation record | **`closure_basis` required** |
+  | `archived` | ***(none exists)*** — **CORRECTED 2026-07-13** | **`closure_basis` ALWAYS required** |
   | `complete` | a verdict **plus** qualifying evidence | **PROHIBITED** — not basis-discharged. See the rev-6 ruling below. |
   | `retired` | *(none exists)* | **`closure_basis` ALWAYS required** |
+
+  > **`archived` has no structural basis, because the reference it would need cannot be written.**
+  > This row said "an archive / consolidation record", and D5 Task 6 tried to give it a field
+  > (`archive_ref`) — then found the referent does not exist. `archive.py` keys its index by the
+  > archived entity's **own id** (`ArchiveIndex.active_by_id`) and **mints no record identifier**,
+  > so there is nothing for a ref to point AT: an archived entity's record is already reachable
+  > from `id` alone, and authoring a pointer to it would be a second, unversioned spelling of a
+  > derivable fact. **`archived` therefore behaves exactly like `retired`** — an authored
+  > `closure_basis`, always. **`superseded` is the ONLY terminal with resolvable structure**, and
+  > it is the only one the cross-record validator below has anything to resolve.
 
   `retired` is the only terminal with no structural basis available to it, so it always
   requires an authored one. `superseded` and `archived` require one **exactly when their
@@ -358,13 +369,13 @@ one of them.
 
   An earlier draft said this invariant "lives in JSON Schema." **That is only half true, and the
   half that is false is the load-bearing half.** JSON Schema validates **one record in
-  isolation**; it cannot resolve a successor ID, cannot confirm an archive record exists, and
-  cannot check that a verdict's evidence is real. Those are **cross-record** facts.
+  isolation**; it cannot resolve a successor ID and cannot check that a verdict's evidence is
+  real. Those are **cross-record** facts.
 
   | layer | when | enforces | example |
   |---|---|---|---|
   | **JSON Schema** (§4) | load | local shape & **presence** | `status: superseded` with no `superseded_by:`/`resynthesized_into:` key ⇒ `closure_basis` required |
-  | **Enumerated D3 escape-hatch validator** | load | structural **resolution** *(cross-record)* | `superseded_by: hypothesis:9999` (dangling); an `archived` entity with no archive-index row |
+  | **Enumerated D3 escape-hatch validator** | load | structural **resolution** *(cross-record)* | `superseded_by: hypothesis:9999` (dangling). **Lineage is the ONLY thing it resolves** — `archived` has no resolvable structure (see above), so there is no archive-existence check and never was one to write. |
   | **Graph check** | **materialize** | evidential **sufficiency** | `complete` + a `verdict` whose qualifying evidence does not exist |
 
   > **Three layers, not two — corrected while writing D5.** An earlier draft put
