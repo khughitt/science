@@ -1,9 +1,15 @@
 # Hypothesis Field Adjudication (D5 Task 2)
 
-> **Status: proposed — two owner decisions are open (§5).** Every disposition below is backed by an
-> opened reader, cited `file:line`. This is the artifact Task 6 (core mixin) and Task 6b (project
-> extensions) are generated from. A key that is wrong here becomes a hard validation failure on real
-> files the moment the schema closes.
+> **Status: CLOSED — both owner decisions ruled (§5b, §9).** Every disposition below is backed by an
+> opened reader, cited `file:line`.
+>
+> **THIS DOCUMENT IS THE AUTHORITY for Task 6 (core mixin) and Task 6b (project extensions).** They
+> are generated from it, and its dispositions are pinned as executable data in
+> `test_mixin_hypothesis.py` (`CORE` / `PROJECT_EXTENSION` / `FORBIDDEN`, partitioning the 36
+> measured keys). **Where the implementation plan's prose disagrees with this table, this table
+> wins** — the plan's field list predates the reader survey, and a first pass at Task 6 was in fact
+> generated from that stale list (it kept nine non-core keys and deleted `profile`). A key that is
+> wrong here becomes a hard validation failure on real files the moment the schema closes.
 
 **Corpus:** 147 authored hypotheses across 18 project roots / 15 git repositories
 (`science entity field-inventory`, Task 1). **36 distinct authored keys.**

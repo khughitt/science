@@ -234,7 +234,10 @@ def test_counts_authored_keys_only(tmp_path: Path) -> None:
     assert inv["phase"] == 1
     # Internal/derived fields must NOT appear: this reads AUTHORED frontmatter, never the
     # enriched `raw` dict. `_enrich_raw` (sources.py:713) injects `project`, `canonical_id`,
-    # `profile`, `type`, `aliases`, `content_preview` -- none of which any author wrote.
+    # `profile`, `type`, `aliases`, `content_preview`. Note `profile` and `aliases` are ALSO
+    # authored (3 files each) -- `_enrich_raw` only fills them when absent -- which is precisely
+    # why the inventory must read the file's own bytes: from the enriched dict, an authored value
+    # and an injected one are indistinguishable, and `profile` would look derived. It is not.
     for derived in ("project", "canonical_id", "content_preview", "aliases", "type"):
         assert derived not in inv
 
@@ -358,8 +361,15 @@ Every key gets **exactly one** of four dispositions:
 **Core, but owned by the deferred P1 capability subsystem (3):** `required_capabilities`,
 `capability_scope`, `composition_rule` — declared, not absorbed.
 
-**Derived / delete (2):** `phase` (folds into `status`, rev 7) · `profile` (`_enrich_raw` sets it;
-3 files hand-author it — strip them).
+**Derived / delete (1):** `phase` (folds into `status`, rev 7).
+
+> ⚠️ **This paragraph is SUPERSEDED by Task 2's adjudication artifact
+> (`2026-07-12-hypothesis-field-adjudication.md`) — read that, not this.** It is kept only to show
+> what the pre-adjudication list said. Two errors it contained: it called **`profile` derived and
+> told the migration to strip it** (Task 2 §3 proved an authored `profile` is *honored* —
+> `sources.py:765-772` is **fill-if-missing**, it reaches `sci:profile` at `materialize.py:640`, and
+> it drives `registration_state`), and it kept **nine keys in core that Task 2 removed**.
+> **Task 6 and Task 6b are generated from the artifact.**
 
 ### The six-field "belief cluster" — RULED (design rev 8). It is **three unrelated ownership patterns.**
 
@@ -1129,6 +1139,9 @@ from science_model.profiles.core import CORE_PROFILE
 
 PROFILE = default_profile_for_kind("hypothesis")
 V = EntityValidator()
+MIXIN = json.loads(
+    (files("science_model.schemas") / "mixin-hypothesis-1.0.json").read_text(encoding="utf-8")
+)
 
 
 def _h(**over) -> dict:
@@ -1136,6 +1149,67 @@ def _h(**over) -> dict:
             "created": "2026-07-12", "updated": "2026-07-12", "status": "active"}
     base.update(over)
     return base
+
+
+# ---------------------------------------------------------------------------------------------
+# TASK 2's ADJUDICATION, AS DATA. The authority is
+# `docs/plans/2026-07-12-hypothesis-field-adjudication.md`; this is its executable form, and the
+# schema is checked against IT rather than against a hand-kept list in the plan's prose. Regenerate
+# AUTHORED_KEYS with `science entity field-inventory --kind hypothesis` across the roster.
+# ---------------------------------------------------------------------------------------------
+
+# CORE -- an accepted toolkit contract owns the semantics (§2, §3, §4, §6-keep).
+CORE = {
+    "id", "kind", "title", "status", "created", "updated",       # §2 structural
+    "related", "source_refs",                                    # §2 resolution/graph edges
+    "origins", "added_by", "lens_views", "ontology_terms",       # §3 real readers
+    "datasets", "review_state", "aliases", "profile",
+    "composition_rule", "description", "rival_model_packet",
+    "required_capabilities", "capability_scope",                 # §4 capability side-channel
+}
+
+# NEW core -- 0 authored today; core BEFORE any reader ships (design rev 8/9).
+NEW_CORE = {"verdict", "closure_basis", "superseded_by", "resynthesized_into", "archive_ref"}
+
+# PROJECT-EXTENSION (§5, §6) -- real fields, owned by ONE project. Must be UNDECLARED in core:
+# admission is Task 6b's to grant, and `false` here would make the extension unsatisfiable.
+PROJECT_EXTENSION = {
+    "confidence_label", "confidence_mechanistic_label", "identification",   # mm30
+    "external_hypothesis_id", "author_stated_evidence",                     # evolution
+}
+
+# MIGRATED or DELETED (§6, §7) -- `false` in the mixin, so no extension can resurrect them.
+FORBIDDEN = {
+    "phase",                 # -> `status` (design rev 7)
+    "belief_state",          # -> derived (Task 2b)
+    "evidence_stance",       # -> deleted outright (§5b: it collapses origin with coverage)
+    "confidence",            # -> author-written expert_judgment evidence lines (§5b)
+    "tags",                  # -> already ruled legacy by the toolkit's own health check
+    "priority", "role", "domain", "promotion_criteria",   # no owned semantics
+    "promoted_from",         # -> `origins`
+}
+
+# The corpus, MEASURED (Task 1) -- written out, NOT computed as the union of the three sets above.
+# A derived AUTHORED_KEYS would make the partition test a tautology that passes no matter which
+# disposition a key was filed under, or whether the corpus authors it at all. This literal is the
+# only thing in the file that the schema is not free to define.
+AUTHORED_KEYS = {
+    "added_by", "aliases", "author_stated_evidence", "belief_state", "capability_scope",
+    "composition_rule", "confidence", "confidence_label", "confidence_mechanistic_label",
+    "created", "datasets", "description", "domain", "evidence_stance", "external_hypothesis_id",
+    "id", "identification", "kind", "lens_views", "ontology_terms", "origins", "phase",
+    "priority", "profile", "promoted_from", "promotion_criteria", "related",
+    "required_capabilities", "review_state", "rival_model_packet", "role", "source_refs",
+    "status", "tags", "title", "updated",
+}
+assert len(AUTHORED_KEYS) == 36
+
+
+def _sample(key: str):
+    """A schema-valid value for each key -- the point is ADMISSION, not the value's shape."""
+    lists = {"related", "source_refs", "origins", "lens_views", "ontology_terms", "datasets",
+             "aliases", "tags", "required_capabilities", "resynthesized_into"}
+    return [] if key in lists else ("hypothesis:0002-y" if key == "superseded_by" else "x")
 
 
 def test_lifecycle_vocabulary_is_the_ruled_one() -> None:
@@ -1227,18 +1301,56 @@ def test_the_mixin_says_so_STRUCTURALLY_not_just_behaviorally() -> None:
     assert mixin["properties"]["version"] is False
 
 
-def test_every_authored_field_in_the_corpus_is_DECLARED() -> None:
-    # The P0 gate, executed. Task 2 adjudicated 36 keys; if the mixin declares fewer, then
-    # closing the schema rejects real files. This is the test that would have caught rev 1.
-    schema = json.loads(
-        (files("science_model.schemas") / "mixin-hypothesis-1.0.json").read_text(encoding="utf-8")
-    )
-    base = json.loads(
+def test_every_authored_key_has_EXACTLY_ONE_disposition() -> None:
+    # The 36 keys the corpus actually authors (`science entity field-inventory --kind hypothesis`,
+    # Task 1) partition into Task 2's FOUR dispositions -- no key in two, no key in none. A key that
+    # falls through the partition is a key the schema has not decided about, and it will be decided
+    # by accident at migration time.
+    assert CORE | PROJECT_EXTENSION | FORBIDDEN == AUTHORED_KEYS
+    assert not (CORE & PROJECT_EXTENSION) and not (CORE & FORBIDDEN)
+    assert not (PROJECT_EXTENSION & FORBIDDEN)
+
+
+def test_CORE_keys_are_admitted() -> None:
+    # Each core key, one at a time -- a single kitchen-sink payload would let one key's rejection
+    # hide behind another's.
+    for key in CORE - {"id", "kind", "title", "status"}:  # the four are already in _h()
+        V.validate_as(_h(**{key: _sample(key)}), PROFILE)
+
+
+def test_PROJECT_EXTENSION_keys_are_ABSENT_FROM_CORE_but_not_FORBIDDEN_BY_IT() -> None:
+    # Two assertions, and BOTH matter.
+    for key in PROJECT_EXTENSION:
+        # (a) core alone rejects it -- else the mixin swallowed a one-project field into the
+        #     shared vocabulary of all 22 projects, which is the rev-2 defect.
+        with pytest.raises(EntityValidationError):
+            V.validate_as(_h(**{key: _sample(key)}), PROFILE)
+        # (b) core does NOT declare it `false` -- else Task 6b is UNSATISFIABLE. `allOf` intersects,
+        #     so `false` in the mixin ∧ `{type: string}` in mm30's extension is a contradiction: every
+        #     mm30 hypothesis would fail, with no hint pointing at the mixin. Admission for these keys
+        #     is Task 6b's to grant; the mixin must be SILENT, not hostile.
+        assert key not in MIXIN["properties"]
+
+
+def test_FORBIDDEN_keys_are_rejected_and_UNRESURRECTABLE() -> None:
+    for key in FORBIDDEN:
+        with pytest.raises(EntityValidationError):
+            V.validate_as(_h(**{key: _sample(key)}), PROFILE)
+        # `false`, not merely undeclared: a field D5 DELETED must not come back through a project
+        # extension. This is the line that makes `tags` (which base 2.0 still declares!) actually
+        # illegal -- `unevaluatedProperties` cannot reject what the base declared.
+        assert MIXIN["properties"][key] is False
+
+
+def test_a_field_the_BASE_declares_is_still_rejected_when_the_mixin_says_false() -> None:
+    # The trap this test exists for: `unevaluatedProperties: false` does NOT reject base-declared
+    # keys -- they ARE evaluated. Without the mixin's explicit `false`, base 2.0 would silently
+    # re-admit `tags`, the field the toolkit's own health check exists to remove.
+    assert "tags" in json.loads(
         (files("science_model.schemas") / "science-entity-base-2.0.json").read_text(encoding="utf-8")
-    )
-    declared = set(schema["properties"]) | set(base["properties"])
-    adjudicated = set(ADJUDICATED_HYPOTHESIS_FIELDS)  # from Task 2's doc; pin it here
-    assert adjudicated - {"phase"} <= declared
+    )["properties"]
+    with pytest.raises(EntityValidationError):
+        V.validate_as(_h(tags=["legacy"]), PROFILE)
 
 
 def test_schema_and_descriptor_agree() -> None:
@@ -1358,14 +1470,12 @@ In `validator.py`, add `validate_as`, make `validate` delegate, and **close the 
 > and 369 records rely on it; closing commons is a separate decision with a separate blast radius.
 > `strict` is gated on `PROJECT_MIXIN_NAMES` so each kind opts in **as it migrates**.
 
-- [ ] **Step 3b: Write `mixin-hypothesis-1.0.json`.** `properties` contains **exactly the keys Task 2
-  adjudicated as `core`** — the 25 core fields plus the 3 deferred-capability fields. It does
-  **NOT** contain the project-extension fields (`confidence_label`, `confidence_mechanistic_label`,
-  `evidence_scope`); those compose in from the project's own extension (Task 6b). It does **NOT**
-  contain `belief_state` (deleted — derived), `phase`, `disposition`, or `profile`.
-  Abridged below to the fields this slice reasons about — **the implementer writes the full core
-  list from Task 2's doc, and `test_every_authored_field_in_the_corpus_is_DECLARED` enforces that
-  every corpus key is covered by the mixin *or* by a composed project extension:**
+- [ ] **Step 3b: Write `mixin-hypothesis-1.0.json` — GENERATED FROM TASK 2'S ARTIFACT, not from this
+  plan's prose.** `docs/plans/2026-07-12-hypothesis-field-adjudication.md` is the authority; every
+  key below traces to a disposition there. The mixin is **materially smaller** than the pre-Task-2
+  draft: nine keys left core (`identification`, `tags`, `priority`, `role`, `promoted_from`,
+  `promotion_criteria`, `domain`, `external_hypothesis_id`, `confidence_label` /
+  `confidence_mechanistic_label`), and `profile` — which the draft deleted — is **kept**.
 
 > **`schema_profile: false` and `version: false` are load-bearing, not decoration.** Base 2.0 keeps
 > both as **optional generic properties** — commons records (base 1.0) legitimately author them, and
@@ -1411,33 +1521,35 @@ In `validator.py`, add `validate_as`, make `validate` delegate, and **close the 
     "source_refs": { "type": "array", "items": { "type": "string" } },
     "origins": { "type": "array" },
     "added_by": { "type": "string" },
-    "tags": { "type": "array", "items": { "type": "string" } },
-    "ontology_terms": { "type": "array", "items": { "type": "string" } },
-    "datasets": { "type": "array" },
     "lens_views": { "type": "array" },
-    "priority": {},
-    "role": { "type": "string" },
-    "domain": { "type": "string" },
-    "description": { "type": "string" },
-    "aliases": { "type": "array", "items": { "type": "string" } },
+    "datasets": { "type": "array" },
     "review_state": {},
-    "promoted_from": { "type": "string" },
-    "promotion_criteria": {},
-    "rival_model_packet": {},
-    "external_hypothesis_id": { "type": "string" },
-    "identification": {},
-
-    "required_capabilities": { "type": "array", "$comment": "P1 subsystem — declared, not yet absorbed." },
-    "capability_scope": {},
+    "aliases": { "type": "array", "items": { "type": "string" } },
+    "profile": { "type": "string", "$comment": "AUTHORED and honored — `sources.py:765-772` is fill-if-missing, `materialize.py:640` emits sci:profile, `entities_inventory.py:195-199` derives registration_state from it. 3 files author it. An earlier draft called it derived and stripped it; that was wrong." },
     "composition_rule": {},
+    "rival_model_packet": {},
+
+    "required_capabilities": { "type": "array", "$comment": "38 files, 3 projects. P1 subsystem — DECLARED, not yet absorbed. Reaches its readers through a raw-frontmatter re-parse today; undeclared, strictness hard-fails all 38." },
+    "capability_scope": {},
 
     "phase": false,
     "disposition": false,
     "disposition_basis": false,
-    "profile": false,
+    "belief_state": false,
+    "evidence_stance": false,
+    "tags": false,
+    "priority": false,
+    "role": false,
+    "domain": false,
+    "promoted_from": false,
+    "promotion_criteria": false,
+    "confidence": false,
 
     "schema_profile": false,
-    "version": false
+    "version": false,
+    "sources": false,
+    "licenses": false,
+    "contributors": false
   },
 
   "allOf": [
@@ -1464,9 +1576,30 @@ In `validator.py`, add `validate_as`, make `validate` delegate, and **close the 
 }
 ```
 
-> `"phase": false` is the JSON Schema idiom for *"this property must not appear."* It makes the
-> deletion **enforced**, not merely intended. `"profile": false` keeps a derived field from being
-> hand-authored (3 files do today — Task 8 strips it).
+> ### `false` vs. UNDECLARED — the distinction the whole mixin turns on
+>
+> `"x": false` is the JSON Schema idiom for *"this property must not appear."* Inside an `allOf` it
+> is **absolute: no extension can ever re-admit it**, because `allOf` intersects and a `false` branch
+> can never be satisfied. Undeclared is different — `unevaluatedProperties: false` rejects the key
+> **unless a composed extension declares it.**
+>
+> So the two lists are not interchangeable, and mixing them up breaks the design in both directions:
+>
+> | disposition | mechanism | why |
+> |---|---|---|
+> | **migrated / deleted** (`phase`, `belief_state`, `evidence_stance`, `tags`, `priority`, `role`, `domain`, `promoted_from`, `promotion_criteria`, `confidence`) | **`false`** | A deleted field must **not be resurrectable through a project extension.** `false` is the only spelling that says so. It also makes the migration's own leftovers fail loudly instead of validating. |
+> | **project-extension** (`confidence_label`, `confidence_mechanistic_label`, `identification`, `external_hypothesis_id`, `author_stated_evidence`) | **undeclared** | ⚠️ **Marking these `false` would make Task 6b unsatisfiable** — mm30's extension declares `identification`, and `false ∧ {type: string}` is a contradiction, so *every mm30 hypothesis would fail with no hint why.* They must be **absent from core**, not forbidden by it. |
+>
+> **The base's declared fields need an explicit decision too**, because `unevaluatedProperties`
+> **cannot** reject what the base already declares. Silence here is not neutrality — it is admission:
+>
+> | inherited from base 2.0 | decision | why |
+> |---|---|---|
+> | `tags` | **`false`** | Task 2 §7: **already ruled legacy by the toolkit** — `lingering_tags.py` is a health check whose entire job is to tell you to delete it. Without this line the base **silently re-admits** the field D5 is finishing off. |
+> | `sources`, `licenses`, `contributors` | **`false`** | **Not on the project `Entity` model at all** — commons-only. They are silently dropped today. Declaring them would invent a contract; `source_refs` (141 files) and `added_by` (31) are the project spellings, and two spellings of one fact on one kind is the collapse this arc exists to undo. |
+> | `same_as`, `dataset_usage` | **admitted** | Real owned semantics for *any* project kind — `Entity:317` → `materialize.py:889` emits sameAs edges; `Entity:444` has its own graph module. Zero hypotheses author them today, but forbidding them would **delete a live capability**, which is not a schema's decision to make. |
+> | `description`, `ontology_terms`, `status` | **admitted** | Core (Task 2 §3/§6). The mixin *narrows* `status` from the base's free string to the ruled enum — `allOf` intersects, so narrowing is exactly what it can do. |
+> | `schema_profile`, `version` | **`false`** | Derived / commons-only. See Task 5 — the base cannot forbid them (commons authors both), so the mixin must. |
 
 - [ ] **Step 4: Green** — the whole model suite, including Task 5's fourth test.
 
@@ -1484,6 +1617,31 @@ cd science/model && uv run --frozen pytest -q
 the only way to keep mm30 validating would be to promote a one-project field into the core mixin
 for all 22 projects.** That is design §6's ownership contract, violated. **Strictness and
 project-local fields must arrive together, or strictness cannot arrive at all.**
+
+> ### TWO extensions, not one. `external_hypothesis_id` cannot leave core and have no owner.
+>
+> Task 2 removed it from core (13 files, **zero readers**, an `EH-###` key belonging to an external
+> system). Removal alone would **delete 13 authored identifiers** the moment the schema closes — a
+> field cannot be evicted from core *and* left homeless. Same for `author_stated_evidence` (13 files),
+> which §5b preserved **as source provenance**.
+>
+> | extension | project | fields |
+> |---|---|---|
+> | `extension-mm30.assessment/1.0` | multiple-myeloma | `confidence_label`, `confidence_mechanistic_label`, `identification` |
+> | **`extension-evolution.provenance/1.0`** | cancer/mechanisms/evolution | `external_hypothesis_id`, `author_stated_evidence` |
+>
+> Both evolution fields are **opaque authored provenance strings with zero epistemic force** — and
+> that is now *structurally* true, not merely asserted: Task 2b deleted the `_authored_magnitude`
+> chain that gave `author_stated_evidence` a belief magnitude. Declaring it **preserves 13 authored
+> values while inventing nothing.** §6's alternative — folding the free text into structured
+> `origins` — needs an `OriginType` and a source per file, which is **authoring work, not a
+> migration step.** *Do not let the migration synthesize it.*
+
+> **Full 147-file validation does NOT belong in Task 6.** It cannot even run here: the corpus still
+> carries `phase`, and mm30/evolution fields have no extension until this task composes them. The
+> real gate is the **two-phase preflight in Task 11**, after Task 6b's extensions exist and Task 9
+> renders the migrated frontmatter. Task 6 proves the *contract*; Task 11 proves the *corpus*.
+> Asserting corpus-wide validity any earlier would be certifying against files that do not exist yet.
 
 Design §6 already names the mechanism: an **additive-only extension component** in the profile,
 which may *add* fields to a core kind but never redefine a core one.
@@ -2141,6 +2299,19 @@ guard `test_every_declared_status_still_classified` fails loud if this is wrong 
 
 ### Task 9: The migration — two-phase, all-or-none, per repo
 
+> **⚠️ Four fixture files must be backfilled here, or the preflight fails on our own repo.** Base 2.0
+> **requires** `created` and `updated`. Measured across the roster: **every one of the 147 real
+> hypotheses has both** — and **four fixture hypotheses have neither**:
+> `big_picture/minimal_project/{h1-alpha,h2-beta}.md`, `commons_mm30_canary/h4-attractor-convergence.md`,
+> `spec_y_kitchen_sink/h01.md`. (The canary is also the one file in the corpus with **no `status`** —
+> which is what it exists to be.)
+>
+> The fixtures are **schema-contract participants, not optional test data** (ruled 2026-07-12), so
+> they migrate with everyone else — and that means Task 9 backfills their dates. This is the fixture
+> tax the ruling deliberately accepted: *a fixture left unpinned would make the suite test an
+> accidental mixed-version state.* **Backfill from the file's git history, never `date.today()`** —
+> a fabricated `created` is exactly the manufactured provenance this arc keeps refusing.
+
 **Files:**
 - Create: `science/src/science_tool/migrate_hypothesis.py`
 - Modify: `science/src/science_tool/entities_cli.py` (register `entity migrate-hypothesis`)
@@ -2236,7 +2407,17 @@ from science_model.frontmatter import atomic_write_text, render_frontmatter, spl
 from science_tool.status_inventory import inventory, load_adjudication
 
 ADJUDICATION_PATH = Path(".science/hypothesis-lifecycle.adjudication.yaml")
-_DROPPED = ("phase", "disposition", "disposition_basis", "profile")
+
+# The keys the migration REMOVES from frontmatter. `profile` is NOT among them: Task 2 §3 proved an
+# authored `profile` is honored (sources.py:765-772 is fill-if-missing, not overwrite), reaches the
+# graph as `sci:profile` (materialize.py:640), and drives `registration_state`
+# (entities_inventory.py:195-199). Stripping it would DELETE a live semantic field from 3 files and
+# silently change their registration state. An earlier draft of this plan had it here; that was the
+# same "derived, so strip it" reflex that `_enrich_raw`'s fill-if-missing quietly disproves.
+_DROPPED = ("phase", "disposition", "disposition_basis")
+
+# Migrated, not dropped: their VALUES move (Task 10). Deleting them here would destroy content.
+#   promoted_from -> origins   |   confidence -> author-written expert_judgment evidence lines
 
 
 class MigrationRefused(Exception):
