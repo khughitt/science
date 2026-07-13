@@ -1571,75 +1571,198 @@ def check_resolution(
   3. **`entities.edit_entity`** — before writing, so a terminal transition with a dangling
      successor **fails before a byte is written** (Task 10).
 
-> ### ⚠️ Task 2b ORPHANED THREE GUARANTEES. This step must re-home ALL THREE, not one.
+> ### ⚠️ Task 2b orphaned three guarantees — but a VERDICT IS NOT AN ORDINAL BELIEF LADDER.
 >
 > Deleting `_authored_magnitude` (Task 2b, shipped) removed the only input to three shipped rules
-> from the 2026-05-22 belief design. They were **provably dead on the real corpus** — all 13 files
-> author `belief_state: speculative`, the floor, and every rule needs a higher rung — so the deletion
-> was behavior-neutral. **But the invariants they encoded are not dead.** They guarded *an author
-> asserting an epistemic claim the evidence does not support* — which is now exactly what an authored
-> **`verdict`** is. Rev 4 of this plan specified only the first successor; the other two were being
-> silently dropped, and one of them was an **ERROR in the `hygiene` commit gate**.
+> from the 2026-05-22 belief design. They were **provably dead on the corpus** (every real file sits
+> at rung 0; every rule needs a higher rung), so the deletion was behavior-neutral. **But the
+> invariants they encoded are not dead** — they guarded *an author asserting an epistemic claim the
+> evidence does not support*, which is now exactly what an authored **`verdict`** is.
 >
-> | deleted (belief axis) | sev | successor (verdict axis) | licensed by |
-> |---|---|---|---|
-> | `belief.refutation-masked` | **ERROR**, *gated* | **`verdict.refutation-masked`** — an authored verdict of `supported`/`partially-supported` while an **unresolved decisive whole-claim refutation** stands. **Re-add to the `hygiene` gate in `gates.py`.** | rev 8 pt. 4 |
-> | `belief.single-source-ceiling` | WARN, *gated* | **`verdict.single-source-ceiling`** — a verdict above the fragile ceiling resting on a **single independence group**. **Re-add to the `hygiene` gate.** | rev 8 pt. 4 |
-> | `belief.inflated` | WARN | **`verdict.disagrees-with-computed`** — the authored verdict outruns computed belief. **REPORT ONLY.** | rev 8 pt. 4 — *"computed systems may report a recommendation or disagreement, but must never populate or overwrite the authored verdict."* |
+> **My first attempt re-homed them as one-to-one renames. That was wrong, and it is worth naming why.**
+> `speculative → fragile → supported → well_supported` is an **ordinal magnitude**.
+> `supported | partially-supported | weakened | refuted` is **not a ladder at all** — it is a set of
+> *adjudications*, and ordinalizing them produces nonsense:
 >
-> **`check_verdict_has_evidence` alone is necessary but NOT sufficient.** A hypothesis can carry
-> abundant qualifying evidence *and* an unresolved decisive refutation, and still author
-> `verdict: supported`. It would pass the evidence check and be exactly what `refutation-masked`
-> existed to catch. **Evidence-exists and evidence-agrees are different questions.**
+> - A decisive refutation of **one constituent proposition** is perfectly compatible with
+>   `partially-supported`. On a ladder it reads as a contradiction.
+> - **`weakened` is temporal.** It asserts a *change*, and **cannot be inferred from a single current
+>   belief snapshot** — it needs a prior one.
+> - **One decisive independent test can legitimately establish `refuted`.** So a
+>   "single-source ceiling" applied to `refuted` would flag exactly the strongest possible refutation.
+>   The ceiling doesn't just fail to transfer — **it inverts.**
 >
-> Note how cleanly the contract absorbs this: rev 8 point 4 already says computed systems **may
-> report a disagreement** and **must never overwrite**. All three successors are *reports*. The
-> belief axis had to be policed because belief was authored; the verdict axis is policed because
-> adjudication *should* be authored — and that is the whole difference D5 exists to draw.
+> So there is no rename. There is a **compatibility matrix**, and only one hard invariant.
+>
+> | verdict | minimum agreement check | severity |
+> |---|---|---|
+> | `supported` | composed belief supports it; a **decisive whole-hypothesis / core-conjunction refutation is an ERROR** | **ERROR** on refutation |
+> | `partially-supported` | some support **plus** unresolved / disputed / unsupported portions. **Never ordinalized** — a refuted member is *expected here*, not contradictory. | report |
+> | `weakened` | disputing evidence or a negative adjudication basis. **Historical weakening requires a prior snapshot** — do not infer a trajectory from one. | report |
+> | `refuted` | a decisive refutation **or** an explicitly linked negative adjudication. **No single-source ceiling.** | report |
+>
+> | rule | severity | what it is |
+> |---|---|---|
+> | **`verdict.refutation-masked`** | **ERROR**, re-gated in `gates.py` | **The hard invariant.** `supported` while an unresolved decisive whole-hypothesis or **core-conjunction** refutation stands. |
+> | **`verdict.missing-basis`** | ERROR | An authored verdict with **no qualifying basis at all**. |
+> | **`verdict.disagrees-with-computed`** | WARN, report-only | The authored adjudication and the composed belief disagree. **Explanatory, not a ceiling.** |
+>
+> The last two are **explanatory disagreement reports**, not ports of the deleted ordinal rules.
+> Licensed by rev 8 point 4 — *computed systems may report a recommendation or disagreement, and must
+> **never** populate or overwrite the authored verdict.* The belief axis had to be policed because
+> belief was **authored**; the verdict axis is policed because adjudication **should be**.
 
-- [ ] **Step 3c: The verdict-evidence GRAPH check** (design rev 8, contract point 2)
+> ### ⚠️ Use COMPOSED hypothesis belief — not a flattened evidence pool.
+>
+> An earlier draft called
+> `aggregate_belief(collect_evidence_units(knowledge, provenance, _evidence_targets_for_uri(uri)))`.
+> That **merges every member's evidence into one pool**, so strong evidence for one proposition can
+> **hide a speculative core member** — the precise failure `roll_up_weakest_link` exists to prevent.
+>
+> **The authoritative hypothesis computation already exists: `bundle_belief.belief_for_entity()`**
+> (`graph/bundle_belief.py:180`). It dispatches hypothesis → `BundleBeliefResult`, whose
+> `member_results` / `bottleneck_members` / `unresolved_members` / `contested_members` are exactly the
+> vocabulary the matrix above needs — and it keeps **`capped_by_refutation` as a SEPARATE boolean
+> axis, never folded into the magnitude ordinal** (`bundle_belief.py:133-137`), which is the same
+> distinction this whole correction rests on. Use it. Do not re-derive it.
+>
+> **Check direct whole-hypothesis refutations SEPARATELY.** When a hypothesis has core members,
+> `belief_for_entity` takes the bundle branch (`:215+`) and **never calls
+> `collect_evidence_units([uri])`** — so a decisive refutation attached *directly to the hypothesis*
+> is invisible to it. **Bundle dispatch would hide the very thing `refutation-masked` must catch.**
+
+> ### ⚠️ `check_verdict_has_evidence` overclaimed — and so does the CONTRACT.
+>
+> The drafted body tested `if not units`, which establishes only that **an edge exists**. It does not
+> establish:
+> - **polarity agreement** — a `supports` line is not a basis for `refuted`;
+> - **admissibility** under the belief policy — a unit the policy excludes is not a basis;
+> - **an interpretation basis** — the code never read interpretations.
+>
+> **And it cannot.** `interpretation` **is not an entity kind in the graph** — the registry holds
+> `evidence-line`, `falsification`, `hypothesis`, `mechanism`, `proposition`, … and **no
+> `interpretation`**, and no interpretation→hypothesis predicate exists. So design rev 8's contract
+> clause *"qualifying, resolvable evidence **or interpretation basis**"* is **unimplementable as
+> written**. That is a defect in the **contract**, not just in the draft code.
+>
+> **Resolution — scope it explicitly, do not quietly claim it.** A qualifying basis is:
+> 1. an **admissible, polarity-agreeing evidence-line unit** on the hypothesis or a core member, and/or
+> 2. a **`falsification`** record (`FalsificationEntity.falsifies` → proposition,
+>    `materialize.py:1230`) on the hypothesis or a core member — this is the *"explicitly linked
+>    negative adjudication"* the `refuted` row calls for.
+>
+> **Interpretations are OUT OF SCOPE until they reach the graph.** Either wire them (a separate
+> slice: interpretation must become a graph kind with a typed edge to the hypothesis) or **amend
+> design rev 8 point 2 to say evidence-line-and-falsification basis.** Do not ship a check whose
+> docstring claims a basis it cannot read. *(File as a defect against rev 8.)*
+
+- [ ] **Step 3c: The verdict-agreement GRAPH check** (design rev 8, contract point 2 — *as amended*)
 
 ```python
-# science/src/science_tool/validate/checks/verdict_evidence.py
-"""Every authored verdict must have qualifying, resolvable evidence — at graph time.
+# science/src/science_tool/validate/checks/verdict_agreement.py
+"""Does an authored verdict AGREE with the composed evidence? -- at graph time.
 
-`verdict` is an ADJUDICATION, and an adjudication with nothing behind it is a fabrication.
-The constraint is NOT conditional on the lifecycle: a `draft` hypothesis asserting
-`verdict: refuted` with no evidence is exactly as unfounded as a `complete` one. Scoping this
-to `status: complete` (as an earlier draft did) would leave the front door open.
+`verdict` is an ADJUDICATION, and an adjudication with nothing behind it is a fabrication. The
+constraint is NOT conditional on the lifecycle: a `draft` hypothesis asserting `verdict: refuted`
+with no basis is exactly as unfounded as a `complete` one.
 
-This lives at GRAPH time, not load time, because qualifying evidence is carried by
-evidence-line EDGES, which exist only after materialization. A load-time validator reading one
-file cannot see them. Design §7.4 names three enforcement layers for exactly this reason.
+THREE things this deliberately does NOT do:
 
-It REPORTS. It never populates or overwrites `verdict` -- the moment a computed system can do
-that, `verdict` stops being an adjudication and becomes another derived scalar (rev 8, point 4).
+1. It does not ORDINALIZE the verdict. `supported|partially-supported|weakened|refuted` is not a
+   ladder -- a refuted core member is *expected* under `partially-supported`, `weakened` is
+   temporal, and ONE decisive independent test can legitimately establish `refuted`. A
+   single-source ceiling applied to `refuted` would flag the strongest possible refutation.
+   Compatibility is a MATRIX, not a comparison.
+2. It does not FLATTEN member evidence. `belief_for_entity` composes (weakest-link over core
+   members) so that strong evidence for one proposition cannot mask a speculative core member.
+3. It does not WRITE. It reports a recommendation or a disagreement and never populates or
+   overwrites the authored verdict (rev 8 pt. 4). The moment it could, `verdict` would stop being
+   an adjudication.
+
+SCOPE -- stated, not assumed. A qualifying basis is an admissible, polarity-agreeing evidence-line
+unit, or a `falsification` record, on the hypothesis or one of its CORE members. **Interpretations
+are out of scope: `interpretation` is not a graph kind** (the registry has no such entity and no
+typed edge to a hypothesis), so rev 8's "or interpretation basis" clause cannot be enforced here.
+Do not imply otherwise in a message.
 """
 
+_ORDER = 28
+_VERDICTS = ("supported", "partially-supported", "weakened", "refuted")
 
-@Check(section="verdict evidence", order=28)
-def check_verdict_has_evidence(ctx: ValidateContext) -> Iterator[Result]:
+
+@Check(section="verdict agreement", order=_ORDER)
+def check_verdict_agreement(ctx: ValidateContext) -> Iterator[Result]:
     knowledge, provenance = _load_belief_graphs(ctx)
-    if knowledge is None:
+    if knowledge is None or provenance is None:
         return
+
     for hyp_uri in _hypotheses(knowledge):
         verdict = next(knowledge.objects(hyp_uri, SCI_NS.verdict), None)
         if verdict is None:
-            continue                       # absent == no adjudication recorded. Legal.
-        units = collect_evidence_units(
-            knowledge, provenance, _evidence_targets_for_uri(knowledge, hyp_uri)
-        )
-        if not units:
+            continue                        # absent == no adjudication recorded. Legal, and common.
+        verdict = str(verdict)
+
+        composed = belief_for_entity(knowledge, provenance, hyp_uri, scalar_enabled=...)
+
+        # Direct whole-hypothesis evidence is checked SEPARATELY: when core members exist,
+        # belief_for_entity takes the bundle branch and never looks at evidence attached to the
+        # hypothesis IRI itself (bundle_belief.py:215+). Bundle dispatch would otherwise HIDE the
+        # decisive whole-hypothesis refutation that `verdict.refutation-masked` exists to catch.
+        direct = collect_evidence_units(knowledge, provenance, [hyp_uri])
+
+        basis = _qualifying_basis(knowledge, provenance, hyp_uri, composed, direct, verdict)
+        if not basis:
+            yield Result(
+                Severity.ERROR, _path_for(ctx, hyp_uri), None,
+                f"{hyp_uri}: verdict {verdict!r} has no qualifying basis "
+                f"(no admissible, polarity-agreeing evidence line or falsification on the "
+                f"hypothesis or any core member). A verdict is an adjudication OF something.",
+                "verdict.missing-basis", None,
+            )
+            continue
+
+        # THE HARD INVARIANT. `supported` cannot stand on top of an unresolved decisive refutation
+        # of the whole hypothesis or of its core conjunction. Note `partially-supported` is NOT
+        # included: a refuted member is exactly what that verdict is FOR.
+        if verdict == "supported" and _decisive_refutation(composed, direct):
+            yield Result(
+                Severity.ERROR, _path_for(ctx, hyp_uri), None,
+                f"{hyp_uri}: verdict 'supported' with an unresolved decisive refutation of the "
+                f"hypothesis or a core member",
+                "verdict.refutation-masked", None,
+            )
+
+        # Explanatory disagreement -- REPORT ONLY, never a ceiling and never a rewrite.
+        if (reason := _disagreement(verdict, composed)) is not None:
             yield Result(
                 Severity.WARN, _path_for(ctx, hyp_uri), None,
-                f"{hyp_uri} authors verdict {verdict!r} with no qualifying evidence or "
-                f"interpretation basis. A verdict is an adjudication OF something.",
-                "verdict-evidence", None,
+                f"{hyp_uri}: authored verdict {verdict!r} disagrees with composed belief: {reason}",
+                "verdict.disagrees-with-computed", None,
             )
 ```
 
-  A **disagreement** between the authored verdict and derived belief is reported as a separate,
-  lower-severity finding — **never** as a rewrite (rev 8, point 4).
+**`_qualifying_basis` must establish all three of these — an edge is not a basis:**
+
+| requirement | why `if not units` was not enough |
+|---|---|
+| **polarity agreement** | a `supports` line is not a basis for `refuted` |
+| **admissibility** under the belief policy | a unit the policy excludes is not a basis |
+| **located on the hypothesis or a CORE member** | evidence on a *rival*/background member adjudicates nothing about this hypothesis |
+
+**`_disagreement` implements the matrix — it does not compare rungs:**
+
+| verdict | reports a disagreement when… |
+|---|---|
+| `supported` | the composed belief does not support it (the ERROR case is handled above, separately) |
+| `partially-supported` | there is **no** unresolved/disputed/unsupported portion (`unresolved_members` and `contested_members` both empty **and** nothing refuted) — i.e. nothing *partial* about it |
+| `weakened` | **no** disputing evidence and no negative adjudication basis. **Never infer a historical trajectory from one snapshot** — a true weakening claim needs a prior `belief_snapshot`; absent one, only report the *absence of any dispute*, never the absence of *change*. |
+| `refuted` | no decisive refutation and no linked falsification. **No single-source ceiling** — one decisive independent test is a legitimate refutation. |
+
+- [ ] **Step 3d: Re-gate the hard invariant.** Add **`verdict.refutation-masked`** to the `hygiene`
+  tier in `validate/gates.py` — it inherits the gated ERROR that `belief.refutation-masked` held
+  before Task 2b removed it. `verdict.missing-basis` is an ERROR but **ungated for one release**
+  (it is new authoring surface; do not break a commit on day one).
+  `verdict.disagrees-with-computed` is **never gated** — a disagreement is information, not a fault.
 
 - [ ] **Step 4: Green** — unit + wiring, both packages, plus `ruff` and `pyright`.
 

@@ -1,6 +1,6 @@
 # The authoritative entity schema
 
-**Date:** 2026-07-12 (rev 8 — **FINAL**; `verdict` ownership ruled, belief cluster partitioned; see §10)
+**Date:** 2026-07-12 (rev 9 — `verdict` basis scoped + compatibility ruled as a MATRIX, not a ladder; see §10)
 **Status:** **Architecture accepted; final amendment applied.** D1–D5 ruled (§9), D4 contract
 re-ruled against the audit. **Ready to write the D5 implementation plan.**
 **Contract input:** [`2026-07-12-d4-status-vocabulary-audit.md`](2026-07-12-d4-status-vocabulary-audit.md)
@@ -611,9 +611,49 @@ rollups) onto `partially-supported | supported | weakened | refuted`. The correc
 **The `verdict` contract:**
 
 1. **Absent** = no adjudication has been recorded. (Not "no evidence" — *no adjudication*.)
-2. **Every authored verdict must have qualifying, resolvable evidence or interpretation basis at
-   graph time** — **not only when `status: complete`**. A verdict with nothing behind it is the
-   fabrication this design exists to prevent, whatever the lifecycle says.
+2. **Every authored verdict must have a qualifying, resolvable basis at graph time** — **not only
+   when `status: complete`**. A verdict with nothing behind it is the fabrication this design exists
+   to prevent, whatever the lifecycle says.
+
+   > **⚠️ AMENDED (rev 9). This clause originally said "evidence **or interpretation** basis" — and
+   > the interpretation half is UNIMPLEMENTABLE.** `interpretation` **is not an entity kind in the
+   > graph**: the registry holds `evidence-line`, `falsification`, `hypothesis`, `mechanism`,
+   > `proposition`, … and no `interpretation`, with no typed edge from one to a hypothesis. The
+   > contract named a basis the graph cannot represent, so any check claiming to enforce it would be
+   > lying in its own docstring.
+   >
+   > **A qualifying basis is therefore, today:** an **admissible, polarity-agreeing evidence-line
+   > unit**, or a **`falsification` record** (the *"explicitly linked negative adjudication"*), on the
+   > hypothesis **or one of its CORE members**. Evidence on a rival/background member adjudicates
+   > nothing about this hypothesis.
+   >
+   > Restoring the interpretation half requires its own slice — interpretation must become a graph
+   > kind with a typed edge to the hypothesis. **Until then the clause is scoped, not quietly
+   > claimed.** *(Found while designing Task 7; the existing `verdict/` subsystem parses
+   > interpretation **bodies** for polarity tokens and never touches hypotheses — a different
+   > concept that happens to share the word.)*
+
+2b. **Verdict compatibility is a MATRIX, not an ordinal comparison.**
+   `supported | partially-supported | weakened | refuted` is **not a ladder**, and must never be
+   mapped onto the belief magnitudes `speculative → fragile → supported → well_supported`:
+   - a decisive refutation of **one constituent proposition** is *compatible with*
+     `partially-supported` — on a ladder it reads as a contradiction;
+   - **`weakened` is temporal** — it asserts a *change*, and cannot be inferred from a single current
+     belief snapshot;
+   - **one decisive independent test can legitimately establish `refuted`** — so a "single-source
+     ceiling" would flag the strongest possible refutation. The ceiling does not merely fail to
+     transfer; **it inverts.**
+
+   The **one hard invariant** is `verdict.refutation-masked`: **`supported`** (not
+   `partially-supported`) while an unresolved **decisive whole-hypothesis or core-conjunction**
+   refutation stands. Everything else the computed layer says is an **explanatory disagreement
+   report** — per point 4, never a ceiling and never a rewrite.
+
+   And it must be computed from **composed** hypothesis belief (`bundle_belief.belief_for_entity`,
+   weakest-link over core members), **never a flattened evidence pool** — flattening lets strong
+   evidence for one proposition mask a speculative core member. Direct whole-hypothesis refutations
+   must be checked **separately**, because bundle dispatch never reads evidence attached to the
+   hypothesis IRI itself once core members exist.
 3. **`complete` additionally requires a verdict to be present** (rev 6).
 4. **Computed systems may report a recommendation or a disagreement, but must NEVER populate or
    overwrite the authored verdict.** The moment they can, it stops being an adjudication.
