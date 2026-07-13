@@ -61,28 +61,75 @@ Before executing any research command:
    `templates/<name>.md`. If neither exists, warn the
    user and proceed without a template — the command's Writing section provides
    sufficient structure.
-8. **Resolve science CLI invocation:** When a command says to run `science`,
-   prefer the project-local install path: `uv run science <command>`.
-   This assumes the root `pyproject.toml` includes `science` as a dev
-   dependency installed via `uv add --dev --editable "$SCIENCE_TOOL_PATH"`
-   (the distribution is `science`; the entry point it installs is `science`).
-   If you are operating from a git worktree and `uv run --frozen science ...`
-   fails because a relative editable `tool.uv.sources` path resolves to a
-   nonexistent checkout, use the main checkout's synced environment while
-   keeping the worktree as the current directory:
-   `$MAIN/.venv/bin/science <command>`. For wrappers or rules that shell out to
-   nested `uv run --frozen ...`, export `UV_PROJECT=$MAIN` so dependencies
-   resolve from the main checkout while cwd-relative project files still come
-   from the worktree.
-   If that fails (no root `pyproject.toml` or science not in dependencies),
-   fall back to:
-   `uv run --with <science-plugin-root>/science science <command>`
+8. **Verify the project-local Science CLI:** Execute the top-level CLI
+   Compatibility Gate below before the command's first Science invocation. It
+   uses the consumer's frozen lock; do not route through a toolkit checkout or
+   another environment.
+
+## CLI Compatibility Gate
+
+```bash
+SCIENCE_REQUIRED_VERSION=0.3.0
+if output=$(uv run --frozen science --version 2>&1); then
+  SCIENCE_INSTALLED_VERSION=${output##* }
+elif uv run --frozen science --help >/dev/null 2>&1; then
+  # The CLI runs but has no --version option, so it predates the baseline.
+  # Decided by behavior, never by matching Click's version-dependent wording.
+  SCIENCE_INSTALLED_VERSION=
+else
+  # The CLI cannot run at all: missing/stale lock, Git fetch failure, import
+  # error. Report the real diagnosis; never advise moving the Science pin.
+  printf '%s\n' "$output" >&2
+  exit 1
+fi
+
+if ! SCIENCE_INSTALLED_VERSION="$SCIENCE_INSTALLED_VERSION" \
+     SCIENCE_REQUIRED_VERSION="$SCIENCE_REQUIRED_VERSION" \
+     uv run --no-project python - <<'PY'
+import os
+import re
+import sys
+
+def release(name: str) -> tuple[int, int, int] | None:
+    match = re.match(r"(\d+)\.(\d+)\.(\d+)", name)
+    return tuple(map(int, match.groups())) if match else None
+
+installed = release(os.environ["SCIENCE_INSTALLED_VERSION"])
+required = release(os.environ["SCIENCE_REQUIRED_VERSION"])
+sys.exit(0 if installed is not None and required is not None and installed >= required else 1)
+PY
+then
+  display=${SCIENCE_INSTALLED_VERSION:-unknown-or-pre-0.3.0}
+  echo "This Science agent command requires science >=$SCIENCE_REQUIRED_VERSION; found $display." >&2
+  echo "upgrade with: uv lock --upgrade-package science && uv sync --frozen" >&2
+  exit 1
+fi
+```
+
+After the gate succeeds, run the command through the consumer's project-local
+environment as `uv run science <command>`. Missing dependency, missing or stale
+lock, and Git fetch failures are surfaced directly and must be fixed in the
+consumer project.
+
+A CLI that answers `--help` but rejects `--version` predates the baseline;
+malformed successful output and a version below the floor are likewise
+compatibility failures, and all three stop with the upgrade command. A CLI that
+cannot run at all is an environment failure: its output is printed verbatim and
+must be fixed as reported.
+
+The `--help` probe is what separates those two classes. Do not substitute a match
+against Click's error text — its wording changed in Click 8.4, and `science`
+allows any `click>=8.1`, so a freshly locked consumer can emit either form. The
+root `--version` probe is the permanent bootstrap surface; do not replace it with
+a preflight subcommand, which an older CLI could not recognize either.
 
 Run a small, serendipitous review pass across the project's epistemic
 entities. Sampling is weighted by the existing attention machinery
 (freshness, time since last review, evidence balance). The agent reviews
 each sampled entity for gaps, looks for unappreciated pairwise connections,
 flags stub candidates, and writes a short report.
+
+Follow `references/command-preamble.md` before executing this command.
 
 Use the user input for optional flags. Recognized:
 

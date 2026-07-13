@@ -47,8 +47,10 @@ def test_generate_codex_skills_rewrites_claude_specific_references(tmp_path: Pat
     assert "/science:sync" not in text
     assert "${CLAUDE_PLUGIN_ROOT}" not in text
     assert "If the user explicitly asks to save the output or includes `--save`" in text
-    assert "project-local install path: `uv run science <command>`" in text
-    assert "`uv run --with <science-plugin-root>/science science <command>`" in text
+    assert "SCIENCE_REQUIRED_VERSION=0.3.0" in text
+    assert "environment as `uv run science <command>`" in text
+    assert "Missing dependency, missing or stale" in text
+    assert "uv run --with <science-plugin-root>/science" not in text
 
 
 def test_generate_codex_skills_rewrites_arguments_and_template_paths(tmp_path: Path) -> None:
@@ -738,3 +740,34 @@ def test_agents_md_template_has_no_at_core_includes() -> None:
     text = template.read_text(encoding="utf-8")
     assert "@core/overview.md" not in text
     assert "@core/decisions.md" not in text
+
+
+def test_generated_command_skills_embed_cli_compatibility_gate(tmp_path: Path) -> None:
+    generated = generate_codex_skills(ROOT, tmp_path)
+
+    for name, path in generated.items():
+        if name in {"science-research-methodology", "science-scientific-writing"}:
+            continue
+        text = path.read_text(encoding="utf-8")
+        assert "SCIENCE_REQUIRED_VERSION=0.3.0" in text, name
+        assert "uv run --frozen science --version" in text, name
+        assert "UV_PROJECT=$MAIN" not in text, name
+        assert "$MAIN/.venv/bin/science" not in text, name
+
+
+def test_committed_codex_skills_match_fresh_generation(tmp_path: Path) -> None:
+    generated_root = tmp_path / "codex-skills"
+    generate_codex_skills(ROOT, generated_root)
+
+    expected = {
+        path.relative_to(generated_root): path.read_bytes()
+        for path in generated_root.rglob("*")
+        if path.is_file()
+    }
+    actual = {
+        path.relative_to(CODEX_SKILLS_ROOT): path.read_bytes()
+        for path in CODEX_SKILLS_ROOT.rglob("*")
+        if path.is_file() and path.name != "INSTALL.codex.md"
+    }
+
+    assert actual == expected
