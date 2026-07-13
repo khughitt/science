@@ -8,6 +8,8 @@ Propose the *reasoning fields* — `predicate`, `polarity`, `claim_layer`, and r
 `subject` / `object` — of the promoted propositions for one paper, via the
 `proposition-synthesize` subagent. The agent only proposes; the curator reviews and applies.
 
+Follow `${CLAUDE_PLUGIN_ROOT}/references/command-preamble.md` before executing this command.
+
 ## Usage
 
 `/synthesize-propositions <pmid|doi|citekey>`

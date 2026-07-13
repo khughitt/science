@@ -12,6 +12,8 @@ Generate `entities/synthesis/<hyp>.md` files (one per hypothesis), an
 See `docs/user-guide/big-picture-synthesis.md` for the durable user-facing
 synthesis and topic-coverage gap semantics.
 
+Follow `${CLAUDE_PLUGIN_ROOT}/references/command-preamble.md` before executing this command.
+
 ## Flags
 
 Parse `$ARGUMENTS` for:

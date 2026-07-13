@@ -23,7 +23,7 @@ Parse `$ARGUMENTS` for:
 
 ## Phase 1: Setup and inventory
 
-Follow the standard Science command preamble.
+Follow `${CLAUDE_PLUGIN_ROOT}/references/command-preamble.md` before executing this command.
 
 Then gather deterministic evidence:
 

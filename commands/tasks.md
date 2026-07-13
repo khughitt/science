@@ -16,6 +16,8 @@ Manage the project task queue in `tasks/active.md`.
 > drift between what the conversation thinks is the task list and what
 > the project actually tracks.
 
+Follow `${CLAUDE_PLUGIN_ROOT}/references/command-preamble.md` before executing this command.
+
 ## Setup
 
 Read `tasks/active.md` if it exists. If `tasks/` directory doesn't exist, create it.

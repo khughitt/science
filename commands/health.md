@@ -6,6 +6,8 @@ description: Run the science health check and triage findings interactively. Use
 
 Aggregate project health diagnostics and walk the user through cluster-level cleanup.
 
+Follow `${CLAUDE_PLUGIN_ROOT}/references/command-preamble.md` before executing this command.
+
 `$ARGUMENTS` optionally specifies the project root (default: current directory).
 
 ## Procedure

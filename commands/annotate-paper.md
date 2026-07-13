@@ -8,6 +8,8 @@ Extract sub-article **statements** (propositions/questions/hypotheses) and **fig
 (metaphors/analogies) from a paper that already has a persisted `.source.md` and PubTator
 annotations, via the `paper-annotate` subagent.
 
+Follow `${CLAUDE_PLUGIN_ROOT}/references/command-preamble.md` before executing this command.
+
 ## Usage
 
 `/annotate-paper <pmid|doi|citekey>` — optionally `--force` to re-run even if unchanged.

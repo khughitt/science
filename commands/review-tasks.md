@@ -6,6 +6,8 @@ description: Audit and reorganize the task backlog — check stale tasks, verify
 
 Structured review of the project task backlog. Validates statuses against actual codebase state, adjusts priorities to current project direction, and identifies gaps.
 
+Follow `${CLAUDE_PLUGIN_ROOT}/references/command-preamble.md` before executing this command.
+
 `$ARGUMENTS` optionally specifies scope (e.g., "P2 only", "research tasks", "lens-system group").
 
 ## Procedure

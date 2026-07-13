@@ -10,6 +10,8 @@ entities. Sampling is weighted by the existing attention machinery
 each sampled entity for gaps, looks for unappreciated pairwise connections,
 flags stub candidates, and writes a short report.
 
+Follow `${CLAUDE_PLUGIN_ROOT}/references/command-preamble.md` before executing this command.
+
 Use `$ARGUMENTS` for optional flags. Recognized:
 
 - `--apply` — consumed by this slash command; permits exactly one side
