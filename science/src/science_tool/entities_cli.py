@@ -231,6 +231,61 @@ def entity_field_inventory(kind: str, output_format: str) -> None:
     )
 
 
+@entity_group.command("status-inventory")
+@click.option(
+    "--adjudication",
+    type=click.Path(path_type=Path, exists=True),
+    help="YAML of explicit author decisions for files no rule can migrate: "
+    "{entity_id: {status, verdict?, closure_basis?}}.",
+)
+@click.option("--format", "output_format", type=click.Choice(OUTPUT_FORMATS), default="table", show_default=True)
+def entity_status_inventory(adjudication: Path | None, output_format: str) -> None:
+    """Plan the hypothesis lifecycle/verdict split. Report-only — writes nothing.
+
+    `phase` is the lifecycle; `status` was only ever the verdict (design rev 7). A file whose
+    `status` is terminal lost its lifecycle, its verdict AND its closure reason at once, so it is
+    REFUSED rather than guessed — and escapes only via an explicit `--adjudication` entry.
+    """
+
+    from science_tool.status_inventory import inventory, load_adjudication
+
+    decisions = load_adjudication(adjudication) if adjudication else {}
+    try:
+        result = inventory(Path.cwd(), adjudication=decisions)
+    except KeyError as exc:
+        raise click.ClickException(str(exc).strip('"')) from exc
+
+    rows = [
+        {
+            "id": row.entity_id,
+            "status": row.status or "—",
+            "phase": row.phase or "—",
+            "target_status": row.target_status or "REFUSED",
+            "verdict": row.target_verdict or "—",
+            "ambiguity": row.ambiguity or "",
+        }
+        for row in result.rows
+    ]
+    emit_query_rows(
+        output_format=output_format,
+        title="Hypothesis lifecycle / verdict plan",
+        columns=[
+            ("id", "ID"),
+            ("status", "status (old)"),
+            ("phase", "phase (old)"),
+            ("target_status", "status (new)"),
+            ("verdict", "verdict (new)"),
+            ("ambiguity", "Refused because"),
+        ],
+        rows=rows,
+        meta={
+            "total": len(result.rows),
+            "deterministic": len(result.deterministic),
+            "refused": len(result.ambiguous),
+        },
+    )
+
+
 @entity_group.command("sections")
 @click.argument("kind")
 @click.option("--format", "output_format", type=click.Choice(OUTPUT_FORMATS), default="table", show_default=True)
