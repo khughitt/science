@@ -1652,7 +1652,15 @@ def admit_authored_relation(
     of these rules is narrower than this one by construction, and a validator narrower than the
     builder reports a clean corpus that has no graph.
     """
-    graph_uri = _graph_uri(relation.graph_layer)
+    try:
+        graph_uri = _graph_uri(relation.graph_layer)
+    except ValueError as exc:
+        # `_graph_uri` has other callers and raises a bare `ValueError`; TYPE it here, at the
+        # boundary. A rejection that escapes untyped is invisible to every caller that asks
+        # admission as a QUESTION -- `audit_relations` catches `RelationRejection`, so this refusal
+        # did not get reported, it CRASHED the check that was meant to report it. Every path out of
+        # this function meaning "this does not materialize" is a `RelationRejection` with a code.
+        raise RelationRejection("unsupported-graph-layer", str(exc)) from exc
 
     subj_res = resolver.resolve(relation.subject)
     subject_entity = entity_index.get(subj_res.canonical_id or "")

@@ -116,6 +116,28 @@ def test_a_BARE_AMENDS_SELF_EDGE_is_an_ERROR_though_NOBODY_WROTE_THAT_RULE(tmp_p
     assert findings[0].path == tmp_path / "entities/interpretations/i1.md"
 
 
+def test_an_UNSUPPORTED_GRAPH_LAYER_is_REPORTED_and_does_not_CRASH_the_CHECK(tmp_path: Path) -> None:
+    # ☠️ DELEGATION IS ONLY AS GOOD AS THE TYPE ON THE REFUSAL. `_graph_uri` refuses an unknown layer
+    # with a bare `ValueError`; `audit_relations` catches `RelationRejection`. So this rule -- which
+    # nobody wrote, and which arrived with the delegation -- did not reach the report: it propagated
+    # out of the check and CRASHED the whole `validate` run. A rule that escapes untyped is not a
+    # stricter check, it is a broken one, and only an executed test tells the two apart.
+    _seed(tmp_path)
+    _write(tmp_path, "i1", {"id": "interpretation:i1", "kind": "interpretation"})
+    _write(tmp_path, "i2", {"id": "interpretation:i2", "kind": "interpretation"})
+    _relations_yaml(tmp_path, [
+        {"subject": "interpretation:i1", "predicate": "sci:supersedes",
+         "object": "interpretation:i2", "graph_layer": "graph/not-a-layer"},
+    ])
+
+    findings = [r for r in _results(tmp_path) if r.rule == "relation.unsupported-graph-layer"]
+
+    assert len(findings) == 1
+    assert findings[0].severity is Severity.ERROR
+    assert findings[0].path == tmp_path / "knowledge/sources/local/relations.yaml"
+    assert "graph/not-a-layer" in findings[0].message
+
+
 def test_an_ARCHIVED_SUBJECT_is_an_ERROR_because_a_FROZEN_record_cannot_AUTHOR(tmp_path: Path) -> None:
     # ☠️ THE ENDPOINTS ARE NOT SYMMETRIC, and generalizing the object's rule to the subject is what
     # let an ARCHIVED record supersede a LIVE one. `materialize` resolves an OBJECT through the

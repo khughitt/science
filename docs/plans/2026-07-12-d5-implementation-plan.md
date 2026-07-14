@@ -4105,10 +4105,15 @@ cd science       && uv run ruff check && uv run pyright
   write boundary**, so the commit half rejects both a mutated token and a duck-typed substitute
   (privacy by underscore and a Python type annotation are conventions; the runtime MAC check is the
   enforcement);
-  `IdResolution` — `.canonical(raw)`, `.kind_of(canonical_id)` (**every** backed population, because
-  legality is a question about the resolved entity), `.mutable`, `.archived`;
+  `IdResolution` — `.canonical(raw)`, `.mutable`, `.archived` (the WRITER's populations, and only
+  those: `.kind_of()` is **gone** with the ladder — legality is not this module's question);
+  `graph.relation_audit.audit_relations(project_root, sources) -> RelationAudit`, with
+  `.admitted: tuple[AdmittedRelation, ...]`, `.defects: tuple[RelationDefect, ...]` and
+  `.relations(name)` (**by profile relation NAME, never by CURIE string-compare** — a predicate has
+  more than one legal spelling);
   `SupersedesGraph.path_by_id` (the check reports a *file*: `Result` has no `entity_id` field);
-  `SupersessionError`; `report["mismatched_kinds"]`, `report["unresolved_targets"]`,
+  `SupersessionError`; `report["invalid_relations"]` (`{code, path, subject, predicate, object,
+  message}` — **one key, the audit's verdict**, replacing the four hand-maintained buckets),
   `report["archived_targets"]`, `report["unmanaged_targets"]`, `report["unbacked_inverses"]`,
   `report["to_repair"]`, `report["repaired"]`
 - Produces: a **registered** `validate` check — `checks/supersession.py` decorated with `@Check`, and
@@ -4267,6 +4272,21 @@ def test_a_relation_entry_is_CLOSED() -> None:
   hypothesis** — the other twelve are this task's declared, frozen debt, not its scope.
 
 - [x] **Step 5: Leg 3 — the operation supplies the lineage it derives.**
+
+> ☠️ **EVERYTHING FROM HERE TO STEP 6 IS THE DESIGN AS IT WAS SPECIFIED, NOT AS IT SHIPPED.** It is
+> kept because it is the record of what six review rounds actually cost, and the argument for RULING
+> 10 is unreadable without the thing that was ruled against. **Do not copy an API off it.** The
+> ladder it specifies — four writer-side admission buckets, hand-derived — was DELETED (RULING 10,
+> below); the shipped `SupersedesGraph` carries one field where these snippets carry four:
+>
+> | these snippets say | shipped |
+> |---|---|
+> | `graph.mismatched`, `graph.unresolved_targets`, `graph.self_referential`, `graph.cycles` | `graph.invalid: tuple[RelationDefect, ...]` — the audit's verdict, whatever rule fired |
+> | `report["mismatched_kinds"]`, `report["unresolved_targets"]` | `report["invalid_relations"]` — `{code, path, subject, predicate, object, message}` |
+> | a refused edge is *filed* and apply continues | a refused edge **blocks apply, corpus-wide** |
+>
+> `graph.archived_targets`, `graph.unmanaged_targets` and `graph.unbacked_inverses` survive
+> unchanged: those are the WRITER's questions, and the writer is what this module still is.
 
 > **The inverse is the IMMEDIATE superseder, not the chain's survivor.** Edges are
 > `(superseder, superseded)` (`consolidation.py:167-172`), and a *linear* chain is a path — so in
@@ -6022,18 +6042,33 @@ def test_a_hypothesis_CHAIN_records_the_immediate_superseder(tmp_path: Path) -> 
 def test_an_INTERPRETATION_may_not_supersede_a_HYPOTHESIS(tmp_path: Path) -> None:
     # The cross-kind case Task 7a could only test in the abstract. `interpretation -> hypothesis` is
     # not an allowed pair, and if the operation wrote it anyway the record would carry
-    # `superseded_by: interpretation:...` -- which the mixin's `^hypothesis:` pattern rejects. The
-    # write path never consults materialize, so materialize's refusal protects nothing here.
+    # `superseded_by: interpretation:...` -- which the mixin's `^hypothesis:` pattern rejects.
+    #
+    # ☠️ THE CONTRACT CHANGED UNDER THIS TEST, and an earlier draft asserted the OLD one: it read
+    # `report["mismatched_kinds"]` (a key that no longer exists) and expected `apply=True` to return
+    # a clean report. Both are now wrong, and wrong in the safe direction. The refusal is the
+    # relation audit's -- `materialize`'s own admission, asked once -- so the edge is REFUSED rather
+    # than filed in a writer-side bucket, and a corpus carrying ANY unbuildable relation gets no
+    # derived lineage at all. `apply=True` RAISES.
     _write_hypothesis(tmp_path, "0001-x", status="active")
     _write(tmp_path, "interpretations", "i-v1",
            {"id": "interpretation:i-v1", "kind": "interpretation",
             "relations": [_supersedes("hypothesis:0001-x")]})
+    before = (tmp_path / "entities/hypotheses/0001-x.md").read_bytes()
 
-    report = mark_superseded(tmp_path, apply=True)
+    report = mark_superseded(tmp_path, apply=False)      # REPORT names the rule that fired...
 
     assert report["applied"] == []
-    assert [m["id"] for m in report["mismatched_kinds"]] == ["hypothesis:0001-x"]
-    assert "superseded_by" not in read_frontmatter(tmp_path / "entities/hypotheses/0001-x.md")
+    assert [d["code"] for d in report["invalid_relations"]] == ["illegal-kind-pair"]
+    assert report["invalid_relations"][0]["subject"] == "interpretation:i-v1"
+    assert report["invalid_relations"][0]["object"] == "hypothesis:0001-x"
+
+    with pytest.raises(SupersessionError):               # ...and APPLY refuses the whole corpus.
+        mark_superseded(tmp_path, apply=True)
+
+    # BYTE-UNCHANGED, not merely "superseded_by absent". A blocked apply must leave the corpus
+    # exactly as it found it -- the all-or-none contract is about the FILE, not about one key.
+    assert (tmp_path / "entities/hypotheses/0001-x.md").read_bytes() == before
 ```
 
 **Files:**

@@ -23,8 +23,15 @@ So the question is asked ONCE, in the builder's own words:
             ...
 
 A rule the builder gains, this audit gains. A rule the builder loses, this audit loses. There is
-no third place to forget one — `_graph_uri`'s unsupported-layer refusal and the membership-role
-rule both arrived here for free, and neither was on the hand-written list.
+no third place to forget one — the membership-role rule and the unsupported-`graph_layer` refusal
+both arrived here without being written here, and neither was on the hand-written list.
+
+☠️ WITH ONE OBLIGATION, WHICH IS THE PRICE OF DELEGATION: a refusal is only *collectable* if it is
+typed. `_graph_uri` raised a bare `ValueError`, `admit_authored_relation` let it through, and this
+loop catches `RelationRejection` — so that rule did not reach the report; it CRASHED it. The fix was
+at the boundary, not here (materialize.py). The standing rule: every path out of admission that
+means "this does not materialize" carries a `RelationRejection` with a code. An untyped refusal is
+not a stricter check, it is a broken one.
 
 TWO KINDS OF QUESTION LIVE HERE, and only two:
 

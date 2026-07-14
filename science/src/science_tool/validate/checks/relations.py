@@ -9,15 +9,16 @@ This check DERIVES NOTHING. `audit_relations` calls `admit_authored_relation` �
 own admission, on the same `SourceRelation` stream — and this file turns each refusal into a
 `Result`. The rule name is the code the builder's own rejection carried:
 
-    relation.unknown-subject     the subject is not a live loaded entity. NOT symmetric with the
-                                 object: an archived record may be POINTED AT, and may not AUTHOR.
-    relation.unknown-object      the object resolves to nothing (or to an id no record backs)
-    relation.unknown-predicate   the predicate is not a CURIE/IRI this vocabulary resolves
-    relation.external-target     an external term where the predicate requires a project entity
-    relation.self-referential    an entity related to ITSELF
-    relation.illegal-kind-pair   a kind pair the relation model forbids
-    relation.membership-role     a membership role on an edge that is not a membership
-    relation.cycle               the edge lies on a cycle in the {amends, supersedes} lineage
+    relation.unknown-subject          the subject is not a live loaded entity. NOT symmetric with
+                                      the object: an archived record may be POINTED AT, never AUTHOR.
+    relation.unknown-object           the object resolves to nothing (or to an id no record backs)
+    relation.unknown-predicate        the predicate is not a CURIE/IRI this vocabulary resolves
+    relation.unsupported-graph-layer  the edge is authored into a layer that does not exist
+    relation.external-target          an external term where the predicate requires a project entity
+    relation.self-referential         an entity related to ITSELF
+    relation.illegal-kind-pair        a kind pair the relation model forbids
+    relation.membership-role          a membership role on an edge that is not a membership
+    relation.cycle                    the edge lies on a cycle in the {amends, supersedes} lineage
 
 ERROR, and FLAT — never kind-scoped. These are RELATION-VALIDITY failures: the corpus does not build
 a graph at all. That verdict comes from the relation model, which already says which pairs are legal,
@@ -25,10 +26,14 @@ which endpoints exist, and that the lineage is acyclic. It owes nothing to any p
 certification, so it must NOT wait on the status-vocabulary ratchet and must NOT be scoped by kind.
 The same defect is the same defect whatever kind authors it.
 
-☠️ THE BLAST RADIUS IS ZERO, AND FOR A STRUCTURAL REASON RATHER THAN AN EMPIRICAL ONE: `materialize`
-raises on every one of these, so a project that builds a graph today cannot be carrying one. These
-rules can only fire on a corpus that already has no graph. (Verified empirically too, across every
-project carrying lineage edges or a `relations.yaml`: no new ERRORs.)
+☠️ THE BLAST RADIUS IS NOT ZERO — an earlier draft of this docstring claimed it was, and the claim
+was false. What is true is narrower and structural: `materialize` raises on every one of these, so a
+project that BUILDS A GRAPH today cannot be carrying one. These rules fire only on a corpus that
+already has no graph — and such a corpus exists. `3d-attention-bias` authors `sci:tests` from
+`inquiry` and `workflow` subjects, which the relation model does not admit; `materialize_graph`
+has been raising there, and `validate` said nothing. That is the failure this check exists for, so
+finding it is the check working, not the check misfiring. "No project fails today" is a property of
+the corpus, never a property of a rule, and a check whose value is argued from it has no value.
 
 ONE OVERLAP, STATED RATHER THAN ENGINEERED AWAY: a relation endpoint that resolves NOWHERE is also
 reported by the graph audit (`graph`, ERROR, `unresolved_reference`), which owns references of every

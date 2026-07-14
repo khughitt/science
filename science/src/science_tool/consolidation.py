@@ -1,8 +1,14 @@
 """Entity consolidation — derive `superseded` (and its lineage) from supersedes chains.
 
 Read-only by default (report); `--apply` stamps `status: superseded` **and the derived inverse
-`superseded_by`** on the superseded members of *linear* chains only. Non-linear (branched/cyclic)
-components are reported and skipped — their survivor is ambiguous and needs human review.
+`superseded_by`** on the superseded members of *linear* chains only.
+
+A BRANCH and a CYCLE ARE NOT THE SAME OUTCOME, and grouping them cost this module six review rounds.
+A **branch** is a legal graph with an ambiguous survivor: it materializes, it is reported, and apply
+skips it pending human review. A **cycle** is not a graph at all — `materialize` refuses it — so it
+is a `relation.cycle` ERROR from the relation audit, and it BLOCKS apply for the whole corpus rather
+than being quietly stepped around. Every other invalid relation blocks the same way, supersession or
+not: a corpus that does not materialize is not one this tool derives anything from.
 
 The canonical machine-readable supersession edge is a relation with `predicate: "sci:supersedes"`,
 authored on the **successor**, pointing newer → older. It is **not** top-level `supersedes:`
