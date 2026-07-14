@@ -3908,15 +3908,41 @@ cd science       && uv run --frozen pytest
 cd science       && uv run ruff check && uv run pyright
 ```
 
-- [ ] **Step 4b: Prove the emission in the ARTIFACT.** Rebuild `multiple-myeloma` through this
-  worktree (`uv run --project "$WT" science graph build --local-only`, `set -euo pipefail`, `cp`,
-  restore — the Task 6 Step 4b procedure verbatim) and diff against the saved "before" graph.
-  **Expected: byte-identical**, because no corpus hypothesis carries a `verdict` until Task 9. That
-  green is only worth anything alongside the fixture test that proves the triple *is* emitted when a
-  verdict exists — a diff over a corpus with nothing to emit cannot distinguish "additive and
-  correct" from "does nothing at all."
+- [x] **Step 4b: Prove the emission in the ARTIFACT — RUN 2026-07-13.** Rebuild `multiple-myeloma`
+  through this worktree (`uv run --project "$WT" science graph build --local-only`, `cp`, restore —
+  the Task 6 Step 4b procedure verbatim) and diff against the saved "before" graph.
 
-- [ ] **Step 5: Commit.**
+> ### RESULT: the emission is INERT on the corpus, as predicted — and "byte-identical" was the wrong gate
+>
+> **`sci:verdict` triples in the rebuilt graph: ZERO.** Correct, and expected: no mm30 hypothesis
+> carries a `verdict` until Task 9 migrates them. The emission is additive and changed no semantic
+> triple.
+>
+> **But the diff is NOT byte-identical, and the cause is not this task.** Exactly **4 lines** differ,
+> in exactly **two fields**, and both are *build provenance*:
+>
+> | field | why it differs |
+> |---|---|
+> | `schema:dateModified` | the build timestamp. Changes on **any** rebuild. |
+> | `schema:text` (the source hash-inventory blob) | 3189 files, identical file set; **2 files' `sha256` differ** — `AGENTS.md` and `science.yaml`. |
+>
+> Those two files were edited by mm30 commit `fee79a07`, which landed **after** the last commit that
+> rebuilt `knowledge/graph.trig` (`17976d17`). **The committed artifact is simply stale with respect
+> to the committed source**, and any rebuild — with or without this change — surfaces that. mm30's
+> working tree was clean before and after; the graph was restored.
+>
+> So the gate is corrected to what it can actually assert: **no semantic triple changes, and zero
+> `sci:verdict` triples appear.** Demanding byte-identity of an artifact that carries a build
+> timestamp and a source-mtime inventory asks for a green that cannot be produced — and a gate that
+> cannot go green teaches the next person to skip it.
+>
+> The plan's own caveat stands and is why this is worth anything at all: a diff over a corpus with
+> nothing to emit **cannot distinguish "additive and correct" from "does nothing at all."** The
+> fixture test `test_a_verdict_REACHES_the_graph` is what proves the triple *is* emitted when a
+> verdict exists, and dropping the emission fails **10** tests.
+
+- [x] **Step 5: Commit.** — `57b36c39` (the check, its registration, the gate, and 22 tests).
+  **Task 7 is COMPLETE.**
 
 ---
 
