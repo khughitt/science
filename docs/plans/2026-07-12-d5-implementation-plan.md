@@ -569,7 +569,8 @@ def test_author_stated_evidence_never_sets_a_magnitude(tmp_project) -> None:
    implementable as written**):
 
    - an **admissible, polarity-agreeing evidence-line unit** — on the hypothesis **or a core
-     member**. Both reaches are real: a line may bear on a hypothesis directly (`belief.py:130`).
+     member**. Both reaches are real: the `supports`/`disputes` `RelationKind`s admit a hypothesis
+     TARGET from an `evidence-line` SOURCE (`profiles/core.py:648-660`).
    - a **`falsification` record** — on a **core PROPOSITION member, and only there.**
      `FalsificationEntity.falsifies` is required, and `_add_falsification_relations` hard-raises
      unless it resolves to `kind == "proposition"` (`materialize.py:1274`). A falsification *on a
@@ -3417,7 +3418,9 @@ def check_dangling_lineage(ctx: ValidateContext) -> Iterator[Result]:
 > **Resolution — scope it explicitly, do not quietly claim it.** A qualifying basis is one of exactly
 > two things, and **they do not have the same reach**:
 > 1. an **admissible, polarity-agreeing evidence-line unit** on the hypothesis **or a core member**.
->    Both reaches are real: an evidence line may bear on a hypothesis directly (`belief.py:130`).
+>    Both reaches are real: the `supports`/`disputes` `RelationKind`s declare `source_kinds`
+>    including `evidence-line` and `target_kinds=["proposition", "hypothesis"]`
+>    (`profiles/core.py:648-660`) — that admission is what makes a hypothesis a legal target.
 > 2. a **`falsification`** record on a **CORE PROPOSITION MEMBER — and only there.** This is the
 >    *"explicitly linked negative adjudication"* the `refuted` row calls for.
 >
@@ -3524,7 +3527,9 @@ SCOPE -- stated, not assumed, because a basis this check cannot READ is a basis 
 A qualifying basis is exactly one of two things, and their REACH DIFFERS:
 
   * an admissible, polarity-agreeing EVIDENCE-LINE unit -- on the hypothesis OR one of its CORE
-    members (a line may bear on a hypothesis directly; belief.py:130);
+    members. A hypothesis is a LEGAL evidence target: the `supports`/`disputes` relation kinds
+    declare target_kinds ["proposition", "hypothesis"] from an evidence-line source
+    (profiles/core.py:648-660);
   * a FALSIFICATION record -- on a CORE PROPOSITION MEMBER, and ONLY there.
 
 A falsification ON THE HYPOTHESIS cannot exist and is not looked for: `FalsificationEntity.falsifies`

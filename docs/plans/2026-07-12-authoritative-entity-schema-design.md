@@ -664,8 +664,10 @@ rollups) onto `partially-supported | supported | weakened | refuted`. The correc
    > DIFFERENT reaches, which an earlier draft flattened into one:
    >
    > 1. an **admissible, polarity-agreeing evidence-line unit**, on the hypothesis **or one of its
-   >    CORE members**. An evidence line may bear on a hypothesis directly (`belief.py:130` — "so a
-   >    hypothesis sees its linked claims' evidence"), so both reaches are real.
+   >    CORE members**. An evidence line may bear on a hypothesis directly — the `supports` and
+   >    `disputes` `RelationKind`s admit it, declaring `source_kinds` that include `evidence-line`
+   >    and `target_kinds=["proposition", "hypothesis"]` (`profiles/core.py:648-660`). So both
+   >    reaches are real.
    > 2. a **`falsification` record** (the *"explicitly linked negative adjudication"*) on a **CORE
    >    PROPOSITION member — and ONLY there.** A falsification *on the hypothesis* **cannot exist**:
    >    `FalsificationEntity.falsifies` is REQUIRED, and materialization HARD-RAISES unless its
