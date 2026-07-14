@@ -9,8 +9,8 @@ loudly; it would report `to_mark == []`, write nothing, and go **green over an o
 nothing**. *A test belongs in the task where its subject exists.*
 
 `interpretation` declares `superseded` AND is an admitted `sci:supersedes` endpoint today, so leg 3
-— a generic change: the inverse, the kind-pair refusal, the six-way edge admission, the
-reconciliation — is exercised end to end without changing what any existing file means.
+— a generic change: the inverse, the kind-pair refusal, the seven-way edge admission, the acyclicity
+scan, the reconciliation — is exercised end to end without changing what any existing file means.
 """
 
 from __future__ import annotations
@@ -27,10 +27,12 @@ from science_tool.consolidation import (
     IdResolution,
     SupersededChain,
     SupersessionError,
+    SupersessionInputs,
     build_supersedes_graph,
     mark_superseded,
 )
 from science_tool.graph.reference_resolution import ReferenceResolver
+from science_tool.graph.sources import SourceRelation
 
 
 def _write(root: Path, kind_dir: str, name: str, fm: dict) -> Path:
@@ -120,6 +122,40 @@ def _resolution(*, mutable: set[str], archived: set[str], kinds: dict[str, str])
         mutable=frozenset(mutable),
         archived=frozenset(archived),
         kind_by_id=kinds,
+    )
+
+
+def _inputs(
+    entries: list[tuple[Path, dict[str, Any]]],
+    *,
+    mutable: set[str],
+    archived: set[str],
+    kinds: dict[str, str],
+    lineage: list[SourceRelation] | None = None,
+) -> SupersessionInputs:
+    """The builder's inputs, constructed DIRECTLY — resolution AND the edge stream.
+
+    `lineage` defaults to mirroring `sources._entity_nested_relations`: one `SourceRelation` per
+    nested `relations:` entry, `source_path` = the entity's file. The builder reads edges from THE
+    STREAM now and never from frontmatter, so an edge a test wants has to BE in the stream — which is
+    the point. Pass `lineage` explicitly to author an edge in a different carrier, or in a record
+    with no markdown at all.
+    """
+    if lineage is None:
+        lineage = [
+            SourceRelation(
+                subject=str(fm["id"]),
+                predicate=str(rel["predicate"]),
+                object=str(rel["target"]),
+                source_path=str(path),
+            )
+            for path, fm in entries
+            for rel in fm.get("relations", [])
+        ]
+    return SupersessionInputs(
+        entries=tuple(entries),
+        resolution=_resolution(mutable=mutable, archived=archived, kinds=kinds),
+        lineage=tuple(lineage),
     )
 
 
@@ -297,6 +333,7 @@ def test_an_ILLEGAL_kind_pair_is_REFUSED_not_written(tmp_path: Path) -> None:
     assert report["to_mark"] == []
     assert report["mismatched_kinds"] == [
         {"id": "interpretation:i-v1", "superseder": "workflow-run:wr-1",
+         "path": "entities/workflow-runs/wr-1.md",
          "reason": "workflow-run -> interpretation is not an allowed sci:supersedes pair"},
     ]
 
@@ -371,6 +408,7 @@ def test_an_ARCHIVED_target_is_a_VALID_edge_with_no_live_mutation(tmp_path: Path
 
     assert report["archived_targets"] == [
         {"id": "interpretation:i-old", "superseder": "interpretation:i-new",
+         "path": "entities/interpretations/i-new.md",
          "reason": "target is archived (frozen); no live record to stamp"},
     ]
     assert report["unresolved_targets"] == []
@@ -398,6 +436,7 @@ def test_an_UNRESOLVED_target_is_REPORTED_and_BLOCKS_apply(tmp_path: Path) -> No
 
     assert report["unresolved_targets"] == [
         {"id": "interpretation:i-GONE", "superseder": "interpretation:i-v2",
+         "path": "entities/interpretations/i-v2.md",
          "reason": "sci:supersedes target resolves to nothing"},
     ]
     assert report["archived_targets"] == []
@@ -446,6 +485,7 @@ def test_an_ARCHIVED_ALIAS_target_resolves_to_the_ARCHIVE_not_to_nowhere(tmp_pat
     assert report["unresolved_targets"] == []
     assert report["archived_targets"] == [
         {"id": "interpretation:i-old", "superseder": "interpretation:i-new",   # CANONICAL, not alias
+         "path": "entities/interpretations/i-new.md",           # WHERE THE EDGE IS AUTHORED
          "reason": "target is archived (frozen); no live record to stamp"},
     ]
 
@@ -466,7 +506,8 @@ def test_a_RESOLVABLE_LEGAL_target_WE_DO_NOT_OWN_is_reported_and_does_not_BLOCK(
         (Path("j-v2.md"), {"id": "interpretation:j-v2", "kind": "interpretation",
                            "relations": [_supersedes("interpretation:j-v1")]}),
     ]
-    graph = build_supersedes_graph(entries, _resolution(
+    graph = build_supersedes_graph(_inputs(
+        entries,
         mutable={"interpretation:i-v2", "interpretation:j-v1", "interpretation:j-v2"},
         archived=set(),
         kinds={"interpretation:i-v2": "interpretation", "interpretation:j-v1": "interpretation",
@@ -493,7 +534,8 @@ def test_an_ILLEGAL_pair_into_an_UNMANAGED_target_is_MISMATCHED_not_benign() -> 
         (Path("i.md"), {"id": "interpretation:new", "kind": "interpretation",
                         "relations": [_supersedes("dataset:commons-thing")]}),
     ]
-    graph = build_supersedes_graph(entries, _resolution(
+    graph = build_supersedes_graph(_inputs(
+        entries,
         mutable={"interpretation:new"}, archived=set(),
         kinds={"interpretation:new": "interpretation", "dataset:commons-thing": "dataset"},
     ))
@@ -812,3 +854,165 @@ def test_TWO_DIFFERENT_TARGETS_from_one_superseder_REMAIN_non_linear(tmp_path: P
         "interpretation:i-v1b",
         "interpretation:i-v2",
     }
+
+
+# ---------------------------------------------------------------------------------------------
+# the CARRIER — an edge is an edge wherever it is authored
+# ---------------------------------------------------------------------------------------------
+#
+# The builder used to scan entity markdown for nested `relations:`. `materialize` reads
+# `sources.relations`, which ALSO unions `knowledge/sources/<local>/relations.yaml` and the legacy
+# models/parameters blocks. So an edge authored in `relations.yaml` was invisible to this authority
+# and fully visible to the graph builder: `--apply` walked past a self-edge that refuses to
+# materialize. An authority that reads a SUBSET of what it validates does not validate.
+
+
+def _relations_yaml(root: Path, items: list[dict[str, str]]) -> Path:
+    path = root / "knowledge" / "sources" / "local" / "relations.yaml"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(yaml.safe_dump({"relations": items}), encoding="utf-8")
+    return path
+
+
+def _amends(target: str) -> dict[str, str]:
+    return {"predicate": "sci:amends", "target": target}
+
+
+def test_an_edge_authored_in_RELATIONS_YAML_IS_A_REAL_EDGE_and_is_STAMPED(tmp_path: Path) -> None:
+    # THE POSITIVE CONTROL, and the load-bearing one. It is not enough for the new carrier to be
+    # scanned for DEFECTS -- if it were only wired into the refusal paths, a valid edge authored
+    # there would still derive nothing, and "we read relations.yaml" would be a half-truth. The edge
+    # lives ONLY in relations.yaml; neither record's frontmatter mentions the other.
+    _seed(tmp_path)
+    _interp(tmp_path, "i-v1")
+    _interp(tmp_path, "i-v2")
+    _relations_yaml(tmp_path, [
+        {"subject": "interpretation:i-v2", "predicate": "sci:supersedes",
+         "object": "interpretation:i-v1"},
+    ])
+
+    report = mark_superseded(tmp_path, apply=True)
+
+    assert report["applied"] == ["interpretation:i-v1"]
+    fm = read_frontmatter(tmp_path / "entities/interpretations/i-v1.md")
+    assert fm is not None
+    assert fm["status"] == "superseded"
+    assert fm["superseded_by"] == "interpretation:i-v2"   # the inverse, derived from the YAML edge
+
+
+def test_a_SELF_SUPERSESSION_in_RELATIONS_YAML_BLOCKS_and_names_THAT_FILE(tmp_path: Path) -> None:
+    # Same defect, other carrier. And the finding must name `relations.yaml` -- NOT the subject's
+    # markdown, which does not contain the offending line and where nothing can be fixed.
+    _seed(tmp_path)
+    _interp(tmp_path, "i1")
+    _relations_yaml(tmp_path, [
+        {"subject": "interpretation:i1", "predicate": "sci:supersedes",
+         "object": "interpretation:i1"},
+    ])
+
+    with pytest.raises(SupersessionError) as excinfo:
+        mark_superseded(tmp_path, apply=True)
+
+    blocking = excinfo.value.blocking
+    assert [b["id"] for b in blocking] == ["interpretation:i1"]
+    assert blocking[0]["path"] == "knowledge/sources/local/relations.yaml"
+
+
+# ---------------------------------------------------------------------------------------------
+# CYCLES — a branch is ambiguous; a cycle is a corpus with NO GRAPH
+# ---------------------------------------------------------------------------------------------
+#
+# `_classify` collapsed both into one `non_linear` outcome, which carries a branch's disposition:
+# report, skip, do NOT block. So a cycle -- which `materialize` REFUSES to build
+# (`_validate_no_amendment_cycles`) -- was filed as a valid-but-ambiguous chain and `--apply`
+# returned clean over it.
+
+
+def test_a_SUPERSEDES_CYCLE_is_REFUSED_and_BLOCKS_apply(tmp_path: Path) -> None:
+    _seed(tmp_path)
+    _interp(tmp_path, "a", relations=[_supersedes("interpretation:b")])
+    _interp(tmp_path, "b", relations=[_supersedes("interpretation:a")])
+
+    report = mark_superseded(tmp_path, apply=False)
+
+    # ONE FINDING PER AUTHORED EDGE: every edge on the cycle is implicated, and breaking any one of
+    # them breaks the cycle. Each names the file it was authored in.
+    assert len(report["cycles"]) == 2
+    assert {c["path"] for c in report["cycles"]} == {
+        "entities/interpretations/a.md",
+        "entities/interpretations/b.md",
+    }
+    assert report["non_linear"] == []    # NOT filed as a branch -- it is not one
+    assert report["chains"] == [] and report["to_mark"] == []
+
+    with pytest.raises(SupersessionError):
+        mark_superseded(tmp_path, apply=True)
+
+
+def test_a_MIXED_amends_supersedes_CYCLE_is_STILL_A_CYCLE(tmp_path: Path) -> None:
+    # ☠️ THE ONE A SUPERSEDES-ONLY SCAN CANNOT SEE. `a supersedes b` is, on its own, a perfectly
+    # ordinary linear chain -- and `b amends a` closes a cycle through it. Both edges are legal
+    # pairs; every per-edge check passes; `materialize` still raises, because
+    # `_validate_no_amendment_cycles` walks {sci:amends, sci:supersedes} as ONE relation.
+    #
+    # Scan `supersedes` alone and this corpus reports a clean chain and OFFERS TO STAMP `b`.
+    _seed(tmp_path)
+    _interp(tmp_path, "a", relations=[_supersedes("interpretation:b")])
+    _interp(tmp_path, "b", relations=[_amends("interpretation:a")])
+
+    report = mark_superseded(tmp_path, apply=False)
+
+    assert len(report["cycles"]) == 2
+    assert any("sci:amends" in c["reason"] for c in report["cycles"])
+    assert report["chains"] == []        # the supersedes edge is linear -- and it is NOT a chain
+    assert report["to_mark"] == []       # nothing inside a cycle is stampable
+
+    with pytest.raises(SupersessionError):
+        mark_superseded(tmp_path, apply=True)
+
+
+def test_a_BRANCH_is_NOT_a_CYCLE(tmp_path: Path) -> None:
+    # THE CONTROL that keeps the split honest. A branch is a VALID corpus: it materializes, and it is
+    # merely ambiguous about which node survives. It stays `non_linear`, it raises no cycle, and it
+    # must NOT block -- or "separate cycles from branches" would just be "block on both".
+    _seed(tmp_path)
+    _interp(tmp_path, "i-v1")
+    _interp(tmp_path, "i-a", relations=[_supersedes("interpretation:i-v1")])
+    _interp(tmp_path, "i-b", relations=[_supersedes("interpretation:i-v1")])
+
+    report = mark_superseded(tmp_path, apply=True)   # does NOT raise
+
+    assert report["cycles"] == []
+    assert len(report["non_linear"]) == 1
+    assert report["non_linear"][0]["reason"] == "branched supersedes chain"
+    assert report["applied"] == []
+
+
+def test_a_CYCLE_THROUGH_AN_UNMANAGED_NODE_is_still_a_CYCLE() -> None:
+    # WHY THE CYCLE SCAN RUNS ON EVERY RESOLVED EDGE AND NOT ON THE ADMITTED ONES. `graph.edges` is
+    # the WRITER's set: it drops edges into targets we cannot stamp (commons, non-markdown sources).
+    # `i-live -> i-commons` is exactly such an edge -- so a scan over `graph.edges` sees ONLY
+    # `i-commons -> i-live`, a single edge, no cycle. `materialize` emits both triples and raises.
+    #
+    # The commons record authors its edge in its own file, which is why the edge is expressible here
+    # at all and why `lineage` is passed explicitly: it does not live in this project's markdown.
+    entries: list[tuple[Path, dict[str, Any]]] = [
+        (Path("i-live.md"), {"id": "interpretation:i-live", "kind": "interpretation"}),
+    ]
+    graph = build_supersedes_graph(_inputs(
+        entries,
+        mutable={"interpretation:i-live"},          # the commons record is NOT ours to stamp
+        archived=set(),
+        kinds={"interpretation:i-live": "interpretation",
+               "interpretation:i-commons": "interpretation"},
+        lineage=[
+            SourceRelation(subject="interpretation:i-live", predicate="sci:supersedes",
+                           object="interpretation:i-commons", source_path="i-live.md"),
+            SourceRelation(subject="interpretation:i-commons", predicate="sci:supersedes",
+                           object="interpretation:i-live", source_path="commons/i-commons.md"),
+        ],
+    ))
+
+    assert graph.edges == frozenset({("interpretation:i-commons", "interpretation:i-live")})
+    assert len(graph.cycles) == 2                   # BOTH edges, though only one was ever admitted
+    assert graph.linear == () and graph.non_linear == ()
