@@ -3978,7 +3978,35 @@ cd science       && uv run ruff check && uv run pyright
 
 ---
 
-### Task 7a: The D4 supersedable gate — **compute** it, and land three of its four legs
+### Task 7a: The D4 supersedable gate — **compute** it, and land three of its four legs — **DONE 2026-07-13** (`b97ec0ea`; self-edge + duplicate-edge admission defects fixed in follow-up)
+
+> ### ⚠️ TWO RULINGS on the SHIPPED builder — both found by REVIEW of `b97ec0ea`, not by writing it
+>
+> *Same pattern as Task 7's rulings 4 and 5: the defects that survive are the ones the author's own
+> execution cannot see. Both were live in `b97ec0ea`; neither was caught by its 25 tests. Both are
+> the **same root cause** — the builder asked what the relation model asks, but not everything
+> `materialize` asks — and the fix for both is one sentence: **admission must ask exactly the
+> questions the graph builder asks, on the CANONICAL pair.***
+>
+> **6. A self-supersession disappears completely — it does not even become a defect.** `materialize`
+> raises `self-referential authored relation` whenever a resolved object equals its resolved subject,
+> for **any** predicate, and it checks that **before** the kind pair. The builder checked only the
+> kind pair — and a self-edge's pair is `K -> K`, **legal for every kind that supersedes its own
+> kind**, which is every kind in the roster. So the edge was ADMITTED, and then `len(comp) < 2` threw
+> away its one-node component *before classification ever ran*. No mismatch, no non-linear component,
+> no blocker: **`--apply` returned clean over a corpus that does not build a graph.** It now BLOCKS,
+> and the check runs on the canonical pair — so an alias that resolves back to its own source is
+> caught too, which a comparison on the authored strings would miss.
+>
+> **7. Two spellings of one edge fabricate a branch, and the branch suppresses a valid chain.** An RDF
+> graph is a **set** of triples: the identical triple authored twice is one edge, and `materialize`
+> collapses it. The builder accumulated admitted edges in a **list** and counted degrees off it, so a
+> duplicate — the same target twice, or the canonical id once and an alias of it once — became a
+> second in-edge *and* a second out-edge. The component classified as **"branched or cyclic"** and was
+> silently skipped. The corpus was valid; the tool refused to act on it; and the defect it reported
+> **did not exist**. Edges are now a set, deduplicated on the canonical pair. *(The control that keeps
+> this honest: two genuinely different targets must STILL be non-linear — mutation-proven, since
+> "dedupe by superseder" would pass every duplicate test and quietly collapse real branches.)*
 
 > **D5 shipped a `superseded` terminal for a kind that cannot be superseded.** The design states a
 > bidirectional gate (§D4) and D5 implemented **none** of it:
@@ -4111,7 +4139,7 @@ class SupersessionError(RuntimeError):
 > and validates on its own terms. **Author the edge; the inverse is written for you.** It is not a
 > second authored spelling — it is the projection that makes single-record validation *possible*.
 
-- [ ] **Step 1: Write the failing gate — derived, not listed.**
+- [x] **Step 1: Write the failing gate — derived, not listed.**
 
 ```python
 # science/model/tests/test_supersedable_gate.py
@@ -4183,14 +4211,14 @@ def test_a_relation_entry_is_CLOSED() -> None:
         )
 ```
 
-- [ ] **Step 2: Run — and read WHY each one fails.** `test_hypothesis_is_a_supersedes_ENDPOINT` and
+- [x] **Step 2: Run — and read WHY each one fails.** `test_hypothesis_is_a_supersedes_ENDPOINT` and
   `test_the_hypothesis_SCHEMA_admits_the_canonical_edge` fail. `test_a_relation_entry_is_CLOSED`
   **passes for the wrong reason** — `relations` is rejected wholesale by `unevaluatedProperties`,
   not because the typo was caught — which is exactly why it is paired with the admission test above
   it. The gate itself (`broken <= _KNOWN_HALF_WIRED`) **passes today**: `hypothesis` is not yet in
   `declares`, so the derived population cannot see it, and only the direct endpoint test can.
 
-- [ ] **Step 3: Leg 1 — the schema admits `relations:`.** Add to `mixin-hypothesis-1.0.json`
+- [x] **Step 3: Leg 1 — the schema admits `relations:`.** Add to `mixin-hypothesis-1.0.json`
   `properties`, with a **closed** `$def` faithful to `AuthoredTargetedRelation`:
 
 ```json
@@ -4211,12 +4239,12 @@ def test_a_relation_entry_is_CLOSED() -> None:
 }
 ```
 
-- [ ] **Step 4: Leg 2 — the relation admits the endpoint.** In `core.py`, add `hypothesis` to the
+- [x] **Step 4: Leg 2 — the relation admits the endpoint.** In `core.py`, add `hypothesis` to the
   `supersedes` `RelationKind`'s `source_kinds`/`target_kinds` and add the
   `RelationEndpointPair(source_kind="hypothesis", target_kind="hypothesis")` pair. **Only
   hypothesis** — the other twelve are this task's declared, frozen debt, not its scope.
 
-- [ ] **Step 5: Leg 3 — the operation supplies the lineage it derives.**
+- [x] **Step 5: Leg 3 — the operation supplies the lineage it derives.**
 
 > **The inverse is the IMMEDIATE superseder, not the chain's survivor.** Edges are
 > `(superseder, superseded)` (`consolidation.py:167-172`), and a *linear* chain is a path — so in
@@ -4830,12 +4858,28 @@ def _kind_or_prefix(entity_id: str, declared: str | None) -> str:
 
 ```python
 # consolidation.py -- build_supersedes_graph(entries, resolution).
-# RESOLVE -> is it BACKED? -> is the pair LEGAL? -> and only THEN, who OWNS it?
-# Edge admission resolves SIX ways and every one of them is recorded. `continue` without a record is
+# RESOLVE -> BACKED? -> an EDGE AT ALL? -> is the pair LEGAL? -> and only THEN, who OWNS it?
+# Edge admission resolves SEVEN ways and every one of them is recorded. `continue` without a record is
 # how the original filter lied; raw string membership is how the first fix would have lied back, by
 # refusing an alias the graph resolves; and an ownership `continue` ABOVE the pair check is how the
 # second one would have -- by waving through an illegal edge as benign, unstampable debt.
-    edges: list[tuple[str, str]] = []
+#
+# ☠️ THE SEVENTH WAY WAS MISSING FROM THIS PLAN AND FROM THE SHIPPED CODE (found by review of the
+# shipped check, not by writing it): the SELF-EDGE. `materialize` raises `self-referential authored
+# relation` for ANY predicate whose resolved object equals its resolved subject -- checked BEFORE the
+# kind pair, which is why the kind pair cannot substitute for it: a self-edge's pair is `K -> K`,
+# legal for every kind in the roster. So it was ADMITTED as a real edge, and then `len(comp) < 2`
+# dropped its one-node component before classification: no mismatch, no non-linear component, no
+# blocker, and `--apply` returned CLEAN over a corpus that does not build a graph. It BLOCKS.
+#
+# ☠️ AND `edges` IS A SET, NOT A LIST -- for the same "ask what materialize asks" reason. An RDF graph
+# is a set of triples, so the identical triple authored twice IS one edge. Counting degrees off a list
+# makes a duplicate spelling (the same target twice; or the canonical id once and an alias of it once)
+# a second in-edge AND a second out-edge, so an ordinary one-edge chain classifies "branched or
+# cyclic" and is SILENTLY SKIPPED: the corpus is valid, the tool refuses to act, and the defect it
+# reports does not exist. Dedup on the CANONICAL pair -- a duplicate is invisible in the source text.
+    edges: set[tuple[str, str]] = set()
+    self_referential: list[dict[str, str]] = []
     mismatched: list[dict[str, str]] = []
     archived_targets: list[dict[str, str]] = []
     unmanaged_targets: list[dict[str, str]] = []
@@ -5043,7 +5087,7 @@ its inputs, which is what lets every test above construct one without an archive
 > edge and make a consumer guess which one stops a release. All seven additions are additive; nothing
 > existing changes meaning.
 
-- [ ] **Step 5b: Test the operation on a kind that is supersedable TODAY — `interpretation`.**
+- [x] **Step 5b: Test the operation on a kind that is supersedable TODAY — `interpretation`.**
 
 > **`mark_superseded` cannot stamp a `hypothesis` in this task, and a test that says otherwise is
 > not a test.** `_supports_superseded` consults `_STATUS_VALUES` (`consolidation.py:64-74`), and
@@ -5583,14 +5627,14 @@ def test_a_RECONCILED_record_is_BYTE_IDENTICAL_afterwards(tmp_path: Path) -> Non
     assert report["to_mark"] == [] and report["applied"] == [] and report["repaired"] == []
 ```
 
-- [ ] **Step 5c: Amend `test_report_skips_already_superseded_members`.** It pins the *old* meaning
+- [x] **Step 5c: Amend `test_report_skips_already_superseded_members`.** It pins the *old* meaning
   of "already superseded" — status-only — and this task splits that into two facts. Its fixture has
   no `superseded_by`, so under the new rule the member **needs the inverse** and is correctly
   marked. Rewrite it to assert the reconciliation, and keep a `to_mark == []` case for the
   fully-reconciled record (above). **Do not delete it** — it is the regression that proves the skip
   still exists for records that need nothing.
 
-- [ ] **Step 5d: Surface the fourth outcome in `validate`.** `mark_superseded` blocks on an unbacked
+- [x] **Step 5d: Surface the fourth outcome in `validate`.** `mark_superseded` blocks on an unbacked
   inverse, but it is an *opt-in* command — a corpus can carry a groundless lineage indefinitely
   without anyone running it. `validate` is the pass everyone runs.
 
@@ -5665,18 +5709,27 @@ def check_supersession(ctx: ValidateContext) -> Iterator[Result]:
   ratchet function, and its flip test all name this emitter**, and its suite fails if the `WARN` above
   survives. See Task 12.
 
-  **And the WARN is proved to fire HERE, through `run_validate` — not through a direct call to
-  `check_supersession`.** Calling the function directly would pass with the registration missing,
-  which is precisely the failure this step was rewritten to close: the assertion has to travel the
-  path a user travels, so that a check that is decorated-but-not-listed (or listed-but-not-decorated)
-  fails *this* task rather than surviving to Task 12.
+  **The WARN is proved to fire HERE, through `run_validate` — not through a direct call to
+  `check_supersession`.** That proves **wiring**: the check is reachable from the real entry point
+  and fires on real input, rather than only when a test hands it a hand-built context.
+
+  ☠️ **It does NOT prove registration, and this step used to claim it did.** `@Check` registers as an
+  *import side effect*, so any file in the pytest process that imports `checks.supersession` registers
+  the check whatever `CANONICAL_CHECK_MODULES` says — and then the end-to-end test passes over the
+  unlisted module. Task 7 established exactly this for `verdict_agreement`, by mutation, and the same
+  mutation was re-run here: with `"supersession"` dropped from the tuple, this file **alone** fails,
+  but placed after any file that imports the check module, the run is **3 passed**. Green by import
+  order. The registration guard is structural and already covers every check module on disk:
+  `test_check_registry_is_complete.py::test_EVERY_check_module_on_disk_is_REGISTERED`, which compares
+  the *directory* to the tuple and reads no registry state. **Nothing new is owed here** — the guard
+  derives its scope from the filesystem, so a new check module joins it by existing.
 
 ```python
 # science/tests/validate/test_check_supersession.py -- reuses the `_write` / `_supersedes` helpers.
-def test_the_check_is_REGISTERED_and_fires_through_run_validate(tmp_path: Path) -> None:
-    # THROUGH `run_validate`, i.e. through `CANONICAL_CHECKS`. A direct `check_supersession(ctx)` call
-    # cannot tell a registered check from an unregistered one -- and an unregistered check is the
-    # entire defect. `interpretation` is the kind used because it can carry the field TODAY: no
+def test_the_check_is_REGISTERED_and_fires_through_the_runner(tmp_path: Path) -> None:
+    # WIRING, through `runner.run` -- not the registration guard (see above). A direct
+    # `check_supersession(ctx)` call would prove even less: it cannot tell a registered check from an
+    # unregistered one. `interpretation` is the kind used because it can carry the field TODAY: no
     # migration, no pin, and it stays WARN through Task 12 (the uncertified-kind control there).
     _write(tmp_path, "interpretations", "i1", {"id": "interpretation:i1", "kind": "interpretation",
                                                "status": "superseded",
@@ -5707,12 +5760,12 @@ def test_a_BACKED_inverse_is_silent(tmp_path: Path) -> None:
   count moves. A new check landed without its snapshot once already (`5c2b44f1`), and the byte-identity
   gate sat red at main tip until someone noticed.
 
-- [ ] **Step 6: Full gates.** `cd science/model && uv run --frozen pytest` / `cd science && uv run
+- [x] **Step 6: Full gates.** `cd science/model && uv run --frozen pytest` / `cd science && uv run
   --frozen pytest`, both whole; `uv run ruff check` and `uv run pyright`; and the snapshot marker,
   `env -u FORCE_COLOR uv run --frozen pytest -m snapshot` (excluded by default — Step 5d moves it).
   The `materialize` path is the one at risk: leg 2 changes a `RelationKind`, and the graph builders
   read it.
-- [ ] **Step 7: Commit** — **this task's three legs in ONE commit**: the schema admission (Step 3),
+- [x] **Step 7: Commit** — **this task's three legs in ONE commit**: the schema admission (Step 3),
   the relation endpoint (Step 4), and the operation (Steps 5–5d). A bidirectional gate exists to catch
   half-wiring; landing half of *these* would be the defect it was written to detect.
 

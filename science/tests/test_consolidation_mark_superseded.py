@@ -704,3 +704,111 @@ def test_a_RECONCILED_record_is_BYTE_IDENTICAL_afterwards(tmp_path: Path) -> Non
 
     assert target.read_bytes() == before          # NOT ONE BYTE -- `updated:` included
     assert report["to_mark"] == [] and report["applied"] == [] and report["repaired"] == []
+
+
+# ---------------------------------------------------------------------------------------------
+# the edge that is not an edge, and the edge counted twice
+# ---------------------------------------------------------------------------------------------
+
+
+def test_a_SELF_SUPERSESSION_is_REFUSED_and_BLOCKS_apply(tmp_path: Path) -> None:
+    # `materialize` RAISES on a self-referential authored relation -- for ANY predicate, on the
+    # RESOLVED entity, before it ever asks whether the kind pair is allowed. So this corpus does not
+    # build a graph, and `--apply` must not walk over it.
+    #
+    # THE KIND-PAIR CHECK CANNOT CATCH THIS. `interpretation -> interpretation` is a LEGAL pair --
+    # it is the pair every chain in this file is made of -- so a self-edge is admitted, and then a
+    # one-node component is dropped by `len(comp) < 2` before classification ever sees it. No
+    # mismatch, no non-linear component, no blocker: `--apply` returned CLEAN over an invalid corpus.
+    # Legality is a property of the RESOLVED PAIR, and `(x, x)` is illegal whatever `x`'s kind is.
+    _seed(tmp_path)
+    _interp(tmp_path, "i-v1", relations=[_supersedes("interpretation:i-v1")])
+
+    report = mark_superseded(tmp_path, apply=False)
+
+    assert [s["id"] for s in report["self_referential"]] == ["interpretation:i-v1"]
+    assert report["chains"] == [] and report["non_linear"] == [] and report["to_mark"] == []
+    with pytest.raises(SupersessionError, match="supersedes itself"):
+        mark_superseded(tmp_path, apply=True)
+
+
+def test_a_SELF_SUPERSESSION_THROUGH_AN_ALIAS_is_still_a_SELF_SUPERSESSION(tmp_path: Path) -> None:
+    # The self-edge that a string comparison on the AUTHORED text cannot see. `i-old` is a manual
+    # alias for `i-v1`, so `i-v1 supersedes interpretation:i-old` reads as an edge between two
+    # different ids and resolves to one. The check has to run on the CANONICAL pair -- which is
+    # exactly where `materialize` runs it (`subject.canonical_id == object.canonical_id`).
+    _seed(tmp_path)
+    _interp(tmp_path, "i-v1", relations=[_supersedes("interpretation:i-old")])
+    _manual_alias(tmp_path, "interpretation:i-old", "interpretation:i-v1")
+
+    report = mark_superseded(tmp_path, apply=False)
+
+    assert [s["id"] for s in report["self_referential"]] == ["interpretation:i-v1"]
+    assert report["to_mark"] == []
+
+
+def test_the_SAME_EDGE_AUTHORED_TWICE_is_ONE_EDGE_not_a_branch(tmp_path: Path) -> None:
+    # An RDF graph is a SET of triples: authoring the identical relation twice adds nothing the
+    # second time. Accumulating admitted edges in a LIST and counting degrees off it makes the
+    # duplicate a second in-edge and a second out-edge, so a perfectly ordinary one-edge chain is
+    # classified "branched or cyclic" and SILENTLY SKIPPED -- the corpus is valid, and the tool
+    # refuses to act on it while reporting a defect that does not exist.
+    _seed(tmp_path)
+    _interp(tmp_path, "i-v1")
+    _interp(
+        tmp_path,
+        "i-v2",
+        relations=[_supersedes("interpretation:i-v1"), _supersedes("interpretation:i-v1")],
+    )
+
+    report = mark_superseded(tmp_path, apply=False)
+
+    assert report["non_linear"] == []
+    assert report["chains"] == [
+        {"survivor": "interpretation:i-v2", "members": ["interpretation:i-v1"], "linear": True}
+    ]
+    assert report["to_mark"] == ["interpretation:i-v1"]
+
+
+def test_the_SAME_EDGE_IN_TWO_SPELLINGS_is_ONE_EDGE_not_a_branch(tmp_path: Path) -> None:
+    # The same collapse, but the duplicate is invisible in the source text: one edge names the
+    # canonical id and the other an alias of it. Deduplication therefore has to happen AFTER
+    # canonical resolution, not on the authored strings.
+    _seed(tmp_path)
+    _interp(tmp_path, "i-v1")
+    _interp(
+        tmp_path,
+        "i-v2",
+        relations=[_supersedes("interpretation:i-v1"), _supersedes("interpretation:i-old")],
+    )
+    _manual_alias(tmp_path, "interpretation:i-old", "interpretation:i-v1")
+
+    report = mark_superseded(tmp_path, apply=False)
+
+    assert report["non_linear"] == []
+    assert report["to_mark"] == ["interpretation:i-v1"]
+
+
+def test_TWO_DIFFERENT_TARGETS_from_one_superseder_REMAIN_non_linear(tmp_path: Path) -> None:
+    # THE CONTROL THAT KEEPS DEDUPLICATION HONEST. Collapsing duplicate pairs must not collapse
+    # DISTINCT pairs: `i-v2` superseding two different records is a genuine branch (out-degree 2),
+    # it stays non-linear, and it is still never stamped. Without this, "dedupe the edges" could be
+    # implemented as "keep one edge per superseder" and every test above would still pass.
+    _seed(tmp_path)
+    _interp(tmp_path, "i-v1a")
+    _interp(tmp_path, "i-v1b")
+    _interp(
+        tmp_path,
+        "i-v2",
+        relations=[_supersedes("interpretation:i-v1a"), _supersedes("interpretation:i-v1b")],
+    )
+
+    report = mark_superseded(tmp_path, apply=False)
+
+    assert report["chains"] == [] and report["to_mark"] == []
+    assert len(report["non_linear"]) == 1
+    assert set(report["non_linear"][0]["nodes"]) == {
+        "interpretation:i-v1a",
+        "interpretation:i-v1b",
+        "interpretation:i-v2",
+    }

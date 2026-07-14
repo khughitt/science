@@ -1,12 +1,22 @@
-"""`<kind>.unbacked-inverse` — asserted THROUGH the runner, never through a direct call.
+"""`<kind>.unbacked-inverse` — WIRING, asserted through the runner. **Not a registration guard.**
 
-A check module is inert until it is BOTH decorated and imported. `@Check` is what appends to
-`CANONICAL_CHECKS`, and `_load_canonical_checks` — which iterates `CANONICAL_CHECK_MODULES` — is the
-only thing that *imports* the module, and therefore the only thing that ever *runs* the decorator.
-Decorated-but-unlisted = never registered = never run.
+The assertion travels the path a **user** travels: `runner.run` over a real project, not a direct
+`check_supersession(ctx)` call against a hand-built context. That proves the check is reachable from
+the real entry point and fires on real input — which is worth proving, and is all this file proves.
 
-So the assertion travels the path a **user** travels. A direct `check_supersession(ctx)` call cannot
-tell a registered check from an unregistered one — and an unregistered check is the entire defect.
+☠️ IT IS NOT THE GUARD THAT CATCHES AN UNLISTED MODULE, and believing otherwise is how one goes
+missing. `@Check` registers **as an import side effect**, so *any* file in the pytest process that
+imports `checks.supersession` registers the check no matter what `CANONICAL_CHECK_MODULES` says.
+Established by mutation — drop `"supersession"` from the tuple and run:
+
+    pytest tests/validate/test_check_supersession.py                     -> FAILS (catches it)
+    pytest <any file importing the module> tests/validate/test_check...   -> 3 PASSED (blind)
+
+This file imports only `runner`, deliberately, so today it does catch an unregistration. That is an
+accident of nobody else importing the module — a guard by luck, which decays into a wiring test the
+day someone adds the import, and decays **silently**. The real guard is structural and already
+covers this module: `test_check_registry_is_complete.py::test_EVERY_check_module_on_disk_is_REGISTERED`
+compares the *directory* to the tuple and reads no registry state, so no import can contaminate it.
 
 `interpretation` is the kind used throughout: it can carry the field TODAY, so no migration and no
 version pin are in play, and it stays WARN through Task 12 (where it is the uncertified-kind

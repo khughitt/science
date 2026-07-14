@@ -47,8 +47,9 @@ def _supersedes_kind() -> RelationKind:
 class SupersessionError(RuntimeError):
     """An authored supersession the corpus cannot honour.
 
-    Either an edge that is not admissible as an edge (the relation model forbids the kind pair, or
-    the target resolves nowhere), or an authored inverse with no edge behind it. Apply is
+    Either an edge that is not admissible as an edge (it runs from an entity to itself, the relation
+    model forbids the kind pair, or the target resolves nowhere), or an authored inverse with no edge
+    behind it. Apply is
     ALL-OR-NONE over these: the derivation is corpus-wide, and if part of the corpus is not a graph,
     the derivation is not trustworthy anywhere.
     """
@@ -305,6 +306,7 @@ class SupersedesGraph:
     edges: frozenset[tuple[str, str]]  # every ADMITTED (superseder, superseded) edge, canonical
     superseder_by_id: Mapping[str, str]  # superseded id -> its IMMEDIATE superseder (linear only)
     superseded_by_id: Mapping[str, str]  # superseded id -> the AUTHORED inverse, CANONICALIZED
+    self_referential: tuple[dict[str, str], ...]  # edge from an entity to ITSELF -- not an edge
     mismatched: tuple[dict[str, str], ...]  # edge the RELATION MODEL forbids
     archived_targets: tuple[dict[str, str], ...]  # edge resolves INTO the archive -- historical
     unmanaged_targets: tuple[dict[str, str], ...]  # edge resolves, but to nothing WE can stamp
@@ -317,7 +319,7 @@ def build_supersedes_graph(
 ) -> SupersedesGraph:
     """Classify supersedes chains from already-iterated `entries`.
 
-    RESOLVE -> is it BACKED? -> is the pair LEGAL? -> and only THEN, who OWNS it?
+    RESOLVE -> is it BACKED? -> is it an EDGE AT ALL? -> is the pair LEGAL? -> only THEN, who OWNS it?
 
     A pure function of its inputs: it resolves through `resolution` and never touches the
     filesystem, which is what lets a test construct the commons/non-markdown populations as the data
@@ -332,7 +334,15 @@ def build_supersedes_graph(
         kind_by_id[eid] = _kind_of(eid, fm)
         path_by_id[eid] = path
 
-    edges: list[tuple[str, str]] = []
+    # A SET, NOT A LIST -- because an RDF graph is a set of triples, and `materialize` collapses the
+    # identical triple authored twice into the one edge it is. Accumulating admissions in a list and
+    # counting degrees off it turns a duplicate spelling (the same target twice, or the canonical id
+    # once and an alias of it once) into a second in-edge AND a second out-edge, so an ordinary
+    # one-edge chain classifies as "branched or cyclic" and is silently skipped: the corpus is valid,
+    # the tool refuses to act on it, and the defect it reports does not exist. Deduplication happens
+    # HERE, on the CANONICAL pair, because a duplicate is invisible in the authored text.
+    edges: set[tuple[str, str]] = set()
+    self_referential: list[dict[str, str]] = []
     mismatched: list[dict[str, str]] = []
     archived_targets: list[dict[str, str]] = []
     unmanaged_targets: list[dict[str, str]] = []
@@ -369,6 +379,26 @@ def build_supersedes_graph(
                             "sci:supersedes target resolves through an alias to an id that no "
                             "live, archived, or source record backs"
                         ),
+                    }
+                )
+                continue
+
+            # AN EDGE AT ALL? -- on the CANONICAL pair, and BEFORE the kind pair, exactly where
+            # `materialize` asks it (`subject.canonical_id == object.canonical_id`, checked for any
+            # predicate the moment the object resolves to an entity, before `relation_allows_kinds`).
+            #
+            # THE KIND-PAIR CHECK CANNOT CATCH THIS, because a self-edge's kind pair is `K -> K` --
+            # legal for every kind that supersedes its own kind, which is every kind in the roster.
+            # So the self-edge is admitted as real, and then `len(comp) < 2` DROPS its one-node
+            # component before classification: no mismatch, no non-linear component, no blocker, and
+            # `--apply` walks a corpus that does not build a graph. An entity does not supersede
+            # itself; `(x, x)` is not an edge, whatever `x` is.
+            if src == dst:
+                self_referential.append(
+                    {
+                        "id": dst,
+                        "superseder": src,
+                        "reason": "the entity supersedes itself: the target resolves to its subject",
                     }
                 )
                 continue
@@ -428,15 +458,18 @@ def build_supersedes_graph(
                     }
                 )
                 continue
-            edges.append((src, dst))
+            edges.add((src, dst))
 
-    nodes = {n for edge in edges for n in edge}
+    # SORTED, so the topology and every id it yields are deterministic -- a set's iteration order is
+    # not. Everything below reads THIS list; nothing re-derives an admission.
+    admitted = sorted(edges)
+    nodes = {n for edge in admitted for n in edge}
     linear: list[SupersededChain] = []
     non_linear: list[NonLinearComponent] = []
-    for comp in _connected_components(nodes, edges):
+    for comp in _connected_components(nodes, admitted):
         if len(comp) < 2:
             continue
-        is_linear, survivor, members = _classify(comp, edges)
+        is_linear, survivor, members = _classify(comp, admitted)
         if not is_linear or survivor is None:
             non_linear.append(
                 NonLinearComponent(
@@ -454,7 +487,7 @@ def build_supersedes_graph(
     superseder_by_id: dict[str, str] = {}
     for chain in linear:
         members = {chain.survivor, *chain.superseded}
-        for src, dst in edges:
+        for src, dst in admitted:
             if src in members and dst in members:
                 superseder_by_id[dst] = src  # a linear chain is a path: exactly one in-edge
 
@@ -468,7 +501,6 @@ def build_supersedes_graph(
     #
     # Compared against `edges` (ALL admitted edges), NOT `superseder_by_id` (linear only): a member
     # of a BRANCHED component has a real in-edge and IS backed, even though it is never stamped.
-    admitted = set(edges)
     superseded_by_id: dict[str, str] = {}
     unbacked_inverses: list[dict[str, str]] = []
     for _path, fm in entries:
@@ -479,7 +511,7 @@ def build_supersedes_graph(
         superseder = resolution.canonical(raw_inverse)
         if superseder is None:
             continue  # a DANGLING inverse -- `check_resolution` owns that one, not this check
-        if (superseder, eid) not in admitted:
+        if (superseder, eid) not in edges:
             # SAME SHAPE as the other outcomes -- {id, superseder, reason}. `SupersessionError`
             # formats a blocking list uniformly, so a bespoke key name would KeyError inside the
             # raise: the failure path would fail.
@@ -503,6 +535,7 @@ def build_supersedes_graph(
         edges=frozenset(edges),
         superseder_by_id=MappingProxyType(superseder_by_id),
         superseded_by_id=MappingProxyType(superseded_by_id),
+        self_referential=tuple(self_referential),
         mismatched=tuple(mismatched),
         archived_targets=tuple(archived_targets),
         unmanaged_targets=tuple(unmanaged_targets),
@@ -548,7 +581,8 @@ def mark_superseded(project_root: Path, *, apply: bool) -> dict[str, Any]:
       inverse was missing or stale. A separate key on purpose — widening ``applied`` would silently
       change what an existing, JSON-serialized key means for every consumer already reading it, and
       a field whose meaning changes under a consumer is worse than one that disappears.
-    - ``mismatched_kinds`` / ``unresolved_targets`` / ``unbacked_inverses``: refuse **and block**.
+    - ``self_referential`` / ``mismatched_kinds`` / ``unresolved_targets`` / ``unbacked_inverses``:
+      refuse **and block**.
     - ``archived_targets`` / ``unmanaged_targets``: refuse to stamp, but **do not block**.
     """
     project_root = project_root.resolve()
@@ -587,6 +621,7 @@ def mark_superseded(project_root: Path, *, apply: bool) -> dict[str, Any]:
         "repaired": [],
         # The admission outcomes come OFF THE GRAPH. They are not recomputed here: the builder
         # decided, and a second classification could disagree with the first.
+        "self_referential": [dict(s) for s in graph.self_referential],
         "mismatched_kinds": [dict(m) for m in graph.mismatched],
         "unresolved_targets": [dict(u) for u in graph.unresolved_targets],
         "archived_targets": [dict(a) for a in graph.archived_targets],
@@ -602,7 +637,12 @@ def mark_superseded(project_root: Path, *, apply: bool) -> dict[str, Any]:
     # claiming a superseder the graph does not contain means the corpus disagrees with itself about
     # what supersedes what. There is no edge to reconcile TOWARD, so the honest moves are refuse and
     # report -- never a silent "fix".
-    blocking = [*graph.mismatched, *graph.unresolved_targets, *graph.unbacked_inverses]
+    blocking = [
+        *graph.self_referential,
+        *graph.mismatched,
+        *graph.unresolved_targets,
+        *graph.unbacked_inverses,
+    ]
     if blocking:
         raise SupersessionError(blocking)
 
