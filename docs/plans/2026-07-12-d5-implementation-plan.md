@@ -5962,10 +5962,18 @@ def test_a_BACKED_inverse_is_silent(tmp_path: Path) -> None:
 
 ## Phase 3 — The `hypothesis` P2m slice (this is where meaning changes)
 
-> **ATOMIC PER KIND, ACROSS ALL 9 REPOS.** `default_profile_for_kind` is **global** — the instant
+> **ATOMIC PER KIND, ACROSS THE CERTIFIED ROSTER: 18 project roots in 15 git repositories.** That
+> roster is the one **derived** by `field_inventory` (Task 11 Step 0) — never a hand list, and never
+> the "9 repos" this plan said through Rev 3. `default_profile_for_kind` is **global** — the instant
 > Task 9 wires schema validation into the load path, *every* project's hypotheses are validated
-> against the new mixin. Rev 1 migrated one repo and expected the other eight to keep validating.
+> against the new mixin. Rev 1 migrated one repo and expected the rest to keep validating.
 > **They cannot.** Two options existed; this is the one taken:
+>
+> ☠️ **THE STALE SCOPE IN THIS HEADER IS THE DEFECT THAT STRANDED 62 HYPOTHESES.** "9 repos" was not
+> a typo — it was a count nobody re-derived, and the per-repo numbers under it summed to **85 of 147**
+> (§ "147 authored hypotheses — across 18 project roots, not 9 repos"). Migrating on that scope leaves
+> **62 hypotheses on the old meaning, `validate` green, in projects nobody is watching.** A root is
+> not a repo, and neither number may be typed from memory here: both come from Task 11 Step 0.
 >
 > **A per-project version pin.** `science.yaml` gains `entity_schema_version: 2`. The load path
 > selects the hypothesis mixin **only** for pinned projects; unpinned projects keep today's

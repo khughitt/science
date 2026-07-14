@@ -281,7 +281,9 @@ class NonLinearComponent:
     survives, while a cycle is a corpus `materialize` REFUSES to build at all
     (`_validate_no_amendment_cycles`). Filing them together gave the cycle a branch's disposition —
     reported, skipped, and *not blocking* — so `--apply` returned clean over a corpus that has no
-    graph. A cycle is a relation-VALIDITY failure and lives in `SupersedesGraph.cycles`.
+    graph. A cycle is a relation-VALIDITY failure, so it is not this module's to classify: it comes
+    back from the audit as a `code == "cycle"` defect, rides `SupersedesGraph.invalid` out to
+    `report["invalid_relations"]` with every other refusal, and it BLOCKS apply.
     """
 
     nodes: tuple[str, ...]
@@ -413,14 +415,8 @@ def build_supersedes_graph(inputs: SupersessionInputs) -> SupersedesGraph:
         if len(comp) < 2:
             continue
         if comp & cyclic_nodes:
-            # ALREADY DIAGNOSED, and diagnosed better. A component touching a cycle is not a chain
-            # and not a branch -- it is a corpus with no graph, reported edge-by-edge in `cycles`.
-            # Re-filing it as `non_linear` would say "ambiguous survivor" about a corpus that does
-            # not build, and -- worse -- a cycle closed by an `amends` edge can leave the supersedes
-            # edges perfectly linear, so this component would otherwise be advertised as a STAMPABLE
-            # chain. Nothing inside a cycle is stampable. Skipping here is the second lock, behind
-            # `--apply`'s refusal; a derivation that would be wrong if the guard above it were
-            # removed is a derivation resting on that guard.
+            # ALREADY DIAGNOSED, by the audit, and diagnosed better -- see `cyclic_nodes` above for
+            # why nothing in a cyclic component is stampable.
             continue
         is_linear, survivor, members = _classify(comp, admitted)
         if not is_linear or survivor is None:
