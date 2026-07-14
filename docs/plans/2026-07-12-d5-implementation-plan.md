@@ -3978,7 +3978,7 @@ cd science       && uv run ruff check && uv run pyright
 
 ---
 
-### Task 7a: The D4 supersedable gate — **compute** it, and land three of its four legs — **DONE 2026-07-13** (`b97ec0ea`; self-edge + duplicate-edge admission defects fixed in follow-up)
+### Task 7a: The D4 supersedable gate — **compute** it, and land three of its four legs — **DONE 2026-07-14** (`b97ec0ea`, + `cda554c6` self-edge/duplicate-edge admission, + the `validate` relation-validity rules)
 
 > ### ⚠️ TWO RULINGS on the SHIPPED builder — both found by REVIEW of `b97ec0ea`, not by writing it
 >
@@ -5634,9 +5634,39 @@ def test_a_RECONCILED_record_is_BYTE_IDENTICAL_afterwards(tmp_path: Path) -> Non
   fully-reconciled record (above). **Do not delete it** — it is the regression that proves the skip
   still exists for records that need nothing.
 
-- [x] **Step 5d: Surface the fourth outcome in `validate`.** `mark_superseded` blocks on an unbacked
-  inverse, but it is an *opt-in* command — a corpus can carry a groundless lineage indefinitely
-  without anyone running it. `validate` is the pass everyone runs.
+- [x] **Step 5d: Surface what BLOCKS in `validate` — all of it, not just the fourth outcome.**
+  `mark_superseded` blocks on an unbacked inverse, but it is an *opt-in* command — a corpus can carry
+  a groundless lineage indefinitely without anyone running it. `validate` is the pass everyone runs.
+
+  > ### ⚠️ RULING 8 — this step's original scope was the gap. Found by review, again.
+  >
+  > *Named only the unbacked inverse, so that is all the shipped check emitted — while the builder was
+  > by then recording **three** blocking outcomes. `runner.run` over `i sci:supersedes i` and over
+  > `i sci:supersedes dataset:d` produced **zero** relevant findings, although `materialize` refuses
+  > to build a graph over either and `mark_superseded --apply` blocks both. The module's own rationale
+  > — "the operation is opt-in, validation is universal" — argued for exactly the coverage it did not
+  > have.*
+  >
+  > **Two severity tiers, on two different axes, and conflating them is the status-vocabulary incident
+  > repeating:**
+  >
+  > * `supersession.self-referential` and `supersession.illegal-kind-pair` → **ERROR**, name **flat**.
+  >   These are RELATION-VALIDITY failures: `materialize` *raises* on both, so the corpus builds no
+  >   graph at all. That verdict comes from the relation model, which already says which pairs are
+  >   legal — it owes **nothing** to any per-kind status certification, so these do **not** wait on
+  >   Task 12's ratchet and are **not** kind-scoped. Same defect whatever kind authors them.
+  > * `<kind>.unbacked-inverse` → **WARN**, name **kind-scoped**. That one *is* about a status
+  >   vocabulary (is this kind's `superseded` terminal certified?), and `gated_findings` filters on
+  >   `Result.rule` alone. Task 12 owes it the flip to `severity_for_kind(kind)`.
+  >
+  > **ERROR is free here, and that was checked against the disk rather than assumed.** Across all 18
+  > roots the corpus authors **zero** `sci:supersedes` relations — the only six grep hits are inside
+  > `<!-- Conclusion chains: -->` template boilerplate — so both ERROR rules have a blast radius of
+  > exactly **zero**. *(The WARN is not free, and correctly so: **4** records DO author `superseded_by`
+  > — `3d-attention-bias/0004`, `natural-systems/0043,0045,0047` — and every one is unbacked, because
+  > no canonical edge exists anywhere. The real lineage is written in the **withdrawn top-level
+  > `supersedes:` spelling** the Entity model silently drops. That is Task 9's migration input, and it
+  > is the check earning its keep on day one.)*
 
 **A check module is inert until it is BOTH decorated and imported.** `@Check` is what appends to
 `CANONICAL_CHECKS` (`checks/__init__.py:84-87`), and `_load_canonical_checks` — which iterates
@@ -5726,7 +5756,7 @@ def check_supersession(ctx: ValidateContext) -> Iterator[Result]:
 
 ```python
 # science/tests/validate/test_check_supersession.py -- reuses the `_write` / `_supersedes` helpers.
-def test_the_check_is_REGISTERED_and_fires_through_the_runner(tmp_path: Path) -> None:
+def test_a_registered_check_fires_through_the_runner(tmp_path: Path) -> None:
     # WIRING, through `runner.run` -- not the registration guard (see above). A direct
     # `check_supersession(ctx)` call would prove even less: it cannot tell a registered check from an
     # unregistered one. `interpretation` is the kind used because it can carry the field TODAY: no
