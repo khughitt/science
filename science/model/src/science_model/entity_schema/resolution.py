@@ -88,7 +88,7 @@ class LineageTargets(Protocol):
 
 
 def check_resolution(
-    entity: dict[str, Any], *, targets: LineageTargets, live_ids: set[str]
+    entity: dict[str, Any], *, targets: LineageTargets, live_hypotheses: set[str]
 ) -> list[ResolutionViolation]:
     """Cross-record terminal violations. Empty == clean.
 
@@ -99,6 +99,13 @@ def check_resolution(
     RESOLVE, then CHECK -- in that order, and never `raw in some_set`. Raw string membership fails
     in BOTH directions: it calls a valid alias dangling (blocking a correct corpus), and it misses
     an alias that resolves back to the entity itself (a closed loop wearing the check's green).
+
+    ☠️ `live_hypotheses` is the set of LOCAL, LIVE **hypothesis** canonical ids -- NOT every loaded
+    entity. It was `live_ids` (all of them), and the name is what invited the bug: the schema
+    constrains only the AUTHORED spelling (`pattern: "^hypothesis:"`), and an alias is free to point
+    anywhere. So `superseded_by: hypothesis:looks-valid` could RESOLVE to `dataset:0002`, find it in
+    the all-entities set, and report CLEAN -- a hypothesis superseded by a dataset. A successor must
+    be a hypothesis; the caller passes only those, and the type of the argument says so.
     """
     if entity.get("status") not in _TERMINALS_WITH_STRUCTURE:
         return []
@@ -131,12 +138,16 @@ def check_resolution(
                 f"{raw_id}: {field} -> {ref!r} resolves to the entity itself "
                 f"({self_canonical}); an entity cannot be its own successor"
             )
-        elif resolution.canonical_id not in live_ids:
-            # Resolvable is not enough. An ARCHIVED successor resolves perfectly well and is still
-            # not a reason: the entity it points at is no longer part of the live corpus.
+        elif resolution.canonical_id not in live_hypotheses:
+            # Resolvable is not enough, and neither is EXISTING. Two distinct failures land here:
+            #   * an ARCHIVED successor -- resolves perfectly, and names an entity that is dead;
+            #   * a CROSS-KIND alias -- resolves perfectly, and names a live DATASET (or topic, or
+            #     paper). The schema cannot catch it: it constrains the authored `^hypothesis:`
+            #     spelling, and an alias may point at anything.
+            # Both are the same sentence: what it names is not a live hypothesis here.
             message = (
                 f"{raw_id}: {field} -> {ref!r} resolves to {resolution.canonical_id}, which is not "
-                f"a live entity in this project; a closed entity's successor must be one that exists"
+                f"a live hypothesis in this project; a closed hypothesis's successor must be one"
             )
         else:
             continue

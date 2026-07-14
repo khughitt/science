@@ -15,6 +15,7 @@ and it is dead".
 from __future__ import annotations
 
 import json
+import shutil
 from pathlib import Path
 
 import pytest
@@ -22,6 +23,8 @@ import yaml
 
 from science_model.entity_schema import EntityValidationError, EntityValidator, default_profile_for_kind
 
+from science_tool.commons.adapter import CommonsEntityAdapter
+from science_tool.commons.registry import RegistryBuilder
 from science_tool.graph.sources import load_project_sources
 from science_tool.validate import runner
 from science_tool.validate.checks.hypotheses import RULE_DANGLING_LINEAGE, check_dangling_lineage
@@ -151,7 +154,7 @@ def test_a_SELF_ALIAS_is_caught_through_the_REAL_loader(tmp_project: Path) -> No
 def test_an_ARCHIVED_successor_RESOLVES_and_is_still_a_violation(tmp_project: Path) -> None:
     # ☠️ THE test that pins `manual_aliases=`. Archived ids are folded into `manual_aliases` and are
     # deliberately NOT loaded as live entities -- so an archived successor RESOLVES and is absent
-    # from `live_ids`.
+    # from the live-hypothesis set.
     #
     # Assert the MESSAGE, not the count. Omit `manual_aliases=` from `from_entities` and this ref
     # simply fails to resolve: still exactly one violation, still green, and the wiring defect is
@@ -164,7 +167,7 @@ def test_an_ARCHIVED_successor_RESOLVES_and_is_still_a_violation(tmp_project: Pa
     )
     violations = lineage_violations(tmp_project)
     assert len(violations) == 1
-    assert "not a live entity" in violations[0].message  # NOT "does not resolve"
+    assert "not a live hypothesis" in violations[0].message  # NOT "does not resolve"
 
 
 def test_an_UNRESOLVED_token_is_a_violation_through_the_REAL_loader(tmp_project: Path) -> None:
@@ -251,3 +254,126 @@ def test_the_LOADER_does_not_build_a_RESOLVER(tmp_path: Path) -> None:
 
     sources = load_project_sources(tmp_path)  # must NOT raise
     assert {e.canonical_id for e in sources.entities} == {"hypothesis:0001-x", "hypothesis:0002-y"}
+
+
+def write_dataset(root: Path, slug: str, *, aliases: list[str] | None = None) -> None:
+    frontmatter: dict[str, object] = {
+        "id": f"dataset:{slug}",
+        "kind": "dataset",
+        "title": slug,
+        "created": "2026-07-13",
+        "updated": "2026-07-13",
+        "status": "active",
+    }
+    if aliases:
+        frontmatter["aliases"] = aliases
+    path = root / "entities" / "datasets" / f"{slug}.md"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(
+        f"---\n{yaml.safe_dump(frontmatter, sort_keys=False)}---\n\n# {slug}\n", encoding="utf-8"
+    )
+
+
+def test_a_CROSS_KIND_alias_successor_is_a_VIOLATION(tmp_project: Path) -> None:
+    # ☠️ THE hole in `live_ids = {every entity}`. The schema constrains only the AUTHORED spelling --
+    # `superseded_by` is `pattern: "^hypothesis:"` -- but an ALIAS may point ANYWHERE. So this is a
+    # schema-valid `hypothesis:`-shaped ref that RESOLVES to a DATASET.
+    #
+    # Against the all-entities set it was found, and reported CLEAN: a hypothesis superseded by a
+    # dataset, with the check's green on it. The successor population must be LIVE HYPOTHESES.
+    write_dataset(tmp_project, "0002", aliases=["hypothesis:looks-valid"])
+    write_hypothesis(
+        tmp_project, "0001-x", status="superseded", extra={"superseded_by": "hypothesis:looks-valid"}
+    )
+    violations = lineage_violations(tmp_project)
+    assert len(violations) == 1
+    assert "dataset:0002" in violations[0].message          # it RESOLVED -- to the wrong kind
+    assert "not a live hypothesis" in violations[0].message
+
+
+def test_a_hypothesis_successor_is_STILL_clean(tmp_project: Path) -> None:
+    # The matched control. Without it, a check that rejected EVERY successor would pass the test
+    # above -- and the population fix would be indistinguishable from breaking lineage entirely.
+    write_dataset(tmp_project, "0002", aliases=["hypothesis:looks-valid"])
+    write_hypothesis(tmp_project, "0009-real")
+    write_hypothesis(
+        tmp_project, "0001-x", status="superseded", extra={"superseded_by": "hypothesis:0009-real"}
+    )
+    assert lineage_violations(tmp_project) == []
+
+
+def test_COMMONS_can_never_own_a_hypothesis__which_is_why_KIND_is_enough() -> None:
+    # ☠️ The CONTRACT that makes a separate locality filter unnecessary -- and that must FAIL LOUDLY
+    # if it ever stops holding.
+    #
+    # `sources.entities` is local markdown PLUS the commons overlay, so "local" and "hypothesis"
+    # look like two independent conditions. They are not: commons derives an entity's kind from its
+    # DIRECTORY (`_TYPE_DIR_TO_TYPE`), and there is no `hypotheses/` one -- so a commons entity can
+    # never BE a hypothesis. Filtering on kind therefore already excludes every non-local entity, and
+    # a locality filter on top would be dead code.
+    #
+    # That reasoning is only sound while this holds. If commons ever gains `hypotheses/`, a SHARED
+    # hypothesis becomes an acceptable-looking successor to a project that does not own it, and this
+    # test is what stops that landing silently.
+    from science_tool.commons.adapter import _TYPE_DIR_TO_TYPE
+
+    assert "hypothesis" not in set(_TYPE_DIR_TO_TYPE.values()), (
+        "commons can now own a hypothesis. `_live_lineage_targets` filters on kind ALONE and "
+        "assumed that was impossible -- it now admits a hypothesis this project does not own as a "
+        "valid successor. Add the locality filter it deliberately omitted."
+    )
+
+
+def test_a_COMMONS_entity_is_NOT_an_acceptable_successor(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # The SHARED case, through the REAL commons overlay rather than the contract alone.
+    # `topic:single-cell-foundation-models` is a COMMONS-OWNED id, and the overlay puts it in
+    # `sources.entities` for real -- so the all-entities population would have ACCEPTED it as a
+    # successor via a `hypothesis:`-shaped alias.
+    #
+    # Precisely what this pins: a commons-owned id, of a commons-ownable kind, reached through the
+    # actual overlay, is not an acceptable successor. It does NOT independently pin locality -- the
+    # id is co-owned here, and locality cannot be tested at all while commons is unable to own a
+    # hypothesis. The test above pins that contract; this one pins the overlay path.
+    commons_root = tmp_path / "commons"
+    shutil.copytree(Path(__file__).parent / "fixtures" / "commons" / "valid", commons_root)
+    RegistryBuilder(commons_root, CommonsEntityAdapter(commons_root)).rebuild()
+    monkeypatch.setenv("SCIENCE_COMMONS_ROOT", str(commons_root))
+    monkeypatch.setenv("SCIENCE_COMMONS_QUIET_STALE", "1")
+
+    root = tmp_path / "project"
+    (root / "entities" / "hypotheses").mkdir(parents=True)
+    (root / "science.yaml").write_text(
+        yaml.safe_dump({"name": "demo", "id": "demo"}), encoding="utf-8"
+    )
+    # a LOCAL alias pointing at the COMMONS-owned topic, in hypothesis clothing
+    write_hypothesis(
+        root, "0001-x", status="superseded",
+        extra={"superseded_by": "hypothesis:shared-alias"},
+    )
+    (root / "entities" / "topics").mkdir(parents=True)
+    (root / "entities" / "topics" / "t.md").write_text(
+        "---\n"
+        + yaml.safe_dump(
+            {
+                "id": "topic:single-cell-foundation-models",
+                "kind": "topic",
+                "title": "SCFM",
+                "created": "2026-07-13",
+                "updated": "2026-07-13",
+                "status": "active",
+                "aliases": ["hypothesis:shared-alias"],
+            },
+            sort_keys=False,
+        )
+        + "---\n",
+        encoding="utf-8",
+    )
+
+    sources = load_project_sources(root)
+    assert "topic:single-cell-foundation-models" in {e.canonical_id for e in sources.entities}
+
+    violations = lineage_violations(root)
+    assert len(violations) == 1
+    assert "not a live hypothesis" in violations[0].message

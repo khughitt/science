@@ -2695,7 +2695,7 @@ dress.
 - Create: `science/model/src/science_model/entity_schema/resolution.py`
 - **Modify: `science/model/src/science_model/entities.py` (`HypothesisEntity`)** — the four
   projection fields (`verdict`, `closure_basis`, `superseded_by`, `resynthesized_into`), **moved
-  forward from Task 8**: the loader pass below cannot observe what the model drops.
+  forward from Task 8**: the lineage check below cannot observe what the model drops.
 - **Modify: `science/src/science_tool/graph/materialize.py:646`** — emit `sci:verdict` beside
   `sci:projectStatus`. **Additive only.**
 - Modify: `validate/checks/hypotheses.py` — the check builds the resolver and calls
@@ -3238,19 +3238,28 @@ def check_dangling_lineage(ctx: ValidateContext) -> Iterator[Result]:
         manual_aliases=sources.manual_aliases,
         identity_table=build_identity_table(sources),
     )
-    # LIVE and LOCAL. Keyed on `canonical_id`, NOT `id`: the resolver ANSWERS in canonical ids, so a
-    # set keyed on the authored `id` would fail to contain its own resolver's answers for every
-    # entity whose canonical id differs from the one on disk.
-    live_ids = {entity.canonical_id for entity in sources.entities}
     path_by_id = {
         str(doc.frontmatter.get("id")): doc.path
         for doc in sources.markdown_documents
         if doc.frontmatter.get("id")
     }
 
+    # ☠️ LIVE **HYPOTHESES** -- not every loaded entity. The schema constrains only the AUTHORED
+    # spelling (`superseded_by` is `pattern: "^hypothesis:"`), and an ALIAS may point ANYWHERE: put
+    # `aliases: [hypothesis:looks-valid]` on `dataset:0002` and the ref RESOLVES to a dataset, is
+    # found in an all-entities set, and reports CLEAN -- a hypothesis superseded by a dataset.
+    #
+    # Keyed on `canonical_id`, NOT `id`: the resolver ANSWERS in canonical ids.
+    #
+    # `kind` alone also makes these LOCAL, by CONTRACT: commons can own only dataset/paper/topic/
+    # theme (`_TYPE_DIR_TO_TYPE`, commons/adapter.py:25 -- the kind comes from the directory, and
+    # there is no `hypotheses/` one), so a commons entity can never be a hypothesis. A locality
+    # filter on top would be dead code; a test pins that contract so it fails loudly if it changes.
+    live_hypotheses = {e.canonical_id for e in sources.entities if e.kind == "hypothesis"}
+
     for entity in sources.entities:
         for violation in check_resolution(
-            entity.model_dump(mode="json"), targets=resolver, live_ids=live_ids
+            entity.model_dump(mode="json"), targets=resolver, live_hypotheses=live_hypotheses
         ):
             path = path_by_id.get(violation.entity_id)
             yield Result(
@@ -6067,7 +6076,7 @@ class HypothesisEntity(ProjectEntity):
     resynthesized_into: list[str] = Field(default_factory=list)
 ```
 
-> **These four fields land in TASK 7, not here** — Task 7's loader pass reads them, and a check
+> **These four fields land in TASK 7, not here** — Task 7's lineage check reads them, and a check
 > cannot observe a field the model drops. They are shown here because Task 8's reconciliation
 > battery is what *certifies* them against the schema; by the time this task runs they already
 > exist. **`archive_ref` is gone entirely** (Task 6 — no reader, no author, no resolvable

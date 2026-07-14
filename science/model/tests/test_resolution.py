@@ -56,7 +56,7 @@ LIVE = {"hypothesis:0001-x", "hypothesis:0002-y", "hypothesis:0009-successor"}
 
 
 def _check(entity: dict[str, object]):
-    return check_resolution(entity, targets=TARGETS, live_ids=LIVE)
+    return check_resolution(entity, targets=TARGETS, live_hypotheses=LIVE)
 
 
 def test_dangling_successor_is_caught() -> None:
@@ -129,7 +129,7 @@ def test_an_ARCHIVED_target_RESOLVES_and_is_still_a_violation() -> None:
         }
     )
     assert len(v) == 1
-    assert "not a live entity" in v[0].message
+    assert "not a live hypothesis" in v[0].message
 
 
 def test_resynthesized_into_is_a_LIST_and_every_member_must_resolve() -> None:
@@ -195,7 +195,7 @@ def test_a_basis_closed_entity_needs_no_structure() -> None:
 def test_a_live_entity_is_not_checked() -> None:
     assert (
         check_resolution(
-            {"id": "hypothesis:0001-x", "status": "active"}, targets=TARGETS, live_ids=set()
+            {"id": "hypothesis:0001-x", "status": "active"}, targets=TARGETS, live_hypotheses=set()
         )
         == []
     )

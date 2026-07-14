@@ -166,6 +166,7 @@ def _check_review_horizon_days(ctx: ValidateContext) -> Iterator[Result]:
 
 
 RULE_DANGLING_LINEAGE = "hypothesis.dangling-lineage"
+_LINEAGE_KIND = "hypothesis"
 
 
 @Check(section="hypotheses...", order=6)
@@ -196,19 +197,16 @@ def check_dangling_lineage(ctx: ValidateContext) -> Iterator[Result]:
         manual_aliases=sources.manual_aliases,
         identity_table=build_identity_table(sources),
     )
-    # LIVE and LOCAL. Keyed on `canonical_id`, NOT `id`: the resolver ANSWERS in canonical ids, so a
-    # set keyed on the authored `id` would fail to contain its own resolver's answers for every
-    # entity whose canonical id differs from the one on disk.
-    live_ids = {entity.canonical_id for entity in sources.entities}
     path_by_id = {
         str(document.frontmatter.get("id")): document.path
         for document in sources.markdown_documents
         if document.frontmatter.get("id")
     }
 
+    live_hypotheses = _live_lineage_targets(sources)
     for entity in sources.entities:
         for violation in check_resolution(
-            entity.model_dump(mode="json"), targets=resolver, live_ids=live_ids
+            entity.model_dump(mode="json"), targets=resolver, live_hypotheses=live_hypotheses
         ):
             path = path_by_id.get(violation.entity_id)
             yield Result(
@@ -219,6 +217,30 @@ def check_dangling_lineage(ctx: ValidateContext) -> Iterator[Result]:
                 RULE_DANGLING_LINEAGE,
                 None,
             )
+
+
+def _live_lineage_targets(sources) -> set[str]:
+    """The ids a successor may name: LOCAL, LIVE **hypotheses**. Not every loaded entity.
+
+    ☠️ This was `{e.canonical_id for e in sources.entities}` -- every entity, every kind -- and that
+    is a hole, because the schema constrains only the AUTHORED spelling. `superseded_by` is
+    `pattern: "^hypothesis:"`, but an ALIAS may point anywhere: put `aliases: [hypothesis:looks-valid]`
+    on `dataset:0002` and `superseded_by: hypothesis:looks-valid` resolves to a DATASET, is found in
+    the all-entities set, and reports CLEAN. A hypothesis superseded by a dataset.
+
+    Keyed on `canonical_id`, NOT `id`: the resolver ANSWERS in canonical ids, so a set keyed on the
+    authored `id` would fail to contain its own resolver's answers for every entity whose canonical
+    id differs from the one on disk.
+
+    `kind == "hypothesis"` is also what makes these LOCAL, and by CONTRACT rather than by luck:
+    `sources.entities` is local markdown plus the commons overlay, and commons can own only
+    `dataset` / `paper` / `topic` / `theme` -- `_TYPE_DIR_TO_TYPE` (commons/adapter.py:25) derives
+    the kind from the directory, and there is no `hypotheses/` one. A commons entity therefore can
+    never be a hypothesis, so no separate locality filter is needed; adding one would be dead code.
+    """
+    return {
+        entity.canonical_id for entity in sources.entities if entity.kind == _LINEAGE_KIND
+    }
 
 
 def _review_horizon_days(frontmatter: dict[str, Any]) -> float | None:
