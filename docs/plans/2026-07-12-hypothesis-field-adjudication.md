@@ -163,6 +163,25 @@ proposition-targeted `expert_judgment` evidence lines.
 > are not enough information to synthesize an evidence line, and a migration that guessed would be
 > manufacturing provenance.
 
+#### ✅ RULED 2026-07-14 (author): **DELETE BOTH SCALARS.** `3d-attention-bias@69fefbd`.
+
+The tool stopped and asked. This is the answer, and it lands on the **second** bullet above — *"if no
+defensible basis can be authored, delete it"* — because the history shows there never was one.
+
+Git says the two values were added in the 2026-04-26 *"graph drift and metadata backfill"*, for one
+purpose: to **activate the uncertainty dashboard**. The originating instruction
+(`doc/meta/dashboard-data-gaps.md:20`) asked only for *"current certainty values"* — and neither
+`0.7` nor `0.75` identifies a proposition, a source, a stance, or an independence group, because
+nothing ever asked the author to supply one.
+
+So the numbers are a **posterior with no allocation behind it**. Synthesizing `expert_judgment`
+evidence lines would not *preserve* that allocation — it would **invent** the target, the stance and
+the source, which is exactly the manufactured provenance this section refuses. The scalars have no
+reader: the dashboard they were backfilled for reads belief from the graph, which they were never
+wired into.
+
+**With this, the corpus preflight is 15 of 15 roots / 143 hypotheses.**
+
 ## 6. RENAME / MIGRATE
 
 | key | files | owner | target |
