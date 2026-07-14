@@ -1,10 +1,16 @@
 """`status` is the LIFECYCLE. `verdict` is the EPISTEMIC conclusion. Two fields, two axes.
 
 Collapsing them is what happened in natural-systems: `hypothesis:0009` needed a lifecycle word
-("stop working on this"), `status` was the only field available, and `status: retired` overwrote the
-epistemic verdict -- recording a refutation that never happened. The hypothesis had failed to
-confirm (a NON-significant confirmatory null, z = -0.889), which is `weakened`, not `refuted`
-(fb-2026-07-11-005).
+("stop working on this"), `status` was the only field available, and `status: retired` SPENT it --
+leaving the epistemic conclusion nowhere to live at all. The word it was spent on was false besides:
+`retired` asserts abandonment, and the pre-registered decisive test had RUN and concluded. The author
+ruled the true record `complete` + `refuted` (fb-2026-07-11-005).
+
+☠️ Five drafts of the design instead read the non-significant confirmatory null (z = -0.889) and
+inferred `weakened`. All five were wrong -- the verdict turns on what the test was FOR, which lives
+in the pre-registration and not in the p-value -- and that is precisely why the migration REFUSES a
+terminal status rather than mapping it. So read the fixtures below as fixtures: the cell this file
+pins hardest, `retired` with NO verdict, is the one 0009 turned out NOT to be.
 
 This file was `test_hypothesis_disposition.py`, and every test in it survives -- because the SUBJECT
 was never `disposition`. The subject is that a hypothesis nobody is working on must stop topping the
@@ -53,6 +59,21 @@ def _hypothesis(*, status: str = "active", **extra: object) -> dict:
 def _load_one(project_root: Path, entity_id: str):
     sources = load_project_sources(project_root)
     return next(e for e in sources.entities if e.id == entity_id)
+
+
+def _pin_schema_2(project_root: Path) -> None:
+    """DECLARE the project migrated -- which is the only way a project is migrated.
+
+    `entity migrate-hypothesis` writes this pin as its final act, after every file is rewritten and
+    re-validated. Every instrument that reads the lifecycle reads THIS, never the shape of the files:
+    a project whose hypotheses merely *look* migrated has declared nothing.
+    """
+    import yaml
+
+    path = project_root / "science.yaml"
+    config = yaml.safe_load(path.read_text(encoding="utf-8"))
+    config["entity_schema_version"] = 2
+    path.write_text(yaml.safe_dump(config, sort_keys=False), encoding="utf-8")
 
 
 def test_BOTH_axes_round_trip_from_frontmatter_to_graph(tmp_path: Path) -> None:
@@ -197,6 +218,7 @@ def test_questions_on_a_terminal_hypothesis_become_rehoming_debt(tmp_path: Path)
     from science_tool.graph.attention import list_rehoming_debt
 
     graph_path = _terminal_hypothesis_with_open_questions(tmp_path, 3)
+    _pin_schema_2(tmp_path)
 
     result = list_rehoming_debt(graph_path)
 
@@ -208,8 +230,7 @@ def test_questions_on_a_terminal_hypothesis_become_rehoming_debt(tmp_path: Path)
 def test_rehoming_debt_is_UNWIRED_over_a_project_that_has_not_MIGRATED(tmp_path: Path) -> None:
     """An UNMIGRATED hypothesis carries the verdict in `status`, so its closure is UNREADABLE.
 
-    `refuted` is not a lifecycle word. On such a project every hypothesis looks non-terminal, and a
-    zero here would not mean "no debt" -- it would mean "I cannot read this project". That is the
+    A zero here would not mean "no debt" -- it would mean "I cannot read this project". That is the
     silent-instrument bug, and this is the guard against re-introducing it via the migration itself.
     """
     from science_tool.graph.attention import list_rehoming_debt
@@ -220,7 +241,47 @@ def test_rehoming_debt_is_UNWIRED_over_a_project_that_has_not_MIGRATED(tmp_path:
 
     assert result.status == "unwired"
     assert result.code == "hypothesis_lifecycle_unmigrated"
-    assert "hypothesis:0009-x" in (result.reason or "")
+    assert "entity_schema_version" in (result.reason or "")
+
+
+def test_migration_is_read_from_the_PIN_and_never_from_the_STATUS_VALUES(tmp_path: Path) -> None:
+    """☠️ The heuristic this test forbids would have called natural-systems MIGRATED.
+
+    An earlier cut of the instrument decided "has this project migrated?" by checking whether its
+    hypotheses' `status` values were lifecycle words. That inference fails on the exact project that
+    opened this arc: natural-systems authored `status: retired` and `status: active` onto UNMIGRATED
+    hypotheses -- both lifecycle words -- while `retired` there MEANT `refuted`. A shape heuristic
+    reads that corpus as migrated, then reads `retired` as a closure. Confidently, and wrongly.
+
+    So the project below looks migrated in every file and has declared nothing. It is unwired.
+    """
+    from science_tool.graph.attention import list_rehoming_debt
+
+    graph_path = build_entity_graph(
+        tmp_path,
+        [
+            # Every status here is a LIFECYCLE word. Not one of them is a declaration.
+            _hypothesis(status="retired"),
+            {
+                "kind": "hypothesis",
+                "id": "0010-y",
+                "frontmatter": {
+                    "title": "H2",
+                    "status": "active",
+                    "related": [],
+                    "source_refs": [],
+                    "created": "2026-07-11",
+                    "updated": "2026-07-11",
+                },
+                "body": "Body.",
+            },
+        ],
+    )
+
+    result = list_rehoming_debt(graph_path)
+
+    assert result.status == "unwired"
+    assert result.code == "hypothesis_lifecycle_unmigrated"
 
 
 def test_rehoming_debt_over_a_MIGRATED_project_with_nothing_closed_is_a_TRUE_zero(tmp_path: Path) -> None:
@@ -228,13 +289,14 @@ def test_rehoming_debt_over_a_MIGRATED_project_with_nothing_closed_is_a_TRUE_zer
 
     Under `disposition` an absent field meant "unreadable", so a project that had simply closed
     nothing reported `unwired` forever -- and NO project ever authored the field. Under the lifecycle,
-    every hypothesis has a status, so "nothing is terminal" is a fact the instrument can actually
-    establish. Zero means zero. An instrument that can never say zero is as useless as one that
-    always does.
+    a project that has DECLARED itself migrated can be read, so "nothing is terminal" becomes a fact
+    the instrument can establish. Zero means zero. An instrument that can never say zero is as
+    useless as one that always does.
     """
     from science_tool.graph.attention import list_rehoming_debt
 
     graph_path = build_entity_graph(tmp_path, [_hypothesis(status="active")])
+    _pin_schema_2(tmp_path)
 
     result = list_rehoming_debt(graph_path)
 

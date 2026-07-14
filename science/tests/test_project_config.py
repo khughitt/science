@@ -314,3 +314,46 @@ children:
         match=r"Use `peers:` instead; `parent:` and `children:` are removed project-config fields\.",
     ):
         load_project_config(project_root)
+
+
+def _config(tmp_path: Path, body: str) -> Path:
+    project_root = tmp_path / "proj"
+    project_root.mkdir()
+    (project_root / "science.yaml").write_text(
+        f"name: proj\nprofile: research\n{body}", encoding="utf-8"
+    )
+    return project_root
+
+
+def test_entity_schema_version_is_the_authored_pin(tmp_path: Path) -> None:
+    # Absent means 1 -- unmigrated -- and absence is the ONLY thing that may mean it. Nothing
+    # infers the version from the shape of the project's files.
+    assert load_project_config(_config(tmp_path, "")).entity_schema_version is None
+
+
+def test_entity_schema_version_rejects_a_version_that_does_not_exist(tmp_path: Path) -> None:
+    # The vocabulary is closed to the versions that EXIST. An unconstrained `int` would make `3` a
+    # silent no-op -- accepted, meaningless, and indistinguishable from a real pin.
+    with pytest.raises(ValidationError):
+        load_project_config(_config(tmp_path, "entity_schema_version: 3\n"))
+
+
+def test_a_MISSPELLED_pin_is_refused_not_preserved(tmp_path: Path) -> None:
+    """THE fail-silent this guard exists to close.
+
+    `ProjectConfig` is `extra="allow"`, so `entity_schema_verison: 2` would otherwise be accepted,
+    preserved in `model_extra`, and ignored -- leaving the project on schema 1, unvalidated, while
+    its author believed it had migrated. Declaring the field does NOT catch this; only refusing the
+    near-miss does.
+    """
+    with pytest.raises(ValidationError, match=r"did you mean 'entity_schema_version'"):
+        load_project_config(_config(tmp_path, "entity_schema_verison: 2\n"))
+
+
+def test_an_UNKNOWN_key_is_still_allowed(tmp_path: Path) -> None:
+    # The guard refuses NEAR-MISSES, not unknowns. `extra="allow"` is deliberate: real science.yaml
+    # files carry project-owned keys this model has no opinion about (`summary`, `tags`, `aspects`,
+    # `layout_version`, ...), and every loadable config in the corpus does. A guard that rejected
+    # unknown keys outright would refuse the entire corpus.
+    cfg = load_project_config(_config(tmp_path, "summary: a project\ntags: [x]\n"))
+    assert cfg.model_extra is not None and cfg.model_extra["summary"] == "a project"

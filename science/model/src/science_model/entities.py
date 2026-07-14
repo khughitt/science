@@ -817,9 +817,18 @@ class HypothesisEntity(ProjectEntity):
     writing `superseded` OVERWROTE `supported` and destroyed the conclusion.
 
     The collapse had teeth. natural-systems had no lifecycle axis, so it wrote `status: retired`
-    — a TASK status — onto a hypothesis, destroying the epistemic verdict and recording a
-    refutation that never happened: the confirmatory null was NON-significant (z = -0.889),
-    which is `weakened`, not `refuted` (fb-2026-07-11-005).
+    — a TASK status — onto a hypothesis, and the one field, once spent, could not hold the
+    conclusion at all: the verdict became unrecordable. The word it was spent on was false
+    besides. `retired` asserts *abandoned for non-epistemic reasons*, and the pre-registered
+    decisive test had in fact RUN and concluded. The author ruled the true record `complete` +
+    `refuted` (fb-2026-07-11-005).
+
+    ☠️ Do not re-derive that adjudication from the statistics. Five drafts of this design read the
+    same non-significant confirmatory null (z = -0.889) and inferred `weakened`; every one was
+    wrong, because the verdict turns on what the test was FOR — which lives in the
+    pre-registration and the author's judgment, not in the p-value. That is exactly why
+    `status_inventory` REFUSES a terminal status instead of mapping it: a "reasonable default"
+    here would have written this design's own error into the corpus and called it a migration.
 
     `verdict` is ABSENT until the evidence speaks. That absence is load-bearing, and it is why
     `proposed`/`under-investigation` are not verdict values: they say the evidence has NOT

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import difflib
 from enum import StrEnum
 from pathlib import Path
 from typing import Annotated, Any, Literal
@@ -221,11 +222,14 @@ class ProjectConfig(BaseModel):
     # thing absence may mean: this is an AUTHORED DECLARATION of which version a project is on, never
     # an inference from its files. Nothing guesses; a project says.
     #
-    # DECLARED, not merely tolerated. `extra="allow"` would already carry the key through untouched,
-    # which is precisely the failure: `entity_schema_verison: 2` would be preserved, ignored, and
-    # leave the project silently unmigrated while its author believed otherwise. And the vocabulary
-    # is closed to the versions that EXIST -- an unconstrained `int` makes `3` a silent no-op the day
-    # someone types it.
+    # DECLARED, not merely tolerated, so the VALUE is checked: the vocabulary is closed to the
+    # versions that EXIST, and an unconstrained `int` would make `3` a silent no-op the day someone
+    # types it.
+    #
+    # Declaring the field does NOT, on its own, catch a MISSPELLED one -- `extra="allow"` carries
+    # `entity_schema_verison: 2` into `model_extra`, preserved and ignored, leaving the project
+    # silently unmigrated while its author believes otherwise. That is what `_reject_near_miss_keys`
+    # below is for. A pin nobody can typo is the whole value of "a project says".
     entity_schema_version: Literal[1, 2] | None = None
 
     @model_validator(mode="before")
@@ -237,6 +241,36 @@ class ProjectConfig(BaseModel):
                 raise ValueError(
                     f"science.yaml uses removed field(s) {illegal!r}. "
                     "Use `peers:` instead; `parent:` and `children:` are removed project-config fields."
+                )
+        return raw
+
+    @model_validator(mode="before")
+    @classmethod
+    def _reject_near_miss_keys(cls, raw: Any) -> Any:
+        """A key that ALMOST names a declared field is a typo, and `extra="allow"` would keep it.
+
+        `extra="allow"` is deliberate: science.yaml carries project-owned keys this model has no
+        opinion about (`summary`, `tags`, `aspects`, `layout_version`, ...), and preserving them is
+        the point. But that same permissiveness turns `entity_schema_verison: 2` into a key that is
+        accepted, preserved, and ignored -- leaving a project silently on schema 1 while its author
+        believes it migrated, which is precisely the fail-silent this arc exists to close. A pin
+        nobody can typo is what "nothing guesses; a project says" actually costs.
+
+        Near-miss, not unknown: an unknown key is legal by design, so only keys that are one
+        plausible slip away from a DECLARED field are refused.
+        """
+        if not isinstance(raw, dict):
+            return raw
+        declared = sorted(cls.model_fields)
+        for key in raw:
+            if not isinstance(key, str) or key in cls.model_fields:
+                continue
+            near = difflib.get_close_matches(key, declared, n=1, cutoff=0.85)
+            if near:
+                raise ValueError(
+                    f"science.yaml: unknown key {key!r} -- did you mean {near[0]!r}? "
+                    "A near-miss key is refused rather than preserved: silently ignoring it would "
+                    "leave the project unconfigured while its author believed otherwise."
                 )
         return raw
 

@@ -11,12 +11,13 @@ from typing import Any, Iterable, Mapping, Sequence
 from rdflib import Dataset, Literal, URIRef
 from rdflib.namespace import SKOS
 
-from science_tool.entities import CLOSED_LIFECYCLE_STATUSES, valid_statuses
+from science_tool.entities import CLOSED_LIFECYCLE_STATUSES
 from science_tool.graph.belief import aggregate_belief, collect_evidence_units
 from science_tool.graph.belief_scalar import belief_scalar, belief_scalar_enabled, format_belief_weight
 from science_tool.graph.io import CITO_NS, PROJECT_NS, SCI_NS, project_root_from_graph_path
 from science_tool.graph.store import _evidence_targets_for_uri, _graph_uri, canonical_id_from_entity_uri
 from science_tool.instruments import InstrumentResult
+from science_tool.project_config import load_project_config
 
 DEFAULT_EPSILON = 0.05
 NEEDS_REVIEW_MULTIPLIER = 3.0
@@ -502,23 +503,28 @@ def _is_closed(knowledge, entity_uri: URIRef) -> bool:
     return status is not None and str(status) in CLOSED_LIFECYCLE_STATUSES
 
 
-def _unmigrated_hypotheses(knowledge) -> list[str]:
-    """Hypotheses whose `status` is not a word the lifecycle vocabulary knows.
+def _speaks_the_lifecycle(graph_path: Path) -> bool:
+    """Has this project DECLARED that its hypotheses carry the lifecycle in `status`?
 
-    THE WIRING QUESTION, and it has to be asked before any terminality claim. Before this arc a
+    THE WIRING QUESTION, and it must be asked before any terminality claim. Before this arc a
     hypothesis' `status` held the epistemic VERDICT (`proposed`, `supported`, `refuted`, ...), and
-    not one of those words is a lifecycle state. So on an unmigrated project every hypothesis looks
-    non-terminal, and the honest report is "I cannot tell" -- not a confident zero.
+    not one of those is a lifecycle state -- so on an unmigrated project every hypothesis looks
+    non-terminal, and the honest report is "I cannot tell", not a confident zero. That is the whole
+    point of `InstrumentResult.unwired`.
 
-    That distinction is the whole point of `InstrumentResult.unwired`: a project's hypotheses cannot
-    be said to carry "no re-homing debt" by an instrument that cannot read their lifecycle at all.
+    ☠️ The answer is the AUTHORED PIN, never the shape of the files. Reading it off the status
+    values -- "these all look like lifecycle words, so the project must be migrated" -- is the same
+    class of inference this arc exists to abolish, and it fails on the very project that opened it:
+    natural-systems wrote `status: retired` and `status: active` onto UNMIGRATED hypotheses, and
+    both are lifecycle words. A shape heuristic would call that corpus migrated and then read
+    `retired` -- which there meant *refuted* -- as a closure. Confidently, and wrongly.
+
+    `entity_schema_version: 2` is written by `entity migrate-hypothesis` as its final act, only
+    after every file in the project has been rewritten and re-validated. So the pin does not merely
+    assert the migration; it is emitted BY it. Absent means 1, and 1 means unreadable.
     """
-    lifecycle = valid_statuses("hypothesis") or frozenset()
-    return sorted(
-        f"{canonical_id_from_entity_uri(str(subject))} (status: {status})"
-        for subject, _, status in knowledge.triples((None, SCI_NS.projectStatus, None))
-        if _entity_kind_of(subject) == "hypothesis" and str(status) not in lifecycle
-    )
+    config = load_project_config(project_root_from_graph_path(graph_path))
+    return config.entity_schema_version == 2
 
 
 def _related_neighbors(knowledge, uri: URIRef) -> set[URIRef]:
@@ -586,26 +592,24 @@ def list_rehoming_debt(graph_path: Path) -> InstrumentResult[dict[str, str]]:
 
     The dead hypothesis is not ranked. Its re-homing debt is.
 
-    `unwired` when the project's hypotheses do not speak the lifecycle vocabulary yet -- their
-    `status` still holds the epistemic VERDICT, so terminality is not a question this instrument can
-    answer about them, and a zero would not mean "no debt". It would mean "I cannot read this
-    project."
+    `unwired` on a project that has not declared `entity_schema_version: 2` -- there, `status` still
+    holds the epistemic VERDICT, so terminality is not a question this instrument can answer, and a
+    zero would not mean "no debt". It would mean "I cannot read this project."
     """
-    dataset = Dataset()
-    dataset.parse(source=str(graph_path), format="trig")
-    knowledge = dataset.graph(PROJECT_NS["graph/knowledge"])
-
-    unmigrated = _unmigrated_hypotheses(knowledge)
-    if unmigrated:
+    if not _speaks_the_lifecycle(graph_path):
         return InstrumentResult.unwired(
             code="hypothesis_lifecycle_unmigrated",
             reason=(
-                "these hypotheses carry a `status` outside the lifecycle vocabulary, so their "
-                "closure cannot be read: "
-                f"{', '.join(unmigrated)}. Migrate the project (`science entity migrate-status`) "
-                "-- zero re-homing debt here would not mean 'no debt', it would mean 'unreadable'."
+                "this project has not declared `entity_schema_version: 2` in science.yaml, so its "
+                "hypotheses still carry the epistemic verdict in `status` and their closure cannot "
+                "be read. Migrate the project (`science entity migrate-hypothesis --apply`) -- zero "
+                "re-homing debt here would not mean 'no debt', it would mean 'unreadable'."
             ),
         )
+
+    dataset = Dataset()
+    dataset.parse(source=str(graph_path), format="trig")
+    knowledge = dataset.graph(PROJECT_NS["graph/knowledge"])
 
     rows: list[dict[str, str]] = []
     terminal_uris = sorted(

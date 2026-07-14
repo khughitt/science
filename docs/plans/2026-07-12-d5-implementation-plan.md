@@ -656,7 +656,11 @@ def test_candidate_keeps_its_verdict(tmp_path: Path) -> None:
 
 
 def test_terminal_status_is_refused_not_guessed(tmp_path: Path) -> None:
-    _hyp(tmp_path, "0009-d", status="retired", phase="candidate")
+    # Synthetic id. ☠️ Do NOT write the real `0009` into these fixtures with invented values --
+    # the author ruled it `complete` + `refuted`, and a fixture that says otherwise is read as
+    # migration guidance by the next person. Revs 1-5 of this plan said `retired` + `weakened`
+    # here, which is the guess the author overruled (Task 4).
+    _hyp(tmp_path, "0042-x", status="retired", phase="candidate")
     inv = inventory(tmp_path)
     assert inv.deterministic == [] and len(inv.ambiguous) == 1
     assert inv.ambiguous[0].target_status is None  # never guessed
@@ -664,18 +668,37 @@ def test_terminal_status_is_refused_not_guessed(tmp_path: Path) -> None:
 
 def test_an_ADJUDICATION_lets_a_refused_file_through(tmp_path: Path) -> None:
     # THE escape from the refusal loop. Without this, `_classify` sees the terminal status
-    # forever and 0009 can never migrate, no matter what an author does to the file.
-    _hyp(tmp_path, "0009-d", status="retired", phase="candidate")
+    # forever and the file can never migrate, no matter what an author does to it.
+    #
+    # This is the CLOSED-WITHOUT-A-VERDICT shape: the work stopped for non-epistemic reasons, so
+    # the verdict stays ABSENT and `closure_basis` carries the reason. Pairing a `closure_basis`
+    # WITH a verdict (as revs 1-5 did) is a second, weaker copy of the adjudication -- when the
+    # evidence spoke, the verdict IS the reason (Task 4).
+    _hyp(tmp_path, "0042-x", status="retired", phase="candidate")
     adj = {
-        "hypothesis:0009-d": Adjudicated(
-            status="retired", verdict="weakened", closure_basis="confirmatory null, z=-0.889"
+        "hypothesis:0042-x": Adjudicated(
+            status="retired", closure_basis="the assay was discontinued; no samples remain"
         )
     }
     inv = inventory(tmp_path, adjudication=adj)
     assert inv.ambiguous == []
     row = inv.deterministic[0]
-    assert (row.target_status, row.target_verdict) == ("retired", "weakened")
-    assert row.target_closure_basis == "confirmatory null, z=-0.889"
+    assert (row.target_status, row.target_verdict) == ("retired", None)
+    assert row.target_closure_basis == "the assay was discontinued; no samples remain"
+
+
+def test_an_adjudication_can_also_record_that_the_EVIDENCE_SPOKE(tmp_path: Path) -> None:
+    # The other shape, and the one `natural-systems/0009` actually is: `complete` + a verdict, and
+    # NO `closure_basis`. The decisive test RAN (so the work is concluded, not abandoned) and it
+    # rejected the organizing conjecture.
+    _hyp(tmp_path, "0009-d", status="retired", phase="candidate")
+    adj = {"hypothesis:0009-d": Adjudicated(status="complete", verdict="refuted")}
+    row = inventory(tmp_path, adjudication=adj).deterministic[0]
+    assert (row.target_status, row.target_verdict, row.target_closure_basis) == (
+        "complete",
+        "refuted",
+        None,
+    )
 
 
 def test_adjudication_for_an_unknown_id_is_an_error(tmp_path: Path) -> None:

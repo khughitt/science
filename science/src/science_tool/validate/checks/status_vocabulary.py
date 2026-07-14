@@ -5,12 +5,17 @@ hand-authored frontmatter is never re-checked -- and nothing in `science validat
 at status at all. So an out-of-vocabulary status could sit in a committed file and no
 surface would say a word.
 
-That is how natural-systems' `hypothesis:0009` came to carry `status: retired`. `retired`
-is not in the hypothesis vocabulary (proposed | under-investigation | partially-supported |
-supported | weakened | refuted | archived) -- it is a TASK status. The author needed a
-workflow word, `status` was the only field available, and the workflow word overwrote the
-epistemic verdict. The hypothesis had in fact been WEAKENED (a non-significant confirmatory
-null, z = -0.889), not refuted, and not retired (fb-2026-07-11-005).
+That is how natural-systems' `hypothesis:0009` came to carry `status: retired` -- and the history
+has to be kept straight, because this check now fires the OTHER WAY. Back then the hypothesis
+vocabulary was the VERDICT (proposed | under-investigation | partially-supported | supported |
+weakened | refuted | archived), so `retired` -- a lifecycle word -- was illegal, and the author who
+needed one had nowhere to put it. D5 gave `status` the lifecycle and moved the conclusion to
+`verdict`, so today `retired` is LEGAL on a hypothesis and `weakened` is what this check flags.
+
+(The author ruled 0009's true record `complete` + `refuted`: the decisive test RAN, so the work was
+concluded rather than abandoned, and it rejected the organizing conjecture. Do not infer `weakened`
+from the non-significant null -- five drafts of the design did, and all five were wrong.
+fb-2026-07-11-005.)
 
 The vocabulary is derived from the Kind Descriptors via `valid_statuses` -- the SAME
 source `edit_entity` uses. There is deliberately NO table here: a per-kind list in this file
