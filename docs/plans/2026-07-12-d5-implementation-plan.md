@@ -2684,7 +2684,7 @@ dress.
 >
 > | inert claim | surface it needs | was landing in | now lands in |
 > |---|---|---|---|
-> | loader second pass reads `superseded_by` / `resynthesized_into` / `closure_basis` / `verdict` | those four fields **on `HypothesisEntity`** — the model drops them today, so the pass would inspect already-projected entities and see **nothing** | Task 8 | **here** (Step 3a) |
+> | the lineage check reads `superseded_by` / `resynthesized_into` / `closure_basis` / `verdict` | those four fields **on `HypothesisEntity`** — the model drops them today, so the check would inspect already-projected entities and see **nothing** | Task 8 | **here** (Step 3a) |
 > | the verdict-agreement **graph** check | **`sci:verdict` in the graph** — materialization emits `projectStatus` and `disposition`, and no verdict at all, so the check reads `None` for every hypothesis and finds no disagreement, ever | Task 10 | **here** (Step 3b) — *emission only; the `sci:disposition` **deletion** stays in Task 10, where `attention.py` is rewired* |
 > | the write boundary refuses a dangling successor | **a write boundary** — `edit_entity` validates nothing today (`entities.py:935`), so there is nothing here to hang the guard on | here | **Task 10**, which ships that boundary. *(It is tested on `resynthesized_into`: `superseded_by` is derived from resolvable edges and cannot dangle.)* |
 >
@@ -2698,8 +2698,10 @@ dress.
   forward from Task 8**: the loader pass below cannot observe what the model drops.
 - **Modify: `science/src/science_tool/graph/materialize.py:646`** — emit `sci:verdict` beside
   `sci:projectStatus`. **Additive only.**
-- Modify: `science/src/science_tool/graph/sources.py` (`ProjectSources.resolution_violations` — the
-  **declared carrier**; `SourceFailure` does not exist), `validate/checks/hypotheses.py`
+- Modify: `validate/checks/hypotheses.py` — the check builds the resolver and calls
+  `check_resolution`. **`graph/sources.py` is NOT modified: the loader must not build a resolver**
+  (Step 3b's box — it makes an alias collision unloadable rather than reportable).
+- Test: `science/tests/test_loader_resolver_boundary.py` — the AST guard that keeps it that way.
 - Create: `science/src/science_tool/validate/checks/verdict_agreement.py`
 - Test: `science/model/tests/test_resolution.py`, `science/tests/test_resolution_wiring.py`,
   **`science/tests/test_verdict_agreement.py`** (Step 3c-i — the verdict subsystem had **no** tests
@@ -2902,7 +2904,7 @@ def test_a_LIVE_ALIAS_resolves_through_the_REAL_loader(tmp_project) -> None:
     write_hypothesis(tmp_project, "0002-y", aliases=["hypothesis:0002"])
     write_hypothesis(tmp_project, "0001-x", status="superseded",
                      extra={"superseded_by": "hypothesis:0002"})
-    assert load_project_sources(tmp_project).resolution_violations == []
+    assert lineage_violations(tmp_project) == []          # the CHECK, not the loader
 
 
 def test_a_SELF_ALIAS_is_caught_through_the_REAL_loader(tmp_project) -> None:
@@ -2910,7 +2912,7 @@ def test_a_SELF_ALIAS_is_caught_through_the_REAL_loader(tmp_project) -> None:
     # `ref == entity_id` check never fires; it resolves cleanly and reads as a valid successor.
     write_hypothesis(tmp_project, "0001-x", status="superseded", aliases=["hypothesis:x-alias"],
                      extra={"superseded_by": "hypothesis:x-alias"})
-    violations = load_project_sources(tmp_project).resolution_violations
+    violations = lineage_violations(tmp_project)          # the CHECK, not the loader
     assert len(violations) == 1
     assert "itself" in violations[0].message
 
@@ -2927,7 +2929,7 @@ def test_an_ARCHIVED_successor_RESOLVES_and_is_still_a_violation(tmp_project) ->
     archive_entity(tmp_project, "hypothesis:0003-gone")        # index-only; markdown not loaded
     write_hypothesis(tmp_project, "0001-x", status="superseded",
                      extra={"superseded_by": "hypothesis:0003-gone"})
-    violations = load_project_sources(tmp_project).resolution_violations
+    violations = lineage_violations(tmp_project)          # the CHECK, not the loader
     assert len(violations) == 1
     assert "not a live entity" in violations[0].message      # NOT "does not resolve"
 
@@ -2969,7 +2971,7 @@ def test_the_dangling_lineage_rule_is_NOT_GATED_yet(tmp_project) -> None:
 def test_the_LOADER_can_actually_SEE_the_terminal_fields(tmp_project) -> None:
     # The test that would have caught the inert wiring. `check_resolution` reads PROJECTED
     # entities, and `HypothesisEntity` dropped all four terminal fields until Step 3 -- so the
-    # second pass would have inspected a stripped record, found no reference, and reported clean.
+    # check would have inspected a stripped record, found no reference, and reported clean.
     # Assert the SUBSTRATE, not just the finding: a green resolver over a blind loader is the
     # silent instrument this arc exists to abolish.
     from science_model.entities import HypothesisEntity
@@ -2985,8 +2987,8 @@ def test_the_LOADER_can_actually_SEE_the_terminal_fields(tmp_project) -> None:
     entity = next(e for e in sources.entities if e.id == "hypothesis:0001-x")
     assert entity.superseded_by == "hypothesis:9999-nope"   # it SURVIVED the projection
 
-    # ...and the loader CARRIED the violation out, typed.
-    assert [v.ref for v in sources.resolution_violations] == ["hypothesis:9999-nope"]
+    # ...and the CHECK, reading those projected entities through the real resolver, SAW it.
+    assert ["9999-nope" in v.message for v in lineage_violations(tmp_project)] == [True]
 ```
 
 > The write-boundary refusal has **moved to Task 10** — `edit_entity` validates nothing today
@@ -3192,105 +3194,90 @@ def check_resolution(
 > | **archived alias** | yes | not live | **violation** — resolvable ≠ a reason |
 > | **unresolved token** (`hypothesis:9999-nope`) | no | — | **violation** |
 
-- [ ] **Step 3b: WIRE it — two call sites, neither optional, and ONE declared carrier between them**
+- [x] **Step 3b: WIRE it — in the CHECK. The LOADER must not build a resolver.** *(SHIPPED — and it
+  reverses this step's original instruction. Read the box.)*
 
-> **`SourceFailure` does not exist.** An earlier draft of this step told the implementer to
-> "append a `SourceFailure`" — a type nowhere in the codebase — and gave `ProjectSources` no field
-> to hold violations either. **The checker had no contract with either end.** The precedent is
-> already there: `SkippedEntity` (`sources.py:140`) is exactly this shape — a typed row the loader
-> collects and `validate` surfaces, so that something dropped at load is *visible* rather than only
-> logged. Follow it.
+> ### ☠️ THE LOADER MUST NOT BUILD A REFERENCE RESOLVER. This was tried TWICE and reverted twice.
+>
+> Every earlier revision of this step said: add a `resolution_violations` carrier to `ProjectSources`
+> and populate it in a **second pass** inside `load_project_sources`, because the loader has the
+> whole corpus, the manual aliases and the identity declarations right there. **It is wrong**, and
+> the reason has nothing to do with lineage:
+>
+> ```
+> ReferenceResolver.from_entities  ->  build_alias_map  ->  RAISES AliasCollisionError
+>                                                           when two entities claim one alias
+> ```
+>
+> So a resolver built inside the loader makes a corpus with a duplicated alias **UNLOADABLE** instead
+> of **REPORTABLE** — for *every* caller of `load_project_sources`, including the many that never
+> look at a hypothesis. **`annotation/proposition_archive.py` exists precisely to REPORT and unblock
+> those collisions, and calls `load_project_sources` on a colliding corpus ON PURPOSE.** The
+> loader-side pass breaks three of its tests.
+>
+> **Loading and resolving are different jobs.** The loader reads and projects sources. Resolution is
+> analysis *over* an already-loaded corpus, and it belongs to the caller that wants an answer and can
+> handle the collision. That is already the convention: **all seven** other
+> `ReferenceResolver.from_entities` call sites build their own resolver, and `migrate.py:162` catches
+> `AliasCollisionError` itself.
+>
+> There is **no `resolution_violations` carrier** and **no second pass**. `ProjectSources` is
+> untouched by this task.
 
-  1. **`graph/sources.py`** — add the carrier beside `skipped_entities`:
-
-```python
-class ProjectSources(BaseModel):
-    ...
-    skipped_entities: list[SkippedEntity] = Field(default_factory=list)
-    resolution_violations: list[ResolutionViolation] = Field(default_factory=list)
-```
-
-  Populate it in a **second pass**, after the whole corpus is loaded — it needs the resolver and the
-  live set, so it cannot be per-file. **Build the resolver exactly as `materialize` does**, from the
-  same inputs: a validator that resolves differently from the materializer is a second authority for
-  one fact.
-
-  **Two mechanical traps, both of which stop the naive version compiling:**
-
-  > **(a) `sources` does not exist yet.** `load_project_sources` ends with a bare
-  > `return ProjectSources(...)` (`sources.py:628`) — there is no local bundle to hand to
-  > `build_identity_table(sources)`, which needs `.identity_declarations`. **Construct the bundle
-  > first, then compute, then return an updated copy.**
-  >
-  > **(b) The two new imports go in OPPOSITE places, for opposite reasons.** Get this backwards and
-  > it does not compile.
-  >
-  > - **`ReferenceResolver` must be FUNCTION-LOCAL.** A top-level
-  >   `from …reference_resolution import ReferenceResolver` in `sources.py` is a **cycle**:
-  >   `reference_resolution.py:11` already does `from science_tool.graph.sources import
-  >   build_alias_map`. Say why in a comment — otherwise the next reader "tidies" it to the top and
-  >   breaks the package. (`load_archive_index` is already imported locally in this same function
-  >   for exactly this reason; follow it.)
-  > - **`build_identity_table` goes TOP-LEVEL**, appended to the import block `sources.py` already
-  >   has from that module (`sources.py:49` imports `IdentityDeclaration`, `ParticipationMode`,
-  >   `classify_owner_scope` — but *not* `build_identity_table`, which is the omission that stopped
-  >   the earlier draft compiling). There is **no** cycle: `identity_table.py` imports nothing from
-  >   `graph.sources` — it takes a structural `_DeclaredSources` Protocol (identity_table.py:122)
-  >   precisely so that it never has to.
+  **`validate/checks/hypotheses.py`** — the check builds the resolver and calls `check_resolution`.
+  Rule `hypothesis.dangling-lineage`, severity **WARN** (ERROR arrives with Task 12's ratchet, per
+  kind). Same three arguments as `materialize.py`, because a validator that resolves a reference
+  differently from the materializer is a second authority for one fact.
 
 ```python
-# At the TOP of sources.py -- extend the EXISTING import from this module (sources.py:49):
-from science_tool.graph.identity_table import (
-    IdentityDeclaration,
-    ParticipationMode,
-    build_identity_table,          # <- ADD. No cycle: identity_table never imports sources.
-    classify_owner_scope,
-)
-```
-
-```python
-    # Everything above is unchanged, up to and including the manual_aliases block.
-    bundle = ProjectSources(
-        project_name=str(config["name"]),
-        ...,                                   # exactly as today
-    )
-
-    # Local import: reference_resolution imports `build_alias_map` FROM this module, so a
-    # top-level import here would make graph/ cyclic. Do not hoist this.
-    from science_tool.graph.reference_resolution import ReferenceResolver
-
-    # The SAME construction as materialize.py (`materialize.py:348`) -- same entities, same manual
-    # aliases, same identity table. Anything less is a different resolver wearing the same name,
-    # and a validator that resolves differently from the materializer is the second authority for
-    # one fact that this whole arc exists to abolish.
+@Check(section="hypotheses...", order=6)
+def check_dangling_lineage(ctx: ValidateContext) -> Iterator[Result]:
+    sources = ctx.project_sources()
     resolver = ReferenceResolver.from_entities(
-        bundle.entities,
-        manual_aliases=bundle.manual_aliases,
-        identity_table=build_identity_table(bundle),
+        sources.entities,
+        manual_aliases=sources.manual_aliases,
+        identity_table=build_identity_table(sources),
     )
-    live_ids = {entity.canonical_id for entity in bundle.entities}   # LIVE and LOCAL
-    violations = [
-        violation
-        for entity in bundle.entities
+    # LIVE and LOCAL. Keyed on `canonical_id`, NOT `id`: the resolver ANSWERS in canonical ids, so a
+    # set keyed on the authored `id` would fail to contain its own resolver's answers for every
+    # entity whose canonical id differs from the one on disk.
+    live_ids = {entity.canonical_id for entity in sources.entities}
+    path_by_id = {
+        str(doc.frontmatter.get("id")): doc.path
+        for doc in sources.markdown_documents
+        if doc.frontmatter.get("id")
+    }
+
+    for entity in sources.entities:
         for violation in check_resolution(
             entity.model_dump(mode="json"), targets=resolver, live_ids=live_ids
-        )
-    ]
-    return bundle.model_copy(update={"resolution_violations": violations})
+        ):
+            path = path_by_id.get(violation.entity_id)
+            yield Result(
+                Severity.WARN, Path(path) if path else None, None,
+                violation.message, "hypothesis.dangling-lineage", None,
+            )
 ```
 
-  > `live_ids` is built from `canonical_id`, **not** `id` — the resolver returns canonical ids, so a
-  > set keyed on raw `id` would fail to contain its own resolver's answers for every entity whose
-  > canonical id differs from its authored one.
+  **It reads the four fields Step 3 put on the model** — before those, `model_dump` yields a record
+  with no lineage at all and this check reports clean forever. `ResolutionViolation`'s typed fields
+  are why this is a projection and not a re-parse: a `list[str]` would have forced the check to
+  recover `entity_id` and `field` out of an English sentence.
 
-  **It reads the four fields Step 3 put on the model** — before that, `model_dump` yields a record
-  with no lineage at all and this pass reports clean forever.
+  **Two guards, and they prove different things** (`tests/test_loader_resolver_boundary.py`,
+  `tests/test_resolution_wiring.py`):
 
-  2. **`validate/checks/hypotheses.py`** — a new check that *consumes the carrier*, rather than
-     re-deriving anything: one `Result` per violation, rule `hypothesis.dangling-lineage`, severity
-     **WARN**. (ERROR arrives with Task 12's ratchet, per kind.) The typed fields are why this is a
-     projection and not a re-parse — a `list[str]` would have forced the check to recover
-     `entity_id` and `field` out of an English sentence.
+  - **behavioural** — `test_the_LOADER_does_not_build_a_RESOLVER` loads a corpus whose two entities
+    claim one alias and asserts `load_project_sources` does not raise.
+  - **architectural** — an **AST guard** asserting `graph/sources.py` contains no `.from_entities()`
+    call and no import of `reference_resolution`, at any scope. This is the one that matters: the
+    behavioural test pins the *symptom*, and **a loader that builds the resolver, catches
+    `AliasCollisionError`, and carries on would pass it** — reintroducing the coupling *and* adding a
+    swallowed exception. Verified by mutation: under exactly that change the behavioural test passes
+    and only the AST guard fails. The AST guard carries its own self-check
+    (`test_the_GUARD_ITSELF_still_matches_a_real_construction`), because a guard that no longer
+    recognises what it forbids is not a guard, it is a green light.
+
 
   *(The third call site — the **write boundary** — is **Task 10's**. Task 7a splits that boundary
   into a private `_prepare_write` / `_commit_write` pair and builds the derived writer
