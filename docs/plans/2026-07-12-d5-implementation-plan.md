@@ -7383,6 +7383,15 @@ committing any of them, and so keep the all-or-none promise it makes (Task 7a).
   `field_inventory` is *this branch's* instrument, and a bare `uv run` resolves a toolkit that does
   not have it — or, worse, an older one that does and counts differently.
 
+> **☠️ THE FOUR TOOLKIT-OWNED ROOTS MUST RESOLVE TO THIS WORKTREE, NEVER THE MAIN CHECKOUT.** `meta`
+> and the three `tests/fixtures/**` roots live INSIDE `~/d/science`, and this branch's changes to them
+> — the adjudication artifact, the pinned/canary fixtures, the migrated frontmatter — exist only in
+> this worktree. A `~/d/**/science.yaml` glob that skips `.claude`/`.worktrees` does not omit these
+> four; it finds them in the MAIN checkout, which lacks all of it, and preflight then refuses
+> `commons_mm30_canary` for a missing adjudication file that is right here. So the roster is built in
+> **two disjoint halves**: the 14 EXTERNAL roots from `~/d` with the entire `~/d/science` tree
+> excluded, and the 4 TOOLKIT-OWNED roots enumerated from the worktree explicitly. 14 + 4 = 18.
+
 ```bash
 WT=$(realpath ~/d/science/.claude/worktrees/instrument-result/science)
 
@@ -7401,12 +7410,33 @@ if _got != _want:
 from science_tool.field_inventory import field_inventory
 
 D = Path.home() / "d"
+WT = Path(sys.argv[1]).resolve()          # ~/d/science/.claude/worktrees/<name>/science
+WT_REPO = WT.parent                       # the worktree checkout root (holds meta/ and tests/)
+SCIENCE = (D / "science").resolve()       # the toolkit repo -- EVERY checkout of it is excluded below
+
+# HALF 1: the 14 external roots. Exclude the whole `~/d/science` subtree (main checkout AND every
+# worktree under it), so the four toolkit-owned roots come ONLY from HALF 2, at the worktree.
 SKIP = {".venv", ".git", ".claude", ".worktrees", "node_modules", "templates"}
-roots = sorted({
-    p.parent.resolve()                      # .resolve() collapses the ~/d/r/* symlinks
+external = {
+    p.parent.resolve()                    # .resolve() collapses the ~/d/r/* symlinks
     for p in D.glob("**/science.yaml")
     if not any(s in SKIP for s in p.parts) and "--" not in p.parent.name
-})
+    and SCIENCE not in p.resolve().parents  # <- the fix: no root inside the toolkit repo
+}
+
+# HALF 2: the four toolkit-owned roots, taken from THIS worktree by exact path -- not discovered by a
+# glob that could bind them to the main checkout. `meta`, plus the three fixture projects.
+toolkit_owned = [
+    WT_REPO / "meta",
+    WT / "tests" / "fixtures" / "spec_y_kitchen_sink",
+    WT / "tests" / "fixtures" / "big_picture" / "minimal_project",
+    WT / "tests" / "fixtures" / "commons_mm30_canary" / "project",
+]
+for r in toolkit_owned:
+    if not (r / "science.yaml").is_file():
+        sys.exit(f"MISSING TOOLKIT-OWNED ROOT: {r}")
+
+roots = sorted(external | {r.resolve() for r in toolkit_owned})
 manifest = []
 for r in roots:
     n = field_inventory(r, "hypothesis").get("id", 0)
@@ -7419,11 +7449,19 @@ for r in roots:
 manifest.sort(key=lambda m: m["root"])
 Path("/tmp/claude-1000/roster.json").write_text(json.dumps(manifest, indent=2))
 repos = {m["repo"] for m in manifest}
+# The four toolkit-owned roots share ONE repo -- this worktree -- so a group-by-repo commit in Step 1
+# must key on `git rev-parse --show-toplevel`, never on the root path.
+wt_top = subprocess.run(["git", "-C", str(WT_REPO), "rev-parse", "--show-toplevel"],
+                        capture_output=True, text=True, check=True).stdout.strip()
+owned_here = [m for m in manifest if m["repo"] == wt_top]
 print(f"{len(manifest)} roots, {sum(m['n'] for m in manifest)} hypotheses, {len(repos)} git repos")
+print(f"  toolkit-owned in THIS worktree ({wt_top}): {[m['slug'] for m in owned_here]}")
 PY
 ```
 
-Expect **18 roots / 147 hypotheses / 15 git repos** as of 2026-07-12.
+Expect **18 roots / 147 hypotheses / 15 git repos** as of 2026-07-12 — 14 external plus the four
+toolkit-owned (`meta`, `spec_y_kitchen_sink`, `big_picture/minimal_project`,
+`commons_mm30_canary/project`), all four resolving inside this worktree's checkout.
 
 > **The gate is set equality on `(root, n)` — not the totals.** `18/147` is satisfiable while a
 > root silently disappears and another gains the same count. Snapshot the manifest **once**, here,
