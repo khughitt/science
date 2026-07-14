@@ -67,6 +67,7 @@ CANONICAL_CHECK_MODULES = (
     "prose_lints",
     "annotations",
     "evidence_lines",
+    "verdict_agreement",
     "propositions",
     "origins",
     "lens_views",

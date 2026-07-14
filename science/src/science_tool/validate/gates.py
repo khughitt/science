@@ -38,9 +38,24 @@ _TIER_RULES: dict[str, frozenset[str]] = {
             # `belief.refutation-masked` and `belief.single-source-ceiling` were gated here.
             # Both compared an AUTHORED belief magnitude against the computed one, and belief is
             # no longer authored (D5 / design rev 8), so they have no input and were removed.
-            # NOTE: `refutation-masked` — an author asserting >= supported while an unresolved
-            # decisive refutation stands — is a real invariant that still needs a home on the
-            # `verdict` axis. It is re-gated there, not silently dropped.
+            #
+            # `refutation-masked` — an author asserting support while an unresolved decisive
+            # refutation stands — is a real invariant, and it now has its home on the axis that IS
+            # authored. It inherits the gated ERROR its belief-axis predecessor held.
+            #
+            # `single-source-ceiling` does NOT come back. Applied to `refuted` it would flag the
+            # strongest possible refutation — one decisive independent test — as unfounded. The
+            # ceiling does not merely fail to transfer to the verdict axis; it INVERTS.
+            "verdict.refutation-masked",
+            #
+            # The other two verdict rules are deliberately UNGATED:
+            #   `verdict.missing-basis`         — WARN. The basis contract is normative, but at
+            #       least 11 of the 15 migrating verdicts cannot satisfy it today, so an ERROR
+            #       would be an uncertified instrument failing real builds. It has its OWN ratchet,
+            #       independent of the `hypothesis` kind's certification.
+            #   `verdict.disagrees-with-computed` — a disagreement is information, not a fault.
+            #       Gating it would make the check a ceiling on the authored verdict, which is
+            #       exactly what design rev 8 point 4 forbids.
             "evidence.proxy-ungated",
         }
     ),

@@ -2731,7 +2731,7 @@ dress.
   **`science/tests/test_verdict_agreement.py`** (Step 3c-i — the verdict subsystem had **no** tests
   at all, and its artifact diff is empty by construction, so it could not have had them)
 
-- [ ] **Step 1: Write the failing tests** — unit **and wiring**. Rev 1 shipped the module unwired
+- [x] **Step 1: Write the failing tests** — unit **and wiring**. Rev 1 shipped the module unwired
   and admitted it in its own self-review. **The wiring tests are the point.**
 
 ```python
@@ -2776,11 +2776,11 @@ TARGETS = _Targets({
     "hypothesis:0003-gone": "hypothesis:0003-gone",       # <- resolves, but NOT live
     "hypothesis:x-alias": "hypothesis:0001-x",            # <- an alias OF the entity itself
 })
-LIVE = {"hypothesis:0001-x", "hypothesis:0002-y", "hypothesis:0009-successor"}
+LIVE_HYPOTHESES = {"hypothesis:0001-x", "hypothesis:0002-y", "hypothesis:0009-successor"}
 
 
 def _check(entity: dict[str, object]):
-    return check_resolution(entity, targets=TARGETS, live_ids=LIVE)
+    return check_resolution(entity, targets=TARGETS, live_hypotheses=LIVE_HYPOTHESES)
 
 
 def test_dangling_successor_is_caught() -> None:
@@ -2830,7 +2830,7 @@ def test_an_ARCHIVED_target_RESOLVES_and_is_still_a_violation() -> None:
     v = _check({"id": "hypothesis:0001-x", "status": "superseded",
                 "superseded_by": "hypothesis:0003-gone"})
     assert len(v) == 1
-    assert "not a live entity" in v[0].message
+    assert "not a live hypothesis" in v[0].message
 
 
 def test_resynthesized_into_is_a_LIST_and_every_member_must_resolve() -> None:
@@ -2869,7 +2869,7 @@ def test_a_basis_closed_entity_needs_no_structure() -> None:
 
 def test_a_live_entity_is_not_checked() -> None:
     assert check_resolution(
-        {"id": "hypothesis:0001-x", "status": "active"}, targets=TARGETS, live_ids=set()
+        {"id": "hypothesis:0001-x", "status": "active"}, targets=TARGETS, live_hypotheses=set()
     ) == []
 ```
 
@@ -2944,7 +2944,7 @@ def test_a_SELF_ALIAS_is_caught_through_the_REAL_loader(tmp_project) -> None:
 def test_an_ARCHIVED_successor_RESOLVES_and_is_still_a_violation(tmp_project) -> None:
     # ☠️ THE test that pins `manual_aliases=`. Archived ids are folded into `manual_aliases`
     # (sources.py:618) and are deliberately NOT loaded as live entities -- so an archived successor
-    # RESOLVES and is absent from `live_ids`.
+    # RESOLVES and is absent from `live_hypotheses`.
     #
     # Assert the MESSAGE, not the count. Omit `manual_aliases=` from `from_entities` and this ref
     # simply fails to resolve: still exactly one violation, still green, and the wiring defect is
@@ -2955,7 +2955,7 @@ def test_an_ARCHIVED_successor_RESOLVES_and_is_still_a_violation(tmp_project) ->
                      extra={"superseded_by": "hypothesis:0003-gone"})
     violations = lineage_violations(tmp_project)          # the CHECK, not the loader
     assert len(violations) == 1
-    assert "not a live entity" in violations[0].message      # NOT "does not resolve"
+    assert "not a live hypothesis" in violations[0].message  # NOT "does not resolve"
 
 
 @pytest.mark.parametrize(
@@ -3026,9 +3026,9 @@ def test_the_LOADER_can_actually_SEE_the_terminal_fields(tmp_project) -> None:
 > superseder off the canonical edge.** A derived field with any caller-supplied spelling — authored
 > or not — is the thing rev 10 deleted.
 
-- [ ] **Step 2: Run and fail.**
+- [x] **Step 2: Run and fail.**
 
-- [ ] **Step 3: The four projection fields — MOVED FORWARD from Task 8.** Without them the loader
+- [x] **Step 3: The four projection fields — MOVED FORWARD from Task 8.** Without them the loader
   pass below reads a stripped record. `science/model/src/science_model/entities.py`,
   `HypothesisEntity`:
 
@@ -3042,7 +3042,7 @@ def test_the_LOADER_can_actually_SEE_the_terminal_fields(tmp_project) -> None:
   Task 8 still owns their **certification** (the reconciliation battery against the schema); this
   task owns their **existence**, because it is the first task that reads them.
 
-- [ ] **Step 3a: Implement `resolution.py`**
+- [x] **Step 3a: Implement `resolution.py`**
 
 ```python
 # science/model/src/science_model/entity_schema/resolution.py
@@ -3128,7 +3128,7 @@ class LineageTargets(Protocol):
 
 
 def check_resolution(
-    entity: dict[str, Any], *, targets: LineageTargets, live_ids: set[str]
+    entity: dict[str, Any], *, targets: LineageTargets, live_hypotheses: set[str]
 ) -> list[ResolutionViolation]:
     """Cross-record terminal violations. Empty == clean.
 
@@ -3169,7 +3169,7 @@ def check_resolution(
                 f"{raw_id}: {field} -> {ref!r} resolves to the entity itself "
                 f"({self_canonical}); an entity cannot be its own successor"
             )
-        elif resolution.canonical_id not in live_ids:
+        elif resolution.canonical_id not in live_hypotheses:
             # Resolvable is not enough. An ARCHIVED successor resolves perfectly well and is still
             # not a reason: the entity it points at is no longer part of the live corpus.
             message = (
@@ -3319,7 +3319,7 @@ def check_dangling_lineage(ctx: ValidateContext) -> Iterator[Result]:
   `superseded_by` parameter: the field is **derived**, and a caller-supplied spelling of it — from a
   CLI flag or from Python — is exactly what rev 10 deleted.)*
 
-- [ ] **Step 3b-ii: Emit `sci:verdict`** — **without this, Step 3c's check is inert.**
+- [x] **Step 3b-ii: Emit `sci:verdict`** — **without this, Step 3c's check is inert.**
   `materialize.py:646` emits `projectStatus` and `disposition` and **no verdict at all**, so the
   graph check below would read `None` for every hypothesis and find a disagreement **never**. One
   triple, beside the status:
@@ -3437,7 +3437,7 @@ def check_dangling_lineage(ctx: ValidateContext) -> Iterator[Result]:
 > design rev 8 point 2 to say evidence-line-and-falsification basis.** Do not ship a check whose
 > docstring claims a basis it cannot read. *(File as a defect against rev 8.)*
 
-- [ ] **Step 3c-0: REGISTER the check — or it never runs, and every test still passes.**
+- [x] **Step 3c-0: REGISTER the check — or it never runs, and every test still passes.**
 
   Writing `verdict_agreement.py` does **not** enable it. `validate` runs only what
   `CANONICAL_CHECK_MODULES` names (`checks/__init__.py:25`): `_load_canonical_checks` imports each
@@ -3448,27 +3448,47 @@ def check_dangling_lineage(ctx: ValidateContext) -> Iterator[Result]:
   is eagerly loaded, so a name listed before its file exists is an immediate `ModuleNotFoundError`
   that breaks the entire package.
 
-  > ### ☠️ Why the unit tests CANNOT catch this, and what does
+  > ### ☠️ Why the unit tests CANNOT catch this — and why AN END-TO-END TEST CANNOT EITHER
   >
   > `test_verdict_agreement.py` imports `verdict_agreement` to get at its helpers. **That import runs
   > the decorator.** So the check registers itself *inside the test process* and every unit test
-  > passes — while `science validate` in a real project runs 75 checks and never calls it. The suite
-  > is green and the feature is off. This is the silent-instrument failure verbatim, one layer up.
+  > passes — while `science validate` in a real project never calls it. The suite is green and the
+  > feature is off. This is the silent-instrument failure verbatim, one layer up.
+  >
+  > **Rev 1 answered that with an end-to-end test through `run_validate`, and that answer is WRONG.**
+  > Established by mutation, not by argument — unregister the module and run:
+  >
+  > ```
+  > pytest tests/test_check_registry_is_complete.py                      -> BOTH tests fail
+  > pytest tests/test_verdict_agreement.py tests/test_check_registry...  -> only the FIRST fails
+  > ```
+  >
+  > The decorator fires on **import**, and the import happens in the *same pytest process*. So by the
+  > time the e2e test calls `runner.run`, the check is registered **no matter what the tuple says**.
+  > In the full suite — which always contains both files — an e2e test can **never** catch an
+  > unregistration. It is order-dependent, and its green reads as coverage it does not have. *The
+  > proposed guard had the same defect as the thing it was guarding against.*
   >
   > The registry fails **loud** in one direction (listed-but-missing → `ModuleNotFoundError`) and
   > **silent** in the other (present-but-unlisted → never runs). Only the silent direction needs a
-  > guard, and it must be **derived from the directory, not hand-listed** — a guard that enumerates
-  > its own scope has a hole by construction, which is the very hole it would be closing.
+  > guard, and **only a test that reads no registry state can be it**: compare the DIRECTORY to the
+  > TUPLE. Derived from the filesystem, not hand-listed — a guard that enumerates its own scope has a
+  > hole by construction, which is the very hole it would be closing.
+  >
+  > The e2e test still ships, renamed to what it actually proves: a **wiring** test (a registered
+  > check, through the real entry point, over a real materialized graph, reaches a hypothesis and
+  > emits its rule). That is worth having. It is simply not the thing that catches an unlisted module.
 
 ```python
-# science/tests/validate/test_check_registry_is_complete.py
+# science/tests/test_check_registry_is_complete.py
 from pathlib import Path
 
 
 def test_EVERY_check_module_on_disk_is_REGISTERED() -> None:
-    # Derived from the FILESYSTEM, not from a list. A check module that exists but is not named in
-    # CANONICAL_CHECK_MODULES is dead code that looks exactly like a working check -- it has a
-    # @Check decorator, it has passing unit tests, and `validate` never calls it.
+    # THE GUARD. Immune to import order BY CONSTRUCTION: disk vs. tuple, no registry state read.
+    # A check module that exists but is not named in CANONICAL_CHECK_MODULES is dead code that looks
+    # exactly like a working check -- it has a @Check decorator, it has passing unit tests, and
+    # `validate` never calls it.
     from science_tool.validate import checks
 
     on_disk = {
@@ -3482,25 +3502,25 @@ def test_EVERY_check_module_on_disk_is_REGISTERED() -> None:
     )
 
 
-def test_the_verdict_check_runs_through_RUN_VALIDATE(tmp_project) -> None:
-    # End-to-end, through the REAL entry point -- NOT by importing the module (which would run the
-    # decorator and conceal the omission this test exists to catch).
+def test_a_registered_check_REACHES_a_real_project(tmp_path) -> None:
+    # WIRING, not registration (see the box above): `runner.run` -> the graph -> the check -> a rule
+    # on a real hypothesis. It proves the check is reachable from the real entry point and fires on
+    # real materialized input, rather than only when a test hands it a hand-built context.
     #
     # The check reads `knowledge/graph.trig`; writing source alone leaves `_load_belief_graphs`
     # returning `(None, None)` and the registered check correctly emitting NOTHING. Build the
-    # artifact first, or this test fails without ever exercising the verdict surface.
+    # artifact first, or this test goes green without ever exercising the verdict surface.
     from science_tool.graph.materialize import materialize_graph
 
-    write_hypothesis(tmp_project, "0001-x", status="complete",
+    write_hypothesis(tmp_path, "0001-x", status="complete",
                      extra={"verdict": "supported"})          # no basis -> missing-basis
-    graph_path = materialize_graph(tmp_project)
-    assert graph_path.is_file()                               # prove the check has something to read
+    assert materialize_graph(tmp_path).is_file()              # prove the check has something to read
 
-    rules = {r.rule for r in run_validate(tmp_project)}
+    rules = {r.rule for r in runner.run(tmp_path, strict=False, verbose=False).results}
     assert "verdict.missing-basis" in rules
 ```
 
-- [ ] **Step 3c: The verdict-agreement GRAPH check** (design rev 8, contract point 2 — *as amended*)
+- [x] **Step 3c: The verdict-agreement GRAPH check** (design rev 8, contract point 2 — *as amended*)
 
 ```python
 # science/src/science_tool/validate/checks/verdict_agreement.py
@@ -3623,12 +3643,45 @@ def check_verdict_agreement(ctx: ValidateContext) -> Iterator[Result]:
 
 | verdict | reports a disagreement when… |
 |---|---|
-| `supported` | the composed belief does not support it (the ERROR case is handled above, separately) |
-| `partially-supported` | there is **no** unresolved/disputed/unsupported portion (`unresolved_members` and `contested_members` both empty **and** nothing refuted) — i.e. nothing *partial* about it |
+| `supported` | **nothing composes** — the composed magnitude is `speculative` — **or** an unresolved decisive refutation stands. *(Not "the magnitude is below the `supported` rung" — see the ruling below. The ERROR case is emitted separately, and both may fire.)* |
+| `partially-supported` | there is **no** unresolved/disputed/unsupported portion (no core member `speculative` or contested **and** nothing refuted) — i.e. nothing *partial* about it |
 | `weakened` | **no** disputing evidence and no negative adjudication basis. **Never infer a historical trajectory from one snapshot** — a true weakening claim needs a prior `belief_snapshot`; absent one, only report the *absence of any dispute*, never the absence of *change*. |
 | `refuted` | no decisive refutation and no linked falsification. **No single-source ceiling** — one decisive independent test is a legitimate refutation. |
 
-- [ ] **Step 3c-i: The verdict subsystem's FAILING TESTS — written BEFORE 3b-ii and 3c, not after.**
+> ### ⚠️ THREE RULINGS the snippets above did not survive contact with — found while implementing
+>
+> **1. `supported` may NOT be tested against the `supported` RUNG — that is the single-source ceiling
+> coming back through the side door.** The table's *"the composed belief does not support it"* reads
+> naturally as `magnitude < BeliefMagnitude.SUPPORTED`. It cannot be: `_base_magnitude` returns
+> **`fragile`** for a lone support unit (`well_supported` needs ≥2 clean units; one unit is fragile by
+> the corroboration rule, belief.py:310-313). So the rung test would warn on **every verdict backed by
+> a single decisive experiment** — the exact inversion this design named when it killed
+> `belief.single-source-ceiling`, and it would have fired on the plan's OWN control test
+> (`test_an_ADMISSIBLE_unit_IS_a_basis`, which expects silence). The honest complaint is that
+> **nothing composes at all**, or that **a refutation stands**. Both are emitted; neither is a ceiling.
+>
+> **2. `capped_by_refutation` is NOT the refutation predicate.** It is the flag for *"a decisive
+> refutation pulled the magnitude DOWN"* (belief.py:365-368) — so a claim with a decisive refutation
+> and **no support** composes to `speculative`, is never capped, and the flag reads **False**. That is
+> *precisely* the `supported`-over-a-bare-refutation case `verdict.refutation-masked` exists to catch,
+> and a check built on the flag would have been silent on it. Ask the real question instead: is there
+> an **admitted decisive refuting unit**? `dispute_units` is the reduced, admitted, non-diagnostic
+> list — the same one `aggregate_belief` itself tests. *(Mutation-proven: swapping in the flag fails
+> 4 tests, including both refutation tests.)*
+>
+> **3. `_unit(stance="refutes")` names a stance that does not exist.** `collect_evidence_units` reads
+> exactly two predicates, `cito:supports` and `cito:disputes` (belief.py:143). A refuting edge **is**
+> a `disputes` edge that additionally satisfies `is_decisive_refutation` (independent + strong +
+> direct_test + whole_claim). The shipped fixture makes `disputes` decisive by default, so the
+> polarity control tests polarity and nothing else.
+>
+> **And one GAP: the plan's test list never exercised the falsification limb.** The basis contract has
+> two limbs, and only the evidence-line one had tests — the `falsification`-on-a-core-member limb, the
+> *"explicitly linked negative adjudication"* the `refuted` row depends on, was specified in prose and
+> gated by nothing. Two tests ship for it, with a polarity control proving it cannot ground
+> `supported`.
+
+- [x] **Step 3c-i: The verdict subsystem's FAILING TESTS — written BEFORE 3b-ii and 3c, not after.**
 
 > **The whole subsystem had no Step-1 tests.** Every claim in the two tables above — polarity,
 > admissibility, core-member scope, the non-ordinal matrix, the two rules firing independently —
@@ -3803,7 +3856,7 @@ def test_weakened_is_never_inferred_from_ONE_snapshot() -> None:
     assert results == []
 ```
 
-- [ ] **Step 3d: Re-gate the hard invariant — and ONLY it.** Add **`verdict.refutation-masked`** to
+- [x] **Step 3d: Re-gate the hard invariant — and ONLY it.** Add **`verdict.refutation-masked`** to
   the `hygiene` tier in `validate/gates.py`; it inherits the gated ERROR that
   `belief.refutation-masked` held before Task 2b removed it.
 
@@ -3845,7 +3898,7 @@ def test_refutation_masked_IS_gated_at_hygiene() -> None:
 > nothing about whether the corpus carries verdict bases, so `verdict.missing-basis` must stay WARN
 > even then* — cannot be stated before the thing it constrains exists.
 
-- [ ] **Step 4: Green** — unit + wiring, **both suites whole**, plus `ruff` and `pyright`. Task 7
+- [x] **Step 4: Green** — unit + wiring, **both suites whole**, plus `ruff` and `pyright`. Task 7
   now touches `science_model.entities` (Step 3) and `science_tool.graph.materialize` (Step 3b-ii),
   so neither suite is optional.
 
@@ -5676,7 +5729,7 @@ def test_a_stamped_HYPOTHESIS_satisfies_its_own_schema(tmp_path: Path) -> None:
     # not a raw id set, which would both reject a valid alias and miss a self-alias (Task 7).
     targets = ReferenceResolver.from_entities(_load_entities(tmp_path))
     assert check_resolution(
-        fm, targets=targets, live_ids={"hypothesis:0002-new"}
+        fm, targets=targets, live_hypotheses={"hypothesis:0002-new"}
     ) == []
 
 
