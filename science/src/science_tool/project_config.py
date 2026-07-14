@@ -285,6 +285,42 @@ def reject_near_miss_keys(raw: Any) -> None:
             )
 
 
+_LEGAL_ENTITY_SCHEMA_VERSIONS: frozenset[int] = frozenset({1, 2})
+
+
+def validated_entity_schema_version(raw: Any) -> int | None:
+    """The pin's value, checked against the closed vocabulary, WITHOUT full ``ProjectConfig``.
+
+    ☠️ THE ONE AUTHORITY BOTH PATHS READ THE PIN THROUGH. The graph loader and the write boundary
+    each ask "does this project speak schema 2?" -- and a `2` that armed the writer but not the
+    loader, or the reverse, is two answers to one question. The loader cannot afford full
+    ``ProjectConfig`` (it requires `name`, and demanding that of every graph build is a tightening
+    that is not this arc's), so BOTH call this, on the raw dict.
+
+    It validates the KEY (near-miss, via ``reject_near_miss_keys``) and the VALUE. A present pin must
+    be a version that EXISTS: `"2"` (a quoted string), `3`, `True`, or any other value is REFUSED, not
+    silently read as "unpinned". That degrade-to-unpinned was the fail-open -- the load path enforced
+    nothing while the write path raised on the very same file, because one read the value uncoerced
+    and compared it to `2` and the other typed it through ``Literal[1, 2]``.
+
+    Returns the version (1 or 2) for a legal pin, or ``None`` when the pin is ABSENT. Absence is the
+    only thing that means "unpinned"; a present-but-wrong value is an error a project must fix.
+    """
+    reject_near_miss_keys(raw)
+    if not isinstance(raw, dict):
+        return None
+    value = raw.get("entity_schema_version")
+    if value is None:
+        return None
+    if isinstance(value, bool) or value not in _LEGAL_ENTITY_SCHEMA_VERSIONS:
+        raise ValueError(
+            f"science.yaml: entity_schema_version must be 1 or 2 (an integer), not {value!r}. "
+            "A present pin with an illegal value is refused rather than read as 'unpinned' -- that "
+            "silent degrade let the loader skip schema validation while the writer rejected the file."
+        )
+    return value
+
+
 def load_project_config(project_root: Path) -> ProjectConfig:
     """Load and validate science.yaml at ``project_root``. Defaults id to dirname."""
     yaml_path = project_config_path(project_root)

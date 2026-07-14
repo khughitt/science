@@ -20,6 +20,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 from pathlib import Path
 
+import yaml
+
 from science_model.entity_schema import (
     EntityValidator,
     ProfileParseError,
@@ -31,7 +33,11 @@ from science_model.entity_schema import (
 )
 from science_model.frontmatter import project_config_path
 
-from science_tool.project_config import ProjectConfig, load_project_config
+from science_tool.project_config import (
+    ProjectConfig,
+    load_project_config,
+    validated_entity_schema_version,
+)
 
 SCHEMAS_DIRNAME = "schemas"
 
@@ -93,20 +99,23 @@ def load_project_schema_if_pinned(project_root: Path) -> ProjectSchema | None:
     `retired` MEANT `refuted`. Every one of those is a lifecycle word, so a "does it look migrated?"
     test calls the corpus migrated and reads its verdicts as closures.
 
-    ☠️ THE PIN IS READ THROUGH THE VALIDATED CONFIG, NEVER OFF THE RAW YAML. An earlier revision did
-    the latter — cheaper, and it routed straight around `reject_near_miss_keys`, the guard written to
-    stop exactly this. `entity_schema_verison: 2` then parsed as "no pin", every schema check on the
-    write path went quietly silent, and the project was left believing it had migrated. That is not a
-    degraded read of the pin; it is the fail-silent the pin exists to abolish, and it was reachable by
-    one transposed letter. A near-miss pin must FAIL, never fall back to "unpinned".
+    ☠️ THE PIN DECISION COMES FROM THE ONE NARROW AUTHORITY, `validated_entity_schema_version`, which
+    the LOAD path reads it through too. An earlier revision compared a raw-YAML read to `2` here --
+    cheaper, and it routed straight around the key AND value checks. `entity_schema_verison: 2` (a
+    typo) or `entity_schema_version: "2"` (a stray quote) then parsed as "no pin", every schema check
+    on the write path went quietly silent, and the project was left believing it had migrated. That is
+    not a degraded read of the pin; it is the fail-silent the pin exists to abolish. A near-miss key or
+    an illegal value must FAIL, never fall back to "unpinned". `load_project_config` runs only once the
+    authority has ruled the project PINNED -- it is how the entity_extensions are read, not a second
+    opinion on the pin.
     """
     path = project_config_path(project_root)
     if not path.is_file():
         return None  # no config at all is not a typo — it is a project that never claimed anything
-    config = load_project_config(project_root)
-    if config.entity_schema_version != ENTITY_SCHEMA_VERSION:
+    raw = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
+    if validated_entity_schema_version(raw) != ENTITY_SCHEMA_VERSION:
         return None
-    return load_project_schema(project_root, config)
+    return load_project_schema(project_root, load_project_config(project_root))
 
 
 def _certify_declarations(

@@ -51,7 +51,7 @@ from science_tool.entity_profiles import (
     ProjectSchema,
     load_project_schema,
 )
-from science_tool.project_config import reject_near_miss_keys
+from science_tool.project_config import validated_entity_schema_version
 from science_tool.graph.entity_registry import EntityKindNotRegisteredError, EntityRegistry
 from science_tool.graph.errors import EntityIdentityCollisionError
 from science_tool.graph.identity_table import (
@@ -231,17 +231,12 @@ def load_project_sources(
     # The AUTHORED pin, and the only thing that arms schema-first validation. Absent (or 1) means the
     # project has not migrated, so its entities load exactly as they did before D5.
     #
-    # Read off the dict this function already has, NOT via `load_project_config`: that would impose
-    # full `ProjectConfig` validation (which requires `name`) on every graph build, and this path has
-    # never required it. Tightening what a graph build demands of `science.yaml` is a real change and
-    # it is not this task's -- smuggling it in under a migration would put it inside Task 11's diff.
-    # The typo guard (`_reject_near_miss_keys`) lives with `ProjectConfig`, which `validate` and the
-    # migration both load, so a misspelled pin is still refused where it is authored.
-    #
-    # The WRITE path asks the same question through `load_project_schema_if_pinned`, which reads the
-    # same key and compares it to the same `ENTITY_SCHEMA_VERSION`. It is not used here only because
-    # this function already holds the parsed config, and re-reading `science.yaml` on every graph
-    # build to learn something it is already holding would be a real cost for no gain.
+    # The pin was VALIDATED in `_read_project_config` through `validated_entity_schema_version` -- the
+    # one narrow authority the WRITE path (`load_project_schema_if_pinned`) also reads it through, so
+    # the two never disagree about whether a project speaks schema 2. That authority checks the value
+    # without full `ProjectConfig` (which requires `name`): a graph build has never demanded a `name`,
+    # and tightening that under a migration would put it inside Task 11's diff. So by here the value is
+    # already 1, 2, or None -- a `"2"` or `3` was refused at read time, not silently read as unpinned.
     project_schema = (
         load_project_schema(project_root)
         if config.get("entity_schema_version") == ENTITY_SCHEMA_VERSION
@@ -1217,12 +1212,13 @@ def _read_project_config(project_root: Path) -> dict[str, object]:
     if yaml_path.is_file():
         data = yaml.safe_load(yaml_path.read_text(encoding="utf-8")) or {}
 
-    # The typo guard, WITHOUT the rest of `ProjectConfig` (which requires `name`, and demanding that
-    # of every graph build is a tightening that is not this arc's). It has to run HERE too: the pin
-    # below decides whether this loader enforces the entity schema at all, so `entity_schema_verison`
-    # would read as "unpinned", switch the schema check off, and load an unvalidated corpus while its
-    # author believed it was protected. Fail-open, reachable by one transposed letter.
-    reject_near_miss_keys(data)
+    # The pin, VALIDATED here through the one narrow authority the write path also uses -- key AND
+    # value, WITHOUT the rest of `ProjectConfig` (which requires `name`, a tightening not this arc's).
+    # It has to run HERE: the pin decides whether this loader enforces the entity schema at all, so a
+    # misspelled key OR an illegal value (`"2"`, `3`) would read as "unpinned", switch the schema check
+    # off, and load an unvalidated corpus while its author believed it was protected. Fail-open,
+    # reachable by one transposed letter or one stray quote.
+    pinned_version = validated_entity_schema_version(data)
 
     if "profiles" in data and "knowledge_profiles" not in data:
         raise ValueError("science.yaml uses removed top-level profiles; use knowledge_profiles")
@@ -1263,11 +1259,10 @@ def _read_project_config(project_root: Path) -> dict[str, object]:
         "freshness": raw_freshness,
         "peer_ids": peer_ids,
         # This dict is a CURATED projection of science.yaml -- an unlisted key does not reach the
-        # loader at all. So the pin has to be listed, and it is passed through UNCOERCED: `2` arms
-        # schema validation, and anything else (absent, 1, or a string "2") does not. `ProjectConfig`
-        # is where the value is typed and a near-miss key is refused; this is the graph path's read
-        # of it, and it must not tighten what a graph build demands of science.yaml.
-        "entity_schema_version": data.get("entity_schema_version"),
+        # loader at all, so the pin has to be listed. It is the VALIDATED value: `2` arms schema
+        # validation, `1`/absent do not, and an illegal value already raised above rather than
+        # reaching here as a silent "unpinned".
+        "entity_schema_version": pinned_version,
     }
     if cache_key is not None:
         _PROJECT_CONFIG_CACHE[cache_key] = config

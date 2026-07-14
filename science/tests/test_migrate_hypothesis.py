@@ -267,6 +267,44 @@ def test_the_PIN_is_the_final_act(tmp_path: Path) -> None:
     assert not (project / JOURNAL_PATH).exists()  # the journal is consumed, so absence means "clean"
 
 
+def test_a_stale_EXPLICIT_pin_is_REPLACED_not_read_as_already_set(tmp_path: Path) -> None:
+    # ☠️ The pin is the SOLE authority for "migrated", so a migration that thinks it wrote the pin but
+    # did not is the fail-open at its worst: files rewritten, journal deleted, corpus reads unmigrated
+    # forever. A substring test (`"entity_schema_version:" in text`) returned early on an existing
+    # `: 1`, leaving a fully-rewritten corpus pinned to version 1. The match is EXACT now, and the
+    # stale pin is REPLACED.
+    project = _project(tmp_path)
+    (project / "science.yaml").write_text("name: p\nid: p\nentity_schema_version: 1\n", encoding="utf-8")
+    _hyp(project, "0001-a", status="proposed", phase="active")
+
+    migrate(project, apply=True)
+
+    text = (project / "science.yaml").read_text(encoding="utf-8")
+    assert "entity_schema_version: 2" in text
+    assert "entity_schema_version: 1" not in text
+    assert not (project / JOURNAL_PATH).exists()  # the pin was CONFIRMED, so the journal was cleared
+
+
+def test_a_COMMENT_mentioning_the_key_does_not_block_the_real_pin(tmp_path: Path) -> None:
+    # The other half of the substring bug: a comment `# entity_schema_version: ...` matched too, so the
+    # migration returned without ever writing a real key. The match ignores comments and indentation.
+    project = _project(tmp_path)
+    (project / "science.yaml").write_text(
+        "name: p\nid: p\n# entity_schema_version is set by the migration\n", encoding="utf-8"
+    )
+    _hyp(project, "0001-a", status="proposed", phase="active")
+
+    migrate(project, apply=True)
+
+    real_pins = [
+        line
+        for line in (project / "science.yaml").read_text(encoding="utf-8").splitlines()
+        if line.strip().startswith("entity_schema_version:") and not line.lstrip().startswith("#")
+    ]
+    assert real_pins == ["entity_schema_version: 2"]
+    assert not (project / JOURNAL_PATH).exists()
+
+
 def test_the_body_and_unrelated_frontmatter_SURVIVE(tmp_path: Path) -> None:
     project = _project(tmp_path)
     path = _hyp(

@@ -337,31 +337,29 @@ def test_the_AUTHORED_lineage_field_is_reachable_from_the_CLI(
     assert written["resynthesized_into"] == ["hypothesis:0002-y"]
 
 
-def test_the_LINEAGE_guard_is_live_on_an_UNMIGRATED_project(tmp_path: Path) -> None:
-    # THE ASYMMETRY, CERTIFIED. The SCHEMA check is gated on the pin; this one is NOT, and that is
-    # deliberate: `superseded` meant `superseded` in the old vocabulary too, so a dangling successor
-    # is authorable in an unmigrated project TODAY -- which is exactly the corpus that most needs the
-    # guard. Gating it on the pin would arm it only for the projects already made safe.
-    #
-    # No `entity_schema_version` here. If this ever starts passing the write, the guard has quietly
-    # become a reward for having already migrated.
+def test_the_LINEAGE_guard_MOVED_it_did_not_VANISH(tmp_path: Path) -> None:
+    # The write boundary must not MANUFACTURE schema-2 lineage on an unmigrated project -- writing
+    # `resynthesized_into` onto a schema-1 record is itself the two-vocabularies state (see
+    # `test_an_UNMIGRATED_project_is_refused_the_NEW_VOCABULARY`). So the WRITE-side lineage guard is
+    # not "reject dangling successors on unpinned projects"; it is "refuse to write a successor here
+    # at all, migrate first."
     (tmp_path / "science.yaml").write_text(yaml.safe_dump({"name": "p", "id": "p"}), encoding="utf-8")
     (tmp_path / "entities/hypotheses").mkdir(parents=True)
     _hypothesis(tmp_path, "0001-x")
 
-    with pytest.raises(EntityCommandError, match="9999-nope"):
-        edit_entity(
-            tmp_path,
-            "hypothesis:0001-x",
-            status="superseded",
-            resynthesized_into=["hypothesis:9999-nope"],
-        )
+    with pytest.raises(EntityCommandError, match="migrate-hypothesis"):
+        edit_entity(tmp_path, "hypothesis:0001-x", resynthesized_into=["hypothesis:9999-nope"])
 
-    # ...and the SCHEMA half is correctly silent here: `phase` is a key the 2.0 mixin REFUSES, but
-    # this project never claimed to speak 2.0, so an unrelated edit to a file the migration has not
-    # reached must still go through. Enforcing the new schema on an unpinned project would reject
-    # `--title` over a key the migration is coming for.
-    _hypothesis(tmp_path, "0002-y", phase="active", status="refuted")
+    # The guard did not vanish, it MOVED: a HAND-AUTHORED dangling successor on an unmigrated corpus is
+    # still caught, on the VALIDATE path, over every entity regardless of pin. That is
+    # `test_validate_reports_a_dangling_successor` in test_resolution_wiring.py -- the surviving half
+    # of the asymmetry. The write boundary governs what may be MANUFACTURED; validate governs what
+    # already EXISTS.
+
+    # ...and the project stays workable: an unrelated `--title` edit to a file the migration has not
+    # reached still goes through -- enforcing the new schema on an unpinned project would reject
+    # `--title` over a `phase:` key the migration is coming for.
+    _hypothesis(tmp_path, "0002-y", phase="active", status="active")
     edit_entity(tmp_path, "hypothesis:0002-y", title="Renamed")
     assert _frontmatter(tmp_path / "entities/hypotheses/0002-y.md")["title"] == "Renamed"
 
@@ -405,22 +403,33 @@ def test_a_MISSPELLED_pin_FAILS_ON_THE_LOAD_PATH_TOO(tmp_path: Path) -> None:
 
 
 def test_an_UNMIGRATED_project_is_refused_the_NEW_VOCABULARY(tmp_path: Path) -> None:
-    # `verdict` and `closure_basis` MEAN NOTHING before the fold: under schema 1 the verdict IS
-    # `status`, and there is no lifecycle for a closure to discharge. Writing one anyway produced a
-    # record speaking two vocabularies at once -- `verdict: supported` sitting beside `status:
-    # proposed` and `phase: active`, three fields with no agreement between them. That is the exact
-    # state this arc exists to abolish, and the write surface was handing it out.
-    #
-    # "Not migrated" is not "no rules apply". It is "has not earned the new words yet".
+    # The FULL schema-2 vocabulary is refused on an unmigrated project, not just the two fields that
+    # mean nothing before the fold:
+    #   verdict, closure_basis -- the verdict IS `status` under schema 1, and there is no lifecycle
+    #     for a closure to discharge.
+    #   status -- the descriptor now offers only the NEW lifecycle words, so an accepted value is a
+    #     new-vocabulary word on an old-vocabulary record.
+    #   resynthesized_into -- a schema-2 lineage field; writing it evades the reverse implication the
+    #     schema enforces only once pinned.
+    # Each would leave the record speaking two vocabularies at once -- the exact state this arc exists
+    # to abolish, and the write surface was handing it out. "Not migrated" is not "no rules apply"; it
+    # is "has not earned the new words yet".
     (tmp_path / "science.yaml").write_text(yaml.safe_dump({"name": "p", "id": "p"}), encoding="utf-8")
     (tmp_path / "entities/hypotheses").mkdir(parents=True)
-    path = _hypothesis(tmp_path, "0001-x", status="proposed", phase="active")
+    path = _hypothesis(tmp_path, "0001-x", status="active", phase="active")
 
-    for field in ("verdict", "closure_basis"):
+    refused: list[dict[str, object]] = [
+        {"verdict": "supported"},
+        {"closure_basis": "folded in"},
+        {"status": "complete"},
+        {"resynthesized_into": ["hypothesis:0002-y"]},
+    ]
+    for kwargs in refused:
         with pytest.raises(EntityCommandError, match="migrate-hypothesis"):
-            edit_entity(tmp_path, "hypothesis:0001-x", **{field: "supported"})
+            edit_entity(tmp_path, "hypothesis:0001-x", **kwargs)  # type: ignore[arg-type]
     written = _frontmatter(path)
-    assert "verdict" not in written and "closure_basis" not in written
+    assert not ({"verdict", "closure_basis", "resynthesized_into"} & set(written))
+    assert written["status"] == "active"  # untouched by any refused edit
 
     # ...and the project is still WORKABLE. Refusing the new vocabulary must not refuse the old one:
     # a `--title` edit to a file the migration has not reached still goes through.
@@ -428,19 +437,28 @@ def test_an_UNMIGRATED_project_is_refused_the_NEW_VOCABULARY(tmp_path: Path) -> 
     assert _frontmatter(path)["title"] == "Renamed"
 
 
-def test_a_DANGLING_successor_on_an_OPEN_record_is_caught(tmp_path: Path) -> None:
-    # THE TRIGGER ASKED THE WRONG QUESTION. It fired on `status == "superseded"` -- a proxy for "has
-    # a successor" -- so an ACTIVE hypothesis naming `hypothesis:9999-nope` was never checked at all.
-    # The one fault the module exists to catch, sailing through on a status.
+@pytest.mark.parametrize("bad_value", ["2", 3])
+def test_an_INVALID_pin_VALUE_fails_the_SAME_way_on_BOTH_paths(
+    tmp_path: Path, bad_value: object
+) -> None:
+    # THE THIRD FACE OF THE PIN FAIL-OPEN. A near-miss KEY was closed; a wrong VALUE was not. The
+    # load path read `entity_schema_version` uncoerced and armed validation only when it `== 2`, so
+    # `"2"` (a stray quote) and `3` read as "unpinned" and switched the schema off -- while the write
+    # path, which typed the value through the config, RAISED on the same file. Two answers to one
+    # question, split across the two readers.
     #
-    # Unpinned on purpose: the schema (which would also refuse this now, via the reverse implication)
-    # does not run here, so this pins the RESOLUTION check specifically.
-    (tmp_path / "science.yaml").write_text(yaml.safe_dump({"name": "p", "id": "p"}), encoding="utf-8")
+    # The one narrow authority now validates the VALUE on both paths, so a present-but-illegal pin
+    # FAILS identically -- it is a project to fix, never a project silently read as unmigrated.
+    (tmp_path / "science.yaml").write_text(
+        yaml.safe_dump({"name": "p", "id": "p", "entity_schema_version": bad_value}), encoding="utf-8"
+    )
     (tmp_path / "entities/hypotheses").mkdir(parents=True)
     _hypothesis(tmp_path, "0001-x")
 
-    with pytest.raises(EntityCommandError, match="9999-nope"):
-        edit_entity(tmp_path, "hypothesis:0001-x", resynthesized_into=["hypothesis:9999-nope"])
+    with pytest.raises(ValueError, match="entity_schema_version"):
+        load_project_sources(tmp_path)  # LOAD path — no longer degrades to unpinned
+    with pytest.raises(EntityCommandError, match="not valid"):
+        edit_entity(tmp_path, "hypothesis:0001-x", title="Renamed")  # WRITE path — same verdict
 
 
 def test_a_record_with_NO_lineage_does_not_pay_for_OTHER_entities_alias_collisions(

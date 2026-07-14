@@ -1087,13 +1087,27 @@ def _prepare_write(
     )
 
 
-# Fields that MEAN NOTHING before the fold. Under schema 1 the verdict IS `status`, and there is no
-# lifecycle for a `closure_basis` to discharge -- so writing either into an unmigrated project does
-# not record a fact, it manufactures a record that no consumer in that project can read: a shiny new
-# `verdict: supported` sitting beside `status: proposed` and `phase: active`, with three fields and
-# no agreement between them. That is the two-vocabularies-at-once state this whole arc exists to
-# abolish, and the write surface was handing it out.
-_SCHEMA_2_ONLY_FIELDS: frozenset[str] = frozenset({"verdict", "closure_basis"})
+# Fields an UNMIGRATED hypothesis project may not have written to it. Each would put a schema-2
+# meaning onto a schema-1 record -- the two-vocabularies-at-once state this whole arc exists to
+# abolish, and which the write surface was handing out:
+#
+#   verdict, closure_basis -- MEAN NOTHING before the fold. Under schema 1 the verdict IS `status`,
+#     and there is no lifecycle for a closure to discharge, so `verdict: supported` beside
+#     `status: proposed` and `phase: active` is three fields with no agreement between them.
+#   status -- the kind descriptor now offers ONLY the new lifecycle words (`active`, `complete`,
+#     `retired`, ...). Any value `_validate_status` accepts is therefore a new-vocabulary word landing
+#     on an old-vocabulary record; an OLD word (`proposed`) it already refuses. So there is no coherent
+#     status edit to an unmigrated hypothesis -- both answers are wrong, and the field is refused.
+#   resynthesized_into -- a schema-2 lineage field. Written unpinned it evades the reverse implication
+#     (a successor names what a record has INSTEAD of a future, so `active` + a successor is a
+#     contradiction) -- which the schema enforces only once the project has pinned.
+#
+# The lineage guard for an unmigrated corpus does not live here: a HAND-AUTHORED dangling successor is
+# still caught by `check_dangling_lineage` on the validate path, over every entity regardless of pin.
+# This gate governs only what the WRITE boundary may MANUFACTURE.
+_PIN_REQUIRED_FIELDS: frozenset[str] = frozenset(
+    {"status", "verdict", "closure_basis", "resynthesized_into"}
+)
 
 
 def _schema_gate_or_raise(
@@ -1108,28 +1122,31 @@ def _schema_gate_or_raise(
     * PINNED -> validate the merged record against the composed schema. A terminal transition with
       no basis fails here, before a byte is written.
     * UNPINNED -> the schema cannot be applied (it would reject `--title` over a `phase:` key the
-      migration is coming for) -- but the new VOCABULARY must still be refused. Skipping both checks
-      is what let `--verdict supported` land on an unmigrated file. An unpinned project is not one
-      the rules do not reach; it is one that has not earned the new words yet.
+      migration is coming for) -- but the schema-2 VOCABULARY must still be refused. Skipping this is
+      what let `--verdict supported`, `--status complete`, and `--resynthesized-into` land on an
+      unmigrated file. An unpinned project is not one the rules do not reach; it is one that has not
+      earned the new words yet. `--title` and other schema-1 fields still go through.
     """
     if kind not in PROJECT_MIXIN_NAMES:
         return
 
     try:
         schema = load_project_schema_if_pinned(project_root)
-    except ValidationError as exc:
-        # A near-miss pin lands HERE now, and it must arrive as a CLI error rather than a pydantic
-        # traceback -- an author who typed `entity_schema_verison` needs the sentence, not a stack.
+    except (ValidationError, ValueError) as exc:
+        # A near-miss pin OR an illegal pin value lands HERE now (the shared authority raises a plain
+        # ValueError; a pydantic model elsewhere in the config raises ValidationError). Either must
+        # arrive as a CLI error, not a traceback -- an author who typed `entity_schema_verison` or
+        # `"2"` needs the sentence, not a stack.
         raise EntityCommandError(f"science.yaml is not valid, so this write cannot be checked:\n{exc}") from exc
     if schema is None:
-        offered = sorted(_SCHEMA_2_ONLY_FIELDS & {k for k, v in fields.items() if v is not None})
+        offered = sorted(_PIN_REQUIRED_FIELDS & {k for k, v in fields.items() if v is not None})
         if offered:
             raise EntityCommandError(
                 f"{', '.join(offered)} cannot be written here: this project has not declared "
                 f"`entity_schema_version: 2`, so its {kind} records still carry the verdict in "
-                f"`status` and have no lifecycle for a closure to discharge. Writing {offered[0]!r} "
-                f"now would leave the record speaking two vocabularies at once. Migrate the project "
-                f"first: `science entity migrate-hypothesis --apply`."
+                f"`status` and speak the pre-fold vocabulary. Writing {offered[0]!r} now would leave "
+                f"the record speaking two vocabularies at once. Migrate the project first: "
+                f"`science entity migrate-hypothesis --apply`."
             )
         return
 

@@ -60,8 +60,15 @@ def _write(root: Path, kind_dir: str, name: str, fm: dict) -> Path:
     return path
 
 
-def _seed(root: Path) -> None:
-    (root / "science.yaml").write_text("name: chain-test\n", encoding="utf-8")
+def _seed(root: Path, *, pinned: bool = False) -> None:
+    # `pinned=True` declares entity_schema_version: 2. Superseding a HYPOTHESIS writes `status:
+    # superseded`, and the write boundary refuses the schema-2 vocabulary on an unmigrated project --
+    # so a hypothesis-supersession test runs in the post-fold world, the world where that operation
+    # exists. Interpretation supersession is unaffected either way (its kind is not gated).
+    body = "name: chain-test\n"
+    if pinned:
+        body += "entity_schema_version: 2\n"
+    (root / "science.yaml").write_text(body, encoding="utf-8")
 
 
 def _supersedes(target: str) -> dict[str, str]:
@@ -1132,7 +1139,7 @@ def test_a_stamped_HYPOTHESIS_satisfies_its_own_schema(tmp_path: Path) -> None:
     # legs must agree at once: the schema admits the edge, the relation admits the endpoint PAIR, the
     # operation writes a resolvable inverse, and the descriptor makes `superseded` a status the kind
     # can hold. Any one missing and this fails -- which is why a bidirectional gate is one assertion.
-    _seed(tmp_path)
+    _seed(tmp_path, pinned=True)  # superseding a hypothesis is a schema-2 operation
     _hypothesis(tmp_path, "0001-old", status="active")
     _hypothesis(tmp_path, "0002-new", status="active",
                 relations=[_supersedes("hypothesis:0001-old")])
@@ -1163,7 +1170,7 @@ def test_a_hypothesis_CHAIN_records_the_immediate_superseder(tmp_path: Path) -> 
     # A <- B <- C on the kind that matters. The interpretation test above proves the inversion picks
     # the IMMEDIATE superseder; this proves the descriptor change did not quietly re-route
     # hypotheses back down the skip path, where every assertion about lineage is vacuously true.
-    _seed(tmp_path)
+    _seed(tmp_path, pinned=True)  # superseding a hypothesis is a schema-2 operation
     _hypothesis(tmp_path, "0003-c", status="active")
     _hypothesis(tmp_path, "0002-b", status="active",
                 relations=[_supersedes("hypothesis:0003-c")])

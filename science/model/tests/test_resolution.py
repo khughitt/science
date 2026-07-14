@@ -199,3 +199,20 @@ def test_a_live_entity_is_not_checked() -> None:
         )
         == []
     )
+
+
+def test_a_live_entity_WITH_a_DANGLING_successor_IS_checked() -> None:
+    # ☠️ THE TRIGGER KEYS ON LINEAGE, NOT STATUS. The check used to fire on terminal status, so an
+    # `active` record that named a dead successor was never looked at -- the one fault this module
+    # exists to catch, sailing through on a status. Presence of a successor is the trigger; the status
+    # is irrelevant to whether it must resolve.
+    v = _check(
+        {
+            "id": "hypothesis:0001-x",
+            "status": "active",
+            "resynthesized_into": ["hypothesis:9999-nope"],
+        }
+    )
+    assert len(v) == 1
+    assert v[0].field == "resynthesized_into"
+    assert v[0].ref == "hypothesis:9999-nope"

@@ -30,6 +30,7 @@ import subprocess
 from dataclasses import dataclass
 from pathlib import Path
 
+import yaml
 from science_model.entity_schema import EntityValidationError
 from science_model.frontmatter import (
     atomic_write_text,
@@ -38,7 +39,8 @@ from science_model.frontmatter import (
     split_frontmatter,
 )
 
-from science_tool.entity_profiles import ProjectSchema, load_project_schema
+from science_tool.entity_profiles import ENTITY_SCHEMA_VERSION, ProjectSchema, load_project_schema
+from science_tool.project_config import validated_entity_schema_version
 from science_tool.status_inventory import InventoryRow, adjudication_for, inventory
 
 JOURNAL_PATH = Path(".science/hypothesis-migration.journal")
@@ -197,13 +199,41 @@ def _journal_write(project_root: Path, planned: list[PlannedWrite]) -> None:
     atomic_write_text(journal, json.dumps({"entries": entries}, indent=2) + "\n")
 
 
+def _is_top_level_pin(line: str) -> bool:
+    """Whether `line` is the top-level `entity_schema_version:` key -- not a comment, not nested.
+
+    A substring test conflated three different lines with the real key: a comment
+    (`# entity_schema_version: ...`), a key indented under some block, and an existing
+    `entity_schema_version: 1`. The first two are not the pin; the third IS the pin and must be
+    REPLACED, not read as "already set" and left at 1.
+    """
+    if line[:1].isspace():
+        return False  # indented -> a nested key, not the top-level pin
+    stripped = line.lstrip()
+    if stripped.startswith("#"):
+        return False  # a comment that merely mentions the key
+    return stripped.startswith("entity_schema_version:")
+
+
 def _set_entity_schema_version(project_root: Path, version: int) -> None:
-    """Write the pin. Text-level, so the project config keeps its comments and its key order."""
+    """Write the pin as a REAL top-level key, replacing any existing one. Text-level, so the project
+    config keeps its comments and its key order.
+
+    ☠️ The pin is the sole authority for "this project speaks schema 2", so a migration that thinks it
+    wrote the pin but did not is the fail-open at its most dangerous: the files are rewritten, the
+    journal is deleted, and the corpus reads as unmigrated forever after. So the match is EXACT (see
+    `_is_top_level_pin`), and `_commit` re-reads the file to CONFIRM the pin took before it clears the
+    recovery journal.
+    """
     path = project_config_path(project_root)
-    text = path.read_text(encoding="utf-8")
-    if "entity_schema_version:" in text:
-        return
-    atomic_write_text(path, f"{text.rstrip()}\nentity_schema_version: {version}\n")
+    lines = path.read_text(encoding="utf-8").splitlines()
+    key_line = f"entity_schema_version: {version}"
+    for index, line in enumerate(lines):
+        if _is_top_level_pin(line):
+            lines[index] = key_line
+            atomic_write_text(path, "\n".join(lines) + "\n")
+            return
+    atomic_write_text(path, "\n".join([*lines, key_line]).lstrip("\n") + "\n")
 
 
 def _commit(project_root: Path, planned: list[PlannedWrite]) -> list[Path]:
@@ -212,7 +242,17 @@ def _commit(project_root: Path, planned: list[PlannedWrite]) -> list[Path]:
     for write in planned:
         atomic_write_text(write.path, write.text)
     # The pin, LAST: a project is on schema 2 only once its files actually are.
-    _set_entity_schema_version(project_root, 2)
+    _set_entity_schema_version(project_root, ENTITY_SCHEMA_VERSION)
+    # ...and CONFIRM it took before the recovery journal is cleared. The pin is the sole authority for
+    # "migrated", so a silently-unwritten pin would strand a fully-rewritten corpus as unmigrated with
+    # no journal to recover from. Read it back through the same authority the loader and writer use.
+    raw = yaml.safe_load(project_config_path(project_root).read_text(encoding="utf-8")) or {}
+    if validated_entity_schema_version(raw) != ENTITY_SCHEMA_VERSION:
+        raise MigrationRefused(
+            f"the files were rewritten but {project_config_path(project_root).name} did not end up "
+            f"pinned to entity_schema_version: {ENTITY_SCHEMA_VERSION}. The recovery journal is KEPT; "
+            "fix the pin by hand, then this project is complete -- do NOT re-run the migration."
+        )
     (project_root / JOURNAL_PATH).unlink()
     return [write.path for write in planned]
 
