@@ -10,6 +10,16 @@ it. Three properties, and the last two are the ones a naive test cannot see:
    schema is decoration).
 3. Every value the schema admits SURVIVES the round trip  (else: it validates, the model *accepts*
    it, and `model_dump()` loses it -- acceptance and preservation are different properties).
+
+☠️ SCOPE: this file reconciles the PACKAGE-DEFAULT profile -- core base + core mixin. It cannot see a
+PROJECT EXTENSION, and it must not try: `entity_extensions` is a `science_tool` concept, and
+`science_model` may not import its own consumer. So the third property is only half-proved here.
+
+Its other half -- *a field declared by a project extension survives the projection* -- is D3.3, and it
+is proved where the composition actually happens: `science/tests/test_schema_first_load.py`. Do not
+read the battery below as covering it. `Entity` was `extra="ignore"` while every test in this file
+passed, and mm30's `identification`, evolution's `source_stated_evidence`, and mm30's
+`confidence_mechanistic_label` were being discarded at `model_validate` the whole time.
 """
 
 from __future__ import annotations

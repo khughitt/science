@@ -251,7 +251,13 @@ def _materialize_commons_entity(
     raw: dict[str, object] = dict(fm)
     raw["kind"] = kind
     raw["canonical_id"] = fm["id"]
-    if "description" in fm and "summary" not in fm:
+    # Only for kinds that actually DECLARE `summary`. This used to be unconditional, and it worked
+    # only because `Entity` was `extra="ignore"`: on a `topic` (no `summary` field) the key was set
+    # here and silently eaten at `model_validate`. With the projection preserving what the schema
+    # admits (D3.3), an eaten key becomes a kept one -- and `materialize._add_entity` reads
+    # `getattr(entity, "summary", "")` into `schema:description`, so every commons topic would have
+    # started emitting a triple it has never had. The drop was load-bearing and nobody knew.
+    if "description" in fm and "summary" not in fm and "summary" in schema.model_fields:
         raw["summary"] = fm["description"]
     if kind == "paper" and "journal" in fm and not raw.get("venue"):
         raw["venue"] = fm["journal"]

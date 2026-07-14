@@ -42,8 +42,11 @@ from science_model.source_contracts import (
 )
 from science_model.source_ref import SourceRef
 
+from science_model.entity_schema import EntityValidationError
+
 from science_tool.bibliography import is_bibliography_reference as _is_bibliography_reference
 from science_tool.commons.aliases import load_manual_aliases
+from science_tool.entity_profiles import ProjectSchema, load_project_schema
 from science_tool.graph.entity_registry import EntityKindNotRegisteredError, EntityRegistry
 from science_tool.graph.errors import EntityIdentityCollisionError
 from science_tool.graph.identity_table import (
@@ -220,6 +223,18 @@ def load_project_sources(
     """
     project_root = project_root.resolve()
     config = _read_project_config(project_root)
+    # The AUTHORED pin, and the only thing that arms schema-first validation. Absent (or 1) means the
+    # project has not migrated, so its entities load exactly as they did before D5.
+    #
+    # Read off the dict this function already has, NOT via `load_project_config`: that would impose
+    # full `ProjectConfig` validation (which requires `name`) on every graph build, and this path has
+    # never required it. Tightening what a graph build demands of `science.yaml` is a real change and
+    # it is not this task's -- smuggling it in under a migration would put it inside Task 11's diff.
+    # The typo guard (`_reject_near_miss_keys`) lives with `ProjectConfig`, which `validate` and the
+    # migration both load, so a misspelled pin is still refused where it is authored.
+    project_schema = (
+        load_project_schema(project_root) if config.get("entity_schema_version") == 2 else None
+    )
     profiles = KnowledgeProfiles.model_validate(config["knowledge_profiles"])
     local_profile = profiles.local
     freshness_block = config.get("freshness") or {}
@@ -348,6 +363,11 @@ def load_project_sources(
                     continue
                 kind = _normalize_kind(raw_kind)
                 raw["kind"] = kind
+                # D3.1 -- THE SCHEMA GOES FIRST, and it goes first on the AUTHORED frontmatter,
+                # before `_enrich_raw` mixes the loader's derived keys into the same dict.
+                _validate_against_schema(
+                    raw, kind=kind, path=str(ref.path), project_schema=project_schema
+                )
                 _enrich_raw(
                     raw,
                     kind=kind,
@@ -1133,6 +1153,52 @@ def _load_typed_records(
     return records
 
 
+# The kinds whose JSON Schema is ENFORCED on load, for projects pinned to entity schema 2.
+#
+# One kind, deliberately. D5 migrates the corpus KIND BY KIND, and a kind is enforceable only once
+# its corpus has been certified against the schema (Task 11) -- 147 hypotheses, across 18 roots, every
+# one of them rendered and validated before a byte was written. `dataset`/`paper`/`topic`/`theme` have
+# mixins too, and adding them here would enforce a contract their corpus has never been measured
+# against: the files would fail, and the failure would be the schema's fault, not theirs.
+#
+# This set grows in Task 12's ratchet, one certified kind at a time.
+SCHEMA_ENFORCED_KINDS: frozenset[str] = frozenset({"hypothesis"})
+
+
+def _validate_against_schema(
+    raw: dict[str, Any],
+    *,
+    kind: str,
+    path: str,
+    project_schema: ProjectSchema | None,
+) -> None:
+    """D3.1/D3.2 — the composed JSON Schema is checked BEFORE the projection is built.
+
+    `project_schema` is None unless the project DECLARED `entity_schema_version: 2`, so an unmigrated
+    project is untouched: it keeps today's behaviour, and its hypotheses keep the verdict in `status`.
+    Nothing here infers the version from the files (see `ProjectConfig.entity_schema_version`).
+
+    The profile is the project-COMPOSED one, never the package default: mm30's `identification` and
+    evolution's `source_stated_evidence` are declared by project EXTENSIONS, so against the package
+    default they are unknown keys and `unevaluatedProperties: false` would reject the files of the two
+    projects that did nothing wrong.
+
+    This is the half that makes `Entity`'s `extra="allow"` safe. The schema refuses what it does not
+    know; the projection preserves what the schema admitted. Apart, each is a defect -- preservation
+    without validation is just `extra="allow"` over an unvalidated corpus.
+    """
+    if project_schema is None or kind not in SCHEMA_ENFORCED_KINDS:
+        return
+    authored = {key: value for key, value in raw.items() if key not in MarkdownAdapter.INJECTED_KEYS}
+    try:
+        project_schema.validator.validate_as(authored, project_schema.profile_for(kind))
+    except EntityValidationError as exc:
+        raise ValueError(
+            f"{path}: {kind} frontmatter does not satisfy its schema "
+            f"(project is pinned to entity_schema_version: 2)\n  {exc}"
+        ) from exc
+
+
 def _read_project_config(project_root: Path) -> dict[str, object]:
     yaml_path = project_config_path(project_root)
     cache_key: tuple[str, int] | None = None
@@ -1184,6 +1250,12 @@ def _read_project_config(project_root: Path) -> dict[str, object]:
         "ontologies": [str(o) for o in raw_ontologies],
         "freshness": raw_freshness,
         "peer_ids": peer_ids,
+        # This dict is a CURATED projection of science.yaml -- an unlisted key does not reach the
+        # loader at all. So the pin has to be listed, and it is passed through UNCOERCED: `2` arms
+        # schema validation, and anything else (absent, 1, or a string "2") does not. `ProjectConfig`
+        # is where the value is typed and a near-miss key is refused; this is the graph path's read
+        # of it, and it must not tighten what a graph build demands of science.yaml.
+        "entity_schema_version": data.get("entity_schema_version"),
     }
     if cache_key is not None:
         _PROJECT_CONFIG_CACHE[cache_key] = config

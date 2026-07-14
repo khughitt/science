@@ -297,7 +297,28 @@ class LensView(BaseModel):
 
 
 class Entity(BaseModel):
-    """A research entity parsed from frontmatter or the knowledge graph."""
+    """A research entity parsed from frontmatter or the knowledge graph.
+
+    ☠️ `extra="allow"`, and it is D3.3, not a convenience: *"Projections MUST preserve schema-valid
+    extension fields. Never return to `extra="ignore"` -- that is the original defect."*
+
+    A PROJECT EXTENSION declares fields this shared model cannot: mm30's `identification`,
+    evolution's `source_stated_evidence`. They are schema-valid for those projects and they are NOT
+    core, so no amount of declaring on this class is the answer -- declaring them here would make one
+    project's field a Science field for all 22. Under `extra="ignore"` they validated on disk and
+    evaporated at `model_validate`, which is how the codebase grew THREE separate ways back in (a
+    deliberate raw re-parse, a pre-validation read, and a schema-blind export passthrough). When a
+    schema silently drops what authors write, consumers do not go without -- they grow a second way
+    in, and the result is a shadow schema nobody declared and nobody can validate.
+
+    This is safe ONLY because the schema is checked FIRST. `extra="allow"` on its own would preserve
+    every typo and every deleted key; `unevaluatedProperties: false` on the composed profile is what
+    refuses them, and `load_project_sources` runs it before constructing this model on any project
+    pinned to `entity_schema_version: 2`. The two are one contract: the SCHEMA refuses what it does
+    not know, the PROJECTION preserves what it admitted. Separated, each is a defect.
+    """
+
+    model_config = ConfigDict(extra="allow")
 
     id: str
     canonical_id: str = ""
