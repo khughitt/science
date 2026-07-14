@@ -73,14 +73,26 @@ NEW_CORE = {"verdict", "closure_basis", "superseded_by", "resynthesized_into"}
 PROJECT_EXTENSION = {
     "confidence_label", "confidence_mechanistic_label", "identification",   # mm30
     "external_hypothesis_id",                                              # evolution
+    "promoted_from",                                                       # protein-landscape
 }
 
 # §6 RENAME / MIGRATE -- the VALUE survives; only its home changes. The migration MUST write the
 # target. `false` on the source key, so the old spelling can never come back.
+#
+# ☠️ `promoted_from` WAS HERE, mapped to `origins`, and the rename is NOT PERFORMABLE. Ruled
+# 2026-07-14, on the data: `OriginRecord.type` is a required enum (`user | assistant | literature`)
+# -- it records WHO originated the idea. All three protein-landscape values are the same path,
+# `knowledge/sources/local/entities.yaml` -- WHERE the entity was promoted from. Those are different
+# facts, and no rule turns a source path into an originator. Any `OriginType` the migration picked
+# would be FABRICATED PROVENANCE, which is the one thing this arc refuses hardest.
+#
+# It is authored provenance with no epistemic force and zero toolkit readers -- which is, word for
+# word, the description under which the same artifact ruled `external_hypothesis_id` a project
+# extension. So it goes where its twin went. The `origins` route rested on a belief about what
+# `OriginRecord` holds that reading `OriginRecord` refutes.
 RENAMED_TO_FIELD = {
     "phase": "status",                                    # design rev 7 -- `phase` IS the lifecycle
     "author_stated_evidence": "source_stated_evidence",   # -> extension-evolution.provenance (§6)
-    "promoted_from": "origins",                           # its values are literally source paths
 }
 
 # ...and one whose target is not a FIELD at all. `confidence` becomes author-written

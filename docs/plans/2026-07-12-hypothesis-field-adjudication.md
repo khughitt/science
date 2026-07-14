@@ -119,6 +119,7 @@ Composed via Task 6b. **Two of these are the owning project's call, not the tool
 | `identification` | 12 | mm30 | values are a causal-identification vocabulary (`observational` \| `interventional` \| `longitudinal` \| `structural` \| `methodological`; one file leaks the enum in an inline comment). The lookalike `identification_strength` is a **real declared field on `PropositionEntity`** — a different kind. Bare `identification` is dead: its only route was the **retired** `.edges.yaml` (`workbench_apply.py:171` now raises); only the stale prompt `agents/hypothesis-synthesizer.md:58` still mentions it. → `extension-mm30.identification_strategy` |
 | `external_hypothesis_id` | 13 | evolution | `EH-###` — an external system's key. Zero readers. → **`extension-evolution.provenance`** (with `source_stated_evidence`, §6 — one extension, since both fields are authored provenance with no epistemic force) |
 | `confidence` | 2 | 3d-attention-bias | **A per-kind narrowing, not a delete** — see §5b. `confidence` is declared on `Entity` (`entities.py:331`) and materialized as `sci:confidence` for *all* kinds, feeding `low_confidence` risk signals (`store/summary.py:101-126`), the evidence export (`store/export.py:213-250`), both causal exporters, and `graph uncertainty`. It stays core **for other kinds**; the *hypothesis* mixin simply does not admit it. **This narrowing is only expressible because the schema is per-kind — it could not be said before D5.** |
+| `promoted_from` | 3 | protein-landscape | **MOVED HERE FROM §6, 2026-07-14** — the `origins` rename is not performable (an `OriginType` cannot be derived from a source path; see §6). Authored provenance, no epistemic force, **zero toolkit readers on a hypothesis** — the same grounds as `external_hypothesis_id` above. → **`extension-protein-landscape.promotion`**, string preserved byte-for-byte. **UNDECLARED in core, never `false`.** |
 
 *(`evidence_stance` was a candidate here and has been **ruled out** — see §5b.)*
 
@@ -167,8 +168,37 @@ proposition-targeted `expert_judgment` evidence lines.
 | key | files | owner | target |
 |---|---|---|---|
 | `author_stated_evidence` | 13 | evolution | **RULED 2026-07-13: the deterministic rename** → **`source_stated_evidence`**, declared in `extension-evolution.provenance`, **string preserved byte-for-byte**; the old key becomes `false` in the core mixin. *No provenance is fabricated; only its ownership is made explicit.* (The other option — folding the free text into structured `origins` — needs an `OriginType` and a source **per file**: authoring work, not a migration step.) **Never magnitude, never coverage, never computed belief** (design rev 8 + §5b) — and since Task 2b deleted `_authored_magnitude`, that is now *structurally* true rather than merely stated. This is the *only* survivor of the evolution belief cluster. |
-| `promoted_from` | 3 | protein-landscape | → **`origins`**. Its values are literally source paths (`knowledge/sources/local/entities.yaml`) — which is exactly what the structured origin model holds. Today it is **write-only and emitted on `decision` entities** (`decision_log.py:157`), not hypotheses; nothing reads it back. |
+| ~~`promoted_from`~~ | 3 | protein-landscape | ☠️ **MOVED TO §5 (project-extension), 2026-07-14 — THIS RENAME IS NOT PERFORMABLE.** See below. |
 | `description` | 3 | protein-landscape | → keep as a **core generic** field. It is *not* inert: `sources.py:748-755` uses it as the `content_preview` fallback, which becomes `schema:description` in the graph (`materialize.py:639`). Declare it rather than lose the effect. |
+
+### ☠️ `promoted_from` → `origins` was REFUTED BY THE MODEL — ruled 2026-07-14 (author)
+
+**This rename cannot be performed, and the reason is not a technicality.** It was adjudicated against
+a belief about `OriginRecord` that reading `OriginRecord` refutes:
+
+- **`OriginRecord.type` is a REQUIRED enum** — `user | assistant | literature` (`entities.py:233`). It
+  records **WHO originated the idea**. (`ref` is not an escape hatch: for `literature` it is
+  constrained to `paper:` / `cite:`.)
+- **All three authored values are the same path** — `knowledge/sources/local/entities.yaml`. That
+  records **WHERE the entity was promoted from**.
+
+Those are **different facts**, and no rule turns a source path into an originator. The migration
+would have to *pick* an `OriginType`, and every choice is **fabricated provenance** — which is the
+one thing this arc refuses hardest, and which §6 *already knew*: the identical objection is why
+`author_stated_evidence` was **not** folded into `origins` (*"needs an `OriginType` and a source per
+file: authoring work, not a migration step"*). The objection was raised, sustained for one field, and
+not carried across to the field beside it.
+
+**Disposition: PROJECT-EXTENSION (§5)** — `extension-protein-landscape.promotion`, string preserved
+byte-for-byte, and **UNDECLARED in the core mixin** (not `false`, which would make the extension
+unsatisfiable — §5's own warning). It is *authored provenance with no epistemic force and zero
+toolkit readers*, which is **word for word** the description under which this same document ruled
+`external_hypothesis_id` a project extension. It goes where its twin went.
+
+> **The lesson, and it is the same one Task 4 taught:** the adjudication was defensible from the
+> field's *name and values* alone, and still wrong, because it turns on what the TARGET can hold —
+> which lives in the model, not in the corpus. Two of the four dispositions in this document are
+> claims about a destination, and a destination is checkable. **Check it.**
 
 ## 7. DERIVED / DELETE  *(no **semantic** reader — see §7b)*
 

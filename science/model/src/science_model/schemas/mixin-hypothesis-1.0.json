@@ -74,7 +74,6 @@
     "priority": false,
     "role": false,
     "domain": false,
-    "promoted_from": false,
     "promotion_criteria": false,
     "confidence": false,
 

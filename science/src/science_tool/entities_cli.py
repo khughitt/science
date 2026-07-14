@@ -291,6 +291,78 @@ def entity_status_inventory(adjudication: Path | None, output_format: str) -> No
     )
 
 
+@entity_group.command("migrate-hypothesis")
+@click.option("--apply", "apply_changes", is_flag=True, help="Write. Without this, plan only.")
+@click.option(
+    "--resume",
+    "resume_interrupted",
+    is_flag=True,
+    help="Finish an INTERRUPTED write pass from its journal. Never re-plans.",
+)
+@click.option(
+    "--preflight-all",
+    is_flag=True,
+    help="Render and validate every root in --manifest. Writes NOTHING, anywhere.",
+)
+@click.option(
+    "--manifest",
+    type=click.Path(path_type=Path, exists=True),
+    help="Roster JSON of project roots: [{\"root\": \"~/d/mm30\", ...}, ...] (Task 11 Step 0).",
+)
+def entity_migrate_hypothesis(
+    apply_changes: bool,
+    resume_interrupted: bool,
+    preflight_all: bool,
+    manifest: Path | None,
+) -> None:
+    """Migrate this project's hypotheses to entity schema 2. Two-phase and ALL-OR-NONE.
+
+    `status` becomes the LIFECYCLE and `verdict` the epistemic conclusion; the eight ruled deletes
+    go; `author_stated_evidence` becomes `source_stated_evidence`. Every target is rendered AND
+    validated against this project's COMPOSED schema before a single byte is written, and the
+    version pin is the final act — so a project is on schema 2 only once its files actually are.
+
+    `--preflight-all` is what makes the slice atomic across REPOSITORIES rather than merely ordered:
+    no root is applied until every root's rendered target has passed. Without it the rollout degrades
+    to per-root validate-then-write, which leaves the most refutation-capable corpus for last, after
+    the others are already written.
+    """
+    import json as _json
+
+    from science_tool.migrate_hypothesis import MigrationRefused, migrate, resume
+
+    if preflight_all:
+        if manifest is None:
+            raise click.ClickException("--preflight-all requires --manifest")
+        roster = _json.loads(manifest.read_text(encoding="utf-8"))
+        failures: list[str] = []
+        for entry in roster:
+            root = Path(entry["root"]).expanduser()
+            try:
+                planned = migrate(root, apply=False)
+            except MigrationRefused as exc:
+                failures.append(f"{root}:\n{exc}")
+            else:
+                click.echo(f"  ok  {root}  ({len(planned)} hypotheses)")
+        if failures:
+            raise click.ClickException(
+                f"{len(failures)} of {len(roster)} roots FAILED preflight. Nothing was written, in "
+                "any root.\n\n" + "\n\n".join(failures)
+            )
+        click.echo(f"\nAll {len(roster)} roots pass preflight.")
+        return
+
+    try:
+        paths = resume(Path.cwd()) if resume_interrupted else migrate(Path.cwd(), apply=apply_changes)
+    except MigrationRefused as exc:
+        raise click.ClickException(str(exc)) from exc
+
+    verb = "migrated" if (apply_changes or resume_interrupted) else "would migrate"
+    click.echo(f"{verb} {len(paths)} hypotheses")
+    if not (apply_changes or resume_interrupted):
+        click.echo("(dry run — nothing written; re-run with --apply)")
+
+
 @entity_group.command("sections")
 @click.argument("kind")
 @click.option("--format", "output_format", type=click.Choice(OUTPUT_FORMATS), default="table", show_default=True)
