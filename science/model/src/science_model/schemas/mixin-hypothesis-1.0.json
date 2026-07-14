@@ -110,6 +110,16 @@
       "$comment": "`archived` requires an AUTHORED basis, exactly like `retired`. An earlier draft also admitted `archive_ref` as a structural discharge — a field with no reader anywhere in the toolkit, no author in the corpus, and NO RESOLVABLE NAMESPACE: the archive index (archive.py) is keyed by the archived entity's OWN id and mints no record identifier, so `archive_ref` could only ever have restated a fact derivable from `id`. A second, unversioned spelling of a derivable fact is the exact collapse this arc exists to undo, so it is gone.",
       "if": { "properties": { "status": { "const": "archived" } }, "required": ["status"] },
       "then": { "required": ["closure_basis"] }
+    },
+    {
+      "$comment": "THE REVERSE IMPLICATION, and it is not symmetry for its own sake. The rules above say a superseded record must name SOMETHING; alone, they leave `status: active` beside `superseded_by: hypothesis:0002` perfectly valid — a record that is being actively worked AND has already been replaced. Every consumer reads exactly one of those two fields and none of them agree on the answer. A successor is what a record has INSTEAD of a future, so naming one and staying open is not an edge case, it is a contradiction; the schema now refuses it rather than leaving it to a checker that only looked at terminals.",
+      "if": {
+        "anyOf": [
+          { "required": ["superseded_by"] },
+          { "required": ["resynthesized_into"] }
+        ]
+      },
+      "then": { "properties": { "status": { "const": "superseded" } }, "required": ["status"] }
     }
   ],
 

@@ -13,6 +13,7 @@ from pathlib import Path
 from typing import Any, cast
 
 import yaml
+from pydantic import ValidationError
 from science_model.entities import OriginRecord, ProjectEntity
 from science_model.entity_schema import (
     PROJECT_MIXIN_NAMES,
@@ -1062,8 +1063,9 @@ def _prepare_write(
     frontmatter.setdefault("updated", date.today().isoformat())
 
     # Cheapest authority first: the composed schema decides SHAPE, and it decides it about one
-    # record, so it needs no corpus at all.
-    _schema_validate_or_raise(project_root, location.kind, frontmatter)
+    # record, so it needs no corpus at all. On an UNPINNED project it still refuses the schema-2
+    # vocabulary -- a gate that reads "not migrated" as "no rules" is not a gate.
+    _schema_gate_or_raise(project_root, location.kind, fields, frontmatter)
 
     text = _render_markdown(frontmatter, location.body)
     warnings, prospective = _validate_prospective_write(
@@ -1085,25 +1087,52 @@ def _prepare_write(
     )
 
 
-def _schema_validate_or_raise(
-    project_root: Path, kind: str, frontmatter: Mapping[str, object]
+# Fields that MEAN NOTHING before the fold. Under schema 1 the verdict IS `status`, and there is no
+# lifecycle for a `closure_basis` to discharge -- so writing either into an unmigrated project does
+# not record a fact, it manufactures a record that no consumer in that project can read: a shiny new
+# `verdict: supported` sitting beside `status: proposed` and `phase: active`, with three fields and
+# no agreement between them. That is the two-vocabularies-at-once state this whole arc exists to
+# abolish, and the write surface was handing it out.
+_SCHEMA_2_ONLY_FIELDS: frozenset[str] = frozenset({"verdict", "closure_basis"})
+
+
+def _schema_gate_or_raise(
+    project_root: Path, kind: str, fields: Mapping[str, object], frontmatter: Mapping[str, object]
 ) -> None:
     """D3.1 at the WRITE boundary: the composed JSON Schema is the authority on a record's shape.
 
-    Two gates, and each is an explicit "not migrated" rather than a fallback:
+    The KIND gate first -- `PROJECT_MIXIN_NAMES` is the migration slice list, and a kind with no
+    project mixin has no schema to be held to. Then the project's PIN decides which of two things
+    happens, and NEITHER of them is "nothing":
 
-    * the KIND must be in `PROJECT_MIXIN_NAMES` -- the migration slice list. A kind with no project
-      mixin has no schema to be held to, and inventing one would enforce a contract its corpus was
-      never measured against.
-    * the PROJECT must have DECLARED `entity_schema_version: 2`. Same gate as the load path, and it
-      has to be: validating a write against the 2.0 mixin in a project the migration has not reached
-      would reject `--title` on a file whose only sin is a `phase:` key the migration is coming for.
+    * PINNED -> validate the merged record against the composed schema. A terminal transition with
+      no basis fails here, before a byte is written.
+    * UNPINNED -> the schema cannot be applied (it would reject `--title` over a `phase:` key the
+      migration is coming for) -- but the new VOCABULARY must still be refused. Skipping both checks
+      is what let `--verdict supported` land on an unmigrated file. An unpinned project is not one
+      the rules do not reach; it is one that has not earned the new words yet.
     """
     if kind not in PROJECT_MIXIN_NAMES:
         return
-    schema = load_project_schema_if_pinned(project_root)
+
+    try:
+        schema = load_project_schema_if_pinned(project_root)
+    except ValidationError as exc:
+        # A near-miss pin lands HERE now, and it must arrive as a CLI error rather than a pydantic
+        # traceback -- an author who typed `entity_schema_verison` needs the sentence, not a stack.
+        raise EntityCommandError(f"science.yaml is not valid, so this write cannot be checked:\n{exc}") from exc
     if schema is None:
+        offered = sorted(_SCHEMA_2_ONLY_FIELDS & {k for k, v in fields.items() if v is not None})
+        if offered:
+            raise EntityCommandError(
+                f"{', '.join(offered)} cannot be written here: this project has not declared "
+                f"`entity_schema_version: 2`, so its {kind} records still carry the verdict in "
+                f"`status` and have no lifecycle for a closure to discharge. Writing {offered[0]!r} "
+                f"now would leave the record speaking two vocabularies at once. Migrate the project "
+                f"first: `science entity migrate-hypothesis --apply`."
+            )
         return
+
     try:
         schema.validator.validate_as(dict(frontmatter), schema.profile_for(kind))
     except EntityValidationError as exc:
@@ -1117,10 +1146,17 @@ def _resolution_check_or_raise(
 ) -> None:
     """The D3 escape hatch, ENUMERATED: does this record's lineage name a real, live, OTHER entity?
 
-    NOT gated on the pin, unlike the schema check, and the asymmetry is the point. `superseded` meant
-    `superseded` in the OLD vocabulary too, so a dangling successor is authorable in an unmigrated
-    project today -- which is precisely the corpus that most needs the guard. Gating this on the pin
-    would arm it only for the projects that had already been made safe.
+    ☠️ ASKED OF EVERY RECORD THAT NAMES A SUCCESSOR, whatever its status. It used to run only on
+    `superseded` records, and a status is a bad proxy for "has lineage" in both directions: an
+    `active` hypothesis carrying `resynthesized_into: [hypothesis:9999-nope]` was never checked at
+    all, while a `superseded` one discharged by `closure_basis` -- no successor, nothing to resolve --
+    built a resolver anyway, so an alias collision between two OTHER entities blocked its `--title`
+    edit. `has_lineage_to_resolve` now asks about lineage.
+
+    NOT gated on the pin, unlike the schema check, and the asymmetry is the point. `superseded_by`
+    meant `superseded_by` in the OLD vocabulary too, so a dangling successor is authorable in an
+    unmigrated project today -- which is precisely the corpus that most needs the guard. Gating this
+    on the pin would arm it only for the projects that had already been made safe.
 
     Gated on the kind, though, because `check_resolution` asks whether a successor is a live
     HYPOTHESIS. Pointing it at another kind would measure that kind against a set it is not in.

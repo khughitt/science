@@ -247,32 +247,42 @@ class ProjectConfig(BaseModel):
     @model_validator(mode="before")
     @classmethod
     def _reject_near_miss_keys(cls, raw: Any) -> Any:
-        """A key that ALMOST names a declared field is a typo, and `extra="allow"` would keep it.
-
-        `extra="allow"` is deliberate: science.yaml carries project-owned keys this model has no
-        opinion about (`summary`, `tags`, `aspects`, `layout_version`, ...), and preserving them is
-        the point. But that same permissiveness turns `entity_schema_verison: 2` into a key that is
-        accepted, preserved, and ignored -- leaving a project silently on schema 1 while its author
-        believes it migrated, which is precisely the fail-silent this arc exists to close. A pin
-        nobody can typo is what "nothing guesses; a project says" actually costs.
-
-        Near-miss, not unknown: an unknown key is legal by design, so only keys that are one
-        plausible slip away from a DECLARED field are refused.
-        """
-        if not isinstance(raw, dict):
-            return raw
-        declared = sorted(cls.model_fields)
-        for key in raw:
-            if not isinstance(key, str) or key in cls.model_fields:
-                continue
-            near = difflib.get_close_matches(key, declared, n=1, cutoff=0.85)
-            if near:
-                raise ValueError(
-                    f"science.yaml: unknown key {key!r} -- did you mean {near[0]!r}? "
-                    "A near-miss key is refused rather than preserved: silently ignoring it would "
-                    "leave the project unconfigured while its author believed otherwise."
-                )
+        reject_near_miss_keys(raw)
         return raw
+
+
+def reject_near_miss_keys(raw: Any) -> None:
+    """A key that ALMOST names a declared field is a typo, and `extra="allow"` would keep it.
+
+    `extra="allow"` is deliberate: science.yaml carries project-owned keys this model has no opinion
+    about (`summary`, `tags`, `aspects`, `layout_version`, ...), and preserving them is the point.
+    But that same permissiveness turns `entity_schema_verison: 2` into a key that is accepted,
+    preserved, and ignored -- leaving a project silently on schema 1 while its author believes it
+    migrated, which is precisely the fail-silent this arc exists to close. A pin nobody can typo is
+    what "nothing guesses; a project says" actually costs.
+
+    Near-miss, not unknown: an unknown key is legal by design, so only keys that are one plausible
+    slip away from a DECLARED field are refused.
+
+    ☠️ MODULE-LEVEL, and not a private validator, because the pin is read on TWO paths and only one
+    of them can afford full `ProjectConfig` validation. The graph loader cannot: `name` is required,
+    and demanding it of every graph build is a real tightening that is not this arc's. So the loader
+    calls THIS, on the raw dict, and gets the typo guard without the rest. A near-miss pin must FAIL
+    on both paths -- degrading it to "unpinned" is the fail-open, wearing the pin's own clothes.
+    """
+    if not isinstance(raw, dict):
+        return
+    declared = sorted(ProjectConfig.model_fields)
+    for key in raw:
+        if not isinstance(key, str) or key in ProjectConfig.model_fields:
+            continue
+        near = difflib.get_close_matches(key, declared, n=1, cutoff=0.85)
+        if near:
+            raise ValueError(
+                f"science.yaml: unknown key {key!r} -- did you mean {near[0]!r}? "
+                "A near-miss key is refused rather than preserved: silently ignoring it would "
+                "leave the project unconfigured while its author believed otherwise."
+            )
 
 
 def load_project_config(project_root: Path) -> ProjectConfig:

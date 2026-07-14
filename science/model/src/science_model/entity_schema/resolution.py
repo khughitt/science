@@ -28,13 +28,23 @@ from typing import Any, Protocol
 
 from pydantic import BaseModel
 
-# `superseded` is the ONLY terminal with resolvable structure (design §7.4, corrected 2026-07-13).
-# `archived` was in this set for two revisions and had NO archive check behind it -- because none
-# can be written: the archive index is keyed by the archived entity's own id and mints no record
-# identifier, so there is nothing to resolve. A status listed here with no check is a promise the
-# module does not keep. `retired` and `archived` are discharged by `closure_basis`, which is SHAPE,
-# and shape is the schema's -- this module must not restate it.
-_TERMINALS_WITH_STRUCTURE = frozenset({"superseded"})
+# ☠️ THIS MODULE ASKS ABOUT LINEAGE, AND IT KEYS ON LINEAGE.
+#
+# It used to key on `status in {"superseded"}` -- a proxy for "this record has a successor" -- and a
+# proxy is wrong in BOTH directions:
+#
+#   * A record with a DANGLING successor and a non-terminal status was never checked at all. An
+#     `active` hypothesis could carry `resynthesized_into: [hypothesis:9999-nope]` and pass every
+#     gate, which is the precise fault this module exists to catch, sailing through on a status.
+#   * A `superseded` record discharged by `closure_basis` -- no successor, nothing to resolve -- was
+#     handed to a resolver anyway. That is not merely wasted work: building one RAISES on a corpus
+#     with a duplicated alias, so an unrelated `--title` edit was blocked by a collision between two
+#     other entities, over lineage the record does not have.
+#
+# The forward implication -- a `superseded` record must name SOMETHING (a successor or a basis) --
+# is SHAPE, it is one record's business, and it is the schema's. The reverse (lineage present =>
+# status superseded) is shape too, and now the schema says that as well. Neither belongs here.
+# This module answers the one question a schema structurally cannot: does the reference RESOLVE?
 
 
 class ResolutionViolation(BaseModel):
@@ -88,25 +98,29 @@ class LineageTargets(Protocol):
 
 
 def has_lineage_to_resolve(entity: dict[str, Any]) -> bool:
-    """Whether `check_resolution` has anything to say about this record. Needs NO resolver.
+    """Whether this record names a successor at all. Needs NO resolver.
 
     Exists so a caller can decide whether BUILDING one is worth it without restating the rule that
     decides. That is not a micro-optimization: `ReferenceResolver.from_entities` RAISES on a corpus
-    with a duplicated alias, so a write boundary that constructed one unconditionally would turn a
-    reportable fault into an unwritable project -- for every edit, on every kind, including the ones
-    with no lineage at all.
+    with a duplicated alias, so a caller that constructed one for a record with NO lineage would
+    turn a reportable fault into an unwritable project — an alias collision between two OTHER
+    entities blocking an edit to this one.
     """
-    return entity.get("status") in _TERMINALS_WITH_STRUCTURE
+    return bool(_lineage_refs(entity))
 
 
 def check_resolution(
     entity: dict[str, Any], *, targets: LineageTargets, live_hypotheses: set[str]
 ) -> list[ResolutionViolation]:
-    """Cross-record terminal violations. Empty == clean.
+    """Cross-record LINEAGE violations. Empty == clean.
 
-    RESOLUTION only. Whether a basis is PRESENT and NON-EMPTY is shape, and shape is the schema's
-    (`minItems: 1`, `pattern: "\\S"`). Re-checking it here would be a second authority for the same
-    fact, which is the collapse this arc exists to undo.
+    RESOLUTION only, and asked of every record that NAMES a successor — whatever its status. A
+    dangling successor is a dangling successor on an `active` record too, and reading the status to
+    decide whether to look was how one sailed through (see the module header).
+
+    Whether a basis is PRESENT and NON-EMPTY is shape, and shape is the schema's (`minItems: 1`,
+    `pattern: "\\S"`). Re-checking it here would be a second authority for the same fact, which is
+    the collapse this arc exists to undo.
 
     RESOLVE, then CHECK -- in that order, and never `raw in some_set`. Raw string membership fails
     in BOTH directions: it calls a valid alias dangling (blocking a correct corpus), and it misses

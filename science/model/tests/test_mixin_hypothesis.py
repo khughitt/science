@@ -373,13 +373,34 @@ def test_CORE_keys_are_admitted() -> None:
         V.validate_as(_h(**{key: _sample(key)}), PROFILE)
 
 
+# A successor is what a record has INSTEAD of a future, so these two are admitted ONLY on a record
+# that has actually been superseded. Naming one on an `active` record is not a permissive corner --
+# it is a contradiction the schema now refuses (see the reverse implication in the mixin).
+_LINEAGE_KEYS = {"superseded_by", "resynthesized_into"}
+
+
 def test_the_NEW_core_fields_are_admitted_AS_A_SET() -> None:
     # `verdict` and `closure_basis` get their own conditional tests above, and that is exactly how
     # `archive_ref` and `resynthesized_into` could quietly vanish from the schema while the suite
     # stayed green. They are core BEFORE any reader ships (rev 8/9); nothing else asserts they exist.
     for key in NEW_CORE:
         assert key in MIXIN["properties"], f"{key} is core and undeclared"
-        V.validate_as(_h(**{key: _sample(key)}), PROFILE)
+        status = "superseded" if key in _LINEAGE_KEYS else "active"
+        V.validate_as(_h(status=status, **{key: _sample(key)}), PROFILE)
+
+
+def test_a_SUCCESSOR_on_a_record_that_is_still_OPEN_is_a_CONTRADICTION() -> None:
+    # THE REVERSE IMPLICATION. The conditionals above say a `superseded` record must name SOMETHING;
+    # alone, they left `status: active` beside `superseded_by: hypothesis:0002` perfectly valid -- a
+    # record being actively worked AND already replaced. Every consumer reads one field or the other
+    # and none of them agree. The schema is the right authority for it: it is one record's shape, and
+    # a checker that only looked at terminals could never see it, BY CONSTRUCTION.
+    for key in _LINEAGE_KEYS:
+        for open_status in ("active", "draft", "complete"):
+            with pytest.raises(EntityValidationError):
+                V.validate_as(
+                    _h(status=open_status, verdict="supported", **{key: _sample(key)}), PROFILE
+                )
 
 
 def test_PROJECT_EXTENSION_keys_are_ABSENT_FROM_CORE_but_not_FORBIDDEN_BY_IT() -> None:

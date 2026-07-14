@@ -23,6 +23,7 @@ from science_tool.consolidation import _prepare_supersession, mark_superseded
 from science_tool.entities_cli import entity_group
 from science_tool.entities import EntityCommandError, edit_entity, find_entity
 from science_tool.graph.attention import DEBT_QUESTION_STATUSES
+from science_tool.graph.sources import load_project_sources
 from science_tool.validate.checks.dataset_capabilities import is_demand_closed
 
 SRC = Path(__file__).resolve().parents[1] / "src"
@@ -363,3 +364,99 @@ def test_the_LINEAGE_guard_is_live_on_an_UNMIGRATED_project(tmp_path: Path) -> N
     _hypothesis(tmp_path, "0002-y", phase="active", status="refuted")
     edit_entity(tmp_path, "hypothesis:0002-y", title="Renamed")
     assert _frontmatter(tmp_path / "entities/hypotheses/0002-y.md")["title"] == "Renamed"
+
+
+# ---------------------------------------------------------------------------------------------
+# THE FAIL-OPEN PATHS. Each of these was a gate that, when it could not decide, decided NOTHING.
+# ---------------------------------------------------------------------------------------------
+
+
+def test_a_MISSPELLED_pin_FAILS_instead_of_degrading_to_unpinned(tmp_path: Path) -> None:
+    # ☠️ THE WORST SHAPE OF BUG THIS ARC HAS: a guard routed around by the code that needed it.
+    # `reject_near_miss_keys` was written to catch exactly `entity_schema_verison`, and the write
+    # boundary then read the pin straight off the raw YAML -- so the typo parsed as "no pin", every
+    # schema check went silent, and the project sat there believing it had migrated. One transposed
+    # letter turned the whole boundary off, and NOTHING said so.
+    (tmp_path / "science.yaml").write_text(
+        yaml.safe_dump({"name": "p", "id": "p", "entity_schema_verison": 2}), encoding="utf-8"
+    )
+    (tmp_path / "entities/hypotheses").mkdir(parents=True)
+    _hypothesis(tmp_path, "0001-x")
+
+    # It must not silently accept `complete` with no verdict, which is what "degraded to unpinned"
+    # bought. It must REFUSE, and say the word the author typed wrong.
+    with pytest.raises(EntityCommandError, match="entity_schema_verison"):
+        edit_entity(tmp_path, "hypothesis:0001-x", status="complete")
+    assert _frontmatter(tmp_path / "entities/hypotheses/0001-x.md")["status"] == "active"
+
+
+def test_a_MISSPELLED_pin_FAILS_ON_THE_LOAD_PATH_TOO(tmp_path: Path) -> None:
+    # The same fail-open, at the reader. The pin decides whether the LOADER enforces the schema at
+    # all, so a near-miss pin would switch validation off and load an unvalidated corpus -- while its
+    # author believed it was protected. The guard has to run on both paths or it protects neither.
+    (tmp_path / "science.yaml").write_text(
+        yaml.safe_dump({"name": "p", "id": "p", "entity_schema_verison": 2}), encoding="utf-8"
+    )
+    (tmp_path / "entities/hypotheses").mkdir(parents=True)
+    _hypothesis(tmp_path, "0001-x")
+
+    with pytest.raises(ValueError, match="entity_schema_verison"):
+        load_project_sources(tmp_path)
+
+
+def test_an_UNMIGRATED_project_is_refused_the_NEW_VOCABULARY(tmp_path: Path) -> None:
+    # `verdict` and `closure_basis` MEAN NOTHING before the fold: under schema 1 the verdict IS
+    # `status`, and there is no lifecycle for a closure to discharge. Writing one anyway produced a
+    # record speaking two vocabularies at once -- `verdict: supported` sitting beside `status:
+    # proposed` and `phase: active`, three fields with no agreement between them. That is the exact
+    # state this arc exists to abolish, and the write surface was handing it out.
+    #
+    # "Not migrated" is not "no rules apply". It is "has not earned the new words yet".
+    (tmp_path / "science.yaml").write_text(yaml.safe_dump({"name": "p", "id": "p"}), encoding="utf-8")
+    (tmp_path / "entities/hypotheses").mkdir(parents=True)
+    path = _hypothesis(tmp_path, "0001-x", status="proposed", phase="active")
+
+    for field in ("verdict", "closure_basis"):
+        with pytest.raises(EntityCommandError, match="migrate-hypothesis"):
+            edit_entity(tmp_path, "hypothesis:0001-x", **{field: "supported"})
+    written = _frontmatter(path)
+    assert "verdict" not in written and "closure_basis" not in written
+
+    # ...and the project is still WORKABLE. Refusing the new vocabulary must not refuse the old one:
+    # a `--title` edit to a file the migration has not reached still goes through.
+    edit_entity(tmp_path, "hypothesis:0001-x", title="Renamed")
+    assert _frontmatter(path)["title"] == "Renamed"
+
+
+def test_a_DANGLING_successor_on_an_OPEN_record_is_caught(tmp_path: Path) -> None:
+    # THE TRIGGER ASKED THE WRONG QUESTION. It fired on `status == "superseded"` -- a proxy for "has
+    # a successor" -- so an ACTIVE hypothesis naming `hypothesis:9999-nope` was never checked at all.
+    # The one fault the module exists to catch, sailing through on a status.
+    #
+    # Unpinned on purpose: the schema (which would also refuse this now, via the reverse implication)
+    # does not run here, so this pins the RESOLUTION check specifically.
+    (tmp_path / "science.yaml").write_text(yaml.safe_dump({"name": "p", "id": "p"}), encoding="utf-8")
+    (tmp_path / "entities/hypotheses").mkdir(parents=True)
+    _hypothesis(tmp_path, "0001-x")
+
+    with pytest.raises(EntityCommandError, match="9999-nope"):
+        edit_entity(tmp_path, "hypothesis:0001-x", resynthesized_into=["hypothesis:9999-nope"])
+
+
+def test_a_record_with_NO_lineage_does_not_pay_for_OTHER_entities_alias_collisions(
+    tmp_path: Path,
+) -> None:
+    # THE SAME PROXY, FAILING THE OTHER WAY. A `superseded` record discharged by `closure_basis` has
+    # no successor and nothing to resolve -- but the status-keyed trigger built a resolver for it
+    # anyway, and `ReferenceResolver.from_entities` RAISES on a duplicated alias. So an unrelated
+    # `--title` edit was blocked by a collision between two entities this record never mentions.
+    #
+    # The collision is real and still reportable; it is simply none of this write's business.
+    (tmp_path / "science.yaml").write_text(yaml.safe_dump({"name": "p", "id": "p"}), encoding="utf-8")
+    (tmp_path / "entities/hypotheses").mkdir(parents=True)
+    _hypothesis(tmp_path, "0001-x", status="superseded", closure_basis="folded into the review")
+    _hypothesis(tmp_path, "0002-y", aliases=["hypothesis:shared"])
+    _hypothesis(tmp_path, "0003-z", aliases=["hypothesis:shared"])  # <- the collision
+
+    edit_entity(tmp_path, "hypothesis:0001-x", title="Renamed")
+    assert _frontmatter(tmp_path / "entities/hypotheses/0001-x.md")["title"] == "Renamed"

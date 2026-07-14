@@ -20,7 +20,6 @@ from __future__ import annotations
 from dataclasses import dataclass
 from pathlib import Path
 
-import yaml
 from science_model.entity_schema import (
     EntityValidator,
     ProfileParseError,
@@ -94,18 +93,20 @@ def load_project_schema_if_pinned(project_root: Path) -> ProjectSchema | None:
     `retired` MEANT `refuted`. Every one of those is a lifecycle word, so a "does it look migrated?"
     test calls the corpus migrated and reads its verdicts as closures.
 
-    The pin is read from the raw YAML rather than through `ProjectConfig`, and that is deliberate: an
-    UNPINNED project must keep loading exactly as it does today, and imposing full `science.yaml`
-    validation on every graph build is a real change that belongs to its own task. A PINNED project
-    does get that validation, via `load_project_schema` — it asked for it.
+    ☠️ THE PIN IS READ THROUGH THE VALIDATED CONFIG, NEVER OFF THE RAW YAML. An earlier revision did
+    the latter — cheaper, and it routed straight around `reject_near_miss_keys`, the guard written to
+    stop exactly this. `entity_schema_verison: 2` then parsed as "no pin", every schema check on the
+    write path went quietly silent, and the project was left believing it had migrated. That is not a
+    degraded read of the pin; it is the fail-silent the pin exists to abolish, and it was reachable by
+    one transposed letter. A near-miss pin must FAIL, never fall back to "unpinned".
     """
     path = project_config_path(project_root)
     if not path.is_file():
+        return None  # no config at all is not a typo — it is a project that never claimed anything
+    config = load_project_config(project_root)
+    if config.entity_schema_version != ENTITY_SCHEMA_VERSION:
         return None
-    data = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
-    if not isinstance(data, dict) or data.get("entity_schema_version") != ENTITY_SCHEMA_VERSION:
-        return None
-    return load_project_schema(project_root)
+    return load_project_schema(project_root, config)
 
 
 def _certify_declarations(

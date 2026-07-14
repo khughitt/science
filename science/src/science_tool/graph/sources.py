@@ -51,6 +51,7 @@ from science_tool.entity_profiles import (
     ProjectSchema,
     load_project_schema,
 )
+from science_tool.project_config import reject_near_miss_keys
 from science_tool.graph.entity_registry import EntityKindNotRegisteredError, EntityRegistry
 from science_tool.graph.errors import EntityIdentityCollisionError
 from science_tool.graph.identity_table import (
@@ -1215,6 +1216,13 @@ def _read_project_config(project_root: Path) -> dict[str, object]:
     data: dict[str, object] = {}
     if yaml_path.is_file():
         data = yaml.safe_load(yaml_path.read_text(encoding="utf-8")) or {}
+
+    # The typo guard, WITHOUT the rest of `ProjectConfig` (which requires `name`, and demanding that
+    # of every graph build is a tightening that is not this arc's). It has to run HERE too: the pin
+    # below decides whether this loader enforces the entity schema at all, so `entity_schema_verison`
+    # would read as "unpinned", switch the schema check off, and load an unvalidated corpus while its
+    # author believed it was protected. Fail-open, reachable by one transposed letter.
+    reject_near_miss_keys(data)
 
     if "profiles" in data and "knowledge_profiles" not in data:
         raise ValueError("science.yaml uses removed top-level profiles; use knowledge_profiles")
