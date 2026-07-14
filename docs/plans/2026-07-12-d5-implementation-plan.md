@@ -3644,11 +3644,16 @@ def check_verdict_agreement(ctx: ValidateContext) -> Iterator[Result]:
 | verdict | reports a disagreement when… |
 |---|---|
 | `supported` | **nothing composes** — the composed magnitude is `speculative` — **or** an unresolved decisive refutation stands. *(Not "the magnitude is below the `supported` rung" — see the ruling below. The ERROR case is emitted separately, and both may fire.)* |
-| `partially-supported` | there is **no** unresolved/disputed/unsupported portion (no core member `speculative` or contested **and** nothing refuted) — i.e. nothing *partial* about it |
+| `partially-supported` | **either limb is missing.** It is a **conjunction** — *some support* **plus** *some unresolved/disputed/unsupported portion* — so it disagrees when there is **no admitted support unit** in scope, **or** when there is no unresolved/contested/refuted/falsified portion. *(This row said only the second half in earlier drafts. See ruling 4: the first half is what stops a wholly-disputed hypothesis from reading as `partially-supported` in silence.)* |
 | `weakened` | **no** disputing evidence and no negative adjudication basis. **Never infer a historical trajectory from one snapshot** — a true weakening claim needs a prior `belief_snapshot`; absent one, only report the *absence of any dispute*, never the absence of *change*. |
 | `refuted` | no decisive refutation and no linked falsification. **No single-source ceiling** — one decisive independent test is a legitimate refutation. |
 
-> ### ⚠️ THREE RULINGS the snippets above did not survive contact with — found while implementing
+> ### ⚠️ FIVE RULINGS the snippets above did not survive contact with — found while implementing
+>
+> *(Rulings 4 and 5 came from a REVIEW of the shipped check, not from writing it — the first three
+> were caught at the keyboard, these two only under someone else's execution. Both were live defects
+> in `57b36c39`, and neither was caught by its 22 tests. Recorded here because the plan's own table
+> row is what encoded the first of them.)*
 >
 > **1. `supported` may NOT be tested against the `supported` RUNG — that is the single-source ceiling
 > coming back through the side door.** The table's *"the composed belief does not support it"* reads
@@ -3674,6 +3679,33 @@ def check_verdict_agreement(ctx: ValidateContext) -> Iterator[Result]:
 > a `disputes` edge that additionally satisfies `is_decisive_refutation` (independent + strong +
 > direct_test + whole_claim). The shipped fixture makes `disputes` decisive by default, so the
 > polarity control tests polarity and nothing else.
+>
+> **4. `partially-supported` is a CONJUNCTION, and the disagreement table wrote it as a
+> disjunction.** The contract at line ~3370 is explicit — *"some support **plus** unresolved /
+> disputed / unsupported portions"* — but the `_disagreement` row asked only for the **second** limb.
+> With no support anywhere in scope, **every portion is unsettled by definition**, so the shipped
+> `_has_partial_aspect` returned `True` for three corpora that have no support at all: **no evidence
+> whatsoever**, **only a decisive dispute**, and **only a falsification**. All three passed in
+> silence, and the dispute-only and falsification-only cases emitted **nothing at all** — `disputes`
+> and a linked falsification are both *qualifying bases* for `partially-supported`, so
+> `missing-basis` stayed quiet too, and `disagrees-with-computed` was the only thing standing between
+> a wholly-refuted hypothesis and a green run. It was not standing. Agreement now requires **both**:
+> ≥1 admitted **support** unit **and** ≥1 unresolved/contested/refuted/falsified portion.
+>
+> ☠️ **The old positive control CODIFIED the defect.** `test_partially_supported_with_a_refuted_CORE_
+> member_is_NOT_a_disagreement` had a *sole* core member, refuted, with **no supported portion** — a
+> corpus that is not partially supported at all. It is green under a check that never reads the
+> support limb, and it was. The control now carries **two** core members: one supported, one refuted.
+> *(Mutation-proven: restoring the disjunction fails exactly the three new regressions.)*
+>
+> **5. The `supported` disagreement message made a FALSE CLAIM.** `_disagreement` reported *"no
+> admissible evidence composes to any support at all"* on **any** speculative composition. But
+> `belief_for_entity` is **weakest-link over core members**: an admissible supporting line **directly
+> on the hypothesis** coexists with a speculative composition the moment one core member has no
+> support of its own. The message told the author to write evidence they **had already written**. A
+> check may not name a fact it did not read — `_speculative_reason` now names the actual locus (which
+> core member is holding the conjunction down), and keeps the flat message only for the case where it
+> is true. *(Mutation-proven, with a control asserting the flat message is still reachable.)*
 >
 > **And one GAP: the plan's test list never exercised the falsification limb.** The basis contract has
 > two limbs, and only the evidence-line one had tests — the `falsification`-on-a-core-member limb, the

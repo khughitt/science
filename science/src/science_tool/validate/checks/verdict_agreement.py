@@ -269,17 +269,26 @@ def _disagreement(verdict: str, composition: _Composition, *, falsified: bool) -
         # experiment -- reimposing, on the verdict axis, the single-source ceiling this design
         # deleted. The honest complaint is that NOTHING composes, or that a refutation stands.
         if composition.magnitude == BeliefMagnitude.SPECULATIVE:
-            return "no admissible evidence composes to any support at all"
+            return _speculative_reason(composition)
         if _has_decisive_refutation(composition):
             return "an unresolved decisive refutation stands"
         return None
 
     if verdict == "partially-supported":
-        if _has_partial_aspect(composition, falsified=falsified):
-            return None
-        return (
-            "nothing is partial: no unresolved or contested portion, and nothing refuted"
-        )
+        # A CONJUNCTION, not a disjunction. `partially-supported` says *some of it holds up and
+        # some of it does not* -- so BOTH limbs must be present. Accepting an unsettled portion
+        # ALONE let a hypothesis with nothing but a decisive dispute (or nothing but a
+        # falsification, or no evidence at all) read as `partially-supported` in silence: with no
+        # support anywhere, EVERY portion is unsettled by definition. Such a hypothesis is not
+        # partially supported; it is UNSUPPORTED.
+        if not _has_support(composition):
+            return (
+                "nothing is supported: no admissible supporting evidence on the hypothesis or "
+                "on any core member"
+            )
+        if not _has_unsettled_portion(composition, falsified=falsified):
+            return "nothing is partial: no unresolved or contested portion, and nothing refuted"
+        return None
 
     if verdict == "weakened":
         # `weakened` asserts a CHANGE, and a change cannot be read from one snapshot: without a
@@ -298,7 +307,13 @@ def _disagreement(verdict: str, composition: _Composition, *, falsified: bool) -
     return None
 
 
-def _has_partial_aspect(composition: _Composition, *, falsified: bool) -> bool:
+def _has_unsettled_portion(composition: _Composition, *, falsified: bool) -> bool:
+    """Is any portion refuted, falsified, contested, or simply unsupported?
+
+    HALF of `partially-supported` -- never the whole of it. On its own this is ALSO true of a
+    hypothesis with no evidence whatsoever (every portion is speculative), which is exactly why the
+    caller conjoins it with `_has_support`.
+    """
     if _has_decisive_refutation(composition) or falsified:
         return True
     return any(
@@ -307,8 +322,39 @@ def _has_partial_aspect(composition: _Composition, *, falsified: bool) -> bool:
     )
 
 
+def _has_support(composition: _Composition) -> bool:
+    return any(belief.support_units for belief in _admitted(composition))
+
+
 def _has_dispute(composition: _Composition) -> bool:
     return any(belief.dispute_units for belief in _admitted(composition))
+
+
+def _speculative_reason(composition: _Composition) -> str:
+    """WHY the composition is speculative -- named from what was actually READ.
+
+    ☠️ "no admissible evidence composes to any support at all" is a FALSE CLAIM whenever support
+    exists but the CONJUNCTION is dragged down: `belief_for_entity` is weakest-link over core
+    members, so an admissible supporting line directly on the hypothesis coexists with a speculative
+    composition the moment one core member has no support of its own. Emitting the flat message
+    there told the author to write evidence they had already written. Each branch below states only
+    what it read.
+    """
+    if not _has_support(composition):
+        return "no admissible evidence composes to any support at all"
+
+    unsupported = [
+        uri
+        for uri, belief in zip(composition.core_uris, composition.core, strict=True)
+        if not belief.support_units
+    ]
+    if unsupported:
+        return (
+            "admissible supporting evidence exists, but the weakest-link conjunction over core "
+            "members stays speculative: no admissible support on "
+            f"{', '.join(sorted(str(uri) for uri in unsupported))}"
+        )
+    return "the admissible supporting evidence is too weak to compose to any support"
 
 
 # ---------------------------------------------------------------------------------------------

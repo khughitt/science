@@ -38,8 +38,16 @@ from science_tool.validate.gates import cumulative_rules
 from science_tool.validate.result import Severity
 
 HYPOTHESIS = "hypothesis:0001-x"
-CORE = "proposition:core"
 RIVAL = "proposition:rival"
+
+# TWO core members, because `partially-supported` is a conjunction: its positive control needs one
+# member that holds up and one that does not, and a single-member project cannot express that.
+_REFS = {
+    "hypothesis": HYPOTHESIS,
+    "core": "proposition:core",
+    "core-2": "proposition:core-2",
+    "rival": RIVAL,
+}
 
 
 # ---------------------------------------------------------------------------------------------
@@ -77,7 +85,7 @@ def _write(root: Path, rel: str, body: str) -> None:
 
 
 def _target_ref(on: str) -> str:
-    return {"hypothesis": HYPOTHESIS, "core": CORE, "rival": RIVAL}[on]
+    return _REFS[on]
 
 
 def _write_unit(root: Path, index: int, unit: Unit) -> None:
@@ -136,7 +144,7 @@ def build(
     for role in members:
         ref = _target_ref(role)
         discusses: list[object] = (
-            [HYPOTHESIS] if role == "core" else [{"frame": HYPOTHESIS, "role": "rival"}]
+            [{"frame": HYPOTHESIS, "role": "rival"}] if role == "rival" else [HYPOTHESIS]
         )
         _write(
             root,
@@ -179,6 +187,10 @@ def results(root: Path) -> list:
 
 def rules(root: Path) -> set[str]:
     return {result.rule for result in results(root)}
+
+
+def messages(root: Path, rule: str) -> list[str]:
+    return [result.message for result in results(root) if result.rule == rule]
 
 
 @pytest.fixture
@@ -324,25 +336,89 @@ def test_a_refutation_DIRECTLY_on_the_hypothesis_is_caught_despite_bundle_member
 # ---------------------------------------------------------------------------------------------
 
 
-def test_partially_supported_with_a_refuted_CORE_member_is_NOT_a_disagreement(
+def test_partially_supported_with_a_SUPPORTED_and_a_REFUTED_core_member_is_NOT_a_disagreement(
     project: Path,
 ) -> None:
-    # On an ordinal reading this is a contradiction. It is not: a decisively refuted constituent is
-    # exactly what `partially-supported` ASSERTS. Ordinalizing the verdict produces this false
-    # positive, which is why the check reports a MATRIX and never compares rungs.
+    # THE positive control, and it needs BOTH limbs present -- one core member that holds up, one
+    # decisively refuted. On an ordinal reading the refuted member is a contradiction. It is not: a
+    # decisively refuted constituent alongside a supported one is exactly what
+    # `partially-supported` ASSERTS. Ordinalizing the verdict produces this false positive, which is
+    # why the check reports a MATRIX and never compares rungs.
+    #
+    # ☠️ A one-member version of this control (sole member, refuted, nothing supported) is NOT the
+    # same test: it is green under a check that never reads the support limb at all, and it was --
+    # it codified the disjunction defect the three regressions below now forbid.
     root = build(
         project,
         verdict="partially-supported",
-        units=(Unit(stance="disputes", on="core"),),
-        members=("core",),
+        units=(Unit(stance="supports", on="core"), Unit(stance="disputes", on="core-2")),
+        members=("core", "core-2"),
     )
-    assert "verdict.disagrees-with-computed" not in rules(root)
+    assert results(root) == []
 
 
 def test_partially_supported_with_NOTHING_partial_IS_a_disagreement(project: Path) -> None:
-    # The other side -- without it, the test above is satisfied by a check that never fires at all.
+    # The unsettled-limb control: all support, nothing unresolved.
     root = build(project, verdict="partially-supported", units=(Unit(stance="supports"),))
     assert "verdict.disagrees-with-computed" in rules(root)
+
+
+# `partially-supported` is a CONJUNCTION -- *some of it holds up and some of it does not*. Reading
+# the unsettled limb ALONE as sufficient made all three corpora below pass in silence, because a
+# hypothesis with no support at all has every portion unsettled by definition. None of them is
+# partially supported; each is UNSUPPORTED.
+
+
+def test_partially_supported_with_NO_EVIDENCE_AT_ALL_IS_a_disagreement(project: Path) -> None:
+    root = build(project, verdict="partially-supported")
+    assert "verdict.disagrees-with-computed" in rules(root)
+
+
+def test_partially_supported_with_ONLY_a_dispute_IS_a_disagreement(project: Path) -> None:
+    # A basis EXISTS -- `disputes` grounds `partially-supported` -- so `missing-basis` stays silent
+    # and this rule is the ONLY thing standing between a wholly-disputed hypothesis and a green run.
+    root = build(project, verdict="partially-supported", units=(Unit(stance="disputes"),))
+    assert rules(root) == {"verdict.disagrees-with-computed"}
+
+
+def test_partially_supported_with_ONLY_a_falsification_IS_a_disagreement(project: Path) -> None:
+    # Same, through the other basis limb: a linked negative adjudication and nothing else.
+    root = build(
+        project, verdict="partially-supported", members=("core",), falsified_member="core"
+    )
+    assert rules(root) == {"verdict.disagrees-with-computed"}
+
+
+def test_supported_over_an_UNRESOLVED_core_member_does_not_deny_the_support_that_exists(
+    project: Path,
+) -> None:
+    # The composition is weakest-link over core members, so an admissible supporting line directly
+    # on the hypothesis STILL composes to speculative the moment one core member has no support of
+    # its own. The disagreement is real and must be reported.
+    #
+    # ☠️ But the flat message -- "no admissible evidence composes to any support at all" -- is a
+    # FALSE CLAIM here: the support exists, is admissible, and composed. It told the author to write
+    # evidence they had already written. A check may not name a fact it did not read; the message
+    # must name the member that is actually holding the conjunction down.
+    root = build(
+        project,
+        verdict="supported",
+        units=(Unit(stance="supports", on="hypothesis"),),
+        members=("core",),
+    )
+    assert rules(root) == {"verdict.disagrees-with-computed"}   # a basis EXISTS -- only the fit fails
+
+    (message,) = messages(root, "verdict.disagrees-with-computed")
+    assert "no admissible evidence composes to any support at all" not in message
+    assert str(PROJECT_NS["proposition/core"]) in message
+
+
+def test_supported_with_NO_evidence_at_all_DOES_say_so(project: Path) -> None:
+    # The control for the message above: when there really is no support, the flat message is the
+    # TRUE one and must still be reachable. Without this, the fix above could suppress it entirely.
+    root = build(project, verdict="supported")
+    (message,) = messages(root, "verdict.disagrees-with-computed")
+    assert "no admissible evidence composes to any support at all" in message
 
 
 def test_refuted_from_ONE_decisive_test_is_NOT_ceilinged(project: Path) -> None:
