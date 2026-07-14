@@ -8,13 +8,19 @@ The canonical machine-readable supersession edge is a relation with `predicate: 
 authored on the **successor**, pointing newer → older. It is **not** top-level `supersedes:`
 (silently dropped), and not `sci:amends` (which revises, not replaces).
 
-**ONE EDGE STREAM, NOT ONE CARRIER.** The edges come from `sources.relations` — the *same* list
-`materialize` consumes — which already unions structured `knowledge/sources/<local>/relations.yaml`,
-entity-nested `relations:`, and the legacy models/parameters blocks. Scanning entity markdown alone
-made `relations.yaml` a **blind spot**: an edge authored there was invisible to this authority and
-fully visible to the graph builder, so a self-edge or an illegal kind pair written in that file
-refused to materialize while `validate` and `mark_superseded --apply` both reported clean. An
-authority that reads a *subset* of what it validates does not validate.
+**THIS MODULE DOES NOT DECIDE WHAT AN EDGE IS.** `science_tool.graph.relation_audit` does, by
+delegating to `materialize`'s own `admit_authored_relation` — so the edges here are, by
+construction, the edges the graph builder admits. Six review rounds found six defects in a
+hand-written admission ladder that lived in this file, and every one of them was the same defect:
+it asked a NARROWER question than `materialize` asks. The ladder is gone. What remains is the only
+question this module is actually the authority on:
+
+    the edge is REAL — can we STAMP the thing it points at?
+
+That is the WRITER's question, and `archived` / `mutable` are the WRITER's populations. Legality,
+resolvability, acyclicity and endpoint validity are the BUILDER's, asked once, in the builder's
+words. When the audit refuses an edge, apply refuses too: a corpus that does not materialize is not
+one this tool derives anything from.
 
 **The inverse is a PROJECTION, not a second authored spelling.** JSON Schema sees one record in
 isolation, so it can never read an edge authored in *another* file — which is why the closed record
@@ -34,43 +40,32 @@ from pathlib import Path
 from types import MappingProxyType
 from typing import TYPE_CHECKING, Any, Mapping
 
-from science_model.profiles.core import CORE_PROFILE
-from science_model.profiles.schema import RelationKind
-from science_model.relations import relation_allows_kinds
-
 from science_tool.big_picture.frontmatter import read_frontmatter
 from science_tool.entities import _commit_write, _prepare_write, _PreparedWrite, _STATUS_VALUES
 from science_tool.entity_scan import iter_entity_markdown
 from science_tool.graph.reference_resolution import ReferenceResolver
+from science_tool.graph.relation_audit import RelationAudit, RelationDefect, audit_relations
 
 if TYPE_CHECKING:
-    from science_tool.graph.sources import ProjectSources, SourceRelation
+    from science_tool.graph.sources import ProjectSources
 
 _SUPERSEDED = "superseded"
 _SUPERSEDES = "supersedes"
-_AMENDS = "amends"
-
-
-def _supersedes_kind() -> RelationKind:
-    """The relation kind, resolved from the profile — the SAME object `materialize` validates against."""
-    return next(r for r in CORE_PROFILE.relation_kinds if r.name == "supersedes")
 
 
 class SupersessionError(RuntimeError):
     """An authored supersession the corpus cannot honour.
 
-    Either an edge that is not admissible as an edge (it runs from an entity to itself, the relation
-    model forbids the kind pair, it lies on a cycle in the amendment/supersession lineage, or an
-    endpoint resolves nowhere), or an authored inverse with no edge behind it. Apply is ALL-OR-NONE
-    over these: the derivation is corpus-wide, and if part of the corpus is not a graph, the
-    derivation is not trustworthy anywhere.
+    Either a relation the graph builder REFUSES (the audit's verdict, whatever rule fired: an
+    endpoint that resolves nowhere or to a record that is not live, a kind pair the relation model
+    forbids, an entity superseding itself, a cycle in the amendment/supersession lineage), or an
+    authored inverse with no edge behind it. Apply is ALL-OR-NONE over these: the derivation is
+    corpus-wide, and if part of the corpus is not a graph, the derivation is not trustworthy
+    anywhere.
     """
 
-    def __init__(self, blocking: list[dict[str, str]]) -> None:
-        super().__init__(
-            "refusing to apply: "
-            + "; ".join(f"{b['superseder']} -> {b['id']} ({b['reason']})" for b in blocking)
-        )
+    def __init__(self, blocking: list[str]) -> None:
+        super().__init__("refusing to apply: " + "; ".join(blocking))
         self.blocking = blocking
 
 
@@ -83,33 +78,6 @@ def iter_entity_frontmatter(project_root: Path) -> list[tuple[Path, dict[str, An
         if fm and "id" in fm:
             out.append((path, fm))
     return out
-
-
-def _lineage_relation(predicate: str) -> str | None:
-    """`"supersedes"`, `"amends"`, or `None` — through the term resolver `materialize` itself uses.
-
-    NOT a string compare against `"sci:supersedes"`. A predicate is a CURIE *or* an absolute IRI
-    (`_resolve_relation_term` accepts both), so the same edge has more than one authored spelling,
-    and a compare on the CURIE alone would drop the IRI spelling out of this authority while the
-    graph builder emitted it normally. Resolve the term, then ask which vocabulary URI it is — the
-    one question with one answer.
-
-    `None` for a predicate that does not resolve at all: `_resolve_relation_term` raises on an
-    unknown prefix, and `materialize` raises with it. That is not a supersession defect and this is
-    not the authority that reports it — but a `validate` check must not be the thing that crashes.
-    """
-    from science_tool.graph.io import SCI_NS
-    from science_tool.graph.materialize import _resolve_relation_term
-
-    try:
-        uri = _resolve_relation_term(predicate)
-    except ValueError:
-        return None
-    if uri == SCI_NS.supersedes:
-        return _SUPERSEDES
-    if uri == SCI_NS.amends:
-        return _AMENDS
-    return None
 
 
 def _kind_or_prefix(entity_id: str, declared: object) -> str:
@@ -147,49 +115,36 @@ class IdResolution:
     neither the live scan nor the manual-alias map — they are registered inside `build_alias_map`,
     which the resolver owns. Ask the resolver; do not reconstruct what it knows.
 
-    Resolvability and ownership are ORTHOGONAL. `mutable` is the LIVE MARKDOWN scan — not
+    THE WRITER'S TWO POPULATIONS, AND NOTHING ELSE. `mutable` is the LIVE MARKDOWN scan — not
     `sources.entities`, which also carries commons-overlay and non-markdown entities that
-    `iter_entity_frontmatter` never saw and the graph's live maps have no key for.
+    `iter_entity_frontmatter` never saw and the graph's live maps have no key for. `archived` is the
+    active archive.
 
-    And LEGALITY is orthogonal to BOTH. `kind_of` spans EVERY population the resolver can reach —
-    live, archived, and everything else — because that is the population `materialize` validates a
-    relation endpoint against: it reads the resolved entity's kind, live or not, and never asks who
-    can write the file. A kind map that stopped at the live scan could not ask the legality question
-    about the very targets we decline to stamp, so those edges would skip the check entirely.
+    There is deliberately NO kind map here any more. A kind map in this file existed to answer
+    "is this edge LEGAL?", which is not this module's question and never was — it is
+    `materialize`'s, and it is now asked there, once. (The docstring that used to live here asserted
+    that materialize "reads the resolved entity's kind, live or not, and never asks who can write
+    the file". That is true of the OBJECT endpoint and FALSE of the SUBJECT, which must be a live
+    loaded entity. Generalizing it to both endpoints is how an ARCHIVED record came to author a
+    supersession that `--apply` then stamped into a live one.)
     """
 
     resolver: ReferenceResolver  # the SAME object, with the SAME args, that `materialize` builds
     mutable: frozenset[str]  # canonical ids of LIVE MARKDOWN entities -- the only stampable set
     archived: frozenset[str]  # canonical ids of ACTIVE archived rows
-    kind_by_id: Mapping[str, str]  # kind of EVERY id ANY population backs
 
     def canonical(self, raw: str) -> str | None:
         res = self.resolver.resolve(raw)
         return res.canonical_id if res.status == "resolved" and res.canonical_id else None
 
-    def kind_of(self, canonical_id: str) -> str | None:
-        """The kind of a RESOLVED id, or None if NOTHING backs it.
-
-        `None` is a real answer, not a lookup miss: `build_alias_map` registers manual aliases
-        UNCONDITIONALLY, so an alias resolves to its canonical id whether or not any record backs
-        that id. Such a target is dangling with extra steps — we cannot ask whether the edge is
-        legal, and an unanswerable guard must not report "benign".
-
-        `""` IS A DIFFERENT ANSWER FROM `None`: a record backs the id but declares no kind (an
-        archive row predating the field). Materialize resolves that to `""` too, and `""` satisfies
-        no `allowed_kind_pairs` entry — so the edge is MISMATCHED, not dangling. Distinguishing the
-        two is what keeps this authority's refusals identical to materialize's.
-        """
-        return self.kind_by_id.get(canonical_id)
-
 
 @dataclass(frozen=True)
 class SupersessionInputs:
-    """Everything the builder reads, loaded ONCE — and the edge stream it reads them *from*.
+    """Everything the builder reads, loaded ONCE — and the VERDICT it reads the edges *through*.
 
-    `lineage` is the authored amendment/supersession relations lifted straight off
-    `sources.relations`: the identical objects `materialize` iterates, carrying the identical
-    `source_path`. Nothing here re-parses a carrier file, so no carrier can be forgotten.
+    `audit` is `materialize`'s admission over the whole `sources.relations` stream: which authored
+    relations build, and which do not, decided by the graph builder itself. The builder below never
+    re-decides an admission — it consumes one.
 
     `entries` stays separate and stays *markdown*: it is the WRITER's population — the records
     `mark_superseded` can stamp, and the only place an authored `superseded_by` can live.
@@ -197,16 +152,13 @@ class SupersessionInputs:
 
     entries: tuple[tuple[Path, dict[str, Any]], ...]
     resolution: IdResolution
-    lineage: tuple[SourceRelation, ...]
-
-    def supersedes(self) -> list[SourceRelation]:
-        return [r for r in self.lineage if _lineage_relation(r.predicate) == _SUPERSEDES]
+    audit: RelationAudit
 
 
 def load_supersession_inputs(project_root: Path) -> SupersessionInputs:
-    """Load the entries, the resolver, and the edge stream — from ONE `load_project_sources` pass.
+    """Load the entries, the resolver, and the relation audit — from ONE `load_project_sources` pass.
 
-    One pass because the resolver and the edges have to agree: an edge admitted against one snapshot
+    One pass because the resolver and the audit have to agree: an edge admitted against one snapshot
     of the corpus and resolved against another is an edge nobody validated.
     """
     from science_tool.graph.sources import load_project_sources
@@ -216,7 +168,7 @@ def load_supersession_inputs(project_root: Path) -> SupersessionInputs:
     return SupersessionInputs(
         entries=tuple(entries),
         resolution=_id_resolution(project_root, entries, sources),
-        lineage=tuple(r for r in sources.relations if _lineage_relation(r.predicate) is not None),
+        audit=audit_relations(project_root, sources),
     )
 
 
@@ -226,7 +178,7 @@ def _id_resolution(
     """Built with the SAME CALL the materializer makes — not a reimplementation of it.
 
     Same three arguments, same answers, which is the only way "an edge that materializes must not be
-    reported unresolved" is a guarantee rather than a coincidence. (`sources.manual_aliases` already
+    reported unstampable" is a guarantee rather than a coincidence. (`sources.manual_aliases` already
     has the archive's `resolvable_ids()` folded in, so archived aliases resolve too.)
     """
     from science_tool.archive import load_archive_index
@@ -242,25 +194,6 @@ def _id_resolution(
         res = resolver.resolve(raw)
         return res.canonical_id if res.status == "resolved" and res.canonical_id else raw
 
-    # THE KIND MAP SPANS EVERY POPULATION THE RESOLVER CAN REACH, because the LEGALITY question is
-    # about the resolved ENTITY, not about whether we can write to it. Three sources, live last so
-    # it wins -- it is the only one that reflects what is on disk right now.
-    #
-    # The ARCHIVE's `ArchiveRow.kind` is NULLABLE, and `or ""` MIRRORS MATERIALIZE EXACTLY. Do NOT
-    # fall back to the id prefix: `supersedes` declares `allowed_kind_pairs`, an authoritative
-    # allow-list, so `""` matches no pair and materialize RAISES on the edge. A prefix fallback here
-    # would ADMIT and STAMP an edge the graph then refuses to build -- a write that succeeds and
-    # leaves the corpus unmaterializable, which is worse than either authority refusing alone.
-    archive = load_archive_index(project_root)
-    kind_by_id: dict[str, str] = {}
-    for entity in sources.entities:
-        kind_by_id[entity.canonical_id] = entity.kind
-    for cid, row in archive.active_by_id.items():
-        kind_by_id[cid] = row.kind or ""
-    for _path, fm in entries:
-        eid = canon_or_self(str(fm["id"]))
-        kind_by_id[eid] = _kind_or_prefix(eid, fm.get("kind"))
-
     # MUTABLE = the MARKDOWN SCAN, canonicalized. NOT `sources.entities`: that list also carries
     # commons-overlay and non-markdown entities the live scan never yielded, so the graph's
     # `kind_by_id`/`path_by_id` have no key for them -- classify one as stampable and the next line
@@ -268,8 +201,7 @@ def _id_resolution(
     return IdResolution(
         resolver=resolver,
         mutable=frozenset(canon_or_self(str(fm["id"])) for _path, fm in entries),
-        archived=frozenset(archive.active_by_id),
-        kind_by_id=kind_by_id,
+        archived=frozenset(load_archive_index(project_root).active_by_id),
     )
 
 
@@ -299,59 +231,6 @@ def _connected_components(nodes: set[str], edges: list[tuple[str, str]]) -> list
             stack.extend(adj[node] - seen)
         components.append(comp)
     return components
-
-
-def _cyclic_components(edges: list[tuple[str, str]]) -> list[frozenset[str]]:
-    """Every cycle in the lineage, as a node set — the strongly connected components of size >= 2.
-
-    SCCs, not "the first cycle a DFS happens to close". `materialize` raises on the first one and
-    stops, which is right for a hard failure; a CHECK has to name every offender, and name the same
-    ones on every run. An SCC of size >= 2 says exactly "these nodes can all reach one another", so
-    an edge lies on a cycle iff both its endpoints share one — no ordering, no arbitrary entry node.
-
-    (Size >= 2 because a self-loop is a one-node SCC. Self-edges never reach here: they are their
-    own outcome, rejected at admission, and an entity that supersedes itself is a different defect
-    from two entities that supersede each other.)
-    """
-    adjacency: dict[str, list[str]] = {}
-    for src, dst in edges:
-        adjacency.setdefault(src, []).append(dst)
-        adjacency.setdefault(dst, [])
-
-    index: dict[str, int] = {}
-    low: dict[str, int] = {}
-    on_stack: set[str] = set()
-    stack: list[str] = []
-    counter = 0
-    found: list[frozenset[str]] = []
-
-    def strongconnect(node: str) -> None:
-        nonlocal counter
-        index[node] = low[node] = counter
-        counter += 1
-        stack.append(node)
-        on_stack.add(node)
-        for target in sorted(adjacency[node]):
-            if target not in index:
-                strongconnect(target)
-                low[node] = min(low[node], low[target])
-            elif target in on_stack:
-                low[node] = min(low[node], index[target])
-        if low[node] == index[node]:
-            component: set[str] = set()
-            while True:
-                popped = stack.pop()
-                on_stack.discard(popped)
-                component.add(popped)
-                if popped == node:
-                    break
-            if len(component) > 1:
-                found.append(frozenset(component))
-
-    for node in sorted(adjacency):
-        if node not in index:
-            strongconnect(node)
-    return sorted(found, key=sorted)
 
 
 def _classify(comp: set[str], edges: list[tuple[str, str]]) -> tuple[bool, str | None, set[str]]:
@@ -405,22 +284,17 @@ class NonLinearComponent:
 
 @dataclass(frozen=True)
 class SupersedesGraph:
-    """The topology, the inversion, and every edge-admission outcome — from one pass.
+    """The topology, the inversion, and the writer's disposition of every admitted edge.
 
-    The builder is the SOLE authority on which edges are real. Nothing downstream recomputes an
-    admission decision; `edges` is exposed precisely so the unbacked-inverse rule and the `validate`
-    check can ask "is there an edge behind this?" without ever re-deciding what an edge is.
+    `invalid` is the AUDIT's verdict, passed through untouched — every authored relation the graph
+    builder refuses, whatever the rule. This module does not classify those and must not: it once
+    did, in four hand-maintained buckets, and the buckets were narrower than the builder every
+    single time. There is one bucket now, it is not ours, and it BLOCKS.
 
-    `kind_by_id` and `path_by_id` are LIVE-ONLY, deliberately: they are the writer's map of what it
-    can stamp. The legality question needs kinds for targets we will never stamp (archived rows,
-    commons entities), and that is a different map on `IdResolution`, spanning a different
-    population. Merging them would put a node in the topology that has no file here to write.
-
-    Every EDGE outcome below carries a `path`: the **project-relative** file that authored the
-    edge, straight off `SourceRelation.source_path`. Not `path_by_id[superseder]` — an edge in
-    `relations.yaml` is a line in *that* file, not in its subject's markdown, and its subject may
-    have no markdown in this project at all. Report where the line is, or the report cannot be acted
-    on.
+    `kind_by_id` and `path_by_id` are LIVE-ONLY: the writer's map of what it can stamp. `edges` is
+    the ADMITTED and STAMPABLE set — the edges that both build and land in a file we own — and it is
+    exposed precisely so the unbacked-inverse rule can ask "is there an edge behind this?" without
+    re-deciding what an edge is.
     """
 
     linear: tuple[SupersededChain, ...]
@@ -428,80 +302,29 @@ class SupersedesGraph:
     status_by_id: Mapping[str, str | None]
     kind_by_id: Mapping[str, str]  # LIVE entities -- the population `mark_superseded` stamps
     path_by_id: Mapping[str, Path]  # LIVE entities -- `Result` reports a FILE, not an id
-    edges: frozenset[tuple[str, str]]  # every ADMITTED (superseder, superseded) edge, canonical
+    edges: frozenset[tuple[str, str]]  # ADMITTED and STAMPABLE (superseder, superseded), canonical
     superseder_by_id: Mapping[str, str]  # superseded id -> its IMMEDIATE superseder (linear only)
     superseded_by_id: Mapping[str, str]  # superseded id -> the AUTHORED inverse, CANONICALIZED
-    self_referential: tuple[dict[str, str], ...]  # edge from an entity to ITSELF -- not an edge
-    mismatched: tuple[dict[str, str], ...]  # edge the RELATION MODEL forbids
-    cycles: tuple[dict[str, str], ...]  # every edge lying on a lineage CYCLE -- no graph builds
+    invalid: tuple[RelationDefect, ...]  # every relation MATERIALIZE REFUSES -- not our verdict
     archived_targets: tuple[dict[str, str], ...]  # edge resolves INTO the archive -- historical
     unmanaged_targets: tuple[dict[str, str], ...]  # edge resolves, but to nothing WE can stamp
-    unresolved_targets: tuple[dict[str, str], ...]  # edge resolves NOWHERE -- dangling
     unbacked_inverses: tuple[dict[str, str], ...]  # authored inverse with NO admitted edge behind it
-
-
-def _lineage_cycles(
-    inputs: SupersessionInputs,
-) -> tuple[tuple[dict[str, str], ...], frozenset[str]]:
-    """Every edge lying on a lineage cycle, and the nodes those cycles span.
-
-    OVER THE FAMILY, NOT OVER `supersedes` ALONE, because that is the scan `materialize` runs:
-    `_validate_no_amendment_cycles` walks `{sci:amends, sci:supersedes}` as ONE relation and raises
-    on a cycle through either. `a supersedes b` + `b amends a` is a corpus with NO GRAPH, and a
-    supersedes-only scan sees nothing but a clean linear chain and offers to stamp it.
-
-    OVER EVERY RESOLVED EDGE, NOT OVER THE ADMITTED ONES, because `edges` is the WRITER's set — it
-    drops archived and commons targets, which we cannot stamp but which `materialize` emits as real
-    triples and traverses like any other node. A cycle through an archived record is a cycle.
-
-    ONE FINDING PER AUTHORED EDGE, not one per cycle: a cycle is a property of the edge SET, every
-    edge in it is implicated, and any one of them is a place to break it. A finding has to name a
-    file someone can open.
-    """
-    resolution = inputs.resolution
-    authored: dict[tuple[str, str], set[tuple[str, str]]] = {}  # pair -> {(path, predicate)}
-    for rel in inputs.lineage:
-        src = resolution.canonical(rel.subject)
-        dst = resolution.canonical(rel.object)
-        if src is None or dst is None or src == dst:
-            continue  # unresolved and self-referential are OTHER outcomes, each already reported
-        if resolution.kind_of(src) is None or resolution.kind_of(dst) is None:
-            continue  # an alias to an id nothing backs -- not a node, so not on a cycle
-        authored.setdefault((src, dst), set()).add((rel.source_path, rel.predicate))
-
-    found: list[dict[str, str]] = []
-    nodes: set[str] = set()
-    for component in _cyclic_components(sorted(authored)):
-        nodes |= component
-        members = ", ".join(sorted(component))
-        for src, dst in sorted(p for p in authored if p[0] in component and p[1] in component):
-            for path, predicate in sorted(authored[(src, dst)]):
-                found.append(
-                    {
-                        "id": dst,
-                        "superseder": src,
-                        "path": path,
-                        "reason": (
-                            f"{predicate} lies on a cycle in the amendment/supersession lineage "
-                            f"through: {members}"
-                        ),
-                    }
-                )
-    return tuple(found), frozenset(nodes)
 
 
 def build_supersedes_graph(inputs: SupersessionInputs) -> SupersedesGraph:
     """Classify the supersession lineage from the loaded `inputs`.
 
-    RESOLVE -> is it BACKED? -> is it an EDGE AT ALL? -> is the pair LEGAL? -> only THEN, who OWNS it?
-    And, over the lineage as a whole: is it ACYCLIC?
+    The audit has already decided WHICH EDGES ARE REAL — resolvable, legal, non-self-referential,
+    acyclic — by asking `materialize`'s own admission. This function asks the one question left:
+    OF THE REAL EDGES, WHICH TARGETS CAN WE STAMP? Archived (frozen: report, don't block), unmanaged
+    (not our markdown: report, don't block), or ours (stamp it).
 
-    A pure function of its inputs: it resolves through `inputs.resolution` and never touches the
-    filesystem, which is what lets a test construct the commons/non-markdown populations — and each
-    edge carrier — as the data they actually are.
+    A pure function of its inputs: it never touches the filesystem, which is what lets a test
+    construct the commons/non-markdown populations — and the audit's verdict — as the data they are.
     """
     entries = inputs.entries
     resolution = inputs.resolution
+    audit = inputs.audit
 
     status_by_id: dict[str, str | None] = {}
     kind_by_id: dict[str, str] = {}
@@ -512,152 +335,49 @@ def build_supersedes_graph(inputs: SupersessionInputs) -> SupersedesGraph:
         kind_by_id[eid] = _kind_of(eid, fm)
         path_by_id[eid] = path
 
+    # THE EDGE IS ALREADY REAL. `audit.relations("supersedes")` yields only relations `materialize`
+    # ADMITTED: the subject is a live loaded entity, the object resolves to a live entity or an
+    # active archived row, the kind pair is allowed, it is not a self-edge, and the lineage it sits
+    # in is acyclic. Not one of those questions is re-asked here, because every time this module
+    # asked one of them itself it asked a narrower version and let a corpus through that has no
+    # graph. What is left below is the single question this module owns: CAN WE STAMP THE TARGET?
+    #
     # A SET, NOT A LIST -- because an RDF graph is a set of triples, and `materialize` collapses the
-    # identical triple authored twice into the one edge it is. Accumulating admissions in a list and
-    # counting degrees off it turns a duplicate spelling (the same target twice, or the canonical id
-    # once and an alias of it once) into a second in-edge AND a second out-edge, so an ordinary
-    # one-edge chain classifies as branched and is silently skipped: the corpus is valid, the tool
-    # refuses to act on it, and the defect it reports does not exist. Deduplication happens HERE, on
-    # the CANONICAL pair, because a duplicate is invisible in the authored text.
+    # identical triple authored twice into the one edge it is. Counting degrees off a list turns a
+    # duplicate spelling (the canonical id once and an alias of it once) into a second in-edge AND a
+    # second out-edge, so an ordinary one-edge chain classifies as branched and is silently skipped.
     edges: set[tuple[str, str]] = set()
-    self_referential: list[dict[str, str]] = []
-    mismatched: list[dict[str, str]] = []
     archived_targets: list[dict[str, str]] = []
     unmanaged_targets: list[dict[str, str]] = []
-    unresolved_targets: list[dict[str, str]] = []
-    relation = _supersedes_kind()
 
-    for rel in inputs.supersedes():
-        path = rel.source_path  # WHERE THE LINE IS -- `relations.yaml`, or the subject's markdown
-        src = resolution.canonical(rel.subject)
-        if src is None:
-            # AN UNRESOLVED SUBJECT, reachable only from `relations.yaml` (a nested relation's
-            # subject is the record it was authored in, which exists by construction). The GRAPH
-            # AUDIT owns this one and already reports it ERROR -- `unresolved_reference ... subject
-            # -> <id>`. We cannot ask a single one of our questions about an id that denotes
-            # nothing, so we ask none of them, and we do not become a second voice on one defect.
-            continue
-
-        dst = resolution.canonical(rel.object)  # ASK THE RESOLVER, exactly as `materialize` does
+    for admitted_relation in audit.relations(_SUPERSEDES):
+        src = admitted_relation.subject.canonical_id
+        dst = admitted_relation.object_canonical_id
+        path_of_edge = admitted_relation.relation.source_path
         if dst is None:
-            # DANGLING. The reference denotes nothing. The old `if dst not in known: continue`
-            # filter DELETED this case, which is the only reason "a derived inverse cannot
-            # dangle" was ever true -- an invariant held by removing its counterexamples.
-            unresolved_targets.append(
-                {
-                    "id": rel.object,
-                    "superseder": src,
-                    "path": path,
-                    "reason": "sci:supersedes target resolves to nothing",
-                }
-            )
-            continue
+            continue  # an EXTERNAL term: a real edge, but not a node of this project, so unstampable
 
-        # BACKED? A manual alias resolves whether or not any RECORD backs the id. No record means no
-        # kind; no kind means the legality question below is UNANSWERABLE -- and an unanswerable
-        # guard must not return "benign". Dangling with extra steps. It BLOCKS. Asked of BOTH
-        # endpoints: a `relations.yaml` subject is an authored reference like any other, and an
-        # alias-to-nothing there is the same hole on the other side of the arrow.
-        dst_kind = resolution.kind_of(dst)
-        if dst_kind is None:
-            unresolved_targets.append(
-                {
-                    "id": dst,
-                    "superseder": src,
-                    "path": path,
-                    "reason": (
-                        "sci:supersedes target resolves through an alias to an id that no "
-                        "live, archived, or source record backs"
-                    ),
-                }
-            )
-            continue
-        src_kind = resolution.kind_of(src)
-        if src_kind is None:
-            unresolved_targets.append(
-                {
-                    "id": src,
-                    "superseder": src,
-                    "path": path,
-                    "reason": (
-                        "sci:supersedes subject resolves through an alias to an id that no "
-                        "live, archived, or source record backs"
-                    ),
-                }
-            )
-            continue
-
-        # AN EDGE AT ALL? -- on the CANONICAL pair, and BEFORE the kind pair, exactly where
-        # `materialize` asks it (`subject.canonical_id == object.canonical_id`, checked for any
-        # predicate the moment the object resolves to an entity, before `relation_allows_kinds`).
-        #
-        # THE KIND-PAIR CHECK CANNOT CATCH THIS, because a self-edge's kind pair is `K -> K` --
-        # legal for every kind that supersedes its own kind, which is every kind in the roster.
-        # So the self-edge is admitted as real, and then `len(comp) < 2` DROPS its one-node
-        # component before classification: no mismatch, no non-linear component, no blocker, and
-        # `--apply` walks a corpus that does not build a graph. An entity does not supersede
-        # itself; `(x, x)` is not an edge, whatever `x` is.
-        if src == dst:
-            self_referential.append(
-                {
-                    "id": dst,
-                    "superseder": src,
-                    "path": path,
-                    "reason": "the entity supersedes itself: the target resolves to its subject",
-                }
-            )
-            continue
-
-        # LEGAL? -- BEFORE ownership, and before `_connected_components`.
-        #
-        # `materialize` raises on a forbidden pair for ANY resolved target, live or not: it reads
-        # the resolved entity's kind and never asks who can write the file. Ask ownership first and
-        # this check never runs on an archived or commons target -- an illegal edge would be filed as
-        # benign, unstampable debt and apply would proceed.
-        #
-        # And it must be here rather than in the apply loop for the same reason one layer up: an
-        # illegal edge is still an EDGE. It joins the component and counts toward in-degree, so a
-        # guard inside the `linear` loop never runs on it -- the component is classified NON-LINEAR,
-        # `mismatched` comes back empty, and the LEGAL supersession sharing that component is
-        # silently suppressed as branched when nothing branched.
-        # A guard downstream of the corruption it detects is not a guard.
-        if not relation_allows_kinds(relation, src_kind, dst_kind):
-            mismatched.append(
-                {
-                    "id": dst,
-                    "superseder": src,
-                    "path": path,
-                    "reason": (
-                        f"{src_kind or '(no kind)'} -> {dst_kind or '(no kind)'} is not an allowed "
-                        f"sci:supersedes pair"
-                    ),
-                }
-            )
-            continue
-
-        # The edge is REAL. Now, and only now, the question the WRITER cares about: can we stamp
-        # the thing it points at?
         if dst in resolution.archived:
-            # A VALID historical supersession into a frozen record -- the ordinary end of a
-            # lineage (supersede, then archive). Not an error, and not a mutation. Report it,
-            # keep it out of the topology, and do NOT block.
+            # A VALID historical supersession into a frozen record -- the ordinary end of a lineage
+            # (supersede, then archive). Not an error, and not a mutation. Report it, keep it out of
+            # the topology, and do NOT block.
             archived_targets.append(
                 {
                     "id": dst,
                     "superseder": src,
-                    "path": path,
+                    "path": path_of_edge,
                     "reason": "target is archived (frozen); no live record to stamp",
                 }
             )
             continue
         if dst not in resolution.mutable:
-            # RESOLVED and LEGAL, but not ours: a commons-overlay entity, a non-markdown source.
-            # `materialize` builds this edge happily; we simply have no markdown file here.
+            # ADMITTED, but not ours: a commons-overlay entity, a non-markdown source. `materialize`
+            # builds this edge happily; we simply have no markdown file here to write.
             unmanaged_targets.append(
                 {
                     "id": dst,
                     "superseder": src,
-                    "path": path,
+                    "path": path_of_edge,
                     "reason": (
                         "target resolves but is not a live markdown entity of this project; "
                         "nothing here to stamp"
@@ -667,7 +387,15 @@ def build_supersedes_graph(inputs: SupersessionInputs) -> SupersedesGraph:
             continue
         edges.add((src, dst))
 
-    cycles, cyclic_nodes = _lineage_cycles(inputs)
+    # Nodes the audit says lie on a lineage cycle. A component touching one is not a chain and not a
+    # branch -- it is a corpus with no graph, already reported edge-by-edge in `invalid`. Skipping it
+    # below is the second lock, behind `--apply`'s refusal: a cycle closed by an `amends` edge can
+    # leave the `supersedes` edges perfectly linear, so this component would otherwise be advertised
+    # as a STAMPABLE chain. Nothing inside a cycle is stampable.
+    cyclic_nodes = frozenset(
+        node for defect in audit.defects if defect.code == "cycle"
+        for node in (defect.subject, defect.object)
+    )
 
     # SORTED, so the topology and every id it yields are deterministic -- a set's iteration order is
     # not. Everything below reads THIS list; nothing re-derives an admission.
@@ -752,12 +480,9 @@ def build_supersedes_graph(inputs: SupersessionInputs) -> SupersedesGraph:
         edges=frozenset(edges),
         superseder_by_id=MappingProxyType(superseder_by_id),
         superseded_by_id=MappingProxyType(superseded_by_id),
-        self_referential=tuple(self_referential),
-        mismatched=tuple(mismatched),
-        cycles=cycles,
+        invalid=audit.defects,
         archived_targets=tuple(archived_targets),
         unmanaged_targets=tuple(unmanaged_targets),
-        unresolved_targets=tuple(unresolved_targets),
         unbacked_inverses=tuple(unbacked_inverses),
     )
 
@@ -800,8 +525,13 @@ def mark_superseded(project_root: Path, *, apply: bool) -> dict[str, Any]:
       inverse was missing or stale. A separate key on purpose — widening ``applied`` would silently
       change what an existing, JSON-serialized key means for every consumer already reading it, and
       a field whose meaning changes under a consumer is worse than one that disappears.
-    - ``self_referential`` / ``mismatched_kinds`` / ``cycles`` / ``unresolved_targets`` /
-      ``unbacked_inverses``: refuse **and block**.
+    - ``invalid_relations``: every authored relation `materialize` REFUSES, as
+      ``{"code", "path", "subject", "predicate", "object", "message"}`` — the audit's verdict,
+      verbatim. Replaces the old ``self_referential`` / ``mismatched_kinds`` / ``cycles`` /
+      ``unresolved_targets`` keys, which were four hand-maintained buckets that between them never
+      managed to cover what the graph builder actually refuses. Refuses **and blocks**.
+    - ``unbacked_inverses``: an authored ``superseded_by`` with no edge behind it. Refuse **and
+      block**.
     - ``archived_targets`` / ``unmanaged_targets``: refuse to stamp, but **do not block**.
     """
     project_root = project_root.resolve()
@@ -837,12 +567,19 @@ def mark_superseded(project_root: Path, *, apply: bool) -> dict[str, Any]:
         "skipped_kinds": skipped_kinds,
         "to_repair": to_repair,
         "repaired": [],
-        # The admission outcomes come OFF THE GRAPH. They are not recomputed here: the builder
+        # The outcomes come OFF THE GRAPH. They are not recomputed here: the audit and the builder
         # decided, and a second classification could disagree with the first.
-        "self_referential": [dict(s) for s in graph.self_referential],
-        "mismatched_kinds": [dict(m) for m in graph.mismatched],
-        "cycles": [dict(c) for c in graph.cycles],
-        "unresolved_targets": [dict(u) for u in graph.unresolved_targets],
+        "invalid_relations": [
+            {
+                "code": d.code,
+                "path": d.path,
+                "subject": d.subject,
+                "predicate": d.predicate,
+                "object": d.object,
+                "message": d.message,
+            }
+            for d in graph.invalid
+        ],
         "archived_targets": [dict(a) for a in graph.archived_targets],
         "unmanaged_targets": [dict(u) for u in graph.unmanaged_targets],
         "unbacked_inverses": [dict(u) for u in graph.unbacked_inverses],
@@ -856,12 +593,13 @@ def mark_superseded(project_root: Path, *, apply: bool) -> dict[str, Any]:
     # claiming a superseder the graph does not contain means the corpus disagrees with itself about
     # what supersedes what. There is no edge to reconcile TOWARD, so the honest moves are refuse and
     # report -- never a silent "fix".
+    #
+    # `graph.invalid` is EVERY relation the audit refused, not only the supersession ones -- because
+    # a corpus with any unbuildable relation HAS NO GRAPH, and stamping a derived lineage into it
+    # writes a record whose graph never builds. This derivation is corpus-wide or it is nothing.
     blocking = [
-        *graph.self_referential,
-        *graph.mismatched,
-        *graph.cycles,
-        *graph.unresolved_targets,
-        *graph.unbacked_inverses,
+        *(f"{d.path}: {d.message}" for d in graph.invalid),
+        *(f"{u['superseder']} -> {u['id']} ({u['reason']})" for u in graph.unbacked_inverses),
     ]
     if blocking:
         raise SupersessionError(blocking)

@@ -1,44 +1,29 @@
-"""The supersession lineage, as `validate` sees it — the outcomes it OWNS.
+"""The one supersession outcome `validate` OWNS: an authored inverse with no edge behind it.
 
-`mark_superseded` refuses every one of these, but it is an **opt-in** command: a corpus can carry a
-broken lineage indefinitely without anyone ever running it. `validate` is the pass everyone runs, so
-what blocks the operation has to be visible here too, or it is visible nowhere.
+`superseded_by` is a PROJECTION of an authored `sci:supersedes` edge. A record that carries one with
+no edge behind it is a record whose lineage claim is grounded in nothing — and nothing else catches
+it: JSON Schema sees a non-empty string, `check_resolution` sees an id that resolves, and
+reconciliation never looks, because the record is in no chain (there is no edge). Four nets, zero
+coverage, for the exact failure that top-level `supersedes:` was withdrawn to prevent.
 
-WHAT THIS CHECK DOES *NOT* CLAIM: it is not the whole blocking set. `mark_superseded` also blocks on
-an endpoint that resolves nowhere, and that one is **already owned** — the graph audit reports it
-(`graph`, ERROR, `unresolved_reference ... subject -> <id>`) for every authored relation in the
-project. Re-reporting it here would put two voices on one defect. Two authorities, one rule each.
+THIS CHECK IS DELIBERATELY SMALL. It used to also report self-edges, illegal kind pairs and lineage
+cycles — RELATION-VALIDITY failures, which is to say: the graph builder's verdict, restated in a
+hand-written ladder that turned out to be narrower than the builder six times running. Those live in
+`relations.py` now, where they are asked once, by `materialize`'s own admission, over the whole
+authored-relation stream. What is left here is the only question that is actually about a STATUS
+VOCABULARY, and it is this module's alone:
 
-TWO SEVERITY TIERS, ON TWO DIFFERENT AXES — and conflating them is the whole lesson of the
-status-vocabulary incident (severity graded on the wrong axis):
+    the record says it was superseded — by an edge that does not exist.
 
-* `supersession.self-referential`, `supersession.illegal-kind-pair` and `supersession.cycle` are
-  **ERROR**, and their names are **FLAT**. These are RELATION-VALIDITY failures: `materialize`
-  *raises* on all three (`self-referential authored relation`, the endpoint check, and
-  `cycle in amendment/supersession relations`), so a corpus carrying any of them cannot build a
-  graph AT ALL. That verdict is handed down by the relation model, which already says which pairs
-  are legal and that the lineage is acyclic — it owes nothing to any per-kind status certification,
-  so these must NOT wait on Task 12's ratchet and must NOT be kind-scoped. They are the same defect
-  whatever kind authors them.
+WARN, and KIND-SCOPED — the other axis entirely, and conflating the two is the whole lesson of the
+status-vocabulary incident (severity graded on the wrong axis). `gated_findings` filters on
+`Result.rule` **alone**, never on severity, so a single generic `supersession.unbacked-inverse` in a
+gate tier would gate every UNCERTIFIED kind's findings too, promoting the whole vocabulary the moment
+one kind earned it. Kind-scoped names let the gate advance one certified kind at a time. Task 12 owes
+the flip to `severity_for_kind(kind)`.
 
-* `<kind>.unbacked-inverse` is **WARN**, and its name IS kind-scoped. That one is about a *status
-  vocabulary* — whether a kind's `superseded` terminal is certified — and `gated_findings` filters on
-  `Result.rule` **alone**, never on severity. A single generic `supersession.unbacked-inverse` in a
-  gate tier would gate every UNCERTIFIED kind's findings too, promoting the whole vocabulary the
-  moment one kind earned it. Kind-scoped names let the gate advance one certified kind at a time.
-  Task 12 owes the flip to `severity_for_kind(kind)`.
-
-A cycle is reported ONCE PER AUTHORED EDGE, against the file that authored it, because breaking any
-edge on the cycle breaks the cycle — there is no single "offending" one to blame.
-
-KNOWN GAP, stated rather than papered over: a self-edge or an illegal endpoint on a bare `sci:amends`
-relation also refuses to materialize, and nothing reports it. `amends` reaches this module only
-through the ACYCLICITY question, which `materialize` asks of the two predicates jointly. Its
-per-edge validity is a different check's to own — and the general form of that check ("every
-authored relation materializes") would subsume all three ERROR rules here.
-
-IT CONSUMES THE GRAPH; it does not re-derive edges. `build_supersedes_graph` is the sole authority on
-what an edge is, and a check that recomputed them could disagree with the thing it is checking.
+IT CONSUMES THE GRAPH; it does not re-derive edges. `build_supersedes_graph` reads the audit's
+admitted edges, and a check that recomputed them could disagree with the thing it is checking.
 """
 
 from __future__ import annotations
@@ -54,26 +39,6 @@ from science_tool.validate.result import Result, Severity
 @Check(section="supersession lineage", order=29)
 def check_supersession(ctx: ValidateContext) -> Iterator[Result]:
     graph = build_supersedes_graph(load_supersession_inputs(ctx.project_root))
-
-    # THE EDGES THAT ARE NOT EDGES -- reported against the file that AUTHORED them, which is NOT
-    # necessarily the superseder's markdown: `relations.yaml` carries edges whose subject may have no
-    # markdown record in this project at all. `path` comes off `SourceRelation.source_path`, so the
-    # finding always names a file with the offending line in it. The message names the SUBJECT for
-    # the same reason -- one `relations.yaml` holds many edges, and "the file" is not the locator.
-    for rule, outcomes in (
-        ("supersession.self-referential", graph.self_referential),
-        ("supersession.illegal-kind-pair", graph.mismatched),
-        ("supersession.cycle", graph.cycles),
-    ):
-        for bad in outcomes:
-            yield Result(
-                Severity.ERROR,
-                ctx.project_root / bad["path"],
-                None,
-                f"{bad['superseder']} -> {bad['id']}: {bad['reason']}",
-                rule,
-                None,
-            )
 
     for unbacked in graph.unbacked_inverses:
         entity_id = unbacked["id"]
