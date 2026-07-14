@@ -6929,6 +6929,42 @@ science entity migrate-hypothesis --preflight-all --manifest FILE  # render+vali
 
 ### Task 10: Consumers — and **only** the hypothesis branch
 
+> ### ✅ DONE — `39d98e9f` (the write boundary). Task 8's commit carried the vocabulary re-pointing.
+>
+> **THREE DEPARTURES FROM WHAT THIS TASK PRESCRIBED**, and Tasks 11–12 depend on each:
+>
+> 1. **The schema check is gated on the PIN, not only on the kind.** This task said
+>    `_schema_validate_or_raise` "skips kinds not yet in `PROJECT_MIXIN_NAMES`" and said nothing
+>    about the project. But Task 9 ruled the authored pin the sole authority on whether a project
+>    speaks schema 2 — so a writer that decided it on its own would be a second authority for the
+>    one fact this arc keeps collapsing. Unpinned, the schema half is silent: enforcing the 2.0
+>    mixin on a project the migration has not reached would reject `--title` over a `phase:` key the
+>    migration is coming for. **Consequence: the schema half of this boundary is INERT on the real
+>    corpus until Task 11 pins each project.** Both halves now ask `load_project_schema_if_pinned`.
+>
+> 2. **The LINEAGE check is deliberately NOT pin-gated.** `superseded` meant `superseded` in the old
+>    vocabulary too, so a dangling successor is authorable in an unmigrated project *today* — which
+>    is exactly the corpus that most needs the guard. Gating it on the pin would arm it only for the
+>    projects already made safe. It is live now, on all 18 roots.
+>
+> 3. **`--resynthesized-into` was added, and without it this task shipped decoration.** The
+>    parameter this task put on `edit_entity` had **no production caller**: zero uses across the
+>    corpus, and no CLI flag: the dangling-successor rule would have been enforced only against its
+>    own test. The schema discharges `superseded` with any of `superseded_by` (DERIVED, unauthorable
+>    — correctly), `closure_basis`, or `resynthesized_into`; with no flag for the third, a **split
+>    supersession was a state the schema admitted and no writer in the toolkit could produce.**
+>
+> Two more things this task did not foresee:
+>
+> - `SCHEMA_ENFORCED_KINDS` (Task 9) is **deleted**. It was a second hand-maintained copy of
+>   `PROJECT_MIXIN_NAMES` — which is the migration slice list *and* gates schema strictness, so a
+>   kind present in one and absent from the other is checked against a profile that admits anything.
+>   **Task 12's ratchet now has ONE list to widen, in the model.**
+> - `render_entity_frontmatter_updates` is a **second entity writer**: arbitrary `updates` mapping,
+>   no schema check, no resolution check, and it writes `superseded_by` / `resynthesized_into`
+>   outright. Not a hole today — both callers operate on **propositions**, which have no project
+>   mixin — but it is pinned by an AST guard, and **the proposition slice must close it**.
+
 > ### ⚠️ HALF OF THIS TASK ALREADY LANDED, WITH TASK 8. Read this before starting.
 >
 > Task 8's descriptor change is **global** — `default_profile_for_kind` is not per-project — so the
@@ -6993,7 +7029,7 @@ science entity migrate-hypothesis --preflight-all --manifest FILE  # render+vali
 > suppressing demand warnings. **A consumer may only be rewritten in its own kind's slice.**
 > `attention.py:25-27` stays exactly as it is until the `question` slice.
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 ```python
 # science/tests/test_hypothesis_consumers.py
@@ -7170,9 +7206,9 @@ def test_a_CORRUPTED_inverse_is_caught_by_the_net_that_MATCHES_ITS_FAILURE(tmp_p
     assert fm["superseded_by"] == "hypothesis:0002-y"     # the EDGE won, not the hand edit
 ```
 
-- [ ] **Step 2: Run and fail.**
+- [x] **Step 2: Run and fail.**
 
-- [ ] **Step 3: Implement.** `dataset_capabilities` — change **only** the hypothesis branch:
+- [x] **Step 3: Implement.** `dataset_capabilities` — change **only** the hypothesis branch:
 
 ```python
 # questions still carry answeredness in `status` -- the question slice has not run.
@@ -7305,9 +7341,9 @@ re-raises `EntityValidationError` as `EntityCommandError`.
 **writes nothing** — which is also what lets `mark_superseded` prepare every planned write before
 committing any of them, and so keep the all-or-none promise it makes (Task 7a).
 
-- [ ] **Step 4: Green — everything, both packages, ruff, pyright.**
+- [x] **Step 4: Green — everything, both packages, ruff, pyright.**
 
-- [ ] **Step 5: Commit.**
+- [x] **Step 5: Commit.**
 
 ---
 
