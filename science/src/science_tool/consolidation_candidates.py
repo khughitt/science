@@ -20,6 +20,7 @@ from pydantic import BaseModel, Field
 
 from science_tool.consolidation import (
     SupersedesGraph,
+    _id_resolution,
     build_supersedes_graph,
     iter_entity_frontmatter,
 )
@@ -305,7 +306,7 @@ def detect_consolidation_candidates(
     """
     project_root = Path(project_root).resolve()
     entries = iter_entity_frontmatter(project_root)
-    graph = build_supersedes_graph(entries)
+    graph = build_supersedes_graph(entries, _id_resolution(project_root, entries))
     lineage = _lineage_section(graph)
 
     visible: list[tuple[str, str, dict[str, Any]]] = [

@@ -1,7 +1,10 @@
 from __future__ import annotations
 
+import hashlib
+import hmac
 import os
 import re
+import secrets
 import unicodedata
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
@@ -932,6 +935,145 @@ def _reject_if_archived(project_root: Path, ref: str) -> None:
     )
 
 
+# ---------------------------------------------------------------------------------------------
+# THE WRITE BOUNDARY — ONE mechanism, in two halves, and BOTH halves are PRIVATE.
+#
+# `_prepare_write` merges, renders, and validates; it writes NOTHING. The split is what makes
+# `mark_superseded`'s all-or-none claim true rather than aspirational: a caller can learn that a
+# write WOULD be rejected before a byte hits the disk.
+#
+# THE COMMIT HALF IS PRIVATE TOO, AND SO IS THE VALUE IT TAKES. A public `commit_entity_write` that
+# writes whatever `.text` it is handed -- by contract, WITHOUT validating it -- is not a hole in the
+# boundary; it IS a second, unvalidated writer, and a plain frozen dataclass is one call away:
+#
+#     _commit_write(_PreparedWrite(entity_id=..., path=..., text="<anything>", warnings=()))
+#
+# SO THE TOKEN CARRIES A SEAL, AND THE SEAL IS BOUND TO THE PAYLOAD rather than merely possessed. A
+# bare sentinel -- "hold this object and you are trusted" -- is a BEARER token, and a bearer token
+# can be carried onto content it never vouched for, with no private import at all:
+#
+#     dataclasses.replace(legitimately_prepared, text="<anything>")   # copies the sentinel
+#
+# `replace()` re-runs `__post_init__`, so an identity check on a sentinel sees the SAME trusted
+# object and waves through text that was never validated. The seal must therefore be a statement
+# ABOUT THE PAYLOAD: an HMAC over every field the write consists of. `replace()` recomputes nothing,
+# so it carries the OLD seal onto NEW bytes and `__post_init__` refuses it.
+#
+# THE HONEST CLAIM, since Python has no private constructors: this does not make forgery
+# *impossible* -- `_SEAL_KEY` is reachable by anyone willing to import a private name and recompute
+# the digest. It makes forgery **inexpressible by accident**: not by a plausible refactor, not by a
+# helpful `replace()`, not by a caller who thought this was the supported path.
+# ---------------------------------------------------------------------------------------------
+
+_SEAL_KEY = secrets.token_bytes(32)  # module-private, per-process; never exported, never persisted
+
+
+def _seal(entity_id: str, path: Path, text: str) -> str:
+    """An HMAC over EVERY field the write actually consists of.
+
+    Covering `text` alone would leave `replace(prepared, path=<elsewhere>)` free to redirect
+    validated bytes at an unvalidated file.
+    """
+    payload = "\0".join((entity_id, str(path), text)).encode("utf-8")
+    return hmac.new(_SEAL_KEY, payload, hashlib.sha256).hexdigest()
+
+
+@dataclass(frozen=True)
+class _PreparedWrite:
+    entity_id: str
+    path: Path
+    text: str  # fully rendered, fully validated -- nothing left to decide
+    warnings: tuple[str, ...]
+    seal: str  # HMAC of (entity_id, path, text). No default, deliberately.
+
+    def __post_init__(self) -> None:
+        # `compare_digest`, not `==`: this is a MAC check, and constant-time comparison is what a MAC
+        # check is. Runs on `replace()` too, which is the entire point.
+        if not hmac.compare_digest(self.seal, _seal(self.entity_id, self.path, self.text)):
+            raise TypeError(
+                "_PreparedWrite is not constructible, and its seal does not travel: it is the "
+                "proof that _prepare_write validated THIS text for THIS path. Call _prepare_write."
+            )
+
+
+def _prepare_write(
+    project_root: Path,
+    ref: str,
+    fields: Mapping[str, object],
+    *,
+    appends: Mapping[str, list[str]] | None = None,
+) -> _PreparedWrite:
+    """PRIVATE. Merge, render, validate, SEAL. Writes NOTHING.
+
+    Takes a `fields` MAPPING and has NO `**kwargs`, so the one place a derived field can be set is a
+    call site -- and there are exactly two in the codebase: `edit_entity` (which cannot express
+    `superseded_by`) and `consolidation._prepare_supersession` (which derives it from an admitted
+    canonical edge).
+
+    `appends` carries `edit_entity`'s unique-append list semantics, which need the record's CURRENT
+    value. Doing it here rather than in the caller keeps the boundary to ONE `find_entity` and one
+    archive check -- and keeps their ORDER, so an archived ref still reports the actionable
+    `_reject_if_archived` error instead of a bare "Entity not found".
+    """
+    project_root = project_root.resolve()
+    _reject_if_archived(project_root, ref)
+    location = find_entity(project_root, ref)
+
+    frontmatter = dict(location.frontmatter)
+    for key, additions in (appends or {}).items():
+        frontmatter[key] = _append_unique_string_values(frontmatter.get(key), additions)
+    for key, value in fields.items():
+        if key == "status":
+            _validate_status(location.kind, str(value))
+        frontmatter[key] = value
+    frontmatter.setdefault("updated", date.today().isoformat())
+
+    text = _render_markdown(frontmatter, location.body)
+    warnings = _validate_prospective_write(
+        project_root=project_root,
+        rel_path=Path(location.rel_path),
+        text=text,
+        target_entity_id=location.entity_id,
+    )
+    return _PreparedWrite(
+        entity_id=location.entity_id,
+        path=location.path,
+        text=text,
+        warnings=tuple(warnings),
+        seal=_seal(location.entity_id, location.path, text),
+    )
+
+
+def _commit_write(prepared: _PreparedWrite) -> EntityWriteResult:
+    """PRIVATE. Authenticate the prepared value, then atomically replace the file.
+
+    It performs no schema or resolution decisions; it re-verifies the proof that those decisions
+    covered THESE bytes for THIS path. Construction-time verification is NOT the write boundary:
+    Python erases the annotation at runtime, so this can otherwise be handed a duck-typed object
+    that never ran `__post_init__` -- and a legitimately prepared frozen instance can still be
+    changed with `object.__setattr__` after its constructor check ran.
+    """
+    if not isinstance(prepared, _PreparedWrite):
+        raise TypeError("a prepared write must be earned from _prepare_write")
+    if not hmac.compare_digest(
+        prepared.seal, _seal(prepared.entity_id, prepared.path, prepared.text)
+    ):
+        raise TypeError("prepared-write seal does not cover the bytes and path being committed")
+    _atomic_replace_text(prepared.path, prepared.text)
+    return EntityWriteResult(
+        entity_id=prepared.entity_id, path=prepared.path, warnings=list(prepared.warnings)
+    )
+
+
+# THE AUTHORED SURFACE. Explicit, keyword-only, and it must NEVER grow a `**kwargs`.
+#
+# It does NOT gain a `superseded_by` parameter. `superseded_by` is DERIVED, and putting it on the
+# authored-edit surface would recreate the second authored spelling design rev 10 exists to delete:
+# an author could write a resolvable `superseded_by` with NO canonical edge behind it, the schema
+# would pass, `check_resolution` would pass, and the entity would be superseded according to
+# nothing. A `**kwargs` here would smuggle it back in -- and would make a named-parameter guard
+# anti-informative, because the absence of the name is exactly what a VAR_KEYWORD signature
+# guarantees whether or not the field is reachable.
 def edit_entity(
     project_root: Path,
     ref: str,
@@ -943,30 +1085,20 @@ def edit_entity(
     updated: date | None = None,
     today: date | None = None,
 ) -> EntityWriteResult:
-    project_root = project_root.resolve()
-    _reject_if_archived(project_root, ref)
-    location = find_entity(project_root, ref)
-    frontmatter = dict(location.frontmatter)
+    fields: dict[str, object] = {}
     if title is not None:
-        frontmatter["title"] = title
+        fields["title"] = title
     if status is not None:
-        _validate_status(location.kind, status)
-        frontmatter["status"] = status
-    if related:
-        frontmatter["related"] = _append_unique_string_values(frontmatter.get("related"), related)
-    if source_refs:
-        frontmatter["source_refs"] = _append_unique_string_values(frontmatter.get("source_refs"), source_refs)
-    frontmatter["updated"] = (updated or today or date.today()).isoformat()
+        fields["status"] = status
+    fields["updated"] = (updated or today or date.today()).isoformat()
 
-    text = _render_markdown(frontmatter, location.body)
-    warnings = _validate_prospective_write(
-        project_root=project_root,
-        rel_path=Path(location.rel_path),
-        text=text,
-        target_entity_id=location.entity_id,
-    )
-    _atomic_replace_text(location.path, text)
-    return EntityWriteResult(entity_id=location.entity_id, path=location.path, warnings=warnings)
+    appends: dict[str, list[str]] = {}
+    if related:
+        appends["related"] = related
+    if source_refs:
+        appends["source_refs"] = source_refs
+
+    return _commit_write(_prepare_write(project_root, ref, fields, appends=appends))
 
 
 def append_entity_note(

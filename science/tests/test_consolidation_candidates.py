@@ -8,6 +8,11 @@ import yaml
 
 
 def _write(root: Path, kind_dir: str, name: str, fm: dict) -> None:
+    # `title` is REQUIRED by the entity model. The old supersedes-graph builder was a raw frontmatter
+    # scan and never noticed; it now resolves through `load_project_sources` -- the same authority
+    # `materialize` uses -- which hard-fails on an entity that does not satisfy its own model. These
+    # fixtures were always writing invalid entities; nothing was looking.
+    fm = {"title": name, **fm}
     d = root / "entities" / kind_dir
     d.mkdir(parents=True, exist_ok=True)
     (d / f"{name}.md").write_text(

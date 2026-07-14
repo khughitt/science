@@ -74,6 +74,7 @@ CANONICAL_CHECK_MODULES = (
     "workflow_runs",
     "workflow_steps",
     "methods",
+    "supersession",
 )
 
 

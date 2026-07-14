@@ -467,3 +467,57 @@ def test_a_LIST_form_packet_serializes_BYTE_IDENTICALLY() -> None:
 
     assert "rival_id" not in serialized
     assert "discriminator_status" not in serialized
+
+
+# ---------------------------------------------------------------------------------------------
+# LEG 1 of the D4 supersedable gate: the schema must ADMIT the canonical supersession edge.
+#
+# The canonical edge is a `relations:` entry with `predicate: sci:supersedes`, authored on the
+# SUCCESSOR (consolidation.py:7-12). It is NOT top-level `supersedes:` -- that spelling is silently
+# dropped (fb-2026-07-11-017). So `relations:` is the ONLY carrier the toolkit reads, and
+# `unevaluatedProperties: false` was rejecting it outright: `superseded` was a terminal status this
+# kind could not reach through any supported path.
+#
+# The other two legs (the relation endpoint, and the operation) are in test_supersedable_gate.py
+# and the science-side consolidation tests.
+# ---------------------------------------------------------------------------------------------
+
+
+def test_the_hypothesis_SCHEMA_admits_the_canonical_edge() -> None:
+    V.validate_as(
+        _h(
+            status="superseded",
+            superseded_by="hypothesis:0002-y",
+            relations=[{"predicate": "sci:supersedes", "target": "hypothesis:0000-old"}],
+        ),
+        PROFILE,
+    )
+
+
+def test_a_relation_entry_is_CLOSED() -> None:
+    # `AuthoredTargetedRelation` (source_contracts.py) is predicate/target/graph_layer and nothing
+    # else. Without `additionalProperties: false` on the $def, a typo'd key INSIDE a relation is
+    # silently dropped -- the exact class of defect this arc exists to end. Paired with the
+    # admission test above ON PURPOSE: before leg 1, this test passed for the WRONG REASON
+    # (`relations` was rejected wholesale by `unevaluatedProperties`, so the typo was never reached).
+    with pytest.raises(EntityValidationError):
+        V.validate_as(
+            _h(
+                status="active",
+                relations=[
+                    {
+                        "predicate": "sci:supersedes",
+                        "target": "hypothesis:0000-old",
+                        "tarrget": "typo",
+                    }
+                ],
+            ),
+            PROFILE,
+        )
+
+
+def test_a_relation_entry_REQUIRES_predicate_and_target() -> None:
+    # The control for the closure above: closed is not the same as complete. A relation with no
+    # target names nothing, and an edge that names nothing is not an edge.
+    with pytest.raises(EntityValidationError):
+        V.validate_as(_h(relations=[{"predicate": "sci:supersedes"}]), PROFILE)

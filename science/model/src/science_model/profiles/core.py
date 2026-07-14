@@ -687,16 +687,29 @@ CORE_PROFILE = ProfileManifest(
         RelationKind(
             name="supersedes",
             predicate="sci:supersedes",
-            source_kinds=["workflow-run", *_CONCLUSION_KINDS],
-            target_kinds=["workflow-run", *_CONCLUSION_KINDS],
+            # LEG 2 of the D4 supersedable gate. `hypothesis` declares a `superseded` terminal
+            # (Task 8) and is auto-stamped by `mark_superseded` -- but it was not an admissible
+            # endpoint here, so authoring the canonical edge raised ValueError in materialize. The
+            # vocabulary and the relation model disagreed, and the terminal was a dead letter.
+            #
+            # HYPOTHESIS ONLY. Twelve other kinds are half-wired the same way (decision, inquiry,
+            # mechanism, method, observation, plan, pre-registration, proposition, synthesis, theme,
+            # topic, workflow-step). They are this arc's DECLARED, FROZEN DEBT -- ratcheted by
+            # test_every_supersedable_kind_can_author_the_CANONICAL_edge, which forbids the set
+            # growing while allowing any of them to be repaired. Widening them here would be scope
+            # this task did not certify.
+            source_kinds=["workflow-run", "hypothesis", *_CONCLUSION_KINDS],
+            target_kinds=["workflow-run", "hypothesis", *_CONCLUSION_KINDS],
             allowed_kind_pairs=[
                 RelationEndpointPair(source_kind="workflow-run", target_kind="workflow-run"),
+                RelationEndpointPair(source_kind="hypothesis", target_kind="hypothesis"),
                 *_CONCLUSION_KIND_PAIRS,
             ],
             layer="layer/core",
             description=(
                 "A newer entity replaces an older entity as canonical. Valid "
-                "for workflow-run replacement and conclusion-level replacement."
+                "for workflow-run replacement, hypothesis replacement, and "
+                "conclusion-level replacement."
             ),
         ),
         RelationKind(

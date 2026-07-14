@@ -39,6 +39,12 @@
     "added_by": { "type": "string" },
     "profile": { "type": "string", "$comment": "AUTHORED and honored — sources.py:765-772 is fill-if-missing, materialize.py:640 emits sci:profile, entities_inventory.py:195-199 derives registration_state from it. 3 files author it. An earlier draft called it derived and stripped it; that was wrong." },
 
+    "relations": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/authored_relation" },
+      "$comment": "LEG 1 of the D4 supersedable gate. The CANONICAL supersession edge is a `relations:` entry with `predicate: sci:supersedes` (consolidation.py:7-12) — NOT top-level `supersedes:`, which is silently dropped (fb-2026-07-11-017). With `unevaluatedProperties: false` and no declaration here, the ONLY carrier the toolkit reads was rejected outright, making `superseded` a terminal status this kind could not reach through any supported path."
+    },
+
     "origins": { "type": "array", "items": { "$ref": "#/$defs/origin_record" } },
     "lens_views": { "type": "array", "items": { "$ref": "#/$defs/lens_view" } },
     "review_state": { "$ref": "#/$defs/review_state" },
@@ -109,6 +115,17 @@
   ],
 
   "$defs": {
+    "authored_relation": {
+      "$comment": "AuthoredTargetedRelation (source_contracts.py) — predicate/target/graph_layer, and nothing else. `additionalProperties: false` because a typo'd key INSIDE a relation is silently dropped today, which is the class of defect this arc exists to end. `graph_layer` defaults to `graph/knowledge` in the model; it is optional here, and never required.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["predicate", "target"],
+      "properties": {
+        "predicate": { "type": "string", "pattern": "\\S" },
+        "target": { "type": "string", "pattern": "\\S" },
+        "graph_layer": { "type": "string" }
+      }
+    },
     "origin_record": {
       "$comment": "OriginRecord (entities.py:241) — extra=forbid, so `additionalProperties: false` is the FAITHFUL translation, not added strictness.",
       "type": "object",

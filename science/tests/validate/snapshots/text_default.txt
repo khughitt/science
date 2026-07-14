@@ -1,8 +1,9 @@
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 Science Project Validation
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-Checks: 59 included, 0 skipped (profile: full)
+Checks: 61 included, 0 skipped (profile: full)
 ERROR validate.local.sh is no longer supported; migrate it using docs/migration/2026-05-19-validate-local-sh-porting-guide.md [validate.sidecar.legacy_removed]
+WARN pyproject.toml [tooling] pyproject.toml does not list science under [dependency-groups].dev (fix: add the dependency and configure `science = { git = "https://github.com/khughitt/science.git", subdirectory = "science" }`)
 WARN 2 broken refs: namespace [references]
 WARN 2 [UNVERIFIED] marker(s) found in documents; examples: doc/overview.md:8, entities/reports/0001-overview.md:16 [unresolved_markers]
 ERROR graph audit: unresolved_reference — report:overview related -> unknown-project:question:q01 (entities/reports/0001-overview.md references an unknown canonical entity (no local entity for unknown-project:question:q01; cross-project references to peer-project entities are not commons-promotable -- link them in prose rather than structured frontmatter, or check the ref's spelling)) [graph]
@@ -13,4 +14,4 @@ ERROR entities/questions/0001-research-question.md [entity-conformance] filename
 ERROR entities/reports/0001-overview.md [entity-conformance] filename stem '0001-overview' != id local-part 'overview'
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-FAILED: 7 error(s), 2 warning(s)
+FAILED: 7 error(s), 3 warning(s)
