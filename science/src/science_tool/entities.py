@@ -14,16 +14,26 @@ from typing import Any, cast
 
 import yaml
 from science_model.entities import OriginRecord, ProjectEntity
+from science_model.entity_schema import (
+    PROJECT_MIXIN_NAMES,
+    EntityValidationError,
+    check_resolution,
+    has_lineage_to_resolve,
+)
 from science_model.frontmatter import atomic_write_text, split_frontmatter
 from science_model.profiles import EntityKind, ProfileManifest, load_profile_manifest
 from science_model.profiles.core import CORE_PROFILE
 from science_model.profiles.local import LOCAL_PROFILE
 from science_model.profiles.schema import EntityFilenameStrategy
 
+from science_tool.entity_profiles import load_project_schema_if_pinned
 from science_tool.entity_scan import iter_entity_markdown
+from science_tool.graph.identity_table import build_identity_table
 from science_tool.graph.migrate import audit_project_sources
 from science_tool.graph.reference_resolution import ReferenceResolver
 from science_tool.graph.sources import (
+    AliasCollisionError,
+    ProjectSources,
     load_project_sources,
     local_profile_sources_dir,
     resolve_local_profile_name,
@@ -873,7 +883,7 @@ def create_entity(
 
     entity_id_value = generate_entity_id(project_root, kind, title, entity_id, slug, today=today_value)
     status_value = status or _DEFAULT_STATUS[kind]
-    _validate_status(kind, status_value)
+    _validate_status(project_root, kind, status_value)
     rel_path = _resolve_destination_rel_path(project_root, kind, entity_id_value, explicit_path, today_value)
     destination = project_root / rel_path
     if destination.exists():
@@ -892,7 +902,7 @@ def create_entity(
         no_hints=no_hints,
         extra_frontmatter=extra_frontmatter,
     )
-    warnings = _validate_prospective_write(
+    warnings, _ = _validate_prospective_write(
         project_root=project_root,
         rel_path=rel_path,
         text=text,
@@ -1031,6 +1041,12 @@ def _prepare_write(
     value. Doing it here rather than in the caller keeps the boundary to ONE `find_entity` and one
     archive check -- and keeps their ORDER, so an archived ref still reports the actionable
     `_reject_if_archived` error instead of a bare "Entity not found".
+
+    THE LIFECYCLE GATE LIVES HERE, in the half that writes nothing, and that is what makes it a gate
+    rather than a lament: a terminal transition with no basis, or with a successor that names
+    nothing, fails BEFORE a byte reaches the disk instead of landing and surfacing as a `validate`
+    WARN afterwards. Both entry points inherit it because both come through here. A boundary that
+    governed only the path nobody was going to corrupt would be decoration.
     """
     project_root = project_root.resolve()
     _reject_if_archived(project_root, ref)
@@ -1041,17 +1057,25 @@ def _prepare_write(
         frontmatter[key] = _append_unique_string_values(frontmatter.get(key), additions)
     for key, value in fields.items():
         if key == "status":
-            _validate_status(location.kind, str(value))
+            _validate_status(project_root, location.kind, str(value))
         frontmatter[key] = value
     frontmatter.setdefault("updated", date.today().isoformat())
 
+    # Cheapest authority first: the composed schema decides SHAPE, and it decides it about one
+    # record, so it needs no corpus at all.
+    _schema_validate_or_raise(project_root, location.kind, frontmatter)
+
     text = _render_markdown(frontmatter, location.body)
-    warnings = _validate_prospective_write(
+    warnings, prospective = _validate_prospective_write(
         project_root=project_root,
         rel_path=Path(location.rel_path),
         text=text,
         target_entity_id=location.entity_id,
     )
+    # ...then the ONE question the schema structurally cannot answer, against the corpus as it WOULD
+    # be. Resolving a successor against the BASELINE would ask about a corpus this write is changing.
+    _resolution_check_or_raise(location.kind, frontmatter, prospective)
+
     return _PreparedWrite(
         entity_id=location.entity_id,
         path=location.path,
@@ -1059,6 +1083,71 @@ def _prepare_write(
         warnings=tuple(warnings),
         seal=_seal(location.entity_id, location.path, text),
     )
+
+
+def _schema_validate_or_raise(
+    project_root: Path, kind: str, frontmatter: Mapping[str, object]
+) -> None:
+    """D3.1 at the WRITE boundary: the composed JSON Schema is the authority on a record's shape.
+
+    Two gates, and each is an explicit "not migrated" rather than a fallback:
+
+    * the KIND must be in `PROJECT_MIXIN_NAMES` -- the migration slice list. A kind with no project
+      mixin has no schema to be held to, and inventing one would enforce a contract its corpus was
+      never measured against.
+    * the PROJECT must have DECLARED `entity_schema_version: 2`. Same gate as the load path, and it
+      has to be: validating a write against the 2.0 mixin in a project the migration has not reached
+      would reject `--title` on a file whose only sin is a `phase:` key the migration is coming for.
+    """
+    if kind not in PROJECT_MIXIN_NAMES:
+        return
+    schema = load_project_schema_if_pinned(project_root)
+    if schema is None:
+        return
+    try:
+        schema.validator.validate_as(dict(frontmatter), schema.profile_for(kind))
+    except EntityValidationError as exc:
+        raise EntityCommandError(
+            f"{frontmatter.get('id', kind)}: the edit does not satisfy the {kind} schema\n  {exc}"
+        ) from exc
+
+
+def _resolution_check_or_raise(
+    kind: str, frontmatter: Mapping[str, object], sources: ProjectSources
+) -> None:
+    """The D3 escape hatch, ENUMERATED: does this record's lineage name a real, live, OTHER entity?
+
+    NOT gated on the pin, unlike the schema check, and the asymmetry is the point. `superseded` meant
+    `superseded` in the OLD vocabulary too, so a dangling successor is authorable in an unmigrated
+    project today -- which is precisely the corpus that most needs the guard. Gating this on the pin
+    would arm it only for the projects that had already been made safe.
+
+    Gated on the kind, though, because `check_resolution` asks whether a successor is a live
+    HYPOTHESIS. Pointing it at another kind would measure that kind against a set it is not in.
+    """
+    if kind not in PROJECT_MIXIN_NAMES:
+        return
+    record = dict(frontmatter)
+    if not has_lineage_to_resolve(record):
+        return  # no resolver built: see `has_lineage_to_resolve` for why that matters
+
+    try:
+        resolver = ReferenceResolver.from_entities(
+            sources.entities,
+            manual_aliases=sources.manual_aliases,
+            identity_table=build_identity_table(sources),
+        )
+    except AliasCollisionError as exc:
+        raise EntityCommandError(
+            f"cannot check this entity's lineage: the corpus has a duplicated alias ({exc}). "
+            "Resolve the collision, then retry -- a successor cannot be verified against a corpus "
+            "that disagrees about which entity an id names."
+        ) from exc
+
+    live = {e.canonical_id for e in sources.entities if e.kind == kind}
+    violations = check_resolution(record, targets=resolver, live_hypotheses=live)
+    if violations:
+        raise EntityCommandError("; ".join(v.message for v in violations))
 
 
 def _commit_write(prepared: _PreparedWrite) -> EntityWriteResult:
@@ -1097,16 +1186,32 @@ def edit_entity(
     *,
     title: str | None = None,
     status: str | None = None,
+    verdict: str | None = None,
+    closure_basis: str | None = None,
+    resynthesized_into: list[str] | None = None,  # AUTHORED: no canonical relation behind it
     related: list[str] | None = None,
     source_refs: list[str] | None = None,
     updated: date | None = None,
     today: date | None = None,
 ) -> EntityWriteResult:
+    """The AUTHORED-edit surface. Prepare, then commit.
+
+    ONE generic lifecycle boundary, not four invented verbs. `--closure-basis` and `--verdict` are
+    accepted ATOMICALLY with the transition they discharge, which is what lets a single schema check
+    inside `_prepare_write` decide the whole thing: `status: retired` with no basis is not a write
+    that needs a follow-up, it is a write that never happens.
+    """
     fields: dict[str, object] = {}
     if title is not None:
         fields["title"] = title
     if status is not None:
         fields["status"] = status
+    if verdict is not None:
+        fields["verdict"] = verdict
+    if closure_basis is not None:
+        fields["closure_basis"] = closure_basis
+    if resynthesized_into is not None:
+        fields["resynthesized_into"] = resynthesized_into
     fields["updated"] = (updated or today or date.today()).isoformat()
 
     appends: dict[str, list[str]] = {}
@@ -1135,7 +1240,7 @@ def append_entity_note(
     frontmatter["updated"] = date_value.isoformat()
     body = append_note_to_body(location.body, f"- {date_value.isoformat()}: {note_text}")
     text = _render_markdown(frontmatter, body)
-    warnings = _validate_prospective_write(
+    warnings, _ = _validate_prospective_write(
         project_root=project_root,
         rel_path=Path(location.rel_path),
         text=text,
@@ -1523,9 +1628,23 @@ def _atomic_replace_text(path: Path, text: str) -> None:
     atomic_write_text(path, text)
 
 
-def _validate_status(kind: str, status: str) -> None:
-    if status not in _STATUS_VALUES[kind]:
-        raise EntityCommandError(f"Invalid status for {kind}: {status}")
+def _validate_status(project_root: Path, kind: str, status: str) -> None:
+    """Reject a status the kind does not declare — and know about PROJECT-LOCAL kinds.
+
+    It used to index `_STATUS_VALUES[kind]`, which holds BUILT-IN kinds only, so editing an entity of
+    a kind the project declares in its own manifest raised a bare `KeyError` out of a CLI command.
+    `valid_statuses` is the one function that reads local manifests, and it answers `None` for a
+    local kind that declares NO vocabulary — an OPEN set, not an empty one. Reading `None` as "no
+    status is valid" would refuse every edit to those kinds instead of accepting any.
+    """
+    try:
+        allowed = valid_statuses(kind, project_root=project_root)
+    except KeyError:
+        raise EntityCommandError(f"Unknown entity kind: {kind}") from None
+    if allowed is not None and status not in allowed:
+        raise EntityCommandError(
+            f"Invalid status for {kind}: {status} (expected one of {', '.join(sorted(allowed))})"
+        )
 
 
 def _resolve_destination_rel_path(
@@ -1558,12 +1677,20 @@ def _validate_prospective_write(
     text: str,
     target_entity_id: str,
     include_commons: bool = True,
-) -> list[str]:
+) -> tuple[list[str], ProjectSources]:
+    """Audit warnings, AND the corpus as it would be after this write.
+
+    It hands the prospective sources back because it already built them, and the caller's next
+    question — does this record's successor resolve? — is a question about exactly that corpus.
+    Loading it a second time to ask would be waste, and loading the BASELINE instead would answer a
+    question about a corpus this write is in the middle of changing.
+    """
     rel_path_text = rel_path.as_posix()
     baseline_rows, _ = audit_project_sources(load_project_sources(project_root, include_commons=include_commons))
-    prospective_rows, _ = audit_project_sources(
-        load_project_sources(project_root, markdown_overrides={rel_path_text: text}, include_commons=include_commons)
+    prospective = load_project_sources(
+        project_root, markdown_overrides={rel_path_text: text}, include_commons=include_commons
     )
+    prospective_rows, _ = audit_project_sources(prospective)
 
     baseline_keys = {_audit_row_key(row) for row in baseline_rows}
     new_rows = [row for row in prospective_rows if _audit_row_key(row) not in baseline_keys]
@@ -1577,7 +1704,7 @@ def _validate_prospective_write(
             blocking_rows.append(row)
     if blocking_rows:
         raise EntityCommandError("; ".join(_format_blocking_row(row) for row in blocking_rows))
-    return warnings
+    return warnings, prospective
 
 
 def _audit_row_key(row: Mapping[str, object]) -> tuple[str, str, str, str, str, str]:

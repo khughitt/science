@@ -20,6 +20,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from pathlib import Path
 
+import yaml
 from science_model.entity_schema import (
     EntityValidator,
     ProfileParseError,
@@ -29,10 +30,14 @@ from science_model.entity_schema import (
     parse_component,
     resolve_profile,
 )
+from science_model.frontmatter import project_config_path
 
 from science_tool.project_config import ProjectConfig, load_project_config
 
 SCHEMAS_DIRNAME = "schemas"
+
+# The version a project must DECLARE before any of this is applied to its files.
+ENTITY_SCHEMA_VERSION = 2
 
 
 class EntityExtensionsError(ValueError):
@@ -74,6 +79,33 @@ def load_project_schema(
     )
     _certify_declarations(config.entity_extensions, schemas_dir, schema)
     return schema
+
+
+def load_project_schema_if_pinned(project_root: Path) -> ProjectSchema | None:
+    """The project's composed schema — or None if it has not DECLARED `entity_schema_version: 2`.
+
+    ONE gate, shared by the LOAD path (`graph/sources.py`) and the WRITE path (`entities.py`). The
+    pin is the authority and the file shape never is, so "does this project speak schema 2?" must
+    have exactly one answer: a writer that answered it differently from the loader would validate
+    writes against a schema the loader does not enforce, or refuse writes the loader would accept.
+
+    THE SHAPE HEURISTIC IS NOT A FALLBACK, it is the bug. natural-systems — the project that opened
+    this arc — authored `status: retired` and `status: active` onto UNMIGRATED hypotheses, where
+    `retired` MEANT `refuted`. Every one of those is a lifecycle word, so a "does it look migrated?"
+    test calls the corpus migrated and reads its verdicts as closures.
+
+    The pin is read from the raw YAML rather than through `ProjectConfig`, and that is deliberate: an
+    UNPINNED project must keep loading exactly as it does today, and imposing full `science.yaml`
+    validation on every graph build is a real change that belongs to its own task. A PINNED project
+    does get that validation, via `load_project_schema` — it asked for it.
+    """
+    path = project_config_path(project_root)
+    if not path.is_file():
+        return None
+    data = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
+    if not isinstance(data, dict) or data.get("entity_schema_version") != ENTITY_SCHEMA_VERSION:
+        return None
+    return load_project_schema(project_root)
 
 
 def _certify_declarations(

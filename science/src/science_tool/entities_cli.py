@@ -92,10 +92,32 @@ def entity_show(ref: str, output_format: str) -> None:
     emit_entity_show(location, output_format)
 
 
+# ☠️ NO `--superseded-by`, and its absence is a decision, not an omission.
+#
+# `superseded_by` is DERIVED: it is the inversion of the canonical `sci:supersedes` edge, and
+# `consolidation._prepare_supersession` reads it off the admitted graph. An author flag for it would
+# recreate the second authored spelling this arc exists to delete -- a user could write a RESOLVABLE
+# `superseded_by` with no canonical edge behind it, and schema AND the resolution check would both
+# report green over a supersession grounded in nothing. Author the EDGE; the inverse is written
+# for you.
 @entity_group.command("edit")
 @click.argument("ref")
 @click.option("--title")
 @click.option("--status")
+@click.option("--verdict", help="Epistemic conclusion (hypothesis): what the evidence SAYS.")
+@click.option(
+    "--closure-basis",
+    help="Why the entity closed: what a person DID. Required by `retired`/`archived`.",
+)
+# The one lineage field that IS authored. `superseded` is discharged by any of `superseded_by`,
+# `resynthesized_into`, or `closure_basis` -- and the first is derived, so without this flag a SPLIT
+# supersession would be a state the schema admits and no writer in the toolkit can produce.
+@click.option(
+    "--resynthesized-into",
+    "resynthesized_into",
+    multiple=True,
+    help="Successor hypothesis this one was split into (repeatable). Must resolve to a live one.",
+)
 @click.option("--related", "related_refs", multiple=True, help="Related entity reference (repeatable)")
 @click.option("--source-ref", "source_refs", multiple=True, help="Source reference (repeatable)")
 @click.option("--updated")
@@ -103,11 +125,19 @@ def entity_edit(
     ref: str,
     title: str | None,
     status: str | None,
+    verdict: str | None,
+    closure_basis: str | None,
+    resynthesized_into: tuple[str, ...],
     related_refs: tuple[str, ...],
     source_refs: tuple[str, ...],
     updated: str | None,
 ) -> None:
-    """Edit source-authored entity metadata."""
+    """Edit source-authored entity metadata.
+
+    `--verdict` and `--closure-basis` are accepted ATOMICALLY with the `--status` transition they
+    discharge, because a terminal status without its basis is not a write that needs a follow-up --
+    it is a write that does not happen.
+    """
 
     try:
         result = edit_entity(
@@ -115,6 +145,9 @@ def entity_edit(
             ref,
             title=title,
             status=status,
+            verdict=verdict,
+            closure_basis=closure_basis,
+            resynthesized_into=list(resynthesized_into) or None,
             related=list(related_refs),
             source_refs=list(source_refs),
             updated=_parse_entity_date(updated) if updated else None,

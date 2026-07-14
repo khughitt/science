@@ -87,6 +87,18 @@ class LineageTargets(Protocol):
     def resolve(self, raw: str) -> Resolved: ...
 
 
+def has_lineage_to_resolve(entity: dict[str, Any]) -> bool:
+    """Whether `check_resolution` has anything to say about this record. Needs NO resolver.
+
+    Exists so a caller can decide whether BUILDING one is worth it without restating the rule that
+    decides. That is not a micro-optimization: `ReferenceResolver.from_entities` RAISES on a corpus
+    with a duplicated alias, so a write boundary that constructed one unconditionally would turn a
+    reportable fault into an unwritable project -- for every edit, on every kind, including the ones
+    with no lineage at all.
+    """
+    return entity.get("status") in _TERMINALS_WITH_STRUCTURE
+
+
 def check_resolution(
     entity: dict[str, Any], *, targets: LineageTargets, live_hypotheses: set[str]
 ) -> list[ResolutionViolation]:
@@ -107,7 +119,7 @@ def check_resolution(
     the all-entities set, and report CLEAN -- a hypothesis superseded by a dataset. A successor must
     be a hypothesis; the caller passes only those, and the type of the argument says so.
     """
-    if entity.get("status") not in _TERMINALS_WITH_STRUCTURE:
+    if not has_lineage_to_resolve(entity):
         return []
 
     raw_id = str(entity.get("id") or "<unknown>")

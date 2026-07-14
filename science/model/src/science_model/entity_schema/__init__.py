@@ -26,6 +26,7 @@ from science_model.entity_schema.merge import (
 )
 from science_model.entity_schema.profile import (
     BASE_NAME,
+    PROJECT_MIXIN_NAMES,
     TYPE_MIXIN_NAMES,
     ProfileComponent,
     ProfileParseError,
@@ -43,6 +44,7 @@ from science_model.entity_schema.resolution import (
     LineageTargets,
     ResolutionViolation,
     check_resolution,
+    has_lineage_to_resolve,
 )
 from science_model.entity_schema.validator import (
     EntityValidationError,
@@ -52,6 +54,7 @@ from science_model.entity_schema.wrapper import SharedEntity
 
 __all__ = [
     "BASE_NAME",
+    "PROJECT_MIXIN_NAMES",
     "TYPE_MIXIN_NAMES",
     "EntityValidationError",
     "EntityValidator",
@@ -70,6 +73,7 @@ __all__ = [
     "check_resolution",
     "default_profile_for_kind",
     "filename_for",
+    "has_lineage_to_resolve",
     "parse_component",
     "parse_profile",
     "read_canonical_body_sections",

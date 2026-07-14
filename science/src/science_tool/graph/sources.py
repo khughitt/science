@@ -42,11 +42,15 @@ from science_model.source_contracts import (
 )
 from science_model.source_ref import SourceRef
 
-from science_model.entity_schema import EntityValidationError
+from science_model.entity_schema import PROJECT_MIXIN_NAMES, EntityValidationError
 
 from science_tool.bibliography import is_bibliography_reference as _is_bibliography_reference
 from science_tool.commons.aliases import load_manual_aliases
-from science_tool.entity_profiles import ProjectSchema, load_project_schema
+from science_tool.entity_profiles import (
+    ENTITY_SCHEMA_VERSION,
+    ProjectSchema,
+    load_project_schema,
+)
 from science_tool.graph.entity_registry import EntityKindNotRegisteredError, EntityRegistry
 from science_tool.graph.errors import EntityIdentityCollisionError
 from science_tool.graph.identity_table import (
@@ -232,8 +236,15 @@ def load_project_sources(
     # it is not this task's -- smuggling it in under a migration would put it inside Task 11's diff.
     # The typo guard (`_reject_near_miss_keys`) lives with `ProjectConfig`, which `validate` and the
     # migration both load, so a misspelled pin is still refused where it is authored.
+    #
+    # The WRITE path asks the same question through `load_project_schema_if_pinned`, which reads the
+    # same key and compares it to the same `ENTITY_SCHEMA_VERSION`. It is not used here only because
+    # this function already holds the parsed config, and re-reading `science.yaml` on every graph
+    # build to learn something it is already holding would be a real cost for no gain.
     project_schema = (
-        load_project_schema(project_root) if config.get("entity_schema_version") == 2 else None
+        load_project_schema(project_root)
+        if config.get("entity_schema_version") == ENTITY_SCHEMA_VERSION
+        else None
     )
     profiles = KnowledgeProfiles.model_validate(config["knowledge_profiles"])
     local_profile = profiles.local
@@ -1153,18 +1164,6 @@ def _load_typed_records(
     return records
 
 
-# The kinds whose JSON Schema is ENFORCED on load, for projects pinned to entity schema 2.
-#
-# One kind, deliberately. D5 migrates the corpus KIND BY KIND, and a kind is enforceable only once
-# its corpus has been certified against the schema (Task 11) -- 147 hypotheses, across 18 roots, every
-# one of them rendered and validated before a byte was written. `dataset`/`paper`/`topic`/`theme` have
-# mixins too, and adding them here would enforce a contract their corpus has never been measured
-# against: the files would fail, and the failure would be the schema's fault, not theirs.
-#
-# This set grows in Task 12's ratchet, one certified kind at a time.
-SCHEMA_ENFORCED_KINDS: frozenset[str] = frozenset({"hypothesis"})
-
-
 def _validate_against_schema(
     raw: dict[str, Any],
     *,
@@ -1186,8 +1185,13 @@ def _validate_against_schema(
     This is the half that makes `Entity`'s `extra="allow"` safe. The schema refuses what it does not
     know; the projection preserves what the schema admitted. Apart, each is a defect -- preservation
     without validation is just `extra="allow"` over an unvalidated corpus.
+
+    `PROJECT_MIXIN_NAMES` is the migration slice list, and enforcement is gated on it rather than on a
+    second frozenset of the same names. It also gates schema STRICTNESS in the validator, so a kind
+    enforced here but absent there would be checked against a profile that admits anything: a green
+    check over an unchecked record. Two hand-maintained copies of one list is how that happens.
     """
-    if project_schema is None or kind not in SCHEMA_ENFORCED_KINDS:
+    if project_schema is None or kind not in PROJECT_MIXIN_NAMES:
         return
     authored = {key: value for key, value in raw.items() if key not in MarkdownAdapter.INJECTED_KEYS}
     try:
