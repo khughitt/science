@@ -6587,6 +6587,47 @@ guard `test_every_declared_status_still_classified` fails loud if this is wrong 
 
 ### Task 9: The migration — two-phase, all-or-none, per repo
 
+> ### ☠️ REV 7 — THIS TASK IS THREE THINGS, AND THEY ARE ONE UNIT. Read before writing any code.
+>
+> Revs 1–6 scoped Task 9 as "rewrite the status field". That is **not a migration this corpus can
+> survive**, for a reason the review surfaced and the task's own inputs prove:
+>
+> 1. **The projection still drops what the schema admits.** `Entity` is `extra="ignore"`, so a
+>    schema-valid **project-extension** field validates on disk and evaporates at `model_validate`.
+>    Verified, on the three real ones: `confidence_mechanistic_label`, `identification`,
+>    `source_stated_evidence` — all three absent from `model_dump()`. **This makes the migration's own
+>    renames unsound.** Task 2 rules `author_stated_evidence` → **`source_stated_evidence`** on 13
+>    evolution files, and that target is declared **only in a project extension**. Rewrite the 13 files
+>    and the loader discards the field on the very next read: the string survives on disk and reaches
+>    nothing. Task 2's own words, one level down — *a rename whose target nobody declared is a delete
+>    with better manners.* Declared in the SCHEMA, undeclared in the PROJECTION, is that delete.
+> 2. **D3.3 is the design's, not this task's invention**: *"Projections MUST preserve schema-valid
+>    extension fields. Never return to `extra="ignore"` — that is the original defect."* No task owned
+>    it. It is owned here, because here is where the schema starts being enforced.
+> 3. **`extra="allow"` alone would preserve garbage**, so it lands **with** D3.1 — schema-first
+>    validation — and not before. Together they are the contract: the SCHEMA refuses unknown keys, the
+>    PROJECTION preserves the ones it admitted. Apart, each is a defect: validation without
+>    preservation is a rename that deletes; preservation without validation is `extra="allow"` over an
+>    unvalidated corpus.
+>
+> So Task 9 ships **the projection (D3.3), the load path (D3.1/D3.2), and the migration** in one
+> commit. They cannot be separated: you cannot arm validation without the pin, and you cannot set the
+> pin on files whose rename targets the loader throws away.
+>
+> **And the migration is the FULL field adjudication, not the status cross-tab.** Revs 1–6 dropped
+> `phase`/`disposition`/`disposition_basis` and stopped. `docs/plans/2026-07-12-hypothesis-field-adjudication.md`
+> is the authority, and it rules **eight deletes**, **two renames**, and **one refusal** besides:
+>
+> | disposition | keys | mechanism |
+> |---|---|---|
+> | **delete** | `phase` (107), `belief_state` (13), `evidence_stance` (13), `tags` (11), `priority` (8), `role` (2), `promotion_criteria` (2), `domain` (2) | strip the key; the mixin marks each `false`, so a leftover fails LOUDLY |
+> | **rename** | `author_stated_evidence` → `source_stated_evidence` (13, evolution); `promoted_from` → `origins` (3, protein-landscape) | value preserved **byte-for-byte**; the target must be *representable*, which is why (1) above blocks |
+> | **cross-tab** | `status` + `phase` → `status` (lifecycle) + `verdict` (epistemic) | `status_inventory`, entirely — this module adds no rule of its own |
+> | **☠️ REFUSE** | `confidence` (2, 3d-attention-bias) | **`0.7` and `0.75` name no proposition, stance, source, strength, or independence group.** The migration STOPS and names the files. The author decomposes each scalar into proposition-targeted `expert_judgment` evidence lines, or deletes it. *A migration that guessed here would be manufacturing provenance* — the D5 refusal contract, applied to a field instead of a status. |
+>
+> `disposition`/`disposition_basis` need **no migration step**: the corpus authored them on **zero of
+> 147** hypotheses, and Task 8 deleted the fields with their only reader.
+
 > **⚠️ Four fixture files must be backfilled here, or the preflight fails on our own repo.** Base 2.0
 > **requires** `created` and `updated`. The certified corpus is **147 = 143 non-fixture + 4 fixture**,
 > and Task 2's inventory already reported **`created`/`updated` on exactly 143** — so the arithmetic
@@ -6604,12 +6645,40 @@ guard `test_every_declared_status_still_classified` fails loud if this is wrong 
 > a fabricated `created` is exactly the manufactured provenance this arc keeps refusing.
 
 **Files:**
+- Modify: `science/model/src/science_model/entities.py` — `Entity.model_config` → `extra="allow"` (**D3.3**)
+- Modify: `science/src/science_tool/graph/sources.py` — schema-first validation, gated on the pin (**D3.1/D3.2**)
 - Create: `science/src/science_tool/migrate_hypothesis.py`
 - Modify: `science/src/science_tool/entities_cli.py` (register `entity migrate-hypothesis`)
+- Test: `science/model/tests/test_hypothesis_entity.py` — extend the battery to the **composed project profile**
 - Test: `science/tests/test_migrate_hypothesis.py`
+- Test: `science/tests/test_schema_first_load.py`
 
 **Interfaces:**
-- Consumes `status_inventory.inventory()` + `load_adjudication()`. **Adds no mapping logic.**
+- Consumes `status_inventory.inventory()` + **`adjudication_for(project_root)`** — *not* `load_adjudication(path)`.
+  Absence of an adjudication file is **normal** (most projects need none), and `load_adjudication`
+  raises on a missing path **by design**, so calling it directly would make every un-adjudicated
+  project a crash. `adjudication_for` is the may-be-absent accessor; `load_adjudication` is the
+  fail-loud reader behind it, for a path the author *did* write.
+- Consumes **`entity_profiles.load_project_schema(project_root)`** — the project-COMPOSED profile, not
+  the package-default `default_profile_for_kind`. ☠️ With the package default, **mm30's and
+  evolution's extension fields are unknown keys**, so `unevaluatedProperties: false` rejects them and
+  the migration refuses those two repos entirely — with an error blaming the files, for fields their
+  project legitimately declares. Task 6b exists precisely so this composition is available; using the
+  package default here would waste it and misread the failure as corpus corruption.
+- **Adds no mapping logic.** The cross-tab lives in `status_inventory`, entirely and deliberately: a
+  rule that lived here and not there would mean the inventory a human read and approved was not the
+  migration that ran.
+
+> ### The test subjects, in full. Revs 1–6 listed six; these are the ones they left out.
+>
+> | subject | why it is not optional |
+> |---|---|
+> | **the eight deletes** | one test per key is overkill; one parametrized test over `phase`/`belief_state`/`evidence_stance`/`tags`/`priority`/`role`/`promotion_criteria`/`domain` is not. A delete that silently doesn't fire leaves a key the mixin marks `false`, so the file fails *its own* schema at the end of Phase 1 — which is the good failure. Assert it anyway: the preflight's refusal must name the KEY, not just the file. |
+| **the two renames** | value preserved **byte-for-byte**, old key gone, new key present — *and the migrated entity survives a load*, which is the property (1) above says the projection currently breaks. A rename test that only reads the file cannot see the delete-with-better-manners. |
+> | **☠️ the `confidence` REFUSAL** | the migration must STOP on 3d-attention-bias's two files and name them. This is the one field where a plausible mechanical answer exists (`0.7` → a prior) and taking it would fabricate chronology. **A refusal with no test is a refusal that gets optimized away by the next implementer**, who will see two scalars and a `confidence_label` extension and think it obvious. |
+> | **the fixture date backfill** | `created`/`updated` from **git history** (`git log --diff-filter=A --format=%as -- <path>`), never `date.today()`. Assert the backfilled value equals the file's real add-date; a test that only asserts *some* date passes for a fabricated one. |
+> | **crash → rerun** | see the journal ruling below. Kill after file 1 of 2; assert the rerun COMPLETES and the corpus is byte-identical to an uninterrupted run. |
+> | **the composed profile** | migrate an mm30-shaped file (with `identification`) and an evolution-shaped one (with `author_stated_evidence`); both must pass preflight. Against the package-default profile they cannot — which is the bug this catches. |
 
 - [ ] **Step 1: Write the failing test**
 
@@ -6617,21 +6686,38 @@ guard `test_every_declared_status_still_classified` fails loud if this is wrong 
 # science/tests/test_migrate_hypothesis.py
 def test_refuses_everything_when_any_file_is_ambiguous(tmp_path) -> None:
     _hyp(tmp_path, "0001-a", status="proposed", phase="active")     # deterministic
-    _hyp(tmp_path, "0009-d", status="retired", phase="candidate")   # ambiguous
-    with pytest.raises(MigrationRefused, match="0009-d"):
+    _hyp(tmp_path, "0042-x", status="retired", phase="candidate")   # ambiguous
+    with pytest.raises(MigrationRefused, match="0042-x"):
         migrate(tmp_path, apply=True)
     assert 'status: "proposed"' in (tmp_path / "entities/hypotheses/0001-a.md").read_text()
 
 
 def test_an_adjudication_file_unblocks_it(tmp_path) -> None:
+    # `complete` + `refuted` -- the shape the author RULED for natural-systems/0009 (Task 4). The
+    # evidence spoke, so the verdict IS the closure reason and `closure_basis` stays absent.
     _hyp(tmp_path, "0009-d", status="retired", phase="candidate")
     (tmp_path / ".science").mkdir()
     (tmp_path / ".science/hypothesis-lifecycle.adjudication.yaml").write_text(
-        'hypothesis:0009-d:\n  status: retired\n  verdict: weakened\n'
-        '  closure_basis: "confirmatory null, z=-0.889"\n', encoding="utf-8")
+        "hypothesis:0009-d:\n  status: complete\n  verdict: refuted\n", encoding="utf-8")
     migrate(tmp_path, apply=True)
     t = (tmp_path / "entities/hypotheses/0009-d.md").read_text()
-    assert 'status: "retired"' in t and 'verdict: "weakened"' in t and "z=-0.889" in t
+    assert 'status: "complete"' in t and 'verdict: "refuted"' in t
+
+
+def test_a_project_with_NO_adjudication_file_migrates_fine(tmp_path) -> None:
+    # `adjudication_for`, not `load_adjudication`. Absence is NORMAL -- most projects need none --
+    # and the fail-loud reader would turn every un-adjudicated root into a crash.
+    _hyp(tmp_path, "0001-a", status="proposed", phase="active")
+    migrate(tmp_path, apply=True)
+
+
+def test_the_two_CONFIDENCE_files_are_REFUSED_not_converted(tmp_path) -> None:
+    # ☠️ `0.7` names no proposition, stance, source, strength, or independence group. The plausible
+    # mechanical answer -- call it a prior -- would relabel a POSTERIOR as something that preceded
+    # the evidence. The tool stops; the author decomposes it into expert_judgment evidence lines.
+    _hyp(tmp_path, "0001-a", status="proposed", phase="active", extra={"confidence": 0.7})
+    with pytest.raises(MigrationRefused, match="confidence"):
+        migrate(tmp_path, apply=True)
 
 
 def test_NOTHING_is_written_if_any_target_fails_schema_validation(tmp_path, monkeypatch) -> None:
@@ -6781,16 +6867,62 @@ def migrate(project_root: Path, *, apply: bool) -> list[Path]:
 
     # The version pin, LAST: a project is on schema 2 only once its files actually are.
     _set_entity_schema_version(project_root, 2)
+    _journal_clear(project_root)
     return [p for p, _ in planned]
 ```
 
-> `_set_entity_schema_version` writes `entity_schema_version: 2` into `science.yaml`. It is the
-> **final** act: a crash before it leaves the project unpinned, and unpinned means "not schema-2",
-> so re-running is safe and idempotent.
+> ### ☠️ "Re-running is safe and idempotent" was FALSE. It is the one claim here that could strand a repo.
+>
+> Revs 1–6 said: the pin is written last, so a crash leaves the project unpinned, and unpinned means
+> not-schema-2, so just run it again. **The second step does not follow.** The rerun does not read the
+> pin — it reads the FILES, through `status_inventory._classify`. And a file the crashed run already
+> migrated is `status: draft` with **no `phase`**, so on the rerun `_classify` defaults the absent
+> phase to `active`, finds `draft != active`, matches no branch, and falls through to the terminal /
+> unknown arm: **"status 'draft' is terminal or unknown: adjudicate explicitly."**
+>
+> So a process killed after the first write leaves a corpus the migration **refuses to resume** and
+> demands the author adjudicate — file by file, for files that are already correct. It does not
+> corrupt anything (the refusal is real, and refusing is what this tool is for), but *"safe and
+> idempotent"* is exactly the sentence that would have sent someone into that state trusting a rerun.
+> An all-or-none writer whose crash recovery is "run it again" needs the rerun to actually work.
+>
+> **A JOURNAL, not a bigger claim.** Phase 2 writes `.science/hypothesis-migration.journal` **before**
+> the first file and appends each path as it lands. Its presence means *a write pass was interrupted*:
+>
+> - **On a clean run** the journal is written, consumed, and deleted (`_journal_clear`), so its
+>   absence is the normal state and carries no meaning.
+> - **On a rerun with a journal present**, the tool does **not** re-plan from the files — the files no
+>   longer speak the language the planner reads. It replays the journal's remaining entries from the
+>   plan it already committed to disk, finishes the write, sets the pin, and clears the journal.
+> - **If the journal disagrees with the corpus** (a file it names is gone, or its content is neither
+>   the pre- nor the post-image), it **REFUSES** and says so. A half-migrated corpus is precisely the
+>   two-meanings-of-`status` state this arc exists to eliminate, and guessing our way out of it would
+>   be the compatibility layer D5 forbids, wearing a recovery hat.
+>
+> **Regression required — the one this plan shipped without:** kill the writer after file 1 of 2,
+> assert the rerun COMPLETES (not refuses), and assert the resulting corpus is byte-identical to an
+> uninterrupted run. A crash-recovery claim with no failure-injection test is a comment, not a
+> property.
 
-- [ ] **Step 4: Green** — `6 passed`.
+- [ ] **Step 4: The CLI surface — and it is Task 11's interface, not a convenience.**
 
-- [ ] **Step 5: Commit.**
+```
+science entity migrate-hypothesis                                  # dry run, this project
+science entity migrate-hypothesis --apply                          # write + pin, this project
+science entity migrate-hypothesis --preflight-all --manifest FILE  # render+validate EVERY root; write nothing
+```
+
+> `--preflight-all --manifest` is the only thing that makes the slice **atomic across 15
+> repositories rather than merely ordered**. It reads the roster JSON that Task 11 Step 0 derives,
+> renders and validates all 147 targets across all 18 roots, writes **nothing**, and exits non-zero
+> if any root fails. Without it, Task 11's "no root is applied until every root's target has passed"
+> is a sentence with no implementation, and the rollout degrades to per-root validate-then-write —
+> which leaves `evolution`, the only root that can refute the extension composition, for last, after
+> 14 repos are already written.
+
+- [ ] **Step 5: Green** — both suites, ruff, pyright.
+
+- [ ] **Step 6: Commit.**
 
 ---
 
