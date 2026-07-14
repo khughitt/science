@@ -660,10 +660,20 @@ rollups) onto `partially-supported | supported | weakened | refuted`. The correc
    > contract named a basis the graph cannot represent, so any check claiming to enforce it would be
    > lying in its own docstring.
    >
-   > **A qualifying basis is therefore, today:** an **admissible, polarity-agreeing evidence-line
-   > unit**, or a **`falsification` record** (the *"explicitly linked negative adjudication"*), on the
-   > hypothesis **or one of its CORE members**. Evidence on a rival/background member adjudicates
-   > nothing about this hypothesis.
+   > **A qualifying basis is therefore, today, one of exactly two things** — and note the two have
+   > DIFFERENT reaches, which an earlier draft flattened into one:
+   >
+   > 1. an **admissible, polarity-agreeing evidence-line unit**, on the hypothesis **or one of its
+   >    CORE members**. An evidence line may bear on a hypothesis directly (`belief.py:130` — "so a
+   >    hypothesis sees its linked claims' evidence"), so both reaches are real.
+   > 2. a **`falsification` record** (the *"explicitly linked negative adjudication"*) on a **CORE
+   >    PROPOSITION member — and ONLY there.** A falsification *on the hypothesis* **cannot exist**:
+   >    `FalsificationEntity.falsifies` is REQUIRED, and materialization HARD-RAISES unless its
+   >    target resolves to `kind == "proposition"` (`materialize.py:1274`, "falsification targets
+   >    must be propositions"). Permitting it here would name a basis the graph refuses to store —
+   >    the same defect as the interpretation clause, one paragraph up.
+   >
+   > Evidence on a rival/background member adjudicates nothing about this hypothesis.
    >
    > Restoring the interpretation half requires its own slice — interpretation must become a graph
    > kind with a typed edge to the hypothesis. **Until then the clause is scoped, not quietly

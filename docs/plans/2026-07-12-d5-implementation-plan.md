@@ -874,9 +874,17 @@ is not certified. STOP.**
 > an admissible, polarity-agreeing **evidence-line** unit, or a **`falsification`** record.
 >
 > **`interpretation:0192` is neither.** `interpretation` is not a graph kind (design rev 9). So the
-> moment Task 7's `verdict.missing-basis` ships, it would **ERROR on the flagship file of this entire
-> arc** — the one whose corruption started it. *The adjudication is sound; the graph simply cannot yet
+> moment Task 7's `verdict.missing-basis` ships, it **fires on the flagship file of this entire arc**
+> — the one whose corruption started it. *The adjudication is sound; the graph simply cannot yet
 > represent what it rests on.* **A representation obligation, not adjudicative ambiguity.**
+>
+> **It fires at WARN, and that is exactly why.** An earlier draft of this sentence said it would
+> **ERROR**, contradicting this task's own later ruling and Task 7's shipped severity. `0009` is not
+> the exception that survives an ERROR rule — it is the *proof the rule cannot be an ERROR yet*:
+> **≥11 of the 15 migrating verdicts cannot satisfy it**, so an ERROR would be an uncertified
+> instrument failing real builds. That is the original incident, verbatim. `verdict.missing-basis`
+> ships **WARN and ungated**, with its **own** ratchet (it stays WARN even after Task 12 certifies
+> the *kind* — kind certification is a different axis from rule certification).
 
 **Measured (do not re-derive):**
 
@@ -3391,11 +3399,19 @@ def check_dangling_lineage(ctx: ValidateContext) -> Iterator[Result]:
 > clause *"qualifying, resolvable evidence **or interpretation basis**"* is **unimplementable as
 > written**. That is a defect in the **contract**, not just in the draft code.
 >
-> **Resolution — scope it explicitly, do not quietly claim it.** A qualifying basis is:
-> 1. an **admissible, polarity-agreeing evidence-line unit** on the hypothesis or a core member, and/or
-> 2. a **`falsification`** record (`FalsificationEntity.falsifies` → proposition,
->    `materialize.py:1230`) on the hypothesis or a core member — this is the *"explicitly linked
->    negative adjudication"* the `refuted` row calls for.
+> **Resolution — scope it explicitly, do not quietly claim it.** A qualifying basis is one of exactly
+> two things, and **they do not have the same reach**:
+> 1. an **admissible, polarity-agreeing evidence-line unit** on the hypothesis **or a core member**.
+>    Both reaches are real: an evidence line may bear on a hypothesis directly (`belief.py:130`).
+> 2. a **`falsification`** record on a **CORE PROPOSITION MEMBER — and only there.** This is the
+>    *"explicitly linked negative adjudication"* the `refuted` row calls for.
+>
+> ⚠️ **A falsification "on the hypothesis" CANNOT EXIST — do not look for one.** `FalsificationEntity`
+> declares `falsifies: str` as **required**, and `_add_falsification` **hard-raises** unless the
+> target resolves to `kind == "proposition"`: *"falsification targets must be propositions"*
+> (`materialize.py:1274`). An earlier draft of this clause said "on the hypothesis or a core member",
+> which would have sent the implementer looking for a triple the materializer refuses to write — the
+> **same defect as the interpretation clause above**, made twice in one paragraph.
 >
 > **Interpretations are OUT OF SCOPE until they reach the graph.** Either wire them (a separate
 > slice: interpretation must become a graph kind with a typed edge to the hypothesis) or **amend
@@ -3488,11 +3504,20 @@ THREE things this deliberately does NOT do:
    overwrites the authored verdict (rev 8 pt. 4). The moment it could, `verdict` would stop being
    an adjudication.
 
-SCOPE -- stated, not assumed. A qualifying basis is an admissible, polarity-agreeing evidence-line
-unit, or a `falsification` record, on the hypothesis or one of its CORE members. **Interpretations
-are out of scope: `interpretation` is not a graph kind** (the registry has no such entity and no
-typed edge to a hypothesis), so rev 8's "or interpretation basis" clause cannot be enforced here.
-Do not imply otherwise in a message.
+SCOPE -- stated, not assumed, because a basis this check cannot READ is a basis it must not CLAIM.
+A qualifying basis is exactly one of two things, and their REACH DIFFERS:
+
+  * an admissible, polarity-agreeing EVIDENCE-LINE unit -- on the hypothesis OR one of its CORE
+    members (a line may bear on a hypothesis directly; belief.py:130);
+  * a FALSIFICATION record -- on a CORE PROPOSITION MEMBER, and ONLY there.
+
+A falsification ON THE HYPOTHESIS cannot exist and is not looked for: `FalsificationEntity.falsifies`
+is required, and materialization hard-raises unless it resolves to a proposition ("falsification
+targets must be propositions", materialize.py:1274).
+
+INTERPRETATIONS are out of scope: `interpretation` is not a graph kind (no such entity in the
+registry, no typed edge to a hypothesis), so rev 8's "or interpretation basis" clause cannot be
+enforced here. Do not imply otherwise in a message.
 """
 
 _ORDER = 28
@@ -3534,9 +3559,14 @@ def check_verdict_agreement(ctx: ValidateContext) -> Iterator[Result]:
         if not basis:
             yield Result(
                 Severity.WARN, _path_for(ctx, hyp_uri), None,
-                f"{hyp_uri}: verdict {verdict!r} has no qualifying basis "
-                f"(no admissible, polarity-agreeing evidence line or falsification on the "
-                f"hypothesis or any core member). A verdict is an adjudication OF something.",
+                # The message must name the basis the check ACTUALLY LOOKS FOR. An earlier draft
+                # offered "or falsification on the hypothesis" -- a record that CANNOT EXIST
+                # (materialize.py:1274) -- so the finding told the author to write something the
+                # materializer would refuse. The two reaches differ, and the message says so.
+                f"{hyp_uri}: verdict {verdict!r} has no qualifying basis (no admissible, "
+                f"polarity-agreeing evidence line on the hypothesis or a core member, and no "
+                f"falsification on a core proposition member). "
+                f"A verdict is an adjudication OF something.",
                 "verdict.missing-basis", None,
             )
 
