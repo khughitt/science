@@ -559,11 +559,26 @@ def test_author_stated_evidence_never_sets_a_magnitude(tmp_project) -> None:
 "authored for now." Task 6's schema and Task 7's graph check both implement this contract:
 
 1. **Absent** = *no adjudication has been recorded* (not "no evidence").
-2. **Every authored verdict must have qualifying, resolvable evidence or interpretation basis at
-   graph time — NOT only when `status: complete`.** A verdict with nothing behind it is a
-   fabrication whatever the lifecycle says. *(Rev 2 of this plan scoped the graph check to
-   `complete` only. Wrong — and it would have let a `draft` hypothesis assert `refuted` with no
-   evidence at all.)*
+2. **Every authored verdict must have a qualifying, resolvable basis at graph time — NOT only when
+   `status: complete`.** A verdict with nothing behind it is a fabrication whatever the lifecycle
+   says. *(Rev 2 of this plan scoped the graph check to `complete` only. Wrong — and it would have
+   let a `draft` hypothesis assert `refuted` with no evidence at all.)*
+
+   **A qualifying basis is exactly two things, and their REACH DIFFERS** (rev 9 — this clause said
+   *"evidence **or interpretation** basis"* for three revisions, and **neither half of that was
+   implementable as written**):
+
+   - an **admissible, polarity-agreeing evidence-line unit** — on the hypothesis **or a core
+     member**. Both reaches are real: a line may bear on a hypothesis directly (`belief.py:130`).
+   - a **`falsification` record** — on a **core PROPOSITION member, and only there.**
+     `FalsificationEntity.falsifies` is required, and `_add_falsification_relations` hard-raises
+     unless it resolves to `kind == "proposition"` (`materialize.py:1274`). A falsification *on a
+     hypothesis* **cannot exist.**
+
+   **`interpretation` is NOT a basis.** It is not a graph kind at all — no such entity in the
+   registry, no typed edge to a hypothesis — so the check cannot read one. Restoring it needs its
+   own slice. **A check must never claim a basis it cannot read**, and this contract is the first
+   thing an implementer reads, so it says so here rather than only in Task 7.
 3. **`complete` additionally requires a verdict to be present** (rev 6).
 4. **Computed systems may report a recommendation or a disagreement — never populate or overwrite
    the authored verdict.** The moment they can, it stops being an adjudication.
@@ -3407,7 +3422,8 @@ def check_dangling_lineage(ctx: ValidateContext) -> Iterator[Result]:
 >    *"explicitly linked negative adjudication"* the `refuted` row calls for.
 >
 > ⚠️ **A falsification "on the hypothesis" CANNOT EXIST — do not look for one.** `FalsificationEntity`
-> declares `falsifies: str` as **required**, and `_add_falsification` **hard-raises** unless the
+> declares `falsifies: str` as **required**, and `_add_falsification_relations`
+> (`materialize.py:1258`) **hard-raises** unless the
 > target resolves to `kind == "proposition"`: *"falsification targets must be propositions"*
 > (`materialize.py:1274`). An earlier draft of this clause said "on the hypothesis or a core member",
 > which would have sent the implementer looking for a triple the materializer refuses to write — the
