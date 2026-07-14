@@ -200,6 +200,24 @@ _ALLOWED_EXPLICIT_ROOTS = (Path("entities"),)
 # `sci:supersedes` lineage survives materialization.
 _HIDDEN_STATUSES: frozenset[str] = frozenset({"superseded", "archived"})
 
+# CLOSED: no longer an object of active work. A THIRD axis, and not a synonym for either set
+# around it -- `retired` and `complete` are CLOSED but still default-VISIBLE (hidden and closed are
+# different questions), and `active` is open whatever the evidence says.
+#
+# This is the set `disposition: closed` used to name, and it is the whole reason that field could be
+# deleted rather than migrated: closure is a LIFECYCLE fact, so once `status` carries the lifecycle,
+# a second field for it is the collapse re-introduced under a new name. Every consumer that asked
+# "is this still being worked?" -- attention ranking, re-homing debt, demand closure -- asks it here,
+# and asks it in ONE place, because three copies of a vocabulary is how they drift.
+#
+# ☠️ NOT `refuted`. A refuted hypothesis is very often still being worked (written up, probed for
+# why), which is precisely why the verdict and the lifecycle are two fields. Closure is something a
+# person DID; a verdict is what the evidence SAYS. Reading one off the other is the bug this arc
+# exists to end.
+CLOSED_LIFECYCLE_STATUSES: frozenset[str] = frozenset(
+    {"complete", "superseded", "retired", "archived", "abandoned", "deprecated"}
+)
+
 # Human-curated allowlist of statuses that remain default-visible. This is the
 # source of truth the EntityKind schema lacks (it carries only `statuses` /
 # `default_status`, no live/terminal metadata). Every status declared by any core
@@ -216,12 +234,15 @@ _LIVE_STATUSES: frozenset[str] = frozenset(
         "partially-answered",
         "answered",
         "deferred",
+        # `proposed` is the DATASET lifecycle's, and `supported`/`weakened`/`contested` are the
+        # PROPOSITION's. They were also the hypothesis VERDICT vocabulary, worn as a status --
+        # and they stay here only because those other kinds still declare them as statuses.
+        # `under-investigation`, `partially-supported` and `refuted` are gone with the collapse:
+        # no kind declares them now, and the first two were never anything but "the evidence has
+        # not spoken", which `verdict`'s ABSENCE says without a word for it.
         "proposed",
-        "under-investigation",
-        "partially-supported",
         "supported",
         "weakened",
-        "refuted",
         "complete",
         "contested",
         # Pre-registration lifecycle. `committed` is the freeze point -- emphatically
@@ -702,7 +723,6 @@ def build_entity_markdown(
     related: list[str],
     source_refs: list[str],
     today: date,
-    phase: str | None = None,
     with_sections: list[str] | None = None,
     without_sections: list[str] | None = None,
     no_hints: bool = False,
@@ -728,7 +748,6 @@ def build_entity_markdown(
             "slug": slug_value,
             "local_part": local_part,
             "nn": _leading_number(local_part),
-            "phase": phase or "active",
         }
         try:
             text = Renderer(today=today).render(
@@ -841,7 +860,6 @@ def create_entity(
     related: list[str] | None = None,
     source_refs: list[str] | None = None,
     today: date | None = None,
-    phase: str | None = None,
     with_sections: list[str] | None = None,
     without_sections: list[str] | None = None,
     no_hints: bool = False,
@@ -869,7 +887,6 @@ def create_entity(
         related=list(related or []),
         source_refs=list(source_refs or []),
         today=today_value,
-        phase=phase,
         with_sections=with_sections,
         without_sections=without_sections,
         no_hints=no_hints,

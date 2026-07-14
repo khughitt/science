@@ -1,8 +1,8 @@
 """Port of validate.sh "Checking hypotheses..." and review horizon blocks.
 
 Checks hypothesis files under both ``entities/hypotheses/`` (new layout)
-and the legacy ``$SPECS_DIR/hypotheses/`` root for Falsifiability, Status,
-and phase shape, then scans ``$DOC_DIR`` and ``$SPECS_DIR`` markdown
+and the legacy ``$SPECS_DIR/hypotheses/`` root for Falsifiability and Status,
+then scans ``$DOC_DIR`` and ``$SPECS_DIR`` markdown
 frontmatter for non-positive review horizons.
 """
 
@@ -23,7 +23,6 @@ from science_tool.validate.checks import Check
 from science_tool.validate.context import ValidateContext
 from science_tool.validate.result import Result, Severity
 
-_PHASE_RE = re.compile(r"^phase:\s*['\"]?([^'\"\s#]*)['\"]?\s*(?:#.*)?$")
 _STATUS_RE = re.compile(r"^status:")
 _FENCE_RE = re.compile(r"^ {0,3}(`{3,}|~{3,})")
 
@@ -64,13 +63,6 @@ def _check_hypothesis(ctx: ValidateContext, path: Path) -> Iterator[Result]:
     if not _has_status(frontmatter, lines):
         yield _result(Severity.WARN, relative, f"{relative} missing Status field")
 
-    phase = _phase_value(frontmatter, lines)
-    if phase is not None and phase not in {"candidate", "active"}:
-        yield _result(
-            Severity.WARN,
-            relative,
-            f"{relative} has invalid phase '{phase}' (must be 'candidate' or 'active')",
-        )
 
 
 def _has_falsifiability_heading(lines: list[str]) -> bool:
@@ -127,16 +119,6 @@ def _has_status(frontmatter: dict[str, Any], lines: list[str]) -> bool:
     return "status" in frontmatter or any(line.startswith("- **Status:**") or _STATUS_RE.match(line) for line in lines)
 
 
-def _phase_value(frontmatter: dict[str, Any], lines: list[str]) -> str | None:
-    phase = frontmatter.get("phase")
-    if phase is not None:
-        return str(phase)
-
-    for line in lines:
-        match = _PHASE_RE.match(line)
-        if match is not None:
-            return match.group(1)
-    return None
 
 
 def _check_review_horizon_days(ctx: ValidateContext) -> Iterator[Result]:

@@ -11,6 +11,7 @@ from typing import Any, Iterable, Mapping, Sequence
 from rdflib import Dataset, Literal, URIRef
 from rdflib.namespace import SKOS
 
+from science_tool.entities import CLOSED_LIFECYCLE_STATUSES, valid_statuses
 from science_tool.graph.belief import aggregate_belief, collect_evidence_units
 from science_tool.graph.belief_scalar import belief_scalar, belief_scalar_enabled, format_belief_weight
 from science_tool.graph.io import CITO_NS, PROJECT_NS, SCI_NS, project_root_from_graph_path
@@ -133,7 +134,13 @@ def compute_attention_candidates(
         #
         # It stays in the graph: queryable, provenance-visible, lineage intact. Closure is
         # not hiding. Its orphaned questions do not vanish with it -- see `list_rehoming_debt`.
-        if (entity_uri, SCI_NS.disposition, Literal("closed")) in knowledge:
+        #
+        # CLOSURE IS READ OFF THE LIFECYCLE, not off a verdict. A `refuted` hypothesis that is still
+        # being written up is `status: active` and STAYS RANKED -- it is live work. What drops out is
+        # a hypothesis somebody CLOSED. Reading terminality off the verdict instead would re-collapse
+        # the two axes and silently unrank every hypothesis the evidence went against, whether or not
+        # anyone was done with it.
+        if _is_closed(knowledge, entity_uri):
             continue
 
         freshness_state = str(state_literal)
@@ -484,6 +491,36 @@ def _entity_kind_of(uri: URIRef) -> str | None:
     return canonical_id.partition(":")[0]
 
 
+def _is_closed(knowledge, entity_uri: URIRef) -> bool:
+    """Is this entity CLOSED — no longer an object of active work?
+
+    Off the LIFECYCLE (`sci:projectStatus`), against the one vocabulary in `entities.py`. This
+    replaces `sci:disposition`, which said the same thing in a second field that no file ever
+    authored.
+    """
+    status = next(knowledge.objects(entity_uri, SCI_NS.projectStatus), None)
+    return status is not None and str(status) in CLOSED_LIFECYCLE_STATUSES
+
+
+def _unmigrated_hypotheses(knowledge) -> list[str]:
+    """Hypotheses whose `status` is not a word the lifecycle vocabulary knows.
+
+    THE WIRING QUESTION, and it has to be asked before any terminality claim. Before this arc a
+    hypothesis' `status` held the epistemic VERDICT (`proposed`, `supported`, `refuted`, ...), and
+    not one of those words is a lifecycle state. So on an unmigrated project every hypothesis looks
+    non-terminal, and the honest report is "I cannot tell" -- not a confident zero.
+
+    That distinction is the whole point of `InstrumentResult.unwired`: a project's hypotheses cannot
+    be said to carry "no re-homing debt" by an instrument that cannot read their lifecycle at all.
+    """
+    lifecycle = valid_statuses("hypothesis") or frozenset()
+    return sorted(
+        f"{canonical_id_from_entity_uri(str(subject))} (status: {status})"
+        for subject, _, status in knowledge.triples((None, SCI_NS.projectStatus, None))
+        if _entity_kind_of(subject) == "hypothesis" and str(status) not in lifecycle
+    )
+
+
 def _related_neighbors(knowledge, uri: URIRef) -> set[URIRef]:
     """All entities joined to ``uri`` by a skos:related edge, either direction.
 
@@ -549,29 +586,39 @@ def list_rehoming_debt(graph_path: Path) -> InstrumentResult[dict[str, str]]:
 
     The dead hypothesis is not ranked. Its re-homing debt is.
 
-    `unwired` when the graph declares no dispositions at all: a project whose hypotheses
-    predate the field cannot be said to have "no re-homing debt" -- nothing has been closed
-    because nothing CAN be closed, and reporting a confident zero would be the silent-
-    instrument bug.
+    `unwired` when the project's hypotheses do not speak the lifecycle vocabulary yet -- their
+    `status` still holds the epistemic VERDICT, so terminality is not a question this instrument can
+    answer about them, and a zero would not mean "no debt". It would mean "I cannot read this
+    project."
     """
     dataset = Dataset()
     dataset.parse(source=str(graph_path), format="trig")
     knowledge = dataset.graph(PROJECT_NS["graph/knowledge"])
 
-    if not any(knowledge.triples((None, SCI_NS.disposition, None))):
+    unmigrated = _unmigrated_hypotheses(knowledge)
+    if unmigrated:
         return InstrumentResult.unwired(
-            code="no_disposition_declared",
+            code="hypothesis_lifecycle_unmigrated",
             reason=(
-                "graph/knowledge carries no sci:disposition triples -- no hypothesis can be "
-                "terminal, so re-homing debt cannot be assessed. Zero here would not mean "
-                "'no debt'."
+                "these hypotheses carry a `status` outside the lifecycle vocabulary, so their "
+                "closure cannot be read: "
+                f"{', '.join(unmigrated)}. Migrate the project (`science entity migrate-status`) "
+                "-- zero re-homing debt here would not mean 'no debt', it would mean 'unreadable'."
             ),
         )
 
     rows: list[dict[str, str]] = []
-    for hypothesis_uri in sorted(knowledge.subjects(SCI_NS.disposition, Literal("closed")), key=str):
-        if not isinstance(hypothesis_uri, URIRef):
-            continue
+    terminal_uris = sorted(
+        (
+            subject
+            for subject in knowledge.subjects(SCI_NS.projectStatus, None)
+            if isinstance(subject, URIRef)
+            and _entity_kind_of(subject) == "hypothesis"
+            and _is_closed(knowledge, subject)
+        ),
+        key=str,
+    )
+    for hypothesis_uri in terminal_uris:
         hypothesis_id = canonical_id_from_entity_uri(str(hypothesis_uri))
         if hypothesis_id is None:
             continue

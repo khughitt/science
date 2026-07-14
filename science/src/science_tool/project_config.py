@@ -217,6 +217,16 @@ class ProjectConfig(BaseModel):
     data_policy: DataPolicyConfig | None = None
     reproducibility_policy: ReproducibilityPolicyConfig | None = None
     entity_extensions: dict[str, list[str]] = Field(default_factory=dict)
+    # The project's ENTITY SCHEMA generation. Absent means 1 -- unmigrated -- and that is the only
+    # thing absence may mean: this is an AUTHORED DECLARATION of which version a project is on, never
+    # an inference from its files. Nothing guesses; a project says.
+    #
+    # DECLARED, not merely tolerated. `extra="allow"` would already carry the key through untouched,
+    # which is precisely the failure: `entity_schema_verison: 2` would be preserved, ignored, and
+    # leave the project silently unmigrated while its author believed otherwise. And the vocabulary
+    # is closed to the versions that EXIST -- an unconstrained `int` makes `3` a silent no-op the day
+    # someone types it.
+    entity_schema_version: Literal[1, 2] | None = None
 
     @model_validator(mode="before")
     @classmethod

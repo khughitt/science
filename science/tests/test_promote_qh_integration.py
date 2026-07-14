@@ -91,14 +91,14 @@ def test_question_promote_round_trip(tmp_path):
     assert len(list(qdir.glob("*.md"))) == 1
 
 
-def test_hypothesis_promote_is_candidate_phase(tmp_path):
+def test_hypothesis_promote_is_a_DRAFT(tmp_path):
     md, sp = _setup_statement(tmp_path, atype="hypothesis", exact="X drives Y", frag="h1")
     r = CliRunner().invoke(annotate_group, ["promote", str(md), "--root", str(tmp_path), "--apply"])
     assert r.exit_code == 0, r.output
     minted = list((tmp_path / "entities" / "hypotheses").glob("*.md"))
     assert len(minted) == 1
     text = minted[0].read_text(encoding="utf-8")
-    assert "status: proposed" in text and "phase: candidate" in text
+    assert "status: draft" in text and "phase:" not in text
     assert "## Organizing Conjecture" in text and "X drives Y" in text
 
 

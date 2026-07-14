@@ -328,7 +328,9 @@ def _mint_numeric(kind: str) -> MintFn:
                 "updated": today,
             }
             if kind == "hypothesis":
-                fields["phase"] = "candidate"
+                # A promoted claim is a TRIAL FRAMING, not a committed one -- which is what
+                # `phase: candidate` said. `draft` is the lifecycle word it folded into.
+                fields["status"] = "draft"
             rendered = renderer.render(kind, fields=fields)
             rendered = _insert_claim_into_lead(rendered, lead, c.claim)
             # (4) Final write — overwrites the empty placeholder. Last step.

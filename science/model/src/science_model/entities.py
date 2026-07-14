@@ -304,6 +304,20 @@ class Entity(BaseModel):
     kind: str
     type: EntityType | None = None
     title: str
+    # ☠️ `description` IS THE THIRD `phase`. Entity-base 1.0 AND 2.0 declare it, it is ruled CORE,
+    # hypothesis files author it -- and this class had no such field, so `extra="ignore"` was
+    # DISCARDING it at `model_validate`. It validated, it looked declared, and it reached nothing.
+    #
+    # It belongs on `Entity`, not on one subclass, because the BASE is what declares it: every kind
+    # has been dropping it equally, including the commons kinds whose records most obviously have
+    # descriptions. (The body prose is read pre-validation into `content_preview`, so a record was
+    # not wholly unread -- but the `description` FIELD itself reached no attribute and no triple.)
+    #
+    # Representable now; NOT yet materialized to the graph. That is a deliberate stopping point:
+    # quietly adding a predicate to `graph.trig` would put an unrelated change inside a migration's
+    # diff. Ending the drop is this arc's business; deciding what a description MEANS to the graph
+    # is not.
+    description: str = ""
     status: str | None = None
     project: str
     profile: str = "core"
@@ -795,61 +809,44 @@ class TaskEntity(ProjectEntity):
 
 
 class HypothesisEntity(ProjectEntity):
-    """Hypothesis — carries the two orthogonal lifecycle axes.
+    """Hypothesis — two orthogonal axes, in two fields.
 
-    `status` (inherited) is the EPISTEMIC VERDICT: what the evidence says. Its vocabulary
-    already distinguishes `refuted` (met a rejection criterion) from `weakened` (failed to
-    confirm, did not reject).
+    `status` (inherited) is the LIFECYCLE. `verdict` is the EPISTEMIC conclusion. Neither may
+    be inferred from the other, and the cell that proves it is `superseded` + `supported` —
+    formerly supported, now replaced — which the collapsed field could not express at all:
+    writing `superseded` OVERWROTE `supported` and destroyed the conclusion.
 
-    `disposition` is the WORKFLOW STATE: whether this hypothesis is still an object of
-    active work. It says nothing about truth.
+    The collapse had teeth. natural-systems had no lifecycle axis, so it wrote `status: retired`
+    — a TASK status — onto a hypothesis, destroying the epistemic verdict and recording a
+    refutation that never happened: the confirmatory null was NON-significant (z = -0.889),
+    which is `weakened`, not `refuted` (fb-2026-07-11-005).
 
-    The two are ORTHOGONAL, and neither may be inferred from the other. All four
-    combinations are meaningful:
+    `verdict` is ABSENT until the evidence speaks. That absence is load-bearing, and it is why
+    `proposed`/`under-investigation` are not verdict values: they say the evidence has NOT
+    spoken, which absence already says.
 
-    - `refuted` + `open`              — disproved, still being worked (writing it up, probing why)
-    - `supported` + `closed`          — confirmed and done
-    - `under-investigation` + `closed` — closed for PRAGMATIC reasons; epistemically undecided
-    - `refuted` + `closed`            — disproved and closed
+    THE INVARIANTS ARE NOT HERE. `complete` requires a verdict; `retired` requires a
+    closure_basis; `superseded` requires lineage or a basis. All three live in
+    `mixin-hypothesis-1.0.json`, which is the sole authority (D3). Re-asserting them as
+    model_validators would build the second authority D3 abolishes, and the two would drift.
+    The reconciliation battery in `model/tests/test_hypothesis_entity.py` is the gate that keeps
+    this class honest instead — it proves the schema is at least as strict as this projection,
+    and that every value the schema admits SURVIVES the round trip.
 
-    That third case is why a single field cannot carry both. natural-systems had no workflow
-    axis, so it wrote `status: retired` — a TASK status — onto a hypothesis, destroying the
-    epistemic verdict and recording a refutation that never happened: the confirmatory null
-    was NON-significant (z = -0.889), which is `weakened`, not `refuted` (fb-2026-07-11-005).
-
-    `disposition` defaults to `open` and is NEVER inferred from `status`. An existing
-    hypothesis that nobody has closed IS open — there is no fact to migrate. Inferring
-    closure from a terminal epistemic status would re-collapse the two axes and silently
-    close hypotheses whose authors never said to.
+    `disposition`/`disposition_basis` are GONE. They were the workflow axis hand-rolled beside a
+    status field that had no lifecycle words; `status` now carries the lifecycle, so a second
+    axis for the same fact is the collapse re-introduced under a new name.
     """
-
-    disposition: Literal["open", "closed"] = "open"
-    disposition_basis: str | None = None
 
     # The four TERMINAL fields. `Entity` is `extra="ignore"`, so until a field is DECLARED here it
     # is silently dropped at `model_validate` -- and any consumer reading a projected entity sees a
     # record with no lineage and no adjudication at all. `check_resolution` reads projected
     # entities, so without these four it would inspect a stripped record, find no reference, and
     # report clean forever: a green resolver over a blind loader.
-    #
-    # Their CERTIFICATION against the schema (the reconciliation battery) is Task 8's. This task
-    # owns their EXISTENCE, because it is the first that reads them.
     verdict: Literal["partially-supported", "supported", "weakened", "refuted"] | None = None
     closure_basis: str | None = None
     superseded_by: str | None = None
     resynthesized_into: list[str] = Field(default_factory=list)
-
-    @model_validator(mode="after")
-    def _closed_requires_a_basis(self) -> "HypothesisEntity":
-        # Closure is always an EXPLICIT authored act. Without a basis, retirement is an
-        # unexplained disappearance -- and the whole point of the axis is that closing is
-        # something a person DID, for a reason that can be named.
-        if self.disposition == "closed" and not (self.disposition_basis or "").strip():
-            raise ValueError(
-                "disposition: closed requires disposition_basis (a pre-registration ref, "
-                "or authored prose for a pragmatic close)"
-            )
-        return self
 
 
 class DatasetEntity(ProjectEntity):

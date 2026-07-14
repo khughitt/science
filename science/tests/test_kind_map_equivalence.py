@@ -65,7 +65,13 @@ FROZEN_MARKDOWN_POLICIES = {
 FROZEN_DEFAULT_STATUS = {
     "evidence-line": "draft",
     "question": "active",
-    "hypothesis": "proposed",
+    # ☠️ THE ONE DELIBERATE DIVERGENCE. Every other literal in this file is frozen to prove a
+    # refactor changed no VALUES. `hypothesis` is different: its vocabulary was MEANT to change --
+    # `status` was the epistemic verdict wearing the lifecycle's name, and the verdict now lives in
+    # `verdict`. So this entry is re-frozen to the folded lifecycle ON PURPOSE, and the file keeps
+    # doing its job for every other kind. Re-freezing a golden is only ever legitimate when the
+    # change it records is the point of the commit; if you are here for any other reason, stop.
+    "hypothesis": "active",
     "discussion": "active",
     "interpretation": "active",
     "theme": "active",
@@ -101,8 +107,11 @@ FROZEN_DEFAULT_STATUS = {
 FROZEN_STATUS_VALUES = {
     "evidence-line": frozenset({"draft", "active", "retired", "archived"}),
     "question": frozenset({"active", "partially-answered", "answered", "deferred", "retired", "archived"}),
+    # The folded LIFECYCLE -- see the note on FROZEN_DEFAULT_STATUS["hypothesis"] above. The old set
+    # ({proposed, under-investigation, partially-supported, supported, weakened, refuted, archived})
+    # was the VERDICT vocabulary, and it left `archived` as the only lifecycle word a hypothesis had.
     "hypothesis": frozenset(
-        {"proposed", "under-investigation", "partially-supported", "supported", "weakened", "refuted", "archived"}
+        {"draft", "active", "complete", "superseded", "retired", "archived"}
     ),
     "discussion": frozenset({"active", "complete", "superseded", "archived"}),
     "interpretation": frozenset({"active", "complete", "superseded", "archived"}),

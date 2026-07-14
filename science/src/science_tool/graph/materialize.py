@@ -644,19 +644,17 @@ def _add_entity(
         knowledge.add((uri, SCI_NS.domain, Literal(entity.domain)))
     if entity.status:
         knowledge.add((uri, SCI_NS.projectStatus, Literal(entity.status)))
+    # The EPISTEMIC axis, beside the LIFECYCLE `sci:projectStatus` above. Two predicates because
+    # they are two facts: a hypothesis can be `superseded` AND `supported` (formerly supported, now
+    # replaced), which the collapsed field destroyed by overwriting one with the other.
     verdict = getattr(entity, "verdict", None)
     if verdict:
         knowledge.add((uri, SCI_NS.verdict, Literal(verdict)))
-    # The WORKFLOW axis, orthogonal to the epistemic `status` above. It MUST reach the graph:
-    # attention ranking and candidate-frame selection are graph consumers, so a field that
-    # stops at the model can never exclude a terminal hypothesis from either. (`phase` stops
-    # at the model, which is exactly why it could not have carried this — fb-2026-07-11-005.)
-    disposition = getattr(entity, "disposition", None)
-    if disposition:
-        knowledge.add((uri, SCI_NS.disposition, Literal(disposition)))
-    disposition_basis = getattr(entity, "disposition_basis", None)
-    if disposition_basis:
-        knowledge.add((uri, SCI_NS.dispositionBasis, Literal(disposition_basis)))
+    # `sci:disposition` / `sci:dispositionBasis` are GONE, with the model fields behind them.
+    # Closure is a LIFECYCLE fact and `sci:projectStatus` already carries it -- a graph consumer
+    # asking "is this still being worked?" reads `CLOSED_LIFECYCLE_STATUSES` off that predicate.
+    # The corpus authored `disposition:` on ZERO of 147 hypotheses, so nothing is stranded and
+    # nothing needed migrating: the field never held a fact any file had written down.
     if entity.kind == "dataset" and entity.source_class:
         knowledge.add((uri, SCI_NS.sourceClass, Literal(entity.source_class)))
     if entity.kind == "dataset" and entity.license:

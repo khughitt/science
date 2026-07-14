@@ -251,37 +251,38 @@ def test_build_entity_markdown_can_strip_template_hints() -> None:
     assert "<!--" not in text
 
 
-def test_build_entity_markdown_hypothesis_defaults_phase_active() -> None:
+def test_build_entity_markdown_hypothesis_defaults_to_the_ACTIVE_lifecycle() -> None:
     text = build_entity_markdown(
         kind="hypothesis",
-        entity_id="hypothesis:0001-default-phase",
-        title="Default phase hypothesis",
-        status="proposed",
+        entity_id="hypothesis:0001-default-status",
+        title="Default status hypothesis",
+        status="active",
         related=[],
         source_refs=[],
         today=date(2026, 5, 28),
     )
     _, frontmatter_text, _ = text.split("---\n", 2)
     frontmatter = yaml.safe_load(frontmatter_text)
-    assert frontmatter["phase"] == "active"
+    assert frontmatter["status"] == "active"
+    assert "phase" not in frontmatter          # the collapsed field is GONE, not merely unused
     assert "## Promotion criteria" not in text
 
 
-def test_build_entity_markdown_hypothesis_candidate_phase_includes_promotion_criteria() -> None:
+def test_build_entity_markdown_hypothesis_DRAFT_includes_promotion_criteria() -> None:
+    # `draft` is what `phase: candidate` folded into -- a trial framing, not yet committed.
     text = build_entity_markdown(
         kind="hypothesis",
-        entity_id="hypothesis:0002-candidate-phase",
-        title="Candidate phase hypothesis",
-        status="proposed",
+        entity_id="hypothesis:0002-draft",
+        title="Draft hypothesis",
+        status="draft",
         related=[],
         source_refs=[],
         today=date(2026, 5, 28),
-        phase="candidate",
         with_sections=["promotion-criteria"],
     )
     _, frontmatter_text, _ = text.split("---\n", 2)
     frontmatter = yaml.safe_load(frontmatter_text)
-    assert frontmatter["phase"] == "candidate"
+    assert frontmatter["status"] == "draft"
     assert "## Promotion criteria" in text
 
 

@@ -30,24 +30,29 @@ def _run(root: Path) -> list[str]:
     return [r.message for r in check_status_vocabulary(ctx)]
 
 
-def test_task_status_on_a_hypothesis_is_flagged(tmp_path: Path) -> None:
-    """`retired` is not in the hypothesis vocabulary. It is a TASK status.
+def test_a_VERDICT_word_in_status_is_flagged(tmp_path: Path) -> None:
+    """☠️ THIS TEST ASSERTED THE EXACT OPPOSITE, AND THE INVERSION IS THE WHOLE ARC.
 
-    This is the exact defect: the author needed a WORKFLOW word, `status` was the only
-    field available, and the workflow word overwrote the epistemic verdict.
+    It read: "`retired` is not in the hypothesis vocabulary. It is a TASK status." That was true, and
+    it was the DEFECT -- not the rule. The author of natural-systems' `hypothesis:0009` needed a
+    lifecycle word, `status` held the epistemic verdict, and so writing "stop working on this"
+    destroyed "the evidence failed to confirm it" (fb-2026-07-11-005).
+
+    `status` is the LIFECYCLE now, so `retired` is not merely allowed -- it is the correct word, and
+    the test below asserts it passes. What is flagged is the mirror image: a VERDICT word sitting in
+    the lifecycle field, which is every unmigrated hypothesis in the corpus and precisely what the
+    migration exists to move.
     """
-    _entity(tmp_path, "hypotheses/0009-x.md", entity_id="hypothesis:0009-x", kind="hypothesis", status="retired")
+    _entity(tmp_path, "hypotheses/0009-x.md", entity_id="hypothesis:0009-x", kind="hypothesis", status="weakened")
 
     messages = _run(tmp_path)
 
-    assert any("retired" in m and "hypothesis" in m for m in messages), messages
+    assert any("weakened" in m and "hypothesis" in m for m in messages), messages
 
 
-def test_declared_status_passes(tmp_path: Path) -> None:
-    """`weakened` IS in the vocabulary -- and is what hypothesis:0009 should have carried,
-    since a non-significant confirmatory null (z = -0.889) failed to confirm rather than
-    refuting anything."""
-    _entity(tmp_path, "hypotheses/0009-x.md", entity_id="hypothesis:0009-x", kind="hypothesis", status="weakened")
+def test_a_LIFECYCLE_word_passes(tmp_path: Path) -> None:
+    """`retired` IS the vocabulary now -- the word `hypothesis:0009` needed and could not have."""
+    _entity(tmp_path, "hypotheses/0009-x.md", entity_id="hypothesis:0009-x", kind="hypothesis", status="retired")
 
     assert not _run(tmp_path)
 

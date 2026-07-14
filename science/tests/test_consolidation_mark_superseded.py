@@ -1,16 +1,19 @@
 """Auto-derive `superseded` — status **and its derived lineage** — from supersedes chains.
 
-Leg 3 of the D4 supersedable gate. Everything here is on `interpretation`, and deliberately so:
-`mark_superseded` CANNOT stamp a `hypothesis` in this task. `_supports_superseded` consults
-`_STATUS_VALUES`, and `hypothesis` does not declare `superseded` until Task 8's descriptor — so a
-hypothesis member is routed to `skipped_kinds`, nothing is written, and the write boundary's
-`_validate_status` would reject the status anyway. A hypothesis apply-test here would not fail
-loudly; it would report `to_mark == []`, write nothing, and go **green over an operation that did
-nothing**. *A test belongs in the task where its subject exists.*
+Leg 3 of the D4 supersedable gate — proved on `interpretation`, then CLOSED on `hypothesis`.
 
-`interpretation` declares `superseded` AND is an admitted `sci:supersedes` endpoint today, so leg 3
-— a generic change: the inverse, the kind-pair refusal, the seven-way edge admission, the acyclicity
-scan, the reconciliation — is exercised end to end without changing what any existing file means.
+The generic machinery (the inverse, the kind-pair refusal, the seven-way edge admission, the
+acyclicity scan, the reconciliation) is exercised on `interpretation`, which has declared
+`superseded` and been an admitted `sci:supersedes` endpoint all along — so leg 3 could be certified
+without changing what any existing file means.
+
+`hypothesis` could not be tested here AT ALL until its descriptor declared a `superseded` terminal:
+`_supports_superseded` consults `_STATUS_VALUES`, so every hypothesis member was routed to
+`skipped_kinds` and nothing was written. A hypothesis apply-test would not have failed loudly — it
+would have reported `to_mark == []`, written nothing, and gone **green over an operation that did
+nothing**. That is why the hypothesis tests at the bottom of this file arrive with the descriptor
+that makes them executable, and not one task earlier. *A test belongs in the task where its subject
+exists.*
 """
 
 from __future__ import annotations
@@ -22,6 +25,8 @@ import pytest
 import yaml
 from rdflib import URIRef
 from science_model.entities import Entity
+from science_model.entity_schema import EntityValidator, default_profile_for_kind
+from science_model.entity_schema.resolution import check_resolution
 from science_model.profiles.core import CORE_PROFILE
 
 from science_tool.big_picture.frontmatter import read_frontmatter
@@ -31,6 +36,7 @@ from science_tool.consolidation import (
     SupersessionError,
     SupersessionInputs,
     build_supersedes_graph,
+    load_supersession_inputs,
     mark_superseded,
 )
 from science_tool.graph.io import SCI_NS
@@ -204,6 +210,16 @@ def _interp(root: Path, name: str, **fm: Any) -> Path:
     return _write(root, "interpretations", name, {"id": f"interpretation:{name}", "kind": "interpretation", **fm})
 
 
+def _hypothesis(root: Path, name: str, **fm: Any) -> Path:
+    # `created`/`updated` are REQUIRED by entity-base 2.0, and this fixture is validated against the
+    # real profile by `test_a_stamped_HYPOTHESIS_satisfies_its_own_schema` -- so a fixture that omits
+    # them would fail for a reason having nothing to do with supersession.
+    return _write(root, "hypotheses", name, {
+        "id": f"hypothesis:{name}", "kind": "hypothesis",
+        "created": "2026-07-13", "updated": "2026-07-13", **fm,
+    })
+
+
 def _invalid(report: dict[str, Any], code: str) -> list[dict[str, str]]:
     """The audit's refusals of one kind, off the report.
 
@@ -274,8 +290,9 @@ def test_report_flags_non_linear_chain_and_skips_it(tmp_path: Path) -> None:
 def test_member_whose_kind_lacks_superseded_vocab_is_skipped_not_crashed(tmp_path: Path) -> None:
     _seed(tmp_path)
     # workflow-run is a supersedes endpoint but declares NO status vocabulary. The member must be
-    # reported under skipped_kinds, never crash. (This is the route a `hypothesis` takes TODAY —
-    # which is exactly why no hypothesis apply-test can live in this task.)
+    # reported under skipped_kinds, never crash. (`hypothesis` took this same route until the
+    # descriptor gave it a `superseded` terminal; it now stamps, and the tests at the bottom of this
+    # file are the ones that could not exist while it was skipped.)
     _write(tmp_path, "workflow-runs", "wr-old", {"id": "workflow-run:wr-old", "kind": "workflow-run"})
     _write(tmp_path, "workflow-runs", "wr-new", {"id": "workflow-run:wr-new", "kind": "workflow-run",
                                                  "relations": [_supersedes("workflow-run:wr-old")]})
@@ -1098,3 +1115,95 @@ def test_a_CYCLE_THROUGH_AN_UNMANAGED_NODE_KEEPS_ITS_COMPONENT_OUT_OF_THE_TOPOLO
     # ...and it stamps NEITHER, because the audit says both lie on a cycle.
     assert graph.linear == () and graph.non_linear == ()
     assert len(graph.invalid) == 2
+
+
+# ---------------------------------------------------------------------------------------------
+# hypothesis — EXECUTABLE for the first time
+#
+# Every test above runs on `interpretation`, and not by preference: `_supports_superseded` was False
+# for `hypothesis` until its descriptor declared a `superseded` terminal, so `mark_superseded` routed
+# every hypothesis to `skipped_kinds` and wrote nothing. There was no hypothesis apply-test to write.
+# These three are the D4 triangle closed, on the kind the whole arc is about.
+# ---------------------------------------------------------------------------------------------
+
+
+def test_a_stamped_HYPOTHESIS_satisfies_its_own_schema(tmp_path: Path) -> None:
+    # THE TRIANGLE, CLOSED -- and the first hypothesis this toolkit has ever superseded. All four
+    # legs must agree at once: the schema admits the edge, the relation admits the endpoint PAIR, the
+    # operation writes a resolvable inverse, and the descriptor makes `superseded` a status the kind
+    # can hold. Any one missing and this fails -- which is why a bidirectional gate is one assertion.
+    _seed(tmp_path)
+    _hypothesis(tmp_path, "0001-old", status="active")
+    _hypothesis(tmp_path, "0002-new", status="active",
+                relations=[_supersedes("hypothesis:0001-old")])
+
+    report = mark_superseded(tmp_path, apply=True)
+    fm = read_frontmatter(tmp_path / "entities/hypotheses/0001-old.md")
+
+    assert report["applied"] == ["hypothesis:0001-old"]   # NOT skipped_kinds -- the old failure mode
+    assert report["skipped_kinds"] == []
+    assert fm is not None
+    assert fm["status"] == "superseded"
+    assert fm["superseded_by"] == "hypothesis:0002-new"
+
+    # THE STAMPED RECORD VALIDATES. The operation writes frontmatter; the schema is what says that
+    # frontmatter is legal. A tool that writes a record its own schema rejects has not migrated the
+    # vocabulary, it has broken the corpus -- and nothing else in this file would notice.
+    EntityValidator().validate_as(fm, default_profile_for_kind("hypothesis"))
+
+    # ...and the lineage RESOLVES, through the SAME resolver the loader and `materialize` use -- not
+    # a raw id set, which would both reject a valid alias and miss a self-alias.
+    resolver = load_supersession_inputs(tmp_path).resolution.resolver
+    assert check_resolution(
+        fm, targets=resolver, live_hypotheses={"hypothesis:0002-new"}
+    ) == []
+
+
+def test_a_hypothesis_CHAIN_records_the_immediate_superseder(tmp_path: Path) -> None:
+    # A <- B <- C on the kind that matters. The interpretation test above proves the inversion picks
+    # the IMMEDIATE superseder; this proves the descriptor change did not quietly re-route
+    # hypotheses back down the skip path, where every assertion about lineage is vacuously true.
+    _seed(tmp_path)
+    _hypothesis(tmp_path, "0003-c", status="active")
+    _hypothesis(tmp_path, "0002-b", status="active",
+                relations=[_supersedes("hypothesis:0003-c")])
+    _hypothesis(tmp_path, "0001-a", status="active",
+                relations=[_supersedes("hypothesis:0002-b")])
+
+    report = mark_superseded(tmp_path, apply=True)
+
+    assert set(report["applied"]) == {"hypothesis:0002-b", "hypothesis:0003-c"}
+    c = read_frontmatter(tmp_path / "entities/hypotheses/0003-c.md")
+    assert c is not None
+    assert c["superseded_by"] == "hypothesis:0002-b"      # NOT 0001-a, the survivor
+
+
+def test_an_INTERPRETATION_may_not_supersede_a_HYPOTHESIS(tmp_path: Path) -> None:
+    # The cross-kind case. `interpretation -> hypothesis` is not an allowed pair -- `supersedes`
+    # admits `hypothesis -> hypothesis`, and nothing else into a hypothesis. If the operation wrote
+    # the edge anyway the record would carry `superseded_by: interpretation:...`, which the mixin's
+    # `^hypothesis:` pattern rejects: a record the tool wrote and the schema refuses.
+    #
+    # The refusal is the relation audit's -- `materialize`'s own admission, asked once -- so the edge
+    # is REFUSED rather than filed in a writer-side bucket, and a corpus carrying ANY unbuildable
+    # relation gets no derived lineage at all. `apply=True` RAISES.
+    _seed(tmp_path)
+    _hypothesis(tmp_path, "0001-x", status="active")
+    _interp(tmp_path, "i-v1", relations=[_supersedes("hypothesis:0001-x")])
+    before = (tmp_path / "entities/hypotheses/0001-x.md").read_bytes()
+
+    report = mark_superseded(tmp_path, apply=False)       # REPORT names the rule that fired...
+
+    assert report["applied"] == []
+    bad = _invalid(report, "illegal-kind-pair")
+    assert [(b["subject"], b["object"]) for b in bad] == [
+        ("interpretation:i-v1", "hypothesis:0001-x"),
+    ]
+    assert "(got interpretation -> hypothesis)" in bad[0]["message"]
+
+    with pytest.raises(SupersessionError):               # ...and APPLY refuses the whole corpus.
+        mark_superseded(tmp_path, apply=True)
+
+    # BYTE-UNCHANGED, not merely "superseded_by absent". A blocked apply must leave the corpus
+    # exactly as it found it -- the all-or-none contract is about the FILE, not about one key.
+    assert (tmp_path / "entities/hypotheses/0001-x.md").read_bytes() == before

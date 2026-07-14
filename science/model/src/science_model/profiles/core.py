@@ -40,16 +40,18 @@ CORE_PROFILE = ProfileManifest(
             shortform="h",
             home="entities/hypotheses",
             strategy="numeric",
-            default_status="proposed",
-            statuses=[
-                "proposed",
-                "under-investigation",
-                "partially-supported",
-                "supported",
-                "weakened",
-                "refuted",
-                "archived",
-            ],
+            # `status` is the LIFECYCLE, uniformly, on every kind. The old vocabulary
+            # (proposed | under-investigation | partially-supported | supported | weakened |
+            # refuted | archived) was the epistemic VERDICT wearing the lifecycle's name -- which
+            # left `archived` as the only lifecycle word a hypothesis had, and pushed authors into
+            # hand-rolling `phase` for the rest. The verdict now lives in `verdict`; `phase` folds
+            # in here.
+            #
+            # `archived` MUST STAY: `consolidate._is_consolidatable` returns False for a closed
+            # vocabulary that lacks it, so dropping the word silently disables hypothesis
+            # consolidation -- a capability lost with no error anywhere.
+            default_status="active",
+            statuses=["draft", "active", "complete", "superseded", "retired", "archived"],
         ),
         EntityKind(
             name="question",

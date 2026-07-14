@@ -6004,7 +6004,7 @@ def test_a_BACKED_inverse_is_silent(tmp_path: Path) -> None:
 > writes nothing. **Step 3c-ii below is the closure of the D4 triangle** — Task 7a builds the
 > machinery on `interpretation`; this task is the first moment it can be pointed at a hypothesis.
 
-- [ ] **Step 3c-ii: The hypothesis supersession tests — executable for the first time.**
+- [x] **Step 3c-ii: The hypothesis supersession tests — executable for the first time.**
 
 ```python
 # science/tests/test_consolidation_mark_superseded.py
@@ -6113,7 +6113,7 @@ def test_the_capability_scope_vocabulary_is_not_a_SECOND_authority() -> None:
     assert sorted(mixin["properties"]["capability_scope"]["enum"]) == sorted(VALID_SCOPES)
 ```
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 ```python
 # science/model/tests/test_hypothesis_entity.py
@@ -6436,9 +6436,9 @@ _BATTERY: dict[str, list[Any]] = {
 > The battery above deliberately keeps `origin_ref` out of its `lens_views` payloads so it tests
 > *shape*, not those invariants. **Delete either validator and nothing replaces it.**
 
-- [ ] **Step 2: Run and fail.**
+- [x] **Step 2: Run and fail.**
 
-- [ ] **Step 3: Rewrite the descriptor** (`profiles/core.py`):
+- [x] **Step 3: Rewrite the descriptor** (`profiles/core.py`):
 
 ```python
         EntityKind(
@@ -6553,12 +6553,12 @@ guard `test_every_declared_status_still_classified` fails loud if this is wrong 
 **Step 3e — `science.yaml`:** admit `entity_schema_version: int | None`. Absent ⇒ version 1
 (unmigrated). No project sets it yet — Task 9 does that per repo.
 
-- [ ] **Step 4: Green — both suites, plus ruff and pyright.** Consumers that read the old
+- [x] **Step 4: Green — both suites, plus ruff and pyright.** Consumers that read the old
   vocabulary are updated in **Task 10**, so run Task 10's edits together with this task's if the
   suite is red at this point. **Do not commit red** (rev 1 explicitly told the implementer to,
   which is both a broken task and a contradiction of its own atomicity claim).
 
-- [ ] **Step 5: Commit.**
+- [x] **Step 5: Commit.**
 
 ---
 
@@ -6772,6 +6772,36 @@ def migrate(project_root: Path, *, apply: bool) -> list[Path]:
 ---
 
 ### Task 10: Consumers — and **only** the hypothesis branch
+
+> ### ⚠️ HALF OF THIS TASK ALREADY LANDED, WITH TASK 8. Read this before starting.
+>
+> Task 8's descriptor change is **global** — `default_profile_for_kind` is not per-project — so the
+> instant it lands, every consumer reading the old vocabulary is wrong. There is no green commit
+> containing Task 8 alone, which is exactly what Task 8's Step 4 says ("run Task 10's edits together
+> with this task's if the suite is red"). It was red. So the **vocabulary re-pointing** shipped in
+> Task 8's commit, and what remains here is Task 10's **own new capability**.
+>
+> **DONE (in Task 8's commit):**
+> - `hypotheses_cli.py` — `--phase` deleted, `--status draft|active`, promotion-criteria on `draft`
+> - `annotation/promote.py` — `fields["phase"] = "candidate"` → `fields["status"] = "draft"`
+> - `validate/checks/hypotheses.py` — the `phase` shape check **deleted** (the mixin forbids the key
+>   outright: `"phase": false`. A shape check for a field the schema refuses is a second authority.)
+> - `graph/materialize.py` — `sci:disposition` / `sci:dispositionBasis` **deleted**, with their model
+>   fields, in the same commit as their only reader
+> - `graph/attention.py` — terminal exclusion and `list_rehoming_debt` now read the LIFECYCLE
+> - `validate/checks/dataset_capabilities.py` — `is_demand_closed(kind=, status=, verdict=)`
+> - `commands/add-hypothesis.md`, `commands/big-picture.md` (+ regenerated `codex-skills/`)
+> - `tests/test_hypothesis_consumers.py` — the `is_demand_closed` / `DEBT_QUESTION_STATUSES` half
+>
+> **STILL OPEN (this task's real work):** the **write boundary**. `entities_cli.py` gains
+> `--verdict` / `--closure-basis`; `_prepare_write` gains schema validation and the
+> `check_resolution` guard; `_validate_status`'s raw `KeyError` is fixed; and the rest of
+> `test_hypothesis_consumers.py` (the `edit_entity` lifecycle-transition tests, the `_prepare_write`
+> / `_commit_write` call-site guards, the corrupted-inverse test) is written.
+>
+> ☠️ **`is_demand_closed` reads the VERDICT for a hypothesis and the STATUS for a question, and that
+> asymmetry is deliberate.** The question slice has not run. Do not "tidy" it into one rule — doing so
+> silently reopens every answered question in the corpus. `DEBT_QUESTION_STATUSES` stays frozen.
 
 **Files:**
 - `science/src/science_tool/hypotheses_cli.py:28-34,62-64` — `--phase` → `--status`; the `promotion-criteria` section now triggers on `status == "draft"`
