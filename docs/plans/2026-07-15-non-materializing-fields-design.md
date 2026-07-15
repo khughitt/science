@@ -13,9 +13,13 @@ the schema (see §3).
 
 ## 1. The defect
 
-The graph's source of truth for a supersession/amendment edge is a `relations:` entry
-with predicate `sci:supersedes` / `sci:amends`, authored on the successor
-(`consolidation.py:13-14`). A **top-level** `supersedes:` / `amends:` frontmatter key
+The graph's source of truth for both edges is a `relations:` entry with the corresponding
+predicate. The shared `relations:` representation and its admission/materialization are
+declared by the `RelationKind` descriptors in `profiles/core.py` (`sci:supersedes` ~688,
+`sci:amends` ~719). For supersession specifically, `consolidation.py:12-14` names the
+canonical edge (`predicate: sci:supersedes`, authored on the successor) and explicitly
+distinguishes it from both top-level `supersedes:` ("silently dropped") and `sci:amends`
+("which revises, not replaces"). A **top-level** `supersedes:` / `amends:` frontmatter key
 looks authoritative but materializes **zero** triples, silently. Downstream,
 `big-picture` derives `provenance_coverage` from these chains, so the silent drop
 produces a wrong `thin` rating.
@@ -43,16 +47,19 @@ in the flat (non-materializing) form:
 still a finding — the defect is the authoritative-looking *spelling*, independent of
 value.
 
-**Message.** Names the entity id, the offending key, and the required replacement, using
-the current relation field name **`target`** (the schema requires `["predicate",
-"target"]`; the withdrawn plan's `object:` spelling is stale):
+**Message.** Required elements, each asserted by a test: (a) the offending **entity id**;
+(b) the offending **key**; (c) the required **`relations:` + predicate** replacement form,
+using the current relation field name **`target`** (the schema requires `["predicate",
+"target"]`; the withdrawn plan's `object:` spelling is stale). Because the authored value
+may be `null`, a list, or an id of any kind, the replacement is **schematic** — it must
+**not** echo the authored value or assume the target's kind:
 
 ```
-top-level 'supersedes:' materializes no triples and is silently ignored by the graph.
-Author it as a relations: entry instead:
+interpretation:0001-x: top-level 'supersedes:' materializes no triples and is silently
+ignored by the graph. Author it as a relations: entry instead:
   relations:
     - predicate: sci:supersedes
-      target: interpretation:0000-y
+      target: <target-id>
 ```
 
 ## 3. Kind-awareness — the crux
@@ -96,16 +103,23 @@ breakage, unlike the D5 status-vocab check that fired across five projects at on
 offenders; the only authored top-level occurrence is the *legitimate* `supersedes:` in
 `templates/workflow-run.md`, and the QA-audit tests construct workflow-run examples
 dynamically. The migration policy — *migrate genuine offenders, never soften the rule* —
-therefore stands but requires no corpus edits now. MM30's two interpretations are fixed
-when MM30 bumps its pin; that is out of scope for this toolkit change.
+therefore stands but requires no corpus edits now. MM30's two interpretations are a
+separate migration: bumping MM30's pin only *surfaces* the two errors — MM30 must then
+rewrite them into the `relations:` form. That migration is out of scope for this toolkit
+change and happens in MM30's repo, alongside or after its pin bump.
 
 ## 6. Testing
 
-- `supersedes:` on an interpretation → one ERROR naming `relations:` and `sci:supersedes`.
-- `amends:` on an interpretation → one ERROR naming `sci:amends`.
+- `supersedes:` on an interpretation → one ERROR whose message contains the entity id, the
+  key, `relations:`, and `sci:supersedes`.
+- `amends:` on an interpretation → one ERROR naming the entity id and `sci:amends`.
 - The `relations:` form (predicate + target) → clean, no findings.
 - `supersedes:` on a `workflow-run` entity → clean (the legit-reader exclusion).
-- `supersedes: []` (empty value) on an interpretation → still one ERROR (presence, not value).
+- **`amends:` on a `workflow-run` entity → ERROR.** The exclusion is *pair*-specific
+  (`(workflow-run, supersedes)` only), not a blanket pass for the kind.
+- **`supersedes: null` on an interpretation → ERROR.** Guards against an implementation
+  that tests `fm.get(key) is None` and so misses a valueless key.
+- `supersedes: []` (empty list) on an interpretation → still one ERROR (presence, not value).
 - A non-vacuity guard: with no offending key present, the check yields nothing — proving
   it can be silent, so the ERROR cases prove it can fire.
 
