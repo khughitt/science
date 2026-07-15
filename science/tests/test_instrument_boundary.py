@@ -193,7 +193,7 @@ def _known(module_rel: str, fn: str) -> bool:
     return (module_rel, fn) in _ALLOWLIST | _NOT_INSTRUMENTS | _DEFERRED_INSTRUMENTS
 
 
-def test_instrument_namespace_returns_instrument_result() -> None:
+def test_instrument_namespace_returns_canonical_result() -> None:
     offenders: list[str] = []
     for module_rel in INSTRUMENT_MODULES:
         for fn in _violations(module_rel):

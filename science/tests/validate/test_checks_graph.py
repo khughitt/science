@@ -219,6 +219,40 @@ def test_validate_check_unwired_emits_error_and_skips_diff(tmp_path, monkeypatch
     assert called["diff"] is False
 
 
+def test_graph_validate_fallback_renders_rows_and_skips_dataset_followups(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    from science_tool.validate.checks import graph
+
+    graph_path = tmp_path / "knowledge" / "graph.trig"
+    graph_path.parent.mkdir()
+    graph_path.write_text("not trig <<<", encoding="utf-8")
+
+    def fail_load(_ctx: ValidateContext, _path: Path) -> None:
+        raise ValueError("dataset unavailable")
+
+    def fail_followup(*_args: object, **_kwargs: object) -> None:
+        raise AssertionError("dataset follow-up should not be called after fallback validation")
+
+    monkeypatch.setattr(graph, "validate_peers", lambda _root: [])
+    monkeypatch.setattr(graph, "materialization_audit", lambda _root: ValidationVerdict.passed([]))
+    monkeypatch.setattr(ValidateContext, "graph_dataset", fail_load)
+    monkeypatch.setattr(
+        graph,
+        "validate_graph",
+        lambda _path: ValidationVerdict.passed(
+            [{"check": "parseable", "status": "pass", "details": "fallback ok"}]
+        ),
+    )
+    monkeypatch.setattr(graph, "diff_graph_inputs_dataset", fail_followup)
+    monkeypatch.setattr(graph, "list_inquiries_dataset", fail_followup)
+    monkeypatch.setattr(graph, "validate_inquiry_dataset", fail_followup)
+
+    results = list(graph.check_graph(_ctx(tmp_path)))
+
+    assert "graph validate: parseable — fallback ok" in _messages(results, Severity.INFO)
+
+
 def test_graph_check_reuses_one_loaded_dataset_for_graph_followups(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:

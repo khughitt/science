@@ -159,6 +159,7 @@ from science_tool.graph.store import (
     validate_graph_dataset,
     validate_inquiry_dataset,
 )
+from science_tool.instruments import ValidationVerdict
 from science_tool.peers_validate import PeerIssue, validate_peers
 from science_tool.validate.checks import Check
 from science_tool.validate.context import ValidateContext
@@ -167,6 +168,14 @@ from science_tool.validate.result import Result, Severity
 
 def _result(severity: Severity, message: str) -> Result:
     return Result(severity, None, None, message, "graph", None)
+
+
+def _graph_validation_results(verdict: ValidationVerdict[dict[str, str]]) -> Iterator[Result]:
+    for row in verdict.rows:
+        status = _status(row, context="graph validate", accepted={"fail", "warn", "pass"})
+        check = row["check"]
+        severity = Severity.ERROR if status == "fail" else Severity.WARN if status == "warn" else Severity.INFO
+        yield _result(severity, f"graph validate: {check} — {row['details']}")
 
 
 @Check(section="knowledge graph...", order=17)
@@ -207,18 +216,18 @@ def check_graph(ctx: ValidateContext) -> Iterator[Result]:
         dataset = ctx.graph_dataset(graph_path)
     except Exception:  # noqa: BLE001
         verdict = validate_graph(graph_path)
-    else:
-        verdict = validate_graph_dataset(dataset)
+        if verdict.status == "unwired":
+            yield _result(Severity.ERROR, f"graph validate: could not run ({verdict.code}): {verdict.reason}")
+            return
+        yield from _graph_validation_results(verdict)
+        return
 
+    verdict = validate_graph_dataset(dataset)
     if verdict.status == "unwired":
         yield _result(Severity.ERROR, f"graph validate: could not run ({verdict.code}): {verdict.reason}")
         return
 
-    for row in verdict.rows:
-        status = _status(row, context="graph validate", accepted={"fail", "warn", "pass"})
-        check = row["check"]
-        severity = Severity.ERROR if status == "fail" else Severity.WARN if status == "warn" else Severity.INFO
-        yield _result(severity, f"graph validate: {check} — {row['details']}")
+    yield from _graph_validation_results(verdict)
 
     # This INFO branch used to be UNREACHABLE: read_revision_manifest never raised, it
     # returned {} -- so a manifest-less graph took the "N stale input file(s)" path or,
