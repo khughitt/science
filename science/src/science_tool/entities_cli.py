@@ -19,6 +19,7 @@ from science_tool.entities import (
     plan_entity_removal,
     remove_entity,
 )
+from science_tool.field_inventory import field_inventory
 from science_tool.graph.store import DEFAULT_GRAPH_PATH, query_neighborhood
 from science_tool.output import OUTPUT_FORMATS, emit_query_rows, unwrap_instrument
 from science_tool.styles import entity_table_renderers
@@ -91,10 +92,32 @@ def entity_show(ref: str, output_format: str) -> None:
     emit_entity_show(location, output_format)
 
 
+# ☠️ NO `--superseded-by`, and its absence is a decision, not an omission.
+#
+# `superseded_by` is DERIVED: it is the inversion of the canonical `sci:supersedes` edge, and
+# `consolidation._prepare_supersession` reads it off the admitted graph. An author flag for it would
+# recreate the second authored spelling this arc exists to delete -- a user could write a RESOLVABLE
+# `superseded_by` with no canonical edge behind it, and schema AND the resolution check would both
+# report green over a supersession grounded in nothing. Author the EDGE; the inverse is written
+# for you.
 @entity_group.command("edit")
 @click.argument("ref")
 @click.option("--title")
 @click.option("--status")
+@click.option("--verdict", help="Epistemic conclusion (hypothesis): what the evidence SAYS.")
+@click.option(
+    "--closure-basis",
+    help="Why the entity closed: what a person DID. Required by `retired`/`archived`.",
+)
+# The one lineage field that IS authored. `superseded` is discharged by any of `superseded_by`,
+# `resynthesized_into`, or `closure_basis` -- and the first is derived, so without this flag a SPLIT
+# supersession would be a state the schema admits and no writer in the toolkit can produce.
+@click.option(
+    "--resynthesized-into",
+    "resynthesized_into",
+    multiple=True,
+    help="Successor hypothesis this one was split into (repeatable). Must resolve to a live one.",
+)
 @click.option("--related", "related_refs", multiple=True, help="Related entity reference (repeatable)")
 @click.option("--source-ref", "source_refs", multiple=True, help="Source reference (repeatable)")
 @click.option("--updated")
@@ -102,11 +125,19 @@ def entity_edit(
     ref: str,
     title: str | None,
     status: str | None,
+    verdict: str | None,
+    closure_basis: str | None,
+    resynthesized_into: tuple[str, ...],
     related_refs: tuple[str, ...],
     source_refs: tuple[str, ...],
     updated: str | None,
 ) -> None:
-    """Edit source-authored entity metadata."""
+    """Edit source-authored entity metadata.
+
+    `--verdict` and `--closure-basis` are accepted ATOMICALLY with the `--status` transition they
+    discharge, because a terminal status without its basis is not a write that needs a follow-up --
+    it is a write that does not happen.
+    """
 
     try:
         result = edit_entity(
@@ -114,6 +145,9 @@ def entity_edit(
             ref,
             title=title,
             status=status,
+            verdict=verdict,
+            closure_basis=closure_basis,
+            resynthesized_into=list(resynthesized_into) or None,
             related=list(related_refs),
             source_refs=list(source_refs),
             updated=_parse_entity_date(updated) if updated else None,
@@ -204,6 +238,162 @@ def entity_list(
         rows=rows,
         renderers=entity_table_renderers(),
     )
+
+
+@entity_group.command("field-inventory")
+@click.option("--kind", required=True, help="Entity kind to inventory (e.g. hypothesis).")
+@click.option("--format", "output_format", type=click.Choice(OUTPUT_FORMATS), default="table", show_default=True)
+def entity_field_inventory(kind: str, output_format: str) -> None:
+    """Report every AUTHORED frontmatter key for a kind, with the number of files carrying it.
+
+    Report-only. This is the declare-or-delete instrument: a key absent from this report but
+    present on disk becomes a hard validation failure the moment the kind's schema is closed.
+    """
+
+    inventory = field_inventory(Path.cwd(), kind)
+    rows = [
+        {"key": key, "files": count}
+        for key, count in sorted(inventory.items(), key=lambda item: (-item[1], item[0]))
+    ]
+    emit_query_rows(
+        output_format=output_format,
+        title=f"Authored frontmatter keys — {kind}",
+        columns=[("key", "Key"), ("files", "Files")],
+        rows=rows,
+        meta={"kind": kind, "keys": len(rows)},
+    )
+
+
+@entity_group.command("status-inventory")
+@click.option(
+    "--adjudication",
+    type=click.Path(path_type=Path, exists=True),
+    help="Override the canonical .science/hypothesis-lifecycle.adjudication.yaml with another "
+    "YAML of explicit author decisions: {entity_id: {status, verdict?, closure_basis?}}.",
+)
+@click.option("--format", "output_format", type=click.Choice(OUTPUT_FORMATS), default="table", show_default=True)
+def entity_status_inventory(adjudication: Path | None, output_format: str) -> None:
+    """Plan the hypothesis lifecycle/verdict split. Report-only — writes nothing.
+
+    `phase` is the lifecycle; `status` was only ever the verdict (design rev 7). A file whose
+    `status` is terminal lost its lifecycle, its verdict AND its closure reason at once, so it is
+    REFUSED rather than guessed — and escapes only via an authored adjudication entry.
+
+    The adjudication is read from `.science/hypothesis-lifecycle.adjudication.yaml` — the same
+    path the migration consumes, so what discharges a refusal here discharges it there.
+    """
+
+    from science_tool.status_inventory import adjudication_for, inventory, load_adjudication
+
+    decisions = (
+        load_adjudication(adjudication) if adjudication else adjudication_for(Path.cwd())
+    )
+    try:
+        result = inventory(Path.cwd(), adjudication=decisions)
+    except KeyError as exc:
+        raise click.ClickException(str(exc).strip('"')) from exc
+
+    rows = [
+        {
+            "id": row.entity_id,
+            "status": row.status or "—",
+            "phase": row.phase or "—",
+            "target_status": row.target_status or "REFUSED",
+            "verdict": row.target_verdict or "—",
+            "ambiguity": row.ambiguity or "",
+        }
+        for row in result.rows
+    ]
+    emit_query_rows(
+        output_format=output_format,
+        title="Hypothesis lifecycle / verdict plan",
+        columns=[
+            ("id", "ID"),
+            ("status", "status (old)"),
+            ("phase", "phase (old)"),
+            ("target_status", "status (new)"),
+            ("verdict", "verdict (new)"),
+            ("ambiguity", "Refused because"),
+        ],
+        rows=rows,
+        meta={
+            "total": len(result.rows),
+            "deterministic": len(result.deterministic),
+            "refused": len(result.ambiguous),
+        },
+    )
+
+
+@entity_group.command("migrate-hypothesis")
+@click.option("--apply", "apply_changes", is_flag=True, help="Write. Without this, plan only.")
+@click.option(
+    "--resume",
+    "resume_interrupted",
+    is_flag=True,
+    help="Finish an INTERRUPTED write pass from its journal. Never re-plans.",
+)
+@click.option(
+    "--preflight-all",
+    is_flag=True,
+    help="Render and validate every root in --manifest. Writes NOTHING, anywhere.",
+)
+@click.option(
+    "--manifest",
+    type=click.Path(path_type=Path, exists=True),
+    help="Roster JSON of project roots: [{\"root\": \"~/d/mm30\", ...}, ...] (Task 11 Step 0).",
+)
+def entity_migrate_hypothesis(
+    apply_changes: bool,
+    resume_interrupted: bool,
+    preflight_all: bool,
+    manifest: Path | None,
+) -> None:
+    """Migrate this project's hypotheses to entity schema 2. Two-phase and ALL-OR-NONE.
+
+    `status` becomes the LIFECYCLE and `verdict` the epistemic conclusion; the eight ruled deletes
+    go; `author_stated_evidence` becomes `source_stated_evidence`. Every target is rendered AND
+    validated against this project's COMPOSED schema before a single byte is written, and the
+    version pin is the final act — so a project is on schema 2 only once its files actually are.
+
+    `--preflight-all` is what makes the slice atomic across REPOSITORIES rather than merely ordered:
+    no root is applied until every root's rendered target has passed. Without it the rollout degrades
+    to per-root validate-then-write, which leaves the most refutation-capable corpus for last, after
+    the others are already written.
+    """
+    import json as _json
+
+    from science_tool.migrate_hypothesis import MigrationRefused, migrate, resume
+
+    if preflight_all:
+        if manifest is None:
+            raise click.ClickException("--preflight-all requires --manifest")
+        roster = _json.loads(manifest.read_text(encoding="utf-8"))
+        failures: list[str] = []
+        for entry in roster:
+            root = Path(entry["root"]).expanduser()
+            try:
+                planned = migrate(root, apply=False)
+            except MigrationRefused as exc:
+                failures.append(f"{root}:\n{exc}")
+            else:
+                click.echo(f"  ok  {root}  ({len(planned)} hypotheses)")
+        if failures:
+            raise click.ClickException(
+                f"{len(failures)} of {len(roster)} roots FAILED preflight. Nothing was written, in "
+                "any root.\n\n" + "\n\n".join(failures)
+            )
+        click.echo(f"\nAll {len(roster)} roots pass preflight.")
+        return
+
+    try:
+        paths = resume(Path.cwd()) if resume_interrupted else migrate(Path.cwd(), apply=apply_changes)
+    except MigrationRefused as exc:
+        raise click.ClickException(str(exc)) from exc
+
+    verb = "migrated" if (apply_changes or resume_interrupted) else "would migrate"
+    click.echo(f"{verb} {len(paths)} hypotheses")
+    if not (apply_changes or resume_interrupted):
+        click.echo("(dry run — nothing written; re-run with --apply)")
 
 
 @entity_group.command("sections")

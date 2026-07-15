@@ -21,7 +21,7 @@ from pydantic import BaseModel, Field
 from science_tool.consolidation import (
     SupersedesGraph,
     build_supersedes_graph,
-    iter_entity_frontmatter,
+    load_supersession_inputs,
 )
 from science_tool.entities import is_default_visible
 
@@ -304,8 +304,9 @@ def detect_consolidation_candidates(
     *max_cluster_size*.
     """
     project_root = Path(project_root).resolve()
-    entries = iter_entity_frontmatter(project_root)
-    graph = build_supersedes_graph(entries)
+    inputs = load_supersession_inputs(project_root)
+    entries = inputs.entries
+    graph = build_supersedes_graph(inputs)
     lineage = _lineage_section(graph)
 
     visible: list[tuple[str, str, dict[str, Any]]] = [

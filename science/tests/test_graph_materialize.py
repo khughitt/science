@@ -213,6 +213,27 @@ def test_materialize_graph_includes_task_nodes_and_canonical_links(tmp_path: Pat
     assert (task_uri, SCI.tests, question_uri) in knowledge
 
 
+def test_materialize_emits_hypothesis_verdict(tmp_path: Path) -> None:
+    project = tmp_path / "demo"
+    _write_demo_project(project)
+    _write_minimal_entity(
+        project / "entities" / "hypotheses" / "h02-verdict.md",
+        "hypothesis:h02-verdict",
+        "hypothesis",
+        "Hypothesis with verdict",
+        extra_frontmatter=['verdict: "supported"'],
+    )
+
+    trig_path = materialize_graph(project)
+
+    dataset = Dataset()
+    dataset.parse(source=str(trig_path), format="trig")
+    knowledge = dataset.graph(PROJECT_NS["graph/knowledge"])
+
+    hypothesis_uri = PROJECT_NS["hypothesis/h02-verdict"]
+    assert (hypothesis_uri, SCI.verdict, Literal("supported")) in knowledge
+
+
 def test_materialize_emits_inquiry_target_from_frontmatter(tmp_path: Path) -> None:
     """A doc-authored inquiry's `target:` frontmatter must materialize as
     sci:target so the target_exists graph audit can resolve it."""
@@ -1712,3 +1733,47 @@ def test_annotation_source_ref_materializes_wasderivedfrom(tmp_path: Path) -> No
     assert (prop_uri, PROV.wasDerivedFrom, _annotation_uri("annotation:papers/p.source#a-1")) in provenance
     # the resolvable entity ref still materializes via the existing path (paper:<id> behaves identically)
     assert (prop_uri, PROV.wasDerivedFrom, PROJECT_NS["question/q01-demo"]) in provenance
+
+
+def test_the_single_rival_packet_REACHES_the_graph() -> None:
+    # `_model_to_json` is what carries the packet into `sci:rivalModelPacket`. The four keys below
+    # are absent from protein-landscape's committed graph TODAY -- 0 occurrences -- because
+    # `RivalModelPacket` was extra="ignore" and dropped them before serialization ever saw them.
+    # The model ACCEPTED the packet all along; acceptance was never the property worth asserting.
+    #
+    # Hermetic on purpose: protein-landscape's own `graph build` is red today (an unresolved
+    # `question:0004-mega-cluster-split` alias), so this claim cannot be carried by that project's
+    # artifact until Task 11 fixes it. A fixture entity has no such dependency.
+    from science_model.reasoning import RivalModelPacket
+    from science_tool.graph.materialize import _model_to_json
+
+    packet = RivalModelPacket(
+        packet_id="platonic-vs-multimanifold",
+        rival_id="platonic-representation-hypothesis",
+        rival_name="PRH",
+        rival_claim="representations converge",
+        discriminator_status="pre-registered",
+    )
+
+    emitted = json.loads(_model_to_json(packet))
+
+    assert emitted["rival_id"] == "platonic-representation-hypothesis"
+    assert emitted["rival_name"] == "PRH"
+    assert emitted["rival_claim"] == "representations converge"
+    assert emitted["discriminator_status"] == "pre-registered"
+
+
+def test_a_LIST_form_packet_emits_NO_new_keys() -> None:
+    # The collateral-churn guard, at the layer that writes the artifact. `_model_to_json` is an
+    # INCLUSIVE `model_dump`, so four plain optionals would add four `null` keys to every serialized
+    # packet -- and one of the corpus's two packets sits on a PROPOSITION, an entity the hypothesis
+    # migration must not touch. `exclude_if` is what keeps that literal byte-identical.
+    from science_model.reasoning import RivalModelPacket
+    from science_tool.graph.materialize import _model_to_json
+
+    emitted = json.loads(_model_to_json(RivalModelPacket(packet_id="p", alternative_models=["m"])))
+
+    assert "rival_id" not in emitted
+    assert "rival_name" not in emitted
+    assert "rival_claim" not in emitted
+    assert "discriminator_status" not in emitted

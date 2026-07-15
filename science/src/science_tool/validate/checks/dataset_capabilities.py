@@ -12,6 +12,7 @@ from pathlib import Path
 from typing import Any
 
 from science_tool.datasets.capability_scope import VALID_SCOPES, is_valid_scope
+from science_tool.entities import CLOSED_LIFECYCLE_STATUSES
 from science_tool.validate._helpers import entity_frontmatters
 from science_tool.validate.checks import Check
 from science_tool.validate.context import ValidateContext
@@ -21,45 +22,57 @@ _QH_PREFIXES = ("question:", "hypothesis:")
 _REQUIRED_FIELD = "required_capabilities"
 _PROVIDED_FIELD = "provided_capabilities"
 
-# Statuses that mark a question/hypothesis as *demand-closed*: its investigation
-# is concluded, so it exerts no live pull on data. This is a distinct axis from
-# the entity *visibility* set (`_LIVE_STATUSES` in entities.py, which keeps e.g.
-# `answered` and `refuted` visible for the record): a concluded target is still
-# shown to users but no longer needs capability annotation, and a candidate
-# dataset that reaches only concluded targets is not filling a live gap.
+# *Demand-closed*: the target's investigation is concluded, so it exerts no live pull on data. A
+# distinct axis from entity *visibility* (`_LIVE_STATUSES` in entities.py): a concluded target is
+# still shown to users, it just no longer needs capability annotation, and a candidate dataset whose
+# whole reach is concluded is not filling a live gap.
 #
-# Deliberately conservative — a suppressor should fail toward keeping the WARN,
-# since a false-suppress hides a real coverage gap while a false-keep only leaves
-# a low-value warning. So evidentiary-settled-but-reopenable hypothesis states
-# are treated as LIVE: `supported` (can still be strengthened) and `weakened`
-# (verdict still open) both keep warning. Likewise `partially-answered`,
-# `partially-supported`, and `deferred` retain residual/paused demand.
-_DEMAND_CLOSED_STATUSES = frozenset(
-    {
-        # questions: investigation concluded
-        "answered",
-        "resolved",
-        "closed",
-        "rejected",
-        "duplicate",
-        # hypotheses: verdict settled against the claim
-        "refuted",
-        # shared terminal / abandoned lifecycle
-        "superseded",
-        "retired",
-        "archived",
-        "abandoned",
-        "deprecated",
-    }
-)
+# Deliberately conservative — a suppressor should fail toward KEEPING the WARN, since a false
+# suppress hides a real coverage gap while a false keep only leaves a low-value warning.
+#
+# ☠️ QUESTIONS AND HYPOTHESES NOW ANSWER THIS DIFFERENTLY, and the split is not cosmetic. A
+# hypothesis' conclusion moved to `verdict`; a QUESTION still encodes answeredness in `status`,
+# because the question slice has not run. One shared status set could not express that, and reading
+# a question's `status` through the hypothesis' new rules would silently reopen every answered
+# question in the corpus. Each kind is asked in its own vocabulary until its own slice migrates it.
+_QUESTION_CLOSED = frozenset({"answered", "resolved", "closed", "rejected", "duplicate"})
+
+
+def is_demand_closed(*, kind: str, status: str | None, verdict: str | None = None) -> bool:
+    """Whether a question/hypothesis still exerts live pull on data. False == still demanding."""
+    # The shared terminal lifecycle: closed for ANY kind, whatever the evidence said.
+    if status in CLOSED_LIFECYCLE_STATUSES:
+        return True
+    if kind == "hypothesis":
+        # `refuted` was the ONE hypothesis-specific value any consumer ever read, and it is a
+        # VERDICT now, not a status. `supported` and `weakened` stay LIVE on purpose: a supported
+        # hypothesis can still be strengthened and a weakened one is still open, so both keep
+        # warning. Only a claim the evidence went AGAINST stops demanding data.
+        return verdict == "refuted"
+    if kind == "question":
+        return status in _QUESTION_CLOSED
+    return False
 
 
 def _result(path: str | None, message: str, rule: str) -> Result:
     return Result(Severity.WARN, Path(path) if path else None, None, message, rule, None)
 
 
-def _is_demand_closed(status: Any) -> bool:
-    return isinstance(status, str) and status in _DEMAND_CLOSED_STATUSES
+def _fm_is_demand_closed(fm: Mapping[str, Any]) -> bool:
+    """`is_demand_closed` over one raw frontmatter record."""
+    ident = fm.get("id")
+    kind = fm.get("kind")
+    if not isinstance(kind, str):
+        # The id prefix IS the kind for the q/h records this check reaches; a record with neither
+        # cannot be classified, and an unclassifiable target must stay LIVE (keep the WARN).
+        kind = ident.partition(":")[0] if isinstance(ident, str) else ""
+    status = fm.get("status")
+    verdict = fm.get("verdict")
+    return is_demand_closed(
+        kind=kind,
+        status=status if isinstance(status, str) else None,
+        verdict=verdict if isinstance(verdict, str) else None,
+    )
 
 
 def _scope_gate(
@@ -101,7 +114,14 @@ def _scope_gate(
 def evaluate_dataset_capabilities(entities: Iterable[dict[str, Any]]) -> Iterator[Result]:
     records = list(entities)
     dataset_to_targets, target_to_datasets = _frontmatter_reach(records)
-    status_by_id = {ident: fm.get("status") for fm in records if isinstance((ident := fm.get("id")), str) and ident}
+    # Closure is decided PER RECORD, because it now takes the kind and the verdict -- not a status
+    # looked up in one kind-blind map. An id absent from this map is treated as LIVE below, which is
+    # the conservative direction: an unknown target keeps the WARN.
+    closed_by_id = {
+        ident: _fm_is_demand_closed(fm)
+        for fm in records
+        if isinstance((ident := fm.get("id")), str) and ident
+    }
 
     for fm in records:
         ident = fm.get("id")
@@ -129,7 +149,7 @@ def evaluate_dataset_capabilities(entities: Iterable[dict[str, Any]]) -> Iterato
                 # Suppress when the dataset's entire reach is demand-closed: an
                 # unannotated candidate serving only concluded targets is not a
                 # live gap. Keep warning if any reached target is still live.
-                if targets and not all(_is_demand_closed(status_by_id.get(t)) for t in targets):
+                if targets and not all(closed_by_id.get(t, False) for t in targets):
                     yield _result(
                         path_value,
                         f"{ident}: dataset reaches {sorted(targets)} but declares no provided_capabilities",
@@ -151,7 +171,7 @@ def evaluate_dataset_capabilities(entities: Iterable[dict[str, Any]]) -> Iterato
                 )
             # Suppress a concluded target's missing-requirement WARN: it no longer
             # needs capability annotation to gate coverage of a live decision.
-            elif issue == "missing" and target_to_datasets.get(ident) and not _is_demand_closed(fm.get("status")):
+            elif issue == "missing" and target_to_datasets.get(ident) and not _fm_is_demand_closed(fm):
                 yield _result(
                     path_value,
                     f"{ident}: target reaches {sorted(target_to_datasets[ident])} but declares no required_capabilities",

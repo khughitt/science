@@ -24,13 +24,12 @@ def hypothesis_group() -> None:
 @click.option("--source-ref", "source_refs", multiple=True, help="Source reference (repeatable)")
 @click.option("--id", "entity_id")
 @click.option("--slug")
-@click.option("--status")
 @click.option(
-    "--phase",
-    type=click.Choice(["active", "candidate"]),
+    "--status",
+    type=click.Choice(["draft", "active"]),
     default="active",
     show_default=True,
-    help="candidate trial framing (includes Promotion criteria) or committed active frame",
+    help="draft trial framing (includes Promotion criteria) or committed active frame",
 )
 @click.option("--with", "with_sections", multiple=True, help="Include optional template section key (repeatable)")
 @click.option("--without", "without_sections", multiple=True, help="Drop required template section key (repeatable)")
@@ -48,8 +47,7 @@ def hypothesis_create(
     source_refs: tuple[str, ...],
     entity_id: str | None,
     slug: str | None,
-    status: str | None,
-    phase: str,
+    status: str,
     with_sections: tuple[str, ...],
     without_sections: tuple[str, ...],
     no_hints: bool,
@@ -59,7 +57,10 @@ def hypothesis_create(
     """Create a source-authored hypothesis."""
 
     sections = list(with_sections)
-    if phase == "candidate" and "promotion-criteria" not in sections:
+    # `draft` is what `phase: candidate` FOLDED INTO -- a trial framing, not yet committed. There is
+    # no separate `--phase` flag any more, because there is no separate field: a hypothesis has ONE
+    # lifecycle, and `draft` is its first state.
+    if status == "draft" and "promotion-criteria" not in sections:
         sections.append("promotion-criteria")
 
     extra = build_origin_frontmatter(origins, added_by)
@@ -72,7 +73,6 @@ def hypothesis_create(
         status=status,
         related=list(related_refs),
         source_refs=list(source_refs),
-        phase=phase,
         with_sections=sections,
         without_sections=list(without_sections),
         no_hints=no_hints,

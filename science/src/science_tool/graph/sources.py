@@ -42,8 +42,16 @@ from science_model.source_contracts import (
 )
 from science_model.source_ref import SourceRef
 
+from science_model.entity_schema import PROJECT_MIXIN_NAMES, EntityValidationError
+
 from science_tool.bibliography import is_bibliography_reference as _is_bibliography_reference
 from science_tool.commons.aliases import load_manual_aliases
+from science_tool.entity_profiles import (
+    ENTITY_SCHEMA_VERSION,
+    ProjectSchema,
+    load_project_schema,
+)
+from science_tool.project_config import validated_entity_schema_version
 from science_tool.graph.entity_registry import EntityKindNotRegisteredError, EntityRegistry
 from science_tool.graph.errors import EntityIdentityCollisionError
 from science_tool.graph.identity_table import (
@@ -169,6 +177,11 @@ class ProjectSources(BaseModel):
     relations: list[SourceRelation] = Field(default_factory=list)
     bindings: list[BindingSource] = Field(default_factory=list)
     manual_aliases: dict[str, str] = Field(default_factory=dict)
+    # Subset of `manual_aliases` keys that came from the ARCHIVE index (not project-
+    # authored `mappings.yaml`). build_alias_map needs this to keep an archived id from
+    # silently shadowing a live entity's auto-derived token: an authored mapping may win
+    # over a colliding derived alias, an archive token never does.
+    archive_alias_tokens: frozenset[str] = Field(default_factory=frozenset)
     ontology_catalogs: list[OntologyCatalog] = Field(default_factory=list)
     registry: EntityRegistry
     markdown_documents: list[MarkdownSourceDocument] = Field(default_factory=list)
@@ -220,6 +233,20 @@ def load_project_sources(
     """
     project_root = project_root.resolve()
     config = _read_project_config(project_root)
+    # The AUTHORED pin, and the only thing that arms schema-first validation. Absent (or 1) means the
+    # project has not migrated, so its entities load exactly as they did before D5.
+    #
+    # The pin was VALIDATED in `_read_project_config` through `validated_entity_schema_version` -- the
+    # one narrow authority the WRITE path (`load_project_schema_if_pinned`) also reads it through, so
+    # the two never disagree about whether a project speaks schema 2. That authority checks the value
+    # without full `ProjectConfig` (which requires `name`): a graph build has never demanded a `name`,
+    # and tightening that under a migration would put it inside Task 11's diff. So by here the value is
+    # already 1, 2, or None -- a `"2"` or `3` was refused at read time, not silently read as unpinned.
+    project_schema = (
+        load_project_schema(project_root)
+        if config.get("entity_schema_version") == ENTITY_SCHEMA_VERSION
+        else None
+    )
     profiles = KnowledgeProfiles.model_validate(config["knowledge_profiles"])
     local_profile = profiles.local
     freshness_block = config.get("freshness") or {}
@@ -348,7 +375,12 @@ def load_project_sources(
                     continue
                 kind = _normalize_kind(raw_kind)
                 raw["kind"] = kind
-                _enrich_raw(
+                # D3.1 -- THE SCHEMA GOES FIRST, and it goes first on the AUTHORED frontmatter,
+                # before `_enrich_raw` mixes the loader's derived keys into the same dict.
+                _validate_against_schema(
+                    raw, kind=kind, path=str(ref.path), project_schema=project_schema
+                )
+                authored_aliases = _enrich_raw(
                     raw,
                     kind=kind,
                     project_slug=project_slug,
@@ -375,6 +407,7 @@ def load_project_sources(
                     continue
                 try:
                     entity = schema.model_validate(raw)
+                    entity._authored_aliases = authored_aliases
                 except ValidationError as exc:
                     details = _format_missing_fields(exc)
                     failure = _format_schema_validation_failure(kind=kind, schema=schema, exc=exc)
@@ -616,6 +649,7 @@ def load_project_sources(
     from science_tool.archive import load_archive_index
 
     manual_aliases = _load_manual_aliases(project_root, local_profile=local_profile)
+    archive_alias_tokens: set[str] = set()
     for token, canonical in load_archive_index(project_root).resolvable_ids().items():
         existing = manual_aliases.get(token)
         if existing is not None and existing != canonical:
@@ -624,6 +658,7 @@ def load_project_sources(
                 f"alias -> {existing!r}; unarchive or rename before archiving"
             )
         manual_aliases[token] = canonical
+        archive_alias_tokens.add(token)
 
     return ProjectSources(
         project_name=str(config["name"]),
@@ -635,6 +670,7 @@ def load_project_sources(
         relations=relations,
         bindings=bindings,
         manual_aliases=manual_aliases,
+        archive_alias_tokens=frozenset(archive_alias_tokens),
         ontology_catalogs=ontology_catalogs,
         registry=registry,
         markdown_documents=markdown_documents,
@@ -647,19 +683,79 @@ def load_project_sources(
     )
 
 
-def build_alias_map(entities: list[Entity], manual_aliases: dict[str, str] | None = None) -> dict[str, str]:
-    """Build a best-effort alias map for canonical entity resolution."""
-    alias_map: dict[str, str] = {}
+# Alias provenance, most-authoritative first. The ONLY collision resolved silently is
+# (mappings, derived): a `mappings.yaml` mapping is an explicit, external human
+# declaration and wins over an auto-derived convenience token. Every other cross-target
+# collision raises AliasCollisionError. In particular a `frontmatter` alias does NOT beat
+# a colliding derived short id -- an entity claiming another entity's short id is an
+# ambiguity to report, not to silently resolve.
+_PROV_CANONICAL = 0  # entity.canonical_id -- the identity itself
+_PROV_MAPPINGS = 1  # a `mappings.yaml` mapping (external, project-authored)
+_PROV_FRONTMATTER = 2  # an explicit `aliases:` entry on the entity itself
+_PROV_ARCHIVE = 3  # a token folded in from the archive index
+_PROV_DERIVED = 4  # path-stem / number-derived short token (`q04` from `0004`)
+
+
+def build_alias_map(
+    entities: list[Entity],
+    manual_aliases: dict[str, str] | None = None,
+    *,
+    archive_alias_tokens: frozenset[str] = frozenset(),
+) -> dict[str, str]:
+    """Build a best-effort alias map for canonical entity resolution.
+
+    Provenance precedence (D5 / design rev 9). A `mappings.yaml` mapping silently overrides
+    a colliding AUTO-DERIVED alias, because the number/path-derived short token (`q04` from
+    `0004`) is a convenience, never an identity authority, and a project that renumbered
+    its records declares the old numbers there deliberately. Every OTHER cross-target
+    collision still raises `AliasCollisionError`: canonical-vs-canonical, mappings-vs-
+    mappings, an entity's own frontmatter alias vs anything it disagrees with (including a
+    derived short id -- that is a real ambiguity, not a convenience to drop), and an
+    archive token vs anything. An archive token never wins silently, so an archived id can
+    never shadow a live entity's derived token.
+    """
+    # token -> (canonical_id, provenance)
+    claims: dict[str, tuple[str, int]] = {}
+
+    def register(token: str, canonical_id: str, provenance: int) -> None:
+        existing = claims.get(token)
+        if existing is None:
+            claims[token] = (canonical_id, provenance)
+            return
+        existing_id, existing_prov = existing
+        if existing_id == canonical_id:
+            # Same target: keep the strongest provenance so a later derived duplicate can
+            # never weaken a mapping/frontmatter claim.
+            if provenance < existing_prov:
+                claims[token] = (canonical_id, provenance)
+            return
+        if {existing_prov, provenance} == {_PROV_MAPPINGS, _PROV_DERIVED}:
+            if existing_prov == _PROV_DERIVED:
+                claims[token] = (canonical_id, provenance)  # the mapping replaces derived
+            return  # else the mapping already holds it; drop the derived token
+        raise AliasCollisionError(
+            alias=token, first_canonical_id=existing_id, second_canonical_id=canonical_id
+        )
+
     for entity in entities:
-        _register_alias(alias_map, entity.canonical_id, entity.canonical_id)
-        _register_alias(alias_map, entity.canonical_id.lower(), entity.canonical_id)
+        register(entity.canonical_id, entity.canonical_id, _PROV_CANONICAL)
+        register(entity.canonical_id.lower(), entity.canonical_id, _PROV_CANONICAL)
+        # Provenance is CARRIED from load (`_authored_aliases`), never reconstructed by
+        # token equality: a frontmatter token that coincides with this entity's own
+        # derived short id (`q01` authored on the entity `0001` also derives) stays
+        # FRONTMATTER, so a colliding mappings entry still raises instead of silently
+        # winning as it would against a purely-derived token.
+        authored = entity._authored_aliases
         for alias in entity.aliases:
-            _register_alias(alias_map, alias, entity.canonical_id)
-            _register_alias(alias_map, alias.lower(), entity.canonical_id)
+            provenance = _PROV_FRONTMATTER if alias in authored else _PROV_DERIVED
+            register(alias, entity.canonical_id, provenance)
+            register(alias.lower(), entity.canonical_id, provenance)
     for alias, canonical_id in (manual_aliases or {}).items():
-        _register_alias(alias_map, alias, canonical_id)
-        _register_alias(alias_map, alias.lower(), canonical_id)
-    return alias_map
+        provenance = _PROV_ARCHIVE if alias in archive_alias_tokens else _PROV_MAPPINGS
+        register(alias, canonical_id, provenance)
+        register(alias.lower(), canonical_id, provenance)
+
+    return {token: claim[0] for token, claim in claims.items()}
 
 
 def is_external_reference(raw: str, *, known_prefixes: frozenset[str] | None = None) -> bool:
@@ -718,7 +814,7 @@ def _enrich_raw(
     local_profile: str,
     active_kinds: frozenset[str],
     ontology_catalogs: list[OntologyCatalog],
-) -> None:
+) -> frozenset[str]:
     """Centralized normalization layer between adapter output and Entity validation.
 
     Mutates `raw` in place. Fills Entity defaults + legacy normalization:
@@ -728,6 +824,10 @@ def _enrich_raw(
     - Normalize `kind` and optional core-only `type` projection
     - Description → content_preview fallback (legacy aggregate rows)
     - Validate reasoning enum fields and fail early on legacy/invalid shapes
+
+    Returns the frozenset of EXPLICITLY-authored frontmatter alias tokens (empty for
+    entities without a canonical id or an `aliases:` list). Callers set this on the
+    constructed entity's `_authored_aliases` so alias resolution can carry provenance.
     """
     raw.setdefault("project", project_slug)
     raw.setdefault("ontology_terms", [])
@@ -773,27 +873,19 @@ def _enrich_raw(
 
     # Alias derivation (mix in file-stem-based tokens for hypothesis/question/task
     # files named `<token>-<rest>.md`; mirrors the legacy MarkdownProvider behavior).
+    # `authored` captures ONLY the explicit frontmatter tokens (cleaned exactly as
+    # `_derive_aliases.add` stores them), so a coincident authored/derived token keeps
+    # its authored provenance downstream instead of being reclassified as derived.
+    authored: frozenset[str] = frozenset()
     if isinstance(canonical_id, str):
         explicit = raw.get("aliases") or []
         if not isinstance(explicit, list):
             explicit = []
         explicit_list = [str(a) for a in explicit]
-        fp = raw.get("file_path")
-        path_aliases: list[str] = []
-        if isinstance(fp, str) and fp and kind in {"hypothesis", "question", "task"}:
-            stem = Path(fp).stem
-            m = _SHORT_ID_RE.match(stem)
-            if m is None:
-                head = stem.split("-", 1)[0]
-                m = _SHORT_ID_RE.match(head)
-            if m is not None:
-                token = m.group("token")
-                path_aliases = [
-                    f"{kind}:{token.lower()}",
-                    f"{kind}:{token.upper()}",
-                    token.lower(),
-                    token.upper(),
-                ]
+        authored = frozenset(
+            token for a in explicit_list if (token := a.strip()) and token != canonical_id
+        )
+        path_aliases = _path_alias_tokens(raw.get("file_path"), kind)
         raw["aliases"] = _derive_aliases(canonical_id, kind, [*explicit_list, *path_aliases])
 
     # Reasoning metadata is current-state metadata. Do not silently erase invalid
@@ -809,6 +901,8 @@ def _enrich_raw(
                 raise ValueError(
                     f"invalid reasoning metadata {field}={value!r} at {source}; expected one of: {allowed}"
                 ) from exc
+
+    return authored
 
 
 def _load_legacy_records(
@@ -846,7 +940,7 @@ def _load_legacy_records(
             "source_refs": list(record.source_refs),
             "aliases": list(record.aliases),
         }
-        _enrich_raw(
+        authored_aliases = _enrich_raw(
             raw,
             kind="model",
             project_slug=project_slug,
@@ -856,6 +950,7 @@ def _load_legacy_records(
         )
         schema = registry.resolve("model")
         entity = schema.model_validate(raw)
+        entity._authored_aliases = authored_aliases
         out.append((entity, SourceRef(adapter_name="legacy-model", path=record.source_path)))
 
     parameter_records = _load_typed_records(
@@ -886,7 +981,7 @@ def _load_legacy_records(
         # which is always included in profile_manifests above.
         schema: type[Entity] = registry.resolve("canonical_parameter")
 
-        _enrich_raw(
+        authored_aliases = _enrich_raw(
             raw,
             kind="canonical_parameter",
             project_slug=project_slug,
@@ -895,6 +990,7 @@ def _load_legacy_records(
             ontology_catalogs=ontology_catalogs,
         )
         entity = schema.model_validate(raw)
+        entity._authored_aliases = authored_aliases
         out.append((entity, SourceRef(adapter_name="legacy-parameter", path=record.source_path)))
 
     return out
@@ -973,7 +1069,7 @@ def _load_structured_source_records(
                 raw["created"] = record.created
             if record.updated is not None:
                 raw["updated"] = record.updated
-            _enrich_raw(
+            authored_aliases = _enrich_raw(
                 raw,
                 kind=kind_name,
                 project_slug=project_slug,
@@ -982,6 +1078,7 @@ def _load_structured_source_records(
                 ontology_catalogs=ontology_catalogs,
             )
             entity = schema.model_validate(raw)
+            entity._authored_aliases = authored_aliases
             out.append((entity, SourceRef(adapter_name="structured-source", path=record.source_path or default_path)))
     return out
 
@@ -1133,6 +1230,45 @@ def _load_typed_records(
     return records
 
 
+def _validate_against_schema(
+    raw: dict[str, Any],
+    *,
+    kind: str,
+    path: str,
+    project_schema: ProjectSchema | None,
+) -> None:
+    """D3.1/D3.2 — the composed JSON Schema is checked BEFORE the projection is built.
+
+    `project_schema` is None unless the project DECLARED `entity_schema_version: 2`, so an unmigrated
+    project is untouched: it keeps today's behaviour, and its hypotheses keep the verdict in `status`.
+    Nothing here infers the version from the files (see `ProjectConfig.entity_schema_version`).
+
+    The profile is the project-COMPOSED one, never the package default: mm30's `identification` and
+    evolution's `source_stated_evidence` are declared by project EXTENSIONS, so against the package
+    default they are unknown keys and `unevaluatedProperties: false` would reject the files of the two
+    projects that did nothing wrong.
+
+    This is the half that makes `Entity`'s `extra="allow"` safe. The schema refuses what it does not
+    know; the projection preserves what the schema admitted. Apart, each is a defect -- preservation
+    without validation is just `extra="allow"` over an unvalidated corpus.
+
+    `PROJECT_MIXIN_NAMES` is the migration slice list, and enforcement is gated on it rather than on a
+    second frozenset of the same names. It also gates schema STRICTNESS in the validator, so a kind
+    enforced here but absent there would be checked against a profile that admits anything: a green
+    check over an unchecked record. Two hand-maintained copies of one list is how that happens.
+    """
+    if project_schema is None or kind not in PROJECT_MIXIN_NAMES:
+        return
+    authored = {key: value for key, value in raw.items() if key not in MarkdownAdapter.INJECTED_KEYS}
+    try:
+        project_schema.validator.validate_as(authored, project_schema.profile_for(kind))
+    except EntityValidationError as exc:
+        raise ValueError(
+            f"{path}: {kind} frontmatter does not satisfy its schema "
+            f"(project is pinned to entity_schema_version: 2)\n  {exc}"
+        ) from exc
+
+
 def _read_project_config(project_root: Path) -> dict[str, object]:
     yaml_path = project_config_path(project_root)
     cache_key: tuple[str, int] | None = None
@@ -1145,6 +1281,14 @@ def _read_project_config(project_root: Path) -> dict[str, object]:
     data: dict[str, object] = {}
     if yaml_path.is_file():
         data = yaml.safe_load(yaml_path.read_text(encoding="utf-8")) or {}
+
+    # The pin, VALIDATED here through the one narrow authority the write path also uses -- key AND
+    # value, WITHOUT the rest of `ProjectConfig` (which requires `name`, a tightening not this arc's).
+    # It has to run HERE: the pin decides whether this loader enforces the entity schema at all, so a
+    # misspelled key OR an illegal value (`"2"`, `3`) would read as "unpinned", switch the schema check
+    # off, and load an unvalidated corpus while its author believed it was protected. Fail-open,
+    # reachable by one transposed letter or one stray quote.
+    pinned_version = validated_entity_schema_version(data)
 
     if "profiles" in data and "knowledge_profiles" not in data:
         raise ValueError("science.yaml uses removed top-level profiles; use knowledge_profiles")
@@ -1184,6 +1328,11 @@ def _read_project_config(project_root: Path) -> dict[str, object]:
         "ontologies": [str(o) for o in raw_ontologies],
         "freshness": raw_freshness,
         "peer_ids": peer_ids,
+        # This dict is a CURATED projection of science.yaml -- an unlisted key does not reach the
+        # loader at all, so the pin has to be listed. It is the VALIDATED value: `2` arms schema
+        # validation, `1`/absent do not, and an illegal value already raised above rather than
+        # reaching here as a silent "unpinned".
+        "entity_schema_version": pinned_version,
     }
     if cache_key is not None:
         _PROJECT_CONFIG_CACHE[cache_key] = config
@@ -1313,11 +1462,22 @@ def _derive_aliases(canonical_id: str, kind: str, explicit_aliases: list[str]) -
     return aliases
 
 
-def _register_alias(alias_map: dict[str, str], alias: str, canonical_id: str) -> None:
-    existing = alias_map.get(alias)
-    if existing is not None and existing != canonical_id:
-        raise AliasCollisionError(alias=alias, first_canonical_id=existing, second_canonical_id=canonical_id)
-    alias_map[alias] = canonical_id
+def _path_alias_tokens(file_path: object, kind: str) -> list[str]:
+    """Short-id alias tokens derived from a `<token>-<rest>.md` file stem.
+
+    Mirrors the legacy MarkdownProvider behavior: only hypothesis/question/task files whose
+    stem starts with a `[a-z]<digits>` short id contribute path aliases.
+    """
+    if not (isinstance(file_path, str) and file_path and kind in {"hypothesis", "question", "task"}):
+        return []
+    stem = Path(file_path).stem
+    match = _SHORT_ID_RE.match(stem)
+    if match is None:
+        match = _SHORT_ID_RE.match(stem.split("-", 1)[0])
+    if match is None:
+        return []
+    token = match.group("token")
+    return [f"{kind}:{token.lower()}", f"{kind}:{token.upper()}", token.lower(), token.upper()]
 
 
 def _default_profile_for_kind(

@@ -1,0 +1,13 @@
+# Explicit author decisions for hypotheses the D5 migration REFUSES to guess (Task 3).
+#
+# Fixtures get NO inference shortcut. This canary authors no `status` at all, so the classifier
+# cannot derive a lifecycle or a verdict from it and refuses the file — exactly as it would for a
+# real project. The escape is an artifact, not a rule, and that is the whole point: re-reading the
+# file could never help, because an author's edit is indistinguishable from the original omission.
+#
+# This stub exists to exercise commons overlay merging. It never asserted an epistemic claim, so it
+# gets a lifecycle and NO verdict — an absent verdict says "no adjudication has been recorded",
+# which is precisely true here.
+hypothesis:h4-attractor-convergence:
+  status: draft
+  # verdict: deliberately absent — this fixture adjudicates nothing.

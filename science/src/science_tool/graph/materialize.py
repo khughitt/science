@@ -346,7 +346,10 @@ def _emit_phase(sources: ProjectSources, *, archive_active: dict | None = None) 
     referenced_archived: set[str] = set()
 
     resolver = ReferenceResolver.from_entities(
-        sources.entities, manual_aliases=sources.manual_aliases, identity_table=build_identity_table(sources)
+        sources.entities,
+        manual_aliases=sources.manual_aliases,
+        archive_alias_tokens=sources.archive_alias_tokens,
+        identity_table=build_identity_table(sources),
     )
     entity_index = {entity.canonical_id: entity for entity in sources.entities}
     ext_prefixes = _EXTERNAL_PREFIXES | external_prefixes(sources.ontology_catalogs)
@@ -644,16 +647,17 @@ def _add_entity(
         knowledge.add((uri, SCI_NS.domain, Literal(entity.domain)))
     if entity.status:
         knowledge.add((uri, SCI_NS.projectStatus, Literal(entity.status)))
-    # The WORKFLOW axis, orthogonal to the epistemic `status` above. It MUST reach the graph:
-    # attention ranking and candidate-frame selection are graph consumers, so a field that
-    # stops at the model can never exclude a terminal hypothesis from either. (`phase` stops
-    # at the model, which is exactly why it could not have carried this — fb-2026-07-11-005.)
-    disposition = getattr(entity, "disposition", None)
-    if disposition:
-        knowledge.add((uri, SCI_NS.disposition, Literal(disposition)))
-    disposition_basis = getattr(entity, "disposition_basis", None)
-    if disposition_basis:
-        knowledge.add((uri, SCI_NS.dispositionBasis, Literal(disposition_basis)))
+    # The EPISTEMIC axis, beside the LIFECYCLE `sci:projectStatus` above. Two predicates because
+    # they are two facts: a hypothesis can be `superseded` AND `supported` (formerly supported, now
+    # replaced), which the collapsed field destroyed by overwriting one with the other.
+    verdict = getattr(entity, "verdict", None)
+    if verdict:
+        knowledge.add((uri, SCI_NS.verdict, Literal(verdict)))
+    # `sci:disposition` / `sci:dispositionBasis` are GONE, with the model fields behind them.
+    # Closure is a LIFECYCLE fact and `sci:projectStatus` already carries it -- a graph consumer
+    # asking "is this still being worked?" reads `CLOSED_LIFECYCLE_STATUSES` off that predicate.
+    # The corpus authored `disposition:` on ZERO of 147 hypotheses, so nothing is stranded and
+    # nothing needed migrating: the field never held a fact any file had written down.
     if entity.kind == "dataset" and entity.source_class:
         knowledge.add((uri, SCI_NS.sourceClass, Literal(entity.source_class)))
     if entity.kind == "dataset" and entity.license:
@@ -1589,6 +1593,168 @@ def _register_external_term(
     bridge.add((target_uri, SCI_NS.profile, Literal(_external_profile(raw_target, ontology_catalogs))))
 
 
+@dataclass(frozen=True)
+class AdmittedRelation:
+    """One authored relation that MATERIALIZES — resolved, validated, not yet emitted.
+
+    The product of `admit_authored_relation`, and the only thing `_add_authored_relation` emits
+    from. Emission-time side effects (registering an external term, marking an archived id
+    referenced, adding the triple) are the CALLER's, so admission stays pure and can therefore be
+    asked as a *question* — by `validate`, which needs the answer without the graph.
+    """
+
+    relation: SourceRelation
+    graph_uri: URIRef
+    subject: Entity
+    subject_uri: URIRef
+    predicate_uri: URIRef
+    object: Entity | _ArchivedEndpoint | None  # None == an external term
+    object_uri: URIRef
+    relation_kind: RelationKind | None
+
+    @property
+    def object_canonical_id(self) -> str | None:
+        """The object's canonical id, or `None` for an external term — which is not a project node."""
+        return None if self.object is None else self.object.canonical_id
+
+
+class RelationRejection(ValueError):
+    """An authored relation that does NOT materialize, and WHICH RULE refused it.
+
+    A `ValueError` still, so every existing caller (and `materialize_graph`'s own contract) is
+    unchanged: it raises exactly what it raised before, with the same message. The addition is
+    `code` — the machine-readable reason, so an auditor can name the rule that fired instead of
+    parsing English out of a message.
+    """
+
+    def __init__(self, code: str, message: str) -> None:
+        super().__init__(message)
+        self.code = code
+
+
+def admit_authored_relation(
+    relation: SourceRelation,
+    *,
+    entity_index: Mapping[str, Entity],
+    resolver: ReferenceResolver,
+    ext_prefixes: frozenset[str],
+    archive_active: Mapping[str, object],
+) -> AdmittedRelation:
+    """Resolve and validate one authored relation, or raise `RelationRejection`. Emits NOTHING.
+
+    ☠️ THE ENDPOINTS ARE NOT SYMMETRIC. The SUBJECT must be a loaded entity — a member of
+    `entity_index`, i.e. of `sources.entities`. The OBJECT may additionally be an active ARCHIVED
+    row or an EXTERNAL term. That asymmetry is a rule of the graph, not an accident of this
+    function: an archived record is frozen history that a live record may point *at*, and a frozen
+    record does not get to author new claims about the living corpus.
+
+    This is the SOLE implementation of "does this relation materialize?". `validate` asks it, and
+    `mark_superseded` asks it, precisely so that neither re-derives it: a second, hand-written copy
+    of these rules is narrower than this one by construction, and a validator narrower than the
+    builder reports a clean corpus that has no graph.
+    """
+    try:
+        graph_uri = _graph_uri(relation.graph_layer)
+    except ValueError as exc:
+        # `_graph_uri` has other callers and raises a bare `ValueError`; TYPE it here, at the
+        # boundary. A rejection that escapes untyped is invisible to every caller that asks
+        # admission as a QUESTION -- `audit_relations` catches `RelationRejection`, so this refusal
+        # did not get reported, it CRASHED the check that was meant to report it. Every path out of
+        # this function meaning "this does not materialize" is a `RelationRejection` with a code.
+        raise RelationRejection("unsupported-graph-layer", str(exc)) from exc
+
+    subj_res = resolver.resolve(relation.subject)
+    subject_entity = entity_index.get(subj_res.canonical_id or "")
+    if subject_entity is None:
+        raise RelationRejection("unknown-subject", f"Unknown canonical entity: {relation.subject}")
+    subject_uri = _entity_uri(subject_entity.canonical_id)
+
+    try:
+        predicate_uri = _resolve_relation_term(relation.predicate)
+    except ValueError as exc:
+        raise RelationRejection("unknown-predicate", str(exc)) from exc
+
+    object_entity: Entity | _ArchivedEndpoint | None = None
+    if is_external_reference(relation.object, known_prefixes=ext_prefixes):
+        object_uri = _external_uri(relation.object)
+    else:
+        obj_res = resolver.resolve(relation.object)
+        obj_cid = obj_res.canonical_id if obj_res.status == "resolved" else None
+        if obj_cid is not None and obj_cid not in entity_index and obj_cid in archive_active:
+            # Resolved-but-not-live: an active archived id. Materialize the edge to its
+            # canonical URI and validate the endpoint by the archived row's kind.
+            arow = archive_active[obj_cid]
+            object_uri = _entity_uri(obj_cid)
+            object_entity = _ArchivedEndpoint(canonical_id=obj_cid, kind=getattr(arow, "kind", "") or "")
+        else:
+            resolved_object = entity_index.get(obj_cid or "")
+            if resolved_object is None:
+                raise RelationRejection(
+                    "unknown-object", f"Unknown canonical entity: {relation.object}"
+                )
+            object_entity = resolved_object
+            object_uri = _entity_uri(object_entity.canonical_id)
+
+    relation_kind = _profile_relation_for_predicate(predicate_uri)
+    _validate_authored_relation_endpoint(
+        relation,
+        relation_kind=relation_kind,
+        subject_entity=subject_entity,
+        object_entity=object_entity,  # type: ignore[arg-type]
+    )
+    _validate_membership_role(
+        relation,
+        predicate_uri=predicate_uri,
+        subject_entity=subject_entity,
+        object_entity=object_entity,
+    )
+
+    return AdmittedRelation(
+        relation=relation,
+        graph_uri=graph_uri,
+        subject=subject_entity,
+        subject_uri=subject_uri,
+        predicate_uri=predicate_uri,
+        object=object_entity,
+        object_uri=object_uri,
+        relation_kind=relation_kind,
+    )
+
+
+def _is_membership(
+    predicate_uri: URIRef,
+    subject_entity: Entity,
+    object_entity: Entity | _ArchivedEndpoint | None,
+) -> bool:
+    """A proposition→live-bundle `cito:discusses` edge — the only edge a membership ROLE may ride."""
+    subject_is_proposition = subject_entity.canonical_id.split(":", 1)[0] == "proposition"
+    object_is_live_bundle = isinstance(object_entity, Entity) and object_entity.canonical_id.split(":", 1)[
+        0
+    ] in ("hypothesis", "mechanism")
+    return predicate_uri == CITO_NS.discusses and subject_is_proposition and object_is_live_bundle
+
+
+def _validate_membership_role(
+    relation: SourceRelation,
+    *,
+    predicate_uri: URIRef,
+    subject_entity: Entity,
+    object_entity: Entity | _ArchivedEndpoint | None,
+) -> None:
+    if (
+        predicate_uri == CITO_NS.discusses
+        and relation.role is not None
+        and not _is_membership(predicate_uri, subject_entity, object_entity)
+    ):
+        raise RelationRejection(
+            "membership-role",
+            f"relation {relation.subject} cito:discusses {relation.object}: role "
+            f"{relation.role!r} set, but this is not a proposition→live-bundle membership "
+            "(subject must be a proposition and object a live hypothesis/mechanism); "
+            "membership roles are only valid on membership edges.",
+        )
+
+
 def _add_authored_relation(
     relation: SourceRelation,
     *,
@@ -1606,46 +1772,30 @@ def _add_authored_relation(
     archive_active = archive_active or {}
     if referenced_archived is None:
         referenced_archived = set()
-    graph = dataset.graph(_graph_uri(relation.graph_layer))
-    subject_entity = _canonical_entity(relation.subject, entity_index=entity_index, resolver=resolver)
-    subject_uri = _entity_uri(subject_entity.canonical_id)
-    predicate_uri = _resolve_relation_term(relation.predicate)
 
-    object_entity: Entity | _ArchivedEndpoint | None = None
-    if is_external_reference(relation.object, known_prefixes=ext_prefixes):
-        object_uri = _external_uri(relation.object)
-        _register_external_term(object_uri, relation.object, bridge=bridge, ontology_catalogs=ontology_catalogs)
-    else:
-        obj_res = resolver.resolve(relation.object)
-        obj_cid = obj_res.canonical_id if obj_res.status == "resolved" else None
-        if obj_cid is not None and obj_cid not in entity_index and obj_cid in archive_active:
-            # Resolved-but-not-live: an active archived id. Materialize the edge to its
-            # canonical URI and validate the endpoint by the archived row's kind.
-            arow = archive_active[obj_cid]
-            object_uri = _entity_uri(obj_cid)
-            object_entity = _ArchivedEndpoint(canonical_id=obj_cid, kind=arow.kind or "")
-            referenced_archived.add(obj_cid)
-        else:
-            object_entity = _canonical_entity(relation.object, entity_index=entity_index, resolver=resolver)
-            object_uri = _entity_uri(object_entity.canonical_id)
-
-    relation_kind = _profile_relation_for_predicate(predicate_uri)
-    _validate_authored_relation_endpoint(
+    admitted = admit_authored_relation(
         relation,
-        relation_kind=relation_kind,
-        subject_entity=subject_entity,
-        object_entity=object_entity,  # type: ignore[arg-type]
+        entity_index=entity_index,
+        resolver=resolver,
+        ext_prefixes=ext_prefixes,
+        archive_active=archive_active,
     )
 
-    subject_is_proposition = subject_entity.canonical_id.split(":", 1)[0] == "proposition"
-    object_is_live_bundle = (
-        isinstance(object_entity, Entity)
-        and object_entity.canonical_id.split(":", 1)[0] in ("hypothesis", "mechanism")
-    )
-    is_membership = (
-        predicate_uri == CITO_NS.discusses and subject_is_proposition and object_is_live_bundle
-    )
-    if is_membership and isinstance(object_entity, Entity):
+    graph = dataset.graph(admitted.graph_uri)
+    subject_uri = admitted.subject_uri
+    subject_entity = admitted.subject
+    predicate_uri = admitted.predicate_uri
+    object_entity = admitted.object
+    object_uri = admitted.object_uri
+
+    if object_entity is None:
+        _register_external_term(
+            object_uri, relation.object, bridge=bridge, ontology_catalogs=ontology_catalogs
+        )
+    elif isinstance(object_entity, _ArchivedEndpoint):
+        referenced_archived.add(object_entity.canonical_id)
+
+    if _is_membership(predicate_uri, subject_entity, object_entity) and isinstance(object_entity, Entity):
         emit_discusses_membership(
             graph,
             prop_uri=subject_uri,
@@ -1653,13 +1803,6 @@ def _add_authored_relation(
             prop_cid=subject_entity.canonical_id,
             frame_cid=object_entity.canonical_id,
             role=relation.role or MembershipRole.CORE,
-        )
-    elif predicate_uri == CITO_NS.discusses and relation.role is not None:
-        raise ValueError(
-            f"relation {relation.subject} cito:discusses {relation.object}: role "
-            f"{relation.role!r} set, but this is not a proposition→live-bundle membership "
-            "(subject must be a proposition and object a live hypothesis/mechanism); "
-            "membership roles are only valid on membership edges."
         )
     else:
         graph.add((subject_uri, predicate_uri, object_uri))
@@ -1705,26 +1848,29 @@ def _validate_authored_relation_endpoint(
         return
     if object_entity is None:
         if relation_kind.target_kinds or relation_kind.allowed_kind_pairs:
-            raise ValueError(
+            raise RelationRejection(
+                "external-target",
                 "invalid authored relation endpoint: "
                 f"{relation.subject} {relation.predicate} ({_relation_name_for_error(relation_kind, relation.predicate)}) "
                 f"{relation.object} in {relation.source_path} "
-                "targets an external reference but the predicate requires a project entity"
+                "targets an external reference but the predicate requires a project entity",
             )
         return
     if object_entity is not None and subject_entity.canonical_id == object_entity.canonical_id:
-        raise ValueError(
+        raise RelationRejection(
+            "self-referential",
             "self-referential authored relation: "
             f"{relation.subject} {relation.predicate} ({_relation_name_for_error(relation_kind, relation.predicate)}) "
-            f"{relation.object} in {relation.source_path}"
+            f"{relation.object} in {relation.source_path}",
         )
     if relation_allows_kinds(relation_kind, subject_entity.kind, object_entity.kind):
         return
-    raise ValueError(
+    raise RelationRejection(
+        "illegal-kind-pair",
         "invalid authored relation endpoint: "
         f"{relation.subject} {relation.predicate} ({_relation_name_for_error(relation_kind, relation.predicate)}) "
         f"{relation.object} in {relation.source_path} "
-        f"(got {subject_entity.kind} -> {object_entity.kind})"
+        f"(got {subject_entity.kind} -> {object_entity.kind})",
     )
 
 

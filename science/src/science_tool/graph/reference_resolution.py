@@ -47,9 +47,12 @@ class ReferenceResolver:
         entities: list[Entity],
         *,
         manual_aliases: dict[str, str] | None = None,
+        archive_alias_tokens: frozenset[str] = frozenset(),
         identity_table: "IdentityTable | None" = None,
     ) -> "ReferenceResolver":
-        alias_map = build_alias_map(entities, manual_aliases=manual_aliases)
+        alias_map = build_alias_map(
+            entities, manual_aliases=manual_aliases, archive_alias_tokens=archive_alias_tokens
+        )
         identity_map = _build_identity_map(entities, alias_map)
         slug_index: dict[str, set[str]] = {}
 

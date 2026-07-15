@@ -100,8 +100,9 @@ def test_registration_includes_references_between_hypotheses_and_papers() -> Non
     importlib.reload(references)
     importlib.reload(papers)
 
-    assert [(entry.section, entry.order) for entry in CANONICAL_CHECKS[-3:]] == [
+    assert [(entry.section, entry.order) for entry in CANONICAL_CHECKS[-4:]] == [
         ("hypotheses...", 5),
+        ("hypotheses...", 6),  # check_dangling_lineage -- the cross-record lineage layer
         ("reference integrity...", 7),
         ("paper summaries...", 7),
     ]

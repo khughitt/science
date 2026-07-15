@@ -74,16 +74,34 @@ def test_without_removes_required_section() -> None:
     assert "## Organizing Conjecture" in text
 
 
-def test_hypothesis_phase_defaults_to_active_when_unset() -> None:
-    text = Renderer(today=date(2026, 5, 3)).render("hypothesis", fields=_fields("hypothesis"))
-    assert _frontmatter(text)["phase"] == "active"
-
-
-def test_hypothesis_phase_takes_context_value() -> None:
+def test_hypothesis_status_defaults_to_active_when_unset() -> None:
     fields = _fields("hypothesis")
-    fields["phase"] = "candidate"
+    del fields["status"]
     text = Renderer(today=date(2026, 5, 3)).render("hypothesis", fields=fields)
-    assert _frontmatter(text)["phase"] == "candidate"
+    assert _frontmatter(text)["status"] == "active"
+
+
+def test_hypothesis_status_takes_context_value() -> None:
+    # `draft` is what `phase: candidate` FOLDED INTO -- a trial framing, not yet committed. It is a
+    # `status` now because it always was one: a lifecycle word, kept out of `status` only because
+    # that field was occupied by the epistemic verdict.
+    fields = _fields("hypothesis")
+    fields["status"] = "draft"
+    text = Renderer(today=date(2026, 5, 3)).render("hypothesis", fields=fields)
+    assert _frontmatter(text)["status"] == "draft"
+
+
+def test_the_hypothesis_template_no_longer_EMITS_the_collapsed_fields() -> None:
+    # The rename above would pass just as well if `phase:` and `disposition:` were still rendered
+    # beside the new `status:`. They must be GONE: a template that still emits them re-teaches the
+    # collapse to every hypothesis anyone creates, and the migration would be re-authoring the same
+    # defect it is retiring. This is the assertion that says so.
+    frontmatter = _frontmatter(
+        Renderer(today=date(2026, 5, 3)).render("hypothesis", fields=_fields("hypothesis"))
+    )
+    assert "phase" not in frontmatter
+    assert "disposition" not in frontmatter
+    assert "disposition_basis" not in frontmatter
 
 
 def test_no_hints_strips_html_comments() -> None:

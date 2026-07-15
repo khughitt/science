@@ -5,12 +5,17 @@ hand-authored frontmatter is never re-checked -- and nothing in `science validat
 at status at all. So an out-of-vocabulary status could sit in a committed file and no
 surface would say a word.
 
-That is how natural-systems' `hypothesis:0009` came to carry `status: retired`. `retired`
-is not in the hypothesis vocabulary (proposed | under-investigation | partially-supported |
-supported | weakened | refuted | archived) -- it is a TASK status. The author needed a
-workflow word, `status` was the only field available, and the workflow word overwrote the
-epistemic verdict. The hypothesis had in fact been WEAKENED (a non-significant confirmatory
-null, z = -0.889), not refuted, and not retired (fb-2026-07-11-005).
+That is how natural-systems' `hypothesis:0009` came to carry `status: retired` -- and the history
+has to be kept straight, because this check now fires the OTHER WAY. Back then the hypothesis
+vocabulary was the VERDICT (proposed | under-investigation | partially-supported | supported |
+weakened | refuted | archived), so `retired` -- a lifecycle word -- was illegal, and the author who
+needed one had nowhere to put it. D5 gave `status` the lifecycle and moved the conclusion to
+`verdict`, so today `retired` is LEGAL on a hypothesis and `weakened` is what this check flags.
+
+(The author ruled 0009's true record `complete` + `refuted`: the decisive test RAN, so the work was
+concluded rather than abandoned, and it rejected the organizing conjecture. Do not infer `weakened`
+from the non-significant null -- five drafts of the design did, and all five were wrong.
+fb-2026-07-11-005.)
 
 The vocabulary is derived from the Kind Descriptors via `valid_statuses` -- the SAME
 source `edit_entity` uses. There is deliberately NO table here: a per-kind list in this file
@@ -26,23 +31,37 @@ from science_tool.entities import valid_statuses
 from science_tool.entity_scan import iter_entity_markdown
 from science_tool.validate.checks import Check
 from science_tool.validate.context import ValidateContext
-from science_tool.validate.result import Result, Severity
+from science_tool.validate.kind_severity import severity_for_kind
+from science_tool.validate.result import Result
 
 
-def _severity(ctx: ValidateContext) -> Severity:
-    """ERROR on v3 projects, WARN on older layouts.
+def _result(kind: str, path: Path, message: str) -> Result:
+    """KIND-scoped rule, KIND-graded severity -- both on the axis that carries the meaning.
 
-    Enforcement here is RETROACTIVE: a project may already hold entities whose status was
-    never in the vocabulary, and turning on a hard error would fail its whole corpus at
-    once. This graded rollout is the codebase's existing answer to that (see
-    `entity_conformance._severity`), so use it rather than inventing a second policy.
+    This check first shipped grading severity by `layout_version >= 3`, copying
+    `entity_conformance`. That was the wrong axis and it failed immediately: layout
+    version says whether a project's LAYOUT is modern, not whether a KIND's status
+    vocabulary is trustworthy. All five projects were v3, so the gate graded nothing, and
+    472 entities errored the moment the check landed -- ~3 in 4 of them because the
+    vocabulary was wrong, not the entity (`report` had no terminal state; `plan` had no
+    `draft`; `pre-registration` had no `committed`, the very state our own template and
+    command prescribe).
+
+    The doctrine we already hold covers this: an UNCERTIFIED instrument cannot refute.
+    A vocabulary that has never been reconciled against what the toolkit scaffolds and
+    what projects author is an uncertified instrument, and it may not fail anyone's
+    build. So this check advises, and only advises, until each kind's vocabulary is
+    certified and its projects migrated -- at which point severity ratchets up PER KIND.
+
+    Severity is `severity_for_kind(kind)` and the rule is `f"{kind}.status-vocabulary"`, not a
+    generic `status-vocabulary`, for the reason the whole certification arc exists: `gated_findings`
+    keys on rule NAME alone (`gates.py`), so a generic name in a gate tier would fail every
+    UNCERTIFIED kind's build the instant one kind earned promotion -- the status-vocabulary incident,
+    restaged. Kind-scoped names let the gate list one certified kind (`hypothesis.status-vocabulary`)
+    and leave every other kind a WARN that gates nothing. No compatibility alias for the old generic
+    name: a second spelling of one rule is the drift this axis exists to prevent.
     """
-    version = ctx.manifest.get("layout_version")
-    return Severity.ERROR if isinstance(version, int) and version >= 3 else Severity.WARN
-
-
-def _result(severity: Severity, path: Path, message: str) -> Result:
-    return Result(severity, path, None, message, "status-vocabulary", None)
+    return Result(severity_for_kind(kind), path, None, message, f"{kind}.status-vocabulary", None)
 
 
 @Check(section="entity status vocabulary", order=20)
@@ -73,7 +92,7 @@ def check_status_vocabulary(ctx: ValidateContext) -> Iterator[Result]:
 
         if status not in allowed:
             yield _result(
-                _severity(ctx),
+                kind,
                 path,
                 f"status {status!r} is not in the declared vocabulary for kind {kind!r} "
                 f"({', '.join(sorted(allowed))}).",

@@ -1,7 +1,10 @@
 from __future__ import annotations
 
+import hashlib
+import hmac
 import os
 import re
+import secrets
 import unicodedata
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
@@ -10,17 +13,28 @@ from pathlib import Path
 from typing import Any, cast
 
 import yaml
+from pydantic import ValidationError
 from science_model.entities import OriginRecord, ProjectEntity
+from science_model.entity_schema import (
+    PROJECT_MIXIN_NAMES,
+    EntityValidationError,
+    check_resolution,
+    has_lineage_to_resolve,
+)
 from science_model.frontmatter import atomic_write_text, split_frontmatter
 from science_model.profiles import EntityKind, ProfileManifest, load_profile_manifest
 from science_model.profiles.core import CORE_PROFILE
 from science_model.profiles.local import LOCAL_PROFILE
 from science_model.profiles.schema import EntityFilenameStrategy
 
+from science_tool.entity_profiles import load_project_schema_if_pinned
 from science_tool.entity_scan import iter_entity_markdown
+from science_tool.graph.identity_table import build_identity_table
 from science_tool.graph.migrate import audit_project_sources
 from science_tool.graph.reference_resolution import ReferenceResolver
 from science_tool.graph.sources import (
+    AliasCollisionError,
+    ProjectSources,
     load_project_sources,
     local_profile_sources_dir,
     resolve_local_profile_name,
@@ -197,6 +211,24 @@ _ALLOWED_EXPLICIT_ROOTS = (Path("entities"),)
 # `sci:supersedes` lineage survives materialization.
 _HIDDEN_STATUSES: frozenset[str] = frozenset({"superseded", "archived"})
 
+# CLOSED: no longer an object of active work. A THIRD axis, and not a synonym for either set
+# around it -- `retired` and `complete` are CLOSED but still default-VISIBLE (hidden and closed are
+# different questions), and `active` is open whatever the evidence says.
+#
+# This is the set `disposition: closed` used to name, and it is the whole reason that field could be
+# deleted rather than migrated: closure is a LIFECYCLE fact, so once `status` carries the lifecycle,
+# a second field for it is the collapse re-introduced under a new name. Every consumer that asked
+# "is this still being worked?" -- attention ranking, re-homing debt, demand closure -- asks it here,
+# and asks it in ONE place, because three copies of a vocabulary is how they drift.
+#
+# ☠️ NOT `refuted`. A refuted hypothesis is very often still being worked (written up, probed for
+# why), which is precisely why the verdict and the lifecycle are two fields. Closure is something a
+# person DID; a verdict is what the evidence SAYS. Reading one off the other is the bug this arc
+# exists to end.
+CLOSED_LIFECYCLE_STATUSES: frozenset[str] = frozenset(
+    {"complete", "superseded", "retired", "archived", "abandoned", "deprecated"}
+)
+
 # Human-curated allowlist of statuses that remain default-visible. This is the
 # source of truth the EntityKind schema lacks (it carries only `statuses` /
 # `default_status`, no live/terminal metadata). Every status declared by any core
@@ -213,14 +245,21 @@ _LIVE_STATUSES: frozenset[str] = frozenset(
         "partially-answered",
         "answered",
         "deferred",
+        # `proposed` is the DATASET lifecycle's, and `supported`/`weakened`/`contested` are the
+        # PROPOSITION's. They were also the hypothesis VERDICT vocabulary, worn as a status --
+        # and they stay here only because those other kinds still declare them as statuses.
+        # `under-investigation`, `partially-supported` and `refuted` are gone with the collapse:
+        # no kind declares them now, and the first two were never anything but "the evidence has
+        # not spoken", which `verdict`'s ABSENCE says without a word for it.
         "proposed",
-        "under-investigation",
-        "partially-supported",
         "supported",
         "weakened",
-        "refuted",
         "complete",
         "contested",
+        # Pre-registration lifecycle. `committed` is the freeze point -- emphatically
+        # LIVE: a committed pre-registration is the one thing a study must not lose
+        # sight of.
+        "committed",
         "amended",
         "deprecated",
         "abandoned",
@@ -695,7 +734,6 @@ def build_entity_markdown(
     related: list[str],
     source_refs: list[str],
     today: date,
-    phase: str | None = None,
     with_sections: list[str] | None = None,
     without_sections: list[str] | None = None,
     no_hints: bool = False,
@@ -721,7 +759,6 @@ def build_entity_markdown(
             "slug": slug_value,
             "local_part": local_part,
             "nn": _leading_number(local_part),
-            "phase": phase or "active",
         }
         try:
             text = Renderer(today=today).render(
@@ -834,7 +871,6 @@ def create_entity(
     related: list[str] | None = None,
     source_refs: list[str] | None = None,
     today: date | None = None,
-    phase: str | None = None,
     with_sections: list[str] | None = None,
     without_sections: list[str] | None = None,
     no_hints: bool = False,
@@ -848,7 +884,7 @@ def create_entity(
 
     entity_id_value = generate_entity_id(project_root, kind, title, entity_id, slug, today=today_value)
     status_value = status or _DEFAULT_STATUS[kind]
-    _validate_status(kind, status_value)
+    _validate_status(project_root, kind, status_value)
     rel_path = _resolve_destination_rel_path(project_root, kind, entity_id_value, explicit_path, today_value)
     destination = project_root / rel_path
     if destination.exists():
@@ -862,13 +898,12 @@ def create_entity(
         related=list(related or []),
         source_refs=list(source_refs or []),
         today=today_value,
-        phase=phase,
         with_sections=with_sections,
         without_sections=without_sections,
         no_hints=no_hints,
         extra_frontmatter=extra_frontmatter,
     )
-    warnings = _validate_prospective_write(
+    warnings, _ = _validate_prospective_write(
         project_root=project_root,
         rel_path=rel_path,
         text=text,
@@ -928,41 +963,318 @@ def _reject_if_archived(project_root: Path, ref: str) -> None:
     )
 
 
+# ---------------------------------------------------------------------------------------------
+# THE WRITE BOUNDARY — ONE mechanism, in two halves, and BOTH halves are PRIVATE.
+#
+# `_prepare_write` merges, renders, and validates; it writes NOTHING. The split is what makes
+# `mark_superseded`'s all-or-none claim true rather than aspirational: a caller can learn that a
+# write WOULD be rejected before a byte hits the disk.
+#
+# THE COMMIT HALF IS PRIVATE TOO, AND SO IS THE VALUE IT TAKES. A public `commit_entity_write` that
+# writes whatever `.text` it is handed -- by contract, WITHOUT validating it -- is not a hole in the
+# boundary; it IS a second, unvalidated writer, and a plain frozen dataclass is one call away:
+#
+#     _commit_write(_PreparedWrite(entity_id=..., path=..., text="<anything>", warnings=()))
+#
+# SO THE TOKEN CARRIES A SEAL, AND THE SEAL IS BOUND TO THE PAYLOAD rather than merely possessed. A
+# bare sentinel -- "hold this object and you are trusted" -- is a BEARER token, and a bearer token
+# can be carried onto content it never vouched for, with no private import at all:
+#
+#     dataclasses.replace(legitimately_prepared, text="<anything>")   # copies the sentinel
+#
+# `replace()` re-runs `__post_init__`, so an identity check on a sentinel sees the SAME trusted
+# object and waves through text that was never validated. The seal must therefore be a statement
+# ABOUT THE PAYLOAD: an HMAC over every field the write consists of. `replace()` recomputes nothing,
+# so it carries the OLD seal onto NEW bytes and `__post_init__` refuses it.
+#
+# THE HONEST CLAIM, since Python has no private constructors: this does not make forgery
+# *impossible* -- `_SEAL_KEY` is reachable by anyone willing to import a private name and recompute
+# the digest. It makes forgery **inexpressible by accident**: not by a plausible refactor, not by a
+# helpful `replace()`, not by a caller who thought this was the supported path.
+# ---------------------------------------------------------------------------------------------
+
+_SEAL_KEY = secrets.token_bytes(32)  # module-private, per-process; never exported, never persisted
+
+
+def _seal(entity_id: str, path: Path, text: str) -> str:
+    """An HMAC over EVERY field the write actually consists of.
+
+    Covering `text` alone would leave `replace(prepared, path=<elsewhere>)` free to redirect
+    validated bytes at an unvalidated file.
+    """
+    payload = "\0".join((entity_id, str(path), text)).encode("utf-8")
+    return hmac.new(_SEAL_KEY, payload, hashlib.sha256).hexdigest()
+
+
+@dataclass(frozen=True)
+class _PreparedWrite:
+    entity_id: str
+    path: Path
+    text: str  # fully rendered, fully validated -- nothing left to decide
+    warnings: tuple[str, ...]
+    seal: str  # HMAC of (entity_id, path, text). No default, deliberately.
+
+    def __post_init__(self) -> None:
+        # `compare_digest`, not `==`: this is a MAC check, and constant-time comparison is what a MAC
+        # check is. Runs on `replace()` too, which is the entire point.
+        if not hmac.compare_digest(self.seal, _seal(self.entity_id, self.path, self.text)):
+            raise TypeError(
+                "_PreparedWrite is not constructible, and its seal does not travel: it is the "
+                "proof that _prepare_write validated THIS text for THIS path. Call _prepare_write."
+            )
+
+
+def _prepare_write(
+    project_root: Path,
+    ref: str,
+    fields: Mapping[str, object],
+    *,
+    appends: Mapping[str, list[str]] | None = None,
+) -> _PreparedWrite:
+    """PRIVATE. Merge, render, validate, SEAL. Writes NOTHING.
+
+    Takes a `fields` MAPPING and has NO `**kwargs`, so the one place a derived field can be set is a
+    call site -- and there are exactly two in the codebase: `edit_entity` (which cannot express
+    `superseded_by`) and `consolidation._prepare_supersession` (which derives it from an admitted
+    canonical edge).
+
+    `appends` carries `edit_entity`'s unique-append list semantics, which need the record's CURRENT
+    value. Doing it here rather than in the caller keeps the boundary to ONE `find_entity` and one
+    archive check -- and keeps their ORDER, so an archived ref still reports the actionable
+    `_reject_if_archived` error instead of a bare "Entity not found".
+
+    THE LIFECYCLE GATE LIVES HERE, in the half that writes nothing, and that is what makes it a gate
+    rather than a lament: a terminal transition with no basis, or with a successor that names
+    nothing, fails BEFORE a byte reaches the disk instead of landing and surfacing as a `validate`
+    WARN afterwards. Both entry points inherit it because both come through here. A boundary that
+    governed only the path nobody was going to corrupt would be decoration.
+    """
+    project_root = project_root.resolve()
+    _reject_if_archived(project_root, ref)
+    location = find_entity(project_root, ref)
+
+    frontmatter = dict(location.frontmatter)
+    for key, additions in (appends or {}).items():
+        frontmatter[key] = _append_unique_string_values(frontmatter.get(key), additions)
+    for key, value in fields.items():
+        if key == "status":
+            _validate_status(project_root, location.kind, str(value))
+        frontmatter[key] = value
+    frontmatter.setdefault("updated", date.today().isoformat())
+
+    # Cheapest authority first: the composed schema decides SHAPE, and it decides it about one
+    # record, so it needs no corpus at all. On an UNPINNED project it still refuses the schema-2
+    # vocabulary -- a gate that reads "not migrated" as "no rules" is not a gate.
+    _schema_gate_or_raise(project_root, location.kind, fields, frontmatter)
+
+    text = _render_markdown(frontmatter, location.body)
+    warnings, prospective = _validate_prospective_write(
+        project_root=project_root,
+        rel_path=Path(location.rel_path),
+        text=text,
+        target_entity_id=location.entity_id,
+    )
+    # ...then the ONE question the schema structurally cannot answer, against the corpus as it WOULD
+    # be. Resolving a successor against the BASELINE would ask about a corpus this write is changing.
+    _resolution_check_or_raise(location.kind, frontmatter, prospective)
+
+    return _PreparedWrite(
+        entity_id=location.entity_id,
+        path=location.path,
+        text=text,
+        warnings=tuple(warnings),
+        seal=_seal(location.entity_id, location.path, text),
+    )
+
+
+# Fields an UNMIGRATED hypothesis project may not have written to it. Each would put a schema-2
+# meaning onto a schema-1 record -- the two-vocabularies-at-once state this whole arc exists to
+# abolish, and which the write surface was handing out:
+#
+#   verdict, closure_basis -- MEAN NOTHING before the fold. Under schema 1 the verdict IS `status`,
+#     and there is no lifecycle for a closure to discharge, so `verdict: supported` beside
+#     `status: proposed` and `phase: active` is three fields with no agreement between them.
+#   status -- the kind descriptor now offers ONLY the new lifecycle words (`active`, `complete`,
+#     `retired`, ...). Any value `_validate_status` accepts is therefore a new-vocabulary word landing
+#     on an old-vocabulary record; an OLD word (`proposed`) it already refuses. So there is no coherent
+#     status edit to an unmigrated hypothesis -- both answers are wrong, and the field is refused.
+#   resynthesized_into -- a schema-2 lineage field. Written unpinned it evades the reverse implication
+#     (a successor names what a record has INSTEAD of a future, so `active` + a successor is a
+#     contradiction) -- which the schema enforces only once the project has pinned.
+#
+# The lineage guard for an unmigrated corpus does not live here: a HAND-AUTHORED dangling successor is
+# still caught by `check_dangling_lineage` on the validate path, over every entity regardless of pin.
+# This gate governs only what the WRITE boundary may MANUFACTURE.
+_PIN_REQUIRED_FIELDS: frozenset[str] = frozenset(
+    {"status", "verdict", "closure_basis", "resynthesized_into"}
+)
+
+
+def _schema_gate_or_raise(
+    project_root: Path, kind: str, fields: Mapping[str, object], frontmatter: Mapping[str, object]
+) -> None:
+    """D3.1 at the WRITE boundary: the composed JSON Schema is the authority on a record's shape.
+
+    The KIND gate first -- `PROJECT_MIXIN_NAMES` is the migration slice list, and a kind with no
+    project mixin has no schema to be held to. Then the project's PIN decides which of two things
+    happens, and NEITHER of them is "nothing":
+
+    * PINNED -> validate the merged record against the composed schema. A terminal transition with
+      no basis fails here, before a byte is written.
+    * UNPINNED -> the schema cannot be applied (it would reject `--title` over a `phase:` key the
+      migration is coming for) -- but the schema-2 VOCABULARY must still be refused. Skipping this is
+      what let `--verdict supported`, `--status complete`, and `--resynthesized-into` land on an
+      unmigrated file. An unpinned project is not one the rules do not reach; it is one that has not
+      earned the new words yet. `--title` and other schema-1 fields still go through.
+    """
+    if kind not in PROJECT_MIXIN_NAMES:
+        return
+
+    try:
+        schema = load_project_schema_if_pinned(project_root)
+    except (ValidationError, ValueError) as exc:
+        # A near-miss pin OR an illegal pin value lands HERE now (the shared authority raises a plain
+        # ValueError; a pydantic model elsewhere in the config raises ValidationError). Either must
+        # arrive as a CLI error, not a traceback -- an author who typed `entity_schema_verison` or
+        # `"2"` needs the sentence, not a stack.
+        raise EntityCommandError(f"science.yaml is not valid, so this write cannot be checked:\n{exc}") from exc
+    if schema is None:
+        offered = sorted(_PIN_REQUIRED_FIELDS & {k for k, v in fields.items() if v is not None})
+        if offered:
+            raise EntityCommandError(
+                f"{', '.join(offered)} cannot be written here: this project has not declared "
+                f"`entity_schema_version: 2`, so its {kind} records still carry the verdict in "
+                f"`status` and speak the pre-fold vocabulary. Writing {offered[0]!r} now would leave "
+                f"the record speaking two vocabularies at once. Migrate the project first: "
+                f"`science entity migrate-hypothesis --apply`."
+            )
+        return
+
+    try:
+        schema.validator.validate_as(dict(frontmatter), schema.profile_for(kind))
+    except EntityValidationError as exc:
+        raise EntityCommandError(
+            f"{frontmatter.get('id', kind)}: the edit does not satisfy the {kind} schema\n  {exc}"
+        ) from exc
+
+
+def _resolution_check_or_raise(
+    kind: str, frontmatter: Mapping[str, object], sources: ProjectSources
+) -> None:
+    """The D3 escape hatch, ENUMERATED: does this record's lineage name a real, live, OTHER entity?
+
+    ☠️ ASKED OF EVERY RECORD THAT NAMES A SUCCESSOR, whatever its status. It used to run only on
+    `superseded` records, and a status is a bad proxy for "has lineage" in both directions: an
+    `active` hypothesis carrying `resynthesized_into: [hypothesis:9999-nope]` was never checked at
+    all, while a `superseded` one discharged by `closure_basis` -- no successor, nothing to resolve --
+    built a resolver anyway, so an alias collision between two OTHER entities blocked its `--title`
+    edit. `has_lineage_to_resolve` now asks about lineage.
+
+    NOT gated on the pin, unlike the schema check, and the asymmetry is the point. `superseded_by`
+    meant `superseded_by` in the OLD vocabulary too, so a dangling successor is authorable in an
+    unmigrated project today -- which is precisely the corpus that most needs the guard. Gating this
+    on the pin would arm it only for the projects that had already been made safe.
+
+    Gated on the kind, though, because `check_resolution` asks whether a successor is a live
+    HYPOTHESIS. Pointing it at another kind would measure that kind against a set it is not in.
+    """
+    if kind not in PROJECT_MIXIN_NAMES:
+        return
+    record = dict(frontmatter)
+    if not has_lineage_to_resolve(record):
+        return  # no resolver built: see `has_lineage_to_resolve` for why that matters
+
+    try:
+        resolver = ReferenceResolver.from_entities(
+            sources.entities,
+            manual_aliases=sources.manual_aliases,
+            archive_alias_tokens=sources.archive_alias_tokens,
+            identity_table=build_identity_table(sources),
+        )
+    except AliasCollisionError as exc:
+        raise EntityCommandError(
+            f"cannot check this entity's lineage: the corpus has a duplicated alias ({exc}). "
+            "Resolve the collision, then retry -- a successor cannot be verified against a corpus "
+            "that disagrees about which entity an id names."
+        ) from exc
+
+    live = {e.canonical_id for e in sources.entities if e.kind == kind}
+    violations = check_resolution(record, targets=resolver, live_hypotheses=live)
+    if violations:
+        raise EntityCommandError("; ".join(v.message for v in violations))
+
+
+def _commit_write(prepared: _PreparedWrite) -> EntityWriteResult:
+    """PRIVATE. Authenticate the prepared value, then atomically replace the file.
+
+    It performs no schema or resolution decisions; it re-verifies the proof that those decisions
+    covered THESE bytes for THIS path. Construction-time verification is NOT the write boundary:
+    Python erases the annotation at runtime, so this can otherwise be handed a duck-typed object
+    that never ran `__post_init__` -- and a legitimately prepared frozen instance can still be
+    changed with `object.__setattr__` after its constructor check ran.
+    """
+    if not isinstance(prepared, _PreparedWrite):
+        raise TypeError("a prepared write must be earned from _prepare_write")
+    if not hmac.compare_digest(
+        prepared.seal, _seal(prepared.entity_id, prepared.path, prepared.text)
+    ):
+        raise TypeError("prepared-write seal does not cover the bytes and path being committed")
+    _atomic_replace_text(prepared.path, prepared.text)
+    return EntityWriteResult(
+        entity_id=prepared.entity_id, path=prepared.path, warnings=list(prepared.warnings)
+    )
+
+
+# THE AUTHORED SURFACE. Explicit, keyword-only, and it must NEVER grow a `**kwargs`.
+#
+# It does NOT gain a `superseded_by` parameter. `superseded_by` is DERIVED, and putting it on the
+# authored-edit surface would recreate the second authored spelling design rev 10 exists to delete:
+# an author could write a resolvable `superseded_by` with NO canonical edge behind it, the schema
+# would pass, `check_resolution` would pass, and the entity would be superseded according to
+# nothing. A `**kwargs` here would smuggle it back in -- and would make a named-parameter guard
+# anti-informative, because the absence of the name is exactly what a VAR_KEYWORD signature
+# guarantees whether or not the field is reachable.
 def edit_entity(
     project_root: Path,
     ref: str,
     *,
     title: str | None = None,
     status: str | None = None,
+    verdict: str | None = None,
+    closure_basis: str | None = None,
+    resynthesized_into: list[str] | None = None,  # AUTHORED: no canonical relation behind it
     related: list[str] | None = None,
     source_refs: list[str] | None = None,
     updated: date | None = None,
     today: date | None = None,
 ) -> EntityWriteResult:
-    project_root = project_root.resolve()
-    _reject_if_archived(project_root, ref)
-    location = find_entity(project_root, ref)
-    frontmatter = dict(location.frontmatter)
-    if title is not None:
-        frontmatter["title"] = title
-    if status is not None:
-        _validate_status(location.kind, status)
-        frontmatter["status"] = status
-    if related:
-        frontmatter["related"] = _append_unique_string_values(frontmatter.get("related"), related)
-    if source_refs:
-        frontmatter["source_refs"] = _append_unique_string_values(frontmatter.get("source_refs"), source_refs)
-    frontmatter["updated"] = (updated or today or date.today()).isoformat()
+    """The AUTHORED-edit surface. Prepare, then commit.
 
-    text = _render_markdown(frontmatter, location.body)
-    warnings = _validate_prospective_write(
-        project_root=project_root,
-        rel_path=Path(location.rel_path),
-        text=text,
-        target_entity_id=location.entity_id,
-    )
-    _atomic_replace_text(location.path, text)
-    return EntityWriteResult(entity_id=location.entity_id, path=location.path, warnings=warnings)
+    ONE generic lifecycle boundary, not four invented verbs. `--closure-basis` and `--verdict` are
+    accepted ATOMICALLY with the transition they discharge, which is what lets a single schema check
+    inside `_prepare_write` decide the whole thing: `status: retired` with no basis is not a write
+    that needs a follow-up, it is a write that never happens.
+    """
+    fields: dict[str, object] = {}
+    if title is not None:
+        fields["title"] = title
+    if status is not None:
+        fields["status"] = status
+    if verdict is not None:
+        fields["verdict"] = verdict
+    if closure_basis is not None:
+        fields["closure_basis"] = closure_basis
+    if resynthesized_into is not None:
+        fields["resynthesized_into"] = resynthesized_into
+    fields["updated"] = (updated or today or date.today()).isoformat()
+
+    appends: dict[str, list[str]] = {}
+    if related:
+        appends["related"] = related
+    if source_refs:
+        appends["source_refs"] = source_refs
+
+    return _commit_write(_prepare_write(project_root, ref, fields, appends=appends))
 
 
 def append_entity_note(
@@ -982,7 +1294,7 @@ def append_entity_note(
     frontmatter["updated"] = date_value.isoformat()
     body = append_note_to_body(location.body, f"- {date_value.isoformat()}: {note_text}")
     text = _render_markdown(frontmatter, body)
-    warnings = _validate_prospective_write(
+    warnings, _ = _validate_prospective_write(
         project_root=project_root,
         rel_path=Path(location.rel_path),
         text=text,
@@ -1237,7 +1549,11 @@ def list_entities(
             "--related cannot be combined with --include-archived (the archive index does not carry relation data)"
         )
     sources = load_project_sources(project_root.resolve())
-    resolver = ReferenceResolver.from_entities(sources.entities, manual_aliases=sources.manual_aliases)
+    resolver = ReferenceResolver.from_entities(
+        sources.entities,
+        manual_aliases=sources.manual_aliases,
+        archive_alias_tokens=sources.archive_alias_tokens,
+    )
     related_key = _resolved_ref_key(resolver, related) if related is not None else None
 
     rows: list[dict[str, object]] = []
@@ -1370,9 +1686,23 @@ def _atomic_replace_text(path: Path, text: str) -> None:
     atomic_write_text(path, text)
 
 
-def _validate_status(kind: str, status: str) -> None:
-    if status not in _STATUS_VALUES[kind]:
-        raise EntityCommandError(f"Invalid status for {kind}: {status}")
+def _validate_status(project_root: Path, kind: str, status: str) -> None:
+    """Reject a status the kind does not declare — and know about PROJECT-LOCAL kinds.
+
+    It used to index `_STATUS_VALUES[kind]`, which holds BUILT-IN kinds only, so editing an entity of
+    a kind the project declares in its own manifest raised a bare `KeyError` out of a CLI command.
+    `valid_statuses` is the one function that reads local manifests, and it answers `None` for a
+    local kind that declares NO vocabulary — an OPEN set, not an empty one. Reading `None` as "no
+    status is valid" would refuse every edit to those kinds instead of accepting any.
+    """
+    try:
+        allowed = valid_statuses(kind, project_root=project_root)
+    except KeyError:
+        raise EntityCommandError(f"Unknown entity kind: {kind}") from None
+    if allowed is not None and status not in allowed:
+        raise EntityCommandError(
+            f"Invalid status for {kind}: {status} (expected one of {', '.join(sorted(allowed))})"
+        )
 
 
 def _resolve_destination_rel_path(
@@ -1405,12 +1735,20 @@ def _validate_prospective_write(
     text: str,
     target_entity_id: str,
     include_commons: bool = True,
-) -> list[str]:
+) -> tuple[list[str], ProjectSources]:
+    """Audit warnings, AND the corpus as it would be after this write.
+
+    It hands the prospective sources back because it already built them, and the caller's next
+    question — does this record's successor resolve? — is a question about exactly that corpus.
+    Loading it a second time to ask would be waste, and loading the BASELINE instead would answer a
+    question about a corpus this write is in the middle of changing.
+    """
     rel_path_text = rel_path.as_posix()
     baseline_rows, _ = audit_project_sources(load_project_sources(project_root, include_commons=include_commons))
-    prospective_rows, _ = audit_project_sources(
-        load_project_sources(project_root, markdown_overrides={rel_path_text: text}, include_commons=include_commons)
+    prospective = load_project_sources(
+        project_root, markdown_overrides={rel_path_text: text}, include_commons=include_commons
     )
+    prospective_rows, _ = audit_project_sources(prospective)
 
     baseline_keys = {_audit_row_key(row) for row in baseline_rows}
     new_rows = [row for row in prospective_rows if _audit_row_key(row) not in baseline_keys]
@@ -1424,7 +1762,7 @@ def _validate_prospective_write(
             blocking_rows.append(row)
     if blocking_rows:
         raise EntityCommandError("; ".join(_format_blocking_row(row) for row in blocking_rows))
-    return warnings
+    return warnings, prospective
 
 
 def _audit_row_key(row: Mapping[str, object]) -> tuple[str, str, str, str, str, str]:

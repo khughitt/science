@@ -699,32 +699,6 @@ def test_hypotheses_raw_top_level_status_line_satisfies_status(tmp_path: Path) -
     assert "entities/hypotheses/h1.md missing Status field" not in messages
 
 
-def test_hypotheses_phase_validation(tmp_path: Path) -> None:
-    from science_tool.validate.checks.hypotheses import check_hypotheses
-
-    ctx = _ctx(tmp_path)
-    hypotheses_dir = tmp_path / "entities" / "hypotheses"
-    hypotheses_dir.mkdir(parents=True)
-    hypotheses_dir.joinpath("h1.md").write_text(
-        "---\nstatus: active\nphase: proposed # template comment\n---\n## Falsifiability\nContent\n",
-        encoding="utf-8",
-    )
-    hypotheses_dir.joinpath("h2.md").write_text(
-        "---\nstatus: active\nphase: candidate\n---\n## Falsifiability\nContent\n",
-        encoding="utf-8",
-    )
-    hypotheses_dir.joinpath("h3.md").write_text(
-        "---\nstatus: active\nphase: 'active'\n---\n## Falsifiability\nContent\n",
-        encoding="utf-8",
-    )
-
-    messages = _messages(check_hypotheses(ctx))
-
-    assert "entities/hypotheses/h1.md has invalid phase 'proposed' (must be 'candidate' or 'active')" in messages
-    assert "specs/hypotheses/h2.md has invalid phase 'candidate' (must be 'candidate' or 'active')" not in messages
-    assert "specs/hypotheses/h3.md has invalid phase 'active' (must be 'candidate' or 'active')" not in messages
-
-
 def test_hypotheses_warns_for_non_positive_review_horizon_under_entities(tmp_path: Path) -> None:
     from science_tool.validate.checks.hypotheses import check_hypotheses
 

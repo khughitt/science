@@ -1,8 +1,8 @@
 """Port of validate.sh "Checking hypotheses..." and review horizon blocks.
 
 Checks hypothesis files under both ``entities/hypotheses/`` (new layout)
-and the legacy ``$SPECS_DIR/hypotheses/`` root for Falsifiability, Status,
-and phase shape, then scans ``$DOC_DIR`` and ``$SPECS_DIR`` markdown
+and the legacy ``$SPECS_DIR/hypotheses/`` root for Falsifiability and Status,
+then scans ``$DOC_DIR`` and ``$SPECS_DIR`` markdown
 frontmatter for non-positive review horizons.
 """
 
@@ -14,13 +14,16 @@ from pathlib import Path
 from typing import Any
 
 import yaml
+from science_model.entity_schema.resolution import check_resolution
 
 from science_tool.entity_scan import iter_entity_markdown
+from science_tool.graph.identity_table import build_identity_table
+from science_tool.graph.reference_resolution import ReferenceResolver
 from science_tool.validate.checks import Check
 from science_tool.validate.context import ValidateContext
+from science_tool.validate.kind_severity import severity_for_kind
 from science_tool.validate.result import Result, Severity
 
-_PHASE_RE = re.compile(r"^phase:\s*['\"]?([^'\"\s#]*)['\"]?\s*(?:#.*)?$")
 _STATUS_RE = re.compile(r"^status:")
 _FENCE_RE = re.compile(r"^ {0,3}(`{3,}|~{3,})")
 
@@ -61,13 +64,6 @@ def _check_hypothesis(ctx: ValidateContext, path: Path) -> Iterator[Result]:
     if not _has_status(frontmatter, lines):
         yield _result(Severity.WARN, relative, f"{relative} missing Status field")
 
-    phase = _phase_value(frontmatter, lines)
-    if phase is not None and phase not in {"candidate", "active"}:
-        yield _result(
-            Severity.WARN,
-            relative,
-            f"{relative} has invalid phase '{phase}' (must be 'candidate' or 'active')",
-        )
 
 
 def _has_falsifiability_heading(lines: list[str]) -> bool:
@@ -124,16 +120,6 @@ def _has_status(frontmatter: dict[str, Any], lines: list[str]) -> bool:
     return "status" in frontmatter or any(line.startswith("- **Status:**") or _STATUS_RE.match(line) for line in lines)
 
 
-def _phase_value(frontmatter: dict[str, Any], lines: list[str]) -> str | None:
-    phase = frontmatter.get("phase")
-    if phase is not None:
-        return str(phase)
-
-    for line in lines:
-        match = _PHASE_RE.match(line)
-        if match is not None:
-            return match.group(1)
-    return None
 
 
 def _check_review_horizon_days(ctx: ValidateContext) -> Iterator[Result]:
@@ -160,6 +146,99 @@ def _check_review_horizon_days(ctx: ValidateContext) -> Iterator[Result]:
                 relative,
                 f"{relative}: review_state.review_horizon_days must be positive (got {horizon:g})",
             )
+
+
+RULE_DANGLING_LINEAGE = "hypothesis.dangling-lineage"
+_LINEAGE_KIND = "hypothesis"
+
+
+@Check(section="hypotheses...", order=6)
+def check_dangling_lineage(ctx: ValidateContext) -> Iterator[Result]:
+    """A closed hypothesis's successor must resolve to a real, live, OTHER entity.
+
+    The schema validates one record in isolation, so it can only see that `superseded_by:` is
+    PRESENT. Whether it resolves is a cross-record fact, and this is where it is asked.
+
+    ☠️ The resolver is built HERE, and NOT inside `load_project_sources`. That was tried, and it is
+    wrong: `ReferenceResolver.from_entities` raises `AliasCollisionError` on a corpus with a
+    duplicated alias, so constructing it in the loader turns a REPORTABLE fault into an UNLOADABLE
+    project -- for every consumer of the loader, including the ones that never look at a hypothesis.
+    `annotation/proposition_archive.py` exists precisely to REPORT and unblock those collisions, and
+    calls `load_project_sources` on a colliding corpus on purpose; the loader-side pass breaks it
+    (three tests). Resolution is ANALYSIS over a loaded corpus. The loader loads. Every other
+    `from_entities` call site in the tree builds its own resolver for the same reason.
+
+    Same three arguments as `materialize.py` -- same entities, same manual aliases, same identity
+    table -- because a validator that resolves a reference differently from the materializer is a
+    second authority for one fact.
+
+    Severity is `severity_for_kind(hypothesis)` -- ERROR now that the kind is certified, WARN for any
+    kind that is not (the emitter shares one authority with the status-vocabulary and unbacked-inverse
+    emitters).
+    """
+    sources = ctx.project_sources()
+    resolver = ReferenceResolver.from_entities(
+        sources.entities,
+        manual_aliases=sources.manual_aliases,
+        archive_alias_tokens=sources.archive_alias_tokens,
+        identity_table=build_identity_table(sources),
+    )
+    path_by_id = {
+        str(document.frontmatter.get("id")): document.path
+        for document in sources.markdown_documents
+        if document.frontmatter.get("id")
+    }
+
+    live_hypotheses = _live_lineage_targets(sources)
+    for entity in sources.entities:
+        # KIND-SCOPED to hypothesis, and this is a semantic requirement, not a filter for tidiness.
+        # `check_resolution` asks whether a successor resolves to a LIVE HYPOTHESIS (`live_hypotheses`);
+        # that is the hypothesis lineage contract. An interpretation's successor is another
+        # interpretation, so running an interpretation through this would flag its perfectly valid
+        # lineage as "not a live hypothesis" AND report it under `hypothesis.dangling-lineage` -- the
+        # wrong kind's rule, double-covering the `interpretation.unbacked-inverse` that supersession.py
+        # already owns. Interpretation lineage debt is that check's, by kind; this one is hypotheses'.
+        if entity.kind != _LINEAGE_KIND:
+            continue
+        for violation in check_resolution(
+            entity.model_dump(mode="json"), targets=resolver, live_hypotheses=live_hypotheses
+        ):
+            path = path_by_id.get(violation.entity_id)
+            yield Result(
+                # KIND-graded: `hypothesis` is certified, so this is ERROR and gated. The loop is
+                # hypothesis-only (guard above), so the kind is fixed; the call still goes through
+                # `severity_for_kind` so this emitter and the other two share one authority.
+                severity_for_kind(_LINEAGE_KIND),
+                Path(path) if path else None,
+                None,
+                violation.message,
+                RULE_DANGLING_LINEAGE,
+                None,
+            )
+
+
+def _live_lineage_targets(sources) -> set[str]:
+    """The ids a successor may name: LOCAL, LIVE **hypotheses**. Not every loaded entity.
+
+    ☠️ This was `{e.canonical_id for e in sources.entities}` -- every entity, every kind -- and that
+    is a hole, because the schema constrains only the AUTHORED spelling. `superseded_by` is
+    `pattern: "^hypothesis:"`, but an ALIAS may point anywhere: put `aliases: [hypothesis:looks-valid]`
+    on `dataset:0002` and `superseded_by: hypothesis:looks-valid` resolves to a DATASET, is found in
+    the all-entities set, and reports CLEAN. A hypothesis superseded by a dataset.
+
+    Keyed on `canonical_id`, NOT `id`: the resolver ANSWERS in canonical ids, so a set keyed on the
+    authored `id` would fail to contain its own resolver's answers for every entity whose canonical
+    id differs from the one on disk.
+
+    `kind == "hypothesis"` is also what makes these LOCAL, and by CONTRACT rather than by luck:
+    `sources.entities` is local markdown plus the commons overlay, and commons can own only
+    `dataset` / `paper` / `topic` / `theme` -- `_TYPE_DIR_TO_TYPE` (commons/adapter.py:25) derives
+    the kind from the directory, and there is no `hypotheses/` one. A commons entity therefore can
+    never be a hypothesis, so no separate locality filter is needed; adding one would be dead code.
+    """
+    return {
+        entity.canonical_id for entity in sources.entities if entity.kind == _LINEAGE_KIND
+    }
 
 
 def _review_horizon_days(frontmatter: dict[str, Any]) -> float | None:

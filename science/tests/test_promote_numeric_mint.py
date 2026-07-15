@@ -36,12 +36,14 @@ def test_mint_question_is_template_faithful(tmp_path):
     assert "What drives tumor growth?" in summary
 
 
-def test_mint_hypothesis_is_candidate_phase(tmp_path):
+def test_mint_hypothesis_is_a_DRAFT(tmp_path):
     eid = _mint("hypothesis", "Drug X inhibits pathway Y", tmp_path)
     assert eid.startswith("hypothesis:0001-")
     text = (tmp_path / "entities" / "hypotheses" / f"{eid.split(':', 1)[1]}.md").read_text()
-    assert "status: proposed" in text
-    assert "phase: candidate" in text
+    # A promoted claim is a TRIAL FRAMING -- `phase: candidate` in the collapsed spelling, and
+    # `status: draft` in the lifecycle that replaced it. ONE field says it now.
+    assert "status: draft" in text
+    assert "phase:" not in text
     for section in ("## Organizing Conjecture", "## Proposition Bundle", "## Predictions",
                     "## Falsifiability", "## Related Work"):
         assert section in text

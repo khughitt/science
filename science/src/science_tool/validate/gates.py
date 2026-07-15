@@ -35,9 +35,38 @@ _TIER_RULES: dict[str, frozenset[str]] = {
             "code.uncommitted",
             "code.hardcoded-path",
             "code.produced-by-unresolved",
-            "belief.refutation-masked",
-            "belief.single-source-ceiling",
+            # `belief.refutation-masked` and `belief.single-source-ceiling` were gated here.
+            # Both compared an AUTHORED belief magnitude against the computed one, and belief is
+            # no longer authored (D5 / design rev 8), so they have no input and were removed.
+            #
+            # `refutation-masked` — an author asserting support while an unresolved decisive
+            # refutation stands — is a real invariant, and it now has its home on the axis that IS
+            # authored. It inherits the gated ERROR its belief-axis predecessor held.
+            #
+            # `single-source-ceiling` does NOT come back. Applied to `refuted` it would flag the
+            # strongest possible refutation — one decisive independent test — as unfounded. The
+            # ceiling does not merely fail to transfer to the verdict axis; it INVERTS.
+            "verdict.refutation-masked",
+            #
+            # The other two verdict rules are deliberately UNGATED:
+            #   `verdict.missing-basis`         — WARN. The basis contract is normative, but at
+            #       least 11 of the 15 migrating verdicts cannot satisfy it today, so an ERROR
+            #       would be an uncertified instrument failing real builds. It has its OWN ratchet,
+            #       independent of the `hypothesis` kind's certification.
+            #   `verdict.disagrees-with-computed` — a disagreement is information, not a fault.
+            #       Gating it would make the check a ceiling on the authored verdict, which is
+            #       exactly what design rev 8 point 4 forbids.
             "evidence.proxy-ungated",
+            # The `hypothesis` kind is certified (D5): all 18 roots pinned, rendering, validating.
+            # Its three kind-level rules ratchet to ERROR and gate HERE, and only for this kind --
+            # the names are kind-scoped so an uncertified kind's identical finding stays a WARN that
+            # gates nothing (`gated_findings` keys on rule name alone). `_CERTIFIED_KINDS` in
+            # `kind_severity.py` and this list advance together, one kind per slice.
+            #   `verdict.missing-basis` is NOT here: it is a rule-level ratchet on a different axis
+            #   (>=11 of 15 verdicts have no basis today), independent of the kind's certification.
+            "hypothesis.status-vocabulary",
+            "hypothesis.dangling-lineage",
+            "hypothesis.unbacked-inverse",
         }
     ),
 }

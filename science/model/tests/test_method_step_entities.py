@@ -41,7 +41,18 @@ def test_method_entity_is_a_project_entity() -> None:
     assert method.canonical_id == "method:leiden"
 
 
-def test_bare_project_entity_still_drops_step_fields() -> None:
-    """Guards the motivation: the base class silently ignores these keys."""
+def test_bare_project_entity_does_not_DECLARE_step_fields_but_no_longer_EATS_them() -> None:
+    """The motivation, restated -- because the old assertion pinned the defect as a feature.
+
+    It read `assert not hasattr(entity, "rule_name")` under the docstring "the base class silently
+    ignores these keys", which is `extra="ignore"` asserted as desirable. D3.3 abolishes exactly that:
+    a projection must never silently drop what the schema admits.
+
+    What the typed subclass really buys is DECLARATION -- a typed field, a default, a place in
+    `model_fields`, and a materializer that knows the predicate. What it does not buy, and must not,
+    is the destruction of the value on every other kind.
+    """
     entity = ProjectEntity.model_validate(_base(workflow="workflow:x", rule_name="cluster"))
-    assert not hasattr(entity, "rule_name")
+
+    assert "rule_name" not in ProjectEntity.model_fields  # not DECLARED...
+    assert entity.model_extra == {"workflow": "workflow:x", "rule_name": "cluster"}  # ...not LOST

@@ -93,7 +93,11 @@ def _step_results(step: WorkflowStepEntity, method: MethodEntity, path: Path) ->
 def check_workflow_step_seed_bindings(ctx: ValidateContext) -> Iterator[Result]:
     """A step's seed bindings must agree with the method it applies."""
     sources = ctx.project_sources()
-    resolver = ReferenceResolver.from_entities(sources.entities, manual_aliases=sources.manual_aliases)
+    resolver = ReferenceResolver.from_entities(
+        sources.entities,
+        manual_aliases=sources.manual_aliases,
+        archive_alias_tokens=sources.archive_alias_tokens,
+    )
     entity_index: dict[str, Entity] = {entity.canonical_id: entity for entity in sources.entities}
     for step in sources.entities:
         if not isinstance(step, WorkflowStepEntity):

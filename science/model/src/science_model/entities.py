@@ -7,7 +7,7 @@ from datetime import date
 from enum import StrEnum
 from typing import Any, Literal, Protocol
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+from pydantic import BaseModel, ConfigDict, Field, PrivateAttr, field_validator, model_validator
 
 from science_model.identity import (  # noqa: F401  (EntityClass re-exported; relocated to identity in Spec 2)
     EntityClass,
@@ -297,13 +297,48 @@ class LensView(BaseModel):
 
 
 class Entity(BaseModel):
-    """A research entity parsed from frontmatter or the knowledge graph."""
+    """A research entity parsed from frontmatter or the knowledge graph.
+
+    ☠️ `extra="allow"`, and it is D3.3, not a convenience: *"Projections MUST preserve schema-valid
+    extension fields. Never return to `extra="ignore"` -- that is the original defect."*
+
+    A PROJECT EXTENSION declares fields this shared model cannot: mm30's `identification`,
+    evolution's `source_stated_evidence`. They are schema-valid for those projects and they are NOT
+    core, so no amount of declaring on this class is the answer -- declaring them here would make one
+    project's field a Science field for all 22. Under `extra="ignore"` they validated on disk and
+    evaporated at `model_validate`, which is how the codebase grew THREE separate ways back in (a
+    deliberate raw re-parse, a pre-validation read, and a schema-blind export passthrough). When a
+    schema silently drops what authors write, consumers do not go without -- they grow a second way
+    in, and the result is a shadow schema nobody declared and nobody can validate.
+
+    This is safe ONLY because the schema is checked FIRST. `extra="allow"` on its own would preserve
+    every typo and every deleted key; `unevaluatedProperties: false` on the composed profile is what
+    refuses them, and `load_project_sources` runs it before constructing this model on any project
+    pinned to `entity_schema_version: 2`. The two are one contract: the SCHEMA refuses what it does
+    not know, the PROJECTION preserves what it admitted. Separated, each is a defect.
+    """
+
+    model_config = ConfigDict(extra="allow")
 
     id: str
     canonical_id: str = ""
     kind: str
     type: EntityType | None = None
     title: str
+    # ☠️ `description` IS THE THIRD `phase`. Entity-base 1.0 AND 2.0 declare it, it is ruled CORE,
+    # hypothesis files author it -- and this class had no such field, so `extra="ignore"` was
+    # DISCARDING it at `model_validate`. It validated, it looked declared, and it reached nothing.
+    #
+    # It belongs on `Entity`, not on one subclass, because the BASE is what declares it: every kind
+    # has been dropping it equally, including the commons kinds whose records most obviously have
+    # descriptions. (The body prose is read pre-validation into `content_preview`, so a record was
+    # not wholly unread -- but the `description` FIELD itself reached no attribute and no triple.)
+    #
+    # Representable now; NOT yet materialized to the graph. That is a deliberate stopping point:
+    # quietly adding a predicate to `graph.trig` would put an unrelated change inside a migration's
+    # diff. Ending the drop is this arc's business; deciding what a description MEANS to the graph
+    # is not.
+    description: str = ""
     status: str | None = None
     project: str
     profile: str = "core"
@@ -338,6 +373,16 @@ class Entity(BaseModel):
     review_after: date | None = None
     review_state: EpistemicReviewState | None = None
     composition_rule: CompositionRule | None = None
+
+    # Load-time provenance: the subset of `aliases` that was EXPLICITLY authored in this
+    # entity's frontmatter `aliases:` list, as opposed to the path-/number-derived short
+    # tokens the loader mixes in (`q04` from `0004`). Carried from load so alias resolution
+    # can tell an authored claim from a derived convenience -- even when an authored token
+    # happens to COINCIDE with a derived one (a frontmatter `q01` on the very entity whose
+    # number also derives `q01`). Reconstructing this by token equality misclassifies that
+    # coincidence; it must be carried, never inferred. Private: never serialized to graph,
+    # frontmatter, or inventory, and never part of the kind field-presence surface.
+    _authored_aliases: frozenset[str] = PrivateAttr(default_factory=frozenset)
 
     @model_validator(mode="after")
     def _validate_review_state_kind(self) -> "Entity":
@@ -795,48 +840,53 @@ class TaskEntity(ProjectEntity):
 
 
 class HypothesisEntity(ProjectEntity):
-    """Hypothesis — carries the two orthogonal lifecycle axes.
+    """Hypothesis — two orthogonal axes, in two fields.
 
-    `status` (inherited) is the EPISTEMIC VERDICT: what the evidence says. Its vocabulary
-    already distinguishes `refuted` (met a rejection criterion) from `weakened` (failed to
-    confirm, did not reject).
+    `status` (inherited) is the LIFECYCLE. `verdict` is the EPISTEMIC conclusion. Neither may
+    be inferred from the other, and the cell that proves it is `superseded` + `supported` —
+    formerly supported, now replaced — which the collapsed field could not express at all:
+    writing `superseded` OVERWROTE `supported` and destroyed the conclusion.
 
-    `disposition` is the WORKFLOW STATE: whether this hypothesis is still an object of
-    active work. It says nothing about truth.
+    The collapse had teeth. natural-systems had no lifecycle axis, so it wrote `status: retired`
+    — a TASK status — onto a hypothesis, and the one field, once spent, could not hold the
+    conclusion at all: the verdict became unrecordable. The word it was spent on was false
+    besides. `retired` asserts *abandoned for non-epistemic reasons*, and the pre-registered
+    decisive test had in fact RUN and concluded. The author ruled the true record `complete` +
+    `refuted` (fb-2026-07-11-005).
 
-    The two are ORTHOGONAL, and neither may be inferred from the other. All four
-    combinations are meaningful:
+    ☠️ Do not re-derive that adjudication from the statistics. Five drafts of this design read the
+    same non-significant confirmatory null (z = -0.889) and inferred `weakened`; every one was
+    wrong, because the verdict turns on what the test was FOR — which lives in the
+    pre-registration and the author's judgment, not in the p-value. That is exactly why
+    `status_inventory` REFUSES a terminal status instead of mapping it: a "reasonable default"
+    here would have written this design's own error into the corpus and called it a migration.
 
-    - `refuted` + `open`              — disproved, still being worked (writing it up, probing why)
-    - `supported` + `closed`          — confirmed and done
-    - `under-investigation` + `closed` — closed for PRAGMATIC reasons; epistemically undecided
-    - `refuted` + `closed`            — disproved and closed
+    `verdict` is ABSENT until the evidence speaks. That absence is load-bearing, and it is why
+    `proposed`/`under-investigation` are not verdict values: they say the evidence has NOT
+    spoken, which absence already says.
 
-    That third case is why a single field cannot carry both. natural-systems had no workflow
-    axis, so it wrote `status: retired` — a TASK status — onto a hypothesis, destroying the
-    epistemic verdict and recording a refutation that never happened: the confirmatory null
-    was NON-significant (z = -0.889), which is `weakened`, not `refuted` (fb-2026-07-11-005).
+    THE INVARIANTS ARE NOT HERE. `complete` requires a verdict; `retired` requires a
+    closure_basis; `superseded` requires lineage or a basis. All three live in
+    `mixin-hypothesis-1.0.json`, which is the sole authority (D3). Re-asserting them as
+    model_validators would build the second authority D3 abolishes, and the two would drift.
+    The reconciliation battery in `model/tests/test_hypothesis_entity.py` is the gate that keeps
+    this class honest instead — it proves the schema is at least as strict as this projection,
+    and that every value the schema admits SURVIVES the round trip.
 
-    `disposition` defaults to `open` and is NEVER inferred from `status`. An existing
-    hypothesis that nobody has closed IS open — there is no fact to migrate. Inferring
-    closure from a terminal epistemic status would re-collapse the two axes and silently
-    close hypotheses whose authors never said to.
+    `disposition`/`disposition_basis` are GONE. They were the workflow axis hand-rolled beside a
+    status field that had no lifecycle words; `status` now carries the lifecycle, so a second
+    axis for the same fact is the collapse re-introduced under a new name.
     """
 
-    disposition: Literal["open", "closed"] = "open"
-    disposition_basis: str | None = None
-
-    @model_validator(mode="after")
-    def _closed_requires_a_basis(self) -> "HypothesisEntity":
-        # Closure is always an EXPLICIT authored act. Without a basis, retirement is an
-        # unexplained disappearance -- and the whole point of the axis is that closing is
-        # something a person DID, for a reason that can be named.
-        if self.disposition == "closed" and not (self.disposition_basis or "").strip():
-            raise ValueError(
-                "disposition: closed requires disposition_basis (a pre-registration ref, "
-                "or authored prose for a pragmatic close)"
-            )
-        return self
+    # The four TERMINAL fields. `Entity` is `extra="ignore"`, so until a field is DECLARED here it
+    # is silently dropped at `model_validate` -- and any consumer reading a projected entity sees a
+    # record with no lineage and no adjudication at all. `check_resolution` reads projected
+    # entities, so without these four it would inspect a stripped record, find no reference, and
+    # report clean forever: a green resolver over a blind loader.
+    verdict: Literal["partially-supported", "supported", "weakened", "refuted"] | None = None
+    closure_basis: str | None = None
+    superseded_by: str | None = None
+    resynthesized_into: list[str] = Field(default_factory=list)
 
 
 class DatasetEntity(ProjectEntity):

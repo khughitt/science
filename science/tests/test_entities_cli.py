@@ -45,7 +45,7 @@ def test_entity_create_accepts_local_numeric_id_part() -> None:
 
         result = runner.invoke(
             main,
-            ["entity", "create", "hypothesis", "Local ID", "--id", "0005-local-id", "--status", "proposed"],
+            ["entity", "create", "hypothesis", "Local ID", "--id", "0005-local-id", "--status", "active"],
         )
 
         assert result.exit_code == 0, result.output
@@ -1545,7 +1545,7 @@ def test_discussion_create_with_optional_section_includes_addendum() -> None:
         assert "## Double-Blind Addendum" in path.read_text(encoding="utf-8")
 
 
-def test_hypothesis_create_phase_candidate_sets_field_and_includes_promotion_criteria() -> None:
+def test_hypothesis_create_DRAFT_sets_the_lifecycle_and_includes_promotion_criteria() -> None:
     runner = CliRunner()
     with runner.isolated_filesystem():
         root = Path.cwd()
@@ -1553,18 +1553,19 @@ def test_hypothesis_create_phase_candidate_sets_field_and_includes_promotion_cri
 
         result = runner.invoke(
             main,
-            ["hypotheses", "create", "Trial framing", "--id", "hypothesis:0001-trial-framing", "--phase", "candidate"],
+            ["hypotheses", "create", "Trial framing", "--id", "hypothesis:0001-trial-framing", "--status", "draft"],
         )
 
         assert result.exit_code == 0, result.output
         path = Path("entities/hypotheses/0001-trial-framing.md")
         assert path.is_file()
         text = path.read_text(encoding="utf-8")
-        assert "phase: candidate" in text
+        assert "status: draft" in text
+        assert "phase:" not in text          # there is no second field to disagree with the first
         assert "## Promotion criteria" in text
 
 
-def test_hypothesis_create_defaults_phase_active_without_promotion_criteria() -> None:
+def test_hypothesis_create_defaults_to_ACTIVE_without_promotion_criteria() -> None:
     runner = CliRunner()
     with runner.isolated_filesystem():
         root = Path.cwd()
@@ -1578,7 +1579,8 @@ def test_hypothesis_create_defaults_phase_active_without_promotion_criteria() ->
         path = Path("entities/hypotheses/0001-committed-frame.md")
         assert path.is_file()
         text = path.read_text(encoding="utf-8")
-        assert "phase: active" in text
+        assert "status: active" in text
+        assert "phase:" not in text
         assert "## Promotion criteria" not in text
 
 

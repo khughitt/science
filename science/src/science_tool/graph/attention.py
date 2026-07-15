@@ -8,14 +8,20 @@ from datetime import date, datetime
 from pathlib import Path
 from typing import Any, Iterable, Mapping, Sequence
 
+import yaml
 from rdflib import Dataset, Literal, URIRef
 from rdflib.namespace import SKOS
 
+from science_model.frontmatter import project_config_path
+
+from science_tool.entities import CLOSED_LIFECYCLE_STATUSES
+from science_tool.entity_profiles import ENTITY_SCHEMA_VERSION
 from science_tool.graph.belief import aggregate_belief, collect_evidence_units
 from science_tool.graph.belief_scalar import belief_scalar, belief_scalar_enabled, format_belief_weight
 from science_tool.graph.io import CITO_NS, PROJECT_NS, SCI_NS, project_root_from_graph_path
 from science_tool.graph.store import _evidence_targets_for_uri, _graph_uri, canonical_id_from_entity_uri
 from science_tool.instruments import InstrumentResult
+from science_tool.project_config import validated_entity_schema_version
 
 DEFAULT_EPSILON = 0.05
 NEEDS_REVIEW_MULTIPLIER = 3.0
@@ -133,7 +139,13 @@ def compute_attention_candidates(
         #
         # It stays in the graph: queryable, provenance-visible, lineage intact. Closure is
         # not hiding. Its orphaned questions do not vanish with it -- see `list_rehoming_debt`.
-        if (entity_uri, SCI_NS.disposition, Literal("closed")) in knowledge:
+        #
+        # CLOSURE IS READ OFF THE LIFECYCLE, not off a verdict. A `refuted` hypothesis that is still
+        # being written up is `status: active` and STAYS RANKED -- it is live work. What drops out is
+        # a hypothesis somebody CLOSED. Reading terminality off the verdict instead would re-collapse
+        # the two axes and silently unrank every hypothesis the evidence went against, whether or not
+        # anyone was done with it.
+        if _is_closed(knowledge, entity_uri):
             continue
 
         freshness_state = str(state_literal)
@@ -484,6 +496,47 @@ def _entity_kind_of(uri: URIRef) -> str | None:
     return canonical_id.partition(":")[0]
 
 
+def _is_closed(knowledge, entity_uri: URIRef) -> bool:
+    """Is this entity CLOSED — no longer an object of active work?
+
+    Off the LIFECYCLE (`sci:projectStatus`), against the one vocabulary in `entities.py`. This
+    replaces `sci:disposition`, which said the same thing in a second field that no file ever
+    authored.
+    """
+    status = next(knowledge.objects(entity_uri, SCI_NS.projectStatus), None)
+    return status is not None and str(status) in CLOSED_LIFECYCLE_STATUSES
+
+
+def _speaks_the_lifecycle(graph_path: Path) -> bool:
+    """Has this project DECLARED that its hypotheses carry the lifecycle in `status`?
+
+    THE WIRING QUESTION, and it must be asked before any terminality claim. Before this arc a
+    hypothesis' `status` held the epistemic VERDICT (`proposed`, `supported`, `refuted`, ...), and
+    not one of those is a lifecycle state -- so on an unmigrated project every hypothesis looks
+    non-terminal, and the honest report is "I cannot tell", not a confident zero. That is the whole
+    point of `InstrumentResult.unwired`.
+
+    ☠️ The answer is the AUTHORED PIN, never the shape of the files. Reading it off the status
+    values -- "these all look like lifecycle words, so the project must be migrated" -- is the same
+    class of inference this arc exists to abolish, and it fails on the very project that opened it:
+    natural-systems wrote `status: retired` and `status: active` onto UNMIGRATED hypotheses, and
+    both are lifecycle words. A shape heuristic would call that corpus migrated and then read
+    `retired` -- which there meant *refuted* -- as a closure. Confidently, and wrongly.
+
+    `entity_schema_version: 2` is written by `entity migrate-hypothesis` as its final act, only
+    after every file in the project has been rewritten and re-validated. So the pin does not merely
+    assert the migration; it is emitted BY it. Absent means 1, and 1 means unreadable.
+
+    Read through `validated_entity_schema_version` -- the SAME authority the loader and writer use --
+    so this third reader cannot answer the pin question differently. `ProjectConfig.entity_schema_version`
+    would accept an authored `null` as `None` (indistinguishable from absent), which the authority
+    refuses; going through it keeps "only absence is unpinned" true at every reader.
+    """
+    project_root = project_root_from_graph_path(graph_path)
+    raw = yaml.safe_load(project_config_path(project_root).read_text(encoding="utf-8")) or {}
+    return validated_entity_schema_version(raw) == ENTITY_SCHEMA_VERSION
+
+
 def _related_neighbors(knowledge, uri: URIRef) -> set[URIRef]:
     """All entities joined to ``uri`` by a skos:related edge, either direction.
 
@@ -549,29 +602,37 @@ def list_rehoming_debt(graph_path: Path) -> InstrumentResult[dict[str, str]]:
 
     The dead hypothesis is not ranked. Its re-homing debt is.
 
-    `unwired` when the graph declares no dispositions at all: a project whose hypotheses
-    predate the field cannot be said to have "no re-homing debt" -- nothing has been closed
-    because nothing CAN be closed, and reporting a confident zero would be the silent-
-    instrument bug.
+    `unwired` on a project that has not declared `entity_schema_version: 2` -- there, `status` still
+    holds the epistemic VERDICT, so terminality is not a question this instrument can answer, and a
+    zero would not mean "no debt". It would mean "I cannot read this project."
     """
+    if not _speaks_the_lifecycle(graph_path):
+        return InstrumentResult.unwired(
+            code="hypothesis_lifecycle_unmigrated",
+            reason=(
+                "this project has not declared `entity_schema_version: 2` in science.yaml, so its "
+                "hypotheses still carry the epistemic verdict in `status` and their closure cannot "
+                "be read. Migrate the project (`science entity migrate-hypothesis --apply`) -- zero "
+                "re-homing debt here would not mean 'no debt', it would mean 'unreadable'."
+            ),
+        )
+
     dataset = Dataset()
     dataset.parse(source=str(graph_path), format="trig")
     knowledge = dataset.graph(PROJECT_NS["graph/knowledge"])
 
-    if not any(knowledge.triples((None, SCI_NS.disposition, None))):
-        return InstrumentResult.unwired(
-            code="no_disposition_declared",
-            reason=(
-                "graph/knowledge carries no sci:disposition triples -- no hypothesis can be "
-                "terminal, so re-homing debt cannot be assessed. Zero here would not mean "
-                "'no debt'."
-            ),
-        )
-
     rows: list[dict[str, str]] = []
-    for hypothesis_uri in sorted(knowledge.subjects(SCI_NS.disposition, Literal("closed")), key=str):
-        if not isinstance(hypothesis_uri, URIRef):
-            continue
+    terminal_uris = sorted(
+        (
+            subject
+            for subject in knowledge.subjects(SCI_NS.projectStatus, None)
+            if isinstance(subject, URIRef)
+            and _entity_kind_of(subject) == "hypothesis"
+            and _is_closed(knowledge, subject)
+        ),
+        key=str,
+    )
+    for hypothesis_uri in terminal_uris:
         hypothesis_id = canonical_id_from_entity_uri(str(hypothesis_uri))
         if hypothesis_id is None:
             continue

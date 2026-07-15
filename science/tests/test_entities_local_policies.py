@@ -214,8 +214,13 @@ def test_no_local_profile_is_empty(tmp_path: Path) -> None:
 
 
 def test_status_accessors_core_unchanged() -> None:
-    assert default_status("hypothesis") == "proposed"
-    assert "supported" in valid_statuses("hypothesis")
+    # The hypothesis LIFECYCLE. `supported` used to be here and is not a status any more -- it is a
+    # `verdict`, which is a different field on a different axis.
+    assert default_status("hypothesis") == "active"
+    assert "supported" not in valid_statuses("hypothesis")
+    assert {"draft", "active", "complete", "superseded", "retired", "archived"} == set(
+        valid_statuses("hypothesis")
+    )
 
 
 def test_local_kind_status_defaults_open(tmp_path: Path) -> None:

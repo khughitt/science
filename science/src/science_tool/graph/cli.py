@@ -584,7 +584,7 @@ def graph_inquiry_summary(top: int, output_format: str, graph_path: Path) -> Non
     "--path", "graph_path", default=str(DEFAULT_GRAPH_PATH), show_default=True, type=click.Path(path_type=Path)
 )
 def graph_rehoming_debt(output_format: str, graph_path: Path) -> None:
-    """Open questions still attached to a TERMINAL (disposition: closed) hypothesis.
+    """Open questions still attached to a CLOSED hypothesis (a terminal `status`).
 
     Closing a hypothesis does not close its questions -- it UNHOUSES them. They are dropped
     from the attention ranking along with their dead hypothesis, so without this surface a

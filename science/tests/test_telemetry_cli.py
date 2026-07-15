@@ -2,15 +2,40 @@
 
 from __future__ import annotations
 
+import importlib
 import json
+from collections.abc import Generator
 from pathlib import Path
 
+import pytest
 from click.testing import CliRunner
 
 from science_tool.cli import main
 from science_tool.telemetry import append_event, read_events
 from science_tool.validate import Check, Result, Severity, ValidateContext
-from science_tool.validate.checks import clear_checks_for_tests
+from science_tool.validate.checks import CANONICAL_CHECK_MODULES, clear_checks_for_tests
+
+
+@pytest.fixture
+def isolated_check_registry() -> Generator[None]:
+    """Clear the check registry for this test, and PUT IT BACK.
+
+    ☠️ `clear_checks_for_tests()` is PERMANENT for the session. `_load_canonical_checks()` runs
+    exactly once — at import of `validate/checks/__init__.py` — and `@Check` fires as an *import
+    side effect*, so re-importing an already-imported module re-registers NOTHING. A test that
+    clears the registry and walks away leaves every LATER `runner.run` in the session running an
+    EMPTY check list.
+
+    That does not fail loudly. It fails by finding nothing — so a downstream end-to-end assertion
+    like "this check is registered and fires" passes over an empty registry, or reports zero
+    findings and blames its own fixture. Restoring the registry is what keeps those assertions
+    meaningful; `importlib.reload` is what makes the decorator run again.
+    """
+    clear_checks_for_tests()
+    yield
+    clear_checks_for_tests()
+    for module_name in CANONICAL_CHECK_MODULES:
+        importlib.reload(importlib.import_module(f"science_tool.validate.checks.{module_name}"))
 
 
 def test_successful_cli_invocation_records_command_finish(tmp_path: Path) -> None:
@@ -44,8 +69,12 @@ def test_click_parse_error_records_command_error(tmp_path: Path) -> None:
     assert events[0]["exit_code"] == 2
 
 
-def test_telemetry_group_preserves_nonzero_ctx_exit(tmp_path: Path) -> None:
-    clear_checks_for_tests()
+def test_telemetry_group_preserves_nonzero_ctx_exit(
+    tmp_path: Path, isolated_check_registry: None
+) -> None:
+    # The fixture clears the registry (so `demo_check` is the ONLY check this run sees) and RESTORES
+    # it afterwards. Clearing without restoring silently disarms every later `runner.run` in the
+    # session -- see the fixture's docstring.
 
     @Check(section="demo", order=10)
     def demo_check(ctx: ValidateContext) -> list[Result]:

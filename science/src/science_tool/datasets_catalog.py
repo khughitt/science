@@ -142,7 +142,7 @@ def add_dataset(
         related=related,
         today=today,
     )
-    warnings = _validate_prospective_write(
+    warnings, _ = _validate_prospective_write(
         project_root=project_root,
         rel_path=rel_path,
         text=text,
@@ -478,7 +478,7 @@ def verify_access(
     text = f"---\n{front}---\n\n{body}"
 
     rel_path = Path("entities") / "datasets" / f"{slug}.md"
-    warnings = _validate_prospective_write(
+    warnings, _ = _validate_prospective_write(
         project_root=project_root,
         rel_path=rel_path,
         text=text,

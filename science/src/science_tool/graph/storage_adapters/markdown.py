@@ -66,6 +66,14 @@ class MarkdownAdapter(StorageAdapter):
             raw["canonical_id"] = raw["id"]
         return raw
 
+    # The keys ADDED above -- no author wrote them, and the JSON Schema knows nothing about them.
+    # Schema-first validation (D3.1) checks the AUTHORED frontmatter, so it must subtract exactly
+    # this set; validating the enriched dict would report the loader's own bookkeeping as unknown
+    # keys the author must fix. It lives here, beside the injection, because a new injected key that
+    # forgot to update a list living in another module would surface as a schema error blaming a
+    # file whose author is blameless.
+    INJECTED_KEYS = frozenset({"content", "file_path", "canonical_id"})
+
     def source_document(self, ref: SourceRef, raw: dict[str, Any]) -> MarkdownSourceDocument | None:
         return MarkdownSourceDocument(
             path=ref.path,

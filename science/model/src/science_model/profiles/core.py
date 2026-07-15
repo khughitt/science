@@ -40,16 +40,18 @@ CORE_PROFILE = ProfileManifest(
             shortform="h",
             home="entities/hypotheses",
             strategy="numeric",
-            default_status="proposed",
-            statuses=[
-                "proposed",
-                "under-investigation",
-                "partially-supported",
-                "supported",
-                "weakened",
-                "refuted",
-                "archived",
-            ],
+            # `status` is the LIFECYCLE, uniformly, on every kind. The old vocabulary
+            # (proposed | under-investigation | partially-supported | supported | weakened |
+            # refuted | archived) was the epistemic VERDICT wearing the lifecycle's name -- which
+            # left `archived` as the only lifecycle word a hypothesis had, and pushed authors into
+            # hand-rolling `phase` for the rest. The verdict now lives in `verdict`; `phase` folds
+            # in here.
+            #
+            # `archived` MUST STAY: `consolidate._is_consolidatable` returns False for a closed
+            # vocabulary that lacks it, so dropping the word silently disables hypothesis
+            # consolidation -- a capability lost with no error anywhere.
+            default_status="active",
+            statuses=["draft", "active", "complete", "superseded", "retired", "archived"],
         ),
         EntityKind(
             name="question",
@@ -173,7 +175,13 @@ CORE_PROFILE = ProfileManifest(
             home="entities/reports",
             strategy="numeric",
             default_status="active",
-            statuses=["active", "superseded", "retired", "archived"],
+            # `report` carries NO semantic axis -- its status IS a document lifecycle, and
+            # a report that is finished must be able to say so. Its absence was an
+            # omission, not a policy: `plan` and `interpretation` both declare `complete`;
+            # `report` simply never got it, so 112 finished reports said `complete`
+            # illegally and 8 said `draft`. Added by construction, as the lifecycle words
+            # they are -- not because files existed.
+            statuses=["draft", "active", "complete", "superseded", "retired", "archived"],
         ),
         EntityKind(
             name="validation-report",
@@ -404,7 +412,19 @@ CORE_PROFILE = ProfileManifest(
             home="entities/pre-registrations",
             strategy="numeric",
             default_status="active",
-            statuses=["active", "amended", "superseded", "retired"],
+            # `committed` is the FREEZE POINT -- the state the whole pre-registration
+            # doctrine exists to name. It is added because BOTH
+            # `templates/pre-registration.md` AND `commands/pre-register.md:258` prescribe
+            # `status: "committed"` on sign-off: a value the toolkit itself tells authors
+            # to write must be declared or struck from the template, and striking the
+            # freeze point is not an option.
+            #
+            # `committed`/`amended` are a COMMITMENT axis, not a document lifecycle.
+            # `draft`/`complete` are NOT added here even though 16 files use them: they
+            # are lifecycle words, they belong on the lifecycle axis once `status` is
+            # split, and adding them now would deepen the very collapse the split exists
+            # to undo. Those files stay WARN -- that warning IS the migration signal.
+            statuses=["active", "committed", "amended", "superseded", "retired"],
         ),
         EntityKind(
             name="plan",
@@ -416,7 +436,15 @@ CORE_PROFILE = ProfileManifest(
             home="entities/plans",
             strategy="numeric",
             default_status="active",
-            statuses=["active", "complete", "superseded", "retired", "archived"],
+            # `plan` carries NO semantic axis -- its status IS a document lifecycle, and a
+            # plan is DRAFTED before it is active. `draft` was its single commonest status
+            # in the wild (102) and was illegal. Added by construction, as the lifecycle
+            # word it is.
+            #
+            # `proposed` (25) is deliberately NOT added: it is drift toward `draft`, and
+            # minting a synonym would entrench the ad-hoc per-kind divergence this whole
+            # exercise is trying to end. Those 25 stay WARN and migrate to `draft`.
+            statuses=["draft", "active", "complete", "superseded", "retired", "archived"],
         ),
         EntityKind(
             name="search",
@@ -661,16 +689,29 @@ CORE_PROFILE = ProfileManifest(
         RelationKind(
             name="supersedes",
             predicate="sci:supersedes",
-            source_kinds=["workflow-run", *_CONCLUSION_KINDS],
-            target_kinds=["workflow-run", *_CONCLUSION_KINDS],
+            # LEG 2 of the D4 supersedable gate. `hypothesis` declares a `superseded` terminal
+            # (Task 8) and is auto-stamped by `mark_superseded` -- but it was not an admissible
+            # endpoint here, so authoring the canonical edge raised ValueError in materialize. The
+            # vocabulary and the relation model disagreed, and the terminal was a dead letter.
+            #
+            # HYPOTHESIS ONLY. Twelve other kinds are half-wired the same way (decision, inquiry,
+            # mechanism, method, observation, plan, pre-registration, proposition, synthesis, theme,
+            # topic, workflow-step). They are this arc's DECLARED, FROZEN DEBT -- ratcheted by
+            # test_every_supersedable_kind_can_author_the_CANONICAL_edge, which forbids the set
+            # growing while allowing any of them to be repaired. Widening them here would be scope
+            # this task did not certify.
+            source_kinds=["workflow-run", "hypothesis", *_CONCLUSION_KINDS],
+            target_kinds=["workflow-run", "hypothesis", *_CONCLUSION_KINDS],
             allowed_kind_pairs=[
                 RelationEndpointPair(source_kind="workflow-run", target_kind="workflow-run"),
+                RelationEndpointPair(source_kind="hypothesis", target_kind="hypothesis"),
                 *_CONCLUSION_KIND_PAIRS,
             ],
             layer="layer/core",
             description=(
                 "A newer entity replaces an older entity as canonical. Valid "
-                "for workflow-run replacement and conclusion-level replacement."
+                "for workflow-run replacement, hypothesis replacement, and "
+                "conclusion-level replacement."
             ),
         ),
         RelationKind(

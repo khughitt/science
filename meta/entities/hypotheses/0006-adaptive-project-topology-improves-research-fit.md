@@ -1,11 +1,10 @@
 ---
 kind: hypothesis
 title: Adaptive project topology improves research fit
-status: proposed
-created: '2026-05-17'
-updated: '2026-07-01'
+status: active
+created: "2026-05-17"
+updated: "2026-07-01"
 id: hypothesis:0006-adaptive-project-topology-improves-research-fit
-phase: active
 source_refs: []
 related:
 - question:0014-adaptive-project-topology

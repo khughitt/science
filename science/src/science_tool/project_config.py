@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import difflib
 from enum import StrEnum
 from pathlib import Path
 from typing import Annotated, Any, Literal
@@ -216,6 +217,20 @@ class ProjectConfig(BaseModel):
     data: ProjectDataConfig | None = None
     data_policy: DataPolicyConfig | None = None
     reproducibility_policy: ReproducibilityPolicyConfig | None = None
+    entity_extensions: dict[str, list[str]] = Field(default_factory=dict)
+    # The project's ENTITY SCHEMA generation. Absent means 1 -- unmigrated -- and that is the only
+    # thing absence may mean: this is an AUTHORED DECLARATION of which version a project is on, never
+    # an inference from its files. Nothing guesses; a project says.
+    #
+    # DECLARED, not merely tolerated, so the VALUE is checked: the vocabulary is closed to the
+    # versions that EXIST, and an unconstrained `int` would make `3` a silent no-op the day someone
+    # types it.
+    #
+    # Declaring the field does NOT, on its own, catch a MISSPELLED one -- `extra="allow"` carries
+    # `entity_schema_verison: 2` into `model_extra`, preserved and ignored, leaving the project
+    # silently unmigrated while its author believes otherwise. That is what `_reject_near_miss_keys`
+    # below is for. A pin nobody can typo is the whole value of "a project says".
+    entity_schema_version: Literal[1, 2] | None = None
 
     @model_validator(mode="before")
     @classmethod
@@ -228,6 +243,87 @@ class ProjectConfig(BaseModel):
                     "Use `peers:` instead; `parent:` and `children:` are removed project-config fields."
                 )
         return raw
+
+    @model_validator(mode="before")
+    @classmethod
+    def _reject_near_miss_keys(cls, raw: Any) -> Any:
+        reject_near_miss_keys(raw)
+        return raw
+
+
+def reject_near_miss_keys(raw: Any) -> None:
+    """A key that ALMOST names a declared field is a typo, and `extra="allow"` would keep it.
+
+    `extra="allow"` is deliberate: science.yaml carries project-owned keys this model has no opinion
+    about (`summary`, `tags`, `aspects`, `layout_version`, ...), and preserving them is the point.
+    But that same permissiveness turns `entity_schema_verison: 2` into a key that is accepted,
+    preserved, and ignored -- leaving a project silently on schema 1 while its author believes it
+    migrated, which is precisely the fail-silent this arc exists to close. A pin nobody can typo is
+    what "nothing guesses; a project says" actually costs.
+
+    Near-miss, not unknown: an unknown key is legal by design, so only keys that are one plausible
+    slip away from a DECLARED field are refused.
+
+    ☠️ MODULE-LEVEL, and not a private validator, because the pin is read on TWO paths and only one
+    of them can afford full `ProjectConfig` validation. The graph loader cannot: `name` is required,
+    and demanding it of every graph build is a real tightening that is not this arc's. So the loader
+    calls THIS, on the raw dict, and gets the typo guard without the rest. A near-miss pin must FAIL
+    on both paths -- degrading it to "unpinned" is the fail-open, wearing the pin's own clothes.
+    """
+    if not isinstance(raw, dict):
+        return
+    declared = sorted(ProjectConfig.model_fields)
+    for key in raw:
+        if not isinstance(key, str) or key in ProjectConfig.model_fields:
+            continue
+        near = difflib.get_close_matches(key, declared, n=1, cutoff=0.85)
+        if near:
+            raise ValueError(
+                f"science.yaml: unknown key {key!r} -- did you mean {near[0]!r}? "
+                "A near-miss key is refused rather than preserved: silently ignoring it would "
+                "leave the project unconfigured while its author believed otherwise."
+            )
+
+
+_LEGAL_ENTITY_SCHEMA_VERSIONS: frozenset[int] = frozenset({1, 2})
+
+
+def validated_entity_schema_version(raw: Any) -> int | None:
+    """The pin's value, checked against the closed vocabulary, WITHOUT full ``ProjectConfig``.
+
+    ☠️ THE ONE AUTHORITY BOTH PATHS READ THE PIN THROUGH. The graph loader and the write boundary
+    each ask "does this project speak schema 2?" -- and a `2` that armed the writer but not the
+    loader, or the reverse, is two answers to one question. The loader cannot afford full
+    ``ProjectConfig`` (it requires `name`, and demanding that of every graph build is a tightening
+    that is not this arc's), so BOTH call this, on the raw dict.
+
+    It validates the KEY (near-miss, via ``reject_near_miss_keys``) and the VALUE. A present pin must
+    be a version that EXISTS: `"2"` (a quoted string), `3`, `1.0`, `True`, or an explicit `null` is
+    REFUSED, not silently read as "unpinned". That degrade-to-unpinned was the fail-open -- the load
+    path enforced nothing while the write path raised on the very same file.
+
+    ☠️ ABSENCE is the ONLY thing that means "unpinned" -- so the test is KEY PRESENCE, never
+    ``raw.get()``, which cannot tell a missing key from an authored `entity_schema_version: null`.
+    And the value must be a strict ``int``: `type(value) is int` rejects `bool` (`type(True) is int` is
+    ``False``) AND `float`, which plain membership would wave through because `1.0 == 1` and
+    `1.0 in {1, 2}` is ``True``. A present-but-wrong value is a project to FIX, never one silently read
+    as unmigrated.
+
+    Returns the version (1 or 2) for a legal pin, or ``None`` when the pin is ABSENT.
+    """
+    reject_near_miss_keys(raw)
+    if not isinstance(raw, dict):
+        return None
+    if "entity_schema_version" not in raw:
+        return None  # ABSENCE, and only absence, is "unpinned"
+    value = raw["entity_schema_version"]
+    if type(value) is not int or value not in _LEGAL_ENTITY_SCHEMA_VERSIONS:
+        raise ValueError(
+            f"science.yaml: entity_schema_version must be 1 or 2 (an integer), not {value!r}. "
+            "A present pin with an illegal value is refused rather than read as 'unpinned' -- that "
+            "silent degrade let the loader skip schema validation while the writer rejected the file."
+        )
+    return value
 
 
 def load_project_config(project_root: Path) -> ProjectConfig:

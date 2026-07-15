@@ -187,13 +187,30 @@ class MeasurementModel(BaseModel):
 
 
 class RivalModelPacket(BaseModel):
-    """A bounded set of rival models for explicit comparison."""
+    """A bounded set of rival models for explicit comparison.
+
+    Two spellings of a rival coexist here, and the corpus chose the second one: the LIST form
+    (`alternative_models`) is authored by ZERO files, while the SINGLE-RIVAL form below is authored
+    by the only packet-bearing hypothesis there is. Because this model is `extra="ignore"`, those
+    four keys were accepted at `model_validate` and then dropped by `model_dump` -- they reach
+    neither the graph nor any reader. Declaring them ends the drop and preserves the file as
+    written; whether a packet SHOULD have two spellings is a design question, filed as one.
+
+    `exclude_if` is not cosmetic. `_model_to_json` (materialize.py:1897) is an inclusive
+    `model_dump`, so plain optionals would add four `null` keys to the serialized literal of every
+    EXISTING packet -- including one on a proposition, an entity the hypothesis migration has no
+    business touching.
+    """
 
     packet_id: str = Field(min_length=1)
     target_hypothesis: str | None = None
     target_inquiry: str | None = None
     current_working_model: str | None = None
     alternative_models: list[str] = Field(default_factory=list)
+    rival_id: str | None = Field(default=None, exclude_if=lambda value: value is None)
+    rival_name: str | None = Field(default=None, exclude_if=lambda value: value is None)
+    rival_claim: str | None = Field(default=None, exclude_if=lambda value: value is None)
+    discriminator_status: str | None = Field(default=None, exclude_if=lambda value: value is None)
     shared_observables: list[str] = Field(default_factory=list)
     discriminating_predictions: list[str] = Field(default_factory=list)
     adjudication_rule: str | None = None

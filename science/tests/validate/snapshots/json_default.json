@@ -1,7 +1,7 @@
 {
   "summary": {
     "errors": 7,
-    "warnings": 2,
+    "warnings": 3,
     "infos": 0
   },
   "results": [
@@ -11,6 +11,14 @@
       "line": null,
       "message": "validate.local.sh is no longer supported; migrate it using docs/migration/2026-05-19-validate-local-sh-porting-guide.md",
       "rule": "validate.sidecar.legacy_removed",
+      "task": null
+    },
+    {
+      "severity": "warn",
+      "path": "pyproject.toml",
+      "line": null,
+      "message": "pyproject.toml does not list science under [dependency-groups].dev (fix: add the dependency and configure `science = { git = \"https://github.com/khughitt/science.git\", subdirectory = \"science\" }`)",
+      "rule": "tooling",
       "task": null
     },
     {

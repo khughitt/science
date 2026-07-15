@@ -142,7 +142,11 @@ def report_dataset_stochasticity(project_root: Path, dataset_ref: str) -> Stocha
 
     sources = load_project_sources(project_root, strict_core_schema=False)
     _reject_skipped_stochasticity_sources(sources)
-    resolver = ReferenceResolver.from_entities(sources.entities, manual_aliases=sources.manual_aliases)
+    resolver = ReferenceResolver.from_entities(
+        sources.entities,
+        manual_aliases=sources.manual_aliases,
+        archive_alias_tokens=sources.archive_alias_tokens,
+    )
     workflow_id = resolver.resolve(workflow_id_ref).canonical_id or workflow_id_ref
     pairs = steps_and_methods_for_workflow(sources, resolver, workflow_id)
 

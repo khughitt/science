@@ -121,7 +121,9 @@ Do not frame a single paper or result as proving the hypothesis.
 
 `science hypotheses create` defaults `status` to `proposed`. The supported life-cycle values are `proposed`, `under-investigation`, `partially-supported`, `supported`, `weakened`, and `refuted`. Use `--status under-investigation` only if active testing is already underway. Avoid `supported`, `weakened`, or `refuted` as the default outcome of authoring a new hypothesis — those are evidence-based exit states.
 
-`phase` defaults to `active` (a committed frame). For a trial framing you are promoting to organize work but have not yet committed to, pass `--phase candidate`: this sets `phase: candidate` in the frontmatter *and* includes the otherwise-optional `## Promotion criteria` section, where you state what evidence or analytic outcome would justify promoting it to `active`.
+`status` defaults to `active` (a committed frame). For a trial framing you are promoting to organize work but have not yet committed to, pass `--status draft`: this sets `status: draft` in the frontmatter *and* includes the otherwise-optional `## Promotion criteria` section, where you state what evidence or analytic outcome would justify promoting it to `active`.
+
+`status` is the **lifecycle** (`draft | active | complete | superseded | retired | archived`) — what is being *done* with the hypothesis. What the *evidence says* is a separate field, `verdict` (`partially-supported | supported | weakened | refuted`), and it stays **absent until the evidence speaks**. Never infer one from the other: a refuted hypothesis you are still writing up is `status: active`, and a hypothesis retired for pragmatic reasons has no verdict at all.
 
 Use optional layered-claim fields only when they reduce ambiguity, by editing the file body and frontmatter after creation:
 - `claim_layer`

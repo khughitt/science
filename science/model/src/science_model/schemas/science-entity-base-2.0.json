@@ -1,0 +1,90 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.science/science-entity-base-2.0.json",
+  "title": "science entity base profile (kind-agnostic; mixins pin identity)",
+  "$comment": "Base 1.0 enum-locks `kind` and prefix-locks `id` to the four commons kinds. Composition is a pure allOf, which can only NARROW, so no mixin can widen them and project-authored kinds cannot be expressed under 1.0 at all. This base constrains shape only; each mixin supplies the exact `kind` const. Commons records stay pinned to 1.0 — two base versions coexisting is what versioning is for.",
+  "type": "object",
+  "required": [
+    "id",
+    "kind",
+    "title",
+    "created",
+    "updated"
+  ],
+  "properties": {
+    "schema_profile": {
+      "type": "string",
+      "pattern": "^science-entity-base/[0-9]+\\.[0-9]+(\\+[a-z][a-z0-9._-]*/[0-9]+\\.[0-9]+)*$",
+      "$comment": "Optional here, and DERIVED for project kinds (`default_profile_for_kind`). It stays declared because commons records — which travel between repos, so the profile must travel with the record — legitimately author it. A project kind's mixin sets this to `false`."
+    },
+    "id": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9-]*:[A-Za-z0-9][A-Za-z0-9._-]{0,127}$",
+      "$comment": "Prefix-agnostic. The suffix is widened to 127 chars because real hypothesis slugs exceed base 1.0's 64 (e.g. `0009-local-structure-globalization-obstruction`)."
+    },
+    "kind": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9-]*$",
+      "$comment": "Shape only. The mixin's `const` pins the exact kind — so adding a new kind never edits this versioned file."
+    },
+    "title": {"type": "string", "minLength": 1},
+    "version": {
+      "type": "string",
+      "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+$",
+      "science:merge": "forbidden",
+      "$comment": "Optional here, and a COMMONS concept: semver on a shared record. A project entity is versioned by its repo's git history. A project kind's mixin sets this to `false`."
+    },
+    "description": {"type": "string"},
+    "created": {"type": "string", "format": "date"},
+    "updated": {"type": "string", "format": "date"},
+    "sources": {"type": "array", "items": {"type": "string"}},
+    "licenses": {
+      "type": "array",
+      "items": {
+        "oneOf": [
+          {"type": "string"},
+          {
+            "type": "object",
+            "required": ["name"],
+            "properties": {
+              "name": {"type": "string"},
+              "path": {"type": "string"},
+              "title": {"type": "string"}
+            }
+          }
+        ]
+      }
+    },
+    "contributors": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["name"],
+        "properties": {
+          "name": {"type": "string"},
+          "email": {"type": "string"},
+          "role": {"type": "string"}
+        }
+      }
+    },
+    "ontology_terms": {"type": "array", "items": {"type": "string"}, "science:merge": "append"},
+    "same_as": {"type": "array", "items": {"type": "string"}, "science:merge": "append"},
+    "tags": {"type": "array", "items": {"type": "string"}, "science:merge": "append"},
+    "dataset_usage": {"$ref": "#/$defs/dataset_usage", "science:merge": "append"},
+    "status": {"type": "string"}
+  },
+  "$defs": {
+    "dataset_usage": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["ref", "role"],
+        "properties": {
+          "ref": {"type": "string", "pattern": "^dataset:"},
+          "role": {"enum": ["analyzed", "set_definition_source", "validation_source", "cited", "upstream", "training", "reference"]},
+          "overlap": {"enum": ["full", "partial", "unknown"]}
+        }
+      }
+    }
+  }
+}

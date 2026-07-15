@@ -3,3 +3,4 @@ profile: "research"
 aspects:
   - hypothesis-testing
   - software-development
+entity_schema_version: 2

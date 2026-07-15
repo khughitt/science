@@ -9,6 +9,8 @@ from jsonschema.exceptions import ValidationError as _JsonValidationError
 
 from science_model.entity_schema.loader import SchemaLoader
 from science_model.entity_schema.profile import (
+    PROJECT_MIXIN_NAMES,
+    TYPE_MIXIN_NAMES,
     ProfileParseError,
     ProfileString,
     parse_profile,
@@ -30,6 +32,7 @@ class EntityValidator:
         self._loader = loader or SchemaLoader()
 
     def validate(self, entity: dict[str, Any]) -> None:
+        """Validate against the entity's OWN declared `schema_profile` (the commons path)."""
         profile_str = entity.get("schema_profile")
         if not profile_str:
             raise EntityValidationError("entity is missing required schema_profile field")
@@ -37,11 +40,18 @@ class EntityValidator:
             profile = parse_profile(profile_str)
         except ProfileParseError as exc:
             raise EntityValidationError(f"invalid schema_profile: {exc}") from exc
+        self.validate_as(entity, profile)
+
+    def validate_as(self, entity: dict[str, Any], profile: ProfileString) -> None:
+        """Validate against an EXPLICIT profile, without mutating the caller's dict.
+
+        Project entities do not author `schema_profile`; it is derived from `kind`
+        (`default_profile_for_kind`), so the profile must be passed in rather than read out.
+        """
         if profile.mixin is None:
             raise EntityValidationError(
-                "schema_profile must include a type mixin "
-                "(dataset/paper/topic/theme) — base-only profiles are not "
-                "valid for entity payloads",
+                f"schema_profile must include a type mixin (one of {sorted(TYPE_MIXIN_NAMES)}) "
+                "— base-only profiles are not valid for entity payloads",
             )
         composed = self._compose(profile)
         validator = Draft202012Validator(
@@ -84,7 +94,20 @@ class EntityValidator:
         if profile.mixin is not None:
             parts.append(self._loader.load(profile.mixin))
         parts.extend(self._loader.load(ext) for ext in profile.extensions)
-        return {"allOf": parts}
+
+        # `unevaluatedProperties` -- NOT `additionalProperties`. Inside an allOf,
+        # `additionalProperties` in one branch cannot see properties declared by a SIBLING branch,
+        # so it would reject every field the mixin declares. `unevaluatedProperties` is evaluated
+        # after the whole allOf and sees the union. This is THE line that turns the original defect
+        # (Entity's extra="ignore" silently dropping undeclared keys) into a loud failure.
+        #
+        # Commons profiles are deliberately NOT closed: `SharedEntity` is extra="allow" by design
+        # and 369 records rely on it. `strict` is gated on PROJECT_MIXIN_NAMES so each kind opts in
+        # as it migrates.
+        composed: dict[str, Any] = {"allOf": parts}
+        if profile.mixin is not None and profile.mixin.name in PROJECT_MIXIN_NAMES:
+            composed["unevaluatedProperties"] = False
+        return composed
 
 
 def _format_error(err: _JsonValidationError) -> str:

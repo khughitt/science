@@ -2,10 +2,9 @@
 id: "hypothesis:{{nn}}-{{slug}}"
 kind: "hypothesis"
 title: "{{title}}"
-status: "proposed"
-disposition: "open"  # open | closed. WORKFLOW state, orthogonal to `status`. `closed` = no longer an object of active work; it says NOTHING about truth. Never inferred from status.
-# disposition_basis: required when disposition is `closed` -- a pre-registration ref, or authored prose for a pragmatic close.
-phase: "active"  # candidate | active. `candidate` for trial framings being promoted to organize work but not yet committed; `active` (default) for committed frames.
+status: "active"  # draft | active | complete | superseded | retired | archived. The LIFECYCLE. What the evidence SAYS is `verdict`, and it stays absent until the evidence speaks.
+# verdict: partially-supported | supported | weakened | refuted. The epistemic conclusion -- NEVER inferred from status, and required once status is `complete`.
+# closure_basis: required when status is `retired` (and for `archived`) -- why this stopped being worked. Prose, or a pre-registration ref.
 # aspects: ["hypothesis-testing"]  # optional override; omitted entities inherit project aspects
 source_refs: []
 # origins: known originators (user | assistant | literature). Provenance only;
@@ -19,9 +18,7 @@ _template:
     id: { from: entity_id }
     kind: { default: "hypothesis" }
     title: { from: title }
-    status: { from: status }
-    disposition: { default: "open" }
-    phase: { from: phase, default: "active" }
+    status: { from: status, default: "active" }
     source_refs: { from: source_refs }
     origins: { from: origins, default: [] }
     related: { from: related }
@@ -92,7 +89,7 @@ Be specific about what would force revision.
 ## Promotion criteria
 
 <!--
-Required prose when `phase: candidate`; omit when `phase: active`.
+Required prose when `status: draft`; omit when `status: active`.
 What evidence or analytic outcome would justify promoting this from
 candidate to active? Be concrete. This is a documentation convention,
 not a validator-enforced rule.
