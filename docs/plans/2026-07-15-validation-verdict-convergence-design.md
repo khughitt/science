@@ -161,8 +161,8 @@ Consumer-by-consumer disposition:
 | `validate` check (audit) | `validate/checks/graph.py:177` | On `unwired`, emit an ERROR finding rather than "all canonical references resolved". |
 | source compiler | `graph/materialize.py::_compile` via `_audit_phase` | `_audit_phase` → `ValidationVerdict[AuditRow]` (private). `_compile` **fails closed**: `if verdict.status == "unwired": raise ValueError(...)`. Then `has_failures = verdict.status == "failed"`. `CompilationResult.has_failures` stays a `bool` — `ValidationVerdict` is the *public* boundary type only; private plumbing keeps its bool. |
 | freshness | `graph/freshness.py:422` | Reject `unwired` (raise) before the `status == "failed"` gate. |
-| entity audit diff | `entities.py:1747, 1751` | Use `.rows` for the baseline/prospective diff; assert not `unwired` first. |
-| health check | `graph/health_checks/unresolved_refs.py:64` | Use `.rows`; treat `unwired` as a surfaced failure, not empty findings. |
+| entity audit diff | `entities.py:1747, 1751` | Use `.rows` for the baseline/prospective diff; on `unwired`, **raise `EntityCommandError`** (entities.py:47) first — never `assert`, which `python -O` strips, restoring the silent `.rows` path. |
+| health check | `collect_unresolved_refs` (`graph/health_checks/unresolved_refs.py:64`) | The function already returns `InstrumentResult[UnresolvedRef]` and has an `unwired` idiom. On an `unwired` audit verdict, **propagate as `InstrumentResult.unwired(code=verdict.code, reason=verdict.reason)`** — a precise bridge between the two types, not the ambiguous "surfaced failure." Then use `.rows`. |
 
 ## 6. Guard changes
 
@@ -195,18 +195,35 @@ Consumer-by-consumer disposition:
 are **distinct codes**, tested separately; a well-formed graph returns `passed`/`failed`
 correctly.
 
-**Consumer fail-closed tests (the core of the review).**
-- `science graph validate` on an **unparseable** and a **missing** graph, in **table** and
-  **json** modes: nonzero exit; output carries the "could not run" text + machine
-  `code`/`reason`; **no empty successful rows payload** (json is not `[]`).
-- `_compile` and `freshness` **fail closed on an injected `unwired` audit verdict**
-  (monkeypatch the producer) — raise, do not compile/continue.
-- `validate`-check regression: an `unwired` `validate_graph` yields exactly one ERROR
-  **and** `diff_graph_inputs_dataset` is **not called** (assert the follow-up is skipped).
+**Consumer fail-closed tests — one per disposition in the §5 table.** §5 makes exhaustive
+`unwired` handling an invariant; the tests must cover *every* boundary, since these are the
+branches most likely to regress into reading empty rows as success. Each injects an
+`unwired` verdict (monkeypatch the producer) unless the real producer emits it:
 
-**Guard tests.** Both new modules are scanned; the detector flags `tuple[list, bool]`;
-`audit_identity_table` sits in `_NOT_INSTRUMENTS`; `test_migration_is_complete` and
-`test_allowlist_has_no_stale_entries` stay green.
+- **`science graph validate`** (real `unwired` via unparseable + missing graph), in **table**
+  and **json** modes: nonzero exit; output carries "could not run" + machine `code`/`reason`;
+  **no empty successful rows payload** (json is not `[]`).
+- **`science graph audit`** (`cli.py:162`, injected `unwired`): surfaces `code`/`reason`,
+  exits nonzero — not exit 0 over empty rows.
+- **`validate`-check, validate side** (injected `unwired` `validate_graph`): exactly one
+  ERROR **and** `diff_graph_inputs_dataset` is **not called** (assert the follow-up skipped).
+- **`validate`-check, audit side** (`checks/graph.py:177`, injected `unwired`
+  `materialization_audit`): emits an ERROR, not "all canonical references resolved".
+- **`_compile` / `_audit_phase`** (injected `unwired` `audit_project_sources`): raises, does
+  not compile.
+- **`freshness`** (injected `unwired`): raises, does not continue past the audit.
+- **entity baseline/prospective audit** (`entities.py`, injected `unwired`): raises
+  `EntityCommandError`, does not diff empty `.rows`.
+- **`collect_unresolved_refs`** (injected `unwired`): returns `InstrumentResult.unwired`
+  carrying the verdict's `code`/`reason`, not `InstrumentResult.from_rows([])`.
+
+**Guard tests.** Both new modules are scanned; `audit_identity_table` sits in
+`_NOT_INSTRUMENTS`; `test_migration_is_complete` and `test_allowlist_has_no_stale_entries`
+stay green. **The detector test is parameterized over *both* precursor tuple families** —
+`tuple[list[T], bool]` **and** `tuple[list[T], str | None]` (and the `Optional[str]`
+spelling, which `_is_str_or_none` still accepts). There are no remaining reason-precursor
+offenders in-tree to catch a `str | None` regression implicitly, so the detector must be
+asserted directly on synthetic signatures of both shapes.
 
 **Existing call-site updates.** ~35 test sites unpack `rows, has_failures = fn(...)`; each
 becomes `verdict = fn(...)` with `.rows` / `.status`. Mechanical, but each must keep its
@@ -225,9 +242,23 @@ original assertion intent.
   `science/src/science_tool/entities.py`,
   `science/src/science_tool/graph/health_checks/unresolved_refs.py` (consumer contract)
 - Modify: `science/tests/test_instrument_boundary.py` (namespace, detector, prose,
-  `_NOT_INSTRUMENTS`)
+  `_NOT_INSTRUMENTS`; parameterized both-precursor detector test)
 - Create: `science/tests/test_validation_verdict.py` (type unit tests)
-- Modify: the ~35 existing tuple-unpacking test sites (§7)
+- Modify (consumer fail-closed regressions, §7 — one per disposition):
+  `science/tests/test_graph_cli.py` (validate + audit CLI, table/json),
+  `science/tests/validate/test_checks_graph.py` (validate + audit sides),
+  `science/tests/graph/test_phase_split_contracts.py` (`_compile`/`_audit_phase`),
+  `science/tests/test_freshness_derivation.py` (freshness),
+  `science/tests/test_entities.py` (baseline/prospective audit),
+  `science/tests/test_health.py` (`collect_unresolved_refs`)
+- Modify (mechanical `.rows`/`.status` unpacking, intent preserved): the remaining
+  tuple-unpacking sites, incl. `science/tests/test_graph_validate_run_resolution.py`,
+  `science/tests/test_graph_validate_patch_convenience.py`,
+  `science/tests/test_graph_migrate.py`, `science/tests/test_dataset_usage_materialize.py`,
+  `science/tests/test_chain_freshness_integration.py`,
+  `science/tests/test_meta_reference.py`, `science/tests/test_substrate_two_scope_e2e.py`,
+  `science/tests/test_identity_audit_entrypoints.py`,
+  `science/tests/test_chain_audit_references.py`
 
 ## 9. Out of scope
 
