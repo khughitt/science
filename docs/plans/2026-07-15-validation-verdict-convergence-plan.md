@@ -15,7 +15,8 @@
 - **Run from `science/`.** Tests: `cd science && uv run --frozen pytest`. Lint: `uv run ruff check`. Types: `uv run pyright` (walks up to the repo-root `pyrightconfig.json`).
 - **Type name is `ValidationVerdict`** — never `Verdict` (collides with the `science_tool.verdict` epistemic package).
 - **`unwired` handling is a design invariant:** no consumer may derive a pass/fail bool via `status == "failed"` without first handling `unwired` and failing closed. Never use `assert` for a runtime boundary (`python -O` strips it).
-- **`ValidationVerdict` is the PUBLIC boundary type only.** Private plumbing (`_audit_phase`, `_compile`, `CompilationResult.has_failures`) keeps its internal `bool`.
+- **`ValidationVerdict` is the PUBLIC boundary type only.** `_audit_phase` (private) returns the verdict, but the deeper plumbing — `_compile`'s local gate and `CompilationResult.has_failures` — keeps its internal `bool`.
+- **User-facing "could not run" wording is fixed by the design.** `unwrap_verdict`, the CLI, and the validate check all say "could not run (`<code>`): `<reason>`". (The pre-existing `unwrap_instrument` says "did not run"; it is out of scope and untouched.)
 - Project rules: composition over inheritance; explicit over defensive; fail early; **no legacy/compatibility layers**; no `Unified` prefix; **no AI-attribution trailers** on commits.
 - Each task leaves the tree green (`pytest`, `ruff`, `pyright` all pass) — a producer's return-type change and all its consumers land in the same commit.
 
@@ -34,7 +35,7 @@
 
 ## Task Dependency
 
-Task 1 (type) → Task 2 (validator pair + its consumers) and Task 3 (audit family + its consumers), which are independent of each other → Task 4 (guard, after both migrations remove all offenders).
+**Strictly sequential: Task 1 → Task 2 → Task 3 → Task 4.** Tasks 2 and 3 both modify `graph/cli.py` and `validate/checks/graph.py` (and share `tests/validate/test_checks_graph.py` and `tests/test_graph_cli.py`), so they must NOT run in parallel — Task 3 builds on Task 2's edits to those files. Task 4 runs after both migrations, when no offender remains.
 
 ---
 
@@ -90,7 +91,7 @@ def test_failed_carries_rows() -> None:
 
 
 def test_unwrap_verdict_raises_on_unwired() -> None:
-    with pytest.raises(click.ClickException, match=r"graph validate did not run \(unparseable\)"):
+    with pytest.raises(click.ClickException, match=r"graph validate could not run \(unparseable\): bad"):
         unwrap_verdict(ValidationVerdict.unwired(code="unparseable", reason="bad"), what="graph validate")
 
 
@@ -186,7 +187,7 @@ def unwrap_verdict(verdict: ValidationVerdict[RowT], *, what: str) -> tuple[list
     the convergence exists to stop -- so it raises before anything is rendered.
     """
     if verdict.status == "unwired":
-        raise click.ClickException(f"{what} did not run ({verdict.code}): {verdict.reason}")
+        raise click.ClickException(f"{what} could not run ({verdict.code}): {verdict.reason}")
     if verdict.reason:
         click.echo(f"notice ({verdict.code}): {verdict.reason}", err=True)
     return verdict.rows, verdict.status == "failed"
@@ -389,8 +390,9 @@ def test_graph_validate_unparseable_table_and_json(tmp_path) -> None:
     for fmt in ("table", "json"):
         res = CliRunner().invoke(graph_group, ["validate", "--path", str(p), "--format", fmt])
         assert res.exit_code != 0
-        assert "did not run (unparseable)" in res.output
-        assert '"rows": []' not in res.output  # never a clean empty payload
+        assert "could not run (unparseable)" in res.output  # machine code
+        assert "did not parse" in res.output                # reason, not merely the code
+        assert '"rows": []' not in res.output               # never a clean empty payload
 
 
 def test_graph_validate_missing_is_graph_missing(tmp_path) -> None:
@@ -399,7 +401,8 @@ def test_graph_validate_missing_is_graph_missing(tmp_path) -> None:
 
     res = CliRunner().invoke(graph_group, ["validate", "--path", str(tmp_path / "nope.trig")])
     assert res.exit_code != 0
-    assert "did not run (graph_missing)" in res.output
+    assert "could not run (graph_missing)" in res.output  # machine code
+    assert "not found" in res.output                      # reason
 ```
 
 - [ ] **Step 7: Run the affected suites + lint + types**
@@ -429,7 +432,8 @@ git commit -m "feat(validate): validate_graph* return ValidationVerdict; unwired
 - Modify: `science/src/science_tool/graph/cli.py` (`graph audit`)
 - Modify: `science/src/science_tool/validate/checks/graph.py` (audit side)
 - Modify: `science/src/science_tool/graph/freshness.py`, `entities.py`, `graph/health_checks/unresolved_refs.py`
-- Test: `test_graph_migrate.py`, `test_dataset_usage_materialize.py`, `graph/test_phase_split_contracts.py`, `test_chain_freshness_integration.py`, `test_meta_reference.py`, `test_substrate_two_scope_e2e.py`, `test_identity_audit_entrypoints.py`, `test_chain_audit_references.py`, `test_entities.py`, `test_freshness_derivation.py`, `test_health.py`
+- Test (fail-closed regressions, one per §5 audit-family disposition): `test_graph_cli.py` (graph audit), `validate/test_checks_graph.py` (validate-check audit side), `graph/test_phase_split_contracts.py` (`_compile`), `test_chain_freshness_integration.py` (freshness), `test_entities.py` (`create_entity`), `test_health.py` (`collect_unresolved_refs`)
+- Test (mechanical unpacking / fake-return updates): `test_graph_migrate.py`, `test_graph_migrate_identity_audit.py`, `test_graph_commons_mm30_canary.py`, `test_dataset_usage_materialize.py`, `test_meta_reference.py`, `test_substrate_two_scope_e2e.py`, `test_identity_audit_entrypoints.py`, `test_chain_audit_references.py`
 
 **Interfaces:**
 - Consumes: `ValidationVerdict`, `unwrap_verdict` (Task 1).
@@ -437,77 +441,118 @@ git commit -m "feat(validate): validate_graph* return ValidationVerdict; unwired
 
 - [ ] **Step 1: Write failing migration + fail-closed tests**
 
-Add to `tests/test_graph_migrate.py`:
+Every snippet below is executable against the target module's existing builders (verified: `_build_clean_project` in `test_phase_split_contracts.py`, `_write` in `test_chain_freshness_integration.py`, `seed_project`/`create_entity` in `test_entities.py`, `_write_layered_claim_project` in `test_health.py`).
+
+**Migration return-type** — add to `tests/test_graph_migrate.py` (seeds inline, as that module does):
 
 ```python
-def test_audit_project_sources_returns_verdict() -> None:
-    # reuse this module's existing `sources` builder for a clean project
-    verdict = audit_project_sources(sources)  # sources fixture as used by neighboring tests
+def test_audit_project_sources_returns_verdict(tmp_path: Path) -> None:
+    project = tmp_path / "p"
+    (project / "entities" / "hypotheses").mkdir(parents=True)
+    (project / "science.yaml").write_text("name: demo\n", encoding="utf-8")
+    (project / "entities" / "hypotheses" / "h1.md").write_text(
+        '---\nid: "hypothesis:h1"\nkind: "hypothesis"\ntitle: "H1"\n'
+        'related: []\nsource_refs: []\ncreated: "2026-03-12"\nupdated: "2026-03-12"\n---\nBody.\n',
+        encoding="utf-8",
+    )
+    verdict = audit_project_sources(load_project_sources(project))
     assert verdict.status in {"passed", "failed"}
     assert isinstance(verdict.rows, list)
 ```
 
-Add to `tests/graph/test_phase_split_contracts.py`:
+**`_compile` fail-closed** — add to `tests/graph/test_phase_split_contracts.py` (uses this module's `_build_clean_project`, which returns a compiler-ready `demo/` dir; `_compile` loads sources BEFORE `_audit_phase`, so the project must be real):
 
 ```python
-def test_compile_fails_closed_on_unwired_audit(tmp_path, monkeypatch) -> None:
+def test_compile_fails_closed_on_unwired_audit(tmp_path: Path, monkeypatch) -> None:
     from science_tool.instruments import ValidationVerdict
     from science_tool.graph import materialize
 
+    demo = _build_clean_project(tmp_path)
     monkeypatch.setattr(materialize, "audit_project_sources", lambda _s: ValidationVerdict.unwired(code="x", reason="r"))
-    with pytest.raises(ValueError, match="did not run"):
-        materialize._compile(tmp_path, stop_after="audit")
+    with pytest.raises(ValueError, match="could not run"):
+        materialize._compile(demo, stop_after="audit")
 ```
 
-Add to `tests/test_freshness_derivation.py`:
+**Freshness fail-closed** — add to `tests/test_chain_freshness_integration.py` (has `_write` + seeds real projects; `propagate_freshness_in_memory` loads sources before auditing, so seed a loadable project; the audit import is LAZY inside the function, so patch the SOURCE module `migrate`):
 
 ```python
-def test_freshness_fails_closed_on_unwired_audit(tmp_path, monkeypatch) -> None:
+def test_freshness_fails_closed_on_unwired_audit(tmp_path: Path, monkeypatch) -> None:
     from science_tool.instruments import ValidationVerdict
-    from science_tool.graph import migrate
-
     from science_tool.graph import freshness, migrate
 
-    # freshness.py:407 (`propagate_freshness_in_memory`) imports audit_project_sources LAZILY
-    # inside the function (freshness.py:420), so patch the SOURCE module, not `freshness`.
+    _write(tmp_path, "science.yaml", "name: test\nknowledge_profiles:\n  local: local\n")
+    _write(
+        tmp_path,
+        "entities/hypotheses/h1.md",
+        '---\nid: "hypothesis:h1"\nkind: "hypothesis"\ntitle: "H1"\n'
+        'related: []\nsource_refs: []\ncreated: "2026-03-12"\nupdated: "2026-03-12"\n---\nBody.\n',
+    )
     monkeypatch.setattr(migrate, "audit_project_sources", lambda _s: ValidationVerdict.unwired(code="x", reason="r"))
-    with pytest.raises(ValueError, match="did not run"):
+    with pytest.raises(ValueError, match="could not run"):
         freshness.propagate_freshness_in_memory(tmp_path)
 ```
 
-Add to `tests/test_entities.py`:
+**Entity boundary fail-closed** — add to `tests/test_entities.py` (uses its `seed_project` + public `create_entity`, the path through `_validate_prospective_write`; `entities.py:33` imports the audit at module level, so patch the string target as the existing tests do):
 
 ```python
-def test_entity_prospective_audit_fails_closed_on_unwired(tmp_path, monkeypatch) -> None:
+def test_create_entity_fails_closed_on_unwired_audit(tmp_path: Path, monkeypatch) -> None:
     from science_tool.instruments import ValidationVerdict
-    from science_tool import entities
-    from science_tool.entities import EntityCommandError
 
-    monkeypatch.setattr(entities, "audit_project_sources", lambda _s: ValidationVerdict.unwired(code="x", reason="r"))
-    with pytest.raises(EntityCommandError):
-        entities._validate_prospective_write(  # entities.py:1731, keyword-only
-            project_root=tmp_path,
-            rel_path=Path("entities/topics/x.md"),
-            text="---\nid: topic:x\nkind: topic\n---\n",
-            target_entity_id="topic:x",
-            include_commons=False,
-        )
+    seed_project(tmp_path)
+    monkeypatch.setattr(
+        "science_tool.entities.audit_project_sources",
+        lambda _s: ValidationVerdict.unwired(code="x", reason="r"),
+    )
+    with pytest.raises(EntityCommandError, match="could not run"):
+        create_entity(project_root=tmp_path, kind="question", title="New Question")
 ```
 
-Add to `tests/test_health.py`:
+**`collect_unresolved_refs` bridge** — add to `tests/test_health.py` (uses `_write_layered_claim_project`, which seeds NON-EMPTY entities so the function passes its own `if not sources.entities` guard and reaches the audit; `unresolved_refs.py:16` imports the audit at module level):
 
 ```python
-def test_collect_unresolved_refs_bridges_unwired_audit(monkeypatch) -> None:
+def test_collect_unresolved_refs_bridges_unwired_audit(tmp_path: Path, monkeypatch) -> None:
     from science_tool.instruments import ValidationVerdict
     from science_tool.graph.health_checks import unresolved_refs
 
+    _write_layered_claim_project(tmp_path)
     monkeypatch.setattr(unresolved_refs, "audit_project_sources", lambda _s: ValidationVerdict.unwired(code="x", reason="r"))
-    result = unresolved_refs.collect_unresolved_refs(project_root=..., sources=<non-empty sources>)
+    result = unresolved_refs.collect_unresolved_refs(tmp_path)
     assert result.status == "unwired"
     assert result.code == "x"
 ```
 
-(Replace `...`/placeholders with the neighboring tests' existing builders — `test_entities.py` already has `fake_audit_project_sources` monkeypatch scaffolding, and `test_health.py` builds `ProjectSources`.)
+**`science graph audit` fail-closed** — add to `tests/test_graph_cli.py` (§5 disposition; inject `unwired` via the CLI's audit producer, patched where `cli.py` imports it):
+
+```python
+def test_graph_audit_unwired_exits_nonzero(tmp_path, monkeypatch) -> None:
+    from click.testing import CliRunner
+    from science_tool.instruments import ValidationVerdict
+    from science_tool.graph import cli as graph_cli
+
+    (tmp_path / "science.yaml").write_text("name: demo\n", encoding="utf-8")
+    monkeypatch.setattr(graph_cli, "materialization_audit", lambda _root: ValidationVerdict.unwired(code="unparseable", reason="boom"))
+    res = CliRunner().invoke(graph_cli.graph_group, ["audit", "--project-root", str(tmp_path)])  # cli.py:154 option name
+    assert res.exit_code != 0
+    assert "could not run (unparseable)" in res.output
+    assert "boom" in res.output
+    assert '"rows": []' not in res.output
+```
+
+**Validate-check audit side fail-closed** — add to `tests/validate/test_checks_graph.py` (§5 disposition; inject `unwired` `materialization_audit`, assert an ERROR, not "all canonical references resolved"):
+
+```python
+def test_validate_check_audit_side_unwired_emits_error(tmp_path, monkeypatch) -> None:
+    from science_tool.instruments import ValidationVerdict
+    from science_tool.validate.checks import graph
+    from science_tool.validate.runner import run
+
+    (tmp_path / "science.yaml").write_text("name: demo\n", encoding="utf-8")
+    monkeypatch.setattr(graph, "materialization_audit", lambda _root: ValidationVerdict.unwired(code="unparseable", reason="boom"))
+    result = run(tmp_path, strict=False, verbose=False, enable_python_sidecar=False)
+    msgs = [r.message for r in result.results]
+    assert any("graph audit: could not run (unparseable)" in m for m in msgs)
+    assert not any("all canonical references resolved" in m for m in msgs)
+```
 
 - [ ] **Step 2: Run to verify failure**
 
@@ -538,7 +583,7 @@ def _audit_phase(sources: ProjectSources) -> ValidationVerdict[AuditRow]:
     sources = load_project_sources(project_root, strict_identity=False)
     verdict = _audit_phase(sources)
     if verdict.status == "unwired":
-        raise ValueError(f"Source audit did not run ({verdict.code}): {verdict.reason}")
+        raise ValueError(f"Source audit could not run ({verdict.code}): {verdict.reason}")
     audit_rows = verdict.rows
     has_failures = verdict.status == "failed"
 ```
@@ -588,7 +633,7 @@ def materialization_audit(project_root: Path) -> ValidationVerdict[dict[str, str
 ```python
     verdict = audit_project_sources(sources)
     if verdict.status == "unwired":
-        raise ValueError(f"Cannot compute freshness — source audit did not run ({verdict.code}): {verdict.reason}")
+        raise ValueError(f"Cannot compute freshness — source audit could not run ({verdict.code}): {verdict.reason}")
     audit_rows = verdict.rows
     if verdict.status == "failed":
         details = "; ".join(f"{row['source']} -> {row['target']}" for row in audit_rows if row["status"] == "fail")
@@ -600,7 +645,7 @@ def materialization_audit(project_root: Path) -> ValidationVerdict[dict[str, str
     def _audit_rows(project_sources) -> list[AuditRow]:
         verdict = audit_project_sources(project_sources)
         if verdict.status == "unwired":
-            raise EntityCommandError(f"source audit did not run ({verdict.code}): {verdict.reason}")
+            raise EntityCommandError(f"source audit could not run ({verdict.code}): {verdict.reason}")
         return verdict.rows
 
     baseline_rows = _audit_rows(load_project_sources(project_root, include_commons=include_commons))
@@ -609,18 +654,18 @@ def materialization_audit(project_root: Path) -> ValidationVerdict[dict[str, str
 ```
 (Ensure `AuditRow` is imported in `entities.py`; if not, use `list` in the annotation.)
 
-`graph/health_checks/unresolved_refs.py` (line ~64) — bridge to `InstrumentResult.unwired`:
+`graph/health_checks/unresolved_refs.py` (line ~64) — bridge to `InstrumentResult.unwired`. `verdict.code` stays statically `str | None` (Pydantic's runtime invariant does not narrow the field after the status check), while `InstrumentResult.unwired(code: str)` demands `str`. Narrow explicitly with `cast` (add `from typing import cast`), documenting reliance on the model invariant — never `assert` (strippable):
 ```python
     verdict = audit_project_sources(sources)
     if verdict.status == "unwired":
-        return InstrumentResult.unwired(code=verdict.code, reason=verdict.reason)
+        # code is guaranteed non-None on an unwired verdict by ValidationVerdict's invariant.
+        return InstrumentResult.unwired(code=cast(str, verdict.code), reason=verdict.reason)
     rows = verdict.rows
 ```
-(`code` is non-None on an `unwired` verdict by invariant, satisfying `InstrumentResult.unwired`'s required `code`.)
 
 - [ ] **Step 6: Update existing tuple-unpacking tests (mechanical)**
 
-Apply the canonical transform at every `audit_project_sources(...)` / `materialization_audit(...)` call site in: `test_graph_migrate.py`, `test_dataset_usage_materialize.py`, `graph/test_phase_split_contracts.py`, `test_chain_freshness_integration.py`, `test_meta_reference.py`, `test_substrate_two_scope_e2e.py`, `test_identity_audit_entrypoints.py`, `test_chain_audit_references.py`:
+Apply the canonical transform at every `audit_project_sources(...)` / `materialization_audit(...)` call site in: `test_graph_migrate.py`, `test_graph_migrate_identity_audit.py` (`:82`), `test_graph_commons_mm30_canary.py` (`:39`), `test_dataset_usage_materialize.py`, `graph/test_phase_split_contracts.py`, `test_chain_freshness_integration.py`, `test_meta_reference.py`, `test_substrate_two_scope_e2e.py`, `test_identity_audit_entrypoints.py`, `test_chain_audit_references.py`:
 ```python
 # before:
 rows, has_failures = materialization_audit(tmp_path)
@@ -634,21 +679,42 @@ In `test_entities.py`, the `fake_audit_project_sources` monkeypatch helpers must
 # before: def fake_audit_project_sources(sources): return ([...], False)
 # after:  return ValidationVerdict.from_has_failures([...], False)
 ```
+In `tests/validate/test_checks_graph.py`, the `materialization_audit` monkeypatch stubs (left as tuples in Task 2, since the audit side was not yet migrated) now become `ValidationVerdict`:
+```python
+# before: monkeypatch.setattr(graph, "materialization_audit", lambda _root: ([], False))
+# after:  monkeypatch.setattr(graph, "materialization_audit", lambda _root: ValidationVerdict.passed([]))
+```
 
 - [ ] **Step 7: Run the affected suites + lint + types**
 
 Run:
 ```bash
-cd science && uv run --frozen pytest tests/test_graph_migrate.py tests/test_dataset_usage_materialize.py tests/graph/test_phase_split_contracts.py tests/test_chain_freshness_integration.py tests/test_meta_reference.py tests/test_substrate_two_scope_e2e.py tests/test_identity_audit_entrypoints.py tests/test_chain_audit_references.py tests/test_entities.py tests/test_freshness_derivation.py tests/test_health.py -q \
+cd science && uv run --frozen pytest \
+  tests/test_graph_migrate.py tests/test_graph_migrate_identity_audit.py tests/test_graph_commons_mm30_canary.py \
+  tests/test_dataset_usage_materialize.py tests/graph/test_phase_split_contracts.py \
+  tests/test_chain_freshness_integration.py tests/test_meta_reference.py tests/test_substrate_two_scope_e2e.py \
+  tests/test_identity_audit_entrypoints.py tests/test_chain_audit_references.py tests/test_entities.py \
+  tests/test_health.py tests/test_graph_cli.py tests/validate/test_checks_graph.py -q \
   && uv run ruff check src/science_tool/graph/migrate.py src/science_tool/graph/materialize.py src/science_tool/graph/cli.py src/science_tool/validate/checks/graph.py src/science_tool/graph/freshness.py src/science_tool/entities.py src/science_tool/graph/health_checks/unresolved_refs.py \
-  && uv run pyright src/science_tool/graph/materialize.py src/science_tool/graph/migrate.py src/science_tool/graph/freshness.py src/science_tool/entities.py src/science_tool/graph/health_checks/unresolved_refs.py
+  && uv run pyright src/science_tool/graph/materialize.py src/science_tool/graph/migrate.py src/science_tool/graph/cli.py src/science_tool/validate/checks/graph.py src/science_tool/graph/freshness.py src/science_tool/entities.py src/science_tool/graph/health_checks/unresolved_refs.py
 ```
 Expected: PASS; clean.
 
 - [ ] **Step 8: Commit**
 
 ```bash
-git add science/src/science_tool/graph/migrate.py science/src/science_tool/graph/materialize.py science/src/science_tool/graph/cli.py science/src/science_tool/validate/checks/graph.py science/src/science_tool/graph/freshness.py science/src/science_tool/entities.py science/src/science_tool/graph/health_checks/unresolved_refs.py science/tests/
+git add \
+  science/src/science_tool/graph/migrate.py science/src/science_tool/graph/materialize.py \
+  science/src/science_tool/graph/cli.py science/src/science_tool/validate/checks/graph.py \
+  science/src/science_tool/graph/freshness.py science/src/science_tool/entities.py \
+  science/src/science_tool/graph/health_checks/unresolved_refs.py \
+  science/tests/test_graph_migrate.py science/tests/test_graph_migrate_identity_audit.py \
+  science/tests/test_graph_commons_mm30_canary.py science/tests/test_dataset_usage_materialize.py \
+  science/tests/graph/test_phase_split_contracts.py science/tests/test_chain_freshness_integration.py \
+  science/tests/test_meta_reference.py science/tests/test_substrate_two_scope_e2e.py \
+  science/tests/test_identity_audit_entrypoints.py science/tests/test_chain_audit_references.py \
+  science/tests/test_entities.py science/tests/test_health.py \
+  science/tests/test_graph_cli.py science/tests/validate/test_checks_graph.py
 git commit -m "feat(graph): audit family returns ValidationVerdict; all consumers fail closed on unwired"
 ```
 
@@ -765,10 +831,10 @@ git commit -m "test(instruments): guard covers the ValidationVerdict family; det
 
 **Spec coverage** (design §1-§9):
 - §2 type → Task 1. §3 scope (4 migrations, 1 privatization, 1 `_NOT_INSTRUMENTS`) → Tasks 2 (validators + privatize), 3 (audit family), 4 (`audit_identity_table`). §4 unwired codes → Task 2 Step 3 (`graph_missing`/`unparseable`, tested Step 1). §5 consumer contract (every disposition) → Task 2 (validate CLI, validate-check) + Task 3 (audit CLI, audit-check, `_compile`, freshness, entities, `collect_unresolved_refs`). §6 guard (modules, detector, `_NOT_INSTRUMENTS`, prose) → Task 4. §7 tests (type, per-disposition fail-closed, both-precursor detector) → Tasks 1, 2, 3, 4. §8 files → covered.
-- **Every §5 disposition has a fail-closed test:** graph validate (T2), graph audit (T3 — via `unwrap_verdict`, exercised by the audit-check test + CLI), validate-check validate side (T2), validate-check audit side (add in T3 Step 6 if not present — see note), `_compile` (T3), freshness (T3), entities (T3), `collect_unresolved_refs` (T3).
+- **Every §5 disposition has an explicit fail-closed test:** graph validate (T2 Step 6), graph audit (`test_graph_audit_unwired_exits_nonzero`, T3 Step 1), validate-check validate side (T2 Step 6), validate-check audit side (`test_validate_check_audit_side_unwired_emits_error`, T3 Step 1), `_compile` (T3 Step 1), freshness (T3 Step 1), entities via `create_entity` (T3 Step 1), `collect_unresolved_refs` (T3 Step 1).
 
-**Placeholder scan:** All production symbols are pinned — `_validate_prospective_write` (entities.py:1731), `propagate_freshness_in_memory` (freshness.py:407), `collect_unresolved_refs(project_root, *, sources=None)` (unresolved_refs.py:49). The remaining `...` occurrences are the neighboring tests' existing `ProjectSources`/`sources` builders (`test_graph_migrate.py`, `test_health.py`, `test_entities.py` already construct these) — the implementer reuses each module's own builder rather than inventing one. Monkeypatch targets account for import style: `freshness` imports the audit **lazily**, so its test patches `migrate.audit_project_sources`; `materialize`/`entities`/`unresolved_refs` import it at module level and patch their own module name.
+**Placeholder scan:** No placeholders remain. All production symbols are pinned — `_validate_prospective_write` (entities.py:1731), `propagate_freshness_in_memory` (freshness.py:407), `collect_unresolved_refs(project_root, *, sources=None)` (unresolved_refs.py:49), `graph_audit`'s `--project-root` (cli.py:154). Every Step 1 test is executable against a named builder verified to exist: `_build_clean_project` (test_phase_split_contracts.py), `_write` (test_chain_freshness_integration.py), `seed_project`/`create_entity` (test_entities.py), `_write_layered_claim_project` (test_health.py), inline seed (test_graph_migrate.py). Monkeypatch targets account for import style: `freshness` imports the audit **lazily**, so its test patches `migrate.audit_project_sources`; `materialize`/`entities`/`unresolved_refs`/`cli` import it at module level and patch their own module name.
 
-**Type consistency:** `ValidationVerdict.from_has_failures(rows, has_failures)`, `.passed(rows)`, `.failed(rows)`, `.unwired(code=, reason=)`, and `unwrap_verdict(verdict, what=) -> (rows, has_failures)` are used identically across Tasks 1-3. `AuditRow` is the row type for `audit_project_sources`; `dict[str, str]` for `validate_graph*` and `materialization_audit`.
+**Type consistency:** `ValidationVerdict.from_has_failures(rows, has_failures)`, `.passed(rows)`, `.failed(rows)`, `.unwired(code=, reason=)`, and `unwrap_verdict(verdict, what=) -> (rows, has_failures)` are used identically across Tasks 1-3. `AuditRow` is the row type for `audit_project_sources`; `dict[str, str]` for `validate_graph*` and `materialization_audit`. User-facing "could not run (`<code>`): `<reason>`" is uniform across `unwrap_verdict`, the CLI, and both validate-check branches.
 
-**Note for the implementer:** Task 3 Step 5 adds the validate-check *audit-side* `unwired` branch; add a regression for it alongside the validate-side one in `tests/validate/test_checks_graph.py` (inject an `unwired` `materialization_audit`, assert an ERROR finding, not "all canonical references resolved").
+**Existing-test regressions folded in:** `test_entities.py`'s `fake_audit_project_sources` helpers return tuples today and are updated to `ValidationVerdict.from_has_failures(...)` in T3 Step 6; the `validate/test_checks_graph.py` monkeypatch stubs for `validate_graph*`/`materialization_audit` become `ValidationVerdict` in T2 Step 5 and T3 Step 6.
