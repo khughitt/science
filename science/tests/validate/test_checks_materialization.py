@@ -44,7 +44,7 @@ def test_top_level_supersedes_on_interpretation_is_an_error(tmp_path: Path) -> N
     msg = results[0].message
     # every required element (design §2)
     assert "interpretation:0001-x" in msg     # the entity id
-    assert "supersedes" in msg                # the key
+    assert "top-level 'supersedes:'" in msg   # the authored key, not just the predicate
     assert "relations:" in msg                # the replacement form
     assert "sci:supersedes" in msg            # the predicate
     assert "target" in msg and "<target-id>" in msg   # current field name, schematic target
@@ -61,6 +61,7 @@ def test_top_level_amends_on_interpretation_is_an_error(tmp_path: Path) -> None:
     results = _results(tmp_path)
     assert [r.severity for r in results] == [Severity.ERROR]
     assert "interpretation:0001-x" in results[0].message
+    assert "top-level 'amends:'" in results[0].message
     assert "sci:amends" in results[0].message
 
 
