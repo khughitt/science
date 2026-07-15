@@ -7,7 +7,7 @@ from datetime import date
 from enum import StrEnum
 from typing import Any, Literal, Protocol
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+from pydantic import BaseModel, ConfigDict, Field, PrivateAttr, field_validator, model_validator
 
 from science_model.identity import (  # noqa: F401  (EntityClass re-exported; relocated to identity in Spec 2)
     EntityClass,
@@ -373,6 +373,16 @@ class Entity(BaseModel):
     review_after: date | None = None
     review_state: EpistemicReviewState | None = None
     composition_rule: CompositionRule | None = None
+
+    # Load-time provenance: the subset of `aliases` that was EXPLICITLY authored in this
+    # entity's frontmatter `aliases:` list, as opposed to the path-/number-derived short
+    # tokens the loader mixes in (`q04` from `0004`). Carried from load so alias resolution
+    # can tell an authored claim from a derived convenience -- even when an authored token
+    # happens to COINCIDE with a derived one (a frontmatter `q01` on the very entity whose
+    # number also derives `q01`). Reconstructing this by token equality misclassifies that
+    # coincidence; it must be carried, never inferred. Private: never serialized to graph,
+    # frontmatter, or inventory, and never part of the kind field-presence surface.
+    _authored_aliases: frozenset[str] = PrivateAttr(default_factory=frozenset)
 
     @model_validator(mode="after")
     def _validate_review_state_kind(self) -> "Entity":

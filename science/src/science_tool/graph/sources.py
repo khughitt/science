@@ -380,7 +380,7 @@ def load_project_sources(
                 _validate_against_schema(
                     raw, kind=kind, path=str(ref.path), project_schema=project_schema
                 )
-                _enrich_raw(
+                authored_aliases = _enrich_raw(
                     raw,
                     kind=kind,
                     project_slug=project_slug,
@@ -407,6 +407,7 @@ def load_project_sources(
                     continue
                 try:
                     entity = schema.model_validate(raw)
+                    entity._authored_aliases = authored_aliases
                 except ValidationError as exc:
                     details = _format_missing_fields(exc)
                     failure = _format_schema_validation_failure(kind=kind, schema=schema, exc=exc)
@@ -739,9 +740,14 @@ def build_alias_map(
     for entity in entities:
         register(entity.canonical_id, entity.canonical_id, _PROV_CANONICAL)
         register(entity.canonical_id.lower(), entity.canonical_id, _PROV_CANONICAL)
-        derived = _auto_derived_alias_tokens(entity.canonical_id, entity.kind, entity.file_path)
+        # Provenance is CARRIED from load (`_authored_aliases`), never reconstructed by
+        # token equality: a frontmatter token that coincides with this entity's own
+        # derived short id (`q01` authored on the entity `0001` also derives) stays
+        # FRONTMATTER, so a colliding mappings entry still raises instead of silently
+        # winning as it would against a purely-derived token.
+        authored = entity._authored_aliases
         for alias in entity.aliases:
-            provenance = _PROV_DERIVED if alias in derived else _PROV_FRONTMATTER
+            provenance = _PROV_FRONTMATTER if alias in authored else _PROV_DERIVED
             register(alias, entity.canonical_id, provenance)
             register(alias.lower(), entity.canonical_id, provenance)
     for alias, canonical_id in (manual_aliases or {}).items():
@@ -808,7 +814,7 @@ def _enrich_raw(
     local_profile: str,
     active_kinds: frozenset[str],
     ontology_catalogs: list[OntologyCatalog],
-) -> None:
+) -> frozenset[str]:
     """Centralized normalization layer between adapter output and Entity validation.
 
     Mutates `raw` in place. Fills Entity defaults + legacy normalization:
@@ -818,6 +824,10 @@ def _enrich_raw(
     - Normalize `kind` and optional core-only `type` projection
     - Description → content_preview fallback (legacy aggregate rows)
     - Validate reasoning enum fields and fail early on legacy/invalid shapes
+
+    Returns the frozenset of EXPLICITLY-authored frontmatter alias tokens (empty for
+    entities without a canonical id or an `aliases:` list). Callers set this on the
+    constructed entity's `_authored_aliases` so alias resolution can carry provenance.
     """
     raw.setdefault("project", project_slug)
     raw.setdefault("ontology_terms", [])
@@ -863,11 +873,18 @@ def _enrich_raw(
 
     # Alias derivation (mix in file-stem-based tokens for hypothesis/question/task
     # files named `<token>-<rest>.md`; mirrors the legacy MarkdownProvider behavior).
+    # `authored` captures ONLY the explicit frontmatter tokens (cleaned exactly as
+    # `_derive_aliases.add` stores them), so a coincident authored/derived token keeps
+    # its authored provenance downstream instead of being reclassified as derived.
+    authored: frozenset[str] = frozenset()
     if isinstance(canonical_id, str):
         explicit = raw.get("aliases") or []
         if not isinstance(explicit, list):
             explicit = []
         explicit_list = [str(a) for a in explicit]
+        authored = frozenset(
+            token for a in explicit_list if (token := a.strip()) and token != canonical_id
+        )
         path_aliases = _path_alias_tokens(raw.get("file_path"), kind)
         raw["aliases"] = _derive_aliases(canonical_id, kind, [*explicit_list, *path_aliases])
 
@@ -884,6 +901,8 @@ def _enrich_raw(
                 raise ValueError(
                     f"invalid reasoning metadata {field}={value!r} at {source}; expected one of: {allowed}"
                 ) from exc
+
+    return authored
 
 
 def _load_legacy_records(
@@ -921,7 +940,7 @@ def _load_legacy_records(
             "source_refs": list(record.source_refs),
             "aliases": list(record.aliases),
         }
-        _enrich_raw(
+        authored_aliases = _enrich_raw(
             raw,
             kind="model",
             project_slug=project_slug,
@@ -931,6 +950,7 @@ def _load_legacy_records(
         )
         schema = registry.resolve("model")
         entity = schema.model_validate(raw)
+        entity._authored_aliases = authored_aliases
         out.append((entity, SourceRef(adapter_name="legacy-model", path=record.source_path)))
 
     parameter_records = _load_typed_records(
@@ -961,7 +981,7 @@ def _load_legacy_records(
         # which is always included in profile_manifests above.
         schema: type[Entity] = registry.resolve("canonical_parameter")
 
-        _enrich_raw(
+        authored_aliases = _enrich_raw(
             raw,
             kind="canonical_parameter",
             project_slug=project_slug,
@@ -970,6 +990,7 @@ def _load_legacy_records(
             ontology_catalogs=ontology_catalogs,
         )
         entity = schema.model_validate(raw)
+        entity._authored_aliases = authored_aliases
         out.append((entity, SourceRef(adapter_name="legacy-parameter", path=record.source_path)))
 
     return out
@@ -1048,7 +1069,7 @@ def _load_structured_source_records(
                 raw["created"] = record.created
             if record.updated is not None:
                 raw["updated"] = record.updated
-            _enrich_raw(
+            authored_aliases = _enrich_raw(
                 raw,
                 kind=kind_name,
                 project_slug=project_slug,
@@ -1057,6 +1078,7 @@ def _load_structured_source_records(
                 ontology_catalogs=ontology_catalogs,
             )
             entity = schema.model_validate(raw)
+            entity._authored_aliases = authored_aliases
             out.append((entity, SourceRef(adapter_name="structured-source", path=record.source_path or default_path)))
     return out
 
@@ -1456,16 +1478,6 @@ def _path_alias_tokens(file_path: object, kind: str) -> list[str]:
         return []
     token = match.group("token")
     return [f"{kind}:{token.lower()}", f"{kind}:{token.upper()}", token.lower(), token.upper()]
-
-
-def _auto_derived_alias_tokens(canonical_id: str, kind: str, file_path: object) -> set[str]:
-    """Every alias token the auto-derivation would add for this entity.
-
-    These are the path-stem and number-derived short forms -- the tokens that are NOT
-    project-authored. `build_alias_map` subtracts this set from `Entity.aliases` to tell
-    an authored frontmatter alias apart from a derived convenience token.
-    """
-    return set(_derive_aliases(canonical_id, kind, _path_alias_tokens(file_path, kind)))
 
 
 def _default_profile_for_kind(

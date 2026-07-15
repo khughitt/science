@@ -136,6 +136,27 @@ def test_a_FRONTMATTER_alias_does_NOT_beat_a_colliding_DERIVED_short_id(project:
         build_alias_map(sources.entities, manual_aliases=sources.manual_aliases)
 
 
+def test_a_COINCIDENT_authored_token_keeps_FRONTMATTER_provenance_vs_a_mapping(
+    project: Path,
+) -> None:
+    # The provenance hole: `0001-a` derives `q01` AND explicitly authors `q01` in its
+    # frontmatter, while mappings.yaml maps `q01` -> a DIFFERENT entity. Reconstructing
+    # provenance by token equality would see `q01 in derived(0001-a)` and misclassify the
+    # authored token as DERIVED, letting the mapping silently win. Carried provenance keeps
+    # it FRONTMATTER, so this is authored-vs-authored -> RAISE.
+    _write_question(project, "0001-a", aliases=["q01"])
+    _write_question(project, "0002-b")
+    _write_mappings(project, {"q01": "question:0002-b"})
+
+    sources = load_project_sources(project)
+    with pytest.raises(AliasCollisionError):
+        build_alias_map(
+            sources.entities,
+            manual_aliases=sources.manual_aliases,
+            archive_alias_tokens=sources.archive_alias_tokens,
+        )
+
+
 def test_a_MAPPINGS_entry_DOES_beat_the_SAME_derived_short_id(project: Path) -> None:
     # The mirror of the test above: the identical collision, but declared in mappings.yaml
     # instead of frontmatter, resolves silently to the mapping's target.
