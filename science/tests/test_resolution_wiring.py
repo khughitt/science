@@ -274,6 +274,25 @@ def write_dataset(root: Path, slug: str, *, aliases: list[str] | None = None) ->
     )
 
 
+def write_interpretation(
+    root: Path, slug: str, *, status: str = "active", extra: dict[str, object] | None = None
+) -> None:
+    frontmatter: dict[str, object] = {
+        "id": f"interpretation:{slug}",
+        "kind": "interpretation",
+        "title": slug,
+        "created": "2026-07-13",
+        "updated": "2026-07-13",
+        "status": status,
+    }
+    frontmatter.update(extra or {})
+    path = root / "entities" / "interpretations" / f"{slug}.md"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(
+        f"---\n{yaml.safe_dump(frontmatter, sort_keys=False)}---\n\n# {slug}\n", encoding="utf-8"
+    )
+
+
 def test_a_CROSS_KIND_alias_successor_is_a_VIOLATION(tmp_project: Path) -> None:
     # ☠️ THE hole in `live_ids = {every entity}`. The schema constrains only the AUTHORED spelling --
     # `superseded_by` is `pattern: "^hypothesis:"` -- but an ALIAS may point ANYWHERE. So this is a
@@ -298,6 +317,30 @@ def test_a_hypothesis_successor_is_STILL_clean(tmp_project: Path) -> None:
     write_hypothesis(tmp_project, "0009-real")
     write_hypothesis(
         tmp_project, "0001-x", status="superseded", extra={"superseded_by": "hypothesis:0009-real"}
+    )
+    assert lineage_violations(tmp_project) == []
+
+
+def test_an_INTERPRETATION_with_lineage_is_NOT_a_hypothesis_dangling_finding(
+    tmp_project: Path,
+) -> None:
+    # ☠️ THE mis-scoping control. `check_dangling_lineage` iterated EVERY entity and emitted its
+    # hypothesis-scoped rule, but `check_resolution` demands the successor resolve to a LIVE
+    # HYPOTHESIS (`live_hypotheses`). An interpretation's successor is another INTERPRETATION, so
+    # every interpretation carrying lineage tripped "not a live hypothesis" -- under
+    # `hypothesis.dangling-lineage`, the wrong kind's rule, double-covering the
+    # `interpretation.unbacked-inverse` supersession.py already owns. Task 12 would have PROMOTED
+    # that mis-scoped WARN to a gating ERROR on four live interpretation records.
+    #
+    # An interpretation superseded by a LIVE interpretation is valid interpretation lineage; the
+    # hypothesis dangling-lineage check must be SILENT on it. Interpretation lineage debt is
+    # supersession.py's, by kind -- not this check's.
+    write_interpretation(tmp_project, "0002-successor")
+    write_interpretation(
+        tmp_project,
+        "0001-x",
+        status="superseded",
+        extra={"superseded_by": "interpretation:0002-successor"},
     )
     assert lineage_violations(tmp_project) == []
 

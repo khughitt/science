@@ -188,6 +188,15 @@ def check_dangling_lineage(ctx: ValidateContext) -> Iterator[Result]:
 
     live_hypotheses = _live_lineage_targets(sources)
     for entity in sources.entities:
+        # KIND-SCOPED to hypothesis, and this is a semantic requirement, not a filter for tidiness.
+        # `check_resolution` asks whether a successor resolves to a LIVE HYPOTHESIS (`live_hypotheses`);
+        # that is the hypothesis lineage contract. An interpretation's successor is another
+        # interpretation, so running an interpretation through this would flag its perfectly valid
+        # lineage as "not a live hypothesis" AND report it under `hypothesis.dangling-lineage` -- the
+        # wrong kind's rule, double-covering the `interpretation.unbacked-inverse` that supersession.py
+        # already owns. Interpretation lineage debt is that check's, by kind; this one is hypotheses'.
+        if entity.kind != _LINEAGE_KIND:
+            continue
         for violation in check_resolution(
             entity.model_dump(mode="json"), targets=resolver, live_hypotheses=live_hypotheses
         ):

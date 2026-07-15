@@ -7623,8 +7623,9 @@ cannot produce a duplicate repo. Several repos are **Dropbox-only with no remote
 
 **Files:**
 - Create: `science/src/science_tool/validate/kind_severity.py` — **the shared interface.**
-- Modify: `science/src/science_tool/validate/checks/hypotheses.py` — **both** kind-level emitters
-  (`hypothesis.status-vocabulary` **and** `hypothesis.dangling-lineage`) call it.
+- Modify: `science/src/science_tool/validate/checks/hypotheses.py` — **(2a, prerequisite)** scope
+  `check_dangling_lineage`'s loop to `entity.kind == "hypothesis"`, then **both** kind-level emitters
+  (`hypothesis.status-vocabulary` **and** `hypothesis.dangling-lineage`) call `severity_for_kind`.
 - Modify: `science/src/science_tool/validate/checks/supersession.py` (Task 7a) — the **third**
   kind-level emitter. It ships with a hard-coded `Severity.WARN` and a comment pointing here; replace
   it with `severity_for_kind(kind)`.
@@ -7774,6 +7775,19 @@ def severity_for_kind(kind: str) -> Severity:
     return Severity.ERROR if kind in _CERTIFIED_KINDS else Severity.WARN
 ```
 
+- [ ] **Step 2a (PREREQUISITE, before any flip): scope `check_dangling_lineage` to hypotheses.**
+  Its loop iterated **every** entity and emitted the hypothesis-scoped rule for each — but
+  `check_resolution` requires the successor to resolve to a **live hypothesis** (`live_hypotheses`).
+  An interpretation's successor is another interpretation, so every interpretation carrying lineage
+  tripped "not a live hypothesis" **under `hypothesis.dangling-lineage`** — the wrong kind's rule,
+  double-covering the `interpretation.unbacked-inverse` that `supersession.py` already owns. Add
+  `if entity.kind != _LINEAGE_KIND: continue` and a control regression
+  (`test_an_INTERPRETATION_with_lineage_is_NOT_a_hypothesis_dangling_finding`). **This must land
+  before Step 2b**: without it, adding `hypothesis.dangling-lineage` to the `hygiene` tier would gate
+  four live interpretation records (1 `3d-attention-bias`, 3 `natural-systems`) as ERRORs under a
+  hypothesis rule — breaking `validate` in two projects for a defect that is not theirs and is
+  already reported, as a WARN, on the correct kind. (Shipped as its own precondition commit.)
+
 - [ ] **Step 2b: Route ALL THREE kind-level emitters through it.** Two are in
   `validate/checks/hypotheses.py` — the `hypothesis.status-vocabulary` finding and the
   `hypothesis.dangling-lineage` finding (Task 7, which hard-coded `Severity.WARN`). **The third is in
@@ -7792,16 +7806,40 @@ def severity_for_kind(kind: str) -> Severity:
   ratchet" in a comment and Task 12 never touched it. This step is the only thing that closes that
   loop, and its own tests (Step 2c) fail if any of the three still hard-codes `WARN`.
 
-- [ ] **Step 3: Re-assert the manifest, then validate.** Re-derive the roster and require **exact
-  `(root, n)` set equality** against `/tmp/claude-1000/roster.json` (Task 11 Step 0). Totals are not
-  a gate: `18/147` still holds if one root vanishes while another gains the same count. Only then
-  run `science validate` across all 18 roots — **all exit 0** — plus our own suite for the three
-  fixture roots. Flipping `hypothesis` to ERROR against a corpus that has drifted since
-  certification is precisely the original incident.
+- [ ] **Step 3: Re-assert the manifest, prove the flip is inert, then differential-validate.**
+  Three gates, in order, and **none of them is `exit 0`** — Task 11 established that **11 of 18 roots
+  exit nonzero for pre-existing reasons** (synthetic fixtures, dataset-pointer and dangling-ref debt,
+  meta's own crashing validate hook). A gate on exit code would fail on faults this task never
+  touched, and "fix them first" is a different project's scope.
 
-  **Reuse Task 11 Step 3's loop verbatim** — `--project "$WT"`, the per-root import assertion, and
-  a nonzero exit on any failure (Global constraint 0). This step decides whether a rule becomes
-  **ERROR** for 147 files across 15 repositories. Certifying that against the **pinned public
+  1. **Manifest.** Re-derive the roster and require **exact `(root, n)` set equality** against
+     `/tmp/claude-1000/roster.json` (Task 11 Step 0) via `roster_compare.py`. Totals are not a gate:
+     `18/147` still holds if one root vanishes while another gains the same count. Flipping
+     `hypothesis` to ERROR against a corpus that has drifted since certification is the original
+     incident. *(Fresh run: 18 roots / 147 hyps, exact match.)*
+
+  2. **The flip promotes nothing** — the precondition that makes this ratchet safe. Sweep all 18
+     roots and require **zero findings on all three kind-level rules by `Result.rule`** —
+     `hypothesis.status-vocabulary`, `hypothesis.unbacked-inverse`, `hypothesis.dangling-lineage`
+     (`rule_sweep.py`, which reads `Result.rule`, **not** the verbose printer's short tag — the
+     printer collapses `hypothesis.unbacked-inverse` and `interpretation.unbacked-inverse` to the
+     same `[unbacked-inverse]`). Zero findings today means the WARN→ERROR flip changes the severity
+     of findings that **do not exist**, so no build that passes now can start failing. The
+     interpretation lineage debt must STILL be reported — under `interpretation.unbacked-inverse`
+     (1 in `3d-attention-bias`, 3 in `natural-systems`): re-homed by the `check_dangling_lineage`
+     kind-scoping (Step 2a), not lost. *(Fresh run: all three hypothesis rules 0 across 18 roots;
+     `interpretation.unbacked-inverse` = 4, unchanged.)*
+
+  3. **Differential-validate.** Run `science validate` across all 18 roots and require, per root, the
+     after-migration **ERROR-line SET ⊆ the before-migration ERROR-line SET** (`diff_errors.py`,
+     normalized by stripping the project-root path; a NEW traceback also fails). This is the same gate
+     Task 11 Step 3 used, and it is the correct one here for the same reason: the flip is certified to
+     add **no new error** to any root, whatever that root's pre-existing exit code. Plus our own suite
+     for the three fixture roots.
+
+  **Reuse Task 11 Step 3's harness** — `--project-root <root>` per root, the per-root import
+  assertion, and the differential comparator (Global constraint 0). This step decides whether a rule
+  becomes **ERROR** for 147 files across 15 repositories. Certifying that against the **pinned public
   toolkit** — which has neither the mixin nor the checks — would arm the ratchet on the strength of
   a run that never looked at a single migrated file. *A gate certified by the wrong instrument is
   not a gate.*
