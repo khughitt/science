@@ -76,6 +76,7 @@ CANONICAL_CHECK_MODULES = (
     "methods",
     "relations",
     "supersession",
+    "materialization",
 )
 
 
