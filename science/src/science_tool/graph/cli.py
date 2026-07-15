@@ -32,7 +32,7 @@ from science_tool.graph.store import (
     read_graph_stats,
     validate_graph,
 )
-from science_tool.output import OUTPUT_FORMATS, emit, emit_query_rows, unwrap_instrument
+from science_tool.output import OUTPUT_FORMATS, emit, emit_query_rows, unwrap_instrument, unwrap_verdict
 from science_tool.prose import scan_prose
 
 
@@ -230,7 +230,7 @@ def graph_stats(output_format: str, graph_path: Path) -> None:
 def graph_validate(output_format: str, graph_path: Path) -> None:
     """Run structural validation checks on graph.trig."""
 
-    rows, has_failures = validate_graph(graph_path)
+    rows, has_failures = unwrap_verdict(validate_graph(graph_path), what="graph validate")
     emit_query_rows(
         output_format=output_format,
         title="Graph Validation",
@@ -1231,5 +1231,4 @@ def add_mechanism_cmd(
 ) -> None:
     """Add a mechanism over existing typed entities and proposition refs."""
     raise _retired_writer("graph add mechanism", "Run `science entity create mechanism <title>`")
-
 

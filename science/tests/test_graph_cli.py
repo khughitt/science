@@ -1526,6 +1526,30 @@ def test_graph_predicates_outputs_table() -> None:
     assert "sci:projectStatus" in result.output
 
 
+def test_graph_validate_unparseable_table_and_json(tmp_path) -> None:
+    from click.testing import CliRunner
+    from science_tool.graph.cli import graph_group
+
+    p = tmp_path / "graph.trig"
+    p.write_text("not trig <<<", encoding="utf-8")
+    for fmt in ("table", "json"):
+        res = CliRunner().invoke(graph_group, ["validate", "--path", str(p), "--format", fmt])
+        assert res.exit_code != 0
+        assert "could not run (unparseable)" in res.output
+        assert "did not parse" in res.output
+        assert '"rows": []' not in res.output
+
+
+def test_graph_validate_missing_is_graph_missing(tmp_path) -> None:
+    from click.testing import CliRunner
+    from science_tool.graph.cli import graph_group
+
+    res = CliRunner().invoke(graph_group, ["validate", "--path", str(tmp_path / "nope.trig")])
+    assert res.exit_code != 0
+    assert "could not run (graph_missing)" in res.output
+    assert "not found" in res.output
+
+
 def test_graph_predicates_outputs_json() -> None:
     runner = CliRunner()
     result = runner.invoke(main, ["graph", "predicates", "--format", "json"])

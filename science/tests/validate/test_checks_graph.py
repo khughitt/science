@@ -7,7 +7,7 @@ from typing import Any
 
 import pytest
 
-from science_tool.instruments import InstrumentResult
+from science_tool.instruments import InstrumentResult, ValidationVerdict
 from science_tool.peers_validate import PeerIssueKind
 from science_tool.validate import Result, Severity, ValidateContext
 
@@ -159,13 +159,12 @@ def test_graph_validate_rows_map_statuses(monkeypatch: pytest.MonkeyPatch, tmp_p
     monkeypatch.setattr(
         graph,
         "validate_graph_dataset",
-        lambda _dataset: (
+        lambda _dataset: ValidationVerdict.failed(
             [
                 {"check": "parseable", "status": "pass", "details": "ok"},
                 {"check": "orphaned", "status": "warn", "details": "1 orphan"},
                 {"check": "acyclic", "status": "fail", "details": "cycle"},
-            ],
-            True,
+            ]
         ),
     )
     monkeypatch.setattr(graph, "diff_graph_inputs_dataset", lambda _dataset, **_kwargs: InstrumentResult[dict].empty())
@@ -176,6 +175,35 @@ def test_graph_validate_rows_map_statuses(monkeypatch: pytest.MonkeyPatch, tmp_p
     assert "graph validate: acyclic — cycle" in _messages(results, Severity.ERROR)
     assert "graph validate: orphaned — 1 orphan" in _messages(results, Severity.WARN)
     assert "graph validate: parseable — ok" in _messages(results, Severity.INFO)
+
+
+def test_validate_check_unwired_emits_error_and_skips_diff(tmp_path, monkeypatch) -> None:
+    from science_tool.instruments import ValidationVerdict
+    from science_tool.validate.checks import graph
+
+    called = {"diff": False}
+    monkeypatch.setattr(
+        graph,
+        "validate_graph",
+        lambda _p: ValidationVerdict.unwired(code="unparseable", reason="bad"),
+    )
+    # materialization_audit is NOT migrated until Task 3; in Task 2 check_graph still
+    # tuple-unpacks it, so this stub stays a tuple. Task 3 converts it to a verdict.
+    monkeypatch.setattr(graph, "materialization_audit", lambda _root: ([], False))
+
+    monkeypatch.setattr(graph, "diff_graph_inputs_dataset", lambda *a, **k: called.__setitem__("diff", True))
+    # force the except branch: make ctx.graph_dataset raise (a broken graph.trig on disk)
+    (tmp_path / "science.yaml").write_text("name: demo\n", encoding="utf-8")
+    gdir = tmp_path / "knowledge"
+    gdir.mkdir()
+    (gdir / "graph.trig").write_text("not trig <<<", encoding="utf-8")
+
+    from science_tool.validate.runner import run
+
+    result = run(tmp_path, strict=False, verbose=False, enable_python_sidecar=False)
+    msgs = [r.message for r in result.results if "graph validate" in r.message]
+    assert any("could not run (unparseable): bad" in m for m in msgs)
+    assert called["diff"] is False
 
 
 def test_graph_check_reuses_one_loaded_dataset_for_graph_followups(
@@ -203,7 +231,9 @@ def test_graph_check_reuses_one_loaded_dataset_for_graph_followups(
     monkeypatch.setattr(
         graph,
         "validate_graph_dataset",
-        lambda dataset: ([{"check": "parseable_trig", "status": "pass", "details": "ok"}], False),
+        lambda dataset: ValidationVerdict.passed(
+            [{"check": "parseable_trig", "status": "pass", "details": "ok"}]
+        ),
         raising=False,
     )
     monkeypatch.setattr(
@@ -247,15 +277,9 @@ def test_parseable_trig_failure_stops_graph_followups(monkeypatch: pytest.Monkey
     monkeypatch.setattr(
         graph,
         "validate_graph",
-        lambda _path: (
-            [
-                {
-                    "check": "parseable_trig",
-                    "status": "fail",
-                    "details": "failed to parse graph.trig",
-                }
-            ],
-            True,
+        lambda _path: ValidationVerdict.unwired(
+            code="unparseable",
+            reason="graph.trig did not parse: bad syntax",
         ),
     )
 
@@ -268,7 +292,10 @@ def test_parseable_trig_failure_stops_graph_followups(monkeypatch: pytest.Monkey
 
     results = list(graph.check_graph(_ctx(tmp_path)))
 
-    assert "graph validate: parseable_trig — failed to parse graph.trig" in _messages(results, Severity.ERROR)
+    assert (
+        "graph validate: could not run (unparseable): graph.trig did not parse: bad syntax"
+        in _messages(results, Severity.ERROR)
+    )
 
 
 def test_graph_audit_unknown_status_raises(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
@@ -308,7 +335,9 @@ def test_graph_validate_unknown_status_raises(monkeypatch: pytest.MonkeyPatch, t
     monkeypatch.setattr(
         graph,
         "validate_graph_dataset",
-        lambda _dataset: ([{"check": "parseable", "status": "mystery", "details": "ok"}], False),
+        lambda _dataset: ValidationVerdict.passed(
+            [{"check": "parseable", "status": "mystery", "details": "ok"}]
+        ),
     )
 
     with pytest.raises(ValueError, match="graph validate returned unknown status: mystery"):
@@ -323,7 +352,7 @@ def test_diff_rows_emit_stale_warning_and_verbose_details(monkeypatch: pytest.Mo
     graph_path.write_text("", encoding="utf-8")
     monkeypatch.setattr(graph, "validate_peers", lambda _root: [])
     monkeypatch.setattr(graph, "materialization_audit", lambda _root: ([], False))
-    monkeypatch.setattr(graph, "validate_graph_dataset", lambda _dataset: ([], False))
+    monkeypatch.setattr(graph, "validate_graph_dataset", lambda _dataset: ValidationVerdict.passed([]))
     monkeypatch.setattr(
         graph,
         "diff_graph_inputs_dataset",
@@ -351,7 +380,7 @@ def test_diff_unknown_status_raises(monkeypatch: pytest.MonkeyPatch, tmp_path: P
     graph_path.write_text("", encoding="utf-8")
     monkeypatch.setattr(graph, "validate_peers", lambda _root: [])
     monkeypatch.setattr(graph, "materialization_audit", lambda _root: ([], False))
-    monkeypatch.setattr(graph, "validate_graph_dataset", lambda _dataset: ([], False))
+    monkeypatch.setattr(graph, "validate_graph_dataset", lambda _dataset: ValidationVerdict.passed([]))
     monkeypatch.setattr(
         graph,
         "diff_graph_inputs_dataset",
@@ -372,7 +401,7 @@ def test_inquiry_validation_maps_statuses_and_verbose_passes(monkeypatch: pytest
     graph_path.write_text("", encoding="utf-8")
     monkeypatch.setattr(graph, "validate_peers", lambda _root: [])
     monkeypatch.setattr(graph, "materialization_audit", lambda _root: ([], False))
-    monkeypatch.setattr(graph, "validate_graph_dataset", lambda _dataset: ([], False))
+    monkeypatch.setattr(graph, "validate_graph_dataset", lambda _dataset: ValidationVerdict.passed([]))
     monkeypatch.setattr(graph, "diff_graph_inputs_dataset", lambda _dataset, **_kwargs: InstrumentResult[dict].empty())
     monkeypatch.setattr(
         graph, "list_inquiries_dataset", lambda _dataset: InstrumentResult.from_rows([{"slug": "demo"}])
@@ -413,7 +442,7 @@ def test_inquiry_value_error_propagates(monkeypatch: pytest.MonkeyPatch, tmp_pat
     graph_path.write_text("", encoding="utf-8")
     monkeypatch.setattr(graph, "validate_peers", lambda _root: [])
     monkeypatch.setattr(graph, "materialization_audit", lambda _root: ([], False))
-    monkeypatch.setattr(graph, "validate_graph_dataset", lambda _dataset: ([], False))
+    monkeypatch.setattr(graph, "validate_graph_dataset", lambda _dataset: ValidationVerdict.passed([]))
     monkeypatch.setattr(graph, "diff_graph_inputs_dataset", lambda _dataset, **_kwargs: InstrumentResult[dict].empty())
     monkeypatch.setattr(
         graph, "list_inquiries_dataset", lambda _dataset: InstrumentResult.from_rows([{"slug": "demo"}])
@@ -436,7 +465,7 @@ def test_inquiry_unknown_status_raises(monkeypatch: pytest.MonkeyPatch, tmp_path
     graph_path.write_text("", encoding="utf-8")
     monkeypatch.setattr(graph, "validate_peers", lambda _root: [])
     monkeypatch.setattr(graph, "materialization_audit", lambda _root: ([], False))
-    monkeypatch.setattr(graph, "validate_graph_dataset", lambda _dataset: ([], False))
+    monkeypatch.setattr(graph, "validate_graph_dataset", lambda _dataset: ValidationVerdict.passed([]))
     monkeypatch.setattr(graph, "diff_graph_inputs_dataset", lambda _dataset, **_kwargs: InstrumentResult[dict].empty())
     monkeypatch.setattr(
         graph, "list_inquiries_dataset", lambda _dataset: InstrumentResult.from_rows([{"slug": "demo"}])

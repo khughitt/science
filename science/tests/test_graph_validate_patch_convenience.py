@@ -22,7 +22,8 @@ def test_validate_graph_flags_orphan_patch_convenience_edge() -> None:
     # A convenience edge with no backing sci:PatchMembership node.
     ds.graph(patch_uri).add((patch_uri, SCI_NS.hasMember, member_uri))
 
-    rows, has_failures = validate_graph_dataset(ds)
+    verdict = validate_graph_dataset(ds)
+    rows, has_failures = verdict.rows, verdict.status == "failed"
 
     row = _row(rows, "patch_membership_convenience")
     assert row["status"] == "fail"
@@ -42,7 +43,7 @@ def test_validate_graph_passes_when_convenience_edges_are_backed() -> None:
     graph.add((patch_uri, SCI_NS.hasMember, member_uri))
     graph.add((member_uri, SCI_NS.inPatch, patch_uri))
 
-    rows, _ = validate_graph_dataset(ds)
+    rows = validate_graph_dataset(ds).rows
 
     row = _row(rows, "patch_membership_convenience")
     assert row["status"] == "pass"
@@ -51,7 +52,7 @@ def test_validate_graph_passes_when_convenience_edges_are_backed() -> None:
 def test_validate_graph_passes_when_no_patches_present() -> None:
     ds = Dataset()
 
-    rows, _ = validate_graph_dataset(ds)
+    rows = validate_graph_dataset(ds).rows
 
     row = _row(rows, "patch_membership_convenience")
     assert row["status"] == "pass"

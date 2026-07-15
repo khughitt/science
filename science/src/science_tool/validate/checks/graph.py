@@ -199,20 +199,19 @@ def check_graph(ctx: ValidateContext) -> Iterator[Result]:
     try:
         dataset = ctx.graph_dataset(graph_path)
     except Exception:  # noqa: BLE001
-        rows, _has_failures = validate_graph(graph_path)
+        verdict = validate_graph(graph_path)
     else:
-        rows, _has_failures = validate_graph_dataset(dataset)
-    parseable_failed = False
-    for row in rows:
+        verdict = validate_graph_dataset(dataset)
+
+    if verdict.status == "unwired":
+        yield _result(Severity.ERROR, f"graph validate: could not run ({verdict.code}): {verdict.reason}")
+        return
+
+    for row in verdict.rows:
         status = _status(row, context="graph validate", accepted={"fail", "warn", "pass"})
         check = row["check"]
-        if check == "parseable_trig" and status == "fail":
-            parseable_failed = True
         severity = Severity.ERROR if status == "fail" else Severity.WARN if status == "warn" else Severity.INFO
         yield _result(severity, f"graph validate: {check} — {row['details']}")
-
-    if parseable_failed:
-        return
 
     # This INFO branch used to be UNREACHABLE: read_revision_manifest never raised, it
     # returned {} -- so a manifest-less graph took the "N stale input file(s)" path or,
@@ -306,5 +305,4 @@ def _status(row: dict[str, Any], *, context: str, accepted: set[str]) -> str:
     if status not in accepted:
         raise ValueError(f"{context} returned unknown status: {status}")
     return status
-
 

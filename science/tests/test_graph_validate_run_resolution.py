@@ -15,26 +15,56 @@ def _row(rows, name):
     return next(r for r in rows if r["check"] == name)
 
 
+def test_validate_graph_missing_is_unwired(tmp_path) -> None:
+    from science_tool.graph.store.validation import validate_graph
+
+    verdict = validate_graph(tmp_path / "nope.trig")
+    assert verdict.status == "unwired"
+    assert verdict.code == "graph_missing"
+    assert verdict.rows == []
+
+
+def test_validate_graph_unparseable_is_unwired(tmp_path) -> None:
+    from science_tool.graph.store.validation import validate_graph
+
+    p = tmp_path / "graph.trig"
+    p.write_text("this is not trig <<<", encoding="utf-8")
+    verdict = validate_graph(p)
+    assert verdict.status == "unwired"
+    assert verdict.code == "unparseable"
+
+
+def test_validate_graph_dataset_returns_verdict() -> None:
+    from science_tool.graph.store.validation import validate_graph_dataset
+
+    verdict = validate_graph_dataset(_dataset_from_trig("@prefix ex: <http://e/> . ex:a ex:b ex:c ."))
+    assert verdict.status in {"passed", "failed"}
+    assert verdict.rows  # report card is always present
+
+
 def test_row_is_always_present_even_with_no_evidence_lines():
-    rows, _ = validate_graph_dataset(_dataset_from_trig("@prefix ex: <http://e/> . ex:a ex:b ex:c ."))
+    rows = validate_graph_dataset(_dataset_from_trig("@prefix ex: <http://e/> . ex:a ex:b ex:c .")).rows
     assert _row(rows, "empirical_run_resolution")["status"] == "pass"
 
 
 def test_unresolved_empirical_line_warns_in_p2(empirical_line_without_run_trig):
-    rows, has_failures = validate_graph_dataset(_dataset_from_trig(empirical_line_without_run_trig))
+    verdict = validate_graph_dataset(_dataset_from_trig(empirical_line_without_run_trig))
+    rows, has_failures = verdict.rows, verdict.status == "failed"
     row = _row(rows, "empirical_run_resolution")
     assert row["status"] == "warn"
     assert not has_failures  # P2 is warn-only; P4 flips this
 
 
 def test_resolved_empirical_line_passes(empirical_line_with_run_trig):
-    rows, has_failures = validate_graph_dataset(_dataset_from_trig(empirical_line_with_run_trig))
+    verdict = validate_graph_dataset(_dataset_from_trig(empirical_line_with_run_trig))
+    rows, has_failures = verdict.rows, verdict.status == "failed"
     assert _row(rows, "empirical_run_resolution")["status"] == "pass"
     assert not has_failures
 
 
 def test_member_of_cycle_fails(member_of_cycle_trig):
-    rows, has_failures = validate_graph_dataset(_dataset_from_trig(member_of_cycle_trig))
+    verdict = validate_graph_dataset(_dataset_from_trig(member_of_cycle_trig))
+    rows, has_failures = verdict.rows, verdict.status == "failed"
     row = _row(rows, "empirical_run_resolution")
     assert row["status"] == "fail"
     assert "dataset.member-of-cycle" in row["details"]
@@ -49,7 +79,7 @@ def test_member_of_cycle_fails(member_of_cycle_trig):
 
 def test_derivation_run_without_fingerprint_still_warns(empirical_line_with_unfingerprinted_run_trig):
     """The contract must fail CLOSED: naming a run is not bearing a fingerprint."""
-    rows, _ = validate_graph_dataset(_dataset_from_trig(empirical_line_with_unfingerprinted_run_trig))
+    rows = validate_graph_dataset(_dataset_from_trig(empirical_line_with_unfingerprinted_run_trig)).rows
     row = _row(rows, "empirical_run_resolution")
     assert row["status"] == "warn"
     assert "run-unfingerprinted" in row["details"]
@@ -57,7 +87,7 @@ def test_derivation_run_without_fingerprint_still_warns(empirical_line_with_unfi
 
 def test_run_refs_to_unfingerprinted_run_still_warns(line_with_unfingerprinted_run_ref_trig):
     """run_refs must not be a back door around the fingerprint requirement."""
-    rows, _ = validate_graph_dataset(_dataset_from_trig(line_with_unfingerprinted_run_ref_trig))
+    rows = validate_graph_dataset(_dataset_from_trig(line_with_unfingerprinted_run_ref_trig)).rows
     row = _row(rows, "empirical_run_resolution")
     assert row["status"] == "warn"
     assert "run-unfingerprinted" in row["details"]
@@ -67,9 +97,9 @@ def test_run_refs_to_fingerprinted_run_resolves_a_code_only_dataset(
     line_with_produced_by_dataset_and_fingerprinted_run_ref_trig,
 ):
     """The rescue case: sound dataset provenance that cannot itself name a run."""
-    rows, _ = validate_graph_dataset(
+    rows = validate_graph_dataset(
         _dataset_from_trig(line_with_produced_by_dataset_and_fingerprinted_run_ref_trig)
-    )
+    ).rows
     assert _row(rows, "empirical_run_resolution")["status"] == "pass"
 
 
@@ -154,7 +184,8 @@ def test_real_materialized_unfingerprinted_run_does_not_resolve(tmp_path):
     dataset_uri = PROJECT_NS["dataset/ds1"]
     assert (dataset_uri, SCI_NS.workflowRun, run_uri) in knowledge
 
-    rows, has_failures = validate_graph_dataset(dataset)
+    verdict = validate_graph_dataset(dataset)
+    rows, has_failures = verdict.rows, verdict.status == "failed"
     row = _row(rows, "empirical_run_resolution")
     assert row["status"] == "warn"
     assert "run-unfingerprinted" in row["details"]
@@ -252,7 +283,8 @@ def test_real_materialized_fingerprinted_run_resolves(tmp_path, local_fingerprin
     assert (dataset_uri, SCI_NS.workflowRun, run_uri) in knowledge
     assert (run_uri, SCI_NS.fingerprintPolicy, None) in knowledge
 
-    rows, has_failures = validate_graph_dataset(dataset)
+    verdict = validate_graph_dataset(dataset)
+    rows, has_failures = verdict.rows, verdict.status == "failed"
     row = _row(rows, "empirical_run_resolution")
     assert row["status"] == "pass"
     assert not has_failures
@@ -266,15 +298,15 @@ def test_verdict_is_identical_with_and_without_data_files_on_disk(
     Validate must return the same rows whether or not the run's data files exist.
     """
     ds = _dataset_from_trig(empirical_line_with_run_trig)
-    before, _ = validate_graph_dataset(ds)
+    before = validate_graph_dataset(ds).rows
 
     data = tmp_path / "results" / "w1" / "r1"
     data.mkdir(parents=True)
     (data / "out.csv").write_text("x,y\n1,2\n", encoding="utf-8")
-    after_present, _ = validate_graph_dataset(_dataset_from_trig(empirical_line_with_run_trig))
+    after_present = validate_graph_dataset(_dataset_from_trig(empirical_line_with_run_trig)).rows
 
     (data / "out.csv").unlink()
-    after_absent, _ = validate_graph_dataset(_dataset_from_trig(empirical_line_with_run_trig))
+    after_absent = validate_graph_dataset(_dataset_from_trig(empirical_line_with_run_trig)).rows
 
     assert before == after_present == after_absent
 
@@ -391,7 +423,8 @@ def test_run_resolution_ignores_datasets_outside_the_dataset_qa_substrate(tmp_pa
     by_line = dependence_datasets_by_line(knowledge, provenance)
     assert by_line[line_uri] == {dep_uri}
 
-    rows, has_failures = validate_graph_dataset(dataset)
+    verdict = validate_graph_dataset(dataset)
+    rows, has_failures = verdict.rows, verdict.status == "failed"
     row = _row(rows, "empirical_run_resolution")
     # The cited-only run must NOT rescue resolution: only ds-dep (no provenance)
     # is on the substrate, so the line stays unresolved.

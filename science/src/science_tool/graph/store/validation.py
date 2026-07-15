@@ -19,7 +19,7 @@ from science_tool.graph.io import (
 from science_tool.graph.patch_membership import validate_patch_membership_convenience
 from science_tool.graph.run_resolution import MemberOfCycleError, NoRunReason, resolved_empirical_runs
 
-from ...instruments import InstrumentResult
+from ...instruments import InstrumentResult, ValidationVerdict
 from .constants import PREDICATE_REGISTRY, SCHEMA_NS, SCI_NS, SCIC_NS
 from .dataset import _load_dataset
 from .graphutil import _has_cycle
@@ -34,16 +34,24 @@ def query_predicates() -> list[dict[str, str]]:
     return list(PREDICATE_REGISTRY)
 
 
-def validate_graph(graph_path: Path) -> tuple[list[dict[str, str]], bool]:
+def validate_graph(graph_path: Path) -> ValidationVerdict[dict[str, str]]:
+    if not graph_path.exists():
+        return ValidationVerdict.unwired(
+            code="graph_missing",
+            reason=f"Graph file not found: {graph_path}",
+        )
     try:
         dataset = _load_dataset(graph_path)
     except Exception as exc:  # noqa: BLE001
-        return _parse_failure_rows(exc), True
+        return ValidationVerdict.unwired(
+            code="unparseable",
+            reason=f"graph.trig did not parse: {exc}",
+        )
 
     return validate_graph_dataset(dataset)
 
 
-def validate_graph_dataset(dataset: Dataset) -> tuple[list[dict[str, str]], bool]:
+def validate_graph_dataset(dataset: Dataset) -> ValidationVerdict[dict[str, str]]:
     rows: list[dict[str, str]] = []
     rows.append(
         {
@@ -165,11 +173,11 @@ def validate_graph_dataset(dataset: Dataset) -> tuple[list[dict[str, str]], bool
             }
         )
 
-    run_messages, run_fatal = validate_empirical_run_resolution(dataset)
+    run_messages, run_fatal = _validate_empirical_run_resolution(dataset)
     if run_messages:
         if run_fatal:
             # Fatal today means a structural `dataset.member-of-cycle` defect
-            # (see `validate_empirical_run_resolution`), not "no fingerprinted
+            # (see `_validate_empirical_run_resolution`), not "no fingerprinted
             # run" — the per-line message already names the actual defect.
             details = f"structural defect blocking run resolution: {run_messages[0]}"
         else:
@@ -191,7 +199,7 @@ def validate_graph_dataset(dataset: Dataset) -> tuple[list[dict[str, str]], bool
         )
 
     has_failures = any(row["status"] == "fail" for row in rows)
-    return rows, has_failures
+    return ValidationVerdict.from_has_failures(rows, has_failures)
 
 
 def _knowledge_and_provenance(dataset: Dataset) -> tuple[Graph, Graph]:
@@ -240,7 +248,7 @@ def _runs_for_line(
     return [], reasons
 
 
-def validate_empirical_run_resolution(dataset: Dataset) -> tuple[list[str], bool]:
+def _validate_empirical_run_resolution(dataset: Dataset) -> tuple[list[str], bool]:
     """Belief-eligible empirical lines must resolve to a FINGERPRINTED run.
 
     Returns (messages, is_fatal). A member_of cycle is fatal; unresolved lines
@@ -276,16 +284,6 @@ def validate_empirical_run_resolution(dataset: Dataset) -> tuple[list[str], bool
             detail = ", ".join(sorted({r.value for r in reasons})) or "no-provenance"
             messages.append(f"{line}: evidence.empirical-run-unresolved ({detail})")
     return sorted(messages), False
-
-
-def _parse_failure_rows(exc: Exception) -> list[dict[str, str]]:
-    return [
-        {
-            "check": "parseable_trig",
-            "status": "fail",
-            "details": f"failed to parse graph.trig: {exc}",
-        }
-    ]
 
 
 def diff_graph_inputs(graph_path: Path, mode: str) -> InstrumentResult[dict[str, str]]:
