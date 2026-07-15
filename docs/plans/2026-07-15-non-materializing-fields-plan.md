@@ -6,7 +6,7 @@
 
 **Architecture:** One new canonical validate check, `check_non_materializing_fields`, that mirrors `status_vocabulary.py`: iterate entity markdown under `entities/`, read each file's frontmatter, and yield a `Result` when a non-materializing relation key is present on a kind that has no semantic top-level reader for it. Legitimacy is a small explicit `(kind, key)` set, because it is a behavioral fact (a live consumer) that no kind descriptor declares.
 
-**Tech Stack:** Python 3.13, pytest. Package root is `science/` — **there is no root `pyproject.toml`**.
+**Tech Stack:** Python ≥3.11 (the package floor, `science/pyproject.toml`), pytest. Package root is `science/` — **there is no root `pyproject.toml`**.
 
 **Design:** [`2026-07-15-non-materializing-fields-design.md`](2026-07-15-non-materializing-fields-design.md)
 
@@ -95,6 +95,8 @@ def test_top_level_supersedes_on_interpretation_is_an_error(tmp_path: Path) -> N
     assert "supersedes" in msg                # the key
     assert "relations:" in msg                # the replacement form
     assert "sci:supersedes" in msg            # the predicate
+    assert "target" in msg and "<target-id>" in msg   # current field name, schematic target
+    assert "interpretation:0000-y" not in msg  # must NOT echo the authored value
     assert results[0].rule == "non-materializing-field"
 
 
@@ -139,6 +141,20 @@ def test_amends_on_workflow_run_is_an_error(tmp_path: Path) -> None:
     results = _results(tmp_path)
     assert [r.severity for r in results] == [Severity.ERROR]
     assert "sci:amends" in results[0].message
+
+
+def test_malformed_non_string_kind_still_flags_and_does_not_crash(tmp_path: Path) -> None:
+    """A list/mapping `kind` is UNHASHABLE; an unguarded `(kind, key)` frozenset lookup would
+    raise, and the runner would abort the whole check (skipping later entities). The key must
+    still receive its rule, and the check must not error out."""
+    _entity(
+        tmp_path, "interpretations/0001-x.md",
+        entity_id="interpretation:0001-x", kind="[oops]",  # YAML flow sequence -> unhashable list
+        extra="supersedes: interpretation:0000-y\n",
+    )
+    results = _results(tmp_path)
+    assert [r.severity for r in results] == [Severity.ERROR]
+    assert results[0].rule == "non-materializing-field"
 
 
 def test_null_valued_supersedes_is_an_error(tmp_path: Path) -> None:
@@ -241,7 +257,12 @@ def check_non_materializing_fields(ctx: ValidateContext) -> Iterator[Result]:
         for key, predicate in _NON_MATERIALIZING.items():
             if key not in fm:  # PRESENCE, not value -- null/[] are still findings
                 continue
-            if (kind, key) in _LEGIT_TOP_LEVEL:
+            # A non-string `kind` (list/mapping from malformed YAML) is UNHASHABLE: building
+            # `(kind, key)` for the frozenset lookup would raise, and the runner
+            # (runner.py:124) would convert THIS check into a single `validate.check-error`,
+            # silently skipping every entity after the malformed one. A non-string kind also
+            # cannot be a legit reader, so the key must still be flagged.
+            if isinstance(kind, str) and (kind, key) in _LEGIT_TOP_LEVEL:
                 continue
             yield Result(
                 Severity.ERROR,
@@ -271,7 +292,7 @@ In `science/src/science_tool/validate/checks/__init__.py`, append `"materializat
 - [ ] **Step 5: Run the check's tests — expect PASS**
 
 Run: `cd science && uv run --frozen pytest tests/validate/test_checks_materialization.py -q`
-Expected: 8 passed.
+Expected: 9 passed.
 
 - [ ] **Step 6: Run the registry guard — expect PASS**
 
@@ -301,18 +322,52 @@ judges whether authored information has any effect (fb-2026-07-11-017)."
 
 ---
 
-## Task 2: Close the feedback item
+## Task 2: Record the resolution in every doc that declares fb-017 open
 
-fb-2026-07-11-017 is tracked in the design/plan docs, not a self-hosted `science tasks` backlog (this repo has none). Closing it is a documentation act.
+fb-2026-07-11-017 is tracked in the plan/design docs, not a self-hosted `science tasks`
+backlog (this repo has none), so closing it is a documentation act. **Three** docs currently
+state it is open/live; all three must be reconciled, and the two originating docs must keep
+their *withdrawn* account (it is the reason this fix looks the way it does) with a resolution
+addendum appended — not a rewrite.
 
 **Files:**
-- Modify: `docs/plans/2026-07-15-non-materializing-fields-design.md` (status line)
+- Modify: `docs/plans/2026-07-15-non-materializing-fields-design.md` (its `**Status:**` line)
+- Modify: `docs/plans/2026-07-11-instrument-result-convergence-plan.md` (Task 6 blockquote, ~line 1519)
+- Modify: `docs/plans/2026-07-11-instrument-result-convergence-design.md` (the fb-017 scope note, ~line 494)
 
-- [ ] **Step 1:** Change the design doc's `**Status:**` line to note the check shipped and the branch, e.g. `**Status:** SHIPPED on branch fb017-non-materializing-fields (not merged). fb-2026-07-11-017 addressed.`
-- [ ] **Step 2: Commit**
+- [ ] **Step 1: Update the new design's status line.** Replace its `**Status:**` line with the exact text (reserve "SHIPPED"/"CLOSED" for the merged state):
+
+```
+**Status:** IMPLEMENTED on branch `fb017-non-materializing-fields`; pending merge. fb-2026-07-11-017 addressed.
+```
+
+- [ ] **Step 2: Append a resolution addendum to the convergence PLAN's Task 6 blockquote.** Immediately after the line `> **`fb-2026-07-11-017` is open and its defect is live.**`, add (inside the blockquote, preserving everything above it):
+
+```
+>
+> **RESOLVED 2026-07-15 (design amended's follow-on delivered).** The per-kind vocabulary
+> the withdrawal waited on became unnecessary: legitimacy is a behavioral fact (one reader,
+> `qa_audit/runs.py:47`), encoded as an explicit `(workflow-run, supersedes)` exception, not
+> a schema derivation. Shipped as `check_non_materializing_fields`. See
+> [`2026-07-15-non-materializing-fields-design.md`](2026-07-15-non-materializing-fields-design.md)
+> and [`2026-07-15-non-materializing-fields-plan.md`](2026-07-15-non-materializing-fields-plan.md).
+> The withdrawn account below stands as the record of why.
+```
+
+- [ ] **Step 3: Append a resolution note to the convergence DESIGN's fb-017 scope paragraph.** Immediately after the sentence ending `... \`fb-2026-07-11-017\` remains **open**.`, add:
+
+```
+**RESOLVED 2026-07-15** by a follow-on design — the kind-awareness is an explicit
+one-pair reader exception, not a per-kind vocabulary. See
+[`2026-07-15-non-materializing-fields-design.md`](2026-07-15-non-materializing-fields-design.md).
+```
+
+- [ ] **Step 4: Commit**
 
 ```bash
-git add docs/plans/2026-07-15-non-materializing-fields-design.md
+git add docs/plans/2026-07-15-non-materializing-fields-design.md \
+        docs/plans/2026-07-11-instrument-result-convergence-plan.md \
+        docs/plans/2026-07-11-instrument-result-convergence-design.md
 git commit -m "docs(validate): mark fb-2026-07-11-017 addressed by the non-materializing-field check"
 ```
 
@@ -320,7 +375,8 @@ git commit -m "docs(validate): mark fb-2026-07-11-017 addressed by the non-mater
 
 ## Self-review
 
-- **Spec coverage:** design §2 (the check) → Task 1 Steps 3–4; §2 message contract → Step 1 test `test_top_level_supersedes...` asserts id/key/`relations:`/predicate; §2 trigger-on-presence → `test_null_valued...`, `test_empty_list...` + `key in fm`; §3 kind-awareness legit set → `_LEGIT_TOP_LEVEL` + `test_supersedes_on_workflow_run...`; §3 pair-specificity → `test_amends_on_workflow_run_is_an_error`; §4 unconditional ERROR → `Severity.ERROR` literal (no `kind_severity` import) + every test asserts `Severity.ERROR`; §5 rollout / clean in-repo scan → Step 7 note; §6 testing matrix → Step 1 (all seven rows + non-vacuity guard); §7 files → Task 1 Files.
+- **Spec coverage:** design §2 (the check) → Task 1 Steps 3–4; §2 message contract → Step 1 `test_top_level_supersedes...` asserts id, key, `relations:`, predicate, `target`/`<target-id>`, **and** that the authored value (`interpretation:0000-y`) is not echoed; §2 trigger-on-presence → `test_null_valued...`, `test_empty_list...` + `key in fm`; §3 kind-awareness legit set → `_LEGIT_TOP_LEVEL` + `test_supersedes_on_workflow_run...`; §3 pair-specificity → `test_amends_on_workflow_run_is_an_error`; §4 unconditional ERROR → `Severity.ERROR` literal (no `kind_severity` import) + every test asserts `Severity.ERROR`; §5 rollout / clean in-repo scan → Step 7 note; §6 testing matrix → Step 1 (all seven rows + non-vacuity guard); §7 files → Task 1 Files.
+- **Beyond the design matrix (per review):** `test_malformed_non_string_kind...` guards the unhashable-`kind` abort (finding #1), and the implementation's `isinstance(kind, str)` guard is what it pins. Task 2 reconciles **all three** docs that declare fb-017 open, preserving the withdrawn account.
 - **Placeholder scan:** none — every code step carries complete code; the message string is identical in the test asserts (substrings) and the implementation.
 - **Type consistency:** `check_non_materializing_fields(ctx) -> Iterator[Result]`; `Result(Severity.ERROR, path, None, message, "non-materializing-field", None)` matches the `Result(severity, path, line, message, rule, task)` dataclass; `_LEGIT_TOP_LEVEL` and `_NON_MATERIALIZING` names are used identically in the Interfaces block, the implementation, and the design.
 - **One known trap:** the registry guard (Task 1 Step 6) — creating the module without listing it fails `test_EVERY_check_module_on_disk_is_REGISTERED`. Steps 4 and 6 cover it.
