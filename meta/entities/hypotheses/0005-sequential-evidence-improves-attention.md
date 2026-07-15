@@ -1,12 +1,10 @@
 ---
 kind: hypothesis
-title: Sequential anytime-valid evidence improves attention and stopping decisions
-  over fixed-N synthesis
-status: proposed
-created: '2026-05-05'
-updated: '2026-05-05'
+title: Sequential anytime-valid evidence improves attention and stopping decisions over fixed-N synthesis
+status: draft
+created: "2026-05-05"
+updated: "2026-05-05"
 id: hypothesis:0005-sequential-evidence-improves-attention
-phase: candidate
 source_refs:
 - paper:Mulder2026
 - paper:Aitken2024

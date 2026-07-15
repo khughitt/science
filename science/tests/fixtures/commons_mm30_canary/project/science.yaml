@@ -1,3 +1,4 @@
 name: mm30-canary
 knowledge_profiles:
   local: local
+entity_schema_version: 2

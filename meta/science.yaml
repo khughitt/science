@@ -66,3 +66,4 @@ prose_lint:
   - H2
   - h00
   - q99
+entity_schema_version: 2

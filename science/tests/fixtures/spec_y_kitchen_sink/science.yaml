@@ -2,3 +2,4 @@ name: spec-y-kitchen-sink
 profile: research
 knowledge_profiles:
   local: local
+entity_schema_version: 2

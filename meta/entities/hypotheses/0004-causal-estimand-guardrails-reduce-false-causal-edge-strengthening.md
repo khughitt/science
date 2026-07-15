@@ -1,11 +1,10 @@
 ---
 kind: hypothesis
 title: Causal-estimand guardrails reduce false causal edge strengthening
-status: proposed
-created: '2026-05-05'
-updated: '2026-05-06'
+status: active
+created: "2026-05-05"
+updated: "2026-05-06"
 id: hypothesis:0004-causal-estimand-guardrails-reduce-false-causal-edge-strengthening
-phase: active
 source_refs:
 - paper:Berenfeld2026
 - paper:Dai2023

@@ -1,15 +1,15 @@
 ---
 kind: hypothesis
-title: Stochastic revisiting of down-weighted claims improves final recall under noisy
-  early evidence
-status: supported
-created: '2026-04-24'
-updated: '2026-07-01'
+title: Stochastic revisiting of down-weighted claims improves final recall under noisy early evidence
+status: active
+created: "2026-04-24"
+updated: "2026-07-01"
 id: hypothesis:0001-stochastic-revisiting
 source_refs: []
 related:
 - topic:analytic-flexibility-and-replication
 - question:0001-bioinformatics-generalizability
+verdict: supported
 ---
 
 # Hypothesis H01: Stochastic revisiting of down-weighted claims improves final recall under noisy early evidence

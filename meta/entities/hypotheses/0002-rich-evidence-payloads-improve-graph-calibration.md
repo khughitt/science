@@ -1,11 +1,10 @@
 ---
 kind: hypothesis
 title: Rich evidence payloads improve graph calibration
-status: proposed
-created: '2026-05-05'
-updated: '2026-05-06'
+status: active
+created: "2026-05-05"
+updated: "2026-05-06"
 id: hypothesis:0002-rich-evidence-payloads-improve-graph-calibration
-phase: active
 source_refs:
 - paper:Zhao2012
 - paper:Li2016

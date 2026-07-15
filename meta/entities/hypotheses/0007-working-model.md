@@ -1,13 +1,10 @@
 ---
 kind: hypothesis
-title: 'Science working model: a federated patchwork of provenance-typed, uncertainty-bearing
-  epistemic models'
-status: proposed
-created: '2026-05-31'
-updated: '2026-05-31'
+title: 'Science working model: a federated patchwork of provenance-typed, uncertainty-bearing epistemic models'
+status: active
+created: "2026-05-31"
+updated: "2026-05-31"
 id: hypothesis:0007-working-model
-role: working-model
-phase: active
 related:
 - hypothesis:0001-stochastic-revisiting
 - hypothesis:0002-rich-evidence-payloads-improve-graph-calibration
