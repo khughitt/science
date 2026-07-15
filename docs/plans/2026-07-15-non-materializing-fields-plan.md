@@ -340,7 +340,7 @@ state, and the code is not merged when this task runs.
 
 **Files:**
 - Modify: `docs/plans/2026-07-15-non-materializing-fields-design.md` (its `**Status:**` line)
-- Modify: `docs/plans/2026-07-11-instrument-result-convergence-design.md` (add a banner near the top, after the `## Status` block)
+- Modify: `docs/plans/2026-07-11-instrument-result-convergence-design.md` (add a banner immediately after the `## Status` heading, before its existing prose)
 - Modify: `docs/plans/2026-07-11-instrument-result-convergence-plan.md` (add the same banner directly under the H1 header block)
 
 - [ ] **Step 1: Update the new design's status line.** Replace its `**Status:**` line with exactly:
@@ -349,7 +349,7 @@ state, and the code is not merged when this task runs.
 **Status:** IMPLEMENTED on branch `fb017-non-materializing-fields`; pending merge. fb-2026-07-11-017 addressed.
 ```
 
-- [ ] **Step 2: Add the banner to the convergence DESIGN**, as a new blockquote inserted immediately after the `## Status` section's final paragraph (before the next `##` heading). Use this exact text:
+- [ ] **Step 2: Add the banner to the convergence DESIGN**, as a new blockquote inserted immediately after the `## Status` heading, before any existing status prose. This placement makes every open/live statement in the section sit below — and therefore be governed by — the banner. Use this exact text:
 
 ```
 > **fb-2026-07-11-017 STATUS UPDATE (2026-07-15) — supersedes every "open"/"live"
@@ -367,11 +367,11 @@ state, and the code is not merged when this task runs.
 
 - [ ] **Step 3: Add the same banner to the convergence PLAN**, inserted immediately after the plan's H1 header block (after the `**Goal:** … Tech Stack …` preamble, before the first `##`/`---`). Use the identical blockquote text from Step 2.
 
-- [ ] **Step 4: Verify no present-tense open-status claim now stands unqualified.** Grep both convergence docs and confirm each remaining "is open"/"is live"/"remains open" mention sits *below* its file's banner (so the banner governs it):
+- [ ] **Step 4: Verify no present-tense open-status claim now stands unqualified.** Search both convergence docs and confirm each remaining "is open"/"is live"/"remains open" mention sits *below* its file's banner (so the banner governs it):
 
 ```bash
-cd /mnt/ssd/Dropbox/science/.claude/worktrees/instrument-result
-grep -nE "fb-2026-07-11-017|is open|is live|remains open" \
+cd ~/d/science/.claude/worktrees/instrument-result
+rg -n "fb-2026-07-11-017|is open|is live|remains open" \
   docs/plans/2026-07-11-instrument-result-convergence-design.md \
   docs/plans/2026-07-11-instrument-result-convergence-plan.md
 ```
