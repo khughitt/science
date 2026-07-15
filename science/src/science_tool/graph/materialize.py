@@ -346,7 +346,10 @@ def _emit_phase(sources: ProjectSources, *, archive_active: dict | None = None) 
     referenced_archived: set[str] = set()
 
     resolver = ReferenceResolver.from_entities(
-        sources.entities, manual_aliases=sources.manual_aliases, identity_table=build_identity_table(sources)
+        sources.entities,
+        manual_aliases=sources.manual_aliases,
+        archive_alias_tokens=sources.archive_alias_tokens,
+        identity_table=build_identity_table(sources),
     )
     entity_index = {entity.canonical_id: entity for entity in sources.entities}
     ext_prefixes = _EXTERNAL_PREFIXES | external_prefixes(sources.ontology_catalogs)

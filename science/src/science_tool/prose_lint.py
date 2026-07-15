@@ -779,7 +779,11 @@ def build_short_form_resolver(root: Path) -> dict[str, str] | None:
     except Exception as exc:  # noqa: BLE001 - a lint must not hard-fail on graph-load issues
         logger.warning("short-form-ids resolver unavailable (%s); falling back to deny-list only", exc)
         return None
-    alias_map = build_alias_map(sources.entities, sources.manual_aliases)
+    alias_map = build_alias_map(
+        sources.entities,
+        sources.manual_aliases,
+        archive_alias_tokens=sources.archive_alias_tokens,
+    )
     for alias, canonical in _archived_task_aliases(root.resolve()).items():
         alias_map.setdefault(alias, canonical)
     return alias_map

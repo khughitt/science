@@ -114,6 +114,7 @@ def audit_relations(project_root: Path, sources: ProjectSources) -> RelationAudi
     resolver = ReferenceResolver.from_entities(
         sources.entities,
         manual_aliases=sources.manual_aliases,
+        archive_alias_tokens=sources.archive_alias_tokens,
         identity_table=build_identity_table(sources),
     )
     entity_index = {entity.canonical_id: entity for entity in sources.entities}

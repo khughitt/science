@@ -157,7 +157,10 @@ def audit_project_sources(sources: ProjectSources) -> tuple[list[AuditRow], bool
     identity_table = build_identity_table(sources)
     try:
         resolver = ReferenceResolver.from_entities(
-            sources.entities, manual_aliases=sources.manual_aliases, identity_table=identity_table
+            sources.entities,
+            manual_aliases=sources.manual_aliases,
+            archive_alias_tokens=sources.archive_alias_tokens,
+            identity_table=identity_table,
         )
     except AliasCollisionError as exc:
         # Alias collision short-circuits the reference checks (no resolver), but we

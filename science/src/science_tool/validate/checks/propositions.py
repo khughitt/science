@@ -338,7 +338,11 @@ def check_relations_store_membership_roles(ctx: ValidateContext) -> Iterator[Res
 
     from science_tool.graph.sources import build_alias_map
 
-    alias_map = build_alias_map(sources.entities, manual_aliases=sources.manual_aliases)
+    alias_map = build_alias_map(
+        sources.entities,
+        manual_aliases=sources.manual_aliases,
+        archive_alias_tokens=sources.archive_alias_tokens,
+    )
 
     # Re-key relation_roles by canonicalized (subject_cid, object_cid) pairs.
     canonical_relation_roles: dict[tuple[str, str], str] = {}

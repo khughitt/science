@@ -1207,7 +1207,11 @@ def _derive_seed_policy_for_run(
     # wrong. The two guards below close both.
     sources = load_project_sources(project_root, strict_core_schema=False)
     _reject_skipped_steps(sources)
-    resolver = ReferenceResolver.from_entities(sources.entities, manual_aliases=sources.manual_aliases)
+    resolver = ReferenceResolver.from_entities(
+        sources.entities,
+        manual_aliases=sources.manual_aliases,
+        archive_alias_tokens=sources.archive_alias_tokens,
+    )
     _reject_unattributable_steps(sources, resolver)
     workflow_id = _resolve_or_raise(resolver, workflow_ref, run_path)
 

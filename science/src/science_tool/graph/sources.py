@@ -177,6 +177,11 @@ class ProjectSources(BaseModel):
     relations: list[SourceRelation] = Field(default_factory=list)
     bindings: list[BindingSource] = Field(default_factory=list)
     manual_aliases: dict[str, str] = Field(default_factory=dict)
+    # Subset of `manual_aliases` keys that came from the ARCHIVE index (not project-
+    # authored `mappings.yaml`). build_alias_map needs this to keep an archived id from
+    # silently shadowing a live entity's auto-derived token: an authored mapping may win
+    # over a colliding derived alias, an archive token never does.
+    archive_alias_tokens: frozenset[str] = Field(default_factory=frozenset)
     ontology_catalogs: list[OntologyCatalog] = Field(default_factory=list)
     registry: EntityRegistry
     markdown_documents: list[MarkdownSourceDocument] = Field(default_factory=list)
@@ -643,6 +648,7 @@ def load_project_sources(
     from science_tool.archive import load_archive_index
 
     manual_aliases = _load_manual_aliases(project_root, local_profile=local_profile)
+    archive_alias_tokens: set[str] = set()
     for token, canonical in load_archive_index(project_root).resolvable_ids().items():
         existing = manual_aliases.get(token)
         if existing is not None and existing != canonical:
@@ -651,6 +657,7 @@ def load_project_sources(
                 f"alias -> {existing!r}; unarchive or rename before archiving"
             )
         manual_aliases[token] = canonical
+        archive_alias_tokens.add(token)
 
     return ProjectSources(
         project_name=str(config["name"]),
@@ -662,6 +669,7 @@ def load_project_sources(
         relations=relations,
         bindings=bindings,
         manual_aliases=manual_aliases,
+        archive_alias_tokens=frozenset(archive_alias_tokens),
         ontology_catalogs=ontology_catalogs,
         registry=registry,
         markdown_documents=markdown_documents,
@@ -674,19 +682,74 @@ def load_project_sources(
     )
 
 
-def build_alias_map(entities: list[Entity], manual_aliases: dict[str, str] | None = None) -> dict[str, str]:
-    """Build a best-effort alias map for canonical entity resolution."""
-    alias_map: dict[str, str] = {}
+# Alias provenance, most-authoritative first. The ONLY collision resolved silently is
+# (mappings, derived): a `mappings.yaml` mapping is an explicit, external human
+# declaration and wins over an auto-derived convenience token. Every other cross-target
+# collision raises AliasCollisionError. In particular a `frontmatter` alias does NOT beat
+# a colliding derived short id -- an entity claiming another entity's short id is an
+# ambiguity to report, not to silently resolve.
+_PROV_CANONICAL = 0  # entity.canonical_id -- the identity itself
+_PROV_MAPPINGS = 1  # a `mappings.yaml` mapping (external, project-authored)
+_PROV_FRONTMATTER = 2  # an explicit `aliases:` entry on the entity itself
+_PROV_ARCHIVE = 3  # a token folded in from the archive index
+_PROV_DERIVED = 4  # path-stem / number-derived short token (`q04` from `0004`)
+
+
+def build_alias_map(
+    entities: list[Entity],
+    manual_aliases: dict[str, str] | None = None,
+    *,
+    archive_alias_tokens: frozenset[str] = frozenset(),
+) -> dict[str, str]:
+    """Build a best-effort alias map for canonical entity resolution.
+
+    Provenance precedence (D5 / design rev 9). A `mappings.yaml` mapping silently overrides
+    a colliding AUTO-DERIVED alias, because the number/path-derived short token (`q04` from
+    `0004`) is a convenience, never an identity authority, and a project that renumbered
+    its records declares the old numbers there deliberately. Every OTHER cross-target
+    collision still raises `AliasCollisionError`: canonical-vs-canonical, mappings-vs-
+    mappings, an entity's own frontmatter alias vs anything it disagrees with (including a
+    derived short id -- that is a real ambiguity, not a convenience to drop), and an
+    archive token vs anything. An archive token never wins silently, so an archived id can
+    never shadow a live entity's derived token.
+    """
+    # token -> (canonical_id, provenance)
+    claims: dict[str, tuple[str, int]] = {}
+
+    def register(token: str, canonical_id: str, provenance: int) -> None:
+        existing = claims.get(token)
+        if existing is None:
+            claims[token] = (canonical_id, provenance)
+            return
+        existing_id, existing_prov = existing
+        if existing_id == canonical_id:
+            # Same target: keep the strongest provenance so a later derived duplicate can
+            # never weaken a mapping/frontmatter claim.
+            if provenance < existing_prov:
+                claims[token] = (canonical_id, provenance)
+            return
+        if {existing_prov, provenance} == {_PROV_MAPPINGS, _PROV_DERIVED}:
+            if existing_prov == _PROV_DERIVED:
+                claims[token] = (canonical_id, provenance)  # the mapping replaces derived
+            return  # else the mapping already holds it; drop the derived token
+        raise AliasCollisionError(
+            alias=token, first_canonical_id=existing_id, second_canonical_id=canonical_id
+        )
+
     for entity in entities:
-        _register_alias(alias_map, entity.canonical_id, entity.canonical_id)
-        _register_alias(alias_map, entity.canonical_id.lower(), entity.canonical_id)
+        register(entity.canonical_id, entity.canonical_id, _PROV_CANONICAL)
+        register(entity.canonical_id.lower(), entity.canonical_id, _PROV_CANONICAL)
+        derived = _auto_derived_alias_tokens(entity.canonical_id, entity.kind, entity.file_path)
         for alias in entity.aliases:
-            _register_alias(alias_map, alias, entity.canonical_id)
-            _register_alias(alias_map, alias.lower(), entity.canonical_id)
+            provenance = _PROV_DERIVED if alias in derived else _PROV_FRONTMATTER
+            register(alias, entity.canonical_id, provenance)
+            register(alias.lower(), entity.canonical_id, provenance)
     for alias, canonical_id in (manual_aliases or {}).items():
-        _register_alias(alias_map, alias, canonical_id)
-        _register_alias(alias_map, alias.lower(), canonical_id)
-    return alias_map
+        provenance = _PROV_ARCHIVE if alias in archive_alias_tokens else _PROV_MAPPINGS
+        register(alias, canonical_id, provenance)
+        register(alias.lower(), canonical_id, provenance)
+
+    return {token: claim[0] for token, claim in claims.items()}
 
 
 def is_external_reference(raw: str, *, known_prefixes: frozenset[str] | None = None) -> bool:
@@ -805,22 +868,7 @@ def _enrich_raw(
         if not isinstance(explicit, list):
             explicit = []
         explicit_list = [str(a) for a in explicit]
-        fp = raw.get("file_path")
-        path_aliases: list[str] = []
-        if isinstance(fp, str) and fp and kind in {"hypothesis", "question", "task"}:
-            stem = Path(fp).stem
-            m = _SHORT_ID_RE.match(stem)
-            if m is None:
-                head = stem.split("-", 1)[0]
-                m = _SHORT_ID_RE.match(head)
-            if m is not None:
-                token = m.group("token")
-                path_aliases = [
-                    f"{kind}:{token.lower()}",
-                    f"{kind}:{token.upper()}",
-                    token.lower(),
-                    token.upper(),
-                ]
+        path_aliases = _path_alias_tokens(raw.get("file_path"), kind)
         raw["aliases"] = _derive_aliases(canonical_id, kind, [*explicit_list, *path_aliases])
 
     # Reasoning metadata is current-state metadata. Do not silently erase invalid
@@ -1392,11 +1440,32 @@ def _derive_aliases(canonical_id: str, kind: str, explicit_aliases: list[str]) -
     return aliases
 
 
-def _register_alias(alias_map: dict[str, str], alias: str, canonical_id: str) -> None:
-    existing = alias_map.get(alias)
-    if existing is not None and existing != canonical_id:
-        raise AliasCollisionError(alias=alias, first_canonical_id=existing, second_canonical_id=canonical_id)
-    alias_map[alias] = canonical_id
+def _path_alias_tokens(file_path: object, kind: str) -> list[str]:
+    """Short-id alias tokens derived from a `<token>-<rest>.md` file stem.
+
+    Mirrors the legacy MarkdownProvider behavior: only hypothesis/question/task files whose
+    stem starts with a `[a-z]<digits>` short id contribute path aliases.
+    """
+    if not (isinstance(file_path, str) and file_path and kind in {"hypothesis", "question", "task"}):
+        return []
+    stem = Path(file_path).stem
+    match = _SHORT_ID_RE.match(stem)
+    if match is None:
+        match = _SHORT_ID_RE.match(stem.split("-", 1)[0])
+    if match is None:
+        return []
+    token = match.group("token")
+    return [f"{kind}:{token.lower()}", f"{kind}:{token.upper()}", token.lower(), token.upper()]
+
+
+def _auto_derived_alias_tokens(canonical_id: str, kind: str, file_path: object) -> set[str]:
+    """Every alias token the auto-derivation would add for this entity.
+
+    These are the path-stem and number-derived short forms -- the tokens that are NOT
+    project-authored. `build_alias_map` subtracts this set from `Entity.aliases` to tell
+    an authored frontmatter alias apart from a derived convenience token.
+    """
+    return set(_derive_aliases(canonical_id, kind, _path_alias_tokens(file_path, kind)))
 
 
 def _default_profile_for_kind(

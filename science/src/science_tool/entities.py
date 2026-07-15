@@ -1188,6 +1188,7 @@ def _resolution_check_or_raise(
         resolver = ReferenceResolver.from_entities(
             sources.entities,
             manual_aliases=sources.manual_aliases,
+            archive_alias_tokens=sources.archive_alias_tokens,
             identity_table=build_identity_table(sources),
         )
     except AliasCollisionError as exc:
@@ -1548,7 +1549,11 @@ def list_entities(
             "--related cannot be combined with --include-archived (the archive index does not carry relation data)"
         )
     sources = load_project_sources(project_root.resolve())
-    resolver = ReferenceResolver.from_entities(sources.entities, manual_aliases=sources.manual_aliases)
+    resolver = ReferenceResolver.from_entities(
+        sources.entities,
+        manual_aliases=sources.manual_aliases,
+        archive_alias_tokens=sources.archive_alias_tokens,
+    )
     related_key = _resolved_ref_key(resolver, related) if related is not None else None
 
     rows: list[dict[str, object]] = []

@@ -177,6 +177,7 @@ def check_dangling_lineage(ctx: ValidateContext) -> Iterator[Result]:
     resolver = ReferenceResolver.from_entities(
         sources.entities,
         manual_aliases=sources.manual_aliases,
+        archive_alias_tokens=sources.archive_alias_tokens,
         identity_table=build_identity_table(sources),
     )
     path_by_id = {
