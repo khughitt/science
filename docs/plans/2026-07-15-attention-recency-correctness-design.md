@@ -72,14 +72,19 @@ Concretely in `graph/attention.py`:
   **Absent triple → `None`. Present-but-invalid → `ValueError`.** These must
   not collapse to the same value (fail early; corrupt data is not absence).
 
-  **Strict lexical contract.** The freshness pass writes `sci:lastReviewed` as
-  `Literal(d.isoformat(), datatype=XSD.date)` (`freshness.py:392`), so the only
-  valid lexical form is `xsd:date` — `YYYY-MM-DD`. Parse the **whole** literal
-  with `date.fromisoformat(text)`; do **not** slice (`text[:10]`) — the current
-  `_parse_date_literal` (`:670-679`) slices and so accepts `2026-05-01garbage`,
-  masking corruption. Drop that helper's `datetime`/`Z` fallback here: this field
-  is a date, not a timestamp. The raised `ValueError` **names the entity id and
-  the offending value**, e.g.
+  **Strict canonical lexical contract.** The freshness pass writes
+  `sci:lastReviewed` as `Literal(d.isoformat(), datatype=XSD.date)`
+  (`freshness.py:392`). The toolkit therefore accepts only its own canonical
+  producer form, exactly `YYYY-MM-DD`; this is deliberately narrower than the
+  complete `xsd:date` lexical space. Parse the **whole** literal with
+  `date.fromisoformat(text)`, then require `parsed.isoformat() == text` (an
+  equivalent full-match grammar check is also valid). The round-trip check is
+  load-bearing: Python's parser also accepts compact dates (`20260501`) and ISO
+  week dates (`2026-W18-5`), neither of which is the toolkit's canonical form.
+  Do **not** slice (`text[:10]`) — the current `_parse_date_literal` (`:670-679`)
+  slices and so accepts `2026-05-01garbage`, masking corruption. Drop that
+  helper's `datetime`/`Z` fallback here: this field is a date, not a timestamp.
+  The raised `ValueError` **names the entity id and the offending value**, e.g.
   `f"{entity_id}: sci:lastReviewed value {raw!r} is not a valid ISO date (YYYY-MM-DD)"`
   — that message is what the CLI surfaces (§4, "Corrupt-date CLI handling").
 
@@ -233,9 +238,10 @@ All tests build a small in-memory `Dataset` with `sci:freshnessState` triples
 - **`_last_reviewed_date` contract.** Returns the parsed date when
   `sci:lastReviewed` is present and valid; `None` when the triple is **absent**;
   raises `ValueError` when the triple is **present but invalid**. Pin all three
-  cases, and specifically use `2026-05-01garbage` (not merely `not-a-date`) for
-  the invalid case, to prove the fix rejects trailing garbage the old `[:10]`
-  slice accepted. The raised message contains the entity id and the raw value.
+  cases. Invalid cases include `2026-05-01garbage` (to prove the fix rejects
+  trailing garbage the old `[:10]` slice accepted), compact `20260501`, and ISO
+  week date `2026-W18-5` (to prove `date.fromisoformat` is not the sole lexical
+  gate). The raised message contains the entity id and the raw value.
 - **Corrupt-date CLI surfacing.** With a corrupt `sci:lastReviewed` in the graph,
   **both** `graph attention-sample` and `graph attention-rank` exit non-zero with
   a `ClickException` naming the entity and the invalid value — not a traceback.
