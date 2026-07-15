@@ -7,7 +7,7 @@ from typing import Any, TypeVar
 import click
 from rich.table import Table
 
-from science_tool.instruments import InstrumentResult
+from science_tool.instruments import InstrumentResult, ValidationVerdict
 from science_tool.styles import get_console
 
 OUTPUT_FORMATS: tuple[str, str] = ("table", "json")
@@ -54,6 +54,20 @@ def unwrap_instrument(result: InstrumentResult[RowT], *, what: str) -> list[RowT
     if result.reason:
         click.echo(f"notice ({result.code}): {result.reason}", err=True)
     return result.rows
+
+
+def unwrap_verdict(verdict: ValidationVerdict[RowT], *, what: str) -> tuple[list[RowT], bool]:
+    """Turn a ValidationVerdict into ``(rows, has_failures)``, REFUSING to render unwired.
+
+    The parallel of ``unwrap_instrument`` for the verdict axis: an unwired validator did
+    not run, so emitting its empty rows as a clean report would be the exact silent-run lie
+    the convergence exists to stop -- so it raises before anything is rendered.
+    """
+    if verdict.status == "unwired":
+        raise click.ClickException(f"{what} could not run ({verdict.code}): {verdict.reason}")
+    if verdict.reason:
+        click.echo(f"notice ({verdict.code}): {verdict.reason}", err=True)
+    return verdict.rows, verdict.status == "failed"
 
 
 def emit_query_rows(

@@ -128,3 +128,64 @@ class InstrumentResult(BaseModel, Generic[RowT]):
         if rows:
             return cls.ok(rows, code=code, reason=reason)
         return cls.empty(code=code, reason=reason)
+
+
+ValidationVerdictStatus = Literal["passed", "failed", "unwired"]
+
+
+class ValidationVerdict(BaseModel, Generic[RowT]):
+    """Canonical validator/audit result — the verdict axis of the instrument convergence.
+
+    Sibling to ``InstrumentResult``. Where an *instrument* reports found/empty/unwired, a
+    *validator* reports a pass/fail VERDICT over a report card present whenever it ran.
+    There is no ``empty``: a validator that ran is ``passed`` or ``failed``; one that could
+    not is ``unwired``. ``passed`` with an empty card is told from ``unwired`` by STATUS,
+    never by row count.
+
+    Named ``ValidationVerdict``, not ``Verdict``: ``science_tool.verdict`` is the epistemic
+    verdict-token package — a different meaning of the word.
+
+    The verdict is set EXPLICITLY by the caller. The type is ``Generic[RowT]`` and cannot
+    inspect ``row["status"]``, exactly as ``InstrumentResult`` cannot inspect its rows.
+    """
+
+    status: ValidationVerdictStatus
+    rows: list[RowT] = Field(default_factory=list)
+    reason: str | None = None
+    code: str | None = None
+
+    @model_validator(mode="after")
+    def _enforce_status_invariant(self) -> "ValidationVerdict[RowT]":
+        if self.status == "unwired":
+            if self.rows:
+                raise ValueError("status='unwired' forbids rows; they are meaningless")
+            if not self.code:
+                raise ValueError("status='unwired' requires a machine-readable code")
+        return self
+
+    @classmethod
+    def passed(
+        cls, rows: list[RowT], *, code: str | None = None, reason: str | None = None
+    ) -> "ValidationVerdict[RowT]":
+        return cls(status="passed", rows=rows, code=code, reason=reason)
+
+    @classmethod
+    def failed(
+        cls, rows: list[RowT], *, code: str | None = None, reason: str | None = None
+    ) -> "ValidationVerdict[RowT]":
+        return cls(status="failed", rows=rows, code=code, reason=reason)
+
+    @classmethod
+    def unwired(cls, *, code: str, reason: str | None = None) -> "ValidationVerdict[RowT]":
+        return cls(status="unwired", rows=[], code=code, reason=reason)
+
+    @classmethod
+    def from_has_failures(
+        cls,
+        rows: list[RowT],
+        has_failures: bool,
+        *,
+        code: str | None = None,
+        reason: str | None = None,
+    ) -> "ValidationVerdict[RowT]":
+        return cls(status="failed" if has_failures else "passed", rows=rows, code=code, reason=reason)
