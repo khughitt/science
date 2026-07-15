@@ -1,6 +1,6 @@
 # ValidationVerdict — the validator/audit convergence (instrument-result follow-on item 2)
 
-**Status:** IMPLEMENTED on branch `validation-verdict-convergence`; pending merge.
+**Status:** SHIPPED — merged to local `main` at `c4aa77c7`.
 
 **Origin.** The InstrumentResult convergence
 ([`2026-07-11-instrument-result-convergence-design.md`](2026-07-11-instrument-result-convergence-design.md))

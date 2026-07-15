@@ -4,8 +4,8 @@
 
 > **VALIDATOR-PAYLOAD STATUS UPDATE (2026-07-15) — supersedes every "open", "live",
 > "deferred", and "out of scope" statement about follow-on item 2 below.** The validator-
-> and-audit payload convergence is **IMPLEMENTED** on branch `validation-verdict-convergence`;
-> pending merge. `ValidationVerdict[RowT]` now carries passed/failed/unwired explicitly,
+> and-audit payload convergence is **SHIPPED** — merged to local `main` at `c4aa77c7`.
+> `ValidationVerdict[RowT]` now carries passed/failed/unwired explicitly,
 > all consumers fail closed on unwired, and the boundary guard rejects both tuple precursor
 > families. The withdrawn account below is retained as the historical rationale for why
 > `InstrumentResult` could not absorb this family. See
