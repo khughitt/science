@@ -1,18 +1,38 @@
 from __future__ import annotations
 
+import importlib
+import sys
+from collections.abc import Generator
 from pathlib import Path
 
+import pytest
+
+import science_tool.validate.checks as checks
+from science_tool.validate.checks import CANONICAL_CHECK_MODULES
 from science_tool.validate.result import Severity
 
 
-def _load_checks_with_dataset_capabilities_fresh() -> None:
-    import sys
+@pytest.fixture
+def dataset_capabilities_registered() -> Generator[None]:
+    """Re-register `dataset_capabilities` via its import side effect, then RESTORE the full registry.
 
-    import science_tool.validate.checks as checks
+    ☠️ `clear_checks_for_tests()` is PERMANENT for the session, and `_load_canonical_checks()`
+    re-imports already-loaded modules -- a no-op, because `@Check` fires only on FIRST import. So the
+    clear + fresh-load below leaves the global registry holding only the one module that was popped
+    and re-executed, and every LATER `runner.run` in the session then iterates a near-empty check
+    list and reports nothing. It does not fail loudly; it fails by finding nothing.
 
+    Teardown puts the registry back by `importlib.reload`-ing every canonical module, which is what
+    makes the `@Check` decorators run again -- the same hazard and the same fix as
+    `isolated_check_registry` in `test_telemetry_cli.py`.
+    """
     checks.clear_checks_for_tests()
     sys.modules.pop("science_tool.validate.checks.dataset_capabilities", None)
     checks._load_canonical_checks()
+    yield
+    checks.clear_checks_for_tests()
+    for module_name in CANONICAL_CHECK_MODULES:
+        importlib.reload(importlib.import_module(f"science_tool.validate.checks.{module_name}"))
 
 
 def _results(entities: list[dict]):
@@ -161,18 +181,17 @@ def test_required_missing_kept_when_target_live() -> None:
     assert (Severity.WARN, "dataset-capabilities.required-missing") in rules
 
 
+@pytest.mark.usefixtures("dataset_capabilities_registered")
 def test_module_is_registered() -> None:
     from science_tool.validate.checks import CANONICAL_CHECKS
-
-    _load_checks_with_dataset_capabilities_fresh()
 
     assert any(entry.fn.__module__.endswith("dataset_capabilities") for entry in CANONICAL_CHECKS)
 
 
+@pytest.mark.usefixtures("dataset_capabilities_registered")
 def test_capability_warning_surfaces_through_runner(tmp_path: Path) -> None:
     from science_tool.validate.runner import run
 
-    _load_checks_with_dataset_capabilities_fresh()
     (tmp_path / "science.yaml").write_text("name: demo\n", encoding="utf-8")
     ds_dir = tmp_path / "entities" / "datasets"
     q_dir = tmp_path / "entities" / "questions"
