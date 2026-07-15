@@ -1,6 +1,6 @@
 # ValidationVerdict — the validator/audit convergence (instrument-result follow-on item 2)
 
-**Status:** design approved with review changes folded in; ready for the implementation plan.
+**Status:** IMPLEMENTED on branch `validation-verdict-convergence`; pending merge.
 
 **Origin.** The InstrumentResult convergence
 ([`2026-07-11-instrument-result-convergence-design.md`](2026-07-11-instrument-result-convergence-design.md))

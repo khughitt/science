@@ -2,6 +2,15 @@
 
 ## Status
 
+> **VALIDATOR-PAYLOAD STATUS UPDATE (2026-07-15) — supersedes every "open", "live",
+> "deferred", and "out of scope" statement about follow-on item 2 below.** The validator-
+> and-audit payload convergence is **IMPLEMENTED** on branch `validation-verdict-convergence`;
+> pending merge. `ValidationVerdict[RowT]` now carries passed/failed/unwired explicitly,
+> all consumers fail closed on unwired, and the boundary guard rejects both tuple precursor
+> families. The withdrawn account below is retained as the historical rationale for why
+> `InstrumentResult` could not absorb this family. See
+> [`2026-07-15-validation-verdict-convergence-design.md`](2026-07-15-validation-verdict-convergence-design.md).
+
 > **fb-2026-07-11-017 STATUS UPDATE (2026-07-15) — supersedes every "open"/"live"
 > statement about it below.** The materialization lint is now **SHIPPED** — merged to local
 > `main` at `8e5e4709`; fb-2026-07-11-017 is CLOSED.

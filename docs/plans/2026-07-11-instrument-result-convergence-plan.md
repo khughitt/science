@@ -1,5 +1,15 @@
 # InstrumentResult Convergence Implementation Plan
 
+> **VALIDATOR-PAYLOAD STATUS UPDATE (2026-07-15) — supersedes every "open", "live",
+> "deferred", and "out of scope" statement about follow-on item 2 below.** The validator-
+> and-audit payload convergence is **IMPLEMENTED** on branch `validation-verdict-convergence`;
+> pending merge. `ValidationVerdict[RowT]` now carries passed/failed/unwired explicitly,
+> all consumers fail closed on unwired, and the boundary guard rejects both tuple precursor
+> families. The deferred implementation account below is retained as historical rationale;
+> its explanation of why `InstrumentResult` could not absorb the orthogonal `has_failures`
+> channel remains valid. See
+> [`2026-07-15-validation-verdict-convergence-design.md`](2026-07-15-validation-verdict-convergence-design.md).
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Make it structurally impossible for an instrument to report a clean empty result when it never actually ran.
