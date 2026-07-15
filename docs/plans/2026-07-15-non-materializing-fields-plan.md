@@ -322,53 +322,69 @@ judges whether authored information has any effect (fb-2026-07-11-017)."
 
 ---
 
-## Task 2: Record the resolution in every doc that declares fb-017 open
+## Task 2: Reconcile fb-017's status across every doc that declares it open
 
 fb-2026-07-11-017 is tracked in the plan/design docs, not a self-hosted `science tasks`
-backlog (this repo has none), so closing it is a documentation act. **Three** docs currently
-state it is open/live; all three must be reconciled, and the two originating docs must keep
-their *withdrawn* account (it is the reason this fix looks the way it does) with a resolution
-addendum appended — not a rewrite.
+backlog (this repo has none), so recording its status is a documentation act. Its open/live
+status is asserted in **many** present-tense places — the convergence design's Status,
+open-items count, acceptance section, scope note, and Follow-on section; the convergence
+plan's Task 6 blockquote and self-review. Editing each one inline is brittle: miss one and
+the docs contradict each other again.
+
+Instead, place a single **authoritative resolution banner** at the top of each convergence
+doc that explicitly supersedes *every* open/live statement below it. This reconciles all of
+them at once and cannot miss one, while the withdrawn narrative below stays intact as the
+historical record (it is the reason this fix has the shape it does). Language is
+**"IMPLEMENTED … pending merge"** — `SHIPPED`/`CLOSED`/`RESOLVED` are reserved for the merged
+state, and the code is not merged when this task runs.
 
 **Files:**
 - Modify: `docs/plans/2026-07-15-non-materializing-fields-design.md` (its `**Status:**` line)
-- Modify: `docs/plans/2026-07-11-instrument-result-convergence-plan.md` (Task 6 blockquote, ~line 1519)
-- Modify: `docs/plans/2026-07-11-instrument-result-convergence-design.md` (the fb-017 scope note, ~line 494)
+- Modify: `docs/plans/2026-07-11-instrument-result-convergence-design.md` (add a banner near the top, after the `## Status` block)
+- Modify: `docs/plans/2026-07-11-instrument-result-convergence-plan.md` (add the same banner directly under the H1 header block)
 
-- [ ] **Step 1: Update the new design's status line.** Replace its `**Status:**` line with the exact text (reserve "SHIPPED"/"CLOSED" for the merged state):
+- [ ] **Step 1: Update the new design's status line.** Replace its `**Status:**` line with exactly:
 
 ```
 **Status:** IMPLEMENTED on branch `fb017-non-materializing-fields`; pending merge. fb-2026-07-11-017 addressed.
 ```
 
-- [ ] **Step 2: Append a resolution addendum to the convergence PLAN's Task 6 blockquote.** Immediately after the line `> **`fb-2026-07-11-017` is open and its defect is live.**`, add (inside the blockquote, preserving everything above it):
+- [ ] **Step 2: Add the banner to the convergence DESIGN**, as a new blockquote inserted immediately after the `## Status` section's final paragraph (before the next `##` heading). Use this exact text:
 
 ```
->
-> **RESOLVED 2026-07-15 (design amended's follow-on delivered).** The per-kind vocabulary
-> the withdrawal waited on became unnecessary: legitimacy is a behavioral fact (one reader,
-> `qa_audit/runs.py:47`), encoded as an explicit `(workflow-run, supersedes)` exception, not
-> a schema derivation. Shipped as `check_non_materializing_fields`. See
+> **fb-2026-07-11-017 STATUS UPDATE (2026-07-15) — supersedes every "open"/"live"
+> statement about it below.** The materialization lint is now IMPLEMENTED on branch
+> `fb017-non-materializing-fields`; **pending merge** (not yet merged, so not yet SHIPPED).
+> The per-kind key vocabulary this design deferred it for proved unnecessary: legitimacy is
+> one **semantic** top-level reader (`qa_audit/runs.py:47`, the QA-audit chain), encoded as
+> an explicit `(workflow-run, supersedes)` exception — not a schema derivation, and not the
+> generic entity-deletion reference cleanup, which reads the key but assigns it no
+> supersession semantics. See
 > [`2026-07-15-non-materializing-fields-design.md`](2026-07-15-non-materializing-fields-design.md)
 > and [`2026-07-15-non-materializing-fields-plan.md`](2026-07-15-non-materializing-fields-plan.md).
-> The withdrawn account below stands as the record of why.
+> Everything below about fb-2026-07-11-017 is retained as the historical *withdrawn* record.
 ```
 
-- [ ] **Step 3: Append a resolution note to the convergence DESIGN's fb-017 scope paragraph.** Immediately after the sentence ending `... \`fb-2026-07-11-017\` remains **open**.`, add:
+- [ ] **Step 3: Add the same banner to the convergence PLAN**, inserted immediately after the plan's H1 header block (after the `**Goal:** … Tech Stack …` preamble, before the first `##`/`---`). Use the identical blockquote text from Step 2.
 
-```
-**RESOLVED 2026-07-15** by a follow-on design — the kind-awareness is an explicit
-one-pair reader exception, not a per-kind vocabulary. See
-[`2026-07-15-non-materializing-fields-design.md`](2026-07-15-non-materializing-fields-design.md).
+- [ ] **Step 4: Verify no present-tense open-status claim now stands unqualified.** Grep both convergence docs and confirm each remaining "is open"/"is live"/"remains open" mention sits *below* its file's banner (so the banner governs it):
+
+```bash
+cd /mnt/ssd/Dropbox/science/.claude/worktrees/instrument-result
+grep -nE "fb-2026-07-11-017|is open|is live|remains open" \
+  docs/plans/2026-07-11-instrument-result-convergence-design.md \
+  docs/plans/2026-07-11-instrument-result-convergence-plan.md
 ```
 
-- [ ] **Step 4: Commit**
+Expected: every hit is below its file's banner line. No inline edits to those hits — the banner supersedes them by construction. (Descriptive statements of *what the defect is* are history and stay as-is.)
+
+- [ ] **Step 5: Commit**
 
 ```bash
 git add docs/plans/2026-07-15-non-materializing-fields-design.md \
         docs/plans/2026-07-11-instrument-result-convergence-plan.md \
         docs/plans/2026-07-11-instrument-result-convergence-design.md
-git commit -m "docs(validate): mark fb-2026-07-11-017 addressed by the non-materializing-field check"
+git commit -m "docs(validate): mark fb-2026-07-11-017 implemented (pending merge) by the non-materializing-field check"
 ```
 
 ---
@@ -376,7 +392,7 @@ git commit -m "docs(validate): mark fb-2026-07-11-017 addressed by the non-mater
 ## Self-review
 
 - **Spec coverage:** design §2 (the check) → Task 1 Steps 3–4; §2 message contract → Step 1 `test_top_level_supersedes...` asserts id, key, `relations:`, predicate, `target`/`<target-id>`, **and** that the authored value (`interpretation:0000-y`) is not echoed; §2 trigger-on-presence → `test_null_valued...`, `test_empty_list...` + `key in fm`; §3 kind-awareness legit set → `_LEGIT_TOP_LEVEL` + `test_supersedes_on_workflow_run...`; §3 pair-specificity → `test_amends_on_workflow_run_is_an_error`; §4 unconditional ERROR → `Severity.ERROR` literal (no `kind_severity` import) + every test asserts `Severity.ERROR`; §5 rollout / clean in-repo scan → Step 7 note; §6 testing matrix → Step 1 (all seven rows + non-vacuity guard); §7 files → Task 1 Files.
-- **Beyond the design matrix (per review):** `test_malformed_non_string_kind...` guards the unhashable-`kind` abort (finding #1), and the implementation's `isinstance(kind, str)` guard is what it pins. Task 2 reconciles **all three** docs that declare fb-017 open, preserving the withdrawn account.
+- **Beyond the design matrix (per review):** `test_malformed_non_string_kind...` guards the unhashable-`kind` abort (finding #1), and the implementation's `isinstance(kind, str)` guard is what it pins. Task 2 reconciles **all three** docs via an authoritative "IMPLEMENTED … pending merge" banner atop each convergence doc that supersedes every open/live claim below it (robust against missing one of the ~7 scattered mentions), preserving the withdrawn account.
 - **Placeholder scan:** none — every code step carries complete code; the message string is identical in the test asserts (substrings) and the implementation.
 - **Type consistency:** `check_non_materializing_fields(ctx) -> Iterator[Result]`; `Result(Severity.ERROR, path, None, message, "non-materializing-field", None)` matches the `Result(severity, path, line, message, rule, task)` dataclass; `_LEGIT_TOP_LEVEL` and `_NON_MATERIALIZING` names are used identically in the Interfaces block, the implementation, and the design.
 - **One known trap:** the registry guard (Task 1 Step 6) — creating the module without listing it fails `test_EVERY_check_module_on_disk_is_REGISTERED`. Steps 4 and 6 cover it.
