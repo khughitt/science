@@ -7409,7 +7409,9 @@ if _got != _want:
 
 from science_tool.field_inventory import field_inventory
 
-D = Path.home() / "d"
+D = (Path.home() / "d").resolve()         # ☠️ RESOLVE: ~/d is itself a symlink to /mnt/ssd/Dropbox,
+                                          # and roots below are `.resolve()`d -- an unresolved D makes
+                                          # `r.relative_to(D)` (the slug) raise on every external root.
 WT = Path(sys.argv[1]).resolve()          # ~/d/science/.claude/worktrees/<name>/science
 WT_REPO = WT.parent                       # the worktree checkout root (holds meta/ and tests/)
 SCIENCE = (D / "science").resolve()       # the toolkit repo -- EVERY checkout of it is excluded below
