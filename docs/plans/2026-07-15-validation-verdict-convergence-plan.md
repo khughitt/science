@@ -90,6 +90,13 @@ def test_failed_carries_rows() -> None:
     assert v.rows == [{"check": "x", "status": "fail"}]
 
 
+def test_failed_allows_empty_rows() -> None:
+    # design §2: passed AND failed permit an empty report card; only unwired forbids rows
+    v = ValidationVerdict.failed([])
+    assert v.status == "failed"
+    assert v.rows == []
+
+
 def test_unwrap_verdict_raises_on_unwired() -> None:
     with pytest.raises(click.ClickException, match=r"graph validate could not run \(unparseable\): bad"):
         unwrap_verdict(ValidationVerdict.unwired(code="unparseable", reason="bad"), what="graph validate")
@@ -358,7 +365,9 @@ def test_validate_check_unwired_emits_error_and_skips_diff(tmp_path, monkeypatch
 
     called = {"diff": False}
     monkeypatch.setattr(graph, "validate_graph", lambda _p: ValidationVerdict.unwired(code="unparseable", reason="bad"))
-    monkeypatch.setattr(graph, "materialization_audit", lambda _root: ValidationVerdict.passed([]))
+    # materialization_audit is NOT migrated until Task 3; in Task 2 check_graph still
+    # tuple-unpacks it, so this stub stays a tuple. Task 3 converts it to a verdict.
+    monkeypatch.setattr(graph, "materialization_audit", lambda _root: ([], False))
 
     def _boom(*a, **k):
         raise AssertionError("graph_dataset should fail so validate_graph is used")
@@ -531,11 +540,12 @@ def test_graph_audit_unwired_exits_nonzero(tmp_path, monkeypatch) -> None:
 
     (tmp_path / "science.yaml").write_text("name: demo\n", encoding="utf-8")
     monkeypatch.setattr(graph_cli, "materialization_audit", lambda _root: ValidationVerdict.unwired(code="unparseable", reason="boom"))
-    res = CliRunner().invoke(graph_cli.graph_group, ["audit", "--project-root", str(tmp_path)])  # cli.py:154 option name
-    assert res.exit_code != 0
-    assert "could not run (unparseable)" in res.output
-    assert "boom" in res.output
-    assert '"rows": []' not in res.output
+    for fmt in ("table", "json"):  # exercise json so the empty-payload assertion is not vacuous
+        res = CliRunner().invoke(graph_cli.graph_group, ["audit", "--project-root", str(tmp_path), "--format", fmt])  # cli.py:154 option
+        assert res.exit_code != 0
+        assert "could not run (unparseable)" in res.output  # machine code
+        assert "boom" in res.output                         # reason
+        assert '"rows": []' not in res.output               # never a clean empty payload
 ```
 
 **Validate-check audit side fail-closed** — add to `tests/validate/test_checks_graph.py` (§5 disposition; inject `unwired` `materialization_audit`, assert an ERROR, not "all canonical references resolved"):
@@ -544,14 +554,19 @@ def test_graph_audit_unwired_exits_nonzero(tmp_path, monkeypatch) -> None:
 def test_validate_check_audit_side_unwired_emits_error(tmp_path, monkeypatch) -> None:
     from science_tool.instruments import ValidationVerdict
     from science_tool.validate.checks import graph
+    from science_tool.validate.result import Severity
     from science_tool.validate.runner import run
 
     (tmp_path / "science.yaml").write_text("name: demo\n", encoding="utf-8")
     monkeypatch.setattr(graph, "materialization_audit", lambda _root: ValidationVerdict.unwired(code="unparseable", reason="boom"))
     result = run(tmp_path, strict=False, verbose=False, enable_python_sidecar=False)
-    msgs = [r.message for r in result.results]
-    assert any("graph audit: could not run (unparseable)" in m for m in msgs)
-    assert not any("all canonical references resolved" in m for m in msgs)
+    errors = [
+        r for r in result.results
+        if r.severity == Severity.ERROR and "graph audit: could not run (unparseable)" in r.message
+    ]
+    assert errors, "expected an ERROR finding for the unwired audit"
+    assert "boom" in errors[0].message  # reason pinned, not just the code
+    assert not any("all canonical references resolved" in r.message for r in result.results)
 ```
 
 - [ ] **Step 2: Run to verify failure**
@@ -761,7 +776,7 @@ def test_new_modules_in_namespace() -> None:
     assert "graph/migrate.py" in INSTRUMENT_MODULES
 ```
 
-Import `_is_tuple_precursor` at the top of the test module.
+`_is_tuple_precursor` is module-level in `test_instrument_boundary.py`, so these tests call it directly — no import needed.
 
 - [ ] **Step 2: Run to verify failure**
 
