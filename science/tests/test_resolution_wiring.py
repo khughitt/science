@@ -106,19 +106,18 @@ def test_validate_reports_a_dangling_successor(tmp_project: Path) -> None:
     )
     findings = [r for r in run_validate(tmp_project) if r.rule == RULE_DANGLING_LINEAGE]
     assert len(findings) == 1
-    # WARN, hard-coded, until the kind is certified. Task 12 routes this emitter through
-    # `severity_for_kind` and inverts this exact assertion -- so if that step is skipped, THAT test
-    # fails. The promise has a test now, not a comment.
-    assert findings[0].severity == "warn"
+    # ERROR now that `hypothesis` is certified (D5): the emitter routes through
+    # `severity_for_kind("hypothesis")`. If that emitter ever hard-codes WARN again, this fails.
+    assert findings[0].severity == "error"
     assert "9999-nope" in findings[0].message
 
 
-def test_the_dangling_lineage_rule_is_NOT_GATED_yet() -> None:
-    # WARN that fails no build. The rule's absence from every gate tier is the whole content of
-    # "ungated" -- and it is the claim Task 12 later inverts, so it needs to be pinned HERE.
+def test_the_dangling_lineage_rule_IS_GATED() -> None:
+    # The ratchet's other half: severity without a tier fails nobody's build. `hypothesis` is
+    # certified, so its kind-scoped rule is in the `hygiene` tier -- and only its kind-scoped one.
     from science_tool.validate.gates import cumulative_rules
 
-    assert RULE_DANGLING_LINEAGE not in cumulative_rules("hygiene")
+    assert RULE_DANGLING_LINEAGE in cumulative_rules("hygiene")
 
 
 # ---------------------------------------------------------------------------------------------
@@ -420,3 +419,57 @@ def test_a_COMMONS_entity_is_NOT_an_acceptable_successor(
     violations = lineage_violations(root)
     assert len(violations) == 1
     assert "not a live hypothesis" in violations[0].message
+
+
+# ---------------------------------------------------------------------------------------------
+# D5 Task 12 -- the `unbacked-inverse` emitter (supersession.py) ratchets on the SAME axis
+# ---------------------------------------------------------------------------------------------
+
+
+def test_unbacked_inverse_FLIPS_to_error_with_the_kind(tmp_project: Path) -> None:
+    # A `superseded_by` that RESOLVES to a live hypothesis but has NO `sci:supersedes` edge behind
+    # it. `hypothesis` is certified, so this is a gating ERROR. (dangling-lineage stays silent: the
+    # successor IS a live hypothesis; the two rules are disjoint on this record.)
+    write_hypothesis(tmp_project, "0001-x", status="superseded",
+                     extra={"superseded_by": "hypothesis:0002-y"})
+    write_hypothesis(tmp_project, "0002-y", status="active")
+    findings = [r for r in run_validate(tmp_project) if r.rule == "hypothesis.unbacked-inverse"]
+
+    assert [f.severity for f in findings] == ["error"]
+
+
+def test_unbacked_inverse_IS_GATED() -> None:
+    from science_tool.validate.gates import cumulative_rules
+
+    assert "hypothesis.unbacked-inverse" in cumulative_rules("hygiene")
+
+
+def test_unbacked_inverse_stays_WARN_for_an_UNCERTIFIED_kind(tmp_project: Path) -> None:
+    # THE CONTROL, and the reason the rule name is kind-scoped. `interpretation` is NOT certified:
+    # the same defect on it stays a WARN and is NOT gated. A single generic `supersession.unbacked-
+    # inverse` would make this unreachable -- promoting `hypothesis` would promote every kind sharing
+    # the name, which is the status-vocabulary incident restaged.
+    from science_tool.validate.gates import cumulative_rules
+
+    write_interpretation(tmp_project, "i-v1", status="superseded",
+                         extra={"superseded_by": "interpretation:i-v2"})
+    write_interpretation(tmp_project, "i-v2", status="active")
+    findings = [r for r in run_validate(tmp_project) if r.rule == "interpretation.unbacked-inverse"]
+
+    assert [f.severity for f in findings] == ["warn"]
+    assert "interpretation.unbacked-inverse" not in cumulative_rules("hygiene")
+    assert "hypothesis.unbacked-inverse" in cumulative_rules("hygiene")
+
+
+def test_missing_basis_stays_WARN_even_when_the_KIND_is_certified() -> None:
+    # Kind certification and verdict-basis certification are INDEPENDENT facts. `hypothesis` being
+    # certified says every root is pinned and renders; it says NOTHING about whether the corpus
+    # carries verdict bases (>=11 of 15 do not). Coupling them would let an uncertified rule ride in
+    # on a certified one's coattails -- how a check that cannot pass ends up failing real builds.
+    from science_tool.validate.gates import cumulative_rules
+    from science_tool.validate.kind_severity import severity_for_kind
+    from science_tool.validate.result import Severity
+
+    assert severity_for_kind("hypothesis") is Severity.ERROR
+    assert "verdict.missing-basis" not in cumulative_rules("hygiene")
+    assert "verdict.refutation-masked" in cumulative_rules("hygiene")  # the one that IS gated

@@ -15,12 +15,13 @@ VOCABULARY, and it is this module's alone:
 
     the record says it was superseded — by an edge that does not exist.
 
-WARN, and KIND-SCOPED — the other axis entirely, and conflating the two is the whole lesson of the
-status-vocabulary incident (severity graded on the wrong axis). `gated_findings` filters on
-`Result.rule` **alone**, never on severity, so a single generic `supersession.unbacked-inverse` in a
-gate tier would gate every UNCERTIFIED kind's findings too, promoting the whole vocabulary the moment
-one kind earned it. Kind-scoped names let the gate advance one certified kind at a time. Task 12 owes
-the flip to `severity_for_kind(kind)`.
+KIND-SCOPED, and KIND-GRADED via `severity_for_kind(kind)` — the other axis entirely, and conflating
+the two is the whole lesson of the status-vocabulary incident (severity graded on the wrong axis).
+`gated_findings` filters on `Result.rule` **alone**, never on severity, so a single generic
+`supersession.unbacked-inverse` in a gate tier would gate every UNCERTIFIED kind's findings too,
+promoting the whole vocabulary the moment one kind earned it. Kind-scoped names let the gate advance
+one certified kind at a time: `hypothesis.unbacked-inverse` is gated (and ERROR), every other kind's
+is a WARN that gates nothing.
 
 IT CONSUMES THE GRAPH; it does not re-derive edges. `build_supersedes_graph` reads the audit's
 admitted edges, and a check that recomputed them could disagree with the thing it is checking.
@@ -33,7 +34,8 @@ from collections.abc import Iterator
 from science_tool.consolidation import build_supersedes_graph, load_supersession_inputs
 from science_tool.validate.checks import Check
 from science_tool.validate.context import ValidateContext
-from science_tool.validate.result import Result, Severity
+from science_tool.validate.kind_severity import severity_for_kind
+from science_tool.validate.result import Result
 
 
 @Check(section="supersession lineage", order=29)
@@ -44,14 +46,13 @@ def check_supersession(ctx: ValidateContext) -> Iterator[Result]:
         entity_id = unbacked["id"]
         kind = graph.kind_by_id[entity_id]
         yield Result(
-            # WARN, and Task 12 owes the flip to `severity_for_kind(kind)`. Severity is EARNED:
-            # this phase changes no meaning -- and the corpus is NOT clean here. Four live records
-            # (one `3d-attention-bias` interpretation, three `natural-systems`) author a
-            # `superseded_by` with no edge behind it, because their real lineage is written in the
-            # WITHDRAWN top-level `supersedes:` spelling the Entity model silently drops. That is
-            # this rule's finding, on disk, today -- and Task 9's migration input. ERROR would break
-            # `validate` in two projects for a defect they have no migration for yet.
-            Severity.WARN,
+            # PER FINDING -- `severity_for_kind(kind)`, not `severity_for_kind("hypothesis")`: this
+            # emitter fires for EVERY kind, and only the certified ones may ERROR. `hypothesis` is
+            # certified, so its unbacked inverses are ERROR and gated. The four live NON-hypothesis
+            # records (one `3d-attention-bias` interpretation, three `natural-systems`) stay WARN and
+            # ungated: their real lineage is written in the WITHDRAWN top-level `supersedes:` spelling
+            # the Entity model silently drops, an uncertified kind's defect with no migration yet.
+            severity_for_kind(kind),
             # `Result` reports a FILE -- it has no `entity_id` field -- which is why the graph
             # carries `path_by_id`: the check must not re-derive the canonicalization that produced
             # the key it looks up. An inverse is a field on a RECORD, not an edge in a carrier file,

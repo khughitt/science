@@ -21,6 +21,7 @@ from science_tool.graph.identity_table import build_identity_table
 from science_tool.graph.reference_resolution import ReferenceResolver
 from science_tool.validate.checks import Check
 from science_tool.validate.context import ValidateContext
+from science_tool.validate.kind_severity import severity_for_kind
 from science_tool.validate.result import Result, Severity
 
 _STATUS_RE = re.compile(r"^status:")
@@ -171,7 +172,9 @@ def check_dangling_lineage(ctx: ValidateContext) -> Iterator[Result]:
     table -- because a validator that resolves a reference differently from the materializer is a
     second authority for one fact.
 
-    WARN, hard-coded, until the `hypothesis` kind is certified (Task 12's ratchet flips it per kind).
+    Severity is `severity_for_kind(hypothesis)` -- ERROR now that the kind is certified, WARN for any
+    kind that is not (the emitter shares one authority with the status-vocabulary and unbacked-inverse
+    emitters).
     """
     sources = ctx.project_sources()
     resolver = ReferenceResolver.from_entities(
@@ -202,7 +205,10 @@ def check_dangling_lineage(ctx: ValidateContext) -> Iterator[Result]:
         ):
             path = path_by_id.get(violation.entity_id)
             yield Result(
-                Severity.WARN,
+                # KIND-graded: `hypothesis` is certified, so this is ERROR and gated. The loop is
+                # hypothesis-only (guard above), so the kind is fixed; the call still goes through
+                # `severity_for_kind` so this emitter and the other two share one authority.
+                severity_for_kind(_LINEAGE_KIND),
                 Path(path) if path else None,
                 None,
                 violation.message,

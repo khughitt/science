@@ -7664,7 +7664,7 @@ cannot produce a duplicate repo. Several repos are **Dropbox-only with no remote
 > lists the certified kind's name only, and an uncertified kind's finding stays a WARN that gates
 > nothing. **The `_CERTIFIED_KINDS` set and the `hygiene` tier advance together, one kind at a time.**
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 ```python
 # science/tests/test_kind_severity.py
@@ -7750,7 +7750,7 @@ def test_missing_basis_stays_WARN_even_when_the_KIND_is_certified() -> None:
     assert "verdict.refutation-masked" in cumulative_rules("hygiene")   # the one that IS gated
 ```
 
-- [ ] **Step 2: Implement — the shared interface**
+- [x] **Step 2: Implement — the shared interface**
 
 ```python
 # science/src/science_tool/validate/kind_severity.py
@@ -7775,7 +7775,7 @@ def severity_for_kind(kind: str) -> Severity:
     return Severity.ERROR if kind in _CERTIFIED_KINDS else Severity.WARN
 ```
 
-- [ ] **Step 2a (PREREQUISITE, before any flip): scope `check_dangling_lineage` to hypotheses.**
+- [x] **Step 2a (PREREQUISITE, before any flip): scope `check_dangling_lineage` to hypotheses.**
   Its loop iterated **every** entity and emitted the hypothesis-scoped rule for each — but
   `check_resolution` requires the successor to resolve to a **live hypothesis** (`live_hypotheses`).
   An interpretation's successor is another interpretation, so every interpretation carrying lineage
@@ -7788,7 +7788,7 @@ def severity_for_kind(kind: str) -> Severity:
   hypothesis rule — breaking `validate` in two projects for a defect that is not theirs and is
   already reported, as a WARN, on the correct kind. (Shipped as its own precondition commit.)
 
-- [ ] **Step 2b: Route ALL THREE kind-level emitters through it.** Two are in
+- [x] **Step 2b: Route ALL THREE kind-level emitters through it.** Two are in
   `validate/checks/hypotheses.py` — the `hypothesis.status-vocabulary` finding and the
   `hypothesis.dangling-lineage` finding (Task 7, which hard-coded `Severity.WARN`). **The third is in
   `validate/checks/supersession.py`** (Task 7a), which hard-codes `Severity.WARN` on
@@ -7796,17 +7796,25 @@ def severity_for_kind(kind: str) -> Severity:
   `severity_for_kind(...)` — and the third takes it **per finding**, `severity_for_kind(kind)`, not
   `severity_for_kind("hypothesis")`: it emits for every kind, and only the certified ones may ERROR.
 
-  Then add **both** new rules to the `hygiene` tier in `validate/gates.py`:
-  `hypothesis.dangling-lineage` **and `hypothesis.unbacked-inverse`** — kind-scoped names, because
-  `gated_findings` keys on rule name alone (`gates.py:59-62`) and a generic name would gate every
-  uncertified kind's WARNs along with them. A severity with no tier fails nobody's build; Task 7 and
-  Task 7a each pinned their absence precisely so this task must invert both.
+  Then add **all three** kind-scoped rules to the `hygiene` tier in `validate/gates.py`:
+  `hypothesis.status-vocabulary`, `hypothesis.dangling-lineage`, **and** `hypothesis.unbacked-inverse`
+  — kind-scoped names, because `gated_findings` keys on rule name alone and a generic name would gate
+  every uncertified kind's WARNs along with them. A severity with no tier fails nobody's build.
+
+  **`status-vocabulary` was a GENERIC, always-WARN rule in `status_vocabulary.py`, not the kind-scoped
+  `hypothesis.status-vocabulary` this task's earlier prose assumed** (plan-vs-code drift, caught before
+  the ratchet landed). It is inherently kind-level — its authority, certification, severity, and
+  rollout all vary by kind — so keeping it generic while the other two encode the kind would preserve
+  the exact axis mismatch this task exists to eliminate. The rule becomes `f"{kind}.status-vocabulary"`
+  and the severity `severity_for_kind(kind)`; **only `hypothesis.status-vocabulary` is gated**, every
+  other kind stays a WARN that gates nothing. **No compatibility alias for the old generic name** — a
+  second spelling of one rule is the drift this axis prevents (owner ruling).
 
   **Omitting the third emitter is how the first two got stranded.** Task 7 wrote "ERROR is Task 12's
   ratchet" in a comment and Task 12 never touched it. This step is the only thing that closes that
   loop, and its own tests (Step 2c) fail if any of the three still hard-codes `WARN`.
 
-- [ ] **Step 3: Re-assert the manifest, prove the flip is inert, then differential-validate.**
+- [x] **Step 3: Re-assert the manifest, prove the flip is inert, then differential-validate.**
   Three gates, in order, and **none of them is `exit 0`** — Task 11 established that **11 of 18 roots
   exit nonzero for pre-existing reasons** (synthetic fixtures, dataset-pointer and dangling-ref debt,
   meta's own crashing validate hook). A gate on exit code would fail on faults this task never
@@ -7843,7 +7851,9 @@ def severity_for_kind(kind: str) -> Severity:
   toolkit** — which has neither the mixin nor the checks — would arm the ratchet on the strength of
   a run that never looked at a single migrated file. *A gate certified by the wrong instrument is
   not a gate.*
-- [ ] **Step 4: Commit** (15 repos, grouped by `git rev-parse --show-toplevel`).
+- [x] **Step 4: Commit** — a SINGLE toolkit commit on the worktree branch. Unlike Task 11 (which
+  rewrote 147 entity files across 15 repos), this task changes only toolkit code — the checks, the
+  severity function, the gate. There are no per-repo entity edits to group.
 
 > ### Out of scope: the verdict-basis ratchet (deferred, not forgotten)
 >
@@ -7965,4 +7975,6 @@ later.
   the right shape is probably `alternative_models: list[RivalModel]`, collapsing both. **Deleting a
   field on a model shared with other kinds is not a migration's business**, so the question is filed
   rather than answered here. The *drop* is fixed; the *duplication* is not.
-- **The 169 residual status-vocabulary WARNs** on other kinds. They stay WARNs until their slices.
+- **The residual status-vocabulary WARNs on other kinds.** They stay WARNs — kind-scoped, ungated —
+  until each kind's own slice certifies it. (Measured after the ratchet landed: **266** across the 18
+  roots, all on non-hypothesis kinds; a snapshot of the deferred backlog, not a contract.)

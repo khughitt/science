@@ -57,6 +57,16 @@ _TIER_RULES: dict[str, frozenset[str]] = {
             #       Gating it would make the check a ceiling on the authored verdict, which is
             #       exactly what design rev 8 point 4 forbids.
             "evidence.proxy-ungated",
+            # The `hypothesis` kind is certified (D5): all 18 roots pinned, rendering, validating.
+            # Its three kind-level rules ratchet to ERROR and gate HERE, and only for this kind --
+            # the names are kind-scoped so an uncertified kind's identical finding stays a WARN that
+            # gates nothing (`gated_findings` keys on rule name alone). `_CERTIFIED_KINDS` in
+            # `kind_severity.py` and this list advance together, one kind per slice.
+            #   `verdict.missing-basis` is NOT here: it is a rule-level ratchet on a different axis
+            #   (>=11 of 15 verdicts have no basis today), independent of the kind's certification.
+            "hypothesis.status-vocabulary",
+            "hypothesis.dangling-lineage",
+            "hypothesis.unbacked-inverse",
         }
     ),
 }

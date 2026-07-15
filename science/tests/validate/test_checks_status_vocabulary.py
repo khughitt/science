@@ -30,6 +30,12 @@ def _run(root: Path) -> list[str]:
     return [r.message for r in check_status_vocabulary(ctx)]
 
 
+def _results(root: Path):
+    (root / "science.yaml").write_text("name: fixture\nprofile: research\n", encoding="utf-8")
+    ctx = ValidateContext.from_project_root(root, strict=False, verbose=False)
+    return list(check_status_vocabulary(ctx))
+
+
 def test_a_VERDICT_word_in_status_is_flagged(tmp_path: Path) -> None:
     """☠️ THIS TEST ASSERTED THE EXACT OPPOSITE, AND THE INVERSION IS THE WHOLE ARC.
 
@@ -72,3 +78,63 @@ def test_missing_status_is_not_this_checks_business(tmp_path: Path) -> None:
     path.write_text('---\nid: "hypothesis:0009-x"\nkind: hypothesis\ntitle: "T"\n---\n\nBody.\n', encoding="utf-8")
 
     assert not _run(tmp_path)
+
+
+# ---------------------------------------------------------------------------------------------
+# D5 Task 12 -- the rule is KIND-SCOPED and KIND-GRADED (the third of three kind-level emitters)
+# ---------------------------------------------------------------------------------------------
+
+
+def test_a_HYPOTHESIS_status_violation_is_ERROR_and_kind_scoped_and_GATED(tmp_path: Path) -> None:
+    # `hypothesis` is certified (D5), so an out-of-vocabulary status on it is a gating ERROR -- and
+    # the rule is `hypothesis.status-vocabulary`, never the generic `status-vocabulary`.
+    from science_tool.validate.gates import cumulative_rules
+
+    _entity(tmp_path, "hypotheses/0009-x.md", entity_id="hypothesis:0009-x", kind="hypothesis", status="weakened")
+
+    results = _results(tmp_path)
+
+    assert len(results) == 1
+    assert results[0].rule == "hypothesis.status-vocabulary"
+    assert results[0].severity == "error"
+    assert "hypothesis.status-vocabulary" in cumulative_rules("hygiene")
+
+
+def test_an_INTERPRETATION_status_violation_stays_WARN_and_UNGATED(tmp_path: Path) -> None:
+    # THE CONTROL, and the reason the name is kind-scoped. `interpretation` is NOT certified: the
+    # same defect on it is a WARN that gates nothing. Emit one generic `status-vocabulary` instead
+    # and this is unreachable -- promoting `hypothesis` would promote every kind that shares the name.
+    from science_tool.validate.gates import cumulative_rules
+
+    _entity(
+        tmp_path,
+        "interpretations/0001-x.md",
+        entity_id="interpretation:0001-x",
+        kind="interpretation",
+        status="weakened",
+    )
+
+    results = _results(tmp_path)
+
+    assert len(results) == 1
+    assert results[0].rule == "interpretation.status-vocabulary"
+    assert results[0].severity == "warn"
+    assert "interpretation.status-vocabulary" not in cumulative_rules("hygiene")
+
+
+def test_the_generic_status_vocabulary_rule_is_NEVER_emitted(tmp_path: Path) -> None:
+    # No compatibility alias for the old generic name (owner ruling): a second spelling of one rule
+    # is exactly the drift this axis exists to prevent. Both a certified and an uncertified kind.
+    _entity(tmp_path, "hypotheses/0009-x.md", entity_id="hypothesis:0009-x", kind="hypothesis", status="weakened")
+    _entity(
+        tmp_path,
+        "interpretations/0001-x.md",
+        entity_id="interpretation:0001-x",
+        kind="interpretation",
+        status="weakened",
+    )
+
+    rules = {r.rule for r in _results(tmp_path)}
+
+    assert "status-vocabulary" not in rules
+    assert rules == {"hypothesis.status-vocabulary", "interpretation.status-vocabulary"}

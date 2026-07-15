@@ -31,11 +31,12 @@ from science_tool.entities import valid_statuses
 from science_tool.entity_scan import iter_entity_markdown
 from science_tool.validate.checks import Check
 from science_tool.validate.context import ValidateContext
-from science_tool.validate.result import Result, Severity
+from science_tool.validate.kind_severity import severity_for_kind
+from science_tool.validate.result import Result
 
 
-def _result(path: Path, message: str) -> Result:
-    """Always WARN.
+def _result(kind: str, path: Path, message: str) -> Result:
+    """KIND-scoped rule, KIND-graded severity -- both on the axis that carries the meaning.
 
     This check first shipped grading severity by `layout_version >= 3`, copying
     `entity_conformance`. That was the wrong axis and it failed immediately: layout
@@ -50,11 +51,17 @@ def _result(path: Path, message: str) -> Result:
     A vocabulary that has never been reconciled against what the toolkit scaffolds and
     what projects author is an uncertified instrument, and it may not fail anyone's
     build. So this check advises, and only advises, until each kind's vocabulary is
-    certified and its projects migrated -- at which point severity ratchets up PER KIND
-    (see docs/plans/2026-07-12-status-vocabulary-certification-design.md), which is the
-    axis that actually carries the meaning.
+    certified and its projects migrated -- at which point severity ratchets up PER KIND.
+
+    Severity is `severity_for_kind(kind)` and the rule is `f"{kind}.status-vocabulary"`, not a
+    generic `status-vocabulary`, for the reason the whole certification arc exists: `gated_findings`
+    keys on rule NAME alone (`gates.py`), so a generic name in a gate tier would fail every
+    UNCERTIFIED kind's build the instant one kind earned promotion -- the status-vocabulary incident,
+    restaged. Kind-scoped names let the gate list one certified kind (`hypothesis.status-vocabulary`)
+    and leave every other kind a WARN that gates nothing. No compatibility alias for the old generic
+    name: a second spelling of one rule is the drift this axis exists to prevent.
     """
-    return Result(Severity.WARN, path, None, message, "status-vocabulary", None)
+    return Result(severity_for_kind(kind), path, None, message, f"{kind}.status-vocabulary", None)
 
 
 @Check(section="entity status vocabulary", order=20)
@@ -85,6 +92,7 @@ def check_status_vocabulary(ctx: ValidateContext) -> Iterator[Result]:
 
         if status not in allowed:
             yield _result(
+                kind,
                 path,
                 f"status {status!r} is not in the declared vocabulary for kind {kind!r} "
                 f"({', '.join(sorted(allowed))}).",
