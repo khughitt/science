@@ -2,6 +2,18 @@
 
 ## Status
 
+> **fb-2026-07-11-017 STATUS UPDATE (2026-07-15) — supersedes every "open"/"live"
+> statement about it below.** The materialization lint is now IMPLEMENTED on branch
+> `fb017-non-materializing-fields`; **pending merge** (not yet merged, so not yet SHIPPED).
+> The per-kind key vocabulary this design deferred it for proved unnecessary: legitimacy is
+> one **semantic** top-level reader (`qa_audit/runs.py:47`, the QA-audit chain), encoded as
+> an explicit `(workflow-run, supersedes)` exception — not a schema derivation, and not the
+> generic entity-deletion reference cleanup, which reads the key but assigns it no
+> supersession semantics. See
+> [`2026-07-15-non-materializing-fields-design.md`](2026-07-15-non-materializing-fields-design.md)
+> and [`2026-07-15-non-materializing-fields-plan.md`](2026-07-15-non-materializing-fields-plan.md).
+> Everything below about fb-2026-07-11-017 is retained as the historical *withdrawn* record.
+
 **The `InstrumentResult` migration (Sequencing 1–4) is implemented** on branch
 `instrument-result-convergence`. **This design has been amended:** the materialization
 lint (`fb-2026-07-11-017`) was removed from its Sequencing and its acceptance set and
