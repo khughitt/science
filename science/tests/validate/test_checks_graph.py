@@ -70,22 +70,20 @@ def test_peer_valid_empty_audit_no_graph_stops_before_graph_calls(
 
 def test_validate_check_audit_side_unwired_emits_error(tmp_path, monkeypatch) -> None:
     from science_tool.validate.checks import graph
-    from science_tool.validate.runner import run
 
-    (tmp_path / "science.yaml").write_text("name: demo\n", encoding="utf-8")
     monkeypatch.setattr(
         graph,
         "materialization_audit",
         lambda _root: ValidationVerdict.unwired(code="unparseable", reason="boom"),
     )
-    result = run(tmp_path, strict=False, verbose=False, enable_python_sidecar=False)
+    results = list(graph.check_graph(_ctx(tmp_path)))
     errors = [
         r
-        for r in result.results
+        for r in results
         if r.severity == Severity.ERROR and "graph audit: could not run (unparseable): boom" in r.message
     ]
     assert errors, "expected an ERROR finding for the unwired audit"
-    assert not any("all canonical references resolved" in r.message for r in result.results)
+    assert not any("all canonical references resolved" in r.message for r in results)
 
 
 def test_peer_errors_emit_all_cli_lines_and_summary(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
@@ -211,15 +209,12 @@ def test_validate_check_unwired_emits_error_and_skips_diff(tmp_path, monkeypatch
 
     monkeypatch.setattr(graph, "diff_graph_inputs_dataset", lambda *a, **k: called.__setitem__("diff", True))
     # force the except branch: make ctx.graph_dataset raise (a broken graph.trig on disk)
-    (tmp_path / "science.yaml").write_text("name: demo\n", encoding="utf-8")
     gdir = tmp_path / "knowledge"
     gdir.mkdir()
     (gdir / "graph.trig").write_text("not trig <<<", encoding="utf-8")
 
-    from science_tool.validate.runner import run
-
-    result = run(tmp_path, strict=False, verbose=False, enable_python_sidecar=False)
-    msgs = [r.message for r in result.results if "graph validate" in r.message]
+    results = list(graph.check_graph(_ctx(tmp_path)))
+    msgs = [r.message for r in results if "graph validate" in r.message]
     assert any("could not run (unparseable): bad" in m for m in msgs)
     assert called["diff"] is False
 

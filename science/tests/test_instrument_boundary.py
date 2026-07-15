@@ -1,9 +1,9 @@
 """Instrument-result boundary guard (silent-instrument ruling).
 
 Additive ratchet: a public helper in the instrument namespace must return
-``InstrumentResult[...]``. It may not return a bare ``list``/``dict``/``int``,
-nor the ``tuple[list[T], str | None]`` precursor form that two catalog helpers
-grew independently before this type existed.
+``InstrumentResult[...]`` or ``ValidationVerdict[...]``. It may not return a bare
+``list``/``dict``/``int``, nor either ``tuple[list[T], bool]`` or
+``tuple[list[T], str | None]`` precursor form.
 
 The namespace is ``science_tool.instruments.INSTRUMENT_MODULES`` — imported, not
 restated, so the guard and the migration query cannot drift.
@@ -24,6 +24,8 @@ from __future__ import annotations
 import ast
 from pathlib import Path
 
+import pytest
+
 from science_tool.instruments import INSTRUMENT_MODULES
 
 _SCIENCE_SRC = Path(__file__).resolve().parents[1] / "src" / "science_tool"
@@ -35,7 +37,8 @@ _ALLOWLIST: frozenset[tuple[str, str]] = frozenset()
 
 # Pure/total helpers that live in the namespace but are NOT instruments. PERMANENT.
 #
-# The test, applied by reading all 46 bodies (docs/plans/2026-07-11-instrument-triage.md):
+# The test, applied to every public body in INSTRUMENT_MODULES
+# (docs/plans/2026-07-11-instrument-triage.md):
 # does the helper do I/O, or resolve a user-supplied identifier? If NO -- it is a pure
 # function of already-loaded arguments -- then an empty return is a fact about its INPUT,
 # not a claim about the world, and a status surface would be ceremony without safety
@@ -63,6 +66,11 @@ _NOT_INSTRUMENTS: frozenset[tuple[str, str]] = frozenset(
         # the input was empty -- a fact about the argument, not about the world.
         ("graph/attention.py", "reason_aware_sample_candidates"),
         ("graph/attention.py", "weighted_sample_without_replacement"),
+        # Pure fold over a caller-supplied IdentityTable -> audit rows. Zero I/O; the only
+        # caller is audit_project_sources internally. Empty rows == "no collisions in THIS
+        # table", a fact about the argument, not the world. Surfaced only because migrate.py
+        # joined the namespace.
+        ("graph/migrate.py", "audit_identity_table"),
         # Takes NO ARGUMENTS. A projection over the module constant HEALTH_CHECKS.
         # It has no input that could be absent, and its return is never empty.
         ("graph/health.py", "list_health_checks"),
@@ -117,15 +125,12 @@ def _is_str_or_none(node: ast.expr) -> bool:
 
 
 def _is_tuple_precursor(node: ast.expr) -> bool:
-    """Match ``tuple[list[T], str | None]`` — the ad-hoc REASON channel, precisely.
+    """Match ``tuple[list[T], bool]`` and ``tuple[list[T], str | None]``.
 
-    Deliberately NOT ``tuple[list[T], ...]``. The validator family returns
-    ``tuple[list[...], bool]``, where the bool is ``has_failures`` — an independent
-    pass/fail channel, not a reason string (validation.py computes it as
-    ``any(row["status"] == "fail" ...)``, so it is NOT ``bool(rows)``). Sweeping
-    those in would force them through a type whose ``status`` cannot carry them:
-    for a validator, ``ok`` means "found rows", i.e. found PROBLEMS — orthogonal to
-    pass/fail, not a synonym for it.
+    The former carries the has_failures verdict; the latter is the reason
+    precursor. Both are pre-convergence shapes: the verdict now belongs in
+    ``ValidationVerdict`` and the reason in ``InstrumentResult``. (Reversed from
+    the earlier exclusion of the bool channel — the sibling type carries it now.)
     """
     if not isinstance(node, ast.Subscript):
         return False
@@ -134,7 +139,38 @@ def _is_tuple_precursor(node: ast.expr) -> bool:
     inner = node.slice
     if not isinstance(inner, ast.Tuple) or len(inner.elts) != 2:
         return False
-    return _annotation_root(inner.elts[0]) == "list" and _is_str_or_none(inner.elts[1])
+    if _annotation_root(inner.elts[0]) != "list":
+        return False
+    second = inner.elts[1]
+    return _is_str_or_none(second) or _annotation_root(second) == "bool"
+
+
+@pytest.mark.parametrize(
+    "annotation",
+    [
+        "tuple[list[dict[str, str]], bool]",
+        "tuple[list[str], str | None]",
+        "tuple[list[int], Optional[str]]",
+    ],
+)
+def test_detector_flags_both_precursor_families(annotation: str) -> None:
+    node = ast.parse(f"def f() -> {annotation}: ...").body[0]
+    assert _is_tuple_precursor(node.returns) is True
+
+
+def test_detector_ignores_verdict_and_instrument_returns() -> None:
+    for annotation in (
+        "ValidationVerdict[dict[str, str]]",
+        "InstrumentResult[dict[str, str]]",
+        "tuple[Graph, Graph]",
+    ):
+        node = ast.parse(f"def f() -> {annotation}: ...").body[0]
+        assert _is_tuple_precursor(node.returns) is False
+
+
+def test_new_modules_in_namespace() -> None:
+    assert "graph/materialize.py" in INSTRUMENT_MODULES
+    assert "graph/migrate.py" in INSTRUMENT_MODULES
 
 
 def _violations(module_rel: str) -> list[str]:
@@ -165,7 +201,8 @@ def test_instrument_namespace_returns_instrument_result() -> None:
                 offenders.append(f'        ("{module_rel}", "{fn}"),')
     assert not offenders, (
         "These namespace helpers return a bare collection. Each is EITHER an\n"
-        "instrument (-> migrate it to InstrumentResult, or park it in _ALLOWLIST)\n"
+        "instrument (-> migrate it to InstrumentResult or ValidationVerdict, or park it "
+        "in _ALLOWLIST)\n"
         "OR a pure/total helper that cannot be unwired (-> _NOT_INSTRUMENTS, with a\n"
         "justification). An empty list cannot say whether an instrument ran:\n"
         + "\n".join(sorted(offenders))

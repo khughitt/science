@@ -32,7 +32,7 @@ RowT = TypeVar("RowT")
 
 InstrumentStatus = Literal["ok", "empty", "unwired"]
 
-#: Modules whose public helpers must return ``InstrumentResult``.
+#: Modules whose public helpers must return ``InstrumentResult`` or ``ValidationVerdict``.
 #:
 #: This tuple is the SINGLE definition of the instrument namespace. The AST guard
 #: (tests/test_instrument_boundary.py) imports it, and any migration query must
@@ -66,6 +66,8 @@ INSTRUMENT_MODULES: tuple[str, ...] = (
     "curate/inventory.py",
     "benchmark_catalog.py",
     "datasets_catalog.py",
+    "graph/materialize.py",
+    "graph/migrate.py",
 )
 
 
