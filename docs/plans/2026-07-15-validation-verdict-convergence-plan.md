@@ -32,10 +32,14 @@
 - `science/src/science_tool/graph/freshness.py`, `entities.py`, `graph/health_checks/unresolved_refs.py` — consumer contract.
 - `science/tests/test_instrument_boundary.py` — namespace, detector, prose, `_NOT_INSTRUMENTS`.
 - `science/tests/test_validation_verdict.py` — new type + `unwrap_verdict` unit tests.
+- `docs/plans/2026-07-15-validation-verdict-convergence-design.md` — mark this design implemented pending merge.
+- `docs/plans/2026-07-11-instrument-result-convergence-design.md` and
+  `docs/plans/2026-07-11-instrument-result-convergence-plan.md` — authoritative item-2
+  resolution banners; preserve the original deferred rationale as history.
 
 ## Task Dependency
 
-**Strictly sequential: Task 1 → Task 2 → Task 3 → Task 4.** Tasks 2 and 3 both modify `graph/cli.py` and `validate/checks/graph.py` (and share `tests/validate/test_checks_graph.py` and `tests/test_graph_cli.py`), so they must NOT run in parallel — Task 3 builds on Task 2's edits to those files. Task 4 runs after both migrations, when no offender remains.
+**Strictly sequential: Task 1 → Task 2 → Task 3 → Task 4 → Task 5.** Tasks 2 and 3 both modify `graph/cli.py` and `validate/checks/graph.py` (and share `tests/validate/test_checks_graph.py` and `tests/test_graph_cli.py`), so they must NOT run in parallel — Task 3 builds on Task 2's edits to those files. Task 4 runs after both migrations, when no offender remains. Task 5 records the implementation only after the full-tree gate is green.
 
 ---
 
@@ -291,7 +295,7 @@ Change `validate_graph_dataset`'s signature to `-> ValidationVerdict[dict[str, s
     return ValidationVerdict.from_has_failures(rows, has_failures)
 ```
 
-Privatize the helper: rename `def validate_empirical_run_resolution(` → `def _validate_empirical_run_resolution(` and update its one call site (line ~168) `run_messages, run_fatal = _validate_empirical_run_resolution(dataset)`. Delete the now-dead `_parse_failure_rows` helper if `validate_graph` no longer references it (it does not after this change) — confirm with `grep -n _parse_failure_rows src/science_tool/graph/store/validation.py`; remove if unreferenced.
+Privatize the helper: rename `def validate_empirical_run_resolution(` → `def _validate_empirical_run_resolution(` and update its one call site (line ~168) `run_messages, run_fatal = _validate_empirical_run_resolution(dataset)`. Update the nearby fatal-branch comment (line ~172) to cite `_validate_empirical_run_resolution`, not the now-nonexistent public name. Delete the now-dead `_parse_failure_rows` helper if `validate_graph` no longer references it (it does not after this change) — confirm with `grep -n _parse_failure_rows src/science_tool/graph/store/validation.py`; remove if unreferenced.
 
 - [ ] **Step 4: Update the two producers' consumers**
 
@@ -320,7 +324,7 @@ Privatize the helper: rename `def validate_empirical_run_resolution(` → `def _
         verdict = validate_graph_dataset(dataset)
 
     if verdict.status == "unwired":
-        yield _result(Severity.ERROR, f"graph validate: could not run ({verdict.code}) — {verdict.reason}")
+        yield _result(Severity.ERROR, f"graph validate: could not run ({verdict.code}): {verdict.reason}")
         return
 
     for row in verdict.rows:
@@ -383,7 +387,7 @@ def test_validate_check_unwired_emits_error_and_skips_diff(tmp_path, monkeypatch
 
     result = run(tmp_path, strict=False, verbose=False, enable_python_sidecar=False)
     msgs = [r.message for r in result.results if "graph validate" in r.message]
-    assert any("could not run (unparseable)" in m for m in msgs)
+    assert any("could not run (unparseable): bad" in m for m in msgs)  # code + reason + fixed punctuation
     assert called["diff"] is False
 ```
 
@@ -562,10 +566,9 @@ def test_validate_check_audit_side_unwired_emits_error(tmp_path, monkeypatch) ->
     result = run(tmp_path, strict=False, verbose=False, enable_python_sidecar=False)
     errors = [
         r for r in result.results
-        if r.severity == Severity.ERROR and "graph audit: could not run (unparseable)" in r.message
+        if r.severity == Severity.ERROR and "graph audit: could not run (unparseable): boom" in r.message
     ]
     assert errors, "expected an ERROR finding for the unwired audit"
-    assert "boom" in errors[0].message  # reason pinned, not just the code
     assert not any("all canonical references resolved" in r.message for r in result.results)
 ```
 
@@ -635,7 +638,7 @@ def materialization_audit(project_root: Path) -> ValidationVerdict[dict[str, str
 ```python
     audit_verdict = materialization_audit(ctx.project_root)
     if audit_verdict.status == "unwired":
-        yield _result(Severity.ERROR, f"graph audit: could not run ({audit_verdict.code}) — {audit_verdict.reason}")
+        yield _result(Severity.ERROR, f"graph audit: could not run ({audit_verdict.code}): {audit_verdict.reason}")
         return
     audit_rows = audit_verdict.rows
     if not audit_rows:
@@ -823,6 +826,16 @@ Add the `_NOT_INSTRUMENTS` entry for the newly-exposed pure helper:
 
 Update the module docstring, the `test_instrument_namespace_returns_instrument_result` assertion message, and the offender-message text to read "`InstrumentResult` or `ValidationVerdict`."
 
+Also remove the stale exact-count claim in the `_NOT_INSTRUMENTS` preamble. Adding two
+modules widens the namespace beyond the original 46-body triage, so replace:
+```python
+# The test, applied by reading all 46 bodies (...):
+```
+with count-free wording:
+```python
+# The test, applied to every public body in INSTRUMENT_MODULES (...):
+```
+
 - [ ] **Step 4: Run the full guard suite**
 
 Run: `cd science && uv run --frozen pytest tests/test_instrument_boundary.py -q`
@@ -842,10 +855,93 @@ git commit -m "test(instruments): guard covers the ValidationVerdict family; det
 
 ---
 
+### Task 5: Reconcile the design record after implementation
+
+**Files:**
+- Modify: `docs/plans/2026-07-15-validation-verdict-convergence-design.md`
+- Modify: `docs/plans/2026-07-11-instrument-result-convergence-design.md`
+- Modify: `docs/plans/2026-07-11-instrument-result-convergence-plan.md`
+
+**Interfaces:**
+- Consumes: the fully verified implementation from Tasks 1–4.
+- Produces: one authoritative live status for instrument-result follow-on item 2 while
+  retaining the original exclusion/deferment rationale as historical context.
+
+- [ ] **Step 1: Mark the dedicated design implemented pending merge**
+
+Replace the status line atop `2026-07-15-validation-verdict-convergence-design.md` with:
+
+```markdown
+**Status:** IMPLEMENTED on branch `validation-verdict-convergence`; pending merge.
+```
+
+Do not say SHIPPED/CLOSED before the branch merges.
+
+- [ ] **Step 2: Add authoritative item-2 resolution banners to both convergence docs**
+
+In `2026-07-11-instrument-result-convergence-design.md`, add this banner at the top of
+`## Status`, before every open/live count and follow-on statement:
+
+```markdown
+> **VALIDATOR-PAYLOAD STATUS UPDATE (2026-07-15) — supersedes every "open", "live",
+> "deferred", and "out of scope" statement about follow-on item 2 below.** The validator-
+> and-audit payload convergence is **IMPLEMENTED** on branch `validation-verdict-convergence`;
+> pending merge. `ValidationVerdict[RowT]` now carries passed/failed/unwired explicitly,
+> all consumers fail closed on unwired, and the boundary guard rejects both tuple precursor
+> families. The withdrawn account below is retained as the historical rationale for why
+> `InstrumentResult` could not absorb this family. See
+> [`2026-07-15-validation-verdict-convergence-design.md`](2026-07-15-validation-verdict-convergence-design.md).
+```
+
+In `2026-07-11-instrument-result-convergence-plan.md`, add this banner immediately below
+the title:
+
+```markdown
+> **VALIDATOR-PAYLOAD STATUS UPDATE (2026-07-15) — supersedes every "open", "live",
+> "deferred", and "out of scope" statement about follow-on item 2 below.** The validator-
+> and-audit payload convergence is **IMPLEMENTED** on branch `validation-verdict-convergence`;
+> pending merge. `ValidationVerdict[RowT]` now carries passed/failed/unwired explicitly,
+> all consumers fail closed on unwired, and the boundary guard rejects both tuple precursor
+> families. The deferred implementation account below is retained as historical rationale;
+> its explanation of why `InstrumentResult` could not absorb the orthogonal `has_failures`
+> channel remains valid. See
+> [`2026-07-15-validation-verdict-convergence-design.md`](2026-07-15-validation-verdict-convergence-design.md).
+```
+
+Do not rewrite or delete the original deferred section.
+
+- [ ] **Step 3: Verify every residual open/deferred mention is subordinated**
+
+Run:
+
+```bash
+rg -n "validator payload|validate_graph|deferred|out of scope|open|live" \
+  docs/plans/2026-07-11-instrument-result-convergence-design.md \
+  docs/plans/2026-07-11-instrument-result-convergence-plan.md \
+  docs/plans/2026-07-15-validation-verdict-convergence-design.md
+git diff --check
+```
+
+Expected: the dedicated design says IMPLEMENTED pending merge; every contradictory
+historical statement in either convergence document occurs below its authoritative
+status banner; no whitespace errors.
+
+- [ ] **Step 4: Commit**
+
+```bash
+git add \
+  docs/plans/2026-07-15-validation-verdict-convergence-design.md \
+  docs/plans/2026-07-11-instrument-result-convergence-design.md \
+  docs/plans/2026-07-11-instrument-result-convergence-plan.md
+git commit -m "docs(instruments): mark ValidationVerdict convergence implemented pending merge"
+```
+
+---
+
 ## Self-Review
 
 **Spec coverage** (design §1-§9):
-- §2 type → Task 1. §3 scope (4 migrations, 1 privatization, 1 `_NOT_INSTRUMENTS`) → Tasks 2 (validators + privatize), 3 (audit family), 4 (`audit_identity_table`). §4 unwired codes → Task 2 Step 3 (`graph_missing`/`unparseable`, tested Step 1). §5 consumer contract (every disposition) → Task 2 (validate CLI, validate-check) + Task 3 (audit CLI, audit-check, `_compile`, freshness, entities, `collect_unresolved_refs`). §6 guard (modules, detector, `_NOT_INSTRUMENTS`, prose) → Task 4. §7 tests (type, per-disposition fail-closed, both-precursor detector) → Tasks 1, 2, 3, 4. §8 files → covered.
+- §2 type → Task 1. §3 scope (4 migrations, 1 privatization, 1 `_NOT_INSTRUMENTS`) → Tasks 2 (validators + privatize), 3 (audit family), 4 (`audit_identity_table`). §4 unwired codes → Task 2 Step 3 (`graph_missing`/`unparseable`, tested Step 1). §5 consumer contract (every disposition) → Task 2 (validate CLI, validate-check) + Task 3 (audit CLI, audit-check, `_compile`, freshness, entities, `collect_unresolved_refs`). §6 guard (modules, detector, `_NOT_INSTRUMENTS`, prose) → Task 4. §7 tests (type, per-disposition fail-closed, both-precursor detector) → Tasks 1, 2, 3, 4. §8 files → covered. Historical status reconciliation → Task 5.
 - **Every §5 disposition has an explicit fail-closed test:** graph validate (T2 Step 6), graph audit (`test_graph_audit_unwired_exits_nonzero`, T3 Step 1), validate-check validate side (T2 Step 6), validate-check audit side (`test_validate_check_audit_side_unwired_emits_error`, T3 Step 1), `_compile` (T3 Step 1), freshness (T3 Step 1), entities via `create_entity` (T3 Step 1), `collect_unresolved_refs` (T3 Step 1).
 
 **Placeholder scan:** No placeholders remain. All production symbols are pinned — `_validate_prospective_write` (entities.py:1731), `propagate_freshness_in_memory` (freshness.py:407), `collect_unresolved_refs(project_root, *, sources=None)` (unresolved_refs.py:49), `graph_audit`'s `--project-root` (cli.py:154). Every Step 1 test is executable against a named builder verified to exist: `_build_clean_project` (test_phase_split_contracts.py), `_write` (test_chain_freshness_integration.py), `seed_project`/`create_entity` (test_entities.py), `_write_layered_claim_project` (test_health.py), inline seed (test_graph_migrate.py). Monkeypatch targets account for import style: `freshness` imports the audit **lazily**, so its test patches `migrate.audit_project_sources`; `materialize`/`entities`/`unresolved_refs`/`cli` import it at module level and patch their own module name.
