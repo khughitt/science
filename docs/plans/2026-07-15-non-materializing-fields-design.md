@@ -14,15 +14,17 @@ the schema (see §3).
 ## 1. The defect
 
 The graph's source of truth for both edges is a `relations:` entry with the corresponding
-predicate. The shared `relations:` representation and its admission/materialization are
-declared by the `RelationKind` descriptors in `profiles/core.py` (`sci:supersedes` ~688,
-`sci:amends` ~719). For supersession specifically, `consolidation.py:12-14` names the
-canonical edge (`predicate: sci:supersedes`, authored on the successor) and explicitly
-distinguishes it from both top-level `supersedes:` ("silently dropped") and `sci:amends`
-("which revises, not replaces"). A **top-level** `supersedes:` / `amends:` frontmatter key
-looks authoritative but materializes **zero** triples, silently. Downstream,
-`big-picture` derives `provenance_coverage` from these chains, so the silent drop
-produces a wrong `thin` rating.
+predicate. `Entity.relations: list[AuthoredTargetedRelation]` defines the authored record
+shape; `AuthoredTargetedRelation` requires `predicate` and `target`. The `RelationKind`
+descriptors in `profiles/core.py` declare the predicate vocabulary and endpoint
+admissibility (`sci:supersedes` ~688, `sci:amends` ~719), and graph materialization consumes
+the authored records under those rules. For supersession specifically,
+`consolidation.py:12-14` names the canonical edge (`predicate: sci:supersedes`, authored on
+the successor) and explicitly distinguishes it from both top-level `supersedes:`
+("silently dropped") and `sci:amends` ("which revises, not replaces"). A **top-level**
+`supersedes:` / `amends:` frontmatter key looks authoritative but materializes **zero**
+triples, silently. Downstream, `big-picture` derives `provenance_coverage` from these
+chains, so the silent drop produces a wrong `thin` rating.
 
 MM30 authored two interpretations in the top-level form; the graph has 0 `sci:supersedes`
 triples project-wide. The defect is confirmed **still live after D5**: a schema-2
@@ -82,8 +84,15 @@ _LEGIT_TOP_LEVEL: frozenset[tuple[str, str]] = frozenset({
 ```
 
 Everything in the non-materializing key set is illegitimate unless `(kind, key)` is in
-this set. Sole audited toolkit reader of these keys: `qa_audit/runs.py:47`. There is no
-legitimate top-level reader of `amends`.
+this set. Here a legitimate reader means a **domain consumer that assigns the field its
+intended first-class semantics**. `qa_audit/runs.py:47` is the sole such top-level reader:
+it interprets `workflow-run.supersedes` as the QA-audit chain. There is no semantic
+top-level reader of `amends`.
+
+`entities.py` also includes `supersedes` in `_REMOVABLE_FRONTMATTER_REF_KEYS`. That generic
+entity-deletion cleanup recognizes and removes reference-shaped values, but it assigns no
+supersession semantics and emits no graph edge. Maintenance recognition of a possible
+reference therefore does **not** legitimize the key as lineage authoring on other kinds.
 
 ## 4. Severity — unconditional ERROR, outside `kind_severity`
 
