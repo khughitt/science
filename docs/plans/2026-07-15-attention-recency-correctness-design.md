@@ -1,6 +1,6 @@
 # Attention-ranking recency correctness — design (fb-2026-07-10-023)
 
-**Status:** Approved, pending implementation. Branch `attention-recency-correctness`.
+**Status:** Decision-ready (pending review acceptance). Branch `attention-recency-correctness`.
 
 This closes item 3 of the InstrumentResult-convergence follow-on list
 (`docs/plans/2026-07-11-instrument-result-convergence-design.md` §"Follow-on
@@ -32,8 +32,8 @@ reviewed yesterday scores 1.03×, so **stamping reviews would make unstamped
 entities dominate** — precisely because flat-365 is a wildly wrong stand-in for
 "never reviewed" when the freshness pass already models that case via `created`.
 
-The reporter (fb-2026-07-10-023) observed the surface symptom: `days_since_last
-_review: 365` on every row of `attention-sample`.
+The reporter (fb-2026-07-10-023) observed the surface symptom:
+`days_since_last_review: 365` on every row of `attention-sample`.
 
 ### Already fixed, not re-touched: fb-2026-07-11-005
 
@@ -60,17 +60,28 @@ Concretely in `graph/attention.py`:
   entity_uri, today) -> float` with:
 
   ```python
-  def _last_reviewed_date(knowledge, entity_uri: URIRef) -> date | None:
+  def _last_reviewed_date(knowledge, entity_id: str, entity_uri: URIRef) -> date | None:
       """The entity's sci:lastReviewed date, or None if it was never reviewed.
 
-      Absence (no triple) is None. A PRESENT but unparseable value is a corrupt
+      Absence (no triple) is None. A PRESENT but invalid value is a corrupt
       graph, not an absence, and raises — silently reading it as None would
       misrepresent bad data as 'never reviewed'.
       """
   ```
 
-  **Absent triple → `None`. Present-but-unparseable → `ValueError`.** These must
+  **Absent triple → `None`. Present-but-invalid → `ValueError`.** These must
   not collapse to the same value (fail early; corrupt data is not absence).
+
+  **Strict lexical contract.** The freshness pass writes `sci:lastReviewed` as
+  `Literal(d.isoformat(), datatype=XSD.date)` (`freshness.py:392`), so the only
+  valid lexical form is `xsd:date` — `YYYY-MM-DD`. Parse the **whole** literal
+  with `date.fromisoformat(text)`; do **not** slice (`text[:10]`) — the current
+  `_parse_date_literal` (`:670-679`) slices and so accepts `2026-05-01garbage`,
+  masking corruption. Drop that helper's `datetime`/`Z` fallback here: this field
+  is a date, not a timestamp. The raised `ValueError` **names the entity id and
+  the offending value**, e.g.
+  `f"{entity_id}: sci:lastReviewed value {raw!r} is not a valid ISO date (YYYY-MM-DD)"`
+  — that message is what the CLI surfaces (§4, "Corrupt-date CLI handling").
 
 Reasons are unaffected: `_derive_phase1_reasons` (`:405-457`) derives only from
 kind + support/dispute counts, and open-question debt drives its own reason —
@@ -110,21 +121,45 @@ Every surface that renders review recency is updated to the honest value:
 | `graph attention-rank` table | *(no recency column)* | **add** column `("last_reviewed", "Last reviewed")` |
 | JSON for both commands | `days_since_last_review` in row | `last_reviewed` in row (via `format_attention_candidate`) |
 | Wander skeleton table (`wander/skeleton.py:36-40`) | `"Last reviewed (days)"` from `components[...]` | `"Last reviewed"` from `bundle.last_reviewed` (ISO date / `never`) |
+| Wander JSON (`wander/skeleton.py:116` `_bundle_to_dict`) | recency reachable only via `components["days_since_last_review"]` | explicit `"last_reviewed"` key (ISO date / `null`) |
 
 `attention-rank` is the deterministic review queue — the surface where
 "when was this last looked at" is most useful — so it gains the column rather
 than only replacing the sample column.
 
 This is a **breaking change** to the row/JSON schema of `attention-sample`,
-`attention-rank`, and the Wander skeleton. Acceptable per project doctrine
-(internal tooling, no compatibility layer); called out so the plan updates every
-column config, JSON assertion, and skeleton fixture.
+`attention-rank`, the Wander skeleton table, **and Wander JSON**. Acceptable per
+project doctrine (internal tooling, no compatibility layer); called out so the
+plan updates every column config, JSON assertion, and skeleton fixture.
 
 ### Wander propagation
 
 `wander/context.py` `ContextBundle` gains `last_reviewed: date | None`, set from
 `candidate.last_reviewed` in `assemble_bundle` (`context.py:51-57`).
-`wander/skeleton.py` renders it: ISO date when set, `never` when `None`.
+
+Both Wander render paths carry it, because `_bundle_to_dict` hand-selects fields
+(it does not spread the candidate) and would otherwise drop recency entirely once
+the key leaves `components`:
+
+- **Skeleton table** (`skeleton.py:36-40`): render `bundle.last_reviewed` — ISO
+  date when set, `never` when `None`.
+- **JSON** (`skeleton.py:116` `_bundle_to_dict`): add
+  `"last_reviewed": bundle.last_reviewed.isoformat() if bundle.last_reviewed else None`.
+
+### Corrupt-date CLI handling
+
+`_last_reviewed_date` raises `ValueError` (from inside
+`compute_attention_candidates`) on a present-but-invalid `sci:lastReviewed`. The
+two `graph attention-*` commands must surface it as a clean
+`click.ClickException`, not a traceback. Today the handling is **inconsistent**:
+`graph attention-sample` already wraps `query_attention_sample` in
+`try/except ValueError → ClickException` (`cli.py:641-652`), but
+`graph attention-rank` calls `unwrap_instrument(query_attention_ranked(...))`
+directly (`:705`) with no wrap. Add the same `try/except ValueError` around
+`attention-rank`'s `query_attention_ranked` call so corrupt data yields the
+entity-naming message from §2, on both commands. (Wander already wraps its
+`compute_attention_candidates` call in `try/except ValueError → ClickException`,
+so its path is covered.) Tested on both attention commands in §7.
 
 ## 5. Dead-API removal: `today`
 
@@ -155,9 +190,13 @@ date used for the walk and stub-smell").
 
 ## 6. Side-effect I checked: sampling scale
 
-The deleted factor was ~13.17× and near-uniform on today's corpus, so **ranking
-order is essentially preserved** — a uniform multiplier does not reorder. It does
-shrink absolute weights ~13×, which raises the relative prominence of the
+The deleted factor was ~13.17× and near-uniform on today's corpus. Ranking order
+is **exactly** preserved only among candidates over which the deleted age factor
+was uniform — i.e. the all-unreviewed common case, where a uniform multiplier
+does not reorder. Where reviewed and unreviewed candidates mix, order **does**
+change, and that change is the **intended** correction (the old term made an
+unstamped entity outrank a freshly-reviewed one). It also shrinks absolute
+weights ~13×, which raises the relative prominence of the
 additive `epsilon` floor (`DEFAULT_EPSILON = 0.05`): with a multiplicative base
 of 1, epsilon's maximum contribution to a candidate's weight becomes ~4.8%
 (`0.05 / 1.05`), versus ~0.4% when the 13× inflation was present.
@@ -193,8 +232,13 @@ All tests build a small in-memory `Dataset` with `sci:freshnessState` triples
   date / `never`.
 - **`_last_reviewed_date` contract.** Returns the parsed date when
   `sci:lastReviewed` is present and valid; `None` when the triple is **absent**;
-  raises `ValueError` when the triple is **present but unparseable**. Pin all
-  three cases.
+  raises `ValueError` when the triple is **present but invalid**. Pin all three
+  cases, and specifically use `2026-05-01garbage` (not merely `not-a-date`) for
+  the invalid case, to prove the fix rejects trailing garbage the old `[:10]`
+  slice accepted. The raised message contains the entity id and the raw value.
+- **Corrupt-date CLI surfacing.** With a corrupt `sci:lastReviewed` in the graph,
+  **both** `graph attention-sample` and `graph attention-rank` exit non-zero with
+  a `ClickException` naming the entity and the invalid value — not a traceback.
 - **`today` is gone.** `compute_attention_candidates` and the two `query_*`
   functions no longer accept `today` (a call passing it raises `TypeError`); the
   `graph attention-*` commands no longer expose `--today`.
@@ -205,16 +249,33 @@ All tests build a small in-memory `Dataset` with `sci:freshnessState` triples
   `AttentionCandidate.last_reviewed`; `format_attention_candidate`; helper
   rename/contract; `NEVER_REVIEWED_DAYS` deletion; `today` removal.
 - `science/src/science_tool/graph/cli.py` — both attention table column configs;
-  remove `--today` options and `sample_date`/`rank_date` plumbing.
+  remove `--today` options and `sample_date`/`rank_date` plumbing; wrap
+  `attention-rank`'s `query_attention_ranked` call in `try/except ValueError →
+  ClickException`.
 - `science/src/science_tool/wander/context.py` — `ContextBundle.last_reviewed`
   + `assemble_bundle`.
-- `science/src/science_tool/wander/skeleton.py` — skeleton table column.
+- `science/src/science_tool/wander/skeleton.py` — skeleton table column **and**
+  the `last_reviewed` key in `_bundle_to_dict` (JSON).
 - `science/src/science_tool/wander/sampling.py` — drop `today` from
   `sample_for_walk`.
 - `science/src/science_tool/wander/cli.py` — drop `today=` arg to attention;
   update `--today` help.
-- Tests: `science/tests/**/test_attention*.py`, Wander skeleton/CLI tests —
-  update existing weight/column/JSON assertions; add the §7 tests.
+- Tests:
+  - `science/tests/**/test_attention*.py` — update weight/column/JSON
+    assertions; add the recency-gone, freshness-still-ranks, perverse-repair,
+    honest-output, `_last_reviewed_date`, corrupt-date CLI, and `today`-removed
+    tests (§7).
+  - `science/tests/test_wander_sampling.py` — drop `today` from
+    `sample_for_walk` call sites.
+  - `science/tests/test_wander_context.py` — assert `ContextBundle.last_reviewed`
+    is populated from the candidate.
+  - `science/tests/test_wander_skeleton.py` — table "Last reviewed" column and
+    JSON `last_reviewed` assertions; update its direct `ContextBundle(...)`
+    constructions for the new field.
+  - `science/tests/test_wander_stub_smell.py` — update its direct
+    `ContextBundle(...)` constructions for the new field.
+  - `science/tests/test_wander_cli.py` — `--today` still accepted (walk/stub),
+    no longer influences attention.
 - Docs: add authoritative status banners to
   `docs/plans/2026-07-11-instrument-result-convergence-design.md` and
   `-plan.md` marking the attention-ranking pair (fb-2026-07-10-023 +
