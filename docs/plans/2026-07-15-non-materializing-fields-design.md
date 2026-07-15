@@ -1,6 +1,6 @@
 # Non-materializing frontmatter fields — design (fb-2026-07-11-017)
 
-**Status:** IMPLEMENTED on branch `fb017-non-materializing-fields`; pending merge. fb-2026-07-11-017 addressed.
+**Status:** SHIPPED — merged to local `main` at `8e5e4709`. fb-2026-07-11-017 CLOSED.
 
 **Origin.** This closes the last live defect from the instrument-result convergence
 plan. That plan attempted the fix as its Task 6, then **withdrew** it: a flat key

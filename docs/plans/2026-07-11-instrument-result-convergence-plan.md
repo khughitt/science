@@ -11,8 +11,8 @@
 **Design doc:** [`2026-07-11-instrument-result-convergence-design.md`](2026-07-11-instrument-result-convergence-design.md). Read it before Task 1; it carries the rulings this plan implements.
 
 > **fb-2026-07-11-017 STATUS UPDATE (2026-07-15) — supersedes every "open"/"live"
-> statement about it below.** The materialization lint is now IMPLEMENTED on branch
-> `fb017-non-materializing-fields`; **pending merge** (not yet merged, so not yet SHIPPED).
+> statement about it below.** The materialization lint is now **SHIPPED** — merged to local
+> `main` at `8e5e4709`; fb-2026-07-11-017 is CLOSED.
 > The per-kind key vocabulary this design deferred it for proved unnecessary: legitimacy is
 > one **semantic** top-level reader (`qa_audit/runs.py:47`, the QA-audit chain), encoded as
 > an explicit `(workflow-run, supersedes)` exception — not a schema derivation, and not the
