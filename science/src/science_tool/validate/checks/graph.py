@@ -174,7 +174,14 @@ def check_graph(ctx: ValidateContext) -> Iterator[Result]:
     peer_issues = validate_peers(ctx.project_root)
     yield from _peer_results(ctx, peer_issues)
 
-    audit_rows, _has_failures = materialization_audit(ctx.project_root)
+    audit_verdict = materialization_audit(ctx.project_root)
+    if audit_verdict.status == "unwired":
+        yield _result(
+            Severity.ERROR,
+            f"graph audit: could not run ({audit_verdict.code}): {audit_verdict.reason}",
+        )
+        return
+    audit_rows = audit_verdict.rows
     if not audit_rows:
         yield _result(Severity.INFO, "graph audit: all canonical references resolved")
     else:
@@ -305,4 +312,3 @@ def _status(row: dict[str, Any], *, context: str, accepted: set[str]) -> str:
     if status not in accepted:
         raise ValueError(f"{context} returned unknown status: {status}")
     return status
-

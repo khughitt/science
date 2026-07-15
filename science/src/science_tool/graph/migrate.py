@@ -26,6 +26,7 @@ from science_tool.graph.sources import (
     load_project_sources,
 )
 from science_tool.graph.store import PROJECT_ENTITY_PREFIXES
+from science_tool.instruments import ValidationVerdict
 
 
 class AuditRow(TypedDict):
@@ -151,7 +152,7 @@ def audit_identity_table(table: IdentityTable) -> list[AuditRow]:
     return rows
 
 
-def audit_project_sources(sources: ProjectSources) -> tuple[list[AuditRow], bool]:
+def audit_project_sources(sources: ProjectSources) -> ValidationVerdict[AuditRow]:
     """Validate that structured project sources resolve canonically."""
     rows: list[AuditRow] = []
     identity_table = build_identity_table(sources)
@@ -208,7 +209,7 @@ def audit_project_sources(sources: ProjectSources) -> tuple[list[AuditRow], bool
 
     rows.sort(key=lambda row: (row["source"], row["target"]))
     has_failures = any(row["status"] == "fail" for row in rows)
-    return rows, has_failures
+    return ValidationVerdict.from_has_failures(rows, has_failures)
 
 
 def _audit_geneset_row_dataset_usage(

@@ -79,7 +79,7 @@ def test_clean_project_audit_has_no_identity_collision(tmp_path: Path) -> None:
     _seed(tmp_path)
     _md(tmp_path, "entities/hypotheses/h1.md", "hypothesis:h1", "hypothesis")
     sources = load_project_sources(tmp_path, include_commons=False)
-    rows, _ = audit_project_sources(sources)
+    rows = audit_project_sources(sources).rows
     assert [r for r in rows if r["check"] == "identity_collision"] == []
 
 

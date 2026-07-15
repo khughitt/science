@@ -18,8 +18,7 @@ def _write(tmp_path: Path, rel: str, body: str) -> None:
 
 
 def _audit_rows(project: Path):
-    rows, _has_failures = audit_project_sources(load_project_sources(project))
-    return rows
+    return audit_project_sources(load_project_sources(project)).rows
 
 
 def _project_with_dangling_chain_link(tmp_path: Path) -> Path:

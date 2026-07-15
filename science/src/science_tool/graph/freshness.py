@@ -419,8 +419,13 @@ def propagate_freshness_in_memory(project_root: Path) -> list[dict]:
     from science_tool.graph.migrate import audit_project_sources
 
     sources = load_project_sources(project_root.resolve(), strict_identity=False)
-    audit_rows, has_failures = audit_project_sources(sources)
-    if has_failures:
+    verdict = audit_project_sources(sources)
+    if verdict.status == "unwired":
+        raise ValueError(
+            f"Cannot compute freshness — source audit could not run ({verdict.code}): {verdict.reason}"
+        )
+    audit_rows = verdict.rows
+    if verdict.status == "failed":
         details = "; ".join(f"{row['source']} -> {row['target']}" for row in audit_rows if row["status"] == "fail")
         raise ValueError(f"Cannot compute freshness with unresolved references: {details}")
 

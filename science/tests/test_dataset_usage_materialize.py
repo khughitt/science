@@ -841,7 +841,8 @@ def test_materialize_graph_audits_paper_usage_refs_as_dataset_only(tmp_path, fro
         encoding="utf-8",
     )
 
-    rows, has_failures = materialization_audit(tmp_path)
+    verdict = materialization_audit(tmp_path)
+    rows, has_failures = verdict.rows, verdict.status == "failed"
 
     assert has_failures is True
     assert any(
@@ -892,7 +893,8 @@ def test_materialize_graph_audits_derivation_inputs_as_dataset_only(tmp_path):
         "    - dataset:smith\n",
     )
 
-    rows, has_failures = materialization_audit(tmp_path)
+    verdict = materialization_audit(tmp_path)
+    rows, has_failures = verdict.rows, verdict.status == "failed"
 
     assert has_failures is True
     assert any(
@@ -1240,7 +1242,8 @@ def test_materialization_audit_reports_unresolved_geneset_row_usage_refs(tmp_pat
         encoding="utf-8",
     )
 
-    rows, has_failures = materialization_audit(tmp_path)
+    verdict = materialization_audit(tmp_path)
+    rows, has_failures = verdict.rows, verdict.status == "failed"
 
     assert has_failures is True
     assert any(
@@ -1276,7 +1279,8 @@ def test_materialization_audit_reports_non_dataset_geneset_row_usage_refs(tmp_pa
         encoding="utf-8",
     )
 
-    rows, has_failures = materialization_audit(tmp_path)
+    verdict = materialization_audit(tmp_path)
+    rows, has_failures = verdict.rows, verdict.status == "failed"
 
     assert has_failures is True
     assert any(

@@ -36,7 +36,8 @@ def _stage_fixture(tmp_path: Path) -> tuple[Path, Path]:
 
 def _load_sources(project: Path) -> ProjectSources:
     sources = load_project_sources(project)
-    rows, has_failures = audit_project_sources(sources)
+    verdict = audit_project_sources(sources)
+    rows, has_failures = verdict.rows, verdict.status == "failed"
     assert not has_failures, rows
     return sources
 

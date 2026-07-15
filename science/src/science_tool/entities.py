@@ -30,7 +30,7 @@ from science_model.profiles.schema import EntityFilenameStrategy
 from science_tool.entity_profiles import load_project_schema_if_pinned
 from science_tool.entity_scan import iter_entity_markdown
 from science_tool.graph.identity_table import build_identity_table
-from science_tool.graph.migrate import audit_project_sources
+from science_tool.graph.migrate import AuditRow, audit_project_sources
 from science_tool.graph.reference_resolution import ReferenceResolver
 from science_tool.graph.sources import (
     AliasCollisionError,
@@ -1744,11 +1744,17 @@ def _validate_prospective_write(
     question about a corpus this write is in the middle of changing.
     """
     rel_path_text = rel_path.as_posix()
-    baseline_rows, _ = audit_project_sources(load_project_sources(project_root, include_commons=include_commons))
+    def _audit_rows(project_sources: ProjectSources) -> list[AuditRow]:
+        verdict = audit_project_sources(project_sources)
+        if verdict.status == "unwired":
+            raise EntityCommandError(f"source audit could not run ({verdict.code}): {verdict.reason}")
+        return verdict.rows
+
+    baseline_rows = _audit_rows(load_project_sources(project_root, include_commons=include_commons))
     prospective = load_project_sources(
         project_root, markdown_overrides={rel_path_text: text}, include_commons=include_commons
     )
-    prospective_rows, _ = audit_project_sources(prospective)
+    prospective_rows = _audit_rows(prospective)
 
     baseline_keys = {_audit_row_key(row) for row in baseline_rows}
     new_rows = [row for row in prospective_rows if _audit_row_key(row) not in baseline_keys]

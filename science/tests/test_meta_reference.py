@@ -61,7 +61,8 @@ class TestMetaRefsInAudit:
         )
 
         sources = load_project_sources(tmp_path)
-        rows, has_failures = audit_project_sources(sources)
+        verdict = audit_project_sources(sources)
+        rows, has_failures = verdict.rows, verdict.status == "failed"
 
         assert has_failures is False, f"audit failed for meta: refs: {rows}"
         # No row should mention the meta refs as unresolved

@@ -159,7 +159,7 @@ def graph_propagate_freshness(project_root: Path, output_format: str) -> None:
 def graph_audit(output_format: str, project_root: Path) -> None:
     """Audit canonical source references before graph materialization."""
 
-    rows, has_failures = materialization_audit(project_root)
+    rows, has_failures = unwrap_verdict(materialization_audit(project_root), what="graph audit")
     emit_query_rows(
         output_format=output_format,
         title="Graph Source Audit",
@@ -1231,4 +1231,3 @@ def add_mechanism_cmd(
 ) -> None:
     """Add a mechanism over existing typed entities and proposition refs."""
     raise _retired_writer("graph add mechanism", "Run `science entity create mechanism <title>`")
-

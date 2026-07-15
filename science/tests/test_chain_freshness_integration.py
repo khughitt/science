@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+import pytest
 from click.testing import CliRunner
 from rdflib import Dataset, URIRef
 
@@ -188,7 +189,8 @@ chain:
 ---
 """,
     )
-    rows, has_failures = audit_project_sources(load_project_sources(tmp_path))
+    verdict = audit_project_sources(load_project_sources(tmp_path))
+    rows, has_failures = verdict.rows, verdict.status == "failed"
     assert has_failures is True
     assert any(
         row["status"] == "fail"
@@ -197,3 +199,23 @@ chain:
         and row["target"] == "mechanism:b"
         for row in rows
     )
+
+
+def test_freshness_fails_closed_on_unwired_audit(tmp_path: Path, monkeypatch) -> None:
+    from science_tool.instruments import ValidationVerdict
+    from science_tool.graph import freshness, migrate
+
+    _write(tmp_path, "science.yaml", "name: test\nknowledge_profiles:\n  local: local\n")
+    _write(
+        tmp_path,
+        "entities/hypotheses/h1.md",
+        '---\nid: "hypothesis:h1"\nkind: "hypothesis"\ntitle: "H1"\n'
+        'related: []\nsource_refs: []\ncreated: "2026-03-12"\nupdated: "2026-03-12"\n---\nBody.\n',
+    )
+    monkeypatch.setattr(
+        migrate,
+        "audit_project_sources",
+        lambda _s: ValidationVerdict.unwired(code="x", reason="r"),
+    )
+    with pytest.raises(ValueError, match="could not run"):
+        freshness.propagate_freshness_in_memory(tmp_path)

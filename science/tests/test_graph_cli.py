@@ -1550,6 +1550,27 @@ def test_graph_validate_missing_is_graph_missing(tmp_path) -> None:
     assert "not found" in res.output
 
 
+def test_graph_audit_unwired_exits_nonzero(tmp_path, monkeypatch) -> None:
+    from science_tool.instruments import ValidationVerdict
+    from science_tool.graph import cli as graph_cli
+
+    (tmp_path / "science.yaml").write_text("name: demo\n", encoding="utf-8")
+    monkeypatch.setattr(
+        graph_cli,
+        "materialization_audit",
+        lambda _root: ValidationVerdict.unwired(code="unparseable", reason="boom"),
+    )
+    for fmt in ("table", "json"):
+        res = CliRunner().invoke(
+            graph_cli.graph_group,
+            ["audit", "--project-root", str(tmp_path), "--format", fmt],
+        )
+        assert res.exit_code != 0
+        assert "could not run (unparseable)" in res.output
+        assert "boom" in res.output
+        assert '"rows": []' not in res.output
+
+
 def test_graph_predicates_outputs_json() -> None:
     runner = CliRunner()
     result = runner.invoke(main, ["graph", "predicates", "--format", "json"])

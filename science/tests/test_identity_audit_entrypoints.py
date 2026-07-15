@@ -27,7 +27,8 @@ def _duplicate_owner(root: Path) -> None:
 
 def test_materialization_audit_reports_collision_without_crashing(tmp_path: Path) -> None:
     _duplicate_owner(tmp_path)
-    rows, has_failures = materialization_audit(tmp_path)  # must not raise
+    verdict = materialization_audit(tmp_path)  # must not raise
+    rows, has_failures = verdict.rows, verdict.status == "failed"
     assert has_failures is True
     collision = [r for r in rows if r["check"] == "identity_collision" and r["source"] == "question:q1"]
     assert len(collision) == 1

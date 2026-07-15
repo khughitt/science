@@ -87,7 +87,8 @@ def test_materialize_raises_on_audit_failure(tmp_path: Path) -> None:
 
 def test_audit_only_path_does_not_raise_or_write(tmp_path: Path) -> None:
     _build_dup_project(tmp_path)
-    rows, has_failures = materialization_audit(tmp_path)  # must NOT raise
+    verdict = materialization_audit(tmp_path)  # must NOT raise
+    rows, has_failures = verdict.rows, verdict.status == "failed"
     assert has_failures is True
     assert any(r["status"] == "fail" for r in rows)
     # audit writes nothing
@@ -97,7 +98,7 @@ def test_audit_only_path_does_not_raise_or_write(tmp_path: Path) -> None:
 def test_doc_data_package_files_are_not_materialize_preflight(tmp_path: Path) -> None:
     _build_doc_data_package_project(tmp_path)
     assert materialize_graph(tmp_path, strict=True) == tmp_path / "knowledge" / "graph.trig"
-    rows, _ = materialization_audit(tmp_path)
+    rows = materialization_audit(tmp_path).rows
     assert isinstance(rows, list)
 
 
@@ -115,3 +116,17 @@ def test_build_dataset_from_sources_is_load_audit_free(tmp_path: Path) -> None:
     assert (h1, None, None) in knowledge  # entity emitted
     # build_dataset_from_sources does no filesystem write
     assert not (root / "knowledge" / "graph.trig").exists()
+
+
+def test_compile_fails_closed_on_unwired_audit(tmp_path: Path, monkeypatch) -> None:
+    from science_tool.instruments import ValidationVerdict
+    from science_tool.graph import materialize
+
+    demo = _build_clean_project(tmp_path)
+    monkeypatch.setattr(
+        materialize,
+        "audit_project_sources",
+        lambda _s: ValidationVerdict.unwired(code="x", reason="r"),
+    )
+    with pytest.raises(ValueError, match="could not run"):
+        materialize._compile(demo, stop_after="audit")

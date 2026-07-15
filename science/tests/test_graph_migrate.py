@@ -12,6 +12,20 @@ from science_tool.graph.migrate import audit_project_sources
 from science_tool.graph.sources import load_project_sources
 
 
+def test_audit_project_sources_returns_verdict(tmp_path: Path) -> None:
+    project = tmp_path / "p"
+    (project / "entities" / "hypotheses").mkdir(parents=True)
+    (project / "science.yaml").write_text("name: demo\n", encoding="utf-8")
+    (project / "entities" / "hypotheses" / "h1.md").write_text(
+        '---\nid: "hypothesis:h1"\nkind: "hypothesis"\ntitle: "H1"\n'
+        'related: []\nsource_refs: []\ncreated: "2026-03-12"\nupdated: "2026-03-12"\n---\nBody.\n',
+        encoding="utf-8",
+    )
+    verdict = audit_project_sources(load_project_sources(project))
+    assert verdict.status in {"passed", "failed"}
+    assert isinstance(verdict.rows, list)
+
+
 def test_audit_unresolved_topic_includes_commons_hint(tmp_path: Path, monkeypatch) -> None:
     fixture_root = Path(__file__).parent / "fixtures" / "commons" / "valid"
     commons_root = tmp_path / "commons"
@@ -44,7 +58,7 @@ Body.
     )
 
     sources = load_project_sources(project)
-    rows, _ = audit_project_sources(sources)
+    rows = audit_project_sources(sources).rows
 
     bad = next(row for row in rows if row["target"] == "topic:does-not-exist")
     assert bad["check"] == "unresolved_reference"
@@ -84,7 +98,7 @@ def test_audit_unresolved_nonpromotable_kind_omits_promote_hint(tmp_path: Path) 
     _scaffold_project_with_related(project, '"question:does-not-exist"')
 
     sources = load_project_sources(project)
-    rows, _ = audit_project_sources(sources)
+    rows = audit_project_sources(sources).rows
 
     bad = next(row for row in rows if row["target"] == "question:does-not-exist")
     assert bad["check"] == "unresolved_reference"
@@ -99,7 +113,7 @@ def test_audit_unresolved_cross_project_address_omits_promote_hint(tmp_path: Pat
     _scaffold_project_with_related(project, '"health-meta:research-question:foo"')
 
     sources = load_project_sources(project)
-    rows, _ = audit_project_sources(sources)
+    rows = audit_project_sources(sources).rows
 
     bad = next(row for row in rows if row["target"] == "health-meta:research-question:foo")
     assert bad["check"] == "unresolved_reference"
@@ -146,7 +160,8 @@ def test_audit_registered_peer_cross_project_ref_accepted(tmp_path: Path) -> Non
     _scaffold_project_with_related_and_peer(project, '"cancer-meta:question:001-foo"', "cancer-meta")
 
     sources = load_project_sources(project)
-    rows, has_failures = audit_project_sources(sources)
+    verdict = audit_project_sources(sources)
+    rows, has_failures = verdict.rows, verdict.status == "failed"
 
     assert not any(row["target"] == "cancer-meta:question:001-foo" and row["status"] == "fail" for row in rows)
     assert not has_failures
@@ -184,7 +199,7 @@ Body.
     )
 
     sources = load_project_sources(project)
-    rows, _ = audit_project_sources(sources)
+    rows = audit_project_sources(sources).rows
 
     bad = next(row for row in rows if row["target"] == "dataset:does-not-exist")
     assert bad["check"] == "unresolved_reference"

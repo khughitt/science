@@ -25,6 +25,7 @@ from science_tool.entities import (
     validate_slug,
 )
 from science_tool.graph.sources import load_project_sources
+from science_tool.instruments import ValidationVerdict
 
 
 def test_builtin_path_policy_maps_core_kinds() -> None:
@@ -570,6 +571,18 @@ def test_create_entity_prewrite_validation_removes_no_tmp_file(tmp_path: Path) -
     assert not list(tmp_path.rglob("*.md.tmp"))
 
 
+def test_create_entity_fails_closed_on_unwired_audit(tmp_path: Path, monkeypatch) -> None:
+    from science_tool.instruments import ValidationVerdict
+
+    seed_project(tmp_path)
+    monkeypatch.setattr(
+        "science_tool.entities.audit_project_sources",
+        lambda _s: ValidationVerdict.unwired(code="x", reason="r"),
+    )
+    with pytest.raises(EntityCommandError, match="could not run"):
+        create_entity(project_root=tmp_path, kind="question", title="New Question")
+
+
 def test_create_entity_prospective_audit_failure_rolls_back(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     seed_project(tmp_path)
     write_markdown_entity(
@@ -579,21 +592,24 @@ def test_create_entity_prospective_audit_failure_rolls_back(tmp_path: Path, monk
     )
     calls = 0
 
-    def fake_audit_project_sources(sources: object) -> tuple[list[dict[str, str]], bool]:
+    def fake_audit_project_sources(sources: object) -> ValidationVerdict[dict[str, str]]:
         nonlocal calls
         calls += 1
         if calls == 1:
-            return [], False
-        return [
-            {
-                "check": "ambiguous_cross_kind_reference",
-                "status": "fail",
-                "source": "question:0002-new-question",
-                "field": "related",
-                "target": "0001",
-                "details": "0001 resolves to multiple canonical identities",
-            }
-        ], True
+            return ValidationVerdict.passed([])
+        return ValidationVerdict.from_has_failures(
+            [
+                {
+                    "check": "ambiguous_cross_kind_reference",
+                    "status": "fail",
+                    "source": "question:0002-new-question",
+                    "field": "related",
+                    "target": "0001",
+                    "details": "0001 resolves to multiple canonical identities",
+                }
+            ],
+            True,
+        )
 
     monkeypatch.setattr("science_tool.entities.audit_project_sources", fake_audit_project_sources)
 
@@ -628,8 +644,8 @@ def test_create_entity_reports_preexisting_audit_failures_as_warnings(
         "details": "pre-existing missing hypothesis",
     }
 
-    def fake_audit_project_sources(sources: object) -> tuple[list[dict[str, str]], bool]:
-        return [preexisting_row], True
+    def fake_audit_project_sources(sources: object) -> ValidationVerdict[dict[str, str]]:
+        return ValidationVerdict.from_has_failures([preexisting_row], True)
 
     monkeypatch.setattr("science_tool.entities.audit_project_sources", fake_audit_project_sources)
 
@@ -759,21 +775,24 @@ def test_edit_entity_prospective_audit_failure_rolls_back(tmp_path: Path, monkey
     original = path.read_text(encoding="utf-8")
     calls = 0
 
-    def fake_audit_project_sources(sources: object) -> tuple[list[dict[str, str]], bool]:
+    def fake_audit_project_sources(sources: object) -> ValidationVerdict[dict[str, str]]:
         nonlocal calls
         calls += 1
         if calls == 1:
-            return [], False
-        return [
-            {
-                "check": "ambiguous_cross_kind_reference",
-                "status": "fail",
-                "source": "question:0001-alpha",
-                "field": "related",
-                "target": "0001",
-                "details": "0001 resolves to multiple canonical identities",
-            }
-        ], True
+            return ValidationVerdict.passed([])
+        return ValidationVerdict.from_has_failures(
+            [
+                {
+                    "check": "ambiguous_cross_kind_reference",
+                    "status": "fail",
+                    "source": "question:0001-alpha",
+                    "field": "related",
+                    "target": "0001",
+                    "details": "0001 resolves to multiple canonical identities",
+                }
+            ],
+            True,
+        )
 
     monkeypatch.setattr("science_tool.entities.audit_project_sources", fake_audit_project_sources)
 
@@ -797,21 +816,24 @@ def test_append_entity_note_prospective_audit_failure_rolls_back(
     original = path.read_text(encoding="utf-8")
     calls = 0
 
-    def fake_audit_project_sources(sources: object) -> tuple[list[dict[str, str]], bool]:
+    def fake_audit_project_sources(sources: object) -> ValidationVerdict[dict[str, str]]:
         nonlocal calls
         calls += 1
         if calls == 1:
-            return [], False
-        return [
-            {
-                "check": "invalid_registered_schema",
-                "status": "fail",
-                "source": "question:0001-alpha",
-                "field": "type",
-                "target": "question",
-                "details": "forced failure",
-            }
-        ], True
+            return ValidationVerdict.passed([])
+        return ValidationVerdict.from_has_failures(
+            [
+                {
+                    "check": "invalid_registered_schema",
+                    "status": "fail",
+                    "source": "question:0001-alpha",
+                    "field": "type",
+                    "target": "question",
+                    "details": "forced failure",
+                }
+            ],
+            True,
+        )
 
     monkeypatch.setattr("science_tool.entities.audit_project_sources", fake_audit_project_sources)
 

@@ -68,7 +68,8 @@ def test_audit_emits_ambiguous_reference_for_two_scope_bare_ref(
     project_root = _project_owning_and_referencing_shared_id(tmp_path)
 
     sources = load_project_sources(project_root)
-    rows, has_failures = audit_project_sources(sources)
+    verdict = audit_project_sources(sources)
+    rows, has_failures = verdict.rows, verdict.status == "failed"
     ambiguous = [r for r in rows if r["check"] == "ambiguous_reference"]
     assert has_failures is True
     assert len(ambiguous) == 1
@@ -128,7 +129,7 @@ def test_scoped_ref_resolves_and_materializes(tmp_path: Path, monkeypatch: pytes
 
     # Audit clean (scoped form disambiguates) ...
     sources = load_project_sources(project_root)
-    rows, _ = audit_project_sources(sources)
+    rows = audit_project_sources(sources).rows
     assert [r for r in rows if r["check"] == "ambiguous_reference"] == []
     # ... and the build resolves the scoped ref into a real edge between
     # hypothesis:h1 and topic:single-cell-foundation-models.
@@ -170,7 +171,7 @@ def test_wholly_scoped_no_local_owner_materializes(tmp_path: Path, monkeypatch: 
     sources = load_project_sources(project_root)
     # Single-scope ownership (commons only); audit clean; scoped ref still resolves to a real edge.
     assert build_identity_table(sources).owner_scopes_by_id()[_SHARED_ID] == frozenset({"commons"})
-    rows, _ = audit_project_sources(sources)
+    rows = audit_project_sources(sources).rows
     assert [r for r in rows if r["check"] == "ambiguous_reference"] == []
     trig_path = materialize_graph(project_root)
     assert trig_path.exists()

@@ -2498,3 +2498,18 @@ def test_health_cli_table_includes_prose_epistemics_findings(tmp_path: Path) -> 
     assert "prose-source:example" in result.output
     assert "Next action" in result.output
     assert "science annotate build-prose-health --write" in result.output
+
+
+def test_collect_unresolved_refs_bridges_unwired_audit(tmp_path: Path, monkeypatch) -> None:
+    from science_tool.instruments import ValidationVerdict
+    from science_tool.graph.health_checks import unresolved_refs
+
+    _write_layered_claim_project(tmp_path)
+    monkeypatch.setattr(
+        unresolved_refs,
+        "audit_project_sources",
+        lambda _s: ValidationVerdict.unwired(code="x", reason="r"),
+    )
+    result = unresolved_refs.collect_unresolved_refs(tmp_path)
+    assert result.status == "unwired"
+    assert result.code == "x"

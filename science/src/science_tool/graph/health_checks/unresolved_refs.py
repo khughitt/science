@@ -5,7 +5,7 @@ from __future__ import annotations
 import re
 from collections import defaultdict
 from pathlib import Path
-from typing import TypedDict
+from typing import TypedDict, cast
 
 from science_tool.graph.health_checks.base import (
     NO_ENTITIES_REASON,
@@ -61,7 +61,11 @@ def collect_unresolved_refs(
         sources = load_project_sources(project_root.resolve(), strict_identity=False)
     if not sources.entities:
         return InstrumentResult.unwired(code=PROJECT_SOURCES_EMPTY, reason=NO_ENTITIES_REASON)
-    rows, _ = audit_project_sources(sources)
+    verdict = audit_project_sources(sources)
+    if verdict.status == "unwired":
+        # code is guaranteed non-None on an unwired verdict by ValidationVerdict's invariant.
+        return InstrumentResult.unwired(code=cast(str, verdict.code), reason=verdict.reason)
+    rows = verdict.rows
 
     # Group fail rows by target
     by_target: dict[str, list[str]] = defaultdict(list)

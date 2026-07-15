@@ -111,6 +111,7 @@ from science_tool.graph.store import (
     _resolve_term,
     save_graph_dataset,
 )
+from science_tool.instruments import ValidationVerdict
 
 
 def _iter_membership_refs(entity):
@@ -533,7 +534,7 @@ def _build_dataset_from_sources(
     return emit.dataset
 
 
-def _audit_phase(sources: ProjectSources) -> tuple[list[AuditRow], bool]:
+def _audit_phase(sources: ProjectSources) -> ValidationVerdict[AuditRow]:
     """Audit phase: the single `audit_project_sources` call site."""
     return audit_project_sources(sources)
 
@@ -560,7 +561,11 @@ def _compile(
     project_root = project_root.resolve()
 
     sources = load_project_sources(project_root, strict_identity=False)
-    audit_rows, has_failures = _audit_phase(sources)
+    verdict = _audit_phase(sources)
+    if verdict.status == "unwired":
+        raise ValueError(f"Source audit could not run ({verdict.code}): {verdict.reason}")
+    audit_rows = verdict.rows
+    has_failures = verdict.status == "failed"
 
     if stop_after == "audit":
         return CompilationResult(
@@ -608,7 +613,7 @@ def materialize_graph(project_root: Path, *, strict: bool = True) -> Path:
     return result.trig_path
 
 
-def materialization_audit(project_root: Path) -> tuple[list[dict[str, str]], bool]:
+def materialization_audit(project_root: Path) -> ValidationVerdict[dict[str, str]]:
     """Audit a project root for unresolved canonical references."""
     result = _compile(project_root, stop_after="audit")
     audit_rows = [
@@ -622,7 +627,7 @@ def materialization_audit(project_root: Path) -> tuple[list[dict[str, str]], boo
         }
         for row in result.audit_rows
     ]
-    return audit_rows, result.has_failures
+    return ValidationVerdict.from_has_failures(audit_rows, result.has_failures)
 
 
 def _add_entity(
