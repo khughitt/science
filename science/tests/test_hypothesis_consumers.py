@@ -437,18 +437,31 @@ def test_an_UNMIGRATED_project_is_refused_the_NEW_VOCABULARY(tmp_path: Path) -> 
     assert _frontmatter(path)["title"] == "Renamed"
 
 
-@pytest.mark.parametrize("bad_value", ["2", 3])
+@pytest.mark.parametrize(
+    "bad_value",
+    [
+        None,   # an authored `entity_schema_version: null` -- present, so NOT "unpinned"
+        True,   # a bool: `True == 1`, so numeric membership would wave it through
+        1.0,    # a float: `1.0 in {1, 2}` is True by numeric equality
+        2.0,
+        "2",    # a stray-quoted version
+        3,      # an integer that names no version that exists
+        0,
+    ],
+)
 def test_an_INVALID_pin_VALUE_fails_the_SAME_way_on_BOTH_paths(
     tmp_path: Path, bad_value: object
 ) -> None:
     # THE THIRD FACE OF THE PIN FAIL-OPEN. A near-miss KEY was closed; a wrong VALUE was not. The
-    # load path read `entity_schema_version` uncoerced and armed validation only when it `== 2`, so
-    # `"2"` (a stray quote) and `3` read as "unpinned" and switched the schema off -- while the write
-    # path, which typed the value through the config, RAISED on the same file. Two answers to one
-    # question, split across the two readers.
+    # load path read `entity_schema_version` uncoerced and armed validation only when it `== 2`, so a
+    # wrong value read as "unpinned" and switched the schema off -- while the write path RAISED on the
+    # same file. Two answers to one question, split across the two readers.
     #
-    # The one narrow authority now validates the VALUE on both paths, so a present-but-illegal pin
-    # FAILS identically -- it is a project to fix, never a project silently read as unmigrated.
+    # The one narrow authority now validates the VALUE on both paths: only KEY ABSENCE is "unpinned",
+    # and the value must be a strict `int` in {1, 2} -- so `null`, `True`, `1.0`, `"2"`, and `3` all
+    # FAIL identically, a project to fix rather than one silently read as unmigrated. (`null` matters
+    # specially: `raw.get()` cannot tell it from a missing key; `bool`/`float` matter because numeric
+    # membership treats `True`/`1.0` as `1`.)
     (tmp_path / "science.yaml").write_text(
         yaml.safe_dump({"name": "p", "id": "p", "entity_schema_version": bad_value}), encoding="utf-8"
     )
@@ -459,6 +472,23 @@ def test_an_INVALID_pin_VALUE_fails_the_SAME_way_on_BOTH_paths(
         load_project_sources(tmp_path)  # LOAD path — no longer degrades to unpinned
     with pytest.raises(EntityCommandError, match="not valid"):
         edit_entity(tmp_path, "hypothesis:0001-x", title="Renamed")  # WRITE path — same verdict
+
+
+def test_an_EXPLICIT_null_pin_is_NOT_the_same_as_ABSENCE(tmp_path: Path) -> None:
+    # The distinction the contract turns on and `raw.get()` erased. An ABSENT pin is unpinned and the
+    # project stays workable (`--title` goes through); an authored `entity_schema_version: null` is a
+    # present-but-illegal value and is REFUSED. Same key, opposite verdicts -- which is why the check
+    # is key PRESENCE, not a None-valued read.
+    (tmp_path / "entities/hypotheses").mkdir(parents=True)
+    _hypothesis(tmp_path, "0001-x")
+
+    (tmp_path / "science.yaml").write_text(yaml.safe_dump({"name": "p", "id": "p"}), encoding="utf-8")
+    edit_entity(tmp_path, "hypothesis:0001-x", title="Absent is workable")
+    assert _frontmatter(tmp_path / "entities/hypotheses/0001-x.md")["title"] == "Absent is workable"
+
+    (tmp_path / "science.yaml").write_text("name: p\nid: p\nentity_schema_version: null\n", encoding="utf-8")
+    with pytest.raises(ValueError, match="entity_schema_version"):
+        load_project_sources(tmp_path)
 
 
 def test_a_record_with_NO_lineage_does_not_pay_for_OTHER_entities_alias_collisions(

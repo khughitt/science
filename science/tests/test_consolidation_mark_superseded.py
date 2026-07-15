@@ -39,6 +39,7 @@ from science_tool.consolidation import (
     load_supersession_inputs,
     mark_superseded,
 )
+from science_tool.entities import EntityCommandError
 from science_tool.graph.io import SCI_NS
 from science_tool.graph.materialize import AdmittedRelation
 from science_tool.graph.reference_resolution import ReferenceResolver
@@ -1183,6 +1184,27 @@ def test_a_hypothesis_CHAIN_records_the_immediate_superseder(tmp_path: Path) -> 
     c = read_frontmatter(tmp_path / "entities/hypotheses/0003-c.md")
     assert c is not None
     assert c["superseded_by"] == "hypothesis:0002-b"      # NOT 0001-a, the survivor
+
+
+def test_superseding_a_HYPOTHESIS_on_an_UNMIGRATED_project_is_REFUSED(tmp_path: Path) -> None:
+    # ☠️ Superseding a hypothesis writes `status: superseded` -- a lifecycle value hypotheses did not
+    # admit before the fold -- AND a derived `superseded_by` inverse. Both are schema-2 semantics, so
+    # the operation belongs to a MIGRATED project; the write boundary refuses them on an unpinned one.
+    # This is NOT the gate being weakened for consolidation: the derived writer goes through the SAME
+    # boundary as an authored edit, and pays the SAME pin requirement.
+    #
+    # And it fails ALL-OR-NONE: the refusal lands in the PREPARE phase, before any `_commit_write`, so
+    # the record is byte-unchanged -- a blocked supersession leaves the corpus exactly as it was.
+    _seed(tmp_path)  # UNPINNED on purpose
+    _hypothesis(tmp_path, "0001-old", status="active")
+    _hypothesis(tmp_path, "0002-new", status="active",
+                relations=[_supersedes("hypothesis:0001-old")])
+    before = (tmp_path / "entities/hypotheses/0001-old.md").read_bytes()
+
+    with pytest.raises(EntityCommandError, match="migrate-hypothesis"):
+        mark_superseded(tmp_path, apply=True)
+
+    assert (tmp_path / "entities/hypotheses/0001-old.md").read_bytes() == before
 
 
 def test_an_INTERPRETATION_may_not_supersede_a_HYPOTHESIS(tmp_path: Path) -> None:

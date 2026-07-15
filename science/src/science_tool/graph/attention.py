@@ -8,16 +8,20 @@ from datetime import date, datetime
 from pathlib import Path
 from typing import Any, Iterable, Mapping, Sequence
 
+import yaml
 from rdflib import Dataset, Literal, URIRef
 from rdflib.namespace import SKOS
 
+from science_model.frontmatter import project_config_path
+
 from science_tool.entities import CLOSED_LIFECYCLE_STATUSES
+from science_tool.entity_profiles import ENTITY_SCHEMA_VERSION
 from science_tool.graph.belief import aggregate_belief, collect_evidence_units
 from science_tool.graph.belief_scalar import belief_scalar, belief_scalar_enabled, format_belief_weight
 from science_tool.graph.io import CITO_NS, PROJECT_NS, SCI_NS, project_root_from_graph_path
 from science_tool.graph.store import _evidence_targets_for_uri, _graph_uri, canonical_id_from_entity_uri
 from science_tool.instruments import InstrumentResult
-from science_tool.project_config import load_project_config
+from science_tool.project_config import validated_entity_schema_version
 
 DEFAULT_EPSILON = 0.05
 NEEDS_REVIEW_MULTIPLIER = 3.0
@@ -522,9 +526,15 @@ def _speaks_the_lifecycle(graph_path: Path) -> bool:
     `entity_schema_version: 2` is written by `entity migrate-hypothesis` as its final act, only
     after every file in the project has been rewritten and re-validated. So the pin does not merely
     assert the migration; it is emitted BY it. Absent means 1, and 1 means unreadable.
+
+    Read through `validated_entity_schema_version` -- the SAME authority the loader and writer use --
+    so this third reader cannot answer the pin question differently. `ProjectConfig.entity_schema_version`
+    would accept an authored `null` as `None` (indistinguishable from absent), which the authority
+    refuses; going through it keeps "only absence is unpinned" true at every reader.
     """
-    config = load_project_config(project_root_from_graph_path(graph_path))
-    return config.entity_schema_version == 2
+    project_root = project_root_from_graph_path(graph_path)
+    raw = yaml.safe_load(project_config_path(project_root).read_text(encoding="utf-8")) or {}
+    return validated_entity_schema_version(raw) == ENTITY_SCHEMA_VERSION
 
 
 def _related_neighbors(knowledge, uri: URIRef) -> set[URIRef]:
