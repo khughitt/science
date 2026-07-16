@@ -2,9 +2,11 @@
 
 from __future__ import annotations
 
+import json
 import re
+from collections.abc import Mapping
 from pathlib import Path
-from typing import TypedDict
+from typing import Any, TypedDict
 
 from science_model.entities import Entity
 from science_model.frontmatter import parse_frontmatter
@@ -69,6 +71,91 @@ class LayeredClaimMigrationReport(TypedDict):
     project_root: str
     rows: list[LayeredClaimMigrationRow]
     summary: LayeredClaimMigrationSummary
+
+
+def _declared(entity: Entity, name: str, default: Any) -> Any:
+    """Read a reference field only when the entity's concrete kind declares it.
+
+    Under extra="allow" a stray same-named key lives in model_extra, not in
+    model_fields; reading it via getattr would audit it as a real reference.
+    Returns Any deliberately: it replaces getattr(entity, name, default) (already
+    Any), so the audited call sites keep their typing with no casts.
+    """
+    if name in type(entity).model_fields:
+        return getattr(entity, name, default)
+    return default
+
+
+# The top-level attribute names _audit_entity reads for auditing. The drift-guard test
+# AST-pins this to the actual reads, so it cannot silently drift.
+_AUDITED_REFERENCE_FIELDS: tuple[str, ...] = (
+    "related",
+    "commits_to",
+    "blocked_by",
+    "workflow",
+    "method",
+    "source_refs",
+    "evidence_refs",
+    "dataset_usage",
+    "derivation",
+    "chain",
+    "audits",
+    "proposition_refs",
+    "same_as",
+)
+
+# The subset-declared reference fields: those a stray same-named key can misplace onto a
+# kind that does not declare them. Base-Entity fields are declared everywhere and can never
+# appear as a stray model_extra key, so they are excluded.
+REFERENCE_FIELD_NAMES: frozenset[str] = frozenset(_AUDITED_REFERENCE_FIELDS) - set(Entity.model_fields)
+
+
+def _stringify_extra_value(value: object) -> str:
+    if isinstance(value, str):
+        return value
+    if isinstance(value, (list, tuple)):
+        return ", ".join(_stringify_extra_value(item) for item in value)
+    if isinstance(value, dict):
+        return json.dumps(value, sort_keys=True, ensure_ascii=False)
+    return str(value)
+
+
+def _format_kinds(kinds: tuple[str, ...]) -> str:
+    return ", ".join(f"`{kind}`" for kind in kinds)
+
+
+def _audit_undeclared_reference_keys(
+    entity: Entity,
+    *,
+    declaring_kinds: Mapping[str, tuple[str, ...]],
+) -> list[AuditRow]:
+    """WARN for a reference-named key present on a kind that does not declare it.
+
+    Only reference-field names are flagged; a non-reference extension field is
+    preserved silently (D3.3). Caller gates this on entity.kind being outside the
+    strict-schema kind set — a schema-vouched extension never reaches here.
+    """
+    rows: list[AuditRow] = []
+    for key in sorted(entity.model_extra or {}):
+        if key not in REFERENCE_FIELD_NAMES:
+            continue
+        owners = declaring_kinds.get(key, ())
+        owner_clause = f"; it is declared by {_format_kinds(owners)}" if owners else ""
+        rows.append(
+            {
+                "check": "undeclared_key",
+                "status": "warn",
+                "source": entity.canonical_id,
+                "field": key,
+                "target": _stringify_extra_value((entity.model_extra or {})[key]),
+                "details": (
+                    f"`{key}` is not a declared field of kind `{entity.kind}`{owner_clause}. "
+                    "It is an unvouched extra key on this kind, not wired into the graph — "
+                    "move it to the owning kind or remove it."
+                ),
+            }
+        )
+    return rows
 
 
 _INTERVENTIONAL_RE = re.compile(
@@ -181,8 +268,24 @@ def audit_project_sources(sources: ProjectSources) -> ValidationVerdict[AuditRow
         ext_prefixes = external_prefixes(sources.ontology_catalogs)
         peer_ids = sources.peer_ids
 
+        strict_schema_kinds = sources.strict_schema_kinds
+        declaring_kinds = {
+            field: tuple(
+                kind for kind, cls in sources.registry.registered_kinds().items() if field in cls.model_fields
+            )
+            for field in REFERENCE_FIELD_NAMES
+        }
         for entity in sources.entities:
-            rows.extend(_audit_entity(entity, resolver, ext_prefixes=ext_prefixes, peer_ids=peer_ids))
+            rows.extend(
+                _audit_entity(
+                    entity,
+                    resolver,
+                    ext_prefixes=ext_prefixes,
+                    peer_ids=peer_ids,
+                    strict_schema_kinds=strict_schema_kinds,
+                    declaring_kinds=declaring_kinds,
+                )
+            )
         rows.extend(_audit_geneset_row_dataset_usage(sources, resolver, ext_prefixes=ext_prefixes))
         for relation in sources.relations:
             rows.extend(_audit_relation(relation, resolver, ext_prefixes=ext_prefixes))
@@ -288,9 +391,11 @@ def _audit_entity(
     *,
     ext_prefixes: frozenset[str],
     peer_ids: frozenset[str] = frozenset(),
+    strict_schema_kinds: frozenset[str],
+    declaring_kinds: Mapping[str, tuple[str, ...]],
 ) -> list[AuditRow]:
     rows: list[AuditRow] = []
-    for target in entity.related:
+    for target in _declared(entity, "related", []):
         rows.extend(
             _audit_reference(
                 entity,
@@ -303,7 +408,7 @@ def _audit_entity(
                 peer_ids=peer_ids,
             )
         )
-    for target in getattr(entity, "commits_to", None) or []:
+    for target in _declared(entity, "commits_to", None) or []:
         rows.extend(
             _audit_reference(
                 entity,
@@ -316,23 +421,23 @@ def _audit_entity(
                 peer_ids=peer_ids,
             )
         )
-    # `blocked_by` lives on ProjectEntity; defensive getattr for bare Entity instances.
-    for target in getattr(entity, "blocked_by", []) or []:
+    # `blocked_by` lives on ProjectEntity; bare Entity instances use the declared-field gate.
+    for target in _declared(entity, "blocked_by", []) or []:
         rows.extend(
             _audit_reference(entity, "blocked_by", target, resolver, ext_prefixes=ext_prefixes, peer_ids=peer_ids)
         )
     # `workflow` lives on both WorkflowRunEntity and WorkflowStepEntity, and both
     # refs are worth auditing; only the run's becomes a `sci:executes` edge.
-    workflow_ref = getattr(entity, "workflow", "")
+    workflow_ref = _declared(entity, "workflow", "")
     if workflow_ref:
         rows.extend(_audit_reference(entity, "workflow", workflow_ref, resolver, ext_prefixes=ext_prefixes))
     # `method` is declared only by WorkflowStepEntity; auditing it here is what
     # makes `_add_applies_edge`'s unresolved-ref branch unreachable in the
     # normal pipeline.
-    method_ref = getattr(entity, "method", "")
+    method_ref = _declared(entity, "method", "")
     if method_ref:
         rows.extend(_audit_reference(entity, "method", method_ref, resolver, ext_prefixes=ext_prefixes))
-    for target in entity.source_refs:
+    for target in _declared(entity, "source_refs", []):
         rows.extend(
             _audit_reference(
                 entity,
@@ -344,7 +449,7 @@ def _audit_entity(
                 peer_ids=peer_ids,
             )
         )
-    for target in getattr(entity, "evidence_refs", []) or []:
+    for target in _declared(entity, "evidence_refs", []) or []:
         rows.extend(
             _audit_reference(
                 entity,
@@ -357,7 +462,7 @@ def _audit_entity(
                 peer_ids=peer_ids,
             )
         )
-    for usage in getattr(entity, "dataset_usage", []) or []:
+    for usage in _declared(entity, "dataset_usage", []) or []:
         rows.extend(
             _audit_dataset_reference(
                 entity,
@@ -369,7 +474,7 @@ def _audit_entity(
                 allow_tag=False,
             )
         )
-    derivation = getattr(entity, "derivation", None)
+    derivation = _declared(entity, "derivation", None)
     for target in getattr(derivation, "inputs", []) or []:
         rows.extend(
             _audit_dataset_reference(
@@ -382,7 +487,7 @@ def _audit_entity(
                 allow_tag=False,
             )
         )
-    for target in getattr(entity, "chain", None) or []:
+    for target in _declared(entity, "chain", None) or []:
         rows.extend(
             _audit_reference(
                 entity,
@@ -395,7 +500,7 @@ def _audit_entity(
                 peer_ids=peer_ids,
             )
         )
-    audits_target = getattr(entity, "audits", None)
+    audits_target = _declared(entity, "audits", None)
     if audits_target:
         rows.extend(
             _audit_reference(
@@ -409,7 +514,7 @@ def _audit_entity(
                 peer_ids=peer_ids,
             )
         )
-    for target in getattr(entity, "proposition_refs", None) or []:
+    for target in _declared(entity, "proposition_refs", None) or []:
         rows.extend(
             _audit_reference(
                 entity,
@@ -422,8 +527,10 @@ def _audit_entity(
                 peer_ids=peer_ids,
             )
         )
-    for target in entity.same_as:
+    for target in _declared(entity, "same_as", []):
         rows.extend(_audit_reference(entity, "same_as", target, resolver, ext_prefixes=ext_prefixes, peer_ids=peer_ids))
+    if entity.kind not in strict_schema_kinds:
+        rows.extend(_audit_undeclared_reference_keys(entity, declaring_kinds=declaring_kinds))
     return rows
 
 
