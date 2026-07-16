@@ -226,11 +226,22 @@ whether that is a table, a set of descriptors, or generated code is B's ruling.
 |---|---|
 | **Stable placement-class identifiers** | The unit of the reachability obligation (§6.1) and of conformance-case versioning (§6.3). Must be stable across topology changes so an old case keeps naming the same class. |
 | **Scope/kind enumeration** | Providers enumerate without hardcoding; the conformance suite enumerates the classes it must cover, so a *newly added* class fails certification until it has a case. |
-| **Canonical placement lookup** | `(kind, scope) → placement`, the single operation shared by **writer, reader, census, and applicability facts**. |
+| **Canonical placement lookup** | `PlacementKey → placement`, the single operation shared by **writer, reader, census, and applicability facts**. |
 
 The fourth consumer matters as much as the first three. `RequiresTopologyScope` (§4.5) sources
 its facts here, which is what keeps applicability independent of any census result while still
 being scope-aware.
+
+**C depends only on stable placement-class identity and canonical lookup. `PlacementKey` is B's
+to define, and it is not `(kind, scope)`** — that form is too narrow. Owner, borrower/overlay,
+and package placements can share both kind and storage scope, so the pair does not distinguish
+them; the key likely carries **role or surface** as well. C is deliberately silent on the
+composition.
+
+**Scope bound for B:** topology means **managed entity placements**. B should not absorb every
+`StorageAdapter.discover()` surface — code, tasks, bibliography — unless investigation proves it
+necessary. Providers concerning managed layouts consume B; `source_discovery` (§4.3) can remain
+adapter-composed.
 
 **Sharing the lookup with the writer is load-bearing, not tidiness.** It is the second grounding
 of the oracle (§6.3): a wrong topology cannot stay quiet if production writes land at the
@@ -619,6 +630,18 @@ The wider arc, of which this document specifies **C**:
 
 **Ship order: A → B → C+D. E independent.** Spec order differs deliberately: C is written first,
 while the invariant is sharp.
+
+The executable sequence:
+
+1. Complete **A's arbitration design** (§9.1) and land A.
+2. Spec and implement **B**.
+3. **Reconcile C's abstract interface names with B's shipped API** — §4.3a names semantics, not
+   signatures, and the reconciliation is a real step rather than a formality.
+4. Write the **C+D implementation plan**.
+
+C's implementation plan deliberately waits for B: B determines the concrete types, APIs, module
+ownership, and tests such a plan must name. Writing it earlier yields abstraction or rework.
+A's design does not block *brainstorming* B, but A lands before B.
 
 C declares the **topology interface it requires** (§4.3a); it does not design B's concrete
 representation.
