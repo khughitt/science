@@ -125,7 +125,7 @@ def test_corrupt_last_reviewed_is_clean_cli_error(tmp_path: Path, command: str) 
 
 
 def test_candidates_unwired_when_no_freshness_state_exists() -> None:
-    result = compute_attention_candidates(_dataset_without_freshness(), today=date(2026, 5, 1))
+    result = compute_attention_candidates(_dataset_without_freshness())
 
     assert result.status == "unwired"
     assert result.code == FRESHNESS_STATE_ABSENT
@@ -135,7 +135,7 @@ def test_candidates_unwired_when_no_freshness_state_exists() -> None:
 def test_candidates_unwired_when_knowledge_layer_is_absent() -> None:
     """``Dataset.graph()`` fabricates the missing layer, so the absent-layer case is
     indistinguishable from the never-stamped case — and must fail the same way."""
-    result = compute_attention_candidates(Dataset(), today=date(2026, 5, 1))
+    result = compute_attention_candidates(Dataset())
 
     assert result.status == "unwired"
     assert result.code == FRESHNESS_STATE_ABSENT
@@ -147,18 +147,29 @@ def test_candidates_unwired_when_knowledge_layer_is_absent() -> None:
 
 
 def test_candidates_ok_when_freshness_state_is_present() -> None:
-    result = compute_attention_candidates(_dataset_with_freshness(), today=date(2026, 5, 1))
+    result = compute_attention_candidates(_dataset_with_freshness())
 
     assert result.status == "ok"
     assert {candidate.entity_id for candidate in result.rows} == {"hypothesis:h1", "hypothesis:h2"}
 
 
+def test_compute_attention_candidates_rejects_today_kwarg() -> None:
+    # `today` was removed with the recency term; passing it is an error, not a silently-ignored control.
+    with pytest.raises(TypeError):
+        compute_attention_candidates(_dataset_with_freshness(), today=date(2026, 5, 1))
+
+
+def test_graph_attention_commands_have_no_today_option() -> None:
+    for command in ("attention-sample", "attention-rank"):
+        result = CliRunner().invoke(main, ["graph", command, "--today", "2026-05-01"])
+        assert result.exit_code != 0
+        assert "no such option" in result.output.lower()
+
+
 def test_kinds_filter_matching_nothing_is_empty_not_unwired() -> None:
     """A ``kinds`` filter that selects none of the freshness-bearing entities is a
     TRUE zero: the instrument ran, and the caller asked about a kind it does not have."""
-    result = compute_attention_candidates(
-        _dataset_with_freshness(), today=date(2026, 5, 1), kinds={"nosuchkind"}
-    )
+    result = compute_attention_candidates(_dataset_with_freshness(), kinds={"nosuchkind"})
 
     assert result.status == "empty"
     assert result.code is None
@@ -173,7 +184,7 @@ def test_kinds_filter_matching_nothing_is_empty_not_unwired() -> None:
 def test_query_attention_sample_propagates_unwired(tmp_path: Path) -> None:
     graph_path = _write(tmp_path, _dataset_without_freshness())
 
-    result = query_attention_sample(graph_path, limit=3, seed=7, today=date(2026, 5, 1))
+    result = query_attention_sample(graph_path, limit=3, seed=7)
 
     assert result.status == "unwired"
     assert result.code == FRESHNESS_STATE_ABSENT
@@ -183,7 +194,7 @@ def test_query_attention_sample_propagates_unwired(tmp_path: Path) -> None:
 def test_query_attention_ranked_propagates_unwired(tmp_path: Path) -> None:
     graph_path = _write(tmp_path, _dataset_without_freshness())
 
-    result = query_attention_ranked(graph_path, today=date(2026, 5, 1))
+    result = query_attention_ranked(graph_path)
 
     assert result.status == "unwired"
     assert result.code == FRESHNESS_STATE_ABSENT
@@ -193,7 +204,7 @@ def test_query_attention_ranked_propagates_unwired(tmp_path: Path) -> None:
 def test_query_attention_sample_returns_rows_on_a_freshness_bearing_graph(tmp_path: Path) -> None:
     graph_path = _write(tmp_path, _dataset_with_freshness())
 
-    result = query_attention_sample(graph_path, limit=2, seed=7, today=date(2026, 5, 1))
+    result = query_attention_sample(graph_path, limit=2, seed=7)
 
     assert result.status == "ok"
     assert {row["id"] for row in result.rows} == {"hypothesis:h1", "hypothesis:h2"}
@@ -202,7 +213,7 @@ def test_query_attention_sample_returns_rows_on_a_freshness_bearing_graph(tmp_pa
 def test_query_attention_ranked_returns_rows_on_a_freshness_bearing_graph(tmp_path: Path) -> None:
     graph_path = _write(tmp_path, _dataset_with_freshness())
 
-    result = query_attention_ranked(graph_path, today=date(2026, 5, 1))
+    result = query_attention_ranked(graph_path)
 
     assert result.status == "ok"
     assert {row["id"] for row in result.rows} == {"hypothesis:h1", "hypothesis:h2"}
@@ -211,7 +222,7 @@ def test_query_attention_ranked_returns_rows_on_a_freshness_bearing_graph(tmp_pa
 def test_query_attention_ranked_empty_on_a_kinds_filter_that_matches_nothing(tmp_path: Path) -> None:
     graph_path = _write(tmp_path, _dataset_with_freshness())
 
-    result = query_attention_ranked(graph_path, today=date(2026, 5, 1), kinds={"nosuchkind"})
+    result = query_attention_ranked(graph_path, kinds={"nosuchkind"})
 
     assert result.status == "empty"
 
@@ -257,6 +268,6 @@ def test_sample_for_walk_raises_when_attention_is_unwired(tmp_path: Path) -> Non
     graph_path = _write(tmp_path, _dataset_without_freshness())
 
     with pytest.raises(WanderSamplerError) as excinfo:
-        sample_for_walk(graph_path=graph_path, n=2, seed=7, today=date(2026, 5, 1))
+        sample_for_walk(graph_path=graph_path, n=2, seed=7)
 
     assert FRESHNESS_STATE_ABSENT in str(excinfo.value)

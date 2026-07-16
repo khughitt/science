@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-from datetime import date, datetime
 from pathlib import Path
 
 import click
@@ -612,7 +611,6 @@ def graph_rehoming_debt(output_format: str, graph_path: Path) -> None:
 @click.option("--seed", type=int, default=None, help="Seed for reproducible weighted sampling.")
 @click.option("--kind", "kinds", multiple=True, help="Restrict candidates to one or more entity kinds.")
 @click.option("--epsilon", type=float, default=0.05, show_default=True, help="Positive weight floor.")
-@click.option("--today", type=click.DateTime(formats=["%Y-%m-%d"]), default=None, help="Date for age weighting.")
 @click.option("--format", "output_format", type=click.Choice(OUTPUT_FORMATS), default="table", show_default=True)
 @click.option(
     "--reason-aware",
@@ -627,7 +625,6 @@ def graph_attention_sample(
     seed: int | None,
     kinds: tuple[str, ...],
     epsilon: float,
-    today: datetime | None,
     output_format: str,
     reason_aware: bool,
     graph_path: Path,
@@ -637,13 +634,11 @@ def graph_attention_sample(
 
     if limit < 0:
         raise click.ClickException("--limit must be >= 0")
-    sample_date: date | None = today.date() if today is not None else None
     try:
         result = query_attention_sample(
             graph_path=graph_path,
             limit=limit,
             seed=seed,
-            today=sample_date,
             kinds=set(kinds) if kinds else None,
             epsilon=epsilon,
             reason_aware=reason_aware,
@@ -684,7 +679,6 @@ def graph_attention_sample(
 @click.option("--limit", type=int, default=None, help="Cap the number of ranked rows (default: all).")
 @click.option("--kind", "kinds", multiple=True, help="Restrict candidates to one or more entity kinds.")
 @click.option("--epsilon", type=float, default=0.05, show_default=True, help="Positive weight floor.")
-@click.option("--today", type=click.DateTime(formats=["%Y-%m-%d"]), default=None, help="Date for age weighting.")
 @click.option("--format", "output_format", type=click.Choice(OUTPUT_FORMATS), default="table", show_default=True)
 @click.option(
     "--path", "graph_path", default=str(DEFAULT_GRAPH_PATH), show_default=True, type=click.Path(path_type=Path)
@@ -693,7 +687,6 @@ def graph_attention_rank(
     limit: int | None,
     kinds: tuple[str, ...],
     epsilon: float,
-    today: datetime | None,
     output_format: str,
     graph_path: Path,
 ) -> None:
@@ -702,13 +695,11 @@ def graph_attention_rank(
 
     if limit is not None and limit < 0:
         raise click.ClickException("--limit must be >= 0")
-    rank_date: date | None = today.date() if today is not None else None
     try:
         rows = unwrap_instrument(
             query_attention_ranked(
                 graph_path=graph_path,
                 limit=limit,
-                today=rank_date,
                 kinds=set(kinds) if kinds else None,
                 epsilon=epsilon,
             ),

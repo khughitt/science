@@ -48,7 +48,7 @@ WANDER_FORMATS: tuple[str, ...] = ("markdown", "json")
     "--today",
     type=click.DateTime(formats=["%Y-%m-%d"]),
     default=None,
-    help="Override the date used for sampling and stub-smell.",
+    help="Override the date used for the walk and stub-smell.",
 )
 @click.option(
     "--repo-root",
@@ -80,9 +80,7 @@ def wander_command(
     try:
         dataset = Dataset()
         dataset.parse(source=str(graph_path), format="trig")
-        candidates = compute_attention_candidates(
-            dataset, today=walk_date, kinds=set(kinds) if kinds else None, epsilon=epsilon
-        )
+        candidates = compute_attention_candidates(dataset, kinds=set(kinds) if kinds else None, epsilon=epsilon)
         if candidates.status == "unwired":
             # A walk over a graph that was never assessed for attention is not a walk that
             # found nothing — it is a walk that never happened. Refuse rather than emit an

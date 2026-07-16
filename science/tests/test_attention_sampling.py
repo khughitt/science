@@ -112,7 +112,7 @@ def _uniform_recency_fixture() -> Dataset:
 
 
 def test_recency_no_longer_moves_the_weight() -> None:
-    candidates = compute_attention_candidates(_uniform_recency_fixture(), today=date(2026, 5, 1)).rows
+    candidates = compute_attention_candidates(_uniform_recency_fixture()).rows
     weights = {c.entity_id: c.weight for c in candidates}
     assert weights["hypothesis:recent"] == weights["hypothesis:old"] == weights["hypothesis:never"]
 
@@ -120,13 +120,13 @@ def test_recency_no_longer_moves_the_weight() -> None:
 def test_never_reviewed_does_not_dominate_on_recency() -> None:
     # Perverse-repair guard: a never-reviewed entity must NOT outrank an
     # otherwise-identical recently-reviewed one purely on recency.
-    candidates = compute_attention_candidates(_uniform_recency_fixture(), today=date(2026, 5, 1)).rows
+    candidates = compute_attention_candidates(_uniform_recency_fixture()).rows
     weights = {c.entity_id: c.weight for c in candidates}
     assert weights["hypothesis:never"] == weights["hypothesis:recent"]
 
 
 def test_last_reviewed_surfaced_honestly() -> None:
-    candidates = compute_attention_candidates(_uniform_recency_fixture(), today=date(2026, 5, 1)).rows
+    candidates = compute_attention_candidates(_uniform_recency_fixture()).rows
     by_id = {c.entity_id: c for c in candidates}
     assert by_id["hypothesis:recent"].last_reviewed == date(2026, 4, 30)
     assert by_id["hypothesis:never"].last_reviewed is None
@@ -147,7 +147,7 @@ def test_freshness_still_discriminates_recency() -> None:
         knowledge.add((uri, RDF.type, SCI_NS.Hypothesis))
         knowledge.add((uri, SKOS.prefLabel, Literal(slug)))
         knowledge.add((uri, SCI_NS.freshnessState, Literal(state)))
-    candidates = compute_attention_candidates(dataset, today=date(2026, 5, 1)).rows
+    candidates = compute_attention_candidates(dataset).rows
     weights = {c.entity_id: c.weight for c in candidates}
     assert weights["hypothesis:stale"] > weights["hypothesis:fresh"]
 
@@ -261,7 +261,7 @@ def test_open_question_debt_counts_related_and_theme_comembers() -> None:
 
 
 def test_open_question_debt_raises_weight_and_emits_reason() -> None:
-    candidates = compute_attention_candidates(_debt_fixture(), today=date(2026, 5, 1)).rows
+    candidates = compute_attention_candidates(_debt_fixture()).rows
     by_id = {candidate.entity_id: candidate for candidate in candidates}
 
     indebted = by_id["hypothesis:h_scope"]   # debt 2
@@ -286,7 +286,7 @@ def test_open_question_debt_raises_weight_and_emits_reason() -> None:
 
 
 def test_zero_debt_emits_no_debt_reason() -> None:
-    candidates = compute_attention_candidates(_attention_fixture(), today=date(2026, 5, 1)).rows
+    candidates = compute_attention_candidates(_attention_fixture()).rows
     by_id = {candidate.entity_id: candidate for candidate in candidates}
     for candidate in by_id.values():
         assert all(r.code != "open_question_debt" for r in candidate.reasons)
@@ -294,7 +294,7 @@ def test_zero_debt_emits_no_debt_reason() -> None:
 
 
 def test_format_attention_candidate_exposes_open_question_debt() -> None:
-    candidates = compute_attention_candidates(_debt_fixture(), today=date(2026, 5, 1)).rows
+    candidates = compute_attention_candidates(_debt_fixture()).rows
     by_id = {candidate.entity_id: candidate for candidate in candidates}
     row = format_attention_candidate(by_id["hypothesis:h_scope"])
     assert row["open_question_debt"] == "2"
@@ -308,18 +308,18 @@ def test_query_attention_ranked_is_deterministic_by_weight(tmp_path: Path) -> No
     graph_path = tmp_path / "graph.trig"
     save_canonical_graph_dataset(_debt_fixture(), graph_path)
 
-    rows = query_attention_ranked(graph_path, today=date(2026, 5, 1)).rows
+    rows = query_attention_ranked(graph_path).rows
     ids = [row["id"] for row in rows]
     # h_scope (debt 2) outranks h_other (debt 1); both carry the debt field.
     assert ids.index("hypothesis:h_scope") < ids.index("hypothesis:h_other")
     assert rows[0]["open_question_debt"] == "2"
 
-    top1 = query_attention_ranked(graph_path, today=date(2026, 5, 1), limit=1).rows
+    top1 = query_attention_ranked(graph_path, limit=1).rows
     assert [row["id"] for row in top1] == ["hypothesis:h_scope"]
 
 
 def test_attention_weight_uses_observable_graph_features() -> None:
-    candidates = compute_attention_candidates(_attention_fixture(), today=date(2026, 5, 1)).rows
+    candidates = compute_attention_candidates(_attention_fixture()).rows
     by_id = {candidate.entity_id: candidate for candidate in candidates}
 
     contested = by_id["hypothesis:h1"]
@@ -340,7 +340,7 @@ def test_attention_weight_uses_observable_graph_features() -> None:
 
 
 def test_phase1_reason_derivation_is_proposition_scoped() -> None:
-    candidates = compute_attention_candidates(_reason_fixture(), today=date(2026, 5, 1)).rows
+    candidates = compute_attention_candidates(_reason_fixture()).rows
     by_id = {candidate.entity_id: candidate for candidate in candidates}
 
     assert by_id["proposition:unscaffolded"].reasons == [
@@ -390,7 +390,7 @@ def test_phase1_reason_derivation_is_proposition_scoped() -> None:
 
 
 def test_format_attention_candidate_includes_reasons_for_json_ready_rows() -> None:
-    candidates = compute_attention_candidates(_reason_fixture(), today=date(2026, 5, 1)).rows
+    candidates = compute_attention_candidates(_reason_fixture()).rows
     by_id = {candidate.entity_id: candidate for candidate in candidates}
 
     row = format_attention_candidate(by_id["proposition:unscaffolded"])
@@ -410,7 +410,7 @@ def test_format_attention_candidate_includes_reasons_for_json_ready_rows() -> No
 
 
 def test_format_attention_candidate_uses_empty_reasons_list_when_no_reason_qualifies() -> None:
-    candidates = compute_attention_candidates(_reason_fixture(), today=date(2026, 5, 1)).rows
+    candidates = compute_attention_candidates(_reason_fixture()).rows
     by_id = {candidate.entity_id: candidate for candidate in candidates}
 
     row = format_attention_candidate(by_id["hypothesis:not_reason_scoped"])
@@ -419,7 +419,7 @@ def test_format_attention_candidate_uses_empty_reasons_list_when_no_reason_quali
 
 
 def test_weighted_sampling_is_seeded_and_without_replacement() -> None:
-    candidates = compute_attention_candidates(_attention_fixture(), today=date(2026, 5, 1)).rows
+    candidates = compute_attention_candidates(_attention_fixture()).rows
 
     first = weighted_sample_without_replacement(candidates, limit=2, seed=17)
     second = weighted_sample_without_replacement(candidates, limit=2, seed=17)
@@ -429,7 +429,7 @@ def test_weighted_sampling_is_seeded_and_without_replacement() -> None:
 
 
 def test_epsilon_floor_keeps_quiet_candidates_sampleable() -> None:
-    candidates = compute_attention_candidates(_attention_fixture(), today=date(2026, 5, 1)).rows
+    candidates = compute_attention_candidates(_attention_fixture()).rows
 
     sample = weighted_sample_without_replacement(candidates, limit=10, seed=5)
 
@@ -442,7 +442,7 @@ def test_epsilon_floor_keeps_quiet_candidates_sampleable() -> None:
 
 
 def test_reason_aware_sample_promotes_uncertainty_but_caps_review_routing() -> None:
-    candidates = compute_attention_candidates(_reason_fixture(), today=date(2026, 5, 1)).rows
+    candidates = compute_attention_candidates(_reason_fixture()).rows
 
     sampled = reason_aware_sample_candidates(candidates, limit=5, seed=17)
 
@@ -455,7 +455,7 @@ def test_reason_aware_sample_promotes_uncertainty_but_caps_review_routing() -> N
 
 
 def test_reason_aware_sample_does_not_promote_counterevidence_or_unscaffolded_first() -> None:
-    candidates = compute_attention_candidates(_reason_fixture(), today=date(2026, 5, 1)).rows
+    candidates = compute_attention_candidates(_reason_fixture()).rows
 
     sampled = reason_aware_sample_candidates(candidates, limit=2, seed=17)
 
@@ -488,8 +488,6 @@ def test_graph_attention_sample_cli_outputs_seeded_json(tmp_path: Path) -> None:
             "2",
             "--seed",
             "17",
-            "--today",
-            "2026-05-01",
             "--format",
             "json",
         ],
@@ -525,8 +523,6 @@ def test_graph_attention_sample_cli_reason_aware_json_uses_bounded_review_route(
             str(graph_path),
             "--limit",
             "5",
-            "--today",
-            "2026-05-01",
             "--reason-aware",
             "--format",
             "json",
@@ -573,8 +569,6 @@ def test_graph_attention_sample_cli_table_does_not_print_raw_reason_dicts(tmp_pa
             "1",
             "--seed",
             "1",
-            "--today",
-            "2026-05-01",
         ],
         env={"COLUMNS": "160"},
     )

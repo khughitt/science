@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-from datetime import date
 from pathlib import Path
 
 from rdflib import Dataset
@@ -21,7 +20,6 @@ def sample_for_walk(
     graph_path: Path,
     n: int,
     seed: int | None,
-    today: date | None,
     kinds: set[str] | None = None,
     epsilon: float = 0.05,
 ) -> list[AttentionCandidate]:
@@ -39,7 +37,7 @@ def sample_for_walk(
 
     dataset = Dataset()
     dataset.parse(source=str(graph_path), format="trig")
-    candidates = compute_attention_candidates(dataset, today=today, kinds=kinds, epsilon=epsilon)
+    candidates = compute_attention_candidates(dataset, kinds=kinds, epsilon=epsilon)
     if candidates.status == "unwired":
         raise WanderSamplerError(f"Attention sampling did not run ({candidates.code}): {candidates.reason}")
     return weighted_sample_without_replacement(candidates.rows, limit=n, seed=seed)

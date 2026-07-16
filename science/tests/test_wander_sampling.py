@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-from datetime import date
 from pathlib import Path
 
 import pytest
@@ -35,7 +34,7 @@ def _write_graph(tmp_path: Path, dataset: Dataset) -> Path:
 def test_sample_for_walk_returns_attention_candidates(tmp_path: Path) -> None:
     graph_path = _write_graph(tmp_path, _two_hypothesis_dataset())
 
-    sample = sample_for_walk(graph_path=graph_path, n=2, seed=7, today=date(2026, 5, 9))
+    sample = sample_for_walk(graph_path=graph_path, n=2, seed=7)
 
     assert len(sample) == 2
     ids = {candidate.entity_id for candidate in sample}
@@ -50,8 +49,8 @@ def test_sample_for_walk_returns_attention_candidates(tmp_path: Path) -> None:
 def test_sample_for_walk_is_seeded(tmp_path: Path) -> None:
     graph_path = _write_graph(tmp_path, _two_hypothesis_dataset())
 
-    first = sample_for_walk(graph_path=graph_path, n=1, seed=7, today=date(2026, 5, 9))
-    second = sample_for_walk(graph_path=graph_path, n=1, seed=7, today=date(2026, 5, 9))
+    first = sample_for_walk(graph_path=graph_path, n=1, seed=7)
+    second = sample_for_walk(graph_path=graph_path, n=1, seed=7)
 
     assert [c.entity_id for c in first] == [c.entity_id for c in second]
 
@@ -65,7 +64,7 @@ def test_sample_for_walk_respects_kind_filter(tmp_path: Path) -> None:
     knowledge.add((proposition, SCI_NS.freshnessState, Literal("fresh")))
     graph_path = _write_graph(tmp_path, dataset)
 
-    sample = sample_for_walk(graph_path=graph_path, n=5, seed=7, today=date(2026, 5, 9), kinds={"proposition"})
+    sample = sample_for_walk(graph_path=graph_path, n=5, seed=7, kinds={"proposition"})
 
     assert {c.entity_id for c in sample} == {"proposition:p1"}
 
@@ -74,6 +73,6 @@ def test_sample_for_walk_errors_on_missing_graph(tmp_path: Path) -> None:
     missing = tmp_path / "no-such.trig"
 
     with pytest.raises(WanderSamplerError) as excinfo:
-        sample_for_walk(graph_path=missing, n=3, seed=7, today=date(2026, 5, 9))
+        sample_for_walk(graph_path=missing, n=3, seed=7)
 
     assert "science graph build" in str(excinfo.value)

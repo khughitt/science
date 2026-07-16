@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-from datetime import date
 from pathlib import Path
 
 from rdflib import Dataset, Literal, URIRef
@@ -40,7 +39,7 @@ def _sample_for_walk_from_dataset(dataset: Dataset):
         weighted_sample_without_replacement,
     )
 
-    candidates = compute_attention_candidates(dataset, today=date(2026, 5, 9)).rows
+    candidates = compute_attention_candidates(dataset).rows
     return weighted_sample_without_replacement(candidates, limit=len(candidates), seed=0)
 
 

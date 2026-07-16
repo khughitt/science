@@ -87,7 +87,6 @@ class AttentionCandidate:
 def compute_attention_candidates(
     dataset: Dataset,
     *,
-    today: date | None = None,
     kinds: set[str] | None = None,
     epsilon: float = DEFAULT_EPSILON,
 ) -> InstrumentResult[AttentionCandidate]:
@@ -284,7 +283,6 @@ def query_attention_sample(
     *,
     limit: int,
     seed: int | None = None,
-    today: date | None = None,
     kinds: set[str] | None = None,
     epsilon: float = DEFAULT_EPSILON,
     reason_aware: bool = False,
@@ -297,7 +295,7 @@ def query_attention_sample(
     """
     dataset = Dataset()
     dataset.parse(source=str(graph_path), format="trig")
-    candidates = compute_attention_candidates(dataset, today=today, kinds=kinds, epsilon=epsilon)
+    candidates = compute_attention_candidates(dataset, kinds=kinds, epsilon=epsilon)
     if candidates.status == "unwired":
         return InstrumentResult.unwired(
             code=candidates.code or FRESHNESS_STATE_ABSENT, reason=candidates.reason
@@ -315,7 +313,6 @@ def query_attention_ranked(
     graph_path: Path,
     *,
     limit: int | None = None,
-    today: date | None = None,
     kinds: set[str] | None = None,
     epsilon: float = DEFAULT_EPSILON,
 ) -> InstrumentResult[dict[str, Any]]:
@@ -328,7 +325,7 @@ def query_attention_ranked(
     """
     dataset = Dataset()
     dataset.parse(source=str(graph_path), format="trig")
-    candidates = compute_attention_candidates(dataset, today=today, kinds=kinds, epsilon=epsilon)
+    candidates = compute_attention_candidates(dataset, kinds=kinds, epsilon=epsilon)
     if candidates.status == "unwired":
         return InstrumentResult.unwired(
             code=candidates.code or FRESHNESS_STATE_ABSENT, reason=candidates.reason

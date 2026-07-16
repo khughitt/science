@@ -89,6 +89,28 @@ def test_wander_json_output_is_well_formed(tmp_path: Path) -> None:
     assert len(payload["bundles"]) == 2
 
 
+def test_wander_today_option_still_accepted(tmp_path: Path) -> None:
+    # --today survives the attention `today` removal because it dates the walk and stub-smell.
+    graph_path = _build_fixture_graph(tmp_path)
+    result = CliRunner().invoke(
+        main,
+        [
+            "wander",
+            "--n",
+            "1",
+            "--seed",
+            "1",
+            "--graph-path",
+            str(graph_path),
+            "--format",
+            "json",
+            "--today",
+            "2026-05-01",
+        ],
+    )
+    assert result.exit_code == 0, result.output
+
+
 def test_wander_seed_is_reproducible(tmp_path: Path) -> None:
     graph_path = _build_fixture_graph(tmp_path)
 
