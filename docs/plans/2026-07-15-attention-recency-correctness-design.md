@@ -92,6 +92,18 @@ Concretely in `graph/attention.py`:
   Every raised `ValueError` **names the entity id and the authored value(s)**;
   that message is what the CLI surfaces (§4, "Corrupt-date CLI handling").
 
+  **Production parsing boundary.** RDFLib's default TriG sink constructs typed
+  literals with process-default normalization, which can rewrite parseable
+  non-canonical authored forms before this contract sees them (for example,
+  `2026-W18-5` becomes `2026-05-01`). The attention query loaders and both
+  Wander graph-loading paths therefore use a focused local TriG loader whose
+  dedicated `RDFSink` constructs quoted literals with `normalize=False`. It
+  drives RDFLib's normal `TrigSinkParser` flow against the dataset default
+  graph, retaining named graphs, base resolution, and prefix bindings, and
+  closes auto-opened input resources. It does not mutate
+  `rdflib.NORMALIZE_LITERALS`, monkeypatch RDFLib, or register a global parser
+  plugin. Other graph loaders remain unchanged.
+
 Reasons are unaffected: `_derive_phase1_reasons` (`:405-457`) derives only from
 kind + support/dispute counts, and open-question debt drives its own reason —
 neither reads recency or `freshness_multiplier`.
@@ -254,6 +266,12 @@ All tests build a small in-memory `Dataset` with `sci:freshnessState` triples
 - **Corrupt-date CLI surfacing.** With a corrupt `sci:lastReviewed` in the graph,
   **both** `graph attention-sample` and `graph attention-rank` exit non-zero with
   a `ClickException` naming the entity and the invalid value — not a traceback.
+- **Production lexical preservation.** Hand-authored TriG proves the focused
+  loader retains named/default graph structure, base resolution, prefix
+  bindings, and the exact ISO-week lexical. Real `attention-sample`,
+  `attention-rank`, Wander CLI, and `sample_for_walk` paths reject parseable
+  non-canonical ISO-week and timezone-bearing `xsd:date` values while naming the
+  entity and exact authored lexical.
 - **`today` is gone.** `compute_attention_candidates` and the two `query_*`
   functions no longer accept `today` (a call passing it raises `TypeError`); the
   `graph attention-*` commands no longer expose `--today`.
@@ -262,7 +280,10 @@ All tests build a small in-memory `Dataset` with `sci:freshnessState` triples
 
 - `science/src/science_tool/graph/attention.py` — weight formula;
   `AttentionCandidate.last_reviewed`; `format_attention_candidate`; helper
-  rename/contract; `NEVER_REVIEWED_DAYS` deletion; `today` removal.
+  rename/contract; `NEVER_REVIEWED_DAYS` deletion; `today` removal; focused
+  literal-preserving loader for the two attention query paths.
+- `science/src/science_tool/graph/trig.py` — local RDFLib TriG sink/parser path
+  that retains quoted literal lexicals without changing global state.
 - `science/src/science_tool/graph/cli.py` — both attention table column configs;
   remove `--today` options and `sample_date`/`rank_date` plumbing; wrap
   `attention-rank`'s `query_attention_ranked` call in `try/except ValueError →
@@ -272,9 +293,9 @@ All tests build a small in-memory `Dataset` with `sci:freshnessState` triples
 - `science/src/science_tool/wander/skeleton.py` — skeleton table column **and**
   the `last_reviewed` key in `_bundle_to_dict` (JSON).
 - `science/src/science_tool/wander/sampling.py` — drop `today` from
-  `sample_for_walk`.
+  `sample_for_walk`; use the literal-preserving loader.
 - `science/src/science_tool/wander/cli.py` — drop `today=` arg to attention;
-  update `--today` help.
+  update `--today` help; use the literal-preserving loader.
 - Tests:
   - `science/tests/**/test_attention*.py` — update weight/column/JSON
     assertions; add the recency-gone, freshness-still-ranks, perverse-repair,

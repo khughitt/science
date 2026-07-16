@@ -20,6 +20,7 @@ from science_tool.graph.belief import aggregate_belief, collect_evidence_units
 from science_tool.graph.belief_scalar import belief_scalar, belief_scalar_enabled, format_belief_weight
 from science_tool.graph.io import CITO_NS, PROJECT_NS, SCI_NS, project_root_from_graph_path
 from science_tool.graph.store import _evidence_targets_for_uri, _graph_uri, canonical_id_from_entity_uri
+from science_tool.graph.trig import load_trig_dataset_preserving_literals
 from science_tool.instruments import InstrumentResult
 from science_tool.project_config import validated_entity_schema_version
 
@@ -293,8 +294,7 @@ def query_attention_sample(
     an instrument that never ran is not a sample, and an empty one would read as "these
     are the entities that came up".
     """
-    dataset = Dataset()
-    dataset.parse(source=str(graph_path), format="trig")
+    dataset = load_trig_dataset_preserving_literals(graph_path)
     candidates = compute_attention_candidates(dataset, kinds=kinds, epsilon=epsilon)
     if candidates.status == "unwired":
         return InstrumentResult.unwired(
@@ -323,8 +323,7 @@ def query_attention_ranked(
     `attention-sample`. An ``unwired`` candidate set propagates: an empty review queue
     over an unassessed graph would say "nothing needs review".
     """
-    dataset = Dataset()
-    dataset.parse(source=str(graph_path), format="trig")
+    dataset = load_trig_dataset_preserving_literals(graph_path)
     candidates = compute_attention_candidates(dataset, kinds=kinds, epsilon=epsilon)
     if candidates.status == "unwired":
         return InstrumentResult.unwired(

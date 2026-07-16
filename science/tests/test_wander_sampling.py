@@ -31,6 +31,25 @@ def _write_graph(tmp_path: Path, dataset: Dataset) -> Path:
     return graph_path
 
 
+def _authored_last_reviewed_graph(tmp_path: Path, lexical: str) -> Path:
+    graph_path = tmp_path / "graph.trig"
+    graph_path.write_text(
+        f'''@prefix sci: <http://example.org/science/vocab/> .
+@prefix skos: <http://www.w3.org/2004/02/skos/core#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+
+<http://example.org/project/graph/knowledge> {{
+  <http://example.org/project/hypothesis/h1>
+    a sci:Hypothesis ;
+    skos:prefLabel "h1" ;
+    sci:freshnessState "fresh" ;
+    sci:lastReviewed "{lexical}"^^xsd:date .
+}}
+'''
+    )
+    return graph_path
+
+
 def test_sample_for_walk_returns_attention_candidates(tmp_path: Path) -> None:
     graph_path = _write_graph(tmp_path, _two_hypothesis_dataset())
 
@@ -76,3 +95,15 @@ def test_sample_for_walk_errors_on_missing_graph(tmp_path: Path) -> None:
         sample_for_walk(graph_path=missing, n=3, seed=7)
 
     assert "science graph build" in str(excinfo.value)
+
+
+def test_sample_for_walk_preserves_authored_noncanonical_last_reviewed_error(tmp_path: Path) -> None:
+    lexical = "2026-W18-5"
+    graph_path = _authored_last_reviewed_graph(tmp_path, lexical)
+
+    with pytest.raises(ValueError) as excinfo:
+        sample_for_walk(graph_path=graph_path, n=1, seed=7)
+
+    message = str(excinfo.value)
+    assert "hypothesis:h1" in message
+    assert lexical in message

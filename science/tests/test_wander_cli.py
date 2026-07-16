@@ -33,6 +33,26 @@ def _build_fixture_graph(tmp_path: Path) -> Path:
     return graph_path
 
 
+def _authored_last_reviewed_graph(tmp_path: Path, lexical: str) -> Path:
+    graph_path = tmp_path / "knowledge" / "graph.trig"
+    graph_path.parent.mkdir(parents=True, exist_ok=True)
+    graph_path.write_text(
+        f'''@prefix sci: <http://example.org/science/vocab/> .
+@prefix skos: <http://www.w3.org/2004/02/skos/core#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+
+<http://example.org/project/graph/knowledge> {{
+  <http://example.org/project/hypothesis/h1>
+    a sci:Hypothesis ;
+    skos:prefLabel "h1" ;
+    sci:freshnessState "fresh" ;
+    sci:lastReviewed "{lexical}"^^xsd:date .
+}}
+'''
+    )
+    return graph_path
+
+
 def test_wander_writes_markdown_skeleton(tmp_path: Path) -> None:
     graph_path = _build_fixture_graph(tmp_path)
     out_path = tmp_path / "walk.md"
@@ -179,3 +199,17 @@ def test_wander_errors_with_actionable_message_when_graph_missing(tmp_path: Path
 
     assert result.exit_code != 0
     assert "science graph build" in result.output
+
+
+def test_wander_preserves_authored_noncanonical_last_reviewed_error(tmp_path: Path) -> None:
+    lexical = "2026-05-01+05:00"
+    graph_path = _authored_last_reviewed_graph(tmp_path, lexical)
+
+    result = CliRunner().invoke(
+        main,
+        ["wander", "--n", "1", "--graph-path", str(graph_path), "--format", "json"],
+    )
+
+    assert result.exit_code != 0
+    assert "hypothesis:h1" in result.output
+    assert lexical in result.output

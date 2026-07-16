@@ -13,7 +13,10 @@ reviewer-facing context (`AttentionCandidate.last_reviewed: date | None`), parse
 under a cardinality-0..1 contract: absence → `None`; exactly one canonical
 `xsd:date` literal → `date`; every other RDF shape → `ValueError`. Once the term
 is gone, the `today` parameter it fed becomes dead across the attention/wander
-call chain and is removed.
+call chain and is removed. At the production file boundary, the two attention
+queries and both Wander loaders use a focused local `TrigSinkParser` path whose
+dedicated `RDFSink` constructs quoted literals with `normalize=False`, so strict
+validation receives the authored lexical before RDFLib can normalize it.
 
 **Tech Stack:** Python ≥3.11, rdflib, Click, Pydantic/dataclasses, pytest.
 Package lives under `science/` (`src/science_tool/`).
@@ -25,6 +28,7 @@ Package lives under `science/` (`src/science_tool/`).
 - All commands run from the `science/` package dir: `cd science && uv run --frozen pytest`; lint `uv run ruff check`; types `uv run pyright`. (Getting the dir wrong is the most common mistake — never run `uv run` from repo root.)
 - `sci:lastReviewed` has cardinality **0..1**. Zero objects → `None`. Exactly one object must be an `rdflib.Literal` with datatype exactly `XSD.date` and canonical lexical form **exactly `YYYY-MM-DD`**, enforced by `parsed.isoformat() == text` (reject compact `20260501` and ISO-week `2026-W18-5`).
 - Multiple objects, a plain/wrong-typed literal, another RDF term, or an invalid/non-canonical lexical form → deterministic `ValueError` naming the entity id and authored value(s). Never choose first/latest: RDF object order has no resolution semantics.
+- Preserve authored quoted-literal lexicals only at the four exposed attention/Wander TriG loading paths. Use RDFLib's normal `TrigSinkParser` flow so named graphs, base resolution, and prefix bindings remain intact; close auto-opened input resources. Do not mutate `rdflib.NORMALIZE_LITERALS`, monkeypatch/register a global plugin, or change unrelated graph loaders.
 - No compatibility/legacy layer, no `Unified` prefix, no AI-attribution trailers on commits.
 - Use `~/d/` (not `/home/keith/d/` or `/mnt/ssd/...`) for any filepaths written into docs/code.
 - Dropbox branch volatility: this work is on branch `attention-recency-correctness`; **verify the branch before every commit** (`git branch --show-current`); never `git stash`; nothing is pushed unless the user asks.
@@ -839,9 +843,28 @@ owns that step.
 
 ---
 
+## Final-review parsing correction (IMPLEMENTED pending merge)
+
+RDFLib's default TriG `RDFSink.newLiteral` normalizes parseable typed-literal
+lexicals during `Dataset.parse`, before `_last_reviewed_date` can enforce the
+existing local cardinality-0..1/type/canonical-lexical contract. The production
+fix adds `science_tool.graph.trig.load_trig_dataset_preserving_literals`: a
+dedicated local sink overriding only quoted-literal construction with
+`normalize=False`, driven through `TrigSinkParser` against the dataset default
+graph. The loader preserves named/default graph placement, base resolution, and
+prefix bindings and closes auto-opened sources without global state changes.
+
+The loader is wired only into `query_attention_sample`,
+`query_attention_ranked`, direct Wander CLI loading, and `sample_for_walk`.
+Hand-authored TriG regressions cover the loader plus all four paths with an ISO
+week date and a timezone-bearing date; RDFLib `Literal` serialization is not
+used because it can normalize away the lexical under test.
+
+---
+
 ## Notes for the executor
 
 - **Branch discipline (Dropbox volatility):** run `git branch --show-current` before every commit; it must read `attention-recency-correctness`. Never `git stash`. Nothing is pushed unless the user asks.
 - **Package dir:** every `uv run` is from `science/`. Never from the repo root.
 - **Atomicity of Task 2:** do not try to land `attention.py` without `cli.py` and the Wander files — they share the `components["days_since_last_review"]` shape and the tree goes red if split. The task is large because the change is genuinely atomic.
-- **CLI-invocation idioms:** Tasks 2 & 3 add CLI tests. Both target files invoke the CLI as `from science_tool.cli import main` → `CliRunner().invoke(main, ["graph", ...])` / `["wander", ...]`, and provide graph builders — `_write(tmp_path, dataset)` in `test_attention_preconditions.py`, `_build_fixture_graph(tmp_path)` in `test_wander_cli.py`. Use those; do not invent parallel scaffolding or hand-serialize graphs.
+- **CLI-invocation idioms:** Tasks 2 & 3 add CLI tests. Both target files invoke the CLI as `from science_tool.cli import main` → `CliRunner().invoke(main, ["graph", ...])` / `["wander", ...]`, and provide graph builders — `_write(tmp_path, dataset)` in `test_attention_preconditions.py`, `_build_fixture_graph(tmp_path)` in `test_wander_cli.py`. Use those for ordinary graph fixtures. The final-review parser regressions deliberately use hand-authored TriG because constructing/serializing RDFLib literals can normalize away the authored lexical being tested.

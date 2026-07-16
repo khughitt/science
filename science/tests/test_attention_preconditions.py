@@ -84,6 +84,27 @@ def _reviewed_and_never_graph(tmp_path: Path) -> Path:
     return _write(tmp_path, dataset)
 
 
+def _authored_last_reviewed_graph(tmp_path: Path, lexical: str) -> Path:
+    graph_path = tmp_path / "knowledge" / "graph.trig"
+    graph_path.parent.mkdir(parents=True, exist_ok=True)
+    graph_path.write_text(
+        f'''@prefix project: <http://example.org/project/> .
+@prefix sci: <http://example.org/science/vocab/> .
+@prefix skos: <http://www.w3.org/2004/02/skos/core#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+
+<http://example.org/project/graph/knowledge> {{
+  <http://example.org/project/hypothesis/h1>
+    a sci:Hypothesis ;
+    skos:prefLabel "h1" ;
+    sci:freshnessState "fresh" ;
+    sci:lastReviewed "{lexical}"^^xsd:date .
+}}
+'''
+    )
+    return graph_path
+
+
 @pytest.mark.parametrize("command", ["attention-sample", "attention-rank"])
 def test_attention_tables_render_last_reviewed(tmp_path: Path, command: str) -> None:
     graph_path = _reviewed_and_never_graph(tmp_path)
@@ -137,6 +158,23 @@ def test_corrupt_last_reviewed_is_clean_cli_error(tmp_path: Path, command: str) 
     assert result.exit_code != 0
     assert "hypothesis:h1" in result.output
     assert "2026-05-01garbage" in result.output
+
+
+@pytest.mark.parametrize("command", ["attention-sample", "attention-rank"])
+@pytest.mark.parametrize("lexical", ["2026-W18-5", "2026-05-01+05:00"])
+def test_parseable_noncanonical_last_reviewed_preserves_authored_cli_error(
+    tmp_path: Path, command: str, lexical: str
+) -> None:
+    graph_path = _authored_last_reviewed_graph(tmp_path, lexical)
+    args = ["graph", command, "--path", str(graph_path)]
+    if command == "attention-sample":
+        args += ["--limit", "5"]
+
+    result = CliRunner().invoke(main, args, env={"COLUMNS": "220"})
+
+    assert result.exit_code != 0
+    assert "hypothesis:h1" in result.output
+    assert lexical in result.output
 
 
 # --------------------------------------------------------------------------

@@ -2,13 +2,12 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from rdflib import Dataset
-
 from science_tool.graph.attention import (
     AttentionCandidate,
     compute_attention_candidates,
     weighted_sample_without_replacement,
 )
+from science_tool.graph.trig import load_trig_dataset_preserving_literals
 
 
 class WanderSamplerError(Exception):
@@ -35,8 +34,7 @@ def sample_for_walk(
     if not graph_path.exists():
         raise WanderSamplerError(f"Graph file not found at {graph_path}. Run `science graph build` first.")
 
-    dataset = Dataset()
-    dataset.parse(source=str(graph_path), format="trig")
+    dataset = load_trig_dataset_preserving_literals(graph_path)
     candidates = compute_attention_candidates(dataset, kinds=kinds, epsilon=epsilon)
     if candidates.status == "unwired":
         raise WanderSamplerError(f"Attention sampling did not run ({candidates.code}): {candidates.reason}")

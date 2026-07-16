@@ -4,12 +4,12 @@ from datetime import date, datetime
 from pathlib import Path
 
 import click
-from rdflib import Dataset
 
 from science_tool.graph.attention import (
     compute_attention_candidates,
     weighted_sample_without_replacement,
 )
+from science_tool.graph.trig import load_trig_dataset_preserving_literals
 from science_tool.wander.context import assemble_bundle
 from science_tool.wander.skeleton import render_json, render_markdown_skeleton
 from science_tool.wander.stub_smell import compute_stub_signals
@@ -78,8 +78,7 @@ def wander_command(
     walk_id = walk_date.strftime("%Y-%m-%d") + "-" + datetime.now().strftime("%H%M")
 
     try:
-        dataset = Dataset()
-        dataset.parse(source=str(graph_path), format="trig")
+        dataset = load_trig_dataset_preserving_literals(graph_path)
         candidates = compute_attention_candidates(dataset, kinds=set(kinds) if kinds else None, epsilon=epsilon)
         if candidates.status == "unwired":
             # A walk over a graph that was never assessed for attention is not a walk that
