@@ -1,11 +1,21 @@
 from __future__ import annotations
 
+import warnings
 from pathlib import Path
 
 from rdflib import Literal, URIRef
 from rdflib.namespace import XSD
 
 from science_tool.graph.trig import load_trig_dataset_preserving_literals
+
+
+def test_load_trig_dataset_emits_no_deprecation_warning(tmp_path: Path) -> None:
+    graph_path = tmp_path / "graph.trig"
+    graph_path.write_text("@prefix ex: <https://example.org/> . ex:s ex:p ex:o .")
+
+    with warnings.catch_warnings():
+        warnings.simplefilter("error", DeprecationWarning)
+        load_trig_dataset_preserving_literals(graph_path)
 
 
 def test_load_trig_dataset_preserves_structure_resolution_bindings_and_lexical(
