@@ -63,14 +63,19 @@ Concretely in `graph/attention.py`:
   def _last_reviewed_date(knowledge, entity_id: str, entity_uri: URIRef) -> date | None:
       """The entity's sci:lastReviewed date, or None if it was never reviewed.
 
-      Absence (no triple) is None. A PRESENT but invalid value is a corrupt
-      graph, not an absence, and raises — silently reading it as None would
-      misrepresent bad data as 'never reviewed'.
+      The predicate has cardinality 0..1. Absence is None. Exactly one object
+      must be a canonical xsd:date literal. Any other shape is corrupt graph
+      data and raises rather than being resolved by RDF object order.
       """
   ```
 
-  **Absent triple → `None`. Present-but-invalid → `ValueError`.** These must
-  not collapse to the same value (fail early; corrupt data is not absence).
+  **Cardinality and RDF-term contract.** `sci:lastReviewed` has cardinality
+  **0..1**. Zero objects → `None`. Exactly one object must be an
+  `rdflib.Literal` whose datatype is exactly `XSD.date`; a plain literal, a
+  different datatype, or another RDF term raises `ValueError`. Multiple
+  objects also raise: never select the first or latest value, because RDF
+  object order has no resolution semantics. Multiplicity diagnostics are
+  deterministic and name the entity id plus every authored value.
 
   **Strict canonical lexical contract.** The freshness pass writes
   `sci:lastReviewed` as `Literal(d.isoformat(), datatype=XSD.date)`
@@ -84,9 +89,8 @@ Concretely in `graph/attention.py`:
   Do **not** slice (`text[:10]`) — the current `_parse_date_literal` (`:670-679`)
   slices and so accepts `2026-05-01garbage`, masking corruption. Drop that
   helper's `datetime`/`Z` fallback here: this field is a date, not a timestamp.
-  The raised `ValueError` **names the entity id and the offending value**, e.g.
-  `f"{entity_id}: sci:lastReviewed value {raw!r} is not a valid ISO date (YYYY-MM-DD)"`
-  — that message is what the CLI surfaces (§4, "Corrupt-date CLI handling").
+  Every raised `ValueError` **names the entity id and the authored value(s)**;
+  that message is what the CLI surfaces (§4, "Corrupt-date CLI handling").
 
 Reasons are unaffected: `_derive_phase1_reasons` (`:405-457`) derives only from
 kind + support/dispute counts, and open-question debt drives its own reason —
@@ -235,13 +239,18 @@ All tests build a small in-memory `Dataset` with `sci:freshnessState` triples
 - **Both CLI tables + Wander.** `attention-sample` and `attention-rank` tables
   each render a "Last reviewed" column; the Wander skeleton renders the ISO
   date / `never`.
-- **`_last_reviewed_date` contract.** Returns the parsed date when
-  `sci:lastReviewed` is present and valid; `None` when the triple is **absent**;
-  raises `ValueError` when the triple is **present but invalid**. Pin all three
-  cases. Invalid cases include `2026-05-01garbage` (to prove the fix rejects
+- **`_last_reviewed_date` contract.** Treats `sci:lastReviewed` as cardinality
+  0..1: zero objects returns `None`; exactly one object returns a date only when
+  it is an `rdflib.Literal` with datatype exactly `XSD.date` and canonical
+  lexical form exactly `YYYY-MM-DD` (`parsed.isoformat() == text`). Multiple
+  objects, a plain/wrong-typed literal, another RDF term, or an
+  invalid/non-canonical lexical form raises deterministic `ValueError` naming
+  the entity id and authored value(s). Pin all cases, including valid+invalid
+  and two-valid multiplicity in insertion-order-independent tests. Lexical
+  rejects include `2026-05-01garbage` (to prove the fix rejects
   trailing garbage the old `[:10]` slice accepted), compact `20260501`, and ISO
   week date `2026-W18-5` (to prove `date.fromisoformat` is not the sole lexical
-  gate). The raised message contains the entity id and the raw value.
+  gate). Never choose first/latest: RDF object order has no resolution semantics.
 - **Corrupt-date CLI surfacing.** With a corrupt `sci:lastReviewed` in the graph,
   **both** `graph attention-sample` and `graph attention-rank` exit non-zero with
   a `ClickException` naming the entity and the invalid value — not a traceback.

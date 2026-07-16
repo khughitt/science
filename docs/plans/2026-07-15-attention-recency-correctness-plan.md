@@ -10,9 +10,10 @@ multiplicative term from the attention weight, and surface an honest
 (derived from `sci:freshnessState`). The raw-days term is a strictly worse
 duplicate, so it is removed. `sci:lastReviewed` is still read — but only as
 reviewer-facing context (`AttentionCandidate.last_reviewed: date | None`), parsed
-strictly against its canonical `YYYY-MM-DD` producer form, with absence → `None`
-and corruption → `ValueError`. Once the term is gone, the `today` parameter it
-fed becomes dead across the attention/wander call chain and is removed.
+under a cardinality-0..1 contract: absence → `None`; exactly one canonical
+`xsd:date` literal → `date`; every other RDF shape → `ValueError`. Once the term
+is gone, the `today` parameter it fed becomes dead across the attention/wander
+call chain and is removed.
 
 **Tech Stack:** Python ≥3.11, rdflib, Click, Pydantic/dataclasses, pytest.
 Package lives under `science/` (`src/science_tool/`).
@@ -22,8 +23,8 @@ Package lives under `science/` (`src/science_tool/`).
 ## Global Constraints
 
 - All commands run from the `science/` package dir: `cd science && uv run --frozen pytest`; lint `uv run ruff check`; types `uv run pyright`. (Getting the dir wrong is the most common mistake — never run `uv run` from repo root.)
-- Canonical `sci:lastReviewed` lexical form is **exactly `YYYY-MM-DD`** — enforced by a round-trip check `parsed.isoformat() == text`, deliberately narrower than the full `xsd:date` space (rejects compact `20260501` and ISO-week `2026-W18-5`).
-- Absence (no triple) → `None`; present-but-invalid → `ValueError` naming the entity id and raw value. Never collapse the two (fail early; corrupt data is not absence).
+- `sci:lastReviewed` has cardinality **0..1**. Zero objects → `None`. Exactly one object must be an `rdflib.Literal` with datatype exactly `XSD.date` and canonical lexical form **exactly `YYYY-MM-DD`**, enforced by `parsed.isoformat() == text` (reject compact `20260501` and ISO-week `2026-W18-5`).
+- Multiple objects, a plain/wrong-typed literal, another RDF term, or an invalid/non-canonical lexical form → deterministic `ValueError` naming the entity id and authored value(s). Never choose first/latest: RDF object order has no resolution semantics.
 - No compatibility/legacy layer, no `Unified` prefix, no AI-attribution trailers on commits.
 - Use `~/d/` (not `/home/keith/d/` or `/mnt/ssd/...`) for any filepaths written into docs/code.
 - Dropbox branch volatility: this work is on branch `attention-recency-correctness`; **verify the branch before every commit** (`git branch --show-current`); never `git stash`; nothing is pushed unless the user asks.
@@ -46,7 +47,7 @@ gate before the wiring task. Purely additive — the tree stays green.
 - Test: `science/tests/test_attention_sampling.py` (add helper-contract tests)
 
 **Interfaces:**
-- Produces: `_last_reviewed_date(knowledge, entity_id: str, entity_uri: URIRef) -> date | None` — returns the parsed `sci:lastReviewed` date; `None` when the triple is absent; raises `ValueError` (naming `entity_id` and the raw value) when present but not canonical `YYYY-MM-DD`.
+- Produces: `_last_reviewed_date(knowledge, entity_id: str, entity_uri: URIRef) -> date | None` — enforces the global cardinality, RDF-term/datatype, and canonical lexical contract locally; no generic accessor or graph-validator rule is added.
 
 - [ ] **Step 1: Write the failing tests**
 
@@ -90,6 +91,12 @@ def test_last_reviewed_date_rejects_non_canonical(raw: str) -> None:
     assert raw in message
 ```
 
+Final review extends this contract test set with insertion-order-independent
+valid+invalid and two-canonical-date multiplicity cases, plus plain literal,
+wrong-datatype literal, and wrong-RDF-term cases. Multiplicity diagnostics must
+contain every authored RDF term (including datatype/language distinctions) and
+be identical regardless of insertion order.
+
 - [ ] **Step 2: Run tests to verify they fail**
 
 Run: `cd science && uv run --frozen pytest tests/test_attention_sampling.py -k last_reviewed_date -v`
@@ -104,15 +111,27 @@ existing `def _days_since_last_review(...)`:
 def _last_reviewed_date(knowledge, entity_id: str, entity_uri: URIRef) -> date | None:
     """The entity's sci:lastReviewed date, or None if it was never reviewed.
 
-    Absence (no triple) is None. A PRESENT value must be the canonical xsd:date
-    producer form the freshness pass writes (YYYY-MM-DD); anything else is a
-    corrupt graph, not an absence, and raises. The round-trip check is
-    load-bearing: date.fromisoformat also accepts compact (20260501) and ISO
-    week (2026-W18-5) forms, neither of which is the toolkit's canonical form.
+    The predicate has cardinality 0..1. Absence is None. Exactly one object must
+    be an xsd:date literal in canonical YYYY-MM-DD form; all other RDF shapes
+    raise. RDF object order has no resolution semantics.
     """
-    literal = next(knowledge.objects(entity_uri, SCI_NS.lastReviewed), None)
-    if literal is None:
+    objects = list(knowledge.objects(entity_uri, SCI_NS.lastReviewed))
+    if not objects:
         return None
+
+    authored_values = sorted(value.n3() for value in objects)
+    if len(objects) != 1:
+        raise ValueError(
+            f"{entity_id}: sci:lastReviewed has multiple authored values "
+            f"[{', '.join(authored_values)}]; expected 0..1 xsd:date literal "
+            "in canonical YYYY-MM-DD form"
+        )
+    literal = objects[0]
+    if not isinstance(literal, Literal) or literal.datatype != XSD.date:
+        raise ValueError(
+            f"{entity_id}: sci:lastReviewed authored value {authored_values[0]} must be an "
+            "xsd:date literal in canonical YYYY-MM-DD form"
+        )
     text = str(literal)
     try:
         parsed = date.fromisoformat(text)
@@ -120,7 +139,7 @@ def _last_reviewed_date(knowledge, entity_id: str, entity_uri: URIRef) -> date |
         parsed = None
     if parsed is None or parsed.isoformat() != text:
         raise ValueError(
-            f"{entity_id}: sci:lastReviewed value {text!r} is not a valid ISO date (YYYY-MM-DD)"
+            f"{entity_id}: sci:lastReviewed value {text!r} is not a canonical xsd:date (YYYY-MM-DD)"
         )
     return parsed
 ```
@@ -128,7 +147,8 @@ def _last_reviewed_date(knowledge, entity_id: str, entity_uri: URIRef) -> date |
 - [ ] **Step 4: Run tests to verify they pass**
 
 Run: `cd science && uv run --frozen pytest tests/test_attention_sampling.py -k last_reviewed_date -v`
-Expected: PASS (6 cases: canonical, absent, and 4 parametrized rejects).
+Expected: PASS (canonical, absent, lexical rejects, multiplicity rejects, and
+wrong RDF term/datatype cases).
 
 - [ ] **Step 5: Full green gate**
 
@@ -474,15 +494,21 @@ unstamped (no `sci:lastReviewed`), so the propagated value is `None` — assert 
     assert bundle.last_reviewed is None
 ```
 
-- [ ] **Step 10: Add the positive CLI-table rendering test and the corrupt-date surfacing test**
+- [ ] **Step 10: Add positive CLI table/JSON rendering tests and the corrupt-date surfacing test**
 
-Add both to `science/tests/test_attention_preconditions.py`. This file already
+Add these to `science/tests/test_attention_preconditions.py`. This file already
 imports `from science_tool.cli import main`, `from click.testing import
 CliRunner`, `RDF`/`SKOS`, and defines `_write(tmp_path, dataset) -> Path` (writes
 via `save_canonical_graph_dataset`) — reuse all of them; do **not** re-serialize
 by hand. The CLI is invoked as `main` with a `"graph"` prefix, e.g.
 `CliRunner().invoke(main, ["graph", "attention-rank", "--path", str(graph_path)])`
 (see `:178`, `:187`).
+
+Parameterize both the table and JSON tests across `attention-sample` and
+`attention-rank`, using the real CLI path and `_reviewed_and_never_graph`. Parse
+JSON rows by entity id and assert the stamped value is `"2026-04-30"`, the
+never-reviewed value is `null`, and `days_since_last_review` is absent from
+both rows.
 
 ```python
 def _reviewed_and_never_graph(tmp_path) -> Path:

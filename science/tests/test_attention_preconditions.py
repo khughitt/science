@@ -20,6 +20,7 @@ Pinned here:
 
 from __future__ import annotations
 
+import json
 from datetime import date
 from pathlib import Path
 
@@ -95,6 +96,25 @@ def test_attention_tables_render_last_reviewed(tmp_path: Path, command: str) -> 
     assert "2026-04-30" in result.output
     assert "never" in result.output
     assert "365" not in result.output
+
+
+@pytest.mark.parametrize("command", ["attention-sample", "attention-rank"])
+def test_attention_json_surfaces_last_reviewed_without_recency_component(
+    tmp_path: Path, command: str
+) -> None:
+    graph_path = _reviewed_and_never_graph(tmp_path)
+    args = ["graph", command, "--path", str(graph_path), "--format", "json"]
+    if command == "attention-sample":
+        args += ["--limit", "5", "--seed", "1"]
+
+    result = CliRunner().invoke(main, args)
+
+    assert result.exit_code == 0, result.output
+    by_id = {row["id"]: row for row in json.loads(result.output)["rows"]}
+    assert by_id["hypothesis:stamped"]["last_reviewed"] == "2026-04-30"
+    assert by_id["hypothesis:never"]["last_reviewed"] is None
+    assert "days_since_last_review" not in by_id["hypothesis:stamped"]
+    assert "days_since_last_review" not in by_id["hypothesis:never"]
 
 
 @pytest.mark.parametrize("command", ["attention-sample", "attention-rank"])

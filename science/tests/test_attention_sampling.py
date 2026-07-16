@@ -50,6 +50,69 @@ def test_last_reviewed_date_absent_triple_is_none() -> None:
     assert _last_reviewed_date(knowledge, "hypothesis:h1", uri) is None
 
 
+def _last_reviewed_error(*values: Literal | URIRef) -> str:
+    knowledge, uri = _knowledge_with_last_reviewed(None)
+    for value in values:
+        knowledge.add((uri, SCI_NS.lastReviewed, value))
+    with pytest.raises(ValueError) as excinfo:
+        _last_reviewed_date(knowledge, "hypothesis:h1", uri)
+    return str(excinfo.value)
+
+
+def test_last_reviewed_date_rejects_valid_then_invalid_multiplicity_deterministically() -> None:
+    valid = Literal("2026-04-01", datatype=XSD.date)
+    invalid = Literal("not-a-date", datatype=XSD.date, normalize=False)
+
+    forward = _last_reviewed_error(valid, invalid)
+    reverse = _last_reviewed_error(invalid, valid)
+
+    assert forward == reverse
+    assert "hypothesis:h1" in forward
+    assert "2026-04-01" in forward
+    assert "not-a-date" in forward
+
+
+def test_last_reviewed_date_rejects_two_canonical_dates_deterministically() -> None:
+    earlier = Literal("2026-04-01", datatype=XSD.date)
+    later = Literal("2026-04-30", datatype=XSD.date)
+
+    forward = _last_reviewed_error(earlier, later)
+    reverse = _last_reviewed_error(later, earlier)
+
+    assert forward == reverse
+    assert "hypothesis:h1" in forward
+    assert "2026-04-01" in forward
+    assert "2026-04-30" in forward
+
+
+def test_last_reviewed_date_multiplicity_diagnostic_preserves_language_tags() -> None:
+    english = Literal("2026-04-01", lang="en")
+    french = Literal("2026-04-01", lang="fr")
+
+    forward = _last_reviewed_error(english, french)
+    reverse = _last_reviewed_error(french, english)
+
+    assert forward == reverse
+    assert "@en" in forward
+    assert "@fr" in forward
+
+
+@pytest.mark.parametrize(
+    "value",
+    [
+        pytest.param(Literal("2026-04-01"), id="plain-literal"),
+        pytest.param(Literal("2026-04-01T00:00:00", datatype=XSD.dateTime), id="wrong-datatype"),
+        pytest.param(URIRef("https://example.org/review/2026-04-01"), id="wrong-rdf-term"),
+    ],
+)
+def test_last_reviewed_date_rejects_wrong_rdf_term_or_datatype(value: Literal | URIRef) -> None:
+    message = _last_reviewed_error(value)
+
+    assert "hypothesis:h1" in message
+    assert str(value) in message
+    assert "xsd:date" in message
+
+
 @pytest.mark.parametrize("raw", ["2026-05-01garbage", "20260501", "2026-W18-5", "not-a-date"])
 def test_last_reviewed_date_rejects_non_canonical(raw: str) -> None:
     knowledge, uri = _knowledge_with_last_reviewed(raw)

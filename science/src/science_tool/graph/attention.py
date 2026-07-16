@@ -10,7 +10,7 @@ from typing import Any, Iterable, Mapping, Sequence
 
 import yaml
 from rdflib import Dataset, Literal, URIRef
-from rdflib.namespace import SKOS
+from rdflib.namespace import SKOS, XSD
 
 from science_model.frontmatter import project_config_path
 
@@ -655,15 +655,31 @@ def list_rehoming_debt(graph_path: Path) -> InstrumentResult[dict[str, str]]:
 def _last_reviewed_date(knowledge, entity_id: str, entity_uri: URIRef) -> date | None:
     """The entity's sci:lastReviewed date, or None if it was never reviewed.
 
-    Absence (no triple) is None. A PRESENT value must be the canonical xsd:date
-    producer form the freshness pass writes (YYYY-MM-DD); anything else is a
-    corrupt graph, not an absence, and raises. The round-trip check is
-    load-bearing: date.fromisoformat also accepts compact (20260501) and ISO
-    week (2026-W18-5) forms, neither of which is the toolkit's canonical form.
+    The predicate has cardinality 0..1. Absence is None. Exactly one object must
+    be an xsd:date literal in the canonical producer form YYYY-MM-DD. Multiple
+    objects, another RDF term or datatype, and invalid or non-canonical lexical
+    forms are corrupt graph data and raise. RDF object order has no resolution
+    semantics, so diagnostics sort and report every authored value.
     """
-    literal = next(knowledge.objects(entity_uri, SCI_NS.lastReviewed), None)
-    if literal is None:
+    objects = list(knowledge.objects(entity_uri, SCI_NS.lastReviewed))
+    if not objects:
         return None
+
+    authored_values = sorted(value.n3() for value in objects)
+    if len(objects) != 1:
+        raise ValueError(
+            f"{entity_id}: sci:lastReviewed has multiple authored values "
+            f"[{', '.join(authored_values)}]; expected 0..1 xsd:date literal "
+            "in canonical YYYY-MM-DD form"
+        )
+
+    literal = objects[0]
+    if not isinstance(literal, Literal) or literal.datatype != XSD.date:
+        raise ValueError(
+            f"{entity_id}: sci:lastReviewed authored value {authored_values[0]} must be an "
+            "xsd:date literal in canonical YYYY-MM-DD form"
+        )
+
     text = str(literal)
     try:
         parsed = date.fromisoformat(text)
@@ -671,7 +687,8 @@ def _last_reviewed_date(knowledge, entity_id: str, entity_uri: URIRef) -> date |
         parsed = None
     if parsed is None or parsed.isoformat() != text:
         raise ValueError(
-            f"{entity_id}: sci:lastReviewed value {text!r} is not a valid ISO date (YYYY-MM-DD)"
+            f"{entity_id}: sci:lastReviewed authored value {authored_values[0]} is not a "
+            "canonical xsd:date (YYYY-MM-DD)"
         )
     return parsed
 
