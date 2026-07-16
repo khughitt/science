@@ -4,6 +4,7 @@ import json
 from datetime import date
 from pathlib import Path
 
+import pytest
 from click.testing import CliRunner
 from rdflib import Dataset, Literal, URIRef
 from rdflib.namespace import RDF, SKOS, XSD
@@ -11,6 +12,7 @@ from rdflib.namespace import RDF, SKOS, XSD
 from science_tool.cli import main
 from science_tool.graph.attention import (
     AttentionReason,
+    _last_reviewed_date,
     _open_question_debt,
     compute_attention_candidates,
     format_attention_candidate,
@@ -22,6 +24,40 @@ from science_tool.graph.io import CITO_NS, PROJECT_NS, SCI_NS, save_canonical_gr
 
 def _u(path: str) -> URIRef:
     return URIRef(PROJECT_NS[path])
+
+
+def _knowledge_with_last_reviewed(raw: str | None):
+    """A one-entity knowledge graph; `raw` is the literal lexical value, or None to omit the triple."""
+    dataset = Dataset()
+    knowledge = dataset.graph(PROJECT_NS["graph/knowledge"])
+    uri = URIRef("https://example.org/hypothesis/h1")
+    knowledge.add((uri, SCI_NS.freshnessState, Literal("fresh")))
+    if raw is not None:
+        # normalize=False is load-bearing: with the default, RDFLib rewrites a
+        # parseable non-canonical value (e.g. "2026-W18-5") to its canonical
+        # lexical form "2026-05-01", which would mask exactly the case under test.
+        knowledge.add((uri, SCI_NS.lastReviewed, Literal(raw, datatype=XSD.date, normalize=False)))
+    return knowledge, uri
+
+
+def test_last_reviewed_date_parses_canonical_form() -> None:
+    knowledge, uri = _knowledge_with_last_reviewed("2026-04-01")
+    assert _last_reviewed_date(knowledge, "hypothesis:h1", uri) == date(2026, 4, 1)
+
+
+def test_last_reviewed_date_absent_triple_is_none() -> None:
+    knowledge, uri = _knowledge_with_last_reviewed(None)
+    assert _last_reviewed_date(knowledge, "hypothesis:h1", uri) is None
+
+
+@pytest.mark.parametrize("raw", ["2026-05-01garbage", "20260501", "2026-W18-5", "not-a-date"])
+def test_last_reviewed_date_rejects_non_canonical(raw: str) -> None:
+    knowledge, uri = _knowledge_with_last_reviewed(raw)
+    with pytest.raises(ValueError) as excinfo:
+        _last_reviewed_date(knowledge, "hypothesis:h1", uri)
+    message = str(excinfo.value)
+    assert "hypothesis:h1" in message
+    assert raw in message
 
 
 def _attention_fixture() -> Dataset:

@@ -657,6 +657,30 @@ def list_rehoming_debt(graph_path: Path) -> InstrumentResult[dict[str, str]]:
     return InstrumentResult.from_rows(rows)
 
 
+def _last_reviewed_date(knowledge, entity_id: str, entity_uri: URIRef) -> date | None:
+    """The entity's sci:lastReviewed date, or None if it was never reviewed.
+
+    Absence (no triple) is None. A PRESENT value must be the canonical xsd:date
+    producer form the freshness pass writes (YYYY-MM-DD); anything else is a
+    corrupt graph, not an absence, and raises. The round-trip check is
+    load-bearing: date.fromisoformat also accepts compact (20260501) and ISO
+    week (2026-W18-5) forms, neither of which is the toolkit's canonical form.
+    """
+    literal = next(knowledge.objects(entity_uri, SCI_NS.lastReviewed), None)
+    if literal is None:
+        return None
+    text = str(literal)
+    try:
+        parsed = date.fromisoformat(text)
+    except ValueError:
+        parsed = None
+    if parsed is None or parsed.isoformat() != text:
+        raise ValueError(
+            f"{entity_id}: sci:lastReviewed value {text!r} is not a valid ISO date (YYYY-MM-DD)"
+        )
+    return parsed
+
+
 def _days_since_last_review(knowledge, entity_uri: URIRef, today: date) -> float:
     literal = next(knowledge.objects(entity_uri, SCI_NS.lastReviewed), None)
     if literal is None:
