@@ -196,6 +196,12 @@ class ProjectSources(BaseModel):
     # §B6: child canonical_id -> parent_dataset ref for sci:subCohortOf materialization.
     # Built from the final entities list (after commons merge) immediately before return.
     dataset_parents: dict[str, str] = Field(default_factory=dict)
+    # The kinds whose extra-preserving load was schema-checked (unevaluatedProperties:
+    # false), i.e. PROJECT_MIXIN_NAMES when the project is pinned, else empty. The graph
+    # audit's undeclared_key diagnostic fires only for kinds OUTSIDE this set: a key that
+    # survives load on an in-set kind is schema-blessed; an out-of-set kind's extras were
+    # never vouched. Default empty is conservative (diagnostic may fire).
+    strict_schema_kinds: frozenset[str] = Field(default_factory=frozenset)
 
 
 SourceBinding = BindingSource
@@ -680,6 +686,7 @@ def load_project_sources(
         freshness_enabled=freshness_enabled,
         peer_ids=frozenset(config.get("peer_ids") or []),  # type: ignore[arg-type]
         dataset_parents=dataset_parents,
+        strict_schema_kinds=PROJECT_MIXIN_NAMES if project_schema is not None else frozenset(),
     )
 
 
