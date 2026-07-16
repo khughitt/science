@@ -179,8 +179,8 @@ patching each of the three call sites independently.
 
    > **SUPERSEDED 2026-07-16.** Equating this gap with fb-2026-07-10-017 was the
    > conflation, not the fix. fb-2026-07-10-017 is the *contract divergence*
-   > (`curate inventory`'s promised keys), now **IMPLEMENTED** on branch
-   > `curate-inventory-contract`; pending merge. See
+   > (`curate inventory`'s promised keys), now **RESOLVED/CLOSED** by the curate
+   > contract reconciliation, merged to local `main` at `c8fb1b63`. See
    > `docs/plans/2026-07-16-curate-inventory-contract-reconciliation-design.md`.
    > The **composite-instrument guard blindness** described here is a *distinct*
    > item that merely shares the module, and it remains **open**.

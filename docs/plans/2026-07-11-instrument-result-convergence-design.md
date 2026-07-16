@@ -1,9 +1,10 @@
 # Instrument Result Convergence — the Silent-Instrument Ruling
 
-> **UPDATE 2026-07-16 — item 4 (fb-2026-07-10-017) IMPLEMENTED (pending merge), and un-conflated.**
+> **UPDATE 2026-07-16 — item 4 (fb-2026-07-10-017) RESOLVED/CLOSED, and un-conflated.**
 > fb-2026-07-10-017 was a **doc↔helper contract divergence** (`curate inventory`
 > promised unresolved-ref / alias-resolution / stale-task keys its payload never
-> returned), implemented by reconciling `commands/curate.md` to the helper — see
+> returned), resolved by reconciling `commands/curate.md` to the helper; merged to
+> local `main` at `c8fb1b63` — see
 > `docs/plans/2026-07-16-curate-inventory-contract-reconciliation-design.md`.
 > **The "no status field / bare-collection detector cannot see it" framing in the
 > fourth entry of the "Four items remain open" list below was a *separate*
