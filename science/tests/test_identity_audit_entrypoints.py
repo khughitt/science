@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import yaml
+
 from science_tool.graph.health import build_health_report
 from science_tool.graph.health_checks.unresolved_refs import collect_unresolved_refs
 from science_tool.graph.materialize import materialization_audit
@@ -23,6 +25,65 @@ def _duplicate_owner(root: Path) -> None:
     _seed(root)
     _md(root, "entities/questions/q1.md", "question:q1", "question")
     _md(root, "entities/questions/q1-duplicate.md", "question:q1", "question")
+
+
+def _conflicting_external_references(root: Path) -> None:
+    """Two external references claiming one id and disagreeing about its title.
+
+    Neither OWNS `paper:Smith2024`, so no owner value settles the disagreement and no duplicate
+    owner row records it. This is the conflict class that is invisible in the declarations.
+    """
+    (root / "science.yaml").write_text(
+        "name: proj\nprofile: research\nknowledge_profiles: {local: local}\nontologies:\n  - biology\n",
+        encoding="utf-8",
+    )
+    (root / "papers").mkdir(parents=True, exist_ok=True)
+    (root / "papers" / "references.bib").write_text(
+        "@article{Smith2024,\n  title = {Title per bib},\n}\n", encoding="utf-8"
+    )
+    src = root / "knowledge" / "sources" / "local"
+    src.mkdir(parents=True, exist_ok=True)
+    src.joinpath("external_refs.yaml").write_text(
+        yaml.safe_dump(
+            {
+                "references": [
+                    {
+                        "id": "paper:Smith2024",
+                        "kind": "paper",
+                        "title": "Title per curie authority",
+                        "primary_external_id": {
+                            "source": "UniProtKB",
+                            "id": "Q02223",
+                            "curie": "UniProtKB:Q02223",
+                            "provenance": "manual",
+                        },
+                    }
+                ]
+            }
+        ),
+        encoding="utf-8",
+    )
+
+
+def test_audit_reports_a_field_conflict_no_declaration_could_reveal(tmp_path: Path) -> None:
+    # The audit runs a DIAGNOSTIC load, which does not raise. Duplicate owners are
+    # reconstructible from the declarations, but a field two non-owners disagree on leaves no
+    # declaration-level trace at all -- both rows are legitimate external references. Without
+    # the audit reading the arbitration ledger, this project reports exactly what a clean
+    # project reports.
+    _conflicting_external_references(tmp_path)
+    verdict = materialization_audit(tmp_path)  # must not raise
+
+    conflicts = [r for r in verdict.rows if r["check"] == "arbitration_contribution_conflict"]
+    assert len(conflicts) == 1
+    assert conflicts[0]["source"] == "paper:Smith2024"
+    assert conflicts[0]["field"] == "title"
+    assert conflicts[0]["status"] == "fail"
+    assert verdict.status == "failed"
+    # The row names BOTH disagreeing sources -- a conflict that cannot say who disagreed is not
+    # actionable by the person who has to resolve it.
+    assert "papers/references.bib" in conflicts[0]["details"]
+    assert "knowledge/sources/local/external_refs.yaml" in conflicts[0]["details"]
 
 
 def test_materialization_audit_reports_collision_without_crashing(tmp_path: Path) -> None:

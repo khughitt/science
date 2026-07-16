@@ -66,7 +66,7 @@ def _load_commons_referenced_entities(
     project_entities: list[Entity],
     project_relations: list[SourceRelation],
     project_bindings: list[BindingSource],
-    identity_table: dict[str, SourceRef],
+    locally_owned_ids: frozenset[str],
     registry: EntityRegistry,
     active_kinds: frozenset[str],
     ontology_catalogs: list[OntologyCatalog],
@@ -84,14 +84,20 @@ def _load_commons_referenced_entities(
         project_relations=project_relations,
         project_bindings=project_bindings,
     )
+    # `locally_owned_ids` answers exactly one question -- which ids does this project OWN --
+    # and the caller derives it from OWNER declarations. It used to be `set(identity_table)`,
+    # i.e. "which ids did something materialize", which is a different question: a bib entry
+    # materializes a node without owning the id, so citing a paper made the project look like
+    # its owner and suppressed the commons canonical + its overlay, skipping both merge_entity
+    # and validate_overlay_pin (fb-2026-07-16-005).
+    locally_owned = set(locally_owned_ids)
     # Locally-owned ids that are referenced AND owned by commons are a cross-scope
     # situation (design §B3): record commons' owner row, but do NOT load a duplicate
     # entity. Everything else loads as before.
-    locally_owned = set(identity_table)
     referenced_local = referenced_ids & locally_owned
-    referenced_ids.difference_update(identity_table)
+    referenced_ids.difference_update(locally_owned)
 
-    pending_ids = referenced_ids | (set(overlays) - set(identity_table))
+    pending_ids = referenced_ids | (set(overlays) - locally_owned)
 
     commons_owner_collisions: list[tuple[str, SourceRef]] = []
     if referenced_local:
@@ -124,7 +130,7 @@ def _load_commons_referenced_entities(
     loaded: list[tuple[Entity, SourceRef]] = []
     overlay_paths: dict[str, str] = {}
     seen_ids: set[str] = set()
-    resolved_ids: set[str] = set(identity_table)
+    resolved_ids: set[str] = set(locally_owned)
     while pending_ids:
         canonical_id = sorted(pending_ids)[0]
         pending_ids.remove(canonical_id)

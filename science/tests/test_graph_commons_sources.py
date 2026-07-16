@@ -75,7 +75,7 @@ def _load_commons(
     project_root: Path,
     *,
     project_entities: list[Entity] | None = None,
-    identity_table: dict[str, SourceRef] | None = None,
+    locally_owned_ids: frozenset[str] = frozenset(),
 ) -> tuple[list[tuple[Entity, SourceRef]], dict[str, str]]:
     loaded, overlay_paths, _collisions = _load_commons_referenced_entities(
         project_root=project_root,
@@ -83,7 +83,7 @@ def _load_commons(
         project_entities=project_entities or [],
         project_relations=[],
         project_bindings=[],
-        identity_table=identity_table or {},
+        locally_owned_ids=locally_owned_ids,
         registry=EntityRegistry.with_core_types(),
         active_kinds=frozenset({"dataset", "paper", "theme", "topic"}),
         ontology_catalogs=[],
@@ -552,12 +552,7 @@ relevance: "central to this project"
 
     loaded, overlay_paths = _load_commons(
         project_root,
-        identity_table={
-            "topic:single-cell-foundation-models": SourceRef(
-                adapter_name="markdown",
-                path="entities/topics/single-cell-foundation-models.md",
-            )
-        },
+        locally_owned_ids=frozenset({"topic:single-cell-foundation-models"}),
     )
 
     assert loaded == []
@@ -835,8 +830,8 @@ def test_commons_owner_of_locally_owned_referenced_id_is_reported_as_collision(
     project_root = tmp_path / "project"
     project_root.mkdir()
 
-    # The project locally owns topic:single-cell-foundation-models (seeded in
-    # identity_table) AND references it; commons also owns it.
+    # The project OWNS topic:single-cell-foundation-models AND references it; commons also
+    # owns it.
     cid = "topic:single-cell-foundation-models"
     loaded, overlay_paths, commons_owner_collisions = _load_commons_referenced_entities(
         project_root=project_root,
@@ -844,7 +839,7 @@ def test_commons_owner_of_locally_owned_referenced_id_is_reported_as_collision(
         project_entities=[_entity("topic:local", related=[cid])],
         project_relations=[],
         project_bindings=[],
-        identity_table={cid: SourceRef(adapter_name="markdown", path="entities/topics/x.md")},
+        locally_owned_ids=frozenset({cid}),
         registry=EntityRegistry.with_core_types(),
         active_kinds=frozenset({"dataset", "paper", "theme", "topic"}),
         ontology_catalogs=[],
@@ -864,3 +859,87 @@ def test_collect_referenced_commons_ids_collects_inner_id_from_scoped_ref() -> N
     assert _collect(entities=[_entity("topic:local", related=["commons:topic:phf19"])]) == {"topic:phf19"}
     # A non-commons inner kind is still ignored.
     assert _collect(entities=[_entity("topic:local", related=["commons:hypothesis:h1"])]) == set()
+
+
+def _bib_overlay_project(tmp_path: Path) -> Path:
+    """A project that both cites Adams2025 in references.bib and overlays it.
+
+    This is the shape every real project has: papers are cited (bib) AND carry
+    project-side commentary (overlay). fb-2026-07-16-005.
+    """
+    project_root = tmp_path / "project"
+    project_root.mkdir()
+    (project_root / "science.yaml").write_text("name: demo\nknowledge_profiles:\n  local: local\n", encoding="utf-8")
+    manifest_path = project_root / "knowledge" / "sources" / "local" / "manifest.yaml"
+    manifest_path.parent.mkdir(parents=True)
+    manifest_path.write_text("", encoding="utf-8")
+    bib_path = project_root / "papers" / "references.bib"
+    bib_path.parent.mkdir(parents=True)
+    bib_path.write_text(
+        "@article{Adams2025,\n"
+        "  title = {A representative paper about homology-aware evaluation},\n"
+        "  author = {Adams, A. and Baker, B.},\n"
+        "  journal = {Nature Methods},\n"
+        "  year = {2025},\n"
+        "  doi = {10.1038/example}\n"
+        "}\n",
+        encoding="utf-8",
+    )
+    overlay_path = project_root / "overlays" / "papers" / "Adams2025.md"
+    overlay_path.parent.mkdir(parents=True)
+    overlay_path.write_text(
+        """---
+id: "paper:Adams2025"
+overlay_of: "paper:Adams2025"
+pin_version: "1.0.0"
+relevance: "central to this project"
+related: ["question:0042-driver-specificity"]
+---
+
+## Relevance
+
+Project-side commentary that must reach the graph.
+""",
+        encoding="utf-8",
+    )
+    return project_root
+
+
+def test_bib_entry_does_not_shadow_paper_overlay(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """A bib entry must not suppress the commons+overlay branch (fb-2026-07-16-005).
+
+    bib is an EXTERNAL_REFERENCE adapter and `identity_table.classify_owner_scope`
+    states "bib rows are never owners". But the load loop seeds the identity dict
+    from bib before commons loads, so the overlay is skipped: never merged, never
+    pin-checked.
+    """
+    commons_root = _build_commons(tmp_path)
+    monkeypatch.setenv("SCIENCE_COMMONS_ROOT", str(commons_root))
+    monkeypatch.setenv("SCIENCE_COMMONS_QUIET_STALE", "1")
+    project_root = _bib_overlay_project(tmp_path)
+
+    sources = load_project_sources(project_root)
+
+    assert sources.commons_overlay_paths.get("paper:Adams2025") == str(
+        project_root / "overlays" / "papers" / "Adams2025.md"
+    ), "overlay was skipped because the bib entry claimed the id first"
+
+
+def test_bib_entry_does_not_suppress_overlay_pin_check(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """An overlay pin must be enforced even when the id is also a bib entry.
+
+    The pin check lives behind the same skip, so a project pinning a stale version
+    validates green against a drifted commons canonical.
+    """
+    commons_root = _build_commons(tmp_path)
+    monkeypatch.setenv("SCIENCE_COMMONS_ROOT", str(commons_root))
+    monkeypatch.setenv("SCIENCE_COMMONS_QUIET_STALE", "1")
+    project_root = _bib_overlay_project(tmp_path)
+    overlay_path = project_root / "overlays" / "papers" / "Adams2025.md"
+    overlay_path.write_text(
+        overlay_path.read_text(encoding="utf-8").replace('pin_version: "1.0.0"', 'pin_version: "0.9.0"'),
+        encoding="utf-8",
+    )
+
+    with pytest.raises(OverlayValidationError):
+        load_project_sources(project_root)

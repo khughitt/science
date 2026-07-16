@@ -337,9 +337,15 @@ def _arbitrate_ordered(
             group = owners_by_scope[scope]
             live = [c for c in group if not c.declaration.deprecated]
             deprecated = [c for c in group if c.declaration.deprecated]
-            for row in deprecated:
-                if row.declaration.adapter == "datapackage" and row.declaration.source_ref:
-                    dataset_datapackages[canonical_id] = row.declaration.source_ref.path
+            # Only when a LIVE owner exists, i.e. only when the datapackage will not represent
+            # this id. The column answers "where else do this dataset's resources live", so a
+            # datapackage that represents its own id has nothing to say here -- the consumer
+            # already resolves that case from the entity's own path. This is a CONSEQUENCE of
+            # arbitration, never an input to it: nothing below reads it back.
+            if live:
+                for row in deprecated:
+                    if row.declaration.adapter == "datapackage" and row.declaration.source_ref:
+                        dataset_datapackages[canonical_id] = row.declaration.source_ref.path
             if len(live) >= 2:
                 # Never choose. Two live owners of one identity is the identity error itself,
                 # and picking one would make the defect invisible exactly where it matters.

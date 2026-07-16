@@ -1,9 +1,16 @@
-"""Behavior-neutral pinning test for the Spec 3 Slice A loop refactor.
+"""Pins the full source-load output under exhaustive, selection-free collection.
 
-Two fixtures exercise the source-load adapter policy branches: markdown
-source_document capture, missing-identity skip under strict, datapackage defer
-onto a markdown owner, and external-ref (bib) defer onto a markdown owner.
-`_snapshot` captures the full normalized load output.
+Two fixtures exercise the source-load adapter branches: markdown source_document capture,
+missing-identity skip under strict, a datapackage contending with a markdown owner, and an
+external-ref (bib) contending with a markdown owner. `_snapshot` captures the full normalized
+load output.
+
+Collection is now exhaustive: every validated adapter entity becomes a contribution and every
+contribution declares, whatever else claims the same id. Adapter-time deferral used to DELETE
+the losing declaration, so the datapackage and bib rows below did not exist -- the load reported
+that only markdown had ever spoken for these ids. Materialization still yields one entity per
+id; what changed is that losing a representative contest no longer erases the evidence that the
+contest happened, which is exactly what the identity audit reads.
 """
 
 from __future__ import annotations
@@ -89,11 +96,15 @@ def _build_nonstrict_project(root: Path) -> None:
     _write(root, "papers/references.bib", "@article{Smith2024,\n  title = {Cells},\n}\n")
 
 
-# Frozen expected output, captured from the current (pre-flip) loop.
+# Frozen expected output under arbitration.
 EXPECTED_STRICT: dict[str, Any] = {
     "entities": ["dataset:ds1", "dataset:ds2", "hypothesis:h1"],
     "identity_declarations": [
         ("dataset:ds1", "owner", "slice-a", "datapackage", True),
+        # ds2's datapackage declares even though markdown wins the representative. The
+        # deprecated row IS the migration signal the identity audit reports on; deferral
+        # deleted it, so the audit could not see a datapackage still needing migration.
+        ("dataset:ds2", "owner", "slice-a", "datapackage", True),
         ("dataset:ds2", "owner", "slice-a", "markdown", False),
         ("hypothesis:h1", "owner", "slice-a", "markdown", False),
     ],
@@ -113,7 +124,14 @@ EXPECTED_STRICT: dict[str, Any] = {
             "body\n",
         ),
     ],
+    # ds2 only. ds1's datapackage REPRESENTS dataset:ds1, so this column has nothing to add
+    # for it -- the consumer resolves a datapackage-represented dataset from its own path.
+    # The column means "where else do this dataset's resources live", and that stays true
+    # without deferral: ds2's markdown owner represents it, so ds2's datapackage says here
+    # where its resources are.
     "dataset_datapackages": {"dataset:ds2": "data/ds2/datapackage.yaml"},
+    # ds2 still materializes from markdown: the datapackage declared, and lost, on the merits
+    # of being deprecated -- not by being dropped before it could speak.
     "entity_source_adapters": {
         "dataset:ds1": "datapackage",
         "dataset:ds2": "markdown",
@@ -124,6 +142,13 @@ EXPECTED_STRICT: dict[str, Any] = {
 EXPECTED_NONSTRICT: dict[str, Any] = {
     "entities": ["paper:Smith2024"],
     "identity_declarations": [
+        # The bib row declares as an EXTERNAL_REFERENCE and never as an owner. It supports the
+        # markdown owner rather than contending with it; deferral deleted this row entirely,
+        # which is how a bib entry came to shadow a commons canonical (fb-2026-07-16-005).
+        # owner_scope "bib" is the external-reference AUTHORITY scope, not this project's:
+        # `classify_owner_scope` gives bib its own scope precisely so a bib row can never be
+        # mistaken for a project owner row.
+        ("paper:Smith2024", "external-reference", "bib", "bib", False),
         ("paper:Smith2024", "owner", "slice-a", "markdown", False),
     ],
     "skipped_entities": [],
@@ -139,13 +164,13 @@ EXPECTED_NONSTRICT: dict[str, Any] = {
 }
 
 
-def test_strict_load_full_output_is_unchanged(tmp_path: Path) -> None:
+def test_strict_load_declares_every_owner_and_materializes_one_per_id(tmp_path: Path) -> None:
     _build_strict_project(tmp_path)
     sources = load_project_sources(tmp_path, include_commons=False)  # strict defaults
     assert _snapshot(sources) == EXPECTED_STRICT
 
 
-def test_nonstrict_load_full_output_is_unchanged(tmp_path: Path) -> None:
+def test_nonstrict_load_declares_the_external_reference_beside_its_owner(tmp_path: Path) -> None:
     _build_nonstrict_project(tmp_path)
     sources = load_project_sources(
         tmp_path, include_commons=False, strict_core_schema=False, strict_identity=True

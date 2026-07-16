@@ -354,10 +354,18 @@ def _emit_phase(sources: ProjectSources, *, archive_active: dict | None = None) 
     )
     entity_index = {entity.canonical_id: entity for entity in sources.entities}
     ext_prefixes = _EXTERNAL_PREFIXES | external_prefixes(sources.ontology_catalogs)
+    # A node is reference-only when an external reference declares it and NOTHING OWNS it.
+    # "Has an external-reference declaration" is a different question that used to give the same
+    # answer, because the loader deferred a bib/curie row whenever an owner existed and the two
+    # could never appear together. They now do -- an authored paper the project also cites has
+    # both -- and only the owner-free ids are genuinely reference nodes.
+    owned_ids = {
+        d.canonical_id for d in sources.identity_declarations if d.participation_mode == ParticipationMode.OWNER
+    }
     external_reference_ids = {
         d.canonical_id
         for d in sources.identity_declarations
-        if d.participation_mode == ParticipationMode.EXTERNAL_REFERENCE
+        if d.participation_mode == ParticipationMode.EXTERNAL_REFERENCE and d.canonical_id not in owned_ids
     }
 
     for entity in sources.entities:

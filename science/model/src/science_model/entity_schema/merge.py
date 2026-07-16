@@ -25,9 +25,23 @@ def read_merge_policy(profile: ProfileString, loader: SchemaLoader | None = None
     for component in _iter_components(profile):
         schema = loader.load(component)
         for field, spec in (schema.get("properties") or {}).items():
-            raw = spec.get(_ANNOTATION_KEY)
-            policy[field] = MergePolicy(raw) if raw else MergePolicy.REPLACE
+            policy[field] = _policy_for(spec)
     return policy
+
+
+def _policy_for(spec: object) -> MergePolicy:
+    """The merge policy a single property spec declares.
+
+    A property spec may be a BOOLEAN schema, not only an object: `false` forbids the property
+    outright (a mixin removing an inherited field), `true` permits anything. Components are read
+    in profile order, so a mixin's `false` correctly overrides whatever the base declared.
+    """
+    if spec is False:
+        return MergePolicy.FORBIDDEN
+    if spec is True or not isinstance(spec, dict):
+        return MergePolicy.REPLACE
+    raw = spec.get(_ANNOTATION_KEY)
+    return MergePolicy(raw) if raw else MergePolicy.REPLACE
 
 
 def read_overlay_merge_policy(loader: SchemaLoader | None = None) -> dict[str, MergePolicy]:

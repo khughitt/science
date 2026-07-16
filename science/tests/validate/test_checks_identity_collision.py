@@ -138,13 +138,24 @@ def test_two_markdown_owners_flagged_error(tmp_path: Path) -> None:
     assert results[0].rule == "forbidden-second-declaration"
 
 
-def test_markdown_owner_with_sibling_datapackage_not_flagged(tmp_path: Path) -> None:
-    # The datapackage DEFERS to the markdown owner (Phase 1.5) -> one owner row ->
-    # no collision.
+def test_markdown_owner_with_sibling_datapackage_warns_as_rollout_debt(tmp_path: Path) -> None:
+    # A datapackage stub beside a markdown owner IS the §C3 rollout debt this check's WARN
+    # branch was written to report -- and that branch had never once executed. Deferral deleted
+    # the datapackage declaration at load, so `collisions()` could not contain a
+    # markdown+datapackage pair, so `is_genuine` was never False, so the WARN text below was
+    # unreachable. The check reported "clean" for a project carrying exactly the debt it exists
+    # to find, and said it in the same words as a project carrying none.
     ctx = _ctx(tmp_path)
     _write_dataset_md(tmp_path, "x.md", "dataset:x")
     _write_datapackage(tmp_path, "x", "dataset:x")
-    assert list(check_forbidden_second_declaration(ctx)) == []
+
+    results = list(check_forbidden_second_declaration(ctx))
+    assert len(results) == 1
+    # WARN, not ERROR: one owner is deprecated, so this is visible-but-non-blocking debt, not a
+    # §B1 duplicate. The severity split is the whole point of grading collisions.
+    assert results[0].severity is Severity.WARN
+    assert "dataset:x" in results[0].message
+    assert "remove the stub to clear it" in results[0].message
 
 
 def test_single_owner_not_flagged(tmp_path: Path) -> None:

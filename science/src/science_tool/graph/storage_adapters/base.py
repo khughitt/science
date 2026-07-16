@@ -68,32 +68,10 @@ class StorageAdapter(ABC):
         """
         raise NotImplementedError(f"adapter {self.name!r} does not support write")
 
-    # --- load-time policy (Spec 3 Slice A) -------------------------------------
-
-    def should_defer(self, *, already_owned: bool) -> bool:
-        """Return True to contribute no owner declaration and no duplicate entity
-        when this id is already owned this load.
-
-        Default: an external-reference adapter (bib, curie-ref) defers to an
-        existing owner (§B3/§C3). DatapackageAdapter overrides this — it is an
-        OWNER adapter but still defers to an existing owner (§B4).
-        """
-        return self.participation_mode is ParticipationMode.EXTERNAL_REFERENCE and already_owned
-
     def source_document(self, ref: SourceRef, raw: dict[str, Any]) -> MarkdownSourceDocument | None:
         """Optional source document captured at load time. Base: none.
 
         MarkdownAdapter returns the markdown body + frontmatter for the
         annotation/anchor surface.
-        """
-        return None
-
-    def deferred_dataset_datapackage(
-        self, *, entity: Entity, ref: SourceRef
-    ) -> tuple[str, str] | None:
-        """When this adapter defers (should_defer True), the (canonical_id, path)
-        the loop should record in `dataset_datapackages`, or None to record
-        nothing. Base: none. DatapackageAdapter returns its (id, path) so member
-        resources stay locatable after the owner wins the column (§B4).
         """
         return None
