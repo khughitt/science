@@ -6,7 +6,8 @@
 > returned), implemented by reconciling `commands/curate.md` to the helper — see
 > `docs/plans/2026-07-16-curate-inventory-contract-reconciliation-design.md`.
 > **The "no status field / bare-collection detector cannot see it" framing in the
-> item-4 entry below (lines ~82–85) was a *separate* observation — composite-instrument
+> fourth entry of the "Four items remain open" list below was a *separate*
+> observation — composite-instrument
 > guard blindness (triage "known gap #1") — that is NOT closed by this and remains
 > open as its own item.** The stale-task-evidence instrument the feedback surfaced is
 > recorded there as a scoped follow-up. This banner supersedes every statement below

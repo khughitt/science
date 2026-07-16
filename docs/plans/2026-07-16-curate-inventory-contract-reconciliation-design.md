@@ -1,10 +1,12 @@
-# Curate Inventory Contract Reconciliation — closing fb-2026-07-10-017
+# Curate Inventory Contract Reconciliation — fb-2026-07-10-017 implemented pending merge
 
 ## Status
 
-**IMPLEMENTED on branch `curate-inventory-contract`; pending merge.** Docs-only reconciliation. Closes fb-2026-07-10-017 (the
+**IMPLEMENTED on branch `curate-inventory-contract`; pending merge.** This
+docs-only reconciliation implements the correction for fb-2026-07-10-017 (the
 last open item on the InstrumentResult-convergence follow-on list) and splits
-two concerns the convergence design conflated under that one id.
+two concerns the convergence design conflated under that one id. Merging this
+branch will close the feedback item.
 
 ## The defect, corrected
 
@@ -26,19 +28,21 @@ This is a **doc↔helper contract divergence**, not a return-shape defect.
 `docs/plans/2026-07-11-instrument-result-convergence-design.md` carries **two
 different characterizations of the same id**:
 
-- **Lines 82–85** (the "four items remain open" list) frame it as a
+- **The fourth entry in the "Four items remain open" list** frames it as a
   *type-shape / guard-blindness* issue: "`collect_inventory` returns a Pydantic
   model with no status field, so the bare-collection detector cannot see it at
   all."
-- **Lines 109–115** frame it *accurately* — "`curate inventory` returning a
+- **The `Context` section's "same shape recurs" paragraph** frames it
+  *accurately* — "`curate inventory` returning a
   payload that silently omits keys its own spec promises" — and explicitly say
   it "belong[s] to other specs and [is] not in this spec's scope."
 
 The second reading matches the feedback. The first bolted a genuinely separate,
 still-open observation (the boundary guard cannot inspect a composite
 typed-model return — triage "known gap #1") onto the fb-017 id. This spec
-un-conflates them: fb-017 is closed by reconciling the doc; the guard-blindness
-observation stays open as its own item (see *Adjacent items kept open*).
+un-conflates them: the fb-017 correction is implemented on this feature branch
+and pending merge; merging it will close fb-017. The guard-blindness observation
+stays open as its own item (see *Adjacent items kept open*).
 
 ### What the two surfaces actually contain
 
@@ -155,19 +159,21 @@ never surface.
 ## Record-correction (so nothing is silently dropped)
 
 The convergence design carved out its follow-on items with the explicit
-principle that none be "silently dropped". Closing fb-017 must therefore split,
-not erase, the two concerns it was conflated with. **Three** historical
-documents currently mis-state this id and each gets a correction:
+principle that none be "silently dropped". Implementing the fb-017 correction
+must therefore split, not erase, the two concerns it was conflated with.
+**Three** historical documents currently mis-state this id and each gets a
+correction:
 
 1. **`2026-07-11-instrument-result-convergence-design.md`** — banner marking
-   fb-2026-07-10-017 CLOSED by this doc-reconciliation, and stating that the
-   guard-blindness observation attached to it in lines 82–85 is a *separate*
-   item that remains open (it is **not** closed by this spec).
+   fb-2026-07-10-017 `IMPLEMENTED (pending merge)` by this doc-reconciliation,
+   and stating that the guard-blindness observation in the fourth entry of the
+   "Four items remain open" list is a *separate* item that remains open (it is
+   **not** addressed by this spec).
 2. **`2026-07-11-instrument-triage.md`** — "known gap #1" (line 172) says guard
    blindness "is exactly fb-2026-07-10-017". That equation is the conflation
-   itself. Add a supersession note: fb-017 is the contract divergence (now
-   closed); the guard-blindness gap is a *distinct* open item that merely shares
-   the module.
+   itself. Add a supersession note: fb-017 is the contract divergence
+   (implemented on the feature branch and pending merge); the guard-blindness
+   gap is a *distinct* open item that merely shares the module.
 3. **`2026-07-11-instrument-result-convergence-plan.md`** — Task 10 Step 2
    (line ~2100) describes fb-017 as "missing `unresolved-ref` / `stale-task` /
    `long_idle` keys". `long_idle` is **delivered**
@@ -175,7 +181,7 @@ documents currently mis-state this id and each gets a correction:
    absent. Add a supersession note correcting the key list and pointing to this
    spec.
 4. **Adjacent items kept open** (below) get their own recorded homes so they
-   survive fb-017's closure.
+   survive fb-017's implementation and eventual post-merge closure.
 
 ## Adjacent items kept open (named, not silently dropped)
 
@@ -192,8 +198,8 @@ documents currently mis-state this id and each gets a correction:
   tasks' `source_refs` / result-manifests / recent commits to emit
   candidate-stale evidence, serving both curate Phase 1 and
   `/science:review-tasks`. New tooling the feedback surfaced but which is not
-  required to close fb-017. Recorded as a scoped follow-up for a separate
-  brainstorm; **out of scope here.**
+  required to implement the fb-017 correction. Recorded as a scoped follow-up
+  for a separate brainstorm; **out of scope here.**
 
 ## Out of scope
 
