@@ -1,0 +1,165 @@
+# Curate Inventory Contract Reconciliation — closing fb-2026-07-10-017
+
+## Status
+
+**Decision-ready.** Docs-only reconciliation. Closes fb-2026-07-10-017 (the
+last open item on the InstrumentResult-convergence follow-on list) and splits
+two concerns the convergence design conflated under that one id.
+
+## The defect, corrected
+
+`fb-2026-07-10-017` (project `post-acute-infection`, `command:curate`,
+category `friction`) reports:
+
+> Phase-1 doc promises the inventory helper returns `long_idle`,
+> `missing_related`, unresolved refs, alias-resolutions, and stale-task
+> evidence in one payload. The installed `science curate inventory` returns
+> only `{agents_md, artifact_counts, artifacts, candidate_signals}`.
+> Unresolved-ref and stale-task evidence had to be pulled separately from
+> `science health` + manual `git log`. Either align the helper's output keys
+> with the command doc or update the doc to match the helper.
+
+This is a **doc↔helper contract divergence**, not a return-shape defect.
+
+### The convergence design mis-scoped this item
+
+`docs/plans/2026-07-11-instrument-result-convergence-design.md` carries **two
+different characterizations of the same id**:
+
+- **Lines 82–85** (the "four items remain open" list) frame it as a
+  *type-shape / guard-blindness* issue: "`collect_inventory` returns a Pydantic
+  model with no status field, so the bare-collection detector cannot see it at
+  all."
+- **Lines 109–115** frame it *accurately* — "`curate inventory` returning a
+  payload that silently omits keys its own spec promises" — and explicitly say
+  it "belong[s] to other specs and [is] not in this spec's scope."
+
+The second reading matches the feedback. The first bolted a genuinely separate,
+still-open observation (the boundary guard cannot inspect a composite
+typed-model return — triage "known gap #1") onto the fb-017 id. This spec
+un-conflates them: fb-017 is closed by reconciling the doc; the guard-blindness
+observation stays open as its own item (see *Adjacent items kept open*).
+
+### What the two surfaces actually contain
+
+`commands/curate.md` lines 64–71 promise the inventory helper returns "compact
+facts only", then lists six categories. The helper
+(`science/src/science_tool/curate/inventory.py`) returns
+`CurationInventory{project_root, artifact_counts, artifacts, candidate_signals,
+agents_md}`, where `candidate_signals` is
+`CandidateSignals{missing_related, missing_source_refs, no_outbound_links,
+recently_modified, long_idle, no_frontmatter_files}`.
+
+| Doc promise (lines 64–71) | Helper field | Verdict |
+|---|---|---|
+| artifact counts by class | `artifact_counts` | delivered |
+| recently modified and long-idle | `recently_modified`, `long_idle` | delivered |
+| missing `related` / `source_refs` | `missing_related`, `missing_source_refs` | delivered |
+| documents with no outbound links | `no_outbound_links` | delivered |
+| unresolved refs and alias-resolutions | — | **absent** |
+| candidate stale-task evidence | — | **absent** |
+| *(not promised)* | `no_frontmatter_files` | **delivered but unlisted** |
+
+The doc is also internally contradictory: "compact facts only" while promising
+unresolved-ref and stale-task evidence — precisely the cross-cutting signals
+that other subsystems own.
+
+### Where the two absent signals actually live
+
+- **Unresolved refs** are already a first-class instrument:
+  `collect_unresolved_refs -> InstrumentResult[UnresolvedRef]`
+  (`graph/health_checks/unresolved_refs.py`), surfaced by `science health`,
+  which Phase 1 **already runs** (`commands/curate.md:32`). Duplicating this
+  into the inventory helper would be two code paths computing the same facts —
+  the exact divergence the toolkit-convergence umbrella exists to kill.
+- **Alias-resolutions** exist only as internal machinery
+  (`graph/reference_resolution.py`, `_authored_aliases` in `graph/sources.py`);
+  there is no user-facing report. The doc already hedged this with "if
+  available".
+- **Stale-task evidence** is genuinely unowned as a deterministic surface.
+  `/science:review-tasks` already performs the *semantic* detection ("Should be
+  `done` — implementation evidence found", source-ref / recent-commit checks)
+  but is entirely agent-led — no CLI helper backs it. The feedback author fell
+  back to manual `git log`.
+
+## Resolution — reconcile the doc to the helper
+
+Docs-only. No change to `curate/inventory.py` or its tests.
+
+Rewrite `commands/curate.md` lines 64–71 so the inventory promise matches the
+helper exactly and the cross-cutting signals point at their real owners.
+
+**Kept bullets** (accurate today):
+- artifact counts by class;
+- recently modified and long-idle artifacts;
+- missing `related` / `source_refs` signals;
+- documents with no outbound links.
+
+**Added bullet** (helper returns it; line 73 already references it; the promise
+list omitted it):
+- files under `entities/` without YAML frontmatter (`no_frontmatter_files`).
+
+**Removed promises, redirected:**
+- unresolved refs / alias-resolutions → removed. Add a note: unresolved refs
+  come from the `science health` output this phase already runs; the inventory
+  helper does not recompute them. Alias-resolutions are internal-only and not
+  currently surfaced.
+- candidate stale-task evidence → removed. Add a note: stale-task judgement is
+  semantic and deferred to `/science:review-tasks`; a deterministic stale-task
+  surface is a recorded follow-up, not yet available.
+
+The proposed replacement text is authored in full in the implementation plan.
+
+## Record-correction (so nothing is silently dropped)
+
+The convergence design carved out its follow-on items with the explicit
+principle that none be "silently dropped". Closing fb-017 must therefore split,
+not erase, the two concerns it was conflated with:
+
+1. **Banner on `2026-07-11-instrument-result-convergence-design.md`** — mark
+   fb-2026-07-10-017 CLOSED by this doc-reconciliation, and state that the
+   guard-blindness observation attached to it in lines 82–85 is a *separate*
+   item that remains open (it is **not** closed by this spec).
+2. **Adjacent items kept open** (below) get their own recorded homes so they
+   survive fb-017's closure.
+
+## Adjacent items kept open (named, not silently dropped)
+
+- **Composite-instrument guard blindness (triage "known gap #1").** The boundary
+  guard's bare-collection detector cannot inspect a typed-model return, so
+  `collect_inventory` — and any future composite-payload instrument — could
+  return a clean-looking empty payload when it never ran, and the guard would
+  not catch it. This is real and independent of fb-017. It also has a concrete
+  live symptom: the CLI `inventory` command's `--project-root` lacks
+  `exists=True` (`curate/cli.py:17`), unlike `consolidation-candidates`
+  (`:50`), so a typo'd path yields a valid, empty inventory rather than an
+  error. Kept open as its own item; **out of scope here.**
+- **Deterministic stale-task-evidence instrument.** A helper examining open
+  tasks' `source_refs` / result-manifests / recent commits to emit
+  candidate-stale evidence, serving both curate Phase 1 and
+  `/science:review-tasks`. New tooling the feedback surfaced but which is not
+  required to close fb-017. Recorded as a scoped follow-up for a separate
+  brainstorm; **out of scope here.**
+
+## Out of scope
+
+- Any change to `curate/inventory.py`, `CurationInventory`, or `CandidateSignals`.
+- Adding a status/`unwired` axis to the inventory payload (that is the
+  guard-blindness item above, not fb-017).
+- Building the stale-task-evidence instrument.
+- Adding `exists=True` to the CLI `--project-root` (belongs to the
+  guard-blindness item).
+
+## Validation
+
+Docs-only; there is no code under test. Verification is:
+
+1. `commands/curate.md` no longer contains the strings "unresolved refs",
+   "alias-resolution", or "stale-task" in the inventory-promise list (rg
+   assertion over lines 64–77).
+2. The inventory-promise bullets map one-to-one to `CandidateSignals` /
+   `CurationInventory` fields (manual field-by-field check against
+   `curate/inventory.py`).
+3. The convergence-design banner and the two kept-open item records are
+   present (rg for the banner text and the follow-on entries).
+4. `git diff --check` is clean.
