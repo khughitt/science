@@ -18,6 +18,7 @@
   - the `Legacy \`doc/plans/\` and \`doc/reports/\` files are curation context` paragraph
 - **The inventory-promise paths map one-to-one to helper fields:** `artifact_counts`, `candidate_signals.{recently_modified, long_idle, missing_related, missing_source_refs, no_outbound_links, no_frontmatter_files}`, `agents_md`.
 - **Green gate:** `cd science && uv run --frozen pytest tests/test_codex_skills.py` passes; `git diff --check` clean.
+- **Feature-branch status is non-terminal.** Use `IMPLEMENTED (pending merge)` throughout Task 2. `SHIPPED`, `CLOSED`, and `RESOLVED/CLOSED` are reserved for the post-merge follow-up owned by `superpowers:finishing-a-development-branch`.
 - Use `~/d/` (not `/home/keith/d/` or `/mnt/ssd/...`) for filepaths in any doc prose.
 - No AI-attribution trailers on commits.
 - Branch `curate-inventory-contract`; merges are `--no-ff` to local `main`; nothing is pushed unless the user asks. Verify the branch before each commit (Dropbox working copy — HEAD can drift).
@@ -132,9 +133,11 @@ rg -n "Legacy .doc/plans/. and" commands/curate.md codex-skills/science-curate/S
 
 Expected: no output from any of the three.
 
-Then assert **each** of the eight one-to-one contract paths appears in **both**
-files. This loop prints a `MISSING` line for any path absent from either file;
-a clean run prints nothing:
+Then assert **each** of the eight one-to-one contract paths appears inside the
+**Phase-1 inventory block** in both files. The `sed` range prevents later
+mentions (especially the existing `agents_md` theme) from satisfying the
+contract check. This loop prints a `MISSING` line for any path absent from the
+block in either file; a clean run prints nothing:
 
 ```bash
 cd ~/d/science
@@ -148,7 +151,8 @@ for p in \
   'candidate_signals.no_frontmatter_files' \
   'agents_md'; do
   for f in commands/curate.md codex-skills/science-curate/SKILL.md; do
-    rg -qF "$p" "$f" || echo "MISSING: $p in $f"
+    sed -n '/^The inventory helper returns compact corpus facts only\./,/^## Phase 2:/p' "$f" \
+      | rg -qF "$p" || echo "MISSING: $p in the Phase-1 inventory block of $f"
   done
 done
 ```
@@ -187,12 +191,12 @@ entities/-only scan can never surface. Regenerate the Codex mirror."
 - Modify: `docs/plans/2026-07-16-curate-inventory-contract-reconciliation-design.md` (status → implemented, pending merge)
 
 **Interfaces:**
-- Consumes: **Task 1, committed.** This task's banners state fb-2026-07-10-017 is closed *by the command reconciliation*; that claim is false until Task 1 lands. **Do not start Task 2 until Task 1 is committed.**
+- Consumes: **Task 1, committed.** This task's banners state fb-2026-07-10-017 is implemented *by the command reconciliation*; that claim is false until Task 1 lands. **Do not start Task 2 until Task 1 is committed.**
 - Produces: no stale fb-2026-07-10-017 characterization remains in the three historical docs, and the governing design is marked implemented.
 
-- [ ] **Step 1: Add the closure banner to the convergence design**
+- [ ] **Step 1: Add the pending-merge implementation banner to the convergence design**
 
-In `docs/plans/2026-07-11-instrument-result-convergence-design.md`, the file already opens with a stack of `> **UPDATE …**` banners (the most recent at the top, above `## Status`). Insert a new banner as the **first** line of the file, above the existing `> **UPDATE 2026-07-16 — item 3 RESOLVED/CLOSED.**` banner.
+In `docs/plans/2026-07-11-instrument-result-convergence-design.md`, the file already opens with a stack of `> **UPDATE …**` banners (the most recent at the top, above `## Status`). Insert a new banner as the **first banner after the H1 title**, above the existing `> **UPDATE 2026-07-16 — item 3 RESOLVED/CLOSED.**` banner.
 
 Use this Edit. `old_string` (the current first banner's opening):
 
@@ -207,10 +211,10 @@ Use this Edit. `old_string` (the current first banner's opening):
 ```
 # Instrument Result Convergence — the Silent-Instrument Ruling
 
-> **UPDATE 2026-07-16 — item 4 (fb-2026-07-10-017) RESOLVED/CLOSED, and un-conflated.**
+> **UPDATE 2026-07-16 — item 4 (fb-2026-07-10-017) IMPLEMENTED (pending merge), and un-conflated.**
 > fb-2026-07-10-017 was a **doc↔helper contract divergence** (`curate inventory`
 > promised unresolved-ref / alias-resolution / stale-task keys its payload never
-> returned), closed by reconciling `commands/curate.md` to the helper — see
+> returned), implemented by reconciling `commands/curate.md` to the helper — see
 > `docs/plans/2026-07-16-curate-inventory-contract-reconciliation-design.md`.
 > **The "no status field / bare-collection detector cannot see it" framing in the
 > item-4 entry below (lines ~82–85) was a *separate* observation — composite-instrument
@@ -243,7 +247,8 @@ Use this Edit. `old_string`:
 
    > **SUPERSEDED 2026-07-16.** Equating this gap with fb-2026-07-10-017 was the
    > conflation, not the fix. fb-2026-07-10-017 is the *contract divergence*
-   > (`curate inventory`'s promised keys), now CLOSED by
+   > (`curate inventory`'s promised keys), now **IMPLEMENTED** on branch
+   > `curate-inventory-contract`; pending merge. See
    > `docs/plans/2026-07-16-curate-inventory-contract-reconciliation-design.md`.
    > The **composite-instrument guard blindness** described here is a *distinct*
    > item that merely shares the module, and it remains **open**.
@@ -264,12 +269,12 @@ Use this Edit. `old_string` (the historical line, verbatim and unchanged):
 ```
 `collect_inventory -> CurationInventory` already returns a typed payload, so it does **not** violate the guard. It is in `INSTRUMENT_MODULES` because fb-2026-07-10-017 reports its payload diverging from the command spec (missing `unresolved-ref` / `stale-task` / `long_idle` keys) — **that is the curate spec's problem, not this one.** Leave the behavior alone; confirm only that the guard passes for this module.
 
-> **CORRECTION 2026-07-16.** `long_idle` was listed above as a missing key but is in fact **delivered** (`CandidateSignals.long_idle`); only unresolved-refs and stale-tasks were ever absent. fb-2026-07-10-017 is now CLOSED by `docs/plans/2026-07-16-curate-inventory-contract-reconciliation-design.md`.
+> **CORRECTION 2026-07-16.** `long_idle` was listed above as a missing key but is in fact **delivered** (`CandidateSignals.long_idle`); only unresolved-refs and stale-tasks were ever absent. fb-2026-07-10-017 is **IMPLEMENTED** on branch `curate-inventory-contract`; pending merge. See `docs/plans/2026-07-16-curate-inventory-contract-reconciliation-design.md`.
 ```
 
 - [ ] **Step 4: Transition the governing design from Decision-ready to implemented**
 
-Everything else now declares fb-2026-07-10-017 closed; the governing design must not stay `Decision-ready`. Use SHIPPED/CLOSED only post-merge (attention-recency precedent) — on this branch it is *implemented, pending merge*.
+Everything else now declares fb-2026-07-10-017 implemented pending merge; the governing design must not stay `Decision-ready`. Use SHIPPED/CLOSED only post-merge (attention-recency precedent) — on this branch it is *implemented, pending merge*.
 
 In `docs/plans/2026-07-16-curate-inventory-contract-reconciliation-design.md`, use this Edit. `old_string`:
 
@@ -289,13 +294,15 @@ Run:
 
 ```bash
 cd ~/d/science
-rg -n "item 4 \(fb-2026-07-10-017\) RESOLVED/CLOSED, and un-conflated" docs/plans/2026-07-11-instrument-result-convergence-design.md
+rg -n "item 4 \(fb-2026-07-10-017\) IMPLEMENTED \(pending merge\), and un-conflated" docs/plans/2026-07-11-instrument-result-convergence-design.md
 rg -n "SUPERSEDED 2026-07-16" docs/plans/2026-07-11-instrument-triage.md
+rg -n "now \*\*IMPLEMENTED\*\* on branch" docs/plans/2026-07-11-instrument-triage.md
 rg -n "CORRECTION 2026-07-16" docs/plans/2026-07-11-instrument-result-convergence-plan.md
+rg -n "fb-2026-07-10-017 is \*\*IMPLEMENTED\*\* on branch" docs/plans/2026-07-11-instrument-result-convergence-plan.md
 rg -n "IMPLEMENTED on branch .curate-inventory-contract.; pending merge" docs/plans/2026-07-16-curate-inventory-contract-reconciliation-design.md
 ```
 
-Expected: one hit each. Also confirm `Decision-ready` no longer appears in the governing design: `rg -n "Decision-ready" docs/plans/2026-07-16-curate-inventory-contract-reconciliation-design.md` → no output.
+Expected: one hit each. These exact assertions ensure no correction record accidentally carries terminal status on the feature branch. Also confirm `Decision-ready` no longer appears in the governing design: `rg -n "Decision-ready" docs/plans/2026-07-16-curate-inventory-contract-reconciliation-design.md` → no output.
 
 - [ ] **Step 6: Final gate — full doc-guard test + clean diff**
 
@@ -320,8 +327,9 @@ git add docs/plans/2026-07-11-instrument-result-convergence-design.md \
         docs/plans/2026-07-16-curate-inventory-contract-reconciliation-design.md
 git commit -m "doc(instruments): un-conflate fb-2026-07-10-017 from composite-guard-blindness
 
-Correct three records that mis-state the id: mark fb-017 CLOSED via the curate
-contract reconciliation, note the guard-blindness observation is a separate open
+Correct three records that mis-state the id: mark fb-017 implemented pending
+merge via the curate contract reconciliation, note the guard-blindness
+observation is a separate open
 item, and fix the plan's wrong 'missing long_idle' key list (long_idle is
 delivered). Transition the governing design to implemented (pending merge)."
 ```
@@ -331,3 +339,5 @@ delivered). Transition the governing design to implemented (pending merge)."
 ## Post-implementation
 
 After both tasks: use superpowers:finishing-a-development-branch. Do **not** push; the user merges `--no-ff` to local `main` when ready. The two kept-open items (composite-instrument guard blindness; deterministic stale-task-evidence instrument) are recorded in the design's *Adjacent items kept open* and the convergence-design banner for a future separate brainstorm — no tracking artifact is created in this plan.
+
+**Post-merge status flip (owned by `superpowers:finishing-a-development-branch`):** after the branch merges to local `main`, make a follow-up docs commit that changes the governing design from `IMPLEMENTED … pending merge` to `SHIPPED`, and changes the three historical correction records from `IMPLEMENTED (pending merge)` to terminal `RESOLVED/CLOSED` wording. Do not make that terminal-status commit on the feature branch.
