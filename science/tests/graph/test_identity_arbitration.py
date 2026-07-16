@@ -399,7 +399,7 @@ def test_borrower_replace_against_defended_owner_is_attributed() -> None:
     [error] = result.errors
     assert error.code == "contribution-conflict"
     assert error.field == "title"
-    assert "overlays/papers/x.md" in error.contributors[0]
+    assert [ref.path for ref in error.contributors] == ["overlays/papers/x.md"]
     # The owner keeps its value: a rejected contribution changes nothing.
     assert result.entities[0].title == "Canonical"
 
@@ -546,7 +546,7 @@ def _snapshot(result: ArbitrationResult) -> str:
                 for cid, fields in result.field_sources.items()
             },
             "errors": [
-                [error.code, error.canonical_id, error.owner_scope, error.field, list(error.contributors)]
+                [error.code, error.canonical_id, error.owner_scope, error.field, [str(ref) for ref in error.contributors]]
                 for error in result.errors
             ],
         },
@@ -592,12 +592,15 @@ def test_every_permutation_agrees_on_errors_too() -> None:
 
 
 def test_permutation_invariance_holds_between_peers_of_one_role() -> None:
-    """Two contributions of the SAME role must resolve by ContributionKey, not arrival.
+    """Two contributions of the SAME role must resolve identically in every arrival order.
 
     The three-contribution fixture above (one owner, one borrower, one external) cannot see this:
     with one contribution per role, no two ever compete, and the result sorts normalize the
     output -- so it passes even against an arbitration that never sorts at all. Ordering only
-    becomes observable when peers contend for one field.
+    becomes observable when peers contend.
+
+    APPEND is what proves the sort is live, because sequence is the value. The two DOIs prove the
+    opposite property: peers disagreeing on a scalar is a CONFLICT, not a race the lower key wins.
     """
     contributions = (
         _owner("paper:x", doi=None, related=["topic:owner"]),
@@ -613,7 +616,116 @@ def test_permutation_invariance_holds_between_peers_of_one_role() -> None:
     ]
 
     assert len({_snapshot(result) for result in results}) == 1
-    # The lower ContributionKey wins the vacancy, and APPEND follows key order -- in every
-    # encounter order, not merely consistently-but-arbitrarily.
-    assert results[0].entities[0].doi == "10.1/first"
+    # APPEND follows key order in every encounter order: this is what the sort buys.
     assert results[0].entities[0].related == ["topic:owner", "topic:first", "topic:second"]
+    # The vacancy STAYS vacant: no source position confers authority over a scalar.
+    assert results[0].entities[0].doi is None
+    [error] = results[0].errors
+    assert error.code == "contribution-conflict"
+    assert error.field == "doi"
+    assert [ref.path for ref in error.contributors] == ["papers/references.bib"] * 2
+
+
+def test_peers_agreeing_on_a_scalar_collapse_to_one_value() -> None:
+    """Agreement is not conflict. Two sources saying the same thing fill the vacancy."""
+    result = _arbitrate(
+        _owner("paper:x", doi=None),
+        _external("paper:x", line=1, doi="10.1/x"),
+        _external("paper:x", line=2, doi="10.1/x"),
+        policy={"doi": MergePolicy.REPLACE},
+    )
+    assert result.entities[0].doi == "10.1/x"
+    assert result.errors == ()
+
+
+def test_two_borrowers_disagreeing_on_a_vacancy_leave_it_vacant() -> None:
+    """The fold-per-borrower defect: the first fills, the second is faulted for disagreeing with
+    a value the first had no authority to install. Proposals are gathered before any decision."""
+    result = _arbitrate(
+        _owner("paper:x", doi=None),
+        _borrower("paper:x", path="overlays/papers/a.md", doi="10.1/a"),
+        _borrower("paper:x", path="overlays/papers/b.md", doi="10.1/b"),
+        policy={"doi": MergePolicy.REPLACE},
+    )
+    assert result.entities[0].doi is None
+    [error] = result.errors
+    assert error.code == "contribution-conflict"
+    assert [ref.path for ref in error.contributors] == [
+        "overlays/papers/a.md",
+        "overlays/papers/b.md",
+    ]
+
+
+def test_external_only_node_leaves_a_contested_scalar_vacant() -> None:
+    result = _arbitrate(
+        _external("paper:x", line=1, doi="10.1/first", title="First"),
+        _external("paper:x", line=2, doi="10.1/second", title="First"),
+    )
+    assert result.entities[0].doi is None
+    assert result.entities[0].title == "First"
+    [error] = result.errors
+    assert error.code == "contribution-conflict"
+    assert error.field == "doi"
+
+
+def test_field_provenance_credits_only_what_the_owner_authored() -> None:
+    """`model_dump()` yields ~67 fields for an entity that authored a dozen.
+
+    Crediting the owner for all of them reports it as the source of values it never supplied --
+    and in the vacancy case names it a source of the very DOI it did not have.
+    """
+    result = _arbitrate(
+        _owner("paper:x", doi=None, title="Canonical"),
+        _external("paper:x", doi="10.1/x"),
+        policy={"doi": MergePolicy.REPLACE},
+    )
+    sources = result.field_sources["paper:x"]
+
+    owner_key = ContributionKey(
+        role=ParticipationMode.OWNER,
+        authority="proj:markdown",
+        path="entities/papers/x.md",
+        position=-1,
+    )
+    assert sources["title"] == (owner_key,)
+    # The owner supplied no doi, so it is not a source of one.
+    assert owner_key not in sources["doi"]
+    assert [key.role for key in sources["doi"]] == [ParticipationMode.EXTERNAL_REFERENCE]
+    # Defaulted, unauthored fields are credited to nobody.
+    assert "commits_to" not in sources
+    assert "lens_views" not in sources
+
+
+def test_cross_scope_peers_are_ambiguous_not_silently_chosen() -> None:
+    """Neither scope is ours nor commons. "The only remaining owner" is a cardinality
+    precondition, not licence to let the lexically lower adapter supply the entity."""
+    result = _arbitrate(
+        _owner("paper:x", owner_scope="alpha", title="Alpha"),
+        _owner("paper:x", owner_scope="beta", title="Beta"),
+        project_scope="unrelated",
+    )
+    assert result.entities == ()
+    [error] = result.errors
+    assert error.code == "ambiguous-representative"
+    # Both rows survive for the resolver.
+    assert len(result.identity_declarations) == 2
+
+
+def test_cross_scope_peer_resolves_when_this_project_owns_it() -> None:
+    result = _arbitrate(
+        _owner("paper:x", owner_scope="proj", title="Ours"),
+        _owner("paper:x", owner_scope="beta", title="Beta"),
+        project_scope="proj",
+    )
+    assert result.entities[0].title == "Ours"
+    assert result.errors == ()
+
+
+def test_cross_scope_peer_resolves_to_commons_when_we_do_not_own_it() -> None:
+    result = _arbitrate(
+        _owner("paper:x", owner_scope="commons", title="Canonical"),
+        _owner("paper:x", owner_scope="beta", title="Beta"),
+        project_scope="unrelated",
+    )
+    assert result.entities[0].title == "Canonical"
+    assert result.errors == ()

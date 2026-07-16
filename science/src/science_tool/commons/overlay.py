@@ -12,7 +12,7 @@ tree into the dedicated overlays/ root.
 
 from __future__ import annotations
 
-from collections.abc import Iterator, Mapping
+from collections.abc import Iterator, Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -219,7 +219,9 @@ def validate_overlay_pin(canonical: CommonsEntityRecord, overlay: OverlayRecord 
         )
 
 
-_SKIP_OVERLAY_FIELDS = frozenset({"id", "overlay_of", "pin_version", "pin_effective_version"})
+# Public: arbitration skips the same structural fields. A second frozenset in the graph would
+# be a second declaration of which fields an overlay may never carry.
+SKIP_OVERLAY_FIELDS = frozenset({"id", "overlay_of", "pin_version", "pin_effective_version"})
 
 
 @dataclass(frozen=True, slots=True)
@@ -264,6 +266,148 @@ class FrontmatterComposition:
     conflicts: tuple[OverlayFieldConflict, ...]
 
 
+@dataclass(frozen=True, slots=True)
+class FieldProposal:
+    """One contributor's offer for one field.
+
+    `contests` is the borrower/external asymmetry, and it is about STANDING, not content: a
+    borrower is explicit project input and may contest an owner (producing an attributed
+    conflict), while an external reference merely supports a node and is silently not offered
+    when the owner has already spoken.
+    """
+
+    value: Any
+    contests: bool
+
+
+@dataclass(frozen=True, slots=True)
+class FieldOutcome:
+    """What the matrix decided, and which proposals it credits or faults for it."""
+
+    value: Any
+    changed: bool
+    contributed: tuple[int, ...]
+    conflicting: tuple[int, ...]
+
+
+def lookup_merge_policy(
+    field: str, merge_policy: Mapping[str, MergePolicy]
+) -> MergePolicy | None:
+    """The entity profile's policy for `field`, else the overlay schema's, else None.
+
+    Explicit membership, not `entity_policy.get(f) or overlay_policy.get(f)`: `or` reads a
+    policy's TRUTHINESS to decide whose policy applies, so a falsey policy value would silently
+    hand the field to the overlay map. Which map declares a field is a fact about the maps, not
+    about the value found in one.
+    """
+    if field in merge_policy:
+        return merge_policy[field]
+    overlay_policy = read_overlay_merge_policy()
+    if field in overlay_policy:
+        return overlay_policy[field]
+    return None
+
+
+def distinct_values(values: list[Any]) -> list[Any]:
+    """Distinct by equality, not by hash -- proposals are frequently lists and dicts."""
+    out: list[Any] = []
+    for value in values:
+        if not any(value == seen for seen in out):
+            out.append(value)
+    return out
+
+
+def resolve_field(
+    policy: MergePolicy,
+    owner_value: Any,
+    proposals: Sequence[FieldProposal],
+) -> FieldOutcome:
+    """Apply one merge policy to an owner's value and every proposal against it.
+
+    THE role matrix -- the CLI (one overlay) and the graph (n contributions) both resolve here,
+    so an overlay cannot mean one thing to `science commons show` and another to the graph.
+
+    Position never decides a scalar. Proposal order is meaningful for APPEND, where sequence is
+    the value, and meaningless everywhere else: differing scalar proposals are a CONFLICT, not a
+    race the earliest source wins. Letting a lower source position confer authority would make a
+    bib line number decide an entity's DOI.
+    """
+    if policy is MergePolicy.APPEND:
+        base = [] if is_unset(owner_value) else list(owner_value)
+        merged = list(base)
+        contributed: list[int] = []
+        for index, proposal in enumerate(proposals):
+            if is_unset(proposal.value):
+                continue
+            added = False
+            for item in list(proposal.value):
+                if item not in merged:
+                    merged.append(item)
+                    added = True
+            if added:
+                contributed.append(index)
+        return FieldOutcome(
+            value=merged,
+            changed=merged != base,
+            contributed=tuple(contributed),
+            conflicting=(),
+        )
+
+    if policy is MergePolicy.PROJECT_ONLY:
+        # A project's own field. An external reference has no project standing and does not
+        # propose one; only borrowers are considered.
+        offers = [(i, p) for i, p in enumerate(proposals) if p.contests]
+        if not offers:
+            return FieldOutcome(owner_value, False, (), ())
+        distinct = distinct_values([p.value for _, p in offers])
+        if len(distinct) == 1:
+            return FieldOutcome(
+                value=distinct[0],
+                changed=distinct[0] != owner_value,
+                contributed=tuple(i for i, _ in offers),
+                conflicting=(),
+            )
+        return FieldOutcome(owner_value, False, (), tuple(i for i, _ in offers))
+
+    if policy is MergePolicy.REPLACE:
+        if not is_unset(owner_value):
+            # The owner has spoken. A borrower contesting that is an attributed conflict; an
+            # external offering it is simply not offered.
+            return FieldOutcome(
+                value=owner_value,
+                changed=False,
+                contributed=(),
+                conflicting=tuple(
+                    i for i, p in enumerate(proposals) if p.contests and not is_unset(p.value)
+                ),
+            )
+        offers = [(i, p) for i, p in enumerate(proposals) if not is_unset(p.value)]
+        if not offers:
+            return FieldOutcome(owner_value, False, (), ())
+        distinct = distinct_values([p.value for _, p in offers])
+        if len(distinct) == 1:
+            # Every proposal agrees: collapse, and credit all of them.
+            return FieldOutcome(
+                value=distinct[0],
+                changed=True,
+                contributed=tuple(i for i, _ in offers),
+                conflicting=(),
+            )
+        # They disagree. The vacancy STAYS a vacancy: filling it from the lowest-ordered source
+        # would resolve a genuine disagreement by file position.
+        return FieldOutcome(owner_value, False, (), tuple(i for i, _ in offers))
+
+    # FORBIDDEN
+    return FieldOutcome(
+        value=owner_value,
+        changed=False,
+        contributed=(),
+        conflicting=tuple(
+            i for i, p in enumerate(proposals) if p.contests and not is_unset(p.value)
+        ),
+    )
+
+
 def compose_frontmatter(
     canonical: Mapping[str, Any],
     overlay: Mapping[str, Any],
@@ -273,48 +417,31 @@ def compose_frontmatter(
 ) -> FrontmatterComposition:
     """Compose validated canonical and overlay frontmatter without I/O.
 
-    The single implementation of the borrower role matrix: `merge_entity` (CLI) and the graph's
-    `arbitrate_contributions` both fold through here, so an overlay cannot mean one thing to
-    `science commons show` and another to the graph.
+    The CLI's single-overlay wrapper over `resolve_field`, which is the shared matrix.
     """
-    overlay_policy = read_overlay_merge_policy()
     merged = dict(canonical)
     field_sources: dict[str, str] = {key: "canonical" for key in merged}
     conflicts: list[OverlayFieldConflict] = []
 
     for field, value in overlay.items():
-        if field in _SKIP_OVERLAY_FIELDS:
+        if field in SKIP_OVERLAY_FIELDS:
             continue
-        # Explicit membership, not `entity_policy.get(f) or overlay_policy.get(f)`: `or` reads a
-        # policy's TRUTHINESS to decide whose policy applies, so a falsey policy value would
-        # silently hand the field to the overlay map. Which map declares a field is a fact about
-        # the maps, not about the value found in one.
-        if field in merge_policy:
-            policy = merge_policy[field]
-        elif field in overlay_policy:
-            policy = overlay_policy[field]
-        else:
+        policy = lookup_merge_policy(field, merge_policy)
+        if policy is None:
             raise OverlayMergeError(field=field, canonical_id=canonical_id)
 
+        outcome = resolve_field(
+            policy, merged.get(field), (FieldProposal(value=value, contests=True),)
+        )
+        if outcome.conflicting:
+            conflicts.append(OverlayFieldConflict(field=field, policy=policy))
+            continue
         if policy is MergePolicy.APPEND:
-            base = canonical.get(field) or []
-            merged[field] = _dedup(list(base) + list(value))
+            merged[field] = outcome.value
             field_sources[field] = "canonical+overlay"
-        elif policy is MergePolicy.PROJECT_ONLY:
-            merged[field] = value
+        elif outcome.contributed:
+            merged[field] = outcome.value
             field_sources[field] = "overlay"
-        elif policy is MergePolicy.REPLACE:
-            # A borrower may FILL what the owner left unset, but never overwrite what the owner
-            # authored. `is_unset`, never `not merged.get(field)` -- an owner's `False` is a
-            # position, not a vacancy.
-            if is_unset(merged.get(field)):
-                merged[field] = value
-                field_sources[field] = "overlay"
-            else:
-                conflicts.append(OverlayFieldConflict(field=field, policy=policy))
-        else:  # FORBIDDEN
-            if not is_unset(value):
-                conflicts.append(OverlayFieldConflict(field=field, policy=policy))
 
     return FrontmatterComposition(
         frontmatter=merged,

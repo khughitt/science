@@ -10,14 +10,23 @@ which adapter ran first is not an error anyone can act on.
 from __future__ import annotations
 
 from collections import defaultdict
-from collections.abc import Iterable, Mapping
+from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass
 from typing import Any, TypeAlias
 
 from science_model.entities import Entity
 from science_model.entity_schema import MergePolicy
+from science_model.source_ref import SourceRef
 
-from science_tool.commons.overlay import OverlayRecord, compose_frontmatter
+from science_tool.commons.errors import OverlayMergeError
+from science_tool.commons.overlay import (
+    SKIP_OVERLAY_FIELDS,
+    FieldProposal,
+    OverlayRecord,
+    distinct_values,
+    lookup_merge_policy,
+    resolve_field,
+)
 from science_tool.graph.identity_table import (
     COMMONS_SCOPE,
     IdentityDeclaration,
@@ -107,15 +116,30 @@ class ArbitrationContext:
     field_policies: Mapping[tuple[str, str], Mapping[str, MergePolicy]]
 
 
-@dataclass(frozen=True, order=True)
+@dataclass(frozen=True)
 class ArbitrationError:
-    """One issue in the ledger. Ordered, so the ledger is a set, not a sequence of events."""
+    """One issue in the ledger.
+
+    `contributors` carries structured SourceRefs, not rendered strings: the strict loader
+    boundary projects these into ContributionConflictError, and a boundary that had to parse
+    display text to recover a path would make the message format load-bearing.
+    """
 
     code: str
     canonical_id: str
     owner_scope: str
     field: str
-    contributors: tuple[str, ...]
+    contributors: tuple[SourceRef, ...]
+
+    @property
+    def sort_key(self) -> tuple[str, str, str, str, tuple[str, ...]]:
+        return (
+            self.code,
+            self.canonical_id,
+            self.owner_scope,
+            self.field,
+            tuple(str(ref) for ref in self.contributors),
+        )
 
 
 @dataclass(frozen=True)
@@ -180,58 +204,91 @@ def _reject_indistinguishable(
     return list(kept.values())
 
 
-def _offer_external_fields(
-    base: dict[str, Any],
-    candidate: Entity,
+def _authored_fields(candidate: Entity) -> set[str]:
+    """The fields this candidate actually SPEAKS to.
+
+    `model_dump()` yields ~67 fields for an entity that authored 12; crediting the owner for all
+    of them makes provenance meaningless and, worse, reports the owner as a source of a value it
+    never supplied. `model_fields_set` is what was explicitly set (including schema extensions),
+    and `is_unset` removes the ones set to an absence -- owner-unset is owner-absent.
+    """
+    dumped = candidate.model_dump()
+    return {
+        field
+        for field in candidate.model_fields_set
+        if field in dumped and not is_unset(dumped[field])
+    }
+
+
+def _external_proposals(candidate: Entity) -> dict[str, Any]:
+    """The permitted metadata an external candidate offers: authored, non-structural."""
+    dumped = candidate.model_dump()
+    return {
+        field: dumped[field]
+        for field in sorted(_authored_fields(candidate))
+        if field not in _EXTERNAL_STRUCTURAL_FIELDS
+    }
+
+
+def _compose_contributions(
+    *,
+    canonical_id: str,
+    scope: str,
+    owner: EntityContribution,
+    attached: list[AttachmentContribution],
+    externals: list[EntityContribution],
     policies: Mapping[str, MergePolicy],
-    key: ContributionKey,
-    field_sources: dict[str, tuple[ContributionKey, ...]],
+    entity_fields: dict[str, tuple[ContributionKey, ...]],
+    errors: list[ArbitrationError],
 ) -> dict[str, Any]:
-    """Merge an external candidate's PERMITTED metadata onto `base`.
+    """Resolve every proposal against the owner, one field at a time.
 
-    Unlike a borrower, an external reference is not project input and cannot contest the owner:
-    a defended REPLACE field is simply not offered. Offering it as an error would make every bib
-    entry that names an owned paper a build failure.
+    Proposals are gathered from ALL contributors before any field is decided -- the two-step
+    discipline at field granularity. Folding contributor-by-contributor would let the first
+    borrower fill a vacancy and then fault the second for conflicting with a value the first had
+    no authority to install.
     """
-    merged = dict(base)
-    for field, value in candidate.model_dump().items():
-        if field in _EXTERNAL_STRUCTURAL_FIELDS or is_unset(value):
+    authored = owner.candidate.model_dump()
+    merged = dict(authored)
+
+    proposals: dict[str, list[tuple[SourceContribution, FieldProposal]]] = defaultdict(list)
+    for borrower in attached:
+        for field, value in borrower.record.frontmatter.items():
+            if field in SKIP_OVERLAY_FIELDS:
+                continue
+            proposals[field].append((borrower, FieldProposal(value=value, contests=True)))
+    for external in externals:
+        for field, value in _external_proposals(external.candidate).items():
+            proposals[field].append((external, FieldProposal(value=value, contests=False)))
+
+    for field in sorted(proposals):
+        entries = proposals[field]
+        policy = lookup_merge_policy(field, policies)
+        if policy is None:
+            if any(proposal.contests for _, proposal in entries):
+                # Fail early: a borrower field with no policy anywhere is a broken profile, and
+                # silently dropping it is how an overlay reaches nothing.
+                raise OverlayMergeError(field=field, canonical_id=canonical_id)
             continue
-        policy = policies.get(field)
-        if policy is MergePolicy.APPEND:
-            combined = list(merged.get(field) or []) + list(value)
-            deduped: list[Any] = []
-            for item in combined:
-                if item not in deduped:
-                    deduped.append(item)
-            if deduped != merged.get(field):
-                merged[field] = deduped
-                field_sources[field] = field_sources.get(field, ()) + (key,)
-        elif policy is MergePolicy.REPLACE and is_unset(merged.get(field)):
-            merged[field] = value
-            field_sources[field] = field_sources.get(field, ()) + (key,)
-    return merged
 
-
-def _merge_supporting_external(
-    base: dict[str, Any],
-    candidate: Entity,
-    key: ContributionKey,
-    field_sources: dict[str, tuple[ContributionKey, ...]],
-) -> dict[str, Any]:
-    """Merge one external onto another when NO owner exists: non-conflicting metadata only.
-
-    With no owner there is no policy to consult, so the only safe rule is to fill vacancies.
-    Two externals disagreeing on a set field are left as the first one said -- an unowned node is
-    not the place to adjudicate between citations.
-    """
-    merged = dict(base)
-    for field, value in candidate.model_dump().items():
-        if field in _EXTERNAL_STRUCTURAL_FIELDS or is_unset(value):
-            continue
-        if is_unset(merged.get(field)):
-            merged[field] = value
-            field_sources[field] = field_sources.get(field, ()) + (key,)
+        outcome = resolve_field(
+            policy, merged.get(field), tuple(proposal for _, proposal in entries)
+        )
+        if outcome.conflicting:
+            errors.append(
+                ArbitrationError(
+                    code="contribution-conflict",
+                    canonical_id=canonical_id,
+                    owner_scope=scope,
+                    field=field,
+                    contributors=_refs_of([entries[i][0] for i in outcome.conflicting]),
+                )
+            )
+        if outcome.contributed:
+            merged[field] = outcome.value
+            for index in outcome.contributed:
+                key = ContributionKey.from_declaration(entries[index][0].declaration)
+                entity_fields[field] = entity_fields.get(field, ()) + (key,)
     return merged
 
 
@@ -292,9 +349,7 @@ def _arbitrate_ordered(
                         canonical_id=canonical_id,
                         owner_scope=scope,
                         field="",
-                        contributors=tuple(
-                            sorted(str(c.declaration.source_ref) for c in live)
-                        ),
+                        contributors=_refs_of(live),
                     )
                 )
                 suppressed = True
@@ -313,7 +368,7 @@ def _arbitrate_ordered(
                         canonical_id=canonical_id,
                         owner_scope=borrower.declaration.owner_scope,
                         field="",
-                        contributors=(str(borrower.declaration.source_ref),),
+                        contributors=_refs_of([borrower]),
                     )
                 )
 
@@ -323,28 +378,36 @@ def _arbitrate_ordered(
         entity_fields: dict[str, tuple[ContributionKey, ...]] = {}
 
         if representatives:
-            # The B3a materialization rule: prefer this project's owner, then commons, then the
-            # only one left. The rows keep every scope, so cross-scope ambiguity stays visible to
-            # the resolver -- this picks an in-memory representative, it does not resolve identity.
-            if context.project_scope in representatives:
-                scope = context.project_scope
-            elif COMMONS_SCOPE in representatives:
-                scope = COMMONS_SCOPE
-            else:
-                scope = min(
-                    representatives,
-                    key=lambda s: _contribution_ordering(representatives[s]),
+            scope = _select_scope(representatives, context.project_scope)
+            if scope is None:
+                # More than one scope owns this id and neither is ours nor commons. "The only
+                # remaining owner" is a cardinality precondition, not licence to invent
+                # precedence: choosing by adapter or path would let a name decide whose entity
+                # the graph sees.
+                errors.append(
+                    ArbitrationError(
+                        code="ambiguous-representative",
+                        canonical_id=canonical_id,
+                        owner_scope="",
+                        field="",
+                        contributors=_refs_of(
+                            [representatives[s] for s in sorted(representatives)]
+                        ),
+                    )
                 )
+                continue
             owner = representatives[scope]
             owner_key = ContributionKey.from_declaration(owner.declaration)
             entity_source_adapters[canonical_id] = owner.declaration.adapter
 
             authored = owner.candidate.model_dump()
-            merged = dict(authored)
-            for field in merged:
+            for field in _authored_fields(owner.candidate):
                 entity_fields[field] = (owner_key,)
 
             attached = [b for b in borrowers if b.declaration.owner_scope == scope]
+            for borrower in attached:
+                if borrower.declaration.source_ref:
+                    overlay_paths[canonical_id] = borrower.declaration.source_ref.path
             if attached:
                 # Fail early: a borrower composed under no policy contributes nothing and says
                 # nothing. Absent policy is a broken caller, not a quiet no-op.
@@ -352,40 +415,16 @@ def _arbitrate_ordered(
             else:
                 policies = context.field_policies.get((scope, canonical_id), {})
 
-            for borrower in attached:
-                key = ContributionKey.from_declaration(borrower.declaration)
-                if borrower.declaration.source_ref:
-                    overlay_paths[canonical_id] = borrower.declaration.source_ref.path
-                composition = compose_frontmatter(
-                    merged,
-                    borrower.record.frontmatter,
-                    policies,
-                    canonical_id=canonical_id,
-                )
-                for conflict in composition.conflicts:
-                    errors.append(
-                        ArbitrationError(
-                            code="contribution-conflict",
-                            canonical_id=canonical_id,
-                            owner_scope=scope,
-                            field=conflict.field,
-                            contributors=(str(borrower.declaration.source_ref),),
-                        )
-                    )
-                for field, source in composition.field_sources.items():
-                    if source in ("overlay", "canonical+overlay"):
-                        entity_fields[field] = entity_fields.get(field, ()) + (key,)
-                merged = composition.frontmatter
-
-            for external in externals:
-                merged = _offer_external_fields(
-                    merged,
-                    external.candidate,
-                    policies,
-                    ContributionKey.from_declaration(external.declaration),
-                    entity_fields,
-                )
-
+            merged = _compose_contributions(
+                canonical_id=canonical_id,
+                scope=scope,
+                owner=owner,
+                attached=attached,
+                externals=externals,
+                policies=policies,
+                entity_fields=entity_fields,
+                errors=errors,
+            )
             # Only what actually CHANGED, so an untouched field keeps the owner's own value
             # object rather than a round-tripped copy of it.
             updates = {
@@ -396,28 +435,14 @@ def _arbitrate_ordered(
             entity = owner.candidate.model_copy(update=updates) if updates else owner.candidate
 
         elif externals:
-            # No owner: an external-only node materializes so references resolve, without any
-            # source becoming its owner. The identity rows still say EXTERNAL_REFERENCE.
-            first = externals[0]
-            first_key = ContributionKey.from_declaration(first.declaration)
-            entity_source_adapters[canonical_id] = first.declaration.adapter
-            authored = first.candidate.model_dump()
-            merged = dict(authored)
-            for field in merged:
-                entity_fields[field] = (first_key,)
-            for external in externals[1:]:
-                merged = _merge_supporting_external(
-                    merged,
-                    external.candidate,
-                    ContributionKey.from_declaration(external.declaration),
-                    entity_fields,
-                )
-            updates = {
-                field: value
-                for field, value in merged.items()
-                if field not in authored or authored[field] != value
-            }
-            entity = first.candidate.model_copy(update=updates) if updates else first.candidate
+            entity, entity_fields = _materialize_external_only(
+                canonical_id=canonical_id,
+                externals=externals,
+                entity_source_adapters=entity_source_adapters,
+                errors=errors,
+            )
+            if entity is None:
+                continue
         else:
             continue
 
@@ -437,5 +462,99 @@ def _arbitrate_ordered(
         dataset_datapackages=dataset_datapackages,
         overlay_paths=overlay_paths,
         field_sources=field_sources,
-        errors=tuple(sorted(errors)),
+        errors=tuple(sorted(errors, key=lambda error: error.sort_key)),
     )
+
+
+def _refs_of(contributions: Sequence[SourceContribution]) -> tuple[SourceRef, ...]:
+    refs = [c.declaration.source_ref for c in contributions if c.declaration.source_ref]
+    return tuple(sorted(refs, key=lambda ref: (ref.path, -1 if ref.line is None else ref.line, ref.adapter_name)))
+
+
+def _select_scope(
+    representatives: Mapping[str, EntityContribution], project_scope: str
+) -> str | None:
+    """The B3a materialization rule. None when it does not determine a single scope.
+
+    This picks an in-memory representative; it does not resolve identity. Every owner row
+    survives, so cross-scope ambiguity stays visible to the resolver.
+    """
+    if project_scope in representatives:
+        return project_scope
+    if COMMONS_SCOPE in representatives:
+        return COMMONS_SCOPE
+    if len(representatives) == 1:
+        return next(iter(representatives))
+    return None
+
+
+def _materialize_external_only(
+    *,
+    canonical_id: str,
+    externals: list[EntityContribution],
+    entity_source_adapters: dict[str, str],
+    errors: list[ArbitrationError],
+) -> tuple[Entity | None, dict[str, tuple[ContributionKey, ...]]]:
+    """Materialize a node no source owns, so references to it resolve.
+
+    No owner means no policy, so the only rule left is agreement. Sequences union in key order --
+    sequence IS the value, so ordering them decides nothing. Scalars must agree: where externals
+    disagree the field is ledgered and left VACANT, because the first candidate is a proposal
+    like any other, and letting its value stand would make bib line order the authority on an
+    entity's DOI.
+    """
+    entity_fields: dict[str, tuple[ContributionKey, ...]] = {}
+    first = externals[0]
+    entity_source_adapters[canonical_id] = first.declaration.adapter
+
+    proposals: dict[str, list[tuple[EntityContribution, Any]]] = defaultdict(list)
+    for external in externals:
+        for field, value in _external_proposals(external.candidate).items():
+            proposals[field].append((external, value))
+
+    authored = first.candidate.model_dump()
+    resolved: dict[str, Any] = {}
+    for field in sorted(proposals):
+        entries = proposals[field]
+        keys = tuple(ContributionKey.from_declaration(c.declaration) for c, _ in entries)
+        values = [value for _, value in entries]
+
+        if all(isinstance(value, list) for value in values):
+            merged_list: list[Any] = []
+            for value in values:
+                for item in value:
+                    if item not in merged_list:
+                        merged_list.append(item)
+            resolved[field] = merged_list
+            entity_fields[field] = keys
+            continue
+
+        distinct = distinct_values(values)
+        if len(distinct) == 1:
+            resolved[field] = distinct[0]
+            entity_fields[field] = keys
+            continue
+        errors.append(
+            ArbitrationError(
+                code="contribution-conflict",
+                canonical_id=canonical_id,
+                owner_scope="",
+                field=field,
+                contributors=_refs_of([c for c, _ in entries]),
+            )
+        )
+        # An explicit vacancy: the disagreement is in the ledger, and no proposal won it.
+        resolved[field] = None
+
+    for field in _authored_fields(first.candidate):
+        if field not in resolved:
+            entity_fields.setdefault(
+                field, (ContributionKey.from_declaration(first.declaration),)
+            )
+    updates = {
+        field: value
+        for field, value in resolved.items()
+        if field not in authored or authored[field] != value
+    }
+    entity = first.candidate.model_copy(update=updates) if updates else first.candidate
+    return entity, entity_fields
