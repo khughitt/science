@@ -63,7 +63,10 @@ def _knowledge_with_last_reviewed(raw: str | None):
     uri = URIRef("https://example.org/hypothesis/h1")
     knowledge.add((uri, SCI_NS.freshnessState, Literal("fresh")))
     if raw is not None:
-        knowledge.add((uri, SCI_NS.lastReviewed, Literal(raw, datatype=XSD.date)))
+        # normalize=False is load-bearing: with the default, RDFLib rewrites a
+        # parseable non-canonical value (e.g. "2026-W18-5") to its canonical
+        # lexical form "2026-05-01", which would mask exactly the case under test.
+        knowledge.add((uri, SCI_NS.lastReviewed, Literal(raw, datatype=XSD.date, normalize=False)))
     return knowledge, uri
 
 
@@ -156,7 +159,7 @@ here (still accepted, now unused); Task 3 removes them.
 - Modify: `science/src/science_tool/graph/cli.py` — `attention-sample` table column + `never` transform (`:663-679`); `attention-rank` table column + `never` transform + `try/except ValueError` (`:705-726`).
 - Modify: `science/src/science_tool/wander/context.py` — `ContextBundle.last_reviewed` (`:16-31`) + `assemble_bundle` (`:50-64`).
 - Modify: `science/src/science_tool/wander/skeleton.py` — skeleton table (`:36-40`), `_bundle_to_dict` JSON (`:116`).
-- Test: `science/tests/test_attention_sampling.py`, `science/tests/test_wander_skeleton.py`, `science/tests/test_wander_stub_smell.py`.
+- Test: `science/tests/test_attention_sampling.py`, `science/tests/test_attention_preconditions.py`, `science/tests/test_wander_skeleton.py`, `science/tests/test_wander_stub_smell.py`, `science/tests/test_wander_context.py`.
 
 **Interfaces:**
 - Consumes: `_last_reviewed_date(knowledge, entity_id, entity_uri) -> date | None` (Task 1).
@@ -501,7 +504,10 @@ def test_attention_tables_render_last_reviewed(tmp_path, command: str) -> None:
     args = ["graph", command, "--path", str(graph_path)]
     if command == "attention-sample":
         args += ["--limit", "5", "--seed", "1"]
-    result = CliRunner().invoke(main, args)
+    # COLUMNS=220 keeps the Rich table wide enough that the "Last reviewed" header
+    # and the ISO date are not ellipsis-truncated (Click's default is 80). Matches
+    # the existing env={"COLUMNS": ...} idiom already used in this test suite.
+    result = CliRunner().invoke(main, args, env={"COLUMNS": "220"})
     assert result.exit_code == 0, result.output
     assert "Last reviewed" in result.output   # column header
     assert "2026-04-30" in result.output       # stamped entity
@@ -517,13 +523,13 @@ def test_corrupt_last_reviewed_is_clean_cli_error(tmp_path, command: str) -> Non
     knowledge.add((uri, RDF.type, SCI_NS.Hypothesis))
     knowledge.add((uri, SKOS.prefLabel, Literal("h1")))
     knowledge.add((uri, SCI_NS.freshnessState, Literal("fresh")))
-    knowledge.add((uri, SCI_NS.lastReviewed, Literal("2026-05-01garbage", datatype=XSD.date)))
+    knowledge.add((uri, SCI_NS.lastReviewed, Literal("2026-05-01garbage", datatype=XSD.date, normalize=False)))
     graph_path = _write(tmp_path, dataset)
 
     args = ["graph", command, "--path", str(graph_path)]
     if command == "attention-sample":
         args += ["--limit", "5"]
-    result = CliRunner().invoke(main, args)
+    result = CliRunner().invoke(main, args, env={"COLUMNS": "220"})
     assert result.exit_code != 0
     assert "hypothesis:h1" in result.output
     assert "2026-05-01garbage" in result.output
