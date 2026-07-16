@@ -84,43 +84,91 @@ that other subsystems own.
 
 ## Resolution — reconcile the doc to the helper
 
-Docs-only. No change to `curate/inventory.py` or its tests.
+Docs-only for behaviour: **no change** to `curate/inventory.py` or its tests.
+Two files change in lockstep, plus historical banners:
 
-Rewrite `commands/curate.md` lines 64–71 so the inventory promise matches the
-helper exactly and the cross-cutting signals point at their real owners.
+1. `commands/curate.md` — the authored source (lines 64–76).
+2. `codex-skills/science-curate/SKILL.md` — the **committed Codex mirror**,
+   regenerated from (1), not hand-edited. `codex-skills/science-curate/SKILL.md`
+   lines 183–196 carry the identical broken contract, and
+   `science/tests/test_codex_skills.py` byte-compares the committed mirror
+   against a fresh generation, so editing `commands/curate.md` without
+   regenerating **fails that test**. Regenerate via
+   `scripts/generate_codex_skills.py`.
 
-**Kept bullets** (accurate today):
-- artifact counts by class;
-- recently modified and long-idle artifacts;
-- missing `related` / `source_refs` signals;
-- documents with no outbound links.
+### Design principle for the rewrite
 
-**Added bullet** (helper returns it; line 73 already references it; the promise
-list omitted it):
-- files under `entities/` without YAML frontmatter (`no_frontmatter_files`).
+The original report saw only the *top-level* JSON keys and could not tell that
+`recently_modified`, `long_idle`, `missing_related`, etc. live under
+`candidate_signals`. So the replacement does not merely list signal names — it
+gives each signal's **exact JSON property path**, which is what actually
+resolves the reported confusion.
 
-**Removed promises, redirected:**
-- unresolved refs / alias-resolutions → removed. Add a note: unresolved refs
-  come from the `science health` output this phase already runs; the inventory
-  helper does not recompute them. Alias-resolutions are internal-only and not
-  currently surfaced.
-- candidate stale-task evidence → removed. Add a note: stale-task judgement is
-  semantic and deferred to `/science:review-tasks`; a deterministic stale-task
-  surface is a recorded follow-up, not yet available.
+### The full replacement text (authored here, applied by the plan)
 
-The proposed replacement text is authored in full in the implementation plan.
+`commands/curate.md` lines 64–76 (and the byte-identical mirror block) become:
+
+> The inventory helper returns compact corpus facts only. Each signal is a
+> property of the JSON payload at the path shown:
+>
+> - `artifact_counts` — counts by artifact class (top-level object).
+> - `candidate_signals.recently_modified` / `candidate_signals.long_idle` —
+>   recently modified and long-idle artifact paths.
+> - `candidate_signals.missing_related` /
+>   `candidate_signals.missing_source_refs` — artifacts missing `related` /
+>   `source_refs`.
+> - `candidate_signals.no_outbound_links` — artifacts with no outbound links.
+> - `candidate_signals.no_frontmatter_files` — Markdown under `entities/` that
+>   lacks YAML frontmatter (entity-file drift).
+> - `agents_md` — per-project `AGENTS.md` / `CLAUDE.md` / `core/decisions.md`
+>   state (see the `agents-md` theme below).
+>
+> The helper does **not** recompute cross-cutting signals owned by other
+> commands this phase already runs:
+>
+> - **unresolved refs** — read the `unresolved_refs` array from the
+>   `science health --format json` output above; the inventory helper does not
+>   duplicate them.
+> - **stale-task evidence** — semantic and out of the inventory's scope; defer
+>   to `/science:review-tasks` (source-ref / result-manifest / recent-commit
+>   judgement). No deterministic stale-task surface exists yet.
+>
+> `candidate_signals.no_frontmatter_files` lists only Markdown under
+> `entities/`; treat each as a missing-metadata candidate unless the file is
+> legitimately prose (for example an `entities/**/README.md`). It never
+> contains `doc/plans/` or `doc/reports/` paths — the helper scans only the
+> canonical entity home.
+
+This corrects three things the old text got wrong: it drops the two
+never-delivered promises (unresolved-refs/alias-resolutions, stale-task
+evidence), it adds the delivered-but-unlisted `no_frontmatter_files`, and it
+replaces the stale lines 73–76 paragraph — which discussed `doc/plans/` /
+`doc/reports/` files that the `entities/`-only scan (`inventory.py:77,153`) can
+never surface.
 
 ## Record-correction (so nothing is silently dropped)
 
 The convergence design carved out its follow-on items with the explicit
 principle that none be "silently dropped". Closing fb-017 must therefore split,
-not erase, the two concerns it was conflated with:
+not erase, the two concerns it was conflated with. **Three** historical
+documents currently mis-state this id and each gets a correction:
 
-1. **Banner on `2026-07-11-instrument-result-convergence-design.md`** — mark
-   fb-2026-07-10-017 CLOSED by this doc-reconciliation, and state that the
+1. **`2026-07-11-instrument-result-convergence-design.md`** — banner marking
+   fb-2026-07-10-017 CLOSED by this doc-reconciliation, and stating that the
    guard-blindness observation attached to it in lines 82–85 is a *separate*
    item that remains open (it is **not** closed by this spec).
-2. **Adjacent items kept open** (below) get their own recorded homes so they
+2. **`2026-07-11-instrument-triage.md`** — "known gap #1" (line 172) says guard
+   blindness "is exactly fb-2026-07-10-017". That equation is the conflation
+   itself. Add a supersession note: fb-017 is the contract divergence (now
+   closed); the guard-blindness gap is a *distinct* open item that merely shares
+   the module.
+3. **`2026-07-11-instrument-result-convergence-plan.md`** — Task 10 Step 2
+   (line ~2100) describes fb-017 as "missing `unresolved-ref` / `stale-task` /
+   `long_idle` keys". `long_idle` is **delivered**
+   (`CandidateSignals.long_idle`); only unresolved-refs and stale-tasks were
+   absent. Add a supersession note correcting the key list and pointing to this
+   spec.
+4. **Adjacent items kept open** (below) get their own recorded homes so they
    survive fb-017's closure.
 
 ## Adjacent items kept open (named, not silently dropped)
@@ -152,14 +200,24 @@ not erase, the two concerns it was conflated with:
 
 ## Validation
 
-Docs-only; there is no code under test. Verification is:
+Docs-only for behaviour; the one test that runs is the existing Codex
+mirror-consistency check. Verification is:
 
-1. `commands/curate.md` no longer contains the strings "unresolved refs",
-   "alias-resolution", or "stale-task" in the inventory-promise list (rg
-   assertion over lines 64–77).
-2. The inventory-promise bullets map one-to-one to `CandidateSignals` /
-   `CurationInventory` fields (manual field-by-field check against
-   `curate/inventory.py`).
-3. The convergence-design banner and the two kept-open item records are
-   present (rg for the banner text and the follow-on entries).
-4. `git diff --check` is clean.
+1. Neither `commands/curate.md` nor `codex-skills/science-curate/SKILL.md`
+   contains "unresolved refs", "alias-resolution", or "stale-task" in the
+   inventory-promise block, nor the stale `doc/plans/` / `doc/reports/`
+   `no_frontmatter_files` guidance (rg assertion over both files).
+2. Every inventory-promise property path maps one-to-one to a
+   `CandidateSignals` / `CurationInventory` field (manual field-by-field check
+   against `curate/inventory.py`): `artifact_counts`, `candidate_signals.{recently_modified,
+   long_idle, missing_related, missing_source_refs, no_outbound_links,
+   no_frontmatter_files}`, `agents_md`.
+3. The Codex mirror is regenerated from source and
+   `cd science && uv run --frozen pytest tests/test_codex_skills.py` passes
+   (the byte-compare test that would otherwise flag a hand-edited or
+   un-regenerated mirror).
+4. All three historical correction notes are present (rg the banner text in
+   `2026-07-11-instrument-result-convergence-design.md`,
+   `2026-07-11-instrument-triage.md`, and
+   `2026-07-11-instrument-result-convergence-plan.md`).
+5. `git diff --check` is clean.
