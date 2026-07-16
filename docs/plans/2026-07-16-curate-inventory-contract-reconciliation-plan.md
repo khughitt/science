@@ -31,6 +31,7 @@
 - `docs/plans/2026-07-11-instrument-result-convergence-design.md` — **Modified:** top banner correcting fb-017's status.
 - `docs/plans/2026-07-11-instrument-triage.md` — **Modified:** supersession note on "known gap #1".
 - `docs/plans/2026-07-11-instrument-result-convergence-plan.md` — **Modified:** supersession note on Task 10 Step 2's key list.
+- `docs/plans/2026-07-16-curate-inventory-contract-reconciliation-design.md` — **Modified:** governing design status → implemented (pending merge).
 
 ---
 
@@ -43,7 +44,7 @@
 
 **Interfaces:**
 - Consumes: nothing from other tasks.
-- Produces: a `commands/curate.md` whose inventory-promise block matches the design's authored replacement text verbatim; a regenerated mirror. Task 2 depends on neither — it is independent.
+- Produces: a `commands/curate.md` whose inventory-promise block matches the design's authored replacement text verbatim; a regenerated mirror. **Task 2's banners assert this reconciliation has happened, so Task 2 is strictly ordered AFTER this task's commit.**
 
 - [ ] **Step 1: Replace the inventory-promise block in `commands/curate.md`**
 
@@ -118,19 +119,41 @@ Expected: prints `Generated Codex skills in <repo>/codex-skills`. This rewrites 
 Run: `cd science && uv run --frozen pytest tests/test_codex_skills.py -q`
 Expected: PASS (all, including the byte-compare test).
 
-- [ ] **Step 5: Assert the three obsolete sentences are gone and the new paths are present**
+- [ ] **Step 5: Assert the three obsolete sentences are gone and every promised path is present**
 
-Run each; the first three must print **nothing** (no match), the last must print matches in both files:
+First, the three obsolete sentences must print **nothing** (no match) in either file:
 
 ```bash
 cd ~/d/science
 rg -n "unresolved refs and obvious alias-resolutions if available" commands/curate.md codex-skills/science-curate/SKILL.md
 rg -n "candidate stale-task evidence from direct source refs or result manifests" commands/curate.md codex-skills/science-curate/SKILL.md
 rg -n "Legacy .doc/plans/. and" commands/curate.md codex-skills/science-curate/SKILL.md
-rg -n "candidate_signals.no_outbound_links" commands/curate.md codex-skills/science-curate/SKILL.md
 ```
 
-Expected: first three → no output; fourth → one hit per file.
+Expected: no output from any of the three.
+
+Then assert **each** of the eight one-to-one contract paths appears in **both**
+files. This loop prints a `MISSING` line for any path absent from either file;
+a clean run prints nothing:
+
+```bash
+cd ~/d/science
+for p in \
+  'artifact_counts' \
+  'candidate_signals.recently_modified' \
+  'candidate_signals.long_idle' \
+  'candidate_signals.missing_related' \
+  'candidate_signals.missing_source_refs' \
+  'candidate_signals.no_outbound_links' \
+  'candidate_signals.no_frontmatter_files' \
+  'agents_md'; do
+  for f in commands/curate.md codex-skills/science-curate/SKILL.md; do
+    rg -qF "$p" "$f" || echo "MISSING: $p in $f"
+  done
+done
+```
+
+Expected: no `MISSING` lines. (`rg -F` fixed-strings, so the `.` in each path is literal.)
 
 - [ ] **Step 6: Confirm no source-code change leaked in**
 
@@ -155,16 +178,17 @@ entities/-only scan can never surface. Regenerate the Codex mirror."
 
 ---
 
-## Task 2: Correct the three historical records
+## Task 2: Correct the historical records and mark the design implemented
 
 **Files:**
 - Modify: `docs/plans/2026-07-11-instrument-result-convergence-design.md` (top banner)
 - Modify: `docs/plans/2026-07-11-instrument-triage.md` (known-gap-#1 note, ~line 172)
 - Modify: `docs/plans/2026-07-11-instrument-result-convergence-plan.md` (Task 10 Step 2 note, ~line 2100)
+- Modify: `docs/plans/2026-07-16-curate-inventory-contract-reconciliation-design.md` (status → implemented, pending merge)
 
 **Interfaces:**
-- Consumes: nothing from Task 1 (independent; can be done before or after).
-- Produces: no stale fb-2026-07-10-017 characterization remains in the three docs.
+- Consumes: **Task 1, committed.** This task's banners state fb-2026-07-10-017 is closed *by the command reconciliation*; that claim is false until Task 1 lands. **Do not start Task 2 until Task 1 is committed.**
+- Produces: no stale fb-2026-07-10-017 characterization remains in the three historical docs, and the governing design is marked implemented.
 
 - [ ] **Step 1: Add the closure banner to the convergence design**
 
@@ -225,25 +249,41 @@ Use this Edit. `old_string`:
    > item that merely shares the module, and it remains **open**.
 ```
 
-- [ ] **Step 3: Correct the plan's Task 10 Step 2 key list**
+- [ ] **Step 3: Append a correction note to the plan's Task 10 Step 2 (do NOT rewrite the historical line)**
 
-In `docs/plans/2026-07-11-instrument-result-convergence-plan.md`, Step 2 (~line 2100) reads: *"It is in `INSTRUMENT_MODULES` because fb-2026-07-10-017 reports its payload diverging from the command spec (missing `unresolved-ref` / `stale-task` / `long_idle` keys) — **that is the curate spec's problem, not this one.**"*
+Match the append-only banner strategy used for the design and triage: **leave the original sentence — including its `long_idle` claim — untouched**, and append a correction block after it. Editing the historical key list would leave the correction's "was listed above" with no referent.
 
-Use this Edit. `old_string`:
+Use this Edit. `old_string` (the historical line, verbatim and unchanged):
 
 ```
 `collect_inventory -> CurationInventory` already returns a typed payload, so it does **not** violate the guard. It is in `INSTRUMENT_MODULES` because fb-2026-07-10-017 reports its payload diverging from the command spec (missing `unresolved-ref` / `stale-task` / `long_idle` keys) — **that is the curate spec's problem, not this one.** Leave the behavior alone; confirm only that the guard passes for this module.
 ```
 
+`new_string` (same line preserved verbatim, correction appended):
+
+```
+`collect_inventory -> CurationInventory` already returns a typed payload, so it does **not** violate the guard. It is in `INSTRUMENT_MODULES` because fb-2026-07-10-017 reports its payload diverging from the command spec (missing `unresolved-ref` / `stale-task` / `long_idle` keys) — **that is the curate spec's problem, not this one.** Leave the behavior alone; confirm only that the guard passes for this module.
+
+> **CORRECTION 2026-07-16.** `long_idle` was listed above as a missing key but is in fact **delivered** (`CandidateSignals.long_idle`); only unresolved-refs and stale-tasks were ever absent. fb-2026-07-10-017 is now CLOSED by `docs/plans/2026-07-16-curate-inventory-contract-reconciliation-design.md`.
+```
+
+- [ ] **Step 4: Transition the governing design from Decision-ready to implemented**
+
+Everything else now declares fb-2026-07-10-017 closed; the governing design must not stay `Decision-ready`. Use SHIPPED/CLOSED only post-merge (attention-recency precedent) — on this branch it is *implemented, pending merge*.
+
+In `docs/plans/2026-07-16-curate-inventory-contract-reconciliation-design.md`, use this Edit. `old_string`:
+
+```
+**Decision-ready.** Docs-only reconciliation. Closes fb-2026-07-10-017 (the
+```
+
 `new_string`:
 
 ```
-`collect_inventory -> CurationInventory` already returns a typed payload, so it does **not** violate the guard. It is in `INSTRUMENT_MODULES` because fb-2026-07-10-017 reports its payload diverging from the command spec (missing `unresolved-ref` / `stale-task` keys) — **that is the curate spec's problem, not this one.** Leave the behavior alone; confirm only that the guard passes for this module.
-
-> **CORRECTION 2026-07-16.** `long_idle` was listed here as a missing key but is in fact **delivered** (`CandidateSignals.long_idle`); only unresolved-refs and stale-tasks were absent. fb-2026-07-10-017 is now CLOSED by `docs/plans/2026-07-16-curate-inventory-contract-reconciliation-design.md`.
+**IMPLEMENTED on branch `curate-inventory-contract`; pending merge.** Docs-only reconciliation. Closes fb-2026-07-10-017 (the
 ```
 
-- [ ] **Step 4: Verify all three correction notes are present**
+- [ ] **Step 5: Verify all three correction notes and the design status transition are present**
 
 Run:
 
@@ -252,11 +292,12 @@ cd ~/d/science
 rg -n "item 4 \(fb-2026-07-10-017\) RESOLVED/CLOSED, and un-conflated" docs/plans/2026-07-11-instrument-result-convergence-design.md
 rg -n "SUPERSEDED 2026-07-16" docs/plans/2026-07-11-instrument-triage.md
 rg -n "CORRECTION 2026-07-16" docs/plans/2026-07-11-instrument-result-convergence-plan.md
+rg -n "IMPLEMENTED on branch .curate-inventory-contract.; pending merge" docs/plans/2026-07-16-curate-inventory-contract-reconciliation-design.md
 ```
 
-Expected: one hit each.
+Expected: one hit each. Also confirm `Decision-ready` no longer appears in the governing design: `rg -n "Decision-ready" docs/plans/2026-07-16-curate-inventory-contract-reconciliation-design.md` → no output.
 
-- [ ] **Step 5: Final gate — full doc-guard test + clean diff**
+- [ ] **Step 6: Final gate — full doc-guard test + clean diff**
 
 Run:
 
@@ -266,22 +307,23 @@ cd ~/d/science && git diff --check
 git status --porcelain
 ```
 
-Expected: pytest PASS; `git diff --check` prints nothing; `git status` shows only the three modified plan docs staged/unstaged for this task (Task 1's files already committed).
+Expected: pytest PASS; `git diff --check` prints nothing; `git status` shows only the four modified docs for this task (the three historical records + the governing design), Task 1's files already committed.
 
-- [ ] **Step 6: Commit**
+- [ ] **Step 7: Commit**
 
 ```bash
 cd ~/d/science
 git branch --show-current   # must be curate-inventory-contract
 git add docs/plans/2026-07-11-instrument-result-convergence-design.md \
         docs/plans/2026-07-11-instrument-triage.md \
-        docs/plans/2026-07-11-instrument-result-convergence-plan.md
+        docs/plans/2026-07-11-instrument-result-convergence-plan.md \
+        docs/plans/2026-07-16-curate-inventory-contract-reconciliation-design.md
 git commit -m "doc(instruments): un-conflate fb-2026-07-10-017 from composite-guard-blindness
 
 Correct three records that mis-state the id: mark fb-017 CLOSED via the curate
 contract reconciliation, note the guard-blindness observation is a separate open
 item, and fix the plan's wrong 'missing long_idle' key list (long_idle is
-delivered)."
+delivered). Transition the governing design to implemented (pending merge)."
 ```
 
 ---
