@@ -8,13 +8,14 @@ import pytest
 from science_model.entities import (
     DatasetEntity,
     DomainEntity,
-    EntityClass,
+    Entity,
     EvidenceLineEntity,
     MechanismEntity,
     PaperEntity,
     ProjectEntity,
     TaskEntity,
 )
+from science_model.identity import EntityClass
 
 from science_tool.graph.entity_registry import (
     EntityKindAlreadyRegisteredError,
@@ -22,6 +23,22 @@ from science_tool.graph.entity_registry import (
     EntityKindShadowError,
     EntityRegistry,
 )
+
+
+def test_registered_kinds_returns_all_registered_sorted() -> None:
+    registry = EntityRegistry.with_core_types()
+
+    class WidgetEntity(Entity):
+        pass
+
+    registry.register_extension_kind("widget", WidgetEntity, entity_class=EntityClass.OPERATIONAL)
+
+    kinds = registry.registered_kinds()
+    assert kinds["workflow-step"].__name__ == "WorkflowStepEntity"
+    assert kinds["widget"] is WidgetEntity
+    assert list(kinds) == sorted(kinds)
+    declaring = [k for k, cls in kinds.items() if "method" in cls.model_fields]
+    assert declaring == ["workflow-step"]
 
 
 def test_with_core_types_registers_all_core_kinds() -> None:

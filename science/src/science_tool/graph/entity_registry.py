@@ -196,6 +196,16 @@ class EntityRegistry:
     def all_kind_classes(self) -> dict[str, EntityClass]:
         return dict(self._kind_class)
 
+    def registered_kinds(self) -> dict[str, type[Entity]]:
+        """All registered kind -> bound model, deterministic by kind name.
+
+        Merges core, profile, catalog, and extension registrations. Used to map a
+        reference field back to the kinds that declare it (graph audit's
+        undeclared_key diagnostic).
+        """
+        merged = {**self._core, **self._profile, **self._catalog, **self._extensions}
+        return dict(sorted(merged.items()))
+
     @staticmethod
     def _require_entity_subclass(candidate: object) -> None:
         if not (isinstance(candidate, type) and issubclass(candidate, Entity)):
