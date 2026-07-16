@@ -1,6 +1,6 @@
 # Attention-ranking recency correctness — design (fb-2026-07-10-023)
 
-**Status:** Decision-ready (pending review acceptance). Branch `attention-recency-correctness`.
+**Status:** IMPLEMENTED on branch `attention-recency-correctness`; pending merge.
 
 This closes item 3 of the InstrumentResult-convergence follow-on list
 (`docs/plans/2026-07-11-instrument-result-convergence-design.md` §"Follow-on

@@ -1,5 +1,12 @@
 # Instrument Result Convergence — the Silent-Instrument Ruling
 
+> **UPDATE 2026-07-15 — item 3 IMPLEMENTED (pending merge).** The attention-ranking
+> follow-on pair (fb-2026-07-10-023 + fb-2026-07-11-005) is implemented on branch
+> `attention-recency-correctness` — see `docs/plans/2026-07-15-attention-recency-correctness-design.md`.
+> The redundant `days_since_last_review` term was deleted; fb-2026-07-11-005 was already
+> handled by the `_is_closed` terminal drop. **This banner supersedes every statement below
+> that describes the attention-ranking pair as open or still-live.**
+
 ## Status
 
 > **VALIDATOR-PAYLOAD STATUS UPDATE (2026-07-15) — supersedes every "open", "live",
