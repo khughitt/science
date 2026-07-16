@@ -1,7 +1,7 @@
 # Identity arbitration — completing the compiler seam
 
 **Date:** 2026-07-16
-**Status:** Design — proposed. Prerequisite for landing the fb-2026-07-16-005 fix.
+**Status:** Design — approved. Prerequisite for landing the fb-2026-07-16-005 fix.
 **Motivating incident:** fb-2026-07-16-005 — a `references.bib` entry shadowed a commons
 canonical. `merge_entity` and `validate_overlay_pin` were skipped for every paper a project also
 cited; ~245 overlays across the federation were inert, and `science validate` reported success
@@ -262,7 +262,7 @@ decided by which schema happens to declare it — not by any ruling anyone made.
 |---|---|
 | `mixin-paper-2.0`, `mixin-theme-2.0`, `mixin-topic-2.0` | `science:merge: project_only` |
 | `mixin-dataset-1.0` | **does not declare `status`** |
-| `science-entity-base-2.0` | declared, **unannotated → `REPLACE`** |
+| `science-entity-base-1.0` | declared, **unannotated → `REPLACE`** |
 
 Paper, theme, and topic were migrated to v2.0 mixins carrying `project_only`. Dataset was left at
 1.0, inherits `status` from the base, and lands on `REPLACE`. Since `_iter_components` is
