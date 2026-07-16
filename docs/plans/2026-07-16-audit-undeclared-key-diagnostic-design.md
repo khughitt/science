@@ -2,10 +2,11 @@
 
 ## Status
 
-**Decision-ready.** Design approved in principle; revised twice after review. The
-diagnostic is gated on the **set of kinds actually schema-validated at load**
-(not a project-wide pin boolean), threads the registry context it needs, and has
-a drift guard that independently rediscovers audited sites. Fixes the
+**Decision-ready.** Design approved in principle; revised three times after
+review. The diagnostic is gated on the **strict-schema kind set** (the kinds
+whose extra-preserving load is schema-checked — not a project-wide pin boolean),
+threads the registry context it needs, and has a drift guard that independently
+rediscovers audited sites and fails closed on non-literal labels. Fixes the
 `_audit_entity` getattr misfire introduced when D5 flipped `Entity` to
 `extra="allow"`, and adds a narrow `undeclared_key` diagnostic so a misplaced
 reference field reports the real defect instead of a phantom
@@ -49,7 +50,7 @@ The report identifies two problems:
   `getattr(entity, "<field>", <default>)` for the non-base fields, so any stray
   known reference-field name is audited as if it were a real reference.
 
-### Two kinds of extra key — the schema-validated kind set decides
+### Two kinds of extra key — the strict-schema kind set decides
 
 `model_extra` does not hold one thing. Per the `Entity` docstring
 (`entities.py:302-318`), it holds **schema-valid project extension fields**
@@ -67,8 +68,8 @@ today only `hypothesis` entities are checked with `unevaluatedProperties: false`
 all. A stray `method:` on a `workflow` entity is therefore *never* refused at
 load — pinned or not — and reaches `_audit_entity` unvouched.
 
-The load-bearing fact is thus **the set of kinds whose extra keys the loader
-actually validated**, not the project-wide pin:
+The load-bearing fact is thus **the set of kinds whose extra-preserving load the
+loader schema-checks** — the strict-schema policy set — not the project-wide pin:
 
 - If `entity.kind` **is** in that set, a stray unknown key would have been refused
   at load (`unevaluatedProperties: false`), so any key present in `model_extra` at
@@ -78,11 +79,34 @@ actually validated**, not the project-wide pin:
   every kind on an unpinned project), no schema vouched for its extra keys. A key
   named like a reference field is an unvouched misplacement — worth a WARN.
 
-This is why the diagnostic is gated on `entity.kind not in schema_validated_kinds`
+This is why the diagnostic is gated on `entity.kind not in strict_schema_kinds`
 rather than on a `schema_pinned` boolean: a boolean would wrongly suppress the
 WARN for a stray `method` on a pinned project's `workflow`. As `PROJECT_MIXIN_NAMES`
 grows over the migration, this gate auto-narrows — a kind that starts being
 schema-validated stops emitting the WARN, because its extra keys are then vouched.
+
+### Why the strict-schema kind set is a sound gate — the extra-preserving-path invariant
+
+`strict_schema_kinds` is a **strict-schema policy** set, not literal per-entity
+validation provenance: `_validate_against_schema` runs only inside the
+markdown-adapter loop (`sources.py:365`), while structured-source entities load by
+a separate path (`sources.py:1000+`) that never calls it. The gate is still exact
+because of an invariant on which load paths can produce a `model_extra` key at all:
+
+- The **markdown adapter** projects frontmatter onto `Entity` (`extra="allow"`),
+  so it is the only path that preserves unknown keys — and it is exactly the path
+  `_validate_against_schema` guards.
+- **Structured sources** load through `StructuredEntitySource`, whose
+  `model_config = ConfigDict(extra="ignore")` (`source_contracts.py:71`) **drops**
+  unknown fields. A structured-source entity of any kind therefore has an empty
+  (of stray keys) `model_extra`, so `_audit_undeclared_reference_keys` finds
+  nothing to flag regardless of whether its kind is in the set.
+
+So the only entities that can carry an unvouched extra key are precisely the ones
+the strict-schema policy governs. The set is named `strict_schema_kinds` (not
+`schema_validated_kinds`) to state this honestly, and a regression test pins the
+invariant (a structured-source entity has no stray `model_extra`), so a future
+extra-preserving load path cannot silently defeat the gate.
 
 ### Which fields actually misfire
 
@@ -107,7 +131,7 @@ applied uniformly (below) so the *set* is derived, never hand-classified.
 ## Resolution — Approach A
 
 Gate every audited reference read through one helper; diagnose an unvouched
-misplacement once, gated on the schema-validated kind set. Three pieces plus a
+misplacement once, gated on the strict-schema kind set. Three pieces plus a
 drift guard.
 
 ### Piece 1 — universal declared-by-kind gate
@@ -147,10 +171,10 @@ Applied uniformly:
 `commons/geneset.py`) and respects inheritance, so `blocked_by` stays audited on
 every `ProjectEntity` subclass while being gated out on `chain-audit`/`domain`.
 
-### Piece 2 — the `undeclared_key` diagnostic, gated on the validated kind set
+### Piece 2 — the `undeclared_key` diagnostic, gated on the strict-schema kind set
 
-A new helper called once from `_audit_entity`, only when the entity's kind was
-**not** schema-validated at load:
+A new helper called once from `_audit_entity`, only when the entity's kind is
+outside the strict-schema set:
 
 ```python
 def _audit_undeclared_reference_keys(
@@ -181,42 +205,42 @@ def _audit_undeclared_reference_keys(
     return rows
 ```
 
-Caller (`_audit_entity`) runs it only for kinds outside the validated set:
+Caller (`_audit_entity`) runs it only for kinds outside the strict-schema set:
 
 ```python
-if entity.kind not in schema_validated_kinds:
+if entity.kind not in strict_schema_kinds:
     rows.extend(_audit_undeclared_reference_keys(entity, declaring_kinds=declaring_kinds))
 ```
 
 - `status: "warn"` — `audit_project_sources` computes
   `has_failures = any(row["status"] == "fail" for row in rows)`, so a `warn` row
   does not block `validate`. On the affected projects the phantom ERRORs become
-  accurate WARNs and `validate` unblocks; where the kind is schema-validated the
-  misfire simply stops (Piece 1) and no WARN is emitted.
+  accurate WARNs and `validate` unblocks; where the kind is under the strict
+  schema the misfire simply stops (Piece 1) and no WARN is emitted.
 - Only keys whose name is a **known reference field** are flagged
   (`REFERENCE_FIELD_NAMES`, derived in Piece 3). A `hypothesis`'s vouched
-  extension field never reaches here (its kind is in the validated set); an
-  unvouched extra key of any non-reference name is preserved silently, honoring
-  D3.3.
+  extension field never reaches here (its kind is in the set); an unvouched extra
+  key of any non-reference name is preserved silently, honoring D3.3.
 
 ### Piece 3 — threaded context and derived sets (no hole-by-construction)
 
-Three facts `_audit_entity` does not currently receive must be threaded from
-`audit_project_sources`, which holds `sources`. All three parameters are
-**required** on `_audit_entity` (no defaults), so a caller cannot silently get
-the conservative-but-wrong empty value.
+`_audit_entity` gains **two required parameters** (no defaults, so a caller
+cannot silently pass the conservative-but-wrong empty value), both threaded from
+`audit_project_sources`, which holds `sources`. The eligible-key set
+`REFERENCE_FIELD_NAMES` is *not* threaded — it is a module-level constant derived
+at import (item 3 below).
 
-1. **The schema-validated kind set.** `ProjectSources` exposes no record of what
-   the loader validated. Add a field
-   `schema_validated_kinds: frozenset[str] = frozenset()` to `ProjectSources`
+1. **The strict-schema kind set.** `ProjectSources` exposes no record of what the
+   loader strict-checked. Add a field
+   `strict_schema_kinds: frozenset[str] = frozenset()` to `ProjectSources`
    (`sources.py:163`), set at the single construction site (`sources.py:663`) to
    `PROJECT_MIXIN_NAMES if project_schema is not None else frozenset()` — exactly
    the kinds `_validate_against_schema` enforced. The empty default is the
    conservative one (nothing vouched ⇒ diagnostic can fire), so a forgotten
    constructor never silently suppresses. `audit_project_sources` reads
-   `sources.schema_validated_kinds` and passes it to each `_audit_entity` call.
-   This auto-tracks `PROJECT_MIXIN_NAMES`: when the migration slice grows,
-   pinned projects validate more kinds and the set widens with no code change here.
+   `sources.strict_schema_kinds` and passes it to each `_audit_entity` call. This
+   auto-tracks `PROJECT_MIXIN_NAMES`: when the migration slice grows, pinned
+   projects strict-check more kinds and the set widens with no code change here.
 
 2. **Declaring-kinds map.** `_kinds_declaring` cannot be computed from a bare
    `Entity`; it needs the active registry (core + profile + catalog + extension
@@ -247,9 +271,9 @@ the conservative-but-wrong empty value.
    fields the tuple is always non-empty (a core class declares each), but the
    empty case is handled rather than assumed.
 
-3. **`REFERENCE_FIELD_NAMES` — derived, not hand-listed.** The eligible extra-key
-   set is exactly the audited **top-level attribute names** that are *not*
-   base-`Entity` fields:
+3. **`REFERENCE_FIELD_NAMES` — a derived module constant, not hand-listed.** The
+   eligible extra-key set is exactly the audited **top-level attribute names**
+   that are *not* base-`Entity` fields:
 
    ```python
    REFERENCE_FIELD_NAMES = frozenset(_AUDITED_REFERENCE_FIELDS) - set(Entity.model_fields)
@@ -262,31 +286,39 @@ the conservative-but-wrong empty value.
    path; it is not a Pydantic field and can never appear as a `model_extra` key).
    The drift guard pins `_AUDITED_REFERENCE_FIELDS` to reality.
 
-### Drift guard — independently rediscovers audited sites
+### Drift guard — independently rediscovers audited sites, fails closed
 
 A `{_declared args} == _AUDITED_REFERENCE_FIELDS` equality alone is blind to a
-future bare `getattr(entity, "foo")` feeding an audit call: neither side moves,
-so the test would pass while the gate is bypassed. The guard therefore checks the
-gate from the audit side and forbids the bypass shape. It AST-walks `_audit_entity`
-and asserts **all three**:
+future bare `getattr(entity, "foo")` feeding an audit call, or an audit call whose
+`field_name` is a keyword or a non-literal: neither side moves, so the test would
+pass while the gate is bypassed. The guard therefore checks the gate from the
+audit side and fails closed on anything it cannot statically read. It AST-walks
+`_audit_entity` and asserts **all four**:
 
 1. **No bare entity getattr.** `_audit_entity` contains zero
    `getattr(entity, <literal>, ...)` calls. Every reference read must go through
    `_declared`; entity metadata (`entity.kind`, `entity.canonical_id`,
    `entity.file_path`) uses plain attribute access and is unaffected.
-2. **Every audited field is gated.** Collect `AUDITED` = the set of top-level
-   prefixes of the `field_name` literal (second positional arg) passed to
-   `_audit_reference` / `_audit_dataset_reference` (`"derivation.inputs"` →
-   `"derivation"`). Collect `GATED` = the first-arg literals of `_declared(entity,
-   "<name>", ...)`. Assert `AUDITED <= GATED`. A new `getattr(entity, "foo")`
-   feeding `_audit_reference(entity, "foo", ...)` puts `"foo"` in `AUDITED` but not
-   `GATED` → fail. (Assertion 1 already rejects that specific shape; this
-   assertion also catches a direct `entity.foo` read used as an audit label.)
-3. **The named constant is honest.** Assert `GATED == set(_AUDITED_REFERENCE_FIELDS)`,
+2. **Every audit call exposes a literal label.** For each call to
+   `_audit_reference` / `_audit_dataset_reference`, resolve `field_name` from
+   positional index 1 **or** the `field_name=` keyword. If it is absent or not an
+   `ast.Constant` string, the guard **fails** ("audit call with a non-literal
+   field_name cannot be verified"). This is the fail-closed rule the reviewer
+   required.
+3. **Every audited field is gated.** Collect `AUDITED` = the top-level prefixes of
+   those literal labels (`"derivation.inputs"` → `"derivation"`). Collect `GATED`
+   = the first-arg literals of `_declared(entity, "<name>", ...)`. Assert
+   `AUDITED <= GATED`. A `getattr`/direct-attribute read feeding
+   `_audit_reference(entity, "foo", ...)` puts `"foo"` in `AUDITED` but not
+   `GATED` → fail.
+4. **The named constant is honest.** Assert `GATED == set(_AUDITED_REFERENCE_FIELDS)`,
    so `REFERENCE_FIELD_NAMES` (derived from it) cannot drift from the reads.
 
-Together these independently discover audited sites (via the audit-call labels)
-and reject any reference read that does not pass through the gate.
+Negative cases the guard test exercises against synthetic function bodies: a bare
+`getattr(entity, "foo")` feeding an audit call (assertions 1 & 3); a
+keyword-form bypass `_audit_reference(entity, field_name="foo", target=entity.foo, ...)`
+(assertion 3); and a non-literal label `_audit_reference(entity, some_var, ...)`
+(assertion 2). Each must be rejected.
 
 ## Row format (deterministic)
 
@@ -306,37 +338,42 @@ sorting on `target`:
 
 1. **Gate, parameterized across all six narrow fields.** For each of `method`,
    `workflow`, `chain`, `audits`, `proposition_refs`, `blocked_by`: build an
-   entity of a kind that does *not* declare that field (and not in
-   `schema_validated_kinds`), with a stray key of that name and a non-resolvable
+   entity of a kind that does *not* declare that field (and outside
+   `strict_schema_kinds`), with a stray key of that name and a non-resolvable
    value; assert `_audit_entity` yields **zero** `unresolved_reference` rows for
    that field and exactly one `undeclared_key` WARN row. Proves every gate.
 2. **Declared audits preserved (regression).** `WorkflowStepEntity` with a
    genuinely-unresolved `method:` → still yields `unresolved_reference`.
 3. `WorkflowStepEntity` with a resolvable `method:` → no rows.
-4. **Non-reference extra key** (e.g. `custom_note: hi`) on a kind outside the
-   validated set → no `undeclared_key` row (name not in `REFERENCE_FIELD_NAMES`).
-5. **Validated-kind suppression.** Stray `method:` on an entity whose
-   `entity.kind` **is** in `schema_validated_kinds` (e.g. `hypothesis`) → **no**
+4. **Non-reference extra key** (e.g. `custom_note: hi`) on a kind outside the set
+   → no `undeclared_key` row (name not in `REFERENCE_FIELD_NAMES`).
+5. **Strict-schema-kind suppression.** Stray `method:` on an entity whose
+   `entity.kind` **is** in `strict_schema_kinds` (e.g. `hypothesis`) → **no**
    `undeclared_key` row (its extra keys are schema-vouched). Constructed directly
    at the audit layer, since a real load would have refused the key.
 6. **Unvalidated kind on a pinned project still warns (the P1 regression this
-   design turns on).** `schema_validated_kinds = frozenset({"hypothesis"})`
+   design turns on).** `strict_schema_kinds = frozenset({"hypothesis"})`
    (a pinned project) and a `workflow` entity with a stray `method:` → the
-   `undeclared_key` WARN **fires**, because `workflow` is not schema-validated
-   even when pinned. A `schema_pinned` boolean would have wrongly suppressed this.
-7. **Full-row assertion.** Assert the complete `undeclared_key` row for the
+   `undeclared_key` WARN **fires**, because `workflow` is not strict-checked even
+   when pinned. A `schema_pinned` boolean would have wrongly suppressed this.
+7. **Structured-source invariant.** A structured-source entity of a kind outside
+   the set, loaded with an unknown reference-named key in its row, has an empty
+   (of stray keys) `model_extra` — `StructuredEntitySource` drops it — so
+   `_audit_undeclared_reference_keys` emits nothing. Pins the extra-preserving-path
+   invariant the gate relies on.
+8. **Full-row assertion.** Assert the complete `undeclared_key` row for the
    `method`-on-`workflow` case: `check`, `status`, `source`, `field`, `target`
    (rendered value), and `details` (including the `` `workflow-step` `` owner
    clause and the "unvouched extra key" wording). Locks `_stringify_extra_value`
    and `_format_kinds`.
-8. **Drift guard (all three assertions).** No `getattr(entity, ...)` in
-   `_audit_entity`; `AUDITED <= GATED`; `GATED == set(_AUDITED_REFERENCE_FIELDS)`.
-   Include a negative check: a synthetic function body with a bare
-   `getattr(entity, "foo")` feeding an audit call is rejected by the guard logic.
-9. **Integration, unpinned fixture.** `audit_project_sources` over an **unpinned**
-   fixture project (`schema_validated_kinds` empty) carrying the stray key →
-   `has_failures` stays `False`, WARN row present.
-10. **`registered_kinds` enumeration.** A registry with core + one extension kind
+9. **Drift guard (all four assertions + negatives).** No `getattr(entity, ...)` in
+   `_audit_entity`; every audit call has a literal `field_name`; `AUDITED <= GATED`;
+   `GATED == set(_AUDITED_REFERENCE_FIELDS)`. Plus the three synthetic negative
+   bodies (bare getattr, keyword-form bypass, non-literal label) are each rejected.
+10. **Integration, unpinned fixture.** `audit_project_sources` over an **unpinned**
+    fixture project (`strict_schema_kinds` empty) carrying the stray key →
+    `has_failures` stays `False`, WARN row present.
+11. **`registered_kinds` enumeration.** A registry with core + one extension kind
     returns all of them in sorted order.
 
 Plus the existing migrate / audit suite for regressions:
@@ -346,11 +383,18 @@ Plus the existing migrate / audit suite for regressions:
 
 1. **fb-2026-07-16-003** — resolved by this diagnostic; the misleading
    `unresolved_reference` is replaced by an accurate `undeclared_key` WARN gated
-   on the schema-validated kind set.
+   on the strict-schema kind set.
 2. **The feedback over-scoped `commits_to`.** It is a base-`Entity` field
    (declared by every kind) and cannot misfire; only the six subset-declared
    fields are affected. Recorded here so the correction is not lost.
-3. **D5 design's undeclared-key inventory** (`2026-07-12-authoritative-entity-schema-design.md`,
+3. **The `Entity` docstring overstates schema-first coverage.**
+   `entities.py:314-317` says `unevaluatedProperties: false` "runs before
+   constructing this model on any project pinned to `entity_schema_version: 2`."
+   The reality is per-kind: it runs only for `kind in PROJECT_MIXIN_NAMES`
+   (`hypothesis` today). The implementation updates that docstring to the
+   per-kind reality, so the source contract stops asserting the whole-project
+   premise this design rejected.
+4. **D5 design's undeclared-key inventory** (`2026-07-12-authoritative-entity-schema-design.md`,
    ~line 453, listing `role`, `input`, `report_kind`, `committed`, `spec`,
    `promoted_from`) — add a pointer noting that misplaced **known reference
    fields** are now handled generally by the `undeclared_key` diagnostic rather
@@ -361,13 +405,13 @@ Plus the existing migrate / audit suite for regressions:
 ## Recorded follow-ups (out of scope here)
 
 - **Ratchet.** `undeclared_key` should ratchet WARN → ERROR after a corpus sweep
-  confirms no project relies on a reference-named extra key on an unvalidated
+  confirms no project relies on a reference-named extra key on a non-strict-checked
   kind — the standard certification path. The ratchet applies only to kinds
-  outside `schema_validated_kinds`.
+  outside `strict_schema_kinds`.
 - **Evolution project data.** The 9 `workflow` entities carrying `method:` should
   relocate it to a `workflow-step` entity or drop it. A project-level decision,
-  not a toolkit change; the WARN surfaces it (`workflow` is not schema-validated,
-  so the WARN fires regardless of the project's pin).
+  not a toolkit change; the WARN surfaces it (`workflow` is not strict-checked, so
+  the WARN fires regardless of the project's pin).
 
 ## Alternatives considered
 
@@ -379,8 +423,12 @@ Plus the existing migrate / audit suite for regressions:
   `PROJECT_MIXIN_NAMES`. The kind-set gate achieves the same correctness with a
   smaller change.
 - **A project-wide `schema_pinned` boolean.** Rejected per P1 above: pinning does
-  not imply every kind was schema-validated (`PROJECT_MIXIN_NAMES` is currently
-  just `hypothesis`), so a boolean suppresses WARNs it must emit.
+  not imply every kind was strict-checked (`PROJECT_MIXIN_NAMES` is currently just
+  `hypothesis`), so a boolean suppresses WARNs it must emit.
+- **Tracking validated entity IDs for exact provenance.** Unnecessary: the only
+  load path that preserves extras is the strict-checked markdown adapter;
+  structured sources drop unknowns (`extra="ignore"`), so a kind-set gate plus the
+  invariant test is exact without per-entity bookkeeping.
 
 ## Out of scope
 
