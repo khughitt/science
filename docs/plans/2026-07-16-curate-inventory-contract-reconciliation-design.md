@@ -106,7 +106,10 @@ resolves the reported confusion.
 
 ### The full replacement text (authored here, applied by the plan)
 
-`commands/curate.md` lines 64–76 (and the byte-identical mirror block) become:
+`commands/curate.md` lines 64–76 (and the generated equivalent mirror block —
+not byte-identical: the generator rewrites `/science:review-tasks` to
+`science-review-tasks`, as the committed mirror already shows at
+`SKILL.md:328`) become:
 
 > The inventory helper returns compact corpus facts only. Each signal is a
 > property of the JSON payload at the path shown:
@@ -129,6 +132,9 @@ resolves the reported confusion.
 > - **unresolved refs** — read the `unresolved_refs` array from the
 >   `science health --format json` output above; the inventory helper does not
 >   duplicate them.
+> - **alias-resolutions** — no user-facing report currently exists; the
+>   reference-resolution machinery is internal only, so treat this as
+>   unavailable.
 > - **stale-task evidence** — semantic and out of the inventory's scope; defer
 >   to `/science:review-tasks` (source-ref / result-manifest / recent-commit
 >   judgement). No deterministic stale-task surface exists yet.
@@ -203,10 +209,17 @@ documents currently mis-state this id and each gets a correction:
 Docs-only for behaviour; the one test that runs is the existing Codex
 mirror-consistency check. Verification is:
 
-1. Neither `commands/curate.md` nor `codex-skills/science-curate/SKILL.md`
-   contains "unresolved refs", "alias-resolution", or "stale-task" in the
-   inventory-promise block, nor the stale `doc/plans/` / `doc/reports/`
-   `no_frontmatter_files` guidance (rg assertion over both files).
+1. The three **obsolete promise sentences** are gone from both
+   `commands/curate.md` and `codex-skills/science-curate/SKILL.md` — assert on
+   the exact sentences, not bare tokens, because the corrective replacement text
+   deliberately mentions "unresolved refs", "stale-task", and
+   `doc/plans/`/`doc/reports/` in redirect/clarification context:
+   - `unresolved refs and obvious alias-resolutions if available`
+   - `candidate stale-task evidence from direct source refs or result manifests`
+   - `Legacy \`doc/plans/\` and` (the stale `no_frontmatter_files` legacy-prose
+     paragraph)
+
+   Each exact sentence returns no `rg` match in either file.
 2. Every inventory-promise property path maps one-to-one to a
    `CandidateSignals` / `CurationInventory` field (manual field-by-field check
    against `curate/inventory.py`): `artifact_counts`, `candidate_signals.{recently_modified,
