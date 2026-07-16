@@ -2,12 +2,14 @@
 
 ## Status
 
-**Decision-ready.** Design approved in principle; revised after review to make the
-diagnostic pin-aware, thread the registry context it needs, and correct the
-drift-guard, tests, and row format. Fixes the `_audit_entity` getattr misfire
-introduced when D5 flipped `Entity` to `extra="allow"`, and adds a narrow,
-pin-aware `undeclared_key` diagnostic so a misplaced reference field reports the
-real defect instead of a phantom `unresolved_reference`.
+**Decision-ready.** Design approved in principle; revised twice after review. The
+diagnostic is gated on the **set of kinds actually schema-validated at load**
+(not a project-wide pin boolean), threads the registry context it needs, and has
+a drift guard that independently rediscovers audited sites. Fixes the
+`_audit_entity` getattr misfire introduced when D5 flipped `Entity` to
+`extra="allow"`, and adds a narrow `undeclared_key` diagnostic so a misplaced
+reference field reports the real defect instead of a phantom
+`unresolved_reference`.
 
 ## The defect
 
@@ -47,34 +49,40 @@ The report identifies two problems:
   `getattr(entity, "<field>", <default>)` for the non-base fields, so any stray
   known reference-field name is audited as if it were a real reference.
 
-### Two kinds of extra key — the pin decides which
+### Two kinds of extra key — the schema-validated kind set decides
 
 `model_extra` does not hold one thing. Per the `Entity` docstring
 (`entities.py:302-318`), it holds **schema-valid project extension fields**
 (mm30's `identification`, evolution's `source_stated_evidence`) *and* raw
 passthrough. The two are told apart by whether the composed profile schema
-vouched for the key — and that check is **project-level, keyed on the pin**:
+vouched for the key. That check is **per-kind**, and its scope is narrower than
+"pinned":
 
-> This is safe ONLY because the schema is checked FIRST. … `unevaluatedProperties:
-> false` on the composed profile is what refuses them, and `load_project_sources`
-> runs it before constructing this model on any project pinned to
-> `entity_schema_version: 2`.
+`_validate_against_schema` (`graph/sources.py`) returns early unless
+`project_schema is not None` **and** `kind in PROJECT_MIXIN_NAMES`. And
+`PROJECT_MIXIN_NAMES = frozenset({"hypothesis"})`
+(`science_model/entity_schema/profile.py:24`). So even on a **pinned** project,
+today only `hypothesis` entities are checked with `unevaluatedProperties: false`;
+`workflow`, `workflow-step`, `chain-audit`, etc. are **not** schema-validated at
+all. A stray `method:` on a `workflow` entity is therefore *never* refused at
+load — pinned or not — and reaches `_audit_entity` unvouched.
 
-So:
+The load-bearing fact is thus **the set of kinds whose extra keys the loader
+actually validated**, not the project-wide pin:
 
-- **Pinned project (`entity_schema_version: 2`).** Every entity passed
-  `unevaluatedProperties: false` at load. A stray key the profile does *not*
-  declare is refused there and never reaches `_audit_entity`. Therefore any key
-  present in `model_extra` at audit time is **schema-blessed for that kind** — a
-  legitimate extension. Flagging it would be a false positive.
-- **Unpinned project.** No schema pre-check ran; `extra="allow"` preserved
-  everything, typos included. A key in `model_extra` is *not* vouched for by any
-  schema.
+- If `entity.kind` **is** in that set, a stray unknown key would have been refused
+  at load (`unevaluatedProperties: false`), so any key present in `model_extra` at
+  audit time is schema-blessed for that kind — a legitimate extension. Do not
+  flag it.
+- If `entity.kind` is **not** in that set (every kind but `hypothesis` today, and
+  every kind on an unpinned project), no schema vouched for its extra keys. A key
+  named like a reference field is an unvouched misplacement — worth a WARN.
 
-This is why the diagnostic must be **pin-aware**: it fires only on unpinned
-projects. A key named `method` on a `workflow` entity is a schema-declared
-extension on a pinned project (leave it alone) but an unvouched, misplaced
-reference name on an unpinned one (worth a WARN).
+This is why the diagnostic is gated on `entity.kind not in schema_validated_kinds`
+rather than on a `schema_pinned` boolean: a boolean would wrongly suppress the
+WARN for a stray `method` on a pinned project's `workflow`. As `PROJECT_MIXIN_NAMES`
+grows over the migration, this gate auto-narrows — a kind that starts being
+schema-validated stops emitting the WARN, because its extra keys are then vouched.
 
 ### Which fields actually misfire
 
@@ -99,18 +107,25 @@ applied uniformly (below) so the *set* is derived, never hand-classified.
 ## Resolution — Approach A
 
 Gate every audited reference read through one helper; diagnose an unvouched
-misplacement once, pin-aware. Three pieces plus a drift guard.
+misplacement once, gated on the schema-validated kind set. Three pieces plus a
+drift guard.
 
 ### Piece 1 — universal declared-by-kind gate
 
 Introduce one helper and route **every** audited reference-field read through it:
 
 ```python
-def _declared(entity: Entity, name: str, default: object) -> object:
+def _declared(entity: Entity, name: str, default: Any) -> Any:
     """Read a reference field only when the entity's concrete kind declares it.
 
     Under extra="allow" a stray same-named key lives in model_extra, not in
     model_fields; reading it via getattr would audit it as a real reference.
+
+    Returns Any deliberately: it replaces `getattr(entity, name, default)`, which
+    is already typed Any, so the audited call sites (list iteration, str args to
+    _audit_reference, Derivation access) keep their existing typing with no casts
+    and no new Pyright suppressions. Type safety here is no worse than the getattr
+    it replaces.
     """
     if name in type(entity).model_fields:
         return getattr(entity, name, default)
@@ -124,18 +139,18 @@ Applied uniformly:
   reference (kills the misfire).
 - For the seven base fields it is a no-op (`name` is always in `model_fields`),
   so their audits are behavior-identical. Routing them through the same helper
-  means the drift guard (Piece 3) has a single, uniform call to collect and no
-  site can be added that bypasses the gate.
+  means the drift guard (below) can assert that no reference read bypasses the
+  gate.
 
 `type(entity).model_fields` is the established codebase idiom for
 "class-declared fields" (`project_config.py`, `run_fingerprint_policy.py`,
 `commons/geneset.py`) and respects inheritance, so `blocked_by` stays audited on
 every `ProjectEntity` subclass while being gated out on `chain-audit`/`domain`.
 
-### Piece 2 — the pin-aware `undeclared_key` diagnostic
+### Piece 2 — the `undeclared_key` diagnostic, gated on the validated kind set
 
-A new helper called once from `_audit_entity`, only when the project is
-**unpinned**:
+A new helper called once from `_audit_entity`, only when the entity's kind was
+**not** schema-validated at load:
 
 ```python
 def _audit_undeclared_reference_keys(
@@ -146,7 +161,7 @@ def _audit_undeclared_reference_keys(
     rows: list[AuditRow] = []
     for key in sorted(entity.model_extra or {}):        # deterministic order
         if key not in REFERENCE_FIELD_NAMES:
-            continue  # a project extension field (D3.3) — not our concern
+            continue  # a non-reference-named extra key — never our concern
         owners = declaring_kinds.get(key, ())
         owner_clause = (
             f"; it is declared by {_format_kinds(owners)}" if owners else ""
@@ -159,41 +174,49 @@ def _audit_undeclared_reference_keys(
             "target": _stringify_extra_value(entity.model_extra[key]),
             "details": (
                 f"`{key}` is not a declared field of kind `{entity.kind}`{owner_clause}. "
-                f"Preserved as an extension field but not wired into the graph — "
+                f"It is an unvouched extra key on this kind, not wired into the graph — "
                 f"move it to the owning kind or remove it."
             ),
         })
     return rows
 ```
 
-Caller (`_audit_entity`) skips this entirely when `schema_pinned` is `True`:
+Caller (`_audit_entity`) runs it only for kinds outside the validated set:
 
 ```python
-if not schema_pinned:
+if entity.kind not in schema_validated_kinds:
     rows.extend(_audit_undeclared_reference_keys(entity, declaring_kinds=declaring_kinds))
 ```
 
 - `status: "warn"` — `audit_project_sources` computes
   `has_failures = any(row["status"] == "fail" for row in rows)`, so a `warn` row
-  does not block `validate`. On an unpinned project the phantom ERRORs become
-  accurate WARNs and `validate` unblocks; on a pinned project the misfire simply
-  stops (Piece 1) and no WARN is emitted.
+  does not block `validate`. On the affected projects the phantom ERRORs become
+  accurate WARNs and `validate` unblocks; where the kind is schema-validated the
+  misfire simply stops (Piece 1) and no WARN is emitted.
 - Only keys whose name is a **known reference field** are flagged
-  (`REFERENCE_FIELD_NAMES`, derived in Piece 3). A genuine extension field of any
-  other name is preserved silently, honoring D3.3.
+  (`REFERENCE_FIELD_NAMES`, derived in Piece 3). A `hypothesis`'s vouched
+  extension field never reaches here (its kind is in the validated set); an
+  unvouched extra key of any non-reference name is preserved silently, honoring
+  D3.3.
 
 ### Piece 3 — threaded context and derived sets (no hole-by-construction)
 
-Two facts `_audit_entity` does not currently receive must be threaded from
-`audit_project_sources`, which holds `sources`:
+Three facts `_audit_entity` does not currently receive must be threaded from
+`audit_project_sources`, which holds `sources`. All three parameters are
+**required** on `_audit_entity` (no defaults), so a caller cannot silently get
+the conservative-but-wrong empty value.
 
-1. **Pin status.** `ProjectSources` currently exposes no pin flag; the pin is
-   computed in `load_project_sources` (`sources.py:247`) and discarded. Add a
-   defaulted field `entity_schema_pinned: bool = False` to `ProjectSources`
-   (`sources.py:163`), set it at the single construction site (`sources.py:663`)
-   from the already-computed pin (`config.get("entity_schema_version") ==
-   ENTITY_SCHEMA_VERSION`). `audit_project_sources` reads
-   `sources.entity_schema_pinned` and passes it to each `_audit_entity` call.
+1. **The schema-validated kind set.** `ProjectSources` exposes no record of what
+   the loader validated. Add a field
+   `schema_validated_kinds: frozenset[str] = frozenset()` to `ProjectSources`
+   (`sources.py:163`), set at the single construction site (`sources.py:663`) to
+   `PROJECT_MIXIN_NAMES if project_schema is not None else frozenset()` — exactly
+   the kinds `_validate_against_schema` enforced. The empty default is the
+   conservative one (nothing vouched ⇒ diagnostic can fire), so a forgotten
+   constructor never silently suppresses. `audit_project_sources` reads
+   `sources.schema_validated_kinds` and passes it to each `_audit_entity` call.
+   This auto-tracks `PROJECT_MIXIN_NAMES`: when the migration slice grows,
+   pinned projects validate more kinds and the set widens with no code change here.
 
 2. **Declaring-kinds map.** `_kinds_declaring` cannot be computed from a bare
    `Entity`; it needs the active registry (core + profile + catalog + extension
@@ -232,23 +255,38 @@ Two facts `_audit_entity` does not currently receive must be threaded from
    REFERENCE_FIELD_NAMES = frozenset(_AUDITED_REFERENCE_FIELDS) - set(Entity.model_fields)
    ```
 
-   where `_AUDITED_REFERENCE_FIELDS` is the tuple of attribute names passed as
-   the first argument to `_declared(...)` in `_audit_entity`. This is a
-   **top-level attribute name** (`derivation`), never an audit *label*
-   (`derivation.inputs` — that string is only the `field_name` argument to
-   `_audit_dataset_reference`, describing the nested path, and is not a Pydantic
-   field, so it can never appear as a `model_extra` key). The drift guard (below)
-   pins `_AUDITED_REFERENCE_FIELDS` to reality.
+   where `_AUDITED_REFERENCE_FIELDS` is the tuple of attribute names read for
+   auditing in `_audit_entity`. These are **top-level attribute names**
+   (`derivation`), never audit *labels* (`derivation.inputs` — that string is only
+   the `field_name` argument to `_audit_dataset_reference`, describing the nested
+   path; it is not a Pydantic field and can never appear as a `model_extra` key).
+   The drift guard pins `_AUDITED_REFERENCE_FIELDS` to reality.
 
-### Drift guard
+### Drift guard — independently rediscovers audited sites
 
-A test AST-walks `_audit_entity` and collects the string literal first argument
-of every `_declared(entity, "<name>", ...)` call. It asserts that set equals
-`_AUDITED_REFERENCE_FIELDS`. Because every audited read now goes through
-`_declared`, a new audit site that forgets the gate — or a name added to
-`_AUDITED_REFERENCE_FIELDS` without a corresponding site — fails the test. The
-audited-field set (and thus `REFERENCE_FIELD_NAMES`) cannot silently drift from
-the audits it mirrors.
+A `{_declared args} == _AUDITED_REFERENCE_FIELDS` equality alone is blind to a
+future bare `getattr(entity, "foo")` feeding an audit call: neither side moves,
+so the test would pass while the gate is bypassed. The guard therefore checks the
+gate from the audit side and forbids the bypass shape. It AST-walks `_audit_entity`
+and asserts **all three**:
+
+1. **No bare entity getattr.** `_audit_entity` contains zero
+   `getattr(entity, <literal>, ...)` calls. Every reference read must go through
+   `_declared`; entity metadata (`entity.kind`, `entity.canonical_id`,
+   `entity.file_path`) uses plain attribute access and is unaffected.
+2. **Every audited field is gated.** Collect `AUDITED` = the set of top-level
+   prefixes of the `field_name` literal (second positional arg) passed to
+   `_audit_reference` / `_audit_dataset_reference` (`"derivation.inputs"` →
+   `"derivation"`). Collect `GATED` = the first-arg literals of `_declared(entity,
+   "<name>", ...)`. Assert `AUDITED <= GATED`. A new `getattr(entity, "foo")`
+   feeding `_audit_reference(entity, "foo", ...)` puts `"foo"` in `AUDITED` but not
+   `GATED` → fail. (Assertion 1 already rejects that specific shape; this
+   assertion also catches a direct `entity.foo` read used as an audit label.)
+3. **The named constant is honest.** Assert `GATED == set(_AUDITED_REFERENCE_FIELDS)`,
+   so `REFERENCE_FIELD_NAMES` (derived from it) cannot drift from the reads.
+
+Together these independently discover audited sites (via the audit-call labels)
+and reject any reference read that does not pass through the gate.
 
 ## Row format (deterministic)
 
@@ -268,32 +306,38 @@ sorting on `target`:
 
 1. **Gate, parameterized across all six narrow fields.** For each of `method`,
    `workflow`, `chain`, `audits`, `proposition_refs`, `blocked_by`: build an
-   entity of a kind that does *not* declare that field, with a stray key of that
-   name and a non-resolvable value; assert `_audit_entity` (unpinned) yields
-   **zero** `unresolved_reference` rows for that field and exactly one
-   `undeclared_key` WARN row. This proves every gate, not just `method`.
+   entity of a kind that does *not* declare that field (and not in
+   `schema_validated_kinds`), with a stray key of that name and a non-resolvable
+   value; assert `_audit_entity` yields **zero** `unresolved_reference` rows for
+   that field and exactly one `undeclared_key` WARN row. Proves every gate.
 2. **Declared audits preserved (regression).** `WorkflowStepEntity` with a
    genuinely-unresolved `method:` → still yields `unresolved_reference`.
 3. `WorkflowStepEntity` with a resolvable `method:` → no rows.
-4. **Legitimate non-reference extension key** (e.g. `custom_note: hi`) on any
-   kind, unpinned → no `undeclared_key` row (name not in
-   `REFERENCE_FIELD_NAMES`).
-5. **Pin suppression.** The same stray `method:` on a `workflow` entity, with
-   `schema_pinned=True` → **no** `undeclared_key` row (a pinned project's extra
-   key is schema-blessed). Confirms Piece 2's pin gate.
-6. **Full-row assertion.** Assert the complete `undeclared_key` row for the
+4. **Non-reference extra key** (e.g. `custom_note: hi`) on a kind outside the
+   validated set → no `undeclared_key` row (name not in `REFERENCE_FIELD_NAMES`).
+5. **Validated-kind suppression.** Stray `method:` on an entity whose
+   `entity.kind` **is** in `schema_validated_kinds` (e.g. `hypothesis`) → **no**
+   `undeclared_key` row (its extra keys are schema-vouched). Constructed directly
+   at the audit layer, since a real load would have refused the key.
+6. **Unvalidated kind on a pinned project still warns (the P1 regression this
+   design turns on).** `schema_validated_kinds = frozenset({"hypothesis"})`
+   (a pinned project) and a `workflow` entity with a stray `method:` → the
+   `undeclared_key` WARN **fires**, because `workflow` is not schema-validated
+   even when pinned. A `schema_pinned` boolean would have wrongly suppressed this.
+7. **Full-row assertion.** Assert the complete `undeclared_key` row for the
    `method`-on-`workflow` case: `check`, `status`, `source`, `field`, `target`
    (rendered value), and `details` (including the `` `workflow-step` `` owner
-   clause). Locks `_stringify_extra_value` and `_format_kinds`.
-7. **Drift guard.** `_AUDITED_REFERENCE_FIELDS` equals the `_declared` call
-   arguments in `_audit_entity` (AST walk).
-8. **Integration, unpinned fixture.** `audit_project_sources` over an **unpinned**
-   fixture project carrying the stray key → `has_failures` stays `False`, and the
-   WARN row is present. The fixture must be unpinned: a pinned project's
-   `unevaluatedProperties: false` would reject a genuinely-undeclared key at load,
-   before `_audit_entity` runs.
-9. **`registered_kinds` enumeration.** A registry with core + one extension kind
-   returns all of them in sorted order.
+   clause and the "unvouched extra key" wording). Locks `_stringify_extra_value`
+   and `_format_kinds`.
+8. **Drift guard (all three assertions).** No `getattr(entity, ...)` in
+   `_audit_entity`; `AUDITED <= GATED`; `GATED == set(_AUDITED_REFERENCE_FIELDS)`.
+   Include a negative check: a synthetic function body with a bare
+   `getattr(entity, "foo")` feeding an audit call is rejected by the guard logic.
+9. **Integration, unpinned fixture.** `audit_project_sources` over an **unpinned**
+   fixture project (`schema_validated_kinds` empty) carrying the stray key →
+   `has_failures` stays `False`, WARN row present.
+10. **`registered_kinds` enumeration.** A registry with core + one extension kind
+    returns all of them in sorted order.
 
 Plus the existing migrate / audit suite for regressions:
 `cd science && uv run --frozen pytest`.
@@ -301,39 +345,42 @@ Plus the existing migrate / audit suite for regressions:
 ## Record-corrections (nothing silently dropped)
 
 1. **fb-2026-07-16-003** — resolved by this diagnostic; the misleading
-   `unresolved_reference` is replaced by an accurate, pin-aware `undeclared_key`
-   WARN.
+   `unresolved_reference` is replaced by an accurate `undeclared_key` WARN gated
+   on the schema-validated kind set.
 2. **The feedback over-scoped `commits_to`.** It is a base-`Entity` field
    (declared by every kind) and cannot misfire; only the six subset-declared
    fields are affected. Recorded here so the correction is not lost.
 3. **D5 design's undeclared-key inventory** (`2026-07-12-authoritative-entity-schema-design.md`,
    ~line 453, listing `role`, `input`, `report_kind`, `committed`, `spec`,
    `promoted_from`) — add a pointer noting that misplaced **known reference
-   fields** are now handled generally by the pin-aware `undeclared_key`
-   diagnostic rather than needing a per-field inventory entry. This is the
-   uninventoried instance D5:456-458 anticipated ("wiring a previously-dropped
-   field still changes rebuilt graphs and validation output").
+   fields** are now handled generally by the `undeclared_key` diagnostic rather
+   than needing a per-field inventory entry. This is the uninventoried instance
+   D5:456-458 anticipated ("wiring a previously-dropped field still changes
+   rebuilt graphs and validation output").
 
 ## Recorded follow-ups (out of scope here)
 
 - **Ratchet.** `undeclared_key` should ratchet WARN → ERROR after a corpus sweep
-  confirms no unpinned project relies on a reference-named extension key — the
-  standard certification path (a new check lands as WARN, the population is
-  certified, then it hardens). The ratchet applies only to unpinned projects;
-  pinned projects never emit it.
+  confirms no project relies on a reference-named extra key on an unvalidated
+  kind — the standard certification path. The ratchet applies only to kinds
+  outside `schema_validated_kinds`.
 - **Evolution project data.** The 9 `workflow` entities carrying `method:` should
   relocate it to a `workflow-step` entity or drop it. A project-level decision,
-  not a toolkit change; the WARN surfaces it (evolution is unpinned, so the WARN
-  fires there).
+  not a toolkit change; the WARN surfaces it (`workflow` is not schema-validated,
+  so the WARN fires regardless of the project's pin).
 
 ## Alternatives considered
 
 - **Reserve reference-field names globally** and enforce it in extension
   resolution, so any such name in `model_extra` is unambiguously a misplacement
-  (pin-independent). Rejected: it touches profile composition, is a larger blast
-  radius, and would retroactively invalidate any pinned project that legitimately
-  declares an extension field of a reference name. The pin-aware skip achieves
-  the same correctness with a smaller change.
+  (kind-set-independent). Rejected: it touches profile composition, is a larger
+  blast radius, and would retroactively invalidate any project that legitimately
+  declares an extension field of a reference name once its kind joins
+  `PROJECT_MIXIN_NAMES`. The kind-set gate achieves the same correctness with a
+  smaller change.
+- **A project-wide `schema_pinned` boolean.** Rejected per P1 above: pinning does
+  not imply every kind was schema-validated (`PROJECT_MIXIN_NAMES` is currently
+  just `hypothesis`), so a boolean suppresses WARNs it must emit.
 
 ## Out of scope
 
