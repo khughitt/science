@@ -1,6 +1,6 @@
 # Attention-ranking recency correctness — design (fb-2026-07-10-023)
 
-**Status:** IMPLEMENTED on branch `attention-recency-correctness`; pending merge.
+**Status:** SHIPPED — merged to local `main` at `791567ae`.
 
 This closes item 3 of the InstrumentResult-convergence follow-on list
 (`docs/plans/2026-07-11-instrument-result-convergence-design.md` §"Follow-on
