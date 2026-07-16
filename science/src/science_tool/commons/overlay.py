@@ -12,7 +12,7 @@ tree into the dedicated overlays/ root.
 
 from __future__ import annotations
 
-from collections.abc import Iterator
+from collections.abc import Iterator, Mapping
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -36,6 +36,7 @@ from science_tool.commons.errors import (
     ProjectDirectoryMissingError,
 )
 from science_tool.commons.query import CommonsQuery
+from science_tool.unset import is_unset
 from science_tool.markdown_utils import frontmatter_span
 
 _TYPE_TO_DIR = {
@@ -243,6 +244,85 @@ def _dedup(items: list[Any]) -> list[Any]:
     return out
 
 
+@dataclass(frozen=True, slots=True)
+class OverlayFieldConflict:
+    """A borrower value the owner's policy does not admit.
+
+    Data, not an exception: the graph arbitrates many contributions at once and must ledger
+    every conflict deterministically, while the CLI merges exactly one overlay and raises on the
+    first. One composition, two dispositions -- so composition reports and callers decide.
+    """
+
+    field: str
+    policy: MergePolicy
+
+
+@dataclass(frozen=True, slots=True)
+class FrontmatterComposition:
+    frontmatter: dict[str, Any]
+    field_sources: dict[str, str]
+    conflicts: tuple[OverlayFieldConflict, ...]
+
+
+def compose_frontmatter(
+    canonical: Mapping[str, Any],
+    overlay: Mapping[str, Any],
+    merge_policy: Mapping[str, MergePolicy],
+    *,
+    canonical_id: str,
+) -> FrontmatterComposition:
+    """Compose validated canonical and overlay frontmatter without I/O.
+
+    The single implementation of the borrower role matrix: `merge_entity` (CLI) and the graph's
+    `arbitrate_contributions` both fold through here, so an overlay cannot mean one thing to
+    `science commons show` and another to the graph.
+    """
+    overlay_policy = read_overlay_merge_policy()
+    merged = dict(canonical)
+    field_sources: dict[str, str] = {key: "canonical" for key in merged}
+    conflicts: list[OverlayFieldConflict] = []
+
+    for field, value in overlay.items():
+        if field in _SKIP_OVERLAY_FIELDS:
+            continue
+        # Explicit membership, not `entity_policy.get(f) or overlay_policy.get(f)`: `or` reads a
+        # policy's TRUTHINESS to decide whose policy applies, so a falsey policy value would
+        # silently hand the field to the overlay map. Which map declares a field is a fact about
+        # the maps, not about the value found in one.
+        if field in merge_policy:
+            policy = merge_policy[field]
+        elif field in overlay_policy:
+            policy = overlay_policy[field]
+        else:
+            raise OverlayMergeError(field=field, canonical_id=canonical_id)
+
+        if policy is MergePolicy.APPEND:
+            base = canonical.get(field) or []
+            merged[field] = _dedup(list(base) + list(value))
+            field_sources[field] = "canonical+overlay"
+        elif policy is MergePolicy.PROJECT_ONLY:
+            merged[field] = value
+            field_sources[field] = "overlay"
+        elif policy is MergePolicy.REPLACE:
+            # A borrower may FILL what the owner left unset, but never overwrite what the owner
+            # authored. `is_unset`, never `not merged.get(field)` -- an owner's `False` is a
+            # position, not a vacancy.
+            if is_unset(merged.get(field)):
+                merged[field] = value
+                field_sources[field] = "overlay"
+            else:
+                conflicts.append(OverlayFieldConflict(field=field, policy=policy))
+        else:  # FORBIDDEN
+            if not is_unset(value):
+                conflicts.append(OverlayFieldConflict(field=field, policy=policy))
+
+    return FrontmatterComposition(
+        frontmatter=merged,
+        field_sources=field_sources,
+        conflicts=tuple(conflicts),
+    )
+
+
 def merge_entity(
     canonical: CommonsEntityRecord,
     overlay: OverlayRecord | None,
@@ -267,25 +347,19 @@ def merge_entity(
             field_sources={key: "canonical" for key in merged},
         )
 
-    overlay_policy = read_overlay_merge_policy()
-    merged = dict(canonical.frontmatter)
-    field_sources: dict[str, str] = {key: "canonical" for key in merged}
-
-    for field, value in overlay.frontmatter.items():
-        if field in _SKIP_OVERLAY_FIELDS:
-            continue
-        policy = merge_policy.get(field) or overlay_policy.get(field)
-        if policy is None:
-            raise OverlayMergeError(field=field, canonical_id=canonical.canonical_id)
-        if policy is MergePolicy.APPEND:
-            base = canonical.frontmatter.get(field, [])
-            merged[field] = _dedup(list(base) + list(value))
-            field_sources[field] = "canonical+overlay"
-        elif policy is MergePolicy.PROJECT_ONLY:
-            merged[field] = value
-            field_sources[field] = "overlay"
-        else:  # REPLACE / FORBIDDEN — unreachable for a validated overlay
-            raise OverlayMergeError(field=field, canonical_id=canonical.canonical_id)
+    composition = compose_frontmatter(
+        canonical.frontmatter,
+        overlay.frontmatter,
+        merge_policy,
+        canonical_id=canonical.canonical_id,
+    )
+    if composition.conflicts:
+        # The CLI merges one overlay, so the first conflict is the answer. Sorted by field, so
+        # an overlay conflicting on two fields names the same one on every run.
+        first = sorted(composition.conflicts, key=lambda conflict: conflict.field)[0]
+        raise OverlayMergeError(field=first.field, canonical_id=canonical.canonical_id)
+    merged = composition.frontmatter
+    field_sources = composition.field_sources
 
     if overlay.body.strip():
         merged_body = canonical_body + "\n\n" + overlay.body

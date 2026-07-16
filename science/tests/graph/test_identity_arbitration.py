@@ -1,21 +1,27 @@
-"""Contribution vocabulary: constructor guards, ordering, and the unset predicate."""
+"""Contribution vocabulary and arbitration: guards, ordering, the role matrix, invariance."""
 from __future__ import annotations
 
+import json
+from itertools import permutations
 from pathlib import Path
 
 import pytest
 from science_model.entities import Entity
+from science_model.entity_schema import MergePolicy
 from science_model.source_ref import SourceRef
 
 from science_tool.commons.overlay import OverlayRecord
 from science_tool.graph.errors import ContributionConflictError
 from science_tool.graph.identity_arbitration import (
+    ArbitrationContext,
+    ArbitrationResult,
     AttachmentContribution,
     ContributionKey,
     EntityContribution,
-    is_unset,
+    arbitrate_contributions,
 )
 from science_tool.graph.identity_table import IdentityDeclaration, ParticipationMode
+from science_tool.unset import is_unset
 
 
 def _declaration(
@@ -243,3 +249,371 @@ def test_contribution_conflict_error_separates_line_zero_from_no_line() -> None:
     assert forward == reverse
     # None sorts before 0: absent location is less specific than a located line 0.
     assert forward.index("a.md\n") < forward.index("a.md:0")
+
+
+# --------------------------------------------------------------------------------------
+# Arbitration: the role matrix, the issue ledger, and permutation invariance.
+# --------------------------------------------------------------------------------------
+
+
+def _entity(canonical_id: str, **fields: object) -> Entity:
+    kind = canonical_id.split(":", 1)[0]
+    base: dict[str, object] = {
+        "id": canonical_id,
+        "canonical_id": canonical_id,
+        "kind": kind,
+        "title": "",
+        "project": "proj",
+        "ontology_terms": [],
+        "related": [],
+        "source_refs": [],
+        "content_preview": "",
+        "file_path": f"entities/{kind}s/x.md",
+    }
+    base.update(fields)
+    return Entity(**base)  # type: ignore[arg-type]
+
+
+def _owner(
+    canonical_id: str,
+    *,
+    adapter: str = "markdown",
+    owner_scope: str = "proj",
+    path: str | None = None,
+    deprecated: bool = False,
+    **fields: object,
+) -> EntityContribution:
+    kind = canonical_id.split(":", 1)[0]
+    declaration = IdentityDeclaration(
+        canonical_id=canonical_id,
+        participation_mode=ParticipationMode.OWNER,
+        owner_scope=owner_scope,
+        adapter=adapter,
+        source_ref=SourceRef(
+            adapter_name=adapter, path=path or f"entities/{kind}s/x.md", line=None
+        ),
+        deprecated=deprecated,
+    )
+    return EntityContribution(declaration, _entity(canonical_id, **fields))
+
+
+def _borrower(
+    canonical_id: str,
+    *,
+    owner_scope: str = "proj",
+    path: str | None = None,
+    **fields: object,
+) -> AttachmentContribution:
+    kind = canonical_id.split(":", 1)[0]
+    overlay_path = path or f"overlays/{kind}s/x.md"
+    declaration = IdentityDeclaration(
+        canonical_id=canonical_id,
+        participation_mode=ParticipationMode.BORROWER,
+        owner_scope=owner_scope,
+        adapter="overlay",
+        source_ref=SourceRef(adapter_name="overlay", path=overlay_path, line=None),
+    )
+    record = OverlayRecord(
+        canonical_id=canonical_id,
+        type=kind,
+        slug="x",
+        project="proj",
+        project_root=Path("/proj"),
+        overlay_path=Path("/proj") / overlay_path,
+        frontmatter=dict(fields),
+        body="",
+        pin_version=None,
+        pin_effective_version=None,
+    )
+    return AttachmentContribution(declaration, record)
+
+
+def _external(
+    canonical_id: str,
+    *,
+    adapter: str = "bib",
+    path: str = "papers/references.bib",
+    line: int | None = 1,
+    **fields: object,
+) -> EntityContribution:
+    declaration = IdentityDeclaration(
+        canonical_id=canonical_id,
+        participation_mode=ParticipationMode.EXTERNAL_REFERENCE,
+        owner_scope=adapter,
+        adapter=adapter,
+        source_ref=SourceRef(adapter_name=adapter, path=path, line=line),
+    )
+    return EntityContribution(declaration, _entity(canonical_id, **fields))
+
+
+def _arbitrate(
+    *contributions: EntityContribution | AttachmentContribution,
+    policy: dict[str, MergePolicy] | None = None,
+    project_scope: str = "proj",
+) -> ArbitrationResult:
+    field_policies = {
+        (c.declaration.owner_scope, c.declaration.canonical_id): dict(policy or {})
+        for c in contributions
+    }
+    return arbitrate_contributions(
+        contributions,
+        context=ArbitrationContext(
+            project_scope=project_scope, field_policies=field_policies
+        ),
+    )
+
+
+def test_owner_unset_allows_one_external_value() -> None:
+    result = _arbitrate(
+        _owner("paper:x", doi=None),
+        _external("paper:x", doi="10.1/x"),
+        policy={"doi": MergePolicy.REPLACE},
+    )
+    assert result.entities[0].doi == "10.1/x"
+
+
+def test_owner_false_is_never_replaced() -> None:
+    result = _arbitrate(
+        _owner("paper:x", pre_registered=False),
+        _external("paper:x", pre_registered=True),
+        policy={"pre_registered": MergePolicy.REPLACE},
+    )
+    assert result.entities[0].pre_registered is False
+
+
+def test_owner_zero_is_never_replaced() -> None:
+    result = _arbitrate(
+        _owner("talk:x", duration_minutes=0),
+        _external("talk:x", duration_minutes=30),
+        policy={"duration_minutes": MergePolicy.REPLACE},
+    )
+    assert result.entities[0].duration_minutes == 0
+
+
+def test_borrower_replace_against_defended_owner_is_attributed() -> None:
+    result = _arbitrate(
+        _owner("paper:x", title="Canonical"),
+        _borrower("paper:x", title="Project rewrite"),
+        policy={"title": MergePolicy.REPLACE},
+    )
+    [error] = result.errors
+    assert error.code == "contribution-conflict"
+    assert error.field == "title"
+    assert "overlays/papers/x.md" in error.contributors[0]
+    # The owner keeps its value: a rejected contribution changes nothing.
+    assert result.entities[0].title == "Canonical"
+
+
+def test_external_replace_against_defended_owner_is_silently_not_offered() -> None:
+    """An external reference SUPPORTS a node; it does not contest one.
+
+    A bib entry carries a title for every paper it names. Treating that as an attempted
+    overwrite would make every citation of an owned paper an error, so a defended REPLACE
+    field is simply not offered -- unlike a borrower's, which is explicit project input.
+    """
+    result = _arbitrate(
+        _owner("paper:x", title="Canonical"),
+        _external("paper:x", title="Bib title"),
+        policy={"title": MergePolicy.REPLACE},
+    )
+    assert result.entities[0].title == "Canonical"
+    assert result.errors == ()
+
+
+def test_project_only_borrower_wins() -> None:
+    result = _arbitrate(
+        _owner("dataset:x", status="canonical"),
+        _borrower("dataset:x", status="active"),
+        policy={"status": MergePolicy.PROJECT_ONLY},
+    )
+    assert result.entities[0].status == "active"
+
+
+def test_append_is_owner_first_then_contribution_key_order() -> None:
+    result = _arbitrate(
+        _owner("paper:x", related=["topic:owner"]),
+        _borrower("paper:x", related=["topic:b"]),
+        _external("paper:x", related=["topic:e"]),
+        policy={"related": MergePolicy.APPEND},
+    )
+    assert result.entities[0].related == ["topic:owner", "topic:b", "topic:e"]
+
+
+def test_external_only_materializes_without_becoming_owner() -> None:
+    result = _arbitrate(_external("paper:x", title="Citation"))
+    assert [entity.canonical_id for entity in result.entities] == ["paper:x"]
+    assert (
+        result.identity_declarations[0].participation_mode
+        is ParticipationMode.EXTERNAL_REFERENCE
+    )
+    assert result.errors == ()
+
+
+def test_real_owner_and_deprecated_datapackage_record_attachment_output() -> None:
+    result = _arbitrate(
+        _owner("dataset:x", adapter="markdown", deprecated=False),
+        _owner(
+            "dataset:x",
+            adapter="datapackage",
+            deprecated=True,
+            path="data/x/datapackage.yaml",
+        ),
+    )
+    assert result.entity_source_adapters == {"dataset:x": "markdown"}
+    assert result.dataset_datapackages == {"dataset:x": "data/x/datapackage.yaml"}
+    # Both rows survive: the deprecated owner is rollout debt a later phase must find.
+    assert len(result.identity_declarations) == 2
+    assert result.errors == ()
+
+
+def test_genuine_duplicate_owner_is_error_and_has_no_representative() -> None:
+    result = _arbitrate(
+        _owner("paper:x", path="entities/papers/a.md"),
+        _owner("paper:x", path="entities/papers/b.md"),
+    )
+    assert result.entities == ()
+    assert result.errors[0].code == "duplicate-owner"
+
+
+def test_borrower_without_an_owner_in_its_scope_is_attributed() -> None:
+    result = _arbitrate(_borrower("paper:x", status="active"))
+    assert result.entities == ()
+    assert result.errors[0].code == "missing-owner"
+
+
+def test_attachment_without_a_policy_fails_early() -> None:
+    """A borrower composed under no policy would silently contribute nothing."""
+    owner = _owner("paper:x", title="Canonical")
+    borrower = _borrower("paper:x", status="active")
+    context = ArbitrationContext(project_scope="proj", field_policies={})
+    with pytest.raises(KeyError, match="paper:x"):
+        arbitrate_contributions((owner, borrower), context=context)
+
+
+def test_aggregate_file_may_own_many_entities_at_one_location() -> None:
+    """Same path, same adapter, no line -- distinct entities.
+
+    ContributionKey is unique per entity, not globally: an aggregate file legitimately owns
+    many entities from one location, and rejecting that as ambiguous would break real projects.
+    """
+    result = _arbitrate(
+        _owner("paper:a", adapter="aggregate", path="entities/papers/all.md"),
+        _owner("paper:b", adapter="aggregate", path="entities/papers/all.md"),
+    )
+    assert [entity.canonical_id for entity in result.entities] == ["paper:a", "paper:b"]
+    assert result.errors == ()
+
+
+def test_two_differing_contributions_at_one_key_are_rejected() -> None:
+    """Same entity, same role, same file, same line, different content.
+
+    Nothing downstream can tell these apart, so a stable sort would resolve them by whichever
+    adapter ran first. That is the silent instrument this arc exists to remove.
+    """
+    first = _owner("paper:x", title="One")
+    second = _owner("paper:x", title="Two")
+    with pytest.raises(ValueError, match="indistinguishable"):
+        _arbitrate(first, second)
+
+
+def test_identical_contributions_at_one_key_are_deduplicated() -> None:
+    result = _arbitrate(_owner("paper:x", title="One"), _owner("paper:x", title="One"))
+    assert len(result.identity_declarations) == 1
+    assert result.entities[0].title == "One"
+    assert result.errors == ()
+
+
+def _snapshot(result: ArbitrationResult) -> str:
+    return json.dumps(
+        {
+            "entities": [entity.model_dump(mode="json") for entity in result.entities],
+            "declarations": [
+                [
+                    row.canonical_id,
+                    row.participation_mode.value,
+                    row.owner_scope,
+                    row.adapter,
+                    str(row.source_ref),
+                    row.deprecated,
+                ]
+                for row in result.identity_declarations
+            ],
+            "entity_source_adapters": result.entity_source_adapters,
+            "dataset_datapackages": result.dataset_datapackages,
+            "overlay_paths": result.overlay_paths,
+            "field_sources": {
+                cid: {field: [list(key.ordering) for key in keys] for field, keys in fields.items()}
+                for cid, fields in result.field_sources.items()
+            },
+            "errors": [
+                [error.code, error.canonical_id, error.owner_scope, error.field, list(error.contributors)]
+                for error in result.errors
+            ],
+        },
+        sort_keys=True,
+        default=str,
+    )
+
+
+def test_every_permutation_has_identical_entities_provenance_and_errors() -> None:
+    contributions = (
+        _owner("paper:x", doi=None, related=["topic:owner"]),
+        _borrower("paper:x", status="active", related=["topic:project"]),
+        _external("paper:x", doi="10.1/x", related=["topic:bib"]),
+    )
+    snapshots = {
+        _snapshot(
+            _arbitrate(
+                *ordering,
+                policy={
+                    "doi": MergePolicy.REPLACE,
+                    "status": MergePolicy.PROJECT_ONLY,
+                    "related": MergePolicy.APPEND,
+                },
+            )
+        )
+        for ordering in permutations(contributions)
+    }
+    assert len(snapshots) == 1
+
+
+def test_every_permutation_agrees_on_errors_too() -> None:
+    """Invariance must hold on the failing path, not only the succeeding one."""
+    contributions = (
+        _owner("paper:x", title="Canonical", path="entities/papers/a.md"),
+        _owner("paper:x", title="Other", path="entities/papers/b.md"),
+        _borrower("paper:x", title="Rewrite"),
+    )
+    snapshots = {
+        _snapshot(_arbitrate(*ordering, policy={"title": MergePolicy.REPLACE}))
+        for ordering in permutations(contributions)
+    }
+    assert len(snapshots) == 1
+
+
+def test_permutation_invariance_holds_between_peers_of_one_role() -> None:
+    """Two contributions of the SAME role must resolve by ContributionKey, not arrival.
+
+    The three-contribution fixture above (one owner, one borrower, one external) cannot see this:
+    with one contribution per role, no two ever compete, and the result sorts normalize the
+    output -- so it passes even against an arbitration that never sorts at all. Ordering only
+    becomes observable when peers contend for one field.
+    """
+    contributions = (
+        _owner("paper:x", doi=None, related=["topic:owner"]),
+        _external("paper:x", line=2, doi="10.1/second", related=["topic:second"]),
+        _external("paper:x", line=1, doi="10.1/first", related=["topic:first"]),
+    )
+    results = [
+        _arbitrate(
+            *ordering,
+            policy={"doi": MergePolicy.REPLACE, "related": MergePolicy.APPEND},
+        )
+        for ordering in permutations(contributions)
+    ]
+
+    assert len({_snapshot(result) for result in results}) == 1
+    # The lower ContributionKey wins the vacancy, and APPEND follows key order -- in every
+    # encounter order, not merely consistently-but-arbitrarily.
+    assert results[0].entities[0].doi == "10.1/first"
+    assert results[0].entities[0].related == ["topic:owner", "topic:first", "topic:second"]

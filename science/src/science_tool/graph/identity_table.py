@@ -90,7 +90,9 @@ class IdentityTable:
         ]
 
 
-_COMMONS_SCOPE = "commons"
+# Public: arbitration reads this to pick a materialization representative. A second literal
+# "commons" elsewhere would be a second declaration of the same fact.
+COMMONS_SCOPE = "commons"
 
 
 def classify_owner_scope(adapter: str, *, project_name: str) -> tuple[str, bool]:
@@ -102,7 +104,7 @@ def classify_owner_scope(adapter: str, *, project_name: str) -> tuple[str, bool]
     if not adapter:
         raise ValueError("identity declaration requires a non-empty adapter name")
     if adapter == "commons-merged":
-        return (_COMMONS_SCOPE, False)
+        return (COMMONS_SCOPE, False)
     if adapter == "bib":
         # External-reference authority scope (design §B3): bib rows are never
         # owners, so this scope only labels provenance; it is non-deprecated.
