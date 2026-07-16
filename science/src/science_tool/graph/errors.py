@@ -21,7 +21,19 @@ class ContributionConflictError(ValueError):
         self.canonical_id = canonical_id
         self.field = field
         # Sorted, so one conflict reads the same on every run regardless of adapter order.
-        self.refs = tuple(sorted(refs, key=lambda ref: (ref.path, ref.line or -1, ref.adapter_name)))
+        # `ref.line is None`, never `ref.line or -1`: line 0 is a valid index, and conflating it
+        # with absence makes the sort key collide, which lets Python's stable sort leak encounter
+        # order back into the rendered message -- the invariance this sort exists to provide.
+        self.refs = tuple(
+            sorted(
+                refs,
+                key=lambda ref: (
+                    ref.path,
+                    -1 if ref.line is None else ref.line,
+                    ref.adapter_name,
+                ),
+            )
+        )
         if not self.refs:
             raise ValueError("a contribution conflict must name the sources that disagree")
         listed = "\n".join(f"  - {ref}" for ref in self.refs)

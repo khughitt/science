@@ -221,3 +221,25 @@ def test_contribution_conflict_error_sorts_its_sources() -> None:
 
     assert forward == reverse
     assert forward.index("a.md") < forward.index("b.md")
+
+
+def test_contribution_conflict_error_separates_line_zero_from_no_line() -> None:
+    """Line 0 is a valid index, not absence.
+
+    Keyed as `ref.line or -1`, a 0-line and a None-line ref with the same path collide, and
+    Python's stable sort then renders the conflict in whatever order the adapters happened to
+    run. Same defect as reading absence off truthiness -- absence is a shape.
+    """
+    refs = [
+        SourceRef(adapter_name="markdown", path="a.md", line=None),
+        SourceRef(adapter_name="markdown", path="a.md", line=0),
+    ]
+
+    forward = str(ContributionConflictError(canonical_id="p:x", field="t", refs=refs))
+    reverse = str(
+        ContributionConflictError(canonical_id="p:x", field="t", refs=list(reversed(refs)))
+    )
+
+    assert forward == reverse
+    # None sorts before 0: absent location is less specific than a located line 0.
+    assert forward.index("a.md\n") < forward.index("a.md:0")
