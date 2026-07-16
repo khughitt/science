@@ -2,7 +2,7 @@
 
 ## Status
 
-**Decision-ready.** Docs-only reconciliation. Closes fb-2026-07-10-017 (the
+**IMPLEMENTED on branch `curate-inventory-contract`; pending merge.** Docs-only reconciliation. Closes fb-2026-07-10-017 (the
 last open item on the InstrumentResult-convergence follow-on list) and splits
 two concerns the convergence design conflated under that one id.
 

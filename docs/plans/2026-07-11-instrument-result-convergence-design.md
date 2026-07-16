@@ -1,5 +1,17 @@
 # Instrument Result Convergence — the Silent-Instrument Ruling
 
+> **UPDATE 2026-07-16 — item 4 (fb-2026-07-10-017) IMPLEMENTED (pending merge), and un-conflated.**
+> fb-2026-07-10-017 was a **doc↔helper contract divergence** (`curate inventory`
+> promised unresolved-ref / alias-resolution / stale-task keys its payload never
+> returned), implemented by reconciling `commands/curate.md` to the helper — see
+> `docs/plans/2026-07-16-curate-inventory-contract-reconciliation-design.md`.
+> **The "no status field / bare-collection detector cannot see it" framing in the
+> item-4 entry below (lines ~82–85) was a *separate* observation — composite-instrument
+> guard blindness (triage "known gap #1") — that is NOT closed by this and remains
+> open as its own item.** The stale-task-evidence instrument the feedback surfaced is
+> recorded there as a scoped follow-up. This banner supersedes every statement below
+> that treats fb-2026-07-10-017 as a return-shape/status defect.
+
 > **UPDATE 2026-07-16 — item 3 RESOLVED/CLOSED.** The attention-ranking follow-on pair
 > (fb-2026-07-10-023 + fb-2026-07-11-005) is **SHIPPED** — merged to local `main` at
 > `791567ae`; see `docs/plans/2026-07-15-attention-recency-correctness-design.md`.

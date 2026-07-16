@@ -2101,6 +2101,8 @@ Same shape for `list_datasets`. Update every caller: `cd science && grep -rn "li
 
 `collect_inventory -> CurationInventory` already returns a typed payload, so it does **not** violate the guard. It is in `INSTRUMENT_MODULES` because fb-2026-07-10-017 reports its payload diverging from the command spec (missing `unresolved-ref` / `stale-task` / `long_idle` keys) — **that is the curate spec's problem, not this one.** Leave the behavior alone; confirm only that the guard passes for this module.
 
+> **CORRECTION 2026-07-16.** `long_idle` was listed above as a missing key but is in fact **delivered** (`CandidateSignals.long_idle`); only unresolved-refs and stale-tasks were ever absent. fb-2026-07-10-017 is **IMPLEMENTED** on branch `curate-inventory-contract`; pending merge. See `docs/plans/2026-07-16-curate-inventory-contract-reconciliation-design.md`.
+
 Run: `cd science && uv run --frozen pytest tests/test_instrument_boundary.py -v`
 
 - [ ] **Step 3: Drain the allowlist, run everything**
