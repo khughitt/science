@@ -190,13 +190,24 @@ CENSUS_PROVIDERS: Final[Mapping[CensusProviderId, CensusProvider]]
 Registration is **closed**: a new provider requires an architectural change and a provider
 conformance suite. The axiom set stays small enough to audit by hand.
 
-| provider | authority |
-|---|---|
-| `commons_inventory` | the commons store, per declared topology |
-| `source_discovery` | generic source discovery — **never** a check-specific path |
-| `graph_identities` | loaded-graph identities |
-| `parsed_references` | references parsed from authoritative sources |
-| `overlay_inventory` | overlay files + explicit project-scope applicability |
+| provider | authority | phase | subject type |
+|---|---|---|---|
+| `commons_inventory` | the commons store, per declared topology | pre-load | commons records |
+| `source_discovery` | `StorageAdapter.discover()` — physical source occurrences, **before** parsing and semantic acceptance. Generic; **never** a check-specific path. | discovery | source occurrences |
+| `compiled_identity_declarations` | `IdentityTable` — a **compiler product** built from *accepted* identity declarations | post-audit | identity declarations |
+| `parsed_references` | references parsed from authoritative sources | parse | reference occurrences |
+| `overlay_inventory` | overlay files + explicit project-scope applicability | pre-load | overlay files |
+
+`source_discovery` and `compiled_identity_declarations` are **distinct authorities**, not one
+authority with two selectors. They differ in phase, in subject type, and in failure semantics:
+discovery enumerates what physically exists before anything is parsed or accepted; the identity
+table enumerates what survived audit as an accepted declaration. A subject can be present in the
+first and absent from the second, and that difference is itself meaningful.
+
+**`compiled_identity_declarations` is deliberately not called "loaded-graph identities".** If a
+provider meant *materialized RDF/graph nodes*, it would inherit survivorship bias — a node that
+failed to materialize is not in the graph — and it **must not be a provider** on those terms. The
+authority is the accepted-declaration table, not the materialized product.
 
 **`parsed_references` censuses from parsed sources, never from resolved edges.** Resolved edges
 are survivorship bias: a dangling reference is definitionally not an edge, so a census built
@@ -206,6 +217,26 @@ coverage of every reference that was not broken.
 Providers consume the topology declaration (see §9, the B prerequisite). They do not hardcode
 paths.
 
+### 4.3a The topology interface C requires of B
+
+C names the **semantic operations** B must provide. It does not choose B's representation —
+whether that is a table, a set of descriptors, or generated code is B's ruling.
+
+| operation | why C needs it |
+|---|---|
+| **Stable placement-class identifiers** | The unit of the reachability obligation (§6.1) and of conformance-case versioning (§6.3). Must be stable across topology changes so an old case keeps naming the same class. |
+| **Scope/kind enumeration** | Providers enumerate without hardcoding; the conformance suite enumerates the classes it must cover, so a *newly added* class fails certification until it has a case. |
+| **Canonical placement lookup** | `(kind, scope) → placement`, the single operation shared by **writer, reader, census, and applicability facts**. |
+
+The fourth consumer matters as much as the first three. `RequiresTopologyScope` (§4.5) sources
+its facts here, which is what keeps applicability independent of any census result while still
+being scope-aware.
+
+**Sharing the lookup with the writer is load-bearing, not tidiness.** It is the second grounding
+of the oracle (§6.3): a wrong topology cannot stay quiet if production writes land at the
+declared paths. Tests and real writes, from two directions. A topology declaration consumed only
+by readers has no such check on it.
+
 ### 4.4 SubjectId is the claim's unit of coverage
 
 Subject granularity **is** the denominator. If a reference claim's subject is the target entity
@@ -214,10 +245,13 @@ reports full coverage, and two occurrences were never examined. The subject must
 occurrence:
 
 ```python
-ReferenceSubject = (source_path, field, position, target)   # scope-qualified
+ReferenceSubject = (source_path, field, position, target, permitted_authority)
 ```
 
-`SubjectId` must be scope-qualified wherever identities can coexist across scopes.
+`SubjectId` must be scope-qualified wherever identities can coexist across scopes. A subject also
+carries whatever a claim's decisive rule depends on — for `ReferenceSubject` that is
+`permitted_authority`, which is what keeps §8.1's ruling in the data model rather than in an
+implementer's memory. See §8.2.
 
 ### 4.5 Applicability is independent of the census result
 
@@ -228,14 +262,33 @@ Applicability is a closed, typed rule evaluated from **independently sourced fac
 capability, validation profile, topology-declared scope. It carries a machine-readable code and
 a human explanation.
 
+**It may not be represented as a callable.** `Callable[[ApplicabilityFacts], ...]` is arbitrary
+code: a claim author can reach into census-derived facts, or simply reconstruct the same
+circular walk inside the rule body. Describing applicability as closed while typing it as a
+function hands back exactly what §4.5 exists to withhold.
+
+The claim **selects a rule and supplies typed parameters**. It does not supply logic:
+
 ```python
 @dataclass(frozen=True)
 class NotApplicable:
     code: ApplicabilityCode         # closed enum
     reason: str                     # human-facing
 
-ApplicabilityRule = Callable[[ApplicabilityFacts], NotApplicable | None]
+# A closed algebra. Each variant is evaluated by the framework against facts the
+# framework sources. Claims construct these; claims never execute them.
+ApplicabilitySpec = (
+    Always
+    | RequiresManifestCapability     # capability: CapabilityId
+    | RequiresValidationProfile      # profile: ProfileId
+    | RequiresTopologyScope          # scope: ScopeId, kind: KindId
+    | AllOf | AnyOf | Not            # closed combinators
+)
 ```
+
+Equivalently a closed `ApplicabilityRuleId` registry with typed parameters; the requirement is
+that the rule set is enumerable and framework-evaluated, so no claim can inspect its own census
+result to decide whether it applies.
 
 An empty expected set **with** an applicability ruling passes, and prints the reason. An empty
 expected set **without** one is a certification failure.
@@ -246,6 +299,10 @@ expected set **without** one is a certification failure.
 
 Reconciliation is over **sets**, not counts — equal counts can cover the wrong records — and
 the partition is **disjoint**, so a subject cannot occupy two states at once.
+
+This is the **full ledger**, which only `INJECTED` mode can produce. `TRAVERSING` satisfies a
+strict subset — see §5.2, which is a load-bearing limitation rather than an implementation
+detail.
 
 ```text
 expected   = passed ⊎ violated ⊎ unresolved ⊎ errored
@@ -276,15 +333,33 @@ predict, **the census is under-enumerating** — and real traffic reports it, in
 without anyone having written a test for that case. It does not prove completeness. It detects
 a whole class of provider narrowness for free.
 
-### 5.2 The honest limit of TRAVERSING mode
+### 5.2 The ledger is mode-dependent, because TRAVERSING cannot produce it
 
-In `INJECTED` mode the runner owns `examined`: it is the call record, and the claim cannot
-influence it.
+**The full per-subject ledger above is `INJECTED`-only.** It requires per-subject `passed` /
+`violated` / `errored` outcomes, and a traversing claim reports only `ctx.examined(claim,
+subject_id)`. Today's `Result` objects carry **neither claim nor subject identity**
+(`validate/result.py`), so there is nothing to attribute an outcome to.
 
-In `TRAVERSING` mode the claim self-reports via `ctx.examined(claim, subject_id)`, because there
-is no other way to know what a legacy traversal looked at. Inferring `examined` from findings is
-survivorship bias again — a claim that examined 245 subjects and found nothing would report
-zero.
+Demanding the full ledger from `TRAVERSING` would require an atomic subject/outcome API threaded
+through all 96 functions — which is not a net, it is the big-bang conversion the ratchet exists
+to avoid. So the contract is honestly split:
+
+| | `TRAVERSING` (net) | `INJECTED` (destination) |
+|---|---|---|
+| `expected` | ✅ external census | ✅ external census |
+| `reported_examined` | ✅ self-reported | ✅ runner-owned call record |
+| `unresolved` | ✅ `expected - reported_examined` | ✅ per subject |
+| `unexpected` | ✅ `reported_examined - expected` | ✅ per subject |
+| `passed` / `violated` split | ❌ not available | ✅ per subject |
+| `errored` | ⚠️ **claim-level** execution failure only | ✅ per subject |
+
+`TRAVERSING` therefore reconciles coverage — *did you reach the subjects you were supposed to
+reach* — and nothing finer. That is enough to catch every instance in §2.2, which is the point
+of the net. It is not enough to attribute outcomes, which is one more reason `INJECTED` is the
+destination rather than a preference.
+
+Inferring `examined` from findings is not an escape: it is survivorship bias again — a claim
+that examined 245 subjects and found nothing would report zero.
 
 Self-reported `examined` is **sound against under-reporting**: missed subjects remain
 `unresolved` against the external census, and reconciliation fires. It is **not sound against
@@ -380,15 +455,37 @@ at the declared paths. Tests and real writes, from two directions.
 
 The keystone. It must **execute**, never trust a marker:
 
+**The guard operates on `CertificationKey`s, never on claims.** Asking
+`sensitivity_cases_for(entry.claim)` would let **one witnessed partition certify every
+partition** — `hypothesis.status-vocabulary` proven for `kind=hypothesis` would silently certify
+`kind=report`, which is precisely the blanket-severity defect the status-vocabulary design
+overturned. The guard compares **exact sets of keys**:
+
 ```python
-def test_every_claim_is_certified() -> None:
+def test_certification_covers_every_exposed_key() -> None:
+    exposed  = {key for entry in CLAIM_REGISTRY for key in certification_keys(entry)}
+    witnessed = {case.key for case in SENSITIVITY_CASES}    # registered, executable
+    policed   = {key for key in CRITICALITY_POLICY}
+
+    assert exposed == witnessed          # no key unwitnessed; no witness for a dead key
+    assert exposed == policed            # every key has an explicit criticality ruling
+
     for entry in CLAIM_REGISTRY:
         assert entry.census.provider in CENSUS_PROVIDERS
-        assert entry.applicability is not None
-        assert sensitivity_cases_for(entry.claim)          # registered, executable cases
-        if is_critical(entry.claim):                       # policy, not self-declared
-            assert isinstance(entry, InjectedClaim)
+        for key in certification_keys(entry):
+            if CRITICALITY_POLICY[key] is Critical:
+                assert isinstance(entry, InjectedClaim)
+
+def test_provider_conformance_covers_every_placement_class() -> None:
+    for provider_id in CENSUS_PROVIDERS:
+        assert placement_classes_for(provider_id) == {c.placement_class for c in CONFORMANCE_CASES[provider_id]}
 ```
+
+Set **equality**, not containment, in both directions: an unwitnessed key is an uncertified
+claim, and a witness for a key the registry no longer exposes is a case that has quietly stopped
+testing anything. The same equality applies to placement classes, so **adding a topology fails
+certification until it has a conformance case** — the new class appears in `exposed` before any
+case covers it.
 
 **The guard checks registry coverage against registered executable cases.** It must not consult
 a boolean like `topology_conformance_suite(provider_id)`, which can answer "yes" without
@@ -439,14 +536,14 @@ bounded claim that **co-ships with C** as its vertical acceptance slice.
 |---|---|
 | claim | `commons.references-resolve` |
 | census | `parsed_references`, scope=commons |
-| subject | `(source_path, field, position, target)`, scope-qualified |
+| subject | `ReferenceSubject` (§8.2) — carries its permitted authority as **data** |
 | mode | **`INJECTED`** — required; C is not complete otherwise |
 | acceptance | flags `paper:Persi2025 → dataset:persi2025-myeloma` |
 
 ### 8.1 Resolution is by permitted authority scope — not by union
 
-The naive rule `target ∈ commons_inventory ∪ graph_identities` **is wrong, and wrong in exactly
-the way this design exists to prevent.**
+The naive rule `target ∈ commons_inventory ∪ compiled_identity_declarations` **is wrong, and
+wrong in exactly the way this design exists to prevent.**
 
 `paper:Persi2025 → dataset:persi2025-myeloma` resolves in `mechanisms/evolution` — because a
 project-local `status: candidate` entity happens to sit there — and fails in
@@ -463,12 +560,48 @@ The rule is:
 - An **external** target must carry the explicit representation E supplies.
 - A **project-local graph identity never legitimizes a commons reference.**
 
-`graph_identities` is admissible as an authority only where it is an independent identity census
-— never as a product of successful materialization or reference resolution.
+`compiled_identity_declarations` is admissible as an authority only because it is an accepted-
+declaration census — never as a product of successful materialization or reference resolution
+(§4.3). A provider built from the materialized graph would be survivorship-biased and could not
+serve here at all.
 
 Consequently **D flags both `Persi2025` and `wang2025-mri-gwas` today.** E later makes
 `wang2025` valid by supplying the missing authority representation — not by the checker looking
 the other way.
+
+### 8.2 Permitted authority must be data on the subject
+
+The rule above is decisive and, as prose, unenforceable. `(source_path, field, position,
+target)` carries no authority, so an implementer reaching for "does this target exist anywhere?"
+reintroduces union resolution and nothing in the type system objects. The subject must carry it:
+
+```python
+@dataclass(frozen=True)
+class ReferenceSubject:
+    source_path: Path
+    field: FieldId
+    position: int
+    target: CanonicalId
+    permitted_authority: AuthorityScope   # closed enum: COMMONS | PROJECT_LOCAL | EXTERNAL
+```
+
+`permitted_authority` is **derived by the census provider** — closed, from reference syntax and
+the declaring field — never chosen by the predicate. The predicate then answers a single
+question with no room for union:
+
+```python
+def commons_references_resolve(subject: ReferenceSubject, ctx) -> Outcome:
+    authority = AUTHORITY_PROVIDER[subject.permitted_authority]   # exactly one
+    return authority.contains(subject.target)
+```
+
+Because `permitted_authority` selects **exactly one** authority, "resolves somewhere" is not a
+sentence the predicate can express. That is the point: §8.1's ruling becomes a property of the
+data model rather than a rule someone must remember.
+
+The closed derivation from syntax/field is itself an axiom and belongs in the provider's
+conformance corpus (§6.3) — sentinels asserting that a given reference syntax in a given field
+yields the expected `AuthorityScope`.
 
 ---
 
@@ -478,7 +611,7 @@ The wider arc, of which this document specifies **C**:
 
 | | piece | status |
 |---|---|---|
-| **A** | Identity collapse — separate "who materialized this id" from "who owns this id" | coded and green in `.worktrees/commons-overlay-bib-shadow`; lands under the existing substrate design's owner/borrower/external-reference model (§B3). No separate design doc — it would restate that ruling. |
+| **A** | Identity collapse — separate "who materialized this id" from "who owns this id" | **implemented, awaiting design/review.** Coded and green in `.worktrees/commons-overlay-bib-shadow`, but it makes policy §B3 does not entail — see §9.1. Needs a short design doc or an explicit substrate amendment **before** it lands. |
 | **B** | Topology declaration — one declaration, shared by writer, reader, and census | **prerequisite for C's honesty.** Kills the `_TYPE_TO_DIR` / `OverlayAdapter` / `CommonsQuery` triplication. Needs its own spec. |
 | **C** | **This document.** | proposed |
 | **D** | Commons closure claim | co-ships with C as its acceptance slice (§8) |
@@ -487,8 +620,33 @@ The wider arc, of which this document specifies **C**:
 **Ship order: A → B → C+D. E independent.** Spec order differs deliberately: C is written first,
 while the invariant is sharp.
 
-C declares the **topology interface it requires**; it does not design B's concrete
+C declares the **topology interface it requires** (§4.3a); it does not design B's concrete
 representation.
+
+### 9.1 A needs an arbitration matrix before it lands
+
+The substrate design's §B3 settles **participation and ownership**. It does **not** settle
+materialization arbitration, metadata precedence, or order independence. The current
+implementation decides all three, and none of those decisions is entailed by §B3:
+
+| decision | where | why it is new policy |
+|---|---|---|
+| A parallel `external_reference_ids` side channel beside `identity_table` | `graph/sources.py` | §B3 gives one identity model; this adds a second, shadow membership set that must be kept in sync by hand |
+| External references **disappear entirely** when they defer before declaration | `graph/sources.py` | §B3 says external references are never owners. It does not say they cease to exist. Load-order-sensitive. |
+| Five fields get a hard-coded owner-empty/external-present merge policy | `graph/sources.py` | a precedence rule invented to repair a metadata regression, applying to a hand-picked field list, unreconciled with the entity schema's declared merge policy |
+
+The third is the one I would flag hardest: `_EXTERNAL_REFERENCE_SUPPORTING_FIELDS` is five field
+names chosen because a specific regression was observed in `meta` (`sci:doi` 23→16). That is
+fitting the system to today's entities — the exact error the status-vocabulary design caught and
+reverted in its own Phase 1.
+
+All three are **load-order-sensitive**, which is disqualifying on its own: the same federation
+should not compile differently depending on adapter ordering.
+
+A short design doc — or an explicit substrate amendment — should establish the **arbitration
+matrix**: for each `(owner participation, deferring participation, field state)`, what
+materializes, what precedence applies, and what invariant makes the answer order-independent.
+The sequence is unchanged; only A's status is.
 
 ### Non-goals
 
@@ -501,9 +659,11 @@ representation.
 
 ## 10. Open questions
 
-- **Provider count.** Five are named in §4.3. Whether `source_discovery` and `graph_identities`
-  are genuinely distinct authorities, or one authority with two selectors, should be settled
-  before the registry is closed — closing it around the wrong seam is expensive to undo.
+- ~~**Provider count.**~~ **SETTLED (§4.3).** `source_discovery` and
+  `compiled_identity_declarations` are distinct authorities — different phase, subject type, and
+  failure semantics — and both stay. The former was renamed away from "loaded-graph identities"
+  because that reading would have made a survivorship-biased materialized product into an
+  authority.
 - **Cross-provider reconciliation.** Where domains overlap semantically, disagreement should be
   fatal. It is **defence in depth, never proof of completeness**: two providers can share a blind
   spot, and records unique to one domain have no overlap to compare. Worth adding; not worth
