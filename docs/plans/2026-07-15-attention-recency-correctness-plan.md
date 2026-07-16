@@ -14,8 +14,8 @@ strictly against its canonical `YYYY-MM-DD` producer form, with absence → `Non
 and corruption → `ValueError`. Once the term is gone, the `today` parameter it
 fed becomes dead across the attention/wander call chain and is removed.
 
-**Tech Stack:** Python, rdflib, Click, Pydantic/dataclasses, pytest. Package
-lives under `science/` (`src/science_tool/`).
+**Tech Stack:** Python ≥3.11, rdflib, Click, Pydantic/dataclasses, pytest.
+Package lives under `science/` (`src/science_tool/`).
 
 **Design:** `docs/plans/2026-07-15-attention-recency-correctness-design.md`.
 
@@ -135,7 +135,7 @@ Expected: PASS. (The new helper is unused by production code until Task 2; that 
 - [ ] **Step 6: Commit**
 
 ```bash
-cd /home/keith/d/science/.claude/worktrees/instrument-result
+cd ~/d/science/.claude/worktrees/instrument-result
 git branch --show-current   # must print: attention-recency-correctness
 git add science/src/science_tool/graph/attention.py science/tests/test_attention_sampling.py
 git commit -m "feat(attention): add strict _last_reviewed_date helper (canonical YYYY-MM-DD)"
@@ -178,7 +178,7 @@ def _uniform_recency_fixture() -> Dataset:
     dataset = Dataset()
     knowledge = dataset.graph(PROJECT_NS["graph/knowledge"])
     for slug, reviewed in [("recent", "2026-04-30"), ("old", "2024-01-01"), ("never", None)]:
-        uri = URIRef(f"https://example.org/hypothesis/{slug}")
+        uri = _u(f"hypothesis/{slug}")  # canonical PROJECT_NS URI — non-canonical URIs are skipped by candidate discovery
         knowledge.add((uri, RDF.type, SCI_NS.Hypothesis))
         knowledge.add((uri, SKOS.prefLabel, Literal(slug)))
         knowledge.add((uri, SCI_NS.freshnessState, Literal("fresh")))
@@ -219,7 +219,7 @@ def test_freshness_still_discriminates_recency() -> None:
     dataset = Dataset()
     knowledge = dataset.graph(PROJECT_NS["graph/knowledge"])
     for slug, state in [("stale", "needs-review"), ("fresh", "fresh")]:
-        uri = URIRef(f"https://example.org/hypothesis/{slug}")
+        uri = _u(f"hypothesis/{slug}")
         knowledge.add((uri, RDF.type, SCI_NS.Hypothesis))
         knowledge.add((uri, SKOS.prefLabel, Literal(slug)))
         knowledge.add((uri, SCI_NS.freshnessState, Literal(state)))
@@ -460,6 +460,17 @@ In `science/tests/test_wander_stub_smell.py`, every direct `ContextBundle(...)`
 construction must gain `last_reviewed=` (a date or `None`) — the stub-smell logic
 does not read it, so any value works; use `last_reviewed=None` for minimal churn.
 
+In `science/tests/test_wander_context.py`, add one line to the existing
+`test_bundle_includes_candidate_components_neighbors_filesystem` asserting that
+`assemble_bundle` propagates the field. Its `_build_dataset` fixture leaves `h1`
+unstamped (no `sci:lastReviewed`), so the propagated value is `None` — assert it
+**without** importing anything (no `date` needed here; Task 3 removes this file's
+`date` import):
+
+```python
+    assert bundle.last_reviewed is None
+```
+
 - [ ] **Step 10: Add the positive CLI-table rendering test and the corrupt-date surfacing test**
 
 Add both to `science/tests/test_attention_preconditions.py`. This file already
@@ -475,7 +486,7 @@ def _reviewed_and_never_graph(tmp_path) -> Path:
     dataset = Dataset()
     knowledge = dataset.graph(PROJECT_NS["graph/knowledge"])
     for slug, reviewed in [("stamped", "2026-04-30"), ("never", None)]:
-        uri = URIRef(f"https://example.org/hypothesis/{slug}")
+        uri = _u(f"hypothesis/{slug}")  # canonical PROJECT_NS URI (this file defines `_u` at :43)
         knowledge.add((uri, RDF.type, SCI_NS.Hypothesis))
         knowledge.add((uri, SKOS.prefLabel, Literal(slug)))
         knowledge.add((uri, SCI_NS.freshnessState, Literal("fresh")))
@@ -502,7 +513,7 @@ def test_attention_tables_render_last_reviewed(tmp_path, command: str) -> None:
 def test_corrupt_last_reviewed_is_clean_cli_error(tmp_path, command: str) -> None:
     dataset = Dataset()
     knowledge = dataset.graph(PROJECT_NS["graph/knowledge"])
-    uri = URIRef("https://example.org/hypothesis/h1")
+    uri = _u("hypothesis/h1")
     knowledge.add((uri, RDF.type, SCI_NS.Hypothesis))
     knowledge.add((uri, SKOS.prefLabel, Literal("h1")))
     knowledge.add((uri, SCI_NS.freshnessState, Literal("fresh")))
@@ -525,19 +536,20 @@ Add `XSD` to the file's rdflib imports if it is not already present
 - [ ] **Step 11: Full green gate**
 
 Run: `cd science && uv run --frozen pytest && uv run ruff check && uv run pyright`
-Expected: PASS. If ruff flags an unused `datetime` import in `attention.py`
-(left over from the deleted `_parse_date_literal`), remove it from the import
-line — keep `date`.
+Expected: PASS. Deleting `_parse_date_literal` leaves `datetime` unused in
+`attention.py` — change its import line `from datetime import date, datetime` to
+`from datetime import date` (keep `date`; it is used by the new field and helper).
 
 - [ ] **Step 12: Commit**
 
 ```bash
-cd /home/keith/d/science/.claude/worktrees/instrument-result
+cd ~/d/science/.claude/worktrees/instrument-result
 git branch --show-current   # must print: attention-recency-correctness
 git add science/src/science_tool/graph/attention.py science/src/science_tool/graph/cli.py \
         science/src/science_tool/wander/context.py science/src/science_tool/wander/skeleton.py \
         science/tests/test_attention_sampling.py science/tests/test_attention_preconditions.py \
-        science/tests/test_wander_skeleton.py science/tests/test_wander_stub_smell.py
+        science/tests/test_wander_skeleton.py science/tests/test_wander_stub_smell.py \
+        science/tests/test_wander_context.py
 git commit -m "feat(attention): delete recency term; surface honest last_reviewed on every surface"
 ```
 
@@ -607,14 +619,17 @@ parameter remains to drop.)
 In `science/src/science_tool/graph/cli.py`, for **both** `graph_attention_sample`
 and `graph_attention_rank`: delete the `@click.option("--today", ...)` decorator,
 the `today: datetime | None,` function parameter, the `sample_date`/`rank_date`
-local, and the `today=...,` argument passed to the query function. Remove the now
-possibly-unused `datetime` import only if ruff flags it.
+local, and the `today=...,` argument passed to the query function. Then delete the
+import line `from datetime import date, datetime` entirely — after this change
+neither `date` nor `datetime` is used anywhere else in `cli.py` (their only uses
+were the `today`/`sample_date`/`rank_date` plumbing just removed).
 
 - [ ] **Step 5: Remove `today` from Wander sampling; keep it for the walk**
 
 In `science/src/science_tool/wander/sampling.py`, delete `today: date | None,`
 from `sample_for_walk` and the `today=today,` argument in its
-`compute_attention_candidates(...)` call (`:42`).
+`compute_attention_candidates(...)` call (`:42`). Then delete the now-unused
+import `from datetime import date` (`:3`) — `date` had no other use in this file.
 
 In `science/src/science_tool/wander/cli.py`: drop only the `today=walk_date`
 argument from the `compute_attention_candidates(...)` call (`:84`) — keep
@@ -633,7 +648,7 @@ tests Task 2 added** (`test_recency_no_longer_moves_the_weight`,
 Find them with:
 
 ```bash
-cd science && grep -rn "today=" tests/test_attention_sampling.py tests/test_attention_preconditions.py \
+cd science && rg -n "today=" tests/test_attention_sampling.py tests/test_attention_preconditions.py \
     tests/test_wander_sampling.py tests/test_wander_context.py
 ```
 
@@ -644,6 +659,12 @@ Two `today=` call sites must **NOT** be changed:
 - any `compute_stub_signals(..., today=...)` — that `today` is stub-smell's own and stays;
 - the new `test_compute_attention_candidates_rejects_today_kwarg` (Step 1) —
   it passes `today=` **on purpose** to assert the `TypeError`.
+
+After stripping, two of these files no longer use `date` at all — delete
+`from datetime import date` (`:3`) from **`test_wander_sampling.py`** and
+**`test_wander_context.py`**. Keep the `date` import in `test_attention_sampling.py`
+(used by many non-`today` assertions) and in `test_attention_preconditions.py`
+(the `rejects_today_kwarg` test intentionally passes `today=date(2026, 5, 1)`).
 
 - [ ] **Step 7: Assert Wander's `--today` still works**
 
@@ -657,13 +678,22 @@ def test_wander_today_option_still_accepted(tmp_path: Path) -> None:
     graph_path = _build_fixture_graph(tmp_path)
     result = CliRunner().invoke(
         main,
-        ["wander", "--n", "1", "--seed", "1", "--today", "2026-05-01", "--path", str(graph_path)],
+        [
+            "wander",
+            "--n", "1",
+            "--seed", "1",
+            "--graph-path", str(graph_path),
+            "--format", "json",
+            "--today", "2026-05-01",
+        ],
     )
     assert result.exit_code == 0, result.output
 ```
 
-Match the `--n`/`--seed`/`--path` flag spellings to the invocations already in
-this file (e.g. `test_wander_writes_markdown_skeleton`) if they differ.
+The graph-path option is `--graph-path` (not `--path`), and `--format json`
+prints to stdout — without it, `markdown` is the default and would write a
+skeleton file into `doc/meta/walks/`. This mirrors `test_wander_writes_markdown
+_skeleton` (`:40-57`), minus `--out`.
 
 - [ ] **Step 8: Full green gate**
 
@@ -673,7 +703,7 @@ Expected: PASS.
 - [ ] **Step 9: Commit**
 
 ```bash
-cd /home/keith/d/science/.claude/worktrees/instrument-result
+cd ~/d/science/.claude/worktrees/instrument-result
 git branch --show-current   # must print: attention-recency-correctness
 git add science/src/science_tool/graph/attention.py science/src/science_tool/graph/cli.py \
         science/src/science_tool/wander/sampling.py science/src/science_tool/wander/cli.py \
@@ -685,52 +715,95 @@ git commit -m "refactor(attention): remove dead today parameter across attention
 
 ---
 
-### Task 4: Docs — close out the follow-on pairing
+### Task 4: Docs — record item 3 as implemented (pre-merge)
 
-Mark the design shipped and stamp both InstrumentResult-convergence documents so
-the attention-ranking follow-on pair (fb-2026-07-10-023 + fb-2026-07-11-005) is
-visibly resolved, not silently dropped.
+Stamp the three documents so the attention-ranking follow-on pair
+(fb-2026-07-10-023 + fb-2026-07-11-005) is visibly addressed, not silently
+dropped. **This is a feature-branch commit, so the wording is `IMPLEMENTED …
+pending merge` — never `SHIPPED`, `CLOSED`, or `RESOLVED`.** Those terminal
+words are reserved for the post-merge commit (made by whoever runs
+finishing-a-development-branch), exactly as the earlier convergence
+reconciliations did it.
 
 **Files:**
 - Modify: `docs/plans/2026-07-15-attention-recency-correctness-design.md` (status line).
-- Modify: `docs/plans/2026-07-11-instrument-result-convergence-design.md` (Follow-on work section).
-- Modify: `docs/plans/2026-07-11-instrument-result-convergence-plan.md` (wherever it lists the pair as open).
+- Modify: `docs/plans/2026-07-11-instrument-result-convergence-design.md` (top-of-doc banner).
+- Modify: `docs/plans/2026-07-11-instrument-result-convergence-plan.md` (top-of-doc banner).
 
-- [ ] **Step 1: Flip the design status**
+- [ ] **Step 1: Set the feature-design status**
 
 In `docs/plans/2026-07-15-attention-recency-correctness-design.md`, change the
-status line from `**Status:** Decision-ready (pending review acceptance).` to
-`**Status:** SHIPPED — merged to local main. Item 3 (fb-2026-07-10-023 +
-fb-2026-07-11-005) CLOSED.` (Adjust the "merged" clause to match reality at
-commit time — if not yet merged, write "Implemented on branch
-`attention-recency-correctness`, pending merge".)
+status line to exactly:
 
-- [ ] **Step 2: Stamp the convergence design**
+```
+**Status:** IMPLEMENTED on branch `attention-recency-correctness`; pending merge.
+```
 
-In `docs/plans/2026-07-11-instrument-result-convergence-design.md`, in the
-"Follow-on work" section's "Attention-ranking correctness" bullet, prepend a
-banner: `**RESOLVED 2026-07-15** (see docs/plans/2026-07-15-attention-recency-
-correctness-design.md): the redundant days-term was deleted; fb-2026-07-11-005
-was already handled by the _is_closed terminal drop.` Leave the original
-reasoning text intact beneath it.
+Do **not** write `SHIPPED`/`CLOSED` here — that flip happens in the post-merge commit.
 
-- [ ] **Step 3: Stamp the convergence plan**
+- [ ] **Step 2: Add an authoritative top-of-doc banner to the convergence design**
 
-In `docs/plans/2026-07-11-instrument-result-convergence-plan.md`, find the entry
-that lists the attention-ranking pair among the still-open follow-on items and
-add the same one-line `RESOLVED 2026-07-15` pointer. (Grep it first:
-`grep -n "2026-07-10-023\|attention-ranking\|Attention-ranking" docs/plans/2026-07-11-instrument-result-convergence-plan.md`.)
+In `docs/plans/2026-07-11-instrument-result-convergence-design.md`, insert
+**immediately after the H1 title line** (before any other prose) a banner that
+supersedes every later open/live statement about this pair — do not hand-edit the
+individual follow-on bullet, which is why a top banner is used:
 
-- [ ] **Step 4: Commit**
+```markdown
+> **UPDATE 2026-07-15 — item 3 IMPLEMENTED (pending merge).** The attention-ranking
+> follow-on pair (fb-2026-07-10-023 + fb-2026-07-11-005) is implemented on branch
+> `attention-recency-correctness` — see `docs/plans/2026-07-15-attention-recency-correctness-design.md`.
+> The redundant `days_since_last_review` term was deleted; fb-2026-07-11-005 was already
+> handled by the `_is_closed` terminal drop. **This banner supersedes every statement below
+> that describes the attention-ranking pair as open or still-live.**
+```
+
+- [ ] **Step 3: Add the same banner to the convergence plan**
+
+First locate the open references so the banner's "supersedes below" claim is
+accurate:
 
 ```bash
-cd /home/keith/d/science/.claude/worktrees/instrument-result
+cd ~/d/science/.claude/worktrees/instrument-result
+rg -n "2026-07-10-023|2026-07-11-005|[Aa]ttention-ranking" docs/plans/2026-07-11-instrument-result-convergence-plan.md
+```
+
+Insert the same `> **UPDATE 2026-07-15 …` banner immediately after that document's
+H1 title line.
+
+- [ ] **Step 4: Verify the docs are internally consistent**
+
+```bash
+cd ~/d/science/.claude/worktrees/instrument-result
+# Banners exist in both convergence docs:
+rg -n "UPDATE 2026-07-15 — item 3 IMPLEMENTED" docs/plans/2026-07-11-instrument-result-convergence-design.md docs/plans/2026-07-11-instrument-result-convergence-plan.md
+# The feature design's Status line must NOT carry premature terminal wording:
+rg -n "^\*\*Status:\*\*.*(SHIPPED|CLOSED|RESOLVED)" docs/plans/2026-07-15-attention-recency-correctness-design.md
+# Whitespace/conflict-marker check on the working-tree doc edits (do not stage yet):
+git diff --check
+```
+Expected: both banners found; the Status-line `rg` prints **nothing** (exit 1 is
+fine — the status reads `IMPLEMENTED … pending merge`); `git diff --check` prints nothing.
+
+- [ ] **Step 5: Full green gate (docs-only, but keep the invariant)**
+
+Run: `cd science && uv run --frozen pytest && uv run ruff check && uv run pyright`
+Expected: PASS (unchanged from Task 3 — this task touches only docs, so confirm nothing regressed).
+
+- [ ] **Step 6: Commit**
+
+```bash
+cd ~/d/science/.claude/worktrees/instrument-result
 git branch --show-current   # must print: attention-recency-correctness
 git add docs/plans/2026-07-15-attention-recency-correctness-design.md \
         docs/plans/2026-07-11-instrument-result-convergence-design.md \
         docs/plans/2026-07-11-instrument-result-convergence-plan.md
-git commit -m "docs(attention): close out follow-on item 3 (fb-2026-07-10-023 + fb-2026-07-11-005)"
+git commit -m "docs(attention): record item 3 implemented pending merge (fb-2026-07-10-023 + fb-2026-07-11-005)"
 ```
+
+**Post-merge (out of this plan's task scope):** when the branch merges to local
+main, a follow-up commit flips this design's status to `SHIPPED` and the two
+convergence banners to `RESOLVED/CLOSED`. The finishing-a-development-branch skill
+owns that step.
 
 ---
 
