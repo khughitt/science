@@ -71,8 +71,8 @@ entailed, and all three are load-order-sensitive.
 
 Four steps. Collection is unordered; arbitration is pure.
 
-1. **Collect.** Load and validate every source into an unordered `SourceContribution` —
-   a declaration **plus** a candidate payload. No arbitration, no deferral, no materialization.
+1. **Collect.** Load and schema-validate every source into an unordered `SourceContribution` —
+   a declaration **plus** a validated candidate. No arbitration, no deferral, no selection.
 2. **Close.** Expand parsed-reference / commons closure to a **fixed point**, adding commons
    owners and overlays as contributions.
 3. **Arbitrate.** Audit the complete contribution set as a **pure function**.
@@ -81,10 +81,23 @@ Four steps. Collection is unordered; arbitration is pure.
 ```python
 @dataclass(frozen=True)
 class SourceContribution:
-    declaration: IdentityDeclaration     # carries participation_mode + owner_scope
-    payload: CandidatePayload            # the parsed record; not yet an Entity
-    source_ref: SourceRef
+    declaration: IdentityDeclaration     # carries participation_mode, owner_scope, AND source_ref
+    candidate: Entity                    # schema-validated; a candidate, not the representative
 ```
+
+**No `source_ref` field.** `IdentityDeclaration` already carries one, and a second copy is a
+second source of truth that can disagree with the first. The declaration is the provenance
+record; the contribution does not restate it.
+
+**`candidate` is a fully schema-validated `Entity`, not a looser "payload".** Arbitration's job
+is to **delay selection**, not to duplicate schema validation or invent a parallel pre-entity
+type. Collection validates exactly as it does today; what changes is that validation no longer
+implies *selection*. Several validated candidates may exist for one identity, and arbitration
+composes the **representative** from them.
+
+The distinction is *candidate* versus *representative*, not *unvalidated* versus *validated*. A
+candidate that fails schema validation never becomes a contribution at all — that is collection's
+ruling and A does not move it.
 
 Order-independence is **structural**, not defended: nothing materializes until every
 contribution exists, so there is no encounter-order projection left to be wrong. Eviction and
@@ -143,24 +156,100 @@ the schema declares field policy, and inventing a parallel field list to sit bes
 error.
 
 But the schema supplies **field policy only**. It does not say how that policy applies *between
-contributor roles*. A still owes a small matrix:
+contributor roles*. A owes a **total** matrix over all four policies × all three roles.
 
-| `MergePolicy` | owner present | owner absent |
-|---|---|---|
-| `REPLACE` | owner value wins; a non-owner may not replace it | the single permitted contributor supplies it |
-| `APPEND` | owner value first, then contributors in a **deterministic order** | contributors in deterministic order |
+**Owner-unset is treated as owner-absent for that field.** The owner wins every field it
+*defines*; a field it declares but leaves empty is not a defended value. This is the general rule
+that replaces the five hardcoded field names — it restores `meta`'s `sci:doi` and `dcterms:date`
+without naming a single field.
 
-Two requirements fall out:
+| `MergePolicy` | owner contributes | borrower contributes | external reference contributes |
+|---|---|---|---|
+| `REPLACE` | value wins | **error** — may not replace an owner's value | **error** |
+| `REPLACE`, owner absent/unset | — | single permitted contributor supplies it | single permitted contributor supplies it |
+| `APPEND` | values first | appends | appends |
+| `APPEND`, owner absent/unset | — | contributors in `ContributionKey` order | contributors in `ContributionKey` order |
+| `PROJECT_ONLY` | value is **overridden** by the project layer | **wins over the owner** — this is the policy's purpose | **error** — an external reference is not the project layer |
+| `PROJECT_ONLY`, owner absent/unset | — | stands alone | **error** |
+| `FORBIDDEN` | value only | **error** | **error** |
+| `FORBIDDEN`, owner absent/unset | — | **error** | **error** |
 
-- **`REPLACE` must define owner-present versus owner-absent behavior explicitly.** This is the
-  live edge of **fb-2026-07-12-006**, where `commons/overlay.py:286-288` raises
-  `OverlayMergeError` on `REPLACE` from a branch its own comment calls "unreachable for a
-  validated overlay". A routes more overlays through `merge_entity` than have ever reached it,
-  so that branch stops being hypothetical.
-- **`APPEND` ordering must be deterministic**, or permutation invariance (§4) fails on list
-  fields — which would make the acceptance test the thing that catches it.
+**Conflicting equal-precedence non-owner values are an error** — never resolved by adapter rank
+(§3.4). Two borrowers supplying different scalars for one `REPLACE` field is a defect to report,
+not a race to win.
 
-The deterministic order is by identity key, never by load position.
+**`APPEND` ordering is by `ContributionKey`, never by load position**, or permutation invariance
+(§4) fails on list fields.
+
+### 3.3a fb-2026-07-12-006 is a landing dependency, not adjacent work
+
+A owns borrower composition, and this matrix *is* the ruling fb-006 needs. Scoping its fix out
+while making its branch reachable would be incoherent.
+
+The mechanism, confirmed:
+
+```python
+policy = merge_policy.get(field) or overlay_policy.get(field)
+...
+else:  # REPLACE / FORBIDDEN — unreachable for a validated overlay
+    raise OverlayMergeError(field=field, canonical_id=canonical.canonical_id)
+```
+
+`merge_entity` implements only `APPEND` and `PROJECT_ONLY`. `REPLACE` and `FORBIDDEN` both raise
+from a branch whose comment asserts it is unreachable.
+
+**Two defaults collide.** `read_merge_policy` defaults an unannotated field to `REPLACE`
+(`merge.py:29`); `read_overlay_merge_policy` defaults one to `PROJECT_ONLY` (`merge.py:41`).
+Because `REPLACE` is truthy, `merge_policy.get(field) or overlay_policy.get(field)` means **the
+entity schema silently preempts the overlay for every field it declares.** A field's fate is
+decided by which schema happens to declare it — not by any ruling anyone made.
+
+**The dataset crash is an incomplete migration:**
+
+| schema | `status` |
+|---|---|
+| `mixin-paper-2.0`, `mixin-theme-2.0`, `mixin-topic-2.0` | `science:merge: project_only` |
+| `mixin-dataset-1.0` | **does not declare `status`** |
+| `science-entity-base-2.0` | declared, **unannotated → `REPLACE`** |
+
+Paper, theme, and topic were migrated to v2.0 mixins carrying `project_only`. Dataset was left at
+1.0, inherits `status` from the base, and lands on `REPLACE`. Since `_iter_components` is
+last-write-wins, the paper mixin overrides the base and the dataset mixin has nothing to override
+it with. **Every commons dataset overlay carrying `status` raises; every paper overlay carrying
+`status` is fine.** That is why fb-006's report and the observed green `meta`/`evolution` builds
+were both true.
+
+**Minimal correction in A's scope:** declare `status` on the dataset path with
+`science:merge: project_only`, matching paper/theme/topic — completing the migration rather than
+inventing policy. Whether that requires `mixin-dataset-2.0` rather than editing a published 1.0
+schema is A's to settle in the implementation plan.
+
+**Out of A's scope:** the `or`-precedence collision between the two defaults is a real defect and
+a wider one. A must **define** the matrix and unblock datasets; reconciling the two default
+sources is fb-006's own to close.
+
+### 3.4 Contribution order must be total
+
+The identity key `(owner_scope, canonical_id)` **groups** contributions. It cannot **order** the
+owner, borrower, and external-reference rows that share it — they all have the same identity key,
+which is what makes them one entity's contributions.
+
+Ordering requires a distinct, total key:
+
+```python
+@dataclass(frozen=True, order=True)
+class ContributionKey:
+    role: ParticipationMode      # owner < borrower < external-reference
+    authority: AuthorityRank     # adapter / authority identity
+    location: SourceLocation     # path, then position within it
+```
+
+Total, deterministic, and independent of load order — which is what `APPEND` needs to satisfy
+§4.
+
+**`ContributionKey` orders; it does not adjudicate.** Equal-precedence contributors supplying
+conflicting scalar values **error**. Using adapter rank to silently pick a winner would
+reintroduce exactly the arbitrary-authority defect A exists to remove, with a tidier name.
 
 ---
 
@@ -185,8 +274,13 @@ Regression acceptance, from the motivating incident:
 - A commons paper cited by `references.bib` merges its overlay and validates its pin — the
   fb-005 defect, which is the shadow closing.
 - The `meta` metadata regression does not recur: `sci:doi` 23, `dcterms:date` 18. Not by an
-  absorb helper, but because an owner-absent `REPLACE` now has a declared answer (§3.3).
+  absorb helper, but because **owner-unset is owner-absent** (§3.3) — a general rule, not five
+  field names.
 - Bib-only citations still materialize minimal nodes (§3.2).
+- **A commons dataset overlay carrying `status` merges instead of raising** (§3.3a) — fb-006's
+  crash, closed by completing the mixin migration.
+- **A borrower attempting to replace an owner's `REPLACE` field errors**, and reports which
+  contributor did it (§3.3).
 
 ---
 
@@ -194,7 +288,8 @@ Regression acceptance, from the motivating incident:
 
 **In:** the four-step contract; `SourceContribution`; deletion of `should_defer`,
 `external_reference_ids`, and `_EXTERNAL_REFERENCE_SUPPORTING_FIELDS`; correct
-`(owner_scope, canonical_id)` keying; the role × policy matrix; permutation invariance.
+`(owner_scope, canonical_id)` keying; the total role × policy matrix (§3.3); `ContributionKey`
+(§3.4); **the minimal fb-2026-07-12-006 correction** (§3.3a); permutation invariance.
 
 **Out:**
 
@@ -202,8 +297,9 @@ Regression acceptance, from the motivating incident:
   `CommonsQuery`.
 - **Cross-scope resolution rules (§B3a).** Followed, not reopened.
 - **RDF Emit.** Downstream and unchanged.
-- **fb-2026-07-12-006's fix.** A must *define* `REPLACE` owner-present/absent behavior; whether
-  `overlay.py:286` still raises is that entry's to settle.
+- **fb-2026-07-12-006's wider defect.** A defines the matrix and unblocks dataset overlays by
+  completing the mixin migration. Reconciling the two colliding policy defaults and the
+  `or`-precedence between them (§3.3a) stays with that entry.
 - **C's census.** A makes the pin check *reachable*. It does not make its coverage *attestable* —
   that is C, and A shipping is precisely what turns ~245 overlays from inert into traffic.
 
