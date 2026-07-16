@@ -54,6 +54,7 @@ def test_bundle_includes_candidate_components_neighbors_filesystem(tmp_path: Pat
     assert bundle.label == "First"
     assert bundle.kind == "hypothesis"
     assert bundle.weight > 0
+    assert bundle.last_reviewed is None
     assert bundle.components["incoming_bears_on"] == 0.0
     assert bundle.source_path == str(source_file)
     assert bundle.content_length == 200

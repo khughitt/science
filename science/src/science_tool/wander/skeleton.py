@@ -33,11 +33,11 @@ def render_markdown_skeleton(
     lines.append("")
     lines.append("## Sample")
     lines.append("")
-    lines.append("| ID | Kind | Weight | Last reviewed (days) |")
+    lines.append("| ID | Kind | Weight | Last reviewed |")
     lines.append("| --- | --- | --- | --- |")
     for bundle, _ in bundles_with_signals:
-        days = bundle.components.get("days_since_last_review", "")
-        lines.append(f"| {bundle.entity_id} | {bundle.kind} | {bundle.weight:.4f} | {days} |")
+        last_reviewed = bundle.last_reviewed.isoformat() if bundle.last_reviewed else "never"
+        lines.append(f"| {bundle.entity_id} | {bundle.kind} | {bundle.weight:.4f} | {last_reviewed} |")
     lines.append("")
     lines.append("## Per-entity review")
     lines.append("")
@@ -120,6 +120,7 @@ def _bundle_to_dict(bundle: ContextBundle, signals: StubSignals) -> dict:
         "kind": bundle.kind,
         "label": bundle.label,
         "freshness_state": bundle.freshness_state,
+        "last_reviewed": bundle.last_reviewed.isoformat() if bundle.last_reviewed else None,
         "weight": bundle.weight,
         "components": dict(bundle.components),
         "source_path": bundle.source_path,

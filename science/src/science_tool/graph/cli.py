@@ -657,6 +657,7 @@ def graph_attention_sample(
             {
                 **row,
                 "reasons": ", ".join(reason["code"] for reason in row.get("reasons", [])),
+                "last_reviewed": row["last_reviewed"] or "never",
             }
             for row in rows
         ]
@@ -668,7 +669,7 @@ def graph_attention_sample(
             ("freshness_state", "Freshness"),
             ("attention_weight", "Weight"),
             ("incoming_bears_on", "Bears On"),
-            ("days_since_last_review", "Days"),
+            ("last_reviewed", "Last reviewed"),
             ("support_count", "Supports"),
             ("dispute_count", "Disputes"),
             ("evidence_source_count", "Evidence Sources"),
@@ -702,16 +703,22 @@ def graph_attention_rank(
     if limit is not None and limit < 0:
         raise click.ClickException("--limit must be >= 0")
     rank_date: date | None = today.date() if today is not None else None
-    rows = unwrap_instrument(
-        query_attention_ranked(
-            graph_path=graph_path,
-            limit=limit,
-            today=rank_date,
-            kinds=set(kinds) if kinds else None,
-            epsilon=epsilon,
-        ),
-        what="graph attention-rank",
-    )
+    try:
+        rows = unwrap_instrument(
+            query_attention_ranked(
+                graph_path=graph_path,
+                limit=limit,
+                today=rank_date,
+                kinds=set(kinds) if kinds else None,
+                epsilon=epsilon,
+            ),
+            what="graph attention-rank",
+        )
+    except ValueError as exc:
+        raise click.ClickException(str(exc)) from exc
+    table_rows = rows
+    if output_format == "table":
+        table_rows = [{**row, "last_reviewed": row["last_reviewed"] or "never"} for row in rows]
     emit_query_rows(
         output_format=output_format,
         title="Attention ranking",
@@ -720,9 +727,10 @@ def graph_attention_rank(
             ("kind", "Kind"),
             ("freshness_state", "Freshness"),
             ("attention_weight", "Weight"),
+            ("last_reviewed", "Last reviewed"),
             ("open_question_debt", "Q-Debt"),
         ],
-        rows=rows,
+        rows=table_rows,
     )
 
 

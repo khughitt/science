@@ -19,8 +19,9 @@ def _bundle(entity_id: str = "hypothesis:h1", **overrides) -> ContextBundle:
         kind=entity_id.split(":")[0],
         label="Sample label",
         freshness_state="fresh",
+        last_reviewed=date(2026, 4, 1),
         weight=1.25,
-        components={"incoming_bears_on": 0.0, "days_since_last_review": 30.0},
+        components={"incoming_bears_on": 0.0},
         source_path="doc/h1.md",
         mtime=date(2026, 4, 1),
         content_length=412,
@@ -83,3 +84,35 @@ def test_json_serialization_round_trips_bundle_fields() -> None:
     assert parsed["walk_id"] == "2026-05-09-1430"
     assert parsed["bundles"][0]["entity_id"] == "hypothesis:h1"
     assert parsed["bundles"][0]["stub_signals"]["is_stub_candidate"] is False
+
+
+def test_skeleton_renders_last_reviewed() -> None:
+    table_bundle = _bundle("hypothesis:h1")
+    never_bundle = _bundle("hypothesis:h2", last_reviewed=None)
+    today = date(2026, 5, 9)
+    bundles_with_signals = [
+        (b, compute_stub_signals(b, today=today)) for b in (table_bundle, never_bundle)
+    ]
+    text = render_markdown_skeleton(
+        walk_id="2026-05-09-1430",
+        walk_date=today,
+        seed=1,
+        n=2,
+        bundles_with_signals=bundles_with_signals,
+    )
+    assert "| Last reviewed |" in text
+    assert "2026-04-01" in text
+    assert "never" in text
+
+    payload = json.loads(
+        render_json(
+            walk_id="2026-05-09-1430",
+            walk_date=today,
+            seed=1,
+            n=2,
+            bundles_with_signals=bundles_with_signals,
+        )
+    )
+    reviewed = {b["entity_id"]: b["last_reviewed"] for b in payload["bundles"]}
+    assert reviewed["hypothesis:h1"] == "2026-04-01"
+    assert reviewed["hypothesis:h2"] is None

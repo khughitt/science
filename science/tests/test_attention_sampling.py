@@ -96,6 +96,62 @@ def _attention_fixture() -> Dataset:
     return dataset
 
 
+def _uniform_recency_fixture() -> Dataset:
+    """Three hypotheses identical in every scoring input, same freshness_state,
+    differing only in last_reviewed (recent / old / never)."""
+    dataset = Dataset()
+    knowledge = dataset.graph(PROJECT_NS["graph/knowledge"])
+    for slug, reviewed in [("recent", "2026-04-30"), ("old", "2024-01-01"), ("never", None)]:
+        uri = _u(f"hypothesis/{slug}")
+        knowledge.add((uri, RDF.type, SCI_NS.Hypothesis))
+        knowledge.add((uri, SKOS.prefLabel, Literal(slug)))
+        knowledge.add((uri, SCI_NS.freshnessState, Literal("fresh")))
+        if reviewed is not None:
+            knowledge.add((uri, SCI_NS.lastReviewed, Literal(reviewed, datatype=XSD.date)))
+    return dataset
+
+
+def test_recency_no_longer_moves_the_weight() -> None:
+    candidates = compute_attention_candidates(_uniform_recency_fixture(), today=date(2026, 5, 1)).rows
+    weights = {c.entity_id: c.weight for c in candidates}
+    assert weights["hypothesis:recent"] == weights["hypothesis:old"] == weights["hypothesis:never"]
+
+
+def test_never_reviewed_does_not_dominate_on_recency() -> None:
+    # Perverse-repair guard: a never-reviewed entity must NOT outrank an
+    # otherwise-identical recently-reviewed one purely on recency.
+    candidates = compute_attention_candidates(_uniform_recency_fixture(), today=date(2026, 5, 1)).rows
+    weights = {c.entity_id: c.weight for c in candidates}
+    assert weights["hypothesis:never"] == weights["hypothesis:recent"]
+
+
+def test_last_reviewed_surfaced_honestly() -> None:
+    candidates = compute_attention_candidates(_uniform_recency_fixture(), today=date(2026, 5, 1)).rows
+    by_id = {c.entity_id: c for c in candidates}
+    assert by_id["hypothesis:recent"].last_reviewed == date(2026, 4, 30)
+    assert by_id["hypothesis:never"].last_reviewed is None
+    for c in candidates:
+        assert "days_since_last_review" not in c.components
+    recent_row = format_attention_candidate(by_id["hypothesis:recent"])
+    never_row = format_attention_candidate(by_id["hypothesis:never"])
+    assert recent_row["last_reviewed"] == "2026-04-30"
+    assert never_row["last_reviewed"] is None
+    assert "days_since_last_review" not in recent_row
+
+
+def test_freshness_still_discriminates_recency() -> None:
+    dataset = Dataset()
+    knowledge = dataset.graph(PROJECT_NS["graph/knowledge"])
+    for slug, state in [("stale", "needs-review"), ("fresh", "fresh")]:
+        uri = _u(f"hypothesis/{slug}")
+        knowledge.add((uri, RDF.type, SCI_NS.Hypothesis))
+        knowledge.add((uri, SKOS.prefLabel, Literal(slug)))
+        knowledge.add((uri, SCI_NS.freshnessState, Literal(state)))
+    candidates = compute_attention_candidates(dataset, today=date(2026, 5, 1)).rows
+    weights = {c.entity_id: c.weight for c in candidates}
+    assert weights["hypothesis:stale"] > weights["hypothesis:fresh"]
+
+
 def _reason_fixture() -> Dataset:
     dataset = Dataset()
     knowledge = dataset.graph(PROJECT_NS["graph/knowledge"])
@@ -270,9 +326,9 @@ def test_attention_weight_uses_observable_graph_features() -> None:
     fresh = by_id["hypothesis:h2"]
 
     assert contested.weight > fresh.weight
+    assert contested.last_reviewed == date(2026, 4, 1)
     assert contested.components == {
         "incoming_bears_on": 2.0,
-        "days_since_last_review": 30.0,
         "freshness_multiplier": 3.0,
         "support_count": 1.0,
         "dispute_count": 1.0,

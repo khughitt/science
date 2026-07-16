@@ -20,6 +20,7 @@ class ContextBundle:
     kind: str
     label: str
     freshness_state: str
+    last_reviewed: date | None
     weight: float
     components: Mapping[str, float]
     source_path: str | None
@@ -53,6 +54,7 @@ def assemble_bundle(
         kind=candidate.kind,
         label=candidate.label,
         freshness_state=candidate.freshness_state,
+        last_reviewed=candidate.last_reviewed,
         weight=candidate.weight,
         components=dict(candidate.components),
         source_path=source_path,

@@ -26,7 +26,7 @@ from pathlib import Path
 import pytest
 from click.testing import CliRunner
 from rdflib import Dataset, Literal, URIRef
-from rdflib.namespace import RDF, SKOS
+from rdflib.namespace import RDF, SKOS, XSD
 
 from science_tool.cli import main
 from science_tool.graph.attention import (
@@ -68,6 +68,55 @@ def _write(tmp_path: Path, dataset: Dataset) -> Path:
     graph_path.parent.mkdir(parents=True, exist_ok=True)
     save_canonical_graph_dataset(dataset, graph_path, preferred_graph_order=[PROJECT_NS["graph/knowledge"]])
     return graph_path
+
+
+def _reviewed_and_never_graph(tmp_path: Path) -> Path:
+    dataset = Dataset()
+    knowledge = dataset.graph(PROJECT_NS["graph/knowledge"])
+    for slug, reviewed in [("stamped", "2026-04-30"), ("never", None)]:
+        uri = _u(f"hypothesis/{slug}")
+        knowledge.add((uri, RDF.type, SCI_NS.Hypothesis))
+        knowledge.add((uri, SKOS.prefLabel, Literal(slug)))
+        knowledge.add((uri, SCI_NS.freshnessState, Literal("fresh")))
+        if reviewed is not None:
+            knowledge.add((uri, SCI_NS.lastReviewed, Literal(reviewed, datatype=XSD.date)))
+    return _write(tmp_path, dataset)
+
+
+@pytest.mark.parametrize("command", ["attention-sample", "attention-rank"])
+def test_attention_tables_render_last_reviewed(tmp_path: Path, command: str) -> None:
+    graph_path = _reviewed_and_never_graph(tmp_path)
+    args = ["graph", command, "--path", str(graph_path)]
+    if command == "attention-sample":
+        args += ["--limit", "5", "--seed", "1"]
+    result = CliRunner().invoke(main, args, env={"COLUMNS": "220"})
+    assert result.exit_code == 0, result.output
+    assert "Last reviewed" in result.output
+    assert "2026-04-30" in result.output
+    assert "never" in result.output
+    assert "365" not in result.output
+
+
+@pytest.mark.parametrize("command", ["attention-sample", "attention-rank"])
+def test_corrupt_last_reviewed_is_clean_cli_error(tmp_path: Path, command: str) -> None:
+    dataset = Dataset()
+    knowledge = dataset.graph(PROJECT_NS["graph/knowledge"])
+    uri = _u("hypothesis/h1")
+    knowledge.add((uri, RDF.type, SCI_NS.Hypothesis))
+    knowledge.add((uri, SKOS.prefLabel, Literal("h1")))
+    knowledge.add((uri, SCI_NS.freshnessState, Literal("fresh")))
+    knowledge.add(
+        (uri, SCI_NS.lastReviewed, Literal("2026-05-01garbage", datatype=XSD.date, normalize=False))
+    )
+    graph_path = _write(tmp_path, dataset)
+
+    args = ["graph", command, "--path", str(graph_path)]
+    if command == "attention-sample":
+        args += ["--limit", "5"]
+    result = CliRunner().invoke(main, args, env={"COLUMNS": "220"})
+    assert result.exit_code != 0
+    assert "hypothesis:h1" in result.output
+    assert "2026-05-01garbage" in result.output
 
 
 # --------------------------------------------------------------------------

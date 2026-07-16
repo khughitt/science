@@ -14,6 +14,7 @@ def _bundle(**overrides) -> ContextBundle:
         kind="hypothesis",
         label="x",
         freshness_state="fresh",
+        last_reviewed=None,
         weight=0.5,
         components={},
         source_path=None,

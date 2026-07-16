@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import random
 from dataclasses import dataclass
-from datetime import date, datetime
+from datetime import date
 from pathlib import Path
 from typing import Any, Iterable, Mapping, Sequence
 
@@ -26,7 +26,6 @@ from science_tool.project_config import validated_entity_schema_version
 DEFAULT_EPSILON = 0.05
 NEEDS_REVIEW_MULTIPLIER = 3.0
 STALE_MULTIPLIER = 2.0
-NEVER_REVIEWED_DAYS = 365.0
 OPEN_QUESTION_DEBT_WEIGHT = 0.5
 # Canonical question debt statuses (science_model entities.py); resolved
 # states (answered/retired) are deliberately excluded — they are not debt.
@@ -79,6 +78,7 @@ class AttentionCandidate:
     kind: str
     label: str
     freshness_state: str
+    last_reviewed: date | None
     weight: float
     components: Mapping[str, float]
     reasons: Sequence[AttentionReason]
@@ -107,7 +107,6 @@ def compute_attention_candidates(
     if epsilon <= 0:
         raise ValueError("epsilon must be > 0")
 
-    current_date = today or date.today()
     knowledge = dataset.graph(PROJECT_NS["graph/knowledge"])
     state_triples = sorted(knowledge.triples((None, SCI_NS.freshnessState, None)), key=str)
     if not state_triples:
@@ -150,7 +149,7 @@ def compute_attention_candidates(
 
         freshness_state = str(state_literal)
         incoming_bears_on = _count_uri_objects(knowledge.triples((None, SCI_NS.bearsOn, entity_uri)))
-        days_since_last_review = _days_since_last_review(knowledge, entity_uri, current_date)
+        last_reviewed = _last_reviewed_date(knowledge, entity_id, entity_uri)
         support_count = _count_uri_objects(knowledge.triples((None, CITO_NS.supports, entity_uri)))
         dispute_count = _count_uri_objects(knowledge.triples((None, CITO_NS.disputes, entity_uri)))
         evidence_source_count = support_count + dispute_count
@@ -160,7 +159,6 @@ def compute_attention_candidates(
 
         weight = (
             (1.0 + incoming_bears_on)
-            * (1.0 + (days_since_last_review / 30.0))
             * freshness_multiplier
             * evidence_balance_factor
             * (1.0 + OPEN_QUESTION_DEBT_WEIGHT * open_question_debt)
@@ -177,10 +175,10 @@ def compute_attention_candidates(
                 kind=kind,
                 label=_label_for(knowledge, entity_uri, entity_id),
                 freshness_state=freshness_state,
+                last_reviewed=last_reviewed,
                 weight=weight,
                 components={
                     "incoming_bears_on": float(incoming_bears_on),
-                    "days_since_last_review": float(days_since_last_review),
                     "freshness_multiplier": float(freshness_multiplier),
                     "support_count": float(support_count),
                     "dispute_count": float(dispute_count),
@@ -372,11 +370,11 @@ def format_attention_candidate(
         "kind": candidate.kind,
         "label": candidate.label,
         "freshness_state": candidate.freshness_state,
+        "last_reviewed": candidate.last_reviewed.isoformat() if candidate.last_reviewed else None,
         "attention_weight": f"{candidate.weight:.4f}",
         "belief_weight": belief_weight,
         "influence_weight": None,
         "incoming_bears_on": str(int(components["incoming_bears_on"])),
-        "days_since_last_review": f"{components['days_since_last_review']:.0f}",
         "support_count": str(int(components["support_count"])),
         "dispute_count": str(int(components["dispute_count"])),
         "evidence_source_count": str(int(components["evidence_source_count"])),
@@ -679,28 +677,6 @@ def _last_reviewed_date(knowledge, entity_id: str, entity_uri: URIRef) -> date |
             f"{entity_id}: sci:lastReviewed value {text!r} is not a valid ISO date (YYYY-MM-DD)"
         )
     return parsed
-
-
-def _days_since_last_review(knowledge, entity_uri: URIRef, today: date) -> float:
-    literal = next(knowledge.objects(entity_uri, SCI_NS.lastReviewed), None)
-    if literal is None:
-        return NEVER_REVIEWED_DAYS
-    parsed = _parse_date_literal(literal)
-    if parsed is None:
-        return NEVER_REVIEWED_DAYS
-    return float(max((today - parsed).days, 0))
-
-
-def _parse_date_literal(value: object) -> date | None:
-    text = str(value)
-    try:
-        return date.fromisoformat(text[:10])
-    except ValueError:
-        pass
-    try:
-        return datetime.fromisoformat(text.replace("Z", "+00:00")).date()
-    except ValueError:
-        return None
 
 
 def _freshness_multiplier(state: str) -> float:
