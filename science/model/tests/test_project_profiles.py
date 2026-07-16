@@ -28,7 +28,7 @@ def test_hypothesis_derives_a_base_2_profile() -> None:
 
 def test_commons_kinds_stay_on_base_1() -> None:
     # Non-negotiable: 369 live commons records pin base 1.0. The base version is PER-KIND.
-    assert default_profile_for_kind("dataset").render() == "science-entity-base/1.0+dataset/1.0"
+    assert default_profile_for_kind("dataset").render() == "science-entity-base/1.0+dataset/2.0"
     assert default_profile_for_kind("paper").render() == "science-entity-base/1.0+paper/2.0"
 
 

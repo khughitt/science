@@ -345,7 +345,7 @@ def test_render_canonical_uses_active_profile() -> None:
         active_profile=extended_profile,
     )
 
-    assert "schema_profile: science-entity-base/1.0+dataset/1.0+bio.matrix/1.0" in rendered
+    assert "schema_profile: science-entity-base/1.0+dataset/2.0+bio.matrix/1.0" in rendered
 
 
 def test_render_canonical_paper_emits_bibkey_field() -> None:
