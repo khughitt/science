@@ -313,9 +313,12 @@ class Entity(BaseModel):
 
     This is safe ONLY because the schema is checked FIRST. `extra="allow"` on its own would preserve
     every typo and every deleted key; `unevaluatedProperties: false` on the composed profile is what
-    refuses them, and `load_project_sources` runs it before constructing this model on any project
-    pinned to `entity_schema_version: 2`. The two are one contract: the SCHEMA refuses what it does
-    not know, the PROJECTION preserves what it admitted. Separated, each is a defect.
+    refuses them. On a project pinned to `entity_schema_version: 2`, `load_project_sources` runs that
+    check before constructing this model — but only for the kinds in `PROJECT_MIXIN_NAMES` (today just
+    `hypothesis`); other kinds are not schema-checked yet, so their extra keys are preserved unvouched
+    and the graph audit's `undeclared_key` diagnostic is what surfaces a misplaced reference field on
+    them. The two are one contract: the SCHEMA refuses what it does not know, the PROJECTION preserves
+    what it admitted. Separated, each is a defect.
     """
 
     model_config = ConfigDict(extra="allow")

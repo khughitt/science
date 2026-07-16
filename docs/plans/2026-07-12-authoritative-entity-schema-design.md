@@ -457,6 +457,11 @@ forbids**.
   previously-dropped field still changes rebuilt graphs, dashboards, attention ranking and
   validation output. **P0 therefore requires downstream graph/output compatibility checks,
   including commons wherever a shared field is touched.**
+  > **NOTE 2026-07-16 (fb-2026-07-16-003).** Misplaced *known reference* fields (a
+  > reference-field name appearing on a kind that does not declare it) are now handled
+  > generally by the graph audit's `undeclared_key` WARN
+  > (`2026-07-16-audit-undeclared-key-diagnostic-design.md`), not by a per-field entry
+  > in this inventory.
 - **P1 — Absorb the real subsystems.** `provided_capabilities`/`required_capabilities` is a
   designed capability-matching subsystem with its own validator and seven design docs, reading
   raw frontmatter, bypassing the model, invisible to the graph. Make it first-class.

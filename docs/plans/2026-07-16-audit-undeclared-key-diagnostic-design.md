@@ -2,7 +2,7 @@
 
 ## Status
 
-**Decision-ready.** Design approved in principle; revised three times after
+**IMPLEMENTED on branch `audit-undeclared-key`; pending merge.** Design approved in principle; revised three times after
 review. The diagnostic is gated on the **strict-schema kind set** (the kinds
 whose extra-preserving load is schema-checked — not a project-wide pin boolean),
 threads the registry context it needs, and has a drift guard that independently
