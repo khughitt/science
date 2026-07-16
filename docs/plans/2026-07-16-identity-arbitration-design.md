@@ -78,12 +78,38 @@ Four steps. Collection is unordered; arbitration is pure.
 3. **Arbitrate.** Audit the complete contribution set as a **pure function**.
 4. **Compose.** Produce final `ProjectSources.entities`. RDF Emit remains downstream, unchanged.
 
+A single contribution type cannot hold both. An owner or external reference contributes a
+validated `Entity`; a **borrower contributes an `OverlayRecord`** — a validated *partial*, which
+is not an `Entity` and never was. Since Close explicitly adds overlays as contributions
+(§2 step 2), the type must admit them:
+
 ```python
 @dataclass(frozen=True)
-class SourceContribution:
+class EntityContribution:
+    """An owner or external reference: a whole, schema-validated candidate entity."""
     declaration: IdentityDeclaration     # carries participation_mode, owner_scope, AND source_ref
-    candidate: Entity                    # schema-validated; a candidate, not the representative
+    candidate: Entity
+
+    def __post_init__(self) -> None:
+        if self.declaration.participation_mode is ParticipationMode.BORROWER:
+            raise ValueError("a borrower contributes an attachment, not an entity")
+
+@dataclass(frozen=True)
+class AttachmentContribution:
+    """A borrower: a validated partial that attaches to an owner's representative."""
+    declaration: IdentityDeclaration
+    record: OverlayRecord
+
+    def __post_init__(self) -> None:
+        if self.declaration.participation_mode is not ParticipationMode.BORROWER:
+            raise ValueError("only a borrower contributes an attachment")
+
+SourceContribution = EntityContribution | AttachmentContribution
 ```
+
+**Invalid role/payload pairings are unconstructible.** The guards are not defensive ceremony:
+`participation_mode` and the contribution type are two statements of the same fact, so the type
+system cannot prevent them disagreeing and construction must.
 
 **No `source_ref` field.** `IdentityDeclaration` already carries one, and a second copy is a
 second source of truth that can disagree with the first. The declaration is the provenance
@@ -163,6 +189,32 @@ contributor roles*. A owes a **total** matrix over all four policies × all thre
 that replaces the five hardcoded field names — it restores `meta`'s `sci:doi` and `dcterms:date`
 without naming a single field.
 
+"Unset" is **mechanical**, not a truthiness test:
+
+```python
+def is_unset(value: object) -> bool:
+    if value is None:
+        return True
+    if isinstance(value, str):
+        return not value.strip()                      # "" and whitespace-only
+    if isinstance(value, (list, tuple, set, frozenset, dict)):
+        return len(value) == 0                        # empty collections
+    return False                                      # False, 0, 0.0 are DEFENDED
+```
+
+| value | verdict |
+|---|---|
+| `None`, field absent | unset |
+| `""`, `"   "` | unset |
+| `[]`, `{}`, `set()`, `()` | unset |
+| **`False`, `0`, `0.0`** | **defended value — the owner said so** |
+
+The last row is the point of specifying this. Python's truthiness would silently classify
+`False` and `0` as unset, letting a non-owner overwrite a value the owner deliberately set — and
+`bool` being a subclass of `int` makes that easy to get wrong twice. The superseded
+`_absorb_external_reference_metadata` used exactly this defect: `if getattr(owner, field_name,
+None):` is a plain truthiness test. Left unspecified, the implementation re-invents it.
+
 | `MergePolicy` | owner contributes | borrower contributes | external reference contributes |
 |---|---|---|---|
 | `REPLACE` | value wins | **error** — may not replace an owner's value | **error** |
@@ -219,14 +271,35 @@ it with. **Every commons dataset overlay carrying `status` raises; every paper o
 `status` is fine.** That is why fb-006's report and the observed green `meta`/`evolution` builds
 were both true.
 
-**Minimal correction in A's scope:** declare `status` on the dataset path with
-`science:merge: project_only`, matching paper/theme/topic — completing the migration rather than
-inventing policy. Whether that requires `mixin-dataset-2.0` rather than editing a published 1.0
-schema is A's to settle in the implementation plan.
+**A's correction: `mixin-dataset-2.0`.** Shared schema versioning is **real** — the authoritative
+entity schema design records that `mixin-paper-1.0` and `2.0` ship side by side — so editing
+`mixin-dataset-1.0` in place would **silently change the semantics of every profile pinned to
+it**. A meaning change requires an atomic versioned migration. The work:
 
-**Out of A's scope:** the `or`-precedence collision between the two defaults is a real defect and
-a wider one. A must **define** the matrix and unblock datasets; reconciling the two default
-sources is fb-006's own to close.
+- Add **`mixin-dataset-2.0`**; **do not mutate `1.0`**.
+- Declare `status: project_only`, matching paper/theme/topic.
+- Update the **dataset default profile** and **promotion paths**.
+- Migrate **explicit dataset profiles in `science-commons`**.
+- Run **toolkit, commons, compatibility, and graph-output** checks.
+
+This is the established mechanism, not a new one: paper, theme, and topic each went to 2.0 for
+precisely this. The cross-repo cost is real, bounded, and explicit.
+
+**A does not close fb-2026-07-12-006.** The distinction matters and the wording should not blur
+it:
+
+- **A closes** the dataset-status crashing *instance*, through the established versioned
+  mechanism.
+- **fb-006 stays open** for the broader entity-policy/overlay-policy precedence contract, until
+  its callers and defaults are redesigned together.
+
+`read_merge_policy` is **unchanged by A**. That restraint is justified by its caller surface, not
+by convenience: it is not merely an overlay helper — `promote.py` uses its **key set for routing**
+and its **values for canonical/project classification**. Changing its return semantics is a
+**shared-interface change**, not a local bug fix, and the declared-versus-defaulted redesign is
+separately scoped.
+
+So A fixes the crash and **does not certify the wider precedence contract**.
 
 ### 3.4 Contribution order must be total
 
@@ -277,19 +350,24 @@ Regression acceptance, from the motivating incident:
   absorb helper, but because **owner-unset is owner-absent** (§3.3) — a general rule, not five
   field names.
 - Bib-only citations still materialize minimal nodes (§3.2).
-- **A commons dataset overlay carrying `status` merges instead of raising** (§3.3a) — fb-006's
-  crash, closed by completing the mixin migration.
+- **A commons dataset overlay carrying `status` merges instead of raising** (§3.3a) — the
+  fb-006 dataset instance, closed by `mixin-dataset-2.0`.
 - **A borrower attempting to replace an owner's `REPLACE` field errors**, and reports which
   contributor did it (§3.3).
+- **An owner field set to `False` or `0` is not overwritten** by any contributor (§3.3) — the
+  truthiness defect the superseded absorb helper carried.
+- **A profile pinned to `mixin-dataset-1.0` keeps 1.0 semantics** (§3.3a) — the versioned
+  migration is atomic, not an in-place meaning change.
 
 ---
 
 ## 5. Scope
 
-**In:** the four-step contract; `SourceContribution`; deletion of `should_defer`,
+**In:** the four-step contract; the `SourceContribution` union (§2); deletion of `should_defer`,
 `external_reference_ids`, and `_EXTERNAL_REFERENCE_SUPPORTING_FIELDS`; correct
-`(owner_scope, canonical_id)` keying; the total role × policy matrix (§3.3); `ContributionKey`
-(§3.4); **the minimal fb-2026-07-12-006 correction** (§3.3a); permutation invariance.
+`(owner_scope, canonical_id)` keying; the total role × policy matrix and the `is_unset`
+predicate (§3.3); `ContributionKey` (§3.4); **`mixin-dataset-2.0` and its migration** (§3.3a);
+permutation invariance.
 
 **Out:**
 
@@ -297,9 +375,12 @@ Regression acceptance, from the motivating incident:
   `CommonsQuery`.
 - **Cross-scope resolution rules (§B3a).** Followed, not reopened.
 - **RDF Emit.** Downstream and unchanged.
-- **fb-2026-07-12-006's wider defect.** A defines the matrix and unblocks dataset overlays by
-  completing the mixin migration. Reconciling the two colliding policy defaults and the
-  `or`-precedence between them (§3.3a) stays with that entry.
+- **`read_merge_policy`.** Unchanged by A. Its declared-versus-defaulted redesign is a
+  shared-interface change (`promote.py` routes on its key set and classifies on its values), not
+  a local fix.
+- **fb-2026-07-12-006's wider defect.** A closes the dataset-status crashing *instance*. The
+  entity-policy/overlay-policy precedence contract stays open under that entry until its callers
+  and defaults are redesigned together (§3.3a).
 - **C's census.** A makes the pin check *reachable*. It does not make its coverage *attestable* —
   that is C, and A shipping is precisely what turns ~245 overlays from inert into traffic.
 
