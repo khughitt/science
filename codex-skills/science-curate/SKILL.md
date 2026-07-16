@@ -180,19 +180,39 @@ If DAG tooling is present and the project has DAGs:
 uv run science dag audit --format json
 ```
 
-The inventory helper should return compact facts only:
+The inventory helper returns compact corpus facts only. Each signal is a
+property of the JSON payload at the path shown:
 
-- artifact counts by class;
-- recently modified and long-idle artifacts;
-- missing `related` / `source_refs` signals;
-- documents with no outbound links;
-- unresolved refs and obvious alias-resolutions if available;
-- candidate stale-task evidence from direct source refs or result manifests.
+- `artifact_counts` — counts by artifact class (top-level object).
+- `candidate_signals.recently_modified` / `candidate_signals.long_idle` —
+  recently modified and long-idle artifact paths.
+- `candidate_signals.missing_related` /
+  `candidate_signals.missing_source_refs` — artifacts missing `related` /
+  `source_refs`.
+- `candidate_signals.no_outbound_links` — artifacts with no outbound links.
+- `candidate_signals.no_frontmatter_files` — Markdown under `entities/` that
+  lacks YAML frontmatter (entity-file drift).
+- `agents_md` — per-project `AGENTS.md` / `CLAUDE.md` / `core/decisions.md`
+  state (see the `agents-md` theme below).
 
-If the inventory includes `no_frontmatter_files`, separate frontmatter-exempt
-legacy prose from true missing-metadata candidates. Legacy `doc/plans/` and
-`doc/reports/` files are curation context unless they live under a registered
-entity home or this sweep is explicitly promoting them to entities.
+The helper does **not** recompute cross-cutting signals owned by other
+commands this phase already runs:
+
+- **unresolved refs** — read the `unresolved_refs` array from the
+  `science health --format json` output above; the inventory helper does not
+  duplicate them.
+- **alias-resolutions** — no user-facing report currently exists; the
+  reference-resolution machinery is internal only, so treat this as
+  unavailable.
+- **stale-task evidence** — semantic and out of the inventory's scope; defer
+  to `science-review-tasks` (source-ref / result-manifest / recent-commit
+  judgement). No deterministic stale-task surface exists yet.
+
+`candidate_signals.no_frontmatter_files` lists only Markdown under
+`entities/`; treat each as a missing-metadata candidate unless the file is
+legitimately prose (for example an `entities/**/README.md`). It never
+contains `doc/plans/` or `doc/reports/` paths — the helper scans only the
+canonical entity home.
 
 ## Phase 2: Candidate triage
 

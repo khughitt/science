@@ -177,6 +177,14 @@ patching each of the three call sites independently.
    deliberately out of scope here. **The module is in the namespace so the guard covers its
    shape; the guard does not and cannot currently see this defect.**
 
+   > **SUPERSEDED 2026-07-16.** Equating this gap with fb-2026-07-10-017 was the
+   > conflation, not the fix. fb-2026-07-10-017 is the *contract divergence*
+   > (`curate inventory`'s promised keys), now **IMPLEMENTED** on branch
+   > `curate-inventory-contract`; pending merge. See
+   > `docs/plans/2026-07-16-curate-inventory-contract-reconciliation-design.md`.
+   > The **composite-instrument guard blindness** described here is a *distinct*
+   > item that merely shares the module, and it remains **open**.
+
 2. **`benchmark_opportunities.py` is a consumer outside the namespace.**
    `load_opportunity_datasets` (`:1060`) calls `benchmark_sources` and **re-exports the same
    `tuple[list[T], str | None]` precursor**, threading `commons_notice` through five typed
