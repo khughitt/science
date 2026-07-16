@@ -293,32 +293,39 @@ future bare `getattr(entity, "foo")` feeding an audit call, or an audit call who
 `field_name` is a keyword or a non-literal: neither side moves, so the test would
 pass while the gate is bypassed. The guard therefore checks the gate from the
 audit side and fails closed on anything it cannot statically read. It AST-walks
-`_audit_entity` and asserts **all four**:
+`_audit_entity` and asserts **all five**:
 
 1. **No bare entity getattr.** `_audit_entity` contains zero
    `getattr(entity, <literal>, ...)` calls. Every reference read must go through
-   `_declared`; entity metadata (`entity.kind`, `entity.canonical_id`,
-   `entity.file_path`) uses plain attribute access and is unaffected.
-2. **Every audit call exposes a literal label.** For each call to
+   `_declared`.
+2. **No direct audited-field attribute access.** `_audit_entity` contains zero
+   `entity.<field>` attribute nodes where `<field>` belongs to
+   `_AUDITED_REFERENCE_FIELDS`. This closes the same-label hole where a legitimate
+   `_declared(entity, "method", ...)` elsewhere satisfied `AUDITED <= GATED` while
+   another audit read `entity.method` directly. Metadata attributes such as
+   `entity.kind`, `entity.canonical_id`, and `entity.file_path` remain allowed.
+3. **Every audit call exposes a literal label.** For each call to
    `_audit_reference` / `_audit_dataset_reference`, resolve `field_name` from
    positional index 1 **or** the `field_name=` keyword. If it is absent or not an
    `ast.Constant` string, the guard **fails** ("audit call with a non-literal
    field_name cannot be verified"). This is the fail-closed rule the reviewer
    required.
-3. **Every audited field is gated.** Collect `AUDITED` = the top-level prefixes of
+4. **Every audited field is gated.** Collect `AUDITED` = the top-level prefixes of
    those literal labels (`"derivation.inputs"` → `"derivation"`). Collect `GATED`
    = the first-arg literals of `_declared(entity, "<name>", ...)`. Assert
    `AUDITED <= GATED`. A `getattr`/direct-attribute read feeding
    `_audit_reference(entity, "foo", ...)` puts `"foo"` in `AUDITED` but not
    `GATED` → fail.
-4. **The named constant is honest.** Assert `GATED == set(_AUDITED_REFERENCE_FIELDS)`,
+5. **The named constant is honest.** Assert `GATED == set(_AUDITED_REFERENCE_FIELDS)`,
    so `REFERENCE_FIELD_NAMES` (derived from it) cannot drift from the reads.
 
 Negative cases the guard test exercises against synthetic function bodies: a bare
-`getattr(entity, "foo")` feeding an audit call (assertions 1 & 3); a
+`getattr(entity, "foo")` feeding an audit call (assertions 1 & 4); a
 keyword-form bypass `_audit_reference(entity, field_name="foo", target=entity.foo, ...)`
-(assertion 3); and a non-literal label `_audit_reference(entity, some_var, ...)`
-(assertion 2). Each must be rejected.
+(assertion 4); a same-label bypass containing both a legitimate
+`_declared(entity, "method", ...)` and a duplicate audit of `entity.method`
+(assertion 2); and a non-literal label `_audit_reference(entity, some_var, ...)`
+(assertion 3). Each must be rejected.
 
 ## Row format (deterministic)
 
@@ -328,7 +335,11 @@ sorting on `target`:
 - `_stringify_extra_value(value)`:
   - `str` → the string as-is.
   - `list` / `tuple` → `", ".join(_stringify_extra_value(v) for v in value)`.
-  - `dict` → `json.dumps(value, sort_keys=True, ensure_ascii=False)`.
+  - `dict` → recursively normalize it, then
+    `json.dumps(normalized, sort_keys=True, ensure_ascii=False)`. Normalization
+    preserves JSON scalars, converts dates/datetimes to ISO text, converts nested
+    mappings to string-keyed mappings and nested sequences to lists, and explicitly
+    falls back to `str(value)` for unsupported scalars.
   - anything else → `str(value)`.
 - `_format_kinds(kinds)`: backtick-quote each already-sorted kind and join with
   `", "` (e.g. `` `workflow-step` `` or `` `workflow-run`, `workflow-step` ``).
@@ -366,14 +377,21 @@ sorting on `target`:
    (rendered value), and `details` (including the `` `workflow-step` `` owner
    clause and the "unvouched extra key" wording). Locks `_stringify_extra_value`
    and `_format_kinds`.
-9. **Drift guard (all four assertions + negatives).** No `getattr(entity, ...)` in
-   `_audit_entity`; every audit call has a literal `field_name`; `AUDITED <= GATED`;
-   `GATED == set(_AUDITED_REFERENCE_FIELDS)`. Plus the three synthetic negative
-   bodies (bare getattr, keyword-form bypass, non-literal label) are each rejected.
-10. **Integration, unpinned fixture.** `audit_project_sources` over an **unpinned**
+9. **YAML-native formatter regression.** A `yaml.safe_load` value with a date and
+   datetime nested inside mixed mappings/lists reaches
+   `_audit_undeclared_reference_keys` and produces a deterministic WARN target
+   instead of raising, while the existing string/list/tuple/plain-dict formats stay
+   unchanged.
+10. **Drift guard (all five assertions + negatives).** No `getattr(entity, ...)` or
+   direct `entity.<audited-field>` access in `_audit_entity`; every audit call has a
+   literal `field_name`; `AUDITED <= GATED`; and
+   `GATED == set(_AUDITED_REFERENCE_FIELDS)`. The synthetic negatives cover bare
+   getattr, keyword-form bypass, same-label direct-attribute bypass, and non-literal
+   label.
+11. **Integration, unpinned fixture.** `audit_project_sources` over an **unpinned**
     fixture project (`strict_schema_kinds` empty) carrying the stray key →
     `has_failures` stays `False`, WARN row present.
-11. **`registered_kinds` enumeration.** A registry with core + one extension kind
+12. **`registered_kinds` enumeration.** A registry with core + one extension kind
     returns all of them in sorted order.
 
 Plus the existing migrate / audit suite for regressions:

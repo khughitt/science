@@ -4,7 +4,8 @@ from __future__ import annotations
 
 import json
 import re
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
+from datetime import date, datetime
 from pathlib import Path
 from typing import Any, TypedDict
 
@@ -110,13 +111,25 @@ _AUDITED_REFERENCE_FIELDS: tuple[str, ...] = (
 REFERENCE_FIELD_NAMES: frozenset[str] = frozenset(_AUDITED_REFERENCE_FIELDS) - set(Entity.model_fields)
 
 
+def _normalize_extra_value(value: object) -> object:
+    if isinstance(value, (date, datetime)):
+        return value.isoformat()
+    if isinstance(value, Mapping):
+        return {str(key): _normalize_extra_value(item) for key, item in value.items()}
+    if isinstance(value, Sequence) and not isinstance(value, (str, bytes, bytearray)):
+        return [_normalize_extra_value(item) for item in value]
+    if value is None or isinstance(value, (str, int, float, bool)):
+        return value
+    return str(value)
+
+
 def _stringify_extra_value(value: object) -> str:
     if isinstance(value, str):
         return value
     if isinstance(value, (list, tuple)):
         return ", ".join(_stringify_extra_value(item) for item in value)
     if isinstance(value, dict):
-        return json.dumps(value, sort_keys=True, ensure_ascii=False)
+        return json.dumps(_normalize_extra_value(value), sort_keys=True, ensure_ascii=False)
     return str(value)
 
 

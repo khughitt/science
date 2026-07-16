@@ -4,7 +4,7 @@
 
 **Goal:** Fix the `_audit_entity` getattr misfire (fb-2026-07-16-003) so a reference field on a kind that does not declare it is no longer audited as a phantom `unresolved_reference`, and add a narrow `undeclared_key` WARN that reports the real defect — gated on the strict-schema kind set so it never fires on a schema-vouched extension field.
 
-**Architecture:** Route every audited reference read in `graph/migrate.py::_audit_entity` through one `_declared(entity, name, default)` helper that reads a field only when the concrete kind declares it (`name in type(entity).model_fields`). A once-per-entity `_audit_undeclared_reference_keys` helper scans `model_extra` for known reference-field names and emits a `status="warn"` row, but only for entities whose `kind` is outside `ProjectSources.strict_schema_kinds` (the kinds the loader schema-checked). An AST drift guard forbids any reference read that bypasses `_declared`.
+**Architecture:** Route every audited reference read in `graph/migrate.py::_audit_entity` through one `_declared(entity, name, default)` helper that reads a field only when the concrete kind declares it (`name in type(entity).model_fields`). A once-per-entity `_audit_undeclared_reference_keys` helper scans `model_extra` for known reference-field names and emits a `status="warn"` row, but only for entities whose `kind` is outside `ProjectSources.strict_schema_kinds` (the kinds the loader schema-checked). YAML-native diagnostic targets are recursively normalized before JSON rendering. An AST drift guard forbids both bare `getattr(entity, ...)` and direct `entity.<audited-field>` reads that bypass `_declared`.
 
 **Tech Stack:** Python 3, Pydantic v2 (`extra="allow"` on `Entity`, `type(x).model_fields`, `x.model_extra`), pytest. All package work runs from `science/`.
 
@@ -26,11 +26,11 @@
 
 - `science/src/science_tool/graph/entity_registry.py` — add `registered_kinds()` (all registered kind → model, sorted).
 - `science/src/science_tool/graph/sources.py` — add `ProjectSources.strict_schema_kinds` field; set it at the single construction site (`:663`) from the computed pin.
-- `science/src/science_tool/graph/migrate.py` — core change: `_declared` gate, `_AUDITED_REFERENCE_FIELDS`/`REFERENCE_FIELD_NAMES`, `_audit_undeclared_reference_keys` + `_stringify_extra_value`/`_format_kinds`, `_audit_entity` signature/body, `audit_project_sources` threading.
+- `science/src/science_tool/graph/migrate.py` — core change: `_declared` gate, `_AUDITED_REFERENCE_FIELDS`/`REFERENCE_FIELD_NAMES`, `_audit_undeclared_reference_keys` + recursive `_normalize_extra_value` + `_stringify_extra_value`/`_format_kinds`, `_audit_entity` signature/body, `audit_project_sources` threading.
 - `science/model/src/science_model/entities.py` — correct the `Entity` docstring (`:314-317`) to the per-kind reality.
 - `docs/plans/2026-07-12-authoritative-entity-schema-design.md` — one NOTE pointer near the undeclared-key inventory (`:454`).
 - `science/tests/test_entity_registry.py` — `registered_kinds()` test.
-- `science/tests/test_undeclared_key_diagnostic.py` — new file: field wiring, structured-source invariant, integration regression, gate+warn (×6), suppression, pinned-warn, resolvable, full-row, formatters, drift guard.
+- `science/tests/test_undeclared_key_diagnostic.py` — new file: field wiring, structured-source invariant, integration regression, gate+warn (×6), suppression, pinned-warn, resolvable, full-row, YAML-native formatter regression, drift guard.
 
 ---
 
@@ -210,7 +210,7 @@ git commit -m "feat(sources): record strict_schema_kinds on ProjectSources for t
 ## Task 3: The audit fix — gate, diagnostic, drift guard
 
 **Files:**
-- Modify: `science/src/science_tool/graph/migrate.py` — imports (`:1-30`), `_audit_entity` (`:285-427`), `audit_project_sources` (`:184-185`); add module constants and four helpers.
+- Modify: `science/src/science_tool/graph/migrate.py` — imports (`:1-30`), `_audit_entity` (`:285-427`), `audit_project_sources` (`:184-185`); add module constants and five helpers.
 - Test: `science/tests/test_undeclared_key_diagnostic.py`
 
 **Interfaces:**
@@ -219,7 +219,7 @@ git commit -m "feat(sources): record strict_schema_kinds on ProjectSources for t
   - `_declared(entity: Entity, name: str, default: Any) -> Any`
   - `_AUDITED_REFERENCE_FIELDS: tuple[str, ...]` — the 13 top-level attribute names read for auditing in `_audit_entity`.
   - `REFERENCE_FIELD_NAMES: frozenset[str]` = `frozenset(_AUDITED_REFERENCE_FIELDS) - set(Entity.model_fields)` — the 6 subset-declared fields.
-  - `_stringify_extra_value(value: object) -> str`, `_format_kinds(kinds: tuple[str, ...]) -> str`
+  - `_normalize_extra_value(value: object) -> object`, `_stringify_extra_value(value: object) -> str`, `_format_kinds(kinds: tuple[str, ...]) -> str`
   - `_audit_undeclared_reference_keys(entity: Entity, *, declaring_kinds: Mapping[str, tuple[str, ...]]) -> list[AuditRow]`
   - `_audit_entity(entity, resolver, *, ext_prefixes, peer_ids, strict_schema_kinds: frozenset[str], declaring_kinds: Mapping[str, tuple[str, ...]]) -> list[AuditRow]` (two new **required** keyword params)
 
@@ -269,7 +269,8 @@ In `science/src/science_tool/graph/migrate.py`, add `import json` to the stdlib 
 
 ```python
 import json
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
+from datetime import date, datetime
 from typing import Any, TypedDict
 ```
 
@@ -360,13 +361,25 @@ _AUDITED_REFERENCE_FIELDS: tuple[str, ...] = (
 REFERENCE_FIELD_NAMES: frozenset[str] = frozenset(_AUDITED_REFERENCE_FIELDS) - set(Entity.model_fields)
 
 
+def _normalize_extra_value(value: object) -> object:
+    if isinstance(value, (date, datetime)):
+        return value.isoformat()
+    if isinstance(value, Mapping):
+        return {str(key): _normalize_extra_value(item) for key, item in value.items()}
+    if isinstance(value, Sequence) and not isinstance(value, (str, bytes, bytearray)):
+        return [_normalize_extra_value(item) for item in value]
+    if value is None or isinstance(value, (str, int, float, bool)):
+        return value
+    return str(value)
+
+
 def _stringify_extra_value(value: object) -> str:
     if isinstance(value, str):
         return value
     if isinstance(value, (list, tuple)):
         return ", ".join(_stringify_extra_value(item) for item in value)
     if isinstance(value, dict):
-        return json.dumps(value, sort_keys=True, ensure_ascii=False)
+        return json.dumps(_normalize_extra_value(value), sort_keys=True, ensure_ascii=False)
     return str(value)
 
 
@@ -455,6 +468,7 @@ Extend the top import block of `science/tests/test_undeclared_key_diagnostic.py`
 
 ```python
 import pytest
+import yaml
 
 from science_model.entities import Entity
 from science_tool.graph.entity_registry import EntityRegistry
@@ -604,12 +618,35 @@ def test_stringify_and_format_kinds() -> None:
     assert _stringify_extra_value({"y": 1, "x": 2}) == '{"x": 2, "y": 1}'
     assert _stringify_extra_value(7) == "7"
     assert _format_kinds(("workflow-run", "workflow-step")) == "`workflow-run`, `workflow-step`"
+
+
+def test_undeclared_key_formats_nested_yaml_native_values() -> None:
+    method = yaml.safe_load(
+        """
+        alpha:
+          - 2026-07-16
+          - nested:
+              at: 2026-07-16T12:34:56+00:00
+              enabled: true
+        zeta: null
+        """
+    )
+    entity = _entity("workflow", method=method)
+
+    rows = _audit_undeclared_reference_keys(entity, declaring_kinds=_declaring_kinds())
+
+    assert len(rows) == 1
+    assert rows[0]["status"] == "warn"
+    assert rows[0]["target"] == (
+        '{"alpha": ["2026-07-16", {"nested": {"at": "2026-07-16T12:34:56+00:00", '
+        '"enabled": true}}], "zeta": null}'
+    )
 ```
 
 - [ ] **Step 11: Run the unit tests**
 
 Run: `cd science && uv run --frozen pytest tests/test_undeclared_key_diagnostic.py -v`
-Expected: all PASS (gate ×6, `_declared` reads, regression, resolvable, full-row, suppression, pinned-warn, formatters, plus Task 2 and the integration test).
+Expected: all PASS (gate ×6, `_declared` reads, regression, resolvable, full-row, suppression, pinned-warn, ordinary formatters, YAML-native recursive normalization through the diagnostic path, plus Task 2 and the integration test).
 
 ### Sub-part D — the drift guard
 
@@ -671,6 +708,17 @@ def _audited_field_names(fn: ast.FunctionDef) -> set[str]:
     return names
 
 
+def _assert_no_direct_audited_field_access(fn: ast.FunctionDef) -> None:
+    for node in ast.walk(fn):
+        if (
+            isinstance(node, ast.Attribute)
+            and isinstance(node.value, ast.Name)
+            and node.value.id == "entity"
+            and node.attr in _migrate._AUDITED_REFERENCE_FIELDS
+        ):
+            raise AssertionError(f"direct entity.{node.attr} at line {node.lineno}; use _declared")
+
+
 def test_no_bare_entity_getattr_in_audit_entity() -> None:
     fn = _audit_entity_ast()
     for node in ast.walk(fn):
@@ -683,6 +731,10 @@ def test_no_bare_entity_getattr_in_audit_entity() -> None:
             and node.args[0].id == "entity"
         ):
             raise AssertionError(f"bare getattr(entity, ...) at line {node.lineno}; use _declared")
+
+
+def test_no_direct_audited_field_access_in_audit_entity() -> None:
+    _assert_no_direct_audited_field_access(_audit_entity_ast())
 
 
 def test_every_audited_field_is_gated() -> None:
@@ -721,6 +773,23 @@ def test_drift_guard_rejects_a_keyword_form_bypass() -> None:
     assert not (_audited_field_names(fn) <= _declared_field_names(fn))
 
 
+def test_drift_guard_rejects_same_label_direct_attribute_bypass() -> None:
+    src = textwrap.dedent(
+        '''
+        def _audit_entity(entity, resolver):
+            method = _declared(entity, "method", "")
+            rows = _audit_reference(entity, "method", method, resolver)
+            rows += _audit_reference(entity, "method", entity.method, resolver)
+            return rows
+        '''
+    )
+    fn = next(n for n in ast.walk(ast.parse(src)) if isinstance(n, ast.FunctionDef))
+    # The old subset-only guard is satisfied by the legitimate first read.
+    assert _audited_field_names(fn) <= _declared_field_names(fn)
+    with pytest.raises(AssertionError, match=r"direct entity\.method"):
+        _assert_no_direct_audited_field_access(fn)
+
+
 def test_drift_guard_rejects_a_nonliteral_label() -> None:
     src = textwrap.dedent(
         '''
@@ -737,7 +806,7 @@ def test_drift_guard_rejects_a_nonliteral_label() -> None:
 - [ ] **Step 13: Run the drift-guard tests**
 
 Run: `cd science && uv run --frozen pytest tests/test_undeclared_key_diagnostic.py -k "drift or getattr or audited_field or declared_reads_match" -v`
-Expected: PASS — the real `_audit_entity` has no bare `getattr(entity, ...)`, every audited field is gated, `GATED == _AUDITED_REFERENCE_FIELDS`, and the three synthetic bypass/non-literal bodies are rejected.
+Expected: PASS — the real `_audit_entity` has no bare `getattr(entity, ...)` or direct `entity.<audited-field>` access, every audited field is gated, `GATED == _AUDITED_REFERENCE_FIELDS`, and the four synthetic bypass/non-literal bodies are rejected, including the same-label direct-access case that satisfies the old subset-only check.
 
 ### Sub-part E — full suite, lint, types, snapshots
 

@@ -6,6 +6,7 @@ import textwrap
 from pathlib import Path
 
 import pytest
+import yaml
 
 from science_model.entities import Entity
 from science_model.entity_schema import PROJECT_MIXIN_NAMES
@@ -227,6 +228,29 @@ def test_stringify_and_format_kinds() -> None:
     assert _format_kinds(("workflow-run", "workflow-step")) == "`workflow-run`, `workflow-step`"
 
 
+def test_undeclared_key_formats_nested_yaml_native_values() -> None:
+    method = yaml.safe_load(
+        """
+        alpha:
+          - 2026-07-16
+          - nested:
+              at: 2026-07-16T12:34:56+00:00
+              enabled: true
+        zeta: null
+        """
+    )
+    entity = _entity("workflow", method=method)
+
+    rows = _audit_undeclared_reference_keys(entity, declaring_kinds=_declaring_kinds())
+
+    assert len(rows) == 1
+    assert rows[0]["status"] == "warn"
+    assert rows[0]["target"] == (
+        '{"alpha": ["2026-07-16", {"nested": {"at": "2026-07-16T12:34:56+00:00", '
+        '"enabled": true}}], "zeta": null}'
+    )
+
+
 def _audit_entity_ast() -> ast.FunctionDef:
     src = textwrap.dedent(inspect.getsource(_migrate._audit_entity))
     return next(n for n in ast.walk(ast.parse(src)) if isinstance(n, ast.FunctionDef))
@@ -270,6 +294,17 @@ def _audited_field_names(fn: ast.FunctionDef) -> set[str]:
     return names
 
 
+def _assert_no_direct_audited_field_access(fn: ast.FunctionDef) -> None:
+    for node in ast.walk(fn):
+        if (
+            isinstance(node, ast.Attribute)
+            and isinstance(node.value, ast.Name)
+            and node.value.id == "entity"
+            and node.attr in _migrate._AUDITED_REFERENCE_FIELDS
+        ):
+            raise AssertionError(f"direct entity.{node.attr} at line {node.lineno}; use _declared")
+
+
 def test_no_bare_entity_getattr_in_audit_entity() -> None:
     fn = _audit_entity_ast()
     for node in ast.walk(fn):
@@ -282,6 +317,10 @@ def test_no_bare_entity_getattr_in_audit_entity() -> None:
             and node.args[0].id == "entity"
         ):
             raise AssertionError(f"bare getattr(entity, ...) at line {node.lineno}; use _declared")
+
+
+def test_no_direct_audited_field_access_in_audit_entity() -> None:
+    _assert_no_direct_audited_field_access(_audit_entity_ast())
 
 
 def test_every_audited_field_is_gated() -> None:
@@ -318,6 +357,22 @@ def test_drift_guard_rejects_a_keyword_form_bypass() -> None:
     fn = next(n for n in ast.walk(ast.parse(src)) if isinstance(n, ast.FunctionDef))
     # "foo" is audited (via keyword field_name) but not gated -> caught.
     assert not (_audited_field_names(fn) <= _declared_field_names(fn))
+
+
+def test_drift_guard_rejects_same_label_direct_attribute_bypass() -> None:
+    src = textwrap.dedent(
+        '''
+        def _audit_entity(entity, resolver):
+            method = _declared(entity, "method", "")
+            rows = _audit_reference(entity, "method", method, resolver)
+            rows += _audit_reference(entity, "method", entity.method, resolver)
+            return rows
+        '''
+    )
+    fn = next(n for n in ast.walk(ast.parse(src)) if isinstance(n, ast.FunctionDef))
+    assert _audited_field_names(fn) <= _declared_field_names(fn)
+    with pytest.raises(AssertionError, match=r"direct entity\.method"):
+        _assert_no_direct_audited_field_access(fn)
 
 
 def test_drift_guard_rejects_a_nonliteral_label() -> None:
