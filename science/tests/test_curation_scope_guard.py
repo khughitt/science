@@ -46,9 +46,11 @@ def _all_src():
 def _literal_strings(node: ast.AST):
     if not isinstance(node, (ast.Set, ast.List, ast.Tuple)):
         return None
-    if not all(isinstance(item, ast.Constant) and isinstance(item.value, str) for item in node.elts):
-        return None
-    return {item.value for item in node.elts}
+    return {
+        item.value
+        for item in node.elts
+        if isinstance(item, ast.Constant) and isinstance(item.value, str)
+    }
 
 
 def _contains_closed_list_literal(tree: ast.AST):
@@ -67,6 +69,64 @@ def _contains_closed_list_literal(tree: ast.AST):
         if values is not None and _CLOSED_LIST <= values:
             return True
     return False
+
+
+def _curation_scope_names(tree: ast.AST):
+    names = {"CurationScope"}
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.ImportFrom):
+            continue
+        for imported in node.names:
+            if imported.name == "CurationScope":
+                names.add(imported.asname or imported.name)
+    return names
+
+
+def _is_scope_default_reference(node: ast.AST, scope_names: set[str]):
+    if not isinstance(node, ast.Attribute) or node.attr not in {
+        "NONE",
+        "CORRESPONDENCE",
+    }:
+        return False
+    qualifier = node.value
+    return (
+        isinstance(qualifier, ast.Name) and qualifier.id in scope_names
+    ) or (isinstance(qualifier, ast.Attribute) and qualifier.attr == "CurationScope")
+
+
+def _contains_scope_default_value(node: ast.AST, scope_names: set[str]):
+    if isinstance(node, ast.Compare):
+        return False
+    if _is_scope_default_reference(node, scope_names):
+        return True
+    if isinstance(node, ast.Call):
+        values = [*node.args]
+        values.extend(
+            keyword.value
+            for keyword in node.keywords
+            if keyword.arg != "curation_scope"
+        )
+        return any(
+            _contains_scope_default_value(value, scope_names) for value in values
+        )
+    return any(
+        _contains_scope_default_value(child, scope_names)
+        for child in ast.iter_child_nodes(node)
+    )
+
+
+def _scope_default_offense_lines(tree: ast.AST):
+    scope_names = _curation_scope_names(tree)
+    offenders = []
+    for node in ast.walk(tree):
+        value = None
+        if isinstance(node, (ast.Return, ast.Assign, ast.NamedExpr)):
+            value = node.value
+        elif isinstance(node, ast.AnnAssign):
+            value = node.value
+        if value is not None and _contains_scope_default_value(value, scope_names):
+            offenders.append(node.lineno)
+    return sorted(set(offenders))
 
 
 def test_validator_is_gone():
@@ -88,6 +148,10 @@ def test_closed_list_detector_requires_one_collection_literal():
     values = ", ".join(repr(kind) for kind in sorted(_CLOSED_LIST))
     assert _contains_closed_list_literal(ast.parse(f"kinds = {{{values}}}"))
     assert _contains_closed_list_literal(ast.parse(f"kinds = frozenset([{values}])"))
+    assert _contains_closed_list_literal(ast.parse(f"kinds = {{{values}, OTHER}}"))
+    assert _contains_closed_list_literal(
+        ast.parse(f"kinds = frozenset([{values}, *OTHER])")
+    )
 
     scattered = "\n".join(
         f"{kind.replace('-', '_')} = {kind!r}" for kind in sorted(_CLOSED_LIST)
@@ -95,13 +159,50 @@ def test_closed_list_detector_requires_one_collection_literal():
     assert not _contains_closed_list_literal(ast.parse(scattered))
 
 
+def test_scope_default_detector_rejects_defaults_but_permits_comparisons():
+    direct_return = ast.parse("def decide():\n    return CurationScope.NONE")
+    aliased_return = ast.parse(
+        "from science_model.identity import CurationScope as Scope\n"
+        "def decide():\n"
+        "    return Scope.CORRESPONDENCE"
+    )
+    assigned_return = ast.parse(
+        "def decide():\n"
+        "    fallback = CurationScope.NONE\n"
+        "    return fallback"
+    )
+    indirect_return = ast.parse(
+        "def decide(defaults, kind):\n"
+        "    return defaults.get(kind, CurationScope.NONE)"
+    )
+    keyword_default = ast.parse(
+        "def decide(resolver):\n"
+        "    return resolver(default=CurationScope.CORRESPONDENCE)"
+    )
+    comparison = ast.parse(
+        "def consume(scope):\n    return scope is CurationScope.NONE"
+    )
+    declaration = ast.parse(
+        "PROFILE = EntityKind(curation_scope=CurationScope.CORRESPONDENCE)"
+    )
+
+    assert _scope_default_offense_lines(direct_return)
+    assert _scope_default_offense_lines(aliased_return)
+    assert _scope_default_offense_lines(assigned_return)
+    assert _scope_default_offense_lines(indirect_return)
+    assert _scope_default_offense_lines(keyword_default)
+    assert not _scope_default_offense_lines(comparison)
+    assert not _scope_default_offense_lines(declaration)
+
+
 def test_only_one_module_applies_the_scope_default():
     """The DEFAULT-application polarity (undeclared → correspondence/none) is what
     'deciding scope' means. A second decider under ANY function name would have to
     name a CurationScope default value to return it. The only production module
     permitted to reference `CurationScope.CORRESPONDENCE` / `CurationScope.NONE` as a
-    RETURNED default is the decider; the enum's own definition lives in identity.py.
-    Consumers may compare against the decider's result but must not re-derive it.
+    returned or assigned default is the decider; the enum's own definition lives in
+    identity.py. Consumers may compare against the decider's result but must not
+    re-derive it.
 
     This catches a renamed second decider that `def curation_scope_for_kind`-name
     matching would miss, and does not enumerate an allow-list of trusted modules —
@@ -111,26 +212,37 @@ def test_only_one_module_applies_the_scope_default():
         if path in (_DECIDER, _ENUM_HOME):
             continue
         tree = ast.parse(path.read_text())
-        for node in ast.walk(tree):
-            # a `return <...CurationScope.CORRESPONDENCE/NONE...>` is default application
-            if isinstance(node, ast.Return) and node.value is not None:
-                src = ast.dump(node.value)
-                if "CORRESPONDENCE" in src or (
-                    "attr='NONE'" in src and "CurationScope" in src
-                ):
-                    offenders.append(f"{path}:{node.lineno}")
+        offenders.extend(
+            f"{path}:{lineno}" for lineno in _scope_default_offense_lines(tree)
+        )
     assert offenders == [], f"a second scope decider applies the default in: {offenders}"
 
 
 def test_decider_exists_where_expected():
     """The one decider is a method on EntityRegistry named curation_scope_for_kind."""
     tree = ast.parse(_DECIDER.read_text())
-    names = {n.name for n in ast.walk(tree) if isinstance(n, ast.FunctionDef)}
-    assert "curation_scope_for_kind" in names
+    registry_classes = [
+        node
+        for node in tree.body
+        if isinstance(node, ast.ClassDef) and node.name == "EntityRegistry"
+    ]
+    assert len(registry_classes) == 1
+    methods = {
+        node.name
+        for node in registry_classes[0].body
+        if isinstance(node, ast.FunctionDef)
+    }
+    assert "curation_scope_for_kind" in methods
 
 
 def test_entity_review_does_not_branch_on_entity_class_for_scope():
     """The old EntityClass gate is gone from the review path."""
     text = (_TOOL_SRC / "entity_review.py").read_text()
+    tree = ast.parse(text)
     assert "EntityClass" not in text, "review scope must not consult EntityClass (design §6.1)"
-    assert "curation_scope_for_kind" in text
+    assert any(
+        isinstance(node, ast.Call)
+        and isinstance(node.func, ast.Attribute)
+        and node.func.attr == "curation_scope_for_kind"
+        for node in ast.walk(tree)
+    )
