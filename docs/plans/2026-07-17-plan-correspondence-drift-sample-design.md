@@ -142,30 +142,72 @@ adequately-powered draw, not a re-slicing of this one.
 
 ### 6.1 Blinded
 
-**The adjudicator never sees `claimed_status`.** It derives a status from
-evidence alone; the comparison against `claimed_status` happens **mechanically,
-afterwards**. Showing the claim first would anchor the verdict toward it and
-depress the very mismatch rate being measured — the result would be
+**The adjudicator never sees any authored progress claim.** It derives a status
+from evidence alone; the comparison against `claimed_status` happens
+**mechanically, afterwards**. Showing a claim first would anchor the verdict
+toward it and depress the very mismatch rate being measured — the result would be
 indistinguishable from "no drift" regardless of the truth. Blinding is cheap and
 is idiomatic here (`/science:discuss` already ships a double-blind mode).
 
-Frontmatter is stripped from the adjudicator's view; the body, its declared
-deliverables, and its task references are supplied.
+**Three claim channels, all removed** — `status` is only the obvious one:
+
+| Channel | Treatment | Why |
+|---|---|---|
+| frontmatter `status` | **stripped** | the claim under test |
+| **body checkboxes** `- [x]` / `- [ ]` | **normalized to `- [ ]`** | authored by the same hand as `status`; **62% of multiple-myeloma plans carry them** (§6.2). An all-checked plan reads as `complete` to any adjudicator — that is anchoring, and scoring `status` against checkboxes would be **claim-vs-claim, not correspondence** |
+| prose progress annotations — "SHIPPED", "DONE", "merged at `<sha>`", "✅" | **stripped** by a predeclared pattern list | same class of claim; natural-systems' own design header carries exactly this (*"Design approved 2026-07-16"*) |
+
+**The rule:** anything a plan's author *asserted* about its own progress is a
+claim. Only artefacts outside the plan — files, symbols, task records, commits —
+are evidence. A channel discovered mid-run that leaks a progress claim
+**invalidates the affected adjudications**, which are redrawn after the pattern
+list is amended and re-registered.
+
+The body (so normalized), the extracted deliverables (§6.2), and the resolved
+task references are what the adjudicator sees.
 
 ### 6.2 Adjudicated status, from evidence only
 
-Probes run against the pinned commit. Each declared deliverable is
-**tri-state** — `present` / `absent` / `unknown` — and `deliverables[].probe`
-records exactly what was tested (path, symbol, command) so every verdict is
-re-runnable. Task ids resolve against `tasks/done/` and `tasks/active.md`.
+**Deliverables are EXTRACTED from the plan body, not declared.** Measured
+2026-07-17: **0 of 264 plan entities declare a `deliverables:` key** — the
+frontmatter vocabulary is `kind/title/status/created/updated/id/related/…` and
+nothing more. An earlier draft said "each *declared* deliverable", which read
+literally would mark **the entire corpus `indeterminate`** and force
+`inconclusive` by construction (§2) — the gate would be unreachable and the
+measurement worthless.
+
+What is actually available:
+
+| Project | n | task refs | code paths in body | **any probeable** |
+|---|---|---|---|---|
+| multiple-myeloma | 126 | 49% | 98% | **98%** |
+| natural-systems | 109 | 48% | 98% | **98%** |
+| post-acute-infection | 10 | 30% | 100% | **100%** |
+| protein-landscape | 19 | 5% | 63% | **63%** |
+
+So extraction is viable, and protein-landscape's thinner coverage is a *result*
+(more `indeterminate`), not a blocker.
+
+**Extraction is part of the blinded adjudication** (§6.1), performed on the
+normalized body: the adjudicator identifies what the plan says it would produce,
+then probes it. `deliverables[].probe` records exactly what was tested (path,
+symbol, command) against the pinned commit, so every verdict is **re-runnable**
+and the extraction itself is auditable — this is the step where a lenient
+adjudicator could otherwise hide.
+
+Each extracted deliverable is **tri-state**: `present` / `absent` / `unknown`.
+Task ids resolve against `tasks/done/` and `tasks/active.md`. **Task linkage is
+~48% at best, so it is a supporting signal, never a required one** — a plan with
+no task reference is not thereby `indeterminate` if its deliverables probe
+cleanly.
 
 | Evidence | Adjudicated |
 |---|---|
-| every deliverable `present` **and** every task `done` | `complete` |
+| every extracted deliverable `present` **and** every referenced task `done` (or none referenced) | `complete` |
 | some deliverables `present`, or tasks mixed/active | `active` |
 | no deliverable `present` **and** no task started | `draft` |
 | another plan declares `supersedes` it | `superseded` |
-| **any probe `unknown`**, or no probeable deliverable declared | **`indeterminate`** (§6.3) |
+| **any probe `unknown`**, or no deliverable could be extracted | **`indeterminate`** (§6.3) |
 
 **Mismatch = `adjudicated ≠ claimed`**, reported as a **confusion matrix**, never
 as a bare rate. The matrix is what distinguishes the two error directions:
@@ -271,6 +313,10 @@ the choice before drawing**, never after seeing the draw.
 | Risk | Mitigation |
 |---|---|
 | **Adjudicator anchors on the claimed status** | §6.1 — blinded; frontmatter stripped; comparison is mechanical and after the fact |
+| **Checkboxes leak a progress claim** | §6.1 — `- [x]` normalized to `- [ ]`; **62% of mm plans carry them**. Scoring `status` against checkboxes is claim-vs-claim, not correspondence |
+| **Prose progress annotations leak the claim** | §6.1 — "SHIPPED"/"DONE"/"merged at `<sha>`" stripped by a predeclared pattern list; a channel found mid-run invalidates and redraws the affected adjudications |
+| **Rubric assumes declared deliverables that do not exist** | §6.2 — **0 of 264** plans declare any; read literally the whole corpus would be `indeterminate` and the gate unreachable. Deliverables are **extracted** from the body (98% of mm/NS name code paths) as part of the blinded step, with the probe recorded |
+| Task linkage assumed universal | §6.2 — it is ~48% at best (5% in protein-landscape); a supporting signal, never required |
 | **Uncertainty read as absence** | §6.3 — Manski bounds carry indeterminates into the estimate; >20% indeterminate forces `inconclusive` regardless of bounds |
 | **Indeterminates silently dropped** | §6.3 — complete-case rate is secondary and never gates |
 | **Ruling out is unreachable at the chosen n** | §7 — thresholds derived; n = 29 proven impossible at α = 0.0167; ladder starts at 40 |
