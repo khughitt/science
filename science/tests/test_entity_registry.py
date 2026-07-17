@@ -15,7 +15,7 @@ from science_model.entities import (
     ProjectEntity,
     TaskEntity,
 )
-from science_model.identity import EntityClass
+from science_model.identity import CurationScope, EntityClass
 
 from science_tool.graph.entity_registry import (
     EntityKindAlreadyRegisteredError,
@@ -23,6 +23,128 @@ from science_tool.graph.entity_registry import (
     EntityKindShadowError,
     EntityRegistry,
 )
+
+_EPISTEMIC = {
+    "assumption",
+    "chain-audit",
+    "discussion",
+    "evidence-line",
+    "falsification",
+    "finding",
+    "hypothesis",
+    "inquiry",
+    "interpretation",
+    "mechanism",
+    "observation",
+    "patch-definition",
+    "proposition",
+    "question",
+    "report",
+    "research-question",
+    "story",
+    "structural-chain",
+    "synthesis",
+    "theme",
+    "validation-report",
+}
+_CORRESPONDENCE = {
+    "claim-registry",
+    "curation-sweep",
+    "method",
+    "plan",
+    "pre-registration",
+    "research-package",
+    "spec",
+    "transformation",
+    "workflow",
+}
+# Every core kind not in the two sets above resolves to `none`.
+_NONE = {
+    "article",
+    "book",
+    "code-file",
+    "concept",
+    "construct",
+    "data-package",
+    "dataset",
+    "decision",
+    "experiment",
+    "outcome",
+    "paper",
+    "prose-source",
+    "search",
+    "talk",
+    "task",
+    "topic",
+    "unknown",
+    "variable",
+    "workflow-run",
+    "workflow-step",
+}
+
+
+def test_core_roster_resolves_exhaustively() -> None:
+    """Design acceptance test 8: every core kind maps to the ratified §5 scope."""
+    registry = EntityRegistry.with_core_types()
+    expected = (
+        {kind: CurationScope.EPISTEMIC for kind in _EPISTEMIC}
+        | {kind: CurationScope.CORRESPONDENCE for kind in _CORRESPONDENCE}
+        | {kind: CurationScope.NONE for kind in _NONE}
+    )
+    assert set(expected) == registry.core_kinds(), "roster and registered core kinds disagree"
+    for kind, scope in expected.items():
+        assert registry.curation_scope_for_kind(kind) is scope, kind
+
+
+def test_closed_list_kinds_all_resolve_none() -> None:
+    """Design acceptance test 2: the deleted closed list's knowledge is preserved."""
+    registry = EntityRegistry.with_core_types()
+    for kind in (
+        "task",
+        "dataset",
+        "workflow-run",
+        "data-package",
+        "paper",
+        "prose-source",
+        "book",
+        "experiment",
+        "code-file",
+    ):
+        assert registry.curation_scope_for_kind(kind) is CurationScope.NONE, kind
+
+
+def test_core_kind_undeclared_defaults_none() -> None:
+    """Design acceptance test 3: a core kind with no declaration → none (refused later)."""
+    registry = EntityRegistry()
+    registry.register_core_kind("gadget", ProjectEntity, entity_class=EntityClass.OPERATIONAL)
+    assert registry.curation_scope_for_kind("gadget") is CurationScope.NONE
+
+
+def test_extension_kind_undeclared_defaults_correspondence() -> None:
+    """Design acceptance test 9: an undeclared EXTENSION kind → correspondence."""
+    registry = EntityRegistry()
+    registry.register_extension_kind("design", ProjectEntity, entity_class=EntityClass.OPERATIONAL)
+    assert registry.curation_scope_for_kind("design") is CurationScope.CORRESPONDENCE
+
+
+def test_extension_kind_declared_scope_wins() -> None:
+    registry = EntityRegistry()
+    registry.register_extension_kind(
+        "design",
+        ProjectEntity,
+        entity_class=EntityClass.OPERATIONAL,
+        curation_scope=CurationScope.NONE,
+    )
+    assert registry.curation_scope_for_kind("design") is CurationScope.NONE
+
+
+def test_unregistered_kind_defaults_correspondence() -> None:
+    """Unknown kinds behave like extension kinds — reviewable by default (§6.2)."""
+    registry = EntityRegistry.with_core_types()
+    assert (
+        registry.curation_scope_for_kind("totally-unknown-kind")
+        is CurationScope.CORRESPONDENCE
+    )
 
 
 def test_registered_kinds_returns_all_registered_sorted() -> None:

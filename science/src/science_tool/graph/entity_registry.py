@@ -34,7 +34,7 @@ from science_model.entities import (
     WorkflowRunEntity,
     WorkflowStepEntity,
 )
-from science_model.identity import EntityClass
+from science_model.identity import CurationScope, EntityClass
 from science_model.patch_definition import PatchDefinitionEntity
 from science_model.profiles.core import CORE_PROFILE
 from science_model.profiles.schema import KindCategory
@@ -89,6 +89,7 @@ class EntityRegistry:
         self._catalog: dict[str, type[Entity]] = {}
         self._extensions: dict[str, type[Entity]] = {}
         self._kind_class: dict[str, EntityClass] = {}
+        self._curation_scope_declared: dict[str, CurationScope | None] = {}
 
     @classmethod
     def with_core_types(cls) -> "EntityRegistry":
@@ -105,15 +106,24 @@ class EntityRegistry:
                 ek.name,
                 CORE_KIND_MODELS.get(ek.name, ProjectEntity),
                 entity_class=ek.entity_class,
+                curation_scope=ek.curation_scope,
             )
         return r
 
-    def register_core_kind(self, kind: str, cls: type[Entity], *, entity_class: EntityClass) -> None:
+    def register_core_kind(
+        self,
+        kind: str,
+        cls: type[Entity],
+        *,
+        entity_class: EntityClass,
+        curation_scope: CurationScope | None = None,
+    ) -> None:
         self._require_entity_subclass(cls)
         if kind in self._core or kind in self._profile or kind in self._catalog or kind in self._extensions:
             raise EntityKindAlreadyRegisteredError(f"kind {kind!r} already registered")
         self._core[kind] = cls
         self._kind_class[kind] = entity_class
+        self._curation_scope_declared[kind] = curation_scope
 
     def register_profile_kind(
         self,
@@ -122,6 +132,7 @@ class EntityRegistry:
         *,
         owner: str,
         entity_class: EntityClass = EntityClass.OPERATIONAL,
+        curation_scope: CurationScope | None = None,
     ) -> None:
         self._require_entity_subclass(cls)
         if kind in self._core:
@@ -130,6 +141,7 @@ class EntityRegistry:
             raise EntityKindAlreadyRegisteredError(f"profile kind {kind!r} already registered")
         self._profile[kind] = cls
         self._kind_class[kind] = entity_class
+        self._curation_scope_declared[kind] = curation_scope
 
     def register_catalog_kind(
         self,
@@ -138,6 +150,7 @@ class EntityRegistry:
         *,
         owner: str,
         entity_class: EntityClass = EntityClass.REFERENCE,
+        curation_scope: CurationScope | None = None,
     ) -> None:
         self._require_entity_subclass(cls)
         if kind in self._core:
@@ -152,6 +165,7 @@ class EntityRegistry:
             raise EntityKindAlreadyRegisteredError(f"catalog kind {kind!r} already registered")
         self._catalog[kind] = cls
         self._kind_class[kind] = entity_class
+        self._curation_scope_declared[kind] = curation_scope
 
     def register_extension_kind(
         self,
@@ -159,6 +173,7 @@ class EntityRegistry:
         cls: type[Entity],
         *,
         entity_class: EntityClass = EntityClass.OPERATIONAL,
+        curation_scope: CurationScope | None = None,
     ) -> None:
         self._require_entity_subclass(cls)
         if kind in self._core or kind in self._profile or kind in self._catalog:
@@ -169,6 +184,7 @@ class EntityRegistry:
             raise EntityKindAlreadyRegisteredError(f"extension kind {kind!r} already registered")
         self._extensions[kind] = cls
         self._kind_class[kind] = entity_class
+        self._curation_scope_declared[kind] = curation_scope
 
     def resolve(self, kind: str) -> type[Entity]:
         if kind in self._core:
@@ -192,6 +208,23 @@ class EntityRegistry:
         if kind not in self._kind_class:
             raise EntityKindNotRegisteredError(f"no classification registered for kind {kind!r}")
         return self._kind_class[kind]
+
+    def curation_scope_for_kind(self, kind: str) -> CurationScope:
+        """Resolve a kind's curation scope — the SINGLE decider (design §6.1).
+
+        Declared value wins. Otherwise the default is polarity-split by registration
+        bucket (design §6.2): core/profile/catalog kinds default to `none` (a newly
+        registered core kind is out of scope until declared); extension kinds and
+        wholly-unregistered kinds default to `correspondence`, preserving today's
+        reviewable-by-default behaviour for exactly the population that has it
+        (project-local extension kinds such as multiple-myeloma's `design`).
+        """
+        declared = self._curation_scope_declared.get(kind)
+        if declared is not None:
+            return declared
+        if kind in self._core or kind in self._profile or kind in self._catalog:
+            return CurationScope.NONE
+        return CurationScope.CORRESPONDENCE
 
     def all_kind_classes(self) -> dict[str, EntityClass]:
         return dict(self._kind_class)
