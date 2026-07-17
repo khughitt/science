@@ -516,31 +516,44 @@ Expected: `6 passed`
 
 - [ ] **Step 5: Measure the leak rate on the real corpus**
 
-Blinding that silently fails is worse than no blinding. Check what the patterns
-catch across the actual frame:
+Blinding that silently fails is worse than no blinding. Measure **both** channels
+separately across the actual frame — they are distinct operations and only one
+inserts `[REDACTED]`. Checkbox normalization rewrites `[x]` → `[ ]` and never
+produces `[REDACTED]`, so the redaction count reflects the *prose* channel alone;
+count checked boxes independently.
 
 ```bash
 cd science && uv run --frozen python -c "
 import pathlib, re
-from science_tool.drift_sample.blind import blind_plan, PROGRESS_PATTERNS
+from science_tool.drift_sample.blind import blind_plan
+box_chk = re.compile(r'^\s*[-*] \[[xX]\]', re.M)
 roots = {
   'mm': pathlib.Path.home()/'d/cancer/cancer-types/multiple-myeloma',
   'ns': pathlib.Path.home()/'d/natural-systems',
+  'pl': pathlib.Path.home()/'d/protein-landscape',
+  'pa': pathlib.Path.home()/'d/health/processes/post-acute-infection',
 }
 for name, root in roots.items():
     d = root/'entities'/'plans'
-    n = hit = 0
-    for f in d.glob('*.md'):
+    n = prose = chk = 0
+    for f in sorted(d.glob('*.md')):
         n += 1
-        out = blind_plan(f.read_text(errors='replace'))
-        if '[REDACTED]' in out: hit += 1
-    print(f'{name}: {hit}/{n} plans had a progress annotation redacted')
+        raw = f.read_text(errors='replace')
+        if box_chk.search(raw): chk += 1
+        if '[REDACTED]' in blind_plan(raw): prose += 1
+    print(f'{name}: prose redacted {prose}/{n}; checked-box normalized {chk}/{n}')
 "
 ```
 
 Record the output in the commit message. This is descriptive — there is no
-threshold to pass. A **0%** hit rate on multiple-myeloma would be suspicious
-enough to investigate before proceeding, since 62% of its plans carry checkboxes.
+threshold to pass.
+
+**On the two rates.** 62% of multiple-myeloma plans carry checkbox *syntax*, but a
+*checked* box — the only checkbox that asserts a claim — appears in roughly 5%.
+The 62% justifies normalizing the format wherever it appears; it does **not**
+predict the redaction rate, and a low checked-box count is expected, not
+suspicious. A **0% prose-redaction** rate on multiple-myeloma would still be worth
+investigating, since progress banners are common there.
 
 - [ ] **Step 6: Commit**
 
