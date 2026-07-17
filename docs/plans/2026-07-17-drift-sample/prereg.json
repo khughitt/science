@@ -1,0 +1,2175 @@
+{
+  "alpha": 0.016666666666666666,
+  "drawn_ids": [
+    "plan:0077-entity-taxonomy-design",
+    "plan:0060-entity-aware-prose-implementation-plan",
+    "plan:0033-content-coverage-push-and-flat-field-deprecation",
+    "plan:0122-mm-scatac-staging-gse162337-gse199268",
+    "plan:0042-script-workflow-cleanup-execution-plan",
+    "plan:0045-cytogenetic-inference-pipeline-plan",
+    "plan:0016-viewer-home-bootstrap-refactor-design",
+    "plan:0092-anti-unification-generator-nodes",
+    "plan:0097-meta-model-v0-3-consolidation",
+    "plan:0096-report-finding-figure-pipelines-plan",
+    "plan:0102-t784-entropy-dissipation-jko-probe",
+    "plan:0065-reader-research-alignment-roadmap",
+    "plan:0008-phenotype-contrast-fassoc-remaining-refactors",
+    "plan:0002-v8-1-version-branch-analysis",
+    "plan:0038-t677-adaptive-permutation-null-plan",
+    "plan:0071-t203-ledergor-replication-pipeline-plan",
+    "plan:0074-t080-docker-closeout",
+    "plan:0028-t630-walker2024-scrna-ingest-pipeline-plan",
+    "plan:0023-foundation-hygiene",
+    "plan:0042-formula-skeleton-motif-pipeline-plan",
+    "plan:0054-project-reorganization-plan",
+    "plan:0009-hd-ap1-sequencing-plan",
+    "plan:0088-t479-myc-state-vs-rearrangement-plan",
+    "plan:0123-dlbcl-comparator-staging",
+    "plan:0017-t488-chng2007-within-hd-clusters-plan",
+    "plan:0112-gene-entity-prose-draft-generation-implementation",
+    "plan:0101-t254-discriminator-targeted-population-scope",
+    "plan:0081-topic-migration-implementation-plan",
+    "plan:0006-expanded-lens-pipeline-plan",
+    "plan:0048-cytogenetic-pipeline-integration",
+    "plan:0030-t648-walker-per-cell-h1-bridge-tiebreaker-pipeline-plan",
+    "plan:0055-gdsc-drug-sensitivity",
+    "plan:0015-viewer-home-bootstrap-baseline-trace",
+    "plan:0098-q121-stratum-aware-successor-endpoint",
+    "plan:0082-t277-within-basin-variance-pipeline-plan",
+    "plan:0125-pi-replication-gate-plan",
+    "plan:0054-task7-pair-table-provenance-ledger-design",
+    "plan:0007-t099-string-metabolic-full-plan",
+    "plan:0012-t469-pc-maturity-scope1-pipeline-plan",
+    "plan:0025-hit-prioritization-phase3-6-plan"
+  ],
+  "frame": [
+    {
+      "claimed_status": "complete",
+      "plan_id": "plan:0001-bias-audit-t202-multi-signature-null-audit-pre-registration-pre-commit",
+      "project": "multiple-myeloma",
+      "rel_path": "entities/plans/0001-bias-audit-t202-multi-signature-null-audit-pre-registration-pre-commit.md",
+      "root": null,
+      "source_sha256": "bafb68bf63ef0f7fb1174699ca051fa7f391bca8abaef0d86cef1d6d63479dde"
+    },
+    {
+      "claimed_status": "active",
+      "plan_id": "plan:0002-v8-1-version-branch-analysis",
+      "project": "multiple-myeloma",
+      "rel_path": "entities/plans/0002-v8-1-version-branch-analysis.md",
+      "root": null,
+      "source_sha256": "1852d71c031d8496e2c172dd9d277e33966a11b63901f8ff85f0f1ed9cf0a11b"
+    },
+    {
+      "claimed_status": "active",
+      "plan_id": "plan:0003-bias-audit-t204-pre-registration-10-priors-5-2-hd-construction",
+      "project": "multiple-myeloma",
+      "rel_path": "entities/plans/0003-bias-audit-t204-pre-registration-10-priors-5-2-hd-construction.md",
+      "root": null,
+      "source_sha256": "d6371092defa6cfc9349c00d10f42e6ec6a9a4eded91ad3abca6367cfa6997dc"
+    },
+    {
+      "claimed_status": "complete",
+      "plan_id": "plan:0004-bias-audit-t214-healthy-pc-maturation-pre-registration-post-commit",
+      "project": "multiple-myeloma",
+      "rel_path": "entities/plans/0004-bias-audit-t214-healthy-pc-maturation-pre-registration-post-commit.md",
+      "root": null,
+      "source_sha256": "527cbcfcede9db9e7edbf8531f7b809334c5850b70e56f404f60c640b61302e7"
+    },
+    {
+      "claimed_status": "active",
+      "plan_id": "plan:0005-t204-pipeline-plan",
+      "project": "multiple-myeloma",
+      "rel_path": "entities/plans/0005-t204-pipeline-plan.md",
+      "root": null,
+      "source_sha256": "629d5c8d3be9a72da97fb99cdff69631f52e8093d480b86b79c25334457d0507"
+    },
+    {
+      "claimed_status": "active",
+      "plan_id": "plan:0006-next-session-action-plan",
+      "project": "multiple-myeloma",
+      "rel_path": "entities/plans/0006-next-session-action-plan.md",
+      "root": null,
+      "source_sha256": "7fdff3e7cb809e4f3c26b0026f672c32cc54a9cf3103adb8f7a9b9aa2e400d6e"
+    },
+    {
+      "claimed_status": "draft",
+      "plan_id": "plan:0007-t304-myc-r-virtual-fish-pipeline-plan",
+      "project": "multiple-myeloma",
+      "rel_path": "entities/plans/0007-t304-myc-r-virtual-fish-pipeline-plan.md",
+      "root": null,
+      "source_sha256": "4a04f2f9045f0f11488487fd6cb5b35ff7400fc564b0af6c31152e96a2eb9134"
+    },
+    {
+      "claimed_status": "active",
+      "plan_id": "plan:0008-phenotype-contrast-fassoc-remaining-refactors",
+      "project": "multiple-myeloma",
+      "rel_path": "entities/plans/0008-phenotype-contrast-fassoc-remaining-refactors.md",
+      "root": null,
+      "source_sha256": "869204e69b5299085ac257300b267579294f7bb3ceccb28f997f5ee3f0d0fba3"
+    },
+    {
+      "claimed_status": "active",
+      "plan_id": "plan:0009-hd-ap1-sequencing-plan",
+      "project": "multiple-myeloma",
+      "rel_path": "entities/plans/0009-hd-ap1-sequencing-plan.md",
+      "root": null,
+      "source_sha256": "7509221296221ebce58dfda19e4568ef44b1beb7692934019d6b6569a578f4cf"
+    },
+    {
+      "claimed_status": "active",
+      "plan_id": "plan:0010-mm-treatment-confounding-convergence-plan",
+      "project": "multiple-myeloma",
+      "rel_path": "entities/plans/0010-mm-treatment-confounding-convergence-plan.md",
+      "root": null,
+      "source_sha256": "f117bcf03d3864e5fbdbb5a484b9325e964b64fbf40cbb1f24dca5e3bdbe748d"
+    },
+    {
+      "claimed_status": "active",
+      "plan_id": "plan:0011-t306-pangea-smm-benchmark-plan",
+      "project": "multiple-myeloma",
+      "rel_path": "entities/plans/0011-t306-pangea-smm-benchmark-plan.md",
+      "root": null,
+      "source_sha256": "c77fd0a1df37b8ce86654e59d027f57d7748ae8b32d4aab79968d694cbf688bf"
+    },
+    {
+      "claimed_status": "active",
+      "plan_id": "plan:0012-t469-pc-maturity-scope1-pipeline-plan",
+      "project": "multiple-myeloma",
+      "rel_path": "entities/plans/0012-t469-pc-maturity-scope1-pipeline-plan.md",
+      "root": null,
+      "source_sha256": "5886de8fe18f1fa5f8df50c326ab139b553296cd51ddae6b67a962985d0056ac"
+    },
+    {
+      "claimed_status": "active",
+      "plan_id": "plan:0013-t469-pc-maturity-scope2-pipeline-plan",
+      "project": "multiple-myeloma",
+      "rel_path": "entities/plans/0013-t469-pc-maturity-scope2-pipeline-plan.md",
+      "root": null,
+      "source_sha256": "93fab25a5bafe54b8b361df12186bdc541acadc70807ba3793f5df1d2d4792d5"
+    },
+    {
+      "claimed_status": "active",
+      "plan_id": "plan:0014-t473-batf3-closure-pipeline-plan",
+      "project": "multiple-myeloma",
+      "rel_path": "entities/plans/0014-t473-batf3-closure-pipeline-plan.md",
+      "root": null,
+      "source_sha256": "bb71eac20e4edb2872c85d86dbb34a8213afb1622b3484ebe7bace5efd59e4a3"
+    },
+    {
+      "claimed_status": "active",
+      "plan_id": "plan:0015-t473-batf3-closure-plan",
+      "project": "multiple-myeloma",
+      "rel_path": "entities/plans/0015-t473-batf3-closure-plan.md",
+      "root": null,
+      "source_sha256": "7c76771ae2cf5fc2dfe0edc155fbde41b42888800686f774e79136b57100446e"
+    },
+    {
+      "claimed_status": "active",
+      "plan_id": "plan:0016-t488-chng2007-within-hd-clusters-pipeline-plan",
+      "project": "multiple-myeloma",
+      "rel_path": "entities/plans/0016-t488-chng2007-within-hd-clusters-pipeline-plan.md",
+      "root": null,
+      "source_sha256": "267cd1d9c01d82d031228cfb4eb1d4a016f59e09f8e3c654497e0fa05b9cac86"
+    },
+    {
+      "claimed_status": "active",
+      "plan_id": "plan:0017-t488-chng2007-within-hd-clusters-plan",
+      "project": "multiple-myeloma",
+      "rel_path": "entities/plans/0017-t488-chng2007-within-hd-clusters-plan.md",
+      "root": null,
+      "source_sha256": "25c13e9e2b7504eecfcdd5236119c258c6b7dff9d69a6be0a1fa750728408f77"
+    },
+    {
+      "claimed_status": "active",
+      "plan_id": "plan:0018-t493-treatment-confounded-convergence-analysis-plan",
+      "project": "multiple-myeloma",
+      "rel_path": "entities/plans/0018-t493-treatment-confounded-convergence-analysis-plan.md",
+      "root": null,
+      "source_sha256": "de8d3e3c2831c59615deabb9d458028f2fd3ec16fb0c6056f113d06f9f410efa"
+    },
+    {
+      "claimed_status": "active",
+      "plan_id": "plan:0019-t520-workflow-outputs-catalog-plan",
+      "project": "multiple-myeloma",
+      "rel_path": "entities/plans/0019-t520-workflow-outputs-catalog-plan.md",
+      "root": null,
+      "source_sha256": "98cb898834fa4f1358bfd06e6bf9fc502d6c32bdb049b6c1cf7d3144619708c5"
+    },
+    {
+      "claimed_status": "active",
+      "plan_id": "plan:0020-t479-myc-state-vs-rearrangement-design",
+      "project": "multiple-myeloma",
+      "rel_path": "entities/plans/0020-t479-myc-state-vs-rearrangement-design.md",
+      "root": null,
+      "source_sha256": "8ebec9f4e473247e1d477c1f2870a605e5019456356e168e9f753114b03eaa9e"
+    },
+    {
+      "claimed_status": "active",
+      "plan_id": "plan:0021-t522-b-rest-hd-prolif-adj-pilot-plan",
+      "project": "multiple-myeloma",
+      "rel_path": "entities/plans/0021-t522-b-rest-hd-prolif-adj-pilot-plan.md",
+      "root": null,
+      "source_sha256": "8a7ca4029616fb9ed13fa16e7a138b2a3a41380efd982638ee2886b821e8804e"
+    },
+    {
+      "claimed_status": "active",
+      "plan_id": "plan:0022-hit-prioritization-phase1-calibration-plan",
+      "project": "multiple-myeloma",
+      "rel_path": "entities/plans/0022-hit-prioritization-phase1-calibration-plan.md",
+      "root": null,
+      "source_sha256": "a0b3e23f0e1f167ff1e233b69fb8578b95b4f6867d79cc5879252fe33712bad3"
+    },
+    {
+      "claimed_status": "active",
+      "plan_id": "plan:0023-hit-prioritization-phase2-coverage-plan",
+      "project": "multiple-myeloma",
+      "rel_path": "entities/plans/0023-hit-prioritization-phase2-coverage-plan.md",
+      "root": null,
+      "source_sha256": "3e81c099b432e8cc8707f94966c0e7fdba7ca69d59dae2b191a522f59c3fa5dc"
+    },
+    {
+      "claimed_status": "active",
+      "plan_id": "plan:0024-hit-prioritization-phase3-novelty-plan",
+      "project": "multiple-myeloma",
+      "rel_path": "entities/plans/0024-hit-prioritization-phase3-novelty-plan.md",
+      "root": null,
+      "source_sha256": "de1f618511b8d3aa9496d53615336f9e441a9fefb80a6539cff0f55719ca2a86"
+    },
+    {
+      "claimed_status": "active",
+      "plan_id": "plan:0025-hit-prioritization-phase3-6-plan",
+      "project": "multiple-myeloma",
+      "rel_path": "entities/plans/0025-hit-prioritization-phase3-6-plan.md",
+      "root": null,
+      "source_sha256": "6163ae4305e2dbe275e71e26e473d5edce9b78977c5d1a3a5a963b440c3fb6da"
+    },
+    {
+      "claimed_status": "active",
+      "plan_id": "plan:0026-hit-prioritization-phase4-rollup-plan",
+      "project": "multiple-myeloma",
+      "rel_path": "entities/plans/0026-hit-prioritization-phase4-rollup-plan.md",
+      "root": null,
+      "source_sha256": "4d0c689160bb556353ae2fcf1786b2f4d36d9c5d188fe3255fab87f84c5468c4"
+    },
+    {
+      "claimed_status": "draft",
+      "plan_id": "plan:0027-cytogenetic-architecture-vector-roadmap",
+      "project": "multiple-myeloma",
+      "rel_path": "entities/plans/0027-cytogenetic-architecture-vector-roadmap.md",
+      "root": null,
+      "source_sha256": "da9efb6aff29b7db6287d0d8901ccdebce40f50f8c0d55d3dea457e033ae34bd"
+    },
+    {
+      "claimed_status": "active",
+      "plan_id": "plan:0028-t630-walker2024-scrna-ingest-pipeline-plan",
+      "project": "multiple-myeloma",
+      "rel_path": "entities/plans/0028-t630-walker2024-scrna-ingest-pipeline-plan.md",
+      "root": null,
+      "source_sha256": "c037a077a16e128bf8eb63c3316317612e4cb2f93c0896aa549ed1dbb4a65a25"
+    },
+    {
+      "claimed_status": "draft",
+      "plan_id": "plan:0029-t637-interpretation-back-linking-sweep-plan",
+      "project": "multiple-myeloma",
+      "rel_path": "entities/plans/0029-t637-interpretation-back-linking-sweep-plan.md",
+      "root": null,
+      "source_sha256": "e789be21faf845f934ec829cb22e6a048034aaa9f97aefda0c38326e28d9a78c"
+    },
+    {
+      "claimed_status": "active",
+      "plan_id": "plan:0030-t648-walker-per-cell-h1-bridge-tiebreaker-pipeline-plan",
+      "project": "multiple-myeloma",
+      "rel_path": "entities/plans/0030-t648-walker-per-cell-h1-bridge-tiebreaker-pipeline-plan.md",
+      "root": null,
+      "source_sha256": "961191c845f6245011211d6343861594094c7016b473eaeee5c6324aaf1d40eb"
+    },
+    {
+      "claimed_status": "active",
+      "plan_id": "plan:0031-t665-gse131651-3d-locus-ledger-pipeline-plan",
+      "project": "multiple-myeloma",
+      "rel_path": "entities/plans/0031-t665-gse131651-3d-locus-ledger-pipeline-plan.md",
+      "root": null,
+      "source_sha256": "f251736b9b31d41fa793bf0c9bb975eba1ea06404e132b40e268640478a6ecdd"
+    },
+    {
+      "claimed_status": "draft",
+      "plan_id": "plan:0032-mm30-framing-and-evidence-repair-implementation-plan",
+      "project": "multiple-myeloma",
+      "rel_path": "entities/plans/0032-mm30-framing-and-evidence-repair-implementation-plan.md",
+      "root": null,
+      "source_sha256": "c576a101242ebe3cc89f3f2463e4577371e7839f9353c82e24127b83f5a05a70"
+    },
+    {
+      "claimed_status": "draft",
+      "plan_id": "plan:0033-pymc-numpyro-gpu-migration-plan",
+      "project": "multiple-myeloma",
+      "rel_path": "entities/plans/0033-pymc-numpyro-gpu-migration-plan.md",
+      "root": null,
+      "source_sha256": "b5aa9797e631bc13d9e9e8f8f7614d0a64fddacde0530665ba451164a391b514"
+    },
+    {
+      "claimed_status": "draft",
+      "plan_id": "plan:0034-uncertainty-centered-framing-roadmap",
+      "project": "multiple-myeloma",
+      "rel_path": "entities/plans/0034-uncertainty-centered-framing-roadmap.md",
+      "root": null,
+      "source_sha256": "5e5bc6a0e071db408483409f4d24538e81b99b1c7255d932ee112aaf8ae6e4d6"
+    },
+    {
+      "claimed_status": "active",
+      "plan_id": "plan:0035-t528-cytogenetics-stratified-catalog-adapter-plan",
+      "project": "multiple-myeloma",
+      "rel_path": "entities/plans/0035-t528-cytogenetics-stratified-catalog-adapter-plan.md",
+      "root": null,
+      "source_sha256": "60af3f5b2933a986c5a285918fbff3e9af45ee56570c91623d7cd4bbf51ccdc2"
+    },
+    {
+      "claimed_status": "active",
+      "plan_id": "plan:0036-t676-catalog-permutation-null-diagnostic-plan",
+      "project": "multiple-myeloma",
+      "rel_path": "entities/plans/0036-t676-catalog-permutation-null-diagnostic-plan.md",
+      "root": null,
+      "source_sha256": "9563cde3b05882b38da92926ba47b5dac8688d15fe6b8b24eb18125ce4c9b122"
+    },
+    {
+      "claimed_status": "active",
+      "plan_id": "plan:0037-t675-n-floor-sweep-plan",
+      "project": "multiple-myeloma",
+      "rel_path": "entities/plans/0037-t675-n-floor-sweep-plan.md",
+      "root": null,
+      "source_sha256": "b3725a8e6203992a99d257d80c9de83847f54b9c57ed4d116567a0ec0cadf635"
+    },
+    {
+      "claimed_status": "active",
+      "plan_id": "plan:0038-t677-adaptive-permutation-null-plan",
+      "project": "multiple-myeloma",
+      "rel_path": "entities/plans/0038-t677-adaptive-permutation-null-plan.md",
+      "root": null,
+      "source_sha256": "996723d09c1ca7213c82a00a1bf62be69cbde362f33ee22c739193bdf63963b9"
+    },
+    {
+      "claimed_status": "active",
+      "plan_id": "plan:0039-m2-validity-filter-refactor-plan",
+      "project": "multiple-myeloma",
+      "rel_path": "entities/plans/0039-m2-validity-filter-refactor-plan.md",
+      "root": null,
+      "source_sha256": "2bf93b4de4d3d4fb2b33637ab9bdcf0e19bf1ba3a59cabc6ca844f4d71945429"
+    },
+    {
+      "claimed_status": "active",
+      "plan_id": "plan:0040-m3-validity-filter-calibration-ledger-plan",
+      "project": "multiple-myeloma",
+      "rel_path": "entities/plans/0040-m3-validity-filter-calibration-ledger-plan.md",
+      "root": null,
+      "source_sha256": "c3ce8d8aa6f0525acf30cd43343c67a89738bf2a0369835cfc478a56c26c6812"
+    },
+    {
+      "claimed_status": "active",
+      "plan_id": "plan:0041-reproducible-script-workflow-remediation-plan",
+      "project": "multiple-myeloma",
+      "rel_path": "entities/plans/0041-reproducible-script-workflow-remediation-plan.md",
+      "root": null,
+      "source_sha256": "186c4a36ccd0d2c3b3ec4b6a65737099542b045aa8459eca79aad9ba59b2406b"
+    },
+    {
+      "claimed_status": "active",
+      "plan_id": "plan:0042-script-workflow-cleanup-execution-plan",
+      "project": "multiple-myeloma",
+      "rel_path": "entities/plans/0042-script-workflow-cleanup-execution-plan.md",
+      "root": null,
+      "source_sha256": "375a7cfd016d890b7a44a67cf7cf9146850646c9ac9661d88c24933be7a536a6"
+    },
+    {
+      "claimed_status": "active",
+      "plan_id": "plan:0043-t200-phf19-os-tte-implementation",
+      "project": "multiple-myeloma",
+      "rel_path": "entities/plans/0043-t200-phf19-os-tte-implementation.md",
+      "root": null,
+      "source_sha256": "ad96088ad0604b293f5cea981fa154dd3f7915f215c732c375caaa73d35a8a2f"
+    },
+    {
+      "claimed_status": "draft",
+      "plan_id": "plan:0044-sc-bulk-integration-plan",
+      "project": "multiple-myeloma",
+      "rel_path": "entities/plans/0044-sc-bulk-integration-plan.md",
+      "root": null,
+      "source_sha256": "3cc8bd87c7041c75a0953de3933dc69792d33941b643d82dbf802602fa67a63f"
+    },
+    {
+      "claimed_status": "draft",
+      "plan_id": "plan:0045-cytogenetic-inference-pipeline-plan",
+      "project": "multiple-myeloma",
+      "rel_path": "entities/plans/0045-cytogenetic-inference-pipeline-plan.md",
+      "root": null,
+      "source_sha256": "52aa755d8798249096740eb40b9434e593203f1a039c99decacf6a67b0970d1c"
+    },
+    {
+      "claimed_status": "draft",
+      "plan_id": "plan:0046-cytogenetic-inference-review",
+      "project": "multiple-myeloma",
+      "rel_path": "entities/plans/0046-cytogenetic-inference-review.md",
+      "root": null,
+      "source_sha256": "cdc2e1180b8a7d9da27029eeb477bdbf87dc944734c12434e9c26188267cba24"
+    },
+    {
+      "claimed_status": "draft",
+      "plan_id": "plan:0047-cytogenetic-integration-review",
+      "project": "multiple-myeloma",
+      "rel_path": "entities/plans/0047-cytogenetic-integration-review.md",
+      "root": null,
+      "source_sha256": "81b6fba2b79dc32951d56d8ede4817caea777443a9f10fdd488877e313bd36f1"
+    },
+    {
+      "claimed_status": "draft",
+      "plan_id": "plan:0048-cytogenetic-pipeline-integration",
+      "project": "multiple-myeloma",
+      "rel_path": "entities/plans/0048-cytogenetic-pipeline-integration.md",
+      "root": null,
+      "source_sha256": "98d4992377a49592875cfe24c45b63c2468fe8786dba133abaddbfb2de3ea80e"
+    },
+    {
+      "claimed_status": "draft",
+      "plan_id": "plan:0049-sensitivity-pipeline",
+      "project": "multiple-myeloma",
+      "rel_path": "entities/plans/0049-sensitivity-pipeline.md",
+      "root": null,
+      "source_sha256": "17b8722f37aacfcfb7d8b85a055e9788e3f32022c26674a39db5db7ada8a60c7"
+    },
+    {
+      "claimed_status": "draft",
+      "plan_id": "plan:0050-dual-ranking-notebook",
+      "project": "multiple-myeloma",
+      "rel_path": "entities/plans/0050-dual-ranking-notebook.md",
+      "root": null,
+      "source_sha256": "183434522d5c1a68f4a7511178ca517cdea111b6b343bfa18e740ef35f647f3c"
+    },
+    {
+      "claimed_status": "draft",
+      "plan_id": "plan:0051-mmrf-mutation-integration-plan",
+      "project": "multiple-myeloma",
+      "rel_path": "entities/plans/0051-mmrf-mutation-integration-plan.md",
+      "root": null,
+      "source_sha256": "3243a51858f4c061ab67c709cd3201b9958ff7032fa4530a9761a682a05d348b"
+    },
+    {
+      "claimed_status": "draft",
+      "plan_id": "plan:0052-progression-pipeline",
+      "project": "multiple-myeloma",
+      "rel_path": "entities/plans/0052-progression-pipeline.md",
+      "root": null,
+      "source_sha256": "417c7d5a4fd4b51211a8cf52b2f2e59139171e3f36b3ced36be485aae99530d6"
+    },
+    {
+      "claimed_status": "draft",
+      "plan_id": "plan:0053-project-reorganization-design",
+      "project": "multiple-myeloma",
+      "rel_path": "entities/plans/0053-project-reorganization-design.md",
+      "root": null,
+      "source_sha256": "25acd559e9845e9293c65dae4829386a4324bbb480963932b0059bd7da9291d5"
+    },
+    {
+      "claimed_status": "draft",
+      "plan_id": "plan:0054-project-reorganization-plan",
+      "project": "multiple-myeloma",
+      "rel_path": "entities/plans/0054-project-reorganization-plan.md",
+      "root": null,
+      "source_sha256": "f3de004af112ebc5ab8a61c1e7c15f1f49b86f0451c6da77b33689f3d03b7424"
+    },
+    {
+      "claimed_status": "draft",
+      "plan_id": "plan:0055-gdsc-drug-sensitivity",
+      "project": "multiple-myeloma",
+      "rel_path": "entities/plans/0055-gdsc-drug-sensitivity.md",
+      "root": null,
+      "source_sha256": "6e923ef517f96735f3b36e1caa9be63c5e6ebd9808e269e2b59e6ef3d6fc583d"
+    },
+    {
+      "claimed_status": "draft",
+      "plan_id": "plan:0056-hypothesis-pipeline-architecture",
+      "project": "multiple-myeloma",
+      "rel_path": "entities/plans/0056-hypothesis-pipeline-architecture.md",
+      "root": null,
+      "source_sha256": "7e943cc9d0f3d08a2f8a0727a9db72c9c6168e0e9783206854e20aa3ae2db276"
+    },
+    {
+      "claimed_status": "draft",
+      "plan_id": "plan:0057-t081-t082-pipeline-plan",
+      "project": "multiple-myeloma",
+      "rel_path": "entities/plans/0057-t081-t082-pipeline-plan.md",
+      "root": null,
+      "source_sha256": "5805cc6c7baa5d47be38d5d5113cd2241bde458666c170dd08ef0f37532e8e86"
+    },
+    {
+      "claimed_status": "draft",
+      "plan_id": "plan:0058-mutation-integration-t104-t106",
+      "project": "multiple-myeloma",
+      "rel_path": "entities/plans/0058-mutation-integration-t104-t106.md",
+      "root": null,
+      "source_sha256": "4217a9ad1fd845530fb5eff73668a312b65774c1bd18b3d2c4709798b7592915"
+    },
+    {
+      "claimed_status": "draft",
+      "plan_id": "plan:0059-publication-figures",
+      "project": "multiple-myeloma",
+      "rel_path": "entities/plans/0059-publication-figures.md",
+      "root": null,
+      "source_sha256": "7b358f97518b4710c05510489c6ae949ae05a710f16813bec2f369034446239a"
+    },
+    {
+      "claimed_status": "draft",
+      "plan_id": "plan:0060-bayesian-causal-dag-plan",
+      "project": "multiple-myeloma",
+      "rel_path": "entities/plans/0060-bayesian-causal-dag-plan.md",
+      "root": null,
+      "source_sha256": "b2cf0b273d8c53ecf95639cac26e8646709da4aa9aa9810f2727a464bcb36207"
+    },
+    {
+      "claimed_status": "draft",
+      "plan_id": "plan:0061-h2-upgrade-path-plan",
+      "project": "multiple-myeloma",
+      "rel_path": "entities/plans/0061-h2-upgrade-path-plan.md",
+      "root": null,
+      "source_sha256": "856bed5f5476e7bbe218c9e8664089b426838d32e7c1c47611c24e92102f313f"
+    },
+    {
+      "claimed_status": "draft",
+      "plan_id": "plan:0062-hd-stratification-plan",
+      "project": "multiple-myeloma",
+      "rel_path": "entities/plans/0062-hd-stratification-plan.md",
+      "root": null,
+      "source_sha256": "f4a1d65000d4ee68f48fa2411f3beb80f2cba76164fb4f255b92d4eabbe55927"
+    },
+    {
+      "claimed_status": "draft",
+      "plan_id": "plan:0063-bioinformatics-audit-framework-phase0",
+      "project": "multiple-myeloma",
+      "rel_path": "entities/plans/0063-bioinformatics-audit-framework-phase0.md",
+      "root": null,
+      "source_sha256": "2a51c0a4b618c8ff37573a61ca201c9f009123a535413608c28205a0333cbb46"
+    },
+    {
+      "claimed_status": "draft",
+      "plan_id": "plan:0064-t128-h2-consolidated-report",
+      "project": "multiple-myeloma",
+      "rel_path": "entities/plans/0064-t128-h2-consolidated-report.md",
+      "root": null,
+      "source_sha256": "f639e053c0c7fd07583482b9845e7574db42a71f378f602632f1cad3e8c8ce77"
+    },
+    {
+      "claimed_status": "draft",
+      "plan_id": "plan:0065-t166-stage-transition-edges",
+      "project": "multiple-myeloma",
+      "rel_path": "entities/plans/0065-t166-stage-transition-edges.md",
+      "root": null,
+      "source_sha256": "39f4b7beae09925d2e43946edfbed7487df8e25e9c3c8a4f0ff1e3203e454796"
+    },
+    {
+      "claimed_status": "draft",
+      "plan_id": "plan:0066-t172-scrna-per-cell-validation",
+      "project": "multiple-myeloma",
+      "rel_path": "entities/plans/0066-t172-scrna-per-cell-validation.md",
+      "root": null,
+      "source_sha256": "68b19635adcfc0d22b6ed1f15db67e8ba1192b0ed945853eb2d8efbc411c16cc"
+    },
+    {
+      "claimed_status": "draft",
+      "plan_id": "plan:0067-t174-pc-continuum-implementation",
+      "project": "multiple-myeloma",
+      "rel_path": "entities/plans/0067-t174-pc-continuum-implementation.md",
+      "root": null,
+      "source_sha256": "9fa41bd47e2f51a8140e63fa47e272aaff620ad98b96a9acbb6d95c00186f070"
+    },
+    {
+      "claimed_status": "draft",
+      "plan_id": "plan:0068-t202-implementation",
+      "project": "multiple-myeloma",
+      "rel_path": "entities/plans/0068-t202-implementation.md",
+      "root": null,
+      "source_sha256": "2f4399fd9fa78d86fce5b3789ad573904a4814af4d500e41d24cc4228f2c359d"
+    },
+    {
+      "claimed_status": "draft",
+      "plan_id": "plan:0069-science-methodology-migration",
+      "project": "multiple-myeloma",
+      "rel_path": "entities/plans/0069-science-methodology-migration.md",
+      "root": null,
+      "source_sha256": "adbb290fee30d7e4dd4b9c19494c6aad3190ce38f687b5ed2e9a4b7839dc4401"
+    },
+    {
+      "claimed_status": "draft",
+      "plan_id": "plan:0070-cytogenetic-subtype-program",
+      "project": "multiple-myeloma",
+      "rel_path": "entities/plans/0070-cytogenetic-subtype-program.md",
+      "root": null,
+      "source_sha256": "897f1851998c897b1670014223b1e633cd158b8712a7ebe0faef1c9765902cff"
+    },
+    {
+      "claimed_status": "draft",
+      "plan_id": "plan:0071-t203-ledergor-replication-pipeline-plan",
+      "project": "multiple-myeloma",
+      "rel_path": "entities/plans/0071-t203-ledergor-replication-pipeline-plan.md",
+      "root": null,
+      "source_sha256": "e661f3025eb5f0d6c9972944cf2a46e1346fcfca6b6d739f59e03fa3d918a3d0"
+    },
+    {
+      "claimed_status": "draft",
+      "plan_id": "plan:0072-t203-ledergor-snakemake-design",
+      "project": "multiple-myeloma",
+      "rel_path": "entities/plans/0072-t203-ledergor-snakemake-design.md",
+      "root": null,
+      "source_sha256": "ffbda0971e7ebf3c4ff01a74bd14fb4a25a9aaef4bbd1a72a1f1770c946849fe"
+    },
+    {
+      "claimed_status": "draft",
+      "plan_id": "plan:0073-t203-ledergor-snakemake-integration",
+      "project": "multiple-myeloma",
+      "rel_path": "entities/plans/0073-t203-ledergor-snakemake-integration.md",
+      "root": null,
+      "source_sha256": "d94234f3205ca56ec189535c64d0a21e3b847e61c353fad6c7264bc72cf31d53"
+    },
+    {
+      "claimed_status": "draft",
+      "plan_id": "plan:0074-t080-docker-closeout",
+      "project": "multiple-myeloma",
+      "rel_path": "entities/plans/0074-t080-docker-closeout.md",
+      "root": null,
+      "source_sha256": "223718e9b38aaffcfe50fa8ddfc9554037d15e020f2dcd665249b116125805f4"
+    },
+    {
+      "claimed_status": "draft",
+      "plan_id": "plan:0075-t208-oetjen-ingestion-plan",
+      "project": "multiple-myeloma",
+      "rel_path": "entities/plans/0075-t208-oetjen-ingestion-plan.md",
+      "root": null,
+      "source_sha256": "e4c6384cabe9290b4c0f87160793c84cc931c885bd732768311a8f460458c3f2"
+    },
+    {
+      "claimed_status": "draft",
+      "plan_id": "plan:0076-t214-healthy-pc-maturation-pipeline-plan",
+      "project": "multiple-myeloma",
+      "rel_path": "entities/plans/0076-t214-healthy-pc-maturation-pipeline-plan.md",
+      "root": null,
+      "source_sha256": "f06a9a0c3e4ae8c0281ce82373e4d25f4a333551b0772a20f53e42f55d700ae9"
+    },
+    {
+      "claimed_status": "draft",
+      "plan_id": "plan:0077-t199-lincs-l1000-pipeline-plan",
+      "project": "multiple-myeloma",
+      "rel_path": "entities/plans/0077-t199-lincs-l1000-pipeline-plan.md",
+      "root": null,
+      "source_sha256": "855ae4c5894cdebcb6ec9be08e2d54445f6ad511d1c2f1e2bd8aba4d2444f6cd"
+    },
+    {
+      "claimed_status": "draft",
+      "plan_id": "plan:0078-verdict-token-backfill",
+      "project": "multiple-myeloma",
+      "rel_path": "entities/plans/0078-verdict-token-backfill.md",
+      "root": null,
+      "source_sha256": "7db2cba382c7f4e15dd7dfee4016ca863bc408744c624a0ca1acc94cd1fcf4f8"
+    },
+    {
+      "claimed_status": "draft",
+      "plan_id": "plan:0079-verdict-token-backfill-rollup",
+      "project": "multiple-myeloma",
+      "rel_path": "entities/plans/0079-verdict-token-backfill-rollup.md",
+      "root": null,
+      "source_sha256": "7591759906907e81d8920f30e659cac9d0f8e15b9e10fd0c13f4b18721f54b01"
+    },
+    {
+      "claimed_status": "draft",
+      "plan_id": "plan:0080-topic-migration-design",
+      "project": "multiple-myeloma",
+      "rel_path": "entities/plans/0080-topic-migration-design.md",
+      "root": null,
+      "source_sha256": "34376224575c246f10d97644a0dbbf16b9c09703100fa2c4542daebd8fa3f7d3"
+    },
+    {
+      "claimed_status": "draft",
+      "plan_id": "plan:0081-topic-migration-implementation-plan",
+      "project": "multiple-myeloma",
+      "rel_path": "entities/plans/0081-topic-migration-implementation-plan.md",
+      "root": null,
+      "source_sha256": "511c9e6800183e45606179cf526a28f44461421eb882e0c8417e73f349afcfb8"
+    },
+    {
+      "claimed_status": "draft",
+      "plan_id": "plan:0082-t277-within-basin-variance-pipeline-plan",
+      "project": "multiple-myeloma",
+      "rel_path": "entities/plans/0082-t277-within-basin-variance-pipeline-plan.md",
+      "root": null,
+      "source_sha256": "3fac6dff7ee2838ee161fb35b6ac574ba2c2c7f0e7e4d54eb7ce3e7d705c2883"
+    },
+    {
+      "claimed_status": "draft",
+      "plan_id": "plan:0083-t278-dwell-time-pipeline-plan",
+      "project": "multiple-myeloma",
+      "rel_path": "entities/plans/0083-t278-dwell-time-pipeline-plan.md",
+      "root": null,
+      "source_sha256": "859c1e911c6532c4a6b8725e8d17d25601ef72bd85e2a663a76e29a48a944f56"
+    },
+    {
+      "claimed_status": "draft",
+      "plan_id": "plan:0084-managed-artifacts-migration",
+      "project": "multiple-myeloma",
+      "rel_path": "entities/plans/0084-managed-artifacts-migration.md",
+      "root": null,
+      "source_sha256": "9c260aa36dbf25002743380c8572d6fe1e1e80459a16fae2fd2b78e249df2da4"
+    },
+    {
+      "claimed_status": "draft",
+      "plan_id": "plan:0085-t439-cytogenetics-fassoc-category-plan",
+      "project": "multiple-myeloma",
+      "rel_path": "entities/plans/0085-t439-cytogenetics-fassoc-category-plan.md",
+      "root": null,
+      "source_sha256": "b7dc2ccfff4aa9cf4888a7b5e3e240ae98865c552ea1321d8b7d23d821e9e91b"
+    },
+    {
+      "claimed_status": "draft",
+      "plan_id": "plan:0086-t444-fassoc-sign-convention-audit-plan",
+      "project": "multiple-myeloma",
+      "rel_path": "entities/plans/0086-t444-fassoc-sign-convention-audit-plan.md",
+      "root": null,
+      "source_sha256": "9157a5fbfcdf365b60178bc0a0679c281034f304f95913db6d7cdb094679ea47"
+    },
+    {
+      "claimed_status": "draft",
+      "plan_id": "plan:0087-phenotype-contrast-registry-architecture",
+      "project": "multiple-myeloma",
+      "rel_path": "entities/plans/0087-phenotype-contrast-registry-architecture.md",
+      "root": null,
+      "source_sha256": "8e3a4e617d286b8343264ba763196ee482a1c415ed73733fb3f3ead62d2aecad"
+    },
+    {
+      "claimed_status": "draft",
+      "plan_id": "plan:0088-t479-myc-state-vs-rearrangement-plan",
+      "project": "multiple-myeloma",
+      "rel_path": "entities/plans/0088-t479-myc-state-vs-rearrangement-plan.md",
+      "root": null,
+      "source_sha256": "ce8446c1b42e800eb13faa820570bbe916b61faed87e76db37a5cea3af76427b"
+    },
+    {
+      "claimed_status": "draft",
+      "plan_id": "plan:0089-hit-prioritization-phase5-governance-plan",
+      "project": "multiple-myeloma",
+      "rel_path": "entities/plans/0089-hit-prioritization-phase5-governance-plan.md",
+      "root": null,
+      "source_sha256": "7cb8f19fb553004272624e920796c587d19088f15320ef6ce4f5ab33c7ff0511"
+    },
+    {
+      "claimed_status": "draft",
+      "plan_id": "plan:0090-t612-relaxed-pathway-validation",
+      "project": "multiple-myeloma",
+      "rel_path": "entities/plans/0090-t612-relaxed-pathway-validation.md",
+      "root": null,
+      "source_sha256": "124650694cd868a75ba49e60866593b96f713feff0d84d019477b4886cfb02a4"
+    },
+    {
+      "claimed_status": "draft",
+      "plan_id": "plan:0091-t688-causal-evidence-layer-plan",
+      "project": "multiple-myeloma",
+      "rel_path": "entities/plans/0091-t688-causal-evidence-layer-plan.md",
+      "root": null,
+      "source_sha256": "0e31802fcc59faaacaa3994a6db0e213449cd6b3a9411f63ad2149fe10be9103"
+    },
+    {
+      "claimed_status": "draft",
+      "plan_id": "plan:0092-t692-perturbation-response-modality-plan",
+      "project": "multiple-myeloma",
+      "rel_path": "entities/plans/0092-t692-perturbation-response-modality-plan.md",
+      "root": null,
+      "source_sha256": "59b181b8a604ba43308f2ec5918a3a4bf1467d8088fd4de9df5ba8c92b0c61ad"
+    },
+    {
+      "claimed_status": "draft",
+      "plan_id": "plan:0093-t693-mechanism-axis-portability-plan",
+      "project": "multiple-myeloma",
+      "rel_path": "entities/plans/0093-t693-mechanism-axis-portability-plan.md",
+      "root": null,
+      "source_sha256": "a46076fb4034e5a54b6686e992c542c77d79c6c57ab5601044748f5a1e2d7b90"
+    },
+    {
+      "claimed_status": "draft",
+      "plan_id": "plan:0094-t694-h1-mechanism-loso-sensitivity-plan",
+      "project": "multiple-myeloma",
+      "rel_path": "entities/plans/0094-t694-h1-mechanism-loso-sensitivity-plan.md",
+      "root": null,
+      "source_sha256": "226c46d36bc0051fc5ee93b0f71298bf77e8def4865da8e583caa32b225da847"
+    },
+    {
+      "claimed_status": "draft",
+      "plan_id": "plan:0095-r7-state-space-geometry-screen",
+      "project": "multiple-myeloma",
+      "rel_path": "entities/plans/0095-r7-state-space-geometry-screen.md",
+      "root": null,
+      "source_sha256": "72cf72aa4c4b47fd9956292787b71f19ece09ac703b6ceb2bfaa7626b374256b"
+    },
+    {
+      "claimed_status": "draft",
+      "plan_id": "plan:0096-report-finding-figure-pipelines-plan",
+      "project": "multiple-myeloma",
+      "rel_path": "entities/plans/0096-report-finding-figure-pipelines-plan.md",
+      "root": null,
+      "source_sha256": "e07c2c5dc325bfa45fd721fc3c83c7e455f10b9f73d731e433d5a9b743606bb8"
+    },
+    {
+      "claimed_status": "draft",
+      "plan_id": "plan:0097-cytogenetic-characterization-c1-c2-implementation",
+      "project": "multiple-myeloma",
+      "rel_path": "entities/plans/0097-cytogenetic-characterization-c1-c2-implementation.md",
+      "root": null,
+      "source_sha256": "97c82c25932cfa77951b771e71fe1e6c44a626c23d4196ce7c93bde2504cd330"
+    },
+    {
+      "claimed_status": "draft",
+      "plan_id": "plan:0098-app-export-stage-implementation",
+      "project": "multiple-myeloma",
+      "rel_path": "entities/plans/0098-app-export-stage-implementation.md",
+      "root": null,
+      "source_sha256": "4489d488dee6f9956db6a9d82fcf233ce20fef8f576105b91c14533dfaa580be"
+    },
+    {
+      "claimed_status": "draft",
+      "plan_id": "plan:0099-cytogenetic-characterization-c3-implementation",
+      "project": "multiple-myeloma",
+      "rel_path": "entities/plans/0099-cytogenetic-characterization-c3-implementation.md",
+      "root": null,
+      "source_sha256": "05b7b5c9e854fe560bfae537173cf4a99d2414fb7f65a4eed766d7a0a45c79f3"
+    },
+    {
+      "claimed_status": "draft",
+      "plan_id": "plan:0100-cytogenetic-characterization-c4-implementation",
+      "project": "multiple-myeloma",
+      "rel_path": "entities/plans/0100-cytogenetic-characterization-c4-implementation.md",
+      "root": null,
+      "source_sha256": "add0ebc105f5612acaa3658d0a16ae504854e25939736bb78f8b1324b1fb6171"
+    },
+    {
+      "claimed_status": "draft",
+      "plan_id": "plan:0101-cytogenetic-characterization-c5-implementation",
+      "project": "multiple-myeloma",
+      "rel_path": "entities/plans/0101-cytogenetic-characterization-c5-implementation.md",
+      "root": null,
+      "source_sha256": "ef38a33abf21dc8093de4a6717f11f57c1d30cc5f2e1a583b3e8d1f88ea3e6d6"
+    },
+    {
+      "claimed_status": "draft",
+      "plan_id": "plan:0102-cytogenetic-characterization-c6-implementation",
+      "project": "multiple-myeloma",
+      "rel_path": "entities/plans/0102-cytogenetic-characterization-c6-implementation.md",
+      "root": null,
+      "source_sha256": "e097d50d11dd5a8b07cfe4205c60d69cdae5e3f80165d0a3e7a770983dce2901"
+    },
+    {
+      "claimed_status": "draft",
+      "plan_id": "plan:0103-mm30-v2-v3-migration-design",
+      "project": "multiple-myeloma",
+      "rel_path": "entities/plans/0103-mm30-v2-v3-migration-design.md",
+      "root": null,
+      "source_sha256": "43581767017b0e86f8c5ac830b55305e15a7d8fa88c99f8150c69df0b93ae399"
+    },
+    {
+      "claimed_status": "draft",
+      "plan_id": "plan:0104-mm30-v2-v3-migration-implementation-plan",
+      "project": "multiple-myeloma",
+      "rel_path": "entities/plans/0104-mm30-v2-v3-migration-implementation-plan.md",
+      "root": null,
+      "source_sha256": "040a7b0565b69bd167aa2b184837b9b25ab9bba6404213d6f03b612b3a2afd83"
+    },
+    {
+      "claimed_status": "draft",
+      "plan_id": "plan:0105-mm30-corpus-migration-checklist",
+      "project": "multiple-myeloma",
+      "rel_path": "entities/plans/0105-mm30-corpus-migration-checklist.md",
+      "root": null,
+      "source_sha256": "a94050aeeb64a19280f6d4b3a87c6869bcafb938d54088fd1d35d686a605eb1c"
+    },
+    {
+      "claimed_status": "draft",
+      "plan_id": "plan:0106-mm30-corpus-migration-plan",
+      "project": "multiple-myeloma",
+      "rel_path": "entities/plans/0106-mm30-corpus-migration-plan.md",
+      "root": null,
+      "source_sha256": "2de0fc5982fe1ffcd7c754fc1ae485919cee2350ef9c0d806d322eda4d167544"
+    },
+    {
+      "claimed_status": "draft",
+      "plan_id": "plan:0107-science-project-explorer-plan2-implementation",
+      "project": "multiple-myeloma",
+      "rel_path": "entities/plans/0107-science-project-explorer-plan2-implementation.md",
+      "root": null,
+      "source_sha256": "5cdf60394d4015aea9016f849a3d5c2f04c930fb3cc518a18a43a45f8022e1ce"
+    },
+    {
+      "claimed_status": "draft",
+      "plan_id": "plan:0108-edges-yaml-retirement-plan",
+      "project": "multiple-myeloma",
+      "rel_path": "entities/plans/0108-edges-yaml-retirement-plan.md",
+      "root": null,
+      "source_sha256": "fcccdb491530ab47d5bd0b39e81f16e75cbe306b49733b3ddbcb204693ac9135"
+    },
+    {
+      "claimed_status": "draft",
+      "plan_id": "plan:0109-derived-belief-app-export-plan",
+      "project": "multiple-myeloma",
+      "rel_path": "entities/plans/0109-derived-belief-app-export-plan.md",
+      "root": null,
+      "source_sha256": "2cd2d3c67a13056bc0ed987850a03fef1a2ccca9295c9f6f989b9ba47a10e05e"
+    },
+    {
+      "claimed_status": "draft",
+      "plan_id": "plan:0110-evidence-line-dataset-grounding-plan",
+      "project": "multiple-myeloma",
+      "rel_path": "entities/plans/0110-evidence-line-dataset-grounding-plan.md",
+      "root": null,
+      "source_sha256": "c0e30711ddbd8838458d2912a962ef1c2678b540ceb20e6da4b917b8ae08bbf4"
+    },
+    {
+      "claimed_status": "draft",
+      "plan_id": "plan:0111-gene-entity-metadata-export-implementation",
+      "project": "multiple-myeloma",
+      "rel_path": "entities/plans/0111-gene-entity-metadata-export-implementation.md",
+      "root": null,
+      "source_sha256": "7530a742d63f4f3290bab337dcc912b710f34267187cf573db2892468f343906"
+    },
+    {
+      "claimed_status": "draft",
+      "plan_id": "plan:0112-gene-entity-prose-draft-generation-implementation",
+      "project": "multiple-myeloma",
+      "rel_path": "entities/plans/0112-gene-entity-prose-draft-generation-implementation.md",
+      "root": null,
+      "source_sha256": "058f802d6a0d90546f4b8e0f5430f418528a25dfa183e21768cbc8f6e3805617"
+    },
+    {
+      "claimed_status": "draft",
+      "plan_id": "plan:0113-dataset-entity-metadata-export-implementation",
+      "project": "multiple-myeloma",
+      "rel_path": "entities/plans/0113-dataset-entity-metadata-export-implementation.md",
+      "root": null,
+      "source_sha256": "21db55ff7135b1fbc85c479d1f0b11ec902450121f1577a885361c96d3783933"
+    },
+    {
+      "claimed_status": "active",
+      "plan_id": "plan:0114-t120-h1-structure-comparison-implementation",
+      "project": "multiple-myeloma",
+      "rel_path": "entities/plans/0114-t120-h1-structure-comparison-implementation.md",
+      "root": null,
+      "source_sha256": "f7e28e2eaee8af591cf285ba86552f7ebfe402565e82633aeb863b5b3beb0044"
+    },
+    {
+      "claimed_status": "active",
+      "plan_id": "plan:0115-gse234261-q0146-immune-baseline-probe",
+      "project": "multiple-myeloma",
+      "rel_path": "entities/plans/0115-gse234261-q0146-immune-baseline-probe.md",
+      "root": null,
+      "source_sha256": "06e8e3c16351d9f03cc3870fc2b38875584c9e672a04be545c312dd3f02bb6e3"
+    },
+    {
+      "claimed_status": "draft",
+      "plan_id": "plan:0116-q0146-immune-baseline-immunotherapy-response-analysis-plan",
+      "project": "multiple-myeloma",
+      "rel_path": "entities/plans/0116-q0146-immune-baseline-immunotherapy-response-analysis-plan.md",
+      "root": null,
+      "source_sha256": "f29c1cf2b37487abfe0242d60a58aac87c9ccf3413b7eebcf1ca01855ae2dc45"
+    },
+    {
+      "claimed_status": "active",
+      "plan_id": "plan:0117-gse234261-wp2-feature-extraction",
+      "project": "multiple-myeloma",
+      "rel_path": "entities/plans/0117-gse234261-wp2-feature-extraction.md",
+      "root": null,
+      "source_sha256": "fc41b5e1debd6103fde7e8e33fb35c0478c2aba72c4c12173860306b13f6a5bc"
+    },
+    {
+      "claimed_status": "active",
+      "plan_id": "plan:0118-gse216571-q0146-bispecific-immune-baseline-probe",
+      "project": "multiple-myeloma",
+      "rel_path": "entities/plans/0118-gse216571-q0146-bispecific-immune-baseline-probe.md",
+      "root": null,
+      "source_sha256": "0a320b3af303e627e92c5f3d3f5d0f85826013722375c1d0a2f3363b8a3de896"
+    },
+    {
+      "claimed_status": "active",
+      "plan_id": "plan:0119-q0170-translation-axis-decomposition-analysis-plan",
+      "project": "multiple-myeloma",
+      "rel_path": "entities/plans/0119-q0170-translation-axis-decomposition-analysis-plan.md",
+      "root": null,
+      "source_sha256": "80e782d3c4262e66c0610c520fc9109ce8dbd5692c1bc4b4be7531b12d29f8b0"
+    },
+    {
+      "claimed_status": "active",
+      "plan_id": "plan:0120-t665-gse87585-cn-sv-overlay",
+      "project": "multiple-myeloma",
+      "rel_path": "entities/plans/0120-t665-gse87585-cn-sv-overlay.md",
+      "root": null,
+      "source_sha256": "0662c685a35ade9c76c06d8e81d286376469646f5986f552cdd90c15a89d1199"
+    },
+    {
+      "claimed_status": "active",
+      "plan_id": "plan:0121-tirier-2021-scrna-ingestion-implementation",
+      "project": "multiple-myeloma",
+      "rel_path": "entities/plans/0121-tirier-2021-scrna-ingestion-implementation.md",
+      "root": null,
+      "source_sha256": "ba039858202245a2f45afca4bdb581fcbc95049bb73aa7b0e85f96dc7ba87f97"
+    },
+    {
+      "claimed_status": "active",
+      "plan_id": "plan:0122-mm-scatac-staging-gse162337-gse199268",
+      "project": "multiple-myeloma",
+      "rel_path": "entities/plans/0122-mm-scatac-staging-gse162337-gse199268.md",
+      "root": null,
+      "source_sha256": "321f8bd93c2d0633bbefaeee339c990d0582fb8ebe9186332352b2a3f1a0b9b2"
+    },
+    {
+      "claimed_status": "active",
+      "plan_id": "plan:0123-dlbcl-comparator-staging",
+      "project": "multiple-myeloma",
+      "rel_path": "entities/plans/0123-dlbcl-comparator-staging.md",
+      "root": null,
+      "source_sha256": "5e72e761f52217e09568ef8852a31b37dcb4044c026baa49fda4dc911bf55c91"
+    },
+    {
+      "claimed_status": "active",
+      "plan_id": "plan:0124-h11c2-pi-signature-prognostic-pipeline",
+      "project": "multiple-myeloma",
+      "rel_path": "entities/plans/0124-h11c2-pi-signature-prognostic-pipeline.md",
+      "root": null,
+      "source_sha256": "68a480c4db81d8d2117924eedf9da63d9f86696b4a25bd876a886114267b01e0"
+    },
+    {
+      "claimed_status": "draft",
+      "plan_id": "plan:0125-pi-replication-gate-plan",
+      "project": "multiple-myeloma",
+      "rel_path": "entities/plans/0125-pi-replication-gate-plan.md",
+      "root": null,
+      "source_sha256": "f933d380b75e190df3054a8917416c07103589d9afab5b3e1d139ac837219278"
+    },
+    {
+      "claimed_status": "active",
+      "plan_id": "plan:2026-06-28-t819-h3-mutation-reshaping-ia18-retest",
+      "project": "multiple-myeloma",
+      "rel_path": "entities/plans/2026-06-28-t819-h3-mutation-reshaping-ia18-retest.md",
+      "root": null,
+      "source_sha256": "20a3bfecf283082261be725272c0a8b8c993470f0009555f1a3b3ee23140baf3"
+    },
+    {
+      "claimed_status": "complete",
+      "plan_id": "plan:0001-t37-full-catalog-constituent-similarity-pipeline",
+      "project": "natural-systems",
+      "rel_path": "entities/plans/0001-t37-full-catalog-constituent-similarity-pipeline.md",
+      "root": null,
+      "source_sha256": "71dc9eaee461eaeba4ba78aadad34965b1e8f8274999c44d1be9af98c63c73aa"
+    },
+    {
+      "claimed_status": "complete",
+      "plan_id": "plan:0002-t38-constituent-expanded-nmf-pipeline",
+      "project": "natural-systems",
+      "rel_path": "entities/plans/0002-t38-constituent-expanded-nmf-pipeline.md",
+      "root": null,
+      "source_sha256": "cdb14e1cda98c445531837b18523af5d82f026e8309a8fce2c0fa4e7bf0740ad"
+    },
+    {
+      "claimed_status": "current",
+      "plan_id": "plan:0003-next-steps-2026-04-12",
+      "project": "natural-systems",
+      "rel_path": "entities/plans/0003-next-steps-2026-04-12.md",
+      "root": null,
+      "source_sha256": "6112d05c6074d94c0ff4c3d368771c52cafaf0f9e9fbb525e1beb00e766f3f84"
+    },
+    {
+      "claimed_status": "active",
+      "plan_id": "plan:0004-handoff-parameters-as-primitives-data-alignment-pilot-and-remaining-work",
+      "project": "natural-systems",
+      "rel_path": "entities/plans/0004-handoff-parameters-as-primitives-data-alignment-pilot-and-remaining-work.md",
+      "root": null,
+      "source_sha256": "92763b4d862e37b6677d4c15d8ac19c1acfca9f5d66649277fa90d1b3bdcb970"
+    },
+    {
+      "claimed_status": "draft",
+      "plan_id": "plan:0005-meta-system-vision",
+      "project": "natural-systems",
+      "rel_path": "entities/plans/0005-meta-system-vision.md",
+      "root": null,
+      "source_sha256": "cce3e95f92d23a4063b33a9f9e4b7074132568bbdff5f4926949598024c6e185"
+    },
+    {
+      "claimed_status": "draft",
+      "plan_id": "plan:0006-session-a-authority-matrix",
+      "project": "natural-systems",
+      "rel_path": "entities/plans/0006-session-a-authority-matrix.md",
+      "root": null,
+      "source_sha256": "e1181914cda2f210bd8419d85c5e4c72547160871a2859741fb664a23d7b50a4"
+    },
+    {
+      "claimed_status": "draft",
+      "plan_id": "plan:0007-session-b-projection-contract",
+      "project": "natural-systems",
+      "rel_path": "entities/plans/0007-session-b-projection-contract.md",
+      "root": null,
+      "source_sha256": "c937a014481815c21bf6b143cf1b05d98b56f2613f26f687ab69b38a75ac976e"
+    },
+    {
+      "claimed_status": "draft",
+      "plan_id": "plan:0008-session-c-graph-assignment",
+      "project": "natural-systems",
+      "rel_path": "entities/plans/0008-session-c-graph-assignment.md",
+      "root": null,
+      "source_sha256": "f85c264d2222863b9ce0df520cefec0796c12d49eececd00c9b2f01711dfe205"
+    },
+    {
+      "claimed_status": "draft",
+      "plan_id": "plan:0009-session-d-milestone-audits",
+      "project": "natural-systems",
+      "rel_path": "entities/plans/0009-session-d-milestone-audits.md",
+      "root": null,
+      "source_sha256": "2cfe177cf6fa2620e51089e031a94f1e966160e5deb3e5352e4bfb3f14d5c038"
+    },
+    {
+      "claimed_status": "draft",
+      "plan_id": "plan:0010-chapters-as-composition-design",
+      "project": "natural-systems",
+      "rel_path": "entities/plans/0010-chapters-as-composition-design.md",
+      "root": null,
+      "source_sha256": "ce75245fcae73a1412f37e619af262406ca8cbef65c50f0d93c9505a117845da"
+    },
+    {
+      "claimed_status": "active",
+      "plan_id": "plan:0011-chapters-as-composition-implementation",
+      "project": "natural-systems",
+      "rel_path": "entities/plans/0011-chapters-as-composition-implementation.md",
+      "root": null,
+      "source_sha256": "184a96430f76d371fbc7a9fc1c7d412f5f2afec889fece913c5aa9706de283c1"
+    },
+    {
+      "claimed_status": "draft",
+      "plan_id": "plan:0012-meta-model-hero-storyboard",
+      "project": "natural-systems",
+      "rel_path": "entities/plans/0012-meta-model-hero-storyboard.md",
+      "root": null,
+      "source_sha256": "113e71cefd61376bd9a01bd50cbfa9b22edcd4f572b77e013016f45afc066938"
+    },
+    {
+      "claimed_status": "draft",
+      "plan_id": "plan:0013-phase-2-handoff",
+      "project": "natural-systems",
+      "rel_path": "entities/plans/0013-phase-2-handoff.md",
+      "root": null,
+      "source_sha256": "bb92952053b13a880842dbb7a816c1ca4332d0dedc5564d49a3bd30c5b1fed54"
+    },
+    {
+      "claimed_status": "complete",
+      "plan_id": "plan:0014-phase-3-morphism-and-hero-design",
+      "project": "natural-systems",
+      "rel_path": "entities/plans/0014-phase-3-morphism-and-hero-design.md",
+      "root": null,
+      "source_sha256": "b848fb22b96b08d92b7e27b9ee464bfe5dbf1d5b51f5dc7a395d44dbb4ca9d5a"
+    },
+    {
+      "claimed_status": "draft",
+      "plan_id": "plan:0015-visual-registry-foundation",
+      "project": "natural-systems",
+      "rel_path": "entities/plans/0015-visual-registry-foundation.md",
+      "root": null,
+      "source_sha256": "049de30f7ccf6d09b76707fc1c61333bb445eb6ca5e7f573be660df90d427483"
+    },
+    {
+      "claimed_status": "draft",
+      "plan_id": "plan:0016-guide-data-r1-contract",
+      "project": "natural-systems",
+      "rel_path": "entities/plans/0016-guide-data-r1-contract.md",
+      "root": null,
+      "source_sha256": "c99f95f59d906a7d525f6047b4f3705d2fbe3344f623f90903f86a1037c584cc"
+    },
+    {
+      "claimed_status": "active",
+      "plan_id": "plan:0017-a2-chapter-editorial-pattern",
+      "project": "natural-systems",
+      "rel_path": "entities/plans/0017-a2-chapter-editorial-pattern.md",
+      "root": null,
+      "source_sha256": "b4d5c6f66ffdf545e19062dfa22049bbefeb6ad3ec4a604c685ea541b64ea1b1"
+    },
+    {
+      "claimed_status": "draft",
+      "plan_id": "plan:0018-a5-guide-unification",
+      "project": "natural-systems",
+      "rel_path": "entities/plans/0018-a5-guide-unification.md",
+      "root": null,
+      "source_sha256": "affc861a24af3a08c7975d871fbaf2a0acc9748923dfc3bf6d3325d08f16f457"
+    },
+    {
+      "claimed_status": "draft",
+      "plan_id": "plan:0019-a5-surface-authority",
+      "project": "natural-systems",
+      "rel_path": "entities/plans/0019-a5-surface-authority.md",
+      "root": null,
+      "source_sha256": "d9f9662e54271603d53401870f48721e0159a55683bd1a7052a1b931d0268319"
+    },
+    {
+      "claimed_status": "draft",
+      "plan_id": "plan:0020-remaining-work-and-phasing",
+      "project": "natural-systems",
+      "rel_path": "entities/plans/0020-remaining-work-and-phasing.md",
+      "root": null,
+      "source_sha256": "31454dc9f57ab6afd92a2fbca280e57820636344f9cd56a971b7986b8123de87"
+    },
+    {
+      "claimed_status": "active",
+      "plan_id": "plan:0021-handoff-meta-system-gap-closure-merged-1-2-3-4-5-6-7-8-done",
+      "project": "natural-systems",
+      "rel_path": "entities/plans/0021-handoff-meta-system-gap-closure-merged-1-2-3-4-5-6-7-8-done.md",
+      "root": null,
+      "source_sha256": "a4c8d33a0e3ac4e04237626ba03b9bb7acb72d6633818fc038b0ac76cd723517"
+    },
+    {
+      "claimed_status": "complete",
+      "plan_id": "plan:0022-detail-page-parity-migration",
+      "project": "natural-systems",
+      "rel_path": "entities/plans/0022-detail-page-parity-migration.md",
+      "root": null,
+      "source_sha256": "b373aea5c282570ccac942ac261923475a69188b0ee8b6192bd8ffcac8bbeb98"
+    },
+    {
+      "claimed_status": "active",
+      "plan_id": "plan:0023-foundation-hygiene",
+      "project": "natural-systems",
+      "rel_path": "entities/plans/0023-foundation-hygiene.md",
+      "root": null,
+      "source_sha256": "eb889fe1f28f7bef52f6b04a99022a80e8405135083fbac0b7a746baea0d6d36"
+    },
+    {
+      "claimed_status": "draft",
+      "plan_id": "plan:0024-meta-system-gap-closure",
+      "project": "natural-systems",
+      "rel_path": "entities/plans/0024-meta-system-gap-closure.md",
+      "root": null,
+      "source_sha256": "d5384217c958be6a3dad69f81ecb8f3883a6b760591034f547620403582b62f2"
+    },
+    {
+      "claimed_status": "complete",
+      "plan_id": "plan:0025-primitive-pipeline-migration",
+      "project": "natural-systems",
+      "rel_path": "entities/plans/0025-primitive-pipeline-migration.md",
+      "root": null,
+      "source_sha256": "7d48749e4028a2e663be2564f4fe1983aadee105b1e199376a0c94af4f2a4bf2"
+    },
+    {
+      "claimed_status": "complete",
+      "plan_id": "plan:0026-authoring-cli-add-commands",
+      "project": "natural-systems",
+      "rel_path": "entities/plans/0026-authoring-cli-add-commands.md",
+      "root": null,
+      "source_sha256": "9d268f874fcb530fc005454bda54cf8ec4f1d878116d134aa718c4af0d81e172"
+    },
+    {
+      "claimed_status": "active",
+      "plan_id": "plan:0027-recon-behavior-migration-2-1",
+      "project": "natural-systems",
+      "rel_path": "entities/plans/0027-recon-behavior-migration-2-1.md",
+      "root": null,
+      "source_sha256": "34f49ef83e7b0ebe6582f34f0dfbbba000fe3bc12af0da8a098f708fe54f2c5d"
+    },
+    {
+      "claimed_status": "active",
+      "plan_id": "plan:0028-recon-dimgroup-migration-2-5",
+      "project": "natural-systems",
+      "rel_path": "entities/plans/0028-recon-dimgroup-migration-2-5.md",
+      "root": null,
+      "source_sha256": "6318fe08537f478dfb3d160dbee27a341fe4c11bc2e205c9a9049110edd1cfbd"
+    },
+    {
+      "claimed_status": "active",
+      "plan_id": "plan:0029-recon-facet-migration-2-4",
+      "project": "natural-systems",
+      "rel_path": "entities/plans/0029-recon-facet-migration-2-4.md",
+      "root": null,
+      "source_sha256": "aae898ac3eeaf1429f9cc4d8b969d6a5e17ffd290308ccb63c064ad75133c5da"
+    },
+    {
+      "claimed_status": "active",
+      "plan_id": "plan:0030-recon-symmetry-migration-2-3",
+      "project": "natural-systems",
+      "rel_path": "entities/plans/0030-recon-symmetry-migration-2-3.md",
+      "root": null,
+      "source_sha256": "00fd3aaf042cbbef140621c3441d55e56026c5775d4d4759d624805cac3d65e0"
+    },
+    {
+      "claimed_status": "active",
+      "plan_id": "plan:0031-recon-variable-migration-2-2",
+      "project": "natural-systems",
+      "rel_path": "entities/plans/0031-recon-variable-migration-2-2.md",
+      "root": null,
+      "source_sha256": "d8cb1de46d652e991eddd70ba44369a9a295ccd382a17e7ad1e8fef9085e6d4c"
+    },
+    {
+      "claimed_status": "draft",
+      "plan_id": "plan:0032-authoring-skills",
+      "project": "natural-systems",
+      "rel_path": "entities/plans/0032-authoring-skills.md",
+      "root": null,
+      "source_sha256": "6d2a320149036c1a87b0e9c2e23378d41cdf108ec08c0f4c69bacf9ddf15fe0c"
+    },
+    {
+      "claimed_status": "draft",
+      "plan_id": "plan:0033-content-coverage-push-and-flat-field-deprecation",
+      "project": "natural-systems",
+      "rel_path": "entities/plans/0033-content-coverage-push-and-flat-field-deprecation.md",
+      "root": null,
+      "source_sha256": "5032fa246e81cc606aaea9f3fa4cc4936f5ce44981ca69d72470db9126cb6e89"
+    },
+    {
+      "claimed_status": "draft",
+      "plan_id": "plan:0034-cross-graph-overlay-ux",
+      "project": "natural-systems",
+      "rel_path": "entities/plans/0034-cross-graph-overlay-ux.md",
+      "root": null,
+      "source_sha256": "785ed70d33416c9ff73ad1914586fcff1030935f3b1bb7bae14e8e2c87627e6a"
+    },
+    {
+      "claimed_status": "draft",
+      "plan_id": "plan:0035-morphism-figure-catalog",
+      "project": "natural-systems",
+      "rel_path": "entities/plans/0035-morphism-figure-catalog.md",
+      "root": null,
+      "source_sha256": "a97013b50bf02dfd27038f699885369bead27fa91339248f5947235cef09cfe6"
+    },
+    {
+      "claimed_status": "complete",
+      "plan_id": "plan:0036-provenance-derivation-redesign-plan",
+      "project": "natural-systems",
+      "rel_path": "entities/plans/0036-provenance-derivation-redesign-plan.md",
+      "root": null,
+      "source_sha256": "601a06e7508dfea943b5dfbadca3f17400001b45415939ce6a5ddb402b0c556b"
+    },
+    {
+      "claimed_status": "proposed",
+      "plan_id": "plan:0037-provenance-schema-integration-plan",
+      "project": "natural-systems",
+      "rel_path": "entities/plans/0037-provenance-schema-integration-plan.md",
+      "root": null,
+      "source_sha256": "a4d773c75199036dae2e3fe02e86f284dabb4e0c31e1ddcc35c3033c7aac41f0"
+    },
+    {
+      "claimed_status": "complete",
+      "plan_id": "plan:0038-q93-morphism-generators-foundation-follow-on-plan",
+      "project": "natural-systems",
+      "rel_path": "entities/plans/0038-q93-morphism-generators-foundation-follow-on-plan.md",
+      "root": null,
+      "source_sha256": "4c932f0f68338854141aa3ad18c74681e833417cd4b543ae10ff834fcd2eff78"
+    },
+    {
+      "claimed_status": "complete",
+      "plan_id": "plan:0039-q93-workstream-1-family-pilots-index",
+      "project": "natural-systems",
+      "rel_path": "entities/plans/0039-q93-workstream-1-family-pilots-index.md",
+      "root": null,
+      "source_sha256": "4bf167b5b9faadd497611552ac7f6120b7cfbc286d33a1c6d53e3ea34df859a2"
+    },
+    {
+      "claimed_status": "proposed",
+      "plan_id": "plan:0040-specializes-param-transforms-pilot-plan",
+      "project": "natural-systems",
+      "rel_path": "entities/plans/0040-specializes-param-transforms-pilot-plan.md",
+      "root": null,
+      "source_sha256": "bb76943b9d0797a744dab69fffdac07171faf6e31419a9e3e95d1f3c11516596"
+    },
+    {
+      "claimed_status": "proposed",
+      "plan_id": "plan:0041-formula-route-entitypage-adapter",
+      "project": "natural-systems",
+      "rel_path": "entities/plans/0041-formula-route-entitypage-adapter.md",
+      "root": null,
+      "source_sha256": "3b49b59a9854563dc7817d014eb966018fd779548b481261c587687bd535bdf7"
+    },
+    {
+      "claimed_status": "complete",
+      "plan_id": "plan:0042-formula-skeleton-motif-pipeline-plan",
+      "project": "natural-systems",
+      "rel_path": "entities/plans/0042-formula-skeleton-motif-pipeline-plan.md",
+      "root": null,
+      "source_sha256": "9dc55a252dd8c75fb3e3ebc6d4695befb035e9db66cceca6dd9925b358e25008"
+    },
+    {
+      "claimed_status": "draft",
+      "plan_id": "plan:0043-model-route-entitypage-adapter",
+      "project": "natural-systems",
+      "rel_path": "entities/plans/0043-model-route-entitypage-adapter.md",
+      "root": null,
+      "source_sha256": "7ff278533b9f67017ec339d08e5c8e8ec71a51185327822f98fa3e2e6c99bbcd"
+    },
+    {
+      "claimed_status": "complete",
+      "plan_id": "plan:0044-q93-composite-paths-and-commuting-squares-plan",
+      "project": "natural-systems",
+      "rel_path": "entities/plans/0044-q93-composite-paths-and-commuting-squares-plan.md",
+      "root": null,
+      "source_sha256": "35beefff76d51c2d67c504ce917fb87b37f29b638d3a5d4ae93e1930f3665b7b"
+    },
+    {
+      "claimed_status": "proposed",
+      "plan_id": "plan:0045-q93-minimal-midpoint-object-formalization-plan",
+      "project": "natural-systems",
+      "rel_path": "entities/plans/0045-q93-minimal-midpoint-object-formalization-plan.md",
+      "root": null,
+      "source_sha256": "2a9feb66f658447782a1ec90cc17935c51d01931b784d084aca4c80a499be2a6"
+    },
+    {
+      "claimed_status": "proposed",
+      "plan_id": "plan:0046-q93-object-layer-comparison-plan",
+      "project": "natural-systems",
+      "rel_path": "entities/plans/0046-q93-object-layer-comparison-plan.md",
+      "root": null,
+      "source_sha256": "a6c94264fc4a2f007dcaa37691205c6166726615e5ed1f8ceca43e6a17e021ec"
+    },
+    {
+      "claimed_status": "proposed",
+      "plan_id": "plan:0047-q93-second-midpoint-object-pilot-plan",
+      "project": "natural-systems",
+      "rel_path": "entities/plans/0047-q93-second-midpoint-object-pilot-plan.md",
+      "root": null,
+      "source_sha256": "aead7932d9b54b8ffcf787dc9fbffae9707b64d75f2133eb252c91af3c802d7c"
+    },
+    {
+      "claimed_status": "proposed",
+      "plan_id": "plan:0048-q93-span-out-of-basis-audit-plan",
+      "project": "natural-systems",
+      "rel_path": "entities/plans/0048-q93-span-out-of-basis-audit-plan.md",
+      "root": null,
+      "source_sha256": "69c39b0b37ae375a2ed66eeb1cf571f73906d6ffe8c571cb57816b773d1811f8"
+    },
+    {
+      "claimed_status": "proposed",
+      "plan_id": "plan:0049-q93-typed-interface-midpoint-pilot-plan",
+      "project": "natural-systems",
+      "rel_path": "entities/plans/0049-q93-typed-interface-midpoint-pilot-plan.md",
+      "root": null,
+      "source_sha256": "e8c67bb56c33483ca22aafb75c56160a64a72ebe2f818104c17b5c49b8a6fb90"
+    },
+    {
+      "claimed_status": "completed",
+      "plan_id": "plan:0050-param-id-hyphen-migration",
+      "project": "natural-systems",
+      "rel_path": "entities/plans/0050-param-id-hyphen-migration.md",
+      "root": null,
+      "source_sha256": "6a18336a947be09dee64ab27fc2c14427183064f92644b7126f6efbae242ddad"
+    },
+    {
+      "claimed_status": "proposed",
+      "plan_id": "plan:0051-param-route-entitypage-adapter",
+      "project": "natural-systems",
+      "rel_path": "entities/plans/0051-param-route-entitypage-adapter.md",
+      "root": null,
+      "source_sha256": "8d8c3dad412b98ddafd50e9fd47c29b9ca1dc37092cb84292fc29d3ed79eadc6"
+    },
+    {
+      "claimed_status": "proposed",
+      "plan_id": "plan:0052-task6-catalog-wide-pair-generation-design",
+      "project": "natural-systems",
+      "rel_path": "entities/plans/0052-task6-catalog-wide-pair-generation-design.md",
+      "root": null,
+      "source_sha256": "0ed1b7e636abe53e48cbbdc2ae4c8da8c056e5a0a8f940e0d9cd29f08d93ca5a"
+    },
+    {
+      "claimed_status": "proposed",
+      "plan_id": "plan:0053-task6-interpretation-rulebook-design",
+      "project": "natural-systems",
+      "rel_path": "entities/plans/0053-task6-interpretation-rulebook-design.md",
+      "root": null,
+      "source_sha256": "359d37d49c9f506faf543646ffd757ae52025d43f065c9c26031246311602746"
+    },
+    {
+      "claimed_status": "proposed",
+      "plan_id": "plan:0054-task7-pair-table-provenance-ledger-design",
+      "project": "natural-systems",
+      "rel_path": "entities/plans/0054-task7-pair-table-provenance-ledger-design.md",
+      "root": null,
+      "source_sha256": "b486cfdb42d7aacf04bc2a335cc4c9e454d5c15562b0a093c83f8d9bb57d0430"
+    },
+    {
+      "claimed_status": "in-progress",
+      "plan_id": "plan:0055-h05-discriminating-test-handoff",
+      "project": "natural-systems",
+      "rel_path": "entities/plans/0055-h05-discriminating-test-handoff.md",
+      "root": null,
+      "source_sha256": "2bbc978ba78a9ffda717ce27490d2ac4bcea57289b92d12e538dc8841a996543"
+    },
+    {
+      "claimed_status": "agreed",
+      "plan_id": "plan:0056-h05-phase-e-methodology",
+      "project": "natural-systems",
+      "rel_path": "entities/plans/0056-h05-phase-e-methodology.md",
+      "root": null,
+      "source_sha256": "607563fb016fb150e1531155aa7376e5e17a860c02f88e6b3e2b35534829c2f0"
+    },
+    {
+      "claimed_status": "draft",
+      "plan_id": "plan:0057-h06-morphism-annotation-design",
+      "project": "natural-systems",
+      "rel_path": "entities/plans/0057-h06-morphism-annotation-design.md",
+      "root": null,
+      "source_sha256": "596ff2b6e2ea5d5c8b776689d463f7ebed8d78b6a801fc9de3316c78957e8f85"
+    },
+    {
+      "claimed_status": "draft",
+      "plan_id": "plan:0058-appendix-b-morphism-evidence-restoration-implementation-plan",
+      "project": "natural-systems",
+      "rel_path": "entities/plans/0058-appendix-b-morphism-evidence-restoration-implementation-plan.md",
+      "root": null,
+      "source_sha256": "54d8bd183ebef9cc02f510a426a8801f9a30be57c7a6419270019328ed6ceea7"
+    },
+    {
+      "claimed_status": "complete",
+      "plan_id": "plan:0059-building-blocks-reader-scaleout-implementation-plan",
+      "project": "natural-systems",
+      "rel_path": "entities/plans/0059-building-blocks-reader-scaleout-implementation-plan.md",
+      "root": null,
+      "source_sha256": "32aa5ae68458e62c39c4e899b931250cc717a56155d367fbbbd1c1874d0fc1c1"
+    },
+    {
+      "claimed_status": "complete",
+      "plan_id": "plan:0060-entity-aware-prose-implementation-plan",
+      "project": "natural-systems",
+      "rel_path": "entities/plans/0060-entity-aware-prose-implementation-plan.md",
+      "root": null,
+      "source_sha256": "3330dc32d112ff1c8cb222431003bc188300d96d1d94f17c0c2269da2c9d2de1"
+    },
+    {
+      "claimed_status": "active",
+      "plan_id": "plan:0061-guide-rich-reader-surface-design",
+      "project": "natural-systems",
+      "rel_path": "entities/plans/0061-guide-rich-reader-surface-design.md",
+      "root": null,
+      "source_sha256": "59111a72607110b69ea05cb0e8eb3a4db822109a350fbe479053a23805a248b7"
+    },
+    {
+      "claimed_status": "draft",
+      "plan_id": "plan:0062-guide-ui-visual-regression-deep-audit-plan",
+      "project": "natural-systems",
+      "rel_path": "entities/plans/0062-guide-ui-visual-regression-deep-audit-plan.md",
+      "root": null,
+      "source_sha256": "dc2fcabc9d45e2e2d3a471114693e4ef14761ef7a4f0fb5d0cff064ca97c98e2"
+    },
+    {
+      "claimed_status": "draft",
+      "plan_id": "plan:0063-pattern-formation-reader-alignment-design",
+      "project": "natural-systems",
+      "rel_path": "entities/plans/0063-pattern-formation-reader-alignment-design.md",
+      "root": null,
+      "source_sha256": "bc7f57ce70c0de109e3b4338bf504b1e1985d858d637fc72de5fb2c1032ae52f"
+    },
+    {
+      "claimed_status": "draft",
+      "plan_id": "plan:0064-pattern-formation-reader-alignment-implementation-plan",
+      "project": "natural-systems",
+      "rel_path": "entities/plans/0064-pattern-formation-reader-alignment-implementation-plan.md",
+      "root": null,
+      "source_sha256": "ff80e6d39042a0290f6030af7cd93fa4676437a3121d665432517b548bfe27ca"
+    },
+    {
+      "claimed_status": "draft",
+      "plan_id": "plan:0065-reader-research-alignment-roadmap",
+      "project": "natural-systems",
+      "rel_path": "entities/plans/0065-reader-research-alignment-roadmap.md",
+      "root": null,
+      "source_sha256": "d2970a0e57b6e1361b56411c7e4aa5ce4f1e2122b7b7f94d3644318e33551e18"
+    },
+    {
+      "claimed_status": "complete",
+      "plan_id": "plan:0066-reader-richness-scaleout-plan",
+      "project": "natural-systems",
+      "rel_path": "entities/plans/0066-reader-richness-scaleout-plan.md",
+      "root": null,
+      "source_sha256": "a4adcd076ee793093667eed2f48ba339a129981b42741bb47c74ca8b998fe4c2"
+    },
+    {
+      "claimed_status": "draft",
+      "plan_id": "plan:0067-h07-cohort-expansion-design",
+      "project": "natural-systems",
+      "rel_path": "entities/plans/0067-h07-cohort-expansion-design.md",
+      "root": null,
+      "source_sha256": "b1f682d9d7e5d526f915ac8e48d98795687b7bd294a844f73ca47b7166e10bad"
+    },
+    {
+      "claimed_status": "active",
+      "plan_id": "plan:0068-t251-hh-fit-workflow-plan",
+      "project": "natural-systems",
+      "rel_path": "entities/plans/0068-t251-hh-fit-workflow-plan.md",
+      "root": null,
+      "source_sha256": "256d39528bd9548718273d9c973aef5697b4f8de022af279ded4155915d683a9"
+    },
+    {
+      "claimed_status": "implemented",
+      "plan_id": "plan:0069-t251-hh-source-audit-plan",
+      "project": "natural-systems",
+      "rel_path": "entities/plans/0069-t251-hh-source-audit-plan.md",
+      "root": null,
+      "source_sha256": "16c7a371b147705320cb9bdd4adbcde7991335c48c229e21fcd6235187d0586f"
+    },
+    {
+      "claimed_status": "complete",
+      "plan_id": "plan:0070-t251-hh-voltage-clamp-data-pipeline-plan",
+      "project": "natural-systems",
+      "rel_path": "entities/plans/0070-t251-hh-voltage-clamp-data-pipeline-plan.md",
+      "root": null,
+      "source_sha256": "1e03bc1b20c59ca37529d7bcaeb7c7875ab32d7bb48cc0e89ac4f7dde5d1a387"
+    },
+    {
+      "claimed_status": "draft",
+      "plan_id": "plan:0071-t376-h07-fidelity-snakemake-pipeline-plan",
+      "project": "natural-systems",
+      "rel_path": "entities/plans/0071-t376-h07-fidelity-snakemake-pipeline-plan.md",
+      "root": null,
+      "source_sha256": "911b9062c74bf427d41b799d8e42aed743f12fc31404c9100d0f3f395a4bf50a"
+    },
+    {
+      "claimed_status": "ready-with-caveats",
+      "plan_id": "plan:0072-t378-h07-prior-structure-analysis-plan",
+      "project": "natural-systems",
+      "rel_path": "entities/plans/0072-t378-h07-prior-structure-analysis-plan.md",
+      "root": null,
+      "source_sha256": "f7d5f949f20f7fa12c853fa66b6a3037776b43680a4699ac03b9b1406e1455f9"
+    },
+    {
+      "claimed_status": "active",
+      "plan_id": "plan:0073-t378-h07-prior-structure-pipeline-plan",
+      "project": "natural-systems",
+      "rel_path": "entities/plans/0073-t378-h07-prior-structure-pipeline-plan.md",
+      "root": null,
+      "source_sha256": "aa0fe40a203106ccaf3a0b8273247b3cd65f511ebbb73ede84e0e160eed96e9c"
+    },
+    {
+      "claimed_status": "draft",
+      "plan_id": "plan:0074-t392-h07-freeze-matrix-design",
+      "project": "natural-systems",
+      "rel_path": "entities/plans/0074-t392-h07-freeze-matrix-design.md",
+      "root": null,
+      "source_sha256": "52412b937313df6d65751de237a1bc68be581e608ef5bd38802bb90f809e19c7"
+    },
+    {
+      "claimed_status": "draft",
+      "plan_id": "plan:0075-t392-h07-freeze-matrix-implementation-plan",
+      "project": "natural-systems",
+      "rel_path": "entities/plans/0075-t392-h07-freeze-matrix-implementation-plan.md",
+      "root": null,
+      "source_sha256": "e4eb93aec9ca5d0b3fed2cddf7fd994d371fa985b42879b8dcbc93ba7f5a4ea1"
+    },
+    {
+      "claimed_status": "draft",
+      "plan_id": "plan:0076-unified-entity-ui-design",
+      "project": "natural-systems",
+      "rel_path": "entities/plans/0076-unified-entity-ui-design.md",
+      "root": null,
+      "source_sha256": "d025d355b030444d7211ed16c8c7a9acdf1ff975f571494a1a254a972706aa95"
+    },
+    {
+      "claimed_status": "design",
+      "plan_id": "plan:0077-entity-taxonomy-design",
+      "project": "natural-systems",
+      "rel_path": "entities/plans/0077-entity-taxonomy-design.md",
+      "root": null,
+      "source_sha256": "22142ad4aa73b0c7314fc650d676fd54dbbde64431288978ab461026f7750fb6"
+    },
+    {
+      "claimed_status": "active",
+      "plan_id": "plan:0078-classifier-retirement-and-landing-pages-design",
+      "project": "natural-systems",
+      "rel_path": "entities/plans/0078-classifier-retirement-and-landing-pages-design.md",
+      "root": null,
+      "source_sha256": "775345dc844ada221eb5e162398a7fe667b6bf99c222ad8fc65bbb411d16258e"
+    },
+    {
+      "claimed_status": "draft",
+      "plan_id": "plan:0079-correspondence-entity-type-sketch",
+      "project": "natural-systems",
+      "rel_path": "entities/plans/0079-correspondence-entity-type-sketch.md",
+      "root": null,
+      "source_sha256": "a079fa2e60783ef3af6179b30ce070c77c3d032f58171d13121a26c8beb929e7"
+    },
+    {
+      "claimed_status": "draft",
+      "plan_id": "plan:0080-correspondence-namespace-migration",
+      "project": "natural-systems",
+      "rel_path": "entities/plans/0080-correspondence-namespace-migration.md",
+      "root": null,
+      "source_sha256": "f60fa39ef060f741e69d5f3af321687dbaac6385a009835f3307a88e1128a476"
+    },
+    {
+      "claimed_status": "draft",
+      "plan_id": "plan:0081-formula-phenomenon-resolution-correspondence-frame",
+      "project": "natural-systems",
+      "rel_path": "entities/plans/0081-formula-phenomenon-resolution-correspondence-frame.md",
+      "root": null,
+      "source_sha256": "f8810809781896041992d752b4b437c12378539b7e3504e08a2f36c09e907b3d"
+    },
+    {
+      "claimed_status": "draft",
+      "plan_id": "plan:0082-organization-axis-implementation",
+      "project": "natural-systems",
+      "rel_path": "entities/plans/0082-organization-axis-implementation.md",
+      "root": null,
+      "source_sha256": "ace7e19f963af471aab900e49fc3046de02ae6739fca99107245c82c749d9ecc"
+    },
+    {
+      "claimed_status": "draft",
+      "plan_id": "plan:0083-organization-axis-semantics-ui-cohesion-design",
+      "project": "natural-systems",
+      "rel_path": "entities/plans/0083-organization-axis-semantics-ui-cohesion-design.md",
+      "root": null,
+      "source_sha256": "47b3b3601fb0a6cbf47dd2502d8b26c5ab961bb7abd5730acf164d998bf4c843"
+    },
+    {
+      "claimed_status": "draft",
+      "plan_id": "plan:0084-equivalence-literature-reading-and-curation-plan",
+      "project": "natural-systems",
+      "rel_path": "entities/plans/0084-equivalence-literature-reading-and-curation-plan.md",
+      "root": null,
+      "source_sha256": "0d5686093c682d7f764f32e034df33f9c2367d2f3d25a30a485c2eb30b20e47c"
+    },
+    {
+      "claimed_status": "draft",
+      "plan_id": "plan:0085-equivalence-frontier-schema-stress-tests-plan",
+      "project": "natural-systems",
+      "rel_path": "entities/plans/0085-equivalence-frontier-schema-stress-tests-plan.md",
+      "root": null,
+      "source_sha256": "c00f2ab241962539e6df0b9eb7ddac748e2553b673fd616fb975508d9998d6cf"
+    },
+    {
+      "claimed_status": "draft",
+      "plan_id": "plan:0086-correspondence-coverage-lens-design",
+      "project": "natural-systems",
+      "rel_path": "entities/plans/0086-correspondence-coverage-lens-design.md",
+      "root": null,
+      "source_sha256": "f8f66eaabc322826eb0e3356c13b58840bbe6014911a1600f963169c90c26a75"
+    },
+    {
+      "claimed_status": "draft",
+      "plan_id": "plan:0087-t590-gate-critical-path",
+      "project": "natural-systems",
+      "rel_path": "entities/plans/0087-t590-gate-critical-path.md",
+      "root": null,
+      "source_sha256": "07b5a99a31883704b30d6e2ed25aaefcd168bf7034a6cb087bba87b3356fcaa5"
+    },
+    {
+      "claimed_status": "draft",
+      "plan_id": "plan:0088-t603-sibling-cluster-de-conflation-metric",
+      "project": "natural-systems",
+      "rel_path": "entities/plans/0088-t603-sibling-cluster-de-conflation-metric.md",
+      "root": null,
+      "source_sha256": "c64a535498d0d3c4436003ea101ac3923aefb19ef073d336320ba778193874ec"
+    },
+    {
+      "claimed_status": "draft",
+      "plan_id": "plan:0089-t604-cluster-gate-implementation",
+      "project": "natural-systems",
+      "rel_path": "entities/plans/0089-t604-cluster-gate-implementation.md",
+      "root": null,
+      "source_sha256": "b0cc30f5dc6c9a7f613bd31ae22f7c7184d693efcd1516933698134e9086e845"
+    },
+    {
+      "claimed_status": "ready-with-caveats",
+      "plan_id": "plan:0090-t607-p3-estimand-redesign-analysis-plan",
+      "project": "natural-systems",
+      "rel_path": "entities/plans/0090-t607-p3-estimand-redesign-analysis-plan.md",
+      "root": null,
+      "source_sha256": "196ec3c5eebffd139ddb30ad2c172529b0845735421e7dd6dfc96fdfea0a3507"
+    },
+    {
+      "claimed_status": "implemented",
+      "plan_id": "plan:0091-t608-matched-cluster-population-plan",
+      "project": "natural-systems",
+      "rel_path": "entities/plans/0091-t608-matched-cluster-population-plan.md",
+      "root": null,
+      "source_sha256": "cb1607f3dc69ead05ff4c77d32ee5e2f1f06c1e71e20243b91821be6f0766f5f"
+    },
+    {
+      "claimed_status": "draft",
+      "plan_id": "plan:0092-anti-unification-generator-nodes",
+      "project": "natural-systems",
+      "rel_path": "entities/plans/0092-anti-unification-generator-nodes.md",
+      "root": null,
+      "source_sha256": "b77352a03eddb8b05e5447af9c6f4e410127dd1de65e05255992a46926408604"
+    },
+    {
+      "claimed_status": "draft",
+      "plan_id": "plan:0093-correspondence-realignment-program",
+      "project": "natural-systems",
+      "rel_path": "entities/plans/0093-correspondence-realignment-program.md",
+      "root": null,
+      "source_sha256": "eab7b90c478c21dc264b99ec949abc977a2dc13b7decf3bffdfddae51155ab06"
+    },
+    {
+      "claimed_status": "draft",
+      "plan_id": "plan:0094-derivation-strata-curatorial-rehoming",
+      "project": "natural-systems",
+      "rel_path": "entities/plans/0094-derivation-strata-curatorial-rehoming.md",
+      "root": null,
+      "source_sha256": "5368d82e2b4d4d389d573b3491b2b0cb94e1007eda7efb87f0a78ee13a9f33a7"
+    },
+    {
+      "claimed_status": "draft",
+      "plan_id": "plan:0095-derivation-stratum-lens",
+      "project": "natural-systems",
+      "rel_path": "entities/plans/0095-derivation-stratum-lens.md",
+      "root": null,
+      "source_sha256": "3e42fbe54e76be36813c8e95bf4ac1e6086072617b7ee13c9e423a713a6780f6"
+    },
+    {
+      "claimed_status": "draft",
+      "plan_id": "plan:0096-formula-kind-arity-decision",
+      "project": "natural-systems",
+      "rel_path": "entities/plans/0096-formula-kind-arity-decision.md",
+      "root": null,
+      "source_sha256": "4688914ee452589c058ab38bb0b29c4222403ef918f0203ff96544bec3acb0aa"
+    },
+    {
+      "claimed_status": "draft",
+      "plan_id": "plan:0097-meta-model-v0-3-consolidation",
+      "project": "natural-systems",
+      "rel_path": "entities/plans/0097-meta-model-v0-3-consolidation.md",
+      "root": null,
+      "source_sha256": "cc4832a877f141ca1348f712538748fbc659d1dd13d33628e83e25ec0d8f0d60"
+    },
+    {
+      "claimed_status": "draft",
+      "plan_id": "plan:0098-q121-stratum-aware-successor-endpoint",
+      "project": "natural-systems",
+      "rel_path": "entities/plans/0098-q121-stratum-aware-successor-endpoint.md",
+      "root": null,
+      "source_sha256": "22318310da612a6683e345c9a27651d9b8e143a36dd3e907ee3b43529b659104"
+    },
+    {
+      "claimed_status": "draft",
+      "plan_id": "plan:0099-h08-empirical-grounding-data-workflows",
+      "project": "natural-systems",
+      "rel_path": "entities/plans/0099-h08-empirical-grounding-data-workflows.md",
+      "root": null,
+      "source_sha256": "7a1b880e170673a41d9848832aec699939e59c36e2ccc1886677637d20b9ee3d"
+    },
+    {
+      "claimed_status": "active",
+      "plan_id": "plan:0100-t644-h08-workflow-template-contract",
+      "project": "natural-systems",
+      "rel_path": "entities/plans/0100-t644-h08-workflow-template-contract.md",
+      "root": null,
+      "source_sha256": "55e85fe7013d8ea357b450578c4af37a3c391a2b43ea6f01c98a11e54c74c55c"
+    },
+    {
+      "claimed_status": "superseded",
+      "plan_id": "plan:0101-t254-discriminator-targeted-population-scope",
+      "project": "natural-systems",
+      "rel_path": "entities/plans/0101-t254-discriminator-targeted-population-scope.md",
+      "root": null,
+      "source_sha256": "6998394dd6990a804c13070166a2ef8715d65cd6a9e943dd001a434a3b4d8f7c"
+    },
+    {
+      "claimed_status": "active",
+      "plan_id": "plan:0102-t784-entropy-dissipation-jko-probe",
+      "project": "natural-systems",
+      "rel_path": "entities/plans/0102-t784-entropy-dissipation-jko-probe.md",
+      "root": null,
+      "source_sha256": "94afc10b401a685b7904d8b1e2bb0fcc0b8f64c520085240ec3fd5371fabdd0e"
+    },
+    {
+      "claimed_status": "active",
+      "plan_id": "plan:0103-t785-jko-wasserstein-variational-frontier-probe",
+      "project": "natural-systems",
+      "rel_path": "entities/plans/0103-t785-jko-wasserstein-variational-frontier-probe.md",
+      "root": null,
+      "source_sha256": "a7c1f50bba1b1f1a85e8cc5038e24e67121c54398576a0a84bc9ff99d66b461a"
+    },
+    {
+      "claimed_status": "active",
+      "plan_id": "plan:0104-t786-kantorovich-duality-fourth-register-probe",
+      "project": "natural-systems",
+      "rel_path": "entities/plans/0104-t786-kantorovich-duality-fourth-register-probe.md",
+      "root": null,
+      "source_sha256": "739e86a51480eaadf030455a635f8f109d7c8a546a1dff6afdfa7f3819f0a119"
+    },
+    {
+      "claimed_status": "active",
+      "plan_id": "plan:0105-t787-register-granularity-and-re-audit",
+      "project": "natural-systems",
+      "rel_path": "entities/plans/0105-t787-register-granularity-and-re-audit.md",
+      "root": null,
+      "source_sha256": "0a967db414650271e4aeea3966e7987195f6f996ab26c71e1e7425c4dadbc97b"
+    },
+    {
+      "claimed_status": "active",
+      "plan_id": "plan:0106-t788-register-precedence-termination-confluence",
+      "project": "natural-systems",
+      "rel_path": "entities/plans/0106-t788-register-precedence-termination-confluence.md",
+      "root": null,
+      "source_sha256": "ac8b3f12125be01b75872bbba0d5d1a2a62a7ebdc6c42d976716ae144d5fd376"
+    },
+    {
+      "claimed_status": "active",
+      "plan_id": "plan:0107-t789-analytic-frontier-strict-stratification",
+      "project": "natural-systems",
+      "rel_path": "entities/plans/0107-t789-analytic-frontier-strict-stratification.md",
+      "root": null,
+      "source_sha256": "0280509dd4ba913477aca27dd1d8cdafa4fa1d15cf1ac54ec00a5ca10cfff1a4"
+    },
+    {
+      "claimed_status": "complete",
+      "plan_id": "plan:0108-wp1-rule-r-prime-holdout-ramp",
+      "project": "natural-systems",
+      "rel_path": "entities/plans/0108-wp1-rule-r-prime-holdout-ramp.md",
+      "root": null,
+      "source_sha256": "6f3e4ba55ae109a8891afbe8ba2afa149e6f99523d992a8deb8e7b4b747b0f4b"
+    },
+    {
+      "claimed_status": "active",
+      "plan_id": "plan:2026-06-30-t780-transcendental-witness-probe",
+      "project": "natural-systems",
+      "rel_path": "entities/plans/2026-06-30-t780-transcendental-witness-probe.md",
+      "root": null,
+      "source_sha256": "de82a275ecb152980e7bfa3810bc7d7db2659815ce693cae30795783ec844b7c"
+    },
+    {
+      "claimed_status": "active",
+      "plan_id": "plan:0001-data-sources-overview-for-protein-landscape",
+      "project": "protein-landscape",
+      "rel_path": "entities/plans/0001-data-sources-overview-for-protein-landscape.md",
+      "root": null,
+      "source_sha256": "13edf49359a5f9943f8c57c6df3fe2765bae82559ad77f0a74e63e86c8f93f87"
+    },
+    {
+      "claimed_status": "active",
+      "plan_id": "plan:0002-multi-modality-embedding-pipelines",
+      "project": "protein-landscape",
+      "rel_path": "entities/plans/0002-multi-modality-embedding-pipelines.md",
+      "root": null,
+      "source_sha256": "db13b41f18c3ee62bf9545392b95eb82057528ffe4cfec75fe3f56c7b31bad7f"
+    },
+    {
+      "claimed_status": "active",
+      "plan_id": "plan:0003-shared-data-model-convergence",
+      "project": "protein-landscape",
+      "rel_path": "entities/plans/0003-shared-data-model-convergence.md",
+      "root": null,
+      "source_sha256": "a78ad25c8a494bcf21bbf6725c456196107e657b6745ec3a7544fd897f579a03"
+    },
+    {
+      "claimed_status": "active",
+      "plan_id": "plan:0004-cross-project-convergence-plan",
+      "project": "protein-landscape",
+      "rel_path": "entities/plans/0004-cross-project-convergence-plan.md",
+      "root": null,
+      "source_sha256": "367849b65c87c69917da6e6f345ccbbd8cb6c246dd02cbcc7df85c37c2e9e21c"
+    },
+    {
+      "claimed_status": "active",
+      "plan_id": "plan:0005-expanded-lens-pipeline-plan-v2",
+      "project": "protein-landscape",
+      "rel_path": "entities/plans/0005-expanded-lens-pipeline-plan-v2.md",
+      "root": null,
+      "source_sha256": "2fcd55c31da03bf571e21581f4d08c6f3c7ac5dee65d2ac9e97830ba396636af"
+    },
+    {
+      "claimed_status": "active",
+      "plan_id": "plan:0006-expanded-lens-pipeline-plan",
+      "project": "protein-landscape",
+      "rel_path": "entities/plans/0006-expanded-lens-pipeline-plan.md",
+      "root": null,
+      "source_sha256": "784d058b904b3a729c15489ea2c7384e296c0ab21ba8696f95e7a5b360ae166c"
+    },
+    {
+      "claimed_status": "draft",
+      "plan_id": "plan:0007-t099-string-metabolic-full-plan",
+      "project": "protein-landscape",
+      "rel_path": "entities/plans/0007-t099-string-metabolic-full-plan.md",
+      "root": null,
+      "source_sha256": "8828630d127bc65a5b0f4a0016548b57f8d06d311e66534cd6de2e554032d5c9"
+    },
+    {
+      "claimed_status": "draft",
+      "plan_id": "plan:0008-t109-t110-t111-plan",
+      "project": "protein-landscape",
+      "rel_path": "entities/plans/0008-t109-t110-t111-plan.md",
+      "root": null,
+      "source_sha256": "9d40266f00b23e45fa56fa9ef6bb7688b99bcf59a96e7118f1a654095b0ddfad"
+    },
+    {
+      "claimed_status": "approved",
+      "plan_id": "plan:0009-archetype-compact-overlay-design",
+      "project": "protein-landscape",
+      "rel_path": "entities/plans/0009-archetype-compact-overlay-design.md",
+      "root": null,
+      "source_sha256": "ede4ac8cfad02106ec7c2e084d8c4b651643130d6e2124a72792eaa2e8253fc8"
+    },
+    {
+      "claimed_status": "approved",
+      "plan_id": "plan:0010-compact-card-variant-design",
+      "project": "protein-landscape",
+      "rel_path": "entities/plans/0010-compact-card-variant-design.md",
+      "root": null,
+      "source_sha256": "319f388881d03705ff3ee2fce6a929ab811d037f1e457877f3484a58c3d97cde"
+    },
+    {
+      "claimed_status": "approved",
+      "plan_id": "plan:0011-structure-preview-card-design",
+      "project": "protein-landscape",
+      "rel_path": "entities/plans/0011-structure-preview-card-design.md",
+      "root": null,
+      "source_sha256": "d8235153dc51e3dfa11317ca05b0b00e2918871fe1ff6a344462c84c25a043dc"
+    },
+    {
+      "claimed_status": "draft",
+      "plan_id": "plan:0012-t063-cluster-card-design-spec",
+      "project": "protein-landscape",
+      "rel_path": "entities/plans/0012-t063-cluster-card-design-spec.md",
+      "root": null,
+      "source_sha256": "cb53e7e9bcdcfd300897c71c1ee96c97aa1f809712f802785c5cc76ee5c5b11f"
+    },
+    {
+      "claimed_status": "draft",
+      "plan_id": "plan:0013-t100-q22-closure-plan",
+      "project": "protein-landscape",
+      "rel_path": "entities/plans/0013-t100-q22-closure-plan.md",
+      "root": null,
+      "source_sha256": "e540573d8f52d57e5df6d491a043f1dbdd96137342e24e1039f3e846dc41ed18"
+    },
+    {
+      "claimed_status": "proposed",
+      "plan_id": "plan:0014-t121-q10-higher-k-check-design",
+      "project": "protein-landscape",
+      "rel_path": "entities/plans/0014-t121-q10-higher-k-check-design.md",
+      "root": null,
+      "source_sha256": "5f19b95383d262c80a60fc625bfecd92b2974a7d383cd0b2f8e6db668901df5c"
+    },
+    {
+      "claimed_status": "active",
+      "plan_id": "plan:0015-viewer-home-bootstrap-baseline-trace",
+      "project": "protein-landscape",
+      "rel_path": "entities/plans/0015-viewer-home-bootstrap-baseline-trace.md",
+      "root": null,
+      "source_sha256": "debc50f58976d0b1e19455ce5ec27390fca7e4abb22734d959c5fe3cf817076b"
+    },
+    {
+      "claimed_status": "active",
+      "plan_id": "plan:0016-viewer-home-bootstrap-refactor-design",
+      "project": "protein-landscape",
+      "rel_path": "entities/plans/0016-viewer-home-bootstrap-refactor-design.md",
+      "root": null,
+      "source_sha256": "a53c12f7ebe16de29e879e748e4172d1382cfa2de8c25796e6846ae35f7f5a31"
+    },
+    {
+      "claimed_status": "active",
+      "plan_id": "plan:0017-viewer-home-bootstrap-refactor-implementation-plan",
+      "project": "protein-landscape",
+      "rel_path": "entities/plans/0017-viewer-home-bootstrap-refactor-implementation-plan.md",
+      "root": null,
+      "source_sha256": "2c7a9d6b306f35872df3398141f755a5127ee0c22345aff06893af4a9b21409b"
+    },
+    {
+      "claimed_status": "active",
+      "plan_id": "plan:0018-t144-t145-heldout-taxa-benchmark-implementation-plan",
+      "project": "protein-landscape",
+      "rel_path": "entities/plans/0018-t144-t145-heldout-taxa-benchmark-implementation-plan.md",
+      "root": null,
+      "source_sha256": "0c6f655a73513ac1b684ac999937e4431d9bc7a8eec51d92b5159a629866c735"
+    },
+    {
+      "claimed_status": "active",
+      "plan_id": "plan:0019-t146-archetype-polytope-bootstrap-stability-plan",
+      "project": "protein-landscape",
+      "rel_path": "entities/plans/0019-t146-archetype-polytope-bootstrap-stability-plan.md",
+      "root": null,
+      "source_sha256": "95966566c3e0cb1d35cff990d165588a9acda05dec86cec059e9f0ec647afb51"
+    },
+    {
+      "claimed_status": "ready-with-caveats",
+      "plan_id": "plan:0002-cross-trigger-pathway-overlap-analysis-plan",
+      "project": "post-acute-infection",
+      "rel_path": "entities/plans/0002-cross-trigger-pathway-overlap-analysis-plan.md",
+      "root": null,
+      "source_sha256": "de8a6b73c15c884ea642cf1336350dd6b1713dc22ab370947560dfb5a4225bbe"
+    },
+    {
+      "claimed_status": "active",
+      "plan_id": "plan:0003-cross-trigger-pathway-overlap-pipeline",
+      "project": "post-acute-infection",
+      "rel_path": "entities/plans/0003-cross-trigger-pathway-overlap-pipeline.md",
+      "root": null,
+      "source_sha256": "fe6a0095e982e637e98645278b17c3b11d8aa36ff55d90421e85e71ac9f10ef8"
+    },
+    {
+      "claimed_status": "active",
+      "plan_id": "plan:0004-impacc-m1-mediator-compatible-corroboration",
+      "project": "post-acute-infection",
+      "rel_path": "entities/plans/0004-impacc-m1-mediator-compatible-corroboration.md",
+      "root": null,
+      "source_sha256": "65fdf664607a29500f8f2f8966b058af4c2987917baae74b995953dc65d0f9fa"
+    },
+    {
+      "claimed_status": "not-ready",
+      "plan_id": "plan:0005-autoimmune-diathesis-sex-modifier-pais-analysis-plan",
+      "project": "post-acute-infection",
+      "rel_path": "entities/plans/0005-autoimmune-diathesis-sex-modifier-pais-analysis-plan.md",
+      "root": null,
+      "source_sha256": "ee0290ff330cef370bc72fc54e9dc4d95d3766779c0e9ea80f6ad234b083551d"
+    },
+    {
+      "claimed_status": "archived",
+      "plan_id": "plan:0006-n3c-synthetic-prototype-autoimmune-sex-pais-pipeline",
+      "project": "post-acute-infection",
+      "rel_path": "entities/plans/0006-n3c-synthetic-prototype-autoimmune-sex-pais-pipeline.md",
+      "root": null,
+      "source_sha256": "fd83597e16b123962c5454f72a974ddec1f415644e28dd2906c22419f464e644"
+    },
+    {
+      "claimed_status": "active",
+      "plan_id": "plan:0007-wave1-mr-autoimmune-longcovid-pilot",
+      "project": "post-acute-infection",
+      "rel_path": "entities/plans/0007-wave1-mr-autoimmune-longcovid-pilot.md",
+      "root": null,
+      "source_sha256": "6970ade04f9a24bf8640ad983a1be0d042266981cf5f80249b983d1986005e7b"
+    },
+    {
+      "claimed_status": "active",
+      "plan_id": "plan:0008-wave1-mr-autoimmune-hormone-longcovid-design",
+      "project": "post-acute-infection",
+      "rel_path": "entities/plans/0008-wave1-mr-autoimmune-hormone-longcovid-design.md",
+      "root": null,
+      "source_sha256": "aa71fdb930ebb51af40973ef245a9f7b222d0fae420a46253cf3c8dc08fb735b"
+    },
+    {
+      "claimed_status": "active",
+      "plan_id": "plan:0009-wave1-mr-hormone-pilot",
+      "project": "post-acute-infection",
+      "rel_path": "entities/plans/0009-wave1-mr-hormone-pilot.md",
+      "root": null,
+      "source_sha256": "914e7b6a891fd2ab70eaa9056eb93f4e8bd5acee313eaf74c00304bffc034f92"
+    },
+    {
+      "claimed_status": "active",
+      "plan_id": "plan:0010-crosspais-pathway-response-rank-estimation",
+      "project": "post-acute-infection",
+      "rel_path": "entities/plans/0010-crosspais-pathway-response-rank-estimation.md",
+      "root": null,
+      "source_sha256": "e25296e7990950f74e42d61d1e77130961ff699234886920ef4cca9d64ff6f8d"
+    },
+    {
+      "claimed_status": "ready-with-caveats",
+      "plan_id": "plan:2026-06-19-menopause-pais-total-effect-analysis-plan",
+      "project": "post-acute-infection",
+      "rel_path": "entities/plans/2026-06-19-menopause-pais-total-effect-analysis-plan.md",
+      "root": null,
+      "source_sha256": "36b0d833104cd8abe19bb149575459de146cca03a06364fd49136f516ce86586"
+    }
+  ],
+  "frame_size": 264,
+  "ladder": [
+    40,
+    80,
+    264
+  ],
+  "pins": {
+    "multiple-myeloma": "6f4fbee4c9a66c07660098ad9d39c9b4688ac284",
+    "natural-systems": "759d9b6c6eb3af288750f504c6bf4d6f2014555d",
+    "post-acute-infection": "007cbdfc26d9eb858e5794fcff749aa40f95ad20",
+    "protein-landscape": "66051a270352c0f0df70cbbc592e78a36c868d9e"
+  },
+  "rubric_commit": "3efbe5b80cefff07190d35d94650dd7743f22e66",
+  "schema": 1,
+  "seed": 20260717,
+  "theta": 0.1
+}

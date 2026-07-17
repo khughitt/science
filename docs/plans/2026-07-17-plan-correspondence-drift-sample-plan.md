@@ -1370,7 +1370,10 @@ ROOTS = {
     "protein-landscape": Path.home() / "d/protein-landscape",
     "post-acute-infection": Path.home() / "d/health/processes/post-acute-infection",
 }
-OUT = Path("docs/plans/2026-07-17-drift-sample/prereg.json")
+# Anchor on the repo root, not the cwd: this script runs from science/, but the
+# pre-registration lives beside the design and plan docs at the repo-root docs/.
+_REPO_ROOT = Path(__file__).resolve().parents[2]
+OUT = _REPO_ROOT / "docs/plans/2026-07-17-drift-sample/prereg.json"
 
 
 def main() -> int:
@@ -1496,7 +1499,9 @@ ROOTS = {
     "protein-landscape": Path.home() / "d/protein-landscape",
     "post-acute-infection": Path.home() / "d/health/processes/post-acute-infection",
 }
-PREREG = Path("docs/plans/2026-07-17-drift-sample/prereg.json")
+# resolve.py sits beside prereg.json in the drift-sample dir, so anchor on this
+# file's own directory rather than the cwd (this is run from science/).
+PREREG = Path(__file__).resolve().parent / "prereg.json"
 
 
 def resolve(rec: dict) -> tuple[list[dict], list[str]]:
@@ -1586,7 +1591,7 @@ and the extracted lists, and **no `claimed_status`**.
 ```bash
 cd science && uv run --frozen python -c "
 import json, pathlib, re
-bundles = json.loads(pathlib.Path('docs/plans/2026-07-17-drift-sample/bundles.json').read_text())
+bundles = json.loads(pathlib.Path('../docs/plans/2026-07-17-drift-sample/bundles.json').read_text())
 bad = [b['plan_id'] for b in bundles
        if re.search(r'\b(status:|SHIPPED|DONE|MERGED|\[x\])', b['body'], re.I)]
 print('LEAKS:', bad or 'none')
