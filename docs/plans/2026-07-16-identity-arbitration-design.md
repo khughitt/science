@@ -346,9 +346,17 @@ Regression acceptance, from the motivating incident:
 
 - A commons paper cited by `references.bib` merges its overlay and validates its pin — the
   fb-005 defect, which is the shadow closing.
-- The `meta` metadata regression does not recur: `sci:doi` 23, `dcterms:date` 18. Not by an
+- The `meta` metadata regression does not recur: every pre-arc `sci:doi` / `dcterms:date` triple
+  survives with its value, and vacancies gain the metadata their owners never authored. Not by an
   absorb helper, but because **owner-unset is owner-absent** (§3.3) — a general rule, not five
   field names.
+
+  The acceptance is that RELATION, not a count. This section previously named `sci:doi` 23 and
+  `dcterms:date` 18; execution disproved both. Pre-arc is `(25, 30)` and the result is `(72, 95)`
+  with 112 additions and nothing lost — so the old figures, being *below* pre-arc, would have
+  accepted a state that LOST metadata, which is the opposite of what this bullet asserts. A count
+  also cannot distinguish "added metadata" from "swapped one set of triples for another of the
+  same size". See the implementation plan's Task 8 Step 5 for the executable form.
 - Bib-only citations still materialize minimal nodes (§3.2).
 - **A commons dataset overlay carrying `status` merges instead of raising** (§3.3a) — the
   fb-006 dataset instance, closed by `mixin-dataset-2.0`.

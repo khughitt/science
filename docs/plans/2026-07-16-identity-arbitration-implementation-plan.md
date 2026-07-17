@@ -675,7 +675,12 @@ Run:
 
 ~~~bash
 cd ~/d/science/.worktrees/commons-overlay-bib-shadow
-rg -n "should_defer|deferred_dataset_datapackage|external_reference_ids" science/src science/tests
+rg -n "should_defer|deferred_dataset_datapackage" science/src science/tests
+# The side channel is a DERIVATION pattern, not a name: nothing in the loader or the closure may
+# consult a set of external-reference ids to decide identity. `external_reference_ids` survives in
+# graph/materialize.py, where it is derived FROM arbitration's declarations (external-reference
+# and not owner) purely to type owner-free nodes -- an output projection, never an input.
+rg -n "external_reference_ids" science/src/science_tool/graph/sources.py science/src/science_tool/graph/commons_sources.py
 ~~~
 
 Expected: no production matches. Test prose may mention former behavior only when explicitly describing the regression.
@@ -821,7 +826,10 @@ Run:
 
 ~~~bash
 cd ~/d/science/.worktrees/commons-overlay-bib-shadow
-rg -n "_EXTERNAL_REFERENCE_SUPPORTING_FIELDS|_absorb_external_reference_metadata|external_reference_ids|identity_table: dict\\[str, SourceRef\\]" science/src/science_tool/graph
+rg -n "_EXTERNAL_REFERENCE_SUPPORTING_FIELDS|_absorb_external_reference_metadata|identity_table: dict\\[str, SourceRef\\]" science/src/science_tool/graph
+# Scoped to the loader/closure: materialize.py legitimately projects external-reference ids OUT of
+# arbitration's declarations (see Task 5 Step 7).
+rg -n "external_reference_ids" science/src/science_tool/graph/sources.py science/src/science_tool/graph/commons_sources.py
 ~~~
 
 Expected: no matches.
@@ -1120,7 +1128,10 @@ Run:
 cd ~/d/science/.worktrees/commons-overlay-bib-shadow
 git diff --check
 git status --short
-rg -n "_EXTERNAL_REFERENCE_SUPPORTING_FIELDS|_absorb_external_reference_metadata|external_reference_ids|should_defer|deferred_dataset_datapackage" science/src
+rg -n "_EXTERNAL_REFERENCE_SUPPORTING_FIELDS|_absorb_external_reference_metadata|should_defer|deferred_dataset_datapackage" science/src
+# The loader and closure must never consult external-reference ids to decide identity. The name
+# still appears in graph/materialize.py as a post-arbitration projection, which is legitimate.
+rg -n "external_reference_ids" science/src/science_tool/graph/sources.py science/src/science_tool/graph/commons_sources.py
 ~~~
 
 Expected: diff check clean; status contains only intended A files; forbidden-remnant search has no matches.
