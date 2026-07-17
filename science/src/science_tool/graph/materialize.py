@@ -362,7 +362,7 @@ def _emit_phase(sources: ProjectSources, *, archive_active: dict | None = None) 
     owned_ids = {
         d.canonical_id for d in sources.identity_declarations if d.participation_mode == ParticipationMode.OWNER
     }
-    external_reference_ids = {
+    reference_only_ids = {
         d.canonical_id
         for d in sources.identity_declarations
         if d.participation_mode == ParticipationMode.EXTERNAL_REFERENCE and d.canonical_id not in owned_ids
@@ -374,7 +374,7 @@ def _emit_phase(sources: ProjectSources, *, archive_active: dict | None = None) 
             knowledge=knowledge,
             provenance=provenance,
             overlay_paths=sources.commons_overlay_paths,
-            external_reference_ids=external_reference_ids,
+            reference_only_ids=reference_only_ids,
         )
 
     for entity in sources.entities:
@@ -644,7 +644,7 @@ def _add_entity(
     knowledge,
     provenance,
     overlay_paths: dict[str, str] | None = None,
-    external_reference_ids: set[str] | None = None,
+    reference_only_ids: set[str] | None = None,
 ) -> None:
     uri = _entity_uri(entity.canonical_id)
     knowledge.add((uri, RDF.type, SCI_NS[_kind_class_name(entity.kind)]))
@@ -679,7 +679,7 @@ def _add_entity(
     # provenance/reference nodes, not project owners. Mark prov:Entity off the
     # DECLARED participation mode, never off kind or curie presence — a future
     # commons-OWNED protein with a curie must keep full owner treatment.
-    if external_reference_ids is not None and entity.canonical_id in external_reference_ids:
+    if reference_only_ids is not None and entity.canonical_id in reference_only_ids:
         knowledge.add((uri, RDF.type, PROV.Entity))
     if entity.kind in ("paper", "book"):
         # Thin bibliographic surface (year/doi/url), emitted only when present.
