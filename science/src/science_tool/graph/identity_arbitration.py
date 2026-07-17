@@ -479,7 +479,7 @@ def _arbitrate_ordered(
                 for field, value in merged.items()
                 if field not in authored or authored[field] != value
             }
-            entity = owner.candidate.model_copy(update=updates) if updates else owner.candidate
+            entity = _install(owner.candidate, updates)
 
         elif externals:
             entity, entity_fields = _materialize_external_only(
@@ -511,6 +511,28 @@ def _arbitrate_ordered(
         field_sources=field_sources,
         errors=tuple(sorted(errors, key=lambda error: error.sort_key)),
     )
+
+
+def _install(candidate: Entity, updates: dict[str, Any]) -> Entity:
+    """Install composed values THROUGH the model, never around it.
+
+    An overlay speaks a DIFFERENT vocabulary than the entity model: its frontmatter is validated
+    against the overlay schema, which types a date as a string. Composition is the boundary
+    between the two, so it is the only place a borrower's value can be brought into the model's
+    types. `model_copy(update=...)` assigns without validating, which let an overlay's
+    `updated: "2026-07-10"` enter as a `str` where every consumer had been promised a `date`;
+    the failure then surfaced in freshness comparing `str > date`, with nothing naming the
+    overlay that caused it.
+
+    Only the owner+borrower path needs this. External references contribute through validated
+    Entity candidates, so their values are already model-typed.
+
+    Re-validating only when something CHANGED keeps an untouched entity's own value objects
+    intact rather than round-tripping every entity through a dump.
+    """
+    if not updates:
+        return candidate
+    return type(candidate).model_validate({**candidate.model_dump(), **updates})
 
 
 def _refs_of(contributions: Sequence[SourceContribution]) -> tuple[SourceRef, ...]:
@@ -618,5 +640,9 @@ def _materialize_external_only(
         for field, value in resolved.items()
         if field not in authored or authored[field] != value
     }
+    # NOT _install: every proposal here came from an already-validated Entity, so there is no
+    # foreign vocabulary to coerce. The one non-model value this function introduces is the
+    # deliberate `None` vacancy above, and validating it would raise on a required field rather
+    # than record the disagreement -- see the vacancy note in the docstring.
     entity = first.candidate.model_copy(update=updates) if updates else first.candidate
     return entity, entity_fields

@@ -756,3 +756,44 @@ def test_cross_scope_peer_resolves_to_commons_when_we_do_not_own_it() -> None:
     )
     assert result.entities[0].title == "Canonical"
     assert result.errors == ()
+
+
+def test_composed_value_is_coerced_to_the_model_type() -> None:
+    """A contributed value must enter the graph as the entity model's type, not as YAML wrote it.
+
+    Overlay frontmatter is validated against the OVERLAY schema, which types a date as a
+    string. The entity model types it as a `date`. Composition is the boundary between those
+    two vocabularies, so it is the place the value must be coerced -- installing the raw string
+    hands every downstream consumer a `str` where it declared a `date`, and the failure lands
+    far away (freshness comparing `str > date`) with nothing pointing back at the overlay.
+    """
+    from datetime import date
+
+    result = arbitrate_contributions(
+        [
+            _owner("paper:x"),
+            _borrower("paper:x", updated="2026-07-10"),
+        ],
+        context=ArbitrationContext(
+            project_scope="proj",
+            field_policies={("proj", "paper:x"): {"updated": MergePolicy.PROJECT_ONLY}},
+        ),
+    )
+
+    assert result.errors == ()
+    assert result.entities[0].updated == date(2026, 7, 10)
+
+
+def test_composed_value_that_the_model_rejects_is_not_installed_silently() -> None:
+    """Coercion is validation, not casting: a value the model cannot accept must fail loudly."""
+    with pytest.raises(ValueError):
+        arbitrate_contributions(
+            [
+                _owner("paper:x"),
+                _borrower("paper:x", updated="not-a-date"),
+            ],
+            context=ArbitrationContext(
+                project_scope="proj",
+                field_policies={("proj", "paper:x"): {"updated": MergePolicy.PROJECT_ONLY}},
+            ),
+        )
