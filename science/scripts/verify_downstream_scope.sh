@@ -38,13 +38,22 @@ for proj in "$MM" "$NS"; do
   set -e
 
   if ! counts=$(
-    jq -er '
-      if (.results | type) != "array" then
+    jq --slurp -er '
+      if length != 1 then
+        error("validate must emit exactly one top-level JSON value")
+      else
+        .[0]
+      end
+      | if (.results | type) != "array" then
         error(".results must be an array")
       elif (.summary.errors | type) != "number" then
         error(".summary.errors must be numeric")
+      elif .summary.errors < 0 or .summary.errors != (.summary.errors | floor) then
+        error(".summary.errors must be a nonnegative integer")
       elif (.summary.warnings | type) != "number" then
         error(".summary.warnings must be numeric")
+      elif .summary.warnings < 0 or .summary.warnings != (.summary.warnings | floor) then
+        error(".summary.warnings must be a nonnegative integer")
       else
         [(.results | length), .summary.errors, .summary.warnings] | @tsv
       end
