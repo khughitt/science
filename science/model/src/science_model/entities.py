@@ -387,26 +387,6 @@ class Entity(BaseModel):
     _authored_aliases: frozenset[str] = PrivateAttr(default_factory=frozenset)
 
     @model_validator(mode="after")
-    def _validate_review_state_kind(self) -> "Entity":
-        # Closed list of clearly-non-epistemic core kinds. Avoids registry
-        # coupling at the science-model layer while still rejecting the
-        # high-confidence cases.
-        non_epistemic = {
-            "task",
-            "dataset",
-            "workflow-run",
-            "data-package",
-            "paper",
-            "prose-source",
-            "book",
-            "experiment",
-            "code-file",
-        }
-        if self.review_state is not None and self.kind in non_epistemic:
-            raise ValueError(f"review_state is not allowed on kind {self.kind!r} (non-epistemic by design)")
-        return self
-
-    @model_validator(mode="after")
     def _validate_lens_views(self) -> "Entity":
         if not self.lens_views:
             return self

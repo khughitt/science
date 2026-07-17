@@ -126,10 +126,13 @@ def _baseline_kwargs(kind: str) -> dict:
 
 
 @pytest.mark.parametrize("kind", NON_EPISTEMIC_KINDS)
-def test_review_state_rejected_on_non_epistemic_kinds(kind: str) -> None:
+def test_model_accepts_review_state_shape_on_any_kind(kind: str) -> None:
+    """Design test 5b: the model validates SHAPE only — scope is refused at the tool
+    boundary (curation_scope_for_kind), not here. A bare model_validate never was a
+    safe scope gate (it consulted a list that could not see a project's own kinds)."""
     rs = ReviewState(last_reviewed=None)
-    with pytest.raises(ValidationError, match="review_state"):
-        Entity(**_baseline_kwargs(kind), review_state=rs)
+    entity = Entity(**_baseline_kwargs(kind), review_state=rs)
+    assert entity.review_state is not None
 
 
 @pytest.mark.parametrize("kind", NON_EPISTEMIC_KINDS)
@@ -137,8 +140,14 @@ def test_no_review_state_still_valid_on_non_epistemic_kinds(kind: str) -> None:
     Entity(**_baseline_kwargs(kind))
 
 
+def test_model_still_rejects_malformed_review_state_shape() -> None:
+    """Shape errors still fail at the model — only the kind-SCOPE check moved out."""
+    with pytest.raises(ValidationError, match="review_horizon_days"):
+        Entity(**_baseline_kwargs("dataset"), review_state=ReviewState(review_horizon_days=0))
+
+
 def test_review_state_allowed_on_open_kinds() -> None:
-    # Kinds outside the closed list (incl. extension kinds) keep accepting review_state.
+    # All kinds, including extension kinds, accept a shape-valid review_state at the model.
     rs = ReviewState(last_reviewed=None)
     Entity(**_baseline_kwargs("hypothesis"), review_state=rs)
     Entity(**_baseline_kwargs("custom-extension-kind"), review_state=rs)
