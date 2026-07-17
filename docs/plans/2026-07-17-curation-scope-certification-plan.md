@@ -38,7 +38,9 @@
 **Modified — `science` (tool):**
 - `science/src/science_tool/graph/entity_registry.py` — store declared scope; add `curation_scope_for_kind`; thread the kwarg through `register_*` and `with_core_types`.
 - `science/src/science_tool/graph/sources.py` — thread `curation_scope` through profile/local registration; extract `_resolve_active_profiles`, `build_entity_registry`, `registry_for_project`.
+- `science/src/science_tool/entities.py` — `_load_markdown_entities` / `find_entity` discover local-extension kinds via `entity_policies(project_root)` (Task 6-A).
 - `science/src/science_tool/entity_review.py` — replace the `EntityClass` gate with the `curation_scope_for_kind` boundary.
+- `science/src/science_tool/entities_cli.py` — update the `entity review` help (no longer "epistemic entity" only).
 - `science/tests/test_entity_registry.py` — scope-resolution unit tests + exhaustive roster.
 - `science/tests/test_entity_review_cli.py` (and `test_entity_review*`) — boundary behaviour, theater guard.
 - `science/tests/test_curation_scope_guard.py` (**create**) — the single-decider import-closure guard.
@@ -696,19 +698,92 @@ git commit -m "refactor(sources): extract build_entity_registry/registry_for_pro
 
 ---
 
-### Task 6: Enforce scope at the `review_entity` boundary
+### Task 6: Discover local-extension entities, then enforce scope at the boundary
+
+**Two deliverables, two commits.** First, `find_entity` must be able to *find* a local-extension entity (`design:0001`) — today it cannot, so a `design` review would fail with "Entity not found" **before** the scope check runs. Then move scope enforcement to the boundary and fix the now-contradictory CLI help.
 
 **Files:**
+- Modify: `science/src/science_tool/entities.py` — `_load_markdown_entities` (~1849) and the `find_entity` not-found roots message (~724)
 - Modify: `science/src/science_tool/entity_review.py:39-84`
-- Test: `science/tests/test_entity_review_cli.py` (and any `test_entity_review*` module)
+- Modify: `science/src/science_tool/entities_cli.py:544-548` (review command help)
+- Test: `science/tests/test_entities.py` (discovery regression), `science/tests/test_entity_review_cli.py`
 
 **Interfaces:**
-- Consumes: `registry_for_project` (Task 5), `curation_scope_for_kind` (Task 4), `CurationScope`.
-- Produces: `review_entity(...)` refuses a kind whose resolved `curation_scope` is `none`; admits `epistemic` and `correspondence` kinds. Signature and return type unchanged.
+- Consumes: `entity_policies` (existing, `entities.py:180`), `registry_for_project` (Task 5), `curation_scope_for_kind` (Task 4), `CurationScope`.
+- Produces: `find_entity(project_root, ref)` discovers entities in project-local extension homes (e.g. `entities/design/`), not just the builtin core homes. `review_entity(...)` refuses a kind whose resolved `curation_scope` is `none`; admits `epistemic` and `correspondence` kinds. Signature and return type unchanged.
 
-- [ ] **Step 1: Write the failing boundary tests**
+#### Deliverable A — local-extension discovery
 
-Add to `science/tests/test_entity_review_cli.py` (reuse the module's existing project fixture that writes `science.yaml` + entities):
+- [ ] **Step 1: Write the failing discovery regression test**
+
+`find_entity` → `_load_markdown_entities(project_root)` iterates only `_BUILTIN_MARKDOWN_POLICIES` (`entities.py:1849`), so a project-local extension kind whose home is `entities/design/` is invisible. Add to `science/tests/test_entities.py` (reuse the module's project-writing helper; if none writes a local `design` manifest + entity, mirror the `tmp_project_with_design_kind` fixture from Task 5):
+
+```python
+from science_tool.entities import find_entity
+
+
+def test_find_entity_discovers_local_extension_kind(tmp_project_with_design_kind):
+    """A local-extension entity under entities/design/ must be findable (else its
+    review fails at lookup, before the scope check — plan Task 6 P1)."""
+    loc = find_entity(tmp_project_with_design_kind, "design:0001")
+    assert loc.kind == "design"
+    assert loc.rel_path == "entities/design/0001.md"  # match the fixture's layout
+```
+
+- [ ] **Step 2: Run to verify failure**
+
+Run: `cd science && uv run --frozen pytest tests/test_entities.py -k discovers_local_extension -v`
+Expected: FAIL — `EntityCommandError: Entity not found: design:0001`.
+
+- [ ] **Step 3: Make `_load_markdown_entities` policy-source project-aware**
+
+In `science/src/science_tool/entities.py`, in `_load_markdown_entities` (line ~1849), replace the builtin-only iteration with the project-aware policy table (builtins ∪ local kinds), which `entity_policies(project_root)` already assembles:
+
+```python
+def _load_markdown_entities(project_root: Path, kind: str | None = None) -> list[dict[str, Any]]:
+    entities: list[dict[str, Any]] = []
+    for policy_kind, policy in entity_policies(project_root).items():
+        if kind is not None and policy_kind != kind:
+            continue
+        root = project_root / policy.root
+        if not root.is_dir():
+            continue
+        for path in iter_entity_markdown(root):
+            frontmatter, _ = _parse_markdown_file(path)
+            entity_id = frontmatter.get("id")
+            entity_kind = frontmatter.get("kind")
+            if isinstance(entity_id, str) and isinstance(entity_kind, str):
+                entities.append({"id": entity_id, "kind": entity_kind, "path": path, "frontmatter": frontmatter})
+    return entities
+```
+
+And in `find_entity` (line ~724), make the not-found message list the same project-aware roots so the error is accurate:
+
+```python
+    roots = ", ".join(str(policy.root) for policy in entity_policies(project_root).values())
+    raise EntityCommandError(f"Entity not found: {ref}. Searched source roots: {roots}")
+```
+
+**Blast-radius note:** `_load_markdown_entities` also backs the public `load_markdown_entities`. Widening discovery to local kinds is the correct behaviour (a project's own entities should be findable), but run the entities suite in Step 4 to confirm no caller relied on the builtin-only scan.
+
+- [ ] **Step 4: Run tests to verify they pass**
+
+Run: `cd science && uv run --frozen pytest tests/test_entities.py -q && uv run --frozen pytest tests/ -q -k "entity or find_entity or markdown"`
+Expected: PASS.
+
+- [ ] **Step 5: Commit deliverable A**
+
+```bash
+cd science && uv run ruff check src/science_tool/entities.py
+git add src/science_tool/entities.py tests/test_entities.py
+git commit -m "fix(entities): find_entity discovers local-extension kinds via entity_policies"
+```
+
+#### Deliverable B — the scope boundary + CLI help
+
+- [ ] **Step 6: Write the failing boundary tests**
+
+Add to `science/tests/test_entity_review_cli.py` (reuse the module's existing project fixture that writes `science.yaml` + entities; `review_project_with_design` is the Task 5 `tmp_project_with_design_kind` shape plus a `design:0001` entity):
 
 ```python
 from science_tool.entity_review import ReviewError, review_entity
@@ -741,14 +816,14 @@ def test_review_admits_local_extension_kind(review_project_with_design):
     assert changed
 ```
 
-The `review_project` fixture needs a `plan:0001` entity and a `dataset:example` entity (both with valid frontmatter) plus a `science.yaml`. `review_project_with_design` adds a local `design` extension kind and a `design:0001` entity. Reuse the existing entity-writing helpers in the test module.
+The `review_project` fixture needs a `plan:0001` entity and a `dataset:example` entity (both with valid frontmatter) plus a `science.yaml`. Reuse the existing entity-writing helpers in the test module.
 
-- [ ] **Step 2: Run to verify failure**
+- [ ] **Step 7: Run to verify failure**
 
 Run: `cd science && uv run --frozen pytest tests/test_entity_review_cli.py -k "plan or dataset or theater or extension" -v`
 Expected: FAIL — `dataset` is currently refused with the OLD `EntityClass` message ("only meaningful on epistemic entities"), and `plan` is currently REFUSED (it is `OPERATIONAL`) — the opposite of the new behaviour.
 
-- [ ] **Step 3: Replace the `EntityClass` gate with the `curation_scope` boundary**
+- [ ] **Step 8: Replace the `EntityClass` gate with the `curation_scope` boundary**
 
 In `science/src/science_tool/entity_review.py`, replace the imports and the gate. Remove:
 ```python
@@ -776,22 +851,31 @@ and, inside `review_entity` where the old gate was:
 
 Update the docstring: replace "non-epistemic target" / "the epistemic-kind gate" wording with "a `none`-scoped kind" and note scope is decided by `curation_scope_for_kind`. The `require_artifact` check stays exactly as-is, still running after the scope gate so lookup and scope errors take precedence.
 
-- [ ] **Step 4: Run tests to verify they pass**
+- [ ] **Step 9: Fix the contradictory CLI help (design deliverable 5, plan P2)**
 
-Run: `cd science && uv run --frozen pytest tests/test_entity_review_cli.py -v`
-Expected: PASS. `plan` reviewable, `dataset` refused with the new message, theater guard intact, local `design` reviewable.
+In `science/src/science_tool/entities_cli.py`, the `entity_review` command docstring (line ~545) still says "Mark an **epistemic** entity as reviewed", which is now false — correspondence kinds are admitted. Update it:
 
-- [ ] **Step 5: Run pyright + the entity-review CLI e2e**
+```python
+def entity_review(ref: str, note: str | None) -> None:
+    """Mark an entity as reviewed-as-of today.
 
-Run: `cd science && uv run pyright src/science_tool/entity_review.py && uv run --frozen pytest tests/ -q -k "entity_review or needs_review"`
-Expected: PASS. (The removed `EntityKindNotRegisteredError` import must have no remaining use — pyright will flag a dangling import if one slipped through.)
+    Works on any kind whose curation_scope admits review — epistemic kinds and the
+    ratified correspondence kinds (plan, spec, method, ...). A review must record an
+    artifact via --note; a bare timestamp bump is rejected to prevent review-theater.
+    """
+```
 
-- [ ] **Step 6: Commit**
+- [ ] **Step 10: Run tests + pyright to verify they pass**
+
+Run: `cd science && uv run --frozen pytest tests/test_entity_review_cli.py -v && uv run pyright src/science_tool/entity_review.py && uv run --frozen pytest tests/ -q -k "entity_review or needs_review"`
+Expected: PASS. `plan` reviewable, `dataset` refused with the new message, theater guard intact, local `design` reviewable. (The removed `EntityKindNotRegisteredError` import must have no remaining use — pyright flags a dangling import.)
+
+- [ ] **Step 11: Commit deliverable B**
 
 ```bash
-cd science && uv run ruff check src/science_tool/entity_review.py
-git add src/science_tool/entity_review.py tests/test_entity_review_cli.py
-git commit -m "feat(review): decide scope via curation_scope_for_kind at the profile-aware boundary"
+cd science && uv run ruff check src/science_tool/entity_review.py src/science_tool/entities_cli.py
+git add src/science_tool/entity_review.py src/science_tool/entities_cli.py tests/test_entity_review_cli.py
+git commit -m "feat(review): decide scope via curation_scope_for_kind at the boundary; fix CLI help"
 ```
 
 ---
@@ -882,8 +966,17 @@ from pathlib import Path
 
 from science_model.entities import Entity
 
+# Both real source roots. The test lives at science/tests/, so science/ is parents[1];
+# the model package is science/model/, NOT repository-root model/.
 _TOOL_SRC = Path(__file__).resolve().parents[1] / "src" / "science_tool"
-_MODEL_SRC = Path(__file__).resolve().parents[2] / "model" / "src" / "science_model"
+_MODEL_SRC = Path(__file__).resolve().parents[1] / "model" / "src" / "science_model"
+assert _TOOL_SRC.is_dir() and _MODEL_SRC.is_dir(), (_TOOL_SRC, _MODEL_SRC)  # fail loud on a path typo
+
+# The single legitimate home of scope DECISION: the enum lives in identity.py; the
+# default is applied in entity_registry.py. Everything else may only CALL the decider
+# and compare its RESULT.
+_DECIDER = _TOOL_SRC / "graph" / "entity_registry.py"
+_ENUM_HOME = _MODEL_SRC / "identity.py"
 
 # The deleted closed list (design §4). Its reappearance anywhere is the two-taxonomy
 # split re-emerging.
@@ -895,40 +988,57 @@ def _py_files(root: Path):
     return [p for p in root.rglob("*.py") if "__pycache__" not in p.parts]
 
 
+def _all_src():
+    return _py_files(_TOOL_SRC) + _py_files(_MODEL_SRC)
+
+
 def test_validator_is_gone():
     assert not hasattr(Entity, "_validate_review_state_kind"), (
         "the model-layer scope validator must be deleted (design §6.1)"
     )
-    # And no residual model validator carries its name.
-    assert "_validate_review_state_kind" not in {
-        name for name in dir(Entity)
-    }
 
 
 def test_closed_list_literal_appears_nowhere():
-    """No module reconstructs the closed set as a review gate."""
+    """No module reconstructs the closed set as a review gate (both source roots)."""
     offenders = []
-    for path in _py_files(_TOOL_SRC) + _py_files(_MODEL_SRC):
+    for path in _all_src():
         text = path.read_text()
         # a set/frozenset literal containing the whole closed list
         if all(f'"{k}"' in text or f"'{k}'" in text for k in _CLOSED_LIST):
-            # allow the guard test's own copy and the drift_sample (unrelated corpus tooling)
-            if path.name == "test_curation_scope_guard.py":
-                continue
             offenders.append(str(path))
     assert offenders == [], f"closed-list knowledge resurfaced in: {offenders}"
 
 
-def test_curation_scope_for_kind_defined_once():
-    """Exactly one function DEFINES the scope resolution (default application)."""
-    definers = []
-    for path in _py_files(_TOOL_SRC):
+def test_only_one_module_applies_the_scope_default():
+    """The DEFAULT-application polarity (undeclared → correspondence/none) is what
+    'deciding scope' means. A second decider under ANY function name would have to
+    name a CurationScope default value to return it. The only production module
+    permitted to reference `CurationScope.CORRESPONDENCE` / `CurationScope.NONE` as a
+    RETURNED default is the decider; the enum's own definition lives in identity.py.
+    Consumers may compare against the decider's result but must not re-derive it.
+
+    This catches a renamed second decider that `def curation_scope_for_kind`-name
+    matching would miss, and does not enumerate an allow-list of trusted modules —
+    it names only the one legitimate home."""
+    offenders = []
+    for path in _all_src():
+        if path in (_DECIDER, _ENUM_HOME):
+            continue
         tree = ast.parse(path.read_text())
         for node in ast.walk(tree):
-            if isinstance(node, ast.FunctionDef) and node.name == "curation_scope_for_kind":
-                definers.append(str(path))
-    assert len(definers) == 1, f"expected one decider, found: {definers}"
-    assert definers[0].endswith("graph/entity_registry.py")
+            # a `return <...CurationScope.CORRESPONDENCE/NONE...>` is default application
+            if isinstance(node, ast.Return) and node.value is not None:
+                src = ast.dump(node.value)
+                if "CORRESPONDENCE" in src or ("attr='NONE'" in src and "CurationScope" in src):
+                    offenders.append(f"{path}:{node.lineno}")
+    assert offenders == [], f"a second scope decider applies the default in: {offenders}"
+
+
+def test_decider_exists_where_expected():
+    """The one decider is a method on EntityRegistry named curation_scope_for_kind."""
+    tree = ast.parse(_DECIDER.read_text())
+    names = {n.name for n in ast.walk(tree) if isinstance(n, ast.FunctionDef)}
+    assert "curation_scope_for_kind" in names
 
 
 def test_entity_review_does_not_branch_on_entity_class_for_scope():
@@ -941,7 +1051,7 @@ def test_entity_review_does_not_branch_on_entity_class_for_scope():
 - [ ] **Step 2: Run to verify it passes**
 
 Run: `cd science && uv run --frozen pytest tests/test_curation_scope_guard.py -v`
-Expected: PASS (Tasks 4–7 already satisfy every assertion). If `test_closed_list_literal_appears_nowhere` flags a legitimate unrelated file (e.g. a fixture snapshot), tighten the heuristic to require the literal inside a `set`/`frozenset` node via AST rather than substring — do NOT relax the closed-list set.
+Expected: PASS (Tasks 4–7 already satisfy every assertion). The `assert _TOOL_SRC.is_dir() and _MODEL_SRC.is_dir()` at import time fails loudly if either path is wrong. `test_entity_review.py` compares `scope is CurationScope.NONE` (a comparison, not a `return` of a default) so it is not flagged; if a legitimate consumer ever needs to `return CurationScope.NONE`, route it through the decider instead — do NOT add the module to an allow-list.
 
 - [ ] **Step 3: Commit**
 
@@ -963,20 +1073,42 @@ git commit -m "test(scope): import-closure guard — exactly one curation-scope 
 
 - [ ] **Step 1: Write the directional isolation test**
 
-Add to `science/tests/test_freshness_derivation.py` (reuse the module's graph-building helper):
+Add to `science/tests/test_freshness_derivation.py`, following the module's existing
+pattern exactly — `derive_freshness(ds, entities=..., today=..., source_changes={})` over
+an `EntityFreshnessInfo` dict, with the module helpers `_u`, `_ds_with_bears_on`,
+`_state_for` (there is no `build_graph`/`entity_uri`/`freshness_project` — those do not
+exist in this file):
 
 ```python
-def test_correspondence_entity_never_receives_freshness_state(freshness_project):
-    """Design test 6: a correspondence-scoped entity (plan) with review_state never
-    becomes a bears_on TARGET and never receives sci:freshnessState — freshness sinks
-    stay EPISTEMIC-only (freshness.py gates on EntityClass.EPISTEMIC, which `plan`
-    (OPERATIONAL) is not). curation_scope did not change this."""
-    dataset = build_graph(freshness_project)  # module's existing builder
-    knowledge = dataset.graph(PROJECT_NS["graph/knowledge"])
-    plan_uri = entity_uri("plan:0001")
-    states = list(knowledge.triples((plan_uri, SCI_NS.freshnessState, None)))
-    assert states == [], "a correspondence entity must not receive freshnessState"
+def test_correspondence_entity_never_receives_freshness_state():
+    """Design test 6: a correspondence-scoped OPERATIONAL kind (plan) with a set
+    last_reviewed never becomes a bears_on TARGET and never receives sci:freshnessState.
+    derive_freshness gates sinks on EntityClass.EPISTEMIC (freshness.py:337), which
+    `plan` (OPERATIONAL) is not — curation_scope did not change this."""
+    plan = _u("plan/0001")
+    src = _u("hypothesis/h1")
+    ds = _ds_with_bears_on([(src, plan)])  # even with an inbound bears_on edge
+    entities: dict[str, EntityFreshnessInfo] = {
+        str(plan): {
+            "kind_class": EntityClass.OPERATIONAL,
+            "last_reviewed": date(2026, 4, 1),
+            "created": date(2026, 4, 1),
+            "updated": date(2026, 4, 1),
+            "review_horizon_days": None,
+        },
+        str(src): {
+            "kind_class": EntityClass.EPISTEMIC,
+            "last_reviewed": date(2026, 4, 1),
+            "created": date(2026, 4, 1),
+            "updated": date(2026, 4, 1),
+            "review_horizon_days": None,
+        },
+    }
+    derive_freshness(ds, entities=entities, today=date(2026, 5, 3), source_changes={})
+    assert _state_for(ds, plan) is None  # OPERATIONAL → never a freshness sink
 ```
+
+(`EntityFreshnessInfo`, `derive_freshness`, `date`, and `EntityClass` are already imported at the top of the file; `_u`, `_ds_with_bears_on`, `_state_for` are module-level helpers.)
 
 - [ ] **Step 2: Confirm the pre-registration source suite still passes (the over-tightening guard)**
 
@@ -1008,54 +1140,65 @@ git commit -m "test(freshness): assert correspondence entities stay out of bears
 
 - [ ] **Step 1: Write the verification script**
 
+The comparison is *which toolkit revision* runs — `main` vs the branch — against the
+**same** downstream projects. The script points `validate --project-root` at each
+downstream project and runs the toolkit selected by `SCIENCE_PKG` (default: the package
+containing the script). That lets one script — living only on the branch — drive both
+the `main` toolkit (via a throwaway `main` worktree) and the branch toolkit, with no
+stashing and no `git checkout` of the working tree.
+
 Create `science/scripts/verify_downstream_scope.sh`:
 
 ```bash
 #!/usr/bin/env bash
-# Design acceptance test 10 / §6.2: `science validate` exit code and finding count
-# must be UNCHANGED by the curation_scope change on real downstream projects.
-# Run once on `main` to capture the baseline, once on the branch to compare.
+# Design acceptance test 10 / §6.2: `science validate` exit code + result count must be
+# UNCHANGED by the curation_scope change on real downstream projects. Run once with the
+# `main` toolkit (SCIENCE_PKG=<main-worktree>/science) and once with the branch toolkit.
 set -euo pipefail
 
-MM="$HOME/d/cancer/cancer-types/multiple-myeloma"
-NS="$HOME/d/natural-systems"
+# Toolkit package to run; defaults to the science/ dir that contains this script.
+SCIENCE_PKG="${SCIENCE_PKG:-$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)}"
+
+MM=~/d/cancer/cancer-types/multiple-myeloma
+NS=~/d/natural-systems
 OUT="${1:?usage: verify_downstream_scope.sh <baseline|branch>}"
 STAMP="/tmp/curation-scope-verify-$OUT.txt"
 : > "$STAMP"
 
 for proj in "$MM" "$NS"; do
   name="$(basename "$proj")"
-  # exit code (do not let set -e abort on a nonzero validate)
-  set +e
-  ( cd science && uv run --frozen science validate --format json --project-root "$proj" > "/tmp/$name-$OUT.json" 2>/dev/null )
+  json="/tmp/$name-$OUT.json"
+  set +e   # a nonzero validate exit is data, not a failure of this script
+  ( cd "$SCIENCE_PKG" && uv run --frozen science validate --format json --project-root "$proj" ) > "$json" 2>/dev/null
   code=$?
   set -e
-  # finding count from the JSON report (adjust the jq path to the validate schema)
-  count=$(jq '[.. | .findings? // empty] | add | length' "/tmp/$name-$OUT.json" 2>/dev/null || echo "PARSE_ERR")
-  echo "$name exit=$code findings=$count" | tee -a "$STAMP"
+  # validate --format json emits {"errors","warnings","infos","results":[...]} (validate/cli.py)
+  n=$(jq '.results | length' "$json" 2>/dev/null || echo PARSE_ERR)
+  e=$(jq '.errors'          "$json" 2>/dev/null || echo PARSE_ERR)
+  w=$(jq '.warnings'        "$json" 2>/dev/null || echo PARSE_ERR)
+  echo "$name exit=$code results=$n errors=$e warnings=$w" | tee -a "$STAMP"
 done
-echo "wrote $STAMP"
+echo "wrote $STAMP (toolkit: $SCIENCE_PKG)"
 ```
 
-Confirm the `science validate` invocation and the `--project-root`/`--format json` flags against the real CLI (`cd science && uv run science validate --help`) and fix the `jq` path to match the actual JSON shape before relying on the counts.
+Confirm the JSON keys against the real CLI once before trusting counts:
+`cd science && uv run science validate --format json --project-root ~/d/natural-systems | jq 'keys'`.
 
-- [ ] **Step 2: Capture the baseline on `main`**
+- [ ] **Step 2: Capture the baseline with the `main` toolkit (no stashing)**
 
 ```bash
-cd science && git stash --include-untracked   # park the branch work if needed, or run from a clean main worktree
-git checkout main
-chmod +x scripts/verify_downstream_scope.sh
-./scripts/verify_downstream_scope.sh baseline
-git checkout curation-scope-certification
-git stash pop || true
+cd science && chmod +x scripts/verify_downstream_scope.sh
+git worktree add /tmp/science-main main                       # clean main checkout of the TOOLKIT
+SCIENCE_PKG=/tmp/science-main/science ./scripts/verify_downstream_scope.sh baseline
 ```
 
-(Prefer a separate clean `main` worktree over stashing the Dropbox-synced tree — see the project's branch-volatility note. Do not stash the user's unrelated working-tree changes.)
+The branch's script runs the `main` toolkit against the real mm + ns checkouts. Nothing in the working tree is stashed or checked out. (If `uv run --frozen` in the worktree needs a sync, run `cd /tmp/science-main/science && uv sync --frozen` first.)
 
-- [ ] **Step 3: Run on the branch and diff**
+- [ ] **Step 3: Run with the branch toolkit and diff**
 
 ```bash
-cd science && ./scripts/verify_downstream_scope.sh branch
+cd science && ./scripts/verify_downstream_scope.sh branch      # default SCIENCE_PKG = this (branch) science/
+git worktree remove /tmp/science-main
 diff /tmp/curation-scope-verify-baseline.txt /tmp/curation-scope-verify-branch.txt && echo "UNCHANGED — test 10 passes"
 ```
 Expected: `UNCHANGED`. multiple-myeloma's local `design`/`review`/`critique`/`audit` extension kinds must resolve to `correspondence` (reviewable, as today), so `validate` output does not move. A DIFF here is a real regression — investigate before proceeding; do not adjust the baseline to match.
@@ -1067,7 +1210,7 @@ cd science && git add scripts/verify_downstream_scope.sh
 git commit -m "test(scope): downstream verify_downstream_scope.sh — validate parity on mm + ns"
 ```
 
-Record the captured `exit=/findings=` lines for mm and ns in the PR description / task notes as the test-10 evidence.
+Record the captured `exit=/results=/errors=/warnings=` lines for mm and ns in the PR description / task notes as the test-10 evidence.
 
 ---
 
@@ -1083,13 +1226,19 @@ Expected: all green.
 
 - [ ] **End-to-end smoke — the blocker this spec exists to clear:**
 
+`science entity review` has **no `--project-root`** — it operates on `Path.cwd()`. Run it
+with the downstream project as the working directory, selecting the branch toolkit with
+`uv run --project`:
+
 ```bash
-cd science && uv run science entity review plan:0001 --note "shipped in <commit>" --project-root ~/d/natural-systems
+cd ~/d/natural-systems && uv run --project ~/d/science/science science entity review plan:0001 --note "shipped in <commit>"
 ```
-Expected: `Reviewed plan:0001 -> ...` (was refused before this spec). Then confirm `dataset` is still refused, and `entity review <a plan> ` with no `--note` is refused by the theater guard.
+Expected: `Reviewed plan:0001 -> ...` (was refused before this spec — `plan` is `OPERATIONAL`). Then confirm from the same cwd that `entity review dataset:<id>` is refused with the `curation_scope 'none'` message, and that `entity review plan:0001` with no `--note` is refused by the theater guard.
 
 ## Self-review notes (for the executor)
 
-- **Every acceptance test maps to a task:** T1→(none, foundation); T2→ closed-list-none; T3→ default-none-core; T4→ positive plan review; T5→ negative dataset refusal; T5b→ model shape-only (Task 7); T6→ freshness directional (Task 9); T7→ theater guard (Task 6); T8→ exhaustive roster (Task 4 Step 1); T9→ extension-correspondence (Task 4/5/6); T10→ downstream (Task 10); test 1 single-decider (Task 8).
+- **Every design acceptance test maps to a task:** test 1 single-decider (Task 8); test 2 closed-list→none (Task 4); test 3 default-none-core (Task 4); test 4 positive plan review (Task 6-B); test 5 negative dataset refusal (Task 6-B); test 5b model shape-only (Task 7); test 6 freshness directional (Task 9); test 7 theater guard (Task 6-B); test 8 exhaustive roster (Task 4 Step 1); test 9 extension→correspondence (Task 4 unit + Task 6-B e2e); test 10 downstream (Task 10).
+- **Local-extension review has a discovery precondition (Task 6-A):** `find_entity` must scan `entity_policies(project_root)`, not just `_BUILTIN_MARKDOWN_POLICIES`, or a `design:0001` review dies at lookup before the scope check. This is why Task 6 has two commits.
+- **The CLI help must stop saying "epistemic entity"** (Task 6-B Step 9) — correspondence kinds are now admitted, and stale help is a user-facing contradiction.
 - **Do not** derive `curation_scope` from `EntityClass` anywhere. **Do not** re-point `_validate_review_state_kind` — delete it. **Do not** add an `EpistemicReviewState` alias.
 - If `registry_for_project` is too heavy for a command that runs outside a project (no `science.yaml`), that is acceptable — `entity review` is inherently project-scoped and already resolves entities under a project root.
