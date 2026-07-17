@@ -1,0 +1,1620 @@
+{
+ "plan:0002-v8-1-version-branch-analysis": [
+  {
+   "deliverables": [
+    "config/mm30.v8.1.yml",
+    "config/workflow.v8.1.yml",
+    "config/workflow-host.v8.1.yml",
+    "workflows/stages/cytogenetics.smk"
+   ],
+   "tasks": [],
+   "superseded": false,
+   "notes": "Kept the three new v8.1 config files (explicitly \"Added\"); added workflows/stages/cytogenetics.smk since \"What Was Changed\" states it is modified as a load-bearing part of the work; dropped candidate config/mm30.v8.yml as it is only referenced as an old file some scripts still hard-code, not a produced artifact."
+  },
+  {
+   "deliverables": [
+    "config/mm30.v8.1.yml",
+    "config/workflow.v8.1.yml",
+    "config/workflow-host.v8.1.yml",
+    "workflows/stages/cytogenetics.smk"
+   ],
+   "tasks": [],
+   "superseded": false,
+   "notes": "Kept the three new v8.1 config files and the cytogenetics.smk stage the plan says it created/modified; dropped candidate config/mm30.v8.yml since it appears only as an existing file some scripts still hard-code (incidental, not a deliverable). No task ids are referenced in the body."
+  }
+ ],
+ "plan:0006-expanded-lens-pipeline-plan": [
+  {
+   "deliverables": [
+    "workflow/scripts/build_string_network_embeddings.py",
+    "workflow/scripts/build_phylogenetic_profiles.py",
+    "workflow/scripts/build_metabolic_embeddings.py",
+    "results/multimodal/string-network-embeddings.h5",
+    "results/multimodal/full-lens-comparison.json",
+    "results/multimodal/lens-orthogonality-heatmap.png"
+   ],
+   "tasks": [
+    "t067",
+    "t071",
+    "t072",
+    "t065",
+    "t073",
+    "t074"
+   ],
+   "superseded": false,
+   "notes": "Added string-network-embeddings.h5 and lens-orthogonality-heatmap.png (both named as concrete produced paths in prose); excluded compare_manifolds.py/generate_report_card.py (pre-existing harnesses the plan reads) and multimodal.smk (rules added to it but no concrete repo-relative path given); other lens HDF5 outputs described but given no concrete path so omitted."
+  },
+  {
+   "deliverables": [
+    "workflow/scripts/build_string_network_embeddings.py",
+    "workflow/scripts/build_phylogenetic_profiles.py",
+    "workflow/scripts/build_metabolic_embeddings.py",
+    "results/multimodal/string-network-embeddings.h5",
+    "results/multimodal/full-lens-comparison.json",
+    "results/multimodal/lens-orthogonality-heatmap.png"
+   ],
+   "tasks": [
+    "t067",
+    "t071",
+    "t072",
+    "t065",
+    "t073",
+    "t074"
+   ],
+   "superseded": false,
+   "notes": "Added string-network-embeddings.h5 and lens-orthogonality-heatmap.png from prose; excluded compare_manifolds.py/generate_report_card.py (existing tools the plan runs, not produces), multimodal.smk (no repo-relative path), and the other \"Save as HDF5\" outputs that lack concrete paths."
+  }
+ ],
+ "plan:0007-t099-string-metabolic-full-plan": [
+  {
+   "deliverables": [
+    "results/multimodal/metabolic-full.h5",
+    "results/multimodal/string-network-full.h5",
+    "results/multimodal/cross-lens-6x6-full.json",
+    "workflow/scripts/download_string.py",
+    "data/raw/string/"
+   ],
+   "tasks": [
+    "t099",
+    "t099a",
+    "t099b",
+    "t099c"
+   ],
+   "superseded": false,
+   "notes": "Dropped the four existing scripts the plan runs/uses as-is (build_metabolic_embeddings.py, build_string_network_embeddings.py, compare_manifolds.py, generate_report_card.py) and download_data.py (only an alternative to extend); added the three result artifacts named in prose plus the new download_string.py and its data/raw/string/ target; download_string.py is an either/or with extending download_data.py, and results/multimodal/pilot files are prior inputs not deliverables."
+  },
+  {
+   "deliverables": [
+    "workflow/scripts/download_string.py",
+    "results/multimodal/metabolic-full.h5",
+    "results/multimodal/string-network-full.h5",
+    "results/multimodal/cross-lens-6x6-full.json",
+    "data/raw/string/"
+   ],
+   "tasks": [
+    "t099",
+    "t099a",
+    "t099b",
+    "t099c"
+   ],
+   "superseded": false,
+   "notes": "Dropped the two build_*_embeddings scripts and compare_manifolds.py/generate_report_card.py as pre-existing tools the plan uses (not creates), and download_data.py as an existing file it merely may extend; added the two .h5 outputs named in prose plus data/raw/string/ (the latter is borderline since it is download payload likely not committed); download_string.py is kept despite the \"or extend download_data.py\" alternative because it is the concrete new-file the plan names."
+  }
+ ],
+ "plan:0008-phenotype-contrast-fassoc-remaining-refactors": [
+  {
+   "deliverables": [
+    "config/cytogenetics_robust_core.yml"
+   ],
+   "tasks": [
+    "t442",
+    "t443",
+    "t444",
+    "t445",
+    "t446",
+    "t447",
+    "t448",
+    "t449",
+    "t450",
+    "t451",
+    "t452",
+    "t453",
+    "t454",
+    "t455",
+    "t456",
+    "t457",
+    "t458",
+    "t459",
+    "t460",
+    "t461",
+    "t462",
+    "t463",
+    "t464",
+    "t491",
+    "t492"
+   ],
+   "superseded": false,
+   "notes": "Most backtick candidates are pre-existing inputs the plan reads (contrast_registry.yaml, mm30.v8.yml, dataset_capabilities.yaml, validate/preflight scripts \"still report 0 errors\") or referenced parent-plan/discussion docs, not deliverables; only config/cytogenetics_robust_core.yml is a genuinely produced repo-relative file, while the promised top_hits_*.tsv / loo_stability outputs live under absolute /data/proj/mm30 paths (not repo-relative) and the manifest builder has no concrete path, so all are omitted."
+  },
+  {
+   "deliverables": [
+    "config/cytogenetics_robust_core.yml"
+   ],
+   "tasks": [
+    "t442",
+    "t443",
+    "t444",
+    "t445",
+    "t446",
+    "t447",
+    "t448",
+    "t449",
+    "t450",
+    "t451",
+    "t452",
+    "t453",
+    "t454",
+    "t455",
+    "t456",
+    "t457",
+    "t458",
+    "t459",
+    "t460",
+    "t461",
+    "t462",
+    "t463",
+    "t464",
+    "t491",
+    "t492"
+   ],
+   "superseded": false,
+   "notes": "Only config/cytogenetics_robust_core.yml is a concrete repo-relative artifact the plan produces; the config/*.yaml and scripts/qa/*.py candidates are pre-existing inputs/DoD checks the plan reads or must still pass, and the top_hits_*.tsv / loo_stability outputs are bare filenames or absolute /data/ paths outside the repo, so they're omitted; tasks expand the explicit \"Tracked tasks: t442-t453, t454-t464\" ranges plus t491/t492 named in Group C."
+  }
+ ],
+ "plan:0009-hd-ap1-sequencing-plan": [
+  {
+   "deliverables": [
+    "doc/pre-registrations/2026-05-XX-t469-hd-ap1-pc-maturity.md"
+   ],
+   "tasks": [
+    "t466",
+    "t467",
+    "t468",
+    "t471",
+    "t484",
+    "t488"
+   ],
+   "superseded": false,
+   "notes": "Only Phase 2a's pre-registration file is a concrete path this plan promises to author (its date-day is a placeholder XX); the interpretation write-ups use `<date>` placeholders with no concrete path, and edges.yaml/.dot/.png/inquiry artifacts are explicitly declared inputs (t471's outputs) the plan says it does NOT modify, so all are excluded."
+  },
+  {
+   "deliverables": [
+    "doc/pre-registrations/2026-05-XX-t469-hd-ap1-pc-maturity.md"
+   ],
+   "tasks": [
+    "t466",
+    "t467",
+    "t468",
+    "t471",
+    "t484",
+    "t488"
+   ],
+   "superseded": false,
+   "notes": "The only concrete probeable path the plan states it will create is the t484 pre-registration doc (Phase 2a \"Authors ...\"); the two interpretation writeups use `<date>` placeholders with no concrete path so I omitted them, and the edges.yaml/DAG artifacts are explicitly declared inputs (t471's), not outputs of this plan."
+  }
+ ],
+ "plan:0012-t469-pc-maturity-scope1-pipeline-plan": [
+  {
+   "deliverables": [
+    "scripts/causal/scrna/pc_maturity.py",
+    "scripts/analyses/t469_pc_maturity_scope1.py",
+    "scripts/causal/scrna/models_t469.py",
+    "tests/test_t469_signatures.py",
+    "tests/test_t469_signature_verification.py",
+    "tests/test_t469_per_cell_scoring.py",
+    "tests/test_t469_variant_a.py",
+    "tests/test_t469_scope1_summary.py"
+   ],
+   "tasks": [
+    "t469",
+    "t484"
+   ],
+   "superseded": false,
+   "notes": "Removed the pre-reg doc/pre-registrations/2026-05-03-t469-hd-ap1-pc-maturity.md candidate (it is the already-committed anchor the plan reads, not a deliverable); the plan's data outputs (signatures.json, per_cell_scores.parquet, variant_a_fits/, *_summary.tsv/json, signature_verification.md) live under an absolute /data/proj/... path outside the repo, so they are not repo-relative probeable paths and are omitted."
+  },
+  {
+   "deliverables": [
+    "scripts/causal/scrna/pc_maturity.py",
+    "scripts/analyses/t469_pc_maturity_scope1.py",
+    "scripts/causal/scrna/models_t469.py",
+    "tests/test_t469_signatures.py",
+    "tests/test_t469_signature_verification.py",
+    "tests/test_t469_per_cell_scoring.py",
+    "tests/test_t469_variant_a.py",
+    "tests/test_t469_scope1_summary.py"
+   ],
+   "tasks": [
+    "t469",
+    "t484"
+   ],
+   "superseded": false,
+   "notes": "Dropped the pre-reg .md candidate (it is a pre-existing anchor the plan reads/cites, committed 2026-05-03, not a deliverable); the data outputs (signatures.json, per_cell_scores.parquet, variant_a_fits/, variant_a_summary.tsv, scope1_summary.json, signature_verification.md) live under absolute /data/proj/mm30/... paths outside the repo, so they are omitted as non-repo-relative; kept only the NEW code modules and test files the plan creates."
+  }
+ ],
+ "plan:0015-viewer-home-bootstrap-baseline-trace": [
+  {
+   "deliverables": [],
+   "tasks": [],
+   "superseded": false,
+   "notes": "This is a baseline performance-trace/measurement document; it promises no concrete file or directory artifacts \u2014 the only \"path\" (`/`) is a URL route, not a filesystem deliverable \u2014 and lists no task ids."
+  },
+  {
+   "deliverables": [],
+   "tasks": [],
+   "superseded": false,
+   "notes": "The body is a baseline-trace/measurement record; it names only a route (`/`) and timing markers, promising no concrete files or directories to create, so deliverables and tasks are empty."
+  }
+ ],
+ "plan:0016-viewer-home-bootstrap-refactor-design": [
+  {
+   "deliverables": [
+    "viewer/src/bootstrap/bootstrap-types.ts",
+    "viewer/src/bootstrap/load-bootstrap-data.ts",
+    "viewer/src/bootstrap/bootstrap-resource.ts",
+    "viewer/src/scene-state/scene-store.ts",
+    "viewer/src/resources/define-async-resource.ts",
+    "viewer/src/resources/strings-resource.ts",
+    "viewer/src/resources/metadata-resource.ts",
+    "viewer/src/resources/projection-resource.ts",
+    "viewer/src/resources/archetype-tree-resource.ts",
+    "viewer/src/resources/archetype-explorer-resource.ts",
+    "viewer/src/resources/leaf-assignments-resource.ts",
+    "viewer/src/resources/tree-structures-resource.ts",
+    "viewer/src/routes/resources/protein-detail-resource.ts",
+    "viewer/src/routes/resources/domain-detail-resource.ts",
+    "viewer/src/routes/resources/pattern-index-resource.ts",
+    "viewer/src/routes/resources/home-hub-resource.ts",
+    "viewer/src/app/AppBootstrap.tsx",
+    "viewer/src/app/AppRouter.tsx",
+    "doc/plans/2026-04-24-viewer-home-bootstrap-baseline-trace.md"
+   ],
+   "tasks": [],
+   "superseded": false,
+   "notes": "Dropped the sole candidate viewer/src/App.tsx as an existing file being modified/decomposed (not created); added the \"Proposed Module Boundaries\" files and the dated baseline trace under doc/plans/, though the plan hedges that the module names \"can shift slightly during implementation.\""
+  },
+  {
+   "deliverables": [
+    "doc/plans/2026-04-24-viewer-home-bootstrap-baseline-trace.md",
+    "viewer/src/App.tsx",
+    "viewer/src/bootstrap/bootstrap-types.ts",
+    "viewer/src/bootstrap/load-bootstrap-data.ts",
+    "viewer/src/bootstrap/bootstrap-resource.ts",
+    "viewer/src/scene-state/scene-store.ts",
+    "viewer/src/resources/define-async-resource.ts",
+    "viewer/src/resources/strings-resource.ts",
+    "viewer/src/resources/metadata-resource.ts",
+    "viewer/src/resources/projection-resource.ts",
+    "viewer/src/resources/archetype-tree-resource.ts",
+    "viewer/src/resources/archetype-explorer-resource.ts",
+    "viewer/src/resources/leaf-assignments-resource.ts",
+    "viewer/src/resources/tree-structures-resource.ts",
+    "viewer/src/routes/resources/protein-detail-resource.ts",
+    "viewer/src/routes/resources/domain-detail-resource.ts",
+    "viewer/src/routes/resources/pattern-index-resource.ts",
+    "viewer/src/routes/resources/home-hub-resource.ts",
+    "viewer/src/app/AppBootstrap.tsx",
+    "viewer/src/app/AppRouter.tsx"
+   ],
+   "tasks": [],
+   "superseded": false,
+   "notes": "Added the dated baseline artifact (body says store it under doc/plans/ and links it as ./2026-04-24-...) and the full \"Proposed Module Boundaries\" file list, which the plan states it will create; kept App.tsx (heavily refactored/named target) though it pre-exists; excluded existing data files (positions/colors/hierarchy/strings/metadata/manifest.json/tree-structures.json etc.) that are read not produced, and omitted the \"coarse hierarchy artifact\" since no concrete path is given; note the plan says the module names \"can shift slightly during implementation.\""
+  }
+ ],
+ "plan:0017-t488-chng2007-within-hd-clusters-plan": [
+  {
+   "deliverables": [
+    "scripts/analyses/t488_chng2007_within_hd_clusters.py",
+    "doc/interpretations/2026-05-03-t488-chng2007-within-hd-clusters.md",
+    "doc/interpretations/2026-05-03-phase1-hd-ap1-closure.md",
+    "/data/proj/mm30/8.0/causal/t488/ap1_by_chng_cluster.tsv",
+    "/data/proj/mm30/8.0/causal/t488/ap1_by_chng_cluster_summary.json",
+    "/data/proj/mm30/8.0/causal/t488/c3_ap1_covariation_mmrf.json",
+    "/data/proj/mm30/8.0/causal/t488/ap1_chr19_decomposition_mmrf.tsv",
+    "/data/proj/mm30/8.0/causal/t488/ap1_chr19_decomposition_xp.tsv",
+    "/data/proj/mm30/8.0/causal/t488/ap1_chr19_decomposition_summary.json",
+    "/data/proj/mm30/8.0/causal/t488/gse6477_chng_reproduction.tsv"
+   ],
+   "tasks": [
+    "t488"
+   ],
+   "superseded": false,
+   "notes": "Included the \u00a74.3\u20134.6 \"Output:\" data files under /data/proj/mm30 (absolute, data-root paths outside the git repo) as genuine produced artifacts despite the \"repo-relative\" framing, since they are the plan's primary probeable deliverables; dropped t473 script/interp (read/cross-referenced), and the inquiry file and tasks/active.md (pre-existing files updated/renamed in place, not created)."
+  },
+  {
+   "deliverables": [
+    "scripts/analyses/t488_chng2007_within_hd_clusters.py",
+    "doc/interpretations/2026-05-03-t488-chng2007-within-hd-clusters.md",
+    "doc/interpretations/2026-05-03-phase1-hd-ap1-closure.md",
+    "doc/inquiries/h-jun-hyperdiploidy-ap1.md",
+    "tasks/active.md"
+   ],
+   "tasks": [
+    "t488"
+   ],
+   "superseded": false,
+   "notes": "Dropped t473_batf3_closure.py and the t473 closure interp as incidental (inherited-from / cross-referenced, not produced); the numerous /data/proj/mm30/8.0/causal/t488/ tsv/json outputs are genuine products but are absolute non-repo-relative data paths, so omitted per the repo-relative requirement; kept the inquiry doc since the plan renames and edits it, and scoped tasks to the plan's owner t488 (t468/t473/t469/t484 are cross-referenced phases, not this plan's tracking id)."
+  },
+  {
+   "deliverables": [
+    "scripts/analyses/t488_chng2007_within_hd_clusters.py",
+    "doc/interpretations/2026-05-03-t488-chng2007-within-hd-clusters.md",
+    "doc/interpretations/2026-05-03-phase1-hd-ap1-closure.md",
+    "data/proj/mm30/8.0/causal/t488/ap1_by_chng_cluster.tsv",
+    "data/proj/mm30/8.0/causal/t488/ap1_by_chng_cluster_summary.json",
+    "data/proj/mm30/8.0/causal/t488/c3_ap1_covariation_mmrf.json",
+    "data/proj/mm30/8.0/causal/t488/ap1_chr19_decomposition_mmrf.tsv",
+    "data/proj/mm30/8.0/causal/t488/ap1_chr19_decomposition_xp.tsv",
+    "data/proj/mm30/8.0/causal/t488/ap1_chr19_decomposition_summary.json",
+    "data/proj/mm30/8.0/causal/t488/gse6477_chng_reproduction.tsv"
+   ],
+   "tasks": [
+    "t488"
+   ],
+   "superseded": false
+  }
+ ],
+ "plan:0023-foundation-hygiene": [
+  {
+   "deliverables": [
+    "scripts/health/checkers/authority/cross-graph-index.ts",
+    "scripts/health/checkers/authority/__tests__/cross-graph-index.test.ts",
+    "scripts/health/checkers/authority/formula-records.ts",
+    "scripts/health/checkers/authority/__tests__/formula-records.test.ts",
+    "scripts/health/checkers/authority/visual-registry.ts",
+    "scripts/health/checkers/authority/__tests__/visual-registry.test.ts",
+    "scripts/health/checkers/authority/index.ts",
+    "scripts/health/checkers/authority/__tests__/authority.test.ts",
+    "src/natural/spec/dataModel/entities.ts",
+    "src/natural/spec/dataModel/__tests__/entities.test.ts",
+    "doc/interpretations/_triage.md",
+    "src/natural/schema/prose.ts",
+    "src/natural/schema/__tests__/prose.test.ts",
+    "scripts/migrate/classify-prose-stability.ts",
+    "scripts/migrate/__tests__/classify-prose-stability.test.ts",
+    "scripts/audit/coverage-prose.ts",
+    "scripts/audit/__tests__/coverage-prose.test.ts"
+   ],
+   "tasks": [],
+   "superseded": false,
+   "notes": "Kept both created and explicitly-modified files from the plan's File-structure section; dropped five candidates that the audits only read/reference or assert-absent (types.ts, knowledge/indexes/cross-graph.json, crossGraphIndex.ts, entityDemoRegistry.ts, interpretation.ts) plus guide-data.json (named as a pre-existing unrelated diff); the ~1144 content/prose/**/*.yml edits are a glob over pre-existing files so omitted; no t### task ids appear (only plan ids), and no supersession statement exists."
+  },
+  {
+   "deliverables": [
+    "scripts/health/checkers/authority/cross-graph-index.ts",
+    "scripts/health/checkers/authority/__tests__/cross-graph-index.test.ts",
+    "scripts/health/checkers/authority/formula-records.ts",
+    "scripts/health/checkers/authority/__tests__/formula-records.test.ts",
+    "scripts/health/checkers/authority/visual-registry.ts",
+    "scripts/health/checkers/authority/__tests__/visual-registry.test.ts",
+    "scripts/health/checkers/authority/index.ts",
+    "scripts/health/checkers/authority/__tests__/authority.test.ts",
+    "src/natural/spec/dataModel/entities.ts",
+    "src/natural/spec/dataModel/__tests__/entities.test.ts",
+    "doc/interpretations/_triage.md",
+    "src/natural/schema/prose.ts",
+    "src/natural/schema/__tests__/prose.test.ts",
+    "scripts/migrate/classify-prose-stability.ts",
+    "scripts/migrate/__tests__/classify-prose-stability.test.ts",
+    "scripts/audit/coverage-prose.ts",
+    "scripts/audit/__tests__/coverage-prose.test.ts"
+   ],
+   "tasks": [],
+   "superseded": false,
+   "notes": "Body concatenates two plans; I scoped deliverables to plan:0023-foundation-hygiene (Groups A/B/C) and excluded the trailing unrelated t677 mm30 plan's paths (qa/t677_adaptive_null/*, core/decisions.md, tasks/active.md), which the candidate hint also omits; dropped types.ts/cross-graph.json/crossGraphIndex.ts/entityDemoRegistry.ts/interpretation.ts/guide-data.json as files merely read, asserted-absent, out-of-scope, or pre-existing; foundation-hygiene tracks via plan docs, not t-ids, so tasks is empty."
+  }
+ ],
+ "plan:0025-hit-prioritization-phase3-6-plan": [
+  {
+   "deliverables": [
+    "bin/fetch-msigdb-json",
+    "data/supp/msigdb.v2026.1.Hs.sha256",
+    "data/supp/msigdb.v2026.1.Hs.json",
+    "data/supp/README.md",
+    "scripts/qa/feature_novelty/msigdb_loader.py",
+    "scripts/qa/feature_novelty/collection_classifier.py",
+    "scripts/qa/feature_novelty/generation.py",
+    "scripts/qa/feature_novelty/input_digest.py",
+    "scripts/qa/feature_novelty/cache.py",
+    "scripts/qa/feature_novelty/gene_backend.py",
+    "scripts/qa/feature_novelty/gene_set_backend.py",
+    "scripts/qa/feature_novelty/driver.py",
+    "scripts/qa/run_feature_novelty.py",
+    "config/feature_novelty.yml",
+    "tests/test_feature_novelty_msigdb_loader.py",
+    "tests/test_feature_novelty_collection_classifier.py",
+    "tests/test_feature_novelty_generation.py",
+    "tests/test_feature_novelty_input_digest.py",
+    "tests/test_feature_novelty_cache.py",
+    "tests/test_feature_novelty_driver.py",
+    "tests/test_feature_novelty_gene_set_backend.py"
+   ],
+   "tasks": [],
+   "superseded": false,
+   "notes": "Added bin/fetch-msigdb-json and data/supp/msigdb.v2026.1.Hs.sha256 (explicit Task-1 Creates the regex missed); dropped the two doc/ candidates as incidental (the design.md is the referenced Spec, the plan.md is this plan document itself); kept data/supp/msigdb.v2026.1.Hs.json since the plan fetches it to that concrete path despite gitignoring it; tasks empty because the only t### token (t532) names a prior cache run, not this plan's tracking id."
+  },
+  {
+   "deliverables": [
+    "bin/fetch-msigdb-json",
+    "data/supp/msigdb.v2026.1.Hs.sha256",
+    "scripts/qa/feature_novelty/msigdb_loader.py",
+    "scripts/qa/feature_novelty/collection_classifier.py",
+    "scripts/qa/feature_novelty/generation.py",
+    "scripts/qa/feature_novelty/input_digest.py",
+    "tests/test_feature_novelty_msigdb_loader.py",
+    "tests/test_feature_novelty_collection_classifier.py",
+    "tests/test_feature_novelty_generation.py",
+    "tests/test_feature_novelty_input_digest.py",
+    "config/feature_novelty.yml",
+    "data/supp/README.md",
+    "scripts/qa/feature_novelty/cache.py",
+    "scripts/qa/feature_novelty/gene_backend.py",
+    "scripts/qa/feature_novelty/gene_set_backend.py",
+    "scripts/qa/feature_novelty/driver.py",
+    "scripts/qa/run_feature_novelty.py",
+    "tests/test_feature_novelty_cache.py",
+    "tests/test_feature_novelty_driver.py",
+    "tests/test_feature_novelty_gene_set_backend.py",
+    "doc/plans/2026-05-07-hit-prioritization-phase3.6-plan.md"
+   ],
+   "tasks": [],
+   "superseded": false,
+   "notes": "Added bin/fetch-msigdb-json and data/supp/msigdb.v2026.1.Hs.sha256 from the File Structure/Task 1 prose (regex missed both); removed the design/spec doc (referenced input, not produced) and data/supp/msigdb.v2026.1.Hs.json (fetched but explicitly gitignored, so not a committed artifact); kept modify-targets as genuine deliverables and kept the plan's own doc path per the Execution Handoff line."
+  }
+ ],
+ "plan:0028-t630-walker2024-scrna-ingest-pipeline-plan": [
+  {
+   "deliverables": [
+    "scripts/external/walker_2024/__init__.py",
+    "scripts/external/walker_2024/constants.py",
+    "scripts/external/walker_2024/extract_seurat_rds.R",
+    "scripts/external/walker_2024/build_harmonized_anndata.py",
+    "scripts/external/walker_2024/build_data_package.py",
+    "scripts/causal/scrna/walker_loader.py",
+    "scripts/causal/tests/test_scrna_walker_loader.py",
+    "workflows/external/walker_2024.smk",
+    "data/external/walker_2024/2024-05/datapackage.json"
+   ],
+   "tasks": [
+    "t629",
+    "t630",
+    "t631",
+    "t172",
+    "t174",
+    "t202",
+    "t203"
+   ],
+   "superseded": false,
+   "notes": "Kept the explicit \"Created:\" code files plus the Task 5 datapackage.json (all repo-relative); dropped candidates docker/mm30-run.sh and config/workflow.yml (existing tools the plan invokes/reads, not created), scripts/causal/scrna/__init__.py (existing file mentioned only as a future helper home), and bare \"raw/walker2024.commands.json\" (an uncommitted data artifact whose regex-captured path is not correctly repo-relative); the many /data/proj/... and data/.../raw/... outputs are explicitly \"not committed\" and mostly absolute, so omitted; added workflows/external/walker_2024.smk which the regex missed."
+  },
+  {
+   "deliverables": [
+    "scripts/external/walker_2024/__init__.py",
+    "scripts/external/walker_2024/constants.py",
+    "scripts/external/walker_2024/extract_seurat_rds.R",
+    "scripts/external/walker_2024/build_harmonized_anndata.py",
+    "scripts/external/walker_2024/build_data_package.py",
+    "scripts/causal/scrna/walker_loader.py",
+    "scripts/causal/tests/test_scrna_walker_loader.py",
+    "workflows/external/walker_2024.smk",
+    "data/external/walker_2024/2024-05/datapackage.json"
+   ],
+   "tasks": [
+    "t630"
+   ],
+   "superseded": false,
+   "notes": "Primary tracking task is t630 (plan id 0028-t630-...); the related-context block also lists t629/t631 (sibling ingest tasks) and t172/t174/t202/t203 (downstream consumers referenced in prose, not tracking ids). Most `/data/proj/...` and `raw/*` outputs are non-committed data artifacts and were omitted; datapackage.json kept as an explicitly-emitted, plausibly-tracked manifest; \"Modified\" files (Snakefile, mm_singlecell_datasets.tsv) excluded since they are edits, not creations."
+  }
+ ],
+ "plan:0030-t648-walker-per-cell-h1-bridge-tiebreaker-pipeline-plan": [
+  {
+   "deliverables": [
+    "scripts/causal/scrna/t648_verdict.py",
+    "scripts/causal/scrna/t648_preflight.py",
+    "scripts/causal/scrna/t648_replicate_pilot.py",
+    "scripts/causal/scrna/t648_patient_slope_calibration.py",
+    "scripts/causal/scrna/t648_aggregate_diagnostics.py",
+    "scripts/causal/scrna/t648_manifest.py",
+    "scripts/causal/scrna/t648_emit_datapackage.py",
+    "scripts/causal/edges/scrna_walker_q3_primary.py",
+    "scripts/causal/edges/scrna_walker_h1_intra_axis.py",
+    "scripts/causal/edges/scrna_walker_q2_nucleolar_stress.py",
+    "scripts/causal/edges/scrna_walker_q3_sensitivity.py",
+    "scripts/causal/edges/scrna_walker_q1_q5_exploratory.py",
+    "data/derived/t648/datapackage.json",
+    "tests/causal/test_t648_edge_driver_smoke.py",
+    "tests/causal/test_t648_pilot_subset.py",
+    "tests/causal/test_run_edge_multi_adjuster.py",
+    "tests/causal/test_edge_fit_result_ess.py",
+    "tests/causal/test_models_summary_harmonization.py",
+    "tests/causal/test_walker_loader_cohort_pooled.py",
+    "tests/causal/test_models_random_slope_nb.py",
+    "tests/causal/test_t648_q3_primary_smoke.py",
+    "tests/causal/test_t648_patient_slope_calibration.py",
+    "tests/causal/test_t648_h1_intra_axis.py",
+    "tests/causal/test_t648_q2_sens_no_rpl.py",
+    "tests/causal/test_t648_q3_within_phase.py",
+    "tests/causal/test_t648_q5_stratified.py",
+    "tests/causal/test_t648_ppc_aggregator.py",
+    "tests/causal/test_t648_verdict_rubric.py",
+    "tests/causal/test_t648_manifest_schema.py"
+   ],
+   "tasks": [
+    "t648"
+   ],
+   "superseded": false,
+   "notes": "Removed two regex candidates as incidental: docker/mm30-run.sh (an existing container run-script referenced, not created) and doc/inquiries/...-pipeline-review.md (a sibling review doc whose findings feed this plan, not an output of it); ADDED nine scripts named verbatim as the commands each Snakemake rule runs (preflight, replicate_pilot, patient_slope_calibration, aggregate_diagnostics, manifest, emit_datapackage under scripts/causal/scrna/, plus q2_nucleolar_stress, q3_sensitivity, q1_q5_exploratory edge drivers), which match the prose promise of plural edge drivers + a calibration module; excluded the /data/proj/mm30/8.0/... JSON outputs (absolute, outside the repo, not repo-relative) and workflows/hypotheses/h1_epigenetic_commitment.smk (a pre-existing file the plan appends rules to, not a created artifact); NOTE the JSON body was authoritative \u2014 a scratch copy I wrote got clobbered by a concurrent process, so I read everything directly from the JSON."
+  },
+  {
+   "deliverables": [
+    "scripts/causal/scrna/t648_preflight.py",
+    "scripts/causal/edges/scrna_walker_q3_primary.py",
+    "scripts/causal/scrna/t648_replicate_pilot.py",
+    "scripts/causal/scrna/t648_patient_slope_calibration.py",
+    "scripts/causal/edges/scrna_walker_h1_intra_axis.py",
+    "scripts/causal/edges/scrna_walker_q2_nucleolar_stress.py",
+    "scripts/causal/edges/scrna_walker_q3_sensitivity.py",
+    "scripts/causal/edges/scrna_walker_q1_q5_exploratory.py",
+    "scripts/causal/scrna/t648_aggregate_diagnostics.py",
+    "scripts/causal/scrna/t648_verdict.py",
+    "scripts/causal/scrna/t648_manifest.py",
+    "scripts/causal/scrna/t648_emit_datapackage.py",
+    "data/derived/t648/datapackage.json",
+    "tests/causal/test_t648_edge_driver_smoke.py",
+    "tests/causal/test_t648_pilot_subset.py",
+    "tests/causal/test_run_edge_multi_adjuster.py",
+    "tests/causal/test_edge_fit_result_ess.py",
+    "tests/causal/test_models_summary_harmonization.py",
+    "tests/causal/test_walker_loader_cohort_pooled.py",
+    "tests/causal/test_models_random_slope_nb.py",
+    "tests/causal/test_t648_q3_primary_smoke.py",
+    "tests/causal/test_t648_patient_slope_calibration.py",
+    "tests/causal/test_t648_h1_intra_axis.py",
+    "tests/causal/test_t648_q2_sens_no_rpl.py",
+    "tests/causal/test_t648_q3_within_phase.py",
+    "tests/causal/test_t648_q5_stratified.py",
+    "tests/causal/test_t648_ppc_aggregator.py",
+    "tests/causal/test_t648_verdict_rubric.py",
+    "tests/causal/test_t648_manifest_schema.py"
+   ],
+   "tasks": [
+    "t648"
+   ],
+   "superseded": false,
+   "notes": "Added new script paths named only inside the Snakemake shell invocations (missed by the backtick regex); excluded the /data/proj/mm30/... JSON outputs as absolute (non-repo-relative) data artifacts, and dropped docker/mm30-run.sh and doc/inquiries/...-review.md as pre-existing references rather than things this plan produces; tracked under t648 only (t649/t642/t630 are gate/optional/cache references, not the tracking task)."
+  }
+ ],
+ "plan:0033-content-coverage-push-and-flat-field-deprecation": [
+  {
+   "deliverables": [
+    "doc/reports/health-report.json",
+    "src/natural/spec/prose/types.ts",
+    "src/natural/spec/prose/templates.ts",
+    "src/natural/spec/prose/entityTargets.ts",
+    "scripts/audit/coverage-prose.ts",
+    "scripts/health/bundle.ts",
+    "scripts/health/reporter.ts",
+    "scripts/health/index.ts",
+    "src/natural/schema/guideEntity.ts",
+    "src/entities/EntityPage.tsx",
+    "src/search/useGuideSearch.ts",
+    "content/prose"
+   ],
+   "tasks": [],
+   "superseded": false,
+   "notes": "Kept all seven regex candidates (all are actively modified core targets, not incidental reads); added entityTargets.ts, the three scripts/health/*.ts, and the content/prose directory from the \"Key files\" list; omitted the glob-only src/{behaviors,...}/** consumer dirs and the .claude/skills path (a \u00a76 dependency, not this plan's output) as not concrete/not produced here."
+  },
+  {
+   "deliverables": [
+    "src/natural/spec/prose/types.ts",
+    "src/natural/spec/prose/templates.ts",
+    "src/natural/spec/prose/entityTargets.ts",
+    "scripts/audit/coverage-prose.ts",
+    "scripts/health/bundle.ts",
+    "scripts/health/reporter.ts",
+    "scripts/health/index.ts",
+    "doc/reports/health-report.json",
+    "src/natural/schema/guideEntity.ts",
+    "src/entities/EntityPage.tsx",
+    "src/search/useGuideSearch.ts",
+    "content/prose"
+   ],
+   "tasks": [],
+   "superseded": false,
+   "notes": "Kept all 7 regex candidates (all named as deliverables/exit-criteria targets); added entityTargets.ts and the three scripts/health/*.ts files from the \"Key files\" brace expansions and Deliverable 2, plus content/prose (populated with new canonical YAML per Deliverable 3); omitted .claude/skills/writing-entity-prose/** as a pre-shipped dependency and the src/{behaviors,...}/** glob as incidental consumer paths rather than clean probeable deliverables; no task ids appear in the body (sections are \u00a7-numbered, not t-numbered)."
+  }
+ ],
+ "plan:0038-t677-adaptive-permutation-null-plan": [
+  {
+   "deliverables": [
+    "scripts/qa/workflow_perm_null.py",
+    "tests/test_workflow_perm_null_adaptive.py",
+    "config/workflow_outputs_catalog.yml",
+    "scripts/qa/workflow_outputs_catalog.py",
+    "tests/test_workflow_outputs_catalog.py",
+    "core/decisions.md",
+    "tasks/active.md",
+    "qa/t677_adaptive_null/verification.md",
+    "qa/t677_adaptive_null/regen.log",
+    "qa/t677_adaptive_null/spot_check.log",
+    "qa/t677_adaptive_null/feature_rollup.log",
+    "qa/t677_adaptive_null/stats.log",
+    "qa/t677_adaptive_null/t676_evidence_join.log",
+    "qa/t677_adaptive_null/d15_continuity.log",
+    "qa/t677_adaptive_null/rollup_check.log",
+    "qa/t677_adaptive_null/n_perm_histogram.tsv",
+    "qa/t677_adaptive_null/disagreement_rows_resolved.tsv",
+    "qa/t677_adaptive_null/unconverging_rows_resolved.tsv",
+    "qa/t677_adaptive_null/d15_strong_continuity.tsv",
+    "qa/t677_adaptive_null/stratified_rollup_check.tsv"
+   ],
+   "tasks": [
+    "t677"
+   ],
+   "superseded": false,
+   "notes": "Removed the design doc, the plan doc itself, and the two qa/t676_null_diagnostic/*.md files as read-only references (not produced); added the concrete qa/t677_adaptive_null/ log+TSV artifacts that Tasks 7-8 explicitly git-add; excluded the /data/proj/mm30/... outputs the plan states are out-of-tree and not committed; the plan is tracked under t677 (t675/t676 are only a dependency and an unblocked downstream task)."
+  },
+  {
+   "deliverables": [
+    "scripts/qa/workflow_perm_null.py",
+    "tests/test_workflow_perm_null_adaptive.py",
+    "config/workflow_outputs_catalog.yml",
+    "scripts/qa/workflow_outputs_catalog.py",
+    "tests/test_workflow_outputs_catalog.py",
+    "core/decisions.md",
+    "tasks/active.md",
+    "qa/t677_adaptive_null/verification.md",
+    "qa/t677_adaptive_null/regen.log",
+    "qa/t677_adaptive_null/spot_check.log",
+    "qa/t677_adaptive_null/feature_rollup.log",
+    "qa/t677_adaptive_null/stats.log",
+    "qa/t677_adaptive_null/t676_evidence_join.log",
+    "qa/t677_adaptive_null/d15_continuity.log",
+    "qa/t677_adaptive_null/rollup_check.log",
+    "qa/t677_adaptive_null/n_perm_histogram.tsv",
+    "qa/t677_adaptive_null/disagreement_rows_resolved.tsv",
+    "qa/t677_adaptive_null/unconverging_rows_resolved.tsv",
+    "qa/t677_adaptive_null/d15_strong_continuity.tsv",
+    "qa/t677_adaptive_null/stratified_rollup_check.tsv"
+   ],
+   "tasks": [
+    "t677"
+   ],
+   "superseded": false,
+   "notes": "Excluded the design doc, the plan doc itself, and the two qa/t676_null_diagnostic/*.md files as read-only references/inputs; excluded /data/proj/mm30 outputs (explicitly out-of-tree and \"not committed\"); included the qa/t677_adaptive_null/ logs and TSVs because the plan explicitly git-adds/commits them as in-repo artifacts; tasks limited to t677 (t675/t676 are only dependency/related tasks, not what this plan is tracked under)."
+  }
+ ],
+ "plan:0042-formula-skeleton-motif-pipeline-plan": [
+  {
+   "deliverables": [
+    "doc/reports/2026-04-23-formula-artifact-producer-audit.md",
+    "doc/reports/2026-04-23-formula-artifact-consumers.tsv",
+    "doc/reports/2026-04-23-formula-skeleton-motif-pipeline-contract.md",
+    "doc/reports/2026-04-23-formula-skeleton-motif-artifacts.tsv",
+    "doc/guides/formula-structure-pipeline.md",
+    "scripts/pipelines/generate_formula_skeletons.py",
+    "scripts/pipelines/generate_typed_skeletons.py",
+    "scripts/pipelines/generate_formula_motif_graphs.py",
+    "scripts/pipelines/generate_pairwise_structure_evidence.py",
+    "scripts/provenance/schema.ts",
+    "src/chapters/generated/formula-skeletons-bare.json",
+    "src/chapters/generated/formula-skeletons-bare.manifest.json",
+    "src/chapters/generated/formula-skeletons-typed.json",
+    "src/chapters/generated/formula-skeletons-typed.manifest.json",
+    "src/chapters/generated/formula-skeletons-dimensioned.json",
+    "src/chapters/generated/formula-motif-graphs.json",
+    "src/chapters/generated/formula-structure-manifest.json",
+    "src/natural/schema/formulaMotif.ts",
+    "src/natural/registry/generated/skeletonCatalog.ts",
+    "src/natural/registry/generated/motifCatalog.ts"
+   ],
+   "tasks": [
+    "t260"
+   ],
+   "superseded": false,
+   "notes": "Kept only concrete Create-targets; dropped candidates that are Read-only or pre-existing files being refactored/wrapped (skeleton-anonymization.py, skeleton-matcher-tight.py, primitive-skeleton-bridge.py, formula-propose.ts, formulaData.ts, health/context.ts, audit-formula-symbols.ts, scopeRegistry.ts, compositionProjection.ts, provenanceRegistry.ts); added two TSV audit outputs the regex missed; omitted all `<date>`-placeholder report paths since they lack a probeable concrete path; skeletonCatalog.ts/motifCatalog.ts are labeled \"optional\" but named concretely so included."
+  },
+  {
+   "deliverables": [
+    "doc/reports/2026-04-23-formula-artifact-producer-audit.md",
+    "doc/reports/2026-04-23-formula-artifact-consumers.tsv",
+    "doc/reports/2026-04-23-formula-skeleton-motif-pipeline-contract.md",
+    "doc/reports/2026-04-23-formula-skeleton-motif-artifacts.tsv",
+    "doc/guides/formula-structure-pipeline.md",
+    "scripts/pipelines/generate_formula_skeletons.py",
+    "scripts/pipelines/generate_typed_skeletons.py",
+    "scripts/pipelines/generate_formula_motif_graphs.py",
+    "scripts/pipelines/generate_pairwise_structure_evidence.py",
+    "scripts/provenance/schema.ts",
+    "src/chapters/generated/formula-skeletons-bare.json",
+    "src/chapters/generated/formula-skeletons-bare.manifest.json",
+    "src/chapters/generated/formula-skeletons-typed.json",
+    "src/chapters/generated/formula-skeletons-typed.manifest.json",
+    "src/chapters/generated/formula-skeletons-dimensioned.json",
+    "src/chapters/generated/formula-motif-graphs.json",
+    "src/chapters/generated/formula-structure-manifest.json",
+    "src/natural/schema/formulaMotif.ts",
+    "src/natural/registry/generated/skeletonCatalog.ts",
+    "src/natural/registry/generated/motifCatalog.ts"
+   ],
+   "tasks": [
+    "t260"
+   ],
+   "superseded": false,
+   "notes": "Removed candidates that are existing files the plan only reads/refactors/modifies (skeleton-*.py, primitive-skeleton-bridge.py, formula-propose.ts, formulaData.ts, health/context.ts, audit-formula-symbols.ts, scopeRegistry.ts, compositionProjection.ts, provenanceRegistry.ts); omitted the many `doc/reports/<date>-*.tsv/.md` outputs and Task 2's unnamed producer and Task 8's scripts/health/checkers/ because they carry no concrete probeable path; kept the \"optional\"/\"possibly create\" registry and schema TS files (skeletonCatalog.ts, motifCatalog.ts, formulaMotif.ts) as concrete named outputs despite their conditional framing."
+  }
+ ],
+ "plan:0042-script-workflow-cleanup-execution-plan": [
+  {
+   "deliverables": [
+    "doc/audits/script-workflow-cleanup/README.md",
+    "doc/audits/script-workflow-cleanup/script_inventory.tsv",
+    "doc/audits/script-workflow-cleanup/orphan_triage.tsv",
+    "doc/audits/script-workflow-cleanup/metadata_gap_triage.tsv",
+    "doc/audits/script-workflow-cleanup/hardcoded_path_triage.tsv",
+    "doc/audits/script-workflow-cleanup/batch_plan.md",
+    "doc/audits/script-workflow-cleanup/subagent_guidance.md",
+    "doc/audits/script-workflow-cleanup/batches"
+   ],
+   "tasks": [],
+   "superseded": false,
+   "notes": "Kept only the durable artifacts the plan CREATES under doc/audits/script-workflow-cleanup/ (adding the four .tsv triage tables the regex missed and the batches/ shard directory); dropped script_workflow_audit.py, test_script_workflow_audit.py (pre-existing, only modified), and generate_share_site.py / docker/mm30-run.sh (incidental example/reference paths); no tracking task id appears (t676/t197 are example script task ids), and the related plan:0041 is a predecessor, not a superseder."
+  },
+  {
+   "deliverables": [
+    "doc/audits/script-workflow-cleanup/README.md",
+    "doc/audits/script-workflow-cleanup/script_inventory.tsv",
+    "doc/audits/script-workflow-cleanup/orphan_triage.tsv",
+    "doc/audits/script-workflow-cleanup/metadata_gap_triage.tsv",
+    "doc/audits/script-workflow-cleanup/hardcoded_path_triage.tsv",
+    "doc/audits/script-workflow-cleanup/batch_plan.md",
+    "doc/audits/script-workflow-cleanup/subagent_guidance.md",
+    "doc/audits/script-workflow-cleanup/batches"
+   ],
+   "tasks": [],
+   "superseded": false,
+   "notes": "Kept the seven durable triage/doc files the plan says it Creates under doc/audits/script-workflow-cleanup/ plus the batches/ directory it populates (batches/*.tsv|*.md are glob patterns, so I list the concrete directory); dropped candidates scripts/generate_share_site.py and docker/mm30-run.sh (referenced only as an orphan-under-triage and an existing dependency to check), and excluded scripts/qa/script_workflow_audit.py and tests/test_script_workflow_audit.py as pre-existing files the plan only modifies; task ids like t676/t197 in the body are illustrative metadata examples, not tracking tasks."
+  }
+ ],
+ "plan:0045-cytogenetic-inference-pipeline-plan": [
+  {
+   "deliverables": [
+    "scripts/cytogenetics/infer_cytogenetics.py",
+    "scripts/cytogenetics/assemble_ground_truth.py",
+    "scripts/cytogenetics/virtual_fish.py",
+    "scripts/cytogenetics/train_classifiers.py",
+    "scripts/cytogenetics/evaluate_final.py",
+    "scripts/cytogenetics/impute_across_datasets.py",
+    "scripts/cytogenetics/stratified_meta_analysis.py"
+   ],
+   "tasks": [
+    "t040",
+    "t041",
+    "t042"
+   ],
+   "superseded": false,
+   "notes": "Dropped candidate tasks t004/t011/t014/t006 (regex misparse of translocations t(4;14)/t(11;14)/t(14;16)/t(6;14)) and t028 (a deferred dependency), using the Source-line tasks t040-t042 instead; removed config/mm30.v8.yml (modified, not created) and mmrf_data_prep.R (explicitly \"no change needed\"); {OUTPUT_ROOT}/... outputs are template placeholders, not concrete repo paths, so omitted; kept infer_cytogenetics.py since the Architecture section names it as a new script even though the tasks decompose into the other seven."
+  },
+  {
+   "deliverables": [
+    "scripts/cytogenetics/infer_cytogenetics.py",
+    "scripts/cytogenetics/assemble_ground_truth.py",
+    "scripts/cytogenetics/virtual_fish.py",
+    "scripts/cytogenetics/train_classifiers.py",
+    "scripts/cytogenetics/evaluate_final.py",
+    "scripts/cytogenetics/impute_across_datasets.py",
+    "scripts/cytogenetics/stratified_meta_analysis.py",
+    "config/mm30.v8.yml"
+   ],
+   "tasks": [
+    "t040",
+    "t041",
+    "t042"
+   ],
+   "superseded": false,
+   "notes": "Removed mmrf_data_prep.R (change table says \"No change needed\"); dropped candidate tasks t004/t011/t014/t006 as regex mis-parses of translocation notation (t(4;14) etc.) and used the Source line's tasks t040-t042; omitted all {OUTPUT_ROOT}/... outputs as they lack concrete repo-relative paths; kept config/mm30.v8.yml as an active modification target."
+  },
+  {
+   "deliverables": [
+    "scripts/cytogenetics/assemble_ground_truth.py",
+    "scripts/cytogenetics/virtual_fish.py",
+    "scripts/cytogenetics/train_classifiers.py",
+    "scripts/cytogenetics/evaluate_final.py",
+    "scripts/cytogenetics/impute_across_datasets.py",
+    "scripts/cytogenetics/stratified_meta_analysis.py",
+    "config/mm30.v8.yml"
+   ],
+   "tasks": [
+    "t040",
+    "t041",
+    "t042"
+   ],
+   "superseded": false
+  }
+ ],
+ "plan:0048-cytogenetic-pipeline-integration": [
+  {
+   "deliverables": [
+    "workflows/cytogenetics.smk",
+    "scripts/cytogenetics/merge_metadata.py",
+    "scripts/cytogenetics/validate_survival.py",
+    "scripts/cytogenetics/cooccurrence.py",
+    "scripts/cytogenetics/instability_index.py",
+    "scripts/cytogenetics/treatment_response.py",
+    "scripts/cytogenetics/longitudinal_changes.py"
+   ],
+   "tasks": [
+    "t050",
+    "t051",
+    "t052",
+    "t053",
+    "t054",
+    "t055"
+   ],
+   "superseded": false,
+   "notes": "Added workflows/cytogenetics.smk (the core Task 1 deliverable named in prose but missed by the regex); dropped config/mm30.v8.yml and the two scripts/fassoc/*.R candidates since the plan modifies these existing files rather than creating them, and omitted the assemble_ground_truth.py/virtual_fish.py/impute_across_datasets.py/stratified_meta_analysis.py scripts which the body states already exist, plus all {OUTPUT_ROOT}/cytogenetics runtime data outputs."
+  },
+  {
+   "deliverables": [
+    "workflows/cytogenetics.smk",
+    "scripts/cytogenetics/merge_metadata.py",
+    "scripts/cytogenetics/validate_survival.py",
+    "scripts/cytogenetics/cooccurrence.py",
+    "scripts/cytogenetics/instability_index.py",
+    "scripts/cytogenetics/treatment_response.py",
+    "scripts/cytogenetics/longitudinal_changes.py"
+   ],
+   "tasks": [
+    "t050",
+    "t051",
+    "t052",
+    "t053",
+    "t054",
+    "t055"
+   ],
+   "superseded": false,
+   "notes": "Added workflows/cytogenetics.smk (named in prose/Task 1 but missed by the regex); removed config/mm30.v8.yml and the two scripts/fassoc/*.R files since the plan lists them under \"Changes to Existing Code\" as edits to pre-existing files, not created artifacts; excluded {OUTPUT_ROOT}/CYTO_OUT data outputs (placeholder paths) and the four already-existing scripts."
+  }
+ ],
+ "plan:0054-project-reorganization-plan": [
+  {
+   "deliverables": [
+    "doc/reorg/dependency_graph.md",
+    "doc/reorg/desired_file_structure.md",
+    "doc/reorg/files_to_remove.md",
+    "doc/reorg/upstream-science-requirements.md",
+    "tests/test_config.py",
+    "tests/test_datapackage.py",
+    "scripts/shared/datapackage.py",
+    "scripts/shared/config.py",
+    "scripts/stages/__init__.py",
+    "config/mm30.v8.yml",
+    "scripts/stages/geo/build_data_package.py",
+    "scripts/stages/fassoc/build_data_package.py",
+    "scripts/stages/meta/package_scores.py",
+    "scripts/stages/fmap/package_result.py",
+    "scripts/stages/reports/prepare_dual_ranking_data.py",
+    "scripts/stages/mmrf/build_data_package.py",
+    "scripts/stages/fmap/build_data_package.py",
+    "scripts/stages/fgsea/build_data_package.py",
+    "scripts/stages/redundancy/build_data_package.py",
+    "scripts/stages/cytogenetics/build_data_package.py",
+    "scripts/stages/decomposition/build_data_package.py",
+    "scripts/stages/sensitivity/build_data_package.py",
+    "scripts/stages/progression/build_data_package.py",
+    "scripts/stages/geo/lib/normalization_common.R",
+    "scripts/stages/fassoc/logistic_regression.R",
+    "scripts/stages/progression/transition_contrasts.py",
+    "tests/test_data_loading.py",
+    "tests/test_prepare_dual_ranking.py",
+    "tests/test_association.py",
+    "tests/test_progression.py"
+   ],
+   "tasks": [],
+   "superseded": false,
+   "notes": "Removed the design-spec path (entities/plans/0053-...md, a read-only reference) and the five OLD pre-move R paths (scripts/geo/lib/setup.R, scripts/geo/lib/normalization_common.R, scripts/geo/download/common.R, scripts/fassoc/utils.R, scripts/geo/lib/logging.R) since Task 11 relocates those under scripts/stages/ so the old paths won't exist; added the 7 sibling build_data_package.py generators the body explicitly enumerates for the stages lacking them (fmap/fgsea/redundancy/cytogenetics/decomposition/sensitivity/progression); kept in-place-modified targets (config/mm30.v8.yml, scripts/shared/config.py, the four pre-existing test files) as genuine non-incidental targets; \"Task N\" headers are plan-internal, not science t-ids, so tasks is empty."
+  },
+  {
+   "deliverables": [
+    "doc/reorg/dependency_graph.md",
+    "doc/reorg/desired_file_structure.md",
+    "doc/reorg/files_to_remove.md",
+    "doc/reorg/upstream-science-requirements.md",
+    "tests/test_config.py",
+    "tests/test_datapackage.py",
+    "scripts/shared/datapackage.py",
+    "scripts/stages/__init__.py",
+    "scripts/stages/progression/transition_contrasts.py",
+    "scripts/stages/geo/lib/normalization_common.R",
+    "scripts/stages/fassoc/logistic_regression.R",
+    "scripts/stages/geo/build_data_package.py",
+    "scripts/stages/fassoc/build_data_package.py",
+    "scripts/stages/meta/package_scores.py",
+    "scripts/stages/fmap/package_result.py",
+    "scripts/stages/reports/prepare_dual_ranking_data.py",
+    "scripts/stages/mmrf/build_data_package.py",
+    "scripts/stages/fmap/build_data_package.py",
+    "scripts/stages/fgsea/build_data_package.py",
+    "scripts/stages/redundancy/build_data_package.py",
+    "scripts/stages/cytogenetics/build_data_package.py",
+    "scripts/stages/decomposition/build_data_package.py",
+    "scripts/stages/sensitivity/build_data_package.py",
+    "scripts/stages/progression/build_data_package.py"
+   ],
+   "tasks": [],
+   "superseded": false,
+   "notes": "Dropped modify-only/read-only candidates (config/mm30.v8.yml, scripts/shared/config.py, the design spec entities/plans/0053-...md) and the old-layout source files (scripts/geo/lib/*.R, scripts/geo/download/common.R, scripts/fassoc/utils.R) that the reorg moves AWAY from; kept new-layout paths produced by moves and expanded Task 20's explicit template into build_data_package.py for the 8 stages it names (mmrf/fmap/fgsea/redundancy/cytogenetics/decomposition/sensitivity/progression); no project task ids (t###) appear, only internal \"Task N\" step numbering."
+  }
+ ],
+ "plan:0054-task7-pair-table-provenance-ledger-design": [
+  {
+   "deliverables": [
+    "doc/reports/2026-04-23-label-provenance-ledger.tsv",
+    "scripts/pipelines/formula_pairwise_evidence.py"
+   ],
+   "tasks": [],
+   "superseded": false,
+   "notes": "Added the prose-named ledger TSV (the plan's explicit Output Commitment) and kept the named producer script; removed provenanceRegistry.ts (explicitly \"precedent only, out of scope\") and excluded the pre-existing interpretation TSV, which the plan references/backfills rather than creates."
+  },
+  {
+   "deliverables": [
+    "scripts/pipelines/formula_pairwise_evidence.py",
+    "doc/reports/2026-04-23-label-provenance-ledger.tsv"
+   ],
+   "tasks": [],
+   "superseded": false,
+   "notes": "Added the committed ledger TSV path named in the Output Commitment section; kept the producer script; removed src/natural/registry/provenanceRegistry.ts since the body explicitly marks it \"precedent only and remains out of scope\"; omitted the interpretation TSV as a pre-existing referenced file this pass wires into rather than creates; no t-id tasks appear in the body (only informal \"Task 6/7\" labels)."
+  }
+ ],
+ "plan:0055-gdsc-drug-sensitivity": [
+  {
+   "deliverables": [
+    "scripts/stages/integration/gdsc_drug_sensitivity.py"
+   ],
+   "tasks": [
+    "t033"
+   ],
+   "superseded": false,
+   "notes": "The only repo-relative file the plan states it will CREATE is the analysis script; the spec (docs/superpowers/specs/2026-04-06-gdsc-drug-sensitivity-design.md) is referenced as an input, and build_data_package.py / integration.smk / pyproject.toml / uv.lock are pre-existing files the plan only modifies, so I dropped them; the five TSV outputs and staged GDSC files live under absolute /data/ paths outside the repo and are not probeable repo-relative deliverables."
+  },
+  {
+   "deliverables": [
+    "scripts/stages/integration/gdsc_drug_sensitivity.py",
+    "scripts/stages/integration/build_data_package.py",
+    "workflows/stages/integration.smk"
+   ],
+   "tasks": [
+    "t033"
+   ],
+   "superseded": false,
+   "notes": "Removed the spec doc candidate (docs/superpowers/specs/2026-04-06-gdsc-drug-sensitivity-design.md) as an incidental reference to the spec this plan implements, not produces; added workflows/stages/integration.smk from prose; excluded the absolute non-repo data paths (/data/raw/gdsc/v2, /data/proj/mm30/8.0/integration/gdsc TSVs) and pyproject.toml/uv.lock (ubiquitous pre-existing files, not distinctive deliverables)."
+  }
+ ],
+ "plan:0060-entity-aware-prose-implementation-plan": [
+  {
+   "deliverables": [
+    "src/chapters/semanticRefs.ts",
+    "src/chapters/__tests__/semanticRefs.test.ts",
+    "src/chapters/ProseMarkdown.tsx",
+    "src/chapters/__tests__/SemanticRefRenderer.test.tsx",
+    "scripts/lib/readerRichnessAudit.ts",
+    "scripts/__tests__/reader-richness-audit.test.ts",
+    "tests/ui/readerRichness.spec.ts",
+    "content/prose/chapter/bg-01-same-equation.md",
+    "doc/reports/2026-05-02-reader-richness-baseline.md",
+    "doc/reports/assets/2026-05-02-reader-richness-baseline.json"
+   ],
+   "tasks": [],
+   "superseded": false,
+   "notes": "All 10 candidates map to the plan's authoritative \"File Structure\" Modify/Refresh list; I omitted the regenerated src/chapters/generated/*.json files since the plan explicitly stages them only if they diff, and excluded Task 0 read-only files (.gitignore, package.json)."
+  },
+  {
+   "deliverables": [
+    "src/chapters/semanticRefs.ts",
+    "src/chapters/__tests__/semanticRefs.test.ts",
+    "src/chapters/ProseMarkdown.tsx",
+    "src/chapters/__tests__/SemanticRefRenderer.test.tsx",
+    "scripts/lib/readerRichnessAudit.ts",
+    "scripts/__tests__/reader-richness-audit.test.ts",
+    "tests/ui/readerRichness.spec.ts",
+    "content/prose/chapter/bg-01-same-equation.md",
+    "doc/reports/2026-05-02-reader-richness-baseline.md",
+    "doc/reports/assets/2026-05-02-reader-richness-baseline.json"
+   ],
+   "tasks": [],
+   "superseded": false,
+   "notes": "All 10 candidates are grounded as \"Modify\" targets in the plan's File Structure section; I excluded the src/chapters/generated/*.json files (regenerated/committed in Tasks 4-6) because they are pre-existing artifacts staged only conditionally, not paths the plan states it creates."
+  }
+ ],
+ "plan:0065-reader-research-alignment-roadmap": [
+  {
+   "deliverables": [],
+   "tasks": [],
+   "superseded": false,
+   "notes": "This is a meta-roadmap that coordinates and points to pre-existing implementation plans (execute-these) and reads synthesis.md as a source; all regex candidates are incidental references, and its own \"Shared Deliverables\" name only vague directories (doc/reports/, doc/reports/assets/) with no concrete probeable path, so no deliverable survives."
+  },
+  {
+   "deliverables": [],
+   "tasks": [],
+   "superseded": false,
+   "notes": "All candidate paths are incidental references (synthesis.md as a source; the four doc/plans/*.md files are pre-existing plans this roadmap sequences/executes, not artifacts it creates); the roadmap's own promised outputs (evidence report, JSON baseline, alignment report, decision memo) name only directories doc/reports/ and doc/reports/assets/ with no concrete filenames, so they are omitted rather than guessed."
+  }
+ ],
+ "plan:0071-t203-ledergor-replication-pipeline-plan": [
+  {
+   "deliverables": [
+    "doc/pre-registrations/2026-04-16-t203-ledergor-replication.md",
+    "scripts/causal/scrna/ledergor_loader.py",
+    "scripts/causal/edges/scrna_pc_continuum_common.py",
+    "scripts/causal/edges/scrna_ledergor_pc_continuum.py",
+    "scripts/causal/tests/test_scrna_ledergor_loader.py",
+    "scripts/causal/tests/test_scrna_pc_continuum_common.py",
+    "doc/interpretations/2026-04-16-t203-ledergor-replication.md"
+   ],
+   "tasks": [
+    "t203"
+   ],
+   "superseded": false,
+   "notes": "Kept only the 7 paths under the \"Created\" list; dropped Modified files (Boiarsky script/test, tasks/active.md, core/overview.md) and Related-Input docs as pre-existing/incidental, and the /data/proj/mm30 artifacts as non-repo-relative/uncommitted; tracking task is the t203 Task Anchor, not the t174/t202 related inputs."
+  },
+  {
+   "deliverables": [
+    "doc/pre-registrations/2026-04-16-t203-ledergor-replication.md",
+    "scripts/causal/scrna/ledergor_loader.py",
+    "scripts/causal/edges/scrna_pc_continuum_common.py",
+    "scripts/causal/edges/scrna_ledergor_pc_continuum.py",
+    "scripts/causal/tests/test_scrna_ledergor_loader.py",
+    "scripts/causal/tests/test_scrna_pc_continuum_common.py",
+    "doc/interpretations/2026-04-16-t203-ledergor-replication.md"
+   ],
+   "tasks": [
+    "t203"
+   ],
+   "superseded": false,
+   "notes": "Kept only the seven files under \"File Structure \u2192 Created\"; dropped the t174/t202 docs (Related Inputs, read-only), the four \"Modified\" pre-existing files (boiarsky orchestrator/test, tasks/active.md, core/overview.md), and the uncommitted /data/... artifacts; tracking anchor is t203, not the related-input tasks t174/t202."
+  }
+ ],
+ "plan:0074-t080-docker-closeout": [
+  {
+   "deliverables": [
+    "tests/test_mm30_run_wrapper.py",
+    "docker/mm30-run.sh",
+    "README.md",
+    "tasks/active.md"
+   ],
+   "tasks": [
+    "t080"
+   ],
+   "superseded": false,
+   "notes": "Added README.md (Task 2 modifies it and it carries the manual verification procedure); kept the three candidates; omitted Dockerfile and config/workflow.v8.1.yml as they are only referenced/verified, not produced."
+  },
+  {
+   "deliverables": [
+    "tests/test_mm30_run_wrapper.py",
+    "docker/mm30-run.sh",
+    "README.md",
+    "tasks/active.md"
+   ],
+   "tasks": [
+    "t080"
+   ],
+   "superseded": false,
+   "notes": "Added README.md (Task 2 modifies it, missed by regex); omitted Dockerfile and config/workflow.v8.1.yml since the plan only confirms/references them rather than producing them; task id t080 taken from the plan title/goal though candidate_tasks was empty."
+  }
+ ],
+ "plan:0077-entity-taxonomy-design": [
+  {
+   "deliverables": [
+    "src/natural/spec/dataModel/entityTypeLens.ts",
+    "scripts/health/checkers/drift/"
+   ],
+   "tasks": [
+    "t217"
+   ],
+   "superseded": false,
+   "notes": "Only the explicitly-new `entityTypeLens.ts` module and the new `scripts/health/checkers/drift/` directory are genuine creations; all other candidate paths are pre-existing files the plan modifies/references, and `entityTaxonomy.ts` is the plan's own rejected v1 proposal."
+  },
+  {
+   "deliverables": [
+    "src/natural/spec/dataModel/entityTypeLens.ts",
+    "scripts/health/checkers/drift/",
+    "src/natural/spec/dataModel/entities.ts",
+    "src/natural/spec/dataModel/types.ts",
+    "src/natural/spec/dataModel/index.ts",
+    "scripts/health/checkers/authority/entity-type-enum.ts",
+    "src/natural/schema/guideEntity.ts",
+    "src/book/catalog/types.ts",
+    "src/book/catalog/CatalogOverview.tsx",
+    "src/entities/entityRegistry.ts",
+    "scripts/health/types.ts",
+    "AGENTS.md"
+   ],
+   "tasks": [
+    "t217"
+   ],
+   "superseded": false,
+   "notes": "Removed candidate entityTaxonomy.ts (the explicitly rejected v1 proposal \u2014 plan says not to create it) and router.tsx (only inspected by a drift checker, not a modification site); added the new entityTypeLens.ts module, the promised scripts/health/checkers/drift/ directory, and the Phase A/C/D files the plan actively modifies (entities.ts, types.ts, CatalogOverview.tsx, entityRegistry.ts, scripts/health/types.ts, AGENTS.md); the individual drift checkers are named only as slugs without file extensions, so I list the directory rather than guess filenames."
+  }
+ ],
+ "plan:0081-topic-migration-implementation-plan": [
+  {
+   "deliverables": [
+    "doc/meta/topic-migration/desired_file_structure.md",
+    "doc/meta/topic-migration/files_to_remove.md",
+    "doc/meta/topic-migration/canonical-topic-ledger-2026-04-22.md",
+    "doc/meta/topic-migration/active-surface-ref-batches-2026-04-22.md",
+    "doc/meta/topic-migration/model-followups-2026-04-22.md",
+    "knowledge/sources/local/terms.yaml"
+   ],
+   "tasks": [],
+   "superseded": false,
+   "notes": "Kept the five files the plan explicitly marks \"Create\" plus knowledge/sources/local/terms.yaml (marked \"Create or Modify\" / \"if introduced\" \u2014 conditional but a concrete promised path); dropped entities.yaml, tasks/active.md, curation-sweep-2026-04-22.md, and tasks/done/2026-04.md as pre-existing files the plan only modifies/references, and the 0080 design doc as a reference-only mention; doc/mechanisms/*.md is a conditional glob with no concrete path so omitted; no t-ids appear in the body."
+  },
+  {
+   "deliverables": [
+    "doc/meta/topic-migration/desired_file_structure.md",
+    "doc/meta/topic-migration/files_to_remove.md",
+    "doc/meta/topic-migration/canonical-topic-ledger-2026-04-22.md",
+    "doc/meta/topic-migration/active-surface-ref-batches-2026-04-22.md",
+    "doc/meta/topic-migration/model-followups-2026-04-22.md",
+    "doc/meta/curation/curation-sweep-2026-04-22.md",
+    "knowledge/sources/local/entities.yaml",
+    "knowledge/sources/local/terms.yaml",
+    "tasks/active.md",
+    "tasks/done/2026-04.md"
+   ],
+   "tasks": [],
+   "superseded": false,
+   "notes": "Removed entities/plans/0080-topic-migration-design.md as it appears only as a \"Reference\" (read, not produced); dropped doc/mechanisms/*.md since it is a glob with no concrete path; kept modified pre-existing files (entities.yaml, terms.yaml, active.md, tasks/done/2026-04.md, curation-sweep) since the plan states it produces changes to them."
+  }
+ ],
+ "plan:0082-t277-within-basin-variance-pipeline-plan": [
+  {
+   "deliverables": [
+    "scripts/hypotheses/h4/within_basin_variance.py"
+   ],
+   "tasks": [
+    "t277"
+   ],
+   "superseded": false,
+   "notes": "Kept only the one new script the plan says it adds; removed the pre-reg, review doc, and shared write_fragment/evidence_schema helpers (all read as pre-existing inputs), the inquiry doc (existing file merely appended to), the residualize_by_ssgsea.py helper (explicitly \"suggested\"/conditional), and the interpretation doc (non-concrete YYYY-MM-DD placeholder); all concrete output artifacts (parquet/tsv/json) write to absolute /data/proj/mm30 paths, not repo-relative locations; the plan is tracked under t277 (t301 is a new task it spawns, others are dependencies)."
+  },
+  {
+   "deliverables": [
+    "scripts/hypotheses/h4/within_basin_variance.py",
+    "doc/interpretations/YYYY-MM-DD-t277-within-basin-variance.md"
+   ],
+   "tasks": [
+    "t277"
+   ],
+   "superseded": false,
+   "notes": "Kept only the one new script and the Task 8 interpretation stub (path has a YYYY-MM-DD placeholder); dropped the pre-reg, review, inquiry-subgraph, and shared write_fragment/evidence_schema files as read-only references, and residualize_by_ssgsea.py as a merely-suggested optional helper; all primary outputs write to /data/ (non-repo-relative) so are excluded."
+  }
+ ],
+ "plan:0088-t479-myc-state-vs-rearrangement-plan": [
+  {
+   "deliverables": [
+    "scripts/qa/t479_myc_state_vs_rearrangement.py",
+    "tests/test_t479_myc_state_vs_rearrangement.py",
+    "doc/interpretations/2026-05-05-t479-myc-state-vs-rearrangement.md"
+   ],
+   "tasks": [
+    "t479"
+   ],
+   "superseded": false,
+   "notes": "Dropped proliferation_score.py (imported/reused), the design doc (spec that is read), tasks/active.md (pre-existing file only edited, not created), and core/decisions.md (explicitly an optional post-implementation consideration); the six output TSV/JSON files are absolute /data/proj paths and gitignored, so not repo-relative deliverables; t478/t483 are related tasks, not what this plan is tracked under."
+  },
+  {
+   "deliverables": [
+    "scripts/qa/t479_myc_state_vs_rearrangement.py",
+    "tests/test_t479_myc_state_vs_rearrangement.py",
+    "doc/interpretations/2026-05-05-t479-myc-state-vs-rearrangement.md"
+   ],
+   "tasks": [
+    "t479"
+   ],
+   "superseded": false,
+   "notes": "Removed proliferation_score.py (reused/imported), the design doc (pre-existing spec it references), active.md (status-line edit only) and core/decisions.md (optional \"consider drafting\" post-note); the six script outputs are absolute /data/proj paths outside the repo, not repo-relative, so omitted; t478/t483 are related/dependency tasks, not the tracking id."
+  }
+ ],
+ "plan:0092-anti-unification-generator-nodes": [
+  {
+   "deliverables": [
+    "src/natural/spec/correspondence/analytics/antiUnification.ts",
+    "src/natural/spec/correspondence/analytics/__tests__/antiUnification.test.ts",
+    "src/natural/spec/correspondence/analytics/skeletonNormalization.ts",
+    "src/natural/spec/correspondence/analytics/__tests__/skeletonNormalization.test.ts",
+    "pipeline/q121/fragment-selection-decision.md",
+    "scripts/audit/anti-unification-generators.ts",
+    "scripts/__tests__/anti-unification-generators.test.ts",
+    "scripts/__tests__/anti-unification-report-shape.test.ts",
+    "scripts/__tests__/anti-unification-npm-script.test.ts",
+    "pipeline/q121/generator-candidates.json",
+    "pipeline/q121/generator-candidates-readme.md"
+   ],
+   "tasks": [],
+   "superseded": false,
+   "notes": "Removed the spike source/output, the formula-points registry (MUST-NOT-write target), and the bare-skeletons substrate as read-only inputs; excluded t254 because the body frames it as the downstream W5 task this report feeds, not the task this W3 plan is tracked under (package.json is edited, not created, so omitted)."
+  },
+  {
+   "deliverables": [
+    "src/natural/spec/correspondence/analytics/antiUnification.ts",
+    "src/natural/spec/correspondence/analytics/__tests__/antiUnification.test.ts",
+    "src/natural/spec/correspondence/analytics/skeletonNormalization.ts",
+    "src/natural/spec/correspondence/analytics/__tests__/skeletonNormalization.test.ts",
+    "pipeline/q121/fragment-selection-decision.md",
+    "scripts/audit/anti-unification-generators.ts",
+    "scripts/__tests__/anti-unification-generators.test.ts",
+    "scripts/__tests__/anti-unification-report-shape.test.ts",
+    "pipeline/q121/generator-candidates.json",
+    "scripts/__tests__/anti-unification-npm-script.test.ts",
+    "pipeline/q121/generator-candidates-readme.md"
+   ],
+   "tasks": [],
+   "superseded": false,
+   "notes": "Removed four candidates that are inputs the plan reads/references but does not create: the existing spike (scripts/spikes/q121-anti-unification-spike.ts), its output (pipeline/q121/anti-unification-spike.json), the read-only substrate (src/chapters/generated/formula-skeletons-bare.json), and formula-points.ts which the plan explicitly says it MUST NOT write; excluded t254 because the body treats it as the downstream W5 task this plan's report feeds, not the task this plan (W3 of plan:0093) is tracked under."
+  }
+ ],
+ "plan:0096-report-finding-figure-pipelines-plan": [
+  {
+   "deliverables": [
+    "doc/reports/biological-leads-and-blindspots.md",
+    "doc/reports/Makefile",
+    "doc/figures/leads/lead3-q90-bortezomib-resistance.svg",
+    "doc/figures/leads/lead3-q90-bortezomib-resistance.png",
+    "doc/figures/leads/lead1-h1-mechanism-verdicts.svg",
+    "doc/figures/leads/lead1-h1-mechanism-verdicts.png",
+    "doc/figures/leads/q87-tp53-ribosome-anticoupling.svg",
+    "doc/figures/leads/q87-tp53-ribosome-anticoupling.png",
+    "doc/figures/leads/q92-rpl22-fao-prior.svg",
+    "doc/figures/leads/q92-rpl22-fao-prior.png",
+    "doc/figures/leads/q93-ribosome-homeostat.svg",
+    "doc/figures/leads/q93-ribosome-homeostat.png",
+    "doc/figures/leads/q94-gpx1-instability.svg",
+    "doc/figures/leads/q94-gpx1-instability.png"
+   ],
+   "tasks": [],
+   "superseded": false,
+   "notes": "The six figure slugs from the Figures table each yield a committed .svg and .png under doc/figures/leads/ (the plan's explicit dual-target rule), plus the newly created doc/reports/Makefile and the report md that figures are embedded into; I omitted workflows/stages/figures.smk, scripts/figures/ scripts, and OUTPUT_ROOT source TSVs since those are pre-existing files edited/read (no concrete new script paths are named), and no concrete task id is given despite the \"track as science tasks\" note."
+  },
+  {
+   "deliverables": [
+    "doc/figures/leads/lead3-q90-bortezomib-resistance.svg",
+    "doc/figures/leads/lead3-q90-bortezomib-resistance.png",
+    "doc/figures/leads/lead1-h1-mechanism-verdicts.svg",
+    "doc/figures/leads/lead1-h1-mechanism-verdicts.png",
+    "doc/figures/leads/q87-tp53-ribosome-anticoupling.svg",
+    "doc/figures/leads/q87-tp53-ribosome-anticoupling.png",
+    "doc/figures/leads/q92-rpl22-fao-prior.svg",
+    "doc/figures/leads/q92-rpl22-fao-prior.png",
+    "doc/figures/leads/q93-ribosome-homeostat.svg",
+    "doc/figures/leads/q93-ribosome-homeostat.png",
+    "doc/figures/leads/q94-gpx1-instability.svg",
+    "doc/figures/leads/q94-gpx1-instability.png",
+    "doc/reports/Makefile"
+   ],
+   "tasks": [],
+   "superseded": false,
+   "notes": "Included the six named figure slugs' SVG+PNG under doc/figures/leads/ (explicitly stated output pattern) and the newly-created doc/reports/Makefile; dropped the candidate biological-leads-and-blindspots.md (a pre-existing report the plan embeds into, not creates) and omitted scripts/figures/*.py since no concrete per-figure script names are given, plus the \"science tasks\" tracking names no id."
+  },
+  {
+   "deliverables": [
+    "doc/reports/biological-leads-and-blindspots.md",
+    "doc/reports/Makefile",
+    "workflows/stages/figures.smk",
+    "doc/figures/leads/lead3-q90-bortezomib-resistance.svg",
+    "doc/figures/leads/lead3-q90-bortezomib-resistance.png",
+    "doc/figures/leads/lead1-h1-mechanism-verdicts.svg",
+    "doc/figures/leads/lead1-h1-mechanism-verdicts.png",
+    "doc/figures/leads/q87-tp53-ribosome-anticoupling.svg",
+    "doc/figures/leads/q87-tp53-ribosome-anticoupling.png",
+    "doc/figures/leads/q92-rpl22-fao-prior.svg",
+    "doc/figures/leads/q92-rpl22-fao-prior.png",
+    "doc/figures/leads/q93-ribosome-homeostat.svg",
+    "doc/figures/leads/q93-ribosome-homeostat.png",
+    "doc/figures/leads/q94-gpx1-instability.svg",
+    "doc/figures/leads/q94-gpx1-instability.png"
+   ],
+   "tasks": [],
+   "superseded": false
+  }
+ ],
+ "plan:0097-meta-model-v0-3-consolidation": [
+  {
+   "deliverables": [
+    "doc/architecture/meta-model-specification.md"
+   ],
+   "tasks": [],
+   "superseded": false,
+   "notes": "The only concrete artifact this plan creates/modifies is doc/architecture/meta-model-specification.md (edited across Tasks 2-6); the other four candidates are all incidental \u2014 the q121 report is read-only gate input, vocabulary-discipline.md is a cited reference, meta/validate.sh is explicitly told NOT to be invoked, and the wiring plan is only where a possible follow-up would be filed."
+  },
+  {
+   "deliverables": [
+    "doc/architecture/meta-model-specification.md"
+   ],
+   "tasks": [],
+   "superseded": false,
+   "notes": "The only file this plan creates/modifies is doc/architecture/meta-model-specification.md (adds the v0.3 changelog and three normative sections); the other candidates are read-only gate inputs (q121 tabulation), a referenced doctrine doc (vocabulary-discipline.md), an explicitly not-to-invoke path (meta/validate.sh), and a plan it only files a follow-up against (correspondence-surface-wiring plan) \u2014 all incidental."
+  }
+ ],
+ "plan:0098-q121-stratum-aware-successor-endpoint": [
+  {
+   "deliverables": [
+    "scripts/audit/lib/__tests__/q121GateSubstrate.test.ts",
+    "scripts/audit/lib/q121GateSubstrate.ts",
+    "src/natural/spec/correspondence/analytics/__tests__/compositionLaw.test.ts",
+    "src/natural/spec/correspondence/analytics/compositionLaw.ts",
+    "scripts/__tests__/q121-au-skeleton-profile-gen.test.ts",
+    "scripts/audit/gen-q121-au-skeleton-profiles.ts",
+    "src/natural/spec/correspondence/data/q121-au-skeleton-profiles.ts",
+    "src/natural/spec/correspondence/data/__tests__/q121-au-skeleton-profiles.test.ts",
+    "src/natural/spec/correspondence/analytics/__tests__/auStructuralEndpoint.test.ts",
+    "src/natural/spec/correspondence/analytics/auStructuralEndpoint.ts",
+    "scripts/__tests__/q121-au-structural-by-stratum.test.ts",
+    "scripts/audit/q121-au-structural-by-stratum.ts",
+    "pipeline/q121/au-structural-violations.json",
+    "doc/reports/2026-05-30-q121-au-structural-tabulation.md",
+    "scripts/__tests__/q121-au-npm-script.test.ts"
+   ],
+   "tasks": [
+    "t590",
+    "t618",
+    "t623"
+   ],
+   "superseded": false,
+   "notes": "Removed the three drift-guard input artifacts (pipeline/t590/endpoint-results.json, src/chapters/generated/derivation-strata.json, pipeline/t594/decirc-rerun.json) and the FieldCount gate's own files (scripts/audit/q121-cross-stratum-violations.ts, pipeline/q121/cross-stratum-violations.json) since the plan explicitly reads/leaves-untouched those rather than creating them; package.json is only edited (npm script) so omitted."
+  },
+  {
+   "deliverables": [
+    "scripts/audit/lib/__tests__/q121GateSubstrate.test.ts",
+    "scripts/audit/lib/q121GateSubstrate.ts",
+    "src/natural/spec/correspondence/analytics/__tests__/compositionLaw.test.ts",
+    "src/natural/spec/correspondence/analytics/compositionLaw.ts",
+    "scripts/__tests__/q121-au-skeleton-profile-gen.test.ts",
+    "scripts/audit/gen-q121-au-skeleton-profiles.ts",
+    "src/natural/spec/correspondence/data/q121-au-skeleton-profiles.ts",
+    "src/natural/spec/correspondence/data/__tests__/q121-au-skeleton-profiles.test.ts",
+    "src/natural/spec/correspondence/analytics/__tests__/auStructuralEndpoint.test.ts",
+    "src/natural/spec/correspondence/analytics/auStructuralEndpoint.ts",
+    "scripts/__tests__/q121-au-structural-by-stratum.test.ts",
+    "scripts/audit/q121-au-structural-by-stratum.ts",
+    "pipeline/q121/au-structural-violations.json",
+    "doc/reports/2026-05-30-q121-au-structural-tabulation.md",
+    "scripts/__tests__/q121-au-npm-script.test.ts"
+   ],
+   "tasks": [
+    "t590",
+    "t618",
+    "t623"
+   ],
+   "superseded": false,
+   "notes": "Removed the three committed drift-guard inputs (pipeline/t590/endpoint-results.json, src/chapters/generated/derivation-strata.json, pipeline/t594/decirc-rerun.json) and the FieldCount gate outputs (scripts/audit/q121-cross-stratum-violations.ts, pipeline/q121/cross-stratum-violations.json) as read/reference or pre-existing-file-modified artifacts that the plan explicitly leaves untouched or byte-identical; package.json is only edited (npm script), not a probeable new path; tasks are the @related/prose-grounded ids (t590/t618/t623) rather than an explicit tracking field."
+  }
+ ],
+ "plan:0101-t254-discriminator-targeted-population-scope": [
+  {
+   "deliverables": [
+    "pipeline/t590/readiness-gate.json",
+    "pipeline/t590/matched-opportunities.json",
+    "pipeline/t590/t607-power.json"
+   ],
+   "tasks": [
+    "t254"
+   ],
+   "superseded": true,
+   "notes": "Dropped candidate endpoint-results.json as an incidental reference (an already-run artifact cited in the superseded banner, not produced by this plan); kept the three Track C / batch-plan tooling outputs; body's opening banner explicitly declares the plan superseded."
+  },
+  {
+   "deliverables": [
+    "pipeline/t590/readiness-gate.json",
+    "pipeline/t590/matched-opportunities.json",
+    "pipeline/t590/t607-power.json"
+   ],
+   "tasks": [
+    "t254"
+   ],
+   "superseded": true,
+   "notes": "Body opens with an explicit \"SUPERSEDED 2026-06-15\" banner, so superseded=true; kept the three Track-C artifacts the plan regenerates but dropped candidate pipeline/t590/endpoint-results.json since the plan cites it as already-run input and explicitly states it does not run t590; embedded <!-- task:t254 --> comments make t254 the tracking task (t257/t590/t607 are referenced but not the tracking id)."
+  }
+ ],
+ "plan:0102-t784-entropy-dissipation-jko-probe": [
+  {
+   "deliverables": [
+    "scripts/egraph_move_spike/entropy_dissipation_probe.py",
+    "scripts/egraph_move_spike/entropy_dissipation_findings.json",
+    "scripts/egraph_move_spike/test_entropy_dissipation_probe.py",
+    "scripts/egraph_move_spike/README.md"
+   ],
+   "tasks": [
+    "t784"
+   ],
+   "superseded": false,
+   "notes": "Removed leibniz_probe.py and exp_closure_probe.py candidates (both listed under Inputs as existing files the probe reuses/mirrors, not creates); added the three new files the plan explicitly emits (entropy_dissipation_probe.py, entropy_dissipation_findings.json, test_entropy_dissipation_probe.py) and kept README.md since the plan states it will update it; the test file's exact path is ambiguous (body says \"add test_entropy_dissipation_probe.py\" while Validation references a scripts/egraph_move_spike/__tests__ suite); tasks reduced to t784 since t780/t782/t773/t783 are only cited as background/inputs."
+  },
+  {
+   "deliverables": [
+    "scripts/egraph_move_spike/entropy_dissipation_probe.py",
+    "scripts/egraph_move_spike/entropy_dissipation_findings.json",
+    "scripts/egraph_move_spike/__tests__/test_entropy_dissipation_probe.py",
+    "scripts/egraph_move_spike/README.md"
+   ],
+   "tasks": [
+    "t784"
+   ],
+   "superseded": false,
+   "notes": "Dropped leibniz_probe.py and exp_closure_probe.py as they are listed under \"Inputs\" (reused/mirrored, explicitly not modified); added three bare filenames named in prose under scripts/egraph_move_spike/, placing the test file in the __tests__ subdir the Validation section names as the suite location."
+  }
+ ],
+ "plan:0112-gene-entity-prose-draft-generation-implementation": [
+  {
+   "deliverables": [
+    "config/app_export_entity_prose.drafts.yaml",
+    "scripts/stages/app_export/entity_prose.py",
+    "scripts/stages/app_export/build_entity_prose_bundles.py",
+    "doc/app-export/entity-prose-authoring.md",
+    "workflows/stages/app_export.smk",
+    "tests/test_app_export_entity_prose.py",
+    "tests/test_app_export_entity_prose_bundles.py",
+    "tests/test_app_export_smk_wiring.py"
+   ],
+   "tasks": [],
+   "superseded": false,
+   "notes": "Dropped the design doc (governing reference, commit 69afb420) and config/app_export_entity_prose.yaml (existing published registry that is read/promoted-into, not created); added workflows/stages/app_export.smk as a Modify target the regex missed; omitted the $MM30_OUTPUT_ROOT/.../entity_prose_bundles.json build output as non-repo-relative; only placeholder task id t-prose-bundles present, no real t### id."
+  },
+  {
+   "deliverables": [
+    "config/app_export_entity_prose.drafts.yaml",
+    "scripts/stages/app_export/build_entity_prose_bundles.py",
+    "doc/app-export/entity-prose-authoring.md",
+    "scripts/stages/app_export/entity_prose.py",
+    "workflows/stages/app_export.smk",
+    "tests/test_app_export_entity_prose.py",
+    "tests/test_app_export_entity_prose_bundles.py",
+    "tests/test_app_export_smk_wiring.py"
+   ],
+   "tasks": [],
+   "superseded": false,
+   "notes": "Kept the File Structure Modify/Create/Test paths (added workflows/stages/app_export.smk, a genuine modify target the regex missed); dropped candidate entities/design/0041-...-design.md (cited design doc, only referenced) and config/app_export_entity_prose.yaml (existing published registry the plan reads/promotes into, not created); omitted the OUTPUT_ROOT-relative entity_prose_bundles.json since it is a generated data artifact, not a committed repo path; no t123-style tracking task ids appear (the metadata \"t-prose-bundles\" is a script tag, not a backlog id)."
+  }
+ ],
+ "plan:0122-mm-scatac-staging-gse162337-gse199268": [
+  {
+   "deliverables": [
+    "workflows/external/frede_2021.smk",
+    "workflows/external/leblay_2024.smk",
+    "scripts/external/geo_deposit/__init__.py",
+    "scripts/external/geo_deposit/staging.py",
+    "scripts/external/frede_2021/__init__.py",
+    "scripts/external/frede_2021/constants.py",
+    "scripts/external/frede_2021/build_data_package.py",
+    "scripts/external/leblay_2024/__init__.py",
+    "scripts/external/leblay_2024/constants.py",
+    "scripts/external/leblay_2024/build_data_package.py",
+    "workflows/Snakefile",
+    "entities/datasets/gse162337.md",
+    "entities/datasets/gse199268.md",
+    "entities/searches/0008-mm-scatac-chromatin-accessibility.md",
+    "doc/plans/data-needs-audit.yaml",
+    "data/external/leblay_2024/2023-09/datapackage.json"
+   ],
+   "tasks": [
+    "t828"
+   ],
+   "superseded": false,
+   "notes": "Deliverables taken from the Architecture layout table's NEW/MODIFY entries; dropped candidates `geo_deposit/staging.py` (stray/duplicate of the real scripts/external path), `scripts/external/tirier_2021/build_data_package.py` (a sibling the plan only mirrors/reads), and `entities/searches/0008-...md` (truncated dup); excluded UNCHANGED question files; added the concrete leblay datapackage.json but omitted the frede one since its path carries a `<geo-release>` placeholder."
+  },
+  {
+   "deliverables": [
+    "workflows/external/frede_2021.smk",
+    "workflows/external/leblay_2024.smk",
+    "workflows/Snakefile",
+    "scripts/external/geo_deposit/__init__.py",
+    "scripts/external/geo_deposit/staging.py",
+    "scripts/external/frede_2021/__init__.py",
+    "scripts/external/frede_2021/constants.py",
+    "scripts/external/frede_2021/build_data_package.py",
+    "scripts/external/leblay_2024/__init__.py",
+    "scripts/external/leblay_2024/constants.py",
+    "scripts/external/leblay_2024/build_data_package.py",
+    "entities/datasets/gse162337.md",
+    "entities/datasets/gse199268.md",
+    "entities/searches/0008-mm-scatac-chromatin-accessibility.md",
+    "doc/plans/data-needs-audit.yaml",
+    "data/external/leblay_2024/2023-09/datapackage.json"
+   ],
+   "tasks": [
+    "t828"
+   ],
+   "superseded": false,
+   "notes": "Dropped candidate scripts/external/tirier_2021/build_data_package.py (a sibling the plan mirrors, not produced) and the truncated regex artifacts geo_deposit/staging.py and entities/searches/0008-...md; added all NEW .smk/scripts files and MODIFY targets from the layout block, plus the one concrete leblay datapackage.json (the frede datapackage path uses a <geo-release> placeholder so it is omitted as non-probeable)."
+  }
+ ],
+ "plan:0123-dlbcl-comparator-staging": [
+  {
+   "deliverables": [
+    "scripts/external/geo_series_matrix/__init__.py",
+    "scripts/external/geo_series_matrix/staging.py",
+    "scripts/external/geo_series_matrix/build_data_package.py",
+    "scripts/external/dlbcl_gse10846/__init__.py",
+    "scripts/external/dlbcl_gse10846/constants.py",
+    "scripts/external/dlbcl_gse87371/__init__.py",
+    "scripts/external/dlbcl_gse87371/constants.py",
+    "workflows/external/dlbcl_comparator.smk",
+    "workflows/Snakefile",
+    "entities/datasets/gse10846.md",
+    "entities/datasets/gse87371.md",
+    "doc/plans/data-needs-audit.yaml",
+    "doc/plans/coverage-snapshot-2026-07-03-dlbcl.json",
+    "doc/plans/wave1-checkpoint.md"
+   ],
+   "tasks": [
+    "t832"
+   ],
+   "superseded": false,
+   "notes": "Corrected the two candidate constants paths to their full scripts/external/... prefix and added the other NEW/MODIFY paths from the architecture diagram; dropped the capability-fit design doc (referenced, not produced) and the entities/questions/0151-*.md glob (no concrete path); chose t832 (noted via `science tasks note t832` in Task 7) as the tracking task over the regex-picked t833, which the body labels an out-of-scope follow-on."
+  },
+  {
+   "deliverables": [
+    "scripts/external/geo_series_matrix/__init__.py",
+    "scripts/external/geo_series_matrix/staging.py",
+    "scripts/external/geo_series_matrix/build_data_package.py",
+    "scripts/external/dlbcl_gse10846/__init__.py",
+    "scripts/external/dlbcl_gse10846/constants.py",
+    "scripts/external/dlbcl_gse87371/__init__.py",
+    "scripts/external/dlbcl_gse87371/constants.py",
+    "workflows/external/dlbcl_comparator.smk",
+    "doc/plans/coverage-snapshot-2026-07-03-dlbcl.json"
+   ],
+   "tasks": [
+    "t832"
+   ],
+   "superseded": false,
+   "notes": "Corrected the two constants.py candidates to their full scripts/external/ paths and added the sibling NEW files (geo_series_matrix package, cohort __init__.py, .smk) that the Architecture tree names but the regex missed; dropped the capability-fit design doc (referenced, not created) and excluded MODIFY-only/append targets (Snakefile, entity stubs, data-needs-audit.yaml, wave1-checkpoint.md) since those pre-exist; reported t832 (the plan's own finish-task tracker) rather than the candidate t833, which the body labels an out-of-scope follow-on."
+  }
+ ],
+ "plan:0125-pi-replication-gate-plan": [
+  {
+   "deliverables": [
+    "scripts/shared/meta.py",
+    "scripts/shared/tests/test_meta.py",
+    "scripts/stages/decomposition/standardized_metafor.py",
+    "scripts/stages/decomposition/standardized_metafor_all.py",
+    "scripts/stages/decomposition/pi_replication_audit.py",
+    "scripts/stages/decomposition/tests/test_pi_replication_audit.py",
+    "entities/pre-registrations/0050-pi-replication-gate.md",
+    "workflows/stages/decomposition.smk"
+   ],
+   "tasks": [
+    "t839"
+   ],
+   "superseded": false,
+   "notes": "Removed `entities/design/0043-...` (read-only design of record) and `shared/meta.py` (import-path duplicate of scripts/shared/meta.py); dropped `tasks/active.md` (incidental mention where t839 is allocated); added `workflows/stages/decomposition.smk` (Task 4 modifies it); omitted the `<next-id>` interpretation file and the `0174/0175/0176-\u2026md` question edits since they carry placeholder/wildcard paths, and the pipeline data outputs (tsv/png tables) since they live under the output root, not the repo tree."
+  },
+  {
+   "deliverables": [
+    "scripts/shared/meta.py",
+    "scripts/shared/tests/test_meta.py",
+    "scripts/stages/decomposition/standardized_metafor.py",
+    "scripts/stages/decomposition/standardized_metafor_all.py",
+    "scripts/stages/decomposition/pi_replication_audit.py",
+    "scripts/stages/decomposition/tests/test_pi_replication_audit.py",
+    "workflows/stages/decomposition.smk",
+    "entities/pre-registrations/0050-pi-replication-gate.md"
+   ],
+   "tasks": [
+    "t839"
+   ],
+   "superseded": false,
+   "notes": "Removed the design file 0043 (read-only design of record), the bare import path `shared/meta.py` (duplicate of scripts/shared/meta.py), and tasks/active.md (only mentioned as where t839 lives); added workflows/stages/decomposition.smk (modified with the new rule); omitted the interpretation entity (`<next-id>` placeholder) and question files (glob `0174/0175/0176-\u2026md`) as they lack concrete probeable paths."
+  }
+ ]
+}

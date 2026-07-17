@@ -1,18 +1,25 @@
 # Curation scope certification — design
 
-**Status:** DESIGN — **v2**, revised 2026-07-17 after review. **Not ready for an
-implementation plan.**
+**Status:** DESIGN — **v3**, 2026-07-17. Blocking precondition **CLEARED**: the
+§2.2 correspondence-drift sample ran and **demonstrated material drift**. §5 is
+**retained**, ready for an implementation plan.
 
-**Blocking precondition.** The §5 ruling is **conditional** on the
-correspondence-drift sample of §2.2, which **has not been run**. v1 justified the
-ruling with a status distribution (*"2 of 126 plans marked complete"*); that
-inference is **retracted** — it cannot distinguish a stale record from an
-in-flight plan. Until the sample exists, this spec has no measured evidence, and
-its gate can still withdraw §5 entirely and close the question as
-*"epistemic-only certified as correct."*
+**Precondition cleared (was blocking).** The §5 ruling was conditional on the
+correspondence-drift sample of §2.2. That sample is now **run and recorded**
+(`docs/plans/2026-07-17-drift-sample/`, pre-registration sha256 `6d270db8…`). At
+the first look (n = 40, equal-probability, blinded double-adjudication) the gate
+returned **demonstrate**: k = 22–24 mismatches (Manski bounds both past the
+demonstrate threshold of k ≥ 9), an ~57% mismatch rate against θ = 0.10, κ = 0.81.
+The dominant cell is stale under-claim — 19 plans assert `draft` while their
+deliverables are built — exactly the §2.2 hypothesis. The retracted v1 argument
+(*"2 of 126 plans marked complete"*, which could not distinguish a stale record
+from an in-flight plan) is **not** what carries the ruling; the measurement does.
+Full result: `docs/plans/2026-07-17-drift-sample/result.md`.
 
-**Ratify before implementing.** The §5 `correspondence` roster is a proposal, not
-a finding (§5 item 5).
+**Consequence.** Per the pre-registered three-way gate, demonstrated drift means
+§5 stands: `curation_scope` is a declared axis, and `plan` is admitted as a
+correspondence-scoped kind. Other correspondence kinds are ratified individually
+from here (§7); the roster remains a proposal for every kind except `plan`.
 
 This is **spec 1 of a decomposed program** (§7). It is deliberately the smallest
 piece, and everything else in the program depends on its ruling: until a review

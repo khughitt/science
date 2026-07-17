@@ -1,0 +1,497 @@
+{
+  "gate": {
+    "k_hi": "demonstrate",
+    "k_lo": "demonstrate"
+  },
+  "k_hi": 24,
+  "k_lo": 22,
+  "n": 40,
+  "n_indeterminate": 2,
+  "plans": [
+    {
+      "adjudicated": "complete",
+      "claimed_status": "active",
+      "normalized_claim": "active",
+      "plan_id": "plan:0002-v8-1-version-branch-analysis",
+      "project": "multiple-myeloma",
+      "reviewer_statuses": [
+        "complete",
+        "complete"
+      ],
+      "verdict": "mismatch"
+    },
+    {
+      "adjudicated": "active",
+      "claimed_status": "active",
+      "normalized_claim": "active",
+      "plan_id": "plan:0006-expanded-lens-pipeline-plan",
+      "project": "protein-landscape",
+      "reviewer_statuses": [
+        "active",
+        "active"
+      ],
+      "verdict": "match"
+    },
+    {
+      "adjudicated": "active",
+      "claimed_status": "draft",
+      "normalized_claim": "draft",
+      "plan_id": "plan:0007-t099-string-metabolic-full-plan",
+      "project": "protein-landscape",
+      "reviewer_statuses": [
+        "active",
+        "active"
+      ],
+      "verdict": "mismatch"
+    },
+    {
+      "adjudicated": "active",
+      "claimed_status": "active",
+      "normalized_claim": "active",
+      "plan_id": "plan:0008-phenotype-contrast-fassoc-remaining-refactors",
+      "project": "multiple-myeloma",
+      "reviewer_statuses": [
+        "active",
+        "active"
+      ],
+      "verdict": "match"
+    },
+    {
+      "adjudicated": "active",
+      "claimed_status": "active",
+      "normalized_claim": "active",
+      "plan_id": "plan:0009-hd-ap1-sequencing-plan",
+      "project": "multiple-myeloma",
+      "reviewer_statuses": [
+        "active",
+        "active"
+      ],
+      "verdict": "match"
+    },
+    {
+      "adjudicated": "active",
+      "claimed_status": "active",
+      "normalized_claim": "active",
+      "plan_id": "plan:0012-t469-pc-maturity-scope1-pipeline-plan",
+      "project": "multiple-myeloma",
+      "reviewer_statuses": [
+        "active",
+        "active"
+      ],
+      "verdict": "match"
+    },
+    {
+      "adjudicated": "indeterminate",
+      "claimed_status": "active",
+      "normalized_claim": "active",
+      "plan_id": "plan:0015-viewer-home-bootstrap-baseline-trace",
+      "project": "protein-landscape",
+      "reviewer_statuses": [
+        "indeterminate",
+        "indeterminate"
+      ],
+      "verdict": "indeterminate"
+    },
+    {
+      "adjudicated": "active",
+      "claimed_status": "active",
+      "normalized_claim": "active",
+      "plan_id": "plan:0016-viewer-home-bootstrap-refactor-design",
+      "project": "protein-landscape",
+      "reviewer_statuses": [
+        "active",
+        "active"
+      ],
+      "verdict": "match"
+    },
+    {
+      "adjudicated": "active",
+      "claimed_status": "active",
+      "normalized_claim": "active",
+      "plan_id": "plan:0017-t488-chng2007-within-hd-clusters-plan",
+      "project": "multiple-myeloma",
+      "reviewer_statuses": [
+        "indeterminate",
+        "active",
+        "active"
+      ],
+      "verdict": "match"
+    },
+    {
+      "adjudicated": "active",
+      "claimed_status": "active",
+      "normalized_claim": "active",
+      "plan_id": "plan:0023-foundation-hygiene",
+      "project": "natural-systems",
+      "reviewer_statuses": [
+        "active",
+        "active"
+      ],
+      "verdict": "match"
+    },
+    {
+      "adjudicated": "active",
+      "claimed_status": "active",
+      "normalized_claim": "active",
+      "plan_id": "plan:0025-hit-prioritization-phase3-6-plan",
+      "project": "multiple-myeloma",
+      "reviewer_statuses": [
+        "active",
+        "active"
+      ],
+      "verdict": "match"
+    },
+    {
+      "adjudicated": "active",
+      "claimed_status": "active",
+      "normalized_claim": "active",
+      "plan_id": "plan:0028-t630-walker2024-scrna-ingest-pipeline-plan",
+      "project": "multiple-myeloma",
+      "reviewer_statuses": [
+        "active",
+        "active"
+      ],
+      "verdict": "match"
+    },
+    {
+      "adjudicated": "active",
+      "claimed_status": "active",
+      "normalized_claim": "active",
+      "plan_id": "plan:0030-t648-walker-per-cell-h1-bridge-tiebreaker-pipeline-plan",
+      "project": "multiple-myeloma",
+      "reviewer_statuses": [
+        "active",
+        "active"
+      ],
+      "verdict": "match"
+    },
+    {
+      "adjudicated": "active",
+      "claimed_status": "draft",
+      "normalized_claim": "draft",
+      "plan_id": "plan:0033-content-coverage-push-and-flat-field-deprecation",
+      "project": "natural-systems",
+      "reviewer_statuses": [
+        "active",
+        "active"
+      ],
+      "verdict": "mismatch"
+    },
+    {
+      "adjudicated": "active",
+      "claimed_status": "active",
+      "normalized_claim": "active",
+      "plan_id": "plan:0038-t677-adaptive-permutation-null-plan",
+      "project": "multiple-myeloma",
+      "reviewer_statuses": [
+        "active",
+        "active"
+      ],
+      "verdict": "match"
+    },
+    {
+      "adjudicated": "active",
+      "claimed_status": "complete",
+      "normalized_claim": "complete",
+      "plan_id": "plan:0042-formula-skeleton-motif-pipeline-plan",
+      "project": "natural-systems",
+      "reviewer_statuses": [
+        "active",
+        "active"
+      ],
+      "verdict": "mismatch"
+    },
+    {
+      "adjudicated": "active",
+      "claimed_status": "active",
+      "normalized_claim": "active",
+      "plan_id": "plan:0042-script-workflow-cleanup-execution-plan",
+      "project": "multiple-myeloma",
+      "reviewer_statuses": [
+        "active",
+        "active"
+      ],
+      "verdict": "match"
+    },
+    {
+      "adjudicated": "active",
+      "claimed_status": "draft",
+      "normalized_claim": "draft",
+      "plan_id": "plan:0045-cytogenetic-inference-pipeline-plan",
+      "project": "multiple-myeloma",
+      "reviewer_statuses": [
+        "draft",
+        "active",
+        "active"
+      ],
+      "verdict": "mismatch"
+    },
+    {
+      "adjudicated": "active",
+      "claimed_status": "draft",
+      "normalized_claim": "draft",
+      "plan_id": "plan:0048-cytogenetic-pipeline-integration",
+      "project": "multiple-myeloma",
+      "reviewer_statuses": [
+        "active",
+        "active"
+      ],
+      "verdict": "mismatch"
+    },
+    {
+      "adjudicated": "active",
+      "claimed_status": "draft",
+      "normalized_claim": "draft",
+      "plan_id": "plan:0054-project-reorganization-plan",
+      "project": "multiple-myeloma",
+      "reviewer_statuses": [
+        "active",
+        "active"
+      ],
+      "verdict": "mismatch"
+    },
+    {
+      "adjudicated": "complete",
+      "claimed_status": "proposed",
+      "normalized_claim": "draft",
+      "plan_id": "plan:0054-task7-pair-table-provenance-ledger-design",
+      "project": "natural-systems",
+      "reviewer_statuses": [
+        "complete",
+        "complete"
+      ],
+      "verdict": "mismatch"
+    },
+    {
+      "adjudicated": "active",
+      "claimed_status": "draft",
+      "normalized_claim": "draft",
+      "plan_id": "plan:0055-gdsc-drug-sensitivity",
+      "project": "multiple-myeloma",
+      "reviewer_statuses": [
+        "active",
+        "active"
+      ],
+      "verdict": "mismatch"
+    },
+    {
+      "adjudicated": "active",
+      "claimed_status": "complete",
+      "normalized_claim": "complete",
+      "plan_id": "plan:0060-entity-aware-prose-implementation-plan",
+      "project": "natural-systems",
+      "reviewer_statuses": [
+        "active",
+        "active"
+      ],
+      "verdict": "mismatch"
+    },
+    {
+      "adjudicated": "indeterminate",
+      "claimed_status": "draft",
+      "normalized_claim": "draft",
+      "plan_id": "plan:0065-reader-research-alignment-roadmap",
+      "project": "natural-systems",
+      "reviewer_statuses": [
+        "indeterminate",
+        "indeterminate"
+      ],
+      "verdict": "indeterminate"
+    },
+    {
+      "adjudicated": "active",
+      "claimed_status": "draft",
+      "normalized_claim": "draft",
+      "plan_id": "plan:0071-t203-ledergor-replication-pipeline-plan",
+      "project": "multiple-myeloma",
+      "reviewer_statuses": [
+        "active",
+        "active"
+      ],
+      "verdict": "mismatch"
+    },
+    {
+      "adjudicated": "active",
+      "claimed_status": "draft",
+      "normalized_claim": "draft",
+      "plan_id": "plan:0074-t080-docker-closeout",
+      "project": "multiple-myeloma",
+      "reviewer_statuses": [
+        "active",
+        "active"
+      ],
+      "verdict": "mismatch"
+    },
+    {
+      "adjudicated": "active",
+      "claimed_status": "design",
+      "normalized_claim": "draft",
+      "plan_id": "plan:0077-entity-taxonomy-design",
+      "project": "natural-systems",
+      "reviewer_statuses": [
+        "active",
+        "active"
+      ],
+      "verdict": "mismatch"
+    },
+    {
+      "adjudicated": "active",
+      "claimed_status": "draft",
+      "normalized_claim": "draft",
+      "plan_id": "plan:0081-topic-migration-implementation-plan",
+      "project": "multiple-myeloma",
+      "reviewer_statuses": [
+        "active",
+        "active"
+      ],
+      "verdict": "mismatch"
+    },
+    {
+      "adjudicated": "active",
+      "claimed_status": "draft",
+      "normalized_claim": "draft",
+      "plan_id": "plan:0082-t277-within-basin-variance-pipeline-plan",
+      "project": "multiple-myeloma",
+      "reviewer_statuses": [
+        "active",
+        "active"
+      ],
+      "verdict": "mismatch"
+    },
+    {
+      "adjudicated": "active",
+      "claimed_status": "draft",
+      "normalized_claim": "draft",
+      "plan_id": "plan:0088-t479-myc-state-vs-rearrangement-plan",
+      "project": "multiple-myeloma",
+      "reviewer_statuses": [
+        "active",
+        "active"
+      ],
+      "verdict": "mismatch"
+    },
+    {
+      "adjudicated": "complete",
+      "claimed_status": "draft",
+      "normalized_claim": "draft",
+      "plan_id": "plan:0092-anti-unification-generator-nodes",
+      "project": "natural-systems",
+      "reviewer_statuses": [
+        "complete",
+        "complete"
+      ],
+      "verdict": "mismatch"
+    },
+    {
+      "adjudicated": "active",
+      "claimed_status": "draft",
+      "normalized_claim": "draft",
+      "plan_id": "plan:0096-report-finding-figure-pipelines-plan",
+      "project": "multiple-myeloma",
+      "reviewer_statuses": [
+        "active",
+        "complete",
+        "active"
+      ],
+      "verdict": "mismatch"
+    },
+    {
+      "adjudicated": "complete",
+      "claimed_status": "draft",
+      "normalized_claim": "draft",
+      "plan_id": "plan:0097-meta-model-v0-3-consolidation",
+      "project": "natural-systems",
+      "reviewer_statuses": [
+        "complete",
+        "complete"
+      ],
+      "verdict": "mismatch"
+    },
+    {
+      "adjudicated": "active",
+      "claimed_status": "draft",
+      "normalized_claim": "draft",
+      "plan_id": "plan:0098-q121-stratum-aware-successor-endpoint",
+      "project": "natural-systems",
+      "reviewer_statuses": [
+        "active",
+        "active"
+      ],
+      "verdict": "mismatch"
+    },
+    {
+      "adjudicated": "superseded",
+      "claimed_status": "superseded",
+      "normalized_claim": "superseded",
+      "plan_id": "plan:0101-t254-discriminator-targeted-population-scope",
+      "project": "natural-systems",
+      "reviewer_statuses": [
+        "superseded",
+        "superseded"
+      ],
+      "verdict": "match"
+    },
+    {
+      "adjudicated": "active",
+      "claimed_status": "active",
+      "normalized_claim": "active",
+      "plan_id": "plan:0102-t784-entropy-dissipation-jko-probe",
+      "project": "natural-systems",
+      "reviewer_statuses": [
+        "active",
+        "active"
+      ],
+      "verdict": "match"
+    },
+    {
+      "adjudicated": "complete",
+      "claimed_status": "draft",
+      "normalized_claim": "draft",
+      "plan_id": "plan:0112-gene-entity-prose-draft-generation-implementation",
+      "project": "multiple-myeloma",
+      "reviewer_statuses": [
+        "complete",
+        "complete"
+      ],
+      "verdict": "mismatch"
+    },
+    {
+      "adjudicated": "active",
+      "claimed_status": "active",
+      "normalized_claim": "active",
+      "plan_id": "plan:0122-mm-scatac-staging-gse162337-gse199268",
+      "project": "multiple-myeloma",
+      "reviewer_statuses": [
+        "active",
+        "active"
+      ],
+      "verdict": "match"
+    },
+    {
+      "adjudicated": "active",
+      "claimed_status": "active",
+      "normalized_claim": "active",
+      "plan_id": "plan:0123-dlbcl-comparator-staging",
+      "project": "multiple-myeloma",
+      "reviewer_statuses": [
+        "active",
+        "active"
+      ],
+      "verdict": "match"
+    },
+    {
+      "adjudicated": "active",
+      "claimed_status": "draft",
+      "normalized_claim": "draft",
+      "plan_id": "plan:0125-pi-replication-gate-plan",
+      "project": "multiple-myeloma",
+      "reviewer_statuses": [
+        "active",
+        "active"
+      ],
+      "verdict": "mismatch"
+    }
+  ],
+  "prereg_sha256": "6d270db84b99ef2c5929679e2f8c39a559b38ec68d84948ca7b0721135e2df62",
+  "theta": 0.1
+}
