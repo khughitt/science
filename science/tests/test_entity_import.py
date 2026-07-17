@@ -757,3 +757,25 @@ def test_self_referential_source_does_not_drift(tmp_path: Path) -> None:
 
     assert report["id"] == "plan:0001-a-thing"
     assert not source.exists()
+
+
+def test_apply_does_not_delete_a_concurrent_writers_reservation_sentinel(tmp_path: Path) -> None:
+    """Lost number race: our claim fails because another writer holds the sentinel; that sentinel must survive."""
+    from science_tool.entities import EntityCommandError
+    from science_tool.entity_import import apply_import
+
+    root = _project(tmp_path)
+    source = _loose(root, "doc/plans/x.md")
+    plan = plan_import(root, source, kind="plan", title="A Thing")
+
+    # Another writer already holds the reservation for this exact number.
+    sentinel = root / "entities" / "plans" / f".{plan.number:04d}.reserving"
+    sentinel.parent.mkdir(parents=True, exist_ok=True)
+    sentinel.write_text("", encoding="utf-8")
+
+    with pytest.raises(EntityCommandError):
+        apply_import(root, plan)
+
+    assert sentinel.exists(), "apply deleted the concurrent writer's reservation sentinel"
+    assert not (root / plan.dest_rel).exists(), "our transaction created a dest despite losing the race"
+    assert source.exists(), "our source was unlinked despite the claim failing"

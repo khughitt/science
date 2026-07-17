@@ -582,7 +582,6 @@ def apply_import(
     except Exception:
         restrict = {*mutated, *(project_root / rel for rel in written_refs)}
         _restore(snapshot, restrict=restrict)
-        (dest.parent / f".{plan.number:0{LOCAL_PART_WIDTH}d}.reserving").unlink(missing_ok=True)
         raise
 
     return {
