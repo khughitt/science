@@ -32,6 +32,7 @@ from pydantic import BaseModel
 
 from science_tool.entities import (
     LOCAL_PART_WIDTH,
+    EntityCommandError,
     _render_markdown,
     _validate_prospective_write,
     default_status,
@@ -120,18 +121,34 @@ def plan_import(
 
     resolved_title = title if title is not None else _derive_title(text, source)
 
-    resolved_status = status if status is not None else default_status(kind, project_root=project_root)
-    allowed = valid_statuses(kind, project_root=project_root)
-    # None is an OPEN set (entities.py:1697), not an empty one -- do not refuse on it.
-    if allowed is not None and resolved_status not in allowed:
-        raise EntityImportError(f"status {resolved_status!r} is not in the {kind} vocabulary {sorted(allowed)}")
+    # Identity resolution: everything here calls into entities.py / entity_reservation.py,
+    # which raise their OWN exception types (a bare KeyError for a kind unknown to both the
+    # built-in table and the local manifest; EntityCommandError for an unsupported kind, a
+    # non-numeric kind, or an unsluggable title) on bad user input. plan_import advertises
+    # EntityImportError as its sole error type -- every test in this module raises it -- so
+    # a caller catching EntityImportError must not see these leak through unwrapped.
+    try:
+        resolved_status = status if status is not None else default_status(kind, project_root=project_root)
+        allowed = valid_statuses(kind, project_root=project_root)
+        # None is an OPEN set (entities.py:1697), not an empty one -- do not refuse on it.
+        # This check raises EntityImportError directly, which the except clauses below do
+        # NOT catch (it is unrelated to EntityCommandError/KeyError) -- it passes through
+        # unwrapped, exactly as if it sat outside the try.
+        if allowed is not None and resolved_status not in allowed:
+            raise EntityImportError(
+                f"status {resolved_status!r} is not in the {kind} vocabulary {sorted(allowed)}"
+            )
+        number = propose_number(project_root, kind)
+        slug_value = validate_slug(slug) if slug is not None else derive_slug(resolved_title)
+        policy = resolve_path_policy(kind)
+    except KeyError as exc:
+        raise EntityImportError(f"unknown entity kind: {kind}") from exc
+    except EntityCommandError as exc:
+        raise EntityImportError(str(exc)) from exc
 
-    number = propose_number(project_root, kind)
-    slug_value = validate_slug(slug) if slug is not None else derive_slug(resolved_title)
     local_part = f"{number:0{LOCAL_PART_WIDTH}d}-{slug_value}"
     entity_id = f"{kind}:{local_part}"
 
-    policy = resolve_path_policy(kind)
     dest = project_root / policy.root / f"{local_part}.md"
     source_rel = source.relative_to(project_root).as_posix()
     dest_rel = dest.relative_to(project_root).as_posix()

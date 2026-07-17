@@ -152,3 +152,19 @@ def test_plan_rebases_outbound_links(tmp_path: Path) -> None:
     plan = plan_import(root, root / "doc/plans/x.md", kind="plan", title="T1")
 
     assert "../../doc/plans/sibling.md" in plan.rendered_text
+
+
+def test_plan_import_unknown_kind_raises_entity_import_error(tmp_path: Path) -> None:
+    """A bad --kind must surface as EntityImportError, not a raw KeyError/EntityCommandError."""
+    root = _project(tmp_path)
+    source = _loose(root, "doc/plans/x.md")
+    with pytest.raises(EntityImportError):
+        plan_import(root, source, kind="not-a-real-kind", title="A Thing")
+
+
+def test_plan_import_unsluggable_title_raises_entity_import_error(tmp_path: Path) -> None:
+    """A 1-char/unsluggable title with no --slug must surface as EntityImportError."""
+    root = _project(tmp_path)
+    source = _loose(root, "doc/plans/x.md")
+    with pytest.raises(EntityImportError):
+        plan_import(root, source, kind="plan", title="T")
