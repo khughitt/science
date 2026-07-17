@@ -219,6 +219,39 @@ as a bare rate. The matrix is what distinguishes the two error directions:
 A plan claiming `draft` whose work genuinely has not started is a **match**. This
 is precisely what the retracted §2.2 count could not see.
 
+### 6.2a Claim normalization (predeclared) — or S4's problem becomes S1's answer
+
+`mismatch = adjudicated ≠ claimed` is **ill-defined against an illegal claim**.
+The adjudicator emits one of the legal six; 21 of natural-systems' 109 plans claim
+something else, and multiple-myeloma claims **zero**. Compared raw, every
+illegal-vocabulary plan is a mismatch **by construction**, and natural-systems
+would look drifty purely because of S4's vocabulary problem — a spurious signal
+concentrated in one project, tilting the pooled rate toward "demonstrated" for the
+wrong reason.
+
+So `claimed_status` is normalized **before** comparison, by a table fixed now:
+
+| Claimed | → | Basis |
+|---|---|---|
+| `draft`, `active`, `complete`, `superseded`, `retired`, `archived` | *(identity)* | already legal |
+| `proposed` (13) | `draft` | **upstream-prescribed** — `core.py` records it as "drift toward `draft`" |
+| `implemented` (2), `completed` (1) | `complete` | synonym |
+| `in-progress` (1), `current` (1), `agreed` (1) | `active` | synonym |
+| `design` (1) | `draft` | lifecycle position |
+| `approved` (3), `draft-for-review`, `ready-with-caveats` (4), `not-ready` (1) | **unmappable → `indeterminate`** | see below |
+
+**Unmappable claims are `indeterminate`, never guessed.** These are precisely
+S4's open question — four projects independently minted words for *"design
+approved, implementation not started"*, and no one has ruled where that sits. To
+map them here would be to **decide S4 silently, inside S1's evidence**, and the
+choice would move S1's answer. They enter the §6.3 Manski bounds like any other
+indeterminate. Measured: ~8 of 264 (**3%**), comfortably under the 20% ceiling.
+
+The mapping is **upstream-prescribed where upstream has spoken, and refuses to
+invent where it has not.** Fixed before the draw; a claim value found in the
+sample but absent from this table is `indeterminate`, not a fresh mapping
+decision.
+
 ### 6.3 `indeterminate` is not a match
 
 An `indeterminate` plan is **neither match nor mismatch**. It is **never silently
@@ -317,6 +350,8 @@ the choice before drawing**, never after seeing the draw.
 | **Prose progress annotations leak the claim** | §6.1 — "SHIPPED"/"DONE"/"merged at `<sha>`" stripped by a predeclared pattern list; a channel found mid-run invalidates and redraws the affected adjudications |
 | **Rubric assumes declared deliverables that do not exist** | §6.2 — **0 of 264** plans declare any; read literally the whole corpus would be `indeterminate` and the gate unreachable. Deliverables are **extracted** from the body (98% of mm/NS name code paths) as part of the blinded step, with the probe recorded |
 | Task linkage assumed universal | §6.2 — it is ~48% at best (5% in protein-landscape); a supporting signal, never required |
+| **Illegal vocabulary scores as drift** | §6.2a — 21 of NS's 109 plans claim an illegal status, mm claims **zero**; compared raw they are mismatches by construction and NS looks drifty from S4's problem, not its own. Claims are normalized by a table fixed before the draw |
+| **S4 decided silently inside S1's evidence** | §6.2a — `approved`/`ready-with-caveats`/`draft-for-review` are S4's open question; they are **`indeterminate`**, never mapped. Mapping them would choose S4's answer and move S1's (~3% of the frame) |
 | **Uncertainty read as absence** | §6.3 — Manski bounds carry indeterminates into the estimate; >20% indeterminate forces `inconclusive` regardless of bounds |
 | **Indeterminates silently dropped** | §6.3 — complete-case rate is secondary and never gates |
 | **Ruling out is unreachable at the chosen n** | §7 — thresholds derived; n = 29 proven impossible at α = 0.0167; ladder starts at 40 |
