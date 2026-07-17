@@ -255,3 +255,22 @@ def test_save_plan_replaces_with_the_overwrite_flag(tmp_path: Path) -> None:
 
     assert result.exit_code == 0, result.output
     assert json.loads(target.read_text(encoding="utf-8"))["entity_id"] == "plan:0001-a-thing"
+
+
+def test_save_plan_to_a_missing_parent_dir_is_a_clean_error(tmp_path: Path) -> None:
+    root = _project(tmp_path)
+    source = root / "doc" / "plans" / "x.md"
+    result = CliRunner().invoke(
+        main,
+        ["entities", "import", str(source), "--kind", "plan", "--project-root", str(root),
+         "--save-plan", str(root / "no" / "such" / "dir" / "plan.json")],
+    )
+    assert result.exit_code != 0
+    assert "Traceback" not in result.output
+    # CliRunner swallows an uncaught exception into result.exception without ever
+    # printing it, so exit_code != 0 alone does not prove the CLI handled this
+    # cleanly -- a raw FileNotFoundError propagating out of the command also exits
+    # nonzero with empty output. Pin down that it is specifically a SystemExit
+    # (click's clean-error exit), not the raw OSError leaking past click's handling.
+    assert isinstance(result.exception, SystemExit), result.exception
+    assert "cannot write --save-plan" in result.output

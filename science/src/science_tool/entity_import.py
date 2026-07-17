@@ -31,6 +31,7 @@ from datetime import date
 from pathlib import Path, PurePosixPath
 from typing import Any
 
+import yaml
 from pydantic import BaseModel
 from pydantic import ValidationError as PydanticValidationError
 
@@ -127,9 +128,15 @@ def plan_import(
     # source changing between the two reads produced a plan whose title/body and
     # whose hash described different bytes. split_frontmatter parses the text we
     # already hold, and that same text is what the hash below commits to.
-    text = source.read_text(encoding="utf-8")
+    try:
+        text = source.read_text(encoding="utf-8")
+    except UnicodeDecodeError as exc:
+        raise EntityImportError(f"{source} is not valid UTF-8: {exc}") from exc
     source_sha256 = hashlib.sha256(text.encode("utf-8")).hexdigest()
-    frontmatter, body = split_frontmatter(text)
+    try:
+        frontmatter, body = split_frontmatter(text)
+    except yaml.YAMLError as exc:
+        raise EntityImportError(f"{source} has a malformed frontmatter block: {exc}") from exc
     if frontmatter:
         raise EntityImportError(
             f"{source} already has frontmatter; import is for loose documents. "
@@ -560,7 +567,10 @@ def apply_import(
     # time. If the source changed since, applying would write the stale render and
     # unlink the newer file -- a silent data loss. Verify content, not existence,
     # BEFORE any mutation or snapshot.
-    current_source = source.read_text(encoding="utf-8")
+    try:
+        current_source = source.read_text(encoding="utf-8")
+    except UnicodeDecodeError as exc:
+        raise EntityImportError(f"{plan.source_rel} is not valid UTF-8: {exc}") from exc
     if hashlib.sha256(current_source.encode("utf-8")).hexdigest() != plan.source_sha256:
         raise EntityImportError(
             f"{plan.source_rel} changed since the preview; re-run the preview so the "

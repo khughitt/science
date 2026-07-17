@@ -371,4 +371,6 @@ def entities_import_command(
                     f"--save-plan target {save_plan} exists; pass --overwrite-plan to replace it"
                 ) from None
             save_plan.write_text(payload_json, encoding="utf-8")
+        except OSError as exc:
+            raise click.UsageError(f"cannot write --save-plan to {save_plan}: {exc}") from exc
     emit(output_format="json", payload=plan.model_dump(), render_text=lambda: None)

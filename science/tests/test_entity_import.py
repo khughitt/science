@@ -779,3 +779,19 @@ def test_apply_does_not_delete_a_concurrent_writers_reservation_sentinel(tmp_pat
     assert sentinel.exists(), "apply deleted the concurrent writer's reservation sentinel"
     assert not (root / plan.dest_rel).exists(), "our transaction created a dest despite losing the race"
     assert source.exists(), "our source was unlinked despite the claim failing"
+
+
+def test_plan_import_non_utf8_source_raises_entity_import_error(tmp_path: Path) -> None:
+    root = _project(tmp_path)
+    source = root / "doc" / "plans" / "bad.md"
+    source.parent.mkdir(parents=True, exist_ok=True)
+    source.write_bytes(b"\xff\xfe\x00\x00 not utf8")
+    with pytest.raises(EntityImportError):
+        plan_import(root, source, kind="plan", title="A Thing")
+
+
+def test_plan_import_malformed_frontmatter_raises_entity_import_error(tmp_path: Path) -> None:
+    root = _project(tmp_path)
+    source = _loose(root, "doc/plans/bad-fm.md", "---\n : : bad yaml : :\n- [unbalanced\n---\n\nbody\n")
+    with pytest.raises(EntityImportError):
+        plan_import(root, source, kind="plan", title="A Thing")
