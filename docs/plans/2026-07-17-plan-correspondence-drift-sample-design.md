@@ -3,9 +3,9 @@
 **Status:** DESIGN — 2026-07-17. **Pre-registration. Nothing below may change
 after the first plan is adjudicated.**
 
-This spec unblocks
+This spec unblocks S1 —
 [`2026-07-17-curation-scope-certification-design.md`](2026-07-17-curation-scope-certification-design.md)
-(S1), whose §5 ruling is conditional on evidence that does not yet exist. S1's v1
+— whose §5 ruling is conditional on evidence that does not yet exist. S1's v1
 justified admitting `plan` to curation scope with a status distribution — *"2 of
 126 plans marked `complete`"* — and that inference was **retracted**: a status
 distribution cannot distinguish a stale record from a plan legitimately in flight.
