@@ -55,7 +55,7 @@ Measured 2026-07-17:
 
 **Blocking preconditions.**
 
-1. **multiple-myeloma's tree is dirty** and it is the largest stratum (48% of N).
+1. **multiple-myeloma's tree is dirty** and it is 48% of the frame.
    Its working copy is Dropbox-synced and its branch/HEAD can move mid-session.
    Commit or stash, re-pin, and **re-verify the sha immediately before the draw**.
    Adjudicating against an unpinned tree measures nothing reproducible.
@@ -69,7 +69,8 @@ Measured 2026-07-17:
 Recorded, committed, and hashed **before the first plan is read**:
 
 - the four pinned commit shas and clean-tree assertions (§3);
-- the RNG **seed** and the realised allocation per stratum (§5);
+- the RNG **seed**, the frame (every plan id at the pinned commits), and the
+  drawn ids (§5);
 - the **adjudication rubric** (§6) and its version;
 - the **materiality threshold** θ (§7);
 - the **ladder** and per-look α (§7);
@@ -79,26 +80,63 @@ Anything discovered later that would change these **invalidates the draw** and
 requires a fresh pre-registration. This is the point of the exercise: thresholds
 fixed *after* seeing a result are not thresholds.
 
-## 5. Selection and stratification
+## 5. Selection: one equal-probability sample
 
-- **Stratify by `(project, claimed_status)`.** Both matter: mm is 48% of N with a
-  visibly different status convention (zero `proposed`, 2 `complete`), and
-  `claimed_status` is one side of the comparison.
-- **Proportional allocation, largest-remainder (Hamilton), no forced minimums.**
-  A stratum rounding to zero is **reported as unsampled**, not topped up —
-  silence is honest when prevalence is negligible. Its `N_h` is excluded from the
-  population the estimate generalises to, and that exclusion is stated with the
-  result.
-- **Any stratum allocated `n_h = 1` is censused or collapsed** before inference,
-  declared **before** the draw. A singleton is degenerate under resampling.
-- **Collapse rule, predeclared:** the eleven natural-systems statuses outside the
-  legal six (`proposed`, `implemented`, `current`, …) collapse into a single
-  `illegal-vocabulary` stratum. They are S4's subject, not S1's, and splitting
-  them creates singletons by construction.
-- **Realised inclusion probabilities `π_h = n_h/N_h` are computed after the draw
-  is fixed but before any outcome is scored**, and recorded with it. Largest-
-  remainder rounding routinely breaks self-weighting, so **assume design-weighted
-  inference** and prove otherwise, never the reverse.
+**Simple random sample without replacement from all N = 264**, one frame, no
+strata. Every plan has inclusion probability `π = n/N`, identical for all.
+
+**`project` and `claimed_status` are reporting variables, not sampling strata.**
+They are recorded per plan and the realised composition is reported, but they do
+not influence selection.
+
+### 5.1 Why not stratified (a contradiction, corrected)
+
+An earlier draft stratified by `(project, claimed_status)` with largest-remainder
+proportional allocation, and stated that design-weighted inference must be
+assumed. **It then gated §7 on a raw mismatch count `k` against a binomial
+Clopper–Pearson threshold. Those two are incompatible.**
+
+Under unequal inclusion probabilities the population rate is a **weighted**
+estimate: two samples with identical `k` imply *different* population rates
+depending on which strata the mismatches fell in. One raw-`k` boundary therefore
+cannot validly gate both, and the §6.3 Manski bounds — also counts — inherit the
+same defect.
+
+This is the natural-systems design's own v5→v6 correction (plain Wilson under
+unequal weights, rejected) reproduced after reading it.
+
+Two ways out. **Equal-probability sampling is adopted**, because:
+
+- It makes `k` a sufficient statistic again, so §7's derived thresholds and
+  §6.3's Manski bounds are valid **as written**.
+- The alternative — keeping strata and deriving design-based *sequential*
+  interval boundaries — is substantially more work for a gate this coarse.
+- Stratification's benefit here was small and its costs were real: at n = 40 over
+  N = 264 the variance reduction is marginal, while `post-acute` (10) and the
+  rare-status cells produce singletons by construction — which is why that draft
+  needed a singleton rule *and* a collapse rule at all. Both rules now disappear:
+  **there are no strata to collapse.**
+
+What is given up: guaranteed representation of small projects, and per-project
+rates precise enough to gate on. Neither is needed. **The estimand is the
+corpus-wide mismatch rate for the `plan` kind** — that is the quantity θ refers to
+and the quantity S1's ruling turns on. Per-project rates are reported
+descriptively (§8) and **never gate**; a project-level ruling would need its own
+adequately-powered draw, not a re-slicing of this one.
+
+### 5.2 Consequences, made explicit
+
+- **No forced minimums, no unsampled-stratum reporting, no collapse rule** — all
+  were artefacts of stratification.
+- **The eleven illegal-vocabulary statuses need no special handling** at
+  selection. They are S4's subject; here they are simply a recorded value of the
+  `claimed_status` reporting variable.
+- **A drawn plan is never substituted.** No replacement for "uninteresting" or
+  hard-to-probe plans — that is selection on the outcome. An unprobeable plan is
+  `indeterminate` (§6.3), which is a *result*, not a reason to redraw.
+- **Expected composition at n = 40** (for budgeting only, not a quota):
+  mm ≈ 19, natural-systems ≈ 17, protein-landscape ≈ 3, post-acute ≈ 1.5.
+  A realised composition far from this is reported, not corrected.
 
 ## 6. Adjudication rubric
 
@@ -145,11 +183,16 @@ An `indeterminate` plan is **neither match nor mismatch**. It is **never silentl
 dropped** — dropping it would bias the estimate toward whichever direction the
 probes happen to fail in.
 
-**Primary analysis: Manski worst-case bounds.** Compute the mismatch rate twice —
-once counting every `indeterminate` as a match (lower bound), once as a mismatch
-(upper bound). If **both** bounds fall on the same side of θ, the gate resolves
-and the indeterminates did not matter. If they straddle θ, the result is
-**inconclusive by construction** — no amount of point-estimating rescues it.
+**Primary analysis: Manski worst-case bounds.** Compute the mismatch count twice —
+once counting every `indeterminate` as a match (`k_lo`), once as a mismatch
+(`k_hi`) — and apply §7's Clopper–Pearson gate to **each**. If **both** resolve to
+the same side of θ, the gate resolves and the indeterminates did not matter. If
+they disagree, the result is **inconclusive by construction** — no amount of
+point-estimating rescues it.
+
+Both bounds are plain counts over an equal-probability sample (§5), which is
+exactly why §7's derived thresholds apply to them unchanged. Under the rejected
+stratified draft these bounds would have needed design weights too.
 
 This is what "do not interpret uncertainty as absence" means operationally: the
 uncertainty is carried into the bound rather than assumed away.
@@ -176,10 +219,14 @@ question rather than estimating it.
 roughly 1 plan in 10 misrecorded, a rotation plausibly repays its cost; at 1 in
 50 it does not. Fixed here so it cannot be tuned to the result.
 
+**These thresholds are valid because selection is equal-probability (§5).** Under
+the stratified draft they were not: `k` would not have determined the population
+rate. Any return to unequal `π` invalidates every number in this section.
+
 **Ladder — three looks, Bonferroni α = 0.05/3 ≈ 0.0167 one-sided each**, joint
-≥95%. Clopper–Pearson (exact, boundary-valid: it retains uncertainty after zero
-observed errors, which a bootstrap cannot — every resample of all-matches returns
-1.0). Thresholds **derived, not chosen**:
+≥95%. Clopper–Pearson on `k/n` (exact, boundary-valid: it retains uncertainty
+after zero observed errors, which a bootstrap cannot — every resample of
+all-matches returns 1.0). Thresholds **derived, not chosen**:
 
 | Look | n | rule out (drift < θ) | demonstrate (drift > θ) |
 |---|---|---|---|
@@ -216,7 +263,7 @@ the choice before drawing**, never after seeing the draw.
 3. The **adjudication set**: per plan, `{doc_id, pinned_commit, source_sha256,
    deliverables[], task_refs[], adjudicated, claimed, verdict}`.
 4. The **result**: confusion matrix, Manski bounds, indeterminate rate, κ, the
-   realised `π_h`, and any unsampled strata.
+   realised composition by project and `claimed_status` (descriptive only).
 5. A **ruling applied to S1** — retain, withdraw, or expand.
 
 ## 9. Risks
@@ -232,8 +279,8 @@ the choice before drawing**, never after seeing the draw.
 | **mm's dirty Dropbox tree moves mid-draw** | §3 — commit/stash, re-pin, re-verify sha immediately before the draw; probes resolve against the pin |
 | **Circularity: roster ratified before its evidence** | Sequencing ruled in the header — `plan` only; other kinds ratified afterwards |
 | **"No drift" branch quietly unreachable** | §2 — withdrawing S1 §5 is a first-class outcome with stated consequences for S2/S3 |
-| Rare strata forced to n_h = 1 | §5 — no forced minimums; unsampled strata reported; singletons censused or collapsed by a rule declared before the draw |
-| S4 vocabulary drift contaminates strata | §5 — the eleven illegal statuses collapse into one `illegal-vocabulary` stratum; S4 is a separate spec |
+| **Unequal `π` invalidates the count-based gate** | §5.1 — equal-probability draw, so `k` is sufficient and §7's derived thresholds and §6.3's Manski bounds hold **as written**. An earlier draft stratified *and* gated on raw `k`; the two are incompatible, and it reproduced natural-systems' own v5→v6 error |
+| S4 vocabulary drift contaminates selection | §5.2 — `claimed_status` is a reporting variable, not a stratum; the illegal statuses need no special handling. S4 is a separate spec |
 | Loose `doc/plans` smuggled into the population | §3 — `plan` entities only; loose docs are S3's population, not this one |
 
 ## 10. Non-goals
@@ -242,5 +289,7 @@ the choice before drawing**, never after seeing the draw.
 - **Curating, fixing, or restatusing any plan.** This measures; it does not act.
   No plan's `status` is edited as a result of adjudication.
 - **Measuring loose `doc/plans`.** §3.
-- **Resolving the status vocabulary** (S4) — §5 collapses it into one stratum.
+- **Resolving the status vocabulary** (S4) — §5.2 records it, nothing more.
+- **Estimating per-project drift rates.** §5.1 — reported descriptively, never
+  gated; a project-level ruling needs its own adequately-powered draw.
 - **Extending to other kinds.** `plan` only.
