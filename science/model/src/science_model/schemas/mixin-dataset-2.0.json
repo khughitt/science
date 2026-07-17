@@ -2,6 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://schemas.science/mixin-dataset-2.0.json",
   "title": "science entity dataset mixin",
+  "$comment": "2.0 adds project_only annotations on status/created/updated, matching paper/theme/topic 2.0. mixin-dataset-1.0.json is RETAINED and load-bearing: it is the rollback target for this migration, and consumers pinned to a pre-2.0 toolkit resolve it by name. Do not delete it without repinning every consumer.",
   "type": "object",
   "required": ["id", "kind", "origin", "tier"],
   "properties": {
@@ -11,6 +12,8 @@
     "origin": {"enum": ["external", "derived"]},
     "tier": {"enum": ["use-now", "evaluate-next", "track"]},
     "status": {"type": "string", "science:merge": "project_only"},
+    "created": {"type": "string", "format": "date", "science:merge": "project_only"},
+    "updated": {"type": "string", "format": "date", "science:merge": "project_only"},
     "update_cadence": {"type": "string"},
     "license": {"type": "string"},
     "accessions": {"type": "array", "items": {"type": "string"}, "science:merge": "forbidden"},

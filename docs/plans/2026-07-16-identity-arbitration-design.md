@@ -277,7 +277,10 @@ entity schema design records that `mixin-paper-1.0` and `2.0` ship side by side 
 it**. A meaning change requires an atomic versioned migration. The work:
 
 - Add **`mixin-dataset-2.0`**; **do not mutate `1.0`**.
-- Declare `status: project_only`, matching paper/theme/topic.
+- Declare **`status`, `created`, and `updated`** all `project_only`, matching paper/theme/topic
+  2.0 exactly. Annotating `status` alone would leave a dataset the one 2.0 kind whose overlay
+  dates still contest the owner and raise; completing the trio while 2.0 is unshipped avoids a
+  later `3.0` and a second 41-file migration.
 - Update the **dataset default profile** and **promotion paths**.
 - Migrate **explicit dataset profiles in `science-commons`**.
 - Run **toolkit, commons, compatibility, and graph-output** checks.

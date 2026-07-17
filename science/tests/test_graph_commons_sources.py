@@ -1031,12 +1031,17 @@ def _status_demo_project(
     *,
     dataset_mixin: str,
     canonical_status: str,
-    overlay_status: str,
+    overlay_fields: dict[str, str],
 ) -> Path:
-    """A commons dataset owner plus a project overlay proposing `status`.
+    """A commons dataset owner plus a project overlay proposing project_only fields.
 
     Parameterized on the dataset mixin version because that is the whole question: the same
-    two files must merge under dataset/2.0 and refuse to merge under dataset/1.0.
+    two files must merge under dataset/2.0 and refuse to merge under dataset/1.0. Parameterized
+    on the overlay's fields because 2.0 declares three of them -- `status`, `created`, `updated`
+    -- and one field passing proves nothing about the other two.
+
+    The canonical owner authors `created`/`updated` as well as `status`, so every one of the
+    three is a field the owner HAS spoken on. That is what makes the 1.0 control a contest.
     """
     entity_path = commons_root / "datasets" / "status-demo" / "entity.md"
     entity_path.parent.mkdir(parents=True)
@@ -1075,11 +1080,12 @@ A pointer dataset used to certify overlay status merging.
 
     overlay_path = project_root / "overlays" / "datasets" / "status-demo.md"
     overlay_path.parent.mkdir(parents=True)
+    proposed = "\n".join(f'{field}: "{value}"' for field, value in overlay_fields.items())
     overlay_path.write_text(
         f"""---
 id: "dataset:status-demo"
 overlay_of: "dataset:status-demo"
-status: "{overlay_status}"
+{proposed}
 ---
 
 ## Project-Specific Notes
@@ -1108,7 +1114,7 @@ def test_dataset_2_0_overlay_status_reaches_the_materialized_entity(
         commons_root,
         dataset_mixin="dataset/2.0",
         canonical_status="canonical",
-        overlay_status="active",
+        overlay_fields={"status": "active"},
     )
 
     sources = load_project_sources(project_root)
@@ -1116,6 +1122,69 @@ def test_dataset_2_0_overlay_status_reaches_the_materialized_entity(
     entity = next(e for e in sources.entities if e.canonical_id == "dataset:status-demo")
     assert entity.status == "active"
     assert sources.arbitration_errors == []
+
+
+def test_dataset_2_0_overlay_dates_reach_the_materialized_entity(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """`created` and `updated` are project_only on dataset/2.0, exactly as on paper/theme/topic.
+
+    Dates are the fields most likely to differ between the store and a project: the commons
+    records when the canonical record was written, the project when IT adopted the dataset.
+    Without these annotations an overlay's dates are a contest against the owner, and a dataset
+    is the one kind where that fails -- which is precisely the asymmetry this pins shut.
+    """
+    commons_root = _build_commons(tmp_path)
+    monkeypatch.setenv("SCIENCE_COMMONS_ROOT", str(commons_root))
+    monkeypatch.setenv("SCIENCE_COMMONS_QUIET_STALE", "1")
+    project_root = _status_demo_project(
+        tmp_path,
+        commons_root,
+        dataset_mixin="dataset/2.0",
+        canonical_status="canonical",
+        overlay_fields={"created": "2026-01-02", "updated": "2026-03-04"},
+    )
+
+    sources = load_project_sources(project_root)
+
+    entity = next(e for e in sources.entities if e.canonical_id == "dataset:status-demo")
+    assert str(entity.created) == "2026-01-02"
+    assert str(entity.updated) == "2026-03-04"
+    assert sources.arbitration_errors == []
+
+
+def test_dataset_1_0_refuses_an_overlay_replacing_defended_dates(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The date half of the versioning-atomicity control.
+
+    dataset/1.0 mentions neither date, so both resolve to default `replace` through the base
+    schema and the owner's dates are defended. This is what a project pinned to 1.0 must keep
+    seeing after 2.0 ships.
+    """
+    commons_root = _build_commons(tmp_path)
+    monkeypatch.setenv("SCIENCE_COMMONS_ROOT", str(commons_root))
+    monkeypatch.setenv("SCIENCE_COMMONS_QUIET_STALE", "1")
+    project_root = _status_demo_project(
+        tmp_path,
+        commons_root,
+        dataset_mixin="dataset/1.0",
+        canonical_status="canonical",
+        overlay_fields={"created": "2026-01-02", "updated": "2026-03-04"},
+    )
+
+    sources = load_project_sources(project_root, strict_identity=False)
+
+    conflicted = {
+        error.field
+        for error in sources.arbitration_errors
+        if error.code is ArbitrationCode.CONTRIBUTION_CONFLICT
+    }
+    assert conflicted == {"created", "updated"}
+
+    entity = next(e for e in sources.entities if e.canonical_id == "dataset:status-demo")
+    assert str(entity.created) == "2026-07-16"
+    assert str(entity.updated) == "2026-07-16"
 
 
 def test_dataset_1_0_refuses_an_overlay_replacing_a_defended_status(
@@ -1138,7 +1207,7 @@ def test_dataset_1_0_refuses_an_overlay_replacing_a_defended_status(
         commons_root,
         dataset_mixin="dataset/1.0",
         canonical_status="canonical",
-        overlay_status="active",
+        overlay_fields={"status": "active"},
     )
     overlay_path = project_root / "overlays" / "datasets" / "status-demo.md"
 
