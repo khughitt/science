@@ -177,3 +177,27 @@ def test_mark_superseded_unknown_id_fails_early(tmp_path: Path) -> None:
 
     with pytest.raises(SupersessionError, match="not derivable"):
         mark_superseded(root, ids=frozenset({"interpretation:9999-ghost"}), apply=True)
+
+
+def test_mark_superseded_dry_run_report_is_scoped(tmp_path: Path) -> None:
+    from science_tool.consolidation import mark_superseded
+
+    root = _project(tmp_path)
+    _superseding_pair(root, "0001-loser-a", "0002-winner-a")
+    _superseding_pair(root, "0003-loser-b", "0004-winner-b")
+
+    report = mark_superseded(root, ids=frozenset({"interpretation:0001-loser-a"}), apply=False)
+
+    assert report["to_mark"] == ["interpretation:0001-loser-a"]
+    assert report["applied"] == []
+    assert "interpretation:0003-loser-b" not in report["to_mark"]
+
+
+def test_mark_superseded_dry_run_unknown_id_fails_early(tmp_path: Path) -> None:
+    from science_tool.consolidation import SupersessionError, mark_superseded
+
+    root = _project(tmp_path)
+    _superseding_pair(root, "0001-loser-a", "0002-winner-a")
+
+    with pytest.raises(SupersessionError, match="not derivable"):
+        mark_superseded(root, ids=frozenset({"interpretation:9999-ghost"}), apply=False)

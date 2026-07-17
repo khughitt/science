@@ -519,13 +519,14 @@ def mark_superseded(
     auto-derivation, status **and** lineage.
 
     When `ids` is provided it is AUTHORITATIVE: only enumerated members are
-    written, and an id that is neither markable nor repairable is an error
-    rather than a silent no-op. It narrows BOTH write sets -- `to_mark` and
-    `to_repair` -- because both are committed by the prepare loop below; a
-    filter on `to_mark` alone would still repair out-of-cohort records.
+    written (or appear in the dry-run report), and an id that is neither
+    markable nor repairable is an error in both dry-run and apply. It narrows
+    BOTH write sets -- `to_mark` and `to_repair` -- because both are committed
+    by the prepare loop below; a filter on `to_mark` alone would still repair
+    out-of-cohort records.
 
     Chain derivation and graph validation remain corpus-wide: the allowlist
-    narrows what is WRITTEN, never what is CHECKED.
+    narrows what is WRITTEN and REPORTED, never what is CHECKED.
 
     Returns a dict with keys:
     - ``chains``: linear chains as ``{"survivor", "members" (sorted), "linear": True}``.
@@ -573,6 +574,16 @@ def mark_superseded(
                 to_repair.append(member)  # status fine, inverse MISSING or STALE
             # else: fully reconciled -- touch nothing, not one byte.
 
+    if ids is not None:
+        derivable = set(to_mark) | set(to_repair)
+        unresolved = sorted(ids - derivable)
+        if unresolved:
+            raise SupersessionError(
+                [f"allowlisted id is not derivable as a supersession member: {entity_id}" for entity_id in unresolved]
+            )
+        to_mark = [member for member in to_mark if member in ids]
+        to_repair = [member for member in to_repair if member in ids]
+
     report: dict[str, Any] = {
         "chains": chains,
         "non_linear": [{"nodes": list(c.nodes), "reason": c.reason} for c in graph.non_linear],
@@ -611,16 +622,6 @@ def mark_superseded(
     # `graph.invalid` is EVERY relation the audit refused, not only the supersession ones -- because
     # a corpus with any unbuildable relation HAS NO GRAPH, and stamping a derived lineage into it
     # writes a record whose graph never builds. This derivation is corpus-wide or it is nothing.
-    if ids is not None:
-        derivable = set(to_mark) | set(to_repair)
-        unresolved = sorted(ids - derivable)
-        if unresolved:
-            raise SupersessionError(
-                [f"allowlisted id is not derivable as a supersession member: {entity_id}" for entity_id in unresolved]
-            )
-        to_mark = [member for member in to_mark if member in ids]
-        to_repair = [member for member in to_repair if member in ids]
-
     blocking = [
         *(f"{d.path}: {d.message}" for d in graph.invalid),
         *(f"{u['superseder']} -> {u['id']} ({u['reason']})" for u in graph.unbacked_inverses),
