@@ -265,7 +265,7 @@ def test_graph_build_local_only_leaves_existing_composite_untouched() -> None:
         composite = knowledge / "composite.trig"
         composite.write_text("existing composite\n", encoding="utf-8")
 
-        def fake_materialize(project_root: Path) -> Path:
+        def fake_materialize(project_root: Path, *, include_commons: bool = True) -> Path:
             graph_path = project_root / "knowledge" / "graph.trig"
             graph_path.parent.mkdir(exist_ok=True)
             graph_path.write_text("local graph\n", encoding="utf-8")
@@ -287,6 +287,71 @@ def test_graph_build_local_only_leaves_existing_composite_untouched() -> None:
         assert composite.read_text(encoding="utf-8") == "existing composite\n"
 
 
+def test_graph_build_no_commons_threads_self_contained_mode_and_announces_it() -> None:
+    """--no-commons is a distinct axis from --local-only: it turns OFF commons participation.
+
+    The flag must reach `materialize_graph` as `include_commons=False`, and the build must say so
+    on stdout -- a self-contained graph that looked identical to a full one is exactly the silent
+    instrument this mode is meant to avoid. --local-only is untouched here: authority participation
+    and composite refresh are orthogonal.
+    """
+    runner = CliRunner()
+
+    with runner.isolated_filesystem():
+        root = Path.cwd()
+        (root / "science.yaml").write_text("name: host\nid: host\nrole: project\n", encoding="utf-8")
+        seen: dict[str, bool] = {}
+
+        def fake_materialize(project_root: Path, *, include_commons: bool = True) -> Path:
+            seen["include_commons"] = include_commons
+            graph_path = project_root / "knowledge" / "graph.trig"
+            graph_path.parent.mkdir(exist_ok=True)
+            graph_path.write_text("local graph\n", encoding="utf-8")
+            return graph_path
+
+        with (
+            patch("science_tool.graph.build.materialize_graph", side_effect=fake_materialize),
+            patch("science_tool.registry.config.ensure_registered"),
+            patch("science_tool.graph.sources.load_project_sources", return_value=None),
+            patch("science_tool.graph.suggest.suggest_ontologies", return_value=[]),
+        ):
+            result = runner.invoke(main, ["graph", "build", "--no-commons"])
+
+        assert result.exit_code == 0, result.output
+        assert seen == {"include_commons": False}
+        assert "Self-contained build (--no-commons)" in result.output
+        assert "NOT consulted" in result.output
+
+
+def test_graph_build_default_consults_commons() -> None:
+    """The complement: without --no-commons, `materialize_graph` runs with commons on."""
+    runner = CliRunner()
+
+    with runner.isolated_filesystem():
+        root = Path.cwd()
+        (root / "science.yaml").write_text("name: host\nid: host\nrole: project\n", encoding="utf-8")
+        seen: dict[str, bool] = {}
+
+        def fake_materialize(project_root: Path, *, include_commons: bool = True) -> Path:
+            seen["include_commons"] = include_commons
+            graph_path = project_root / "knowledge" / "graph.trig"
+            graph_path.parent.mkdir(exist_ok=True)
+            graph_path.write_text("local graph\n", encoding="utf-8")
+            return graph_path
+
+        with (
+            patch("science_tool.graph.build.materialize_graph", side_effect=fake_materialize),
+            patch("science_tool.registry.config.ensure_registered"),
+            patch("science_tool.graph.sources.load_project_sources", return_value=None),
+            patch("science_tool.graph.suggest.suggest_ontologies", return_value=[]),
+        ):
+            result = runner.invoke(main, ["graph", "build", "--local-only"])
+
+        assert result.exit_code == 0, result.output
+        assert seen == {"include_commons": True}
+        assert "Self-contained build" not in result.output
+
+
 def test_graph_build_default_refreshes_composite_when_peers_exist() -> None:
     runner = CliRunner()
 
@@ -303,7 +368,7 @@ def test_graph_build_default_refreshes_composite_when_peers_exist() -> None:
         composite = knowledge / "composite.trig"
         composite.write_text("stale composite\n", encoding="utf-8")
 
-        def fake_materialize(project_root: Path) -> Path:
+        def fake_materialize(project_root: Path, *, include_commons: bool = True) -> Path:
             graph_path = project_root / "knowledge" / "graph.trig"
             graph_path.parent.mkdir(exist_ok=True)
             graph_path.write_text("local graph\n", encoding="utf-8")

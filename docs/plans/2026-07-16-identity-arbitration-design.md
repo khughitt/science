@@ -412,3 +412,23 @@ catch permanently:
 - `dataset:wang2025-mri-gwas` exists nowhere in the federation. Awaits **E**.
 
 These are not A regressions. They are pre-existing defects A stops concealing.
+
+### 6.1 A project that reaches a commons id now requires a reachable store
+
+Before A, a project whose entities referenced a commons id could materialize whether or not the
+commons store was reachable: the reference simply stayed unresolved. Under A the closure opens the
+store whenever it has a non-empty pending set, so **a project that reaches a commons id and has no
+reachable store now fails with `CommonsRootNotFoundError`** rather than silently building a graph
+missing that id. This is the intended fail-closed posture — the alternative silently re-hides the
+fb-005 class the arc removes — but it must be a *chosen* behavior, not an accident.
+
+The explicit opt-out is the **self-contained build**: `include_commons=False` on
+`load_project_sources` / `materialize_graph` / `build_project_graph`, surfaced on the CLI as
+`science graph build --no-commons`. In that mode the store is never opened, reached commons ids
+stay bare references, and the command announces on stdout that commons was not consulted. It is
+orthogonal to `--local-only`, which governs the composite-graph refresh, not authority
+participation. The two modes are deliberately **not interchangeable**: self-contained mode can
+never yield commons content, so a partial graph can never be mistaken for a federated one. The
+witnesses live in `tests/test_graph_commons_sources.py` (fail-closed default, self-contained
+reference load, non-interchangeability) and `tests/test_graph_cli.py` (the flag threads
+`include_commons=False` and announces itself).

@@ -559,16 +559,24 @@ def _compile(
     *,
     stop_after: _Literal["audit"] | None = None,
     strict: bool = True,
+    include_commons: bool = True,
 ) -> CompilationResult:
     """Run the source-compiler phases: Load -> Audit -> Emit -> Derive -> Write.
 
     `stop_after="audit"` returns after the audit phase without gating, emitting,
     or writing (the `materialization_audit` projection). A full run hard-gates on
     audit failures (the `materialize_graph` projection).
+
+    `include_commons=False` is the SELF-CONTAINED build: the loader never opens the
+    commons store, so a project with no reachable store still materializes. This is
+    an explicit opt-out, never a fallback -- with commons participation on (the
+    default) and reachable ids, a missing store still raises. The resulting graph
+    omits commons-owned entities and commons overlays; it is deliberately a
+    different, smaller graph, not an equivalent one.
     """
     project_root = project_root.resolve()
 
-    sources = load_project_sources(project_root, strict_identity=False)
+    sources = load_project_sources(project_root, strict_identity=False, include_commons=include_commons)
     verdict = _audit_phase(sources)
     if verdict.status == "unwired":
         raise ValueError(f"Source audit could not run ({verdict.code}): {verdict.reason}")
@@ -614,9 +622,12 @@ def _compile(
     )
 
 
-def materialize_graph(project_root: Path, *, strict: bool = True) -> Path:
-    """Build `knowledge/graph.trig` deterministically from project sources."""
-    result = _compile(project_root, strict=strict)
+def materialize_graph(project_root: Path, *, strict: bool = True, include_commons: bool = True) -> Path:
+    """Build `knowledge/graph.trig` deterministically from project sources.
+
+    `include_commons=False` selects the self-contained build (see `_compile`).
+    """
+    result = _compile(project_root, strict=strict, include_commons=include_commons)
     assert result.trig_path is not None  # a full compile always writes
     return result.trig_path
 

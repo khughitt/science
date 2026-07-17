@@ -665,6 +665,98 @@ related: ["topic:single-cell-foundation-models"]
     assert sources.commons_overlay_paths == {}
 
 
+def _project_referencing_commons_topic(tmp_path: Path) -> Path:
+    """A project whose only commons contact is a hypothesis referencing a commons topic id.
+
+    Deliberately reaches a commons id WITHOUT an overlay, so the reference alone drives the
+    closure. That is what makes `include_commons` observable: in federation mode the topic is
+    materialized as a commons owner; self-contained, the same id stays an unresolved reference.
+    """
+    project_root = tmp_path / "project"
+    project_root.mkdir()
+    (project_root / "science.yaml").write_text("name: demo\nknowledge_profiles:\n  local: local\n", encoding="utf-8")
+    manifest_path = project_root / "knowledge" / "sources" / "local" / "manifest.yaml"
+    manifest_path.parent.mkdir(parents=True)
+    manifest_path.write_text("", encoding="utf-8")
+    hypothesis_path = project_root / "entities" / "hypotheses" / "h1.md"
+    hypothesis_path.parent.mkdir(parents=True)
+    hypothesis_path.write_text(
+        """---
+id: "hypothesis:h1"
+kind: "hypothesis"
+title: "H1"
+related: ["topic:single-cell-foundation-models"]
+---
+""",
+        encoding="utf-8",
+    )
+    return project_root
+
+
+def test_federation_mode_with_a_reachable_reference_fails_when_the_root_is_missing(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The fail-closed default: a reached commons id + no store is a named error, never a partial graph.
+
+    The project references a commons topic, so the closure has a non-empty pending set and must
+    open the store. With the store absent, silently returning a graph missing that topic would be
+    the silent-instrument failure this whole arc removes. The load must raise instead.
+    """
+    missing_root = tmp_path / "missing-commons"
+    monkeypatch.setenv("SCIENCE_COMMONS_ROOT", str(missing_root))
+    project_root = _project_referencing_commons_topic(tmp_path)
+
+    with pytest.raises(CommonsRootNotFoundError) as excinfo:
+        load_project_sources(project_root)
+
+    assert excinfo.value.root == missing_root
+
+
+def test_self_contained_mode_loads_the_same_reference_without_a_store(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """`include_commons=False` is the explicit opt-out: the store is never opened, so no root is needed.
+
+    This is the deliberate self-contained build. The commons topic is NOT materialized -- it
+    stays a bare reference the hypothesis points at -- and that is the point: a project that
+    genuinely stands alone can build, without weakening the federated default above.
+    """
+    missing_root = tmp_path / "missing-commons"
+    monkeypatch.setenv("SCIENCE_COMMONS_ROOT", str(missing_root))
+    project_root = _project_referencing_commons_topic(tmp_path)
+
+    sources = load_project_sources(project_root, include_commons=False)
+
+    entity_ids = [entity.canonical_id for entity in sources.entities]
+    assert "hypothesis:h1" in entity_ids
+    assert "topic:single-cell-foundation-models" not in entity_ids
+
+
+def test_self_contained_mode_cannot_be_mistaken_for_commons_coverage(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Even with a fully reachable store, the two modes produce materially different graphs.
+
+    If self-contained mode could ever return commons content, it would be a fallback rather than
+    an opt-out, and a partial build could pass for a full one. With the SAME real store present,
+    the federated load materializes the commons topic and the self-contained load does not. The
+    modes are not interchangeable, and the missing owner is the observable proof.
+    """
+    commons_root = _build_commons(tmp_path)
+    monkeypatch.setenv("SCIENCE_COMMONS_ROOT", str(commons_root))
+    monkeypatch.setenv("SCIENCE_COMMONS_QUIET_STALE", "1")
+    project_root = _project_referencing_commons_topic(tmp_path)
+
+    federated = [e.canonical_id for e in load_project_sources(project_root).entities]
+    self_contained = [
+        e.canonical_id for e in load_project_sources(project_root, include_commons=False).entities
+    ]
+
+    assert "topic:single-cell-foundation-models" in federated
+    assert "topic:single-cell-foundation-models" not in self_contained
+    assert "hypothesis:h1" in self_contained
+
+
 def test_load_project_sources_pulls_commons_dataset_usage_ref(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     commons_root = _build_commons(tmp_path)
     monkeypatch.setenv("SCIENCE_COMMONS_ROOT", str(commons_root))
