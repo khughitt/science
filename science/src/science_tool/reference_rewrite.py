@@ -249,11 +249,17 @@ def _manual_hits(
     return manual
 
 
-def rewrite_outbound_links(text: str, old_dir: Path, new_dir: Path) -> tuple[str, list[RefHit]]:
+def rewrite_outbound_links(
+    text: str, old_dir: Path | PurePosixPath, new_dir: Path | PurePosixPath
+) -> tuple[str, list[RefHit]]:
     """Rebase a document's own relative links after it moves from old_dir to new_dir.
 
     Relative links are resolved against the file's directory, so a move silently
     breaks every one of them. Absolute paths and external URLs are left alone.
+
+    Accepts either `Path` or `PurePosixPath` -- only `.as_posix()` is used, so a
+    caller that already holds a repo-relative `PurePosixPath` (no filesystem
+    semantics implied) need not round-trip through `Path`.
     """
     old = PurePosixPath(old_dir.as_posix())
     new = PurePosixPath(new_dir.as_posix())
