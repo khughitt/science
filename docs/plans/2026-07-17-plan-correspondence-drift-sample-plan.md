@@ -1588,12 +1588,26 @@ and the extracted lists, and **no `claimed_status`**.
 
 **Verify no bundle contains a claim** before dispatching any adjudicator:
 
+The detector targets the **structured authored-claim channels** independently of
+the blinder's own patterns, and is case-aware: lowercase verdict words in prose
+("shipped as RDS") are preserved by design (§6.1 case-sensitivity), so flagging
+them would be a false positive. It catches an unredacted `status:` field, a
+`**Status**` banner, a table-cell verdict, a checkbox, an emoji, or an uppercase
+banner verdict word that survived.
+
 ```bash
 cd science && uv run --frozen python -c "
 import json, pathlib, re
 bundles = json.loads(pathlib.Path('../docs/plans/2026-07-17-drift-sample/bundles.json').read_text())
-bad = [b['plan_id'] for b in bundles
-       if re.search(r'\b(status:|SHIPPED|DONE|MERGED|\[x\])', b['body'], re.I)]
+checks = {
+  'status: field': re.compile(r'^\s*[-*]?\s*status:\s*(?!\[REDACTED\])\S', re.M | re.I),
+  '**Status** banner': re.compile(r'\*\*Status', re.I),
+  'table verdict': re.compile(r'\|\s*(?:done|complete|completed|shipped|merged|landed)\s*\|', re.I),
+  'checkbox': re.compile(r'^\s*[-*] \[[xX]\]', re.M),
+  'emoji': re.compile(r'[✅✔☑❌✖]'),
+  'uppercase banner word': re.compile(r'\b(SHIPPED|DONE|COMPLETE|COMPLETED|MERGED|LANDED)\b'),
+}
+bad = [(b['plan_id'], lab) for b in bundles for lab,pat in checks.items() if pat.search(b['body'])]
 print('LEAKS:', bad or 'none')
 "
 ```

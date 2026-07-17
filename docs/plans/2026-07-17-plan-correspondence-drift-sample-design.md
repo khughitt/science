@@ -85,8 +85,8 @@ fixed *after* seeing a result are not thresholds.
 Committed before any plan was adjudicated. Verifiable by anyone who was not here:
 
 - record: `docs/plans/2026-07-17-drift-sample/prereg.json`
-- commit: `ade073624695fb605f501fddb2239a4b54c41441`
-- sha256: `c30f045ac131bce91f2bbc77324c8d9117fe208c6d1c9c11f74c3031377d3c64`
+- rubric commit: `2c84ec271e8ff7356b52d9a5ce65d44972619475`
+- sha256: `6d270db84b99ef2c5929679e2f8c39a559b38ec68d84948ca7b0721135e2df62`
 - pins: multiple-myeloma `6f4fbee4`, natural-systems `759d9b6c6`,
   protein-landscape `66051a2`, post-acute-infection `007cbdf`
 - seed `20260717`; frame N = 264 (mm 126, ns 109, pl 19, pa 10); first look n = 40
@@ -94,6 +94,16 @@ Committed before any plan was adjudicated. Verifiable by anyone who was not here
 
 The frame reconciled with §3 exactly, so the census rung was unchanged and no
 amendment to this design was required at capture time.
+
+**Re-registered once, before any adjudication.** The pilot's leak check (Task 8
+Step 1) found the initial blinding left three mid-body claim channels intact — a
+list-prefixed `**Status**` banner, `status:` fields in sub-entity YAML, and a
+verdict in a table cell (4 of 40 bundles). `PROGRESS_PATTERNS` was extended, the
+draw redrawn (byte-identical: same seed, same clean pins → same 40 ids), and only
+`rubric_commit` advanced (`3efbe5b8` → `2c84ec27`). This is the pre-registered
+contingency, not post-hoc tuning: zero adjudications had run, and the leak check
+exists precisely to catch a blinding failure before the first plan is read. The
+superseded first record was commit `ade07362` (sha256 `c30f045a…`).
 
 ## 5. Selection: one equal-probability sample
 
