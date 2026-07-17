@@ -1440,18 +1440,133 @@ makes "fixed before the draw" checkable by someone who was not here.
 ### Task 8: Run the blinded adjudication
 
 **Files:**
+- Create: `docs/plans/2026-07-17-drift-sample/resolve.py`
+- Create: `docs/plans/2026-07-17-drift-sample/bundles.json`
 - Create: `docs/plans/2026-07-17-drift-sample/verdicts.json`
 
 **Interfaces:**
 - Consumes: `prereg.json`, all instruments from Tasks 1–6.
+- Produces: `resolve(rec) -> (rows, errs)` — the drawn-id → frame-row join, reused
+  by Step 2 so bundles are built from verified rows only.
 - Produces: one `{plan_id, adjudicator, deliverables[], tasks[], adjudicated}` per
   (plan × adjudicator).
 
-- [ ] **Step 1: Build the blinded bundles**
+- [ ] **Step 1: Resolve each drawn id to exactly one frame row, and verify its hash**
 
-For each drawn `plan_id`: open a `pinned_worktree` at its project's pin, read the
-plan, run `blind_plan`, then `extract_deliverables` / `extract_task_refs`. Write
-one bundle per plan containing **only** the blinded body and the extracted lists.
+`prereg.json` already stores the complete frame (`project`, `rel_path`,
+`source_sha256` per row) plus `drawn_ids`. Join them — do **not** re-enumerate the
+corpus and do not copy the rows into a second record that could diverge.
+
+Before blinding anything, resolve and verify:
+
+Create `docs/plans/2026-07-17-drift-sample/resolve.py`:
+
+```python
+"""Resolve drawn ids to frame rows and verify pinned bytes. Fails loudly."""
+
+import hashlib
+import json
+import sys
+import tempfile
+from collections import defaultdict
+from pathlib import Path
+
+from science_tool.drift_sample.frame import Pin, pinned_worktree
+
+# Roots are machine paths and are deliberately absent from prereg.json
+# (Task 7 writes `root: None`). They are re-supplied here, never committed
+# into the record. The commits come from the pre-registration; only the
+# location is local.
+ROOTS = {
+    "multiple-myeloma": Path.home() / "d/cancer/cancer-types/multiple-myeloma",
+    "natural-systems": Path.home() / "d/natural-systems",
+    "protein-landscape": Path.home() / "d/protein-landscape",
+    "post-acute-infection": Path.home() / "d/health/processes/post-acute-infection",
+}
+PREREG = Path("docs/plans/2026-07-17-drift-sample/prereg.json")
+
+
+def resolve(rec: dict) -> tuple[list[dict], list[str]]:
+    """Join drawn_ids to frame rows; exactly one row per id."""
+    by_id: dict[str, list[dict]] = defaultdict(list)
+    for row in rec["frame"]:
+        by_id[row["plan_id"]].append(row)
+
+    rows, errs = [], []
+    for pid in rec["drawn_ids"]:
+        hits = by_id.get(pid, [])
+        if len(hits) != 1:
+            errs.append(f"{pid}: resolved to {len(hits)} frame rows, expected exactly 1")
+            continue
+        rows.append(hits[0])
+    return rows, errs
+
+
+def main() -> int:
+    rec = json.loads(PREREG.read_text())
+    rows, errs = resolve(rec)
+
+    by_project: dict[str, list[dict]] = defaultdict(list)
+    for row in rows:
+        by_project[row["project"]].append(row)
+
+    with tempfile.TemporaryDirectory() as tmp:
+        for project, prows in sorted(by_project.items()):
+            pin = Pin(project=project, root=ROOTS[project], commit=rec["pins"][project])
+            with pinned_worktree(pin, Path(tmp)) as wt:
+                for row in prows:
+                    path = wt / row["rel_path"]
+                    if not path.exists():
+                        errs.append(f"{row['plan_id']}: {row['rel_path']} missing at pin")
+                        continue
+                    got = hashlib.sha256(path.read_bytes()).hexdigest()
+                    if got != row["source_sha256"]:
+                        errs.append(
+                            f"{row['plan_id']}: sha256 {got} != pinned {row['source_sha256']}"
+                        )
+
+    print("RESOLUTION ERRORS:", errs or "none")
+    return 1 if errs else 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())
+```
+
+Run it:
+
+```bash
+cd science && uv run --frozen python ../docs/plans/2026-07-17-drift-sample/resolve.py
+```
+
+Expected: `RESOLUTION ERRORS: none`, exit 0.
+
+Note the worktree is opened **once per project**, not once per plan: `pinned_worktree`
+adds and removes a git worktree, so per-plan would do 40 add/remove cycles against
+the same commit.
+
+**Fail immediately on any of the three** — a missing row, multiple rows, or a hash
+mismatch. Each means the pre-registration no longer describes the corpus being
+read, so the sample it authorises is not the sample being run. Do not repair a row
+by hand and do not fall back to re-enumeration: return to Task 7, re-register, and
+redraw.
+
+This is the only reader of `source_sha256`. Without it the field is written and
+never checked, and a plan edited between registration and adjudication would be
+adjudicated silently under a pre-registration that describes different bytes.
+
+- [ ] **Step 2: Build the blinded bundles**
+
+Step 1's worktrees are removed when `resolve.py` exits, so re-open one per project
+here — grouping by project as `resolve.py` does, and reusing its `resolve()` to get
+the rows. Build bundles **only** from rows that resolved and verified; if Step 1
+reported any error, stop, because a bundle built from an unverified row is not the
+artifact the pre-registration authorises.
+
+For each resolved row: read the plan at `wt / row["rel_path"]`, run `blind_plan`,
+then `extract_deliverables` / `extract_task_refs`. Write one bundle per plan to
+`bundles.json` as `{plan_id, project, body, deliverables, tasks}` — the blinded body
+and the extracted lists, and **no `claimed_status`**.
 
 **Verify no bundle contains a claim** before dispatching any adjudicator:
 
@@ -1468,7 +1583,7 @@ print('LEAKS:', bad or 'none')
 Expected: `LEAKS: none`. Any leak is a blinding failure — fix `PROGRESS_PATTERNS`,
 re-register (Task 7), and redraw. Do not hand-edit the bundle.
 
-- [ ] **Step 2: Dispatch two independent adjudicators per plan**
+- [ ] **Step 3: Dispatch two independent adjudicators per plan**
 
 Every plan is double-adjudicated (design §6.4). Each adjudicator receives one
 bundle and returns only `{deliverables: [{target, result}], tasks: [{id, state}],
@@ -1479,13 +1594,13 @@ Dispatch them as parallel subagents with the bundle inline. The prompt must stat
 the body may be truncated or redacted; report `unknown` when a probe cannot be
 resolved; **`unknown` is a valid and expected answer, not a failure.**
 
-- [ ] **Step 3: Resolve disagreements**
+- [ ] **Step 4: Resolve disagreements**
 
 Where the two adjudicators differ on any probe, dispatch a third. Record all
 three. Report Cohen's κ descriptively — it characterises the instrument and does
 **not** gate.
 
-- [ ] **Step 4: Commit the verdicts**
+- [ ] **Step 5: Commit the verdicts**
 
 ```bash
 git add docs/plans/2026-07-17-drift-sample/verdicts.json
