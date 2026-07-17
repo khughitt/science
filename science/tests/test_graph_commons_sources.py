@@ -24,7 +24,11 @@ from science_tool.graph.commons_sources import (
 )
 from science_tool.graph.entity_registry import EntityRegistry
 from science_tool.graph.errors import ContributionConflictError
-from science_tool.graph.identity_arbitration import ArbitrationCode, EntityContribution
+from science_tool.graph.identity_arbitration import (
+    ArbitrationCode,
+    AttachmentContribution,
+    EntityContribution,
+)
 from science_tool.graph.identity_table import ParticipationMode
 from science_tool.graph.sources import SourceRelation, load_project_sources
 
@@ -92,14 +96,19 @@ def _load_commons(
     *,
     project_entities: list[Entity] | None = None,
 ) -> tuple[list[tuple[Entity, SourceRef | None]], dict[str, str]]:
-    """The closure's owner candidates, in the shape these tests already read."""
+    """The closure's owner candidates and the overlays it attached.
+
+    Overlay paths are DERIVED from the attachment contributions rather than read from a field
+    of their own: an attachment already carries where it came from, and a second copy of that
+    fact is one more thing that can disagree with the first.
+    """
     closure = _closure(project_root, project_entities=project_entities)
     owners = [
         (c.candidate, c.declaration.source_ref)
         for c in closure.contributions
         if isinstance(c, EntityContribution)
     ]
-    return owners, closure.overlay_paths
+    return owners, _attached_overlay_paths(closure)
 
 
 def test_collect_referenced_commons_ids_returns_empty_set_for_no_references() -> None:
@@ -536,6 +545,14 @@ project_tags: ["project-anchor"]
     }
 
 
+def _attached_overlay_paths(closure: CommonsClosure) -> dict[str, str]:
+    return {
+        c.declaration.canonical_id: str(c.record.overlay_path)
+        for c in closure.contributions
+        if isinstance(c, AttachmentContribution)
+    }
+
+
 def test_closure_contributes_even_when_the_project_owns_the_same_id(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -574,7 +591,9 @@ relevance: "central to this project"
         ("topic:single-cell-foundation-models", ParticipationMode.OWNER, "commons-merged"),
         ("topic:single-cell-foundation-models", ParticipationMode.BORROWER, "overlay"),
     }
-    assert closure.overlay_paths == {"topic:single-cell-foundation-models": str(overlay_path)}
+    assert _attached_overlay_paths(closure) == {
+        "topic:single-cell-foundation-models": str(overlay_path)
+    }
 
 
 def test_orchestrator_no_overlays_and_no_refs_is_noop_with_missing_commons_root(
@@ -1104,9 +1123,12 @@ def test_dataset_1_0_refuses_an_overlay_replacing_a_defended_status(
 ) -> None:
     """The versioning atomicity control: pinning 1.0 keeps 1.0's answer.
 
-    dataset/1.0 declares status `replace`, and the canonical owner has spoken, so the overlay
-    is a contest rather than a contribution. If this ever passes by merging, the 2.0 profile
-    is not a version -- it is a global behavior change that pinned entities cannot opt out of.
+    dataset/1.0 does not mention `status` at all -- the profile RESOLVES to the default
+    `replace` through the base schema's bare declaration. That is the semantics 2.0 opts out of
+    explicitly, so this control pins default-replace rather than a mixin's own statement. The
+    canonical owner has spoken, so the overlay is a contest rather than a contribution. If this
+    ever passes by merging, the 2.0 profile is not a version -- it is a global behavior change
+    that pinned entities cannot opt out of.
     """
     commons_root = _build_commons(tmp_path)
     monkeypatch.setenv("SCIENCE_COMMONS_ROOT", str(commons_root))

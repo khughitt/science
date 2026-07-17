@@ -78,7 +78,6 @@ class CommonsClosure:
 
     contributions: tuple[SourceContribution, ...]
     field_policies: dict[tuple[str, str], dict[str, MergePolicy]]
-    overlay_paths: dict[str, str]
 
 
 def collect_commons_contributions(
@@ -144,7 +143,7 @@ class _CommonsClosureCollector:
             overlays=overlays,
         )
         if not pending:
-            return CommonsClosure(contributions=(), field_policies={}, overlay_paths={})
+            return CommonsClosure(contributions=(), field_policies={})
 
         commons_root = resolve_commons_root()
         if not commons_root.is_dir():
@@ -153,7 +152,6 @@ class _CommonsClosureCollector:
 
         contributions: list[SourceContribution] = []
         field_policies: dict[tuple[str, str], dict[str, MergePolicy]] = {}
-        overlay_paths: dict[str, str] = {}
         # `visited` deduplicates I/O ONLY. It never suppresses a declaration: an id reached
         # again from another authority has already contributed, and contributing twice from one
         # commons record would be a second claim commons never made.
@@ -203,7 +201,6 @@ class _CommonsClosureCollector:
                 )
             )
             if overlay is not None:
-                overlay_paths[canonical_id] = str(overlay.overlay_path)
                 contributions.append(
                     AttachmentContribution(
                         declaration=IdentityDeclaration(
@@ -224,7 +221,6 @@ class _CommonsClosureCollector:
         return CommonsClosure(
             contributions=tuple(contributions),
             field_policies=field_policies,
-            overlay_paths=overlay_paths,
         )
 
     def _scan_overlays(self) -> dict[str, OverlayRecord]:
