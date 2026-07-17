@@ -94,9 +94,23 @@ def _is_scope_default_reference(node: ast.AST, scope_names: set[str]):
     ) or (isinstance(qualifier, ast.Attribute) and qualifier.attr == "CurationScope")
 
 
-def _contains_scope_default_value(node: ast.AST, scope_names: set[str]):
+def _contains_scope_default_value(
+    node: ast.AST,
+    scope_names: set[str],
+    *,
+    permit_declarative_keyword: bool = False,
+):
     if isinstance(node, ast.Compare):
-        return False
+        operands = [node.left, *node.comparators]
+        return any(
+            not _is_scope_default_reference(operand, scope_names)
+            and _contains_scope_default_value(
+                operand,
+                scope_names,
+                permit_declarative_keyword=permit_declarative_keyword,
+            )
+            for operand in operands
+        )
     if _is_scope_default_reference(node, scope_names):
         return True
     if isinstance(node, ast.Call):
@@ -104,19 +118,35 @@ def _contains_scope_default_value(node: ast.AST, scope_names: set[str]):
         values.extend(
             keyword.value
             for keyword in node.keywords
-            if keyword.arg != "curation_scope"
+            if not (
+                permit_declarative_keyword and keyword.arg == "curation_scope"
+            )
         )
         return any(
-            _contains_scope_default_value(value, scope_names) for value in values
+            _contains_scope_default_value(
+                value,
+                scope_names,
+                permit_declarative_keyword=permit_declarative_keyword,
+            )
+            for value in values
         )
     return any(
-        _contains_scope_default_value(child, scope_names)
+        _contains_scope_default_value(
+            child,
+            scope_names,
+            permit_declarative_keyword=permit_declarative_keyword,
+        )
         for child in ast.iter_child_nodes(node)
     )
 
 
 def _scope_default_offense_lines(tree: ast.AST):
     scope_names = _curation_scope_names(tree)
+    module_declarations = {
+        id(node)
+        for node in tree.body
+        if isinstance(node, (ast.Assign, ast.AnnAssign))
+    }
     offenders = []
     for node in ast.walk(tree):
         value = None
@@ -124,7 +154,11 @@ def _scope_default_offense_lines(tree: ast.AST):
             value = node.value
         elif isinstance(node, ast.AnnAssign):
             value = node.value
-        if value is not None and _contains_scope_default_value(value, scope_names):
+        if value is not None and _contains_scope_default_value(
+            value,
+            scope_names,
+            permit_declarative_keyword=id(node) in module_declarations,
+        ):
             offenders.append(node.lineno)
     return sorted(set(offenders))
 
@@ -179,6 +213,14 @@ def test_scope_default_detector_rejects_defaults_but_permits_comparisons():
         "def decide(resolver):\n"
         "    return resolver(default=CurationScope.CORRESPONDENCE)"
     )
+    nested_comparison = ast.parse(
+        "def decide(defaults, kind):\n"
+        "    return defaults.get(kind, CurationScope.NONE) is CurationScope.NONE"
+    )
+    returned_curation_scope = ast.parse(
+        "def decide(resolver):\n"
+        "    return resolver(curation_scope=CurationScope.NONE)"
+    )
     comparison = ast.parse(
         "def consume(scope):\n    return scope is CurationScope.NONE"
     )
@@ -191,6 +233,8 @@ def test_scope_default_detector_rejects_defaults_but_permits_comparisons():
     assert _scope_default_offense_lines(assigned_return)
     assert _scope_default_offense_lines(indirect_return)
     assert _scope_default_offense_lines(keyword_default)
+    assert _scope_default_offense_lines(nested_comparison)
+    assert _scope_default_offense_lines(returned_curation_scope)
     assert not _scope_default_offense_lines(comparison)
     assert not _scope_default_offense_lines(declaration)
 
