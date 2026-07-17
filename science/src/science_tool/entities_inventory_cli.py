@@ -12,6 +12,24 @@ from science_tool.output import emit
 from science_tool.project_config import project_config_path
 
 
+def _collect_ids(ids: tuple[str, ...], ids_from: Path | None) -> frozenset[str] | None:
+    """Merge --id flags and an --ids-from manifest into an allowlist, or None.
+
+    Returns None when neither is supplied, preserving the legacy status sweep.
+    An empty manifest is an error rather than a silent full sweep: a caller who
+    passed --ids-from asked for scoping, and degrading that to "archive
+    everything with this status" is the exact accident the allowlist exists to
+    prevent.
+    """
+    collected = set(ids)
+    if ids_from is not None:
+        lines = [line.strip() for line in ids_from.read_text(encoding="utf-8").splitlines()]
+        collected.update(line for line in lines if line and not line.startswith("#"))
+        if not collected:
+            raise click.ClickException(f"--ids-from {ids_from} contained no ids")
+    return frozenset(collected) if collected else None
+
+
 @click.group("entities")
 def entities_group() -> None:
     """Inspect and audit Science entity inventories."""
@@ -62,12 +80,25 @@ def entities_audit_identifiers_command(project_path: Path) -> None:
     default=Path("."),
     help="Project root (default: current directory).",
 )
+@click.option("--id", "ids", multiple=True, help="Restrict to this entity id (repeatable).")
+@click.option(
+    "--ids-from",
+    "ids_from",
+    type=click.Path(exists=True, dir_okay=False, path_type=Path),
+    default=None,
+    help="File of entity ids, one per line; '#' comments and blanks ignored.",
+)
 @click.option("--apply", "apply_changes", is_flag=True, default=False, help="Apply changes (default: dry-run report).")
-def entities_mark_superseded_command(project_root: Path, apply_changes: bool) -> None:
+def entities_mark_superseded_command(
+    project_root: Path, ids: tuple[str, ...], ids_from: Path | None, apply_changes: bool
+) -> None:
     """Auto-derive `superseded` status from linear supersedes chains (report, then --apply)."""
-    from science_tool.consolidation import mark_superseded
+    from science_tool.consolidation import SupersessionError, mark_superseded
 
-    report = mark_superseded(project_root, apply=apply_changes)
+    try:
+        report = mark_superseded(project_root, ids=_collect_ids(ids, ids_from), apply=apply_changes)
+    except SupersessionError as exc:
+        raise click.ClickException(str(exc)) from exc
     emit(output_format="json", payload=report, render_text=lambda: None)
 
 
@@ -79,16 +110,31 @@ def entities_mark_superseded_command(project_root: Path, apply_changes: bool) ->
     help="Project root (default: current directory).",
 )
 @click.option("--status", "statuses", multiple=True, help="Statuses to archive (default: superseded, archived).")
+@click.option("--id", "ids", multiple=True, help="Restrict to this entity id (repeatable).")
+@click.option(
+    "--ids-from",
+    "ids_from",
+    type=click.Path(exists=True, dir_okay=False, path_type=Path),
+    default=None,
+    help="File of entity ids, one per line; '#' comments and blanks ignored.",
+)
 @click.option("--apply", "apply_changes", is_flag=True, default=False, help="Apply changes (default: dry-run report).")
-def entities_archive_command(project_root: Path, statuses: tuple[str, ...], apply_changes: bool) -> None:
+def entities_archive_command(
+    project_root: Path, statuses: tuple[str, ...], ids: tuple[str, ...], ids_from: Path | None, apply_changes: bool
+) -> None:
     """Relocate hidden-status entities into entities/_archive/ (report, then --apply)."""
     from datetime import datetime, timezone
 
-    from science_tool.archive import DEFAULT_ARCHIVE_STATUSES, archive_entities
+    from science_tool.archive import DEFAULT_ARCHIVE_STATUSES, ArchiveError, archive_entities
 
     status_set = frozenset(statuses) if statuses else DEFAULT_ARCHIVE_STATUSES
     now = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
-    report = archive_entities(project_root, statuses=status_set, apply=apply_changes, now=now)
+    try:
+        report = archive_entities(
+            project_root, statuses=status_set, ids=_collect_ids(ids, ids_from), apply=apply_changes, now=now
+        )
+    except ArchiveError as exc:
+        raise click.ClickException(str(exc)) from exc
     emit(output_format="json", payload=report, render_text=lambda: None)
 
 

@@ -201,3 +201,75 @@ def test_mark_superseded_dry_run_unknown_id_fails_early(tmp_path: Path) -> None:
 
     with pytest.raises(SupersessionError, match="not derivable"):
         mark_superseded(root, ids=frozenset({"interpretation:9999-ghost"}), apply=False)
+
+
+def test_cli_archive_id_flag_scopes_operation(tmp_path: Path) -> None:
+    from click.testing import CliRunner
+
+    from science_tool.cli import main
+
+    root = _project(tmp_path)
+    _entity(root, "plans", "0001-in", "plan:0001-in", "plan", "superseded")
+    _entity(root, "plans", "0002-out", "plan:0002-out", "plan", "superseded")
+
+    result = CliRunner().invoke(
+        main, ["entities", "archive", "--project-root", str(root), "--id", "plan:0001-in", "--apply"]
+    )
+
+    assert result.exit_code == 0, result.output
+    assert (root / "entities" / "_archive" / "plans" / "0001-in.md").exists()
+    assert (root / "entities" / "plans" / "0002-out.md").exists()
+
+
+def test_cli_archive_ids_from_manifest(tmp_path: Path) -> None:
+    from click.testing import CliRunner
+
+    from science_tool.cli import main
+
+    root = _project(tmp_path)
+    _entity(root, "plans", "0001-in", "plan:0001-in", "plan", "superseded")
+    _entity(root, "plans", "0002-out", "plan:0002-out", "plan", "superseded")
+    manifest = tmp_path / "cohort.txt"
+    manifest.write_text("# cohort\nplan:0001-in\n\n", encoding="utf-8")
+
+    result = CliRunner().invoke(
+        main, ["entities", "archive", "--project-root", str(root), "--ids-from", str(manifest), "--apply"]
+    )
+
+    assert result.exit_code == 0, result.output
+    assert (root / "entities" / "_archive" / "plans" / "0001-in.md").exists()
+    assert (root / "entities" / "plans" / "0002-out.md").exists()
+
+
+def test_cli_archive_unknown_id_exits_nonzero_without_mutating(tmp_path: Path) -> None:
+    from click.testing import CliRunner
+
+    from science_tool.cli import main
+
+    root = _project(tmp_path)
+    _entity(root, "plans", "0001-in", "plan:0001-in", "plan", "superseded")
+
+    result = CliRunner().invoke(
+        main, ["entities", "archive", "--project-root", str(root), "--id", "plan:9999-ghost", "--apply"]
+    )
+
+    assert result.exit_code != 0
+    assert (root / "entities" / "plans" / "0001-in.md").exists()
+
+
+def test_cli_empty_manifest_is_an_error_not_a_full_sweep(tmp_path: Path) -> None:
+    from click.testing import CliRunner
+
+    from science_tool.cli import main
+
+    root = _project(tmp_path)
+    _entity(root, "plans", "0001-a", "plan:0001-a", "plan", "superseded")
+    manifest = tmp_path / "empty.txt"
+    manifest.write_text("# nothing\n", encoding="utf-8")
+
+    result = CliRunner().invoke(
+        main, ["entities", "archive", "--project-root", str(root), "--ids-from", str(manifest), "--apply"]
+    )
+
+    assert result.exit_code != 0
+    assert (root / "entities" / "plans" / "0001-a.md").exists(), "empty manifest swept the corpus"
