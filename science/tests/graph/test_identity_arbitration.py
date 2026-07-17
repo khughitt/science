@@ -834,12 +834,30 @@ def test_composition_preserves_private_alias_provenance_and_the_authored_field_s
     assert entity.model_fields_set == authored_before | {"updated"}
 
 
-def test_every_returned_representative_validates_against_its_own_model() -> None:
-    """The general invariant: arbitration never returns an entity its model would reject.
+_XREF_A = {"source": "doi", "id": "10.1/x", "curie": "doi:10.1/x", "provenance": "bib"}
+_XREF_B = {"source": "pmid", "id": "999", "curie": "doi:10.1/x", "provenance": "bib"}
+_XREF_C = {"source": "pmid", "id": "999", "curie": "pmid:999", "provenance": "bib"}
 
-    A representative is what every consumer downstream reads. One that cannot round-trip through
-    its own model is a node whose declared types are a lie -- and the lie is discovered by
-    whichever consumer happens to touch the field, far from arbitration.
+
+def _round_tripped(entity: Entity) -> Entity:
+    """The entity the model would build from this entity's own serialized form.
+
+    Private state is carried from load and deliberately never serialized, so a dump cannot
+    express it; carrying it across keeps the comparison about the values the model DECLARES
+    rather than about what a dump happens to preserve.
+    """
+    rebuilt = type(entity).model_validate(entity.model_dump())
+    rebuilt._authored_aliases = entity._authored_aliases
+    return rebuilt
+
+
+def test_every_returned_representative_equals_its_own_round_trip() -> None:
+    """The general invariant: a representative is what its model says it is.
+
+    Equality, not "validation does not raise". A de-typed nested value -- a dict sitting where
+    the model declares an `ExternalId` -- validates happily, because the dict is exactly what the
+    model would accept as INPUT for that field. It is only unequal to what the model BUILDS from
+    it. Round-trip-does-not-raise is blind to the whole class; round-trip-equals is not.
     """
     result = arbitrate_contributions(
         [
@@ -849,6 +867,10 @@ def test_every_returned_representative_validates_against_its_own_model() -> None
             _external("paper:contested", title="Two", path="knowledge/refs.yaml", line=2),
             _external("paper:agreed", title="Same"),
             _external("paper:agreed", title="Same", path="knowledge/refs.yaml", line=3),
+            _external("paper:nested-invariant", xrefs=[_XREF_A]),
+            _external(
+                "paper:nested-invariant", xrefs=[_XREF_C], path="knowledge/refs.yaml", line=4
+            ),
         ],
         context=ArbitrationContext(
             project_scope="proj",
@@ -856,8 +878,9 @@ def test_every_returned_representative_validates_against_its_own_model() -> None
         ),
     )
 
+    assert result.entities
     for entity in result.entities:
-        type(entity).model_validate(entity.model_dump())
+        assert entity == _round_tripped(entity)
 
 
 def test_external_only_title_conflict_yields_no_representative() -> None:
@@ -883,3 +906,46 @@ def test_external_only_title_conflict_yields_no_representative() -> None:
     assert conflicts[0].field == "title"
     # The ledger still names BOTH sources: the node is absent, but why is not.
     assert len(conflicts[0].contributors) == 2
+
+
+def test_external_only_composition_preserves_nested_model_values() -> None:
+    """A proposal must carry the candidate's VALUES, not its serialized shape.
+
+    Reading proposals from `model_dump()` turns a nested `ExternalId` into a plain dict, and the
+    external-only path installs with `model_copy`, which does not coerce it back. The entity then
+    ships with `xrefs` elements that are dicts where the model declares `ExternalId` -- and it
+    ships quietly, because a dict dumps identically to the model it impersonates.
+    """
+    from science_model.identity import ExternalId
+
+    result = arbitrate_contributions(
+        [
+            _external("paper:nested", xrefs=[_XREF_A]),
+            _external("paper:nested", xrefs=[_XREF_C], path="knowledge/refs.yaml", line=2),
+        ],
+        context=ArbitrationContext(project_scope="proj", field_policies={}),
+    )
+
+    # The union differs from either candidate's own list, so the composed value is genuinely
+    # installed rather than left as the first candidate's untouched object.
+    entity = result.entities[0]
+    assert [type(xref) for xref in entity.xrefs] == [ExternalId, ExternalId]
+    assert {xref.curie for xref in entity.xrefs} == {"doi:10.1/x", "pmid:999"}
+
+
+def test_external_only_model_level_rejection_fails_loudly() -> None:
+    """A whole-entity invariant names no field, so no vacancy can explain it.
+
+    Two externals each carrying a valid xref can compose into a list the model rejects as a
+    whole (duplicate CURIEs). That failure arrives with an empty `loc`, and a guard that reads
+    only located errors sees an empty set -- i.e. "nothing wrong" -- and returns the invalid
+    entity with nothing in the ledger. Unexplained means loud.
+    """
+    with pytest.raises(ValueError, match="does not explain"):
+        arbitrate_contributions(
+            [
+                _external("paper:dupe", xrefs=[_XREF_A]),
+                _external("paper:dupe", xrefs=[_XREF_B], path="knowledge/refs.yaml", line=2),
+            ],
+            context=ArbitrationContext(project_scope="proj", field_policies={}),
+        )

@@ -263,10 +263,16 @@ def _authored_fields(candidate: Entity) -> set[str]:
 
 
 def _external_proposals(candidate: Entity) -> dict[str, Any]:
-    """The permitted metadata an external candidate offers: authored, non-structural."""
-    dumped = candidate.model_dump()
+    """The permitted metadata an external candidate offers: authored, non-structural.
+
+    Values come from the candidate ITSELF, never from its dump. A dump is a serialization: it
+    turns a nested `ExternalId` into a plain dict, and the external-only path installs proposals
+    with `model_copy`, which does not coerce one back. The entity would then carry dicts where
+    its model declares models -- quietly, because a dict dumps identically to the model it
+    impersonates. The candidate is already validated, so its attributes are the model's types.
+    """
     return {
-        field: dumped[field]
+        field: getattr(candidate, field)
         for field in sorted(_authored_fields(candidate))
         if field not in _EXTERNAL_STRUCTURAL_FIELDS
     }
@@ -581,17 +587,30 @@ def _select_scope(
     return None
 
 
+# A whole-entity invariant (`xrefs must not contain duplicate external ids`) fails with an empty
+# `loc`: it faults no single field, so no field-level vacancy can ever explain it. Naming it here
+# keeps it OUT of the vacated set by construction, rather than relying on a caller to remember
+# that locationless means unexplained.
+_MODEL_LEVEL = "<entity>"
+
+
 def _fields_the_model_rejects(entity: Entity) -> set[str]:
     """The fields on which this entity fails its OWN model contract, or an empty set.
 
     Arbitration must never return a representative a consumer cannot trust: the declared type is
     what every reader downstream relies on, and a node that violates it is discovered by whoever
     touches the field, far from here.
+
+    Locationless errors are reported as `_MODEL_LEVEL`, never dropped. Filtering them turned a
+    real rejection into an empty set -- which reads as "nothing wrong" -- and shipped the invalid
+    entity with nothing in the ledger.
     """
     try:
         type(entity).model_validate(entity.model_dump())
     except ValidationError as error:
-        return {str(item["loc"][0]) for item in error.errors() if item["loc"]}
+        return {
+            str(item["loc"][0]) if item["loc"] else _MODEL_LEVEL for item in error.errors()
+        }
     return set()
 
 
