@@ -354,10 +354,18 @@ def _emit_phase(sources: ProjectSources, *, archive_active: dict | None = None) 
     )
     entity_index = {entity.canonical_id: entity for entity in sources.entities}
     ext_prefixes = _EXTERNAL_PREFIXES | external_prefixes(sources.ontology_catalogs)
-    external_reference_ids = {
+    # A node is reference-only when an external reference declares it and NOTHING OWNS it.
+    # "Has an external-reference declaration" is a different question that used to give the same
+    # answer, because the loader deferred a bib/curie row whenever an owner existed and the two
+    # could never appear together. They now do -- an authored paper the project also cites has
+    # both -- and only the owner-free ids are genuinely reference nodes.
+    owned_ids = {
+        d.canonical_id for d in sources.identity_declarations if d.participation_mode == ParticipationMode.OWNER
+    }
+    reference_only_ids = {
         d.canonical_id
         for d in sources.identity_declarations
-        if d.participation_mode == ParticipationMode.EXTERNAL_REFERENCE
+        if d.participation_mode == ParticipationMode.EXTERNAL_REFERENCE and d.canonical_id not in owned_ids
     }
 
     for entity in sources.entities:
@@ -366,7 +374,7 @@ def _emit_phase(sources: ProjectSources, *, archive_active: dict | None = None) 
             knowledge=knowledge,
             provenance=provenance,
             overlay_paths=sources.commons_overlay_paths,
-            external_reference_ids=external_reference_ids,
+            reference_only_ids=reference_only_ids,
         )
 
     for entity in sources.entities:
@@ -551,16 +559,24 @@ def _compile(
     *,
     stop_after: _Literal["audit"] | None = None,
     strict: bool = True,
+    include_commons: bool = True,
 ) -> CompilationResult:
     """Run the source-compiler phases: Load -> Audit -> Emit -> Derive -> Write.
 
     `stop_after="audit"` returns after the audit phase without gating, emitting,
     or writing (the `materialization_audit` projection). A full run hard-gates on
     audit failures (the `materialize_graph` projection).
+
+    `include_commons=False` is the SELF-CONTAINED build: the loader never opens the
+    commons store, so a project with no reachable store still materializes. This is
+    an explicit opt-out, never a fallback -- with commons participation on (the
+    default) and reachable ids, a missing store still raises. The resulting graph
+    omits commons-owned entities and commons overlays; it is deliberately a
+    different, smaller graph, not an equivalent one.
     """
     project_root = project_root.resolve()
 
-    sources = load_project_sources(project_root, strict_identity=False)
+    sources = load_project_sources(project_root, strict_identity=False, include_commons=include_commons)
     verdict = _audit_phase(sources)
     if verdict.status == "unwired":
         raise ValueError(f"Source audit could not run ({verdict.code}): {verdict.reason}")
@@ -606,9 +622,12 @@ def _compile(
     )
 
 
-def materialize_graph(project_root: Path, *, strict: bool = True) -> Path:
-    """Build `knowledge/graph.trig` deterministically from project sources."""
-    result = _compile(project_root, strict=strict)
+def materialize_graph(project_root: Path, *, strict: bool = True, include_commons: bool = True) -> Path:
+    """Build `knowledge/graph.trig` deterministically from project sources.
+
+    `include_commons=False` selects the self-contained build (see `_compile`).
+    """
+    result = _compile(project_root, strict=strict, include_commons=include_commons)
     assert result.trig_path is not None  # a full compile always writes
     return result.trig_path
 
@@ -636,7 +655,7 @@ def _add_entity(
     knowledge,
     provenance,
     overlay_paths: dict[str, str] | None = None,
-    external_reference_ids: set[str] | None = None,
+    reference_only_ids: set[str] | None = None,
 ) -> None:
     uri = _entity_uri(entity.canonical_id)
     knowledge.add((uri, RDF.type, SCI_NS[_kind_class_name(entity.kind)]))
@@ -671,7 +690,7 @@ def _add_entity(
     # provenance/reference nodes, not project owners. Mark prov:Entity off the
     # DECLARED participation mode, never off kind or curie presence — a future
     # commons-OWNED protein with a curie must keep full owner treatment.
-    if external_reference_ids is not None and entity.canonical_id in external_reference_ids:
+    if reference_only_ids is not None and entity.canonical_id in reference_only_ids:
         knowledge.add((uri, RDF.type, PROV.Entity))
     if entity.kind in ("paper", "book"):
         # Thin bibliographic surface (year/doi/url), emitted only when present.

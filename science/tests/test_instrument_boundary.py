@@ -71,6 +71,11 @@ _NOT_INSTRUMENTS: frozenset[tuple[str, str]] = frozenset(
         # table", a fact about the argument, not the world. Surfaced only because migrate.py
         # joined the namespace.
         ("graph/migrate.py", "audit_identity_table"),
+        # Pure fold over a caller-supplied error sequence -> audit rows. Zero I/O; the only
+        # caller is audit_project_sources internally. Empty rows == "no conflicts in THIS
+        # ledger", a fact about the argument. The unwiring risk lives at the CALL SITE, not
+        # here, and test_identity_audit_entrypoints covers it end-to-end.
+        ("graph/migrate.py", "audit_arbitration_errors"),
         # Takes NO ARGUMENTS. A projection over the module constant HEALTH_CHECKS.
         # It has no input that could be absent, and its return is never empty.
         ("graph/health.py", "list_health_checks"),

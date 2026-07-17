@@ -215,10 +215,11 @@ def test_orphan_datapackage_synthesizes_deprecated_owner(tmp_path: Path) -> None
     assert owners[0].deprecated is True
 
 
-def test_datapackage_defers_to_markdown_owner(tmp_path: Path) -> None:
-    # §B4: a datapackage is attached resource metadata, NOT a second owner. With a
-    # real markdown owner of the same id, the datapackage DEFERS — markdown wins,
-    # no competing owner row, no collision (this scenario used to raise).
+def test_datapackage_declares_and_loses_to_markdown_owner(tmp_path: Path) -> None:
+    # §B4: a datapackage is attached resource metadata, NOT a second owner. It now DECLARES
+    # alongside the markdown owner and loses the representative contest on the merits of being
+    # deprecated. Previously it was dropped at adapter time, so the load could not report that
+    # this project still has a datapackage awaiting migration.
     _seed(tmp_path)
     (tmp_path / "entities" / "datasets").mkdir(parents=True)
     (tmp_path / "entities" / "datasets" / "x.md").write_text(
@@ -244,11 +245,21 @@ def test_datapackage_defers_to_markdown_owner(tmp_path: Path) -> None:
     )
     sources = load_project_sources(tmp_path)  # must NOT raise
     ds = next(e for e in sources.entities if e.canonical_id == "dataset:x")
-    assert ds.title == "X md"  # the markdown owner won
+    assert ds.title == "X md"  # the markdown owner won the representative
+    assert len([e for e in sources.entities if e.canonical_id == "dataset:x"]) == 1
+
     owners = [d for d in sources.identity_declarations if d.canonical_id == "dataset:x"]
-    assert len(owners) == 1
-    assert owners[0].adapter == "markdown" and owners[0].deprecated is False
-    assert build_identity_table(sources).collisions() == []
+    assert {(d.adapter, d.deprecated) for d in owners} == {("markdown", False), ("datapackage", True)}
+
+    # One collision, and it is TRANSITIONAL, not genuine: two owner rows for one id where one is
+    # deprecated. The strict loader does not raise on it (see the load above) — that separation
+    # is the point. A deprecated datapackage awaiting migration is a fact the audit should report,
+    # not a build-breaking duplicate. Deferral reported [] here, which said the same thing as a
+    # project with no datapackages at all.
+    collisions = build_identity_table(sources).collisions()
+    assert len(collisions) == 1
+    assert collisions[0].canonical_id == "dataset:x"
+    assert {row.adapter for row in collisions[0].rows} == {"markdown", "datapackage"}
 
 
 def test_global_identity_collision_two_markdown_owners(tmp_path: Path) -> None:

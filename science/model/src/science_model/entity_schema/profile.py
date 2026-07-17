@@ -86,7 +86,7 @@ def parse_component(token: str) -> ProfileComponent:
 # Default mixin version per kind, used by `default_profile_for_kind`.
 # Add an entry here when a new mixin version becomes the project default.
 _DEFAULT_MIXIN_VERSION: dict[str, str] = {
-    "dataset": "1.0",
+    "dataset": "2.0",
     "paper": "2.0",
     "topic": "2.0",
     "theme": "2.0",

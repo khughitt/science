@@ -114,7 +114,7 @@ def test_dataset_with_matrix_and_rnaseq() -> None:
     assert profile.extensions == extensions
     rendered = profile.render()
     assert rendered.endswith("+bio.matrix/1.0+bio.rnaseq/1.0")
-    assert rendered.startswith("science-entity-base/1.0+dataset/1.0")
+    assert rendered.startswith("science-entity-base/1.0+dataset/2.0")
 
 
 def test_dataset_extensions_render_structural_before_domain() -> None:

@@ -15,6 +15,19 @@ def test_tags_field_is_append() -> None:
     assert policy["tags"] == MergePolicy.APPEND
 
 
+def test_a_mixin_that_removes_a_field_reads_as_forbidden() -> None:
+    # `mixin-hypothesis-1.0` writes `"phase": false` -- a false subschema, meaning the property
+    # may not appear at all. The reader assumed every property spec was an object and raised
+    # AttributeError on it, so ANY caller reading a hypothesis profile's policy crashed. Nothing
+    # read one until identity arbitration did, which is why a schema shipped for months could
+    # not be asked its own merge policy.
+    policy = read_merge_policy(parse_profile("science-entity-base/2.0+hypothesis/1.0"))
+    assert policy["phase"] == MergePolicy.FORBIDDEN
+    assert policy["disposition"] == MergePolicy.FORBIDDEN
+    # A field the mixin does NOT remove still reads normally.
+    assert policy["title"] == MergePolicy.REPLACE
+
+
 def test_canonical_only_dataset_fields_are_forbidden() -> None:
     # Required-from-canonical fields (derivation, access, datapackage,
     # accessions) carry merge: forbidden so overlays cannot override them.

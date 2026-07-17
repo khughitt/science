@@ -31,11 +31,16 @@ class LocalGraphBuild:
     config: ProjectConfig | None
 
 
-def build_project_graph(project_root: Path) -> LocalGraphBuild:
+def build_project_graph(project_root: Path, *, include_commons: bool = True) -> LocalGraphBuild:
     """Register the project (if configured) and materialize `knowledge/graph.trig`.
 
     Lets `materialize_graph`'s `ValueError` propagate; callers keep their own
     error handling around it.
+
+    `include_commons=False` is the self-contained build: the commons store is
+    never opened, so a project with no reachable store still builds. This is an
+    explicit opt-out chosen by the caller, orthogonal to `--local-only` (which is
+    about composite-graph refresh, not authority participation).
     """
     from science_tool.project_config import load_project_config
     from science_tool.registry.config import ensure_registered
@@ -53,5 +58,5 @@ def build_project_graph(project_root: Path) -> LocalGraphBuild:
             parent=None,
         )
 
-    local_path = materialize_graph(_project_root)
+    local_path = materialize_graph(_project_root, include_commons=include_commons)
     return LocalGraphBuild(local_path=local_path, config=_cfg)

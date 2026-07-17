@@ -16,6 +16,7 @@ from science_tool.addressing import is_address
 from science_tool.bibliography import is_bibliography_reference
 from science_tool.commons.geneset import GenesetCollectionError, parse_geneset_rows
 from science_tool.commons.geneset_resources import dataset_geneset_frontmatter, read_member_rows
+from science_tool.graph.identity_arbitration import ArbitrationCode, ArbitrationError
 from science_tool.graph.identity_table import IdentityTable, build_identity_table
 from science_tool.graph.reference_resolution import ReferenceResolver
 from science_tool.graph.sources import (
@@ -252,6 +253,37 @@ def audit_identity_table(table: IdentityTable) -> list[AuditRow]:
     return rows
 
 
+def audit_arbitration_errors(errors: Sequence[ArbitrationError]) -> list[AuditRow]:
+    """Turn the arbitration ledger into graph-audit rows.
+
+    A diagnostic load does not raise, so without this the ONLY conflicts the audit could see
+    were the ones reconstructible from declarations -- duplicate owners. A field two sources
+    disagreed on left no trace in the declarations at all, so a project with contradictory
+    contributions produced a report identical to a clean project's.
+
+    `duplicate-owner` is deliberately absent: `audit_identity_table` already reports it from the
+    declarations, and one defect must not become two rows.
+    """
+    rows: list[AuditRow] = []
+    for error in errors:
+        if error.code is ArbitrationCode.DUPLICATE_OWNER:
+            continue
+        rows.append(
+            {
+                "check": f"arbitration_{error.code.replace('-', '_')}",
+                # `fail`: the id did not materialize, or materialized without the contested
+                # field. Either way the graph is missing something a source said, and calling
+                # that a warning would let a build pass while silently incomplete.
+                "status": "fail",
+                "source": error.canonical_id,
+                "field": error.field or "identity",
+                "target": error.owner_scope or "-",
+                "details": "contributed by " + " and ".join(str(ref) for ref in error.contributors),
+            }
+        )
+    return rows
+
+
 def audit_project_sources(sources: ProjectSources) -> ValidationVerdict[AuditRow]:
     """Validate that structured project sources resolve canonically."""
     rows: list[AuditRow] = []
@@ -322,6 +354,7 @@ def audit_project_sources(sources: ProjectSources) -> ValidationVerdict[AuditRow
 
     # Additive identity-table audit (design §C2): consume the compiled model.
     rows.extend(audit_identity_table(identity_table))
+    rows.extend(audit_arbitration_errors(sources.arbitration_errors))
 
     rows.sort(key=lambda row: (row["source"], row["target"]))
     has_failures = any(row["status"] == "fail" for row in rows)

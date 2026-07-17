@@ -61,8 +61,10 @@ def test_orphan_datapackage_owner_errors_regardless_of_layout_version(tmp_path: 
 
 def test_non_orphan_datapackage_not_flagged(tmp_path: Path) -> None:
     ctx = _ctx(tmp_path)
-    # A real markdown owner of the same id -> the datapackage DEFERS (Task 1), so no
-    # datapackage owner declaration remains -> nothing to flag.
+    # A real markdown owner of the same id. The datapackage now DECLARES rather than being
+    # dropped at load, so the check cannot infer orphanhood from the declaration's mere
+    # existence -- it must look for the markdown owner. This fixture is what caught the check
+    # asking "is this a datapackage?" while claiming to ask "is this an orphan?".
     (tmp_path / "entities" / "datasets").mkdir(parents=True)
     (tmp_path / "entities" / "datasets" / "x.md").write_text(
         '---\nid: "dataset:x"\nkind: "dataset"\ntitle: "X md"\n'
@@ -72,3 +74,24 @@ def test_non_orphan_datapackage_not_flagged(tmp_path: Path) -> None:
     )
     _write_datapackage(tmp_path, "x", "dataset:x")
     assert list(check_orphan_datapackage_owner(ctx)) == []
+
+
+def test_orphan_beside_an_unrelated_owned_dataset_is_still_flagged(tmp_path: Path) -> None:
+    # Guards the OTHER direction of the same fix: `owned_elsewhere` must exempt only the id it
+    # covers. A check that collected owner ids and then asked "are there any owners at all?"
+    # would pass the test above and silently stop reporting every orphan in any project that
+    # also has one normal dataset -- which is every real project.
+    ctx = _ctx(tmp_path)
+    (tmp_path / "entities" / "datasets").mkdir(parents=True)
+    (tmp_path / "entities" / "datasets" / "owned.md").write_text(
+        '---\nid: "dataset:owned"\nkind: "dataset"\ntitle: "Owned"\n'
+        'origin: "external"\n'
+        'access:\n  level: "public"\n  verified: false\n---\n',
+        encoding="utf-8",
+    )
+    _write_datapackage(tmp_path, "owned", "dataset:owned")
+    _write_datapackage(tmp_path, "lonely", "dataset:lonely")
+
+    results = list(check_orphan_datapackage_owner(ctx))
+    assert len(results) == 1
+    assert "dataset:lonely" in results[0].message

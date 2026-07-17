@@ -34,6 +34,38 @@ def test_paper_node_carries_bib_metadata(tmp_path: Path) -> None:
     assert (uri, DCAT_NS.downloadURL, URIRef("https://ex/x")) in knowledge  # NEW: url (design surface)
 
 
+def test_authored_paper_cited_in_bib_is_not_typed_as_a_reference_node(tmp_path: Path) -> None:
+    # An AUTHORED paper that the project also cites. prov:Entity marks a node that exists only
+    # as a reference; this paper is an owned project entity that happens to have a bib row.
+    #
+    # The predicate was "some declaration for this id is EXTERNAL_REFERENCE", which was correct
+    # only because deferral guaranteed a bib row and an owner row could never coexist. Exhaustive
+    # collection makes them coexist routinely, so the predicate has to ask what it actually
+    # means: is there NO owner? Nothing failed when this was wrong -- an owned paper was simply
+    # mistyped in the graph, which no existing test looked at.
+    (tmp_path / "science.yaml").write_text(_MANIFEST, encoding="utf-8")
+    (tmp_path / "papers").mkdir(parents=True, exist_ok=True)
+    (tmp_path / "papers" / "references.bib").write_text(
+        "@article{Smith2024,\n  title = {Cells},\n}\n@article{Jones2020,\n  title = {Cited only},\n}\n",
+        encoding="utf-8",
+    )
+    owner = tmp_path / "entities" / "papers" / "Smith2024.md"
+    owner.parent.mkdir(parents=True, exist_ok=True)
+    owner.write_text(
+        '---\nid: "paper:Smith2024"\nkind: "paper"\ntitle: "Authored Smith"\n'
+        'status: "active"\ncreated: "2026-01-01"\nupdated: "2026-01-01"\n---\n',
+        encoding="utf-8",
+    )
+
+    sources = load_project_sources(tmp_path, include_commons=False, strict_core_schema=False, strict_identity=False)
+    knowledge = _build_dataset_from_sources(sources).graph(PROJECT_NS["graph/knowledge"])
+
+    assert (_entity_uri("paper:Smith2024"), RDF.type, PROV.Entity) not in knowledge
+    # The genuinely reference-only paper in the same load still IS one -- the fix must not
+    # simply stop marking anything.
+    assert (_entity_uri("paper:Jones2020"), RDF.type, PROV.Entity) in knowledge
+
+
 def test_book_node_carries_bib_metadata(tmp_path: Path) -> None:
     _write(
         tmp_path,
