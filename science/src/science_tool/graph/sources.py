@@ -57,6 +57,7 @@ from science_tool.project_config import validated_entity_schema_version
 from science_tool.graph.entity_registry import EntityKindNotRegisteredError, EntityRegistry
 from science_tool.graph.errors import ContributionConflictError, EntityIdentityCollisionError
 from science_tool.graph.identity_arbitration import (
+    ArbitrationCode,
     ArbitrationContext,
     ArbitrationError,
     EntityContribution,
@@ -1518,22 +1519,29 @@ def _raise_first_arbitration_error(errors: list[ArbitrationError]) -> None:
     run instead of whichever adapter happened to run first.
     """
     for error in errors:
-        if error.code == "duplicate-owner":
-            # This exception predates arbitration and names exactly two refs. Duplicate-owner
-            # is detected over the whole set, so there may be more than two; the pair shown is
-            # the first two in sorted order, and the rest surface once these are resolved.
-            first, second = error.contributors[0], error.contributors[1]
-            raise EntityIdentityCollisionError(error.canonical_id, first, second)
-        if error.code == "contribution-conflict":
-            raise ContributionConflictError(
-                canonical_id=error.canonical_id,
-                field=error.field,
-                refs=error.contributors,
-            )
-    # `missing-owner` and `ambiguous-representative` are deliberately NOT raised here. Both are
-    # states a load can legitimately reach mid-migration, and both already suppress
-    # materialization of the affected id, so the graph never shows a guessed answer. They stay
-    # in `arbitration_errors` for the audit to report.
+        match error.code:
+            case ArbitrationCode.DUPLICATE_OWNER:
+                # This exception predates arbitration and names exactly two refs. Duplicate-owner
+                # is detected over the whole set, so there may be more than two; the pair shown
+                # is the first two in sorted order, and the rest surface once these are resolved.
+                first, second = error.contributors[0], error.contributors[1]
+                raise EntityIdentityCollisionError(error.canonical_id, first, second)
+            case ArbitrationCode.CONTRIBUTION_CONFLICT:
+                raise ContributionConflictError(
+                    canonical_id=error.canonical_id,
+                    field=error.field,
+                    refs=error.contributors,
+                )
+            case ArbitrationCode.MISSING_OWNER | ArbitrationCode.AMBIGUOUS_REPRESENTATIVE:
+                # Deliberately diagnostic. Both are states a load can legitimately reach
+                # mid-migration, and both already suppress materialization of the affected id,
+                # so the graph never shows a guessed answer. The audit reports them.
+                continue
+            case unhandled:  # pragma: no cover - totality guard
+                # No fall-through. A new code must be given a disposition HERE, because the
+                # fall-through's answer would have been "do not raise" -- silently downgrading
+                # an unconsidered defect to a passing strict build.
+                raise RuntimeError(f"arbitration code has no strict-boundary disposition: {unhandled!r}")
 
 
 def _contribute(

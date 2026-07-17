@@ -25,10 +25,10 @@ class StorageAdapter(ABC):
     Subclasses MUST override `discover()` and `load_raw()`. `dump()` is
     optional during migration; the default raises NotImplementedError.
 
-    Load-time policy is declared here (Spec 3 Slice A) so the source-load loop
-    reads it instead of branching on adapter type/name. The defaults below are
-    the common case (an owner adapter that contributes no extra records and never
-    defers); adapters override only what differs.
+    An adapter declares HOW it participates (`participation_mode`) and never whether it wins.
+    Identity is arbitrated once over the complete contribution set, so there is no load-time
+    hook here for yielding to another adapter: an adapter cannot know what else claimed an id,
+    and a decision made from that partial view depended on which adapter ran first.
     """
 
     name: str  # human-readable adapter name; travels in SourceRef.adapter_name

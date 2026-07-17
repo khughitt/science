@@ -14,7 +14,7 @@ from science_tool.addressing import is_address
 from science_tool.bibliography import is_bibliography_reference
 from science_tool.commons.geneset import GenesetCollectionError, parse_geneset_rows
 from science_tool.commons.geneset_resources import dataset_geneset_frontmatter, read_member_rows
-from science_tool.graph.identity_arbitration import ArbitrationError
+from science_tool.graph.identity_arbitration import ArbitrationCode, ArbitrationError
 from science_tool.graph.identity_table import IdentityTable, build_identity_table
 from science_tool.graph.reference_resolution import ReferenceResolver
 from science_tool.graph.sources import (
@@ -167,7 +167,7 @@ def audit_arbitration_errors(errors: Sequence[ArbitrationError]) -> list[AuditRo
     """
     rows: list[AuditRow] = []
     for error in errors:
-        if error.code == "duplicate-owner":
+        if error.code is ArbitrationCode.DUPLICATE_OWNER:
             continue
         rows.append(
             {

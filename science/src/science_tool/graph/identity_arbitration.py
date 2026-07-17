@@ -12,6 +12,7 @@ from __future__ import annotations
 from collections import defaultdict
 from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass
+from enum import StrEnum
 from typing import Any, TypeAlias
 
 from science_model.entities import Entity
@@ -47,6 +48,22 @@ if _UNRANKED:  # pragma: no cover - import-time totality guard
     raise RuntimeError(f"participation modes lack a contribution rank: {sorted(_UNRANKED)}")
 
 
+def _require_provenance(declaration: IdentityDeclaration) -> None:
+    """A CONTRIBUTION must name where it came from.
+
+    `IdentityDeclaration.source_ref` stays optional because non-contribution rows -- a
+    cross-scope commons owner recorded for reference resolution -- legitimately have none. But a
+    contribution is a source's claim, and a claim whose source cannot be named is one no reader
+    can check and no author can be asked about. Guarding here lets every consumer downstream
+    stop asking.
+    """
+    if declaration.source_ref is None:
+        raise ValueError(
+            f"contribution for {declaration.canonical_id!r} from adapter "
+            f"{declaration.adapter!r} has no source_ref"
+        )
+
+
 @dataclass(frozen=True)
 class EntityContribution:
     """A candidate entity offered by an owner or an external reference."""
@@ -57,6 +74,7 @@ class EntityContribution:
     def __post_init__(self) -> None:
         if self.declaration.participation_mode is ParticipationMode.BORROWER:
             raise ValueError("a borrower contributes an attachment, not an entity")
+        _require_provenance(self.declaration)
         if self.declaration.canonical_id != self.candidate.canonical_id:
             raise ValueError(
                 "identity declaration and entity candidate disagree on canonical_id: "
@@ -74,6 +92,7 @@ class AttachmentContribution:
     def __post_init__(self) -> None:
         if self.declaration.participation_mode is not ParticipationMode.BORROWER:
             raise ValueError("only a borrower contributes an attachment")
+        _require_provenance(self.declaration)
         if self.declaration.canonical_id != self.record.canonical_id:
             raise ValueError(
                 "identity declaration and overlay attachment disagree on canonical_id: "
@@ -116,6 +135,21 @@ class ArbitrationContext:
     field_policies: Mapping[tuple[str, str], Mapping[str, MergePolicy]]
 
 
+class ArbitrationCode(StrEnum):
+    """The ledger's CLOSED vocabulary.
+
+    Closed so consumers can be total over it. A bare `str` let the strict boundary match the
+    spellings it happened to remember and fall through on the rest -- and falling through means
+    NOT raising, so a code nobody had considered would silently downgrade to "diagnostic" and
+    the load would report success for a defect arbitration had positively found.
+    """
+
+    DUPLICATE_OWNER = "duplicate-owner"
+    CONTRIBUTION_CONFLICT = "contribution-conflict"
+    MISSING_OWNER = "missing-owner"
+    AMBIGUOUS_REPRESENTATIVE = "ambiguous-representative"
+
+
 @dataclass(frozen=True)
 class ArbitrationError:
     """One issue in the ledger.
@@ -125,11 +159,18 @@ class ArbitrationError:
     display text to recover a path would make the message format load-bearing.
     """
 
-    code: str
+    code: ArbitrationCode
     canonical_id: str
     owner_scope: str
     field: str
     contributors: tuple[SourceRef, ...]
+
+    def __post_init__(self) -> None:
+        if not self.contributors:
+            # An error naming nobody cannot be acted on, and the strict boundary reads
+            # `contributors` positionally. Empty here means a contribution reached arbitration
+            # without provenance, which the contribution guards now prevent at construction.
+            raise ValueError(f"arbitration error {self.code} must name the sources involved")
 
     @property
     def sort_key(self) -> tuple[str, str, str, str, tuple[str, ...]]:
@@ -277,7 +318,7 @@ def _compose_contributions(
         if outcome.conflicting:
             errors.append(
                 ArbitrationError(
-                    code="contribution-conflict",
+                    code=ArbitrationCode.CONTRIBUTION_CONFLICT,
                     canonical_id=canonical_id,
                     owner_scope=scope,
                     field=field,
@@ -351,7 +392,7 @@ def _arbitrate_ordered(
                 # and picking one would make the defect invisible exactly where it matters.
                 errors.append(
                     ArbitrationError(
-                        code="duplicate-owner",
+                        code=ArbitrationCode.DUPLICATE_OWNER,
                         canonical_id=canonical_id,
                         owner_scope=scope,
                         field="",
@@ -370,7 +411,7 @@ def _arbitrate_ordered(
             if borrower.declaration.owner_scope not in representatives:
                 errors.append(
                     ArbitrationError(
-                        code="missing-owner",
+                        code=ArbitrationCode.MISSING_OWNER,
                         canonical_id=canonical_id,
                         owner_scope=borrower.declaration.owner_scope,
                         field="",
@@ -392,7 +433,7 @@ def _arbitrate_ordered(
                 # the graph sees.
                 errors.append(
                     ArbitrationError(
-                        code="ambiguous-representative",
+                        code=ArbitrationCode.AMBIGUOUS_REPRESENTATIVE,
                         canonical_id=canonical_id,
                         owner_scope="",
                         field="",
@@ -473,8 +514,23 @@ def _arbitrate_ordered(
 
 
 def _refs_of(contributions: Sequence[SourceContribution]) -> tuple[SourceRef, ...]:
-    refs = [c.declaration.source_ref for c in contributions if c.declaration.source_ref]
+    """Every contribution's ref -- never a subset.
+
+    This used to filter out ref-less contributions, which turned "a contribution had no
+    provenance" into "fewer contributors than there were contributions", i.e. an error that
+    under-reported who was involved and could even name nobody at all. The contribution guards
+    make the ref total, so this reads it directly and a violation surfaces as a crash in the
+    guard rather than a quietly shortened list.
+    """
+    refs = [_ref_of(c) for c in contributions]
     return tuple(sorted(refs, key=lambda ref: (ref.path, -1 if ref.line is None else ref.line, ref.adapter_name)))
+
+
+def _ref_of(contribution: SourceContribution) -> SourceRef:
+    ref = contribution.declaration.source_ref
+    if ref is None:  # unreachable: guaranteed by _require_provenance at construction
+        raise AssertionError(f"contribution for {contribution.declaration.canonical_id!r} lost its source_ref")
+    return ref
 
 
 def _select_scope(
@@ -542,7 +598,7 @@ def _materialize_external_only(
             continue
         errors.append(
             ArbitrationError(
-                code="contribution-conflict",
+                code=ArbitrationCode.CONTRIBUTION_CONFLICT,
                 canonical_id=canonical_id,
                 owner_scope="",
                 field=field,

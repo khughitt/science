@@ -189,6 +189,33 @@ def test_contribution_key_tolerates_a_declaration_without_a_source_ref() -> None
     assert key.position == -1
 
 
+def _ref_less(mode: ParticipationMode, *, adapter: str = "markdown") -> IdentityDeclaration:
+    return IdentityDeclaration(
+        canonical_id="paper:x",
+        participation_mode=mode,
+        owner_scope="proj",
+        adapter=adapter,
+        source_ref=None,
+    )
+
+
+def test_an_entity_contribution_requires_provenance() -> None:
+    """A contribution with no `source_ref` is a claim nobody can be held to.
+
+    `_refs_of` dropped such rows, so a duplicate-owner error between two of them carried
+    `contributors=()` -- an error naming nobody -- and the strict boundary indexed that empty
+    tuple and raised IndexError in place of the identity collision. Refusing at construction is
+    the one spot the guard cannot be forgotten; every later consumer then gets to assume it.
+    """
+    with pytest.raises(ValueError, match="source_ref"):
+        EntityContribution(_ref_less(ParticipationMode.OWNER), _paper())
+
+
+def test_an_attachment_contribution_requires_provenance() -> None:
+    with pytest.raises(ValueError, match="source_ref"):
+        AttachmentContribution(_ref_less(ParticipationMode.BORROWER, adapter="overlay"), _overlay())
+
+
 def test_contribution_conflict_error_reports_every_source() -> None:
     """The message must carry the provenance a human needs to resolve the conflict.
 
