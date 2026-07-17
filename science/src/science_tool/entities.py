@@ -658,17 +658,22 @@ def path_for_entity(kind: str, entity_id: str, today: date) -> Path:
     return resolve_path_policy(kind).root / f"{local_part}.md"
 
 
+def _entity_not_found_error(project_root: Path, ref: str) -> EntityCommandError:
+    roots = ", ".join(str(policy.root) for policy in entity_policies(project_root).values())
+    return EntityCommandError(f"Entity not found: {ref}. Searched source roots: {roots}")
+
+
 def resolve_entity_ref(project_root: Path, ref: str) -> str:
     entities = _load_markdown_entities(project_root)
     if ":" in ref:
         for entity in entities:
             if entity["id"] == ref:
                 return ref
-        raise EntityCommandError(f"Entity not found: {ref}")
+        raise _entity_not_found_error(project_root, ref)
 
     matches = [entity["id"] for entity in entities if _entity_ref_matches(entity["id"], ref)]
     if not matches:
-        raise EntityCommandError(f"Entity not found: {ref}")
+        raise _entity_not_found_error(project_root, ref)
     if len(matches) > 1:
         raise EntityCommandError(f"Ambiguous entity reference {ref}: {', '.join(sorted(matches))}")
     return matches[0]
@@ -721,8 +726,7 @@ def find_entity(project_root: Path, ref: str) -> EntityLocation:
             frontmatter=dict(frontmatter),
             body=body,
         )
-    roots = ", ".join(str(policy.root) for policy in entity_policies(project_root).values())
-    raise EntityCommandError(f"Entity not found: {ref}. Searched source roots: {roots}")
+    raise _entity_not_found_error(project_root, ref)
 
 
 def build_entity_markdown(

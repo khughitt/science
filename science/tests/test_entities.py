@@ -178,6 +178,15 @@ def test_find_entity_discovers_local_extension_kind(tmp_project_with_design_kind
     assert location.rel_path == "entities/design/0001.md"
 
 
+def test_find_entity_missing_local_extension_reports_project_aware_roots(
+    tmp_project_with_design_kind: Path,
+) -> None:
+    with pytest.raises(EntityCommandError, match="Entity not found: design:9999") as exc_info:
+        find_entity(tmp_project_with_design_kind, "design:9999")
+
+    assert "entities/design" in str(exc_info.value)
+
+
 def test_build_entity_markdown_uses_canonical_frontmatter_and_body() -> None:
     text = build_entity_markdown(
         kind="question",
