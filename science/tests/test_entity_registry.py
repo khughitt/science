@@ -138,6 +138,54 @@ def test_extension_kind_declared_scope_wins() -> None:
     assert registry.curation_scope_for_kind("design") is CurationScope.NONE
 
 
+@pytest.mark.parametrize(
+    ("bucket", "kind"),
+    [
+        ("profile", "shared-note"),
+        ("catalog", "gene"),
+    ],
+)
+def test_profile_and_catalog_kinds_undeclared_default_none(bucket: str, kind: str) -> None:
+    registry = EntityRegistry()
+    if bucket == "profile":
+        registry.register_profile_kind(kind, ProjectEntity, owner="shared")
+    else:
+        registry.register_catalog_kind(kind, DomainEntity, owner="biology")
+
+    assert registry.curation_scope_for_kind(kind) is CurationScope.NONE
+
+
+@pytest.mark.parametrize(
+    ("bucket", "kind", "declared"),
+    [
+        ("profile", "shared-finding", CurationScope.EPISTEMIC),
+        ("catalog", "sample", CurationScope.CORRESPONDENCE),
+    ],
+)
+def test_profile_and_catalog_declared_scope_wins(
+    bucket: str,
+    kind: str,
+    declared: CurationScope,
+) -> None:
+    registry = EntityRegistry()
+    if bucket == "profile":
+        registry.register_profile_kind(
+            kind,
+            ProjectEntity,
+            owner="shared",
+            curation_scope=declared,
+        )
+    else:
+        registry.register_catalog_kind(
+            kind,
+            DomainEntity,
+            owner="biology",
+            curation_scope=declared,
+        )
+
+    assert registry.curation_scope_for_kind(kind) is declared
+
+
 def test_unregistered_kind_defaults_correspondence() -> None:
     """Unknown kinds behave like extension kinds — reviewable by default (§6.2)."""
     registry = EntityRegistry.with_core_types()

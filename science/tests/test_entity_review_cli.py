@@ -147,6 +147,24 @@ def test_entity_review_unknown_id_errors(tmp_path: Path, monkeypatch):
     assert "not found" in result.output.lower() or "unknown" in result.output.lower()
 
 
+def test_entity_review_malformed_policy_yaml_is_clean_cli_error(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    root = _setup_project_with_hypothesis(tmp_path)
+    (root / "science.yaml").write_text("knowledge_profiles: [\n", encoding="utf-8")
+    monkeypatch.chdir(root)
+
+    result = CliRunner().invoke(
+        cli_main,
+        ["entity", "review", "hypothesis:h1", "--note", "checked"],
+    )
+
+    assert result.exit_code == 1
+    assert "Error: Entity policy configuration is not valid:" in result.output
+    assert "Traceback" not in result.output
+
+
 def test_entity_review_preserves_existing_review_horizon_days(tmp_path: Path, monkeypatch):
     """Reviewing must not clobber other review_state fields."""
     root = _setup_project_with_hypothesis(tmp_path)

@@ -207,6 +207,54 @@ def test_find_entity_wraps_invalid_policy_config_as_entity_command_error(tmp_pat
     assert "entity_schema_version must be 1 or 2 (an integer), not '2'" in message
 
 
+@pytest.mark.parametrize(
+    ("malformed_path", "malformed_yaml"),
+    [
+        ("science.yaml", "knowledge_profiles: [\n"),
+        ("knowledge/sources/local/manifest.yaml", "entity_kinds: [\n"),
+    ],
+)
+def test_find_entity_wraps_malformed_policy_yaml(
+    tmp_path: Path,
+    malformed_path: str,
+    malformed_yaml: str,
+) -> None:
+    """Policy YAML parse failures stay on the public command-error route."""
+    seed_project(tmp_path)
+    path = tmp_path / malformed_path
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(malformed_yaml, encoding="utf-8")
+
+    with pytest.raises(EntityCommandError) as exc_info:
+        find_entity(tmp_path, "hypothesis:0001")
+
+    assert type(exc_info.value) is EntityCommandError
+    assert str(exc_info.value).startswith("Entity policy configuration is not valid:\n")
+    assert isinstance(exc_info.value.__cause__, yaml.YAMLError)
+
+
+def test_find_entity_wraps_policy_io_error(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """An unreadable policy source does not leak a raw OS exception."""
+    seed_project(tmp_path)
+
+    def unreadable_policies(_project_root: Path):
+        raise OSError("policy file is unreadable")
+
+    monkeypatch.setattr("science_tool.entities.entity_policies", unreadable_policies)
+
+    with pytest.raises(EntityCommandError) as exc_info:
+        find_entity(tmp_path, "hypothesis:0001")
+
+    assert type(exc_info.value) is EntityCommandError
+    assert str(exc_info.value) == (
+        "Entity policy configuration is not valid:\npolicy file is unreadable"
+    )
+    assert isinstance(exc_info.value.__cause__, OSError)
+
+
 def test_build_entity_markdown_uses_canonical_frontmatter_and_body() -> None:
     text = build_entity_markdown(
         kind="question",

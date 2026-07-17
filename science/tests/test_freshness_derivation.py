@@ -178,10 +178,8 @@ def test_freshness_skips_non_epistemic_entities():
 
 
 def test_correspondence_entity_never_receives_freshness_state():
-    """Design test 6: a correspondence-scoped OPERATIONAL kind (plan) with a set
-    last_reviewed never becomes a bears_on TARGET and never receives sci:freshnessState.
-    derive_freshness gates sinks on EntityClass.EPISTEMIC (freshness.py:337), which
-    `plan` (OPERATIONAL) is not — curation_scope did not change this."""
+    """A correspondence-scoped plan gets no freshness state or sink even with an
+    inbound bears_on edge; sink selection remains gated on EntityClass.EPISTEMIC."""
     plan = _u("plan/0001")
     src = _u("hypothesis/h1")
     ds = _ds_with_bears_on([(src, plan)])  # even with an inbound bears_on edge

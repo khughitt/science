@@ -56,12 +56,12 @@ def _literal_strings(node: ast.AST):
 def _contains_closed_list_literal(tree: ast.AST):
     for node in ast.walk(tree):
         values = None
-        if isinstance(node, ast.Set):
+        if isinstance(node, (ast.Set, ast.List, ast.Tuple)):
             values = _literal_strings(node)
         elif (
             isinstance(node, ast.Call)
             and isinstance(node.func, ast.Name)
-            and node.func.id == "frozenset"
+            and node.func.id in {"frozenset", "list", "set", "tuple"}
             and len(node.args) == 1
             and not node.keywords
         ):
@@ -149,15 +149,23 @@ def _scope_default_offense_lines(tree: ast.AST):
     }
     offenders = []
     for node in ast.walk(tree):
-        value = None
+        values = []
         if isinstance(node, (ast.Return, ast.Assign, ast.NamedExpr)):
-            value = node.value
+            if node.value is not None:
+                values.append(node.value)
         elif isinstance(node, ast.AnnAssign):
-            value = node.value
-        if value is not None and _contains_scope_default_value(
-            value,
-            scope_names,
-            permit_declarative_keyword=id(node) in module_declarations,
+            if node.value is not None:
+                values.append(node.value)
+        elif isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.Lambda)):
+            values.extend(node.args.defaults)
+            values.extend(default for default in node.args.kw_defaults if default is not None)
+        if any(
+            _contains_scope_default_value(
+                value,
+                scope_names,
+                permit_declarative_keyword=id(node) in module_declarations,
+            )
+            for value in values
         ):
             offenders.append(node.lineno)
     return sorted(set(offenders))
@@ -181,7 +189,10 @@ def test_closed_list_literal_appears_nowhere():
 def test_closed_list_detector_requires_one_collection_literal():
     values = ", ".join(repr(kind) for kind in sorted(_CLOSED_LIST))
     assert _contains_closed_list_literal(ast.parse(f"kinds = {{{values}}}"))
+    assert _contains_closed_list_literal(ast.parse(f"kinds = [{values}]"))
+    assert _contains_closed_list_literal(ast.parse(f"kinds = ({values},)"))
     assert _contains_closed_list_literal(ast.parse(f"kinds = frozenset([{values}])"))
+    assert _contains_closed_list_literal(ast.parse(f"kinds = set(({values},))"))
     assert _contains_closed_list_literal(ast.parse(f"kinds = {{{values}, OTHER}}"))
     assert _contains_closed_list_literal(
         ast.parse(f"kinds = frozenset([{values}, *OTHER])")
@@ -227,6 +238,24 @@ def test_scope_default_detector_rejects_defaults_but_permits_comparisons():
     declaration = ast.parse(
         "PROFILE = EntityKind(curation_scope=CurationScope.CORRESPONDENCE)"
     )
+    positional_parameter_default = ast.parse(
+        "def decide(scope=CurationScope.NONE):\n"
+        "    return scope"
+    )
+    keyword_only_parameter_default = ast.parse(
+        "def decide(*, scope=CurationScope.CORRESPONDENCE):\n"
+        "    return scope"
+    )
+    async_parameter_default = ast.parse(
+        "async def decide(scope=CurationScope.NONE):\n"
+        "    return scope"
+    )
+    lambda_parameter_default = ast.parse(
+        "(lambda scope=CurationScope.CORRESPONDENCE: scope)"
+    )
+    lambda_keyword_only_parameter_default = ast.parse(
+        "(lambda *, scope=CurationScope.NONE: scope)"
+    )
 
     assert _scope_default_offense_lines(direct_return)
     assert _scope_default_offense_lines(aliased_return)
@@ -235,6 +264,11 @@ def test_scope_default_detector_rejects_defaults_but_permits_comparisons():
     assert _scope_default_offense_lines(keyword_default)
     assert _scope_default_offense_lines(nested_comparison)
     assert _scope_default_offense_lines(returned_curation_scope)
+    assert _scope_default_offense_lines(positional_parameter_default)
+    assert _scope_default_offense_lines(keyword_only_parameter_default)
+    assert _scope_default_offense_lines(async_parameter_default)
+    assert _scope_default_offense_lines(lambda_parameter_default)
+    assert _scope_default_offense_lines(lambda_keyword_only_parameter_default)
     assert not _scope_default_offense_lines(comparison)
     assert not _scope_default_offense_lines(declaration)
 

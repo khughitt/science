@@ -1854,7 +1854,7 @@ def _load_markdown_entities(project_root: Path, kind: str | None = None) -> list
     entities: list[dict[str, Any]] = []
     try:
         policies = entity_policies(project_root)
-    except (ValidationError, ValueError) as exc:
+    except (yaml.YAMLError, ValidationError, ValueError, OSError) as exc:
         raise EntityCommandError(f"Entity policy configuration is not valid:\n{exc}") from exc
     for policy_kind, policy in policies.items():
         if kind is not None and policy_kind != kind:
