@@ -16,6 +16,7 @@ from science_tool.entities import (
     create_entity,
     derive_slug,
     edit_entity,
+    find_entity,
     generate_entity_id,
     graph_is_stale,
     list_entities,
@@ -161,6 +162,20 @@ def test_resolve_entity_ref_distinguishes_similar_local_parts(tmp_path: Path) ->
 
     assert resolve_entity_ref(tmp_path, "question:0001-draft-alpha") == "question:0001-draft-alpha"
     assert resolve_entity_ref(tmp_path, "question:0002-draft-beta") == "question:0002-draft-beta"
+
+
+def test_find_entity_discovers_local_extension_kind(tmp_project_with_design_kind: Path) -> None:
+    """A local entity must resolve before its review-scope check can run."""
+    write_markdown_entity(
+        tmp_project_with_design_kind,
+        "entities/design/0001.md",
+        {"id": "design:0001", "kind": "design", "title": "Local design"},
+    )
+
+    location = find_entity(tmp_project_with_design_kind, "design:0001")
+
+    assert location.kind == "design"
+    assert location.rel_path == "entities/design/0001.md"
 
 
 def test_build_entity_markdown_uses_canonical_frontmatter_and_body() -> None:

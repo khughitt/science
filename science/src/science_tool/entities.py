@@ -721,7 +721,7 @@ def find_entity(project_root: Path, ref: str) -> EntityLocation:
             frontmatter=dict(frontmatter),
             body=body,
         )
-    roots = ", ".join(str(policy.root) for policy in _BUILTIN_MARKDOWN_POLICIES.values())
+    roots = ", ".join(str(policy.root) for policy in entity_policies(project_root).values())
     raise EntityCommandError(f"Entity not found: {ref}. Searched source roots: {roots}")
 
 
@@ -1848,7 +1848,7 @@ def shortform_for_kind(kind: str) -> str | None:
 
 def _load_markdown_entities(project_root: Path, kind: str | None = None) -> list[dict[str, Any]]:
     entities: list[dict[str, Any]] = []
-    for policy_kind, policy in _BUILTIN_MARKDOWN_POLICIES.items():
+    for policy_kind, policy in entity_policies(project_root).items():
         if kind is not None and policy_kind != kind:
             continue
         root = project_root / policy.root
