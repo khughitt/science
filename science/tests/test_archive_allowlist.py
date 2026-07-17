@@ -101,3 +101,79 @@ def test_allowlist_none_preserves_status_sweep_behaviour(tmp_path: Path) -> None
     report = archive_entities(root, apply=False, now="2026-07-17T00:00:00Z")
 
     assert {row["id"] for row in report["candidates"]} == {"plan:0001-a", "plan:0002-b"}
+
+
+def _superseding_pair(root: Path, loser: str, winner: str, *, loser_status: str = "active") -> None:
+    """A canonical supersession edge: relations[].predicate == sci:supersedes.
+
+    Top-level `supersedes:` is NOT the canonical edge and is ignored by the
+    graph builder -- see consolidation.py:13.
+    """
+    d = root / "entities" / "interpretations"
+    d.mkdir(parents=True, exist_ok=True)
+    (d / f"{loser}.md").write_text(
+        f"---\nid: interpretation:{loser}\nkind: interpretation\ntitle: {loser}\nstatus: {loser_status}\n---\n\nbody\n",
+        encoding="utf-8",
+    )
+    (d / f"{winner}.md").write_text(
+        f"---\nid: interpretation:{winner}\nkind: interpretation\ntitle: {winner}\nstatus: complete\n"
+        f"relations:\n  - predicate: sci:supersedes\n    target: interpretation:{loser}\n---\n\nbody\n",
+        encoding="utf-8",
+    )
+
+
+def test_mark_superseded_allowlist_scopes_to_mark(tmp_path: Path) -> None:
+    from science_tool.consolidation import mark_superseded
+
+    root = _project(tmp_path)
+    _superseding_pair(root, "0001-loser-a", "0002-winner-a")
+    _superseding_pair(root, "0003-loser-b", "0004-winner-b")
+
+    report = mark_superseded(root, ids=frozenset({"interpretation:0001-loser-a"}), apply=True)
+
+    assert report["applied"] == ["interpretation:0001-loser-a"]
+    marked = (root / "entities" / "interpretations" / "0001-loser-a.md").read_text(encoding="utf-8")
+    untouched = (root / "entities" / "interpretations" / "0003-loser-b.md").read_text(encoding="utf-8")
+    assert "status: superseded" in marked
+    assert "status: active" in untouched, "out-of-cohort member was marked"
+
+
+def test_mark_superseded_allowlist_also_scopes_to_repair(tmp_path: Path) -> None:
+    """to_repair is written on every apply (consolidation.py:618) -- it must be scoped too."""
+    from science_tool.consolidation import mark_superseded
+
+    root = _project(tmp_path)
+    # In cohort: needs the status stamp (to_mark).
+    _superseding_pair(root, "0001-loser-a", "0002-winner-a")
+    # OUT of cohort: already superseded, but its inverse is missing -> to_repair.
+    _superseding_pair(root, "0003-loser-b", "0004-winner-b", loser_status="superseded")
+    out_of_cohort = root / "entities" / "interpretations" / "0003-loser-b.md"
+    before = out_of_cohort.read_bytes()
+
+    report = mark_superseded(root, ids=frozenset({"interpretation:0001-loser-a"}), apply=True)
+
+    assert report["repaired"] == [], "an out-of-cohort entity was repaired"
+    assert out_of_cohort.read_bytes() == before, "an out-of-cohort entity was written"
+
+
+def test_mark_superseded_allowlist_can_target_a_repair(tmp_path: Path) -> None:
+    from science_tool.consolidation import mark_superseded
+
+    root = _project(tmp_path)
+    _superseding_pair(root, "0003-loser-b", "0004-winner-b", loser_status="superseded")
+
+    report = mark_superseded(root, ids=frozenset({"interpretation:0003-loser-b"}), apply=True)
+
+    assert report["repaired"] == ["interpretation:0003-loser-b"]
+    text = (root / "entities" / "interpretations" / "0003-loser-b.md").read_text(encoding="utf-8")
+    assert "superseded_by: interpretation:0004-winner-b" in text
+
+
+def test_mark_superseded_unknown_id_fails_early(tmp_path: Path) -> None:
+    from science_tool.consolidation import SupersessionError, mark_superseded
+
+    root = _project(tmp_path)
+    _superseding_pair(root, "0001-loser-a", "0002-winner-a")
+
+    with pytest.raises(SupersessionError, match="not derivable"):
+        mark_superseded(root, ids=frozenset({"interpretation:9999-ghost"}), apply=True)

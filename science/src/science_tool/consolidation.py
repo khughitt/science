@@ -512,9 +512,20 @@ def _prepare_supersession(
     )
 
 
-def mark_superseded(project_root: Path, *, apply: bool) -> dict[str, Any]:
+def mark_superseded(
+    project_root: Path, *, ids: frozenset[str] | None = None, apply: bool
+) -> dict[str, Any]:
     """Scan supersedes chains under ``project_root`` and report (or apply) the `superseded`
     auto-derivation, status **and** lineage.
+
+    When `ids` is provided it is AUTHORITATIVE: only enumerated members are
+    written, and an id that is neither markable nor repairable is an error
+    rather than a silent no-op. It narrows BOTH write sets -- `to_mark` and
+    `to_repair` -- because both are committed by the prepare loop below; a
+    filter on `to_mark` alone would still repair out-of-cohort records.
+
+    Chain derivation and graph validation remain corpus-wide: the allowlist
+    narrows what is WRITTEN, never what is CHECKED.
 
     Returns a dict with keys:
     - ``chains``: linear chains as ``{"survivor", "members" (sorted), "linear": True}``.
@@ -600,6 +611,16 @@ def mark_superseded(project_root: Path, *, apply: bool) -> dict[str, Any]:
     # `graph.invalid` is EVERY relation the audit refused, not only the supersession ones -- because
     # a corpus with any unbuildable relation HAS NO GRAPH, and stamping a derived lineage into it
     # writes a record whose graph never builds. This derivation is corpus-wide or it is nothing.
+    if ids is not None:
+        derivable = set(to_mark) | set(to_repair)
+        unresolved = sorted(ids - derivable)
+        if unresolved:
+            raise SupersessionError(
+                [f"allowlisted id is not derivable as a supersession member: {entity_id}" for entity_id in unresolved]
+            )
+        to_mark = [member for member in to_mark if member in ids]
+        to_repair = [member for member in to_repair if member in ids]
+
     blocking = [
         *(f"{d.path}: {d.message}" for d in graph.invalid),
         *(f"{u['superseder']} -> {u['id']} ({u['reason']})" for u in graph.unbacked_inverses),
