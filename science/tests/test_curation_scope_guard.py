@@ -88,7 +88,28 @@ def _is_curation_scope_type(node: ast.AST, scope_names: set[str]):
     ) or (isinstance(node, ast.Attribute) and node.attr == "CurationScope")
 
 
+def _fixed_scope_constructor_argument(node: ast.Call):
+    """Return the argument from ordinary one-value Enum construction syntax."""
+    if len(node.args) == 1 and not node.keywords:
+        return node.args[0]
+    if (
+        not node.args
+        and len(node.keywords) == 1
+        and node.keywords[0].arg == "value"
+    ):
+        return node.keywords[0].value
+    return None
+
+
 def _is_scope_default_reference(node: ast.AST, scope_names: set[str]):
+    """Recognize ordinary fixed Enum spellings without evaluating Python.
+
+    Covered forms are member attributes, member-name subscription, and value
+    construction by one positional argument or the equivalent ``value=``
+    keyword. Imported aliases and module-qualified ``CurationScope`` names are
+    accepted by ``_is_curation_scope_type``. Dynamic expressions, reflection,
+    and ``*``/``**`` unpacking are intentionally not statically evaluated.
+    """
     if (
         isinstance(node, ast.Attribute)
         and node.attr in {"NONE", "CORRESPONDENCE"}
@@ -98,10 +119,8 @@ def _is_scope_default_reference(node: ast.AST, scope_names: set[str]):
     if (
         isinstance(node, ast.Call)
         and _is_curation_scope_type(node.func, scope_names)
-        and len(node.args) == 1
-        and not node.keywords
     ):
-        value = node.args[0]
+        value = _fixed_scope_constructor_argument(node)
         return isinstance(value, ast.Constant) and value.value in {
             "none",
             "correspondence",
@@ -347,6 +366,46 @@ def test_scope_default_detector_catches_fixed_enum_construction_and_subscription
     assert _scope_default_offense_lines(lambda_keyword_default)
     assert not _scope_default_offense_lines(dynamic_call)
     assert not _scope_default_offense_lines(dynamic_subscription)
+    assert not _scope_default_offense_lines(comparison)
+    assert not _scope_default_offense_lines(declaration)
+
+
+def test_scope_default_detector_catches_fixed_enum_value_keyword():
+    literal_keyword = ast.parse(
+        "def decide():\n"
+        "    return CurationScope(value='none')"
+    )
+    aliased_literal_keyword = ast.parse(
+        "from science_model.identity import CurationScope as Scope\n"
+        "def decide():\n"
+        "    return Scope(value='correspondence')"
+    )
+    qualified_literal_keyword = ast.parse(
+        "import science_model.identity as identity\n"
+        "def decide():\n"
+        "    return identity.CurationScope(value='none')"
+    )
+    parameter_default = ast.parse(
+        "def decide(scope=CurationScope(value='correspondence')):\n"
+        "    return scope"
+    )
+    dynamic_keyword = ast.parse(
+        "def parse(value):\n"
+        "    return CurationScope(value=value)"
+    )
+    comparison = ast.parse(
+        "def consume(scope):\n"
+        "    return scope == CurationScope(value='none')"
+    )
+    declaration = ast.parse(
+        "PROFILE = EntityKind(curation_scope=CurationScope(value='correspondence'))"
+    )
+
+    assert _scope_default_offense_lines(literal_keyword)
+    assert _scope_default_offense_lines(aliased_literal_keyword)
+    assert _scope_default_offense_lines(qualified_literal_keyword)
+    assert _scope_default_offense_lines(parameter_default)
+    assert not _scope_default_offense_lines(dynamic_keyword)
     assert not _scope_default_offense_lines(comparison)
     assert not _scope_default_offense_lines(declaration)
 
