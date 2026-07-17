@@ -86,24 +86,24 @@ This is not a cosmetic overclaim. §2.1 establishes that the epistemic-only ruli
 the evidence certification rests on instead. With this retraction, **the spec
 currently rests on no measured evidence at all.**
 
-**Required before implementation — the correspondence-drift sample.** Draw a
-sample of plans (both corpora, stratified by `claimed_status`) and adjudicate each
-against reality — code, tasks, commits, declared deliverables — reporting **actual
-mismatches**:
+**Required before implementation — the correspondence-drift sample.** Specified as
+its own pre-registration:
+[`2026-07-17-plan-correspondence-drift-sample-design.md`](2026-07-17-plan-correspondence-drift-sample-design.md).
 
-- `claimed_status` vs adjudicated status, as a confusion matrix, not a rate;
-- per-plan evidence: the probe run and its result, so each verdict is re-runnable;
-- tri-state probes — `present` / `absent` / `unknown` — because "no deliverable
-  found" is not "deliverable absent";
-- the mismatch rate reported with an interval, not a point estimate.
+In outline: `plan` entities only (N = 264 across four pinned projects), stratified
+by `(project, claimed_status)`, **blind** adjudication of status from evidence
+alone with tri-state deliverable probes, and a **three-way gate** at materiality
+θ = 0.10 over a predeclared 40 → 80 → 264 ladder:
 
-**The gate:** if the sample shows no material mismatch, plans do not drift in a
-way a correspondence review would catch, and **the epistemic-only ruling stands** —
-§5 is withdrawn and this spec closes as "restriction certified as correct." That
-outcome must remain reachable, or this is not a certification.
+| Outcome | Consequence for this spec |
+|---|---|
+| drift **demonstrated** | retain §5; admit `plan`; ratify the remaining roster afterwards |
+| drift **ruled out** | **withdraw §5**; certify epistemic-only as correct; this spec closes having answered "no" |
+| **inconclusive** | expand per the ladder; uncertainty is **never** reported as absence |
 
-The natural-systems design's §5.1/§5.2 already specify probe and rollup semantics
-of exactly this shape; reuse them rather than re-deriving.
+**Sequencing.** The sample runs **before** §5's roster is ratified. Ratifying
+first would be circular — taxonomy judgment would precede the evidence meant to
+justify it.
 
 ### 2.3 Status drift is convergent across independent projects
 
@@ -404,8 +404,8 @@ Therefore:
    is authoritative for that project.
 2. **An undeclared *extension* kind resolves to `correspondence`, not `none`** —
    preserving today's reviewable-by-default behaviour for exactly the population
-   that has it. Default-`none` governs **core** kinds, where this spec has ratified
-   the mapping (§6.3 test 8) and where silence means "not yet considered." For an
+   that has it. Default-`none` governs **core** kinds, where the roster is
+   ratified (§6.3 test 8) and silence means "not yet considered." For an
    extension kind, silence means "this project never had a field to fill in."
    The asymmetry is deliberate: **the tightening applies where the roster was
    certified, not where it was never asked.**
@@ -417,19 +417,32 @@ Therefore:
 
 ### 6.3 Acceptance tests
 
-1. **Scope SSOT.** No kind receives a different answer from the model and the
-   CLI. Asserted by enumerating *every* registered kind through both paths and
-   diffing — not by spot-checking `plan`.
+**These are framed around the single decider of §6.1.** v2 inherited "model and
+CLI agree" phrasing from v1, which contradicted §6.1's own ruling — there is no
+second decider left to agree with.
+
+1. **Exactly one decider.** A guard test asserts that exactly one module resolves
+   `curation_scope`: no other module reads the field or reimplements the closed
+   list, and `Entity._validate_review_state_kind` **no longer exists**. This
+   replaces v1's "no kind gets a different answer from the model and the CLI",
+   which presumed the two-decider split this spec removes. Derive the guard from
+   the import closure — a guard that *lists* its scope has a hole by construction.
 2. **No knowledge lost in the migration.** Every kind on the deleted closed list
-   resolves to `curation_scope: none`. This is the test that catches a migration
-   that dropped the list instead of transcribing it (§4.1).
-3. **Default is `none`.** A kind registered with no `curation_scope` declaration
-   is refused by both layers — the §4.2 polarity inversion, asserted rather than
-   assumed.
+   resolves to `curation_scope: none` **at the boundary**. This catches a
+   migration that dropped the list instead of transcribing it (§4.1).
+3. **Default is `none` for core kinds.** A core kind declaring no
+   `curation_scope` is refused at the boundary — the §4.2 polarity inversion,
+   asserted rather than assumed. (Extension kinds differ deliberately: test 9.)
 4. **Positive:** `entity review plan:NNNN --note "..."` writes
    `review_state.last_reviewed` and the file validates.
-5. **Negative:** `entity review dataset:X` is refused (`curation_scope: none`),
-   with the same verdict from the model.
+5. **Negative:** `entity review dataset:X` is refused at the boundary
+   (`curation_scope: none`).
+5b. **The model validates shape only (§6.1).** `Entity.model_validate(raw)` on a
+   `none`-scoped kind carrying a well-formed `review_state` **succeeds** — no
+   scope check, no context. Asserted explicitly, because it is a deliberate
+   narrowing that reads like a hole: scope is refused at the boundary, and a bare
+   `model_validate` never was a safe gate (it consulted a list that could not see
+   a project's own kinds). Shape errors still fail here.
 6. **Freshness isolation is directional (§5.1).** A `correspondence`-scoped entity
    carrying `review_state` never becomes a `bears_on` **target** and never
    receives `sci:freshnessState`. It **may** be a `bears_on` **source**.
@@ -507,7 +520,7 @@ exactly the unreviewed entities the sweep exists to find.
 | **Scope derived from `EntityClass`, destroying the closed list's knowledge** | §4.1 — every closed-list kind is `OPERATIONAL`, so deriving would admit `paper`/`dataset`/`workflow-run`. Scope is its **own declared axis**; acceptance test 2 asserts every closed-list kind still resolves to `none` |
 | Closed list dropped rather than migrated | Acceptance test 2 is exactly this test; §6 deliverable 2 says *migrated, not merely dropped* |
 | A future kind is reviewable by default | Default `none` + positive declaration (§5 item 4); acceptance test 3 |
-| Model and CLI diverge again | One predicate over one declared field; acceptance test 1 diffs **every** registered kind through both paths |
+| A second decider reappears | There is exactly **one** — §6.1 deletes `_validate_review_state_kind` rather than re-pointing it. Acceptance test 1 is an import-closure guard asserting no other module resolves scope; a guard that *lists* its scope has a hole by construction |
 | Review theater on newly admitted kinds | `--require-artifact` extended to correspondence reviews; acceptance test 7 |
 | `correspondence` roster admits kinds that cannot be probed | §5 item 5 — the roster is a proposal ratified kind-by-kind; `talk` and `search` flagged as uncertain |
 | Ruling certified from an unadopted feature | §2.1 states plainly that adoption is ~0, so usage certifies nothing; §2.2 makes the drift sample a precondition rather than a claim |
