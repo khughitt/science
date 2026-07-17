@@ -3,7 +3,43 @@
 import pytest
 
 from science_model.identity import CurationScope
+from science_model.profiles.core import CORE_PROFILE
 from science_model.profiles.schema import EntityKind
+
+_EPISTEMIC = {
+    "assumption",
+    "chain-audit",
+    "discussion",
+    "evidence-line",
+    "falsification",
+    "finding",
+    "hypothesis",
+    "inquiry",
+    "interpretation",
+    "mechanism",
+    "observation",
+    "patch-definition",
+    "proposition",
+    "question",
+    "report",
+    "research-question",
+    "story",
+    "structural-chain",
+    "synthesis",
+    "theme",
+    "validation-report",
+}
+_CORRESPONDENCE = {
+    "claim-registry",
+    "curation-sweep",
+    "method",
+    "plan",
+    "pre-registration",
+    "research-package",
+    "spec",
+    "transformation",
+    "workflow",
+}
 
 
 def test_curation_scope_members():
@@ -39,3 +75,21 @@ def test_entity_kind_coerces_string_scope():
 def test_entity_kind_rejects_unknown_scope():
     with pytest.raises(ValueError):
         EntityKind(name="x", canonical_prefix="x", layer="layer/local", description="", curation_scope="sometimes")
+
+
+def test_core_profile_declares_epistemic_and_correspondence_only():
+    declared = {
+        ek.name: ek.curation_scope
+        for ek in CORE_PROFILE.entity_kinds
+        if ek.curation_scope is not None
+    }
+    assert {
+        kind for kind, scope in declared.items() if scope is CurationScope.EPISTEMIC
+    } == _EPISTEMIC
+    assert {
+        kind
+        for kind, scope in declared.items()
+        if scope is CurationScope.CORRESPONDENCE
+    } == _CORRESPONDENCE
+    # `none` kinds are left undeclared on purpose; the registry applies the default.
+    assert all(scope is not CurationScope.NONE for scope in declared.values())
