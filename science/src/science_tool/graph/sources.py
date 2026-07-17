@@ -180,9 +180,9 @@ class ProjectSources(BaseModel):
     profiles: KnowledgeProfiles
     entities: list[Entity]
     entity_source_adapters: dict[str, str] = Field(default_factory=dict)
-    # §B4: id -> rel path of a datapackage.yaml that DEFERRED to an existing owner.
-    # The owner won the owner column, but member-resource resolution still needs the
-    # datapackage path (the geneset member CSV lives there, not in the owner file).
+    # §B4: id -> rel path of a datapackage.yaml that ATTACHES to an id something else
+    # represents. The representative won the owner column, but member-resource resolution still
+    # needs the datapackage path (the geneset member CSV lives there, not in the owner file).
     dataset_datapackages: dict[str, str] = Field(default_factory=dict)
     relations: list[SourceRelation] = Field(default_factory=list)
     bindings: list[BindingSource] = Field(default_factory=list)
@@ -535,31 +535,7 @@ def load_project_sources(
             field_policies=field_policies,
         )
 
-    # ONE decision, over the COMPLETE set, now that every local adapter and legacy loader has
-    # contributed. `arbitrate_contributions` sorts before it decides, so the outcome does not
-    # depend on the order the loops above happened to run in.
-    arbitration = arbitrate_contributions(
-        contributions,
-        context=ArbitrationContext(project_scope=project_name, field_policies=field_policies),
-    )
-    identity_declarations: list[IdentityDeclaration] = list(arbitration.identity_declarations)
-    entities: list[Entity] = list(arbitration.entities)
-    entity_source_adapters: dict[str, str] = dict(arbitration.entity_source_adapters)
-    dataset_datapackages: dict[str, str] = dict(arbitration.dataset_datapackages)
-    arbitration_errors: list[ArbitrationError] = list(arbitration.errors)
-    # Which ids this project OWNS -- read off the OWNER declarations, which is the question
-    # commons closure actually asks. "Which ids did something materialize" is a DIFFERENT
-    # question that used to stand in for it: a bib entry materializes a node without owning the
-    # id, so citing a paper made the project look like its owner and suppressed the commons
-    # canonical along with its overlay (fb-2026-07-16-005).
-    locally_owned_ids = frozenset(
-        declaration.canonical_id
-        for declaration in arbitration.identity_declarations
-        if declaration.participation_mode is ParticipationMode.OWNER
-    )
-
     relations = _load_structured_relations(project_root, local_profile=local_profile)
-    relations.extend(_entity_nested_relations(entities))
     # Legacy model/parameter relations come from the nested authored-relations block.
     relations.extend(
         _legacy_nested_relations(
@@ -585,83 +561,47 @@ def load_project_sources(
     bindings = _load_binding_sources(project_root, local_profile=local_profile, typed_record_cache=typed_record_cache)
     bindings.sort(key=lambda binding: (binding.model, binding.parameter, binding.source_path))
 
-    commons_overlay_paths: dict[str, str] = {}
-    # Rows that record something OTHER than a contribution to arbitrate: a cross-scope commons
-    # owner that does not materialize here, and a borrower whose content commons already
-    # composed. Both are provenance the audit reads; neither competes for the representative.
-    commons_borrower_declarations: list[IdentityDeclaration] = []
     if include_commons:
-        from science_tool.graph.commons_sources import _load_commons_referenced_entities
+        from science_tool.graph.commons_sources import collect_commons_contributions
 
-        commons_loaded, commons_overlay_paths, commons_owner_collisions = _load_commons_referenced_entities(
+        # Close over what commons says BEFORE anything is decided. Seeds are the local
+        # CANDIDATES, not a selection: closure asks which commons ids this project reaches, and
+        # an id reached by a candidate that later loses a contest was still reached.
+        closure = collect_commons_contributions(
             project_root=project_root,
             project_slug=project_slug,
-            project_entities=entities,
+            seed_entities=[c.candidate for c in contributions if isinstance(c, EntityContribution)],
             project_relations=relations,
             project_bindings=bindings,
-            locally_owned_ids=locally_owned_ids,
             registry=registry,
             active_kinds=active_kinds,
             ontology_catalogs=ontology_catalogs,
         )
-        for collision_id, collision_ref in commons_owner_collisions:
-            owner_scope, deprecated = classify_owner_scope(collision_ref.adapter_name, project_name=project_name)
-            commons_borrower_declarations.append(
-                IdentityDeclaration(
-                    canonical_id=collision_id,
-                    participation_mode=ParticipationMode.OWNER,
-                    owner_scope=owner_scope,
-                    adapter=collision_ref.adapter_name,
-                    source_ref=collision_ref,
-                    deprecated=deprecated,
-                )
-            )
-            # Deliberately NOT a contribution: the local owner
-            # remains the single materialized entity; the second owner row exists only
-            # so reference resolution (once scope-aware) flags the bare ref as
-            # ambiguous (design §B3a). No strict raise — cross-scope is not a collision.
-        # Commons owners join the SAME contribution set as everything local, then the whole set
-        # is arbitrated once more below. A commons canonical and a local bib entry claiming one
-        # id is not a special case needing its own merge rule -- it is an OWNER and an
-        # EXTERNAL_REFERENCE, which the shared role matrix already resolves: commons
-        # represents the id, and the bib entry fills only the fields commons left unset.
-        for entity, ref in commons_loaded:
-            owner_scope, deprecated = classify_owner_scope(ref.adapter_name, project_name=project_name)
-            _contribute(
-                entity=entity,
-                ref=ref,
-                adapter_name=ref.adapter_name,
-                participation_mode=ParticipationMode.OWNER,
-                owner_scope=owner_scope,
-                deprecated=deprecated,
-                contributions=contributions,
-                field_policies=field_policies,
-            )
-            overlay_path = commons_overlay_paths.get(entity.canonical_id)
-            if overlay_path:
-                # The overlay's CONTENT is already composed into the commons entity by
-                # `_load_commons_referenced_entities`; this row records that a borrower spoke.
-                # Task 5 turns the overlay into a real AttachmentContribution.
-                commons_borrower_declarations.append(
-                    IdentityDeclaration(
-                        canonical_id=entity.canonical_id,
-                        participation_mode=ParticipationMode.BORROWER,
-                        owner_scope=owner_scope,
-                        adapter="overlay",
-                        source_ref=SourceRef(adapter_name="overlay", path=overlay_path),
-                        deprecated=False,
-                    )
-                )
+        contributions.extend(closure.contributions)
+        field_policies.update(closure.field_policies)
 
-        arbitration = arbitrate_contributions(
-            contributions,
-            context=ArbitrationContext(project_scope=project_name, field_policies=field_policies),
-        )
-        identity_declarations = [*arbitration.identity_declarations, *commons_borrower_declarations]
-        entities = list(arbitration.entities)
-        entity_source_adapters = dict(arbitration.entity_source_adapters)
-        dataset_datapackages = dict(arbitration.dataset_datapackages)
-        arbitration_errors = list(arbitration.errors)
+    # ONE decision, over the COMPLETE set: every local adapter, every legacy loader, and all of
+    # commons have now contributed. Arbitration sorts before it decides, so the outcome does not
+    # depend on the order any of the loops above happened to run in.
+    arbitration = arbitrate_contributions(
+        contributions,
+        context=ArbitrationContext(project_scope=project_name, field_policies=field_policies),
+    )
+    identity_declarations: list[IdentityDeclaration] = list(arbitration.identity_declarations)
+    entities: list[Entity] = list(arbitration.entities)
+    entity_source_adapters: dict[str, str] = dict(arbitration.entity_source_adapters)
+    dataset_datapackages: dict[str, str] = dict(arbitration.dataset_datapackages)
+    arbitration_errors: list[ArbitrationError] = list(arbitration.errors)
+    # What actually COMPOSED, not what merely resolved. An overlay whose id a project owner
+    # won did not compose, and reporting it here would claim project commentary reached a graph
+    # node that never received it.
+    commons_overlay_paths: dict[str, str] = dict(arbitration.overlay_paths)
+
+    # Nested edges come from the REPRESENTATIVES, not from encounter-order candidates. A
+    # candidate that lost a contest must not leak its edges into the graph: the entity the
+    # reader sees would then have relations no file it can open actually declares.
+    relations.extend(_entity_nested_relations(entities))
+    relations.sort(key=lambda relation: (relation.graph_layer, relation.subject, relation.predicate, relation.object))
 
     # THE STRICT BOUNDARY. Arbitration always detects; strictness decides raise vs. report.
     # The ledger is the fact, and these exceptions are a projection of it -- so a diagnostic

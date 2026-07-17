@@ -14,15 +14,17 @@ from science_model.source_ref import SourceRef
 
 from science_tool.commons.adapter import CommonsEntityAdapter
 from science_tool.commons.errors import CommonsEntityError, CommonsRootNotFoundError, OverlayValidationError
-from science_tool.commons.overlay import MergedEntity
 from science_tool.commons.registry import RegistryBuilder
 from science_tool.graph.commons_sources import (
     _OVERLAY_ONLY_FIELDS,
-    _load_commons_referenced_entities,
-    _materialize_commons_entity,
+    CommonsClosure,
+    _materialize_commons_candidate,
+    collect_commons_contributions,
     collect_referenced_commons_ids,
 )
 from science_tool.graph.entity_registry import EntityRegistry
+from science_tool.graph.identity_arbitration import EntityContribution
+from science_tool.graph.identity_table import ParticipationMode
 from science_tool.graph.sources import SourceRelation, load_project_sources
 
 _COMMONS_FIXTURE = Path(__file__).parent / "fixtures" / "commons" / "valid"
@@ -71,24 +73,32 @@ def _collect(
     )
 
 
-def _load_commons(
-    project_root: Path,
-    *,
-    project_entities: list[Entity] | None = None,
-    locally_owned_ids: frozenset[str] = frozenset(),
-) -> tuple[list[tuple[Entity, SourceRef]], dict[str, str]]:
-    loaded, overlay_paths, _collisions = _load_commons_referenced_entities(
+def _closure(project_root: Path, *, project_entities: list[Entity] | None = None) -> CommonsClosure:
+    return collect_commons_contributions(
         project_root=project_root,
         project_slug="demo",
-        project_entities=project_entities or [],
+        seed_entities=project_entities or [],
         project_relations=[],
         project_bindings=[],
-        locally_owned_ids=locally_owned_ids,
         registry=EntityRegistry.with_core_types(),
         active_kinds=frozenset({"dataset", "paper", "theme", "topic"}),
         ontology_catalogs=[],
     )
-    return loaded, overlay_paths
+
+
+def _load_commons(
+    project_root: Path,
+    *,
+    project_entities: list[Entity] | None = None,
+) -> tuple[list[tuple[Entity, SourceRef | None]], dict[str, str]]:
+    """The closure's owner candidates, in the shape these tests already read."""
+    closure = _closure(project_root, project_entities=project_entities)
+    owners = [
+        (c.candidate, c.declaration.source_ref)
+        for c in closure.contributions
+        if isinstance(c, EntityContribution)
+    ]
+    return owners, closure.overlay_paths
 
 
 def test_collect_referenced_commons_ids_returns_empty_set_for_no_references() -> None:
@@ -224,10 +234,10 @@ class _StubCanonical:
     mtime_ns: int = 0
 
 
-def _merged(frontmatter: dict[str, object]) -> MergedEntity:
+def _record(frontmatter: dict[str, object]) -> _StubCanonical:
     canonical_id = str(frontmatter["id"])
     kind = str(frontmatter.get("kind") or frontmatter.get("type"))
-    canonical = _StubCanonical(
+    return _StubCanonical(
         canonical_id=canonical_id,
         type=kind,
         slug=canonical_id.split(":", 1)[-1],
@@ -235,18 +245,12 @@ def _merged(frontmatter: dict[str, object]) -> MergedEntity:
         frontmatter=frontmatter,
         body_path=Path("commons") / kind / f"{canonical_id.split(':', 1)[-1]}.md",
     )
-    return MergedEntity(
-        canonical=canonical,  # type: ignore[arg-type]
-        overlay=None,
-        merged_frontmatter=frontmatter,
-        merged_body="",
-        field_sources={},
-    )
 
 
 def _translate(frontmatter: dict[str, object]) -> Entity:
-    return _materialize_commons_entity(
-        _merged(frontmatter),
+    """The canonical alone. No overlay is applied -- arbitration composes that later."""
+    return _materialize_commons_candidate(
+        _record(frontmatter),  # type: ignore[arg-type]
         registry=EntityRegistry.with_core_types(),
         project_slug="demo",
         active_kinds=frozenset({"dataset", "paper", "theme", "topic"}),
@@ -531,9 +535,16 @@ project_tags: ["project-anchor"]
     }
 
 
-def test_orchestrator_skips_overlay_when_project_identity_already_exists(
+def test_closure_contributes_even_when_the_project_owns_the_same_id(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
+    """Close does not know, or ask, what the project owns.
+
+    It used to take the owned-id set and skip those ids, which is an ARBITRATION decision made
+    inside collection -- and the reason a bib entry could suppress a commons canonical: the
+    "already owned" test could not tell an owner from a citation. Close now contributes what
+    commons says; whether commons wins is decided once, later, over everything.
+    """
     commons_root = _build_commons(tmp_path)
     monkeypatch.setenv("SCIENCE_COMMONS_ROOT", str(commons_root))
     monkeypatch.setenv("SCIENCE_COMMONS_QUIET_STALE", "1")
@@ -550,13 +561,19 @@ relevance: "central to this project"
         encoding="utf-8",
     )
 
-    loaded, overlay_paths = _load_commons(
-        project_root,
-        locally_owned_ids=frozenset({"topic:single-cell-foundation-models"}),
-    )
+    closure = _closure(project_root)
 
-    assert loaded == []
-    assert overlay_paths == {}
+    # Both rows exist. The project owning this id is not Close's business; `_select_scope` gives
+    # the project the representative, and the commons owner row remains visible so a bare
+    # cross-scope reference can be reported as ambiguous (design §B3a).
+    assert {
+        (c.declaration.canonical_id, c.declaration.participation_mode, c.declaration.adapter)
+        for c in closure.contributions
+    } == {
+        ("topic:single-cell-foundation-models", ParticipationMode.OWNER, "commons-merged"),
+        ("topic:single-cell-foundation-models", ParticipationMode.BORROWER, "overlay"),
+    }
+    assert closure.overlay_paths == {"topic:single-cell-foundation-models": str(overlay_path)}
 
 
 def test_orchestrator_no_overlays_and_no_refs_is_noop_with_missing_commons_root(
@@ -821,36 +838,33 @@ def test_pinned_overlay_rejects_commons_version_drift(tmp_path: Path, monkeypatc
     assert "pins 9.9.9 but commons canonical is 1.0.0" in str(excinfo.value)
 
 
-def test_commons_owner_of_locally_owned_referenced_id_is_reported_as_collision(
+def test_commons_owner_of_a_referenced_id_is_contributed_not_special_cased(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
+    """A commons owner is an ordinary OWNER contribution, in the commons scope.
+
+    It used to travel a separate `commons_owner_collisions` channel whose whole reason for
+    existing was that Close had already decided not to materialize the id. With the decision
+    moved out, the second channel has nothing left to carry: one owner row in a different scope
+    is exactly what an EntityContribution already expresses, and arbitration's `_select_scope`
+    is what declines to materialize a duplicate.
+    """
     commons_root = _build_commons(tmp_path)
     monkeypatch.setenv("SCIENCE_COMMONS_ROOT", str(commons_root))
     monkeypatch.setenv("SCIENCE_COMMONS_QUIET_STALE", "1")
     project_root = tmp_path / "project"
     project_root.mkdir()
 
-    # The project OWNS topic:single-cell-foundation-models AND references it; commons also
-    # owns it.
     cid = "topic:single-cell-foundation-models"
-    loaded, overlay_paths, commons_owner_collisions = _load_commons_referenced_entities(
-        project_root=project_root,
-        project_slug="demo",
-        project_entities=[_entity("topic:local", related=[cid])],
-        project_relations=[],
-        project_bindings=[],
-        locally_owned_ids=frozenset({cid}),
-        registry=EntityRegistry.with_core_types(),
-        active_kinds=frozenset({"dataset", "paper", "theme", "topic"}),
-        ontology_catalogs=[],
-    )
+    closure = _closure(project_root, project_entities=[_entity("topic:local", related=[cid])])
 
-    # NOT materialized as a project entity (no duplicate Entity), but reported as a
-    # cross-scope commons owner so the caller can record the second owner row.
-    assert loaded == []
-    assert overlay_paths == {}
-    assert [ref.adapter_name for _cid, ref in commons_owner_collisions] == ["commons-merged"]
-    assert [c for c, _ref in commons_owner_collisions] == [cid]
+    owners = [c for c in closure.contributions if isinstance(c, EntityContribution)]
+    assert [c.declaration.canonical_id for c in owners] == [cid]
+    assert owners[0].declaration.owner_scope == "commons"
+    assert owners[0].declaration.adapter == "commons-merged"
+    # The policy travels WITH the contribution: a commons owner arbitration cannot ask for a
+    # policy is a commons owner whose overlay could never be composed.
+    assert ("commons", cid) in closure.field_policies
 
 
 def test_collect_referenced_commons_ids_collects_inner_id_from_scoped_ref() -> None:
@@ -923,6 +937,52 @@ def test_bib_entry_does_not_shadow_paper_overlay(tmp_path: Path, monkeypatch: py
     assert sources.commons_overlay_paths.get("paper:Adams2025") == str(
         project_root / "overlays" / "papers" / "Adams2025.md"
     ), "overlay was skipped because the bib entry claimed the id first"
+
+    # All three sources speak for this id, in their three different standings. The bug was that
+    # the bib row's mere presence deleted the other two; recording all three is what makes the
+    # arbitration auditable rather than a coincidence of load order.
+    rows = [row for row in sources.identity_declarations if row.canonical_id == "paper:Adams2025"]
+    assert {(row.participation_mode, row.adapter) for row in rows} == {
+        (ParticipationMode.OWNER, "commons-merged"),
+        (ParticipationMode.BORROWER, "overlay"),
+        (ParticipationMode.EXTERNAL_REFERENCE, "bib"),
+    }
+    # Three declarations, ONE node. Exhaustive collection must not become duplicate entities.
+    assert len([entity for entity in sources.entities if entity.canonical_id == "paper:Adams2025"]) == 1
+
+
+def test_closure_collects_a_commons_id_reachable_only_through_an_overlay(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A commons id that ONLY the overlay names must still be collected.
+
+    The canonical Adams2025 says nothing about this topic and no project file references it;
+    the borrower is the sole source of the reference. Closure that reads references off owners
+    alone is blind to exactly the ids a project pulls in through its own commentary.
+    """
+    commons_root = _build_commons(tmp_path)
+    monkeypatch.setenv("SCIENCE_COMMONS_ROOT", str(commons_root))
+    monkeypatch.setenv("SCIENCE_COMMONS_QUIET_STALE", "1")
+    project_root = _bib_overlay_project(tmp_path)
+    overlay_path = project_root / "overlays" / "papers" / "Adams2025.md"
+    overlay_path.write_text(
+        overlay_path.read_text(encoding="utf-8").replace(
+            'related: ["question:0042-driver-specificity"]',
+            'related: ["topic:single-cell-foundation-models"]',
+        ),
+        encoding="utf-8",
+    )
+
+    sources = load_project_sources(project_root)
+
+    owners = {
+        (row.canonical_id, row.adapter)
+        for row in sources.identity_declarations
+        if row.participation_mode is ParticipationMode.OWNER
+    }
+    assert ("paper:Adams2025", "commons-merged") in owners
+    assert ("topic:single-cell-foundation-models", "commons-merged") in owners
+    assert any(e.canonical_id == "topic:single-cell-foundation-models" for e in sources.entities)
 
 
 def test_bib_entry_does_not_suppress_overlay_pin_check(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:

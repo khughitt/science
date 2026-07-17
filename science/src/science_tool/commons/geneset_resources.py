@@ -41,7 +41,8 @@ def resolve_dataset_datapackage_source(
 
     - the entity IS the datapackage (orphan) or a commons-merged dataset → the entity's
       own source path;
-    - a real owner with a deferred datapackage attachment → the recorded ``datapackage_rel``;
+    - an entity-file owner represents the id and a datapackage attaches to it → the recorded
+      ``datapackage_rel``;
     - no datapackage attachment → ``None``.
     """
     if entity_adapter in {"datapackage", "commons-merged"}:
@@ -59,8 +60,8 @@ def dataset_datapackage_path(
     Like ``resolve_dataset_datapackage_source`` but excludes ``commons-merged`` (those
     resources are owned/materialized by the commons scope, not this project) and
     normalizes an ``entity.md`` source to its sibling ``datapackage.yaml``. Used to
-    materialize a dataset's resources as DCAT distributions (§B4) regardless of whether
-    the datapackage is an orphan owner or a deferred attachment on a real owner.
+    materialize a dataset's resources as DCAT distributions (§B4) regardless of whether the
+    datapackage represents the id itself or attaches to an entity-file owner that does.
     """
     if entity_adapter == "datapackage":
         source: str | Path = entity_path
@@ -90,8 +91,8 @@ def dataset_geneset_frontmatter(
 
     - the entity IS the datapackage (orphan) or a commons-merged dataset → read from
       the entity's own source path (preserves prior behavior);
-    - a real owner with a deferred datapackage attachment → read from the recorded
-      datapackage path (``datapackage_rel``);
+    - an entity-file owner represents the id and a datapackage attaches to it → read from the
+      recorded datapackage path (``datapackage_rel``);
     - no datapackage attachment → ``None`` (not a geneset dataset).
     """
     source = resolve_dataset_datapackage_source(

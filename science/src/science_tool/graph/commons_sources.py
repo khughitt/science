@@ -8,14 +8,17 @@ loaded project graph sources without performing I/O or commons access.
 
 from __future__ import annotations
 
+from collections.abc import Iterable
+from dataclasses import dataclass
 from pathlib import Path
 
 from science_model.entities import Entity
-from science_model.entity_schema import parse_profile, read_merge_policy
+from science_model.entity_schema import MergePolicy, parse_profile, read_merge_policy
 from science_model.ontologies.schema import OntologyCatalog
 from science_model.source_contracts import BindingSource
 from science_model.source_ref import SourceRef
 
+from science_tool.commons.adapter import CommonsEntityRecord
 from science_tool.commons.config import resolve_commons_root
 from science_tool.commons.errors import (
     CommonsEntityError,
@@ -24,9 +27,15 @@ from science_tool.commons.errors import (
 )
 from science_tool.commons.geneset import GenesetCollectionError, parse_geneset_rows
 from science_tool.commons.geneset_resources import geneset_resource_frontmatter, read_member_rows
-from science_tool.commons.overlay import MergedEntity, OverlayAdapter, merge_entity, validate_overlay_pin
+from science_tool.commons.overlay import OverlayAdapter, OverlayRecord, validate_overlay_pin
 from science_tool.commons.query import CommonsQuery
 from science_tool.graph.entity_registry import EntityRegistry
+from science_tool.graph.identity_arbitration import (
+    AttachmentContribution,
+    EntityContribution,
+    SourceContribution,
+)
+from science_tool.graph.identity_table import COMMONS_SCOPE, IdentityDeclaration, ParticipationMode
 from science_tool.graph.sources import (
     SourceRelation,
     _enrich_raw,
@@ -34,6 +43,10 @@ from science_tool.graph.sources import (
     is_external_reference,
     is_metadata_reference,
 )
+
+# The PUBLIC adapter name for a commons owner row. `classify_owner_scope` already maps it to
+# owner_scope "commons"; a second alias would be a second name for one fact.
+_COMMONS_ADAPTER = "commons-merged"
 
 _COMMONS_TYPES = frozenset({"dataset", "paper", "topic", "theme"})
 _TYPE_TO_DIR = {"dataset": "datasets", "paper": "papers", "topic": "topics", "theme": "themes"}
@@ -59,123 +72,243 @@ _AUDITED_LIST_FIELDS = (
 _MATERIALIZED_LIST_FIELDS = ("participants", "propositions")
 
 
-def _load_commons_referenced_entities(
+@dataclass(frozen=True)
+class CommonsClosure:
+    """Everything commons contributes to this load, decided by nobody."""
+
+    contributions: tuple[SourceContribution, ...]
+    field_policies: dict[tuple[str, str], dict[str, MergePolicy]]
+    overlay_paths: dict[str, str]
+
+
+def collect_commons_contributions(
     *,
     project_root: Path,
     project_slug: str,
-    project_entities: list[Entity],
+    seed_entities: Iterable[Entity],
     project_relations: list[SourceRelation],
     project_bindings: list[BindingSource],
-    locally_owned_ids: frozenset[str],
     registry: EntityRegistry,
     active_kinds: frozenset[str],
     ontology_catalogs: list[OntologyCatalog],
-) -> tuple[list[tuple[Entity, SourceRef]], dict[str, str], list[tuple[str, SourceRef]]]:
-    overlays = {}
-    if (project_root / "overlays").exists():
-        for item in OverlayAdapter(project_root, project_slug).scan():
-            if isinstance(item, OverlayValidationError):
-                raise item
-            overlays[item.canonical_id] = item
+) -> CommonsClosure:
+    """Close over every commons id this project reaches, and contribute all of them.
 
-    referenced_ids = collect_referenced_commons_ids(
+    Takes no identity table, no owned-id set, no selection of any kind. Those are arbitration's
+    concepts, and letting them in here is how commons came to be suppressed for any id the
+    project had already materialized -- including ids a bib entry merely cited. Close answers
+    "what does commons say"; whether commons WINS is decided later, once everything has spoken.
+    """
+    collector = _CommonsClosureCollector(
         project_root=project_root,
-        project_entities=project_entities,
+        project_slug=project_slug,
+        registry=registry,
+        active_kinds=active_kinds,
+        ontology_catalogs=ontology_catalogs,
+    )
+    return collector.collect(
+        seed_entities=seed_entities,
         project_relations=project_relations,
         project_bindings=project_bindings,
     )
-    # `locally_owned_ids` answers exactly one question -- which ids does this project OWN --
-    # and the caller derives it from OWNER declarations. It used to be `set(identity_table)`,
-    # i.e. "which ids did something materialize", which is a different question: a bib entry
-    # materializes a node without owning the id, so citing a paper made the project look like
-    # its owner and suppressed the commons canonical + its overlay, skipping both merge_entity
-    # and validate_overlay_pin (fb-2026-07-16-005).
-    locally_owned = set(locally_owned_ids)
-    # Locally-owned ids that are referenced AND owned by commons are a cross-scope
-    # situation (design §B3): record commons' owner row, but do NOT load a duplicate
-    # entity. Everything else loads as before.
-    referenced_local = referenced_ids & locally_owned
-    referenced_ids.difference_update(locally_owned)
 
-    pending_ids = referenced_ids | (set(overlays) - locally_owned)
 
-    commons_owner_collisions: list[tuple[str, SourceRef]] = []
-    if referenced_local:
-        # Resolve commons root lazily only when there is something to check.
+class _CommonsClosureCollector:
+    def __init__(
+        self,
+        *,
+        project_root: Path,
+        project_slug: str,
+        registry: EntityRegistry,
+        active_kinds: frozenset[str],
+        ontology_catalogs: list[OntologyCatalog],
+    ) -> None:
+        self._project_root = project_root
+        self._project_slug = project_slug
+        self._registry = registry
+        self._active_kinds = active_kinds
+        self._ontology_catalogs = ontology_catalogs
+
+    def collect(
+        self,
+        *,
+        seed_entities: Iterable[Entity],
+        project_relations: list[SourceRelation],
+        project_bindings: list[BindingSource],
+    ) -> CommonsClosure:
+        overlays = self._scan_overlays()
+        pending = self._seed(
+            seed_entities=seed_entities,
+            project_relations=project_relations,
+            project_bindings=project_bindings,
+            overlays=overlays,
+        )
+        if not pending:
+            return CommonsClosure(contributions=(), field_policies={}, overlay_paths={})
+
         commons_root = resolve_commons_root()
-        if commons_root.is_dir():
-            query = CommonsQuery(commons_root, warn_stale=False)
-            for cid in sorted(referenced_local):
-                try:
-                    record = query.show(cid)
-                except CommonsEntityError:
-                    continue  # commons does not own it -> not a cross-scope owner
-                commons_owner_collisions.append(
-                    (
-                        cid,
-                        SourceRef(
-                            adapter_name="commons-merged", path=_commons_source_ref_path(record.type, record.slug)
+        if not commons_root.is_dir():
+            raise CommonsRootNotFoundError(commons_root)
+        query = CommonsQuery(commons_root, warn_stale=False)
+
+        contributions: list[SourceContribution] = []
+        field_policies: dict[tuple[str, str], dict[str, MergePolicy]] = {}
+        overlay_paths: dict[str, str] = {}
+        # `visited` deduplicates I/O ONLY. It never suppresses a declaration: an id reached
+        # again from another authority has already contributed, and contributing twice from one
+        # commons record would be a second claim commons never made.
+        visited: set[str] = set()
+
+        while pending:
+            canonical_id = min(pending)
+            pending.discard(canonical_id)
+            if canonical_id in visited:
+                continue
+            visited.add(canonical_id)
+
+            overlay = overlays.get(canonical_id)
+            record = self._resolve(query, canonical_id, overlay)
+            if record is None:
+                continue
+
+            # BEFORE any contribution exists, and for every resolved overlay -- including one
+            # whose id a project owner or bib entry also claims. The pin is a statement about
+            # the commons version this overlay was written against; whether the overlay ends up
+            # composing into the graph does not make a stale pin true.
+            validate_overlay_pin(record, overlay)
+            field_policies[(COMMONS_SCOPE, canonical_id)] = read_merge_policy(
+                parse_profile(record.schema_profile)
+            )
+
+            candidate = _materialize_commons_candidate(
+                record,
+                registry=self._registry,
+                project_slug=self._project_slug,
+                active_kinds=self._active_kinds,
+                ontology_catalogs=self._ontology_catalogs,
+            )
+            contributions.append(
+                EntityContribution(
+                    declaration=IdentityDeclaration(
+                        canonical_id=canonical_id,
+                        participation_mode=ParticipationMode.OWNER,
+                        owner_scope=COMMONS_SCOPE,
+                        adapter=_COMMONS_ADAPTER,
+                        source_ref=SourceRef(
+                            adapter_name=_COMMONS_ADAPTER,
+                            path=_commons_source_ref_path(record.type, record.slug),
                         ),
+                    ),
+                    candidate=candidate,
+                )
+            )
+            if overlay is not None:
+                overlay_paths[canonical_id] = str(overlay.overlay_path)
+                contributions.append(
+                    AttachmentContribution(
+                        declaration=IdentityDeclaration(
+                            canonical_id=canonical_id,
+                            participation_mode=ParticipationMode.BORROWER,
+                            owner_scope=COMMONS_SCOPE,
+                            adapter="overlay",
+                            source_ref=SourceRef(
+                                adapter_name="overlay", path=str(overlay.overlay_path)
+                            ),
+                        ),
+                        record=overlay,
                     )
                 )
 
-    if not pending_ids:
-        return [], {}, commons_owner_collisions
+            pending |= self._references_of(candidate) - visited
 
-    commons_root = resolve_commons_root()
-    if not commons_root.is_dir():
-        raise CommonsRootNotFoundError(commons_root)
+        return CommonsClosure(
+            contributions=tuple(contributions),
+            field_policies=field_policies,
+            overlay_paths=overlay_paths,
+        )
 
-    query = CommonsQuery(commons_root, warn_stale=False)
-    loaded: list[tuple[Entity, SourceRef]] = []
-    overlay_paths: dict[str, str] = {}
-    seen_ids: set[str] = set()
-    resolved_ids: set[str] = set(locally_owned)
-    while pending_ids:
-        canonical_id = sorted(pending_ids)[0]
-        pending_ids.remove(canonical_id)
-        if canonical_id in seen_ids or canonical_id in resolved_ids:
-            continue
-        seen_ids.add(canonical_id)
-        overlay = overlays.get(canonical_id)
+    def _scan_overlays(self) -> dict[str, OverlayRecord]:
+        overlays: dict[str, OverlayRecord] = {}
+        if not (self._project_root / "overlays").exists():
+            return overlays
+        for item in OverlayAdapter(self._project_root, self._project_slug).scan():
+            if isinstance(item, OverlayValidationError):
+                raise item
+            overlays[item.canonical_id] = item
+        return overlays
+
+    def _seed(
+        self,
+        *,
+        seed_entities: Iterable[Entity],
+        project_relations: list[SourceRelation],
+        project_bindings: list[BindingSource],
+        overlays: dict[str, OverlayRecord],
+    ) -> set[str]:
+        pending = collect_referenced_commons_ids(
+            project_root=self._project_root,
+            project_entities=list(seed_entities),
+            project_relations=project_relations,
+            project_bindings=project_bindings,
+        )
+        # Every overlay seeds its own id. An overlay is a project's explicit statement that it
+        # borrows this entity, which is a reference in its own right -- it does not need some
+        # other file to also mention the id before commons is consulted.
+        pending |= set(overlays)
+        for overlay in overlays.values():
+            pending |= _overlay_references(overlay)
+        return pending
+
+    def _resolve(
+        self, query: CommonsQuery, canonical_id: str, overlay: OverlayRecord | None
+    ) -> CommonsEntityRecord | None:
         try:
-            record = query.show(canonical_id)
+            return query.show(canonical_id)
         except CommonsEntityError as exc:
             if overlay is not None:
+                # An overlay whose canonical does not exist is a broken overlay, not a missing
+                # reference: the project asserted it borrows something commons does not have.
                 raise OverlayValidationError(
-                    overlay.overlay_path,
-                    canonical_id=canonical_id,
-                    cause=exc,
+                    overlay.overlay_path, canonical_id=canonical_id, cause=exc
                 ) from exc
-            continue
+            # A plain unknown reference is not this layer's error; it surfaces downstream as an
+            # unresolved reference, where the reader can see what pointed at it.
+            return None
 
-        policy = read_merge_policy(parse_profile(record.schema_profile))
-        validate_overlay_pin(record, overlay)
-        merged = merge_entity(record, overlay, policy)
-        entity = _materialize_commons_entity(
-            merged,
-            registry=registry,
-            project_slug=project_slug,
-            active_kinds=active_kinds,
-            ontology_catalogs=ontology_catalogs,
-        )
-        ref = SourceRef(
-            adapter_name="commons-merged",
-            path=_commons_source_ref_path(record.type, record.slug),
-        )
-        loaded.append((entity, ref))
-        resolved_ids.add(canonical_id)
-        if overlay is not None:
-            overlay_paths[canonical_id] = str(overlay.overlay_path)
-        transitive_ids = collect_referenced_commons_ids(
-            project_root=project_root,
-            project_entities=[entity],
+    def _references_of(self, candidate: Entity) -> set[str]:
+        """A resolved canonical's own references.
+
+        Overlays are NOT re-scanned here. Every overlay is known before the loop starts, so
+        `_seed` has already contributed all of their references; scanning them again per
+        canonical would be a second path to the same ids -- and two paths to one fact means
+        neither is load-bearing, so breaking either leaves every test green.
+        """
+        return collect_referenced_commons_ids(
+            project_root=self._project_root,
+            project_entities=[candidate],
             project_relations=[],
             project_bindings=[],
         )
-        pending_ids.update(transitive_ids - resolved_ids - seen_ids)
 
-    return loaded, overlay_paths, commons_owner_collisions
+
+def _overlay_references(overlay: OverlayRecord) -> set[str]:
+    """Commons ids an overlay's frontmatter reaches.
+
+    Read off the raw frontmatter rather than a materialized entity: an overlay is a partial
+    record that need not validate as an Entity on its own, so there is nothing to walk fields
+    on. `overlay_of` is excluded -- it names the entity being borrowed, which is already this
+    id, not a reference out to another one.
+    """
+    found: set[str] = set()
+    for field_name, value in overlay.frontmatter.items():
+        if field_name in {"id", "overlay_of"}:
+            continue
+        if isinstance(value, str):
+            _maybe_add(found, value)
+        elif isinstance(value, list):
+            for item in value:
+                _maybe_add(found, item)
+    return found
 
 
 def collect_referenced_commons_ids(
@@ -235,20 +368,27 @@ def _collect_geneset_row_usage_refs(found: set[str], *, project_root: Path, enti
             _maybe_add(found, usage.get("ref"))
 
 
-def _materialize_commons_entity(
-    merged: MergedEntity,
+def _materialize_commons_candidate(
+    record: CommonsEntityRecord,
     *,
     registry: EntityRegistry,
     project_slug: str,
     active_kinds: frozenset[str],
     ontology_catalogs: list[OntologyCatalog],
 ) -> Entity:
-    fm = dict(merged.merged_frontmatter)
+    """The commons canonical as a CANDIDATE -- the overlay is not applied here.
+
+    Close produces contributions; it does not compose them. The overlay travels beside this
+    candidate as its own AttachmentContribution, and arbitration composes the two under the
+    field policy. Merging here would compose before the full contribution set existed, which is
+    what let a project overlay silently beat contributors nobody had collected yet.
+    """
+    fm = dict(record.frontmatter)
     raw_kind = fm.get("kind")
     if not isinstance(raw_kind, str) or not raw_kind:
         canonical_id = fm.get("id")
         raise CommonsEntityError(
-            merged.canonical.body_path,
+            record.body_path,
             canonical_id=canonical_id if isinstance(canonical_id, str) else None,
             cause=ValueError("missing kind"),
         )
@@ -269,7 +409,7 @@ def _materialize_commons_entity(
         raw["venue"] = fm["journal"]
     raw["scope"] = "shared"
     raw["profile"] = "shared"
-    raw["file_path"] = str(merged.canonical.body_path)
+    raw["file_path"] = str(record.body_path)
     for overlay_only in _OVERLAY_ONLY_FIELDS:
         raw.pop(overlay_only, None)
     raw.pop("schema_profile", None)
