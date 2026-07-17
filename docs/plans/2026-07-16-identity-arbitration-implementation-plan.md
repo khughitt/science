@@ -968,6 +968,21 @@ git -C ~/d/science-commons/.worktrees/dataset-mixin-2 diff --stat
 
 Expected: only datasets/*/entity.md files; one profile-component replacement per file.
 
+- [ ] **Step 4a: Build the migrated worktree's registry**
+
+`registry.sqlite` is gitignored, so a fresh worktree has none. Every consumer that resolves
+through the registry — the Task 8 meta canaries, and the toolkit tests that honour
+`SCIENCE_COMMONS_ROOT` — fails until it exists. `science commons validate` does NOT need it (it
+scans files), so validating first and treating that pass as readiness is misleading.
+
+~~~bash
+cd ~/d/science/.worktrees/commons-overlay-bib-shadow/science
+SCIENCE_COMMONS_ROOT=~/d/science-commons/.worktrees/dataset-mixin-2 uv run --frozen science commons index rebuild
+~~~
+
+Expected: `indexed 369 entities`. The file is ignored, so the worktree stays clean and this adds
+nothing to the migration commit.
+
 - [ ] **Step 5: Validate the migrated store with the feature toolkit**
 
 Run:
@@ -1048,14 +1063,54 @@ Expected: both commands complete without an A-owned load/overlay error.
 
 - [ ] **Step 5: Assert the metadata graph denominators**
 
-Run:
+The acceptance is a RELATION between the pre-arc graph and the new one, not a count. A bare
+count cannot tell "composition added metadata" from "composition replaced one set of triples
+with a different set of the same size", which is the very confusion this step exists to rule
+out. The corpus canary is recorded second, because it dates the moment it is written.
+
+Build the pre-arc graph once for comparison:
+
+~~~bash
+git -C ~/d/science worktree add -f --detach /tmp/prearc c94be64c
+cd /tmp/prearc/meta && uv run --frozen science graph build --local-only
+~~~
+
+Then compare the two graphs:
 
 ~~~bash
 cd ~/d/science/.worktrees/commons-overlay-bib-shadow/meta
-uv run --frozen python -c 'from rdflib import Dataset, URIRef; d=Dataset(); d.parse("knowledge/graph.trig", format="trig"); doi=URIRef("http://example.org/science/vocab/doi"); date=URIRef("http://purl.org/dc/terms/date"); counts=(sum(1 for _ in d.quads((None, doi, None, None))), sum(1 for _ in d.quads((None, date, None, None)))); print(counts); assert counts == (23, 18)'
+uv run --frozen python - <<'PY'
+from rdflib import Dataset, URIRef
+DOI = URIRef("http://example.org/science/vocab/doi")
+DATE = URIRef("http://purl.org/dc/terms/date")
+
+def triples(path):
+    d = Dataset(); d.parse(path, format="trig")
+    return {(s, p, o) for p in (DOI, DATE) for s, _, o, _ in d.quads((None, p, None, None))}
+
+pre, now = triples("/tmp/prearc/meta/knowledge/graph.trig"), triples("knowledge/graph.trig")
+assert pre <= now, f"pre-arc metadata LOST: {sorted(pre - now)[:5]}"
+counts = (sum(1 for s, p, o in now if p == DOI), sum(1 for s, p, o in now if p == DATE))
+print(counts, f"+{len(now - pre)} added")
+PY
 ~~~
 
-Expected: prints (23, 18). This proves owner-unset composition preserved metadata without a field-name allowlist.
+Expected, in order of authority:
+
+1. Every pre-arc DOI/date triple survives, values included (`pre <= now`). A lost or changed
+   triple is a regression regardless of the totals.
+2. Additions are bib metadata filling owner vacancies. Spot-check one against
+   `papers/references.bib`: the owner authored no DOI, and the bib entry supplies it.
+3. The corpus canary at 2026-07-17 is `(72, 95)` with 112 additions. This number is a fact about
+   meta's CONTENT, not about the toolkit -- it moves whenever papers or bib entries are added, so
+   a mismatch calls for re-checking 1 and 2, never for editing the code to reproduce it.
+
+Together these prove owner-unset composition preserved existing metadata AND filled vacancies,
+without a field-name allowlist.
+
+Note: the plan originally asserted `(23, 18)`. That number matched neither the pre-arc graph
+(`25, 30`) nor the result, and being lower than pre-arc it would have accepted a state that
+LOST metadata -- the opposite of what the step set out to prove.
 
 - [ ] **Step 6: Check the branch diff for forbidden remnants and unrelated edits**
 
