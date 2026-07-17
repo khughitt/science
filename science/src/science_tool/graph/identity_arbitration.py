@@ -380,6 +380,7 @@ def _arbitrate_ordered(
             owners_by_scope[owner.declaration.owner_scope].append(owner)
 
         representatives: dict[str, EntityContribution] = {}
+        duplicated_scopes: set[str] = set()
         suppressed = False
         for scope in sorted(owners_by_scope):
             group = owners_by_scope[scope]
@@ -406,6 +407,7 @@ def _arbitrate_ordered(
                         contributors=_refs_of(live),
                     )
                 )
+                duplicated_scopes.add(scope)
                 suppressed = True
                 continue
             if live:
@@ -415,16 +417,22 @@ def _arbitrate_ordered(
                 representatives[scope] = deprecated[0]
 
         for borrower in borrowers:
-            if borrower.declaration.owner_scope not in representatives:
-                errors.append(
-                    ArbitrationError(
-                        code=ArbitrationCode.MISSING_OWNER,
-                        canonical_id=canonical_id,
-                        owner_scope=borrower.declaration.owner_scope,
-                        field="",
-                        contributors=_refs_of([borrower]),
-                    )
+            scope = borrower.declaration.owner_scope
+            # A DUPLICATED scope has no representative either, but "this scope owns nothing" is
+            # false when it owns the id twice -- and it sends the reader off to author an owner
+            # that already exists, twice. The duplicate-owner row is the actionable fact; a
+            # second row contradicting it is noise in the ledger an audit reader acts on.
+            if scope in representatives or scope in duplicated_scopes:
+                continue
+            errors.append(
+                ArbitrationError(
+                    code=ArbitrationCode.MISSING_OWNER,
+                    canonical_id=canonical_id,
+                    owner_scope=scope,
+                    field="",
+                    contributors=_refs_of([borrower]),
                 )
+            )
 
         if suppressed:
             continue

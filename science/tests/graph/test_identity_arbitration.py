@@ -722,6 +722,12 @@ def test_field_provenance_credits_only_what_the_owner_authored() -> None:
     # Defaulted, unauthored fields are credited to nobody.
     assert "commits_to" not in sources
     assert "lens_views" not in sources
+    # TRUTHY defaults, which `is_unset` alone cannot exclude. Without these the test certifies
+    # only the `is_unset` half of `_authored_fields`: dropping `model_fields_set` entirely
+    # leaves every empty-default assertion above green, while the owner silently starts being
+    # credited as the source of a `scope` and a `profile` it never wrote.
+    assert "scope" not in sources
+    assert "profile" not in sources
 
 
 def test_cross_scope_peers_are_ambiguous_not_silently_chosen() -> None:
@@ -949,3 +955,42 @@ def test_external_only_model_level_rejection_fails_loudly() -> None:
             ],
             context=ArbitrationContext(project_scope="proj", field_policies={}),
         )
+
+
+def test_a_duplicated_owner_is_not_also_reported_as_a_missing_owner() -> None:
+    """A borrower whose scope has TWO owners is not a borrower with none.
+
+    The ledger is what an audit reader acts on, so a contradiction in it is a defect even
+    though it over-reports rather than under-reports: "this scope owns nothing" is simply false
+    when the scope owns the id twice, and it points the reader at authoring an owner that
+    already exists -- twice. The duplicate-owner row is the actionable fact.
+    """
+    result = arbitrate_contributions(
+        [
+            _owner("paper:x", path="a.md"),
+            _owner("paper:x", path="b.md"),
+            _borrower("paper:x", relevance="r"),
+        ],
+        context=ArbitrationContext(project_scope="proj", field_policies={}),
+    )
+
+    assert [e.code for e in result.errors] == [ArbitrationCode.DUPLICATE_OWNER]
+
+
+def test_a_borrower_whose_scope_has_no_owner_at_all_is_still_reported() -> None:
+    """The MISSING_OWNER row must survive for the case it actually describes."""
+    result = arbitrate_contributions(
+        [
+            _owner("paper:x", path="a.md"),
+            _owner("paper:x", path="b.md"),
+            _borrower("paper:x", owner_scope="other", relevance="r"),
+        ],
+        context=ArbitrationContext(project_scope="proj", field_policies={}),
+    )
+
+    assert sorted({e.code for e in result.errors}) == [
+        ArbitrationCode.DUPLICATE_OWNER,
+        ArbitrationCode.MISSING_OWNER,
+    ]
+    missing = next(e for e in result.errors if e.code is ArbitrationCode.MISSING_OWNER)
+    assert missing.owner_scope == "other"
