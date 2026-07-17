@@ -124,3 +124,82 @@ def reserve_entity(
         directory, slug_value, stub=stub, label=kind, max_attempts=max_attempts
     )
     return Reservation(entity_id=f"{kind}:{local_part}", path=path)
+
+
+def _archived_numbers(project_root: Path, kind: str) -> set[int]:
+    """Numbers already spent by ARCHIVED entities of `kind`.
+
+    `_max_number` scans one directory, and the archive is a different subtree, so
+    a bare next-number scan will happily re-mint a number an archived entity still
+    owns -- and the archive index will then resolve two entities to one id.
+    """
+    from science_tool.archive import load_archive_index
+
+    numbers: set[int] = set()
+    for entity_id in load_archive_index(project_root).resolvable_ids():
+        prefix, _, local_part = entity_id.partition(":")
+        if prefix != kind:
+            continue
+        match = _NUMERIC_SCAN_RE.match(local_part)
+        if match is not None:
+            numbers.add(int(match.group(1)))
+    return numbers
+
+
+def propose_number(project_root: Path, kind: str) -> int:
+    """The number an import WOULD claim. Read-only, archive-aware, idempotent.
+
+    Deliberately NOT `reserve_number_in_dir`: that function commits the .md and
+    releases the sentinel, so calling it from a dry run leaves an empty entity
+    behind and makes the subsequent apply mint a DIFFERENT number.
+    """
+    policy = resolve_path_policy(kind)
+    if policy.strategy != "numeric":
+        raise EntityCommandError(f"propose_number supports numeric kinds only; {kind} is {policy.strategy}")
+    directory = project_root / policy.root
+    spent = _archived_numbers(project_root, kind)
+    highest = max([_max_number(directory), *spent]) if spent else _max_number(directory)
+    return highest + 1
+
+
+def claim_number_in_dir(
+    project_root: Path, kind: str, number: int, local_part: str, text: str
+) -> Path:
+    """Atomically claim EXACTLY `number` and commit `text` to `<local_part>.md`.
+
+    `reserve_number_in_dir` claims the NEXT number; this claims a NAMED one, which
+    is what a report-then-apply flow needs: the preview showed a number, and apply
+    must land that number or refuse so the operator sees a fresh preview. Silently
+    taking the next free number instead would publish an id the reviewer never saw.
+
+    Takes (project_root, kind) rather than a directory because availability is not
+    a property of the directory: an id in entities/_archive/ is spent, its live
+    file is gone, and a directory-only check would happily reissue it. The archive
+    is re-read HERE, under the sentinel, because propose_number's reading of it is
+    already stale by the time apply runs.
+    """
+    policy = resolve_path_policy(kind)
+    directory = Path(project_root) / policy.root
+    directory.mkdir(parents=True, exist_ok=True)
+    sentinel = directory / f".{number:0{LOCAL_PART_WIDTH}d}.reserving"
+    try:
+        os.close(os.open(sentinel, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o644))
+    except FileExistsError as exc:
+        raise EntityCommandError(
+            f"number {number:0{LOCAL_PART_WIDTH}d} is being reserved by another writer; re-run the preview"
+        ) from exc
+    try:
+        if _number_is_committed(directory, number):
+            raise EntityCommandError(
+                f"number {number:0{LOCAL_PART_WIDTH}d} was committed since the preview; re-run the preview"
+            )
+        if number in _archived_numbers(Path(project_root), kind):
+            raise EntityCommandError(
+                f"number {number:0{LOCAL_PART_WIDTH}d} was archived since the preview; re-run the preview"
+            )
+        path = directory / f"{local_part}.md"
+        with open(path, "x", encoding="utf-8") as handle:
+            handle.write(text)
+        return path
+    finally:
+        sentinel.unlink(missing_ok=True)
