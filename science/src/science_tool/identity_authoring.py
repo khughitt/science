@@ -6,10 +6,17 @@ from typing import Any
 
 from pydantic import ValidationError
 from science_model.entity_schema.loader import SchemaLoader, SchemaNotFoundError
-from science_model.entity_schema.profile import ProfileParseError, parse_profile
+from science_model.entity_schema.profile import ProfileParseError, default_profile_for_kind, parse_profile
 from science_model.packages.schema import IdentityContext
 
-BASE_DATASET_SCHEMA_PROFILE = "science-entity-base/1.0+dataset/1.0"
+# Derived, never declared. This is the default profile for a NEWLY AUTHORED dataset, and
+# `default_profile_for_kind` is the single authority on that. A literal here would be a second
+# declaration of the same fact, and the two would drift the moment either moved -- which is
+# exactly what happened: this constant sat at dataset/1.0 while the default moved to 2.0, so
+# every commons-born scaffold would have re-created the `status: REPLACE` crash (fb-2026-07-12-006)
+# that the dataset/2.0 migration exists to close. Pinned semantics are requested by passing an
+# explicit `schema_profile`, not by freezing this default.
+BASE_DATASET_SCHEMA_PROFILE = default_profile_for_kind("dataset").render()
 ASSEMBLY_REGISTRY_ID = "dataset:assembly-registry"
 GENE_CROSSWALK_ID = "dataset:gene-crosswalk-hgnc"
 PROTEIN_CROSSWALK_ID = "dataset:protein-crosswalk-uniprot"

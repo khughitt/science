@@ -72,18 +72,32 @@ def graph_init(graph_path: Path) -> None:
     is_flag=True,
     help="Materialize only knowledge/graph.trig; leave knowledge/composite.trig untouched.",
 )
-def graph_build(project_root: Path, local_only: bool) -> None:
+@click.option(
+    "--no-commons",
+    is_flag=True,
+    help=(
+        "Self-contained build: do not consult the commons store at all. The graph omits "
+        "commons-owned entities and commons overlays. Orthogonal to --local-only (which is about "
+        "the composite refresh). Without this flag, a project that references commons ids and has "
+        "no reachable store fails rather than silently building a partial graph."
+    ),
+)
+def graph_build(project_root: Path, local_only: bool, no_commons: bool) -> None:
     """Materialize graph.trig and, unless skipped, composite.trig from structured project sources."""
     from science_tool.graph.composite import assemble_composite_graph
     from science_tool.peers import PeerNotFound, PeerUnresolved
 
     _project_root = Path.cwd() if str(project_root) == "." else project_root
     try:
-        result = build_project_graph(_project_root)
+        result = build_project_graph(_project_root, include_commons=not no_commons)
     except ValueError as exc:
         raise click.ClickException(str(exc)) from exc
     _cfg = result.config
     click.echo(f"Materialized local graph at {result.local_path}")
+    if no_commons:
+        # Loud on stdout so a self-contained graph is never silently mistaken for full coverage:
+        # commons-owned entities and overlays are absent by request, not because none applied.
+        click.echo("Self-contained build (--no-commons): commons entities and overlays were NOT consulted")
 
     stale_composite_path = _project_root / "knowledge" / "composite.trig"
     if local_only:
@@ -105,7 +119,7 @@ def graph_build(project_root: Path, local_only: bool) -> None:
     from science_tool.graph.suggest import suggest_ontologies
 
     try:
-        sources = load_project_sources(project_root)
+        sources = load_project_sources(project_root, include_commons=not no_commons)
         suggestions = suggest_ontologies(
             entities=sources.entities,
             declared_ontologies=[c.ontology for c in sources.ontology_catalogs],

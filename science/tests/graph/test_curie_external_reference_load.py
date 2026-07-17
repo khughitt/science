@@ -51,9 +51,10 @@ def test_curie_row_synthesizes_external_reference_declaration(tmp_path: Path) ->
     assert "UniProtKB:Q02223" in list(ent.same_as)
 
 
-def test_curie_defers_to_markdown_owner_no_collision(tmp_path: Path) -> None:
-    # Same id present as BOTH a markdown owner and a curie authority row. Under
-    # STRICT load this must not raise: the curie reference defers to the owner.
+def test_curie_declares_beside_a_markdown_owner_no_collision(tmp_path: Path) -> None:
+    # Same id present as BOTH a markdown owner and a curie authority row. Under STRICT load this
+    # must not raise -- not because the curie row vanishes, but because it declares as an
+    # EXTERNAL_REFERENCE and only owners can collide.
     _base(tmp_path)
     src = _src(tmp_path)
     owner = tmp_path / "entities" / "proteins" / "BCMA.md"
@@ -83,8 +84,22 @@ def test_curie_defers_to_markdown_owner_no_collision(tmp_path: Path) -> None:
         ),
         encoding="utf-8",
     )
-    # strict_identity=True must NOT raise (defer fires).
+    # strict_identity=True must NOT raise: only one OWNER exists.
     sources = load_project_sources(tmp_path, include_commons=False, strict_core_schema=False, strict_identity=True)
     table = build_identity_table(sources)
+
     owners = table.owners()[("demo", "protein:BCMA")]
     assert all(r.adapter == "markdown" for r in owners)
+    rows = [r for r in table.rows if r.canonical_id == "protein:BCMA"]
+    assert {(r.adapter, r.participation_mode) for r in rows} == {
+        ("markdown", ParticipationMode.OWNER),
+        ("curie-ref", ParticipationMode.EXTERNAL_REFERENCE),
+    }
+
+    materialized = [e for e in sources.entities if e.canonical_id == "protein:BCMA"]
+    assert len(materialized) == 1
+    assert sources.entity_source_adapters["protein:BCMA"] == "markdown"
+    # The curie authority SUPPORTS the owner: the owner authored no `same_as`, so the authority's
+    # CURIE fills that vacancy rather than being discarded with the row. Deferral dropped the
+    # curie row wholesale, so an owner that cited no CURIE lost the authority mapping entirely.
+    assert "UniProtKB:Q02223" in list(materialized[0].same_as)

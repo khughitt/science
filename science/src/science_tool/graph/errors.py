@@ -2,7 +2,46 @@
 
 from __future__ import annotations
 
+from collections.abc import Iterable
+
 from science_model.source_ref import SourceRef
+
+
+class ContributionConflictError(ValueError):
+    """Raised when two contributions to one entity disagree on a field.
+
+    Takes the conflict's parts, never a preformatted message: a caller free to pass a string
+    is a caller free to raise a conflict that names no file, and the arbitration is the only
+    thing that still knows which sources disagreed.
+    """
+
+    def __init__(
+        self, *, canonical_id: str, field: str, refs: Iterable[SourceRef]
+    ) -> None:
+        self.canonical_id = canonical_id
+        self.field = field
+        # Sorted, so one conflict reads the same on every run regardless of adapter order.
+        # `ref.line is None`, never `ref.line or -1`: line 0 is a valid index, and conflating it
+        # with absence makes the sort key collide, which lets Python's stable sort leak encounter
+        # order back into the rendered message -- the invariance this sort exists to provide.
+        self.refs = tuple(
+            sorted(
+                refs,
+                key=lambda ref: (
+                    ref.path,
+                    -1 if ref.line is None else ref.line,
+                    ref.adapter_name,
+                ),
+            )
+        )
+        if not self.refs:
+            raise ValueError("a contribution conflict must name the sources that disagree")
+        listed = "\n".join(f"  - {ref}" for ref in self.refs)
+        super().__init__(
+            f"conflicting contributions for {field!r} on entity {canonical_id!r}:\n"
+            f"{listed}\n"
+            f"Resolve by removing the field from all but one source."
+        )
 
 
 class EntityIdentityCollisionError(ValueError):

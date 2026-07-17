@@ -44,15 +44,29 @@ def test_bib_paper_is_external_reference_and_resolves(tmp_path: Path) -> None:
     assert resolver.resolve("paper:Smith2024").status == "resolved"
 
 
-def test_bib_defers_to_markdown_owner_under_strict_load(tmp_path: Path) -> None:
-    # A markdown owner and a BibTeX entry with the same id must not collide; the
-    # external-reference adapter defers to the authored owner.
+def test_bib_declares_beside_a_markdown_owner_without_colliding(tmp_path: Path) -> None:
+    # A markdown owner and a BibTeX entry with the same id must not collide, but the bib row
+    # must still DECLARE. It does not collide because it is an EXTERNAL_REFERENCE — a standing
+    # difference, not a disappearance. Deferral achieved non-collision by deleting the row,
+    # which also deleted the evidence that anything external referenced this id.
     _write(tmp_path, bib="@article{Smith2024,\n  title = {Cells},\n}\n")
     _write_paper_owner(tmp_path, "Smith2024")
-    sources = _load(tmp_path, strict_identity=True)  # would raise if bib emitted a 2nd declaration
-    rows = [r for r in build_identity_table(sources).rows if r.canonical_id == "paper:Smith2024"]
-    assert rows and all(r.participation_mode is ParticipationMode.OWNER for r in rows)
-    assert all(r.adapter == "markdown" for r in rows)
+    sources = _load(tmp_path, strict_identity=True)  # must NOT raise: no two OWNERS exist
+
+    table = build_identity_table(sources)
+    rows = [r for r in table.rows if r.canonical_id == "paper:Smith2024"]
+    assert {(r.adapter, r.participation_mode) for r in rows} == {
+        ("markdown", ParticipationMode.OWNER),
+        ("bib", ParticipationMode.EXTERNAL_REFERENCE),
+    }
+    assert table.collisions() == []  # one owner, so nothing to collide
+
+    # Exactly one representative, and it is the authored owner. The bib entry supports the node;
+    # its title ("Cells") never displaces the owner's authored title.
+    materialized = [e for e in sources.entities if e.canonical_id == "paper:Smith2024"]
+    assert len(materialized) == 1
+    assert materialized[0].title == "Smith2024"
+    assert sources.entity_source_adapters["paper:Smith2024"] == "markdown"
 
 
 def test_bib_entry_with_out_of_range_year_still_loads_as_entity(tmp_path: Path) -> None:

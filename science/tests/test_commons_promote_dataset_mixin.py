@@ -163,7 +163,7 @@ def test_promote_dataset_with_matrix_and_rnaseq_succeeds(
     entity = entity_path.read_text()
     assert (
         "schema_profile: "
-        "science-entity-base/1.0+dataset/1.0+bio.matrix/1.0+bio.rnaseq/1.0"
+        "science-entity-base/1.0+dataset/2.0+bio.matrix/1.0+bio.rnaseq/1.0"
         in entity
     )
     # Bio fields landed in canonical:
@@ -221,7 +221,7 @@ def test_reversed_mixin_order_renders_canonical_profile_order(
     ).read_text(encoding="utf-8")
     assert (
         "schema_profile: "
-        "science-entity-base/1.0+dataset/1.0+bio.matrix/1.0+bio.rnaseq/1.0"
+        "science-entity-base/1.0+dataset/2.0+bio.matrix/1.0+bio.rnaseq/1.0"
         in entity
     )
     audit_log = next((tmp_path / "commons" / ".migrations").glob("*.yaml"))

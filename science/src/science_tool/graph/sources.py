@@ -43,6 +43,8 @@ from science_model.source_contracts import (
 from science_model.source_ref import SourceRef
 
 from science_model.entity_schema import PROJECT_MIXIN_NAMES, EntityValidationError
+from science_model.entity_schema.merge import MergePolicy, read_merge_policy
+from science_model.entity_schema.profile import ProfileParseError, default_profile_for_kind
 
 from science_tool.bibliography import is_bibliography_reference as _is_bibliography_reference
 from science_tool.commons.aliases import load_manual_aliases
@@ -53,7 +55,15 @@ from science_tool.entity_profiles import (
 )
 from science_tool.project_config import validated_entity_schema_version
 from science_tool.graph.entity_registry import EntityKindNotRegisteredError, EntityRegistry
-from science_tool.graph.errors import EntityIdentityCollisionError
+from science_tool.graph.errors import ContributionConflictError, EntityIdentityCollisionError
+from science_tool.graph.identity_arbitration import (
+    ArbitrationCode,
+    ArbitrationContext,
+    ArbitrationError,
+    EntityContribution,
+    SourceContribution,
+    arbitrate_contributions,
+)
 from science_tool.graph.identity_table import (
     IdentityDeclaration,
     ParticipationMode,
@@ -170,9 +180,9 @@ class ProjectSources(BaseModel):
     profiles: KnowledgeProfiles
     entities: list[Entity]
     entity_source_adapters: dict[str, str] = Field(default_factory=dict)
-    # §B4: id -> rel path of a datapackage.yaml that DEFERRED to an existing owner.
-    # The owner won the owner column, but member-resource resolution still needs the
-    # datapackage path (the geneset member CSV lives there, not in the owner file).
+    # §B4: id -> rel path of a datapackage.yaml that ATTACHES to an id something else
+    # represents. The representative won the owner column, but member-resource resolution still
+    # needs the datapackage path (the geneset member CSV lives there, not in the owner file).
     dataset_datapackages: dict[str, str] = Field(default_factory=dict)
     relations: list[SourceRelation] = Field(default_factory=list)
     bindings: list[BindingSource] = Field(default_factory=list)
@@ -188,6 +198,13 @@ class ProjectSources(BaseModel):
     skipped_entities: list[SkippedEntity] = Field(default_factory=list)
     commons_overlay_paths: dict[str, str] = Field(default_factory=dict)
     identity_declarations: list[IdentityDeclaration] = Field(default_factory=list)
+    # Every conflict arbitration found, whether or not this load raised. Under
+    # `strict_identity=True` the load raises and no consumer reads this; under
+    # `strict_identity=False` it is the ONLY channel carrying field-policy conflicts --
+    # declarations can reconstruct a duplicate owner, but nothing about a field two sources
+    # disagreed on. Without it, a diagnostic load would report a clean project by saying
+    # exactly what a project with no conflicts says.
+    arbitration_errors: list[ArbitrationError] = Field(default_factory=list)
     freshness_enabled: bool = True
     # Registered cross-project scopes (this project's id + declared peer ids). The
     # graph audit accepts `<peer>:<kind>:<slug>` addresses to these scopes (design
@@ -353,11 +370,13 @@ def load_project_sources(
 
     project_slug = project_root.name
     project_name = str(config["name"])
-    identity_table: dict[str, SourceRef] = {}
-    identity_declarations: list[IdentityDeclaration] = []
-    entities: list[Entity] = []
-    entity_source_adapters: dict[str, str] = {}
-    dataset_datapackages: dict[str, str] = {}
+    # Collection is EXHAUSTIVE and SELECTION-FREE: every validated entity becomes a
+    # contribution, and nothing here consults what another adapter claimed. Identity is decided
+    # once, by `arbitrate_contributions`, over the complete set -- so the outcome cannot depend
+    # on adapter iteration order, and a contribution that loses is recorded as having lost
+    # rather than deleted.
+    contributions: list[SourceContribution] = []
+    field_policies: dict[tuple[str, str], dict[str, MergePolicy]] = {}
     markdown_documents: list[MarkdownSourceDocument] = []
     skipped_entities: list[SkippedEntity] = list(graduated_kind_skips)
 
@@ -473,35 +492,16 @@ def load_project_sources(
                     )
                     continue
                 owner_scope, deprecated = classify_owner_scope(adapter.name, project_name=project_name)
-                # Defer is declared by the adapter (§B3/§B4/§C3): external-reference
-                # adapters (bib, curie-ref) and datapackages yield to an existing
-                # owner of this id rather than emit a competing owner. A deferring
-                # datapackage still reports its (id, path) so the geneset member gate
-                # can locate its resources after the owner wins the column.
-                if adapter.should_defer(already_owned=entity.canonical_id in identity_table):
-                    pair = adapter.deferred_dataset_datapackage(entity=entity, ref=ref)
-                    if pair is not None:
-                        deferred_id, deferred_path = pair
-                        dataset_datapackages[deferred_id] = deferred_path
-                    continue
-                identity_declarations.append(
-                    IdentityDeclaration(
-                        canonical_id=entity.canonical_id,
-                        participation_mode=adapter.participation_mode,
-                        owner_scope=owner_scope,
-                        adapter=adapter.name,
-                        source_ref=ref,
-                        deprecated=deprecated,
-                    )
+                _contribute(
+                    entity=entity,
+                    ref=ref,
+                    adapter_name=adapter.name,
+                    participation_mode=adapter.participation_mode,
+                    owner_scope=owner_scope,
+                    deprecated=deprecated,
+                    contributions=contributions,
+                    field_policies=field_policies,
                 )
-                existing = identity_table.get(entity.canonical_id)
-                if existing is not None:
-                    if strict_identity:
-                        raise EntityIdentityCollisionError(entity.canonical_id, existing, ref)
-                    continue
-                identity_table[entity.canonical_id] = ref
-                entities.append(entity)
-                entity_source_adapters[entity.canonical_id] = adapter.name
     finally:
         os.chdir(prev_cwd)
 
@@ -530,29 +530,18 @@ def load_project_sources(
         ),
     ]:
         owner_scope, deprecated = classify_owner_scope(ref.adapter_name, project_name=project_name)
-        identity_declarations.append(
-            IdentityDeclaration(
-                canonical_id=entity.canonical_id,
-                participation_mode=ParticipationMode.OWNER,
-                owner_scope=owner_scope,
-                adapter=ref.adapter_name,
-                source_ref=ref,
-                deprecated=deprecated,
-            )
+        _contribute(
+            entity=entity,
+            ref=ref,
+            adapter_name=ref.adapter_name,
+            participation_mode=ParticipationMode.OWNER,
+            owner_scope=owner_scope,
+            deprecated=deprecated,
+            contributions=contributions,
+            field_policies=field_policies,
         )
-        existing = identity_table.get(entity.canonical_id)
-        if existing is not None:
-            if strict_identity:
-                raise EntityIdentityCollisionError(entity.canonical_id, existing, ref)
-            continue
-        identity_table[entity.canonical_id] = ref
-        entities.append(entity)
-        entity_source_adapters[entity.canonical_id] = ref.adapter_name
-
-    entities.sort(key=lambda e: e.canonical_id)
 
     relations = _load_structured_relations(project_root, local_profile=local_profile)
-    relations.extend(_entity_nested_relations(entities))
     # Legacy model/parameter relations come from the nested authored-relations block.
     relations.extend(
         _legacy_nested_relations(
@@ -578,71 +567,53 @@ def load_project_sources(
     bindings = _load_binding_sources(project_root, local_profile=local_profile, typed_record_cache=typed_record_cache)
     bindings.sort(key=lambda binding: (binding.model, binding.parameter, binding.source_path))
 
-    commons_overlay_paths: dict[str, str] = {}
     if include_commons:
-        from science_tool.graph.commons_sources import _load_commons_referenced_entities
+        from science_tool.graph.commons_sources import collect_commons_contributions
 
-        commons_loaded, commons_overlay_paths, commons_owner_collisions = _load_commons_referenced_entities(
+        # Close over what commons says BEFORE anything is decided. Seeds are the local
+        # CANDIDATES, not a selection: closure asks which commons ids this project reaches, and
+        # an id reached by a candidate that later loses a contest was still reached.
+        closure = collect_commons_contributions(
             project_root=project_root,
             project_slug=project_slug,
-            project_entities=entities,
+            seed_entities=[c.candidate for c in contributions if isinstance(c, EntityContribution)],
             project_relations=relations,
             project_bindings=bindings,
-            identity_table=identity_table,
             registry=registry,
             active_kinds=active_kinds,
             ontology_catalogs=ontology_catalogs,
         )
-        for collision_id, collision_ref in commons_owner_collisions:
-            owner_scope, deprecated = classify_owner_scope(collision_ref.adapter_name, project_name=project_name)
-            identity_declarations.append(
-                IdentityDeclaration(
-                    canonical_id=collision_id,
-                    participation_mode=ParticipationMode.OWNER,
-                    owner_scope=owner_scope,
-                    adapter=collision_ref.adapter_name,
-                    source_ref=collision_ref,
-                    deprecated=deprecated,
-                )
-            )
-            # Deliberately do NOT add to `entities` / `identity_table`: the local owner
-            # remains the single materialized entity; the second owner row exists only
-            # so reference resolution (once scope-aware) flags the bare ref as
-            # ambiguous (design §B3a). No strict raise — cross-scope is not a collision.
-        for entity, ref in commons_loaded:
-            owner_scope, deprecated = classify_owner_scope(ref.adapter_name, project_name=project_name)
-            identity_declarations.append(
-                IdentityDeclaration(
-                    canonical_id=entity.canonical_id,
-                    participation_mode=ParticipationMode.OWNER,
-                    owner_scope=owner_scope,
-                    adapter=ref.adapter_name,
-                    source_ref=ref,
-                    deprecated=deprecated,
-                )
-            )
-            overlay_path = commons_overlay_paths.get(entity.canonical_id)
-            if overlay_path:
-                identity_declarations.append(
-                    IdentityDeclaration(
-                        canonical_id=entity.canonical_id,
-                        participation_mode=ParticipationMode.BORROWER,
-                        owner_scope=owner_scope,
-                        adapter="overlay",
-                        source_ref=SourceRef(adapter_name="overlay", path=overlay_path),
-                        deprecated=False,
-                    )
-                )
-            existing = identity_table.get(entity.canonical_id)
-            if existing is not None:
-                if strict_identity:
-                    raise EntityIdentityCollisionError(entity.canonical_id, existing, ref)
-                continue
-            identity_table[entity.canonical_id] = ref
-            entities.append(entity)
-            entity_source_adapters[entity.canonical_id] = ref.adapter_name
+        contributions.extend(closure.contributions)
+        field_policies.update(closure.field_policies)
 
-        entities.sort(key=lambda e: e.canonical_id)
+    # ONE decision, over the COMPLETE set: every local adapter, every legacy loader, and all of
+    # commons have now contributed. Arbitration sorts before it decides, so the outcome does not
+    # depend on the order any of the loops above happened to run in.
+    arbitration = arbitrate_contributions(
+        contributions,
+        context=ArbitrationContext(project_scope=project_name, field_policies=field_policies),
+    )
+    identity_declarations: list[IdentityDeclaration] = list(arbitration.identity_declarations)
+    entities: list[Entity] = list(arbitration.entities)
+    entity_source_adapters: dict[str, str] = dict(arbitration.entity_source_adapters)
+    dataset_datapackages: dict[str, str] = dict(arbitration.dataset_datapackages)
+    arbitration_errors: list[ArbitrationError] = list(arbitration.errors)
+    # What actually COMPOSED, not what merely resolved. An overlay whose id a project owner
+    # won did not compose, and reporting it here would claim project commentary reached a graph
+    # node that never received it.
+    commons_overlay_paths: dict[str, str] = dict(arbitration.overlay_paths)
+
+    # Nested edges come from the REPRESENTATIVES, not from encounter-order candidates. A
+    # candidate that lost a contest must not leak its edges into the graph: the entity the
+    # reader sees would then have relations no file it can open actually declares.
+    relations.extend(_entity_nested_relations(entities))
+    relations.sort(key=lambda relation: (relation.graph_layer, relation.subject, relation.predicate, relation.object))
+
+    # THE STRICT BOUNDARY. Arbitration always detects; strictness decides raise vs. report.
+    # The ledger is the fact, and these exceptions are a projection of it -- so a diagnostic
+    # load and a strict load disagree about what to DO, never about what is true.
+    if strict_identity:
+        _raise_first_arbitration_error(arbitration_errors)
 
     dataset_parents = {e.canonical_id: e.parent_dataset for e in entities if e.kind == "dataset" and e.parent_dataset}
 
@@ -683,6 +654,7 @@ def load_project_sources(
         skipped_entities=skipped_entities,
         commons_overlay_paths=commons_overlay_paths,
         identity_declarations=identity_declarations,
+        arbitration_errors=arbitration_errors,
         freshness_enabled=freshness_enabled,
         peer_ids=frozenset(config.get("peer_ids") or []),  # type: ignore[arg-type]
         dataset_parents=dataset_parents,
@@ -1485,6 +1457,77 @@ def _path_alias_tokens(file_path: object, kind: str) -> list[str]:
         return []
     token = match.group("token")
     return [f"{kind}:{token.lower()}", f"{kind}:{token.upper()}", token.lower(), token.upper()]
+
+
+def _raise_first_arbitration_error(errors: list[ArbitrationError]) -> None:
+    """Project the arbitration ledger onto the strict loader's exception contract.
+
+    `errors` is already sorted, so a project with several problems reports the same one every
+    run instead of whichever adapter happened to run first.
+    """
+    for error in errors:
+        match error.code:
+            case ArbitrationCode.DUPLICATE_OWNER:
+                # This exception predates arbitration and names exactly two refs. Duplicate-owner
+                # is detected over the whole set, so there may be more than two; the pair shown
+                # is the first two in sorted order, and the rest surface once these are resolved.
+                first, second = error.contributors[0], error.contributors[1]
+                raise EntityIdentityCollisionError(error.canonical_id, first, second)
+            case ArbitrationCode.CONTRIBUTION_CONFLICT:
+                raise ContributionConflictError(
+                    canonical_id=error.canonical_id,
+                    field=error.field,
+                    refs=error.contributors,
+                )
+            case ArbitrationCode.MISSING_OWNER | ArbitrationCode.AMBIGUOUS_REPRESENTATIVE:
+                # Deliberately diagnostic. Both are states a load can legitimately reach
+                # mid-migration, and both already suppress materialization of the affected id,
+                # so the graph never shows a guessed answer. The audit reports them.
+                continue
+            case unhandled:  # pragma: no cover - totality guard
+                # No fall-through. A new code must be given a disposition HERE, because the
+                # fall-through's answer would have been "do not raise" -- silently downgrading
+                # an unconsidered defect to a passing strict build.
+                raise RuntimeError(f"arbitration code has no strict-boundary disposition: {unhandled!r}")
+
+
+def _contribute(
+    *,
+    entity: Entity,
+    ref: SourceRef,
+    adapter_name: str,
+    participation_mode: ParticipationMode,
+    owner_scope: str,
+    deprecated: bool,
+    contributions: list[SourceContribution],
+    field_policies: dict[tuple[str, str], dict[str, MergePolicy]],
+) -> None:
+    """Record one contribution. UNCONDITIONALLY -- it never asks what else claimed this id.
+
+    That is the whole point: a contribution is a statement that a source made, and whether the
+    statement wins is not a property of the statement. Deciding here is what let iteration order
+    determine identity and erase the loser.
+    """
+    declaration = IdentityDeclaration(
+        canonical_id=entity.canonical_id,
+        participation_mode=participation_mode,
+        owner_scope=owner_scope,
+        adapter=adapter_name,
+        source_ref=ref,
+        deprecated=deprecated,
+    )
+    contributions.append(EntityContribution(declaration=declaration, candidate=entity))
+    if participation_mode is not ParticipationMode.OWNER:
+        return
+    try:
+        profile = default_profile_for_kind(entity.kind)
+    except ProfileParseError:
+        # NOT a fallback policy. It means no overlay/external composition contract exists for
+        # this project-only kind, so there is nothing to register. Arbitration fails loudly if
+        # an attachment later needs a policy that was never declared -- which is the honest
+        # outcome, rather than composing under a guessed default.
+        return
+    field_policies[(owner_scope, entity.canonical_id)] = read_merge_policy(profile)
 
 
 def _default_profile_for_kind(
