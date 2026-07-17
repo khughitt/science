@@ -156,6 +156,67 @@ def build_entity_graph(project_root: Path, entities: list[dict], relations: list
     return materialize_graph(project_root)
 
 
+def _seed_registry_project(project_root: Path, entity_kinds: list[dict[str, object]]) -> Path:
+    """Create a minimal project with the requested project-local entity kinds."""
+    import yaml
+
+    from _fixtures.entity_helpers import seed_project
+
+    seed_project(project_root)
+    manifest = project_root / "knowledge" / "sources" / "local" / "manifest.yaml"
+    manifest.parent.mkdir(parents=True, exist_ok=True)
+    manifest.write_text(
+        yaml.safe_dump(
+            {
+                "name": "test-local",
+                "imports": ["core"],
+                "strictness": "typed-extension",
+                "entity_kinds": entity_kinds,
+                "relation_kinds": [],
+            },
+            sort_keys=False,
+        ),
+        encoding="utf-8",
+    )
+    return project_root
+
+
+@pytest.fixture
+def tmp_project(tmp_path: Path) -> Path:
+    return _seed_registry_project(tmp_path, [])
+
+
+@pytest.fixture
+def tmp_project_with_design_kind(tmp_path: Path) -> Path:
+    return _seed_registry_project(
+        tmp_path,
+        [
+            {
+                "name": "design",
+                "canonical_prefix": "design",
+                "layer": "layer/local",
+                "description": "Project-local design record.",
+            }
+        ],
+    )
+
+
+@pytest.fixture
+def tmp_project_with_scoped_kind(tmp_path: Path) -> Path:
+    return _seed_registry_project(
+        tmp_path,
+        [
+            {
+                "name": "logbook",
+                "canonical_prefix": "logbook",
+                "layer": "layer/local",
+                "description": "Project-local logbook record.",
+                "curation_scope": "none",
+            }
+        ],
+    )
+
+
 #: Splice this into a hand-authored `workflow-run` frontmatter block so
 #: The authored `execution:` declaration `register-run` captures a fingerprint
 #: from. Nothing under `fingerprint:` is declared here — the whole block is
