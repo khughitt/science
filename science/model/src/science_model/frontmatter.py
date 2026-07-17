@@ -13,7 +13,7 @@ import yaml
 from science_model.entities import (
     Entity,
     EntityType,
-    EpistemicReviewState,
+    ReviewState,
     EvidenceLineEntity,
     FalsificationEntity,
     MechanismEntity,
@@ -422,12 +422,12 @@ def _coerce_identity_context(fm: dict) -> IdentityContext | None:
     return IdentityContext.model_validate(raw)
 
 
-def _coerce_review_state(fm: dict) -> EpistemicReviewState | None:
-    """Build EpistemicReviewState from frontmatter `review_state:` block, or None if absent/malformed."""
+def _coerce_review_state(fm: dict) -> ReviewState | None:
+    """Build ReviewState from frontmatter `review_state:` block, or None if absent/malformed."""
     raw = fm.get("review_state")
     if not isinstance(raw, dict):
         return None
-    return EpistemicReviewState(
+    return ReviewState(
         last_reviewed=_coerce_date(raw.get("last_reviewed")),
         last_review_note=str(raw.get("last_review_note") or ""),
         review_horizon_days=raw.get("review_horizon_days"),

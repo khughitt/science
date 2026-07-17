@@ -167,7 +167,7 @@
       }
     },
     "review_state": {
-      "$comment": "EpistemicReviewState (entities.py:138). `review_horizon_days` must be POSITIVE. `additionalProperties: false` is STRICTER than the model (extra=ignore) — deliberately: a typo'd key inside `review_state` is silently dropped today, which is the exact class of defect this arc exists to end.",
+      "$comment": "ReviewState (entities.py:138). `review_horizon_days` must be POSITIVE. `additionalProperties: false` is STRICTER than the model (extra=ignore) — deliberately: a typo'd key inside `review_state` is silently dropped today, which is the exact class of defect this arc exists to end.",
       "type": "object",
       "additionalProperties": false,
       "properties": {

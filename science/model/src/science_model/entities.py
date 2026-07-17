@@ -135,15 +135,14 @@ class EntityType(StrEnum):
     UNKNOWN = "unknown"
 
 
-class EpistemicReviewState(BaseModel):
-    """Per-entity review-as-of state for epistemic entities.
+class ReviewState(BaseModel):
+    """Per-entity review-as-of state.
 
-    `last_reviewed` is the date the user (or agent) last considered this
-    entity in light of all evidence. `last_review_note` is an optional
-    human-readable note about that review. `review_horizon_days` is an
-    optional per-entity threshold for the `stale` state — when set,
-    entities whose `last_reviewed` is older than `now - horizon` flip
-    to `stale` even without any upstream change.
+    `last_reviewed` is the date the user (or agent) last considered this entity.
+    `last_review_note` is an optional human-readable note about that review.
+    `review_horizon_days` is an optional per-entity threshold for the `stale`
+    state — when set, entities whose `last_reviewed` is older than `now - horizon`
+    flip to `stale` even without any upstream change.
     """
 
     last_reviewed: date | None = None
@@ -151,7 +150,7 @@ class EpistemicReviewState(BaseModel):
     review_horizon_days: int | None = None
 
     @model_validator(mode="after")
-    def _validate_horizon(self) -> "EpistemicReviewState":
+    def _validate_horizon(self) -> "ReviewState":
         if self.review_horizon_days is not None and self.review_horizon_days <= 0:
             raise ValueError("review_horizon_days must be positive when set")
         return self
@@ -374,7 +373,7 @@ class Entity(BaseModel):
     scope: EntityScope = EntityScope.PROJECT
     provisional: bool = False
     review_after: date | None = None
-    review_state: EpistemicReviewState | None = None
+    review_state: ReviewState | None = None
     composition_rule: CompositionRule | None = None
 
     # Load-time provenance: the subset of `aliases` that was EXPLICITLY authored in this
@@ -881,8 +880,8 @@ class HypothesisEntity(ProjectEntity):
     axis for the same fact is the collapse re-introduced under a new name.
     """
 
-    # The four TERMINAL fields. `Entity` is `extra="ignore"`, so until a field is DECLARED here it
-    # is silently dropped at `model_validate` -- and any consumer reading a projected entity sees a
+    # The four TERMINAL fields. `Entity` is `extra="allow"`, so an undeclared field is PRESERVED
+    # (D3.3) but never projected into a typed surface until DECLARED here -- and any consumer reading
     # record with no lineage and no adjudication at all. `check_resolution` reads projected
     # entities, so without these four it would inspect a stripped record, find no reference, and
     # report clean forever: a green resolver over a blind loader.
