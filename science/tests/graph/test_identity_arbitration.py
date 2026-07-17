@@ -13,6 +13,7 @@ from science_model.source_ref import SourceRef
 from science_tool.commons.overlay import OverlayRecord
 from science_tool.graph.errors import ContributionConflictError
 from science_tool.graph.identity_arbitration import (
+    ArbitrationCode,
     ArbitrationContext,
     ArbitrationResult,
     AttachmentContribution,
@@ -797,3 +798,88 @@ def test_composed_value_that_the_model_rejects_is_not_installed_silently() -> No
                 field_policies={("proj", "paper:x"): {"updated": MergePolicy.PROJECT_ONLY}},
             ),
         )
+
+
+def test_composition_preserves_private_alias_provenance_and_the_authored_field_set() -> None:
+    """Coercion must not rebuild the entity -- only the composed values may change.
+
+    `_authored_aliases` is carried from load and, as the model itself states, must never be
+    inferred: it is what distinguishes an authored alias from a derived convenience when the two
+    coincide. `model_fields_set` is the same kind of fact -- what the SOURCE authored, which
+    `_authored_fields` reads to decide who gets credited for a value.
+
+    Reconstructing the entity from `model_dump()` silently drops the first and inflates the
+    second to every field the dump names. Both losses are invisible here and land far away:
+    `build_alias_map` would reclassify an authored alias as derived, so a colliding mappings
+    entry silently wins where it should raise.
+    """
+    from datetime import date
+
+    owner = _owner("paper:x", aliases=["Smith24"])
+    owner.candidate._authored_aliases = frozenset({"Smith24"})
+    authored_before = set(owner.candidate.model_fields_set)
+
+    result = arbitrate_contributions(
+        [owner, _borrower("paper:x", updated="2026-07-10")],
+        context=ArbitrationContext(
+            project_scope="proj",
+            field_policies={("proj", "paper:x"): {"updated": MergePolicy.PROJECT_ONLY}},
+        ),
+    )
+
+    entity = result.entities[0]
+    assert entity.updated == date(2026, 7, 10)
+    assert entity._authored_aliases == frozenset({"Smith24"})
+    # Exactly the composed field joins the authored set -- nothing else the dump would name.
+    assert entity.model_fields_set == authored_before | {"updated"}
+
+
+def test_every_returned_representative_validates_against_its_own_model() -> None:
+    """The general invariant: arbitration never returns an entity its model would reject.
+
+    A representative is what every consumer downstream reads. One that cannot round-trip through
+    its own model is a node whose declared types are a lie -- and the lie is discovered by
+    whichever consumer happens to touch the field, far from arbitration.
+    """
+    result = arbitrate_contributions(
+        [
+            _owner("paper:owned"),
+            _borrower("paper:owned", updated="2026-07-10"),
+            _external("paper:contested", title="One"),
+            _external("paper:contested", title="Two", path="knowledge/refs.yaml", line=2),
+            _external("paper:agreed", title="Same"),
+            _external("paper:agreed", title="Same", path="knowledge/refs.yaml", line=3),
+        ],
+        context=ArbitrationContext(
+            project_scope="proj",
+            field_policies={("proj", "paper:owned"): {"updated": MergePolicy.PROJECT_ONLY}},
+        ),
+    )
+
+    for entity in result.entities:
+        type(entity).model_validate(entity.model_dump())
+
+
+def test_external_only_title_conflict_yields_no_representative() -> None:
+    """A contested required field means the graph cannot honestly say what the node is.
+
+    The vacancy rule is right -- letting the first bib line's title stand would make file order
+    the authority. But `title` is required, so the vacancy is unrepresentable, and the choice is
+    between an invalid entity and no entity. No entity is correct: the conflict is in the ledger
+    naming both sources, which is the actionable fact. Materializing `PaperEntity(title=None)`
+    would instead hand every consumer a node that violates its own contract.
+    """
+    result = arbitrate_contributions(
+        [
+            _external("paper:contested", title="One"),
+            _external("paper:contested", title="Two", path="knowledge/refs.yaml", line=2),
+        ],
+        context=ArbitrationContext(project_scope="proj", field_policies={}),
+    )
+
+    assert [e.canonical_id for e in result.entities] == []
+    conflicts = [e for e in result.errors if e.code is ArbitrationCode.CONTRIBUTION_CONFLICT]
+    assert len(conflicts) == 1
+    assert conflicts[0].field == "title"
+    # The ledger still names BOTH sources: the node is absent, but why is not.
+    assert len(conflicts[0].contributors) == 2

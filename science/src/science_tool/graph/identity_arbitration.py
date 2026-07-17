@@ -15,6 +15,7 @@ from dataclasses import dataclass
 from enum import StrEnum
 from typing import Any, TypeAlias
 
+from pydantic import ValidationError
 from science_model.entities import Entity
 from science_model.entity_schema import MergePolicy
 from science_model.source_ref import SourceRef
@@ -527,12 +528,20 @@ def _install(candidate: Entity, updates: dict[str, Any]) -> Entity:
     Only the owner+borrower path needs this. External references contribute through validated
     Entity candidates, so their values are already model-typed.
 
-    Re-validating only when something CHANGED keeps an untouched entity's own value objects
-    intact rather than round-tripping every entity through a dump.
+    The validated payload is a THROWAWAY used to coerce, never the entity that ships. Returning
+    it would rebuild the candidate from a dump, which drops private state carried from load --
+    `_authored_aliases`, which the model requires be CARRIED and never inferred -- and inflates
+    `model_fields_set` from what the source authored to every field the dump names. Both losses
+    are silent and land far away: `build_alias_map` reads the first to tell an authored alias
+    from a derived one, and `_authored_fields` reads the second to decide whom to credit.
+
+    Installing only the coerced values keeps the shipped entity the one the owner authored,
+    changed in exactly the fields composition changed.
     """
     if not updates:
         return candidate
-    return type(candidate).model_validate({**candidate.model_dump(), **updates})
+    coerced = type(candidate).model_validate({**candidate.model_dump(), **updates})
+    return candidate.model_copy(update={field: getattr(coerced, field) for field in updates})
 
 
 def _refs_of(contributions: Sequence[SourceContribution]) -> tuple[SourceRef, ...]:
@@ -572,6 +581,20 @@ def _select_scope(
     return None
 
 
+def _fields_the_model_rejects(entity: Entity) -> set[str]:
+    """The fields on which this entity fails its OWN model contract, or an empty set.
+
+    Arbitration must never return a representative a consumer cannot trust: the declared type is
+    what every reader downstream relies on, and a node that violates it is discovered by whoever
+    touches the field, far from here.
+    """
+    try:
+        type(entity).model_validate(entity.model_dump())
+    except ValidationError as error:
+        return {str(item["loc"][0]) for item in error.errors() if item["loc"]}
+    return set()
+
+
 def _materialize_external_only(
     *,
     canonical_id: str,
@@ -598,6 +621,7 @@ def _materialize_external_only(
 
     authored = first.candidate.model_dump()
     resolved: dict[str, Any] = {}
+    vacated: set[str] = set()
     for field in sorted(proposals):
         entries = proposals[field]
         keys = tuple(ContributionKey.from_declaration(c.declaration) for c, _ in entries)
@@ -629,6 +653,7 @@ def _materialize_external_only(
         )
         # An explicit vacancy: the disagreement is in the ledger, and no proposal won it.
         resolved[field] = None
+        vacated.add(field)
 
     for field in _authored_fields(first.candidate):
         if field not in resolved:
@@ -642,7 +667,22 @@ def _materialize_external_only(
     }
     # NOT _install: every proposal here came from an already-validated Entity, so there is no
     # foreign vocabulary to coerce. The one non-model value this function introduces is the
-    # deliberate `None` vacancy above, and validating it would raise on a required field rather
-    # than record the disagreement -- see the vacancy note in the docstring.
+    # vacancy above, which is why the result is checked rather than coerced.
     entity = first.candidate.model_copy(update=updates) if updates else first.candidate
+    invalid_fields = _fields_the_model_rejects(entity)
+    if invalid_fields:
+        if not invalid_fields <= vacated:
+            # A field the model rejects that NO conflict explains is a broken candidate reaching
+            # arbitration, not a disagreement arbitration resolved. Failing here keeps the two
+            # apart; swallowing it would let any invalid entity leave as a silent absence.
+            raise ValueError(
+                f"external-only candidate for {canonical_id!r} is invalid in fields the ledger "
+                f"does not explain: {sorted(invalid_fields - vacated)}"
+            )
+        # A vacancy the model cannot represent: `title` is required, so "we do not know" is
+        # unsayable and the choice is an invalid entity or none. None is correct -- the conflict
+        # stays in the ledger naming both sources, which is the fact a reader can act on, while
+        # materializing PaperEntity(title=None) would hand consumers a node that violates the
+        # contract its own kind declares.
+        return None, entity_fields
     return entity, entity_fields
