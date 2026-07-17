@@ -80,6 +80,21 @@ Anything discovered later that would change these **invalidates the draw** and
 requires a fresh pre-registration. This is the point of the exercise: thresholds
 fixed *after* seeing a result are not thresholds.
 
+### 4.1 The pre-registration record (captured 2026-07-17)
+
+Committed before any plan was adjudicated. Verifiable by anyone who was not here:
+
+- record: `docs/plans/2026-07-17-drift-sample/prereg.json`
+- commit: `ade073624695fb605f501fddb2239a4b54c41441`
+- sha256: `c30f045ac131bce91f2bbc77324c8d9117fe208c6d1c9c11f74c3031377d3c64`
+- pins: multiple-myeloma `6f4fbee4`, natural-systems `759d9b6c6`,
+  protein-landscape `66051a2`, post-acute-infection `007cbdf`
+- seed `20260717`; frame N = 264 (mm 126, ns 109, pl 19, pa 10); first look n = 40
+  (mm 24, ns 12, pl 4); θ = 0.10; α = 0.05/3; ladder (40, 80, 264).
+
+The frame reconciled with §3 exactly, so the census rung was unchanged and no
+amendment to this design was required at capture time.
+
 ## 5. Selection: one equal-probability sample
 
 **Simple random sample without replacement from all N = 264**, one frame, no
