@@ -27,84 +27,92 @@ from __future__ import annotations
 import re
 from collections.abc import Iterator
 
-_FENCE_RE = re.compile(r"^(?P<indent> {0,3})(?P<fence>`{3,}|~{3,})(?P<info>[^\n]*)$")
+_FENCE_RE = re.compile(r"^(?P<indent> *)(?P<fence>`{3,}|~{3,})(?P<info>[^\n]*)$")
+# An unbalanced single backtick in prose can pair, via this lazy `.+?` under
+# DOTALL, with a later fence delimiter across a block boundary, masking the span
+# between them and dropping a live link that follows. That over-masks (safe: the
+# result is a stale link the post-move audit surfaces, never a corrupted
+# quotation), so it is left as a deliberate gap rather than fixed here.
 _INLINE_CODE_RE = re.compile(r"(?P<ticks>`+)(?P<body>.+?)(?P=ticks)", re.DOTALL)
 _LIST_ITEM_RE = re.compile(r"^ {0,3}(?:[-*+]|\d{1,9}[.)])\s")
 _BLANK_RE = re.compile(r"^\s*$")
 
 
-def _fenced_line_flags(text: str) -> list[bool]:
-    """One flag per line: True where the line is inside (or is) a fence."""
-    lines = text.split("\n")
-    flags = [False] * len(lines)
-    open_fence: str | None = None
-    for i, line in enumerate(lines):
-        match = _FENCE_RE.match(line)
-        if open_fence is None:
-            if match is not None:
-                open_fence = match.group("fence")
-                flags[i] = True
-            continue
-        flags[i] = True
-        # A closing fence must be the same char and at least as long, with no info.
-        if (
-            match is not None
-            and match.group("fence")[0] == open_fence[0]
-            and len(match.group("fence")) >= len(open_fence)
-            and not match.group("info").strip()
-        ):
-            open_fence = None
-    # An unterminated fence leaves open_fence set; those lines stay masked. Fail
-    # closed: we do not know where the code ended, so we do not rewrite past it.
-    return flags
+def _block_code_flags(text: str) -> list[bool]:
+    """One flag per line: True where the line is block code (fenced or indented).
 
-
-def _indented_code_flags(text: str, fenced: list[bool]) -> list[bool]:
-    """Lines that are indented code blocks, excluding list-paragraph continuations.
-
-    A 4-space indent under a list item is that item's own paragraph, not code --
-    but an indent of 4 or more BEYOND the item's content column IS a code block
-    nested inside the item, and masking it is what stops a rewrite from editing a
-    fence-free code sample that happens to sit under a bullet. So the threshold is
-    relative to the enclosing list item, not the absolute column 4: a single
-    `in_list` boolean masked nothing indented under a list, however deep, which
-    left an 8-space code block below a bullet fully rewritable.
+    Fence and indented-code detection are folded into ONE list-context-aware pass
+    because the two rules share a baseline: inside a list item whose content
+    begins at column C, a fenced code block may be indented C..C+3 and an indented
+    code block begins at C+4. At the top level C=0, recovering the plain 0-3 fence
+    / 4-space code rules. Detecting fences independently of the list context (the
+    prior split, where only the indented pass tracked the list) missed a fence
+    indented AT a list item's content column: recognised by neither mechanism, its
+    content leaked into prose.
     """
     lines = text.split("\n")
     flags = [False] * len(lines)
-    list_content_indent: int | None = None  # None => not inside a list item
+    open_fence: str | None = None
+    fence_base_indent = 0
+    list_content_indent = 0  # 0 => top level (not inside a list item)
     for i, line in enumerate(lines):
-        if fenced[i]:
+        match = _FENCE_RE.match(line)
+        indent = len(line) - len(line.lstrip(" "))
+
+        if open_fence is not None:
+            # Opaque fence body: mask, and only look for the matching close.
+            flags[i] = True
+            if (
+                match is not None
+                and match.group("fence")[0] == open_fence[0]
+                and len(match.group("fence")) >= len(open_fence)
+                and not match.group("info").strip()
+                and indent - fence_base_indent <= 3
+            ):
+                open_fence = None
             continue
+
         if _BLANK_RE.match(line):
             continue  # a blank line neither starts code nor closes the list item
+
         item = _LIST_ITEM_RE.match(line)
         if item is not None:
             # Column where the item's content begins (marker + its trailing space).
             list_content_indent = len(item.group(0))
             continue
-        indent = len(line) - len(line.lstrip(" "))
-        if list_content_indent is not None and indent >= list_content_indent:
-            # Inside the current item: code only once indented 4+ past its content.
-            flags[i] = indent >= list_content_indent + 4
+
+        if indent < list_content_indent:
+            # Dedented out of the list: fall back to the plain top-level rules.
+            list_content_indent = 0
+
+        if (
+            match is not None
+            and list_content_indent <= indent <= list_content_indent + 3
+        ):
+            # A fence opens at the list content baseline (C..C+3); C..C is exactly
+            # the column the prior fence pass could not see.
+            open_fence = match.group("fence")
+            fence_base_indent = list_content_indent
+            flags[i] = True
             continue
-        # Dedented out of any list (or never in one): the plain 4-space rule.
-        list_content_indent = None
-        flags[i] = indent >= 4
+
+        # Indented code begins 4 columns past the list content baseline.
+        flags[i] = indent >= list_content_indent + 4
+    # An unterminated fence leaves open_fence set; those lines stay masked. Fail
+    # closed: we do not know where the code ended, so we do not rewrite past it.
     return flags
 
 
 def prose_spans(text: str) -> list[tuple[int, int]]:
     """Half-open [start, end) offsets of prose, excluding code of every kind."""
     lines = text.split("\n")
-    fenced = _fenced_line_flags(text)
-    indented = _indented_code_flags(text, fenced)
+    block_code = _block_code_flags(text)
 
     masked: list[tuple[int, int]] = []
     offset = 0
     for i, line in enumerate(lines):
         end = offset + len(line)
-        if fenced[i] or indented[i]:
+        if block_code[i]:
             masked.append((offset, end))
         offset = end + 1  # the "\n"
 

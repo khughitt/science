@@ -92,6 +92,18 @@ def test_unterminated_fence_masks_to_end_of_document() -> None:
     assert _targets(text) == ["./b.md"]
 
 
+def test_tilde_fence_indented_under_numbered_item_is_masked() -> None:
+    """F1 regression: a ~~~ fence at a numbered list item's content column masks."""
+    text = "10. step\n\n    ~~~\n    [x](./nope.md)\n    ~~~\n\nAfter [y](./b.md).\n"
+    assert _targets(text) == ["./b.md"]
+
+
+def test_tilde_fence_indented_under_nested_bullet_is_masked() -> None:
+    """F1 regression: fence at a nested-bullet content column, not via accidental backtick pairing."""
+    text = "- outer\n\n  - inner\n\n    ~~~\n    [x](./nope.md)\n    ~~~\n\nAfter [y](./b.md).\n"
+    assert _targets(text) == ["./b.md"]
+
+
 def test_prose_spans_cover_prose_and_exclude_code() -> None:
     text = "a [x](./a.md)\n```\ncode\n```\nb\n"
     spans = prose_spans(text)
