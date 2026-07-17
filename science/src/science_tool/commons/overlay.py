@@ -235,17 +235,6 @@ class MergedEntity:
     field_sources: dict[str, str]  # field -> canonical | overlay | canonical+overlay
 
 
-def _dedup(items: list[Any]) -> list[Any]:
-    """Order-preserving de-duplication for arrays of primitives."""
-    seen: set[Any] = set()
-    out: list[Any] = []
-    for item in items:
-        if item not in seen:
-            seen.add(item)
-            out.append(item)
-    return out
-
-
 @dataclass(frozen=True, slots=True)
 class OverlayFieldConflict:
     """A borrower value the owner's policy does not admit.
@@ -295,10 +284,11 @@ def lookup_merge_policy(
 ) -> MergePolicy | None:
     """The entity profile's policy for `field`, else the overlay schema's, else None.
 
-    Explicit membership, not `entity_policy.get(f) or overlay_policy.get(f)`: `or` reads a
-    policy's TRUTHINESS to decide whose policy applies, so a falsey policy value would silently
-    hand the field to the overlay map. Which map declares a field is a fact about the maps, not
-    about the value found in one.
+    Explicit membership, not `entity_policy.get(f) or overlay_policy.get(f)`. No `MergePolicy`
+    member is falsey today, so the two forms are currently equivalent and no test can tell them
+    apart -- this defends a property rather than fixing a live defect. It is still the right
+    shape: `or` would read a policy's TRUTHINESS to decide whose policy applies, and which map
+    declares a field is a fact about the maps, not about the value found in one.
     """
     if field in merge_policy:
         return merge_policy[field]
