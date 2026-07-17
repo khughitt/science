@@ -210,18 +210,58 @@ def _relocate_rows(
     return {"applied": applied, "skipped": skipped}
 
 
+def _scope_rows_to_allowlist(
+    project_root: Path, rows: list[ArchiveRow], ids: frozenset[str], statuses: frozenset[str]
+) -> list[ArchiveRow]:
+    """Restrict candidate rows to exactly `ids`, failing early on any discrepancy.
+
+    `rows` has already been filtered by status, so an id that is absent from it is
+    ambiguous: it may not exist, or it may exist in a non-archivable status. The
+    two are different errors and a caller who named an id explicitly deserves to
+    be told which, so the corpus is consulted directly rather than inferred from
+    the absence.
+    """
+    by_id = {row.id: row for row in rows}
+    unresolved = sorted(ids - by_id.keys())
+    if unresolved:
+        live: dict[str, str] = {}
+        for path in iter_entity_markdown(project_root / "entities"):
+            fm = read_frontmatter(path)
+            if fm and fm.get("id") in unresolved:
+                live[str(fm["id"])] = str(fm.get("status", ""))
+        for entity_id in unresolved:
+            if entity_id not in live:
+                raise ArchiveError(f"allowlisted id not found: {entity_id}")
+            raise ArchiveError(
+                f"allowlisted id {entity_id} has status {live[entity_id]!r}, "
+                f"which is not in {sorted(statuses)}"
+            )
+    return [by_id[entity_id] for entity_id in sorted(ids)]
+
+
 def archive_entities(
     project_root: Path,
     *,
     statuses: frozenset[str] = DEFAULT_ARCHIVE_STATUSES,
+    ids: frozenset[str] | None = None,
     apply: bool = False,
     now: str | None = None,
 ) -> dict:
     """Report-then-apply relocation of hidden-status entities into the archive.
+
+    When `ids` is None the status sweep selects candidates (legacy behaviour).
+    When `ids` is provided it is AUTHORITATIVE: the operation acts on exactly
+    those ids and nothing else. `statuses` then degrades from a selector to a
+    guard -- an enumerated id whose status is outside `statuses` is an error,
+    not a silent skip, because a caller naming an id explicitly has asserted it
+    is archivable.
+
     Apply does move-first-then-append per entity, rolling the move back if the
     index append fails."""
     project_root = Path(project_root).resolve()
     rows = _candidate_rows(project_root, statuses)
+    if ids is not None:
+        rows = _scope_rows_to_allowlist(project_root, rows, ids, statuses)
     inbound = _inbound_live_refs(project_root, {r.id for r in rows})
     report: dict = {
         "candidates": [
