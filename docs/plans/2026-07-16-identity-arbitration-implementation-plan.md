@@ -21,6 +21,7 @@
 - read_merge_policy and read_overlay_merge_policy retain their current public return contracts. A fixes only the dataset-status crash instance through dataset/2.0.
 - mixin-dataset-1.0 remains byte-for-byte unchanged. Pinned dataset/1.0 profiles retain REPLACE semantics for status.
 - The science-commons migration is a separate commit in an isolated sibling-repo worktree because the main science-commons checkout is dirty.
+- Merge order is toolkit-first and non-negotiable: `mixin-dataset-2.0.json` ships only on this toolkit branch, so merging the commons migration (`fix/dataset-mixin-2`, migration `5c36831`, whose `MERGE-NOTES.md` records the same rule) before the toolkit lands makes all 41 migrated datasets reference a schema resource that consumers on a pre-2.0 toolkit pin cannot resolve, breaking their loads (exit 1, `schema resource 'mixin-dataset-2.0.json' not found`). Commons-first is prohibited; the ordered gate is Task 9.
 - Run toolkit commands from the nested science/ or science/model/ package, never the repository root.
 - Use ~/d/ paths in documentation and commands. Do not add compatibility layers, a Unified prefix, or AI-attribution trailers.
 
@@ -1160,3 +1161,55 @@ Invoke superpowers:requesting-code-review with:
 - Verification evidence from Steps 1–6
 
 The review must explicitly inspect permutation invariance, diagnostic duplicate-owner behavior, the absence of the side channel/five-field list, and the unchanged dataset/1.0 semantics.
+
+---
+
+### Task 9: Integrate toolkit-first, then repin, then merge commons
+
+**Why an ordered gate.** `mixin-dataset-2.0.json` exists only on this toolkit branch. The 41
+migrated `science-commons` datasets on `fix/dataset-mixin-2` reference it by name. A consumer
+resolves that schema resource from the toolkit revision its `uv.lock` pins, so any consumer still
+pinned to a pre-2.0 toolkit cannot resolve `mixin-dataset-2.0.json` and fails to load every
+migrated dataset (exit 1, `schema resource 'mixin-dataset-2.0.json' not found`). The only safe
+sequence therefore lands the toolkit first, repins consumers onto it, proves the federation on
+those pins, and merges commons last. This mirrors an expand → migrate → contract rollout: the new
+schema version must be resolvable everywhere before any data references it.
+
+**Files:**
+
+- No toolkit source changes. This task is release sequencing plus the commons merge notes.
+- Add the ordering constraint to the `science-commons` merge notes for `fix/dataset-mixin-2` so a
+  future operator merging that branch sees the toolkit-first requirement at the merge point, not
+  only here.
+
+- [ ] **Step 1: Merge the toolkit branch, including `mixin-dataset-2.0`**
+
+Land `fix/commons-overlay-bib-shadow` on toolkit `main`. `mixin-dataset-1.0.json` is retained, so
+consumers not yet repinned keep resolving their pinned 1.0 profiles unchanged.
+
+- [ ] **Step 2: Repin managed consumers that read current commons**
+
+Bump the toolkit pin in every managed consumer that resolves commons datasets (`meta`,
+`mechanisms/evolution`, `cancer-types/multiple-myeloma`, and any other consumer on a commons pin)
+to the merged toolkit revision, and `uv sync --frozen` each. Until a consumer is repinned it MUST
+NOT read the migrated commons.
+
+- [ ] **Step 3: Run the federation canaries against the repinned consumers**
+
+~~~bash
+# For each repinned consumer, against the MIGRATED commons:
+SCIENCE_COMMONS_ROOT=~/d/science-commons uv run --frozen science validate --verbose
+SCIENCE_COMMONS_ROOT=~/d/science-commons uv run --frozen science graph build --local-only
+~~~
+
+Expected: no `schema resource 'mixin-dataset-2.0.json' not found`, and the Task 8 Step 5
+denominator relation still holds (`pre <= now`, canary `(72, 95)`). A consumer that genuinely
+stands alone may instead build with `science graph build --no-commons`; that path never reads the
+migrated schema and is not a substitute for repinning a consumer that does consume commons.
+
+- [ ] **Step 4: Merge the commons migration last**
+
+Only after Steps 1–3 are green, merge `science-commons` `fix/dataset-mixin-2` (migration
+`5c36831`; branch tip `b77959a` adds `MERGE-NOTES.md` recording this dependency). Commons-first is
+prohibited (see Global Constraints). Delete `MERGE-NOTES.md` as part of the merge once the toolkit
+is landed and consumers are repinned.
