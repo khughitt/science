@@ -1852,7 +1852,11 @@ def shortform_for_kind(kind: str) -> str | None:
 
 def _load_markdown_entities(project_root: Path, kind: str | None = None) -> list[dict[str, Any]]:
     entities: list[dict[str, Any]] = []
-    for policy_kind, policy in entity_policies(project_root).items():
+    try:
+        policies = entity_policies(project_root)
+    except (ValidationError, ValueError) as exc:
+        raise EntityCommandError(f"Entity policy configuration is not valid:\n{exc}") from exc
+    for policy_kind, policy in policies.items():
         if kind is not None and policy_kind != kind:
             continue
         root = project_root / policy.root

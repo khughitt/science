@@ -187,6 +187,26 @@ def test_find_entity_missing_local_extension_reports_project_aware_roots(
     assert "entities/design" in str(exc_info.value)
 
 
+def test_find_entity_wraps_invalid_policy_config_as_entity_command_error(tmp_path: Path) -> None:
+    seed_project(tmp_path)
+    config_path = tmp_path / "science.yaml"
+    config = yaml.safe_load(config_path.read_text())
+    config["entity_schema_version"] = "2"
+    config_path.write_text(yaml.safe_dump(config), encoding="utf-8")
+    write_markdown_entity(
+        tmp_path,
+        "entities/hypotheses/0001.md",
+        {"id": "hypothesis:0001", "kind": "hypothesis", "title": "Pinned lookup"},
+    )
+
+    with pytest.raises(EntityCommandError) as exc_info:
+        find_entity(tmp_path, "hypothesis:0001")
+
+    message = str(exc_info.value)
+    assert message.startswith("Entity policy configuration is not valid")
+    assert "entity_schema_version must be 1 or 2 (an integer), not '2'" in message
+
+
 def test_build_entity_markdown_uses_canonical_frontmatter_and_body() -> None:
     text = build_entity_markdown(
         kind="question",
