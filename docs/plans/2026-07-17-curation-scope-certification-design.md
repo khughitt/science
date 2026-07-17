@@ -2,7 +2,9 @@
 
 **Status:** DESIGN — **v3**, 2026-07-17. Blocking precondition **CLEARED**: the
 §2.2 correspondence-drift sample ran and **demonstrated material drift**. §5 is
-**retained**, ready for an implementation plan.
+**retained**. The `correspondence` roster is **ratified** (§5 item 5: nine kinds;
+`talk`/`search` scoped `none`). Ready for implementation —
+[`2026-07-17-curation-scope-certification-plan.md`](2026-07-17-curation-scope-certification-plan.md).
 
 **Precondition cleared (was blocking).** The §5 ruling was conditional on the
 correspondence-drift sample of §2.2. That sample is now **run and recorded**
@@ -249,8 +251,8 @@ nothing, with two admitted verdict modes:
 | `curation_scope` | The review asks | Driven by | Kinds |
 |---|---|---|---|
 | `epistemic` | *Given new evidence, is this still my belief?* | `bears_on` propagation | the 21 `EPISTEMIC` kinds |
-| `correspondence` | *Does this record still correspond to reality — did it ship?* | code / task / deliverable probes | plan, spec, method, pre-registration, workflow, transformation, search, claim-registry, research-package, curation-sweep, talk |
-| `none` (default) | — nothing to review | — | paper, book, prose-source, article (immutable); workflow-run, experiment, code-file, data-package, dataset, workflow-step (execution records); task (own lifecycle); all `REFERENCE` kinds |
+| `correspondence` | *Does this record still correspond to reality — did it ship?* | code / task / deliverable probes | plan, spec, method, pre-registration, workflow, transformation, claim-registry, research-package, curation-sweep |
+| `none` (default) | — nothing to review | — | paper, book, prose-source, article, talk, search (records); workflow-run, experiment, code-file, data-package, dataset, workflow-step (execution records); task (own lifecycle); all `REFERENCE` kinds |
 
 A plan has no belief to reconsider, so `bears_on` freshness is meaningless for
 it. But it drifts from reality (§2.2), and that drift is invisible to every
@@ -272,12 +274,16 @@ Therefore:
    of scope until someone declares otherwise — inverting the deny-list polarity of
    §4.2. **Extension kinds are a separate case with a live regression risk — see
    §6.2.**
-5. **The `correspondence` roster above is a proposal, not a finding**, and §6.3
-   test 8 is what turns it into one. It is derived from the closed list's four
-   implicit groups (§4.1) and **must be ratified kind-by-kind and transcribed into
-   the spec before implementation begins** — an approved design must not leave its
-   central mapping open. `talk` and `search` are flagged uncertain: it is not
-   obvious either drifts in a way a probe can check. `pre-registration` is
+5. **The `correspondence` roster is RATIFIED (2026-07-17)** — nine kinds: `plan`
+   (measured, §2.2), `spec`, `method`, `pre-registration` (§5.1), `workflow`,
+   `transformation`, `claim-registry`, `research-package`, `curation-sweep`. Each
+   authors a claim about a deliverable a probe can check. It is derived from the
+   closed list's four implicit groups (§4.1); §6.3 test 8 asserts it exhaustively.
+   **`talk` and `search` were flagged uncertain and are scoped `none`** — neither
+   drifts in a way a deliverable probe can check (a talk is a record once given; a
+   search's results are a log, not a promised artifact), and admitting an
+   unprobeable kind is schema-level review-theater (§5.2). They may be admitted
+   later if a probe is defined (§8, the deferral pattern). `pre-registration` is
    confirmed `correspondence` (§5.1).
 
 **The name is the tell.** `EpistemicReviewState` bakes the conflation into the
