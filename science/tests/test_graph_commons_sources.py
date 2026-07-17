@@ -23,7 +23,8 @@ from science_tool.graph.commons_sources import (
     collect_referenced_commons_ids,
 )
 from science_tool.graph.entity_registry import EntityRegistry
-from science_tool.graph.identity_arbitration import EntityContribution
+from science_tool.graph.errors import ContributionConflictError
+from science_tool.graph.identity_arbitration import ArbitrationCode, EntityContribution
 from science_tool.graph.identity_table import ParticipationMode
 from science_tool.graph.sources import SourceRelation, load_project_sources
 
@@ -1002,4 +1003,136 @@ def test_bib_entry_does_not_suppress_overlay_pin_check(tmp_path: Path, monkeypat
     )
 
     with pytest.raises(OverlayValidationError):
+        load_project_sources(project_root)
+
+
+def _status_demo_project(
+    tmp_path: Path,
+    commons_root: Path,
+    *,
+    dataset_mixin: str,
+    canonical_status: str,
+    overlay_status: str,
+) -> Path:
+    """A commons dataset owner plus a project overlay proposing `status`.
+
+    Parameterized on the dataset mixin version because that is the whole question: the same
+    two files must merge under dataset/2.0 and refuse to merge under dataset/1.0.
+    """
+    entity_path = commons_root / "datasets" / "status-demo" / "entity.md"
+    entity_path.parent.mkdir(parents=True)
+    entity_path.write_text(
+        f"""---
+schema_profile: "science-entity-base/1.0+{dataset_mixin}"
+id: "dataset:status-demo"
+kind: "dataset"
+title: "Status demo dataset"
+version: "1.0.0"
+status: "{canonical_status}"
+created: "2026-07-16"
+updated: "2026-07-16"
+origin: "external"
+tier: "use-now"
+dataset_class: "pointer"
+access:
+  level: "public"
+  verified: true
+---
+
+# Status demo dataset
+
+A pointer dataset used to certify overlay status merging.
+""",
+        encoding="utf-8",
+    )
+    RegistryBuilder(commons_root, CommonsEntityAdapter(commons_root)).rebuild()
+
+    project_root = tmp_path / "project"
+    project_root.mkdir()
+    (project_root / "science.yaml").write_text("name: demo\nknowledge_profiles:\n  local: local\n", encoding="utf-8")
+    manifest_path = project_root / "knowledge" / "sources" / "local" / "manifest.yaml"
+    manifest_path.parent.mkdir(parents=True)
+    manifest_path.write_text("", encoding="utf-8")
+
+    overlay_path = project_root / "overlays" / "datasets" / "status-demo.md"
+    overlay_path.parent.mkdir(parents=True)
+    overlay_path.write_text(
+        f"""---
+id: "dataset:status-demo"
+overlay_of: "dataset:status-demo"
+status: "{overlay_status}"
+---
+
+## Project-Specific Notes
+
+This project uses the pointer.
+""",
+        encoding="utf-8",
+    )
+    return project_root
+
+
+def test_dataset_2_0_overlay_status_reaches_the_materialized_entity(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """dataset/2.0 declares status project_only, so the overlay's status is the graph's status.
+
+    End-to-end over the real loader: the model-level policy test proves what the schema says,
+    which is a different claim from whether a project overlay's status survives closure,
+    arbitration, and materialization to reach the entity a reader sees.
+    """
+    commons_root = _build_commons(tmp_path)
+    monkeypatch.setenv("SCIENCE_COMMONS_ROOT", str(commons_root))
+    monkeypatch.setenv("SCIENCE_COMMONS_QUIET_STALE", "1")
+    project_root = _status_demo_project(
+        tmp_path,
+        commons_root,
+        dataset_mixin="dataset/2.0",
+        canonical_status="canonical",
+        overlay_status="active",
+    )
+
+    sources = load_project_sources(project_root)
+
+    entity = next(e for e in sources.entities if e.canonical_id == "dataset:status-demo")
+    assert entity.status == "active"
+    assert sources.arbitration_errors == []
+
+
+def test_dataset_1_0_refuses_an_overlay_replacing_a_defended_status(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The versioning atomicity control: pinning 1.0 keeps 1.0's answer.
+
+    dataset/1.0 declares status `replace`, and the canonical owner has spoken, so the overlay
+    is a contest rather than a contribution. If this ever passes by merging, the 2.0 profile
+    is not a version -- it is a global behavior change that pinned entities cannot opt out of.
+    """
+    commons_root = _build_commons(tmp_path)
+    monkeypatch.setenv("SCIENCE_COMMONS_ROOT", str(commons_root))
+    monkeypatch.setenv("SCIENCE_COMMONS_QUIET_STALE", "1")
+    project_root = _status_demo_project(
+        tmp_path,
+        commons_root,
+        dataset_mixin="dataset/1.0",
+        canonical_status="canonical",
+        overlay_status="active",
+    )
+    overlay_path = project_root / "overlays" / "datasets" / "status-demo.md"
+
+    sources = load_project_sources(project_root, strict_identity=False)
+
+    conflicts = [
+        error
+        for error in sources.arbitration_errors
+        if error.code is ArbitrationCode.CONTRIBUTION_CONFLICT and error.field == "status"
+    ]
+    assert len(conflicts) == 1
+    assert conflicts[0].canonical_id == "dataset:status-demo"
+    assert [ref.path for ref in conflicts[0].contributors] == [str(overlay_path)]
+
+    entity = next(e for e in sources.entities if e.canonical_id == "dataset:status-demo")
+    assert entity.status == "canonical"
+
+    with pytest.raises(ContributionConflictError):
         load_project_sources(project_root)
