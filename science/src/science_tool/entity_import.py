@@ -32,6 +32,7 @@ from pathlib import Path, PurePosixPath
 from typing import Any
 
 from pydantic import BaseModel
+from pydantic import ValidationError as PydanticValidationError
 
 from science_tool.entities import (
     LOCAL_PART_WIDTH,
@@ -218,6 +219,22 @@ def plan_import(
         ref_report=ref_report,
         warnings=list(warnings),
     )
+
+
+def load_import_plan(path: Path) -> ImportPlan:
+    """Load a plan a previous preview wrote. The plan IS the approval.
+
+    This proves the file is well-TYPED, nothing more. It does NOT prove its path
+    or identity fields are safe -- a saved plan is an editable on-disk artifact, so
+    those are untrusted until `apply_import` runs `_validate_plan_for_apply`
+    (containment, canonical destination, identity coherence) before it mutates
+    anything. Nothing here re-derives the plan: apply also verifies the corpus
+    against it and refuses on any difference.
+    """
+    try:
+        return ImportPlan.model_validate_json(path.read_text(encoding="utf-8"))
+    except (OSError, PydanticValidationError) as exc:
+        raise EntityImportError(f"{path} is not a readable import plan: {exc}") from exc
 
 
 @dataclass(frozen=True)

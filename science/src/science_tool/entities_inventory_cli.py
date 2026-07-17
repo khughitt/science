@@ -264,3 +264,111 @@ def entities_register_kind_command(kind: str, entity_class: str, project_path: P
     except ValueError as exc:
         raise click.ClickException(str(exc)) from exc
     click.echo(f"{kind}: {result}")
+
+
+@entities_group.command("import")
+@click.argument("source", type=click.Path(exists=True, dir_okay=False, path_type=Path), required=False)
+@click.option("--kind", default=None, help="Entity kind to import as (e.g. plan). Required when previewing.")
+@click.option("--title", default=None, help="Entity title (default: the source's first level-1 heading).")
+@click.option("--status", default=None, help="Entity status (default: the kind's default status).")
+@click.option("--slug", default=None, help="Explicit slug (default: derived from the title).")
+@click.option(
+    "--project-root",
+    type=click.Path(exists=True, file_okay=False, path_type=Path),
+    default=Path("."),
+    help="Project root (default: current directory).",
+)
+@click.option(
+    "--save-plan",
+    type=click.Path(dir_okay=False, path_type=Path),
+    default=None,
+    help="Write the preview plan here, for a later --apply-plan. Refuses to overwrite.",
+)
+@click.option(
+    "--overwrite-plan",
+    is_flag=True,
+    default=False,
+    help="Allow --save-plan to replace an existing file (never the source).",
+)
+@click.option(
+    "--apply-plan",
+    "apply_plan_path",
+    type=click.Path(exists=True, dir_okay=False, path_type=Path),
+    default=None,
+    help="Apply a plan saved by an earlier preview. Mutually exclusive with SOURCE.",
+)
+def entities_import_command(
+    source: Path | None,
+    kind: str | None,
+    title: str | None,
+    status: str | None,
+    slug: str | None,
+    project_root: Path,
+    save_plan: Path | None,
+    overwrite_plan: bool,
+    apply_plan_path: Path | None,
+) -> None:
+    """Import a loose markdown document as a canonical entity.
+
+    Preview:  science entities import SRC --kind plan --save-plan p.json
+    Apply:    science entities import --apply-plan p.json
+
+    There is deliberately no --apply flag on the preview form. Re-deriving the
+    plan inside the applying invocation would mean the operator approves one
+    report and the command executes a different one -- silently, when anything
+    claimed the previewed number in between.
+    """
+    from science_tool.entities import EntityCommandError
+    from science_tool.entity_import import (
+        EntityImportError,
+        apply_import,
+        load_import_plan,
+        plan_import,
+    )
+    from science_tool.reference_rewrite import ReferenceDriftError
+
+    if apply_plan_path is not None:
+        if source is not None or kind is not None:
+            raise click.UsageError("--apply-plan takes the saved plan only; do not repeat SOURCE or --kind.")
+        # Exclude the plan artifact from the apply-time corpus scan: it lives in
+        # the corpus, `.json` is scannable, and its body repeats the moving source
+        # path, so an unexcluded plan drifts against itself and every replay fails.
+        exclude = frozenset({apply_plan_path.resolve()})
+        try:
+            plan = load_import_plan(apply_plan_path)
+            payload = {**plan.model_dump(), "applied": apply_import(project_root, plan, exclude=exclude)}
+        except (EntityImportError, EntityCommandError, ReferenceDriftError) as exc:
+            raise click.ClickException(str(exc)) from exc
+        emit(output_format="json", payload=payload, render_text=lambda: None)
+        return
+
+    if source is None or kind is None:
+        raise click.UsageError("SOURCE and --kind are required unless --apply-plan is given.")
+    # --save-plan must never clobber. `--save-plan doc/plans/x.md` (a typo for the
+    # source, or any real repo file) would otherwise destroy that file during what
+    # the command presents as a read-only preview. Refuse the source outright, and
+    # refuse any existing file unless --overwrite-plan is explicit.
+    if save_plan is not None and save_plan.resolve() == source.resolve():
+        raise click.UsageError("--save-plan would overwrite the source document; choose another path")
+    # A stale plan file already sitting at --save-plan would otherwise be scanned
+    # as a referrer during the preview; exclude the target we are about to write.
+    preview_exclude = frozenset({save_plan.resolve()}) if save_plan is not None else frozenset()
+    try:
+        plan = plan_import(
+            project_root, source, kind=kind, title=title, status=status, slug=slug,
+            exclude=preview_exclude,
+        )
+    except (EntityImportError, EntityCommandError) as exc:
+        raise click.ClickException(str(exc)) from exc
+    if save_plan is not None:
+        payload_json = plan.model_dump_json(indent=2)
+        try:
+            with save_plan.open("x", encoding="utf-8") as fh:  # exclusive create
+                fh.write(payload_json)
+        except FileExistsError:
+            if not overwrite_plan:
+                raise click.UsageError(
+                    f"--save-plan target {save_plan} exists; pass --overwrite-plan to replace it"
+                ) from None
+            save_plan.write_text(payload_json, encoding="utf-8")
+    emit(output_format="json", payload=plan.model_dump(), render_text=lambda: None)
