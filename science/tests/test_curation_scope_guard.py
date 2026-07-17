@@ -82,16 +82,40 @@ def _curation_scope_names(tree: ast.AST):
     return names
 
 
-def _is_scope_default_reference(node: ast.AST, scope_names: set[str]):
-    if not isinstance(node, ast.Attribute) or node.attr not in {
-        "NONE",
-        "CORRESPONDENCE",
-    }:
-        return False
-    qualifier = node.value
+def _is_curation_scope_type(node: ast.AST, scope_names: set[str]):
     return (
-        isinstance(qualifier, ast.Name) and qualifier.id in scope_names
-    ) or (isinstance(qualifier, ast.Attribute) and qualifier.attr == "CurationScope")
+        isinstance(node, ast.Name) and node.id in scope_names
+    ) or (isinstance(node, ast.Attribute) and node.attr == "CurationScope")
+
+
+def _is_scope_default_reference(node: ast.AST, scope_names: set[str]):
+    if (
+        isinstance(node, ast.Attribute)
+        and node.attr in {"NONE", "CORRESPONDENCE"}
+        and _is_curation_scope_type(node.value, scope_names)
+    ):
+        return True
+    if (
+        isinstance(node, ast.Call)
+        and _is_curation_scope_type(node.func, scope_names)
+        and len(node.args) == 1
+        and not node.keywords
+    ):
+        value = node.args[0]
+        return isinstance(value, ast.Constant) and value.value in {
+            "none",
+            "correspondence",
+        }
+    if isinstance(node, ast.Subscript) and _is_curation_scope_type(
+        node.value,
+        scope_names,
+    ):
+        member = node.slice
+        return isinstance(member, ast.Constant) and member.value in {
+            "NONE",
+            "CORRESPONDENCE",
+        }
+    return False
 
 
 def _contains_scope_default_value(
@@ -269,6 +293,60 @@ def test_scope_default_detector_rejects_defaults_but_permits_comparisons():
     assert _scope_default_offense_lines(async_parameter_default)
     assert _scope_default_offense_lines(lambda_parameter_default)
     assert _scope_default_offense_lines(lambda_keyword_only_parameter_default)
+    assert not _scope_default_offense_lines(comparison)
+    assert not _scope_default_offense_lines(declaration)
+
+
+def test_scope_default_detector_catches_fixed_enum_construction_and_subscription():
+    literal_call = ast.parse(
+        "def decide():\n"
+        "    return CurationScope('none')"
+    )
+    aliased_literal_call = ast.parse(
+        "from science_model.identity import CurationScope as Scope\n"
+        "def decide():\n"
+        "    return Scope('correspondence')"
+    )
+    member_subscription = ast.parse(
+        "def decide():\n"
+        "    return CurationScope['NONE']"
+    )
+    aliased_member_subscription = ast.parse(
+        "from science_model.identity import CurationScope as Scope\n"
+        "def decide():\n"
+        "    return Scope['CORRESPONDENCE']"
+    )
+    parameter_default = ast.parse(
+        "def decide(scope=CurationScope('none')):\n"
+        "    return scope"
+    )
+    lambda_keyword_default = ast.parse(
+        "(lambda *, scope=CurationScope['CORRESPONDENCE']: scope)"
+    )
+    dynamic_call = ast.parse(
+        "def parse(value):\n"
+        "    return CurationScope(value)"
+    )
+    dynamic_subscription = ast.parse(
+        "def parse(name):\n"
+        "    return CurationScope[name]"
+    )
+    comparison = ast.parse(
+        "def consume(scope):\n"
+        "    return scope == CurationScope('none')"
+    )
+    declaration = ast.parse(
+        "PROFILE = EntityKind(curation_scope=CurationScope('correspondence'))"
+    )
+
+    assert _scope_default_offense_lines(literal_call)
+    assert _scope_default_offense_lines(aliased_literal_call)
+    assert _scope_default_offense_lines(member_subscription)
+    assert _scope_default_offense_lines(aliased_member_subscription)
+    assert _scope_default_offense_lines(parameter_default)
+    assert _scope_default_offense_lines(lambda_keyword_default)
+    assert not _scope_default_offense_lines(dynamic_call)
+    assert not _scope_default_offense_lines(dynamic_subscription)
     assert not _scope_default_offense_lines(comparison)
     assert not _scope_default_offense_lines(declaration)
 
