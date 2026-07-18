@@ -166,6 +166,7 @@ def test_fabricated_task_ref_does_not_anchor(tmp_path):
                 frontmatter="kind: interpretation\nsource_refs:\n  - task:t999")
     ctx = build_document_context(path)
     cands = entity_source_candidates(ctx, idx, _CFG)
+    assert any(c.reference == "task:t999" for c in cands)   # candidate present, not silently dropped
     assert all(c.resolution_status == "unresolved" for c in cands)   # finding 5
 
 
@@ -176,8 +177,9 @@ def test_interpretation_artifact_existence_checked(tmp_path):
         build_document_context(good), idx, _CFG))
     bad = tmp_path / "bad.md"
     bad.write_text("---\nkind: interpretation\nartifact: results/invented.json\n---\nValue 7.94.\n")
-    assert all(c.resolution_status == "unresolved" for c in entity_source_candidates(
-        build_document_context(bad), idx, _CFG))
+    bad_cands = entity_source_candidates(build_document_context(bad), idx, _CFG)
+    assert any(c.reference == "results/invented.json" for c in bad_cands)   # candidate present, not silently dropped
+    assert all(c.resolution_status == "unresolved" for c in bad_cands)
 
 
 def test_related_is_excluded(tmp_path):
