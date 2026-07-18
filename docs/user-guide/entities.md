@@ -55,6 +55,11 @@ carry a `type` projection internally, but catalog, profile, and
 project-extension kinds load as open-ended strings rather than being forced
 through a closed enum or an `unknown` fallback. Kind matching is exact.
 
+<figure markdown="span">
+--8<-- "figures/f8-entity-anatomy.svg"
+<figcaption>An entity file: <code>kind:id</code>, machine-readable frontmatter, human-readable body.</figcaption>
+</figure>
+
 ## Authored And Derived Fields
 
 Authored fields are recorded directly in source files. Derived fields are
