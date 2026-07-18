@@ -14,11 +14,27 @@
     var overlay = document.createElement("div");
     overlay.className = "sci-lightbox";
 
+    var card = document.createElement("div");
+    card.className = "sci-lightbox-card";
+
     var clone = svg.cloneNode(true);
     clone.classList.remove("sci-zoomable");
     clone.removeAttribute("tabindex");
+    clone.removeAttribute("role");
     clone.style.cursor = "";
-    overlay.appendChild(clone);
+    card.appendChild(clone);
+
+    // Carry the figure's caption into the modal, below the figure. Deep-clone
+    // the node (preserving inline <code> etc.) rather than copying innerHTML.
+    var figure = svg.closest("figure");
+    var caption = figure ? figure.querySelector("figcaption") : null;
+    if (caption) {
+      var captionClone = caption.cloneNode(true);
+      captionClone.className = "sci-lightbox-caption";
+      card.appendChild(captionClone);
+    }
+
+    overlay.appendChild(card);
     document.body.appendChild(overlay);
 
     function close() {

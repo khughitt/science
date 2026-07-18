@@ -100,11 +100,41 @@
   transition: opacity 0.18s ease;
 }
 .sci-lightbox.is-open { opacity: 1; }
-.sci-lightbox svg.sci-figure {
-  width: min(95vw, 1400px);
-  height: auto;
+
+/* Solid card so the transparent SVG never shows the dimmed page through it; the
+   surface tracks the active scheme via Material's own background/foreground
+   tokens, so it is correct in both light and dark. */
+.sci-lightbox-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.85rem;
   max-width: 95vw;
   max-height: 92vh;
+  padding: clamp(0.85rem, 2vw, 1.6rem);
+  background: var(--md-default-bg-color, #ffffff);
+  border-radius: 10px;
+  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.55);
+  overflow: auto;
+}
+.sci-lightbox-card svg.sci-figure {
+  width: min(92vw, 1300px);
+  height: auto;
+  max-width: 100%;
+  max-height: 80vh;
   margin: 0;
-  filter: drop-shadow(0 10px 40px rgba(0, 0, 0, 0.55));
+}
+/* The portrait figure fits to height instead, so its card hugs it. */
+.sci-lightbox-card svg.sci-figure-tall {
+  width: auto;
+  height: min(80vh, 860px);
+  max-width: 92vw;
+}
+.sci-lightbox-caption {
+  max-width: 62ch;
+  margin: 0;
+  text-align: center;
+  font-size: 0.82rem;
+  line-height: 1.45;
+  color: var(--md-default-fg-color--light, var(--sci-fig-muted));
 }
