@@ -41,10 +41,13 @@ already `superseded` but whose inverse is missing or stale is *repaired*, not sk
 
 from __future__ import annotations
 
+import hashlib
 from dataclasses import dataclass
 from pathlib import Path
 from types import MappingProxyType
 from typing import TYPE_CHECKING, Any, Mapping
+
+from pydantic import BaseModel, ConfigDict
 
 from science_tool.big_picture.frontmatter import read_frontmatter
 from science_tool.entities import _commit_write, _PreparedWrite, _STATUS_VALUES
@@ -488,6 +491,136 @@ def build_supersedes_graph(inputs: SupersessionInputs) -> SupersedesGraph:
         unmanaged_targets=tuple(unmanaged_targets),
         unbacked_inverses=tuple(unbacked_inverses),
     )
+
+
+# ---------------------------------------------------------------------------------------------
+# decision material — the classifier's INPUT projections, frozen for a Gate A drift digest
+# ---------------------------------------------------------------------------------------------
+
+_MATERIAL_VERSION = 1
+
+
+class EntryProjection(BaseModel):
+    """One entity's decision-relevant frontmatter: identity, status, kind, and the authored
+    `superseded_by` inverse, both as-written and canonicalized."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    eid: str
+    status: str | None
+    kind: str
+    superseded_by_raw: str | None
+    superseded_by_canonical: str | None
+
+
+class EdgeProjection(BaseModel):
+    """One ADMITTED `sci:supersedes` relation. Duplicates are NOT collapsed: the admitted stream
+    is a list here, on purpose — collapsing it to a set is the exact degree-miscount bug
+    `build_supersedes_graph` warns about for its own `edges` set."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    src: str
+    dst: str | None
+    source_path: str
+
+
+class DefectProjection(BaseModel):
+    """One relation the audit refused — the full `RelationDefect` record, not a summary."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    code: str
+    path: str
+    subject: str
+    predicate: str
+    object: str
+    message: str
+
+
+class SupersessionDecisionMaterial(BaseModel):
+    """Everything `build_supersedes_graph` reads off `SupersessionInputs`, frozen BEFORE any
+    graph exists. A digest over this reproduces the whole derivation — `superseded_by_id`,
+    `unbacked_inverses`, `archived_targets`, `unmanaged_targets` all fall out of these same
+    fields — not just the handful a graph-OUTPUT serialization would happen to keep.
+
+    Every list is sorted for a deterministic digest, EXCEPT that sorting `admitted_supersedes`
+    and `defects` never collapses a duplicate: sort is a total order over the projected tuples,
+    not a dedup.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    material_version: int
+    entries: list[EntryProjection]
+    admitted_supersedes: list[EdgeProjection]
+    defects: list[DefectProjection]
+    mutable_population: list[str]
+    archived_population: list[str]
+    supported_kinds: list[str]  # the frozen auto-apply policy the classifier reads (I4)
+
+
+def _project_inputs(inputs: SupersessionInputs) -> SupersessionDecisionMaterial:
+    """Serialize exactly what `build_supersedes_graph` reads off `SupersessionInputs`, resolving
+    the two things the classifier needs the resolver for (each entry's canonical id and each
+    authored `superseded_by`'s canonical) so the classifier can run without a resolver. Sorted for
+    a deterministic digest; admitted relations and defects keep duplicates."""
+    resolution = inputs.resolution
+    entries: list[EntryProjection] = []
+    for _path, fm in inputs.entries:
+        eid = resolution.canonical(str(fm["id"])) or str(fm["id"])
+        raw_inverse = fm.get("superseded_by")
+        raw = raw_inverse if isinstance(raw_inverse, str) and raw_inverse else None
+        entries.append(
+            EntryProjection(
+                eid=eid,
+                status=fm.get("status"),
+                kind=_kind_of(eid, fm),
+                superseded_by_raw=raw,
+                superseded_by_canonical=(resolution.canonical(raw) if raw else None),
+            )
+        )
+    edges = [
+        EdgeProjection(
+            src=admitted_relation.subject.canonical_id,
+            dst=admitted_relation.object_canonical_id,
+            source_path=admitted_relation.relation.source_path,
+        )
+        for admitted_relation in inputs.audit.relations(_SUPERSEDES)
+    ]
+    defects = [
+        DefectProjection(
+            code=d.code, path=d.path, subject=d.subject, predicate=d.predicate,
+            object=d.object, message=d.message,
+        )
+        for d in inputs.audit.defects
+    ]
+    return SupersessionDecisionMaterial(
+        material_version=_MATERIAL_VERSION,
+        entries=sorted(entries, key=lambda e: e.eid),
+        admitted_supersedes=sorted(edges, key=lambda e: (e.src, e.dst or "", e.source_path)),
+        defects=sorted(
+            defects, key=lambda d: (d.code, d.subject, d.predicate, d.object, d.path, d.message)
+        ),
+        mutable_population=sorted(resolution.mutable),
+        archived_population=sorted(resolution.archived),
+        # The auto-apply supported-kind policy IS a decision input (design §5.2): serialize it so
+        # the digest covers it. `_supports_superseded(k)` is `_SUPERSEDED in _STATUS_VALUES.get(k,
+        # ...)`, so the supported set is exactly the kinds whose status vocab admits `superseded`.
+        supported_kinds=sorted(k for k, v in _STATUS_VALUES.items() if _SUPERSEDED in v),
+    )
+
+
+def build_decision_material(project_root: Path) -> SupersessionDecisionMaterial:
+    """The classifier's frozen INPUT — never the graph's output. Never calls
+    `build_supersedes_graph`: that would invert input and output, and defeat the whole point of a
+    digest that has to reproduce the derivation independently of it."""
+    return _project_inputs(load_supersession_inputs(project_root))
+
+
+def decision_digest(material: SupersessionDecisionMaterial) -> str:
+    """A stable digest over the full decision material — Gate A's apply-time drift check."""
+    return hashlib.sha256(material.model_dump_json().encode("utf-8")).hexdigest()
 
 
 # ---------------------------------------------------------------------------------------------
