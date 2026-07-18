@@ -242,8 +242,10 @@ class ResolutionIndex:
 _HARDWARE_PREFIX_RE = re.compile(
     r"(?:RTX|GTX|GPU|CPU|NovaSeq|HiSeq|NextSeq|MiSeq|Tesla|A100|H100|V100)[\s:-]*$", re.IGNORECASE
 )
-_ACCESSION_PREFIX_RE = re.compile(r"\bGCST\d+\b")
-_LICENSE_RE = re.compile(r"\b(?:CC-BY|CC-BY-SA|CC0|GPL|MIT|Apache)-?\d")
+_ACCESSION_PREFIX_ADJ_RE = re.compile(r"(?:GCST|GWAS)[-\s]?$")
+_LICENSE_PREFIX_ADJ_RE = re.compile(
+    r"(?:CC-BY(?:-SA)?|CC-BY-NC|CC0|GPL|LGPL|MIT|Apache|BSD)-?$", re.IGNORECASE
+)
 _FILE_SIZE_CONTEXT_RE = re.compile(
     r"^\s*(?:[KMGT]i?B)\s+(?:download|file|upload|payload|archive|dump)\b", re.IGNORECASE
 )
@@ -257,10 +259,12 @@ def classify_structural(value: str, line: str, col: int) -> str | None:
     dimensions / file sizes are context-gated, never blanket-masked, so a
     factual size like "3.2 Gb genome" stays a claim.
 
-    Both hardware-id and file-size require ADJACENCY to their trigger word —
-    a number merely sharing a sentence with "GPU" or "file" is not enough,
-    since that over-masks genuine numeric claims (e.g. "the GPU processed
-    4096 samples", "3.2 Gb genome file was archived").
+    Hardware-id, accession, license-version, and file-size all require
+    ADJACENCY to their trigger word — a number merely sharing a sentence
+    with "GPU", "GCST", "CC-BY", or "file" is not enough, since that
+    over-masks genuine numeric claims (e.g. "the GPU processed 4096
+    samples", "GCST90441 lists 500 associated loci", "3.2 Gb genome file
+    was archived").
     """
     start = col - 1
     end = start + len(value)
@@ -268,10 +272,9 @@ def classify_structural(value: str, line: str, col: int) -> str | None:
     suffix = line[end : min(len(line), end + 24)]
     if _HARDWARE_PREFIX_RE.search(prefix):
         return "hardware-id"
-    window = line[max(0, start - 24) : min(len(line), end + 24)]
-    if _ACCESSION_PREFIX_RE.search(window):
+    if _ACCESSION_PREFIX_ADJ_RE.search(prefix):
         return "accession"
-    if _LICENSE_RE.search(window):
+    if _LICENSE_PREFIX_ADJ_RE.search(prefix):
         return "license-version"
     if _FILE_SIZE_CONTEXT_RE.search(suffix):
         return "file-size"

@@ -117,6 +117,20 @@ def test_structural_does_not_overmask_claims_near_structural_tokens():
     ) is None
 
 
+def test_structural_accession_and_license_require_adjacency():
+    # a real count near an accession token must NOT be masked
+    s1 = "GCST90441 lists 500 associated loci for this trait"
+    assert classify_structural("500", s1, s1.find("500") + 1) is None
+    # the accession's own adjacent digits ARE masked
+    s2 = "association GCST90084 was used"
+    assert classify_structural("90084", s2, s2.find("90084") + 1) == "accession"
+    # a number merely near a license token (not adjacent) is NOT masked
+    s3 = "the CC-BY-4.0 corpus contained 512 records"
+    assert classify_structural("512", s3, s3.find("512") + 1) is None
+    # the license version adjacent to the prefix IS masked
+    assert classify_structural("4.0", s3, s3.find("4.0") + 1) == "license-version"
+
+
 def test_document_marker_covers_whole_body(tmp_path):
     path = _doc(tmp_path, "The alpha is 0.05 and power 0.8.\n", frontmatter="kind: plan\nstipulated: true")
     ctx = build_document_context(path)
