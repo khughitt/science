@@ -35,6 +35,9 @@ theme:
 extra_css:
   - assets/palette.css
 
+extra_javascript:
+  - assets/lightbox.js
+
 markdown_extensions:
   - admonition
   - attr_list

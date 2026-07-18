@@ -50,10 +50,15 @@
   --sci-fig-muted: #94A3B8;
 }
 
-/* Imported SVGs inherit these because snippets injects the SVG into the DOM. */
-.sci-figure { max-width: 100%; height: auto; display: block; margin: 1rem auto; }
+/* Imported SVGs inherit these because snippets injects the SVG into the DOM.
+   Figures fill the content column (they are vector, so scaling up is lossless);
+   the lone portrait figure is capped so it does not tower over the others. */
+.sci-figure { width: 100%; height: auto; display: block; margin: 1.25rem auto; }
+.sci-figure-tall { max-width: 480px; }
 .sci-figure text { fill: var(--sci-fig-text); font-family: var(--md-text-font-family, sans-serif); }
 .sci-figure .muted { fill: var(--sci-fig-muted); }
+/* Click-to-zoom affordance; the handler is wired by assets/lightbox.js. */
+.sci-zoomable { cursor: zoom-in; }
 
 .sci-epistemic   { fill: var(--sci-epistemic-fill);   stroke: var(--sci-epistemic-stroke);   stroke-width: 2; }
 .sci-proposition { fill: var(--sci-epistemic-fill);   stroke: var(--sci-epistemic-stroke);   stroke-width: 3.5; }
@@ -77,3 +82,29 @@
 /* Inverse label for dark rung fills (belief rung 4 in both schemes; the
    darkened dark-scheme rungs clear AA with white). Out-specifies `.sci-figure text`. */
 .sci-figure .sci-belief-text-inverse { fill: #FFFFFF; }
+
+/* Full-screen figure lightbox. assets/lightbox.js clones the clicked figure
+   into this overlay; the clone keeps `.sci-figure`, so it inherits the scheme's
+   custom properties from the body and stays theme-correct in the overlay too. */
+.sci-lightbox {
+  position: fixed;
+  inset: 0;
+  z-index: 2000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 2.5vmin;
+  background: rgba(15, 23, 42, 0.86);
+  cursor: zoom-out;
+  opacity: 0;
+  transition: opacity 0.18s ease;
+}
+.sci-lightbox.is-open { opacity: 1; }
+.sci-lightbox svg.sci-figure {
+  width: min(95vw, 1400px);
+  height: auto;
+  max-width: 95vw;
+  max-height: 92vh;
+  margin: 0;
+  filter: drop-shadow(0 10px 40px rgba(0, 0, 0, 0.55));
+}
