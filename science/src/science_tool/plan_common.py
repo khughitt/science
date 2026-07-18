@@ -4,6 +4,7 @@ import hashlib
 import hmac
 import os
 import stat
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Annotated, Callable, Literal
 
@@ -257,3 +258,130 @@ def classify_staging(staging: Path, postimage: str) -> Literal["absent", "prefix
     if want.startswith(data):
         return "prefix"
     raise StagingError(f"staging survivor is not a prefix of the postimage: {staging}")
+
+
+class RollbackHalt(RuntimeError):
+    pass
+
+
+class PathEscape(RuntimeError):
+    pass
+
+
+class SurfaceMismatch(RuntimeError):
+    pass
+
+
+@dataclass(frozen=True)
+class PathSnapshot:
+    fp: StateFingerprint
+    content: bytes | None  # regular-file bytes only; None for absent/dir/symlink
+
+
+def snapshot_paths(paths: list[Path]) -> dict[Path, PathSnapshot]:
+    """Capture COMPLETE pre-state: existence, type, mode, symlink target, and (for regular
+    files) the bytes. `bytes | None` alone conflated absent with directory and dropped mode
+    and symlink identity, so rollback could not faithfully reconstruct the tree."""
+    snap: dict[Path, PathSnapshot] = {}
+    for p in paths:
+        fp = fingerprint(p)
+        content = p.read_bytes() if fp.existed and fp.type == "file" else None
+        snap[p] = PathSnapshot(fp=fp, content=content)
+    return snap
+
+
+def _remove_live(path: Path) -> None:
+    try:
+        st = os.lstat(path)
+    except FileNotFoundError:
+        return
+    if stat.S_ISDIR(st.st_mode):
+        os.rmdir(path)  # created dirs are empty by the time we reverse-process them
+    else:
+        os.unlink(path)
+
+
+def _materialize(path: Path, snap: PathSnapshot) -> None:
+    _remove_live(path)
+    fp = snap.fp
+    if not fp.existed:
+        return
+    if fp.type == "file":
+        assert fp.mode is not None  # a present file fingerprint always carries its exact mode
+        fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, fp.mode)
+        with os.fdopen(fd, "wb") as fh:
+            fh.write(snap.content or b"")
+            fh.flush()
+            os.fchmod(fh.fileno(), fp.mode)  # exact bits, incl. 0o000 — an `or 0o644` fallback corrupts mode 0
+            os.fsync(fh.fileno())
+    elif fp.type == "dir":
+        assert fp.mode is not None  # a present dir fingerprint always carries its exact mode
+        path.mkdir(parents=False, exist_ok=True)
+        os.chmod(path, fp.mode)  # exact bits, incl. 0o000 — no `or 0o755` fallback
+    else:  # symlink
+        os.symlink(fp.symlink_target, path)
+
+
+def rollback_transitions(
+    transitions: list[PathTransition], project_root: Path, snapshot: dict[Path, PathSnapshot]
+) -> None:
+    for t in reversed(transitions):  # dirs removed only after their moved-in contents revert
+        path = resolve_within(project_root, t.rel_path)
+        if matches(t.pre, path):
+            continue  # never got written, or already reverted
+        if not matches(t.post, path):
+            raise RollbackHalt(
+                f"live state of {t.rel_path} matches neither pre nor post; "
+                "a concurrent change occurred — refusing to clobber"
+            )
+        snap = snapshot.get(path)
+        if snap is None:
+            # No captured pre-state for a path we are asked to revert -> reconstructing from `pre`
+            # alone would write an EMPTY file when bytes are unavailable. That is data loss, so halt.
+            raise RollbackHalt(f"no snapshot captured for {t.rel_path}; refusing to reconstruct")
+        _materialize(path, snap)
+
+
+def resolve_within(project_root: Path, rel_path: str) -> Path:
+    """Resolve rel_path under project_root, refusing absolute paths, `..` escape, non-canonical
+    spellings, AND symlink-ancestor escape. Called for EVERY declared path before filesystem
+    access. Lexical checks alone are not enough: if `entities/` were a symlink pointing outside
+    the project, a lexically-clean `entities/x.md` would still write out of the corpus — so we
+    `.resolve()` the candidate (following symlinks in the existing ancestor chain) and confirm the
+    physical target is contained, exactly as the import boundary does (`entity_import.py:486`)."""
+    if (
+        rel_path == ""
+        or Path(rel_path).is_absolute()
+        or rel_path != os.path.normpath(rel_path)
+        or rel_path.split("/", 1)[0] == ".."
+    ):
+        raise PathEscape(f"non-canonical or escaping rel_path: {rel_path!r}")
+    root = project_root.resolve()
+    candidate = (root / rel_path).resolve()  # follows symlinks in the existing prefix
+    if candidate != root and not candidate.is_relative_to(root):
+        raise PathEscape(f"rel_path escapes project root (symlink or traversal): {rel_path!r}")
+    return candidate
+
+
+def _surface_key(t: PathTransition) -> tuple[str, str, str, str, str | None]:
+    return (t.role, t.rel_path, t.pre.model_dump_json(), t.post.model_dump_json(), t.postimage)
+
+
+def assert_same_surface(
+    declared: list[PathTransition], expected: list[PathTransition]
+) -> None:
+    if sorted(map(_surface_key, declared)) != sorted(map(_surface_key, expected)):
+        raise SurfaceMismatch(
+            "declared transition surface differs from the freshly derived surface"
+        )
+
+
+def assert_staging_unique(project_root: Path, staged_targets: list[Path], token: str) -> None:
+    root = project_root.resolve()
+    staging = [staging_path_for(t, token) for t in staged_targets]
+    if len(set(staging)) != len(staging):
+        raise StagingError("staging path collision among staged writes")
+    for s in staging:
+        normalized = Path(os.path.normpath(s))
+        if root not in normalized.parents:
+            raise StagingError(f"staging path escapes project root: {s}")

@@ -12,6 +12,8 @@ from science_tool.plan_common import (
     ArchiveStatusSweep, ExplicitArchiveIds, AllSupersessionMembers, ExplicitSupersessionIds,
     PathTransition, EnvelopeError, plan_sha256, read_plan_bytes, verify_envelope,
     StagingError, classify_staging, staged_write, staging_path_for,
+    PathEscape, RollbackHalt, SurfaceMismatch, assert_same_surface, assert_staging_unique,
+    resolve_within, rollback_transitions, snapshot_paths,
 )
 
 
@@ -274,3 +276,133 @@ def test_staged_write_halts_when_target_changed_concurrently(tmp_path: Path, mon
         staged_write(target, "hello", 0o644, token="b", target_pre=target_pre)
     assert staging_path_for(target, "b").exists()                  # survivor preserved as evidence
     assert target.read_text(encoding="utf-8") == "CONCURRENT-EDIT-BY-SOMEONE-ELSE"  # target left as-found
+
+
+def test_rollback_reverts_a_completed_write_to_pre(tmp_path: Path) -> None:
+    (tmp_path / "science.yaml").write_text("name: t\n", encoding="utf-8")
+    target = tmp_path / "e.md"
+    target.write_text("OLD", encoding="utf-8")
+    pre = fingerprint(target)
+    snap = snapshot_paths([target])
+    target.write_text("NEW", encoding="utf-8")  # simulate the write landed
+    post = fingerprint(target)
+    t = PathTransition(role="entity-rewrite", rel_path="e.md", pre=pre, post=post, postimage="NEW")
+    rollback_transitions([t], tmp_path, snap)
+    assert target.read_text(encoding="utf-8") == "OLD"
+
+
+def test_rollback_preserves_non_default_file_mode(tmp_path: Path) -> None:
+    target = tmp_path / "e.md"
+    target.write_text("OLD", encoding="utf-8")
+    os.chmod(target, 0o640)
+    pre = fingerprint(target)
+    snap = snapshot_paths([target])
+    target.write_text("NEW", encoding="utf-8")
+    os.chmod(target, 0o644)
+    post = fingerprint(target)
+    t = PathTransition(role="entity-rewrite", rel_path="e.md", pre=pre, post=post, postimage="NEW")
+    rollback_transitions([t], tmp_path, snap)
+    assert (os.stat(target).st_mode & 0o777) == 0o640  # exact mode restored
+
+
+def test_rollback_restores_symlink_not_a_regular_file(tmp_path: Path) -> None:
+    link = tmp_path / "l"
+    link.symlink_to("t.txt")
+    pre = fingerprint(link)
+    snap = snapshot_paths([link])
+    link.unlink()
+    link.write_text("clobbered-as-file", encoding="utf-8")  # simulate a bad landing
+    post = fingerprint(link)
+    t = PathTransition(role="entity-rewrite", rel_path="l", pre=pre, post=post,
+                       postimage="clobbered-as-file")
+    rollback_transitions([t], tmp_path, snap)
+    assert link.is_symlink()
+    assert os.readlink(link) == "t.txt"
+
+
+def test_rollback_removes_nested_created_dirs_bottom_up(tmp_path: Path) -> None:
+    # archive-dst moved a file into a freshly created nested dir; rollback removes both.
+    created_outer = tmp_path / "entities" / "_archive"
+    created_inner = created_outer / "interpretations"
+    moved = created_inner / "x.md"
+    absent = StateFingerprint(existed=False, type=None, content_sha256=None, mode=None, symlink_target=None)
+    dir_fp = StateFingerprint(existed=True, type="dir", content_sha256=None, mode=0o755, symlink_target=None)
+    # Snapshot BEFORE anything lands, so the snapshot records all three paths ABSENT (== pre).
+    snap = snapshot_paths([created_outer, created_inner, moved])
+    # Now simulate the landed state: both dirs created, file moved in.
+    created_inner.mkdir(parents=True)
+    os.chmod(created_inner, 0o755)
+    os.chmod(created_outer, 0o755)
+    moved.write_text("X", encoding="utf-8")
+    dst = PathTransition(role="archive-dst", rel_path="entities/_archive/interpretations/x.md",
+                         pre=absent, post=fingerprint(moved))
+    outer = PathTransition(role="created-dir", rel_path="entities/_archive", pre=absent, post=dir_fp)
+    inner = PathTransition(role="created-dir", rel_path="entities/_archive/interpretations",
+                           pre=absent, post=dir_fp)
+    # declared order is outer, inner, dst; rollback must process dst -> inner -> outer.
+    rollback_transitions([outer, inner, dst], tmp_path, snap)
+    assert not moved.exists()
+    assert not created_inner.exists()
+    assert not created_outer.exists()
+
+
+def test_rollback_halts_when_a_transition_path_has_no_snapshot(tmp_path: Path) -> None:
+    # A missing snapshot entry is a defect, not an empty-file reconstruction opportunity.
+    target = tmp_path / "e.md"
+    target.write_text("NEW", encoding="utf-8")
+    pre = StateFingerprint(existed=True, type="file",
+                           content_sha256=_hashlib.sha256(b"OLD").hexdigest(), mode=0o644, symlink_target=None)
+    post = fingerprint(target)
+    t = PathTransition(role="entity-rewrite", rel_path="e.md", pre=pre, post=post, postimage="NEW")
+    with pytest.raises(RollbackHalt):
+        rollback_transitions([t], tmp_path, {})  # empty snapshot -> halt, do NOT write empty bytes
+
+
+def test_rollback_halts_on_concurrent_change(tmp_path: Path) -> None:
+    target = tmp_path / "e.md"
+    target.write_text("OLD", encoding="utf-8")
+    pre = fingerprint(target)
+    snap = snapshot_paths([target])
+    post_fp = StateFingerprint(existed=True, type="file",
+                               content_sha256=_hashlib.sha256(b"NEW").hexdigest(), mode=0o644, symlink_target=None)
+    t = PathTransition(role="entity-rewrite", rel_path="e.md", pre=pre, post=post_fp, postimage="NEW")
+    target.write_text("SOMEONE-ELSE", encoding="utf-8")  # matches neither pre nor post
+    with pytest.raises(RollbackHalt):
+        rollback_transitions([t], tmp_path, snap)
+
+
+def test_resolve_within_rejects_absolute_and_escaping_and_noncanonical(tmp_path: Path) -> None:
+    (tmp_path / "entities" / "x").mkdir(parents=True)
+    assert resolve_within(tmp_path, "entities/x/1.md") == (tmp_path / "entities/x/1.md").resolve()
+    for bad in ["/etc/passwd", "../evil", "a/../b", "a/./b", "a//b", "", "sub/"]:
+        with pytest.raises(PathEscape):
+            resolve_within(tmp_path, bad)
+
+
+def test_resolve_within_rejects_ancestor_symlink_escape(tmp_path: Path) -> None:
+    # `entities` is a symlink pointing OUTSIDE the project; a lexically-clean path under it must
+    # still be refused, because it physically resolves outside the corpus.
+    outside = tmp_path.parent / "outside_target"
+    outside.mkdir()
+    root = tmp_path / "proj"
+    root.mkdir()
+    (root / "entities").symlink_to(outside)
+    with pytest.raises(PathEscape):
+        resolve_within(root, "entities/x.md")
+
+
+def test_assert_same_surface_is_order_independent_and_strict() -> None:
+    a = PathTransition(role="created-dir", rel_path="d1", pre=_absent_fp(),
+                       post=StateFingerprint(existed=True, type="dir", content_sha256=None, mode=0o755, symlink_target=None))
+    b = PathTransition(role="created-dir", rel_path="d2", pre=_absent_fp(),
+                       post=StateFingerprint(existed=True, type="dir", content_sha256=None, mode=0o755, symlink_target=None))
+    assert_same_surface([a, b], [b, a])  # no raise
+    with pytest.raises(SurfaceMismatch):
+        assert_same_surface([a], [a, b])
+
+
+def test_assert_staging_unique_flags_collisions(tmp_path: Path) -> None:
+    t1 = tmp_path / "a.md"
+    assert_staging_unique(tmp_path, [t1, tmp_path / "b.md"], "tok")  # no raise
+    with pytest.raises(StagingError):
+        assert_staging_unique(tmp_path, [t1, t1], "tok")
