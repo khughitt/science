@@ -47,7 +47,7 @@ from types import MappingProxyType
 from typing import TYPE_CHECKING, Any, Mapping
 
 from science_tool.big_picture.frontmatter import read_frontmatter
-from science_tool.entities import _commit_write, _prepare_write, _PreparedWrite, _STATUS_VALUES
+from science_tool.entities import _commit_write, _PreparedWrite, _STATUS_VALUES
 from science_tool.entity_scan import iter_entity_markdown
 from science_tool.graph.reference_resolution import ReferenceResolver
 from science_tool.graph.relation_audit import RelationAudit, RelationDefect, audit_relations
@@ -496,7 +496,7 @@ def build_supersedes_graph(inputs: SupersessionInputs) -> SupersedesGraph:
 
 
 def _prepare_supersession(
-    project_root: Path, graph: SupersedesGraph, member: str
+    project_root: Path, graph: SupersedesGraph, member: str, *, preview_date: str
 ) -> _PreparedWrite:
     """Prepare `status: superseded` + its derived inverse for one member. Writes NOTHING.
 
@@ -504,11 +504,17 @@ def _prepare_supersession(
     populated from the admitted canonical edges and nothing else — so there is no argument a caller
     could corrupt, and a groundless inverse is *unexpressible* rather than merely unreached. A field
     nobody can author is not the same as a field nobody can pass; this is the latter, closed.
+
+    `preview_date` is threaded through to `_prepare_write_with_date` as the `updated` default, so a
+    saved plan's preview and its later apply stamp the same date.
     """
-    return _prepare_write(
+    from science_tool.entities import _prepare_write_with_date
+
+    return _prepare_write_with_date(
         project_root,
         member,
         {"status": _SUPERSEDED, "superseded_by": graph.superseder_by_id[member]},
+        updated_default=preview_date,
     )
 
 
@@ -638,7 +644,13 @@ def mark_superseded(
     # Individual writes are atomic; the loop is not. What makes that survivable is the reconciliation
     # above -- a re-run recomputes the graph, sees the members whose projection is missing or stale,
     # and finishes the job.
-    prepared = [_prepare_supersession(project_root, graph, m) for m in (*to_mark, *to_repair)]
+    from datetime import date
+
+    _preview_date = date.today().isoformat()
+    prepared = [
+        _prepare_supersession(project_root, graph, m, preview_date=_preview_date)
+        for m in (*to_mark, *to_repair)
+    ]
     for write in prepared:  # validation is BEHIND us; this loop only commits
         _commit_write(write)
 
