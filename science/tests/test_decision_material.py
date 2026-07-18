@@ -1,11 +1,13 @@
 from __future__ import annotations
 
+import dataclasses
 from pathlib import Path
 
 import yaml
 
 from science_tool.consolidation import (
-    _SUPERSEDES, build_decision_material, decision_digest, load_supersession_inputs,
+    _project_inputs, _SUPERSEDES, build_decision_material, decision_digest,
+    load_supersession_inputs,
 )
 
 
@@ -30,6 +32,20 @@ def test_decision_digest_is_stable_across_runs(tmp_path: Path) -> None:
     d1 = decision_digest(build_decision_material(tmp_path))
     d2 = decision_digest(build_decision_material(tmp_path))
     assert d1 == d2
+
+
+def test_decision_digest_is_invariant_to_entry_authoring_order(tmp_path: Path) -> None:
+    # design §9 (sorted projections): `_project_inputs` sorts `entries` (by `eid`) before the
+    # digest is taken over them, so the digest is a function of decision CONTENT, not scan/authoring
+    # order. `test_decision_digest_is_stable_across_runs` re-scans the SAME unmodified directory
+    # twice, so it passes trivially even with the `sorted(...)` deleted -- it never witnesses the
+    # order-invariance itself. This test targets `_project_inputs` directly: same `SupersessionInputs`
+    # content, `entries` tuple REVERSED, and the resulting digests must still match.
+    _seed(tmp_path)
+    inputs = load_supersession_inputs(tmp_path)
+    reversed_inputs = dataclasses.replace(inputs, entries=tuple(reversed(inputs.entries)))
+    assert reversed_inputs.entries != inputs.entries  # sanity: the reordering is real, not a no-op
+    assert decision_digest(_project_inputs(inputs)) == decision_digest(_project_inputs(reversed_inputs))
 
 
 def test_decision_digest_changes_when_a_material_field_changes(tmp_path: Path) -> None:
