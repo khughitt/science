@@ -17,7 +17,7 @@
 - **Corpus eligibility (all must hold):** returned by `load_markdown_entities` (registered policy homes routed through the archived-excluding canonical scanner, so `_archive/` files are never eligible); `curation_scope_for_kind(kind) != CurationScope.NONE`; `status` not in `CLOSED_LIFECYCLE_STATUSES`. The resolved `CurationScope` is preserved on each row (needed by the freshness scope guard).
 - **Date coercion (canonical only):** accept a YAML `date` **object** or a canonical `YYYY-MM-DD` **string** for which `date.fromisoformat(value).isoformat() == value` (round-trip). Reject a `datetime`, and reject noncanonical strings that `date.fromisoformat` happens to accept (`"20260718"`, `"2026-W29-6"`). Missing → `None`; malformed/noncanonical → raise `RotationError` naming entity id, **path**, and field. Never silently coerce a malformed value to `None`.
 - **Graph enrichment (best-effort):** single payload-level `meta.graph_source` with first-match precedence `absent → invalid → stale → current`, reusing `graph_is_stale`. Only the file-existence check may raise `absent`; **every** step after it (parse, staleness, triple extraction) is wrapped so that any exception yields `("invalid", {})`. Per-row `freshness` populated **only** when `graph_source == "current"` **and** the row's `scope is CurationScope.EPISTEMIC`, else `null`; correspondence rows are always `null`.
-- **Curation wiring:** `/science:curate` uses `science entity rotation` as its coverage-*floor* reading set (guaranteeing least-recently-reviewed entities are read), with the weighted attention sample retained as enrichment/alarm input. The command doc and user guide must reflect this.
+- **Curation wiring:** `/science:curate` uses `science entity rotation` as its coverage-*floor* reading set (the least-recently-reviewed entities are always read *this* sweep), with the weighted attention sample retained as enrichment/alarm input. Rotation selects but never reviews: advancing state requires an `science entity review <ref> --note ...` stamp per reviewed row, and under `--dry-run`/`--no-write` state does not advance. The command doc and user guide must reflect this.
 - **Output:** via `emit_query_rows`; payload `{"format":"json","meta":{...},"rows":[...]}`. Row keys `id`, `last_reviewed`, `age_days`, `rank`, `selected`, `freshness`. Meta keys `pool_size`, `budget`, `displayed`, `coverage_rounds`, `graph_source`. `coverage_rounds = 0` when `N = 0`. Dynamic table title states `budget of pool_size` plus a coverage clause omitted when `coverage_rounds == 0`. Null dates render `never` in the table; JSON keeps raw `null`.
 - **No `--with-drift` in v1.**
 - Project rules: composition over inheritance; explicit over defensive; fail early; no AI-attribution trailers on commits; **never `git add` `science/uv.lock`** (it drifts on `uv run` and must stay out of every commit).
@@ -148,7 +148,7 @@ Create `science/tests/test_curate_rotation_corpus.py`:
 
 from __future__ import annotations
 
-from datetime import date
+from datetime import date, datetime
 from pathlib import Path
 
 import pytest
@@ -249,6 +249,28 @@ def test_eligible_accepts_yaml_date_object(tmp_path: Path) -> None:
     )
     (entity,) = eligible_corpus(root)
     assert entity.created == date(2026, 3, 4)
+
+
+def test_eligible_rejects_datetime(tmp_path: Path) -> None:
+    # A YAML timestamp deserializes to a datetime; the date-only contract rejects it.
+    root = _make_project(
+        tmp_path,
+        [
+            (
+                "entities/plans/0001.md",
+                {
+                    "id": "plan:0001",
+                    "kind": "plan",
+                    "title": "P",
+                    "status": "active",
+                    "created": datetime(2026, 3, 4, 10, 0, 0),
+                },
+            )
+        ],
+    )
+    with pytest.raises(RotationError) as excinfo:
+        eligible_corpus(root)
+    assert "plan:0001" in str(excinfo.value)
 
 
 @pytest.mark.parametrize("bad", ["20260718", "2026-W29-6", "2026-7-8"])
@@ -417,7 +439,7 @@ def eligible_corpus(project_root: Path) -> list[EligibleEntity]:
 - [ ] **Step 4: Run test to verify it passes**
 
 Run: `cd science && uv run --frozen pytest tests/test_curate_rotation_corpus.py -v`
-Expected: PASS (9 test functions / 11 cases, counting the 3 parametrized noncanonical-string cases).
+Expected: PASS (10 test functions / 12 cases, counting the 3 parametrized noncanonical-string cases).
 
 - [ ] **Step 5: Run ruff + pyright on the module**
 
@@ -550,6 +572,19 @@ def test_graph_source_invalid_on_staleness_failure(tmp_path: Path, monkeypatch) 
     source, states = graph_freshness(root)
     assert source == "invalid"
     assert states == {}
+
+
+def test_graph_source_invalid_on_probe_failure(tmp_path: Path, monkeypatch) -> None:
+    """Even the existence probe is best-effort: if Path.exists raises, degrade to invalid."""
+    root = _project_with_hypothesis_and_task(tmp_path)  # no materialize; probe raises before parse
+
+    def _boom(_self: Path) -> bool:
+        raise OSError("simulated stat failure")
+
+    monkeypatch.setattr(Path, "exists", _boom)
+    source, states = graph_freshness(root)
+    assert source == "invalid"
+    assert states == {}
 ```
 
 - [ ] **Step 2: Run test to verify it fails**
@@ -583,15 +618,16 @@ def graph_freshness(project_root: Path) -> tuple[str, dict[str, str]]:
     absent -> invalid -> stale -> current. states maps canonical entity id to its
     freshnessState literal, and is non-empty only when graph_source == "current".
 
-    Only the file-existence probe can yield "absent"; every step after it (parse,
-    staleness check, triple extraction) is wrapped so that ANY failure degrades to
+    Every step is best-effort: a successful `exists()` returning False yields
+    "absent", but if ANY operation raises — including the existence probe itself,
+    the parse, the staleness check, or triple extraction — the result degrades to
     ("invalid", {}) rather than blocking selection. A stale graph is a normal
     result, not a failure, so it returns before the extraction block.
     """
     graph_path = project_root / DEFAULT_GRAPH_PATH
-    if not graph_path.exists():
-        return "absent", {}
     try:
+        if not graph_path.exists():
+            return "absent", {}
         dataset = Dataset()
         dataset.parse(graph_path, format="trig")
         if graph_is_stale(project_root, graph_path):
@@ -612,7 +648,7 @@ Note: the broad `except Exception` is intentional — any parse/staleness/read f
 - [ ] **Step 4: Run test to verify it passes**
 
 Run: `cd science && uv run --frozen pytest tests/test_curate_rotation_freshness.py -v`
-Expected: PASS (5 tests).
+Expected: PASS (6 tests).
 
 - [ ] **Step 5: Run ruff + pyright**
 
@@ -824,7 +860,7 @@ Expected: FAIL — `ImportError: cannot import name 'select_rotation'`.
 
 - [ ] **Step 3: Write minimal implementation**
 
-Edit `science/src/science_tool/curate/rotation.py`. Add `import math` is already present; ensure `from dataclasses import dataclass` and `from datetime import date, datetime` are already imported (they are, from Task 2). Append:
+Edit `science/src/science_tool/curate/rotation.py`. `import math`, `from dataclasses import dataclass`, and `from datetime import date` are already present (from Task 2); no new imports are needed. Append:
 
 ```python
 @dataclass(frozen=True)
@@ -1154,15 +1190,23 @@ layers:
 
 1. **Coverage floor — `science entity rotation`.** This is the default reading
    set. It ranks the reviewable corpus least-recently-reviewed first and prints
-   an adaptive per-sweep budget, so the least-recently-reviewed entities are
-   always read and none is starved across sweeps. Read the rows it marks
-   `selected`.
+   an adaptive per-sweep budget. Read every row it marks `selected`. For each
+   selected row you actually review, record a reasoned review artifact and
+   advance its state with
+   `science entity review <ref> --note "<what you inspected and changed>"`. That
+   stamp is what moves the entity out of the least-recently-reviewed prefix;
+   without it the same prefix recurs on the next sweep. Rotation drives the
+   corpus toward full coverage in a bounded number of sweeps only when each sweep
+   completes its budget **and** its review stamps carry a date strictly later
+   than the corpus's current maximum `last_reviewed`. Under `--dry-run` or
+   `--no-write`, do **not** call `entity review`: rotation state does not advance
+   and the same rows reappear on the next real sweep.
 2. **Enrichment / alarm — the weighted attention sample.** Use
    `science graph attention-sample` to pull *additional* high-attention
    epistemic entities into the pass beyond the rotation floor. Attention biases
-   toward what changed or is contested; rotation guarantees floor coverage. They
-   are complementary, not alternatives — do not drop the rotation floor in favor
-   of attention alone.
+   toward what changed or is contested; rotation, once its stamps land, drives
+   floor coverage. They are complementary, not alternatives — do not drop the
+   rotation floor in favor of attention alone.
 
 Read targeted source artifacts, not the entire corpus.
 ```
@@ -1179,13 +1223,14 @@ insert:
 `science entity rotation` is the coverage *floor* that complements
 `attention-rank`'s weighted queue. It ranks the reviewable corpus — the same
 domain `entity review` resolves — least-recently-reviewed first and prints an
-adaptive per-sweep budget, so the least-recently-touched entities are read first
-and none is starved across sweeps. It is stateless and read-only, advisory like
-the other attention surfaces. It reaches full coverage in a bounded number of
-sweeps only when each sweep both completes its budget and stamps reviews with a
-date strictly later than the corpus's current maximum `last_reviewed`; the two
-tools are complementary — attention biases toward what changed, rotation
-guarantees floor coverage.
+adaptive per-sweep budget, so the least-recently-touched entities are read first.
+It is stateless and read-only, advisory like the other attention surfaces: it
+selects but never reviews, so a selected row only leaves the least-recently-
+reviewed prefix once you stamp it with `science entity review <ref> --note ...`.
+It reaches full coverage in a bounded number of sweeps only when each sweep both
+completes its budget and stamps reviews with a date strictly later than the
+corpus's current maximum `last_reviewed`; the two tools are complementary —
+attention biases toward what changed, rotation drives floor coverage.
 
 ```bash
 science entity rotation
@@ -1199,10 +1244,10 @@ Run:
 
 ```bash
 cd science && uv run science entity rotation --help
-cd .. && grep -n "entity rotation" commands/curate.md docs/user-guide/health-and-validation.md
+cd .. && rg -n "entity rotation" commands/curate.md docs/user-guide/health-and-validation.md
 ```
 
-Expected: the `--help` prints the command's usage (exit 0), and `grep` shows the
+Expected: the `--help` prints the command's usage (exit 0), and `rg` shows the
 new references in both files.
 
 - [ ] **Step 5: Commit**
