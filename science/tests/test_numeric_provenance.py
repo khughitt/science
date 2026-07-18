@@ -3,7 +3,7 @@ from pathlib import Path
 from science_tool.numeric_provenance import (
     Anchored, Exempt, NotClaim, NumericClaim, NumericProvenanceConfig,
     SourceCandidate, Unanchored, build_document_context, build_resolution_index,
-    classify_structural,
+    classify_structural, compute_marker_scopes, marked_scope_for_line,
 )
 
 
@@ -113,3 +113,31 @@ def test_structural_does_not_overmask_claims_near_structural_tokens():
         "the 3.2 Gb genome file was archived",
         "the 3.2 Gb genome file was archived".find("3.2") + 1,
     ) is None
+
+
+def test_document_marker_covers_whole_body(tmp_path):
+    path = _doc(tmp_path, "The alpha is 0.05 and power 0.8.\n", frontmatter="kind: plan\nstipulated: true")
+    ctx = build_document_context(path)
+    scopes = compute_marker_scopes(ctx)
+    line = ctx.lines.index("The alpha is 0.05 and power 0.8.") + 1
+    assert marked_scope_for_line(scopes, line) == "document"
+
+
+def test_section_marker_is_fail_closed(tmp_path):
+    body = ("## Decision thresholds\n<!-- stipulated -->\n\nUse alpha 0.05.\n\n"
+            "## Results\n\nWe saw 7.94 fold.\n")
+    path = _doc(tmp_path, body, frontmatter="kind: plan")
+    ctx = build_document_context(path)
+    scopes = compute_marker_scopes(ctx)
+    assert marked_scope_for_line(scopes, ctx.lines.index("Use alpha 0.05.") + 1) == "section"
+    assert marked_scope_for_line(scopes, ctx.lines.index("We saw 7.94 fold.") + 1) is None
+
+
+def test_block_marker_covers_only_fenced_lines(tmp_path):
+    body = ("We saw 7.94 fold.\n\n<!-- stipulated:start -->\nalpha 0.05\n<!-- stipulated:end -->\n\nAnd 3.1 more.\n")
+    path = _doc(tmp_path, body, frontmatter="kind: interpretation")
+    ctx = build_document_context(path)
+    scopes = compute_marker_scopes(ctx)
+    assert marked_scope_for_line(scopes, ctx.lines.index("alpha 0.05") + 1) == "block"
+    assert marked_scope_for_line(scopes, ctx.lines.index("We saw 7.94 fold.") + 1) is None
+    assert marked_scope_for_line(scopes, ctx.lines.index("And 3.1 more.") + 1) is None

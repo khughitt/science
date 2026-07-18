@@ -278,6 +278,68 @@ def classify_structural(value: str, line: str, col: int) -> str | None:
     return None
 
 
+_SECTION_MARKER_RE = re.compile(r"^\s*<!--\s*stipulated\s*-->\s*$")
+_BLOCK_START_RE = re.compile(r"^\s*<!--\s*stipulated:start\s*-->\s*$")
+_BLOCK_END_RE = re.compile(r"^\s*<!--\s*stipulated:end\s*-->\s*$")
+
+
+@dataclass(frozen=True)
+class MarkerScope:
+    scope: str                      # "document" | "section" | "block"
+    covered_lines: frozenset[int]   # empty when scope == "document"
+    whole_document: bool
+
+
+def compute_marker_scopes(document: DocumentContext) -> tuple[MarkerScope, ...]:
+    """Locate stipulated-marker declarations and their covered line ranges.
+
+    Marker syntax is fixed (not a config knob) so templates/tooling agree
+    across projects:
+      - frontmatter `stipulated: true` -> whole-document scope, subsuming
+        (and short-circuiting past) any finer section/block markers.
+      - `<!-- stipulated -->` immediately under a heading -> that heading's
+        section, fail-closed at the next equal-or-higher heading (reuses
+        `DocumentContext.sections`).
+      - `<!-- stipulated:start -->` ... `<!-- stipulated:end -->` -> the
+        lines strictly between the fence pair.
+    """
+    scopes: list[MarkerScope] = []
+    fm = document.frontmatter
+    if isinstance(fm, dict) and fm.get("stipulated") is True:
+        scopes.append(MarkerScope(scope="document", covered_lines=frozenset(), whole_document=True))
+        return tuple(scopes)  # document flag subsumes all finer markers
+
+    # Section markers: a `<!-- stipulated -->` on the line just after a heading
+    # marks that heading's section (fail-closed via DocumentContext.sections).
+    heading_line_to_section = {s.start_line: s for s in document.sections}
+    for lineno in range(1, len(document.lines) + 1):
+        if _SECTION_MARKER_RE.match(document.lines[lineno - 1]):
+            heading_line = lineno - 1
+            section = heading_line_to_section.get(heading_line)
+            if section is not None:
+                covered = frozenset(range(section.start_line, section.end_line + 1))
+                scopes.append(MarkerScope(scope="section", covered_lines=covered, whole_document=False))
+
+    # Block markers: lines strictly between a start/end fence pair.
+    open_line: int | None = None
+    for lineno in range(1, len(document.lines) + 1):
+        raw = document.lines[lineno - 1]
+        if _BLOCK_START_RE.match(raw):
+            open_line = lineno
+        elif _BLOCK_END_RE.match(raw) and open_line is not None:
+            covered = frozenset(range(open_line + 1, lineno))
+            scopes.append(MarkerScope(scope="block", covered_lines=covered, whole_document=False))
+            open_line = None
+    return tuple(scopes)
+
+
+def marked_scope_for_line(scopes: tuple[MarkerScope, ...], line: int) -> str | None:
+    for marker in scopes:
+        if marker.whole_document or line in marker.covered_lines:
+            return marker.scope
+    return None
+
+
 def build_resolution_index(project_root: Path) -> ResolutionIndex:
     """Build a `ResolutionIndex` from cheap file-based sources only.
 
