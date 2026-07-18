@@ -7,8 +7,9 @@ a stateless `science entity rotation` command that, on each invocation, ranks
 every locally reviewable entity by how long it has gone unreviewed and prints
 the `n(N)` stalest as this sweep's work-list. It performs no reviews and writes
 nothing; the human (or `/science:curate`) reviews each row with the existing
-`science entity review` and commits when they choose. Rotation guarantees that,
-completed sweep by sweep, nothing in the corpus goes unexamined indefinitely.
+`science entity review` and commits when they choose. Under the coverage
+condition in §4.3, completing each sweep's budget re-examines the whole corpus
+within a bounded number of sweeps, so nothing goes unexamined indefinitely.
 
 ## 1. Where this sits in the curation program
 
@@ -55,11 +56,18 @@ The eligible corpus `N` is the set of **locally reviewable, source-authored
 Markdown entities** — exactly the domain `entity review` can resolve. Precisely,
 an entity is eligible iff **all** of:
 
-1. It is yielded by the canonical scanner `iter_entity_markdown(entities_root)`
-   (`entity_scan.py`, the sole sanctioned scan). This excludes the `_archive/`
-   subtree and every other `_`-prefixed segment by construction, and scans only
-   the project's local `entities/` root — so **commons overlays and any
-   adapter-derived rows that have no local source markdown are never admitted.**
+1. It is returned by the public policy-root loader
+   `load_markdown_entities(project_root)` (`entities.py`). This routes each
+   **registered** entity policy home through the canonical scanner
+   `iter_entity_markdown` (`entity_scan.py`), which excludes the `_archive/`
+   subtree and every other `_`-prefixed segment by construction. Enumerating
+   through the registered homes — rather than raw-scanning an arbitrary
+   `entities/` root — is what makes rotation's corpus **identical to the mutation
+   surface `entity review`/`find_entity` resolves**: an unregistered directory
+   cannot appear in rotation yet be unreviewable, and **commons overlays and
+   adapter-derived rows with no local source markdown are never admitted.** Each
+   loaded record carries `{id, kind, path, frontmatter}`, from which `status`,
+   `created`, and `review_state.last_reviewed` are read.
 2. Its kind has `curation_scope_for_kind(kind) != CurationScope.NONE`
    (epistemic ∪ correspondence).
 3. Its `status` is **not** in `CLOSED_LIFECYCLE_STATUSES`
@@ -114,27 +122,43 @@ n(N) = min(N, max(1, ceil(b · ln(N) − a)))      for N > N_full
   **no per-project override** — the coverage bound below is a property of the
   tool, not something a project can tune away.
 
-**Calibration (to be pinned from the S2 rotation simulation).** The constants
-must satisfy: full-read for small projects up to `N_full`; `n(389) = 57` with
-`⌈N/n⌉ = 7` sweeps (the simulated least-recently-reviewed result that beat random
-sampling's ~42 sweeps / p95 57 / max 90 and its never-read tail). A provisional
-fit meeting these targets is `b = 11.53`, `a = 12.57`, `N_full = 25`
-(`n(100) ≈ 41`, `n(389) = 57`); the implementation plan pins the exact simulated
-values.
+**Pinned constants: `b = 11.53`, `a = 12.57`, `N_full = 25`.** The earlier
+rotation simulation did not produce adaptive-curve constants — it established
+only the single working point `n = 57` at `N = 389` and the least-recently-
+reviewed-versus-random coverage comparison (rotation's hard 7 sweeps versus
+random's ~42 / p95 57 / max 90 and its never-read tail). These three constants
+are therefore a **deliberate policy fit** chosen to honor that working point and
+the full-read-for-small-projects goal, not values read off a simulation. The fit
+is verified: `n(25) = 25`, `n(26) = 25`, `n(100) = 41`, `n(389) = 57`
+(`⌈389/57⌉ = 7`), monotone non-decreasing across the tested range. The
+implementation plan locks them with the boundary tests above.
 
 ### 4.3 Coverage invariant (with its condition)
 
-> For a fixed eligible corpus, **when every selected entity's `last_reviewed`
-> strictly advances**, completing each budget gives full coverage within
-> `⌈N/n⌉` rounds.
+> For a fixed eligible corpus, **when each round stamps every selected row with a
+> `last_reviewed` strictly greater than the maximum `last_reviewed` present in the
+> corpus before that round** — equivalently, when after stamping every selected
+> row sorts strictly after every unselected row — completing each budget gives
+> full coverage within `⌈N/n⌉` rounds.
 
-The condition is load-bearing because `last_reviewed` is date-granular: two
-reviews on the same calendar day do not move the key, so a same-day round that
-re-selects an already-today row makes no progress on that row. Reviewing (via
-`science entity review`) sets `last_reviewed = today`, which advances the key
-across day boundaries and moves the entity behind everything not-yet-reviewed;
-under the condition, the corpus behaves as a rotating buffer and every entity is
-reviewed within `⌈N/n⌉` rounds.
+The weaker "each selected row's own date strictly advances" is **not** sufficient,
+because `last_reviewed` is date-granular. Counterexample (`n = 1`): A was reviewed
+yesterday, B today; A sorts first (yesterday < today). Reviewing A *today*
+strictly advances A's own date, yet A and B are now tied at today and A still wins
+the `created` tie-break — so the next round re-selects A and B is never reached,
+violating the `⌈2/1⌉ = 2` bound. Requiring the new stamp to exceed the corpus's
+pre-round maximum (here, B's today) rules this out: A must be stamped strictly
+later than today, landing it behind B, so B is selected next round. Under this
+condition the corpus behaves as a rotating buffer and every entity is reviewed
+within `⌈N/n⌉` rounds.
+
+In practice `science entity review` stamps `today`, so the condition holds exactly
+when each sweep runs on a calendar day strictly later than every `last_reviewed`
+already in the corpus — the normal cadence of at most one sweep per day over a
+corpus whose stalest rows carry older dates. It is broken by running two
+progress-expecting sweeps on the same day, or by a corpus that already contains
+today's date on unselected rows; the honest statement is the maximum-based one
+above.
 
 **Partial reviews have no universal bound.** If a human reviews only some of the
 presented budget, coverage slows; a *repeatedly skipped* row can starve — but
@@ -158,20 +182,34 @@ plainly-stated condition. **S2 stays stateless; the condition is documented.**
 
 ### 6.1 Table and JSON
 
-Default output is a table of the `n(N)` selected rows — `ref`, `last_reviewed`
-(or `never`), and age-in-days — preceded by a header line stating `n of N` and
-the coverage figure `⌈N/n⌉`. `--format json` mirrors `needs-review`'s shape.
+Output is emitted through the shared `emit_query_rows` helper (`output.py`), so
+the JSON payload is exactly `{"format":"json","meta":{...},"rows":[...]}`. The
+table renders the `n(N)` selected rows; `--all` renders the **whole ranked
+queue** (view only; it does not change the budget).
 
-`--all` prints the **whole ranked queue** (view only; it does not change the
-budget). To make it unambiguous that the full queue is displayed while only its
-prefix is the sweep's budget, **every JSON row carries `rank` (1-based) and
-`selected` (bool = `rank ≤ n`)**, and the payload carries metadata:
+**Row keys** (every row, both modes):
+
+```
+id            canonical entity id
+last_reviewed ISO date, or null when never reviewed
+age_days      today − last_reviewed, or null when never reviewed
+rank          1-based position in the total order
+selected      bool = rank ≤ n(N)
+freshness     nullable freshness state (see §6.2); null for correspondence
+              rows and whenever graph enrichment is unavailable
+```
+
+`rank` and `selected` on every row make it unambiguous that `--all` displays the
+full queue while only its prefix is the sweep's budget.
+
+**Meta keys:**
 
 ```
 pool_size       N (eligible corpus size)
 budget          n(N)
 displayed       rows printed (n by default, N under --all)
-coverage_rounds ⌈N/n⌉
+coverage_rounds ⌈N/n⌉, defined as 0 when N = n = 0 (⌈N/n⌉ is otherwise undefined)
+graph_source    single graph-enrichment status: current | absent | stale | invalid
 ```
 
 ### 6.2 Annotations — best-effort, never blocking
@@ -180,16 +218,20 @@ Annotations enrich selected rows but never block selection or change the
 ordering.
 
 - **Freshness enrichment** (epistemic rows): when a materialized `graph.trig` is
-  present, attach the entity's freshness state. The output shape is **stable
-  regardless of availability** — every row always carries a nullable `freshness`
-  field plus a `freshness_status` of `current | absent | stale | invalid`:
-  - `current` — value read from a graph newer than the entity's source;
-  - `absent` — no graph present;
-  - `stale` — graph older than the entity's source (value shown is not trusted as
-    current and is marked so, never presented as current);
-  - `invalid` — graph present but unreadable/malformed.
-  Enrichment being unavailable is reported explicitly; it never blocks or delays
-  the selection.
+  present and current, attach each epistemic entity's freshness state to its
+  nullable per-row `freshness` field. Trust in that graph is a **single
+  payload-level judgement**, `meta.graph_source`, derived once per invocation —
+  not repeated per row:
+  - `absent` — no graph file present;
+  - `invalid` — graph file present but unreadable/malformed;
+  - `stale` — graph present but older than the newest source markdown, per the
+    existing `graph_is_stale(project_root, graph_path)` authority (`entities.py`);
+  - `current` — graph present and not stale.
+  Per-row `freshness` is populated **only** when `graph_source == current`;
+  otherwise every row's `freshness` is `null` (correspondence rows are always
+  `null` — they have no freshness state). A stale graph's values are never
+  presented as current — the status says `stale` and the rows read `null`.
+  Enrichment being unavailable never blocks or delays selection.
 - **Drift enrichment is deferred (`--with-drift` NOT in v1).** S4's validation
   surface honors evidence-scoped acceptance (an accepted false positive is
   suppressed). A raw, targeted single-entity drift probe would bypass that and
@@ -199,40 +241,44 @@ ordering.
 
 ## 7. Components (isolation)
 
-- `science_tool/curation/rotation.py` (proposed) — pure selection core:
-  `eligible_corpus(project_root) -> list[EligibleEntity]` (scan → scope filter →
-  terminal-status filter → frontmatter fields) and
-  `rotation_budget(n: int) -> int` (the piecewise formula), plus
+- `science_tool/curate/rotation.py` — pure selection core in the **existing**
+  `curate` package (no new `curation/` boundary): `eligible_corpus(project_root)
+  -> list[EligibleEntity]` (via `load_markdown_entities` → scope filter →
+  terminal-status filter → read `status`/`created`/`last_reviewed`) and
+  `rotation_budget(pool_size: int) -> int` (the piecewise formula), plus
   `select_rotation(project_root, *, today) -> RotationResult` composing them into
-  ranked rows + metadata. No I/O beyond reading entity markdown; no graph, no git.
-- Freshness enrichment reader (best-effort, isolated) — reads `graph.trig` if
-  present and returns `(freshness, freshness_status)` per ref; failures degrade to
-  `absent`/`invalid`, never raise into selection.
-- CLI command `entity rotation` in `entities_cli.py` — argument parsing, table
-  rendering, JSON assembly. Thin; all logic lives in the core.
+  the total order, ranked rows, and meta. No I/O beyond `load_markdown_entities`;
+  no graph, no git.
+- Freshness enrichment reader (best-effort, isolated) — computes the single
+  `graph_source` judgement (`absent`/`invalid`/`stale`/`current`, reusing
+  `graph_is_stale`) and, only when `current`, returns per-ref freshness states;
+  any failure degrades to `invalid`, never raises into selection.
+- CLI command `entity rotation` in `entities_cli.py` — argument parsing plus a
+  single `emit_query_rows` call. Thin; all logic lives in the core.
 
 ## 8. Testing strategy
 
-- **Budget boundaries:** `n(0)=0`, `n(1)=1`, `n(N_full)=N_full`,
-  `n(N_full+1) < N_full+1`, and the `n(389)=57` / `⌈N/n⌉=7` anchor.
+- **Budget boundaries:** `n(0)=0`, `n(1)=1`, `n(25)=25`, `n(26)=25` (`< 26`),
+  `n(100)=41`, and the `n(389)=57` / `⌈389/57⌉=7` anchor; monotone
+  non-decreasing across the tested range.
 - **Total order:** never-reviewed sorts first; date ties break by `created`;
   missing `created` treated as oldest; final `id` tie-break — including a fixture
   where all three keys are needed to disambiguate.
 - **Corpus filter:** archived (`_archive/`) excluded; `none`-scoped kind excluded;
-  each `CLOSED_LIFECYCLE_STATUSES` member excluded; commons-overlay / adapter-only
-  rows absent (scanner domain).
-- **Coverage invariant (simulated):** with strictly-advancing stamps, a fixed
-  corpus of `N` reaches full coverage within `⌈N/n⌉` rounds; a same-day repeat
-  makes no progress on already-today rows (documents the condition).
-- **Enrichment shape:** `freshness_status` is one of the four values in each of
-  the present/absent/stale/invalid graph conditions; selection succeeds in all
-  four.
-- **Output contract:** JSON rows carry `rank`/`selected`; metadata carries
-  `pool_size`/`budget`/`displayed`/`coverage_rounds`; `--all` displays `N` rows
-  with only the prefix `selected`.
-
-## 9. Open item for the spec-review gate
-
-Pin the exact `a`, `b`, `N_full` from the S2 rotation simulation (§4.2). The
-provisional fit satisfies the stated targets but should be replaced with the
-simulated constants before the implementation plan locks the boundary tests.
+  each `CLOSED_LIFECYCLE_STATUSES` member excluded; a Markdown file under an
+  **unregistered** directory does not appear (enumeration via
+  `load_markdown_entities`, not a raw scan); commons-overlay / adapter-only rows
+  absent.
+- **Coverage invariant:** the `n=1` counterexample — A reviewed yesterday, B
+  today — must show that stamping A `today` re-selects A and starves B, while
+  stamping A strictly after the pre-round maximum covers B by round 2. A fixed
+  corpus under the max-based condition reaches full coverage within `⌈N/n⌉`
+  rounds.
+- **Enrichment:** `meta.graph_source` takes the correct single value in each of
+  the absent / invalid / stale / current graph conditions; per-row `freshness` is
+  populated only under `current` and `null` otherwise (and always `null` for
+  correspondence rows); selection succeeds in all four.
+- **Output contract:** payload is `{"format":"json","meta":{...},"rows":[...]}`;
+  rows carry `id`/`last_reviewed`/`age_days`/`rank`/`selected`/`freshness` with
+  the specified null semantics; `meta.coverage_rounds` is `0` when `N=n=0`;
+  `--all` displays `N` rows with only the prefix `selected`.
