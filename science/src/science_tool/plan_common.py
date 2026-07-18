@@ -5,7 +5,7 @@ import hmac
 import os
 import stat
 from pathlib import Path
-from typing import Annotated, Literal
+from typing import Annotated, Callable, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
@@ -179,3 +179,81 @@ def verify_envelope(raw: bytes, expected_sha256: str) -> None:
             "plan bytes do not match --expected-plan-sha256 (approval envelope); "
             "the saved plan was not the one approved"
         )
+
+
+class StagingError(RuntimeError):
+    pass
+
+
+def staging_path_for(target: Path, token: str) -> Path:
+    return target.with_name(f"{target.name}.{token}.tmp")
+
+
+def staged_write(target: Path, postimage: str, mode: int, token: str, *,
+                 target_pre: "StateFingerprint",
+                 _fault: Callable[[str], None] | None = None) -> None:
+    # `_fault` is a TEST-ONLY seam: a test raises a `BaseException` from it to simulate a process
+    # kill mid-staging. Because it is a BaseException, the `except Exception` cleanup below does NOT
+    # run — the partial `.tmp` survives, exactly as an uncaught SIGKILL would leave it, so the kill
+    # test can assert the survivor is an attributable byte-prefix of the postimage (design §3.4).
+    staging = staging_path_for(target, token)
+    data = postimage.encode("utf-8")
+    try:
+        fd = os.open(staging, os.O_WRONLY | os.O_CREAT | os.O_EXCL, mode)
+    except FileExistsError as exc:
+        raise StagingError(f"staging path already exists: {staging}") from exc
+    try:
+        with os.fdopen(fd, "wb") as fh:
+            if _fault is not None and len(data) > 1:
+                # TEST SEAM: land a STRICT, non-empty prefix on disk (flushed + fsync'd), then simulate
+                # a kill BEFORE the rest is written. A BaseException from `_fault` unwinds the `with`
+                # (flushing an already-empty buffer), so the survivor is exactly the prefix — a genuine
+                # partial, shorter than `data`, never the complete file. If `_fault` does NOT raise, the
+                # remaining bytes are written, so the primitive is never left corrupt by a no-op seam.
+                half = len(data) // 2
+                fh.write(data[:half])
+                fh.flush()
+                os.fsync(fh.fileno())
+                _fault("mid-write")
+                fh.write(data[half:])
+            else:
+                fh.write(data)
+            fh.flush()
+            os.fchmod(fh.fileno(), mode)  # O_EXCL creation mode is umask-masked; force exact bits
+            os.fsync(fh.fileno())         # ...and fsync AFTER the mode is set, on the same fd
+        os.replace(staging, target)
+        dir_fd = os.open(target.parent, os.O_RDONLY)
+        try:
+            os.fsync(dir_fd)
+        finally:
+            os.close(dir_fd)
+    except Exception:
+        # Attribution-aware cleanup (design §3.3/§3.4): remove a survivor ONLY when BOTH hold —
+        # (1) it is our own O_EXCL-created partial (a byte-prefix of the intended postimage), AND
+        # (2) the persistent target is still attributable to this op (unchanged from `target_pre`).
+        # A non-prefix survivor, or a target a concurrent writer changed, is interference: refuse to
+        # delete our staged bytes and surface the anomaly rather than erase recovery evidence. (A kill
+        # via `_fault` is a BaseException and skips this handler entirely, so the partial .tmp is
+        # preserved for classification.)
+        if staging.exists():
+            survivor = staging.read_bytes()
+            if not data.startswith(survivor):
+                raise StagingError(
+                    f"staging survivor is not an attributable prefix, not removing: {staging}")
+            if not matches(target_pre, target):
+                raise StagingError(
+                    f"target changed concurrently during staging; preserving survivor as evidence: {staging}")
+            staging.unlink()  # our own partial (or complete) write AND target still ours; safe to remove
+        raise
+
+
+def classify_staging(staging: Path, postimage: str) -> Literal["absent", "prefix", "complete"]:
+    if not staging.exists():
+        return "absent"
+    data = staging.read_bytes()
+    want = postimage.encode("utf-8")
+    if data == want:
+        return "complete"
+    if want.startswith(data):
+        return "prefix"
+    raise StagingError(f"staging survivor is not a prefix of the postimage: {staging}")
