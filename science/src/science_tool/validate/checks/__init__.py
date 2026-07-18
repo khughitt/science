@@ -78,6 +78,7 @@ CANONICAL_CHECK_MODULES = (
     "supersession",
     "materialization",
     "correspondence_drift",
+    "accepted_validation",
 )
 
 
