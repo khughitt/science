@@ -715,6 +715,15 @@ def _archived_task_aliases(root: Path) -> dict[str, str]:
         return {}
 
 
+def merge_anchor_patterns(base: list[str], additional: list[str]) -> list[str]:
+    """base + additional, order-preserving, de-duplicated."""
+    merged: list[str] = []
+    for pattern in [*base, *additional]:
+        if pattern not in merged:
+            merged.append(pattern)
+    return merged
+
+
 def build_short_form_resolver(root: Path) -> dict[str, str] | None:
     """Build an alias → canonical-id map for resolver-aware short-form-ids.
 

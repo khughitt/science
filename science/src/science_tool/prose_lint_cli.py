@@ -11,8 +11,13 @@ import click
 from science_tool.bibliography import load_bib_author_surnames
 from science_tool.data_root import project_config_path
 from science_tool.output import emit
-from science_tool.project_config import DEFAULT_ANCHOR_PATTERNS, load_project_config
-from science_tool.prose_lint import CHECKS, build_short_form_resolver, scan_root
+from science_tool.project_config import (
+    DEFAULT_ANCHOR_PATTERNS,
+    DEFAULT_PROVENANCE_FIELDS,
+    DEFAULT_SPEC_CLASS_KINDS,
+    load_project_config,
+)
+from science_tool.prose_lint import CHECKS, build_short_form_resolver, merge_anchor_patterns, scan_root
 
 
 @click.group("prose")
@@ -35,6 +40,9 @@ def lint_cmd(root: Path, fmt: str, checks: tuple[str, ...], strict: bool) -> Non
     """Run prose-quality lints across the project's doc/ and entities/ trees."""
     selected = list(checks) if checks else None
     anchor_patterns = list(DEFAULT_ANCHOR_PATTERNS)
+    additional_anchor_patterns: list[str] = []
+    spec_class_kinds = list(DEFAULT_SPEC_CLASS_KINDS)
+    provenance_fields = list(DEFAULT_PROVENANCE_FIELDS)
     enabled_from_config: list[str] | None = None
     exclude_paths: list[str] = []
     short_form_ids_deny: list[str] = []
@@ -44,12 +52,16 @@ def lint_cmd(root: Path, fmt: str, checks: tuple[str, ...], strict: bool) -> Non
         config = load_project_config(root)
         if config.prose_lint is not None:
             anchor_patterns = config.prose_lint.anchor_patterns
+            additional_anchor_patterns = config.prose_lint.additional_anchor_patterns
+            spec_class_kinds = config.prose_lint.spec_class_kinds
+            provenance_fields = config.prose_lint.provenance_fields
             enabled_from_config = config.prose_lint.enabled_checks
             exclude_paths = config.prose_lint.exclude_paths
             short_form_ids_deny = config.prose_lint.short_form_ids_deny
             bare_author_year_deny = config.prose_lint.bare_author_year_deny
     if selected is None and enabled_from_config:
         selected = enabled_from_config
+    effective_anchor_patterns = merge_anchor_patterns(anchor_patterns, additional_anchor_patterns)
 
     effective_checks = selected if selected is not None else list(CHECKS)
     resolver = (
@@ -63,7 +75,9 @@ def lint_cmd(root: Path, fmt: str, checks: tuple[str, ...], strict: bool) -> Non
         root,
         checks=selected,
         strict=strict,
-        anchor_patterns=anchor_patterns,
+        anchor_patterns=effective_anchor_patterns,
+        spec_class_kinds=spec_class_kinds,
+        provenance_fields=provenance_fields,
         exclude_paths=exclude_paths,
         short_form_ids_deny=short_form_ids_deny,
         resolver=resolver,

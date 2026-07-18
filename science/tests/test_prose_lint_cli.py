@@ -156,3 +156,19 @@ def test_lint_resolves_v3_numeric_entity_ids_as_short_forms(tmp_path):
     assert result.exit_code == 0
     payload = json.loads(result.output)
     assert payload["counts"].get("short-form-ids", 0) == 0
+
+
+def test_additional_anchor_patterns_reach_numeric_anchor(tmp_path):
+    (tmp_path / "science.yaml").write_text(
+        "name: demo\nprose_lint:\n  anchor_patterns: ['task:']\n"
+        "  additional_anchor_patterns: ['paper:']\n")
+    (tmp_path / "entities").mkdir()
+    (tmp_path / "entities" / "e.md").write_text(
+        "---\nkind: report\n---\n\nGrounded via paper:Foo2024 the value 7.94 holds.\n")
+    result = CliRunner().invoke(
+        prose_group,
+        ["lint", "--root", str(tmp_path), "--format", "json", "--check", "numeric-anchor"],
+    )
+    payload = json.loads(result.output)
+    # `paper:` is only reachable because it was *additional*, not in anchor_patterns
+    assert "numeric-anchor" not in payload["counts"]
