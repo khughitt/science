@@ -71,10 +71,15 @@ and write those two `==` lines to `docs/requirements.txt`. Result must contain e
 
 - [ ] **Step 2: Ignore generated `site/`**
 
-Append `site/` to `.gitignore` (the strict-build checkpoints in every later task write `docs`-site output to `site/`, which must never be committed):
+Using your editor's file-edit tool (`apply_patch` / Edit — **not** a shell redirect, which the execution environment disallows), append a `site/` entry to the end of `.gitignore`. The `docs`-site strict-build checkpoints in every later task write output to `site/`, which must never be committed. The resulting tail of `.gitignore`:
 
-```bash
-printf 'site/\n' >> .gitignore
+```diff
+ # bib-add lockfile (never commit)
+ meta/papers/.references.bib.lock
+ **/.references.bib.lock
++
++# MkDocs build output (never commit)
++site/
 ```
 
 Verify: `rg -n '^site/$' .gitignore` prints a match.
@@ -279,7 +284,10 @@ git commit -m "docs(user-guide): rewrite cross-docs links + index parity for str
   --sci-dispute:  #DC2626;
   --sci-plumbing: #94A3B8;
   /* Belief magnitude ramp (epistemic/indigo family; NOT support-green).
-     1=speculative → 4=well_supported, increasing intensity. */
+     1=speculative → 4=well_supported, increasing intensity.
+     Rungs 1–3 are light enough for the default dark figure text; rung 4
+     (#4F46E5) needs white labels (2.3:1 with dark text, 6.3:1 with white),
+     applied in F4 via `.sci-belief-text-inverse`. */
   --sci-belief-1: #EEF2FF;
   --sci-belief-2: #C7D2FE;
   --sci-belief-3: #818CF8;
@@ -295,11 +303,13 @@ git commit -m "docs(user-guide): rewrite cross-docs links + index parity for str
   --sci-operational-fill: #164E63;
   --sci-reference-fill:  #44403C;
   --sci-derived-fill:    #1E293B;
-  /* Belief ramp for dark scheme: rising indigo intensity on a dark ground. */
+  /* Belief ramp for dark scheme: rising indigo intensity on a dark ground.
+     Kept dark enough that white labels clear WCAG AA (≥4.5:1) on every rung —
+     rung 4 #4F46E5 is 6.3:1 with #FFFFFF (was #6366F1 at 3.6:1, failing). */
   --sci-belief-1: #312E81;
-  --sci-belief-2: #3730A3;
-  --sci-belief-3: #4F46E5;
-  --sci-belief-4: #6366F1;
+  --sci-belief-2: #3B36B0;
+  --sci-belief-3: #4841D6;
+  --sci-belief-4: #4F46E5;
   --sci-fig-text:  #E2E8F0;
   --sci-fig-muted: #94A3B8;
 }
@@ -328,6 +338,9 @@ git commit -m "docs(user-guide): rewrite cross-docs links + index parity for str
 .sci-badge { fill: var(--sci-derived-stroke); }
 /* Higher specificity than `.sci-figure text` so badge text stays white. */
 .sci-figure .sci-badge-text { fill: #FFFFFF; font-size: 10px; font-weight: 700; }
+/* Inverse label for dark rung fills (belief rung 4 in both schemes; the
+   darkened dark-scheme rungs clear AA with white). Out-specifies `.sci-figure text`. */
+.sci-figure .sci-belief-text-inverse { fill: #FFFFFF; }
 ```
 
 - [ ] **Step 2: Strict build still PASSES** (CSS is referenced by `extra_css`; unused so far but valid).
@@ -443,7 +456,7 @@ git commit -m "docs(user-guide): add F0 entity vocabulary figure + figure key"
 
 **Mermaid vocabulary conventions (documented equivalents of the SVG system, applied to F1 and F2):**
 - The SVG `derived` **badge** has no Mermaid primitive; its documented equivalent is a **parenthetical `(derived)` label + the slate `derived` classDef**. Stated here so it is a deliberate convention, not an omission.
-- `bears on` and derivation/plumbing edges are **dashed slate** via explicit `linkStyle` (matching `.sci-edge-plumbing`), so no relation renders as a default solid link.
+- **No edge uses Mermaid's default solid style.** Every link falls into one of three explicitly-styled categories, each set with its own `linkStyle`: **structural/input** edges (framing, organizing, feeding a build) = **solid indigo** `#4F46E5` (the epistemic-relation accent); **`bears on`/plumbing** edges = **dashed slate** `#94A3B8` (matching `.sci-edge-plumbing`); **derivation** edges = **dashed slate** `#64748B` (matching `.sci-derived` stroke). Because all three categories are set explicitly, no relation is left to render as the default link.
 
 - [ ] **Step 1: Create `docs/user-guide/assets/figures/f1-belief-spine.mmd`**
 
@@ -469,7 +482,8 @@ flowchart TD
     classDef derived fill:#F1F5F9,stroke:#64748B,stroke-width:2px,color:#1E293B;
 
     %% edges: 0=frames 1=organizes 2,3=bears on 4=derives 5=persists
-    %% bears-on = plumbing slate dashed; derivation = derived slate dashed
+    %% structural = solid indigo; bears-on = plumbing slate dashed; derivation = derived slate dashed
+    linkStyle 0,1 stroke:#4F46E5,stroke-width:2px;
     linkStyle 2,3 stroke:#94A3B8,stroke-width:2px,stroke-dasharray:6 5;
     linkStyle 4,5 stroke:#64748B,stroke-width:2px,stroke-dasharray:6 5;
 ```
@@ -555,8 +569,9 @@ flowchart LR
     classDef reference fill:#E7E5E4,stroke:#78716C,stroke-width:2px,color:#1E293B;
     classDef derived fill:#F1F5F9,stroke:#64748B,stroke-width:2px,color:#1E293B;
 
-    %% edges: 0,1,2=authored→build (solid) 3=build→graph 4,5,6=graph→derived
-    %% derivation edges are slate dashed (per the F1/F2 Mermaid conventions)
+    %% edges: 0,1,2=authored→build 3=build→graph 4,5,6=graph→derived
+    %% input edges = solid indigo; derivation edges = slate dashed (per the F1/F2 Mermaid conventions)
+    linkStyle 0,1,2 stroke:#4F46E5,stroke-width:2px;
     linkStyle 3,4,5,6 stroke:#64748B,stroke-width:2px,stroke-dasharray:6 5;
 ```
 
@@ -694,7 +709,7 @@ In `evidence-lines.md` near the top (after the first paragraph), add the same `<
 Run: `uv run --with-requirements docs/requirements.txt mkdocs build --strict`
 Expected: FAIL — `figures/f4-belief-ceilings.svg` not found.
 
-- [ ] **Step 2 (green): create `docs/user-guide/assets/figures/f4-belief-ceilings.svg`** per the spec. MUST: label support/dispute arrows in text; draw the four ladder rungs with classes `sci-belief-1`…`sci-belief-4` (no inline rung fills, no support-green); word the three caps exactly as specified (authored-only ceiling, dependency-qualified QA cap, decisive-independent-whole-claim-direct refutation); render contestation as a single boolean overlay, not a rung; `<title>`/`<desc>` present; entity colors only from `palette.css` classes.
+- [ ] **Step 2 (green): create `docs/user-guide/assets/figures/f4-belief-ceilings.svg`** per the spec. MUST: label support/dispute arrows in text; draw the four ladder rungs with classes `sci-belief-1`…`sci-belief-4` (no inline rung fills, no support-green); give the **rung-4 (`well_supported`) label the `sci-belief-text-inverse` class** so it stays white on the dark indigo fill (WCAG AA — rungs 1–3 keep the default figure text); word the three caps exactly as specified (authored-only ceiling, dependency-qualified QA cap, decisive-independent-whole-claim-direct refutation); render contestation as a single boolean overlay, not a rung; `<title>`/`<desc>` present; entity colors only from `palette.css` classes.
 
 - [ ] **Step 3 (green): strict build PASSES**
 
@@ -786,7 +801,7 @@ concrete, enumerated defects if the audit finds them.
   - F8 → `entities.md` (figcaption).
   If any is missing, add a one-line italic gloss/figcaption for that placement only. Do not edit surrounding prose.
 
-- [ ] **Step 2: Reading-path/nav parity audit** — confirm `index.md` reading path, `index.md` chapter table, and `mkdocs.yml` `nav` list the same 18 chapters (incl. `codex.md`). Fix a mismatch if found; otherwise no change.
+- [ ] **Step 2: Reading-path/nav parity audit** — the guide has **18 Markdown pages**: Home (`index.md`) plus **17 chapter pages** (`introduction.md` … `cross-project-work.md`, incl. `codex.md`). The `index.md` reading path and the `index.md` chapter table each enumerate the **17 chapter pages** (they do not list Home — that is the page they live on); `mkdocs.yml` `nav` lists all **18** (the 17 chapters plus the Home entry). Confirm the same 17 chapter pages appear in all three, and that `nav`'s only extra entry is Home. Fix a mismatch if found; otherwise no change.
 
 - [ ] **Step 3: Full strict build + link sweep**
 
@@ -903,4 +918,4 @@ git commit -m "ci: build docs on PRs, deploy to Pages from main"
 
 - **Spec coverage:** §A → Tasks 1–3, 11 (incl. `.gitignore site/`, exact pins, `edit_uri`); §B → Task 11 (PR-build-only / main-deploy split, deploy-scoped concurrency); §C palette/classes incl. belief ramp → Task 3, applied Tasks 4–9; §D figures F0–F4+F8 → Tasks 4–9, F3 in all three chapters (big-picture, science-model, cross-project-work), F5/F6/F7 dispositions recorded; §E prose/links/index → Task 2 (links + index) and Task 10 (audit-only); §F layout → File Structure table. No uncovered spec section.
 - **Placeholder scan:** no TBD/TODO; every config/CSS/Mermaid/workflow file is given in full. SVG hero figures (F0/F3/F4/F8) are specified by exact construction spec + hard MUST-constraints + red/green build gate + visual acceptance, because a pixel-final SVG is a visually-iterated deliverable, not blind-authorable; this is intentional, not a placeholder. Task 10 is scoped audit-only (with enumerated checks) rather than an open-ended prose rewrite.
-- **Type/name consistency:** CSS class names (`sci-epistemic`, `sci-proposition`, `sci-operational`, `sci-reference`, `sci-derived`, `sci-belief-1`…`sci-belief-4`, `sci-edge-support`, `sci-edge-dispute`, `sci-edge-plumbing`, `sci-badge`, `sci-badge-text`, `sci-figure`) defined in Task 3 are the exact names referenced in Tasks 4/7/8/9. `.sci-figure .sci-badge-text` out-specifies `.sci-figure text` (badge text stays white). Snippet include paths (`figures/<name>`) match `base_path: docs/user-guide/assets`. Mermaid `classDef`/`linkStyle` hexes match the Global Constraints palette; derivation/plumbing edges are dashed slate in F1 and F2. Output dir `site/` consistent between local gate, workflow `path:`, and `.gitignore`.
+- **Type/name consistency:** CSS class names (`sci-epistemic`, `sci-proposition`, `sci-operational`, `sci-reference`, `sci-derived`, `sci-belief-1`…`sci-belief-4`, `sci-edge-support`, `sci-edge-dispute`, `sci-edge-plumbing`, `sci-badge`, `sci-badge-text`, `sci-belief-text-inverse`, `sci-figure`) defined in Task 3 are the exact names referenced in Tasks 4/7/8/9. `.sci-figure .sci-badge-text` and `.sci-figure .sci-belief-text-inverse` out-specify `.sci-figure text` (badge and rung-4 label stay white). Snippet include paths (`figures/<name>`) match `base_path: docs/user-guide/assets`. Mermaid `classDef`/`linkStyle` hexes match the Global Constraints palette; every F1/F2 edge is explicitly styled (structural/input solid indigo, `bears on`/plumbing and derivation dashed slate) — none left to the Mermaid default. Belief rung 4 clears WCAG AA in both schemes (white label; dark-scheme ramp darkened so rung 4 is 6.3:1). Output dir `site/` consistent between local gate, workflow `path:`, and `.gitignore`.
