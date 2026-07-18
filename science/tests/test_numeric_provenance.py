@@ -3,6 +3,7 @@ from pathlib import Path
 from science_tool.numeric_provenance import (
     Anchored, Exempt, NotClaim, NumericClaim, NumericProvenanceConfig,
     SourceCandidate, Unanchored, build_document_context, build_resolution_index,
+    classify_structural,
 )
 
 
@@ -78,3 +79,17 @@ def test_resolution_index_rejects_absolute_and_traversal_paths(tmp_path):
     idx = build_resolution_index(_project(tmp_path))
     assert idx.resolve("/etc/hostname") is False
     assert idx.resolve("../../etc/passwd") is False
+
+
+def test_structural_masks_hardware_and_accession_and_license():
+    # col is the number's real 1-based column within `line` (verified via str.find).
+    assert classify_structural("3070", "trained on an RTX 3070 GPU", 19) == "hardware-id"
+    assert classify_structural("6000", "sequenced on NovaSeq 6000", 22) == "hardware-id"
+    assert classify_structural("90084", "association GCST90084 was used", 17) == "accession"
+    assert classify_structural("4.0", "released under CC-BY-4.0 terms", 22) == "license-version"
+
+
+def test_structural_is_context_gated_for_sizes_not_facts():
+    # a download size is structural; a genome size is a factual claim
+    assert classify_structural("516.9", "the 516.9 MB download completed", 5) == "file-size"
+    assert classify_structural("3.2", "the human genome is 3.2 Gb", 21) is None

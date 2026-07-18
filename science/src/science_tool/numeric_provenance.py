@@ -229,6 +229,47 @@ class ResolutionIndex:
         return False
 
 
+# --- NotClaim structural layer -----------------------------------------------
+#
+# Recognizes numbers that are mechanically NOT quantitative claims: hardware
+# IDs, accessions, license versions, and download sizes. Narrow by design —
+# DOI/PMID/version/compact-ID span masking already lives in
+# `prose_lint._mask_numeric_identifier_spans` and runs before the claim regex;
+# this layer adds only the new categories that masking misses. Model
+# dimensions and file sizes are context-gated, never blanket-masked, so a
+# factual size like "3.2 Gb genome" stays a claim.
+
+_HARDWARE_CONTEXT_RE = re.compile(
+    r"\b(RTX|GTX|GPU|CPU|NovaSeq|HiSeq|NextSeq|MiSeq|Tesla|A100|H100|V100)\b", re.IGNORECASE
+)
+_ACCESSION_PREFIX_RE = re.compile(r"\bGCST\d+\b")
+_LICENSE_RE = re.compile(r"\b(?:CC-BY|CC-BY-SA|CC0|GPL|MIT|Apache)-?\d")
+_FILE_SIZE_RE = re.compile(
+    r"\d[\d.,]*\s?(?:[KMGT]i?B)\b.*\b(?:download|file|upload|payload|archive|dump)\b",
+    re.IGNORECASE,
+)
+
+
+def classify_structural(value: str, line: str, col: int) -> str | None:
+    """Return a NotClaim reason for a clearly structural number, else None.
+
+    `col` is the 1-based column of `value` within `line`. Narrow by design:
+    only tokens that are mechanically not quantitative claims. Model
+    dimensions / file sizes are context-gated, never blanket-masked, so a
+    factual size like "3.2 Gb genome" stays a claim.
+    """
+    window = line[max(0, col - 1 - 24) : min(len(line), col - 1 + len(value) + 24)]
+    if _HARDWARE_CONTEXT_RE.search(window):
+        return "hardware-id"
+    if _ACCESSION_PREFIX_RE.search(window):
+        return "accession"
+    if _LICENSE_RE.search(window):
+        return "license-version"
+    if _FILE_SIZE_RE.search(window):
+        return "file-size"
+    return None
+
+
 def build_resolution_index(project_root: Path) -> ResolutionIndex:
     """Build a `ResolutionIndex` from cheap file-based sources only.
 
