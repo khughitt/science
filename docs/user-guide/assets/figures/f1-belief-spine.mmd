@@ -1,0 +1,25 @@
+flowchart TD
+    Q(["question"]):::epistemic
+    H{{"hypothesis"}}:::epistemic
+    P["proposition"]:::prop
+    O(("observation")):::epistemic
+    E[/"evidence-line + / −"/]:::epistemic
+    B{"belief (derived)"}:::derived
+    S["snapshot (derived)"]:::derived
+
+    Q -->|frames| H
+    H -->|organizes| P
+    O -->|bears on| P
+    E -->|bears on| P
+    P -->|derives| B
+    B -->|persists| S
+
+    classDef epistemic fill:#E0E7FF,stroke:#4F46E5,stroke-width:2px,color:#1E293B;
+    classDef prop fill:#E0E7FF,stroke:#4F46E5,stroke-width:3.5px,color:#1E293B;
+    classDef derived fill:#F1F5F9,stroke:#64748B,stroke-width:2px,color:#1E293B;
+
+    %% edges: 0=frames 1=organizes 2,3=bears on 4=derives 5=persists
+    %% structural = solid indigo; bears-on = plumbing slate dashed; derivation = derived slate dashed
+    linkStyle 0,1 stroke:#4F46E5,stroke-width:2px;
+    linkStyle 2,3 stroke:#94A3B8,stroke-width:2px,stroke-dasharray:6 5;
+    linkStyle 4,5 stroke:#64748B,stroke-width:2px,stroke-dasharray:6 5;
