@@ -5,7 +5,8 @@ sources. It is a derived report surface: edit questions, hypotheses,
 interpretations, tasks, topics, papers, evidence, and graph sources first, then
 regenerate the synthesis.
 
-The command produces three synthesis roles:
+The command works with four synthesis roles (the first three are per-run
+outputs; `paper-batch-synthesis` is authored source material it consumes):
 
 | Role | Purpose |
 |---|---|

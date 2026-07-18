@@ -181,6 +181,7 @@ dataset_usage:
 | `upstream` | The dataset is an upstream input to a derived artifact. |
 | `validation_source` | The dataset was used for validation, not as the main dependence. |
 | `cited` | The dataset is cited context rather than a dependence. |
+| `reference` | Non-dependence provenance, normally minted from `derivation.transformations` rather than authored by hand. |
 
 `overlap` is `full`, `partial`, or `unknown`. Dependence roles
 (`analyzed`, `set_definition_source`, `training`, and `upstream`) contribute to

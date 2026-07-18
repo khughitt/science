@@ -38,6 +38,11 @@ patch metadata, diagnostics, membership records, and patch-specific generated
 view triples; member proposition and evidence triples remain in their semantic
 graph layer.
 
+<figure markdown="span">
+--8<-- "figures/f9-graph-layers.svg"
+<figcaption>Patch and inquiry named graphs are relation-based overlays: their <code>sci:inPatch</code> membership edges point into a shared semantic layer, so a proposition like <code>p02</code> can belong to several patches without duplicating its triples.</figcaption>
+</figure>
+
 The v1 patch policy is `local-closure-v1`. It uses local project scope, a
 depth-bounded `sci:bearsOn` neighborhood based on precomputed
 `sci:bearsOnDepth`, and one-hop direct relations over `cito:discusses`,

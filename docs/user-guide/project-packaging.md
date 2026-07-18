@@ -8,7 +8,7 @@ The packaging commands are:
 
 ```bash
 science project serialize --project-root <root> --out <bundle.tar.gz> [--force]
-science project verify <bundle.tar.gz> [--against <root>] [--extract <dir>] [--json]
+science project verify <bundle.tar.gz> [--against <root>] [--extract <dir>] [--format text|json]
 ```
 
 Use this workflow when a result, finding, or downstream discussion depends on
@@ -122,9 +122,10 @@ claimed, not less.
 Extraction is verify-first and uses a staging directory so an extraction failure
 does not leave a partial target behind.
 
-`--json` emits a stable machine-readable verdict with `version: 1`,
-`bundle_schema_version`, `exit_code`, `status`, `self_check`, optional
-`against`, and `warnings`.
+`--format json` (with `--json` kept as a convenience alias) emits a stable
+machine-readable verdict with `version: 1`, `bundle_schema_version`,
+`exit_code`, `status`, `self_check`, optional `against`, and `warnings`. The
+default `--format text` prints the human-readable verdict.
 
 ## Verify Exit Codes
 

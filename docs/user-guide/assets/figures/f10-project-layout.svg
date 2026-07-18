@@ -1,0 +1,65 @@
+<svg class="sci-figure" role="img" viewBox="0 0 920 430" xmlns="http://www.w3.org/2000/svg">
+  <title>The three-root project layout</title>
+  <desc>A Science-managed project root holds a small set of stable roots. science.yaml is the
+  manifest. entities/&lt;kind&gt;/ holds typed owners — one structural home per kind. overlays/&lt;type&gt;/
+  holds borrows that extend a commons-canonical entity via overlay_of. doc/ is prose only, with no
+  typed owners. knowledge/ is derived, rebuilt by graph build. Supporting roots include tasks,
+  specs, and the bibliography. Everything is locatable by what it is.</desc>
+
+  <defs>
+    <marker id="f10-plumb" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#94A3B8"/>
+    </marker>
+  </defs>
+
+  <!-- ===================== PROJECT ROOT ===================== -->
+  <text x="40" y="40" font-size="15" font-weight="700" font-family="monospace">project/</text>
+  <rect x="32" y="52" width="440" height="350" rx="12" fill="none" stroke="#94A3B8" stroke-width="1.5"/>
+
+  <!-- rows -->
+  <rect x="60" y="66" width="384" height="42" rx="6" fill="none" stroke="#94A3B8" stroke-width="1"/>
+  <text x="78" y="92" font-size="14" font-family="monospace">science.yaml</text>
+
+  <rect x="60" y="120" width="384" height="42" rx="6" fill="none" stroke="#94A3B8" stroke-width="1"/>
+  <text x="78" y="146" font-size="14" font-family="monospace">entities/&lt;kind&gt;/</text>
+
+  <rect x="60" y="174" width="384" height="42" rx="6" fill="none" stroke="#94A3B8" stroke-width="1"/>
+  <text x="78" y="200" font-size="14" font-family="monospace">overlays/&lt;type&gt;/</text>
+
+  <rect x="60" y="228" width="384" height="42" rx="6" fill="none" stroke="#94A3B8" stroke-width="1"/>
+  <text x="78" y="254" font-size="14" font-family="monospace">doc/</text>
+
+  <!-- knowledge/ : the one derived root -->
+  <rect class="sci-derived" x="60" y="282" width="384" height="42" rx="6"/>
+  <text x="78" y="308" font-size="14" font-family="monospace">knowledge/</text>
+  <rect class="sci-badge" x="366" y="293" width="46" height="16" rx="3"/>
+  <text class="sci-badge-text" x="389" y="305" text-anchor="middle">derived</text>
+
+  <text x="78" y="356" class="muted" font-size="12" font-family="monospace">results/  data/  tasks/  specs/  papers/references.bib</text>
+  <text x="78" y="376" class="muted" font-size="11">more roots &#8212; run records, gitignored payload, work, specs, bibliography</text>
+
+  <!-- ===================== ROLE CALLOUTS ===================== -->
+  <!-- manifest -->
+  <line x1="444" y1="87" x2="556" y2="87" stroke="#94A3B8" stroke-width="1" stroke-dasharray="4 4" marker-end="url(#f10-plumb)"/>
+  <text x="564" y="91" class="muted" font-size="13">manifest &#8212; profile, aspects, peers</text>
+
+  <!-- owners -->
+  <line x1="444" y1="141" x2="556" y2="141" stroke="#94A3B8" stroke-width="1" stroke-dasharray="4 4" marker-end="url(#f10-plumb)"/>
+  <text x="564" y="137" font-size="13" font-weight="700">owners</text>
+  <text x="564" y="154" class="muted" font-size="12">one structural home per kind; file = id</text>
+
+  <!-- borrows -->
+  <line x1="444" y1="195" x2="556" y2="195" stroke="#94A3B8" stroke-width="1" stroke-dasharray="4 4" marker-end="url(#f10-plumb)"/>
+  <text x="564" y="191" font-size="13" font-weight="700">borrows</text>
+  <text x="564" y="208" class="muted" font-size="12"><tspan font-family="monospace">overlay_of:</tspan> extends a commons entity</text>
+
+  <!-- prose -->
+  <line x1="444" y1="249" x2="556" y2="249" stroke="#94A3B8" stroke-width="1" stroke-dasharray="4 4" marker-end="url(#f10-plumb)"/>
+  <text x="564" y="245" font-size="13" font-weight="700">prose only</text>
+  <text x="564" y="262" class="muted" font-size="12">no typed entity owners</text>
+
+  <!-- derived -->
+  <line x1="444" y1="303" x2="556" y2="303" stroke="#94A3B8" stroke-width="1" stroke-dasharray="4 4" marker-end="url(#f10-plumb)"/>
+  <text x="564" y="299" font-size="13" font-weight="700">derived</text>
+  <text x="564" y="316" class="muted" font-size="12">rebuilt by <tspan font-family="monospace">graph build</tspan> &#8212; never hand-edited</text>
+</svg>

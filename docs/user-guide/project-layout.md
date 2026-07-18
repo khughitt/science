@@ -17,6 +17,8 @@ agents and humans to find.
 | `doc/` | Prose **only**: research notes, background, interpretations, reports, discussions, figures. No typed entity owners live here. |
 | `specs/` | Structured project specifications such as research questions, scope boundaries, requirements, and product/research planning notes. Not an entity owner root. |
 | `tasks/` | Active, blocked, deferred, retired, and completed work. |
+| `results/` | Workflow-run records and data-package descriptors. A serialize **source root**, bundled into reproducibility archives. |
+| `data/` | Gitignored **payload** bytes (datasets, large artifacts). The data-boundary payload root — not committed source. |
 | `knowledge/` | Generated graph files, summaries, snapshots, and other derived knowledge artifacts. |
 | `papers/references.bib` | Bibliography entries for cited literature. |
 | `.ai/` | Optional project-specific prompts, templates, and overrides. |
@@ -34,6 +36,11 @@ a reader can locate anything by *what it is*:
   `entities/` (which would mint a competing owner) and never under `doc/`.
 - **`doc/`** — prose. Background, interpretations, reports, discussions, figures —
   no typed entity owners.
+
+<figure markdown="span">
+--8<-- "figures/f10-project-layout.svg"
+<figcaption>Every root has one job: <code>entities/</code> owns, <code>overlays/</code> borrows, <code>doc/</code> holds prose, and <code>knowledge/</code> is derived. Locate anything by what it is.</figcaption>
+</figure>
 
 See `docs/user-guide/entities.md` for the entity model and source entity CLI
 contract.

@@ -170,8 +170,7 @@ lives in [`../conventions/cli-behavior.md`](https://github.com/khughitt/science/
 Migration tools are useful when curating older projects, but they are not the
 normal path for new work. Examples include:
 
-- `science data-package ...`
-- `science markers migrate`
+- `science datasets validate`
 - `science tasks fix-blockers`
 
 `science graph migrate-addresses` and `science graph migrate-paper-datasets`

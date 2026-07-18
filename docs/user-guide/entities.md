@@ -841,8 +841,8 @@ When access has been checked, record the whole coupled edit with:
 science dataset verify-access <slug> --license <spdx-or-sentinel> --method <method>
 ```
 
-For deposits, valid verification methods are `retrieved` and
-`credential-confirmed`. For reference records, use `credential-confirmed`,
+For deposits, valid verification methods are `retrieved`,
+`credential-confirmed`, and `landing-confirmed`. For reference records, use `credential-confirmed`,
 `landing-confirmed`, or `metadata-confirmed`. For pointer records, use
 `landing-confirmed` or `metadata-confirmed`.
 
