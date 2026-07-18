@@ -13,6 +13,16 @@ from science_model.identity import CurationScope
 from science_tool.entities import CLOSED_LIFECYCLE_STATUSES, load_markdown_entities
 from science_tool.graph.sources import registry_for_project
 
+from rdflib import Dataset
+
+from science_tool.entities import graph_is_stale
+from science_tool.graph.store import (
+    DEFAULT_GRAPH_PATH,
+    PROJECT_NS,
+    SCI_NS,
+    canonical_id_from_entity_uri,
+)
+
 ROTATION_A = 12.57
 ROTATION_B = 11.53
 N_FULL = 25
@@ -104,3 +114,35 @@ def eligible_corpus(project_root: Path) -> list[EligibleEntity]:
             )
         )
     return corpus
+
+
+def graph_freshness(project_root: Path) -> tuple[str, dict[str, str]]:
+    """Best-effort read of freshness states from the materialized graph.
+
+    Returns (graph_source, states). graph_source has first-match precedence
+    absent -> invalid -> stale -> current. states maps canonical entity id to its
+    freshnessState literal, and is non-empty only when graph_source == "current".
+
+    Every step is best-effort: a successful `exists()` returning False yields
+    "absent", but if ANY operation raises — including the existence probe itself,
+    the parse, the staleness check, or triple extraction — the result degrades to
+    ("invalid", {}) rather than blocking selection. A stale graph is a normal
+    result, not a failure, so it returns before the extraction block.
+    """
+    graph_path = project_root / DEFAULT_GRAPH_PATH
+    try:
+        if not graph_path.exists():
+            return "absent", {}
+        dataset = Dataset()
+        dataset.parse(graph_path, format="trig")
+        if graph_is_stale(project_root, graph_path):
+            return "stale", {}
+        knowledge = dataset.graph(PROJECT_NS["graph/knowledge"])
+        states: dict[str, str] = {}
+        for subject, _, obj in knowledge.triples((None, SCI_NS.freshnessState, None)):
+            canonical_id = canonical_id_from_entity_uri(str(subject))
+            if canonical_id is not None:
+                states[canonical_id] = str(obj)
+        return "current", states
+    except Exception:
+        return "invalid", {}
