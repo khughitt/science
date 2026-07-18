@@ -10,7 +10,7 @@ import pytest
 from science_tool.plan_common import (
     StateFingerprint, UnsupportedPathType, fingerprint, matches,
     ArchiveStatusSweep, ExplicitArchiveIds, AllSupersessionMembers, ExplicitSupersessionIds,
-    PathTransition,
+    PathTransition, EnvelopeError, plan_sha256, read_plan_bytes, verify_envelope,
 )
 
 
@@ -151,3 +151,13 @@ def test_archive_status_sweep_and_explicit_ids_shapes() -> None:
     ArchiveStatusSweep(kind="all_by_status", statuses=["archived", "superseded"])
     ExplicitArchiveIds(kind="explicit_ids", ids=["x:1"], allowed_statuses=["superseded"])
     AllSupersessionMembers(kind="all")
+
+
+def test_envelope_accepts_matching_and_rejects_mismatch(tmp_path: Path) -> None:
+    p = tmp_path / "plan.json"
+    p.write_bytes(b'{"a": 1}')
+    raw = read_plan_bytes(p)
+    assert raw == b'{"a": 1}'
+    verify_envelope(raw, plan_sha256(raw))  # no raise
+    with pytest.raises(EnvelopeError):
+        verify_envelope(raw, "0" * 64)

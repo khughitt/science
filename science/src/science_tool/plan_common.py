@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import hashlib
+import hmac
 import os
 import stat
 from pathlib import Path
@@ -156,3 +157,25 @@ class ExplicitSupersessionIds(BaseModel):
 
 ArchiveSelection = Annotated[ArchiveStatusSweep | ExplicitArchiveIds, Field(discriminator="kind")]
 SupersedeSelection = Annotated[AllSupersessionMembers | ExplicitSupersessionIds, Field(discriminator="kind")]
+
+
+class EnvelopeError(RuntimeError):
+    pass
+
+
+def read_plan_bytes(path: Path) -> bytes:
+    """Read the plan file EXACTLY once; callers hash and parse this same buffer."""
+    return path.read_bytes()
+
+
+def plan_sha256(raw: bytes) -> str:
+    return hashlib.sha256(raw).hexdigest()
+
+
+def verify_envelope(raw: bytes, expected_sha256: str) -> None:
+    actual = plan_sha256(raw)
+    if not hmac.compare_digest(actual, expected_sha256):  # constant-time; hashlib has no compare_digest
+        raise EnvelopeError(
+            "plan bytes do not match --expected-plan-sha256 (approval envelope); "
+            "the saved plan was not the one approved"
+        )
