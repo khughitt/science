@@ -76,3 +76,15 @@ def test_hypothesis_is_a_supersedes_ENDPOINT() -> None:
     # be certified by a gate that skips it -- and Task 8 would then add the status to a kind whose
     # relation model still forbids the edge, taking the half-wired count from twelve to thirteen.
     assert relation_allows_kinds(_supersedes(), "hypothesis", "hypothesis")
+
+
+def test_spec_is_a_supersedes_ENDPOINT() -> None:
+    # `spec` declares a `superseded` terminal (same lifecycle vocabulary as `plan`), so it must be an
+    # admissible `sci:supersedes` endpoint or the derived gate above reports it newly half-wired.
+    assert relation_allows_kinds(_supersedes(), "spec", "spec")
+
+
+def test_supersedes_description_names_spec_replacement() -> None:
+    # The descriptor prose is part of the contract: a reader of the relation must learn that spec
+    # replacement is valid, not only that spec appears in the endpoint lists.
+    assert "spec" in _supersedes().description.lower()
