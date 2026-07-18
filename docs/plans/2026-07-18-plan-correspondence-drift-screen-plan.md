@@ -1210,6 +1210,7 @@ from __future__ import annotations
 from collections.abc import Iterator
 from pathlib import Path
 
+from science_tool.data_root import PROJECT_CONFIG_FILENAME
 from science_tool.validate.acceptance import (
     EVIDENCE_SCOPED_RULES,
     accepted_validation_entries,
@@ -1229,7 +1230,9 @@ def check_accepted_validation(ctx: ValidateContext) -> Iterator[Result]:
         if rule in EVIDENCE_SCOPED_RULES and not entry_is_well_scoped(entry):
             yield Result(
                 Severity.WARN,
-                Path("science.yaml"),
+                # The bare "science.yaml" literal is forbidden outside science_model
+                # (test_science_yaml_literal_is_centralized); use the canonical constant.
+                Path(PROJECT_CONFIG_FILENAME),
                 None,
                 f"accepted_validation entry for {rule!r} (path={entry.get('path')!r}) must be "
                 f"evidence-scoped: message_contains needs a complete 'evidence-signature: v1:<64-hex>' "
