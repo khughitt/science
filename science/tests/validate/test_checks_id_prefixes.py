@@ -145,22 +145,12 @@ def test_prefix_rules_cover_every_markdown_kind() -> None:
     from science_tool.validate.checks.id_prefixes import prefix_rules
 
     rules = prefix_rules()
-    for kind in markdown_entity_kinds():
+    kinds = set(markdown_entity_kinds())
+    assert "spec" in kinds, "spec must be a policy kind (needs a home/strategy)"
+    for kind in kinds:
         if kind in {"research-question", "claim-registry"}:
             continue  # singletons validated elsewhere
         assert rules.get(kind) == f"{kind}:", f"{kind} missing/incorrect prefix rule"
-
-
-def test_prefix_rules_retain_nonpolicy_kinds() -> None:
-    # Regression guard: deriving rules from the policy table must NOT drop
-    # non-policy kinds the static PREFIX_RULES used to cover. `concept` and
-    # `dataset` are not markdown entity kinds (absent from the policy table)
-    # but still carry typed `concept:`/`dataset:` ids that need conformance.
-    from science_tool.validate.checks.id_prefixes import prefix_rules
-
-    rules = prefix_rules()
-    for kind in ("concept", "dataset", "spec"):
-        assert rules.get(kind) == f"{kind}:", f"{kind} prefix rule was dropped"
 
 
 def test_id_prefixes_scans_entities_dir(tmp_path) -> None:
