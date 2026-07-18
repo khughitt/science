@@ -1,0 +1,81 @@
+{
+  "project": "cancer__mechanisms__evolution",
+  "n": 40,
+  "by_origin": {
+    "internal-result": 13,
+    "external-cite": 6,
+    "stipulated-param": 21,
+    "structural": 0,
+    "ambiguous": 0
+  },
+  "by_category": {
+    "count": 10,
+    "sample-size-N": 1,
+    "statistic": 9,
+    "percentage": 6,
+    "threshold-cutoff": 3,
+    "parameter": 7,
+    "measurement": 3,
+    "estimate": 1,
+    "date-version": 0,
+    "identifier": 0,
+    "other": 0
+  },
+  "by_traceability": {
+    "frontmatter-source-covers": 3,
+    "cited-elsewhere-in-doc": 27,
+    "truly-orphaned": 10
+  },
+  "handwavy": 2,
+  "notable_examples": [
+    {
+      "number": "15%",
+      "snippet": "within-subject biological variation in serum PSA is of order 15% to 20%",
+      "origin": "external-cite",
+      "category": "percentage",
+      "traceability": "truly-orphaned",
+      "why": "Domain/biology fact justifying sigma=0.30 with no citation anywhere; hedged 'of order'. Genuine provenance signal."
+    },
+    {
+      "number": "1.8",
+      "snippet": "roughly 1.2-1.8 nats is near-optimal (cite:Doucet2015, cite:Sherlock2015)",
+      "origin": "external-cite",
+      "category": "parameter",
+      "traceability": "cited-elsewhere-in-doc",
+      "why": "Cited to Doucet2015/Sherlock2015 in the same paragraph, yet para_has_citation=false: lint failed to recognize cite: tokens."
+    },
+    {
+      "number": "6.06",
+      "snippet": "for P1001 that reference is 22.89 ng/mL against a day-0 PSA of 6.06 ng/mL",
+      "origin": "external-cite",
+      "category": "measurement",
+      "traceability": "frontmatter-source-covers",
+      "why": "Trial PSA value; source is NCT02415621 / Zhang2017 declared in the doc title. False positive."
+    },
+    {
+      "number": "1,000",
+      "snippet": "The 1,000 core-hour figure was frozen by the analyst, not the PI",
+      "origin": "stipulated-param",
+      "category": "parameter",
+      "traceability": "truly-orphaned",
+      "why": "Author-frozen compute envelope; explicitly a stipulation with no external source. Legitimately unsourced design knob."
+    },
+    {
+      "number": "0.025",
+      "snippet": "estimates a type-I error near 0.025 with a Monte Carlo standard error of about 0.011",
+      "origin": "internal-result",
+      "category": "statistic",
+      "traceability": "cited-elsewhere-in-doc",
+      "why": "Computed statistic derived inline from B=99 and 200 replicates stated in the same paragraph. Anchor present."
+    },
+    {
+      "number": "0.912",
+      "snippet": "The worst patient is P1007, with median |cos| 0.912",
+      "origin": "internal-result",
+      "category": "statistic",
+      "traceability": "cited-elsewhere-in-doc",
+      "why": "Identifiability-probe output; probe (probe_t078_profile_protocol_fidelity.py) named elsewhere in doc, has_pipeline_data_scripts=true."
+    }
+  ],
+  "observations": "Flags are dominated by stipulated design knobs (21/40: budgets, grid/replicate/cohort counts, SBC×100, sigma, nats, quantile cutoffs) and internal probe results (13/40: cos stats, condition numbers, efficiency %, throughput, feasibility margins). Only 6 are external and 3 draw on real external data (the Zhang2017/NCT02415621 trial named in the title). Traceability skews to false positives: ~27 numbers are self-derived inline from stated inputs (4×4×20=320; 8×17+2=138) or anchored to named probes/scripts/the title trial. Only 10 are truly-orphaned, and most are stipulated author-frozen knobs that legitimately need no citation — the two real signals are the uncited 15-20% PSA-variation biology facts. Notable lint bug: cite: tokens present in paragraphs but para_has_citation=false. Redesign: exempt stipulated/inline-derived numbers, recognize cite: and title-declared task/trial, flag bare domain-fact numbers only."
+}

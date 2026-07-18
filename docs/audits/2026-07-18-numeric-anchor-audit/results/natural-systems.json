@@ -1,0 +1,81 @@
+{
+  "project": "natural-systems",
+  "n": 40,
+  "by_origin": {
+    "internal-result": 27,
+    "external-cite": 0,
+    "stipulated-param": 11,
+    "structural": 2,
+    "ambiguous": 0
+  },
+  "by_category": {
+    "count": 11,
+    "sample-size-N": 4,
+    "statistic": 13,
+    "percentage": 2,
+    "threshold-cutoff": 4,
+    "parameter": 3,
+    "measurement": 0,
+    "estimate": 1,
+    "date-version": 0,
+    "identifier": 2,
+    "other": 0
+  },
+  "by_traceability": {
+    "frontmatter-source-covers": 3,
+    "cited-elsewhere-in-doc": 37,
+    "truly-orphaned": 0
+  },
+  "handwavy": 0,
+  "notable_examples": [
+    {
+      "number": "0.287",
+      "snippet": "returned k=5 form-equivalent, p-hat=0.139, Wilson-95 [0.061, 0.287]",
+      "origin": "internal-result",
+      "category": "statistic",
+      "traceability": "cited-elsewhere-in-doc",
+      "why": "Census CI bound fully derived in-paragraph with task+pipeline anchors on the doc; only the local paragraph lacks a citation token."
+    },
+    {
+      "number": "0.30",
+      "snippet": "the combined rule (point >= 0.30 and Wilson-95 lower >= 0.20)",
+      "origin": "stipulated-param",
+      "category": "threshold-cutoff",
+      "traceability": "frontmatter-source-covers",
+      "why": "Author-chosen certification threshold defined in pre-registration:0023, which is listed in this report's frontmatter refs -> clear false positive."
+    },
+    {
+      "number": "13/14",
+      "snippet": "Stage 3 -> Tasks 1 (schema), 13/14 (curation)",
+      "origin": "structural",
+      "category": "identifier",
+      "traceability": "cited-elsewhere-in-doc",
+      "why": "Task-number cross-reference within the plan, not a quantitative claim; lint mis-parses an ID slash-pair as a numeric anchor."
+    },
+    {
+      "number": "10000",
+      "snippet": "arXiv-prevalence representativeness (n=10000, B.2.3) ... completed n=10000 datapackage",
+      "origin": "stipulated-param",
+      "category": "sample-size-N",
+      "traceability": "frontmatter-source-covers",
+      "why": "Chosen census N stated in the entity's own title; source is self-declaring yet the body paragraph carries no inline anchor."
+    },
+    {
+      "number": "0.839",
+      "snippet": "delta-EF = -0.144 against a critical value of 0.335 (p = 0.839)",
+      "origin": "internal-result",
+      "category": "statistic",
+      "traceability": "cited-elsewhere-in-doc",
+      "why": "Permutation p-value from this project's own confound test; provenance is the doc's task/pipeline, not the immediate sentence."
+    },
+    {
+      "number": "0.30-0.35",
+      "snippet": "Rule R's accepted-set precision is expected around 0.30-0.35 (band ~[0.20, 0.45])",
+      "origin": "internal-result",
+      "category": "estimate",
+      "traceability": "frontmatter-source-covers",
+      "why": "Projected prior reasoned from finding:0013's 0.44 anchor (in frontmatter); a modeled expectation, not a measured or orphaned figure."
+    }
+  ],
+  "observations": "Flagged numbers are overwhelmingly internal analysis outputs (27/40 results, 11/40 author-chosen design params); zero external citations and zero genuinely orphaned figures in this sample. Every record has para_has_any_anchor=false yet 39/40 carry a doc-level task ref and most carry pipeline/frontmatter provenance, so the lint's paragraph-local scope is the dominant false-positive driver. Statistics (p/CI/z/effect-size), counts, and sample-sizes account for ~32/40 and are traceable to the doc's pipeline or a frontmatter pre-registration. None are handwavy. Redesign should (a) resolve provenance at doc/frontmatter scope, not paragraph scope; (b) whitelist statistic/count/param patterns emitted by pipeline-backed entities; (c) skip structural identifiers (task numbers, plan versions like 1.5, ID slash-pairs)."
+}

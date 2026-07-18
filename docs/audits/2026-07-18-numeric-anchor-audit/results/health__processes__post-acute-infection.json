@@ -1,0 +1,81 @@
+{
+  "project": "health__processes__post-acute-infection",
+  "n": 40,
+  "by_origin": {
+    "internal-result": 6,
+    "external-cite": 22,
+    "stipulated-param": 3,
+    "structural": 9,
+    "ambiguous": 0
+  },
+  "by_category": {
+    "count": 3,
+    "sample-size-N": 8,
+    "statistic": 8,
+    "percentage": 5,
+    "threshold-cutoff": 4,
+    "parameter": 1,
+    "measurement": 1,
+    "estimate": 1,
+    "date-version": 0,
+    "identifier": 6,
+    "other": 3
+  },
+  "by_traceability": {
+    "frontmatter-source-covers": 21,
+    "cited-elsewhere-in-doc": 18,
+    "truly-orphaned": 1
+  },
+  "handwavy": 0,
+  "notable_examples": [
+    {
+      "number": "6000",
+      "snippet": "Two sequencing platforms: GPL21290 (Illumina HiSeq 3000) and GPL24676 (Illumina NovaSeq 6000)",
+      "origin": "structural",
+      "category": "identifier",
+      "traceability": "frontmatter-source-covers",
+      "why": "Instrument model number, not a claim; a numeric-anchor lint should never fire on hardware/accession tokens."
+    },
+    {
+      "number": "4.1",
+      "snippet": "no 4.1 GB re-download — the byte-stable checksums recorded at staging are preserved",
+      "origin": "structural",
+      "category": "other",
+      "traceability": "truly-orphaned",
+      "why": "Only genuine orphan in sample: an operational data-volume aside with no source, and needing none."
+    },
+    {
+      "number": "1.1",
+      "snippet": "population return-to-baseline is a mean under a conservative RR >= 1.1 + Bonferroni threshold",
+      "origin": "external-cite",
+      "category": "threshold-cutoff",
+      "traceability": "cited-elsewhere-in-doc",
+      "why": "Cited study's design cutoff; Nilforoshan2026 named inline but para_has_citation regex missed it (false positive)."
+    },
+    {
+      "number": "5.6",
+      "snippet": "baseline symptom burden predicts post-COVID burden (+5.6% per symptom)",
+      "origin": "external-cite",
+      "category": "statistic",
+      "traceability": "cited-elsewhere-in-doc",
+      "why": "paper:Sudre2024 ref inline (para_has_any_anchor true) yet still flagged; effect-size numbers ride adjacent-token citations the lint drops."
+    },
+    {
+      "number": "0.01",
+      "snippet": "Signature = nominal p < 0.01 & |log2FC| > 0.5, capped at 200",
+      "origin": "stipulated-param",
+      "category": "threshold-cutoff",
+      "traceability": "frontmatter-source-covers",
+      "why": "Author-chosen analysis cutoff defined in-place; a provenance lint should suppress self-defined stipulated thresholds entirely."
+    },
+    {
+      "number": "6,450",
+      "snippet": "meta-analysis spans up to ~6,450 long-COVID cases and ~1.09M population controls",
+      "origin": "external-cite",
+      "category": "sample-size-N",
+      "traceability": "frontmatter-source-covers",
+      "why": "Dataset entity self-describing its own N with Lammi PMID/DOI in body; canonical false positive for dataset docs."
+    }
+  ],
+  "observations": "Lint over-fires: 21/40 covered by frontmatter/self-description, 18/40 by in-body citation, only 1/40 truly orphaned (an operational '4.1 GB'). External-cite dominates (22), mostly dataset Ns and epi stats (prevalence, OR, p, %-surge) from inline author-year papers (Hou 2025, Sudre2024, Furgier2026) that para_has_citation regex misses. Structural (9) is pure noise: instrument model numbers (3000/6000), file sizes (Mb/GB), GCST-accession suffixes (543), entity-slug digits (0038/0011), config line numbers. Fixes: (a) resolve inline author-year and paper:/cite:/dataset: refs, not just formal cite tags; (b) whitelist accession suffixes, model numbers, sizes, entity slugs, line numbers; (c) exempt author-stipulated cutoffs and confidence values. Genuine orphan rate near zero."
+}

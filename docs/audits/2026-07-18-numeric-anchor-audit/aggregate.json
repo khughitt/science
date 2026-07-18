@@ -1,0 +1,64 @@
+{
+  "n": 320,
+  "projects": 8,
+  "by_origin": {
+    "internal-result": 143,
+    "external-cite": 73,
+    "stipulated-param": 69,
+    "structural": 34,
+    "ambiguous": 1
+  },
+  "by_category": {
+    "count": 59,
+    "sample-size-N": 28,
+    "statistic": 84,
+    "percentage": 29,
+    "threshold-cutoff": 36,
+    "parameter": 26,
+    "measurement": 19,
+    "estimate": 7,
+    "date-version": 2,
+    "identifier": 25,
+    "other": 5
+  },
+  "by_traceability": {
+    "frontmatter-source-covers": 80,
+    "cited-elsewhere-in-doc": 186,
+    "truly-orphaned": 54
+  },
+  "handwavy": 10,
+  "per_project": {
+    "3d-attention-bias": {
+      "orphaned": 4,
+      "handwavy": 3
+    },
+    "cancer__mechanisms__evolution": {
+      "orphaned": 10,
+      "handwavy": 2
+    },
+    "cancer__meta": {
+      "orphaned": 13,
+      "handwavy": 4
+    },
+    "health__comparisons__pan-disease": {
+      "orphaned": 2,
+      "handwavy": 1
+    },
+    "health__processes__cycles": {
+      "orphaned": 13,
+      "handwavy": 0
+    },
+    "health__processes__post-acute-infection": {
+      "orphaned": 1,
+      "handwavy": 0
+    },
+    "natural-systems": {
+      "orphaned": 0,
+      "handwavy": 0
+    },
+    "seq-feats": {
+      "orphaned": 11,
+      "handwavy": 0
+    }
+  }
+}

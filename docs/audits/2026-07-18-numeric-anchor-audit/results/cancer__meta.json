@@ -1,0 +1,81 @@
+{
+  "project": "cancer__meta",
+  "n": 40,
+  "by_origin": {
+    "internal-result": 7,
+    "external-cite": 18,
+    "stipulated-param": 3,
+    "structural": 12,
+    "ambiguous": 0
+  },
+  "by_category": {
+    "count": 12,
+    "sample-size-N": 7,
+    "statistic": 5,
+    "percentage": 2,
+    "threshold-cutoff": 1,
+    "parameter": 0,
+    "measurement": 0,
+    "estimate": 1,
+    "date-version": 1,
+    "identifier": 11,
+    "other": 0
+  },
+  "by_traceability": {
+    "frontmatter-source-covers": 12,
+    "cited-elsewhere-in-doc": 15,
+    "truly-orphaned": 13
+  },
+  "handwavy": 4,
+  "notable_examples": [
+    {
+      "number": "100,000",
+      "snippet": "The 100,000 Genomes Project (Genomics England) is a UK national WGS initiative",
+      "origin": "structural",
+      "category": "identifier",
+      "traceability": "frontmatter-source-covers",
+      "why": "Number is part of the entity's own title/proper name, not a claim; pure lint over-flagging of a resource name."
+    },
+    {
+      "number": "54,945",
+      "snippet": "Carver2026 uses n = 54,945 patients from MSK-IMPACT as a discovery cohort",
+      "origin": "external-cite",
+      "category": "sample-size-N",
+      "traceability": "frontmatter-source-covers",
+      "why": "Frontmatter source_refs lists cite:Carver2026 (empty in sample but present in file); clean false positive."
+    },
+    {
+      "number": "54,875",
+      "snippet": "Ortmayr2019 uses 54 NCI-60 cell lines with transcriptomics (54,875 probes)",
+      "origin": "external-cite",
+      "category": "count",
+      "traceability": "cited-elsewhere-in-doc",
+      "why": "Attributed by inline bare author-year Ortmayr2019 that the lint cannot parse; frontmatter empty, so flagged despite in-text source."
+    },
+    {
+      "number": "200",
+      "snippet": "~40 outgoing transitions per origin state, ~200 total (coarse rule-of-thumb)",
+      "origin": "internal-result",
+      "category": "estimate",
+      "traceability": "truly-orphaned",
+      "why": "Author-derived power heuristic with no external anchor; genuine orphan and handwavy, the case a provenance check should surface."
+    },
+    {
+      "number": "3.5",
+      "snippet": "evaluate implicit bias in LLMs (GPT-3.5-Turbo, DeepSeek-V3, Llama-3.1-70B)",
+      "origin": "structural",
+      "category": "identifier",
+      "traceability": "truly-orphaned",
+      "why": "Version digit inside a model name; structural noise the lint should never flag, pollutes the orphan bucket."
+    },
+    {
+      "number": "0.071",
+      "snippet": "treatment-ordinal coefficient was suggestive but not significant (beta = 0.77, p = 0.071)",
+      "origin": "internal-result",
+      "category": "statistic",
+      "traceability": "cited-elsewhere-in-doc",
+      "why": "Internal federation model result traceable to a named interpretation/task entity in-paragraph, not to any citation."
+    }
+  ],
+  "observations": "Dominant false-positive driver: dataset/question entities attribute numbers via inline bare author-year citekeys (Cao2022, Dai2026, Bentham2025) that the lint cannot parse, and several files DO carry cite: source_refs in frontmatter (the sample's frontmatter_refs was uniformly empty and unreliable). A check that (a) parses inline author-year tokens and (b) reads real frontmatter source_refs would clear ~27/40. Second big class is structural noise: proper-name numbers (100,000 Genomes, 1000 Genomes), model versions (3.1, 3.5), entity/task IDs (0004, 0012, 493), and dates (01/02) should be excluded pre-flag. The residual genuine signal (~13) concentrates in report/plan prose: author-derived power heuristics, tooling counts (~150 warnings), and stipulated alpha/effect-size design values, several handwavy (~200, ~500)."
+}

@@ -1,0 +1,81 @@
+{
+  "project": "health__comparisons__pan-disease",
+  "n": 40,
+  "by_origin": {
+    "internal-result": 25,
+    "external-cite": 6,
+    "stipulated-param": 9,
+    "structural": 0,
+    "ambiguous": 0
+  },
+  "by_category": {
+    "count": 15,
+    "sample-size-N": 2,
+    "statistic": 7,
+    "percentage": 2,
+    "threshold-cutoff": 5,
+    "parameter": 4,
+    "measurement": 2,
+    "estimate": 2,
+    "date-version": 0,
+    "identifier": 0,
+    "other": 1
+  },
+  "by_traceability": {
+    "frontmatter-source-covers": 11,
+    "cited-elsewhere-in-doc": 27,
+    "truly-orphaned": 2
+  },
+  "handwavy": 1,
+  "notable_examples": [
+    {
+      "number": "60%",
+      "snippet": "≥60% mapping coverage AND on axes that passed ... Stage 2 null-diagnostic",
+      "origin": "stipulated-param",
+      "category": "threshold-cutoff",
+      "traceability": "truly-orphaned",
+      "why": "Bare author-chosen assessability gate defined in-doc with no grounding/citation — the kind of ungrounded cutoff worth flagging."
+    },
+    {
+      "number": "159",
+      "snippet": "Sakaue's 159 total phenotypes is already below the 60% gate",
+      "origin": "external-cite",
+      "category": "count",
+      "traceability": "cited-elsewhere-in-doc",
+      "why": "Cohort size from a cited GWAS atlas; source named inline ('Sakaue's'), so lint firing here is a false positive."
+    },
+    {
+      "number": "0.728",
+      "snippet": "Observed 0.728 lands at the upper 'material' end of the pre-reg's expectation range",
+      "origin": "internal-result",
+      "category": "statistic",
+      "traceability": "frontmatter-source-covers",
+      "why": "Computed AUROC; the doc title names owning task t018, so the number's provenance is already declared."
+    },
+    {
+      "number": "3000",
+      "snippet": "squarely inside the configured 1000–3000 window",
+      "origin": "stipulated-param",
+      "category": "parameter",
+      "traceability": "cited-elsewhere-in-doc",
+      "why": "A config.yaml knob whose design task (t028) is referenced in-body; a config-aware lint would suppress it."
+    },
+    {
+      "number": "7.05",
+      "snippet": "vs a degree-preserving node-label QAP null mean of 7.05 → enrichment 7.94×",
+      "origin": "internal-result",
+      "category": "statistic",
+      "traceability": "frontmatter-source-covers",
+      "why": "Permutation-null statistic produced by this project's own confirmatory run; title/refs name t064 and pre-registration:0014."
+    },
+    {
+      "number": "365",
+      "snippet": "None formally reviewed in 365 days despite a frozen v1 verdict",
+      "origin": "internal-result",
+      "category": "other",
+      "traceability": "truly-orphaned",
+      "why": "Rhetorical round-number duration ('~a year'); no source and imprecise — the one genuinely handwavy flag in the sample."
+    }
+  ],
+  "observations": "Dominant pattern: numbers are computed internal results (25/40) — substrate/cluster counts, QAP enrichments, AUROC/ARI/recall — or author-stipulated params (9/40: FDR q, coverage gates, d_g windows, seed offsets). Almost all are precise, not handwavy (1/40). Provenance is real but rarely paragraph-local: 38/40 are covered either by a task-naming title/frontmatter (11) or a task/dataset/citation reference elsewhere in the doc (27), yet para_has_any_anchor is false for every record — so a paragraph-scoped lint is nearly all false positives here. A better check should (a) resolve doc-level frontmatter task_links/related and inline tXXX/cite:/dataset: refs before flagging, (b) recognize config.yaml knobs, and (c) reserve genuine signal for bare stipulated thresholds defined in-doc with no grounding (e.g. the 60% gate) and rhetorical round numbers."
+}
