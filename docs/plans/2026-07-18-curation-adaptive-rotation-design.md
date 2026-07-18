@@ -80,6 +80,13 @@ an entity is eligible iff **all** of:
    *stale-under-claim* `draft` plan that should be `complete` is exactly what the
    S4 drift alarm catches, not something rotation needs to re-surface.)
 
+**Date coercion.** `created` and `review_state.last_reviewed` are read as either a
+YAML `date` value or a canonical `YYYY-MM-DD` string; a missing key coerces to
+`None` (feeding the "oldest/never" ordering). A present-but-malformed value
+(non-date type, or an unparseable string) **fails early** with the offending
+entity id, path, and field named — never silently coerced to `None`, which would
+misorder the entity as maximally stale.
+
 `N` is recomputed from disk on every invocation; it drifts slowly as entities are
 added, closed, or archived.
 
@@ -135,30 +142,34 @@ implementation plan locks them with the boundary tests above.
 
 ### 4.3 Coverage invariant (with its condition)
 
-> For a fixed eligible corpus, **when each round stamps every selected row with a
-> `last_reviewed` strictly greater than the maximum `last_reviewed` present in the
-> corpus before that round** — equivalently, when after stamping every selected
-> row sorts strictly after every unselected row — completing each budget gives
-> full coverage within `⌈N/n⌉` rounds.
+> For a fixed eligible corpus, completing each budget gives full coverage within
+> `⌈N/n⌉` rounds **when, after stamping, every selected row sorts strictly after
+> every unselected row** (the actual invariant). A **tie-break-independent
+> sufficient condition** for that invariant is: each round stamps every selected
+> row with a `last_reviewed` strictly greater than the maximum `last_reviewed`
+> present in the corpus before the round.
 
-The weaker "each selected row's own date strictly advances" is **not** sufficient,
-because `last_reviewed` is date-granular. Counterexample (`n = 1`): A was reviewed
-yesterday, B today; A sorts first (yesterday < today). Reviewing A *today*
-strictly advances A's own date, yet A and B are now tied at today and A still wins
-the `created` tie-break — so the next round re-selects A and B is never reached,
-violating the `⌈2/1⌉ = 2` bound. Requiring the new stamp to exceed the corpus's
-pre-round maximum (here, B's today) rules this out: A must be stamped strictly
-later than today, landing it behind B, so B is selected next round. Under this
-condition the corpus behaves as a rotating buffer and every entity is reviewed
-within `⌈N/n⌉` rounds.
+The two are not equivalent — the invariant is what the bound needs, and exceeding
+the pre-round maximum is one way to guarantee it that does not depend on how the
+`created`/`id` tie-breaks fall. The weaker "each selected row's own date strictly
+advances" is **not** sufficient, because `last_reviewed` is date-granular.
+Counterexample (`n = 1`, with `created(A) < created(B)` so A wins the tie-break):
+A was reviewed yesterday, B today; A sorts first (yesterday < today). Reviewing A
+*today* strictly advances A's own date, yet A and B are now tied at today and A
+still wins the `created` tie-break — so the next round re-selects A and B is never
+reached, violating the `⌈2/1⌉ = 2` bound. (Had `created(A) > created(B)`, stamping
+A today would already move it behind B, so the ordering assumption is load-bearing
+in the counterexample.) Requiring the new stamp to exceed the corpus's pre-round
+maximum (here, B's today) rules this out: A is stamped strictly later than today,
+landing behind B, so B is selected next round. Under the invariant the corpus
+behaves as a rotating buffer and every entity is reviewed within `⌈N/n⌉` rounds.
 
-In practice `science entity review` stamps `today`, so the condition holds exactly
-when each sweep runs on a calendar day strictly later than every `last_reviewed`
-already in the corpus — the normal cadence of at most one sweep per day over a
-corpus whose stalest rows carry older dates. It is broken by running two
-progress-expecting sweeps on the same day, or by a corpus that already contains
-today's date on unselected rows; the honest statement is the maximum-based one
-above.
+In practice `science entity review` stamps `today`, so the sufficient condition is
+guaranteed when each sweep runs on a calendar day strictly later than every
+`last_reviewed` already in the corpus — the normal cadence of at most one sweep
+per day over a corpus whose stalest rows carry older dates. It is broken by
+running two progress-expecting sweeps on the same day, or by a corpus that already
+contains today's date on unselected rows.
 
 **Partial reviews have no universal bound.** If a human reviews only some of the
 presented budget, coverage slows; a *repeatedly skipped* row can starve — but
@@ -186,6 +197,14 @@ Output is emitted through the shared `emit_query_rows` helper (`output.py`), so
 the JSON payload is exactly `{"format":"json","meta":{...},"rows":[...]}`. The
 table renders the `n(N)` selected rows; `--all` renders the **whole ranked
 queue** (view only; it does not change the budget).
+
+`emit_query_rows` does **not** render `meta`, so the human-facing header is carried
+by a **dynamic table `title`** stating budget and pool size and — when defined —
+the coverage figure, e.g. `rotation — 12 of 143 (coverage: 12 sweeps)`; the
+coverage clause is omitted when `coverage_rounds` is `0` (the `N=0` case). Null
+dates never surface as Python `None`: a cell renderer maps a null `last_reviewed`
+(and its null `age_days`) to `never` in the table. The JSON keeps the raw `null`
+so machine consumers are unambiguous.
 
 **Row keys** (every row, both modes):
 
@@ -221,12 +240,13 @@ ordering.
   present and current, attach each epistemic entity's freshness state to its
   nullable per-row `freshness` field. Trust in that graph is a **single
   payload-level judgement**, `meta.graph_source`, derived once per invocation —
-  not repeated per row:
-  - `absent` — no graph file present;
-  - `invalid` — graph file present but unreadable/malformed;
-  - `stale` — graph present but older than the newest source markdown, per the
-    existing `graph_is_stale(project_root, graph_path)` authority (`entities.py`);
-  - `current` — graph present and not stale.
+  not repeated per row — with a strict precedence, first match wins:
+  1. `absent` — no graph file present;
+  2. `invalid` — graph file present but parse/read fails;
+  3. `stale` — graph parses but is older than the graph inputs recognized by
+     `graph_is_stale(project_root, graph_path)` (`entities.py`) — the
+     `MarkdownAdapter` entity roots **and** `tasks/**`, not just entity markdown;
+  4. `current` — graph present, parses, and is not stale.
   Per-row `freshness` is populated **only** when `graph_source == current`;
   otherwise every row's `freshness` is `null` (correspondence rows are always
   `null` — they have no freshness state). A stale graph's values are never
@@ -241,8 +261,8 @@ ordering.
 
 ## 7. Components (isolation)
 
-- `science_tool/curate/rotation.py` — pure selection core in the **existing**
-  `curate` package (no new `curation/` boundary): `eligible_corpus(project_root)
+- `science_tool/curate/rotation.py` — deterministic selection core in the
+  **existing** `curate` package (no new `curation/` boundary): `eligible_corpus(project_root)
   -> list[EligibleEntity]` (via `load_markdown_entities` → scope filter →
   terminal-status filter → read `status`/`created`/`last_reviewed`) and
   `rotation_budget(pool_size: int) -> int` (the piecewise formula), plus
@@ -270,10 +290,12 @@ ordering.
   `load_markdown_entities`, not a raw scan); commons-overlay / adapter-only rows
   absent.
 - **Coverage invariant:** the `n=1` counterexample — A reviewed yesterday, B
-  today — must show that stamping A `today` re-selects A and starves B, while
-  stamping A strictly after the pre-round maximum covers B by round 2. A fixed
-  corpus under the max-based condition reaches full coverage within `⌈N/n⌉`
-  rounds.
+  today, with `created(A) < created(B)` (so A wins the tie-break) — must show that
+  stamping A `today` re-selects A and starves B, while stamping A strictly after
+  the pre-round maximum covers B by round 2. A fixed corpus under the sufficient
+  condition reaches full coverage within `⌈N/n⌉` rounds.
+- **Date coercion:** YAML `date` and `YYYY-MM-DD` string both parse; missing →
+  `None`; a malformed value raises with entity id / path / field named.
 - **Enrichment:** `meta.graph_source` takes the correct single value in each of
   the absent / invalid / stale / current graph conditions; per-row `freshness` is
   populated only under `current` and `null` otherwise (and always `null` for
