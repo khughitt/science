@@ -33,13 +33,13 @@ than a factor of two.
 | draft → active | 15 | **mismatch** (stale under-claim) |
 | draft → complete | 4 | **mismatch** (stale under-claim) |
 | complete → active | 2 | **mismatch** (over-claim) |
-| active → complete | 1 | **mismatch** (over-claim) |
+| active → complete | 1 | **mismatch** (stale under-claim) |
 | superseded → superseded | 1 | match |
 | active → indeterminate | 1 | indeterminate |
 | draft → indeterminate | 1 | indeterminate |
 
-The mass is **stale under-claim**: 19 plans assert `draft` while their promised
-deliverables already exist. This is precisely the S1 §2.2 hypothesis — the one the
+The mass is **stale under-claim**: 20 under-claims — 19 `draft` claims plus one `active` claim —
+while their promised deliverables already exist. This is precisely the S1 §2.2 hypothesis — the one the
 retracted "2 of 126 complete" count could not see — now measured directly under
 blinding.
 
