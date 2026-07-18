@@ -7,7 +7,7 @@ from typing import Literal
 
 from pydantic import BaseModel, Field
 
-from science_model.identity import EntityClass
+from science_model.identity import CurationScope, EntityClass
 
 EntityFilenameStrategy = Literal["numeric", "citekey", "singleton", "slug", "verbatim", "id-local"]
 
@@ -30,6 +30,7 @@ class EntityKind(BaseModel):
     entity_class: EntityClass | None = None
     category: KindCategory | None = None  # None for project-local kinds (only built-in profiles set it)
     template_ready: bool = False  # renders through the migrated Renderer path (== today's MIGRATED_KINDS)
+    curation_scope: CurationScope | None = None  # design §5: authored per kind; None = undeclared (registry applies the default)
     shortform: str | None = None  # single-letter CLI alias, e.g. "h" -> hypothesis
     # Layout/status overrides for project-local markdown kinds (v3 layout). All
     # optional; defaults derive name->entities/<name>/, numeric strategy, "active".

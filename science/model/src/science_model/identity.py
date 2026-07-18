@@ -30,6 +30,21 @@ class EntityClass(StrEnum):
     REFERENCE = "reference"
 
 
+class CurationScope(StrEnum):
+    """Whether — and how — a kind's records may carry review state (design §5).
+
+    An axis of its own, authored per kind and derived from NEITHER `EntityClass`
+    (calibrated for `bears_on` propagation) NOR the deleted closed list. `epistemic`
+    asks "given new evidence, is this still my belief?"; `correspondence` asks "does
+    this record still correspond to reality — did it ship?"; `none` means there is
+    nothing to review.
+    """
+
+    EPISTEMIC = "epistemic"
+    CORRESPONDENCE = "correspondence"
+    NONE = "none"
+
+
 class ExternalId(BaseModel):
     """Structured external identifier attached to an entity."""
 

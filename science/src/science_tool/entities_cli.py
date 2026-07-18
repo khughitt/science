@@ -542,10 +542,11 @@ def entity_neighbors(ref: str, hops: int, output_format: str) -> None:
     "reasoned 'no change'. A review without a recorded artifact is rejected.",
 )
 def entity_review(ref: str, note: str | None) -> None:
-    """Mark an epistemic entity as reviewed-as-of today.
+    """Mark an entity as reviewed-as-of today.
 
-    A review must record an artifact via --note; a bare timestamp bump is
-    rejected to prevent review-theater (see epistemic-drift-detection design M1).
+    Works on any kind whose curation_scope admits review — epistemic kinds and the
+    ratified correspondence kinds (plan, spec, method, ...). A review must record an
+    artifact via --note; a bare timestamp bump is rejected to prevent review-theater.
     """
     from science_tool.entity_review import ReviewError, review_entity
 

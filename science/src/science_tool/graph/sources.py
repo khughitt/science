@@ -7,6 +7,7 @@ import logging
 import os
 import re
 from copy import deepcopy
+from dataclasses import dataclass
 from enum import StrEnum
 from pathlib import Path
 from typing import Any, TypeVar, cast
@@ -170,6 +171,17 @@ class SkippedEntity(BaseModel):
     details: str
 
 
+@dataclass(frozen=True)
+class ActiveProfiles:
+    """Resolved project profiles and ontology catalogs used to build a registry."""
+
+    profile_manifests: list[ProfileManifest]
+    local_profile_manifest: ProfileManifest | None
+    ontology_catalogs: list[OntologyCatalog]
+    local_profile: str
+    local_manifest_rel: str
+
+
 class ProjectSources(BaseModel):
     """Structured source bundle used to materialize a project graph."""
 
@@ -236,6 +248,89 @@ def _resolve_entity_class(declared: str | None, default: EntityClass) -> EntityC
         )
 
 
+def _resolve_active_profiles(project_root: Path) -> ActiveProfiles:
+    project_root = project_root.resolve()
+    config = _read_project_config(project_root)
+    profiles = KnowledgeProfiles.model_validate(config["knowledge_profiles"])
+    local_profile = profiles.local
+    declared_ontologies: list[str] = list(config.get("ontologies") or [])  # type: ignore[union-attr]
+    ontology_catalogs = load_catalogs_for_names(declared_ontologies) if declared_ontologies else []
+    local_dir = local_profile_sources_dir(project_root, local_profile=local_profile)
+    local_profile_manifest = load_profile_manifest(local_dir / "manifest.yaml")
+    profile_manifests: list[ProfileManifest] = [LOCAL_PROFILE]
+    shared = load_shared_profile()
+    if shared is not None:
+        profile_manifests.append(shared)
+    local_manifest_rel = os.path.relpath(local_dir / "manifest.yaml", project_root)
+    return ActiveProfiles(
+        profile_manifests=profile_manifests,
+        local_profile_manifest=local_profile_manifest,
+        ontology_catalogs=ontology_catalogs,
+        local_profile=local_profile,
+        local_manifest_rel=local_manifest_rel,
+    )
+
+
+def build_entity_registry(resolved: ActiveProfiles) -> tuple[EntityRegistry, list[SkippedEntity]]:
+    """Assemble the profile-aware registry and report stale graduated kinds."""
+    registry = EntityRegistry.with_core_types()
+    # A kind that a profile/local manifest declares can graduate to a core kind
+    # in a later release (e.g. `synthesis`). The registry intentionally refuses
+    # to let an extension/profile kind shadow a core one, but for a graduated kind
+    # that refusal would crash the whole load (and every command built on it) for
+    # any project whose manifest still carries the now-redundant declaration. Skip
+    # those stale declarations — the core definition wins — and record each as a
+    # SkippedEntity so `science health`/`graph audit` nudge the project to drop it.
+    graduated_kind_skips: list[SkippedEntity] = []
+
+    def _graduated_skip(kind: str, manifest_rel: str) -> None:
+        graduated_kind_skips.append(
+            SkippedEntity(
+                path=manifest_rel,
+                kind=kind,
+                reason="kind_graduated_to_core",
+                details=(
+                    f"manifest declares entity kind {kind!r}, which is now a core kind; "
+                    "the core definition supersedes it. Remove the declaration from the manifest."
+                ),
+            )
+        )
+
+    for profile in resolved.profile_manifests:
+        for entity_kind in profile.entity_kinds:
+            if registry.is_core_kind(entity_kind.name):
+                _graduated_skip(entity_kind.name, f"profile:{profile.name}")
+                continue
+            registry.register_profile_kind(
+                entity_kind.name,
+                ProjectEntity,
+                owner=profile.name,
+                entity_class=_resolve_entity_class(entity_kind.entity_class, EntityClass.OPERATIONAL),
+                curation_scope=entity_kind.curation_scope,
+            )
+    for catalog in resolved.ontology_catalogs:
+        for entity_type in catalog.entity_types:
+            registry.register_catalog_kind(entity_type.name, DomainEntity, owner=catalog.ontology)
+    if resolved.local_profile_manifest is not None:
+        for entity_kind in resolved.local_profile_manifest.entity_kinds:
+            if registry.is_core_kind(entity_kind.name):
+                _graduated_skip(entity_kind.name, resolved.local_manifest_rel)
+                continue
+            registry.register_extension_kind(
+                entity_kind.name,
+                ProjectEntity,
+                entity_class=_resolve_entity_class(entity_kind.entity_class, EntityClass.OPERATIONAL),
+                curation_scope=entity_kind.curation_scope,
+            )
+    return registry, graduated_kind_skips
+
+
+def registry_for_project(project_root: Path) -> EntityRegistry:
+    """Return the profile-aware entity registry for a project."""
+    registry, _skips = build_entity_registry(_resolve_active_profiles(project_root))
+    return registry
+
+
 def load_project_sources(
     project_root: Path,
     markdown_overrides: dict[str, str] | None = None,
@@ -271,79 +366,21 @@ def load_project_sources(
         else None
     )
     profiles = KnowledgeProfiles.model_validate(config["knowledge_profiles"])
-    local_profile = profiles.local
     freshness_block = config.get("freshness") or {}
     if not isinstance(freshness_block, dict):
         freshness_block = {}
     freshness_enabled = bool(freshness_block.get("enabled", True))
 
-    declared_ontologies: list[str] = list(config.get("ontologies") or [])  # type: ignore[union-attr]
-    ontology_catalogs = load_catalogs_for_names(declared_ontologies) if declared_ontologies else []
-    local_profile_manifest = load_profile_manifest(
-        local_profile_sources_dir(project_root, local_profile=local_profile) / "manifest.yaml"
-    )
-
-    profile_manifests: list[ProfileManifest] = [LOCAL_PROFILE]
-    shared = load_shared_profile()
-    if shared is not None:
-        profile_manifests.append(shared)
-    active_profiles = profile_manifests.copy()
+    resolved = _resolve_active_profiles(project_root)
+    local_profile = resolved.local_profile
+    ontology_catalogs = resolved.ontology_catalogs
+    local_profile_manifest = resolved.local_profile_manifest
+    active_profiles = list(resolved.profile_manifests)
     if local_profile_manifest is not None:
         active_profiles.append(local_profile_manifest)
-
     active_kinds = known_kinds(extra_profiles=active_profiles, ontology_catalogs=ontology_catalogs)
 
-    registry = EntityRegistry.with_core_types()
-    # A kind that a profile/local manifest declares can graduate to a core kind
-    # in a later release (e.g. `synthesis`). The registry intentionally refuses
-    # to let an extension/profile kind shadow a core one, but for a graduated kind
-    # that refusal would crash the whole load (and every command built on it) for
-    # any project whose manifest still carries the now-redundant declaration. Skip
-    # those stale declarations — the core definition wins — and record each as a
-    # SkippedEntity so `science health`/`graph audit` nudge the project to drop it.
-    graduated_kind_skips: list[SkippedEntity] = []
-
-    def _graduated_skip(kind: str, manifest_rel: str) -> None:
-        graduated_kind_skips.append(
-            SkippedEntity(
-                path=manifest_rel,
-                kind=kind,
-                reason="kind_graduated_to_core",
-                details=(
-                    f"manifest declares entity kind {kind!r}, which is now a core kind; "
-                    "the core definition supersedes it. Remove the declaration from the manifest."
-                ),
-            )
-        )
-
-    for profile in profile_manifests:
-        for entity_kind in profile.entity_kinds:
-            if registry.is_core_kind(entity_kind.name):
-                _graduated_skip(entity_kind.name, f"profile:{profile.name}")
-                continue
-            registry.register_profile_kind(
-                entity_kind.name,
-                ProjectEntity,
-                owner=profile.name,
-                entity_class=_resolve_entity_class(entity_kind.entity_class, EntityClass.OPERATIONAL),
-            )
-    for catalog in ontology_catalogs:
-        for entity_type in catalog.entity_types:
-            registry.register_catalog_kind(entity_type.name, DomainEntity, owner=catalog.ontology)
-    if local_profile_manifest is not None:
-        local_manifest_rel = os.path.relpath(
-            local_profile_sources_dir(project_root, local_profile=local_profile) / "manifest.yaml",
-            project_root,
-        )
-        for entity_kind in local_profile_manifest.entity_kinds:
-            if registry.is_core_kind(entity_kind.name):
-                _graduated_skip(entity_kind.name, local_manifest_rel)
-                continue
-            registry.register_extension_kind(
-                entity_kind.name,
-                ProjectEntity,
-                entity_class=_resolve_entity_class(entity_kind.entity_class, EntityClass.OPERATIONAL),
-            )
+    registry, graduated_kind_skips = build_entity_registry(resolved)
 
     project_paths = resolve_paths(project_root)
     adapters: list[StorageAdapter] = [

@@ -177,6 +177,32 @@ def test_freshness_skips_non_epistemic_entities():
     assert _state_for(ds, _u("dataset/d1")) is None  # No freshness emitted.
 
 
+def test_correspondence_entity_never_receives_freshness_state():
+    """A correspondence-scoped plan gets no freshness state or sink even with an
+    inbound bears_on edge; sink selection remains gated on EntityClass.EPISTEMIC."""
+    plan = _u("plan/0001")
+    src = _u("hypothesis/h1")
+    ds = _ds_with_bears_on([(src, plan)])  # even with an inbound bears_on edge
+    entities: dict[str, EntityFreshnessInfo] = {
+        str(plan): {
+            "kind_class": EntityClass.OPERATIONAL,
+            "last_reviewed": date(2026, 4, 1),
+            "created": date(2026, 4, 1),
+            "updated": date(2026, 4, 1),
+            "review_horizon_days": None,
+        },
+        str(src): {
+            "kind_class": EntityClass.EPISTEMIC,
+            "last_reviewed": date(2026, 4, 1),
+            "created": date(2026, 4, 1),
+            "updated": date(2026, 4, 1),
+            "review_horizon_days": None,
+        },
+    }
+    derive_freshness(ds, entities=entities, today=date(2026, 5, 3), source_changes={})
+    assert _state_for(ds, plan) is None  # OPERATIONAL → never a freshness sink
+
+
 def test_freshness_emits_upstream_change_at():
     ds = _ds_with_bears_on(
         [

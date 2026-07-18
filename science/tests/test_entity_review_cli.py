@@ -7,11 +7,76 @@ from datetime import date
 from pathlib import Path
 from textwrap import dedent
 
+import pytest
 from click.testing import CliRunner
+from _fixtures.entity_helpers import write_markdown_entity
 
 from science_tool.cli import main as cli_main
-from science_tool.entity_review import review_entity
+from science_tool.entity_review import ReviewError, review_entity
 from science_tool.graph.materialize import materialize_graph
+
+
+@pytest.fixture
+def review_project(tmp_project: Path) -> Path:
+    write_markdown_entity(
+        tmp_project,
+        "entities/plans/0001.md",
+        {"id": "plan:0001", "kind": "plan", "title": "Implementation plan", "status": "active"},
+    )
+    write_markdown_entity(
+        tmp_project,
+        "entities/datasets/example.md",
+        {"id": "dataset:example", "kind": "dataset", "title": "Example dataset", "status": "active"},
+    )
+    return tmp_project
+
+
+@pytest.fixture
+def review_project_with_design(tmp_project_with_design_kind: Path) -> Path:
+    write_markdown_entity(
+        tmp_project_with_design_kind,
+        "entities/design/0001.md",
+        {"id": "design:0001", "kind": "design", "title": "Local design", "status": "active"},
+    )
+    return tmp_project_with_design_kind
+
+
+def test_review_admits_plan(review_project: Path) -> None:
+    """Design acceptance test 4: a correspondence kind is reviewable."""
+    path, changed = review_entity(
+        review_project,
+        "plan:0001",
+        note="shipped: ships in commit abc",
+        require_artifact=True,
+    )
+
+    assert changed
+    assert "last_reviewed" in path.read_text()
+
+
+def test_review_refuses_dataset(review_project: Path) -> None:
+    """Design acceptance test 5: a none-scoped kind is refused at the boundary."""
+    with pytest.raises(ReviewError, match="curation_scope 'none'"):
+        review_entity(review_project, "dataset:example", note="x", require_artifact=True)
+
+
+def test_review_theater_guard_on_plan(review_project: Path) -> None:
+    """A bare timestamp bump on a plan is refused without an artifact."""
+    with pytest.raises(ReviewError, match="recorded artifact"):
+        review_entity(review_project, "plan:0001", note=None, require_artifact=True)
+
+
+def test_review_admits_local_extension_kind(review_project_with_design: Path) -> None:
+    """An undeclared local extension scope defaults to reviewable correspondence."""
+    path, changed = review_entity(
+        review_project_with_design,
+        "design:0001",
+        note="matches the shipped module layout",
+        require_artifact=True,
+    )
+
+    assert changed
+    assert "last_reviewed" in path.read_text()
 
 
 def _setup_project_with_hypothesis(tmp_path: Path) -> Path:
@@ -80,6 +145,24 @@ def test_entity_review_unknown_id_errors(tmp_path: Path, monkeypatch):
     result = runner.invoke(cli_main, ["entity", "review", "hypothesis:nonexistent"])
     assert result.exit_code != 0
     assert "not found" in result.output.lower() or "unknown" in result.output.lower()
+
+
+def test_entity_review_malformed_policy_yaml_is_clean_cli_error(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    root = _setup_project_with_hypothesis(tmp_path)
+    (root / "science.yaml").write_text("knowledge_profiles: [\n", encoding="utf-8")
+    monkeypatch.chdir(root)
+
+    result = CliRunner().invoke(
+        cli_main,
+        ["entity", "review", "hypothesis:h1", "--note", "checked"],
+    )
+
+    assert result.exit_code == 1
+    assert "Error: Entity policy configuration is not valid:" in result.output
+    assert "Traceback" not in result.output
 
 
 def test_entity_review_preserves_existing_review_horizon_days(tmp_path: Path, monkeypatch):
@@ -256,22 +339,11 @@ def test_entity_needs_review_empty_when_all_fresh(tmp_path: Path, monkeypatch):
 
 
 def _setup_project_with_dataset(tmp_path: Path) -> Path:
-    """Project with a dataset entity placed under the hypotheses root so find_entity can load it.
-
-    _load_markdown_entities scans policy-rooted directories (entities/) and includes any
-    entity whose frontmatter has a valid id/kind — so a file with kind:dataset
-    placed in entities/hypotheses/ is discoverable by find_entity("dataset:d1").
-
-    Scope: this exercises the registry-gate logic in review_entity(). It does
-    not prove the gate fires when a dataset is discovered via its canonical
-    path; in real projects datasets aren't loaded through find_entity at all
-    (no entry in _BUILTIN_MARKDOWN_POLICIES — they flow through dedicated
-    adapters like DatapackageAdapter).
-    """
+    """Project with a dataset entity under its canonical markdown root."""
     root = tmp_path / "demo"
-    (root / "entities" / "hypotheses").mkdir(parents=True)
+    (root / "entities" / "datasets").mkdir(parents=True)
     (root / "science.yaml").write_text("name: demo\nknowledge_profiles:\n  local: core\n")
-    (root / "entities" / "hypotheses" / "d1.md").write_text(
+    (root / "entities" / "datasets" / "d1.md").write_text(
         dedent(
             """
             ---
@@ -288,13 +360,13 @@ def _setup_project_with_dataset(tmp_path: Path) -> Path:
     return root
 
 
-def test_entity_review_rejects_non_epistemic_target(tmp_path: Path, monkeypatch):
+def test_entity_review_rejects_none_scoped_target(tmp_path: Path, monkeypatch):
     root = _setup_project_with_dataset(tmp_path)
     monkeypatch.chdir(root)
     runner = CliRunner()
     result = runner.invoke(cli_main, ["entity", "review", "dataset:d1"])
     assert result.exit_code != 0, result.output
-    assert "non-epistemic" in result.output.lower() or "operational" in result.output.lower()
+    assert "curation_scope 'none'" in result.output
 
 
 def test_entity_review_requires_artifact(tmp_path: Path, monkeypatch):

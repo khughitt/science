@@ -658,17 +658,22 @@ def path_for_entity(kind: str, entity_id: str, today: date) -> Path:
     return resolve_path_policy(kind).root / f"{local_part}.md"
 
 
+def _entity_not_found_error(project_root: Path, ref: str) -> EntityCommandError:
+    roots = ", ".join(str(policy.root) for policy in entity_policies(project_root).values())
+    return EntityCommandError(f"Entity not found: {ref}. Searched source roots: {roots}")
+
+
 def resolve_entity_ref(project_root: Path, ref: str) -> str:
     entities = _load_markdown_entities(project_root)
     if ":" in ref:
         for entity in entities:
             if entity["id"] == ref:
                 return ref
-        raise EntityCommandError(f"Entity not found: {ref}")
+        raise _entity_not_found_error(project_root, ref)
 
     matches = [entity["id"] for entity in entities if _entity_ref_matches(entity["id"], ref)]
     if not matches:
-        raise EntityCommandError(f"Entity not found: {ref}")
+        raise _entity_not_found_error(project_root, ref)
     if len(matches) > 1:
         raise EntityCommandError(f"Ambiguous entity reference {ref}: {', '.join(sorted(matches))}")
     return matches[0]
@@ -721,8 +726,7 @@ def find_entity(project_root: Path, ref: str) -> EntityLocation:
             frontmatter=dict(frontmatter),
             body=body,
         )
-    roots = ", ".join(str(policy.root) for policy in _BUILTIN_MARKDOWN_POLICIES.values())
-    raise EntityCommandError(f"Entity not found: {ref}. Searched source roots: {roots}")
+    raise _entity_not_found_error(project_root, ref)
 
 
 def build_entity_markdown(
@@ -1848,7 +1852,11 @@ def shortform_for_kind(kind: str) -> str | None:
 
 def _load_markdown_entities(project_root: Path, kind: str | None = None) -> list[dict[str, Any]]:
     entities: list[dict[str, Any]] = []
-    for policy_kind, policy in _BUILTIN_MARKDOWN_POLICIES.items():
+    try:
+        policies = entity_policies(project_root)
+    except (yaml.YAMLError, ValidationError, ValueError, OSError) as exc:
+        raise EntityCommandError(f"Entity policy configuration is not valid:\n{exc}") from exc
+    for policy_kind, policy in policies.items():
         if kind is not None and policy_kind != kind:
             continue
         root = project_root / policy.root

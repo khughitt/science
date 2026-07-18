@@ -137,10 +137,10 @@ def _dataset_dp(root: Path, slug: str) -> None:
 
 
 def _materialize(root: Path) -> tuple:
-    """Materialize the project and return (knowledge, provenance) named graphs."""
+    """Materialize the self-contained fixture and return its named graphs."""
     from science_tool.graph.materialize import materialize_graph
 
-    trig = materialize_graph(root)
+    trig = materialize_graph(root, include_commons=False)
     ds = Dataset()
     ds.parse(source=str(trig), format="trig")
     return (

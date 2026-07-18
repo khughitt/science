@@ -15,7 +15,7 @@ from datetime import date
 from pathlib import Path
 
 from rdflib import Dataset
-from science_model.identity import EntityClass
+from science_model.identity import CurationScope
 
 from science_tool.entities import (
     EntityCommandError,
@@ -23,7 +23,6 @@ from science_tool.entities import (
     _render_markdown,
     find_entity,
 )
-from science_tool.graph.entity_registry import EntityKindNotRegisteredError, EntityRegistry
 from science_tool.graph.store import (
     DEFAULT_GRAPH_PATH,
     PROJECT_NS,
@@ -52,11 +51,11 @@ def review_entity(
 
     When `require_artifact` is True, a missing/blank `note` is rejected (the
     review-theater guard): the review must record a concrete artifact. The check
-    runs only after the entity resolves and passes the epistemic-kind gate, so
-    lookup and kind errors still take precedence.
+    runs only after the entity resolves and its kind's scope is decided by
+    `curation_scope_for_kind`, so lookup and scope errors still take precedence.
 
     Returns (path, changed) — `changed` is True iff the file was rewritten.
-    Raises ReviewError on lookup failure, non-epistemic target, or (when
+    Raises ReviewError on lookup failure, a `none`-scoped kind, or (when
     require_artifact) a missing artifact.
     """
     today = today or date.today()
@@ -65,15 +64,14 @@ def review_entity(
     except EntityCommandError as exc:
         raise ReviewError(str(exc)) from exc
 
-    registry = EntityRegistry.with_core_types()
-    try:
-        kind_class = registry.kind_class(location.kind)
-    except EntityKindNotRegisteredError:
-        kind_class = None  # extension kinds default to allowed
-    if kind_class is not None and kind_class != EntityClass.EPISTEMIC:
+    from science_tool.graph.sources import registry_for_project
+
+    registry = registry_for_project(project_root)
+    scope = registry.curation_scope_for_kind(location.kind)
+    if scope is CurationScope.NONE:
         raise ReviewError(
-            f"entity {entity_ref!r} has kind {location.kind!r} "
-            f"({kind_class.value}); review_state is only meaningful on epistemic entities"
+            f"entity {entity_ref!r} has kind {location.kind!r} with curation_scope 'none'; "
+            f"there is nothing to review. Declare curation_scope on the kind to admit it."
         )
 
     if require_artifact and (note is None or not note.strip()):

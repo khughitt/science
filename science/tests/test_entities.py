@@ -16,6 +16,7 @@ from science_tool.entities import (
     create_entity,
     derive_slug,
     edit_entity,
+    find_entity,
     generate_entity_id,
     graph_is_stale,
     list_entities,
@@ -161,6 +162,97 @@ def test_resolve_entity_ref_distinguishes_similar_local_parts(tmp_path: Path) ->
 
     assert resolve_entity_ref(tmp_path, "question:0001-draft-alpha") == "question:0001-draft-alpha"
     assert resolve_entity_ref(tmp_path, "question:0002-draft-beta") == "question:0002-draft-beta"
+
+
+def test_find_entity_discovers_local_extension_kind(tmp_project_with_design_kind: Path) -> None:
+    """A local entity must resolve before its review-scope check can run."""
+    write_markdown_entity(
+        tmp_project_with_design_kind,
+        "entities/design/0001.md",
+        {"id": "design:0001", "kind": "design", "title": "Local design"},
+    )
+
+    location = find_entity(tmp_project_with_design_kind, "design:0001")
+
+    assert location.kind == "design"
+    assert location.rel_path == "entities/design/0001.md"
+
+
+def test_find_entity_missing_local_extension_reports_project_aware_roots(
+    tmp_project_with_design_kind: Path,
+) -> None:
+    with pytest.raises(EntityCommandError, match="Entity not found: design:9999") as exc_info:
+        find_entity(tmp_project_with_design_kind, "design:9999")
+
+    assert "entities/design" in str(exc_info.value)
+
+
+def test_find_entity_wraps_invalid_policy_config_as_entity_command_error(tmp_path: Path) -> None:
+    seed_project(tmp_path)
+    config_path = tmp_path / "science.yaml"
+    config = yaml.safe_load(config_path.read_text())
+    config["entity_schema_version"] = "2"
+    config_path.write_text(yaml.safe_dump(config), encoding="utf-8")
+    write_markdown_entity(
+        tmp_path,
+        "entities/hypotheses/0001.md",
+        {"id": "hypothesis:0001", "kind": "hypothesis", "title": "Pinned lookup"},
+    )
+
+    with pytest.raises(EntityCommandError) as exc_info:
+        find_entity(tmp_path, "hypothesis:0001")
+
+    message = str(exc_info.value)
+    assert message.startswith("Entity policy configuration is not valid")
+    assert "entity_schema_version must be 1 or 2 (an integer), not '2'" in message
+
+
+@pytest.mark.parametrize(
+    ("malformed_path", "malformed_yaml"),
+    [
+        ("science.yaml", "knowledge_profiles: [\n"),
+        ("knowledge/sources/local/manifest.yaml", "entity_kinds: [\n"),
+    ],
+)
+def test_find_entity_wraps_malformed_policy_yaml(
+    tmp_path: Path,
+    malformed_path: str,
+    malformed_yaml: str,
+) -> None:
+    """Policy YAML parse failures stay on the public command-error route."""
+    seed_project(tmp_path)
+    path = tmp_path / malformed_path
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(malformed_yaml, encoding="utf-8")
+
+    with pytest.raises(EntityCommandError) as exc_info:
+        find_entity(tmp_path, "hypothesis:0001")
+
+    assert type(exc_info.value) is EntityCommandError
+    assert str(exc_info.value).startswith("Entity policy configuration is not valid:\n")
+    assert isinstance(exc_info.value.__cause__, yaml.YAMLError)
+
+
+def test_find_entity_wraps_policy_io_error(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """An unreadable policy source does not leak a raw OS exception."""
+    seed_project(tmp_path)
+
+    def unreadable_policies(_project_root: Path):
+        raise OSError("policy file is unreadable")
+
+    monkeypatch.setattr("science_tool.entities.entity_policies", unreadable_policies)
+
+    with pytest.raises(EntityCommandError) as exc_info:
+        find_entity(tmp_path, "hypothesis:0001")
+
+    assert type(exc_info.value) is EntityCommandError
+    assert str(exc_info.value) == (
+        "Entity policy configuration is not valid:\npolicy file is unreadable"
+    )
+    assert isinstance(exc_info.value.__cause__, OSError)
 
 
 def test_build_entity_markdown_uses_canonical_frontmatter_and_body() -> None:
