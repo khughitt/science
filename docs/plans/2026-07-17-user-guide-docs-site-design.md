@@ -2,7 +2,7 @@
 
 **Date:** 2026-07-17
 **Branch/worktree:** `docs/user-guide-site` in `.worktrees/user-guide-docs` (off `main`)
-**Status:** Proposed.
+**Status:** Approved.
 
 ## Goal
 
@@ -32,8 +32,10 @@ Three deliverables:
 - **`mkdocs.yml` at repo root**, with `docs_dir: docs/user-guide`. The site is
   *only* the user guide; the rest of `docs/` stays internal and out of the site.
 - **`site_url`** set to the published Pages URL
-  (`https://khughitt.github.io/science/`); **`repo_url`** set to the GitHub repo
-  so link-rewriting and "edit this page" work.
+  (`https://khughitt.github.io/science/`); **`repo_url`** set to the GitHub repo;
+  **`edit_uri`** set explicitly to `edit/main/docs/user-guide/` so "edit this
+  page" targets this nested `docs_dir` on `main` (Material would otherwise infer
+  the conventional `docs/` path and a possibly-wrong branch).
 - **Dependencies** live in **`docs/requirements.txt`** (pinned `mkdocs-material`,
   `pymdown-extensions`). No root `pyproject.toml`. Local preview:
   `uv run --with-requirements docs/requirements.txt mkdocs serve`.
@@ -73,10 +75,11 @@ Three deliverables:
   ```
 - **Doc "test" = `mkdocs build --strict`**: any broken internal link, missing
   nav file, or bad anchor fails the build (and CI).
-- **Cross-`docs_dir` link policy.** Seven user-guide links currently point into
+- **Cross-`docs_dir` link policy.** Eight user-guide links currently point into
   internal `docs/` content outside `docs_dir` (`../conventions/…`, `../process/…`,
   `../audits/…` in `cli-and-workflows.md`, `entities.md`,
-  `graph-and-derived-state.md`, `project-packaging.md`). Strict builds reject
+  `graph-and-derived-state.md`, `project-packaging.md`, and
+  `cross-project-work.md → ../federation.md`). Strict builds reject
   these. Policy: **rewrite each as an absolute repository blob URL** (based on
   `repo_url`), since the targets are internal repo docs not published to the
   site. This policy is stated here and applied in §E. No internal doc is moved.
@@ -98,9 +101,9 @@ contract with separated build and deploy jobs:
   `mkdocs.yml`, or the workflow), plus `workflow_dispatch`.
 - **`build` job (all triggers):** checkout → `actions/setup-python` →
   `pip install -r docs/requirements.txt` → `mkdocs build --strict` →
-  `actions/upload-pages-artifact` with **`path: site/`** (MkDocs outputs to
-  `site/`; the action defaults to `_site/`, so the path is explicit). This job
-  validates every PR.
+  `actions/configure-pages` → `actions/upload-pages-artifact` with
+  **`path: site/`** (MkDocs outputs to `site/`; the action defaults to `_site/`,
+  so the path is explicit). This job validates every PR.
 - **`deploy` job:** `needs: build`, gated `if: github.ref == 'refs/heads/main'`
   (deploy only from `main`; PRs build but never deploy). Uses
   `actions/deploy-pages`, declares the **`github-pages` environment** with its
@@ -240,7 +243,10 @@ in the epistemic family and never reads as support-green.
   support/dispute, grouped by independence) **bear on** a proposition; reduction
   by independence & quality; the two ceilings — the **authored-only support
   ceiling** (a proposition whose support is authored-only cannot exceed
-  `fragile`) and the **dataset-QA-failed cap** — and the **refutation cap** (a
+  `fragile`) and the **dataset-QA-failed cap** (applies only when the achieved
+  magnitude *depends on* QA-failed empirical support and QA-clean support cannot
+  reach that magnitude on its own — not an automatic cap on any QA-failed
+  dataset) — and the **refutation cap** (a
   decisive, independent, whole-claim **direct** test can cap stronger support to
   `fragile`). Includes the ordinal ladder speculative → fragile → supported →
   well_supported, with **contestation as a boolean overlay**. → `epistemic-model.md`,
@@ -267,7 +273,7 @@ in the epistemic family and never reads as support-green.
   pointer to F0.
 - Fix `index.md`: reading path and chapter table reach parity with the files
   (add `codex.md`); nav matches.
-- **Apply the cross-`docs_dir` link policy (§A):** rewrite the seven `../`
+- **Apply the cross-`docs_dir` link policy (§A):** rewrite the eight `../`
   links into internal `docs/` content as absolute repository blob URLs so the
   strict build passes. No internal doc is moved.
 - Ensure every chapter is in nav and all internal cross-links resolve under
