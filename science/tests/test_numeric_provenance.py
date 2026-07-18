@@ -4,7 +4,7 @@ from science_tool.numeric_provenance import (
     Anchored, Exempt, NotClaim, NumericClaim, NumericProvenanceConfig,
     SourceCandidate, Unanchored, build_document_context, build_resolution_index,
     classify_structural, compute_marker_scopes, entity_source_candidates,
-    marked_scope_for_line,
+    local_candidates_for_paragraph, marked_scope_for_line, paragraph_has_anchor_evidence,
 )
 
 
@@ -187,3 +187,29 @@ def test_related_is_excluded(tmp_path):
     path = _doc(tmp_path, "Value 7.94.\n", frontmatter="kind: interpretation\nrelated:\n  - task:t064")
     cands = entity_source_candidates(build_document_context(path), idx, _CFG)
     assert all(c.reference != "task:t064" for c in cands)   # finding 2 (related != source)
+
+
+def test_local_body_ref_resolves_only_when_it_exists(tmp_path):
+    idx = build_resolution_index(_project(tmp_path))
+    good = local_candidates_for_paragraph("The effect (task:t064) was 7.94 fold.", idx)
+    assert any(c.reference == "task:t064" and c.resolution_status == "resolved" for c in good)
+    bad = local_candidates_for_paragraph("The effect (task:t999) was 7.94 fold.", idx)
+    assert any(c.reference == "task:t999" for c in bad)   # candidate present, not silently dropped
+    assert all(c.resolution_status == "unresolved" for c in bad)
+
+
+def test_wiki_link_is_topical_not_a_candidate(tmp_path):
+    idx = build_resolution_index(_project(tmp_path))
+    cands = local_candidates_for_paragraph("See [[Related Topic]] for background, value 7.94.", idx)
+    assert cands == ()
+
+
+def test_generic_anchor_pattern_is_evidence_not_candidate(tmp_path):
+    idx = build_resolution_index(_project(tmp_path))
+    para = "see config/thresholds.yaml for the 0.05 cutoff"
+    assert paragraph_has_anchor_evidence(para, (r"config/",)) is True
+    assert local_candidates_for_paragraph(para, idx) == ()   # a bare config/ path is not a typed source ref
+
+
+def test_anchor_evidence_empty_patterns_is_false():
+    assert paragraph_has_anchor_evidence("see config/thresholds.yaml for 0.05", ()) is False

@@ -413,6 +413,54 @@ def entity_source_candidates(
     return tuple(deduped)
 
 
+# --- LOCAL paragraph-scoped anchoring layer ----------------------------------
+#
+# A resolvable body reference anchors only its OWN paragraph (finding 2: one
+# incidental body citation must not clear unrelated numbers elsewhere). A
+# generic `config.anchor_patterns` regex match is weaker still: it suppresses
+# that paragraph's finding but produces no `SourceCandidate` and never clears
+# entity-wide.
+
+_BODY_REF_RE = re.compile(
+    r"(?:task:t\d{2,}"
+    r"|\[@[A-Za-z][A-Za-z0-9_:.-]*\]"
+    r"|cite:[A-Za-z][A-Za-z0-9_:.-]*"
+    r"|dataset:[A-Za-z0-9][A-Za-z0-9_.-]*"
+    r"|\[\[[^\]\n]+\]\])"
+)
+
+
+def local_candidates_for_paragraph(
+    paragraph_text: str, index: ResolutionIndex
+) -> tuple[SourceCandidate, ...]:
+    """Extract resolvable body references scoped to a single paragraph.
+
+    Matches `task:tNNN`, `[@key]`, `cite:key`, `dataset:slug`. A `[[wiki]]`
+    link is topical (like `related`) — treated as evidence, not a candidate.
+    """
+    out: list[SourceCandidate] = []
+    for m in _BODY_REF_RE.finditer(paragraph_text):
+        ref = m.group(0)
+        if ref.startswith("[["):
+            continue
+        out.append(SourceCandidate(
+            reference=ref, origin="body", field_or_line="paragraph",
+            resolution_status="resolved" if index.resolve(ref) else "unresolved",
+        ))
+    return tuple(out)
+
+
+def paragraph_has_anchor_evidence(paragraph_text: str, anchor_patterns: tuple[str, ...]) -> bool:
+    """True if any generic `anchor_patterns` regex matches anywhere in the paragraph.
+
+    This is weak evidence only: it suppresses the paragraph's finding but
+    never yields a `SourceCandidate` and never clears entity-wide.
+    """
+    if not anchor_patterns:
+        return False
+    return re.search("|".join(anchor_patterns), paragraph_text) is not None
+
+
 def build_resolution_index(project_root: Path) -> ResolutionIndex:
     """Build a `ResolutionIndex` from cheap file-based sources only.
 
