@@ -2,7 +2,7 @@ from pathlib import Path
 
 from science_tool.numeric_provenance import (
     Anchored, Exempt, NotClaim, NumericClaim, NumericProvenanceConfig,
-    SourceCandidate, Unanchored, build_document_context,
+    SourceCandidate, Unanchored, build_document_context, build_resolution_index,
 )
 
 
@@ -45,3 +45,30 @@ def test_section_scope_is_fail_closed_at_equal_or_higher_heading(tmp_path):
     sid_alpha = ctx.section_id_per_line[ctx.lines.index("Use alpha 0.05.") + 1]
     sid_result = ctx.section_id_per_line[ctx.lines.index("We saw 7.94 fold.") + 1]
     assert sid_alpha != sid_result   # the second H2 closes the first section
+
+
+def _project(tmp_path: Path) -> Path:
+    (tmp_path / "science.yaml").write_text("name: demo\n")
+    (tmp_path / "tasks").mkdir()
+    (tmp_path / "tasks" / "active.md").write_text("## [t064] Do the thing\n\nbody\n")
+    (tmp_path / "entities" / "datasets").mkdir(parents=True)
+    (tmp_path / "entities" / "datasets" / "xyz.md").write_text("---\nid: dataset:xyz\nkind: dataset\n---\n\nbody\n")
+    (tmp_path / "papers").mkdir()
+    (tmp_path / "papers" / "references.bib").write_text("@article{Foo2024, title={T}, year={2024}}\n")
+    (tmp_path / "results").mkdir()
+    (tmp_path / "results" / "qap.json").write_text("{}")
+    return tmp_path
+
+
+def test_resolution_index_resolves_real_refs_and_rejects_fakes(tmp_path):
+    idx = build_resolution_index(_project(tmp_path))
+    assert idx.resolve("task:t064") is True
+    assert idx.resolve("task:t999") is False        # finding 5
+    assert idx.resolve("dataset:xyz") is True
+    assert idx.resolve("dataset:nope") is False
+    assert idx.resolve("[@Foo2024]") is True
+    assert idx.resolve("cite:Foo2024") is True
+    assert idx.resolve("[@Ghost2099]") is False
+    assert idx.resolve("results/qap.json") is True
+    assert idx.resolve("results/invented.json") is False   # finding 5
+    assert idx.resolve("https://example.org/x") is True

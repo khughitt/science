@@ -120,7 +120,7 @@ def build_document_context(path: Path) -> DocumentContext | None:
     # Sections: fail-closed at the next equal-or-higher heading. Fences are skipped
     # so a `#` inside a code block is not read as a heading.
     section_id_per_line = [0] * (n + 1)
-    sections: list[Section] = []
+    built_sections: list[Section] = []
     stack: list[tuple[int, int]] = []  # (heading_level, section_id)
     next_id = 1
     in_fence = False
@@ -140,7 +140,7 @@ def build_document_context(path: Path) -> DocumentContext | None:
             sid = next_id
             next_id += 1
             stack.append((level, sid))
-            sections.append(Section(section_id=sid, heading_level=level, start_line=idx, end_line=idx))
+            built_sections.append(Section(section_id=sid, heading_level=level, start_line=idx, end_line=idx))
         section_id_per_line[idx] = stack[-1][1] if stack else 0
 
     # Fix up each section's end_line to the last line it owns.
@@ -149,7 +149,7 @@ def build_document_context(path: Path) -> DocumentContext | None:
         end_by_id[section_id_per_line[idx]] = idx
     sections = tuple(
         Section(s.section_id, s.heading_level, s.start_line, end_by_id.get(s.section_id, s.start_line))
-        for s in sections
+        for s in built_sections
     )
 
     return DocumentContext(
@@ -163,4 +163,84 @@ def build_document_context(path: Path) -> DocumentContext | None:
         paragraph_text=paragraph_text,
         sections=sections,
         section_id_per_line=tuple(section_id_per_line),
+    )
+
+
+# --- ResolutionIndex: project-wide existence oracle -------------------------
+#
+# `resolve()` answers "does this reference exist?" for task ids, typed entity
+# ids, citation keys, DOIs/PMIDs, URLs (well-formed only — remote existence is
+# out of scope for Part A), and relative artifact paths. All inputs are cheap
+# file reads (task ledgers, entity frontmatter, references.bib) — building
+# this index must NOT trigger a full graph build.
+
+_TASK_REF_RE = re.compile(r"^(?:task:)?t(\d{2,})$")
+_TYPED_REF_RE = re.compile(r"^[a-z][a-z0-9_-]*:[A-Za-z0-9][A-Za-z0-9_.-]*$")
+_CITE_RE = re.compile(r"^(?:cite:|\[@)([A-Za-z][A-Za-z0-9_:.-]*)\]?$")
+_DOI_RE = re.compile(r"^(?:doi:)?10\.\d{4,9}/\S+$", re.IGNORECASE)
+_PMID_RE = re.compile(r"^(?:pmid:)?\d{5,9}$", re.IGNORECASE)
+_URL_RE = re.compile(r"^https?://\S+$", re.IGNORECASE)
+
+
+def _normalize_task_number(token: str) -> str:
+    """Strip leading zeros so `"064"` and `"64"` compare equal; keep >=1 digit."""
+    return token.lstrip("0") or "0"
+
+
+@dataclass(frozen=True)
+class ResolutionIndex:
+    project_root: Path
+    task_numbers: frozenset[str]     # normalized (leading zeros stripped), e.g. {"64"}
+    entity_ids: frozenset[str]       # canonical, e.g. {"dataset:xyz", "task:t064"}
+    bib_keys: frozenset[str]
+    doi_corpus: frozenset[str]
+    pmid_corpus: frozenset[str]
+    data_root: Path
+
+    def resolve(self, reference: str) -> bool:
+        ref = reference.strip()
+        if not ref:
+            return False
+        m = _TASK_REF_RE.match(ref)
+        if m:
+            return _normalize_task_number(m.group(1)) in self.task_numbers
+        if _URL_RE.match(ref):
+            return True  # well-formed; remote existence is out of scope for Part A
+        m = _CITE_RE.match(ref)
+        if m:
+            return m.group(1) in self.bib_keys
+        if _DOI_RE.match(ref):
+            token = ref[len("doi:") :] if ref.lower().startswith("doi:") else ref
+            return token.strip().lower() in self.doi_corpus
+        if _PMID_RE.match(ref):
+            return ref.split(":")[-1] in self.pmid_corpus
+        if _TYPED_REF_RE.match(ref):
+            return ref in self.entity_ids
+        # Treat anything else as a candidate artifact path.
+        for base in (self.project_root, self.data_root):
+            if (base / ref).is_file():
+                return True
+        return False
+
+
+def build_resolution_index(project_root: Path) -> ResolutionIndex:
+    """Build a `ResolutionIndex` from cheap file-based sources only.
+
+    Deliberately avoids `load_project_sources` / graph construction — every
+    loader here is a direct, narrowly-scoped file read.
+    """
+    from science_tool import refs
+    from science_tool.bibliography import load_bib_keys
+    from science_tool.data_root import resolve_data_root
+
+    root = project_root.resolve()
+    task_numbers = {_normalize_task_number(n) for n in refs._load_task_ids(root)}
+    return ResolutionIndex(
+        project_root=root,
+        task_numbers=frozenset(task_numbers),
+        entity_ids=frozenset(refs._load_entity_index(root)),
+        bib_keys=frozenset(load_bib_keys(root)),
+        doi_corpus=frozenset(d.strip().lower() for d in refs._load_doi_corpus(root)),
+        pmid_corpus=frozenset(refs._load_pmid_corpus(root)),
+        data_root=resolve_data_root(root),
     )
