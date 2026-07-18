@@ -267,6 +267,11 @@ curation-step penalty, reduction vocabulary, magnitude thresholds, refutation-ca
 conditions, authored-assertion gates, and dataset-QA ceiling into one immutable
 object.
 
+<figure markdown="span">
+--8<-- "figures/f4-belief-ceilings.svg"
+<figcaption>Evidence lines reduce into a proposition's belief; ceilings and a refutation cap bound it.</figcaption>
+</figure>
+
 The default policy preserves the core belief math: evidence lines are reduced by
 independence group and quality, clean support determines the ordinal magnitude,
 and decisive whole-claim refutations can cap stronger support to `fragile`.
