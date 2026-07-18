@@ -133,11 +133,22 @@ blanket-masked** — `516.9 MB download` is structural, but `the genome is 3.2 G
 is a factual claim; negative fixtures guard against over-masking. (≈11%.)
 
 **2 — Exempt (stipulated, marker-based).** A number cleared here must sit within an
-explicit **stipulated marker's** scope:
+explicit **stipulated marker's** scope. Marker granularity, narrowest-first:
 
-- document-level frontmatter flag for pure-spec documents, and/or
-- a section/block marker covering a parameter block (one marker per "Decision
-  thresholds" section — low burden; exact syntax finalized in the plan).
+- **Section/block markers are the default** — one marker per parameter block (e.g.
+  a "Decision thresholds" section). Section markers **fail closed**: scope ends at
+  the next heading of equal-or-higher level unless explicitly repeated. A section
+  that **mixes** empirical results with stipulated parameters must use a **block**
+  marker around the parameters, not a section marker — the section marker's reach
+  would otherwise silently clear the empirical numbers too.
+- **Document-level frontmatter flag is reserved** for genuinely pure-spec
+  documents (no empirical numbers anywhere in the body). It is a deliberate,
+  narrow escape hatch — **not** a template default (see below).
+
+Templates and scaffolds **must not** ship a document-wide stipulated marker on
+every plan / pre-registration. Auto-marking the whole document would recreate
+kind-wide exemption indirectly — the exact false-negative the review rejected.
+Authors add markers where parameters actually live.
 
 **Entity `kind` does *not* clear numbers.** Spec-class kinds (config
 `spec_class_kinds`, default `[pre-registration, plan]`) only set the `Unanchored`
@@ -146,7 +157,9 @@ would hide ungrounded thresholds like the audit's `60%` assessability gate — a
 stipulated-but-arbitrary cutoff the methodology explicitly wants surfaced. Marking
 is the author's positive declaration "this is a chosen parameter" (the
 `capability_scope` pattern); an *unmarked* ungrounded threshold correctly fires.
-(Reclassifies ≈22%: cheaply marked where genuinely stipulated, surfaced where not.)
+At `info` severity the modest authoring burden buys a durable, auditable
+stipulated/empirical distinction. (Reclassifies ≈22%: cheaply marked where
+genuinely stipulated, surfaced where not.)
 
 **3 — Anchored (resolvable provenance), scope-aware.** A claim is anchored only by
 a source that **resolves** (existence-checked — principle 3), at the correct scope:
@@ -179,6 +192,8 @@ genuinely resolves and newly flagging where it does not.
 
 **4 — Unanchored.** None of the above: a non-exempt claim with no resolvable
 entity-scoped provenance and no resolvable local reference. The genuine signal.
+Remediation stays the existing two-way choice — **mark as stipulated or provide
+resolvable provenance** — modulated only by `kind_hint` messaging.
 
 ### Module boundaries
 
@@ -329,7 +344,11 @@ spot-checked as genuinely ungrounded.
 ## Open questions
 
 **Part A (resolve in the plan):**
-- Stipulated-marker syntax (document flag vs section/block fence) and scoping.
+- Stipulated-marker *syntax* (the concrete document-flag key + the section/block
+  fence tokens). The *granularity policy* is settled: section/block default,
+  section markers fail closed at the next equal-or-higher heading, block markers
+  for mixed empirical/parameter sections, document flag reserved for pure-spec
+  docs, no template auto-marking.
 - Local anchor scope: paragraph vs section.
 - Exact preservation set when unifying the two ad-hoc exemption helpers.
 
