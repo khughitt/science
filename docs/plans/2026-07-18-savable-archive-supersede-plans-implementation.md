@@ -562,7 +562,7 @@ git commit -m "feat(curation): approval-envelope single-read digest verification
 - Test: `science/tests/test_plan_common.py`
 
 **Interfaces:**
-- Produces: `staging_path_for(target: Path, token: str) -> Path` (`<target>.<token>.tmp`); `staged_write(target: Path, postimage: str, mode: int, token: str, target_pre: StateFingerprint | None = None, _fault: Callable[[str], None] | None = None) -> None` (O_EXCL tmp → write → **`_fault("mid-write")` seam** → fchmod → fsync → `os.replace`; the `except Exception` cleanup removes a survivor only when it is an attributable byte-prefix of the postimage **and** `target_pre` (when supplied) still matches the live target — a concurrent target change preserves the survivor and halts, per design §3.3); `classify_staging(staging: Path, postimage: str) -> Literal["absent","prefix","complete"]`. `_fault` is test-only: raising a `BaseException` from it simulates a mid-staging kill (skips cleanup → partial `.tmp` preserved). `StagingError(RuntimeError)`.
+- Produces: `staging_path_for(target: Path, token: str) -> Path` (`<target>.<token>.tmp`); `staged_write(target: Path, postimage: str, mode: int, token: str, *, target_pre: StateFingerprint, _fault: Callable[[str], None] | None = None) -> None` (`target_pre` is **mandatory and keyword-only** — every production call and every test already holds the frozen pre-state, so there is no prefix-only cleanup path to fall into. O_EXCL tmp → write → **`_fault("mid-write")` seam** → fchmod → fsync → `os.replace`; the `except Exception` cleanup removes a survivor only when it is an attributable byte-prefix of the postimage **and** `target_pre` still matches the live target — a concurrent target change preserves the survivor and halts, per design §3.3); `classify_staging(staging: Path, postimage: str) -> Literal["absent","prefix","complete"]`. `_fault` is test-only: raising a `BaseException` from it simulates a mid-staging kill (skips cleanup → partial `.tmp` preserved). `StagingError(RuntimeError)`.
 
 - [ ] **Step 1: Write the failing test**
 
@@ -575,7 +575,7 @@ def test_staged_write_replaces_atomically_with_mode(tmp_path: Path) -> None:
     target = tmp_path / "entities" / "x" / "1.md"
     target.parent.mkdir(parents=True)
     target.write_text("old", encoding="utf-8")
-    staged_write(target, "new-bytes", 0o644, token="batch1")
+    staged_write(target, "new-bytes", 0o644, token="batch1", target_pre=fingerprint(target))
     assert target.read_text(encoding="utf-8") == "new-bytes"
     assert (os.stat(target).st_mode & 0o777) == 0o644
     assert not staging_path_for(target, "batch1").exists()  # tmp consumed
@@ -586,7 +586,7 @@ def test_staged_write_refuses_preexisting_staging_file(tmp_path: Path) -> None:
     target.write_text("x", encoding="utf-8")
     staging_path_for(target, "batch1").write_text("stale", encoding="utf-8")
     with pytest.raises(StagingError):
-        staged_write(target, "y", 0o644, token="batch1")
+        staged_write(target, "y", 0o644, token="batch1", target_pre=fingerprint(target))
 
 
 def test_classify_staging_absent_prefix_complete(tmp_path: Path) -> None:
@@ -619,7 +619,7 @@ def test_staged_write_mid_kill_leaves_attributable_prefix_and_untouched_target(t
 
     postimage = "brand-new-postimage"
     with pytest.raises(_Kill):
-        staged_write(target, postimage, 0o644, token="batch1", _fault=fault)
+        staged_write(target, postimage, 0o644, token="batch1", target_pre=fingerprint(target), _fault=fault)
 
     assert target.read_text(encoding="utf-8") == "original"  # target never touched (attributable state)
     survivor = staging_path_for(target, "batch1")
@@ -640,7 +640,7 @@ def test_staged_write_caught_error_removes_only_attributable_survivor(tmp_path: 
 
     monkeypatch.setattr(os, "replace", boom)
     with pytest.raises(RuntimeError, match="replace failed"):
-        staged_write(target, "hello", 0o644, token="b")
+        staged_write(target, "hello", 0o644, token="b", target_pre=fingerprint(target))
     assert not staging_path_for(target, "b").exists()              # attributable prefix → cleaned up
     assert target.read_text(encoding="utf-8") == "x"               # target untouched (atomic replace)
 
@@ -657,7 +657,7 @@ def test_staged_write_refuses_to_remove_a_non_prefix_survivor(tmp_path: Path, mo
 
     monkeypatch.setattr(os, "replace", corrupt_then_fail)
     with pytest.raises(StagingError, match="not an attributable prefix"):
-        staged_write(target, "hello", 0o644, token="b")
+        staged_write(target, "hello", 0o644, token="b", target_pre=fingerprint(target))
     assert staging_path_for(target, "b").exists()                  # NOT deleted — evidence preserved
     assert target.read_text(encoding="utf-8") == "x"               # target untouched
 
@@ -703,8 +703,8 @@ def staging_path_for(target: Path, token: str) -> Path:
     return target.with_name(f"{target.name}.{token}.tmp")
 
 
-def staged_write(target: Path, postimage: str, mode: int, token: str,
-                 target_pre: "StateFingerprint | None" = None,
+def staged_write(target: Path, postimage: str, mode: int, token: str, *,
+                 target_pre: "StateFingerprint",
                  _fault: Callable[[str], None] | None = None) -> None:
     # `_fault` is a TEST-ONLY seam: a test raises a `BaseException` from it to simulate a process
     # kill mid-staging. Because it is a BaseException, the `except Exception` cleanup below does NOT
@@ -754,7 +754,7 @@ def staged_write(target: Path, postimage: str, mode: int, token: str,
             if not data.startswith(survivor):
                 raise StagingError(
                     f"staging survivor is not an attributable prefix, not removing: {staging}")
-            if target_pre is not None and not matches(target_pre, target):
+            if not matches(target_pre, target):
                 raise StagingError(
                     f"target changed concurrently during staging; preserving survivor as evidence: {staging}")
             staging.unlink()  # our own partial (or complete) write AND target still ours; safe to remove
@@ -2420,13 +2420,14 @@ def test_apply_supersede_plan_matches_legacy_apply_byte_for_byte(tmp_path: Path)
 
 
 def test_apply_refuses_on_decision_drift(tmp_path: Path) -> None:
-    # Gate B (disposition): a change to the DECISION surface after preview — here removing 0001-a's
-    # `sci:supersedes` relation so the re-derived cohort no longer marks 0002-b — is refused. The
-    # member file (0002-b) is left untouched, so this drift is caught purely by the re-derived
-    # disposition/writes comparison, NOT the pre-state gate: it isolates decision drift from
-    # write-source drift (next test). (Contrast: a NON-projected change like editing 0001-a's `title`
-    # would leave the digest, disposition, and writes all identical and MUST NOT be refused —
-    # `test_non_projected_field_change_does_not_move_the_digest`, Task 8, pins that.)
+    # Gate A (decision digest): a change to the DECISION surface after preview — here removing 0001-a's
+    # `sci:supersedes` relation so the re-derived cohort no longer marks 0002-b — is refused. The removed
+    # relation moves the decision projection, so `decision_digest(material) != plan.decision_inputs_sha256`
+    # (Gate A) fires FIRST, before Gate B re-derivation or the pre-state gate is reached. The member file
+    # (0002-b) is left untouched, isolating decision drift from write-source drift (next test). (Contrast:
+    # a NON-projected change like editing 0001-a's `title` leaves the digest, disposition, and writes all
+    # identical and MUST NOT be refused — `test_non_projected_field_change_does_not_move_the_digest`,
+    # Task 8, pins that.)
     _chain(tmp_path)
     plan = plan_supersede(tmp_path, selection=AllSupersessionMembers(kind="all"),
                           preview_date="2026-07-18")
@@ -2439,10 +2440,12 @@ def test_apply_refuses_on_decision_drift(tmp_path: Path) -> None:
 
 
 def test_apply_refuses_on_write_source_drift(tmp_path: Path) -> None:
-    # Gate B / pre-state: a change to the MEMBER being rewritten (0002-b's `title` — NOT a
-    # decision-projection field, so the digest and disposition are UNCHANGED) is still refused,
-    # because the re-derived postimage and the live pre-fingerprint no longer match the frozen write.
-    # This is the drift path that a non-projected change to the *rendered* file legitimately triggers.
+    # Gate B (write surface): a change to the MEMBER being rewritten (0002-b's `title` — NOT a
+    # decision-projection field, so the digest and disposition are UNCHANGED and Gate A passes) is still
+    # refused, because the re-derived postimage differs from the frozen write, so
+    # `assert_same_surface(plan.writes, expected.writes)` (Gate B) fails FIRST — ahead of the later
+    # pre-state gate, which would independently catch it via the changed pre-fingerprint. This is the
+    # drift path a non-projected change to the *rendered* file legitimately triggers.
     _chain(tmp_path)
     plan = plan_supersede(tmp_path, selection=AllSupersessionMembers(kind="all"),
                           preview_date="2026-07-18")
@@ -3241,32 +3244,36 @@ def test_apply_archive_refuses_project_root_mismatch(tmp_path: Path) -> None:
 
 
 def test_apply_archive_refuses_when_index_changed_after_preview(tmp_path: Path) -> None:
-    # design §9 (drift rejection — INDEX changed): the archive-index target's state is frozen at
-    # preview (here absent, so the postimage is just the one new row). If the live index appears/changes
-    # before apply, re-derivation reads the new bytes and produces a different index postimage/pre, so
-    # Gate B refuses rather than clobber a concurrently-written index. The source stays put.
+    # design §9 (drift rejection — INDEX changed), ISOLATED from created-dir drift: `_archive/` exists
+    # BEFORE preview, so `plan_archive` emits no created-dir transition for it and the transition surface
+    # is identical at preview and apply (`_archive/interpretations/` stays absent throughout — it is
+    # never touched here). The ONLY thing that diverges afterward is the index file, so a failure is
+    # specifically the index guard: re-derivation reads the new bytes and produces a different index
+    # postimage/pre, and Gate B refuses rather than clobber a concurrently-written index. Source stays put.
     _superseded(tmp_path)
+    (tmp_path / "entities" / "_archive").mkdir(parents=True)  # created-dir surface fixed BEFORE preview
     plan = plan_archive(tmp_path, selection=ArchiveStatusSweep(kind="all_by_status", statuses=["superseded"]),
                         now="2026-07-18T00:00:00Z")
     index_abs = tmp_path / "entities" / "_archive" / "archive-index.jsonl"
-    index_abs.parent.mkdir(parents=True, exist_ok=True)
-    index_abs.write_text('{"id":"interpretation:9999-z"}\n', encoding="utf-8")  # index diverged after preview
+    index_abs.write_text('{"id":"interpretation:9999-z"}\n', encoding="utf-8")  # ONLY the index diverges
     with pytest.raises(ArchiveApplyError):
         apply_archive_plan(tmp_path, plan, staging_token="tok")
     assert (tmp_path / "entities" / "interpretations" / "0001-x.md").exists()  # not moved
 
 
 def test_apply_archive_refuses_when_destination_appeared_after_preview(tmp_path: Path) -> None:
-    # design §9 (drift rejection — DST appeared): the archive destination is frozen as absent at
-    # preview (`plan_archive` builds archive-dst with `pre=_ABSENT`). If something occupies the
-    # destination before apply, the move would clobber it — the pre-state gate (`matches(pre=absent,
-    # live=exists)` is False) refuses BEFORE any rename, leaving both source and destination untouched.
+    # design §9 (drift rejection — DST appeared), ISOLATED from created-dir drift: the destination's
+    # PARENT exists BEFORE preview, so `plan_archive` emits NO created-dir transitions (both `_archive/`
+    # and `_archive/interpretations/` already exist) and the transition surface is identical at preview
+    # and apply. The ONLY change afterward is the destination FILE appearing, so a failure is specifically
+    # the dst guard: `plan_archive` freezes archive-dst with `pre=_ABSENT`, and the pre-state gate
+    # (`matches(pre=absent, live=exists)` is False) refuses BEFORE any rename, leaving both untouched.
     _superseded(tmp_path)
+    dst = tmp_path / "entities" / "_archive" / "interpretations" / "0001-x.md"
+    dst.parent.mkdir(parents=True)  # created-dir surface fixed BEFORE preview
     plan = plan_archive(tmp_path, selection=ArchiveStatusSweep(kind="all_by_status", statuses=["superseded"]),
                         now="2026-07-18T00:00:00Z")
-    dst = tmp_path / "entities" / "_archive" / "interpretations" / "0001-x.md"
-    dst.parent.mkdir(parents=True, exist_ok=True)
-    dst.write_text("SOMETHING ALREADY HERE", encoding="utf-8")  # destination occupied after preview
+    dst.write_text("SOMETHING ALREADY HERE", encoding="utf-8")  # ONLY the destination file appears
     with pytest.raises(ArchiveApplyError):
         apply_archive_plan(tmp_path, plan, staging_token="tok")
     assert (tmp_path / "entities" / "interpretations" / "0001-x.md").exists()  # src not moved
@@ -3999,8 +4006,9 @@ editable `science` project pins its own version in `science/uv.lock:1827-1829` (
 
 Run: `uv lock` (from `~/d/science/science`)
 Expected: `science/uv.lock` now records `version = "0.5.0"` for the `science` package, and no other
-entries change. Committing it in this task keeps Task 19's non-frozen `ruff`/`pyright` from silently
-re-resolving and leaving `science/uv.lock` as an unstaged diff.
+entries change. Committing it here keeps `science/uv.lock` in sync with the bumped `pyproject.toml`, so
+Task 19's `--frozen` `ruff`/`pyright` gates (which refuse to run against an out-of-sync lock) pass
+instead of erroring on a stale lock.
 
 - [ ] **Step 4: Run version + compatibility tests**
 
@@ -4115,5 +4123,11 @@ Not part of this upstream branch, but the acceptance the design §8 requires bef
 - **Archive index/dst drift tests added (blocker)** — `test_apply_archive_refuses_when_index_changed_after_preview` and `test_apply_archive_refuses_when_destination_appeared_after_preview` complete design §514's drift matrix alongside the existing src-changed and project-mismatch cases.
 - **0.5.0 bump regenerates and commits `science/uv.lock` (blocker)** — Task 18 runs `uv lock` after the version edit and stages `science/uv.lock`; Task 19's lint/type gates run `--frozen` so they cannot mutate the lock.
 - **Exact-mode rollback (minor)** — `_materialize` uses `fp.mode` directly (with a `None`-narrowing assert) instead of `fp.mode or 0o644/0o755`, which corrupted mode `0o000`.
+
+**Sixth-review closures:**
+- **`target_pre` is mandatory keyword-only (functional)** — `staged_write(..., *, target_pre: StateFingerprint, _fault=None)`: the optional default let several Task 5 tests fall back to prefix-only cleanup. All five omitting calls now pass `target_pre=fingerprint(target)`, and the cleanup drops its `is not None` guard so every path enforces target attribution.
+- **Archive drift tests de-confounded from directory drift (functional)** — both new tests created `_archive` dirs after preview, so Gate B could reject on the created-directory surface rather than the guard under test. The index test now pre-creates `_archive/` (leaving `_archive/interpretations/` absent); the destination test pre-creates the destination parent — so each fails specifically when its index/dst guard is removed.
+- **Gate attribution corrected in test comments (wording)** — the decision-drift (relation removed) test is caught by Gate A's decision-digest mismatch before Gate B; the write-source (title edited) test is caught by Gate B's `assert_same_surface` before the later pre-state gate. Comments now name the gate that actually fires first.
+- **Task 18 prose (wording)** — no longer calls Task 19's lint "non-frozen"; it explains that committing the synced lock lets Task 19's `--frozen` gates run instead of erroring on a stale lock.
 
 **Type consistency:** `StateFingerprint`/`PathTransition`/`PathSnapshot`, `resolve_within`/`assert_same_surface`/`assert_staging_unique`, `ArchiveSelection`/`SupersedeSelection`, the nested report models (`SupersededChainReport`/`InvalidRelation`/`TargetReport`/… and `ArchiveCandidate`/`PlannedArchiveRow`), `plan_supersede`/`apply_supersede_plan`, `plan_archive`/`apply_archive_plan`, `_prepare_write_with_date`, `_project_inputs`/`_classify_from_projections`/`build_supersedes_graph_from_material`, `build_decision_material`/`decision_digest` are used consistently across tasks.
