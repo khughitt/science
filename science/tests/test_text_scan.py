@@ -5,6 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from science_tool.text_scan import (
+    MAX_SCANNABLE_BYTES,
     TEXT_SUFFIXES,
     iter_scannable_files,
     read_text_or_skip,
@@ -73,6 +74,40 @@ def test_skip_dirs_are_honoured(tmp_path: Path) -> None:
     names = {p.name for p in iter_scannable_files(tmp_path)}
 
     assert names == {"keep.md"}
+
+
+def test_oversize_file_is_not_scannable(tmp_path: Path, monkeypatch) -> None:
+    """A hundreds-of-MB data file or generated artifact is not a prose reference
+    site. Reading it to scan for links is what made a corpus-wide import balloon
+    to tens of GB of RSS on a data-bearing repo. It is excluded here for the same
+    reason the suffix allowlist exists -- categorically not a reference site --
+    not decoded-then-skipped, because the read is the harm.
+    """
+    monkeypatch.setattr("science_tool.text_scan.MAX_SCANNABLE_BYTES", 16)
+    (tmp_path / "data.json").write_bytes(b"x" * 64)  # over the (patched) cap
+    (tmp_path / "keep.md").write_text("# hi\n", encoding="utf-8")  # under it
+
+    names = {p.name for p in iter_scannable_files(tmp_path)}
+
+    assert "keep.md" in names
+    assert "data.json" not in names
+
+
+def test_file_at_the_cap_is_still_scannable(tmp_path: Path, monkeypatch) -> None:
+    """The cap is a ceiling well above any hand-authored reference file; a file
+    exactly at it is still scanned, so the guard never clips a genuine source."""
+    monkeypatch.setattr("science_tool.text_scan.MAX_SCANNABLE_BYTES", 16)
+    (tmp_path / "edge.json").write_bytes(b"x" * 16)  # exactly at the cap
+
+    names = {p.name for p in iter_scannable_files(tmp_path)}
+
+    assert "edge.json" in names
+
+
+def test_default_cap_clears_the_largest_plausible_source() -> None:
+    """The real ceiling must sit above a canonical source (the largest here is a
+    ~0.8 MB knowledge yaml), so the guard only ever excludes data and artifacts."""
+    assert MAX_SCANNABLE_BYTES >= 1024 * 1024
 
 
 def test_scans_the_real_repository_and_covers_its_python() -> None:

@@ -6,10 +6,13 @@
 which greps for terms, but a rewriter that decodes each hit as UTF-8 will raise
 on the first PNG. This module is the surface a rewriter is allowed to touch.
 
-Two independent guards, because neither is sufficient:
+Three independent guards, because none is sufficient alone:
 
   * an allowlist of suffixes -- a .png is never a reference site, and reading it
-    to discover that is waste; and
+    to discover that is waste;
+  * a size ceiling -- a suffix says nothing about size, and a hundreds-of-MB
+    .json data artifact read into a str for a link regex is what OOMs a
+    corpus-wide pass; excluded like a binary, for the same reason; and
   * a decode that REPORTS a skip instead of raising -- a .md CAN contain
     undecodable bytes, and one bad file must not abort a corpus-wide pass, but
     it must not vanish either.
@@ -39,6 +42,17 @@ _CODE_SUFFIXES: frozenset[str] = frozenset(
 )
 
 TEXT_SUFFIXES: frozenset[str] = _PROSE_SUFFIXES | _CODE_SUFFIXES
+
+# A third exclusion, alongside skip-dirs and the suffix allowlist: size. A
+# reference site is a file a human maintains -- prose, config, a canonical yaml;
+# the largest such file in a real research corpus is under a megabyte. A `.json`
+# or `.csv` in the hundreds of MB is a data artifact that happens to carry a
+# scannable suffix, and decoding it to discover it holds no links is not merely
+# waste -- reading one 800 MB file into a str and running the link regex over it
+# ballooned a corpus-wide import to tens of GB of RSS. Excluded like a binary,
+# and for the same reason: categorically not a reference site. The ceiling sits
+# far above any hand-authored source so the guard never clips a genuine one.
+MAX_SCANNABLE_BYTES: int = 5 * 1024 * 1024  # 5 MiB
 
 
 @dataclass(frozen=True)
@@ -72,6 +86,8 @@ def iter_scannable_files(
         if any(part in _REFERENCE_SCAN_SKIP_DIRS for part in rel_parts):
             continue
         if path.suffix.lower() not in TEXT_SUFFIXES:
+            continue
+        if path.stat().st_size > MAX_SCANNABLE_BYTES:
             continue
         files.append(path)
     return sorted(files)

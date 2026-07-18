@@ -24,8 +24,8 @@ def test_root_version_option_reports_the_declared_package_version() -> None:
     assert result.output == f"science {_package_version()}\n"
 
 
-def test_package_and_plugin_establish_0_4_0_baseline() -> None:
+def test_package_and_plugin_establish_0_4_1_baseline() -> None:
     plugin = json.loads((ROOT / ".claude-plugin" / "plugin.json").read_text(encoding="utf-8"))
 
-    assert _package_version() == "0.4.0"
+    assert _package_version() == "0.4.1"
     assert plugin["version"] == _package_version()

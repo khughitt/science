@@ -32,6 +32,24 @@ records what landed here.
 7. **transaction machinery** — a whole-tree snapshot (bytes, mode, symlink
    target, and directory existence) with rollback asserted by tree identity.
 
+## v0.4.1 — scan size ceiling
+
+The v0.4.0 corpus scan filtered candidate files by directory and suffix but not
+size. Pointed at a real research repo whose `data/` holds an 800 MB `.json`, the
+reference scanner read that file into a `str` and ran the link regex over it,
+ballooning a single `entities import` to tens of GB of RSS. `text_scan`
+`iter_scannable_files` now excludes any file over `MAX_SCANNABLE_BYTES` (5 MiB)
+as a third exclusion alongside skip-dirs and the suffix allowlist — a data
+artifact is categorically not a reference site, and the read is the harm. The
+ceiling sits far above the largest hand-authored source (a sub-megabyte
+canonical yaml), so the guard never clips a genuine reference file. The guard is
+in `iter_scannable_files`, not `read_text_or_skip`, deliberately: a size-based
+`Skip` would surface in `audit_moved_references` as a "may reference" problem,
+and any audit problem rolls the apply back — so every apply against a
+data-bearing repo would abort. Direct reads of specific known files (the imported
+document, a resolved link target) stay uncapped, so importing a legitimately
+large document still works.
+
 ## Known gaps left open, deliberately
 
 - `_remove_frontmatter_ref` still ignores `relations[].target` while
@@ -72,6 +90,14 @@ records what landed here.
   prose-only cannot see a link buried in a masked construct. Making masked mentions
   into `ManualHit`s (without reintroducing fenced-example noise) is a `markdown_scan`
   refinement deferred until a real corpus reference is found to hide this way.
+- The 5 MiB scan ceiling (v0.4.1) means a reference genuinely living inside a
+  file larger than that -- a multi-MB generated artifact, say -- is neither
+  rewritten nor surfaced by the post-move audit, exactly as a reference inside a
+  code file or a skipped directory is not. In this corpus every hand-authored
+  reference site is sub-megabyte, so the ceiling only ever excludes data and
+  generated output; if a real reference is one day found in an oversized file,
+  the exit is a streaming line-scan that never materialises the whole file,
+  rather than raising the cap.
 - The scan-exclusion fix covers a plan applied against its OWN corpus: apply
   excludes the plan file it was handed. A DIFFERENT stale plan `.json` left lying
   in the corpus from an earlier, unrelated import would still be scanned as prose
