@@ -305,6 +305,32 @@ def test_rollback_preserves_non_default_file_mode(tmp_path: Path) -> None:
     assert (os.stat(target).st_mode & 0o777) == 0o640  # exact mode restored
 
 
+def test_rollback_preserves_mode_000(tmp_path: Path) -> None:
+    # 0o000 is the falsy mode a `fp.mode or 0o644` fallback would corrupt to 0o644;
+    # only this case witnesses that regression.
+    target = tmp_path / "locked.txt"
+    content = "original"
+    target.write_text(content, encoding="utf-8")
+    # Snapshot before setting mode to 0o000 (can't read 0o000 files for fingerprinting)
+    snap_before = snapshot_paths([target])
+    # Replace the fingerprint with one that has mode 0o000
+    snap_fp = StateFingerprint(
+        existed=True, type="file",
+        content_sha256=snap_before[target].fp.content_sha256, mode=0o000, symlink_target=None)
+    # Reconstruct snap with corrected mode, preserving content
+    snap = {target: snap_before[target].__class__(fp=snap_fp, content=snap_before[target].content)}
+    # Simulate a modification and mode change
+    target.write_text("tampered", encoding="utf-8")
+    os.chmod(target, 0o644)
+    post = fingerprint(target)
+    t = PathTransition(role="entity-rewrite", rel_path="locked.txt", pre=snap_fp, post=post, postimage="tampered")
+    rollback_transitions([t], tmp_path, snap)
+    assert (os.stat(target).st_mode & 0o777) == 0o000  # exact falsy mode restored
+    # Restore read permission temporarily to verify content
+    os.chmod(target, 0o644)
+    assert target.read_text(encoding="utf-8") == "original"
+
+
 def test_rollback_restores_symlink_not_a_regular_file(tmp_path: Path) -> None:
     link = tmp_path / "l"
     link.symlink_to("t.txt")
