@@ -169,6 +169,17 @@ def test_section_marker_is_fail_closed(tmp_path):
     assert marked_scope_for_line(scopes, ctx.lines.index("We saw 7.94 fold.") + 1) is None
 
 
+def test_section_marker_covers_nested_subsections(tmp_path):
+    body = ("## Parent\n<!-- stipulated -->\n\n"
+            "### Child\n\nChild value 7.94.\n\n"
+            "## Other\n\nOther value 3.1.\n")
+    path = _doc(tmp_path, body, frontmatter="kind: plan")
+    ctx = build_document_context(path)
+    scopes = compute_marker_scopes(ctx)
+    assert marked_scope_for_line(scopes, ctx.lines.index("Child value 7.94.") + 1) == "section"
+    assert marked_scope_for_line(scopes, ctx.lines.index("Other value 3.1.") + 1) is None
+
+
 def test_block_marker_covers_only_fenced_lines(tmp_path):
     body = ("We saw 7.94 fold.\n\n<!-- stipulated:start -->\nalpha 0.05\n<!-- stipulated:end -->\n\nAnd 3.1 more.\n")
     path = _doc(tmp_path, body, frontmatter="kind: interpretation")
@@ -233,6 +244,14 @@ def test_local_body_ref_resolves_only_when_it_exists(tmp_path):
     assert all(c.resolution_status == "unresolved" for c in bad)
 
 
+def test_body_ref_requires_word_boundary(tmp_path):
+    idx = build_resolution_index(_project(tmp_path))
+    bad = local_candidates_for_paragraph("we recite:Foo2024 here", idx)
+    assert all(c.reference != "cite:Foo2024" for c in bad)   # substring match must not fire
+    good = local_candidates_for_paragraph("see cite:Foo2024", idx)
+    assert any(c.reference == "cite:Foo2024" for c in good)
+
+
 def test_wiki_link_is_topical_not_a_candidate(tmp_path):
     idx = build_resolution_index(_project(tmp_path))
     cands = local_candidates_for_paragraph("See [[Related Topic]] for background, value 7.94.", idx)
@@ -263,8 +282,15 @@ def test_unanchored_number_is_the_signal(tmp_path):
 
 
 def test_entity_provenance_anchors_all_numbers(tmp_path):
-    out = _assess(tmp_path, "The improvement was 7.94 fold; p was 0.001.\n",
+    # Trailing text after `0.001` (not a bare `.`) so the claim regex's
+    # trailing negative-lookahead actually matches it — mirrors
+    # test_marked_stipulated_number_is_exempt's same workaround; a number
+    # immediately followed by a sentence-final period is never extracted.
+    out = _assess(tmp_path, "The improvement was 7.94 fold; p was 0.001 (see notes).\n",
                   frontmatter="kind: interpretation\nsource_refs:\n  - task:t064")
+    # guard against the assertion below passing vacuously if extraction drops
+    # both numbers
+    assert {"7.94", "0.001"} <= {a.claim.value for a in out}
     assert all(isinstance(a, Anchored) for a in out if a.claim.value in {"7.94", "0.001"})
 
 

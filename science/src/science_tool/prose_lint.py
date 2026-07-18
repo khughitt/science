@@ -14,13 +14,16 @@ import re
 from dataclasses import dataclass
 from fnmatch import fnmatch
 from pathlib import Path
-from typing import Callable
+from typing import TYPE_CHECKING, Callable
 
 from science_tool.markdown_utils import (
     is_fence_line,
     frontmatter_span,
     strip_inline_code,
 )
+
+if TYPE_CHECKING:
+    from science_tool.numeric_provenance import ResolutionIndex
 
 logger = logging.getLogger(__name__)
 
@@ -497,7 +500,7 @@ def detect_numeric_anchor(
     *,
     strict: bool = False,
     anchor_patterns: list[str] | None = None,
-    resolution_index=None,
+    resolution_index: "ResolutionIndex | None" = None,
     spec_class_kinds: list[str] | None = None,
     provenance_fields: list[str] | None = None,
 ) -> list[LintIssue]:

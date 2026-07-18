@@ -261,6 +261,40 @@ def test_strict_frontmatter_inline_gap_stays_summary_only(tmp_path: Path) -> Non
     ]
 
 
+def test_config_forwards_additional_anchor_patterns_to_numeric_anchor(tmp_path: Path) -> None:
+    # Parity with tests/test_prose_lint_cli.py::test_additional_anchor_patterns_reach_numeric_anchor —
+    # proves the validate-check caller (not just the CLI) forwards
+    # `additional_anchor_patterns` into the additive merge that reaches the
+    # numeric-anchor engine.
+    from science_tool.validate.checks.prose_lints import check_prose_lints
+
+    _write_doc(
+        tmp_path,
+        "---\nkind: report\n---\n\nGrounded via paper:Foo2024 the value 7.94 holds.\n",
+    )
+
+    results = list(
+        check_prose_lints(
+            _ctx(
+                tmp_path,
+                strict=True,
+                prose_lint="\n".join(
+                    [
+                        "prose_lint:",
+                        "  anchor_patterns:",
+                        "    - 'task:'",
+                        "  additional_anchor_patterns:",
+                        "    - 'paper:'",
+                    ]
+                ),
+            )
+        )
+    )
+
+    # `paper:` is only reachable because it was *additional*, not in anchor_patterns
+    assert all(result.rule != "prose_lints.numeric-anchor" for result in results)
+
+
 def test_registration_includes_prose_lints_after_cross_references() -> None:
     import science_tool.validate.checks.cross_references as cross_references
     import science_tool.validate.checks.prose_lints as prose_lints

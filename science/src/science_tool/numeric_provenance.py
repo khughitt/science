@@ -313,14 +313,26 @@ def compute_marker_scopes(document: DocumentContext) -> tuple[MarkerScope, ...]:
         return tuple(scopes)  # document flag subsumes all finer markers
 
     # Section markers: a `<!-- stipulated -->` on the line just after a heading
-    # marks that heading's section (fail-closed via DocumentContext.sections).
+    # marks that heading's section, fail-closed at the next equal-or-higher
+    # heading. `DocumentContext.section_id_per_line` attributes a subsection's
+    # own lines to the CHILD section id, so the marked `Section.end_line`
+    # alone stops short of nested subsections. Recompute the upper bound by
+    # scanning `document.sections` (in document order) for the next heading
+    # whose level is <= the marked heading's level; deeper subsections in
+    # between stay covered, matching the doc's stated coverage promise.
     heading_line_to_section = {s.start_line: s for s in document.sections}
+    sections_by_start = sorted(document.sections, key=lambda s: s.start_line)
     for lineno in range(1, len(document.lines) + 1):
         if _SECTION_MARKER_RE.match(document.lines[lineno - 1]):
             heading_line = lineno - 1
             section = heading_line_to_section.get(heading_line)
             if section is not None:
-                covered = frozenset(range(section.start_line, section.end_line + 1))
+                end_line = len(document.lines)
+                for other in sections_by_start:
+                    if other.start_line > section.start_line and other.heading_level <= section.heading_level:
+                        end_line = other.start_line - 1
+                        break
+                covered = frozenset(range(section.start_line, end_line + 1))
                 scopes.append(MarkerScope(scope="section", covered_lines=covered, whole_document=False))
 
     # Block markers: lines strictly between a start/end fence pair.
@@ -425,10 +437,10 @@ def entity_source_candidates(
 # entity-wide.
 
 _BODY_REF_RE = re.compile(
-    r"(?:task:t\d{2,}"
+    r"(?:(?<![A-Za-z])task:t\d{2,}"
     r"|\[@[A-Za-z][A-Za-z0-9_:.-]*\]"
-    r"|cite:[A-Za-z][A-Za-z0-9_:.-]*"
-    r"|dataset:[A-Za-z0-9][A-Za-z0-9_.-]*"
+    r"|(?<![A-Za-z])cite:[A-Za-z][A-Za-z0-9_:.-]*"
+    r"|(?<![A-Za-z])dataset:[A-Za-z0-9][A-Za-z0-9_.-]*"
     r"|\[\[[^\]\n]+\]\])"
 )
 
@@ -479,7 +491,7 @@ def assess_numeric_claims(
         _BARE_YEAR_RE, _BOLD_STRUCTURAL_LABEL_RE, _CROSS_REFERENCE_RE,
         _HEADER_OR_LIST_RE, _LIST_RE, _NUMERIC_CLAIM_RE, _mask_numeric_identifier_spans,
     )
-    from science_tool.markdown_utils import is_fence_line, strip_inline_code
+    from science_tool.markdown_utils import strip_inline_code
 
     marker_scopes = compute_marker_scopes(document)
     entity_cands = entity_source_candidates(document, index, config)
