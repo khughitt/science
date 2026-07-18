@@ -6,7 +6,7 @@
 
 **Architecture:** Extract the reusable status-vs-reality core (`probe`, `extract`, `adjudicate`, plus a new `evidence_signature`) out of the frozen study package `drift_sample/` into a production package `science_tool/correspondence/`. Add a `validate` check that compares each plan's claimed lifecycle rank against a deterministic adjudication of its extracted deliverables, emitting a permanent-WARN, ungated, evidence-signed finding on under-claim only. Centralize `accepted_validation` handling in `validate.acceptance` (both `validate` and `graph.health` delegate) and make suppression of this rule require an exact evidence-signature token, enforced fail-closed by a second canonical check.
 
-**Tech Stack:** Python 3.12+, `uv` (run from `science/`), pytest, pydantic (`science-model`), the existing `science_tool.validate` check framework.
+**Tech Stack:** Python `>=3.11` (the package's floor), `uv` (run from `science/`), pytest, pydantic (`science-model`), the existing `science_tool.validate` check framework.
 
 **Design:** `docs/plans/2026-07-17-plan-correspondence-drift-screen-design.md`.
 
@@ -19,6 +19,7 @@
 - **No compatibility shims / legacy layers.** Relocations retarget imports; they do not leave re-export stubs.
 - **Frozen study stays reproducible and executable.** `adjudicate`/`probe`/`extract` logic is byte-for-byte unchanged by relocation; `drift_sample/` study scripts retarget their imports.
 - **No AI-attribution trailers** on any commit (no `Co-Authored-By`, no "Generated with" footer).
+- **Working directory.** Every command runs inside this worktree (`.worktrees/plan-correspondence-drift-screen`); `git` commands are executed from its root and package commands from `science/`. Verify `git branch --show-current` reports `plan-correspondence-drift-screen` before the first commit — commits must not leak to `main`. Paths in this plan are worktree-relative; do not hard-code `~/d/…` or absolute Dropbox paths.
 - **Run tests from `science/`:** `cd science && uv run --frozen pytest …`. Lint/types: `uv run ruff check`, `uv run pyright`.
 
 ---
@@ -30,7 +31,7 @@ Move `probe`/`extract`/`adjudicate` out of the study package into a production p
 **Files:**
 - Create: `science/src/science_tool/correspondence/__init__.py`
 - Create: `science/src/science_tool/correspondence/probe.py` (from `drift_sample/probe.py`, verbatim)
-- Create: `science/src/science_tool/correspondence/extract.py` (from `drift_sample/extract.py`, verbatim)
+- Create: `science/src/science_tool/correspondence/extract.py` (from `drift_sample/extract.py`; logic verbatim, one docstring paragraph corrected in Step 2a)
 - Create: `science/src/science_tool/correspondence/adjudicate.py` (`Adjudicated` + `adjudicate`, lifted from `drift_sample/score.py`)
 - Delete: `science/src/science_tool/drift_sample/probe.py`, `science/src/science_tool/drift_sample/extract.py`
 - Modify: `science/src/science_tool/drift_sample/score.py` (drop moved code; import from `correspondence`)
@@ -59,12 +60,31 @@ share ONE definition (design §4.1). The study's statistics stay in `drift_sampl
 - [ ] **Step 2: Move `probe.py` and `extract.py` verbatim**
 
 ```bash
-cd /mnt/ssd/Dropbox/science/.worktrees/plan-correspondence-drift-screen/science
+cd science
 git mv src/science_tool/drift_sample/probe.py src/science_tool/correspondence/probe.py
 git mv src/science_tool/drift_sample/extract.py src/science_tool/correspondence/extract.py
 ```
 
-No content edits — the modules have no intra-`drift_sample` imports.
+The modules have no intra-`drift_sample` imports, so no import edits are needed. One
+docstring correction follows in the next step; the executable logic is unchanged.
+
+- [ ] **Step 2a: Correct the relocated `extract.py` docstring (comment-only)**
+
+`extract.py`'s module docstring currently claims "Under-extraction shows up as
+`indeterminate` (honest)." That is false: extracting *fewer* deliverables than a
+plan promises (say one of three, and it is present) makes `adjudicate` return
+`COMPLETE` — a false positive on the under-claim axis, not `indeterminate`. Only an
+empty extraction or an `UNKNOWN` probe yields `indeterminate`. Replace the final
+paragraph of the docstring (the executable logic below it is untouched):
+
+```python
+Conservative by construction: a token that cannot be resolved to a location is
+not extracted at all. Over-extraction would manufacture mismatches, so the regex
+stays strict. Under-extraction is the residual risk this screen accepts: fewer
+extracted deliverables can make a partially-built plan read as more complete than
+it is, which is why the screen is advisory (design §6.2) and never gates. Only an
+empty extraction or an `unknown` probe collapses to `indeterminate`.
+```
 
 - [ ] **Step 3: Create `correspondence/adjudicate.py`**
 
@@ -191,7 +211,7 @@ from science_tool.drift_sample.score import (
 from science_tool.drift_sample.normalize import normalize_claim
 ```
 
-The surviving `normalize`/`verdict`/`manski`/`gate` tests reference `Adjudicated`, `normalize_claim`, and the statistics — not `ProbeResult`/`TaskState`. If pyright/ruff flags any of the above as unused after the split, delete that name from the import.
+The surviving `normalize`/`verdict`/`manski`/`gate` tests reference `Adjudicated`, `normalize_claim`, and the statistics only — never `ProbeResult`/`TaskState`, which moved with the adjudication tests. The import block above is therefore the complete, final set; add nothing else. Step 8's `ruff check` confirms no unused import survives.
 
 - [ ] **Step 8: Run the full suite + type-check to prove behavior-neutral**
 
@@ -200,10 +220,30 @@ Expected: PASS (same count as before the task, minus zero — tests moved, not r
 Run: `uv run pyright && uv run ruff check`
 Expected: 0 errors.
 
-- [ ] **Step 9: Prove the frozen-study scripts still import**
+- [ ] **Step 9: Prove the frozen-study scripts' imports actually RESOLVE**
 
-Run: `cd science && uv run --frozen python -c "import ast, pathlib; [ast.parse(pathlib.Path(p).read_text()) for p in ['../docs/plans/2026-07-17-drift-sample/build_bundles.py','../docs/plans/2026-07-17-drift-sample/score_run.py']]; import science_tool.drift_sample.score, science_tool.correspondence.adjudicate, science_tool.correspondence.probe, science_tool.correspondence.extract; print('ok')"`
-Expected: `ok`
+`ast.parse` alone only proves the scripts are syntactically valid — it would stay green even if `from science_tool.correspondence.probe import probe_path` pointed at a symbol that no longer exists. `score_run.py` also has no `if __name__ == "__main__"` guard, so importing it as a module executes its body. So resolve each `ImportFrom` **statically**: parse the script, then for every `from <module> import <name>` actually import `<module>` and `getattr` each `<name>`, without running the script body. This catches a moved-but-not-retargeted import and a renamed symbol, which is the whole risk of Task 1.
+
+Run this from `science/`:
+
+```bash
+uv run --frozen python - <<'PY'
+import ast, importlib, pathlib
+scripts = [
+    "../docs/plans/2026-07-17-drift-sample/build_bundles.py",
+    "../docs/plans/2026-07-17-drift-sample/score_run.py",
+]
+for script in scripts:
+    tree = ast.parse(pathlib.Path(script).read_text())
+    for node in ast.walk(tree):
+        if isinstance(node, ast.ImportFrom) and node.module:
+            module = importlib.import_module(node.module)
+            for alias in node.names:
+                assert hasattr(module, alias.name), f"{script}: {node.module}.{alias.name} missing"
+print("ok")
+PY
+```
+Expected: `ok`. A `ModuleNotFoundError` or the assertion message names the exact unretargeted import.
 
 - [ ] **Step 10: Commit**
 
@@ -277,11 +317,27 @@ def test_signature_is_order_independent_in_inputs():
     assert a == b
 
 
-def test_signature_changes_when_a_probe_result_changes():
-    base = dict(claimed="draft", task_states=[], adjudicated="active")
-    present = evidence_signature(probes=[_probe("a.py", ProbeResult.PRESENT)], **base)
-    absent = evidence_signature(probes=[_probe("a.py", ProbeResult.ABSENT)], **base)
-    assert present != absent
+def test_signature_changes_when_any_covered_field_changes():
+    # Every element of the payload must move the hash: claimed status, a probe target,
+    # a probe result, a task ref, a task state, and the adjudicated status. One shared
+    # baseline, mutate one axis at a time.
+    def sig(**over):
+        base = dict(
+            claimed="draft",
+            probes=[_probe("a.py", ProbeResult.PRESENT)],
+            task_states=[("t1", TaskState.DONE)],
+            adjudicated="complete",
+        )
+        base.update(over)
+        return evidence_signature(**base)
+
+    baseline = sig()
+    assert sig(claimed="active") != baseline                                  # claimed status
+    assert sig(probes=[_probe("b.py", ProbeResult.PRESENT)]) != baseline      # probe target
+    assert sig(probes=[_probe("a.py", ProbeResult.ABSENT)]) != baseline       # probe result
+    assert sig(task_states=[("t2", TaskState.DONE)]) != baseline              # task ref
+    assert sig(task_states=[("t1", TaskState.MISSING)]) != baseline           # task state
+    assert sig(adjudicated="active") != baseline                             # adjudicated status
 ```
 
 - [ ] **Step 2: Run to verify it fails**
@@ -512,6 +568,17 @@ def test_draft_with_partial_deliverables_fires_as_active(tmp_path: Path):
     assert "src/a.py" in results[0].message and "src/b.py" in results[0].message
 
 
+def test_active_with_all_present_fires_as_complete(tmp_path: Path):
+    # The other measured under-claim transition (result.md: 1 of 22): claimed `active`,
+    # everything present -> adjudicated COMPLETE, active(1) < complete(2).
+    (tmp_path / "src").mkdir()
+    (tmp_path / "src" / "a.py").write_text("x = 1\n", encoding="utf-8")
+    _plan(tmp_path, "0006-x.md", entity_id="plan:0006", status="active", body="Builds `src/a.py`.")
+    results = _run(tmp_path)
+    assert len(results) == 1
+    assert "active" in results[0].message and "complete" in results[0].message
+
+
 def test_draft_with_absent_deliverable_is_silent(tmp_path: Path):
     _plan(tmp_path, "0002-x.md", entity_id="plan:0002", status="draft", body="Will build `src/missing.py`.")
     assert not _run(tmp_path)
@@ -521,6 +588,34 @@ def test_complete_with_present_deliverable_is_silent(tmp_path: Path):
     (tmp_path / "src").mkdir()
     (tmp_path / "src" / "a.py").write_text("x = 1\n", encoding="utf-8")
     _plan(tmp_path, "0003-x.md", entity_id="plan:0003", status="complete", body="Built `src/a.py`.")
+    assert not _run(tmp_path)
+
+
+def test_complete_claim_with_partial_deliverables_is_silent_not_over_claim(tmp_path: Path):
+    # complete(2) vs adjudicated active(1): the claim is HIGHER than reality. This screen is
+    # under-claim only (design §3), so an over-claim must be silent, not flagged.
+    (tmp_path / "src").mkdir()
+    (tmp_path / "src" / "a.py").write_text("x = 1\n", encoding="utf-8")
+    _plan(
+        tmp_path, "0007-x.md", entity_id="plan:0007", status="complete",
+        body="Built `src/a.py` and `src/b.py`.",
+    )
+    assert not _run(tmp_path)
+
+
+def test_unknown_probe_is_indeterminate_and_silent(tmp_path: Path):
+    # A `../`-escaping path extracts but probes UNKNOWN (probe.py: outside the project),
+    # so adjudicate() returns INDETERMINATE -> off the lifecycle axis -> silent (design §6.3).
+    _plan(tmp_path, "0008-x.md", entity_id="plan:0008", status="draft", body="Builds `../outside/a.py`.")
+    assert not _run(tmp_path)
+
+
+def test_terminal_claimed_status_is_off_axis_and_silent(tmp_path: Path):
+    # `superseded` is not in the draft/active/complete lifecycle ranking, so the screen
+    # never compares it -> silent even though `src/a.py` is present.
+    (tmp_path / "src").mkdir()
+    (tmp_path / "src" / "a.py").write_text("x = 1\n", encoding="utf-8")
+    _plan(tmp_path, "0009-x.md", entity_id="plan:0009", status="superseded", body="Built `src/a.py`.")
     assert not _run(tmp_path)
 
 
@@ -575,7 +670,12 @@ from science_tool.validate.result import Result, Severity
 # draft < active < complete. Anything else (terminal, unknown) is off-axis: silent.
 _LIFECYCLE_RANK = {"draft": 0, "active": 1, "complete": 2}
 
-_RULE = "plan.correspondence-drift"
+# The rule is derived as f"{kind}.correspondence-drift" so the screen extends to a
+# second correspondence-scoped kind without renaming (design §3 "plans only, extensible").
+# Today only "plan" reaches the emit path, so the emitted rule is always
+# "plan.correspondence-drift" -- the exact literal `EVIDENCE_SCOPED_RULES` (Task 5)
+# and the never-gated guard name.
+_SCREENED_KIND = "plan"
 
 
 def _names(probes: list[Probe], result: ProbeResult) -> str:
@@ -583,6 +683,7 @@ def _names(probes: list[Probe], result: ProbeResult) -> str:
 
 
 def _drift_result(
+    rule: str,
     rel_path: Path,
     entity_id: str,
     claimed: str,
@@ -602,7 +703,7 @@ def _drift_result(
         f"Fix the status to {adjudicated.value!r}, or accept with an evidence-scoped "
         f"health.accepted_validation entry. evidence-signature: {signature}"
     )
-    return Result(Severity.WARN, rel_path, None, message, _RULE, None)
+    return Result(Severity.WARN, rel_path, None, message, rule, None)
 
 
 @Check(section="plan correspondence drift", order=205)
@@ -613,8 +714,9 @@ def check_correspondence_drift(ctx: ValidateContext) -> Iterator[Result]:
     for path in iter_entity_markdown(entities_root):
         fm = ctx.frontmatter(path)
         kind, status = fm.get("kind"), fm.get("status")
-        if kind != "plan" or not isinstance(status, str) or not status:
+        if kind != _SCREENED_KIND or not isinstance(status, str) or not status:
             continue
+        rule = f"{kind}.correspondence-drift"
         claimed_rank = _LIFECYCLE_RANK.get(status)
         if claimed_rank is None:
             continue  # terminal / off-axis claimed status
@@ -634,7 +736,7 @@ def check_correspondence_drift(ctx: ValidateContext) -> Iterator[Result]:
         if claimed_rank < adjudicated_rank:  # UNDER-CLAIM
             entity_id = fm.get("id") if isinstance(fm.get("id"), str) else path.stem
             yield _drift_result(
-                path.relative_to(ctx.project_root), entity_id, status, adjudicated, probes, task_states
+                rule, path.relative_to(ctx.project_root), entity_id, status, adjudicated, probes, task_states
             )
 ```
 
@@ -642,23 +744,17 @@ def check_correspondence_drift(ctx: ValidateContext) -> Iterator[Result]:
 
 In `science/src/science_tool/validate/checks/__init__.py`, add `"correspondence_drift"` to the `CANONICAL_CHECK_MODULES` tuple (append after `"materialization"`).
 
-- [ ] **Step 5: Add the registry test**
+- [ ] **Step 5: Prove the check is REGISTERED via the filesystem guard (not a module-load test)**
 
-Append to `science/tests/validate/test_checks_correspondence_drift.py`:
+Do **not** add a bespoke "is it registered" test that imports the check module — importing the module runs the `@Check` decorator as a side effect and registers it inside the shared pytest process, so such a test passes even if `CANONICAL_CHECK_MODULES` omits the entry (it reads registry state another test already contaminated). The repo already owns the correct guard: `tests/test_check_registry_is_complete.py::test_EVERY_check_module_on_disk_is_REGISTERED` compares the checks directory on disk to the `CANONICAL_CHECK_MODULES` tuple and touches no import state, so it catches a present-but-unlisted module. Registering `"correspondence_drift"` in Step 4 is exactly what keeps it green.
 
-```python
-def test_check_is_registered_canonically():
-    from science_tool.validate.checks import CANONICAL_CHECKS, _load_canonical_checks
-
-    _load_canonical_checks()
-    fns = {entry.fn.__name__ for entry in CANONICAL_CHECKS}
-    assert "check_correspondence_drift" in fns
-```
+Run: `cd science && uv run --frozen pytest tests/test_check_registry_is_complete.py::test_EVERY_check_module_on_disk_is_REGISTERED -q`
+Expected: PASS. (Runner reachability itself is proven end-to-end by the CLI test in Task 8 and the health integration test in Task 7.)
 
 - [ ] **Step 6: Run tests + types**
 
 Run: `cd science && uv run --frozen pytest tests/validate/test_checks_correspondence_drift.py -q`
-Expected: PASS (8 tests, including the registry test from Step 5).
+Expected: PASS (11 tests).
 Run: `cd science && uv run pyright && uv run ruff check`
 Expected: 0 errors.
 
@@ -680,7 +776,7 @@ Make `validate.acceptance` the single authority: a field-based match predicate, 
 - Test: `science/tests/test_acceptance_authority.py`
 
 **Interfaces:**
-- Produces: `accepted_validation_entries(project_root: Path) -> list[dict[str, Any]]`; `entry_matches(entry, *, rule, severity, path, task, message) -> bool`; `entry_is_evidence_scoped(entry) -> bool`; `entry_suppresses(entry, *, rule, severity, path, task, message) -> bool`; `EVIDENCE_SCOPED_RULES: frozenset[str]`; `filter_accepted_warnings(project_root, results)` (unchanged signature).
+- Produces: `accepted_validation_entries(project_root: Path) -> list[dict[str, Any]]`; `entry_matches(entry, *, rule, severity, path, task, message) -> bool`; `entry_is_evidence_scoped(entry) -> bool`; `entry_path_is_project_relative(entry) -> bool`; `entry_is_well_scoped(entry) -> bool`; `entry_suppresses(entry, *, rule, severity, path, task, message) -> bool`; `EVIDENCE_SCOPED_RULES: frozenset[str]`; `filter_accepted_warnings(project_root, results)` (unchanged signature).
 
 - [ ] **Step 1: Write the failing tests**
 
@@ -699,7 +795,8 @@ from science_tool.validate.acceptance import (
 )
 from science_tool.validate.result import Result, Severity
 
-_SIG = "v1:" + "a" * 64
+_SIG = "v1:" + "a" * 64                       # the bare hash token (NOT scoped on its own)
+_LABELED = f"evidence-signature: {_SIG}"       # the complete labeled token that IS scoped
 
 
 def _warn(rule: str, path: str, message: str) -> Result:
@@ -714,18 +811,50 @@ def test_path_only_entry_does_not_suppress_the_scoped_rule():
     entry = {"rule": "plan.correspondence-drift", "path": "entities/plans/0001-x.md", "reason": "checked"}
     assert not entry_suppresses(
         entry, rule="plan.correspondence-drift", severity="warn",
-        path="entities/plans/0001-x.md", task=None, message=f"... evidence-signature: {_SIG}",
+        path="entities/plans/0001-x.md", task=None, message=f"... {_LABELED}",
     )
 
 
 def test_valid_signature_entry_suppresses():
     entry = {
         "rule": "plan.correspondence-drift", "path": "entities/plans/0001-x.md",
-        "reason": "input file, not a deliverable", "message_contains": f"evidence-signature: {_SIG}",
+        "reason": "input file, not a deliverable", "message_contains": _LABELED,
     }
     assert entry_suppresses(
         entry, rule="plan.correspondence-drift", severity="warn",
-        path="entities/plans/0001-x.md", task=None, message=f"... evidence-signature: {_SIG}",
+        path="entities/plans/0001-x.md", task=None, message=f"... {_LABELED}",
+    )
+
+
+def test_bare_signature_without_label_does_not_suppress():
+    # A hash without the `evidence-signature:` label is not a scoped signature.
+    entry = {
+        "rule": "plan.correspondence-drift", "path": "entities/plans/0001-x.md",
+        "reason": "tried to accept with a bare hash", "message_contains": _SIG,
+    }
+    assert not entry_suppresses(
+        entry, rule="plan.correspondence-drift", severity="warn",
+        path="entities/plans/0001-x.md", task=None, message=f"... {_LABELED}",
+    )
+
+
+def test_scoped_entry_without_path_does_not_suppress():
+    # Signature present, but no `path`: one signature would blind the rule tree-wide.
+    entry = {"rule": "plan.correspondence-drift", "reason": "no path", "message_contains": _LABELED}
+    assert not entry_suppresses(
+        entry, rule="plan.correspondence-drift", severity="warn",
+        path="entities/plans/0001-x.md", task=None, message=f"... {_LABELED}",
+    )
+
+
+def test_scoped_entry_with_absolute_path_does_not_suppress():
+    entry = {
+        "rule": "plan.correspondence-drift", "path": "/abs/entities/plans/0001-x.md",
+        "reason": "absolute path", "message_contains": _LABELED,
+    }
+    assert not entry_suppresses(
+        entry, rule="plan.correspondence-drift", severity="warn",
+        path="/abs/entities/plans/0001-x.md", task=None, message=f"... {_LABELED}",
     )
 
 
@@ -736,14 +865,15 @@ def test_stale_signature_entry_does_not_suppress():
     }
     assert not entry_suppresses(
         entry, rule="plan.correspondence-drift", severity="warn",
-        path="entities/plans/0001-x.md", task=None, message=f"live evidence-signature: {_SIG}",
+        path="entities/plans/0001-x.md", task=None, message=f"live {_LABELED}",
     )
 
 
-def test_entry_is_evidence_scoped_requires_a_complete_token():
-    assert not entry_is_evidence_scoped({"message_contains": "evidence-signature:"})
-    assert not entry_is_evidence_scoped({"message_contains": "v1:short"})
-    assert entry_is_evidence_scoped({"message_contains": f"x {_SIG} y"})
+def test_entry_is_evidence_scoped_requires_a_complete_labeled_token():
+    assert not entry_is_evidence_scoped({"message_contains": "evidence-signature:"})   # label, no hash
+    assert not entry_is_evidence_scoped({"message_contains": "v1:short"})              # malformed hash
+    assert not entry_is_evidence_scoped({"message_contains": _SIG})                    # hash, no label
+    assert entry_is_evidence_scoped({"message_contains": f"x {_LABELED} y"})           # complete token
 
 
 def test_other_rules_are_unaffected_by_evidence_scoping(tmp_path: Path):
@@ -769,7 +899,7 @@ Replace `science/src/science_tool/validate/acceptance.py` with:
 from __future__ import annotations
 
 import re
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 from typing import Any
 
 import yaml
@@ -779,8 +909,10 @@ from science_tool.validate.result import Result, Severity
 
 EVIDENCE_SCOPED_RULES: frozenset[str] = frozenset({"plan.correspondence-drift"})
 
-# A complete, well-formed signature token — never the bare `evidence-signature:` prefix (§5.5).
-_SIGNATURE_RE = re.compile(r"\bv1:[0-9a-f]{64}\b")
+# The COMPLETE labeled token — a bare `v1:<hex>` or a bare `evidence-signature:` prefix
+# is NOT evidence-scoped. Only `evidence-signature: v1:<64-hex>` counts (design §5.5), so a
+# stray hash-like string in an unrelated message can never accidentally scope an entry.
+_SIGNATURE_RE = re.compile(r"\bevidence-signature:\s*v1:[0-9a-f]{64}\b")
 
 
 def accepted_validation_entries(project_root: Path) -> list[dict[str, Any]]:
@@ -856,6 +988,21 @@ def entry_is_evidence_scoped(entry: dict[str, Any]) -> bool:
     return any(_SIGNATURE_RE.search(v) for v in _message_contains_values(entry.get("message_contains")))
 
 
+def entry_path_is_project_relative(entry: dict[str, Any]) -> bool:
+    """A scoped entry must name ONE non-empty, project-relative path. A missing or
+    absolute `path` would let one evidence signature blind that rule across every plan
+    in the tree (design §5.5), so it is rejected."""
+    path = entry.get("path")
+    return isinstance(path, str) and path != "" and not PurePosixPath(path).is_absolute()
+
+
+def entry_is_well_scoped(entry: dict[str, Any]) -> bool:
+    """The full acceptance gate for an evidence-scoped rule: complete signature token
+    AND a project-relative path. Both `entry_suppresses` (fail-closed) and the
+    malformed-acceptance check (Task 6) derive their decision from this one predicate."""
+    return entry_is_evidence_scoped(entry) and entry_path_is_project_relative(entry)
+
+
 def entry_suppresses(
     entry: dict[str, Any],
     *,
@@ -867,8 +1014,8 @@ def entry_suppresses(
 ) -> bool:
     if not entry_matches(entry, rule=rule, severity=severity, path=path, task=task, message=message):
         return False
-    if rule in EVIDENCE_SCOPED_RULES and not entry_is_evidence_scoped(entry):
-        return False  # fail closed: an unscoped entry for this rule never suppresses
+    if rule in EVIDENCE_SCOPED_RULES and not entry_is_well_scoped(entry):
+        return False  # fail closed: an unscoped or unlocated entry for this rule never suppresses
     return True
 
 
@@ -900,7 +1047,7 @@ def filter_accepted_warnings(project_root: Path, results: list[Result]) -> list[
 - [ ] **Step 4: Run the new tests + the existing acceptance callers**
 
 Run: `cd science && uv run --frozen pytest tests/test_acceptance_authority.py -q`
-Expected: PASS (6 tests).
+Expected: PASS (9 tests).
 Run: `cd science && uv run --frozen pytest tests/test_consolidate_acceptance.py tests/test_archive_acceptance.py -q`
 Expected: PASS (no regression in existing `accepted_validation` users).
 
@@ -923,7 +1070,7 @@ A path-only (unscoped) acceptance entry for an evidence-scoped rule is itself a 
 - Test: `science/tests/validate/test_checks_accepted_validation.py`
 
 **Interfaces:**
-- Consumes: `accepted_validation_entries`, `EVIDENCE_SCOPED_RULES`, `entry_is_evidence_scoped` (Task 5).
+- Consumes: `accepted_validation_entries`, `EVIDENCE_SCOPED_RULES`, `entry_is_well_scoped` (Task 5).
 - Produces: `check_accepted_validation(ctx) -> Iterator[Result]`; rule `accepted-validation.evidence-scope-required`.
 
 - [ ] **Step 1: Write the failing tests**
@@ -970,6 +1117,20 @@ def test_scoped_entry_with_valid_signature_is_silent(tmp_path: Path):
     assert not list(check_accepted_validation(ctx))
 
 
+def test_signature_present_but_absolute_path_warns(tmp_path: Path):
+    # A complete signature is not enough on its own: an absolute path would blind the
+    # rule beyond one project-relative plan, so the guard still fires.
+    ctx = _ctx(
+        tmp_path,
+        'health:\n  accepted_validation:\n    - rule: "plan.correspondence-drift"\n'
+        '      path: "/abs/entities/plans/0001-x.md"\n      reason: "x"\n'
+        f'      message_contains: "evidence-signature: {_SIG}"\n',
+    )
+    results = list(check_accepted_validation(ctx))
+    assert len(results) == 1
+    assert results[0].rule == "accepted-validation.evidence-scope-required"
+
+
 def test_unrelated_rule_entry_is_silent(tmp_path: Path):
     ctx = _ctx(
         tmp_path,
@@ -1007,7 +1168,7 @@ from pathlib import Path
 from science_tool.validate.acceptance import (
     EVIDENCE_SCOPED_RULES,
     accepted_validation_entries,
-    entry_is_evidence_scoped,
+    entry_is_well_scoped,
 )
 from science_tool.validate.checks import Check
 from science_tool.validate.context import ValidateContext
@@ -1020,14 +1181,15 @@ _RULE = "accepted-validation.evidence-scope-required"
 def check_accepted_validation(ctx: ValidateContext) -> Iterator[Result]:
     for entry in accepted_validation_entries(ctx.project_root):
         rule = entry.get("rule")
-        if rule in EVIDENCE_SCOPED_RULES and not entry_is_evidence_scoped(entry):
+        if rule in EVIDENCE_SCOPED_RULES and not entry_is_well_scoped(entry):
             yield Result(
                 Severity.WARN,
                 Path("science.yaml"),
                 None,
                 f"accepted_validation entry for {rule!r} (path={entry.get('path')!r}) must be "
                 f"evidence-scoped: message_contains needs a complete 'evidence-signature: v1:<64-hex>' "
-                f"token, else it would blind that path even after the plan's deliverables change.",
+                f"token AND path must name one non-empty, project-relative plan, else it would blind "
+                f"that rule even after the plan's deliverables change.",
                 _RULE,
                 None,
             )
@@ -1040,9 +1202,11 @@ In `science/src/science_tool/validate/checks/__init__.py`, add `"accepted_valida
 - [ ] **Step 5: Run tests + types**
 
 Run: `cd science && uv run --frozen pytest tests/validate/test_checks_accepted_validation.py -q`
-Expected: PASS (4 tests).
+Expected: PASS (5 tests).
 Run: `cd science && uv run pyright && uv run ruff check`
 Expected: 0 errors.
+Run: `cd science && uv run --frozen pytest tests/test_check_registry_is_complete.py::test_EVERY_check_module_on_disk_is_REGISTERED -q`
+Expected: PASS (the filesystem guard confirms `"accepted_validation"` is now listed, same as Task 4 Step 5).
 
 - [ ] **Step 6: Commit**
 
@@ -1060,6 +1224,7 @@ Remove health's independent copy of the matcher and route it through `validate.a
 **Files:**
 - Modify: `science/src/science_tool/graph/health.py:135-173` (remove `_text_matches`, `_accepted_validation_entries`, `_accepts_validation_finding`; rewrite `_partition_accepted_validation_findings`)
 - Test: `science/tests/test_health_acceptance_parity.py`
+- Test: `science/tests/test_correspondence_drift_health_integration.py`
 
 **Interfaces:**
 - Consumes: `accepted_validation_entries`, `entry_suppresses` (Task 5).
@@ -1159,19 +1324,90 @@ def _partition_accepted_validation_findings(
     return remaining, accepted
 ```
 
-Then remove the two imports that only the deleted helpers used — `import yaml as _yaml` (line 14) and `from science_tool.data_root import project_config_path` (line 16). Both are dead after this change (their sole uses were the deleted `_accepted_validation_entries` at lines 146/148); `ruff` will flag them if any live use remains, so re-run lint before committing.
+Then remove the two imports that only the deleted helpers used — `import yaml as _yaml` (line 14) and `from science_tool.data_root import project_config_path` (line 16). Their sole uses were the deleted `_accepted_validation_entries` (lines 146/148), which now lives in `validate.acceptance`; both are dead after this change. Delete both lines. Step 4's `ruff check` returns 0 — that is the proof no live use remained.
 
-- [ ] **Step 4: Run the parity test + the health suite**
+- [ ] **Step 4: Write the end-to-end health integration test**
 
-Run: `cd science && uv run --frozen pytest tests/test_health_acceptance_parity.py -q`
+The parity test in Step 1 exercises the private partition helper directly. This test proves the whole `science health` path: `build_health_report(project, checks={"validate"})` runs the real canonical `validate` checks (so the drift check AND the malformed-acceptance check both fire), and the report's `validation` / `accepted_validation` partition reflects the fail-closed policy. A two-phase test — first a path-only entry (does not suppress; malformed guard fires), then the live signature lifted from the emitted finding (suppresses).
+
+Create `science/tests/test_correspondence_drift_health_integration.py`:
+
+```python
+from __future__ import annotations
+
+import re
+from pathlib import Path
+
+from science_tool.graph.health import build_health_report
+
+_DRIFT = "plan.correspondence-drift"
+_SCOPE = "accepted-validation.evidence-scope-required"
+
+
+def _project(root: Path, accepted: str) -> None:
+    (root / "src").mkdir(parents=True, exist_ok=True)
+    (root / "src" / "a.py").write_text("x = 1\n", encoding="utf-8")
+    (root / "science.yaml").write_text(f"name: fixture\nprofile: research\n{accepted}", encoding="utf-8")
+    plan = root / "entities" / "plans" / "0001-x.md"
+    plan.parent.mkdir(parents=True, exist_ok=True)
+    plan.write_text(
+        '---\nid: "plan:0001-x"\nkind: plan\ntitle: "T"\nstatus: "draft"\n---\n\nBuilds `src/a.py`.\n',
+        encoding="utf-8",
+    )
+
+
+def _rules(findings: list[dict]) -> list[str]:
+    return [f.get("rule") for f in findings]
+
+
+def test_path_only_entry_keeps_drift_and_raises_scope_guard(tmp_path: Path):
+    _project(
+        tmp_path,
+        'health:\n  accepted_validation:\n    - rule: "plan.correspondence-drift"\n'
+        '      path: "entities/plans/0001-x.md"\n      reason: "path only"\n',
+    )
+    report = build_health_report(tmp_path, checks={"validate"})
+    validation_rules = _rules(report["validation"])
+    # Path-only entry does NOT suppress the drift finding, and the malformed guard fires.
+    assert _DRIFT in validation_rules
+    assert _SCOPE in validation_rules
+    assert _DRIFT not in _rules(report["accepted_validation"])
+
+
+def test_valid_signature_entry_suppresses_drift_in_health(tmp_path: Path):
+    # Phase 1: emit once with no acceptance to capture the live evidence signature.
+    _project(tmp_path, "")
+    first = build_health_report(tmp_path, checks={"validate"})
+    drift = next(f for f in first["validation"] if f.get("rule") == _DRIFT)
+    token = re.search(r"evidence-signature: (v1:[0-9a-f]{64})", drift["message"]).group(1)
+
+    # Phase 2: accept it with the complete labeled signature + project-relative path.
+    _project(
+        tmp_path,
+        'health:\n  accepted_validation:\n    - rule: "plan.correspondence-drift"\n'
+        '      path: "entities/plans/0001-x.md"\n      reason: "input file, not a deliverable"\n'
+        f'      message_contains: "evidence-signature: {token}"\n',
+    )
+    report = build_health_report(tmp_path, checks={"validate"})
+    assert _DRIFT not in _rules(report["validation"])
+    accepted = [f for f in report["accepted_validation"] if f.get("rule") == _DRIFT]
+    assert len(accepted) == 1
+    assert accepted[0]["accepted_reason"] == "input file, not a deliverable"
+    # A well-scoped entry satisfies the guard, so it does NOT also warn.
+    assert _SCOPE not in _rules(report["validation"])
+```
+
+- [ ] **Step 5: Run the parity test, the integration test, and the health suite**
+
+Run: `cd science && uv run --frozen pytest tests/test_health_acceptance_parity.py tests/test_correspondence_drift_health_integration.py -q`
 Expected: PASS.
-Run: `cd science && uv run --frozen pytest -k health -q && uv run pyright`
-Expected: PASS, 0 type errors.
+Run: `cd science && uv run --frozen pytest -k health -q && uv run pyright && uv run ruff check`
+Expected: PASS, 0 type errors, 0 lint.
 
-- [ ] **Step 5: Commit**
+- [ ] **Step 6: Commit**
 
 ```bash
-git add src/science_tool/graph/health.py tests/test_health_acceptance_parity.py
+git add src/science_tool/graph/health.py tests/test_health_acceptance_parity.py tests/test_correspondence_drift_health_integration.py
 git commit -m "refactor(health): delegate accepted_validation to validate.acceptance authority"
 ```
 
@@ -1192,6 +1428,8 @@ Two separated concerns; never assert on the full downstream suite's exit code.
 
 Create `science/tests/test_correspondence_drift_cli.py`:
 
+The subprocess exits nonzero on ANY validation error, not just on gating. So the fixture must be genuinely validation-clean *before* the stale plan is added — otherwise the test would fail (or pass) for reasons unrelated to whether `plan.correspondence-drift` gates. The fixture below was derived empirically by running `python -m science_tool validate --fail-on hygiene` and closing every finding: full `science.yaml` manifest (all `manifest._REQUIRED_FIELDS` + `knowledge_profiles.local` as a **string** + `curated` list), all `directory_structure` required directories and files, a `pyproject.toml` with a worktree-safe git source for `science` (clears the `tooling` warn), `CLAUDE.md` containing only `@AGENTS.md`, an `AGENTS.md` carrying the managed `load-bearing-constraints` BEGIN/END markers, a `research-question.md`, a `tasks/active.md`, and a plan whose filename stem equals its id local-part with `created`/`updated` present. With no stale plan this fixture validates 100% clean (`errors: 0, warnings: 0`); adding the `draft`-with-present-deliverable plan introduces exactly one finding — the drift WARN — and the assertion is that exit stays 0.
+
 ```python
 from __future__ import annotations
 
@@ -1200,34 +1438,96 @@ import subprocess
 import sys
 from pathlib import Path
 
+_SCIENCE_YAML = """\
+name: fixture
+profile: research
+created: 2026-07-18
+last_modified: 2026-07-18
+status: active
+summary: Fixture project for the correspondence-drift CLI exit-code test.
+layout_version: 3
+knowledge_profiles:
+  local: entities
+  curated: []
+"""
 
-def _project(root: Path) -> None:
-    (root / "science.yaml").write_text("name: fixture\nprofile: research\n", encoding="utf-8")
-    (root / "src").mkdir()
+_PYPROJECT = """\
+[project]
+name = "fixture"
+version = "0.0.0"
+requires-python = ">=3.11"
+
+[dependency-groups]
+dev = ["science"]
+
+[tool.uv.sources]
+science = { git = "https://github.com/khughitt/science.git", subdirectory = "science" }
+"""
+
+_AGENTS = """\
+# Fixture
+
+<!-- BEGIN: load-bearing-constraints (managed by /science:curate; edit core/decisions.md instead) -->
+<!-- END: load-bearing-constraints -->
+"""
+
+
+def _clean_project(root: Path) -> None:
+    for d in ("doc", "knowledge", "tasks", "code", "papers", "data", "models", "results", "src", "entities/plans"):
+        (root / d).mkdir(parents=True, exist_ok=True)
+    (root / "science.yaml").write_text(_SCIENCE_YAML, encoding="utf-8")
+    (root / "pyproject.toml").write_text(_PYPROJECT, encoding="utf-8")
+    (root / "README.md").write_text("# Fixture\n", encoding="utf-8")
+    (root / "CLAUDE.md").write_text("@AGENTS.md\n", encoding="utf-8")
+    (root / "AGENTS.md").write_text(_AGENTS, encoding="utf-8")
+    (root / "tasks" / "active.md").write_text("# Active\n\nNothing active.\n", encoding="utf-8")
+    (root / "entities" / "research-question.md").write_text(
+        '---\nid: "research-question:main"\nkind: research-question\ntitle: "RQ"\n'
+        'status: "open"\ncreated: 2026-07-18\nupdated: 2026-07-18\n---\n\nWhat?\n',
+        encoding="utf-8",
+    )
     (root / "src" / "a.py").write_text("x = 1\n", encoding="utf-8")
-    p = root / "entities" / "plans" / "0001-x.md"
-    p.parent.mkdir(parents=True)
-    p.write_text('---\nid: "plan:0001"\nkind: plan\ntitle: "T"\nstatus: "draft"\n---\n\nBuilds `src/a.py`.\n', encoding="utf-8")
+
+
+def _add_stale_plan(root: Path) -> None:
+    (root / "entities" / "plans" / "0001-x.md").write_text(
+        '---\nid: "plan:0001-x"\nkind: plan\ntitle: "T"\nstatus: "draft"\n'
+        'created: 2026-07-18\nupdated: 2026-07-18\n---\n\nBuilds `src/a.py`.\n',
+        encoding="utf-8",
+    )
+
+
+def _validate(root: Path) -> subprocess.CompletedProcess[str]:
+    return subprocess.run(
+        [sys.executable, "-m", "science_tool", "validate", "--fail-on", "hygiene", "--format", "json"],
+        cwd=root, capture_output=True, text=True,
+    )
+
+
+def test_fixture_is_validation_clean_before_the_stale_plan(tmp_path: Path):
+    # The precondition the exit-code assertion depends on: with no stale plan, the tree is clean.
+    _clean_project(tmp_path)
+    proc = _validate(tmp_path)
+    assert proc.returncode == 0, proc.stdout + proc.stderr
+    assert json.loads(proc.stdout)["summary"] == {"errors": 0, "warnings": 0, "infos": 0}
 
 
 def test_drift_warn_exits_zero_even_at_top_fail_on_tier(tmp_path: Path):
-    _project(tmp_path)
-    proc = subprocess.run(
-        [sys.executable, "-m", "science_tool", "validate", "--fail-on", "hygiene", "--format", "json"],
-        cwd=tmp_path, capture_output=True, text=True,
-    )
-    assert proc.returncode == 0, proc.stderr
+    _clean_project(tmp_path)
+    _add_stale_plan(tmp_path)
+    proc = _validate(tmp_path)
+    assert proc.returncode == 0, proc.stdout + proc.stderr
     payload = json.loads(proc.stdout)
     rules = [r["rule"] for r in payload["results"]]
-    assert "plan.correspondence-drift" in rules
+    assert rules == ["plan.correspondence-drift"]  # the ONE finding, and it did not gate
 ```
 
-(`python -m science_tool` is a valid entrypoint — `src/science_tool/__main__.py` exists and `pyproject.toml` declares `science = "science_tool.cli:main"`. `subprocess` here runs the CLI in a real process so the `--fail-on` exit code is exercised end to end, not just the check function.)
+(`python -m science_tool` is a valid entrypoint — `src/science_tool/__main__.py` exists and `pyproject.toml` declares `science = "science_tool.cli:main"`. `subprocess` runs the CLI in a real process so the `--fail-on` exit code is exercised end to end, not just the check function.)
 
 - [ ] **Step 2: Run it**
 
 Run: `cd science && uv run --frozen pytest tests/test_correspondence_drift_cli.py -q`
-Expected: PASS. If it fails on the entrypoint, fix the argv per the note and re-run.
+Expected: PASS (2 tests).
 
 - [ ] **Step 3: Write the `real_projects`-marked test**
 
@@ -1293,7 +1593,7 @@ while their promised deliverables already exist.
 
 - [ ] **Step 3: Sanity-check nothing else moved**
 
-Run: `cd /mnt/ssd/Dropbox/science/.worktrees/plan-correspondence-drift-screen && git diff --stat docs/plans/2026-07-17-drift-sample/result.md`
+Run (from the worktree root): `git diff --stat docs/plans/2026-07-17-drift-sample/result.md`
 Expected: one file changed, a small line delta (labels + one sentence). No change to the headline table (n, k_lo, k_hi, θ, gate).
 
 - [ ] **Step 4: Commit**
