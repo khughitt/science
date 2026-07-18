@@ -51,8 +51,8 @@ sound. The confidence contract in §5 is what makes it sound.
 ## 3. Non-goals (v1)
 
 - **No over-claim detection.** `complete` (or `active`) while deliverables are *absent* is excluded.
-  It is 3 of 22 measured mismatches and lives in the extractor's *unsafe* direction (a moved or
-  illustrative path reads as a false absence — the create-vs-reference call only judgment made).
+  It is 2 of 22 measured mismatches and the direction where a moved or illustrative path reads as a
+  false absence — the create-vs-reference call only judgment made.
 - **No LLM adjudication.** That is the eventual `/science:review-plans` command's job, layered on
   top later. S4 is the deterministic screen only.
 - **No gating, ever.** See §7.
@@ -89,7 +89,9 @@ symbol and are untouched.
 **One definition, no duplication** — the same discipline `status_vocabulary.py` embodies ("there is
 deliberately no table here"). Two copies of `adjudicate` would be exactly the drift this codebase
 refuses. The frozen study reproduces **identically**: the logic is byte-for-byte the same, only
-relocated, and the pre-registered result hashes `prereg.json` (data), not any module path.
+relocated, and the pre-registered result hashes `prereg.json` (data), not any module path. Its
+executable helpers (`build_bundles.py`, `score_run.py`) retarget their imports to `correspondence/`
+so they still run (§11); no compatibility shim is added.
 
 ### 4.2 Add a canonical `body` accessor to `ValidateContext`
 
@@ -133,13 +135,19 @@ def check_correspondence_drift(ctx: ValidateContext) -> Iterator[Result]:
         if not deliverables:
             continue  # nothing probeable -> indeterminate -> silent
         probes = [probe_path(ctx.project_root, d) for d in deliverables]
-        tasks = [resolve_task(ctx.project_root, t) for t in extract_task_refs(body)]
-        adjudicated = adjudicate([p.result for p in probes], tasks, superseded=False)
+        task_states = [(t, resolve_task(ctx.project_root, t)) for t in extract_task_refs(body)]
+        adjudicated = adjudicate(
+            [p.result for p in probes],
+            [state for _ref, state in task_states],
+            superseded=False,
+        )
         adjudicated_rank = _LIFECYCLE_RANK.get(adjudicated.value)
         if adjudicated_rank is None:
             continue  # indeterminate or off-axis -> silent
         if claimed_rank < adjudicated_rank:  # UNDER-CLAIM
-            yield _drift_result(path, fm, status, adjudicated, probes, tasks)
+            # probes and task_states retain (target, result) / (task_ref, state) pairs so the
+            # evidence signature and diagnostic can name them; adjudicate saw only the states.
+            yield _drift_result(path, fm, status, adjudicated, probes, task_states)
 ```
 
 - `kind == "plan"` is a literal, not a set (§3). The emitted rule name is still derived,
@@ -165,11 +173,16 @@ are on-axis. This captures the measured dominant failure and only it:
 | active → complete | 1 | yes (under-claim) |
 | complete → active | 2 | no (over-claim, §3) |
 
-**20 of 22** measured mismatches, all in the "claims less progress than reality" direction. The
-extractor's bias is *under-extraction* → `indeterminate`, never a false `absent`, so under-claim is
-the safe direction: a `draft` that names files which all exist is genuinely not a fresh draft.
+**20 of 22** adjudicated mismatches were under-claims — the "claims less progress than reality"
+direction. Under-claim is the **lower-risk, advisory** direction to screen, not a safe one. The
+deterministic screen's precision is **uncertified**: false under-claims do occur — a plan that
+merely *references* an already-existing input file can extract-and-probe as present and adjudicate
+past `draft` (the create-vs-reference distinction only the sample's human reviewers made; the `0016`
+case is exactly this). Under-extraction is likewise **not** automatically `indeterminate` — a
+partial extracted subset whose members all exist adjudicates `complete`. Screen precision is
+therefore handled downstream by review (§5.3), not asserted here.
 
-### 5.2 Silence conditions (each a deliberate `indeterminate`, not a miss)
+### 5.2 Silence conditions (the check yields nothing)
 
 - No deliverables extracted from the body → the plan names no probeable files.
 - Any probe returns `unknown` (path escapes the project) or `adjudicate` returns `indeterminate`.
@@ -183,26 +196,14 @@ The check **does not** consult `review_state`: `science entity review` only stam
 timestamp, and a review that did not change the status must not silence a still-true correspondence
 signal. So findings clear in exactly two ways:
 
-1. **True positive (≈86% of the population) self-heals.** The author corrects `draft` → `active`;
-   adjudication then agrees (`rank(claimed) == rank(adjudicated)`); the WARN disappears. This is the
-   intended review→act loop and needs no suppression at all.
-2. **Confirmed false positive is suppressed, evidence-scoped, through the *existing*
-   `accepted_validation` machinery** (`science/src/science_tool/validate/acceptance.py`), which
-   already filters any WARN. Path-only acceptance is **forbidden for this rule** because it would
-   permanently blind that path even after the plan's deliverables change. Instead:
-
-   - **The diagnostic carries a deterministic `evidence-signature: <digest>`** — a short hash over
-     the canonical tuple *(claimed status; sorted `deliverable→probe-result` pairs; sorted
-     `task-ref→state` pairs; adjudicated status)*. Any relevant change flips the digest.
-   - **A valid acceptance entry requires** `rule: plan.correspondence-drift` **+** `path` **+**
-     `message_contains: "evidence-signature: <digest>"` **+** a non-empty `reason`. When the
-     evidence changes, the signature changes and the WARN returns.
-   - **Fail-closed enforcement of the narrow-match rule:** an `accepted_validation` entry targeting
-     `plan.correspondence-drift` that lacks an `evidence-signature:` `message_contains` does **not**
-     suppress, *and* is itself surfaced as a WARN (`accepted_validation entry for
-     plan.correspondence-drift must be evidence-scoped (missing evidence-signature)`). This enforces
-     acceptance.py's own documented "narrow match criteria" rule for a finding where a broad match
-     is unsafe; it adds no suppression subsystem.
+1. **A true positive self-heals.** The author corrects `draft` → `active`; adjudication then agrees
+   (`rank(claimed) == rank(adjudicated)`); the WARN disappears. This is the intended review→act loop
+   and needs no suppression at all.
+2. **A confirmed false positive is suppressed, evidence-scoped, through the *existing*
+   `accepted_validation` machinery**, which already filters WARNs. Path-only acceptance is
+   **forbidden for this rule** because it would permanently blind that path even after the plan's
+   deliverables change. The signature format and the fail-closed policy are specified in §5.5, and
+   must be enforced identically on **both** surfaces that read `accepted_validation`.
 
 Anything not acted on **recurs by design** — that is correct for a screen. The calibration in §8
 (≈70 candidates on multiple-myeloma) is the intended backlog the sweep exists to surface, not noise.
@@ -213,8 +214,44 @@ Every finding's message must be actionable and acceptance-writable from the mess
 - the plan's entity id (from frontmatter `id`);
 - claimed status and adjudicated status;
 - the probed evidence (which deliverables are present/absent, which task refs resolved);
-- the `evidence-signature: <digest>`;
+- the `evidence-signature: v1:<sha256>` token (§5.5);
 - the two remedies: correct the status, or add an evidence-scoped `accepted_validation` entry.
+
+`Result.path` on every finding is **project-relative** (the validation contract requires it), so
+acceptance entries and the diagnostic agree on the path spelling.
+
+### 5.5 Evidence-signature format and centralized acceptance
+
+**Signature.** The token is `evidence-signature: v1:<hex>`, where `<hex>` is the **full SHA-256** of
+a **versioned canonical JSON** encoding of the evidence tuple —
+`{"v": 1, "claimed": <status>, "deliverables": [[<target>, <probe-result>], … sorted],
+"tasks": [[<task-ref>, <state>], … sorted], "adjudicated": <status>}` — serialized with sorted keys
+and no insignificant whitespace. Because these signatures are persisted into committed `science.yaml`,
+the encoding is versioned (`v1:`): a future change to what the evidence covers is a new signature
+version, not a silent reinterpretation of old entries.
+
+**Exact-token acceptance.** An `accepted_validation` entry counts as evidence-scoped only if its
+`message_contains` holds a **complete, well-formed** `evidence-signature: v1:<64-hex>` token
+(validated by pattern) — not merely the `evidence-signature:` prefix. A truncated or malformed token
+does not qualify. A valid entry is `rule: plan.correspondence-drift` + `path` (project-relative) +
+that `message_contains` + a non-empty `reason`.
+
+**One acceptance authority, both surfaces.** Loading, matching, and the evidence-scope policy move
+into a single reusable module (promote `validate/acceptance.py`, or a new `science_tool/acceptance.py`)
+exposing a field-based match predicate plus `EVIDENCE_SCOPED_RULES = {"plan.correspondence-drift"}`
+and an entry-validity policy. **Both** consumers delegate to it: `validate`'s
+`filter_accepted_warnings` **and** `graph/health.py`'s `_partition_accepted_validation_findings`,
+which today carries its **own** independent copy (`health.py:145–173`). Suppression is granted only
+when the shared matcher matches **and** the entry satisfies the evidence-scope policy — so an
+unscoped `plan.correspondence-drift` entry fails closed on **both** surfaces. Removing health's
+duplicate is required, not optional; otherwise the hole this amendment closes stays open in `health`.
+
+**Malformed acceptance is a canonical finding, not a filter side effect.** The "unscoped acceptance
+entry" WARN is emitted by a **canonical validation check** that scans `accepted_validation`, under
+the **stable rule id `accepted-validation.evidence-scope-required`**. It is **not** appended inside
+`filter_accepted_warnings`: `validate/cli.py:152` (`_with_accepted_warnings_filtered`) treats
+filtering as removal-only and uses `len(filtered) == len(original)` as its unchanged test, which an
+appended finding would violate. Keeping the filter pure-removal preserves that invariant.
 
 ## 6. Severity: permanent WARN, deliberately not `severity_for_kind`
 
@@ -235,11 +272,11 @@ Therefore:
 
 ## 7. Canonical registration
 
-The check runs only if it is registered. Add `"correspondence_drift"` to
-`CANONICAL_CHECK_MODULES` in `science/src/science_tool/validate/checks/__init__.py` (the tuple
-`_load_canonical_checks` imports). A **registry test** asserts the check is present in
-`CANONICAL_CHECKS` after load and appears in a full runner pass — direct unit tests can pass while
-the check never runs.
+A check runs only if it is registered. Add **both** `"correspondence_drift"` and the
+`accepted-validation.evidence-scope-required` check module (§5.5) to `CANONICAL_CHECK_MODULES` in
+`science/src/science_tool/validate/checks/__init__.py` (the tuple `_load_canonical_checks` imports).
+A **registry test** asserts both are present in `CANONICAL_CHECKS` after load and appear in a full
+runner pass — direct unit tests can pass while a check never runs.
 
 ## 8. Testing strategy (three separated concerns)
 
@@ -249,18 +286,21 @@ the check never runs.
    changes.
 2. **Check-level fixture project** (synthetic `entities/plans/`): a `draft` plan naming a present
    file → one WARN carrying the mandated diagnostic; a `draft` naming only absent files → silent
-   (adjudicates `draft`, agrees); a `complete` plan with present files → silent. Plus the
-   fail-closed acceptance guard: a path-only `accepted_validation` entry does not suppress and
-   yields the "must be evidence-scoped" WARN; a correct evidence-signature entry does suppress; a
-   stale-signature entry does not.
-3. **Two separated downstream concerns — never assert on the full suite's exit code** (unrelated
+   (adjudicates `draft`, agrees); a `complete` plan with present files → silent.
+3. **Centralized acceptance, asserted on *both* `validate` and `science health`** (§5.5): a
+   path-only `accepted_validation` entry does not suppress on either surface; the canonical
+   `accepted-validation.evidence-scope-required` WARN fires; a correct full-`v1:<64-hex>`-signature
+   entry suppresses on both; a stale-signature entry does not. This is the regression test for the
+   duplicated-matcher hole at `health.py:145–173`.
+4. **Two separated downstream concerns — never assert on the full suite's exit code** (unrelated
    future errors must not fail the detector's test):
    - **Synthetic CLI exit-code test**, run at the highest `--fail-on` tier, proving a drift WARN
      exits 0. Self-contained fixture, not multiple-myeloma.
    - **`real_projects`-marked exercise** against `~/d/cancer/cancer-types/multiple-myeloma` proving
-     the detector fires on real data: assert a conservative floor of candidates (all WARN), not the
-     exact count — the corpus is Dropbox-synced and drifts. (Marked so default pytest excludes it,
-     per AGENTS.md.)
+     the detector fires on real data: assert
+     `len([r for r in results if r.rule == "plan.correspondence-drift"]) >= 1` (all such results
+     WARN), not the exact count — the corpus is Dropbox-synced and drifts. (Marked so default pytest
+     excludes it, per AGENTS.md.)
 
 **Score-test split, not retarget:** move only the *adjudication* cases out of
 `test_drift_sample_score.py` into `test_correspondence_adjudicate.py`; leave `normalize`/`verdict`/
@@ -271,9 +311,11 @@ the check never runs.
 
 `docs/plans/2026-07-17-drift-sample/result.md:28`'s confusion matrix labels `active → complete` as
 "over-claim." It is **under-claim** (claimed rank 1 < adjudicated 2 — claims less progress than
-reality). Correct the label and the derived narrative ("19" stale-under-claim → **20 of 22**). This
-is **label-only**: the pre-registered n, k_lo/k_hi Manski bounds, θ, and the DEMONSTRATE gate
-outcome are unchanged (the gate keys on the mismatch *count*, which already included this case).
+reality). Two edits: (a) the matrix label `active → complete` → under-claim; (b) the dominant-cell
+sentence at `result.md:41` becomes **"20 under-claims: 19 `draft` claims plus one `active` claim,
+while their promised deliverables already exist"** (not "19 plans assert `draft`"). This is
+**label-only**: the pre-registered n, k_lo/k_hi Manski bounds, θ, and the DEMONSTRATE gate outcome
+are unchanged (the gate keys on the mismatch *count*, which already included this case).
 
 ## 10. Certification note
 
@@ -285,14 +327,27 @@ permanently and out of every gate tier regardless of any future `_CERTIFIED_KIND
 
 - **Move/relocate:** `drift_sample/probe.py`, `drift_sample/extract.py` → `correspondence/`;
   `adjudicate`/`Adjudicated` out of `drift_sample/score.py` → `correspondence/adjudicate.py`.
+  No compatibility shims.
 - **Create:** `science/src/science_tool/correspondence/{__init__,probe,extract,adjudicate}.py`;
-  `science/src/science_tool/validate/checks/correspondence_drift.py`;
-  `science/tests/test_correspondence_adjudicate.py`; check-level + CLI + `real_projects` tests.
-- **Modify:** `drift_sample/score.py` (drop the moved `adjudicate`/`Adjudicated`; import
-  `ProbeResult`/`TaskState`/`adjudicate`/`Adjudicated` from `correspondence/`); `validate/context.py`
-  (`body()` + shared parse);
-  `validate/checks/__init__.py` (register `correspondence_drift`); `validate/acceptance.py`
-  (fail-closed evidence-scoping guard for this rule); `docs/plans/2026-07-17-drift-sample/result.md`
-  (label-only).
+  `science/src/science_tool/validate/checks/correspondence_drift.py`; the
+  `accepted-validation.evidence-scope-required` check module; the shared acceptance module (if new);
+  `science/tests/test_correspondence_adjudicate.py`; check-level, both-surface acceptance, CLI
+  exit-code, and `real_projects` tests.
+- **Modify:**
+  - `drift_sample/score.py` — drop the moved `adjudicate`/`Adjudicated`; import
+    `ProbeResult`/`TaskState`/`adjudicate`/`Adjudicated` from `correspondence/`.
+  - `docs/plans/2026-07-17-drift-sample/build_bundles.py` — retarget `drift_sample.extract` →
+    `correspondence.extract` (executable study helper).
+  - `docs/plans/2026-07-17-drift-sample/score_run.py` — retarget `drift_sample.probe` →
+    `correspondence.probe`, and `Adjudicated`/`adjudicate` → `correspondence.adjudicate` (leaving
+    `verdict`/`manski`/`gate` on `drift_sample.score`).
+  - `validate/context.py` — `body()` + shared `(frontmatter, body)` parse.
+  - `validate/checks/__init__.py` — register `correspondence_drift` and the evidence-scope check.
+  - the shared acceptance authority (`validate/acceptance.py` promoted, or new
+    `science_tool/acceptance.py`) — loading + matching + evidence-scope policy.
+  - `graph/health.py` — delegate to the shared acceptance authority; **remove** its duplicate
+    `_accepted_validation_entries` / `_accepts_validation_finding` / `_text_matches`
+    (`health.py:135–173`).
+  - `docs/plans/2026-07-17-drift-sample/result.md` — label-only (§9).
 - **Retarget tests:** `test_drift_sample_probe.py`, `test_drift_sample_extract.py`,
   `test_drift_sample_score.py` (split adjudication cases out).
