@@ -340,6 +340,79 @@ def marked_scope_for_line(scopes: tuple[MarkerScope, ...], line: int) -> str | N
     return None
 
 
+_TITLE_TASK_RE = re.compile(r"\bt(\d{2,})\b")
+
+
+def _as_refs(value: object) -> list[str]:
+    if isinstance(value, str) and value.strip():
+        return [value.strip()]
+    if isinstance(value, list):
+        return [v.strip() for v in value if isinstance(v, str) and v.strip()]
+    return []
+
+
+def _is_papers_path(path: Path) -> bool:
+    parts = path.parts
+    return any(left == "entities" and right == "papers" for left, right in zip(parts, parts[1:]))
+
+
+def entity_source_candidates(
+    document: DocumentContext, index: ResolutionIndex, config: NumericProvenanceConfig
+) -> tuple[SourceCandidate, ...]:
+    """Extract the explicit provenance an entity declares, existence-checked.
+
+    Entity-scoped candidates come from exactly: (1) frontmatter fields listed
+    in `config.provenance_fields`; (2) paper-note identity (`source_refs` plus
+    doi/pmid/url/bibkey); (3) interpretation identity (`artifact`/`artifacts`);
+    (4) an owning task named in the title. `related` is deliberately never
+    read — it holds topical links, not sources (finding 2).
+    """
+    fm = document.frontmatter
+    out: list[SourceCandidate] = []
+
+    def add(reference: str, field_or_line: str, origin: str = "frontmatter") -> None:
+        out.append(SourceCandidate(
+            reference=reference, origin=origin, field_or_line=field_or_line,
+            resolution_status="resolved" if index.resolve(reference) else "unresolved",
+        ))
+
+    for field in config.provenance_fields:
+        for ref in _as_refs(fm.get(field)):
+            add(ref, field)
+
+    is_paper = (
+        str(fm.get("kind")) == "paper"
+        or _is_papers_path(document.path)
+        or str(fm.get("id", "")).startswith("paper:")
+    )
+    if is_paper:
+        for ref in _as_refs(fm.get("source_refs")):
+            add(ref, "source_refs")
+        for key in ("doi", "pmid", "url", "bibkey"):
+            for ref in _as_refs(fm.get(key)):
+                add(ref, key)
+
+    if str(fm.get("kind")) == "interpretation" or str(fm.get("id", "")).startswith("interpretation:"):
+        for field in ("artifact", "artifacts"):
+            for ref in _as_refs(fm.get(field)):
+                add(ref, field)
+
+    if document.title:
+        m = _TITLE_TASK_RE.search(document.title)
+        if m:
+            add(f"task:t{m.group(1)}", "title", origin="title")
+
+    # Dedupe by (reference, field_or_line) preserving order.
+    seen: set[tuple[str, str]] = set()
+    deduped: list[SourceCandidate] = []
+    for c in out:
+        key = (c.reference, c.field_or_line)
+        if key not in seen:
+            seen.add(key)
+            deduped.append(c)
+    return tuple(deduped)
+
+
 def build_resolution_index(project_root: Path) -> ResolutionIndex:
     """Build a `ResolutionIndex` from cheap file-based sources only.
 

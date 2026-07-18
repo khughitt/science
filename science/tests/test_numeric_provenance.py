@@ -3,7 +3,8 @@ from pathlib import Path
 from science_tool.numeric_provenance import (
     Anchored, Exempt, NotClaim, NumericClaim, NumericProvenanceConfig,
     SourceCandidate, Unanchored, build_document_context, build_resolution_index,
-    classify_structural, compute_marker_scopes, marked_scope_for_line,
+    classify_structural, compute_marker_scopes, entity_source_candidates,
+    marked_scope_for_line,
 )
 
 
@@ -141,3 +142,46 @@ def test_block_marker_covers_only_fenced_lines(tmp_path):
     assert marked_scope_for_line(scopes, ctx.lines.index("alpha 0.05") + 1) == "block"
     assert marked_scope_for_line(scopes, ctx.lines.index("We saw 7.94 fold.") + 1) is None
     assert marked_scope_for_line(scopes, ctx.lines.index("And 3.1 more.") + 1) is None
+
+
+_CFG = NumericProvenanceConfig(
+    anchor_patterns=("task:", r"\[@"),
+    spec_class_kinds=frozenset({"pre-registration", "plan"}),
+    provenance_fields=("source_refs", "task_links", "input"),
+)
+
+
+def test_frontmatter_provenance_resolves(tmp_path):
+    idx = build_resolution_index(_project(tmp_path))
+    path = _doc(tmp_path, "The effect was 7.94 fold.\n",
+                frontmatter="kind: interpretation\nsource_refs:\n  - task:t064")
+    ctx = build_document_context(path)
+    cands = entity_source_candidates(ctx, idx, _CFG)
+    assert any(c.reference == "task:t064" and c.resolution_status == "resolved" for c in cands)
+
+
+def test_fabricated_task_ref_does_not_anchor(tmp_path):
+    idx = build_resolution_index(_project(tmp_path))
+    path = _doc(tmp_path, "The effect was 7.94 fold.\n",
+                frontmatter="kind: interpretation\nsource_refs:\n  - task:t999")
+    ctx = build_document_context(path)
+    cands = entity_source_candidates(ctx, idx, _CFG)
+    assert all(c.resolution_status == "unresolved" for c in cands)   # finding 5
+
+
+def test_interpretation_artifact_existence_checked(tmp_path):
+    idx = build_resolution_index(_project(tmp_path))
+    good = _doc(tmp_path, "Value 7.94.\n", frontmatter="kind: interpretation\nartifact: results/qap.json")
+    assert any(c.resolution_status == "resolved" for c in entity_source_candidates(
+        build_document_context(good), idx, _CFG))
+    bad = tmp_path / "bad.md"
+    bad.write_text("---\nkind: interpretation\nartifact: results/invented.json\n---\nValue 7.94.\n")
+    assert all(c.resolution_status == "unresolved" for c in entity_source_candidates(
+        build_document_context(bad), idx, _CFG))
+
+
+def test_related_is_excluded(tmp_path):
+    idx = build_resolution_index(_project(tmp_path))
+    path = _doc(tmp_path, "Value 7.94.\n", frontmatter="kind: interpretation\nrelated:\n  - task:t064")
+    cands = entity_source_candidates(build_document_context(path), idx, _CFG)
+    assert all(c.reference != "task:t064" for c in cands)   # finding 2 (related != source)
