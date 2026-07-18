@@ -617,19 +617,21 @@ def test_staged_write_mid_kill_leaves_attributable_prefix_and_untouched_target(t
         if label == "mid-write":
             raise _Kill()
 
+    postimage = "brand-new-postimage"
     with pytest.raises(_Kill):
-        staged_write(target, "brand-new-postimage", 0o644, token="batch1", _fault=fault)
+        staged_write(target, postimage, 0o644, token="batch1", _fault=fault)
 
-    assert target.read_text(encoding="utf-8") == "original"  # target never touched
+    assert target.read_text(encoding="utf-8") == "original"  # target never touched (attributable state)
     survivor = staging_path_for(target, "batch1")
-    assert classify_staging(survivor, "brand-new-postimage") in ("prefix", "complete")  # attributable
+    survivor_bytes = survivor.read_bytes()
+    assert 0 < len(survivor_bytes) < len(postimage.encode())         # a STRICT, non-empty prefix
+    assert classify_staging(survivor, postimage) == "prefix"          # not "complete"
     # no undeclared debris — only the target and the one attributable staging survivor exist
     assert {p.name for p in target.parent.iterdir()} == {target.name, survivor.name}
 
 
 def test_staged_write_caught_error_removes_only_attributable_survivor(tmp_path: Path, monkeypatch) -> None:
-    # The `except Exception` cleanup removes our own partial write; a survivor that is NOT a prefix of
-    # the postimage is refused (not silently deleted), surfacing interference instead of erasing it.
+    # The `except Exception` cleanup removes our own partial write when it is an attributable prefix.
     target = tmp_path / "a.md"
     target.write_text("x", encoding="utf-8")
 
@@ -639,8 +641,25 @@ def test_staged_write_caught_error_removes_only_attributable_survivor(tmp_path: 
     monkeypatch.setattr(os, "replace", boom)
     with pytest.raises(RuntimeError, match="replace failed"):
         staged_write(target, "hello", 0o644, token="b")
-    # our complete staged bytes were a prefix of the postimage → cleaned up
-    assert not staging_path_for(target, "b").exists()
+    assert not staging_path_for(target, "b").exists()              # attributable prefix → cleaned up
+    assert target.read_text(encoding="utf-8") == "x"               # target untouched (atomic replace)
+
+
+def test_staged_write_refuses_to_remove_a_non_prefix_survivor(tmp_path: Path, monkeypatch) -> None:
+    # If the survivor is NOT a byte-prefix of the postimage (concurrent interference), cleanup refuses
+    # to delete it and raises — surfacing the anomaly instead of erasing evidence. Target stays put.
+    target = tmp_path / "a.md"
+    target.write_text("x", encoding="utf-8")
+
+    def corrupt_then_fail(src, dst):
+        Path(src).write_bytes(b"FOREIGN-NON-PREFIX")  # something we did not write appears at the tmp
+        raise RuntimeError("replace failed")
+
+    monkeypatch.setattr(os, "replace", corrupt_then_fail)
+    with pytest.raises(StagingError, match="not an attributable prefix"):
+        staged_write(target, "hello", 0o644, token="b")
+    assert staging_path_for(target, "b").exists()                  # NOT deleted — evidence preserved
+    assert target.read_text(encoding="utf-8") == "x"               # target untouched
 ```
 
 - [ ] **Step 2: Run test to verify it fails**
@@ -677,9 +696,20 @@ def staged_write(target: Path, postimage: str, mode: int, token: str,
         raise StagingError(f"staging path already exists: {staging}") from exc
     try:
         with os.fdopen(fd, "wb") as fh:
-            fh.write(data)
-            if _fault is not None:
-                _fault("mid-write")  # a kill here leaves a partial, attributable .tmp; target untouched
+            if _fault is not None and len(data) > 1:
+                # TEST SEAM: land a STRICT, non-empty prefix on disk (flushed + fsync'd), then simulate
+                # a kill BEFORE the rest is written. A BaseException from `_fault` unwinds the `with`
+                # (flushing an already-empty buffer), so the survivor is exactly the prefix — a genuine
+                # partial, shorter than `data`, never the complete file. If `_fault` does NOT raise, the
+                # remaining bytes are written, so the primitive is never left corrupt by a no-op seam.
+                half = len(data) // 2
+                fh.write(data[:half])
+                fh.flush()
+                os.fsync(fh.fileno())
+                _fault("mid-write")
+                fh.write(data[half:])
+            else:
+                fh.write(data)
             fh.flush()
             os.fchmod(fh.fileno(), mode)  # O_EXCL creation mode is umask-masked; force exact bits
             os.fsync(fh.fileno())         # ...and fsync AFTER the mode is set, on the same fd
@@ -1158,24 +1188,49 @@ def test_all_three_boundary_checks_run_in_order(tmp_path: Path, monkeypatch) -> 
     assert order == ["_schema_gate_or_raise", "_validate_prospective_write", "_resolution_check_or_raise"]
 
 
-def test_body_normalization_is_identical_across_writer_paths(tmp_path: Path) -> None:
-    # I8 / design §9 (byte-stable writer): a leading-newline + CRLF body is folded to the writer's
-    # normal form identically by the injectable writer (used by preview AND saved-plan apply) and by
-    # the legacy `_prepare_write`. This characterizes normalization — it is NOT a body-preservation
-    # claim: the CRLF and leading blank lines are deliberately normalized away by both paths.
+def test_each_boundary_check_is_load_bearing_in_both_prepare_routes(tmp_path: Path, monkeypatch) -> None:
+    # I6 / design §480: each of the three boundary checks is LOAD-BEARING — forcing any one to raise
+    # aborts the write, through BOTH the injectable writer (preview + apply-plan route) and the legacy
+    # `_prepare_write`. Together with the ordering spy above and the dangling-successor behavioral test
+    # below, this proves the extraction refuses an illegal corpus write on every route, not just runs
+    # the checks.
+    import science_tool.entities as e
     from science_tool.entities import _prepare_write
-    (tmp_path / "science.yaml").write_text("name: t\n", encoding="utf-8")
-    d = tmp_path / "entities" / "interpretations"
-    d.mkdir(parents=True)
-    (d / "0001-x.md").write_bytes(
-        b"---\r\nid: interpretation:0001-x\r\nkind: interpretation\r\nstatus: draft\r\n---\r\n\r\nbody line\r\n")
-    a = _prepare_write_with_date(tmp_path, "interpretation:0001-x", {"status": "superseded"},
-                                 updated_default="2026-07-18")
-    b = _prepare_write(tmp_path, "interpretation:0001-x", {"status": "superseded"})
-    # identical normalized BODY (the two differ only in the injected `updated` value)
-    assert a.text.split("---\n", 2)[2] == b.text.split("---\n", 2)[2]
-    assert "\r" not in a.text                                   # CRLF normalized away
-    assert not a.text.split("---\n", 2)[2].startswith("\n")     # leading newline lstripped
+
+    class _Boom(Exception):
+        pass
+
+    _seed(tmp_path)
+    for gate in ("_schema_gate_or_raise", "_validate_prospective_write", "_resolution_check_or_raise"):
+        def boom(*a, _g=gate, **k):
+            raise _Boom(_g)
+
+        monkeypatch.setattr(e, gate, boom)
+        with pytest.raises(_Boom):
+            _prepare_write_with_date(tmp_path, "interpretation:0001-x", {"status": "superseded"},
+                                     updated_default="2026-07-18")
+        with pytest.raises(_Boom):
+            _prepare_write(tmp_path, "interpretation:0001-x", {"status": "superseded"})
+        monkeypatch.undo()
+
+
+def test_present_but_empty_updated_is_preserved_by_the_writer(tmp_path: Path, monkeypatch) -> None:
+    # design §9 (`updated` presence semantics, render layer): a present-but-empty `updated` is
+    # preserved by presence, NOT replaced with the injected default — `setdefault` only fills an
+    # ABSENT key. (The schema boundary separately REJECTS an empty date on a schema-backed project;
+    # that is a different layer, neutralized here to isolate the render behavior.)
+    import science_tool.entities as e
+    p = _seed(tmp_path)
+    p.write_text(
+        "---\nid: interpretation:0001-x\nkind: interpretation\nstatus: draft\nupdated: ''\n---\nbody\n",
+        encoding="utf-8")
+    monkeypatch.setattr(e, "_schema_gate_or_raise", lambda *a, **k: None)
+    monkeypatch.setattr(e, "_validate_prospective_write", lambda **k: ([], object()))
+    monkeypatch.setattr(e, "_resolution_check_or_raise", lambda *a, **k: None)
+    prepared = _prepare_write_with_date(tmp_path, "interpretation:0001-x", {"status": "superseded"},
+                                        updated_default="2026-07-18")
+    fm = yaml.safe_load(prepared.text.split("---\n", 2)[1])
+    assert fm["updated"] == ""  # empty value preserved, NOT overwritten with 2026-07-18
 ```
 
 - [ ] **Step 2: Run test to verify it fails**
@@ -1276,7 +1331,7 @@ And update its ONE caller in `mark_superseded` (`consolidation.py:643`) to pass 
 
 - [ ] **Step 4: Run tests to verify they pass**
 
-Run: `uv run --frozen pytest tests/test_prepare_write_injectable.py science/tests/test_consolidation_mark_superseded.py -q`
+Run: `uv run --frozen pytest tests/test_prepare_write_injectable.py tests/test_consolidation_mark_superseded.py -q`
 Expected: PASS (new tests + all existing mark-superseded tests still green — behavior unchanged on the legacy path).
 
 - [ ] **Step 5: Commit**
@@ -1356,6 +1411,41 @@ def test_decision_digest_changes_when_a_material_field_changes(tmp_path: Path) -
     p.write_text("---\n" + yaml.safe_dump(fm, sort_keys=False) + "---\nbody\n", encoding="utf-8")
     after = decision_digest(build_decision_material(tmp_path))
     assert before != after
+
+
+def test_non_projected_field_change_does_not_move_the_digest(tmp_path: Path) -> None:
+    # design §9: a frontmatter change to a field NOT in the projection (e.g. `title`) leaves the
+    # decision digest unchanged — the digest surface is exactly the decision surface, no more.
+    _seed(tmp_path)
+    before = decision_digest(build_decision_material(tmp_path))
+    p = tmp_path / "entities" / "interpretations" / "0001-a.md"
+    fm = yaml.safe_load(p.read_text(encoding="utf-8").split("---\n", 2)[1])
+    fm["title"] = "A COMPLETELY DIFFERENT TITLE"  # title is not part of the decision projection
+    p.write_text("---\n" + yaml.safe_dump(fm, sort_keys=False) + "---\nbody\n", encoding="utf-8")
+    after = decision_digest(build_decision_material(tmp_path))
+    assert before == after
+
+
+def test_material_admitted_edges_never_collapse_below_the_audit_count(tmp_path: Path) -> None:
+    # design §9 (duplicates preserved): a corpus with a repeated supersedes target must yield a material
+    # whose admitted-edge count equals the audit's relation count — the projection never collapses
+    # admitted relations to a unique set.
+    (tmp_path / "science.yaml").write_text("name: t\n", encoding="utf-8")
+    d = tmp_path / "entities" / "interpretations"
+    d.mkdir(parents=True)
+    (d / "0001-a.md").write_text(
+        "---\nid: interpretation:0001-a\nkind: interpretation\ntitle: A\nstatus: active\n"
+        "relations:\n  - predicate: sci:supersedes\n    target: interpretation:0002-b\n"
+        "  - predicate: sci:supersedes\n    target: interpretation:0002-b\n---\nbody\n",
+        encoding="utf-8")
+    (d / "0002-b.md").write_text(
+        "---\nid: interpretation:0002-b\nkind: interpretation\ntitle: B\nstatus: active\n---\nbody\n",
+        encoding="utf-8")
+    inputs = load_supersession_inputs(tmp_path)
+    mat = build_decision_material(tmp_path)
+    assert len(mat.admitted_supersedes) == len(inputs.audit.relations(_SUPERSEDES))  # no collapsing
+    assert any(e.src == "interpretation:0001-a" and e.dst == "interpretation:0002-b"
+               for e in mat.admitted_supersedes)
 
 
 def test_material_captures_authored_superseded_by_not_just_edges(tmp_path: Path) -> None:
@@ -1557,6 +1647,7 @@ def _all_fields(g):
         "archived_targets": list(g.archived_targets),
         "unmanaged_targets": list(g.unmanaged_targets),
         "unbacked_inverses": list(g.unbacked_inverses),
+        "supported_kinds": sorted(g.supported_kinds),  # I4: the policy field must agree too
     }
 
 
@@ -1887,7 +1978,7 @@ Preserve the domain docstrings/comments from the original `build_supersedes_grap
 
 - [ ] **Step 4: Run tests to verify they pass**
 
-Run: `uv run --frozen pytest tests/test_decision_material.py science/tests/test_consolidation_mark_superseded.py -q`
+Run: `uv run --frozen pytest tests/test_decision_material.py tests/test_consolidation_mark_superseded.py -q`
 Expected: PASS (full-field equivalence + all existing mark-superseded tests; reconcile any order-pinned assertion per the behavior-preservation note).
 
 - [ ] **Step 5: Commit**
@@ -1919,7 +2010,9 @@ from __future__ import annotations
 
 import pytest
 
-from science_tool.plan_common import AllSupersessionMembers, PathTransition, StateFingerprint
+from science_tool.plan_common import (
+    AllSupersessionMembers, ExplicitSupersessionIds, PathTransition, StateFingerprint,
+)
 from science_tool.supersede_plan import (
     InvalidRelation, SupersededChainReport, SupersedePlan, SupersedePreviewReport,
 )
@@ -2160,8 +2253,8 @@ Expected: FAIL — `plan_supersede` missing.
 from pathlib import Path
 
 from science_tool.consolidation import (
-    _disposition_report, build_decision_material, build_supersedes_graph_from_material,
-    decision_digest,
+    SupersessionDecisionMaterial, _disposition_report, build_decision_material,
+    build_supersedes_graph_from_material, decision_digest,
 )
 from science_tool.entities import _prepare_write_with_date
 from science_tool.plan_common import (
@@ -2434,6 +2527,69 @@ def test_rollback_after_first_of_two_entity_writes_restores_surface(tmp_path: Pa
         apply_supersede_plan(tmp_path, plan, staging_token="tok", _fault=fault)
     for rel, data in before.items():
         assert (tmp_path / rel).read_bytes() == data  # both fully restored, no half-applied surface
+
+
+def test_crlf_body_normalized_identically_across_preview_applyplan_and_legacy(tmp_path: Path) -> None:
+    # I4 / design §9: characterize body normalization across the THREE writer routes — preview
+    # (plan_supersede), saved-plan apply (apply_supersede_plan), and legacy apply
+    # (mark_superseded(apply=True)). A CRLF + leading-blank-line body is folded to the writer's normal
+    # form identically by all three. NOT a preservation claim — the CRLF/leading blanks are removed.
+    from science_tool.consolidation import mark_superseded
+
+    def seed(root: Path) -> None:
+        (root / "science.yaml").write_text("name: t\n", encoding="utf-8")
+        d = root / "entities" / "interpretations"
+        d.mkdir(parents=True)
+        (d / "0001-a.md").write_bytes(
+            b"---\r\nid: interpretation:0001-a\r\nkind: interpretation\r\ntitle: A\r\nstatus: active\r\n"
+            b"relations:\r\n  - predicate: sci:supersedes\r\n    target: interpretation:0002-b\r\n---\r\n\r\nbody\r\n")
+        (d / "0002-b.md").write_bytes(
+            b"---\r\nid: interpretation:0002-b\r\nkind: interpretation\r\ntitle: B\r\nstatus: active\r\n---\r\n\r\nbody line\r\n")
+
+    rel = "entities/interpretations/0002-b.md"
+    root_p = tmp_path / "preview"
+    root_p.mkdir()
+    seed(root_p)
+    plan = plan_supersede(root_p, selection=AllSupersessionMembers(kind="all"), preview_date="2026-07-18")
+    preview_body = plan.writes[0].postimage.split("---\n", 2)[2]           # preview route
+    apply_supersede_plan(root_p, plan, staging_token="tok")
+    applied_body = (root_p / rel).read_text(encoding="utf-8").split("---\n", 2)[2]  # apply-plan route
+    root_l = tmp_path / "legacy"
+    root_l.mkdir()
+    seed(root_l)
+    mark_superseded(root_l, ids=None, apply=True)
+    legacy_body = (root_l / rel).read_text(encoding="utf-8").split("---\n", 2)[2]   # legacy apply route
+    assert preview_body == applied_body == legacy_body                    # identical normal form
+    assert "\r" not in applied_body and not applied_body.startswith("\n")  # CRLF + leading blank removed
+
+
+def test_apply_supersede_refuses_project_root_mismatch(tmp_path: Path) -> None:
+    # design §9 (drift rejection): a plan whose project_root does not match the target is refused.
+    _chain(tmp_path)
+    plan = plan_supersede(tmp_path, selection=AllSupersessionMembers(kind="all"), preview_date="2026-07-18")
+    other = plan.model_copy(update={"project_root": str(tmp_path / "elsewhere")})
+    with pytest.raises(SupersedeApplyError):
+        apply_supersede_plan(tmp_path, other, staging_token="tok")
+
+
+def test_apply_supersede_refuses_report_hiding_a_blocker(tmp_path: Path) -> None:
+    # design §9 (report binding): a plan whose preview_report hides a blocker (an unbacked inverse) is
+    # refused at Gate B — the re-derived report still carries it.
+    (tmp_path / "science.yaml").write_text("name: t\n", encoding="utf-8")
+    d = tmp_path / "entities" / "interpretations"
+    d.mkdir(parents=True)
+    (d / "0001-a.md").write_text(  # no supersedes edge — so 0002-b's inverse is UNBACKED
+        "---\nid: interpretation:0001-a\nkind: interpretation\ntitle: A\nstatus: active\n---\nbody\n",
+        encoding="utf-8")
+    (d / "0002-b.md").write_text(
+        "---\nid: interpretation:0002-b\nkind: interpretation\ntitle: B\nstatus: active\n"
+        "superseded_by: interpretation:0001-a\n---\nbody\n", encoding="utf-8")
+    plan = plan_supersede(tmp_path, selection=AllSupersessionMembers(kind="all"), preview_date="2026-07-18")
+    assert plan.preview_report.unbacked_inverses  # the blocker is surfaced at preview
+    tampered = plan.model_copy(update={
+        "preview_report": plan.preview_report.model_copy(update={"unbacked_inverses": []})})
+    with pytest.raises(SupersedeApplyError, match="preview report"):
+        apply_supersede_plan(tmp_path, tampered, staging_token="tok")
 ```
 
 - [ ] **Step 2: Run test to verify it fails**
@@ -2561,7 +2717,7 @@ git commit -m "feat(supersede): apply_supersede_plan three-layer authorization +
 - Test: `science/tests/test_archive_plan.py`
 
 **Interfaces:**
-- Produces: `ArchiveCandidate` (`extra="forbid"`; `id`, `kind: str|None`, `status: str|None`, `original_path: str|None`, `superseded_by: str|None`, `resynthesized_into: list[str]`, `inbound_live_refs: list[str]`) mirroring `archive_entities`' candidate dict; `PlannedArchiveRow` (subclass of the canonical `ArchiveRow` that tightens `model_config` to `extra="forbid"` — a plan is untrusted, so a frozen row must reject unknown keys even though the shared `ArchiveRow` that parses append-only index files tolerates future ones); `ArchivePreviewReport` (`candidates: list[ArchiveCandidate]`); `ArchiveMove` (`id`, `original_path`, `archive_path`, `row: PlannedArchiveRow`); `ArchivePlan` (design §4.1: `schema_version`, `project_root`, `op`, `now`, `selection: ArchiveSelection`, `moves`, `index: PathTransition`, `transitions: list[PathTransition]`, `preview_report`).
+- Produces: `ArchiveCandidate` (`extra="forbid"`; `id`, `kind: str|None`, `status: str|None`, `original_path: str|None`, `superseded_by: str|None`, `resynthesized_into: list[str]`, `inbound_live_refs: list[str]`) mirroring `archive_entities`' candidate dict; `PlannedArchiveRow` (subclass of the canonical `ArchiveRow` that tightens `model_config` to `extra="forbid"` — a plan is untrusted, so a frozen row must reject unknown keys even though the shared `ArchiveRow` that parses append-only index files tolerates future ones); `ArchivePreviewReport` (`candidates: list[ArchiveCandidate]`); `ArchiveMove` (`id`, `original_path`, `archive_path`, `row: PlannedArchiveRow`); `ArchivePlan` (design §4.1: `schema_version`, `project_root`, `op`, `now`, `selection: ArchiveSelection`, `moves`, `index: PathTransition | None = None`, `transitions: list[PathTransition]`, `preview_report`; a `_index_matches_moves` model validator enforces moves↔index).
 
 - [ ] **Step 1: Write the failing test**
 
@@ -2582,18 +2738,34 @@ def _fp_file(sha: str) -> StateFingerprint:
 
 
 def test_archive_plan_roundtrips_and_forbids_extra() -> None:
+    # A VALID empty plan (moves=[], index=None, transitions=[]) round-trips through JSON. The
+    # moves↔index invariant means this is the only coherent empty shape.
+    plan = ArchivePlan(
+        schema_version=1, project_root="/p", op="archive", now="2026-07-18T00:00:00Z",
+        selection=ArchiveStatusSweep(kind="all_by_status", statuses=["superseded"]),
+        moves=[], index=None, transitions=[],
+        preview_report=ArchivePreviewReport(candidates=[]),
+    )
+    assert ArchivePlan.model_validate_json(plan.model_dump_json()) == plan
+
+
+def test_archive_plan_rejects_incoherent_moves_index_shapes() -> None:
+    # I5: the _index_matches_moves validator rejects both incoherent shapes at construction time.
     import hashlib
     body = "index bytes\n"
     idx = PathTransition(role="archive-index", rel_path="entities/_archive/archive-index.jsonl",
                          pre=StateFingerprint(existed=False, type=None, content_sha256=None, mode=None, symlink_target=None),
                          post=_fp_file(hashlib.sha256(body.encode()).hexdigest()), postimage=body)
-    plan = ArchivePlan(
-        schema_version=1, project_root="/p", op="archive", now="2026-07-18T00:00:00Z",
-        selection=ArchiveStatusSweep(kind="all_by_status", statuses=["superseded"]),
-        moves=[], index=idx, transitions=[],
-        preview_report=ArchivePreviewReport(candidates=[]),
-    )
-    assert ArchivePlan.model_validate_json(plan.model_dump_json()) == plan
+    common = dict(schema_version=1, project_root="/p", op="archive", now="2026-07-18T00:00:00Z",
+                  selection=ArchiveStatusSweep(kind="all_by_status", statuses=["superseded"]),
+                  preview_report=ArchivePreviewReport(candidates=[]))
+    with pytest.raises(ValueError, match="empty cohort"):
+        ArchivePlan(**common, moves=[], index=idx, transitions=[])  # empty cohort with an index
+    a_move = ArchiveMove(id="interpretation:0001-x", original_path="entities/interpretations/0001-x.md",
+                         archive_path="entities/_archive/interpretations/0001-x.md",
+                         row=PlannedArchiveRow(op="archive", id="interpretation:0001-x"))
+    with pytest.raises(ValueError, match="non-empty cohort"):
+        ArchivePlan(**common, moves=[a_move], index=None, transitions=[])  # moves but no index
 
 
 def test_nested_archive_models_forbid_extra_keys() -> None:
@@ -2977,6 +3149,7 @@ def test_apply_archive_refuses_cross_device_move_loudly(tmp_path: Path, monkeypa
     # I8 / design §4.3: a cross-device rename raises EXDEV; apply must surface it as a clean refusal
     # (archive must be on the same filesystem), not a partial/ambiguous move.
     import errno
+    import os
     _superseded(tmp_path)
     plan = plan_archive(tmp_path, selection=ArchiveStatusSweep(kind="all_by_status", statuses=["superseded"]),
                         now="2026-07-18T00:00:00Z")
@@ -2989,6 +3162,30 @@ def test_apply_archive_refuses_cross_device_move_loudly(tmp_path: Path, monkeypa
         apply_archive_plan(tmp_path, plan, staging_token="tok")
     # rolled back: the source is still in place, nothing half-moved
     assert (tmp_path / "entities" / "interpretations" / "0001-x.md").exists()
+
+
+def test_apply_archive_refuses_when_source_changed_after_preview(tmp_path: Path) -> None:
+    # design §9 (drift rejection — src changed): mutating the source after preview is refused (the
+    # re-derived row/pre-state no longer matches the plan).
+    _superseded(tmp_path)
+    plan = plan_archive(tmp_path, selection=ArchiveStatusSweep(kind="all_by_status", statuses=["superseded"]),
+                        now="2026-07-18T00:00:00Z")
+    (tmp_path / "entities" / "interpretations" / "0001-x.md").write_text(
+        "---\nid: interpretation:0001-x\nkind: interpretation\ntitle: CHANGED\nstatus: superseded\n---\nbody\n",
+        encoding="utf-8")
+    with pytest.raises(ArchiveApplyError):
+        apply_archive_plan(tmp_path, plan, staging_token="tok")
+    assert (tmp_path / "entities" / "interpretations" / "0001-x.md").exists()  # not moved
+
+
+def test_apply_archive_refuses_project_root_mismatch(tmp_path: Path) -> None:
+    # design §9 (drift rejection — project mismatch).
+    _superseded(tmp_path)
+    plan = plan_archive(tmp_path, selection=ArchiveStatusSweep(kind="all_by_status", statuses=["superseded"]),
+                        now="2026-07-18T00:00:00Z")
+    other = plan.model_copy(update={"project_root": str(tmp_path / "nope")})
+    with pytest.raises(ArchiveApplyError, match="project_root"):
+        apply_archive_plan(tmp_path, other, staging_token="tok")
 
 
 def test_apply_archive_refuses_report_hiding_an_inbound_reference(tmp_path: Path) -> None:
@@ -3323,14 +3520,30 @@ def test_apply_plan_rejects_edited_plan(tmp_path: Path) -> None:
     assert r.exit_code != 0
 
 
+def _two_chains(root: Path) -> None:
+    # Two independent supersessions in one corpus — 0002-b and 0004-d are both markable.
+    (root / "science.yaml").write_text("name: t\n", encoding="utf-8")
+    d = root / "entities" / "interpretations"
+    d.mkdir(parents=True)
+    for sup, sub in (("0001-a", "0002-b"), ("0003-c", "0004-d")):
+        (d / f"{sup}.md").write_text(
+            f"---\nid: interpretation:{sup}\nkind: interpretation\ntitle: {sup}\nstatus: active\n"
+            f"relations:\n  - predicate: sci:supersedes\n    target: interpretation:{sub}\n---\nbody\n",
+            encoding="utf-8")
+        (d / f"{sub}.md").write_text(
+            f"---\nid: interpretation:{sub}\nkind: interpretation\ntitle: {sub}\nstatus: active\n---\nbody\n",
+            encoding="utf-8")
+
+
 def test_apply_plan_rejects_selection_swapped_to_broaden_the_cohort(tmp_path: Path) -> None:
-    # I8 (selection authenticity, negative): editing the plan's `selection` to broaden the cohort is
-    # a raw-byte change, so the approval envelope (digest over raw bytes, checked before JSON parse)
-    # refuses it — a swapped selection cannot slip through even if it would re-derive self-consistently.
-    _two_supersessions(tmp_path)
+    # I8 (selection authenticity, negative): editing the plan's `selection` to point at a different
+    # eligible entity is a raw-byte change, so the approval envelope (digest over raw bytes, checked
+    # before JSON parse) refuses it — a swapped selection cannot slip through. NOTE: the id-selection
+    # flag is the repeatable `--id` (dest `ids`), not `--ids`.
+    _two_chains(tmp_path)
     plan_file = tmp_path / "plan.json"
     r1 = CliRunner().invoke(main, ["entities", "mark-superseded", "--project-root", str(tmp_path),
-                                   "--save-plan", str(plan_file), "--ids", "interpretation:0002-b"])
+                                   "--save-plan", str(plan_file), "--id", "interpretation:0002-b"])
     sha = json.loads(r1.output)["plan_sha256"]
     raw = plan_file.read_text(encoding="utf-8")
     plan_file.write_text(raw.replace("interpretation:0002-b", "interpretation:0004-d"), encoding="utf-8")
@@ -3696,7 +3909,7 @@ Expected: FAIL — package version is still `0.4.1`.
 
 - [ ] **Step 4: Run version + compatibility tests**
 
-Run: `uv run --frozen pytest tests/test_cli_version.py science/tests/test_agent_cli_compatibility.py -q`
+Run: `uv run --frozen pytest tests/test_cli_version.py tests/test_agent_cli_compatibility.py -q`
 Expected: PASS — the baseline test now green, and `test_agent_cli_compatibility.py` (command floor ≤ version) passes **unchanged**.
 
 - [ ] **Step 5: Record the observable behavior change, then commit**
@@ -3727,12 +3940,17 @@ blocking semantics unchanged."
 Run: `uv run --frozen pytest tests -q`
 Expected: PASS (no regressions across archive/consolidation/entity-import/version suites).
 
-- [ ] **Step 2: Run repo validation**
+- [ ] **Step 2: Run lint and type gates** (AGENTS.md "Lint / types", from `~/d/science/science`)
+
+Run: `uv run ruff check` then `uv run pyright`
+Expected: both PASS (clean). Fix any findings in the new/modified files before committing.
+
+- [ ] **Step 3: Run repo validation**
 
 Run: `bash scripts/validate.sh --verbose` (from the repo root `~/d/science`)
 Expected: PASS.
 
-- [ ] **Step 3: Commit any lint/format fixups**
+- [ ] **Step 4: Commit any lint/format fixups**
 
 ```bash
 git add science/src/science_tool science/tests
@@ -3783,5 +4001,14 @@ Not part of this upstream branch, but the acceptance the design §8 requires bef
 - **Report-list order pinned (I7)** — `_disposition_report` now actually sorts the four secondary lists; `test_disposition_report_sorts_the_four_secondary_lists_regardless_of_graph_order` (Task 9) feeds a graph in reverse-of-canonical order, so removing the sort fails.
 - **Ratified §9 acceptance cases (I8)** now explicit TDD steps: explicit-selection replay (`test_apply_explicit_ids_subset_marks_only_that_subset`, Task 12) and authenticity (`test_apply_plan_rejects_selection_swapped_to_broaden_the_cohort`, Task 16); archive inbound-report tampering (`test_apply_archive_refuses_report_hiding_an_inbound_reference`, Task 15); `EXDEV` (`test_apply_archive_refuses_cross_device_move_loudly`, Task 15); `material_version` mismatch (`test_apply_refuses_material_version_mismatch`, Task 12); rollback after the first of two entity writes (`test_rollback_after_first_of_two_entity_writes_restores_surface`, Task 12); leading-newline/CRLF normalization across writer paths (`test_body_normalization_is_identical_across_writer_paths`, Task 7).
 - **Path-scoped final staging (minor)** — Task 19 stages `science/src/science_tool science/tests`, not `git add -A`.
+
+**Fourth-review closures:**
+- **Mid-write test proves a real partial (C1)** — `staged_write`'s seam writes a STRICT prefix (flush+fsync) then faults; `test_staged_write_mid_kill_…` asserts `0 < len(survivor) < len(postimage)` and `classify_staging == "prefix"`. Cleanup is attribution-aware: `test_staged_write_refuses_to_remove_a_non_prefix_survivor` (target untouched, survivor preserved) + the clean-prefix removal test.
+- **Task 13 round-trip is a valid empty plan (C2)** — `moves=[], index=None, transitions=[]`; the incoherent shapes have their own `test_archive_plan_rejects_incoherent_moves_index_shapes`.
+- **Unexecutable tests fixed (C3)** — `ExplicitSupersessionIds` imported in `test_supersede_plan.py`; archive EXDEV test imports `os`; the CLI selection test seeds inline (`_two_chains`) and uses the real repeatable `--id` flag (not `--ids`); the three combined pytest commands now use package-relative second paths.
+- **Boundary + normalization cover the real routes (I4)** — `test_each_boundary_check_is_load_bearing_in_both_prepare_routes` forces each of the three checks to raise through both `_prepare_write_with_date` and legacy `_prepare_write`; `test_crlf_body_normalized_identically_across_preview_applyplan_and_legacy` compares preview → apply-plan → `mark_superseded` end-to-end.
+- **Implementation import + `_all_fields` (I5)** — `SupersessionDecisionMaterial` imported into `supersede_plan.py`; `_all_fields` now includes `supported_kinds`; Task 19 runs `uv run ruff check` and `uv run pyright` (AGENTS.md).
+- **Ratified §9 cases added (I6)** — present-but-empty `updated` (render preservation), duplicate-relation count (no collapsing), non-projected-field digest stability, archive source-drift + project-root mismatch, and a supersession report hiding a blocker are now explicit tests (Tasks 7, 8, 12, 15).
+- **Interface prose (minor)** — Task 13's `ArchivePlan` interface line now reads `index: PathTransition | None = None` with the `_index_matches_moves` validator noted.
 
 **Type consistency:** `StateFingerprint`/`PathTransition`/`PathSnapshot`, `resolve_within`/`assert_same_surface`/`assert_staging_unique`, `ArchiveSelection`/`SupersedeSelection`, the nested report models (`SupersededChainReport`/`InvalidRelation`/`TargetReport`/… and `ArchiveCandidate`/`PlannedArchiveRow`), `plan_supersede`/`apply_supersede_plan`, `plan_archive`/`apply_archive_plan`, `_prepare_write_with_date`, `_project_inputs`/`_classify_from_projections`/`build_supersedes_graph_from_material`, `build_decision_material`/`decision_digest` are used consistently across tasks.
