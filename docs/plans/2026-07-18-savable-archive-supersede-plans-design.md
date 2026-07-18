@@ -226,9 +226,13 @@ class ArchivePlan(BaseModel):
     now: str                            # FROZEN ISO-8601 UTC; injected, no apply-time clock
     selection: ArchiveSelection         # §3.5
     moves: list[ArchiveMove]
-    index: PathTransition               # role="archive-index", literal postimage bytes
+    index: PathTransition | None = None # role="archive-index", literal postimage bytes; None for an
+                                        # EMPTY cohort (no-op plan; legacy `archive` no-ops too)
     transitions: list[PathTransition]   # created-dir entries + per-move archive-src/archive-dst
     preview_report: ArchivePreviewReport  # dry-run review context (§4.4)
+    # model_validator enforces the moves↔index invariant: non-empty moves REQUIRE an index; an empty
+    # cohort carries neither an index nor any transition. Apply still runs Gate B before the no-op,
+    # so an empty saved plan against a corpus that gained an eligible entity is refused as drift.
 
 class ArchiveMove(BaseModel):
     model_config = ConfigDict(extra="forbid")

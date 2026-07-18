@@ -25,7 +25,8 @@ Every task's requirements implicitly include these — copy exact values verbati
 - **The plan stores a `preview_report` (dry-run semantics), not an execution report.** `applied`/`repaired`/`skipped` are populated only after execution; apply emits a **separate** execution report (design §4.4, §5.5).
 - **Selection lists** (ids/statuses) are enforced non-empty, unique, canonically ordered by **model validators**, not comments (design §3.5).
 - **Version bump = three edits + one unchanged test** (design §8): `science/pyproject.toml:3`, `.claude-plugin/plugin.json:3`, `science/tests/test_cli_version.py:27`; `test_agent_cli_compatibility.py` runs unchanged.
-- **House style:** `from __future__ import annotations`; absolute imports; tests use `CliRunner` + `tmp_path` + inline `science.yaml`/entity fixtures. Run tests with `uv run --frozen pytest science/tests/<file> -q` from `~/d/science`. No AI-attribution trailers in commits.
+- **Command working directories (verified).** There is no root `pyproject.toml`. All `uv`/`pytest` commands MUST run from `~/d/science/science` — running them from the repo root fails, because `tests/conftest.py` imports `science_model`, giving `ModuleNotFoundError: No module named 'science_model'` (reproduced). Every `Run:` pytest path in this plan is therefore relative to `~/d/science/science` (e.g. `tests/test_plan_common.py`). **`git` commands and the repo validator run from the repo root `~/d/science`:** `git add` paths stay repo-relative (`science/src/...`, `.claude-plugin/plugin.json`), and the validator is `bash scripts/validate.sh --verbose` (it lives at `scripts/validate.sh`, not the repo root).
+- **House style:** `from __future__ import annotations`; absolute imports; tests use `CliRunner` + `tmp_path` + inline `science.yaml`/entity fixtures. No AI-attribution trailers in commits.
 
 ---
 
@@ -155,7 +156,7 @@ def test_state_fingerprint_rejects_incoherent_combinations(kwargs: dict) -> None
 
 - [ ] **Step 2: Run test to verify it fails**
 
-Run: `uv run --frozen pytest science/tests/test_plan_common.py -q`
+Run: `uv run --frozen pytest tests/test_plan_common.py -q`
 Expected: FAIL — `ModuleNotFoundError: science_tool.plan_common`.
 
 - [ ] **Step 3: Write minimal implementation**
@@ -238,7 +239,7 @@ def matches(fp: StateFingerprint, path: Path) -> bool:
 
 - [ ] **Step 4: Run test to verify it passes**
 
-Run: `uv run --frozen pytest science/tests/test_plan_common.py -q`
+Run: `uv run --frozen pytest tests/test_plan_common.py -q`
 Expected: PASS (5 tests).
 
 - [ ] **Step 5: Commit**
@@ -309,7 +310,7 @@ def test_created_dir_has_no_postimage_and_absent_pre() -> None:
 
 - [ ] **Step 2: Run test to verify it fails**
 
-Run: `uv run --frozen pytest science/tests/test_plan_common.py -q`
+Run: `uv run --frozen pytest tests/test_plan_common.py -q`
 Expected: FAIL — `ImportError: cannot import name 'PathTransition'`.
 
 - [ ] **Step 3: Write minimal implementation**
@@ -353,7 +354,7 @@ class PathTransition(BaseModel):
 
 - [ ] **Step 4: Run test to verify it passes**
 
-Run: `uv run --frozen pytest science/tests/test_plan_common.py -q`
+Run: `uv run --frozen pytest tests/test_plan_common.py -q`
 Expected: PASS.
 
 - [ ] **Step 5: Commit**
@@ -402,7 +403,7 @@ def test_archive_status_sweep_and_explicit_ids_shapes() -> None:
 
 - [ ] **Step 2: Run test to verify it fails**
 
-Run: `uv run --frozen pytest science/tests/test_plan_common.py -q`
+Run: `uv run --frozen pytest tests/test_plan_common.py -q`
 Expected: FAIL — import error.
 
 - [ ] **Step 3: Write minimal implementation**
@@ -468,7 +469,7 @@ SupersedeSelection = Annotated[AllSupersessionMembers | ExplicitSupersessionIds,
 
 - [ ] **Step 4: Run test to verify it passes**
 
-Run: `uv run --frozen pytest science/tests/test_plan_common.py -q`
+Run: `uv run --frozen pytest tests/test_plan_common.py -q`
 Expected: PASS.
 
 - [ ] **Step 5: Commit**
@@ -508,7 +509,7 @@ def test_envelope_accepts_matching_and_rejects_mismatch(tmp_path: Path) -> None:
 
 - [ ] **Step 2: Run test to verify it fails**
 
-Run: `uv run --frozen pytest science/tests/test_plan_common.py -q`
+Run: `uv run --frozen pytest tests/test_plan_common.py -q`
 Expected: FAIL — import error.
 
 - [ ] **Step 3: Write minimal implementation**
@@ -542,7 +543,7 @@ def verify_envelope(raw: bytes, expected_sha256: str) -> None:
 
 - [ ] **Step 4: Run test to verify it passes**
 
-Run: `uv run --frozen pytest science/tests/test_plan_common.py -q`
+Run: `uv run --frozen pytest tests/test_plan_common.py -q`
 Expected: PASS.
 
 - [ ] **Step 5: Commit**
@@ -561,7 +562,7 @@ git commit -m "feat(curation): approval-envelope single-read digest verification
 - Test: `science/tests/test_plan_common.py`
 
 **Interfaces:**
-- Produces: `staging_path_for(target: Path, token: str) -> Path` (`<target>.<token>.tmp`); `staged_write(target: Path, postimage: str, mode: int, token: str) -> None` (O_EXCL tmp → write → fchmod → fsync → `os.replace`); `classify_staging(staging: Path, postimage: str) -> Literal["absent","prefix","complete"]`. `StagingError(RuntimeError)`.
+- Produces: `staging_path_for(target: Path, token: str) -> Path` (`<target>.<token>.tmp`); `staged_write(target: Path, postimage: str, mode: int, token: str, _fault: Callable[[str], None] | None = None) -> None` (O_EXCL tmp → write → **`_fault("mid-write")` seam** → fchmod → fsync → `os.replace`; the `except Exception` cleanup removes a survivor only when it is an attributable byte-prefix of the postimage); `classify_staging(staging: Path, postimage: str) -> Literal["absent","prefix","complete"]`. `_fault` is test-only: raising a `BaseException` from it simulates a mid-staging kill (skips cleanup → partial `.tmp` preserved). `StagingError(RuntimeError)`.
 
 - [ ] **Step 1: Write the failing test**
 
@@ -599,17 +600,61 @@ def test_classify_staging_absent_prefix_complete(tmp_path: Path) -> None:
     staging.write_text("hellX", encoding="utf-8")
     with pytest.raises(StagingError):
         classify_staging(staging, "hello")  # not a prefix -> interference
+
+
+def test_staged_write_mid_kill_leaves_attributable_prefix_and_untouched_target(tmp_path: Path) -> None:
+    # C3 / design §3.4: a kill DURING staging (BaseException from the `_fault` seam, after the write
+    # but before replace) must leave the real writer in only-modeled state — a partial `.tmp` that is
+    # a byte-prefix of the postimage, the target unchanged, and no other debris in the directory.
+    class _Kill(BaseException):
+        pass
+
+    target = tmp_path / "entities" / "x" / "1.md"
+    target.parent.mkdir(parents=True)
+    target.write_text("original", encoding="utf-8")
+
+    def fault(label: str) -> None:
+        if label == "mid-write":
+            raise _Kill()
+
+    with pytest.raises(_Kill):
+        staged_write(target, "brand-new-postimage", 0o644, token="batch1", _fault=fault)
+
+    assert target.read_text(encoding="utf-8") == "original"  # target never touched
+    survivor = staging_path_for(target, "batch1")
+    assert classify_staging(survivor, "brand-new-postimage") in ("prefix", "complete")  # attributable
+    # no undeclared debris — only the target and the one attributable staging survivor exist
+    assert {p.name for p in target.parent.iterdir()} == {target.name, survivor.name}
+
+
+def test_staged_write_caught_error_removes_only_attributable_survivor(tmp_path: Path, monkeypatch) -> None:
+    # The `except Exception` cleanup removes our own partial write; a survivor that is NOT a prefix of
+    # the postimage is refused (not silently deleted), surfacing interference instead of erasing it.
+    target = tmp_path / "a.md"
+    target.write_text("x", encoding="utf-8")
+
+    def boom(*a, **k):
+        raise RuntimeError("replace failed")
+
+    monkeypatch.setattr(os, "replace", boom)
+    with pytest.raises(RuntimeError, match="replace failed"):
+        staged_write(target, "hello", 0o644, token="b")
+    # our complete staged bytes were a prefix of the postimage → cleaned up
+    assert not staging_path_for(target, "b").exists()
 ```
 
 - [ ] **Step 2: Run test to verify it fails**
 
-Run: `uv run --frozen pytest science/tests/test_plan_common.py -q`
+Run: `uv run --frozen pytest tests/test_plan_common.py -q`
 Expected: FAIL — import error.
 
 - [ ] **Step 3: Write minimal implementation**
 
 ```python
 # add to science/src/science_tool/plan_common.py
+from typing import Callable  # add to the existing typing import at the top of the module
+
+
 class StagingError(RuntimeError):
     pass
 
@@ -618,7 +663,12 @@ def staging_path_for(target: Path, token: str) -> Path:
     return target.with_name(f"{target.name}.{token}.tmp")
 
 
-def staged_write(target: Path, postimage: str, mode: int, token: str) -> None:
+def staged_write(target: Path, postimage: str, mode: int, token: str,
+                 _fault: Callable[[str], None] | None = None) -> None:
+    # `_fault` is a TEST-ONLY seam: a test raises a `BaseException` from it to simulate a process
+    # kill mid-staging. Because it is a BaseException, the `except Exception` cleanup below does NOT
+    # run — the partial `.tmp` survives, exactly as an uncaught SIGKILL would leave it, so the kill
+    # test can assert the survivor is an attributable byte-prefix of the postimage (design §3.4).
     staging = staging_path_for(target, token)
     data = postimage.encode("utf-8")
     try:
@@ -628,6 +678,8 @@ def staged_write(target: Path, postimage: str, mode: int, token: str) -> None:
     try:
         with os.fdopen(fd, "wb") as fh:
             fh.write(data)
+            if _fault is not None:
+                _fault("mid-write")  # a kill here leaves a partial, attributable .tmp; target untouched
             fh.flush()
             os.fchmod(fh.fileno(), mode)  # O_EXCL creation mode is umask-masked; force exact bits
             os.fsync(fh.fileno())         # ...and fsync AFTER the mode is set, on the same fd
@@ -638,8 +690,18 @@ def staged_write(target: Path, postimage: str, mode: int, token: str) -> None:
         finally:
             os.close(dir_fd)
     except Exception:
+        # Attribution-aware cleanup (design §3.4): only remove a survivor we can prove is our own
+        # O_EXCL-created partial (a byte-prefix of the intended postimage). A non-prefix survivor
+        # means something we did not write is present — refuse to delete it and surface the anomaly
+        # instead of silently erasing evidence. (A kill via `_fault` is a BaseException and skips
+        # this handler entirely, so the partial .tmp is preserved for classification.)
         if staging.exists():
-            staging.unlink()
+            survivor = staging.read_bytes()
+            if data.startswith(survivor):
+                staging.unlink()  # our own partial (or complete) write; safe to remove
+            else:
+                raise StagingError(
+                    f"staging survivor is not an attributable prefix, not removing: {staging}")
         raise
 
 
@@ -657,7 +719,7 @@ def classify_staging(staging: Path, postimage: str) -> str:
 
 - [ ] **Step 4: Run test to verify it passes**
 
-Run: `uv run --frozen pytest science/tests/test_plan_common.py -q`
+Run: `uv run --frozen pytest tests/test_plan_common.py -q`
 Expected: PASS.
 
 - [ ] **Step 5: Commit**
@@ -834,7 +896,7 @@ def test_assert_staging_unique_flags_collisions(tmp_path: Path) -> None:
 
 - [ ] **Step 2: Run test to verify it fails**
 
-Run: `uv run --frozen pytest science/tests/test_plan_common.py -q`
+Run: `uv run --frozen pytest tests/test_plan_common.py -q`
 Expected: FAIL — import error.
 
 - [ ] **Step 3: Write minimal implementation**
@@ -971,7 +1033,7 @@ def assert_staging_unique(project_root: Path, staged_targets: list[Path], token:
 
 - [ ] **Step 4: Run test to verify it passes**
 
-Run: `uv run --frozen pytest science/tests/test_plan_common.py -q`
+Run: `uv run --frozen pytest tests/test_plan_common.py -q`
 Expected: PASS (rollback for file/mode/symlink/nested-dir/halt; `resolve_within`; surface; staging).
 
 - [ ] **Step 5: Commit**
@@ -1072,11 +1134,53 @@ def test_prepare_write_legacy_wrapper_injects_today(tmp_path: Path) -> None:
     prepared = _prepare_write(tmp_path, "interpretation:0001-x", {"status": "superseded"})
     fm = yaml.safe_load(prepared.text.split("---\n", 2)[1])
     assert fm["updated"] == date.today().isoformat()
+
+
+def test_all_three_boundary_checks_run_in_order(tmp_path: Path, monkeypatch) -> None:
+    # I6: prove the refactor RETAINS all three boundary checks — schema gate, prospective-corpus,
+    # successor-resolution — and runs them in the documented order (cheapest authority first). Each
+    # spy calls through, so behavior is unchanged; only the call order is recorded.
+    import science_tool.entities as e
+    _seed(tmp_path)
+    order: list[str] = []
+    for name in ("_schema_gate_or_raise", "_validate_prospective_write", "_resolution_check_or_raise"):
+        real = getattr(e, name)
+
+        def make(n: str, r):
+            def spy(*a, **k):
+                order.append(n)
+                return r(*a, **k)
+            return spy
+
+        monkeypatch.setattr(e, name, make(name, real))
+    _prepare_write_with_date(tmp_path, "interpretation:0001-x", {"status": "superseded"},
+                             updated_default="2026-07-18")
+    assert order == ["_schema_gate_or_raise", "_validate_prospective_write", "_resolution_check_or_raise"]
+
+
+def test_body_normalization_is_identical_across_writer_paths(tmp_path: Path) -> None:
+    # I8 / design §9 (byte-stable writer): a leading-newline + CRLF body is folded to the writer's
+    # normal form identically by the injectable writer (used by preview AND saved-plan apply) and by
+    # the legacy `_prepare_write`. This characterizes normalization — it is NOT a body-preservation
+    # claim: the CRLF and leading blank lines are deliberately normalized away by both paths.
+    from science_tool.entities import _prepare_write
+    (tmp_path / "science.yaml").write_text("name: t\n", encoding="utf-8")
+    d = tmp_path / "entities" / "interpretations"
+    d.mkdir(parents=True)
+    (d / "0001-x.md").write_bytes(
+        b"---\r\nid: interpretation:0001-x\r\nkind: interpretation\r\nstatus: draft\r\n---\r\n\r\nbody line\r\n")
+    a = _prepare_write_with_date(tmp_path, "interpretation:0001-x", {"status": "superseded"},
+                                 updated_default="2026-07-18")
+    b = _prepare_write(tmp_path, "interpretation:0001-x", {"status": "superseded"})
+    # identical normalized BODY (the two differ only in the injected `updated` value)
+    assert a.text.split("---\n", 2)[2] == b.text.split("---\n", 2)[2]
+    assert "\r" not in a.text                                   # CRLF normalized away
+    assert not a.text.split("---\n", 2)[2].startswith("\n")     # leading newline lstripped
 ```
 
 - [ ] **Step 2: Run test to verify it fails**
 
-Run: `uv run --frozen pytest science/tests/test_prepare_write_injectable.py -q`
+Run: `uv run --frozen pytest tests/test_prepare_write_injectable.py -q`
 Expected: FAIL — `ImportError: cannot import name '_prepare_write_with_date'`.
 
 - [ ] **Step 3: Write minimal implementation**
@@ -1172,7 +1276,7 @@ And update its ONE caller in `mark_superseded` (`consolidation.py:643`) to pass 
 
 - [ ] **Step 4: Run tests to verify they pass**
 
-Run: `uv run --frozen pytest science/tests/test_prepare_write_injectable.py science/tests/test_consolidation_mark_superseded.py -q`
+Run: `uv run --frozen pytest tests/test_prepare_write_injectable.py science/tests/test_consolidation_mark_superseded.py -q`
 Expected: PASS (new tests + all existing mark-superseded tests still green — behavior unchanged on the legacy path).
 
 - [ ] **Step 5: Commit**
@@ -1203,7 +1307,7 @@ the three fields a graph-output serialization would keep.
 - Test: `science/tests/test_decision_material.py`
 
 **Interfaces:**
-- Produces: projection models `EntryProjection` (`eid`, `status: str|None`, `kind`, `superseded_by_raw: str|None`, `superseded_by_canonical: str|None`), `EdgeProjection` (`src`, `dst: str|None`, `source_path`), `DefectProjection` (`code`, `path`, `subject`, `predicate`, `object`, `message`); `SupersessionDecisionMaterial` (`material_version`, `entries: list[EntryProjection]`, `admitted_supersedes: list[EdgeProjection]`, `defects: list[DefectProjection]`, `mutable_population: list[str]`, `archived_population: list[str]`); `_project_inputs(inputs: SupersessionInputs) -> SupersessionDecisionMaterial`; `build_decision_material(project_root) -> SupersessionDecisionMaterial` (`= _project_inputs(load_supersession_inputs(project_root))` — **never** calls `build_supersedes_graph`); `decision_digest(material) -> str`.
+- Produces: projection models `EntryProjection` (`eid`, `status: str|None`, `kind`, `superseded_by_raw: str|None`, `superseded_by_canonical: str|None`), `EdgeProjection` (`src`, `dst: str|None`, `source_path`), `DefectProjection` (`code`, `path`, `subject`, `predicate`, `object`, `message`); `SupersessionDecisionMaterial` (`material_version`, `entries: list[EntryProjection]`, `admitted_supersedes: list[EdgeProjection]`, `defects: list[DefectProjection]`, `mutable_population: list[str]`, `archived_population: list[str]`, `supported_kinds: list[str]` — the frozen auto-apply policy, so the digest covers it, I4); `_project_inputs(inputs: SupersessionInputs) -> SupersessionDecisionMaterial`; `build_decision_material(project_root) -> SupersessionDecisionMaterial` (`= _project_inputs(load_supersession_inputs(project_root))` — **never** calls `build_supersedes_graph`); `decision_digest(material) -> str`.
 
 - [ ] **Step 1: Write the failing test**
 
@@ -1288,7 +1392,7 @@ def test_build_decision_material_does_not_build_a_graph(monkeypatch, tmp_path: P
 
 - [ ] **Step 2: Run test to verify it fails**
 
-Run: `uv run --frozen pytest science/tests/test_decision_material.py -q`
+Run: `uv run --frozen pytest tests/test_decision_material.py -q`
 Expected: FAIL — import error.
 
 - [ ] **Step 3: Write minimal implementation**
@@ -1335,6 +1439,7 @@ class SupersessionDecisionMaterial(BaseModel):
     defects: list[DefectProjection]           # sorted; DUPS KEPT
     mutable_population: list[str]             # sorted
     archived_population: list[str]            # sorted
+    supported_kinds: list[str]               # sorted; the frozen auto-apply policy the classifier reads (I4)
 
 
 def _project_inputs(inputs: SupersessionInputs) -> SupersessionDecisionMaterial:
@@ -1372,6 +1477,10 @@ def _project_inputs(inputs: SupersessionInputs) -> SupersessionDecisionMaterial:
         defects=sorted(defects, key=lambda d: (d.code, d.subject, d.predicate, d.object, d.path, d.message)),
         mutable_population=sorted(resolution.mutable),
         archived_population=sorted(resolution.archived),
+        # The auto-apply supported-kind policy IS a decision input (design §5.2): serialize it so the
+        # digest covers it. `_supports_superseded(k)` is `_SUPERSEDED in _STATUS_VALUES.get(k, ...)`,
+        # so the supported set is exactly the kinds whose status vocab admits `superseded`.
+        supported_kinds=sorted(k for k, v in _STATUS_VALUES.items() if _SUPERSEDED in v),
     )
 
 
@@ -1383,11 +1492,11 @@ def decision_digest(material: SupersessionDecisionMaterial) -> str:
     return hashlib.sha256(material.model_dump_json().encode("utf-8")).hexdigest()
 ```
 
-Implementer notes: `AdmittedRelation.subject.canonical_id`, `.object_canonical_id`, `.relation.source_path` are the exact attributes `build_supersedes_graph` reads at `consolidation.py:363-365`; `RelationDefect` fields are `code/path/subject/predicate/object/message` (`graph/relation_audit.py:68`). `_kind_of` and `_SUPERSEDES` (`= "supersedes"`) already exist in this module. Do **not** import or call `build_supersedes_graph` here — that inverts input and output (finding 2).
+Implementer notes: `AdmittedRelation.subject.canonical_id`, `.object_canonical_id`, `.relation.source_path` are the exact attributes `build_supersedes_graph` reads at `consolidation.py:363-365`; `RelationDefect` fields are `code/path/subject/predicate/object/message` (`graph/relation_audit.py:68`). `_kind_of`, `_SUPERSEDES` (`= "supersedes"`), `_STATUS_VALUES`, `_SUPERSEDED`, and `_supports_superseded` (`consolidation.py:98`) already exist in this module. Do **not** import or call `build_supersedes_graph` here — that inverts input and output (finding 2).
 
 - [ ] **Step 4: Run test to verify it passes**
 
-Run: `uv run --frozen pytest science/tests/test_decision_material.py -q`
+Run: `uv run --frozen pytest tests/test_decision_material.py -q`
 Expected: PASS.
 
 - [ ] **Step 5: Commit**
@@ -1496,16 +1605,86 @@ def test_material_admitted_edges_are_canonically_sorted(tmp_path: Path) -> None:
     keys = [(e.src, e.dst, e.source_path) for e in mat.admitted_supersedes]
     assert len(keys) == 2
     assert keys == sorted(keys)  # canonical order, deterministic across runs
+
+
+def test_material_carries_supported_kinds_and_digest_covers_the_policy(monkeypatch, tmp_path: Path) -> None:
+    # I4: the auto-apply supported-kind policy is part of the authenticated decision surface. It is
+    # serialized (sorted) into the material, and changing it flips the digest — so a policy shift
+    # between preview and apply is caught as drift, not silently applied.
+    import science_tool.consolidation as c
+    _seed(tmp_path)
+    mat = build_decision_material(tmp_path)
+    assert "interpretation" in mat.supported_kinds
+    assert mat.supported_kinds == sorted(mat.supported_kinds)  # canonical
+    before = decision_digest(mat)
+    extended = dict(c._STATUS_VALUES)
+    extended["zzz-fake-kind"] = frozenset({c._SUPERSEDED})  # a new auto-apply-eligible kind
+    monkeypatch.setattr(c, "_STATUS_VALUES", extended)
+    after = decision_digest(build_decision_material(tmp_path))
+    assert before != after  # the policy change moved the digest
+
+
+def test_disposition_reads_supported_kinds_from_the_graph_not_the_module(monkeypatch, tmp_path: Path) -> None:
+    # _disposition_report must consult graph.supported_kinds (authenticated), not the live module
+    # policy. Neutralizing the module function while the graph still carries the policy keeps the
+    # disposition correct — proving the read moved onto the material.
+    import science_tool.consolidation as c
+    _seed(tmp_path)
+    graph = build_supersedes_graph_from_material(build_decision_material(tmp_path))
+    monkeypatch.setattr(c, "_supports_superseded", lambda kind: False)  # would empty to_mark if consulted
+    report = c._disposition_report(graph, ids=None)
+    assert report["to_mark"]  # still non-empty: the policy came from the graph, not the patched module
+
+
+def test_disposition_report_sorts_the_four_secondary_lists_regardless_of_graph_order() -> None:
+    # I7: the release-note behavior change. The four secondary report lists are emitted in canonical
+    # sorted order even when the graph presents them in a NON-canonical order — so removing the sort
+    # in _disposition_report fails this. Each list below is supplied reverse-of-canonical on purpose.
+    from types import MappingProxyType
+
+    from science_tool.consolidation import SupersedesGraph, _disposition_report
+    from science_tool.graph.relation_audit import RelationDefect
+
+    g = SupersedesGraph(
+        linear=(), non_linear=(),
+        status_by_id=MappingProxyType({}), kind_by_id=MappingProxyType({}),
+        path_by_id=MappingProxyType({}), edges=frozenset(),
+        superseder_by_id=MappingProxyType({}), superseded_by_id=MappingProxyType({}),
+        invalid=(
+            RelationDefect(code="invalid_relation", path="z.md", subject="interpretation:0009",
+                           predicate="sci:supersedes", object="x", message="m"),
+            RelationDefect(code="invalid_relation", path="a.md", subject="interpretation:0001",
+                           predicate="sci:supersedes", object="x", message="m"),
+        ),
+        archived_targets=(
+            {"id": "interpretation:0009", "superseder": "interpretation:0001", "path": "z", "reason": "r"},
+            {"id": "interpretation:0002", "superseder": "interpretation:0003", "path": "a", "reason": "r"},
+        ),
+        unmanaged_targets=(
+            {"id": "interpretation:0008", "superseder": "s", "path": "z", "reason": "r"},
+            {"id": "interpretation:0004", "superseder": "s", "path": "a", "reason": "r"},
+        ),
+        unbacked_inverses=(
+            {"id": "interpretation:0007", "superseder": "s", "reason": "r"},
+            {"id": "interpretation:0003", "superseder": "s", "reason": "r"},
+        ),
+        supported_kinds=frozenset({"interpretation"}),
+    )
+    rep = _disposition_report(g, ids=None)
+    assert [d["path"] for d in rep["invalid_relations"]] == ["a.md", "z.md"]
+    assert [a["id"] for a in rep["archived_targets"]] == ["interpretation:0002", "interpretation:0009"]
+    assert [u["id"] for u in rep["unmanaged_targets"]] == ["interpretation:0004", "interpretation:0008"]
+    assert [u["id"] for u in rep["unbacked_inverses"]] == ["interpretation:0003", "interpretation:0007"]
 ```
 
 - [ ] **Step 2: Run test to verify it fails**
 
-Run: `uv run --frozen pytest science/tests/test_decision_material.py -q`
+Run: `uv run --frozen pytest tests/test_decision_material.py -q`
 Expected: FAIL — `ImportError: cannot import name 'build_supersedes_graph_from_material'`.
 
 - [ ] **Step 3: Write minimal implementation**
 
-Replace the body of `build_supersedes_graph` (`consolidation.py:323-490`) with the extraction below. The middle block (`cyclic_nodes` → `_connected_components` → `linear`/`non_linear` → `superseder_by_id`) moves **verbatim**; only the loaders above it and the `superseded_by` loop below it change to read projections instead of `entries`/`resolution`/`audit`.
+Replace the body of `build_supersedes_graph` (`consolidation.py:323-490`) with the extraction below. The middle block (`cyclic_nodes` → `_connected_components` → `linear`/`non_linear` → `superseder_by_id`) moves **verbatim**; only the loaders above it and the `superseded_by` loop below it change to read projections instead of `entries`/`resolution`/`audit`. **Add a `supported_kinds: frozenset[str]` field to the `SupersedesGraph` type** (the NamedTuple/dataclass it already is) so the frozen policy travels with the graph; `_disposition_report` reads `graph.supported_kinds` instead of calling the module-level `_supports_superseded`. Both classifier entry points populate it from `material.supported_kinds`, so live and material-driven graphs agree and the equivalence test still holds.
 
 ```python
 # in science/src/science_tool/consolidation.py
@@ -1608,6 +1787,7 @@ def _classify_from_projections(
         archived_targets=tuple(archived_targets),
         unmanaged_targets=tuple(unmanaged_targets),
         unbacked_inverses=tuple(unbacked_inverses),
+        supported_kinds=frozenset(material.supported_kinds),  # I4: policy travels on the graph
     )
 
 
@@ -1645,7 +1825,7 @@ def _disposition_report(graph: SupersedesGraph, *, ids: frozenset[str] | None) -
         chains.append({"survivor": chain.survivor, "members": list(chain.superseded), "linear": True})
         for member in chain.superseded:
             kind = graph.kind_by_id.get(member, member.split(":", 1)[0])
-            if not _supports_superseded(kind):  # the frozen supported-kind policy, applied to material kind
+            if kind not in graph.supported_kinds:  # I4: read the policy carried in the authenticated material
                 skipped_kinds.append({"id": member, "kind": kind})
                 continue
             if graph.status_by_id.get(member) != _SUPERSEDED:
@@ -1669,13 +1849,26 @@ def _disposition_report(graph: SupersedesGraph, *, ids: frozenset[str] | None) -
         "skipped_kinds": skipped_kinds,
         "to_repair": to_repair,
         "repaired": [],
-        "invalid_relations": [
-            {"code": d.code, "path": d.path, "subject": d.subject, "predicate": d.predicate,
-             "object": d.object, "message": d.message} for d in graph.invalid
-        ],
-        "archived_targets": [dict(a) for a in graph.archived_targets],
-        "unmanaged_targets": [dict(u) for u in graph.unmanaged_targets],
-        "unbacked_inverses": [dict(u) for u in graph.unbacked_inverses],
+        # The four secondary report lists are emitted in CANONICAL sorted order (0.5.0 behavior
+        # change, Task 18) — deterministic regardless of audit/scan order. Blocking semantics
+        # unchanged: `invalid_relations` and `unbacked_inverses` still refuse apply.
+        "invalid_relations": sorted(
+            ({"code": d.code, "path": d.path, "subject": d.subject, "predicate": d.predicate,
+              "object": d.object, "message": d.message} for d in graph.invalid),
+            key=lambda d: (d["code"], d["path"], d["subject"], d["predicate"], d["object"], d["message"]),
+        ),
+        "archived_targets": sorted(
+            (dict(a) for a in graph.archived_targets),
+            key=lambda a: (a["id"], a["superseder"], a["path"]),
+        ),
+        "unmanaged_targets": sorted(
+            (dict(u) for u in graph.unmanaged_targets),
+            key=lambda u: (u["id"], u["superseder"], u["path"]),
+        ),
+        "unbacked_inverses": sorted(
+            (dict(u) for u in graph.unbacked_inverses),
+            key=lambda u: (u["id"], u["superseder"]),
+        ),
     }
 ```
 
@@ -1694,7 +1887,7 @@ Preserve the domain docstrings/comments from the original `build_supersedes_grap
 
 - [ ] **Step 4: Run tests to verify they pass**
 
-Run: `uv run --frozen pytest science/tests/test_decision_material.py science/tests/test_consolidation_mark_superseded.py -q`
+Run: `uv run --frozen pytest tests/test_decision_material.py science/tests/test_consolidation_mark_superseded.py -q`
 Expected: PASS (full-field equivalence + all existing mark-superseded tests; reconcile any order-pinned assertion per the behavior-preservation note).
 
 - [ ] **Step 5: Commit**
@@ -1781,7 +1974,7 @@ def test_supersede_plan_roundtrips_and_forbids_extra() -> None:
 
 - [ ] **Step 2: Run test to verify it fails**
 
-Run: `uv run --frozen pytest science/tests/test_supersede_plan.py -q`
+Run: `uv run --frozen pytest tests/test_supersede_plan.py -q`
 Expected: FAIL — module missing.
 
 - [ ] **Step 3: Write minimal implementation**
@@ -1868,7 +2061,7 @@ class SupersedePlan(BaseModel):
 
 - [ ] **Step 4: Run test to verify it passes**
 
-Run: `uv run --frozen pytest science/tests/test_supersede_plan.py -q`
+Run: `uv run --frozen pytest tests/test_supersede_plan.py -q`
 Expected: PASS.
 
 - [ ] **Step 5: Commit**
@@ -1887,7 +2080,7 @@ git commit -m "feat(supersede): SupersedePreviewReport + SupersedePlan schemas"
 - Test: `science/tests/test_supersede_plan.py`
 
 **Interfaces:**
-- Produces: `plan_supersede(project_root: Path, *, selection: SupersedeSelection, preview_date: str) -> SupersedePlan`. Builds the decision material + digest, derives the selected disposition, and for each member renders the frozen postimage via `_prepare_write_with_date(..., updated_default=preview_date)`, wrapping it as a `PathTransition` (`role="entity-rewrite"`, `pre`=live fingerprint, `post`=fingerprint of the rendered text, `postimage`=rendered text). Populates the preview report from `mark_superseded(project_root, ids=..., apply=False)`.
+- Produces: `plan_supersede(project_root, *, selection, preview_date) -> SupersedePlan` (loads the decision material ONCE, then delegates) and `derive_supersede_plan(project_root, material: SupersessionDecisionMaterial, *, selection, preview_date) -> SupersedePlan` (derives from an already-built material — **no second load of decision inputs**; Gate B calls this with the material it authenticated in Gate A). Derives the selected disposition from the material-derived graph, and for each member renders the frozen postimage via `_prepare_write_with_date(..., updated_default=preview_date)`, wrapping it as a `PathTransition` (`role="entity-rewrite"`, `pre`=live fingerprint, `post`=fingerprint of the rendered text, `postimage`=rendered text). Populates the preview report from the same `_disposition_report` dict.
 
 - [ ] **Step 1: Write the failing test**
 
@@ -1910,6 +2103,21 @@ def _chain(root: Path) -> None:
     (d / "0002-b.md").write_text(
         "---\nid: interpretation:0002-b\nkind: interpretation\ntitle: B\nstatus: active\n---\nbody\n",
         encoding="utf-8")
+
+
+def _two_supersessions(root: Path) -> None:
+    # Two independent chains → two members to mark (0002-b, 0004-d), for subset + rollback tests.
+    (root / "science.yaml").write_text("name: t\n", encoding="utf-8")
+    d = root / "entities" / "interpretations"
+    d.mkdir(parents=True)
+    for sup, sub in (("0001-a", "0002-b"), ("0003-c", "0004-d")):
+        (d / f"{sup}.md").write_text(
+            f"---\nid: interpretation:{sup}\nkind: interpretation\ntitle: {sup}\nstatus: active\n"
+            f"relations:\n  - predicate: sci:supersedes\n    target: interpretation:{sub}\n---\nbody\n",
+            encoding="utf-8")
+        (d / f"{sub}.md").write_text(
+            f"---\nid: interpretation:{sub}\nkind: interpretation\ntitle: {sub}\nstatus: active\n---\nbody\n",
+            encoding="utf-8")
 
 
 def test_plan_supersede_freezes_writes_and_digest(tmp_path: Path) -> None:
@@ -1942,7 +2150,7 @@ def test_plan_supersede_post_mode_matches_the_live_file(tmp_path: Path) -> None:
 
 - [ ] **Step 2: Run test to verify it fails**
 
-Run: `uv run --frozen pytest science/tests/test_supersede_plan.py -q`
+Run: `uv run --frozen pytest tests/test_supersede_plan.py -q`
 Expected: FAIL — `plan_supersede` missing.
 
 - [ ] **Step 3: Write minimal implementation**
@@ -1970,8 +2178,22 @@ def _selected_ids(selection: SupersedeSelection) -> frozenset[str] | None:
 def plan_supersede(
     project_root: Path, *, selection: SupersedeSelection, preview_date: str
 ) -> SupersedePlan:
+    # Preview entry point: load the decision material ONCE, then derive.
     project_root = project_root.resolve()
     material = build_decision_material(project_root)
+    return derive_supersede_plan(project_root, material, selection=selection, preview_date=preview_date)
+
+
+def derive_supersede_plan(
+    project_root: Path, material: SupersessionDecisionMaterial, *,
+    selection: SupersedeSelection, preview_date: str,
+) -> SupersedePlan:
+    """Derive the plan from an ALREADY-BUILT decision material — no second load of decision inputs.
+    Gate B passes the material it just authenticated in Gate A, so the digest surface IS the
+    derivation surface (design §5.3 step 3). Rendering each member's postimage still reads that
+    member's file (the body is not decision-bearing and is not part of the material), but the
+    disposition is a pure function of `material`."""
+    project_root = project_root.resolve()
     graph = build_supersedes_graph_from_material(material)
     ids = _selected_ids(selection)
     # Disposition from the MATERIAL-derived graph — no second filesystem load.
@@ -2022,7 +2244,7 @@ The `post.mode` is the live file's actual mode (`pre.mode`), so the frozen post-
 
 - [ ] **Step 4: Run test to verify it passes**
 
-Run: `uv run --frozen pytest science/tests/test_supersede_plan.py -q`
+Run: `uv run --frozen pytest tests/test_supersede_plan.py -q`
 Expected: PASS.
 
 - [ ] **Step 5: Commit**
@@ -2041,7 +2263,7 @@ git commit -m "feat(supersede): plan_supersede freezes disposition, writes, dige
 - Test: `science/tests/test_supersede_plan.py`
 
 **Interfaces:**
-- Produces: `apply_supersede_plan(project_root: Path, plan: SupersedePlan, *, staging_token: str) -> dict` (returns the execution report `{"applied": [...], "repaired": [...]}`). Assumes the envelope was already verified by the CLI before parsing (Task 16). Runs, in order: **structural** (project_root match, `resolve_within` every write path for containment/canonical form, `assert_staging_unique`, writes↔members bijection, `prepared.path == w.rel_path`) → **gate A** (rebuild material, compare `material_version` + digest) → **gate B by full re-derivation** (`expected = plan_supersede(project_root, selection=plan.selection, preview_date=plan.preview_date)`; `assert_same_surface(plan.writes, expected.writes)`; `expected.preview_report == plan.preview_report`; `expected.to_mark/to_repair == plan.to_mark/to_repair`; blockers in the re-derived report refuse) → **pre-state** (`matches(w.pre)`) → snapshot → `staged_write` each → verify `matches(w.post)` → rollback on failure. Re-deriving the whole plan and comparing the complete surface subsumes the ad-hoc per-write pre/postimage checks: a drifted pre, a tampered postimage, or a forged transition all make `assert_same_surface` (or the digest) fail. `SupersedeApplyError(RuntimeError)`.
+- Produces: `apply_supersede_plan(project_root: Path, plan: SupersedePlan, *, staging_token: str) -> dict` (returns the execution report `{"applied": [...], "repaired": [...]}`). Assumes the envelope was already verified by the CLI before parsing (Task 16). Runs, in order: **structural** (project_root match, `resolve_within` every write path for containment/canonical form, `assert_staging_unique`, writes↔members bijection, `prepared.path == w.rel_path`) → **gate A** (rebuild material, compare `material_version` + digest) → **gate B by full re-derivation from the verified material** (`expected = derive_supersede_plan(project_root, material, selection=plan.selection, preview_date=plan.preview_date)` — reuses the Gate-A material, so `build_decision_material` runs exactly once per apply; `assert_same_surface(plan.writes, expected.writes)`; `expected.preview_report == plan.preview_report`; `expected.to_mark/to_repair == plan.to_mark/to_repair`; blockers in the re-derived report refuse) → **pre-state** (`matches(w.pre)`) → snapshot → `staged_write` each → verify `matches(w.post)` → rollback on failure. Re-deriving the whole plan and comparing the complete surface subsumes the ad-hoc per-write pre/postimage checks: a drifted pre, a tampered postimage, or a forged transition all make `assert_same_surface` (or the digest) fail. `SupersedeApplyError(RuntimeError)`.
 
 - [ ] **Step 1: Write the failing test**
 
@@ -2150,11 +2372,73 @@ def test_kill_after_entity_write_leaves_a_classifiable_state(tmp_path: Path) -> 
     with pytest.raises(_Kill):
         apply_supersede_plan(tmp_path, plan, staging_token="tkn", _fault=fault)
     assert target.read_text(encoding="utf-8") == plan.writes[0].postimage  # complete post-state, no rollback
+
+
+def test_apply_supersede_loads_decision_material_once(tmp_path: Path, monkeypatch) -> None:
+    # C2: Gate B derives from the Gate-A-verified material, so `build_decision_material` runs exactly
+    # once per apply — the digest surface authenticated in Gate A IS the derivation surface.
+    import science_tool.supersede_plan as sp
+    _chain(tmp_path)
+    plan = plan_supersede(tmp_path, selection=AllSupersessionMembers(kind="all"), preview_date="2026-07-18")
+    calls = {"n": 0}
+    real = sp.build_decision_material
+
+    def counting(root: Path) -> "SupersessionDecisionMaterial":
+        calls["n"] += 1
+        return real(root)
+
+    monkeypatch.setattr(sp, "build_decision_material", counting)
+    apply_supersede_plan(tmp_path, plan, staging_token="tok")
+    assert calls["n"] == 1  # Gate A only; a second load would mean Gate B re-derived from fresh FS
+
+
+def test_apply_refuses_material_version_mismatch(tmp_path: Path) -> None:
+    # I8: a plan whose material_version does not match the current material is refused at Gate A.
+    _chain(tmp_path)
+    plan = plan_supersede(tmp_path, selection=AllSupersessionMembers(kind="all"), preview_date="2026-07-18")
+    stale = plan.model_copy(update={"material_version": plan.material_version + 1})
+    with pytest.raises(SupersedeApplyError, match="material_version"):
+        apply_supersede_plan(tmp_path, stale, staging_token="tok")
+
+
+def test_apply_explicit_ids_subset_marks_only_that_subset(tmp_path: Path) -> None:
+    # I8 (selection authenticity, positive): an explicit_ids selection applies exactly its scoped
+    # rederivation — the un-selected eligible member stays untouched, not the full sweep.
+    _two_supersessions(tmp_path)
+    plan = plan_supersede(
+        tmp_path,
+        selection=ExplicitSupersessionIds(kind="explicit_ids", ids=["interpretation:0002-b"]),
+        preview_date="2026-07-18",
+    )
+    assert plan.to_mark == ["interpretation:0002-b"]
+    apply_supersede_plan(tmp_path, plan, staging_token="tok")
+    b = (tmp_path / "entities" / "interpretations" / "0002-b.md").read_text(encoding="utf-8")
+    d = (tmp_path / "entities" / "interpretations" / "0004-d.md").read_text(encoding="utf-8")
+    assert "status: superseded" in b
+    assert "status: superseded" not in d  # the un-selected member is untouched
+
+
+def test_rollback_after_first_of_two_entity_writes_restores_surface(tmp_path: Path) -> None:
+    # I8: a CAUGHT failure (not a kill) after the first of two writes rolls BOTH members back to pre.
+    _two_supersessions(tmp_path)
+    plan = plan_supersede(tmp_path, selection=AllSupersessionMembers(kind="all"), preview_date="2026-07-18")
+    assert len(plan.writes) == 2
+    first_rel = plan.writes[0].rel_path
+    before = {w.rel_path: (tmp_path / w.rel_path).read_bytes() for w in plan.writes}
+
+    def fault(label: str) -> None:
+        if label == f"written:{first_rel}":
+            raise RuntimeError("boom after first write")  # Exception → caught → rollback runs
+
+    with pytest.raises(SupersedeApplyError):
+        apply_supersede_plan(tmp_path, plan, staging_token="tok", _fault=fault)
+    for rel, data in before.items():
+        assert (tmp_path / rel).read_bytes() == data  # both fully restored, no half-applied surface
 ```
 
 - [ ] **Step 2: Run test to verify it fails**
 
-Run: `uv run --frozen pytest science/tests/test_supersede_plan.py -q`
+Run: `uv run --frozen pytest tests/test_supersede_plan.py -q`
 Expected: FAIL — `apply_supersede_plan` missing.
 
 - [ ] **Step 3: Write minimal implementation**
@@ -2209,10 +2493,12 @@ def apply_supersede_plan(project_root: Path, plan: SupersedePlan, *, staging_tok
     if decision_digest(material) != plan.decision_inputs_sha256:
         raise SupersedeApplyError("corpus changed since preview (decision digest mismatch)")
 
-    # Gate B — re-derive the WHOLE plan and compare the complete authorized surface
+    # Gate B — re-derive the WHOLE plan FROM THE GATE-A-VERIFIED MATERIAL (no second decision load;
+    # design §5.3 step 3). `derive_supersede_plan` reads each member's body to render, but never
+    # reloads decision inputs — so the digest surface authenticated above IS the derivation surface.
     try:
-        expected = plan_supersede(project_root, selection=plan.selection,
-                                  preview_date=plan.preview_date)
+        expected = derive_supersede_plan(project_root, material, selection=plan.selection,
+                                         preview_date=plan.preview_date)
     except SupersessionError as exc:
         raise SupersedeApplyError(str(exc)) from exc
     try:
@@ -2254,7 +2540,7 @@ Notes: `w.post.mode` is a concrete int by Task 11's `_fingerprint_of_text` guard
 
 - [ ] **Step 4: Run test to verify it passes**
 
-Run: `uv run --frozen pytest science/tests/test_supersede_plan.py -q`
+Run: `uv run --frozen pytest tests/test_supersede_plan.py -q`
 Expected: PASS (legacy byte-match, drift, postimage tamper, report tamper, path escape).
 
 - [ ] **Step 5: Commit**
@@ -2330,7 +2616,7 @@ def test_planned_row_is_a_valid_archive_row() -> None:
 
 - [ ] **Step 2: Run test to verify it fails**
 
-Run: `uv run --frozen pytest science/tests/test_archive_plan.py -q`
+Run: `uv run --frozen pytest tests/test_archive_plan.py -q`
 Expected: FAIL — module missing.
 
 - [ ] **Step 3: Write minimal implementation**
@@ -2341,7 +2627,7 @@ from __future__ import annotations
 
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, model_validator
 
 from science_tool.archive import ArchiveRow
 from science_tool.plan_common import ArchiveSelection, PathTransition
@@ -2388,13 +2674,24 @@ class ArchivePlan(BaseModel):
     index: PathTransition | None = None  # None for an empty cohort (a no-op plan; legacy archive no-ops too)
     transitions: list[PathTransition]
     preview_report: ArchivePreviewReport
+
+    @model_validator(mode="after")
+    def _index_matches_moves(self) -> "ArchivePlan":
+        # I5: the moves↔index relationship is a schema invariant, not just an apply-time check. A
+        # non-empty cohort MUST carry an index; an empty cohort MUST carry neither an index nor any
+        # transition. This makes a malformed plan unconstructable rather than merely refused later.
+        if self.moves and self.index is None:
+            raise ValueError("a non-empty cohort must carry an archive-index transition")
+        if not self.moves and (self.index is not None or self.transitions):
+            raise ValueError("an empty cohort must carry no index and no transitions")
+        return self
 ```
 
-The `index` is optional because an **empty cohort** (zero candidates) must be a no-op, matching legacy `archive`'s behavior: no move, no directory creation, and no empty index file written into a possibly-nonexistent `_archive/`. `plan_archive` sets `index=None` when there are no moves, and `apply_archive_plan` performs no filesystem writes for such a plan.
+The `index` is optional because an **empty cohort** (zero candidates) must be a no-op, matching legacy `archive`'s behavior: no move, no directory creation, and no empty index file written into a possibly-nonexistent `_archive/`. `plan_archive` sets `index=None` when there are no moves, and `apply_archive_plan` performs no filesystem writes for such a plan. The `_index_matches_moves` validator makes the moves↔index invariant structural (design §4.1).
 
 - [ ] **Step 4: Run test to verify it passes**
 
-Run: `uv run --frozen pytest science/tests/test_archive_plan.py -q`
+Run: `uv run --frozen pytest tests/test_archive_plan.py -q`
 Expected: PASS.
 
 - [ ] **Step 5: Commit**
@@ -2487,7 +2784,7 @@ def test_plan_archive_empty_cohort_is_a_noop_plan(tmp_path: Path) -> None:
 
 - [ ] **Step 2: Run test to verify it fails**
 
-Run: `uv run --frozen pytest science/tests/test_archive_plan.py -q`
+Run: `uv run --frozen pytest tests/test_archive_plan.py -q`
 Expected: FAIL — `plan_archive` missing.
 
 - [ ] **Step 3: Write minimal implementation**
@@ -2599,7 +2896,7 @@ Implementer note: `_candidate_rows` returns `ArchiveRow`s carrying `id`/`kind`/`
 
 - [ ] **Step 4: Run test to verify it passes**
 
-Run: `uv run --frozen pytest science/tests/test_archive_plan.py -q`
+Run: `uv run --frozen pytest tests/test_archive_plan.py -q`
 Expected: PASS.
 
 - [ ] **Step 5: Commit**
@@ -2618,7 +2915,7 @@ git commit -m "feat(archive): plan_archive freezes moves + literal index postima
 - Test: `science/tests/test_archive_plan.py`
 
 **Interfaces:**
-- Produces: `apply_archive_plan(project_root: Path, plan: ArchivePlan, *, staging_token: str, _fault: Callable[[str], None] | None = None) -> dict` (returns `{"applied": [...], "skipped": [...]}`). `_fault` is a **test-only** fault seam, called with a label at each mutation boundary; a test may raise a `BaseException` from it to simulate a process kill (uncaught → no rollback → the survivor state is left for classification). Envelope pre-verified by CLI. Runs, in order: **schema_version** guard → project_root match → **empty-cohort no-op** (no moves ⇒ no writes, `index` must be `None`) → **structural** (`resolve_within` every transition/move path, canonical archive paths, `assert_staging_unique` for the index, no dup move ids) → **gate B by full re-derivation** (`expected == plan` on moves, transition surface incl. optional index, `preview_report`) → **pre-state** → snapshot → create each **declared** dir (`mkdir(parents=False)`), `os.rename` moves (EXDEV refusal) + parent fsync, `staged_write` index → post verify → on `Exception`, rollback then wrap (preserving `RollbackHalt`). `ArchiveApplyError(RuntimeError)`.
+- Produces: `apply_archive_plan(project_root: Path, plan: ArchivePlan, *, staging_token: str, _fault: Callable[[str], None] | None = None) -> dict` (returns `{"applied": [...], "skipped": [...]}`). `_fault` is a **test-only** fault seam, called with a label at each mutation boundary; a test may raise a `BaseException` from it to simulate a process kill (uncaught → no rollback → the survivor state is left for classification). Envelope pre-verified by CLI. Runs, in order: **schema_version** guard → project_root match → **gate B by full re-derivation FIRST** (`expected == plan` on moves, transition surface incl. optional index, `preview_report`) → **empty-cohort no-op** (only after Gate B confirms the live corpus also derives an empty cohort — an empty saved plan against a corpus that gained an eligible entity is refused as drift, I5; `index` must be `None`, no transitions) → **structural** (`resolve_within` every transition/move path, canonical archive paths, `assert_staging_unique` for the index, no dup move ids) → **pre-state** → snapshot → create each **declared** dir (`mkdir(parents=False)`), `os.rename` moves (EXDEV refusal) + parent fsync, `staged_write` index → post verify → on `Exception`, rollback then wrap (preserving `RollbackHalt`). `ArchiveApplyError(RuntimeError)`.
 
 - [ ] **Step 1: Write the failing test**
 
@@ -2656,6 +2953,62 @@ def test_apply_archive_empty_cohort_is_a_noop(tmp_path: Path) -> None:
     report = apply_archive_plan(tmp_path, plan, staging_token="tok")
     assert report == {"applied": [], "skipped": []}
     assert not (tmp_path / "entities" / "_archive").exists()  # no debris
+
+
+def test_apply_empty_cohort_refuses_when_corpus_gained_an_eligible_entity(tmp_path: Path) -> None:
+    # I5: an empty saved plan must still pass Gate B. If the corpus gained an eligible entity between
+    # preview and apply, the re-derivation is non-empty ≠ the empty plan → refused as drift, NOT a
+    # silent successful no-op.
+    (tmp_path / "science.yaml").write_text("name: t\n", encoding="utf-8")
+    d = tmp_path / "entities" / "interpretations"
+    d.mkdir(parents=True)
+    plan = plan_archive(tmp_path, selection=ArchiveStatusSweep(kind="all_by_status", statuses=["superseded"]),
+                        now="2026-07-18T00:00:00Z")
+    assert plan.moves == []
+    # a new superseded entity appears after preview
+    (d / "0001-x.md").write_text(
+        "---\nid: interpretation:0001-x\nkind: interpretation\ntitle: X\nstatus: superseded\n---\nbody\n",
+        encoding="utf-8")
+    with pytest.raises(ArchiveApplyError, match="differ from the plan|corpus changed"):
+        apply_archive_plan(tmp_path, plan, staging_token="tok")
+
+
+def test_apply_archive_refuses_cross_device_move_loudly(tmp_path: Path, monkeypatch) -> None:
+    # I8 / design §4.3: a cross-device rename raises EXDEV; apply must surface it as a clean refusal
+    # (archive must be on the same filesystem), not a partial/ambiguous move.
+    import errno
+    _superseded(tmp_path)
+    plan = plan_archive(tmp_path, selection=ArchiveStatusSweep(kind="all_by_status", statuses=["superseded"]),
+                        now="2026-07-18T00:00:00Z")
+
+    def exdev(src, dst):
+        raise OSError(errno.EXDEV, "Invalid cross-device link")
+
+    monkeypatch.setattr(os, "rename", exdev)
+    with pytest.raises(ArchiveApplyError, match="cross-device"):
+        apply_archive_plan(tmp_path, plan, staging_token="tok")
+    # rolled back: the source is still in place, nothing half-moved
+    assert (tmp_path / "entities" / "interpretations" / "0001-x.md").exists()
+
+
+def test_apply_archive_refuses_report_hiding_an_inbound_reference(tmp_path: Path) -> None:
+    # I8 / design §9 "Report binding": a plan whose preview_report omits a live inbound reference to
+    # an archived entity is refused at Gate B (the re-derived report carries the inbound ref).
+    _superseded(tmp_path)
+    # a live entity references the to-be-archived 0001-x
+    (tmp_path / "entities" / "interpretations" / "0009-live.md").write_text(
+        "---\nid: interpretation:0009-live\nkind: interpretation\ntitle: L\nstatus: active\n"
+        "relations:\n  - predicate: sci:relatedTo\n    target: interpretation:0001-x\n---\nbody\n",
+        encoding="utf-8")
+    plan = plan_archive(tmp_path, selection=ArchiveStatusSweep(kind="all_by_status", statuses=["superseded"]),
+                        now="2026-07-18T00:00:00Z")
+    cand = plan.preview_report.candidates[0]
+    assert "interpretation:0009-live" in cand.inbound_live_refs  # preview surfaced it
+    hidden = cand.model_copy(update={"inbound_live_refs": []})
+    tampered = plan.model_copy(update={
+        "preview_report": plan.preview_report.model_copy(update={"candidates": [hidden]})})
+    with pytest.raises(ArchiveApplyError, match="preview report"):
+        apply_archive_plan(tmp_path, tampered, staging_token="tok")
 
 
 def test_apply_archive_refuses_unsupported_schema_version(tmp_path: Path) -> None:
@@ -2747,11 +3100,11 @@ def test_apply_archive_index_leaves_no_staging_survivor(tmp_path: Path) -> None:
     assert not staging_path_for(index_abs, "tok").exists()
 ```
 
-Mid-staging partial-prefix classification is covered directly by Task 5's `classify_staging` test (a killed partial write is a byte-prefix of the postimage by construction) and by `test_apply_archive_rolls_back_when_index_write_is_blocked` (a stale, non-prefix survivor is refused by `O_EXCL`). The kill-after-write-before-replace case leaves a **complete** `.tmp`, exercised through the `_fault` seam inside `staged_write` is out of scope here — the two boundaries above (post-rename, post-index) plus Task 12's post-entity-write kill cover the declared surface.
+The full kill matrix (design §3.4) is now covered: **mid-staging** kill (a partial `.tmp` that is an attributable byte-prefix, target untouched) by Task 5's `test_staged_write_mid_kill_leaves_attributable_prefix_and_untouched_target` — exercising the real `staged_write` `_fault` seam, not just the `classify_staging` unit; **after each archive rename** and **after the index replacement** by this task's `_fault` boundaries below; and **after each entity write** by Task 12's post-write kill. Every boundary leaves only declared/attributable state.
 
 - [ ] **Step 2: Run test to verify it fails**
 
-Run: `uv run --frozen pytest science/tests/test_archive_plan.py -q`
+Run: `uv run --frozen pytest tests/test_archive_plan.py -q`
 Expected: FAIL — `apply_archive_plan` missing.
 
 - [ ] **Step 3: Write minimal implementation**
@@ -2787,13 +3140,31 @@ def apply_archive_plan(project_root: Path, plan: ArchivePlan, *, staging_token: 
     if plan.project_root != str(project_root):
         raise ArchiveApplyError("plan project_root does not match")
 
-    # Empty cohort — a no-op plan writes nothing (legacy archive no-ops too).
+    # Gate B FIRST — re-derive the WHOLE plan from live sources and compare the complete surface.
+    # Running this BEFORE the empty-cohort short-circuit means a corpus that gained an eligible entity
+    # after preview is caught as drift, not silently reported as a successful no-op (I5). `plan_archive`
+    # is read-only, and it derives its own paths from the live corpus, so it never touches an untrusted
+    # plan path before containment is checked below.
+    plan_index_list = [plan.index] if plan.index is not None else []
+    expected = plan_archive(project_root, selection=plan.selection, now=plan.now)
+    if expected.moves != plan.moves or expected.index != plan.index:
+        raise ArchiveApplyError("re-derived moves/rows/index differ from the plan (corpus changed since preview)")
+    exp_index = [expected.index] if expected.index is not None else []
+    try:
+        assert_same_surface([*plan.transitions, *plan_index_list], [*expected.transitions, *exp_index])
+    except SurfaceMismatch as exc:
+        raise ArchiveApplyError(f"declared transitions differ from re-derived: {exc}") from exc
+    if expected.preview_report != plan.preview_report:
+        raise ArchiveApplyError("re-derived preview report differs from the plan")
+
+    # Empty cohort — a no-op plan writes nothing (legacy archive no-ops too). Only reachable once
+    # Gate B has confirmed the live corpus ALSO derives an empty cohort.
     if not plan.moves:
         if plan.index is not None or plan.transitions:
             raise ArchiveApplyError("empty cohort must carry no index or transitions")
         return {"applied": [], "skipped": []}
 
-    index_list = [plan.index] if plan.index is not None else []
+    index_list = plan_index_list
     all_t = [*plan.transitions, *index_list]
     # Structural — containment for every declared path, canonical archive paths, staging uniqueness
     try:
@@ -2811,18 +3182,6 @@ def apply_archive_plan(project_root: Path, plan: ArchivePlan, *, staging_token: 
     ids = [m.id for m in plan.moves]
     if len(ids) != len(set(ids)):
         raise ArchiveApplyError("duplicate move ids")
-
-    # Gate B — re-derive the WHOLE plan and compare the complete authorized surface
-    expected = plan_archive(project_root, selection=plan.selection, now=plan.now)
-    if expected.moves != plan.moves or expected.index != plan.index:
-        raise ArchiveApplyError("re-derived moves/rows/index differ from the plan")
-    exp_index = [expected.index] if expected.index is not None else []
-    try:
-        assert_same_surface([*plan.transitions, *index_list], [*expected.transitions, *exp_index])
-    except SurfaceMismatch as exc:
-        raise ArchiveApplyError(f"declared transitions differ from re-derived: {exc}") from exc
-    if expected.preview_report != plan.preview_report:
-        raise ArchiveApplyError("re-derived preview report differs from the plan")
 
     # Pre-state gate
     for t in all_t:
@@ -2876,7 +3235,7 @@ Rollback correctness: `all_t` is ordered created-dirs(outer→inner) → src →
 
 - [ ] **Step 4: Run test to verify it passes**
 
-Run: `uv run --frozen pytest science/tests/test_archive_plan.py -q`
+Run: `uv run --frozen pytest tests/test_archive_plan.py -q`
 Expected: PASS (move+index, empty no-op, schema, tampered row, path escape, blocked-index rollback, kill-after-rename, kill-after-index, clean staging boundary).
 
 - [ ] **Step 5: Commit**
@@ -2964,6 +3323,22 @@ def test_apply_plan_rejects_edited_plan(tmp_path: Path) -> None:
     assert r.exit_code != 0
 
 
+def test_apply_plan_rejects_selection_swapped_to_broaden_the_cohort(tmp_path: Path) -> None:
+    # I8 (selection authenticity, negative): editing the plan's `selection` to broaden the cohort is
+    # a raw-byte change, so the approval envelope (digest over raw bytes, checked before JSON parse)
+    # refuses it — a swapped selection cannot slip through even if it would re-derive self-consistently.
+    _two_supersessions(tmp_path)
+    plan_file = tmp_path / "plan.json"
+    r1 = CliRunner().invoke(main, ["entities", "mark-superseded", "--project-root", str(tmp_path),
+                                   "--save-plan", str(plan_file), "--ids", "interpretation:0002-b"])
+    sha = json.loads(r1.output)["plan_sha256"]
+    raw = plan_file.read_text(encoding="utf-8")
+    plan_file.write_text(raw.replace("interpretation:0002-b", "interpretation:0004-d"), encoding="utf-8")
+    r = CliRunner().invoke(main, ["entities", "mark-superseded", "--project-root", str(tmp_path),
+                                  "--apply-plan", str(plan_file), "--expected-plan-sha256", sha])
+    assert r.exit_code != 0  # digest mismatch (raw bytes changed)
+
+
 def test_save_plan_rejects_apply_flag(tmp_path: Path) -> None:
     _chain(tmp_path)
     r = CliRunner().invoke(main, ["entities", "mark-superseded", "--project-root", str(tmp_path),
@@ -3005,7 +3380,7 @@ def test_apply_plan_reads_plan_file_exactly_once(tmp_path: Path, monkeypatch) ->
 
 - [ ] **Step 2: Run test to verify it fails**
 
-Run: `uv run --frozen pytest science/tests/test_supersede_plan_cli.py -q`
+Run: `uv run --frozen pytest tests/test_supersede_plan_cli.py -q`
 Expected: FAIL — unknown option `--save-plan`.
 
 - [ ] **Step 3: Write minimal implementation**
@@ -3103,7 +3478,7 @@ def entities_mark_superseded_command(project_root, ids, ids_from, apply_changes,
 
 - [ ] **Step 4: Run test to verify it passes**
 
-Run: `uv run --frozen pytest science/tests/test_supersede_plan_cli.py -q`
+Run: `uv run --frozen pytest tests/test_supersede_plan_cli.py -q`
 Expected: PASS.
 
 - [ ] **Step 5: Commit**
@@ -3173,7 +3548,7 @@ def test_archive_apply_plan_rejects_status_flag(tmp_path: Path) -> None:
 
 - [ ] **Step 2: Run test to verify it fails**
 
-Run: `uv run --frozen pytest science/tests/test_archive_plan_cli.py -q`
+Run: `uv run --frozen pytest tests/test_archive_plan_cli.py -q`
 Expected: FAIL — unknown option `--save-plan`.
 
 - [ ] **Step 3: Write minimal implementation**
@@ -3278,7 +3653,7 @@ def entities_archive_command(project_root, statuses, ids, ids_from, apply_change
 
 - [ ] **Step 4: Run test to verify it passes**
 
-Run: `uv run --frozen pytest science/tests/test_archive_plan_cli.py -q`
+Run: `uv run --frozen pytest tests/test_archive_plan_cli.py -q`
 Expected: PASS.
 
 - [ ] **Step 5: Commit**
@@ -3311,7 +3686,7 @@ def test_package_and_plugin_establish_0_5_0_baseline() -> None:
 
 - [ ] **Step 2: Run to verify it fails**
 
-Run: `uv run --frozen pytest science/tests/test_cli_version.py -q`
+Run: `uv run --frozen pytest tests/test_cli_version.py -q`
 Expected: FAIL — package version is still `0.4.1`.
 
 - [ ] **Step 3: Bump both version strings**
@@ -3321,7 +3696,7 @@ Expected: FAIL — package version is still `0.4.1`.
 
 - [ ] **Step 4: Run version + compatibility tests**
 
-Run: `uv run --frozen pytest science/tests/test_cli_version.py science/tests/test_agent_cli_compatibility.py -q`
+Run: `uv run --frozen pytest tests/test_cli_version.py science/tests/test_agent_cli_compatibility.py -q`
 Expected: PASS — the baseline test now green, and `test_agent_cli_compatibility.py` (command floor ≤ version) passes **unchanged**.
 
 - [ ] **Step 5: Record the observable behavior change, then commit**
@@ -3349,20 +3724,22 @@ blocking semantics unchanged."
 
 - [ ] **Step 1: Run the whole suite**
 
-Run: `uv run --frozen pytest science/tests -q`
+Run: `uv run --frozen pytest tests -q`
 Expected: PASS (no regressions across archive/consolidation/entity-import/version suites).
 
 - [ ] **Step 2: Run repo validation**
 
-Run: `bash validate.sh --verbose` (from `~/d/science`, if present)
+Run: `bash scripts/validate.sh --verbose` (from the repo root `~/d/science`)
 Expected: PASS.
 
 - [ ] **Step 3: Commit any lint/format fixups**
 
 ```bash
-git add -A
+git add science/src/science_tool science/tests
 git commit -m "chore: lint/format for 0.5.0 curation plans"
 ```
+
+(Path-scoped, not `git add -A`: this repo is Dropbox-synced and the user commits unrelated work into it; stage only the package tree this plan touched.)
 
 ---
 
@@ -3395,5 +3772,16 @@ Not part of this upstream branch, but the acceptance the design §8 requires bef
 - **`schema_version` is enforced** against the supported constant in both apply paths (Tasks 12, 15).
 - **CLI mode contracts** — `--save-plan` rejects `--apply`/envelope/staging-token; report mode rejects plan-only flags (Tasks 16, 17). **Single-read TOCTOU** pinned by `test_apply_plan_reads_plan_file_exactly_once` (Task 16).
 - **Ordering ratified** with a pinned multi-item canonical-order test (Task 9) and recorded as an observable 0.5.0 behavior change (Task 18); wording corrected — `invalid`/`unbacked_inverses` are reported **and blocking**.
+
+**Third-review closures:**
+- **Command working directory (C1)** — `uv`/`pytest` run from `~/d/science/science` (reproduced: root fails with `ModuleNotFoundError: science_model` via `conftest`); pytest paths are package-relative; `git`/validator run from the repo root; validator is `bash scripts/validate.sh`. Global Constraints §"Command working directories".
+- **Gate B derives from the verified material (C2)** — `derive_supersede_plan(project_root, material, …)` is called by preview (after one load) and by apply's Gate B (reusing the Gate-A material), so `build_decision_material` runs exactly once per apply — `test_apply_supersede_loads_decision_material_once` (Task 12).
+- **Mid-staging kill (C3)** — a `_fault("mid-write")` seam inside the real `staged_write`; `test_staged_write_mid_kill_leaves_attributable_prefix_and_untouched_target` (Task 5) asserts the survivor is an attributable byte-prefix, the target is untouched, and no debris remains. The `except` cleanup now removes only an attributable-prefix survivor (not an unconditional `unlink`).
+- **`supported_kinds` in the material (I4)** — the auto-apply policy is serialized into `SupersessionDecisionMaterial`, travels on `SupersedesGraph`, and is read by `_disposition_report`; the digest covers it — `test_material_carries_supported_kinds_and_digest_covers_the_policy`, `test_disposition_reads_supported_kinds_from_the_graph_not_the_module` (Tasks 8-9).
+- **Empty archive apply runs Gate B first (I5)** — the no-op return is reachable only after re-derivation confirms an empty cohort; a corpus that gained an eligible entity is refused as drift — `test_apply_empty_cohort_refuses_when_corpus_gained_an_eligible_entity` (Task 15). `ArchivePlan._index_matches_moves` makes moves↔index a schema invariant; design §4.1 updated.
+- **Write-boundary retention (I6)** — `test_all_three_boundary_checks_run_in_order` (Task 7) proves the schema-gate, prospective-corpus, and successor-resolution checks all survive the extraction, in order; the dangling-successor test still exercises the resolution boundary end-to-end.
+- **Report-list order pinned (I7)** — `_disposition_report` now actually sorts the four secondary lists; `test_disposition_report_sorts_the_four_secondary_lists_regardless_of_graph_order` (Task 9) feeds a graph in reverse-of-canonical order, so removing the sort fails.
+- **Ratified §9 acceptance cases (I8)** now explicit TDD steps: explicit-selection replay (`test_apply_explicit_ids_subset_marks_only_that_subset`, Task 12) and authenticity (`test_apply_plan_rejects_selection_swapped_to_broaden_the_cohort`, Task 16); archive inbound-report tampering (`test_apply_archive_refuses_report_hiding_an_inbound_reference`, Task 15); `EXDEV` (`test_apply_archive_refuses_cross_device_move_loudly`, Task 15); `material_version` mismatch (`test_apply_refuses_material_version_mismatch`, Task 12); rollback after the first of two entity writes (`test_rollback_after_first_of_two_entity_writes_restores_surface`, Task 12); leading-newline/CRLF normalization across writer paths (`test_body_normalization_is_identical_across_writer_paths`, Task 7).
+- **Path-scoped final staging (minor)** — Task 19 stages `science/src/science_tool science/tests`, not `git add -A`.
 
 **Type consistency:** `StateFingerprint`/`PathTransition`/`PathSnapshot`, `resolve_within`/`assert_same_surface`/`assert_staging_unique`, `ArchiveSelection`/`SupersedeSelection`, the nested report models (`SupersededChainReport`/`InvalidRelation`/`TargetReport`/… and `ArchiveCandidate`/`PlannedArchiveRow`), `plan_supersede`/`apply_supersede_plan`, `plan_archive`/`apply_archive_plan`, `_prepare_write_with_date`, `_project_inputs`/`_classify_from_projections`/`build_supersedes_graph_from_material`, `build_decision_material`/`decision_digest` are used consistently across tasks.
