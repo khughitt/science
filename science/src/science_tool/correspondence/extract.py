@@ -5,9 +5,11 @@ extracted rather than read. Extraction is auditable because probe.py records
 exactly what was tested.
 
 Conservative by construction: a token that cannot be resolved to a location is
-not extracted at all, so it becomes an absent deliverable rather than a spurious
-`absent` probe. Under-extraction shows up as `indeterminate` (honest); over-
-extraction would manufacture mismatches (not).
+not extracted at all. Over-extraction would manufacture mismatches, so the regex
+stays strict. Under-extraction is the residual risk this screen accepts: fewer
+extracted deliverables can make a partially-built plan read as more complete than
+it is, which is why the screen is advisory (design §6.2) and never gates. Only an
+empty extraction or an `unknown` probe collapses to `indeterminate`.
 """
 
 from __future__ import annotations

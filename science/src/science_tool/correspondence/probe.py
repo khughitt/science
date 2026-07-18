@@ -1,4 +1,4 @@
-"""Tri-state probes against a pinned worktree.
+"""Tri-state probes against the project tree.
 
 Design §5.2/§6.3: `unknown` is not `absent`. Only `absent` is evidence of
 deadness; a probe that could not run is a fact about the instrument, and
