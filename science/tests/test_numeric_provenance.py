@@ -2,9 +2,10 @@ from pathlib import Path
 
 from science_tool.numeric_provenance import (
     Anchored, Exempt, NotClaim, NumericClaim, NumericProvenanceConfig,
-    SourceCandidate, Unanchored, build_document_context, build_resolution_index,
-    classify_structural, compute_marker_scopes, entity_source_candidates,
-    local_candidates_for_paragraph, marked_scope_for_line, paragraph_has_anchor_evidence,
+    SourceCandidate, Unanchored, assess_numeric_claims, build_document_context,
+    build_resolution_index, classify_structural, compute_marker_scopes,
+    entity_source_candidates, local_candidates_for_paragraph, marked_scope_for_line,
+    paragraph_has_anchor_evidence,
 )
 
 
@@ -213,3 +214,43 @@ def test_generic_anchor_pattern_is_evidence_not_candidate(tmp_path):
 
 def test_anchor_evidence_empty_patterns_is_false():
     assert paragraph_has_anchor_evidence("see config/thresholds.yaml for 0.05", ()) is False
+
+
+def _assess(tmp_path, body, frontmatter=""):
+    idx = build_resolution_index(_project(tmp_path))
+    path = _doc(tmp_path, body, frontmatter=frontmatter)
+    return assess_numeric_claims(build_document_context(path), idx, _CFG)
+
+
+def test_unanchored_number_is_the_signal(tmp_path):
+    out = _assess(tmp_path, "The improvement was 7.94 fold over baseline.\n",
+                  frontmatter="kind: interpretation")
+    assert any(isinstance(a, Unanchored) and a.claim.value == "7.94" for a in out)
+
+
+def test_entity_provenance_anchors_all_numbers(tmp_path):
+    out = _assess(tmp_path, "The improvement was 7.94 fold; p was 0.001.\n",
+                  frontmatter="kind: interpretation\nsource_refs:\n  - task:t064")
+    assert all(isinstance(a, Anchored) for a in out if a.claim.value in {"7.94", "0.001"})
+
+
+def test_spec_class_kind_sets_kind_hint(tmp_path):
+    out = _assess(tmp_path, "Gate coverage at 60% of diseases.\n", frontmatter="kind: plan")
+    hit = next(a for a in out if a.claim.value == "60%")
+    assert isinstance(hit, Unanchored) and hit.kind_hint == "stipulated"   # finding 1
+
+
+def test_marked_stipulated_number_is_exempt(tmp_path):
+    # Trailing text after `%` (not a bare `.`) so the claim regex's trailing
+    # negative-lookahead actually matches — mirrors test_spec_class_kind_sets_kind_hint.
+    body = "## Decision thresholds\n<!-- stipulated -->\n\nGate coverage at 60% of diseases.\n"
+    out = _assess(tmp_path, body, frontmatter="kind: plan")
+    assert any(isinstance(a, Exempt) and a.claim.value == "60%" for a in out)
+
+
+def test_incidental_body_anchor_does_not_clear_distant_number(tmp_path):
+    body = ("Background cites task:t064 for context.\n\n"
+            "A separate paragraph reports 7.94 fold.\n")
+    out = _assess(tmp_path, body, frontmatter="kind: report")
+    hit = next(a for a in out if a.claim.value == "7.94")
+    assert isinstance(hit, Unanchored)   # finding 2: paragraph-scoped, not entity-wide

@@ -461,6 +461,96 @@ def paragraph_has_anchor_evidence(paragraph_text: str, anchor_patterns: tuple[st
     return re.search("|".join(anchor_patterns), paragraph_text) is not None
 
 
+def assess_numeric_claims(
+    document: DocumentContext, index: ResolutionIndex, config: NumericProvenanceConfig
+) -> list[ClaimAssessment]:
+    """Classify every numeric claim in a document's body prose.
+
+    Resolution order per claim (first match wins): NotClaim -> Exempt ->
+    Anchored(entity) -> Anchored(local) -> Unanchored. Reuses the claim
+    extraction and line-walking gates from `prose_lint.detect_numeric_anchor`
+    rather than re-implementing them, so behavior stays consistent with the
+    existing detector.
+    """
+    from science_tool.prose_lint import (  # reuse, do not duplicate
+        _BARE_YEAR_RE, _BOLD_STRUCTURAL_LABEL_RE, _CROSS_REFERENCE_RE,
+        _HEADER_OR_LIST_RE, _LIST_RE, _NUMERIC_CLAIM_RE, _mask_numeric_identifier_spans,
+    )
+    from science_tool.markdown_utils import is_fence_line, strip_inline_code
+
+    marker_scopes = compute_marker_scopes(document)
+    entity_cands = entity_source_candidates(document, index, config)
+    entity_resolved = tuple(c for c in entity_cands if c.resolution_status == "resolved")
+    kind_hint = "stipulated" if (document.kind in config.spec_class_kinds) else None
+
+    out: list[ClaimAssessment] = []
+    in_fence = False
+    in_list_item = False
+    for lineno_zero, raw in enumerate(document.lines):
+        lineno = lineno_zero + 1
+        if lineno < document.body_start:
+            continue
+        if is_fence_line(raw):
+            in_fence = not in_fence
+            continue
+        if in_fence:
+            continue
+        if not raw.strip():
+            in_list_item = False
+            continue
+        if _HEADER_OR_LIST_RE.match(raw):
+            in_list_item = bool(_LIST_RE.match(raw))
+            continue
+        if _BOLD_STRUCTURAL_LABEL_RE.match(raw):
+            continue
+        if in_list_item and raw.startswith((" ", "\t")):
+            continue
+        in_list_item = False
+        if raw.lstrip().startswith("|"):
+            continue
+        line = _mask_numeric_identifier_spans(strip_inline_code(raw))
+        crossref_spans = [m.span() for m in _CROSS_REFERENCE_RE.finditer(line)]
+        pid = document.paragraph_id_per_line[lineno]
+        sid = document.section_id_per_line[lineno]
+        paragraph = document.paragraph_text.get(pid, "")
+        for match in _NUMERIC_CLAIM_RE.finditer(line):
+            value = match.group(0)
+            if _BARE_YEAR_RE.match(value):
+                continue
+            if any(s <= match.start() < e for s, e in crossref_spans):
+                continue
+            claim = NumericClaim(value=value, line=lineno, col=match.start() + 1,
+                                 paragraph_id=pid, section_id=sid)
+            # 1 — NotClaim
+            reason = classify_structural(value, raw, match.start() + 1)
+            if reason is not None:
+                out.append(NotClaim(claim=claim, reason=reason))
+                continue
+            # 2 — Exempt
+            scope = marked_scope_for_line(marker_scopes, lineno)
+            if scope is not None:
+                out.append(Exempt(claim=claim, reason="stipulated", scope=scope))
+                continue
+            # 3 — Anchored (entity)
+            if entity_resolved:
+                out.append(Anchored(claim=claim, candidates=entity_resolved))
+                continue
+            # 3 — Anchored (local, paragraph-scoped)
+            local = tuple(c for c in local_candidates_for_paragraph(paragraph, index)
+                          if c.resolution_status == "resolved")
+            if local:
+                out.append(Anchored(claim=claim, candidates=local))
+                continue
+            # anchor_evidence (weak local suppression, no candidate)
+            evidence = paragraph_has_anchor_evidence(paragraph, config.anchor_patterns)
+            if evidence:
+                out.append(Unanchored(claim=claim, kind_hint=kind_hint, local_evidence=True))
+                continue
+            # 4 — Unanchored (the signal)
+            out.append(Unanchored(claim=claim, kind_hint=kind_hint, local_evidence=False))
+    return out
+
+
 def build_resolution_index(project_root: Path) -> ResolutionIndex:
     """Build a `ResolutionIndex` from cheap file-based sources only.
 
