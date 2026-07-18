@@ -3,7 +3,7 @@
 An `evidence-line` is a durable, reviewable line of support or dispute. It links
 a source, result, observation, or interpretation to the proposition it bears on.
 
-<figure markdown="span">
+<figure class="sci-fig">
 --8<-- "figures/f4-belief-ceilings.svg"
 <figcaption>Support and dispute, grouped by independence, bear on a proposition; magnitude is bounded by two ceilings and a refutation cap.</figcaption>
 </figure>

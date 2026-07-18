@@ -12,7 +12,7 @@ The figures in this guide share one visual vocabulary. Color marks an entity's
 kind. Derived state (belief, snapshots, the graph) is drawn in slate with a
 `derived` badge — never as authored source.
 
-<figure markdown="span">
+<figure class="sci-fig">
 --8<-- "figures/f0-vocabulary.svg"
 <figcaption>Entity vocabulary reader's key.</figcaption>
 </figure>
@@ -55,7 +55,7 @@ carry a `type` projection internally, but catalog, profile, and
 project-extension kinds load as open-ended strings rather than being forced
 through a closed enum or an `unknown` fallback. Kind matching is exact.
 
-<figure markdown="span">
+<figure class="sci-fig">
 --8<-- "figures/f8-entity-anatomy.svg"
 <figcaption>An entity file: <code>kind:id</code>, machine-readable frontmatter, human-readable body.</figcaption>
 </figure>

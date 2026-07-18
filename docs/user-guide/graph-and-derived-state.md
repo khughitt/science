@@ -38,7 +38,7 @@ patch metadata, diagnostics, membership records, and patch-specific generated
 view triples; member proposition and evidence triples remain in their semantic
 graph layer.
 
-<figure markdown="span">
+<figure class="sci-fig">
 --8<-- "figures/f9-graph-layers.svg"
 <figcaption>Patch and inquiry named graphs are relation-based overlays: their <code>sci:inPatch</code> membership edges point into a shared semantic layer, so a proposition like <code>p02</code> can belong to several patches without duplicating its triples.</figcaption>
 </figure>

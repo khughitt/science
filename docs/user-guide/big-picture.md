@@ -51,7 +51,7 @@ reusable canonical owners — shared datasets and reference graphs — and proje
 recognize peers and synchronize shared knowledge without flattening away local
 context.
 
-<figure markdown="span">
+<figure class="sci-fig">
 --8<-- "figures/f3-patchwork.svg"
 <figcaption>A patchwork of epistemic neighborhoods across projects, over a shared commons.</figcaption>
 </figure>
@@ -62,7 +62,7 @@ context.
 
 Belief flows along a spine of typed players:
 
-<figure markdown="span">
+<figure class="sci-fig">
 --8<-- "figures/f1-belief-spine.svg"
 <figcaption>The belief spine — a teaching order, not a required one: evidence and observations bear on a proposition, whose belief is derived and then snapshotted.</figcaption>
 </figure>

@@ -54,6 +54,9 @@ markdown_extensions:
 plugins:
   - search
 
+hooks:
+  - docs/hooks/cache_bust.py
+
 validation:
   nav:
     omitted_files: warn

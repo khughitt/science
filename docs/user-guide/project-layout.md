@@ -37,7 +37,7 @@ a reader can locate anything by *what it is*:
 - **`doc/`** — prose. Background, interpretations, reports, discussions, figures —
   no typed entity owners.
 
-<figure markdown="span">
+<figure class="sci-fig">
 --8<-- "figures/f10-project-layout.svg"
 <figcaption>Every root has one job: <code>entities/</code> owns, <code>overlays/</code> borrows, <code>doc/</code> holds prose, and <code>knowledge/</code> is derived. Locate anything by what it is.</figcaption>
 </figure>

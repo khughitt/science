@@ -6,7 +6,7 @@ has provenance, and the current state of belief should remain inspectable.
 
 ## Big Picture
 
-<figure markdown="span">
+<figure class="sci-fig">
 --8<-- "figures/f2-sources-derived.svg"
 <figcaption>The authored files are the source of truth. The graph, summaries, snapshots, and health outputs are derived readings of those files.</figcaption>
 </figure>
@@ -52,7 +52,7 @@ neighborhoods. A neighborhood is a local cluster around some research concern:
 a question, hypothesis, proposition, inquiry, dataset, method, evidence cluster,
 or analysis result.
 
-<figure markdown="span">
+<figure class="sci-fig">
 --8<-- "figures/f3-patchwork.svg"
 <figcaption>Neighborhoods within a project; derived graphs compose across peers; canonical owners live in the commons.</figcaption>
 </figure>

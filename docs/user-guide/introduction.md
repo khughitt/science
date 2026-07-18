@@ -56,7 +56,7 @@ and health reports should be rebuilt from those sources. If the graph is wrong,
 fix the source artifact and rebuild the graph rather than patching generated
 TriG directly.
 
-<figure markdown="span">
+<figure class="sci-fig">
 --8<-- "figures/f2-sources-derived.svg"
 <figcaption>Authored sources of every class feed graph build; the graph, dashboards, snapshots, and health reports are derived. Fix the source and rebuild — never hand-patch generated TriG.</figcaption>
 </figure>

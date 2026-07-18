@@ -6,7 +6,7 @@ fragility, and missing evidence visible.
 
 ## Core Types
 
-<figure markdown="span">
+<figure class="sci-fig">
 --8<-- "figures/f1-belief-spine.svg"
 <figcaption>The belief spine: evidence and observations bear on a proposition; belief is derived, then persisted as a snapshot. This is a teaching order, not a required one.</figcaption>
 </figure>
@@ -264,7 +264,7 @@ curation-step penalty, reduction vocabulary, magnitude thresholds, refutation-ca
 conditions, authored-assertion gates, and dataset-QA ceiling into one immutable
 object.
 
-<figure markdown="span">
+<figure class="sci-fig">
 --8<-- "figures/f4-belief-ceilings.svg"
 <figcaption>Evidence lines reduce into a proposition's belief; ceilings and a refutation cap bound it.</figcaption>
 </figure>
