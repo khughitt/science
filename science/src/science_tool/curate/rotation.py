@@ -146,3 +146,46 @@ def graph_freshness(project_root: Path) -> tuple[str, dict[str, str]]:
         return "current", states
     except Exception:
         return "invalid", {}
+
+
+@dataclass(frozen=True)
+class RotationResult:
+    rows: list[dict]
+    pool_size: int
+    budget: int
+    coverage_rounds: int
+    graph_source: str
+
+
+def select_rotation(project_root: Path, *, today: date) -> RotationResult:
+    """Rank the eligible corpus least-recently-reviewed first and mark this sweep's
+    budget. Rows are the full ranked queue; the CLI slices to the budget for display."""
+    corpus = eligible_corpus(project_root)
+    ordered = sorted(
+        corpus,
+        key=lambda entity: (entity.last_reviewed or DATE_MIN, entity.created or DATE_MIN, entity.id),
+    )
+    pool_size = len(ordered)
+    budget = rotation_budget(pool_size)
+    coverage_rounds = math.ceil(pool_size / budget) if budget else 0
+    graph_source, states = graph_freshness(project_root)
+    rows: list[dict] = []
+    for index, entity in enumerate(ordered):
+        rank = index + 1
+        rows.append(
+            {
+                "id": entity.id,
+                "last_reviewed": entity.last_reviewed.isoformat() if entity.last_reviewed else None,
+                "age_days": (today - entity.last_reviewed).days if entity.last_reviewed else None,
+                "rank": rank,
+                "selected": rank <= budget,
+                "freshness": (
+                    states.get(entity.id)
+                    if graph_source == "current" and entity.scope is CurationScope.EPISTEMIC
+                    else None
+                ),
+            }
+        )
+    return RotationResult(
+        rows=rows, pool_size=pool_size, budget=budget, coverage_rounds=coverage_rounds, graph_source=graph_source
+    )
