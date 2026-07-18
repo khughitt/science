@@ -92,3 +92,47 @@ def test_extra_forbid_on_state_fingerprint() -> None:
 def test_state_fingerprint_rejects_incoherent_combinations(kwargs: dict) -> None:
     with pytest.raises(ValueError):
         StateFingerprint(**kwargs)  # type: ignore[arg-type]
+
+
+import hashlib as _hashlib
+
+from science_tool.plan_common import PathTransition
+
+
+def _file_fp(content: str) -> StateFingerprint:
+    return StateFingerprint(existed=True, type="file",
+                            content_sha256=_hashlib.sha256(content.encode()).hexdigest(),
+                            mode=0o644, symlink_target=None)
+
+
+def _absent_fp() -> StateFingerprint:
+    return StateFingerprint(existed=False, type=None, content_sha256=None, mode=None, symlink_target=None)
+
+
+def test_entity_rewrite_requires_postimage_hash_to_match_post() -> None:
+    body = "new bytes"
+    t = PathTransition(role="entity-rewrite", rel_path="entities/x/1.md",
+                       pre=_file_fp("old"), post=_file_fp(body), postimage=body)
+    assert t.postimage == body
+
+
+def test_entity_rewrite_rejects_postimage_hash_mismatch() -> None:
+    with pytest.raises(ValueError):
+        PathTransition(role="entity-rewrite", rel_path="entities/x/1.md",
+                       pre=_file_fp("old"), post=_file_fp("A"), postimage="B")
+
+
+def test_archive_src_post_must_be_absent() -> None:
+    with pytest.raises(ValueError):
+        PathTransition(role="archive-src", rel_path="entities/x/1.md",
+                       pre=_file_fp("x"), post=_file_fp("x"), postimage=None)
+
+
+def test_created_dir_has_no_postimage_and_absent_pre() -> None:
+    dir_post = StateFingerprint(existed=True, type="dir", content_sha256=None, mode=0o755, symlink_target=None)
+    t = PathTransition(role="created-dir", rel_path="entities/_archive/x",
+                       pre=_absent_fp(), post=dir_post, postimage=None)
+    assert t.postimage is None
+    with pytest.raises(ValueError):
+        PathTransition(role="created-dir", rel_path="entities/_archive/x",
+                       pre=_absent_fp(), post=dir_post, postimage="oops")

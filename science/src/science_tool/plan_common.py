@@ -70,3 +70,36 @@ def fingerprint(path: Path) -> StateFingerprint:
 
 def matches(fp: StateFingerprint, path: Path) -> bool:
     return fingerprint(path) == fp
+
+
+_STAGED_ROLES = {"entity-rewrite", "archive-index"}
+
+
+class PathTransition(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    role: Literal["entity-rewrite", "archive-src", "archive-dst", "archive-index", "created-dir"]
+    rel_path: str
+    pre: StateFingerprint
+    post: StateFingerprint
+    postimage: str | None = None
+
+    @model_validator(mode="after")
+    def _coherent(self) -> "PathTransition":
+        if self.role in _STAGED_ROLES:
+            if self.postimage is None:
+                raise ValueError(f"{self.role} requires a postimage")
+            if not (self.post.existed and self.post.type == "file"):
+                raise ValueError(f"{self.role} post must be an existing file")
+            want = hashlib.sha256(self.postimage.encode("utf-8")).hexdigest()
+            if self.post.content_sha256 != want:
+                raise ValueError("post.content_sha256 does not match sha256(postimage)")
+        else:
+            if self.postimage is not None:
+                raise ValueError(f"{self.role} must not carry a postimage")
+        if self.role == "archive-src" and self.post.existed:
+            raise ValueError("archive-src post must be absent (the source is moved away)")
+        if self.role in {"archive-dst", "created-dir"} and self.pre.existed:
+            raise ValueError(f"{self.role} pre must be absent (it is created)")
+        if self.role == "created-dir" and self.post.type != "dir":
+            raise ValueError("created-dir post must be a directory")
+        return self
