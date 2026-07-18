@@ -748,24 +748,38 @@ def test_rollback_removes_nested_created_dirs_bottom_up(tmp_path: Path) -> None:
     # archive-dst moved a file into a freshly created nested dir; rollback removes both.
     created_outer = tmp_path / "entities" / "_archive"
     created_inner = created_outer / "interpretations"
+    moved = created_inner / "x.md"
+    absent = StateFingerprint(existed=False, type=None, content_sha256=None, mode=None, symlink_target=None)
+    dir_fp = StateFingerprint(existed=True, type="dir", content_sha256=None, mode=0o755, symlink_target=None)
+    # Snapshot BEFORE anything lands, so the snapshot records all three paths ABSENT (== pre).
+    snap = snapshot_paths([created_outer, created_inner, moved])
+    # Now simulate the landed state: both dirs created, file moved in.
     created_inner.mkdir(parents=True)
     _os.chmod(created_inner, 0o755)
     _os.chmod(created_outer, 0o755)
-    moved = created_inner / "x.md"
     moved.write_text("X", encoding="utf-8")
-    absent = StateFingerprint(existed=False, type=None, content_sha256=None, mode=None, symlink_target=None)
-    dir_fp = StateFingerprint(existed=True, type="dir", content_sha256=None, mode=0o755, symlink_target=None)
     dst = PathTransition(role="archive-dst", rel_path="entities/_archive/interpretations/x.md",
                          pre=absent, post=fingerprint(moved))
     outer = PathTransition(role="created-dir", rel_path="entities/_archive", pre=absent, post=dir_fp)
     inner = PathTransition(role="created-dir", rel_path="entities/_archive/interpretations",
                            pre=absent, post=dir_fp)
-    snap = snapshot_paths([tmp_path / t.rel_path for t in (outer, inner, dst)])
     # declared order is outer, inner, dst; rollback must process dst -> inner -> outer.
     rollback_transitions([outer, inner, dst], tmp_path, snap)
     assert not moved.exists()
     assert not created_inner.exists()
     assert not created_outer.exists()
+
+
+def test_rollback_halts_when_a_transition_path_has_no_snapshot(tmp_path: Path) -> None:
+    # A missing snapshot entry is a defect, not an empty-file reconstruction opportunity.
+    target = tmp_path / "e.md"
+    target.write_text("NEW", encoding="utf-8")
+    pre = StateFingerprint(existed=True, type="file",
+                           content_sha256=_hashlib.sha256(b"OLD").hexdigest(), mode=0o644, symlink_target=None)
+    post = fingerprint(target)
+    t = PathTransition(role="entity-rewrite", rel_path="e.md", pre=pre, post=post, postimage="NEW")
+    with pytest.raises(RollbackHalt):
+        rollback_transitions([t], tmp_path, {})  # empty snapshot -> halt, do NOT write empty bytes
 
 
 def test_rollback_halts_on_concurrent_change(tmp_path: Path) -> None:
@@ -782,10 +796,23 @@ def test_rollback_halts_on_concurrent_change(tmp_path: Path) -> None:
 
 
 def test_resolve_within_rejects_absolute_and_escaping_and_noncanonical(tmp_path: Path) -> None:
-    assert resolve_within(tmp_path, "entities/x/1.md") == tmp_path.resolve() / "entities/x/1.md"
+    (tmp_path / "entities" / "x").mkdir(parents=True)
+    assert resolve_within(tmp_path, "entities/x/1.md") == (tmp_path / "entities/x/1.md").resolve()
     for bad in ["/etc/passwd", "../evil", "a/../b", "a/./b", "a//b", "", "sub/"]:
         with pytest.raises(PathEscape):
             resolve_within(tmp_path, bad)
+
+
+def test_resolve_within_rejects_ancestor_symlink_escape(tmp_path: Path) -> None:
+    # `entities` is a symlink pointing OUTSIDE the project; a lexically-clean path under it must
+    # still be refused, because it physically resolves outside the corpus.
+    outside = tmp_path.parent / "outside_target"
+    outside.mkdir()
+    root = tmp_path / "proj"
+    root.mkdir()
+    (root / "entities").symlink_to(outside)
+    with pytest.raises(PathEscape):
+        resolve_within(root, "entities/x.md")
 
 
 def test_assert_same_surface_is_order_independent_and_strict() -> None:
@@ -891,14 +918,19 @@ def rollback_transitions(
             )
         snap = snapshot.get(path)
         if snap is None:
-            snap = PathSnapshot(fp=t.pre, content=None)
+            # No captured pre-state for a path we are asked to revert -> reconstructing from `pre`
+            # alone would write an EMPTY file when bytes are unavailable. That is data loss, so halt.
+            raise RollbackHalt(f"no snapshot captured for {t.rel_path}; refusing to reconstruct")
         _materialize(path, snap)
 
 
 def resolve_within(project_root: Path, rel_path: str) -> Path:
-    """Resolve rel_path under project_root, refusing absolute paths, `..` escape, and any
-    non-canonical spelling. Called for EVERY declared path before filesystem access, so a
-    plan with an absolute or traversing rel_path cannot reach outside the corpus."""
+    """Resolve rel_path under project_root, refusing absolute paths, `..` escape, non-canonical
+    spellings, AND symlink-ancestor escape. Called for EVERY declared path before filesystem
+    access. Lexical checks alone are not enough: if `entities/` were a symlink pointing outside
+    the project, a lexically-clean `entities/x.md` would still write out of the corpus — so we
+    `.resolve()` the candidate (following symlinks in the existing ancestor chain) and confirm the
+    physical target is contained, exactly as the import boundary does (`entity_import.py:486`)."""
     if (
         rel_path == ""
         or Path(rel_path).is_absolute()
@@ -907,9 +939,9 @@ def resolve_within(project_root: Path, rel_path: str) -> Path:
     ):
         raise PathEscape(f"non-canonical or escaping rel_path: {rel_path!r}")
     root = project_root.resolve()
-    candidate = Path(os.path.normpath(root / rel_path))
-    if candidate != root and root not in candidate.parents:
-        raise PathEscape(f"rel_path escapes project root: {rel_path!r}")
+    candidate = (root / rel_path).resolve()  # follows symlinks in the existing prefix
+    if candidate != root and not candidate.is_relative_to(root):
+        raise PathEscape(f"rel_path escapes project root (symlink or traversal): {rel_path!r}")
     return candidate
 
 
@@ -1018,14 +1050,17 @@ def test_two_invocations_with_same_date_produce_identical_bytes(tmp_path: Path) 
     assert a.text == b.text
 
 
-def test_write_boundary_is_retained_invalid_status_is_refused(tmp_path: Path) -> None:
-    # Proves the refactor kept the prospective-write boundary (entities.py:1072/1075/1083):
-    # a status the kind cannot carry must still raise, exactly as legacy _prepare_write did.
+def test_write_boundary_is_retained_dangling_successor_is_refused(tmp_path: Path) -> None:
+    # Reaches the RESOLUTION boundary specifically (entities.py:1083), one of the three checks the
+    # refactor must retain. A dangling `superseded_by` passes the field loop (`_validate_status`
+    # only inspects `status`) and the schema gate, then fails successor resolution — proving the
+    # prospective-write wall survived the extraction, not merely the status validator.
     import pytest
     _seed(tmp_path)
     with pytest.raises(Exception):
         _prepare_write_with_date(tmp_path, "interpretation:0001-x",
-                                 {"status": "not-a-real-status"}, updated_default="2026-07-18")
+                                 {"superseded_by": "interpretation:9999-does-not-exist"},
+                                 updated_default="2026-07-18")
 
 
 def test_prepare_write_legacy_wrapper_injects_today(tmp_path: Path) -> None:
@@ -1378,14 +1413,18 @@ difference between the two is `path_by_id` (live-only; not decision-bearing).
 - Test: `science/tests/test_decision_material.py`
 
 **Interfaces:**
-- Produces: `_classify_from_projections(material: SupersessionDecisionMaterial, *, path_by_id: Mapping[str, Path]) -> SupersedesGraph`; `build_supersedes_graph_from_material(material) -> SupersedesGraph` (`path_by_id={}`). `build_supersedes_graph(inputs)` keeps its signature but is re-expressed as `_classify_from_projections(_project_inputs(inputs), path_by_id=<eid→path>)`.
+- Produces: `_classify_from_projections(material: SupersessionDecisionMaterial, *, path_by_id: Mapping[str, Path]) -> SupersedesGraph`; `build_supersedes_graph_from_material(material) -> SupersedesGraph` (`path_by_id={}`). `build_supersedes_graph(inputs)` keeps its signature but is re-expressed as `_classify_from_projections(_project_inputs(inputs), path_by_id=<eid→path>)`. Also extracts `_disposition_report(graph: SupersedesGraph, *, ids: frozenset[str] | None) -> dict` — the pure dry-run report builder (chains → to_mark/to_repair/skipped_kinds + the 9 report keys + the ids-allowlist narrowing and `SupersessionError` on unresolved) lifted from `mark_superseded`. Preview (`plan_supersede`) and `mark_superseded` both call it; the second uses the FS-loaded graph, the first uses the **material-derived** graph, so the disposition is a pure function of the graph and preview needs no second filesystem load.
 
 **Behavior-preservation risk (read before coding):** the report lists `archived_targets` /
 `unmanaged_targets` / `unbacked_inverses` / `invalid` now iterate the **sorted** projections, so
-their order becomes canonical instead of audit/scan order. `test_consolidation_mark_superseded.py`
-is the guard. If an assertion there pinned the old order, sorted order is the new canonical form
-for these "report, don't block" lists — update that assertion; do not reintroduce nondeterministic
-order to satisfy it.
+their order becomes canonical instead of audit/scan order — an **observable 0.5.0 behavior change**
+(record it in the release notes; see Task 18). `test_consolidation_mark_superseded.py` is the guard.
+If an assertion there pinned the old order, add a fresh multi-item test that pins the NEW canonical
+order (below) rather than only editing the old one, and do not reintroduce nondeterministic order.
+Note the blocking semantics are unchanged and differ per list: `archived_targets` /
+`unmanaged_targets` are reported **and do not block**; `invalid` and `unbacked_inverses` are
+reported **and DO block** apply (`mark_superseded` raises on them). Only the *ordering* is canonical
+now — not the blocking behavior.
 
 - [ ] **Step 1: Write the failing test**
 
@@ -1423,6 +1462,40 @@ def test_graph_from_material_has_empty_path_by_id(tmp_path: Path) -> None:
     _seed(tmp_path)
     mat = build_supersedes_graph_from_material(build_decision_material(tmp_path))
     assert dict(mat.path_by_id) == {}  # paths are not decision-bearing; gate B never reads them
+
+
+def test_disposition_report_from_material_matches_mark_superseded(tmp_path: Path) -> None:
+    # The disposition helper is a pure function of the graph: driving it from the material-derived
+    # graph must yield the same dry-run report as the filesystem-driven mark_superseded.
+    from science_tool.consolidation import _disposition_report, mark_superseded
+    _seed(tmp_path)
+    mat_graph = build_supersedes_graph_from_material(build_decision_material(tmp_path))
+    assert _disposition_report(mat_graph, ids=None) == mark_superseded(tmp_path, ids=None, apply=False)
+
+
+def test_material_admitted_edges_are_canonically_sorted(tmp_path: Path) -> None:
+    # Pin the NEW canonical (sorted) order of a multi-item list, per the 0.5.0 ordering ratification.
+    (tmp_path / "science.yaml").write_text("name: t\n", encoding="utf-8")
+    d = tmp_path / "entities" / "interpretations"
+    d.mkdir(parents=True)
+    (d / "0001-a.md").write_text(
+        "---\nid: interpretation:0001-a\nkind: interpretation\ntitle: A\nstatus: active\n"
+        "relations:\n  - predicate: sci:supersedes\n    target: interpretation:0004-d\n---\nbody\n",
+        encoding="utf-8")
+    (d / "0002-b.md").write_text(
+        "---\nid: interpretation:0002-b\nkind: interpretation\ntitle: B\nstatus: active\n"
+        "relations:\n  - predicate: sci:supersedes\n    target: interpretation:0003-c\n---\nbody\n",
+        encoding="utf-8")
+    (d / "0003-c.md").write_text(
+        "---\nid: interpretation:0003-c\nkind: interpretation\ntitle: C\nstatus: active\n---\nbody\n",
+        encoding="utf-8")
+    (d / "0004-d.md").write_text(
+        "---\nid: interpretation:0004-d\nkind: interpretation\ntitle: D\nstatus: active\n---\nbody\n",
+        encoding="utf-8")
+    mat = build_decision_material(tmp_path)
+    keys = [(e.src, e.dst, e.source_path) for e in mat.admitted_supersedes]
+    assert len(keys) == 2
+    assert keys == sorted(keys)  # canonical order, deterministic across runs
 ```
 
 - [ ] **Step 2: Run test to verify it fails**
@@ -1556,6 +1629,65 @@ def build_supersedes_graph_from_material(
 ) -> SupersedesGraph:
     """Gate-B derivation: rebuild the disposition from the frozen material, no filesystem read."""
     return _classify_from_projections(material, path_by_id={})
+
+
+def _disposition_report(graph: SupersedesGraph, *, ids: frozenset[str] | None) -> dict:
+    """The dry-run report, as a PURE function of a SupersedesGraph. Lifted verbatim from the body
+    of `mark_superseded` (consolidation.py:555-611) so preview and gate B derive the disposition
+    from the *material-derived* graph — no second filesystem load — and the FS path and the material
+    path produce byte-identical reports. Raises `SupersessionError` when an allowlisted id is not a
+    derivable member, exactly as before."""
+    chains: list[dict[str, Any]] = []
+    to_mark: list[str] = []
+    to_repair: list[str] = []
+    skipped_kinds: list[dict[str, str]] = []
+    for chain in graph.linear:
+        chains.append({"survivor": chain.survivor, "members": list(chain.superseded), "linear": True})
+        for member in chain.superseded:
+            kind = graph.kind_by_id.get(member, member.split(":", 1)[0])
+            if not _supports_superseded(kind):  # the frozen supported-kind policy, applied to material kind
+                skipped_kinds.append({"id": member, "kind": kind})
+                continue
+            if graph.status_by_id.get(member) != _SUPERSEDED:
+                to_mark.append(member)
+            elif graph.superseded_by_id.get(member) != graph.superseder_by_id[member]:
+                to_repair.append(member)
+    if ids is not None:
+        derivable = set(to_mark) | set(to_repair)
+        unresolved = sorted(ids - derivable)
+        if unresolved:
+            raise SupersessionError(
+                [f"allowlisted id is not derivable as a supersession member: {e}" for e in unresolved]
+            )
+        to_mark = [m for m in to_mark if m in ids]
+        to_repair = [m for m in to_repair if m in ids]
+    return {
+        "chains": chains,
+        "non_linear": [{"nodes": list(c.nodes), "reason": c.reason} for c in graph.non_linear],
+        "to_mark": to_mark,
+        "applied": [],
+        "skipped_kinds": skipped_kinds,
+        "to_repair": to_repair,
+        "repaired": [],
+        "invalid_relations": [
+            {"code": d.code, "path": d.path, "subject": d.subject, "predicate": d.predicate,
+             "object": d.object, "message": d.message} for d in graph.invalid
+        ],
+        "archived_targets": [dict(a) for a in graph.archived_targets],
+        "unmanaged_targets": [dict(u) for u in graph.unmanaged_targets],
+        "unbacked_inverses": [dict(u) for u in graph.unbacked_inverses],
+    }
+```
+
+Then rewire `mark_superseded` (`consolidation.py:552-613`) to build its report through the helper — replacing the inline report construction with `report = _disposition_report(graph, ids=ids)` — while leaving the `apply=True` blocking/prepare/commit tail unchanged:
+
+```python
+    project_root = project_root.resolve()
+    graph = build_supersedes_graph(load_supersession_inputs(project_root))
+    report = _disposition_report(graph, ids=ids)
+    if not apply:
+        return report
+    # ... existing blocking check + prepare loop + commit tail, unchanged ...
 ```
 
 Preserve the domain docstrings/comments from the original `build_supersedes_graph` on the moved block — they carry the set-vs-list and audit-verdict reasoning and must not be lost in the move.
@@ -1820,7 +1952,8 @@ Expected: FAIL — `plan_supersede` missing.
 from pathlib import Path
 
 from science_tool.consolidation import (
-    build_decision_material, build_supersedes_graph_from_material, decision_digest, mark_superseded,
+    _disposition_report, build_decision_material, build_supersedes_graph_from_material,
+    decision_digest,
 )
 from science_tool.entities import _prepare_write_with_date
 from science_tool.plan_common import (
@@ -1841,7 +1974,8 @@ def plan_supersede(
     material = build_decision_material(project_root)
     graph = build_supersedes_graph_from_material(material)
     ids = _selected_ids(selection)
-    report_dict = mark_superseded(project_root, ids=ids, apply=False)
+    # Disposition from the MATERIAL-derived graph — no second filesystem load.
+    report_dict = _disposition_report(graph, ids=ids)
     to_mark = list(report_dict["to_mark"])
     to_repair = list(report_dict["to_repair"])
 
@@ -1921,23 +2055,25 @@ from science_tool.supersede_plan import SupersedeApplyError, apply_supersede_pla
 
 def test_apply_supersede_plan_matches_legacy_apply_byte_for_byte(tmp_path: Path) -> None:
     # Build TWO identical corpora. Apply the plan to one; run the legacy `mark_superseded(apply=True)`
-    # on the other. The stamped file bytes must be identical — the actual "replay == legacy" claim.
+    # on the other. The stamped file bytes must be EXACTLY identical — the real "replay == legacy"
+    # claim, with no line-stripping. Pin the plan's preview_date to today so the `updated` line the
+    # legacy clock renders and the frozen postimage agree.
+    from datetime import date
+
     from science_tool.consolidation import mark_superseded
     a, b = tmp_path / "a", tmp_path / "b"
     a.mkdir(); b.mkdir()
     _chain(a); _chain(b)
-    plan = plan_supersede(a, selection=AllSupersessionMembers(kind="all"), preview_date="2026-07-18")
+    plan = plan_supersede(a, selection=AllSupersessionMembers(kind="all"),
+                          preview_date=date.today().isoformat())
     report = apply_supersede_plan(a, plan, staging_token="tkn")
     assert report["applied"] == ["interpretation:0002-b"]
 
-    # Legacy path renders `updated` from date.today(); pin the same date for a byte comparison by
-    # normalizing the one clock-dependent line out of both files before comparing.
     mark_superseded(b, ids=None, apply=True)
-    ra = (a / "entities/interpretations/0002-b.md").read_text(encoding="utf-8")
-    rb = (b / "entities/interpretations/0002-b.md").read_text(encoding="utf-8")
-    strip = lambda s: "\n".join(l for l in s.splitlines() if not l.startswith("updated:"))
-    assert strip(ra) == strip(rb)
-    assert ra == plan.writes[0].postimage  # plan replay is byte-exact
+    ra = (a / "entities/interpretations/0002-b.md").read_bytes()
+    rb = (b / "entities/interpretations/0002-b.md").read_bytes()
+    assert ra == rb  # byte-for-byte, no normalization
+    assert ra.decode("utf-8") == plan.writes[0].postimage  # plan replay is byte-exact
 
 
 def test_apply_refuses_when_corpus_drifted(tmp_path: Path) -> None:
@@ -1985,6 +2121,35 @@ def test_apply_refuses_absolute_rel_path_escape(tmp_path: Path) -> None:
     plan.writes[0] = w.model_copy(update={"rel_path": "/etc/evil.md"})
     with pytest.raises(SupersedeApplyError):
         apply_supersede_plan(tmp_path, plan, staging_token="tkn")
+
+
+def test_apply_refuses_unsupported_schema_version(tmp_path: Path) -> None:
+    _chain(tmp_path)
+    plan = plan_supersede(tmp_path, selection=AllSupersessionMembers(kind="all"),
+                          preview_date="2026-07-18")
+    plan = plan.model_copy(update={"schema_version": 999})
+    with pytest.raises(SupersedeApplyError):
+        apply_supersede_plan(tmp_path, plan, staging_token="tkn")
+
+
+def test_kill_after_entity_write_leaves_a_classifiable_state(tmp_path: Path) -> None:
+    # Kill matrix — after each entity write: the written member holds its postimage; a simulated
+    # kill (BaseException) bypasses rollback, so the survivor is a declared post-state, not corrupt.
+    class _Kill(BaseException):
+        pass
+
+    _chain(tmp_path)
+    plan = plan_supersede(tmp_path, selection=AllSupersessionMembers(kind="all"),
+                          preview_date="2026-07-18")
+    target = tmp_path / "entities" / "interpretations" / "0002-b.md"
+
+    def fault(label: str) -> None:
+        if label == "written:entities/interpretations/0002-b.md":
+            raise _Kill()
+
+    with pytest.raises(_Kill):
+        apply_supersede_plan(tmp_path, plan, staging_token="tkn", _fault=fault)
+    assert target.read_text(encoding="utf-8") == plan.writes[0].postimage  # complete post-state, no rollback
 ```
 
 - [ ] **Step 2: Run test to verify it fails**
@@ -1996,19 +2161,32 @@ Expected: FAIL — `apply_supersede_plan` missing.
 
 ```python
 # add to science/src/science_tool/supersede_plan.py
+from typing import Callable
+
 from science_tool.consolidation import SupersessionError
 from science_tool.plan_common import (
-    PathEscape, StagingError, SurfaceMismatch, assert_same_surface, assert_staging_unique,
-    matches, resolve_within, rollback_transitions, snapshot_paths, staged_write,
+    PathEscape, RollbackHalt, StagingError, SurfaceMismatch, assert_same_surface,
+    assert_staging_unique, matches, resolve_within, rollback_transitions, snapshot_paths, staged_write,
 )
+
+_SUPERSEDE_PLAN_SCHEMA = 1
 
 
 class SupersedeApplyError(RuntimeError):
     pass
 
 
-def apply_supersede_plan(project_root: Path, plan: SupersedePlan, *, staging_token: str) -> dict:
+def apply_supersede_plan(project_root: Path, plan: SupersedePlan, *, staging_token: str,
+                         _fault: Callable[[str], None] | None = None) -> dict:
+    def fault(label: str) -> None:
+        if _fault is not None:
+            _fault(label)  # test-only kill seam; a BaseException here bypasses rollback
+
     project_root = project_root.resolve()
+    if plan.schema_version != _SUPERSEDE_PLAN_SCHEMA:
+        raise SupersedeApplyError(
+            f"unsupported plan schema_version {plan.schema_version} (this tool writes "
+            f"{_SUPERSEDE_PLAN_SCHEMA})")
     if plan.project_root != str(project_root):
         raise SupersedeApplyError("plan project_root does not match")
 
@@ -2059,16 +2237,20 @@ def apply_supersede_plan(project_root: Path, plan: SupersedePlan, *, staging_tok
     try:
         for target, w in zip(targets, plan.writes, strict=True):
             staged_write(target, w.postimage, w.post.mode, staging_token)  # mode is concrete (Task 11)
+            fault(f"written:{w.rel_path}")  # kill boundary: after each entity write
         for target, w in zip(targets, plan.writes, strict=True):
             if not matches(w.post, target):
                 raise SupersedeApplyError(f"post-state verification failed for {w.rel_path}")
-    except Exception:
-        rollback_transitions(plan.writes, project_root, snap)
-        raise
+    except Exception as exc:
+        rollback_transitions(plan.writes, project_root, snap)  # may raise RollbackHalt (propagates)
+        if isinstance(exc, SupersedeApplyError):
+            raise
+        # A staged-write StagingError etc. becomes a SupersedeApplyError once the corpus is restored.
+        raise SupersedeApplyError(f"apply failed and rolled back: {exc}") from exc
     return {"applied": list(plan.to_mark), "repaired": list(plan.to_repair)}
 ```
 
-Note: `w.post.mode` is a concrete int by Task 11's `_fingerprint_of_text` guard, so no `or 0o644` fallback is needed or wanted — a `None` here would be a real defect, not something to paper over.
+Notes: `w.post.mode` is a concrete int by Task 11's `_fingerprint_of_text` guard, so no `or 0o644` fallback. `rollback_transitions` runs on the `except Exception` path only — a `BaseException` (e.g. a simulated process kill) is deliberately NOT caught, so no rollback runs and the survivor state is left for classification (design §2). If rollback itself raises `RollbackHalt`, that propagates distinctly rather than being masked by the wrap.
 
 - [ ] **Step 4: Run test to verify it passes**
 
@@ -2203,10 +2385,12 @@ class ArchivePlan(BaseModel):
     now: str
     selection: ArchiveSelection
     moves: list[ArchiveMove]
-    index: PathTransition
+    index: PathTransition | None = None  # None for an empty cohort (a no-op plan; legacy archive no-ops too)
     transitions: list[PathTransition]
     preview_report: ArchivePreviewReport
 ```
+
+The `index` is optional because an **empty cohort** (zero candidates) must be a no-op, matching legacy `archive`'s behavior: no move, no directory creation, and no empty index file written into a possibly-nonexistent `_archive/`. `plan_archive` sets `index=None` when there are no moves, and `apply_archive_plan` performs no filesystem writes for such a plan.
 
 - [ ] **Step 4: Run test to verify it passes**
 
@@ -2287,6 +2471,18 @@ def test_plan_archive_declares_every_missing_ancestor_dir(tmp_path: Path) -> Non
                         now="2026-07-18T00:00:00Z")
     created = sorted(t.rel_path for t in plan.transitions if t.role == "created-dir")
     assert created == ["entities/_archive", "entities/_archive/interpretations"]
+
+
+def test_plan_archive_empty_cohort_is_a_noop_plan(tmp_path: Path) -> None:
+    # No superseded entities → no moves, no transitions, and NO index transition (legacy no-op).
+    (tmp_path / "science.yaml").write_text("name: t\n", encoding="utf-8")
+    (tmp_path / "entities" / "interpretations").mkdir(parents=True)
+    plan = plan_archive(tmp_path, selection=ArchiveStatusSweep(kind="all_by_status", statuses=["superseded"]),
+                        now="2026-07-18T00:00:00Z")
+    assert plan.moves == []
+    assert plan.transitions == []
+    assert plan.index is None
+    assert plan.preview_report.candidates == []
 ```
 
 - [ ] **Step 2: Run test to verify it fails**
@@ -2373,18 +2569,22 @@ def plan_archive(project_root: Path, *, selection: ArchiveSelection, now: str) -
                                           content_sha256=src_pre.content_sha256, mode=src_pre.mode,
                                           symlink_target=None)))
 
-    index_abs = archive_index_path(project_root)
-    pre_bytes = index_abs.read_bytes() if index_abs.exists() else b""
-    # EXACTLY append_row's serialization (json.dumps(model_dump, sort_keys=True) + "\n"), so the
-    # frozen index round-trips through load_archive_index.
-    appended = "".join(json.dumps(m.row.model_dump(), sort_keys=True) + "\n" for m in moves)
-    post_bytes = pre_bytes + appended.encode("utf-8")
-    index_pre = fingerprint(index_abs)
-    index_mode = index_pre.mode if index_pre.existed else 0o644
-    index = PathTransition(role="archive-index",
-                           rel_path=index_abs.relative_to(project_root).as_posix(),
-                           pre=index_pre, post=_fp_of_bytes(post_bytes, index_mode),
-                           postimage=post_bytes.decode("utf-8"))
+    # Empty cohort → a no-op plan (no index transition), matching legacy `archive`'s no-op. Writing
+    # an empty index into a possibly-absent `_archive/` would both create debris and diverge from legacy.
+    index: PathTransition | None = None
+    if moves:
+        index_abs = archive_index_path(project_root)
+        pre_bytes = index_abs.read_bytes() if index_abs.exists() else b""
+        # EXACTLY append_row's serialization (json.dumps(model_dump, sort_keys=True) + "\n"), so the
+        # frozen index round-trips through load_archive_index.
+        appended = "".join(json.dumps(m.row.model_dump(), sort_keys=True) + "\n" for m in moves)
+        post_bytes = pre_bytes + appended.encode("utf-8")
+        index_pre = fingerprint(index_abs)
+        index_mode = index_pre.mode if index_pre.existed else 0o644
+        index = PathTransition(role="archive-index",
+                               rel_path=index_abs.relative_to(project_root).as_posix(),
+                               pre=index_pre, post=_fp_of_bytes(post_bytes, index_mode),
+                               postimage=post_bytes.decode("utf-8"))
 
     report = ArchivePreviewReport(candidates=[
         ArchiveCandidate(id=r.id, kind=r.kind, status=r.status, original_path=r.original_path,
@@ -2418,7 +2618,7 @@ git commit -m "feat(archive): plan_archive freezes moves + literal index postima
 - Test: `science/tests/test_archive_plan.py`
 
 **Interfaces:**
-- Produces: `apply_archive_plan(project_root: Path, plan: ArchivePlan, *, staging_token: str) -> dict` (returns `{"applied": [...], "skipped": [...]}`). Envelope pre-verified by CLI. Runs, in order: **structural** (project_root match, `resolve_within` every transition/move path, `archive_path == derive_archive_path(original_path)`, `assert_staging_unique` for the index, no dup move ids/paths) → **gate B by full re-derivation** (`expected = plan_archive(project_root, selection=plan.selection, now=plan.now)`; `expected.moves == plan.moves`; `assert_same_surface([*plan.transitions, plan.index], [*expected.transitions, expected.index])`; `expected.preview_report == plan.preview_report`) → **pre-state** (`matches(t.pre)`) → snapshot → create each **declared** dir (`mkdir(parents=False)` — every ancestor is its own transition), `os.rename` moves (EXDEV refusal) + parent fsync, `staged_write` index (`os.replace`) → post verify → rollback on failure. `ArchiveApplyError(RuntimeError)`.
+- Produces: `apply_archive_plan(project_root: Path, plan: ArchivePlan, *, staging_token: str, _fault: Callable[[str], None] | None = None) -> dict` (returns `{"applied": [...], "skipped": [...]}`). `_fault` is a **test-only** fault seam, called with a label at each mutation boundary; a test may raise a `BaseException` from it to simulate a process kill (uncaught → no rollback → the survivor state is left for classification). Envelope pre-verified by CLI. Runs, in order: **schema_version** guard → project_root match → **empty-cohort no-op** (no moves ⇒ no writes, `index` must be `None`) → **structural** (`resolve_within` every transition/move path, canonical archive paths, `assert_staging_unique` for the index, no dup move ids) → **gate B by full re-derivation** (`expected == plan` on moves, transition surface incl. optional index, `preview_report`) → **pre-state** → snapshot → create each **declared** dir (`mkdir(parents=False)`), `os.rename` moves (EXDEV refusal) + parent fsync, `staged_write` index → post verify → on `Exception`, rollback then wrap (preserving `RollbackHalt`). `ArchiveApplyError(RuntimeError)`.
 
 - [ ] **Step 1: Write the failing test**
 
@@ -2426,6 +2626,10 @@ git commit -m "feat(archive): plan_archive freezes moves + literal index postima
 # append to science/tests/test_archive_plan.py
 from science_tool.archive_plan import ArchiveApplyError, apply_archive_plan, plan_archive
 from science_tool.plan_common import staging_path_for
+
+
+class _Kill(BaseException):
+    """Simulates an uncaught process kill — NOT an Exception, so apply's rollback never runs."""
 
 
 def test_apply_archive_plan_moves_entity_and_writes_index(tmp_path: Path) -> None:
@@ -2439,9 +2643,28 @@ def test_apply_archive_plan_moves_entity_and_writes_index(tmp_path: Path) -> Non
     idx = (tmp_path / "entities" / "_archive" / "archive-index.jsonl").read_text(encoding="utf-8")
     assert "interpretation:0001-x" in idx
     assert idx == plan.index.postimage
-    # index round-trips through the canonical loader
     from science_tool.archive import load_archive_index
     assert "interpretation:0001-x" in load_archive_index(tmp_path).active_by_id
+
+
+def test_apply_archive_empty_cohort_is_a_noop(tmp_path: Path) -> None:
+    # No candidates → apply writes nothing and never touches a (possibly-absent) _archive/.
+    (tmp_path / "science.yaml").write_text("name: t\n", encoding="utf-8")
+    (tmp_path / "entities" / "interpretations").mkdir(parents=True)
+    plan = plan_archive(tmp_path, selection=ArchiveStatusSweep(kind="all_by_status", statuses=["superseded"]),
+                        now="2026-07-18T00:00:00Z")
+    report = apply_archive_plan(tmp_path, plan, staging_token="tok")
+    assert report == {"applied": [], "skipped": []}
+    assert not (tmp_path / "entities" / "_archive").exists()  # no debris
+
+
+def test_apply_archive_refuses_unsupported_schema_version(tmp_path: Path) -> None:
+    _superseded(tmp_path)
+    plan = plan_archive(tmp_path, selection=ArchiveStatusSweep(kind="all_by_status", statuses=["superseded"]),
+                        now="2026-07-18T00:00:00Z")
+    plan = plan.model_copy(update={"schema_version": 999})
+    with pytest.raises(ArchiveApplyError):
+        apply_archive_plan(tmp_path, plan, staging_token="tok")
 
 
 def test_apply_archive_refuses_tampered_row(tmp_path: Path) -> None:
@@ -2466,15 +2689,12 @@ def test_apply_archive_refuses_absolute_rel_path_escape(tmp_path: Path) -> None:
 
 
 def test_apply_archive_rolls_back_when_index_write_is_blocked(tmp_path: Path) -> None:
-    # Kill-boundary / move-rollback: a stale, non-prefix staging survivor at the index path makes
-    # the staged index write fail AFTER the entity has moved. Rollback must return the corpus to its
-    # exact pre-state — src restored, dst removed, created dirs removed.
+    # Move-rollback: a stale, non-prefix staging survivor makes the index write fail AFTER the entity
+    # moved. The StagingError is wrapped as ArchiveApplyError only after rollback returns the corpus
+    # to its pre-state — src restored, dst removed.
     _superseded(tmp_path)
-    plan = plan_archive(tmp_path, selection=ArchiveStatusSweep(kind="all_by_status", statuses=["superseded"]),
-                        now="2026-07-18T00:00:00Z")
     index_abs = tmp_path / "entities" / "_archive" / "archive-index.jsonl"
-    index_abs.parent.mkdir(parents=True, exist_ok=True)
-    # NB: parent now exists, so re-plan to keep the surface consistent with the live tree.
+    index_abs.parent.mkdir(parents=True, exist_ok=True)  # so the parent exists before planning
     plan = plan_archive(tmp_path, selection=ArchiveStatusSweep(kind="all_by_status", statuses=["superseded"]),
                         now="2026-07-18T00:00:00Z")
     staging_path_for(index_abs, "tok").write_text("garbage-not-a-prefix", encoding="utf-8")
@@ -2484,8 +2704,41 @@ def test_apply_archive_rolls_back_when_index_write_is_blocked(tmp_path: Path) ->
     assert not (tmp_path / "entities" / "_archive" / "interpretations" / "0001-x.md").exists()  # dst gone
 
 
+def test_kill_after_rename_leaves_a_classifiable_declared_state(tmp_path: Path) -> None:
+    # Kill matrix — after each archive rename: src moved away, dst present, index NOT yet written.
+    _superseded(tmp_path)
+    plan = plan_archive(tmp_path, selection=ArchiveStatusSweep(kind="all_by_status", statuses=["superseded"]),
+                        now="2026-07-18T00:00:00Z")
+
+    def fault(label: str) -> None:
+        if label == "renamed:interpretation:0001-x":
+            raise _Kill()
+
+    with pytest.raises(_Kill):
+        apply_archive_plan(tmp_path, plan, staging_token="tok", _fault=fault)
+    assert not (tmp_path / "entities" / "interpretations" / "0001-x.md").exists()
+    assert (tmp_path / "entities" / "_archive" / "interpretations" / "0001-x.md").exists()
+    assert not (tmp_path / "entities" / "_archive" / "archive-index.jsonl").exists()  # index == pre (absent)
+
+
+def test_kill_after_index_replacement_leaves_complete_index_no_survivor(tmp_path: Path) -> None:
+    # Kill matrix — after index replacement: index is complete, no staging survivor left behind.
+    _superseded(tmp_path)
+    plan = plan_archive(tmp_path, selection=ArchiveStatusSweep(kind="all_by_status", statuses=["superseded"]),
+                        now="2026-07-18T00:00:00Z")
+
+    def fault(label: str) -> None:
+        if label == "index-written":
+            raise _Kill()
+
+    with pytest.raises(_Kill):
+        apply_archive_plan(tmp_path, plan, staging_token="tok", _fault=fault)
+    index_abs = tmp_path / "entities" / "_archive" / "archive-index.jsonl"
+    assert index_abs.read_text(encoding="utf-8") == plan.index.postimage  # complete
+    assert not staging_path_for(index_abs, "tok").exists()  # no undeclared debris
+
+
 def test_apply_archive_index_leaves_no_staging_survivor(tmp_path: Path) -> None:
-    # Clean kill-boundary: after a successful apply the batch-tokened `.tmp` is consumed.
     _superseded(tmp_path)
     plan = plan_archive(tmp_path, selection=ArchiveStatusSweep(kind="all_by_status", statuses=["superseded"]),
                         now="2026-07-18T00:00:00Z")
@@ -2493,6 +2746,8 @@ def test_apply_archive_index_leaves_no_staging_survivor(tmp_path: Path) -> None:
     index_abs = tmp_path / "entities" / "_archive" / "archive-index.jsonl"
     assert not staging_path_for(index_abs, "tok").exists()
 ```
+
+Mid-staging partial-prefix classification is covered directly by Task 5's `classify_staging` test (a killed partial write is a byte-prefix of the postimage by construction) and by `test_apply_archive_rolls_back_when_index_write_is_blocked` (a stale, non-prefix survivor is refused by `O_EXCL`). The kill-after-write-before-replace case leaves a **complete** `.tmp`, exercised through the `_fault` seam inside `staged_write` is out of scope here — the two boundaries above (post-rename, post-index) plus Task 12's post-entity-write kill cover the declared surface.
 
 - [ ] **Step 2: Run test to verify it fails**
 
@@ -2505,30 +2760,49 @@ Expected: FAIL — `apply_archive_plan` missing.
 # add to science/src/science_tool/archive_plan.py
 import errno
 import os
+from typing import Callable
 
 from science_tool.plan_common import (
-    PathEscape, StagingError, SurfaceMismatch, assert_same_surface, assert_staging_unique,
-    matches, resolve_within, rollback_transitions, snapshot_paths, staged_write,
+    PathEscape, RollbackHalt, StagingError, SurfaceMismatch, assert_same_surface,
+    assert_staging_unique, matches, resolve_within, rollback_transitions, snapshot_paths, staged_write,
 )
+
+_ARCHIVE_PLAN_SCHEMA = 1
 
 
 class ArchiveApplyError(RuntimeError):
     pass
 
 
-def apply_archive_plan(project_root: Path, plan: ArchivePlan, *, staging_token: str) -> dict:
+def apply_archive_plan(project_root: Path, plan: ArchivePlan, *, staging_token: str,
+                       _fault: Callable[[str], None] | None = None) -> dict:
+    def fault(label: str) -> None:
+        if _fault is not None:
+            _fault(label)  # a test may raise BaseException here to simulate a kill (no rollback)
+
     project_root = project_root.resolve()
+    if plan.schema_version != _ARCHIVE_PLAN_SCHEMA:
+        raise ArchiveApplyError(
+            f"unsupported plan schema_version {plan.schema_version} (this tool writes {_ARCHIVE_PLAN_SCHEMA})")
     if plan.project_root != str(project_root):
         raise ArchiveApplyError("plan project_root does not match")
 
-    all_t = [*plan.transitions, plan.index]
+    # Empty cohort — a no-op plan writes nothing (legacy archive no-ops too).
+    if not plan.moves:
+        if plan.index is not None or plan.transitions:
+            raise ArchiveApplyError("empty cohort must carry no index or transitions")
+        return {"applied": [], "skipped": []}
+
+    index_list = [plan.index] if plan.index is not None else []
+    all_t = [*plan.transitions, *index_list]
     # Structural — containment for every declared path, canonical archive paths, staging uniqueness
     try:
         abs_by_t = {id(t): resolve_within(project_root, t.rel_path) for t in all_t}
         for m in plan.moves:
             resolve_within(project_root, m.original_path)
             resolve_within(project_root, m.archive_path)
-        assert_staging_unique(project_root, [abs_by_t[id(plan.index)]], staging_token)
+        if plan.index is not None:
+            assert_staging_unique(project_root, [abs_by_t[id(plan.index)]], staging_token)
     except (PathEscape, StagingError) as exc:
         raise ArchiveApplyError(str(exc)) from exc
     for m in plan.moves:
@@ -2540,10 +2814,11 @@ def apply_archive_plan(project_root: Path, plan: ArchivePlan, *, staging_token: 
 
     # Gate B — re-derive the WHOLE plan and compare the complete authorized surface
     expected = plan_archive(project_root, selection=plan.selection, now=plan.now)
-    if expected.moves != plan.moves:
-        raise ArchiveApplyError("re-derived moves/rows differ from the plan")
+    if expected.moves != plan.moves or expected.index != plan.index:
+        raise ArchiveApplyError("re-derived moves/rows/index differ from the plan")
+    exp_index = [expected.index] if expected.index is not None else []
     try:
-        assert_same_surface([*plan.transitions, plan.index], [*expected.transitions, expected.index])
+        assert_same_surface([*plan.transitions, *index_list], [*expected.transitions, *exp_index])
     except SurfaceMismatch as exc:
         raise ArchiveApplyError(f"declared transitions differ from re-derived: {exc}") from exc
     if expected.preview_report != plan.preview_report:
@@ -2573,14 +2848,19 @@ def apply_archive_plan(project_root: Path, plan: ArchivePlan, *, staging_token: 
                 raise
             _fsync_dir(src.parent)
             _fsync_dir(dst.parent)
-        staged_write(abs_by_t[id(plan.index)], plan.index.postimage,
-                     plan.index.post.mode, staging_token)  # mode is concrete
+            fault(f"renamed:{m.id}")  # kill boundary: after each rename, before the index write
+        if plan.index is not None:
+            staged_write(abs_by_t[id(plan.index)], plan.index.postimage,
+                         plan.index.post.mode, staging_token)  # mode is concrete
+            fault("index-written")  # kill boundary: after index replacement
         for t in all_t:
             if not matches(t.post, abs_by_t[id(t)]):
                 raise ArchiveApplyError(f"post-state verification failed for {t.rel_path}")
-    except Exception:
-        rollback_transitions(all_t, project_root, snap)
-        raise
+    except Exception as exc:
+        rollback_transitions(all_t, project_root, snap)  # may raise RollbackHalt (propagates)
+        if isinstance(exc, ArchiveApplyError):
+            raise
+        raise ArchiveApplyError(f"archive apply failed and rolled back: {exc}") from exc
     return {"applied": [m.id for m in plan.moves], "skipped": []}
 
 
@@ -2592,12 +2872,12 @@ def _fsync_dir(directory: Path) -> None:
         os.close(fd)
 ```
 
-Rollback correctness: `all_t` is ordered created-dirs(outer→inner) → src → dst per move, then the index last; `rollback_transitions` processes it **reversed**, so it reverts the index, removes the moved `dst`, restores the `src` from its snapshot bytes, then `rmdir`s the created dirs innermost-first. `snapshot_paths` captured the src bytes at pre, which is what makes src restoration exact.
+Rollback correctness: `all_t` is ordered created-dirs(outer→inner) → src → dst per move, then the optional index last; `rollback_transitions` processes it **reversed**, so it reverts the index, removes the moved `dst`, restores the `src` from its snapshot bytes, then `rmdir`s the created dirs innermost-first. A `_fault`-raised `BaseException` (simulated kill) is deliberately NOT caught by `except Exception`, so no rollback runs and the survivor is left classifiable.
 
 - [ ] **Step 4: Run test to verify it passes**
 
 Run: `uv run --frozen pytest science/tests/test_archive_plan.py -q`
-Expected: PASS (move+index, tampered row, path escape, rollback-on-blocked-index, clean staging boundary).
+Expected: PASS (move+index, empty no-op, schema, tampered row, path escape, blocked-index rollback, kill-after-rename, kill-after-index, clean staging boundary).
 
 - [ ] **Step 5: Commit**
 
@@ -2682,6 +2962,45 @@ def test_apply_plan_rejects_edited_plan(tmp_path: Path) -> None:
     r = CliRunner().invoke(main, ["entities", "mark-superseded", "--project-root", str(tmp_path),
                                   "--apply-plan", str(plan_file), "--expected-plan-sha256", sha])
     assert r.exit_code != 0
+
+
+def test_save_plan_rejects_apply_flag(tmp_path: Path) -> None:
+    _chain(tmp_path)
+    r = CliRunner().invoke(main, ["entities", "mark-superseded", "--project-root", str(tmp_path),
+                                  "--save-plan", str(tmp_path / "p.json"), "--apply"])
+    assert r.exit_code != 0
+    assert "--apply" in r.output
+
+
+def test_report_mode_rejects_staging_token(tmp_path: Path) -> None:
+    _chain(tmp_path)
+    r = CliRunner().invoke(main, ["entities", "mark-superseded", "--project-root", str(tmp_path),
+                                  "--staging-token", "x"])
+    assert r.exit_code != 0
+    assert "--staging-token" in r.output
+
+
+def test_apply_plan_reads_plan_file_exactly_once(tmp_path: Path, monkeypatch) -> None:
+    # TOCTOU regression: the CLI must hash and parse the SAME single read, never reopen the path.
+    import science_tool.plan_common as pc
+    _chain(tmp_path)
+    plan_file = tmp_path / "plan.json"
+    r1 = CliRunner().invoke(main, ["entities", "mark-superseded", "--project-root", str(tmp_path),
+                                   "--save-plan", str(plan_file)])
+    sha = json.loads(r1.output)["plan_sha256"]
+
+    calls = {"n": 0}
+    real = pc.read_plan_bytes
+
+    def counting(path):
+        calls["n"] += 1
+        return real(path)
+
+    monkeypatch.setattr(pc, "read_plan_bytes", counting)
+    r2 = CliRunner().invoke(main, ["entities", "mark-superseded", "--project-root", str(tmp_path),
+                                   "--apply-plan", str(plan_file), "--expected-plan-sha256", sha])
+    assert r2.exit_code == 0, r2.output
+    assert calls["n"] == 1  # one read feeds BOTH the envelope hash and the parse
 ```
 
 - [ ] **Step 2: Run test to verify it fails**
@@ -2749,6 +3068,11 @@ def entities_mark_superseded_command(project_root, ids, ids_from, apply_changes,
 
     allowlist = _collect_ids(ids, ids_from)
     if save_plan is not None:
+        # --apply-plan-only flags are invalid while saving.
+        for bad, name in [(apply_changes, "--apply"), (expected_plan_sha256, "--expected-plan-sha256"),
+                          (staging_token, "--staging-token")]:
+            if bad:
+                raise click.UsageError(f"{name} may not be combined with --save-plan")
         selection = (ExplicitSupersessionIds(kind="explicit_ids", ids=sorted(allowlist))
                      if allowlist else AllSupersessionMembers(kind="all"))
         plan = plan_supersede(project_root.resolve(), selection=selection,
@@ -2765,6 +3089,11 @@ def entities_mark_superseded_command(project_root, ids, ids_from, apply_changes,
              render_text=lambda: None)
         return
 
+    # Plain report mode — flags that only make sense with a plan are rejected here.
+    for bad, name in [(overwrite_plan, "--overwrite-plan"), (expected_plan_sha256, "--expected-plan-sha256"),
+                      (staging_token, "--staging-token")]:
+        if bad:
+            raise click.UsageError(f"{name} requires --save-plan or --apply-plan")
     try:
         report = mark_superseded(project_root, ids=allowlist, apply=apply_changes)
     except SupersessionError as exc:
@@ -2910,6 +3239,10 @@ def entities_archive_command(project_root, statuses, ids, ids_from, apply_change
     allowlist = _collect_ids(ids, ids_from)
     now = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
     if save_plan is not None:
+        for bad, name in [(apply_changes, "--apply"), (expected_plan_sha256, "--expected-plan-sha256"),
+                          (staging_token, "--staging-token")]:
+            if bad:
+                raise click.UsageError(f"{name} may not be combined with --save-plan")
         selection = (ExplicitArchiveIds(kind="explicit_ids", ids=sorted(allowlist),
                                         allowed_statuses=sorted(status_set))
                      if allowlist else
@@ -2930,6 +3263,11 @@ def entities_archive_command(project_root, statuses, ids, ids_from, apply_change
              render_text=lambda: None)
         return
 
+    # Plain report mode — plan-only flags are rejected here.
+    for bad, name in [(overwrite_plan, "--overwrite-plan"), (expected_plan_sha256, "--expected-plan-sha256"),
+                      (staging_token, "--staging-token")]:
+        if bad:
+            raise click.UsageError(f"{name} requires --save-plan or --apply-plan")
     try:
         report = archive_entities(project_root, statuses=status_set, ids=allowlist,
                                   apply=apply_changes, now=now)
@@ -2986,11 +3324,21 @@ Expected: FAIL — package version is still `0.4.1`.
 Run: `uv run --frozen pytest science/tests/test_cli_version.py science/tests/test_agent_cli_compatibility.py -q`
 Expected: PASS — the baseline test now green, and `test_agent_cli_compatibility.py` (command floor ≤ version) passes **unchanged**.
 
-- [ ] **Step 5: Commit**
+- [ ] **Step 5: Record the observable behavior change, then commit**
+
+The 0.5.0 release changes one observable behavior beyond the new flags: `mark-superseded`'s
+secondary report lists (`archived_targets` / `unmanaged_targets` / `unbacked_inverses` /
+`invalid_relations`) are now emitted in **canonical sorted order** instead of audit/scan order
+(Task 9). Record this in the release notes / changelog the repo uses (if none exists, state it in
+the commit body below). Blocking semantics are unchanged.
 
 ```bash
 git add science/pyproject.toml .claude-plugin/plugin.json science/tests/test_cli_version.py
-git commit -m "release: science 0.5.0 — savable archive/mark-superseded plans"
+git commit -m "release: science 0.5.0 — savable archive/mark-superseded plans
+
+Behavior change: mark-superseded report lists (archived_targets/unmanaged_targets/
+unbacked_inverses/invalid_relations) are now in canonical sorted order (was audit order);
+blocking semantics unchanged."
 ```
 
 ---
@@ -3037,5 +3385,15 @@ Not part of this upstream branch, but the acceptance the design §8 requires bef
 - Move rollback + kill-boundary are tested in Task 15, not left as a note.
 - The single classifier (`_classify_from_projections`) is shared by both entry points, so equivalence is structural; `test_graph_from_material_equals_live_on_every_field` (Task 9) checks **every** field and `test_consolidation_mark_superseded.py` guards behavior. The one intentional change — report-list order becomes canonical/sorted — is documented in Task 9's behavior-preservation note.
 - Decision material is built by `_project_inputs` from `SupersessionInputs`, never from the graph output; `test_build_decision_material_does_not_build_a_graph` (Task 8) enforces it.
+
+**Second-review closures:**
+- **Empty archive cohort is a no-op** (`index: PathTransition | None`; `plan_archive` emits `index=None`, `apply_archive_plan` writes nothing) — `test_plan_archive_empty_cohort_is_a_noop_plan` (Task 14), `test_apply_archive_empty_cohort_is_a_noop` (Task 15).
+- **`resolve_within` is symlink-safe** — it `.resolve()`s the candidate and checks `is_relative_to`, matching `entity_import.py:486`; `test_resolve_within_rejects_ancestor_symlink_escape` (Task 6).
+- **Kill-classification matrix** via a `_fault` seam that raises a `BaseException` (uncaught → no rollback): after each entity write (Task 12), after each archive rename and after index replacement (Task 15); mid-staging prefix via `classify_staging` (Task 5). Rollback fallback for a missing snapshot is now a `RollbackHalt`, not an empty-file reconstruction.
+- **Disposition derived from the material-derived graph** through a shared `_disposition_report(graph, *, ids)`; preview and gate B no longer re-load the filesystem — `test_disposition_report_from_material_matches_mark_superseded` (Task 9).
+- **Execute errors are wrapped** as `SupersedeApplyError`/`ArchiveApplyError` only *after* successful rollback, with `RollbackHalt` propagated distinctly (Tasks 12, 15); the blocked-index test now correctly expects the wrapped type.
+- **`schema_version` is enforced** against the supported constant in both apply paths (Tasks 12, 15).
+- **CLI mode contracts** — `--save-plan` rejects `--apply`/envelope/staging-token; report mode rejects plan-only flags (Tasks 16, 17). **Single-read TOCTOU** pinned by `test_apply_plan_reads_plan_file_exactly_once` (Task 16).
+- **Ordering ratified** with a pinned multi-item canonical-order test (Task 9) and recorded as an observable 0.5.0 behavior change (Task 18); wording corrected — `invalid`/`unbacked_inverses` are reported **and blocking**.
 
 **Type consistency:** `StateFingerprint`/`PathTransition`/`PathSnapshot`, `resolve_within`/`assert_same_surface`/`assert_staging_unique`, `ArchiveSelection`/`SupersedeSelection`, the nested report models (`SupersededChainReport`/`InvalidRelation`/`TargetReport`/… and `ArchiveCandidate`/`PlannedArchiveRow`), `plan_supersede`/`apply_supersede_plan`, `plan_archive`/`apply_archive_plan`, `_prepare_write_with_date`, `_project_inputs`/`_classify_from_projections`/`build_supersedes_graph_from_material`, `build_decision_material`/`decision_digest` are used consistently across tasks.
