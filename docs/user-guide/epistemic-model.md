@@ -6,13 +6,10 @@ fragility, and missing evidence visible.
 
 ## Core Types
 
-```mermaid
---8<-- "figures/f1-belief-spine.mmd"
-```
-
-*The belief spine: evidence and observations bear on a proposition; belief is
-derived, then persisted as a snapshot. This is a teaching order, not a required
-one.*
+<figure markdown="span">
+--8<-- "figures/f1-belief-spine.svg"
+<figcaption>The belief spine: evidence and observations bear on a proposition; belief is derived, then persisted as a snapshot. This is a teaching order, not a required one.</figcaption>
+</figure>
 
 | Type | Purpose |
 |---|---|

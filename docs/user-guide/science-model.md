@@ -6,12 +6,10 @@ has provenance, and the current state of belief should remain inspectable.
 
 ## Big Picture
 
-```mermaid
---8<-- "figures/f2-sources-derived.mmd"
-```
-
-The authored files are the source of truth. The graph, summaries, snapshots, and
-health outputs are derived readings of those files.
+<figure markdown="span">
+--8<-- "figures/f2-sources-derived.svg"
+<figcaption>The authored files are the source of truth. The graph, summaries, snapshots, and health outputs are derived readings of those files.</figcaption>
+</figure>
 
 ## Substrate
 

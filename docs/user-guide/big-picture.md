@@ -62,12 +62,10 @@ context.
 
 Belief flows along a spine of typed players:
 
-```mermaid
---8<-- "figures/f1-belief-spine.mmd"
-```
-
-*The belief spine — a teaching order, not a required one: evidence and
-observations bear on a proposition, whose belief is derived and then snapshotted.*
+<figure markdown="span">
+--8<-- "figures/f1-belief-spine.svg"
+<figcaption>The belief spine — a teaching order, not a required one: evidence and observations bear on a proposition, whose belief is derived and then snapshotted.</figcaption>
+</figure>
 
 - **question** frames what the project wants to learn.
 - **hypothesis** organizes one or more propositions into a working conjecture;

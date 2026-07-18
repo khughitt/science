@@ -1,6 +1,8 @@
 /* Canonical palette for Science user-guide figures.
-   Mermaid classDef blocks and SVG symbols copy these hexes verbatim;
-   this file is the canonical definition those copies must track. */
+   Every figure is an inline SVG that inherits these custom properties (fills
+   darken and text lightens in the slate scheme, so figures stay legible in both
+   themes); marker fills copy the stroke hexes verbatim. This file is the
+   canonical definition those copies must track. */
 
 :root {
   /* Entity classes (authored) */

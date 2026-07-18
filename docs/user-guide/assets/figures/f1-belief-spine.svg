@@ -1,0 +1,77 @@
+<svg class="sci-figure" role="img" viewBox="0 0 640 720" xmlns="http://www.w3.org/2000/svg">
+  <title>The belief spine</title>
+  <desc>A teaching-order spine of typed epistemic players. A question (pill) frames a
+  hypothesis (hexagon); the hypothesis organizes a proposition (heavy-bordered rectangle).
+  An observation (circle) and an evidence-line (parallelogram, supporting or disputing) each
+  bear on the same proposition. The proposition derives a belief (diamond, derived), which
+  persists as a snapshot (rectangle, derived). Structural edges are solid indigo; bears-on
+  edges are dashed slate plumbing; derivation edges are dashed slate.</desc>
+
+  <defs>
+    <marker id="f1-indigo" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#4F46E5"/>
+    </marker>
+    <marker id="f1-plumb" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#94A3B8"/>
+    </marker>
+    <marker id="f1-deriv" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#64748B"/>
+    </marker>
+  </defs>
+
+  <!-- ===================== EDGES (drawn first, under nodes) ===================== -->
+  <!-- question -> hypothesis : frames (structural, solid indigo) -->
+  <line x1="150" y1="86" x2="150" y2="146" stroke="#4F46E5" stroke-width="2" marker-end="url(#f1-indigo)"/>
+  <text x="164" y="120" font-size="13">frames</text>
+
+  <!-- hypothesis -> proposition : organizes (structural, solid indigo) -->
+  <line x1="196" y1="196" x2="266" y2="316" stroke="#4F46E5" stroke-width="2" marker-end="url(#f1-indigo)"/>
+  <text x="176" y="266" font-size="13">organizes</text>
+
+  <!-- observation -> proposition : bears on (plumbing dashed slate) -->
+  <line x1="340" y1="220" x2="340" y2="316" stroke="#94A3B8" stroke-width="2" stroke-dasharray="6 5" marker-end="url(#f1-plumb)"/>
+  <text x="352" y="270" font-size="13">bears on</text>
+
+  <!-- evidence-line -> proposition : bears on (plumbing dashed slate) -->
+  <line x1="512" y1="200" x2="410" y2="320" stroke="#94A3B8" stroke-width="2" stroke-dasharray="6 5" marker-end="url(#f1-plumb)"/>
+  <text x="470" y="262" font-size="13">bears on</text>
+
+  <!-- proposition -> belief : derives (derivation dashed slate) -->
+  <line x1="340" y1="376" x2="340" y2="428" stroke="#64748B" stroke-width="2" stroke-dasharray="6 5" marker-end="url(#f1-deriv)"/>
+  <text x="354" y="406" font-size="13">derives</text>
+
+  <!-- belief -> snapshot : persists (derivation dashed slate) -->
+  <line x1="340" y1="556" x2="340" y2="606" stroke="#64748B" stroke-width="2" stroke-dasharray="6 5" marker-end="url(#f1-deriv)"/>
+  <text x="354" y="586" font-size="13">persists</text>
+
+  <!-- ===================== NODES ===================== -->
+  <!-- question : pill (epistemic) -->
+  <rect class="sci-epistemic" x="80" y="40" width="140" height="46" rx="23"/>
+  <text x="150" y="69" text-anchor="middle" font-size="14">question</text>
+
+  <!-- hypothesis : hexagon (epistemic) -->
+  <polygon class="sci-epistemic" points="90,171 118,144 192,144 220,171 192,198 118,198"/>
+  <text x="155" y="176" text-anchor="middle" font-size="14">hypothesis</text>
+
+  <!-- observation : circle (epistemic) -->
+  <circle class="sci-epistemic" cx="340" cy="174" r="46"/>
+  <text x="340" y="179" text-anchor="middle" font-size="13">observation</text>
+
+  <!-- evidence-line : parallelogram (epistemic) -->
+  <polygon class="sci-epistemic" points="456,148 588,148 566,200 434,200"/>
+  <text x="511" y="178" text-anchor="middle" font-size="12">evidence-line + / −</text>
+
+  <!-- proposition : rectangle, heavy border -->
+  <rect class="sci-proposition" x="260" y="316" width="160" height="60" rx="8"/>
+  <text x="340" y="351" text-anchor="middle" font-size="14">proposition</text>
+
+  <!-- belief : diamond (derived) -->
+  <polygon class="sci-derived" points="340,428 404,492 340,556 276,492"/>
+  <text x="340" y="489" text-anchor="middle" font-size="13">belief</text>
+  <text x="340" y="507" text-anchor="middle" font-size="11" class="muted">derived</text>
+
+  <!-- snapshot : rectangle (derived) -->
+  <rect class="sci-derived" x="248" y="606" width="184" height="56" rx="6"/>
+  <text x="340" y="632" text-anchor="middle" font-size="13">snapshot</text>
+  <text x="340" y="650" text-anchor="middle" font-size="11" class="muted">derived</text>
+</svg>

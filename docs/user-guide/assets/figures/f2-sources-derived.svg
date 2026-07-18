@@ -1,0 +1,66 @@
+<svg class="sci-figure" role="img" viewBox="0 0 980 420" xmlns="http://www.w3.org/2000/svg">
+  <title>Authored sources feed derived views</title>
+  <desc>Authored project files of every class — epistemic, operational, and reference sources —
+  feed a graph build (operational). The build produces a derived knowledge graph, and the
+  graph in turn derives dashboard summaries, belief snapshots, and health and validation
+  reports. Input edges are solid indigo; derivation edges are dashed slate. Fix the source and
+  rebuild; never hand-patch generated state.</desc>
+
+  <defs>
+    <marker id="f2-indigo" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#4F46E5"/>
+    </marker>
+    <marker id="f2-deriv" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#64748B"/>
+    </marker>
+  </defs>
+
+  <!-- ===================== EDGES (under nodes) ===================== -->
+  <!-- authored sources -> graph build : input (solid indigo) -->
+  <line x1="222" y1="118" x2="316" y2="196" stroke="#4F46E5" stroke-width="2" marker-end="url(#f2-indigo)"/>
+  <line x1="222" y1="205" x2="316" y2="205" stroke="#4F46E5" stroke-width="2" marker-end="url(#f2-indigo)"/>
+  <line x1="222" y1="292" x2="316" y2="214" stroke="#4F46E5" stroke-width="2" marker-end="url(#f2-indigo)"/>
+
+  <!-- graph build -> knowledge graph : derivation (dashed slate) -->
+  <line x1="472" y1="205" x2="540" y2="205" stroke="#64748B" stroke-width="2" stroke-dasharray="6 5" marker-end="url(#f2-deriv)"/>
+
+  <!-- knowledge graph -> derived outputs : derivation (dashed slate) -->
+  <line x1="728" y1="192" x2="786" y2="120" stroke="#64748B" stroke-width="2" stroke-dasharray="6 5" marker-end="url(#f2-deriv)"/>
+  <line x1="728" y1="205" x2="786" y2="205" stroke="#64748B" stroke-width="2" stroke-dasharray="6 5" marker-end="url(#f2-deriv)"/>
+  <line x1="728" y1="218" x2="786" y2="290" stroke="#64748B" stroke-width="2" stroke-dasharray="6 5" marker-end="url(#f2-deriv)"/>
+
+  <!-- ===================== AUTHORED SOURCES (subgraph) ===================== -->
+  <rect x="18" y="52" width="220" height="316" rx="10" fill="none" stroke="#94A3B8" stroke-width="1.5" stroke-dasharray="4 4"/>
+  <text x="30" y="44" class="muted" font-size="12" font-weight="600">Authored project files</text>
+
+  <rect class="sci-epistemic" x="40" y="90" width="176" height="58" rx="8"/>
+  <text x="128" y="124" text-anchor="middle" font-size="13">epistemic sources</text>
+
+  <rect class="sci-operational" x="40" y="176" width="176" height="58" rx="8"/>
+  <text x="128" y="210" text-anchor="middle" font-size="13">operational sources</text>
+
+  <rect class="sci-reference" x="40" y="262" width="176" height="58" rx="8"/>
+  <text x="128" y="296" text-anchor="middle" font-size="13">reference sources</text>
+
+  <!-- ===================== GRAPH BUILD (operational) ===================== -->
+  <rect class="sci-operational" x="316" y="176" width="156" height="58" rx="8"/>
+  <text x="394" y="210" text-anchor="middle" font-size="13">graph build</text>
+
+  <!-- ===================== KNOWLEDGE GRAPH (derived) ===================== -->
+  <rect class="sci-derived" x="540" y="176" width="188" height="58" rx="8"/>
+  <text x="634" y="201" text-anchor="middle" font-size="13">knowledge graph</text>
+  <text x="634" y="220" text-anchor="middle" font-size="11" class="muted">derived</text>
+
+  <!-- ===================== DERIVED OUTPUTS ===================== -->
+  <rect class="sci-derived" x="786" y="66" width="176" height="56" rx="6"/>
+  <text x="874" y="90" text-anchor="middle" font-size="12">dashboard summaries</text>
+  <text x="874" y="108" text-anchor="middle" font-size="11" class="muted">derived</text>
+
+  <rect class="sci-derived" x="786" y="177" width="176" height="56" rx="6"/>
+  <text x="874" y="201" text-anchor="middle" font-size="12">belief snapshots</text>
+  <text x="874" y="219" text-anchor="middle" font-size="11" class="muted">derived</text>
+
+  <rect class="sci-derived" x="786" y="288" width="176" height="56" rx="6"/>
+  <text x="874" y="312" text-anchor="middle" font-size="12">health &amp; validation</text>
+  <text x="874" y="330" text-anchor="middle" font-size="11" class="muted">derived</text>
+</svg>
