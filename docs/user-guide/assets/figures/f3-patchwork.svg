@@ -46,6 +46,7 @@
   <text x="110" y="284" text-anchor="middle" font-size="10">hypothesis</text>
   <rect class="sci-proposition" x="208" y="207" width="84" height="30" rx="6"/>
   <rect class="sci-proposition" x="208" y="247" width="84" height="30" rx="6"/>
+  <text x="250" y="289" text-anchor="middle" font-size="10">propositions</text>
   <path class="sci-operational" d="M368,231 V253 A22,6 0 0 0 412,253 V231"/>
   <ellipse class="sci-operational" cx="390" cy="231" rx="22" ry="6"/>
   <text x="390" y="284" text-anchor="middle" font-size="10">dataset</text>
@@ -60,6 +61,7 @@
   <text x="110" y="405" text-anchor="middle" font-size="10">question</text>
   <rect class="sci-proposition" x="208" y="331" width="84" height="30" rx="6"/>
   <rect class="sci-proposition" x="208" y="371" width="84" height="30" rx="6"/>
+  <text x="250" y="413" text-anchor="middle" font-size="10">propositions</text>
   <path class="sci-operational" d="M368,355 V377 A22,6 0 0 0 412,377 V355"/>
   <ellipse class="sci-operational" cx="390" cy="355" rx="22" ry="6"/>
   <text x="390" y="405" text-anchor="middle" font-size="10">dataset</text>
@@ -84,6 +86,7 @@
   <text x="610" y="284" text-anchor="middle" font-size="10">hypothesis</text>
   <rect class="sci-proposition" x="708" y="207" width="84" height="30" rx="6"/>
   <rect class="sci-proposition" x="708" y="247" width="84" height="30" rx="6"/>
+  <text x="750" y="289" text-anchor="middle" font-size="10">propositions</text>
   <path class="sci-operational" d="M868,231 V253 A22,6 0 0 0 912,253 V231"/>
   <ellipse class="sci-operational" cx="890" cy="231" rx="22" ry="6"/>
   <text x="890" y="284" text-anchor="middle" font-size="10">dataset</text>
@@ -98,6 +101,7 @@
   <text x="610" y="405" text-anchor="middle" font-size="10">question</text>
   <rect class="sci-proposition" x="708" y="331" width="84" height="30" rx="6"/>
   <rect class="sci-proposition" x="708" y="371" width="84" height="30" rx="6"/>
+  <text x="750" y="413" text-anchor="middle" font-size="10">propositions</text>
   <path class="sci-operational" d="M868,355 V377 A22,6 0 0 0 912,377 V355"/>
   <ellipse class="sci-operational" cx="890" cy="355" rx="22" ry="6"/>
   <text x="890" y="405" text-anchor="middle" font-size="10">dataset</text>

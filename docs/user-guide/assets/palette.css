@@ -52,7 +52,10 @@
 
 /* Imported SVGs inherit these because snippets injects the SVG into the DOM.
    Figures fill the content column (they are vector, so scaling up is lossless);
-   the lone portrait figure is capped so it does not tower over the others. */
+   the lone portrait figure is capped so it does not tower over the others.
+   Material's own `.md-typeset figure { width: fit-content }` would otherwise
+   shrink the figure to the SVG's intrinsic width, so widen the figure too. */
+.md-typeset figure.sci-fig { width: 100%; }
 .sci-figure { width: 100%; height: auto; display: block; margin: 1.25rem auto; }
 .sci-figure-tall { max-width: 480px; }
 .sci-figure text { fill: var(--sci-fig-text); font-family: var(--md-text-font-family, sans-serif); }
