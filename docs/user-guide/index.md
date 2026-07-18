@@ -15,7 +15,7 @@ cross-project work.
 2. Read the [Science Model](science-model.md) for the authored-sources-and-derived-views model.
 3. Learn [Project Layout](project-layout.md) and [Entities](entities.md).
 4. Learn the [Epistemic Model](epistemic-model.md) and [Evidence Lines](evidence-lines.md).
-5. Learn [Graph And Derived State](graph-and-derived-state.md), [Big-Picture Synthesis](big-picture-synthesis.md), [Health And Validation](health-and-validation.md), [CLI And Workflows](cli-and-workflows.md), [Agent Workflows](agent-workflows.md), [Feedback And Telemetry](feedback-and-telemetry.md), [Benchmarking](benchmarking.md), [Project Packaging](project-packaging.md), and [Cross-Project Work](cross-project-work.md).
+5. Learn [Graph And Derived State](graph-and-derived-state.md), [Big-Picture Synthesis](big-picture-synthesis.md), [Health And Validation](health-and-validation.md), [CLI And Workflows](cli-and-workflows.md), [Agent Workflows](agent-workflows.md), [Codex](codex.md), [Feedback And Telemetry](feedback-and-telemetry.md), [Benchmarking](benchmarking.md), [Project Packaging](project-packaging.md), and [Cross-Project Work](cross-project-work.md).
 
 ## Chapters
 

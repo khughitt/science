@@ -449,7 +449,7 @@ build and may recommend adding a catalog to `science.yaml`.
 Catalogs are flat in the current model: Science validates names and prefixes but
 does not perform ontology hierarchy reasoning, runtime ontology fetching, or
 external assertion import. Add new domains through the documented catalog
-process in [Adding a Domain](../process/adding-a-domain.md).
+process in [Adding a Domain](https://github.com/khughitt/science/blob/main/docs/process/adding-a-domain.md).
 
 ## Reference Semantics
 
@@ -552,7 +552,7 @@ store. It can synthesize lightweight paper or book records so `paper:` and
 but it does not claim ownership over a project-authored literature note.
 For app-facing citation rendering, Science exports a separate
 `science.references` bundle from the same bibliography authority. See
-[Citations And Reference Bundles](../conventions/citations-and-references.md)
+[Citations And Reference Bundles](https://github.com/khughitt/science/blob/main/docs/conventions/citations-and-references.md)
 for the normalized record shape, citation grammar, and Labnote package contract.
 
 CURIE-backed external references live in

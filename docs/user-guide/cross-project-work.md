@@ -127,4 +127,4 @@ source records remain the durable basis, and derived graph views are rebuilt.
 Federation connects patches, projects, and project collections without erasing
 local context.
 
-For the deeper model, see [`docs/federation.md`](../federation.md).
+For the deeper model, see [`docs/federation.md`](https://github.com/khughitt/science/blob/main/docs/federation.md).

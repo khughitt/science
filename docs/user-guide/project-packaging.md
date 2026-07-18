@@ -42,7 +42,7 @@ Serialize is git-faithful:
 - `--out` must resolve outside the project root.
 - The archive top-level directory is the safe project id from `science.yaml`.
 
-The command runs the [data-boundary audit](../conventions/data-boundary.md)
+The command runs the [data-boundary audit](https://github.com/khughitt/science/blob/main/docs/conventions/data-boundary.md)
 before writing the archive. It blocks on payload-boundary violations: stranded
 records, leaked payloads, and tracked payloads under data roots. Generic audit
 flags do not block serialization.
@@ -68,7 +68,7 @@ derived from `papers/references.bib`, and registers it in `manifest.json` as a
 public JSON bundle named `references`. Public Markdown bodies and
 `source_refs: ["cite:<bibkey>"]` values must resolve against the bibliography.
 Unknown citekeys and unsupported citation syntax fail closed during export. See
-[Citations And Reference Bundles](../conventions/citations-and-references.md)
+[Citations And Reference Bundles](https://github.com/khughitt/science/blob/main/docs/conventions/citations-and-references.md)
 for the reference-record contract and v1 Markdown citation grammar.
 
 ## Bundle Manifest
