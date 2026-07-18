@@ -131,6 +131,14 @@ def test_structural_accession_and_license_require_adjacency():
     assert classify_structural("4.0", s3, s3.find("4.0") + 1) == "license-version"
 
 
+def test_structural_does_not_mask_count_after_generic_gwas_word():
+    s = "The GWAS 500 cohort showed strong effects"
+    assert classify_structural("500", s, s.find("500") + 1) is None
+    # a real GCST accession's own adjacent digits are still masked
+    s2 = "reported under accession GCST 90084 in the catalog"
+    assert classify_structural("90084", s2, s2.find("90084") + 1) == "accession"
+
+
 def test_document_marker_covers_whole_body(tmp_path):
     path = _doc(tmp_path, "The alpha is 0.05 and power 0.8.\n", frontmatter="kind: plan\nstipulated: true")
     ctx = build_document_context(path)

@@ -242,7 +242,7 @@ class ResolutionIndex:
 _HARDWARE_PREFIX_RE = re.compile(
     r"(?:RTX|GTX|GPU|CPU|NovaSeq|HiSeq|NextSeq|MiSeq|Tesla|A100|H100|V100)[\s:-]*$", re.IGNORECASE
 )
-_ACCESSION_PREFIX_ADJ_RE = re.compile(r"(?:GCST|GWAS)[-\s]?$")
+_ACCESSION_PREFIX_ADJ_RE = re.compile(r"GCST[-\s]?$")
 _LICENSE_PREFIX_ADJ_RE = re.compile(
     r"(?:CC-BY(?:-SA)?|CC-BY-NC|CC0|GPL|LGPL|MIT|Apache|BSD)-?$", re.IGNORECASE
 )
