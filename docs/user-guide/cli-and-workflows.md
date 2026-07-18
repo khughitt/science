@@ -148,12 +148,12 @@ The `annotate` group is a full subsystem. Think of it as phases:
 | Manage annotation state | `science annotate ack`, `science annotate dismiss`, `science annotate fix` |
 
 The stable token vocabulary lives in
-[`../conventions/annotation-tokens.md`](../conventions/annotation-tokens.md).
+[`../conventions/annotation-tokens.md`](https://github.com/khughitt/science/blob/main/docs/conventions/annotation-tokens.md).
 
 ## Shared CLI Behavior
 
 Prefer these conventions when adding or using commands. The durable convention
-lives in [`../conventions/cli-behavior.md`](../conventions/cli-behavior.md).
+lives in [`../conventions/cli-behavior.md`](https://github.com/khughitt/science/blob/main/docs/conventions/cli-behavior.md).
 
 - Read-only planning commands should say when they do not modify files.
 - Mutating commands should make the write target clear: source files, generated

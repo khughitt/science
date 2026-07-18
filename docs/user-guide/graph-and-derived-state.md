@@ -288,7 +288,7 @@ and strict-grounding coverage. Downstream renderers should consume this P4
 artifact rather than parsing P2/P3 storage internals.
 
 For the full framework contract, command list, and artifact details, see the
-[prose epistemics checkpoint](../audits/plans-cleanup/2026-06-17-prose-epistemics-checkpoint.md).
+[prose epistemics checkpoint](https://github.com/khughitt/science/blob/main/docs/audits/plans-cleanup/2026-06-17-prose-epistemics-checkpoint.md).
 
 ## Patch Workbenches
 

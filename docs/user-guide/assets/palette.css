@@ -1,0 +1,77 @@
+/* Canonical palette for Science user-guide figures.
+   Mermaid classDef blocks and SVG symbols copy these hexes verbatim;
+   this file is the canonical definition those copies must track. */
+
+:root {
+  /* Entity classes (authored) */
+  --sci-epistemic-stroke: #4F46E5;
+  --sci-epistemic-fill:   #E0E7FF;
+  --sci-operational-stroke: #0891B2;
+  --sci-operational-fill:   #CFFAFE;
+  --sci-reference-stroke: #78716C;
+  --sci-reference-fill:   #E7E5E4;
+  /* Derived state */
+  --sci-derived-stroke: #64748B;
+  --sci-derived-fill:   #F1F5F9;
+  /* Relation accents */
+  --sci-support:  #16A34A;
+  --sci-dispute:  #DC2626;
+  --sci-plumbing: #94A3B8;
+  /* Belief magnitude ramp (epistemic/indigo family; NOT support-green).
+     1=speculative → 4=well_supported, increasing intensity.
+     Rungs 1–3 are light enough for the default dark figure text; rung 4
+     (#4F46E5) needs white labels (2.3:1 with dark text, 6.3:1 with white),
+     applied in F4 via `.sci-belief-text-inverse`. */
+  --sci-belief-1: #EEF2FF;
+  --sci-belief-2: #C7D2FE;
+  --sci-belief-3: #818CF8;
+  --sci-belief-4: #4F46E5;
+  /* Figure surface */
+  --sci-fig-text:  #1E293B;
+  --sci-fig-muted: #475569;
+}
+
+[data-md-color-scheme="slate"] {
+  /* Darker fills for dark scheme; strokes stay constant for recognizability. */
+  --sci-epistemic-fill:  #312E81;
+  --sci-operational-fill: #164E63;
+  --sci-reference-fill:  #44403C;
+  --sci-derived-fill:    #1E293B;
+  /* Belief ramp for dark scheme: rising indigo intensity on a dark ground.
+     Kept dark enough that white labels clear WCAG AA (≥4.5:1) on every rung —
+     rung 4 #4F46E5 is 6.3:1 with #FFFFFF (was #6366F1 at 3.6:1, failing). */
+  --sci-belief-1: #312E81;
+  --sci-belief-2: #3B36B0;
+  --sci-belief-3: #4841D6;
+  --sci-belief-4: #4F46E5;
+  --sci-fig-text:  #E2E8F0;
+  --sci-fig-muted: #94A3B8;
+}
+
+/* Imported SVGs inherit these because snippets injects the SVG into the DOM. */
+.sci-figure { max-width: 100%; height: auto; display: block; margin: 1rem auto; }
+.sci-figure text { fill: var(--sci-fig-text); font-family: var(--md-text-font-family, sans-serif); }
+.sci-figure .muted { fill: var(--sci-fig-muted); }
+
+.sci-epistemic   { fill: var(--sci-epistemic-fill);   stroke: var(--sci-epistemic-stroke);   stroke-width: 2; }
+.sci-proposition { fill: var(--sci-epistemic-fill);   stroke: var(--sci-epistemic-stroke);   stroke-width: 3.5; }
+.sci-operational { fill: var(--sci-operational-fill); stroke: var(--sci-operational-stroke); stroke-width: 2; }
+.sci-reference   { fill: var(--sci-reference-fill);   stroke: var(--sci-reference-stroke);   stroke-width: 2; }
+.sci-derived     { fill: var(--sci-derived-fill);     stroke: var(--sci-derived-stroke);     stroke-width: 2; }
+
+/* Belief-ladder rungs (F4). Stroke stays epistemic-indigo; fill ramps. */
+.sci-belief-1 { fill: var(--sci-belief-1); stroke: var(--sci-epistemic-stroke); stroke-width: 2; }
+.sci-belief-2 { fill: var(--sci-belief-2); stroke: var(--sci-epistemic-stroke); stroke-width: 2; }
+.sci-belief-3 { fill: var(--sci-belief-3); stroke: var(--sci-epistemic-stroke); stroke-width: 2; }
+.sci-belief-4 { fill: var(--sci-belief-4); stroke: var(--sci-epistemic-stroke); stroke-width: 2; }
+
+.sci-edge-support  { stroke: var(--sci-support);  stroke-width: 2.5; fill: none; }
+.sci-edge-dispute  { stroke: var(--sci-dispute);  stroke-width: 2.5; fill: none; }
+.sci-edge-plumbing { stroke: var(--sci-plumbing); stroke-width: 2; stroke-dasharray: 6 5; fill: none; }
+
+.sci-badge { fill: var(--sci-derived-stroke); }
+/* Higher specificity than `.sci-figure text` so badge text stays white. */
+.sci-figure .sci-badge-text { fill: #FFFFFF; font-size: 10px; font-weight: 700; }
+/* Inverse label for dark rung fills (belief rung 4 in both schemes; the
+   darkened dark-scheme rungs clear AA with white). Out-specifies `.sci-figure text`. */
+.sci-figure .sci-belief-text-inverse { fill: #FFFFFF; }

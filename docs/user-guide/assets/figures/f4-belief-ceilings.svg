@@ -1,0 +1,97 @@
+<svg class="sci-figure" role="img" viewBox="0 0 980 640" xmlns="http://www.w3.org/2000/svg">
+  <title>Belief aggregation and ceilings</title>
+  <desc>Evidence lines, grouped into two independence groups and each labelled "+ supports"
+  or "− disputes", bear on a central proposition. Their contribution is reduced by
+  independence and quality. The proposition's derived belief lands on an ordinal ladder
+  (speculative, fragile, supported, well_supported). Three bounds apply: an authored-only
+  support ceiling at fragile, a conditional dataset-QA cap, and a decisive-refutation cap to
+  fragile. Contestation is a boolean overlay on the proposition, not a ladder rung.</desc>
+
+  <defs>
+    <marker id="f4-support" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#16A34A"/>
+    </marker>
+    <marker id="f4-dispute" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#DC2626"/>
+    </marker>
+    <marker id="f4-slate" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#94A3B8"/>
+    </marker>
+  </defs>
+
+  <!-- ===================== INDEPENDENCE GROUPS ===================== -->
+  <rect x="24" y="56" width="210" height="140" rx="10" fill="none" stroke="#94A3B8" stroke-width="1.5"/>
+  <text x="34" y="76" class="muted" font-size="11">independence group 1</text>
+  <polygon class="sci-epistemic" points="70,124 86,96 168,96 152,124"/>
+  <polygon class="sci-epistemic" points="70,178 86,150 168,150 152,178"/>
+
+  <rect x="24" y="216" width="210" height="140" rx="10" fill="none" stroke="#94A3B8" stroke-width="1.5"/>
+  <text x="34" y="236" class="muted" font-size="11">independence group 2</text>
+  <polygon class="sci-epistemic" points="70,284 86,256 168,256 152,284"/>
+  <polygon class="sci-epistemic" points="70,338 86,310 168,310 152,338"/>
+
+  <!-- evidence -> proposition arrows (color + text; legible without color) -->
+  <line class="sci-edge-support" x1="168" y1="110" x2="452" y2="190" marker-end="url(#f4-support)"/>
+  <line class="sci-edge-support" x1="168" y1="164" x2="452" y2="204" marker-end="url(#f4-support)"/>
+  <line class="sci-edge-support" x1="168" y1="270" x2="452" y2="220" marker-end="url(#f4-support)"/>
+  <line class="sci-edge-dispute" x1="168" y1="324" x2="452" y2="236" marker-end="url(#f4-dispute)"/>
+  <text x="250" y="120" font-size="11">+ supports</text>
+  <text x="250" y="168" font-size="11">+ supports</text>
+  <text x="250" y="262" font-size="11">+ supports</text>
+  <text x="250" y="318" font-size="11">− disputes</text>
+
+  <!-- reduction annotation -->
+  <text x="372" y="118" text-anchor="middle" font-size="11" font-weight="600" class="muted"><tspan x="372" dy="0">reduce by</tspan><tspan x="372" dy="14">independence &amp; quality</tspan></text>
+
+  <!-- ===================== PROPOSITION ===================== -->
+  <rect class="sci-proposition" x="452" y="178" width="130" height="56" rx="8"/>
+  <text x="517" y="211" text-anchor="middle" font-size="13">proposition</text>
+  <!-- contestation: boolean overlay, NOT a rung -->
+  <rect x="486" y="160" width="72" height="18" rx="9" fill="none" stroke="#DC2626" stroke-width="1.5"/>
+  <text x="522" y="173" text-anchor="middle" font-size="10" font-weight="700" fill="#DC2626">contested</text>
+
+  <!-- achieved belief pointer: proposition -> ladder rung "supported" -->
+  <line x1="582" y1="210" x2="776" y2="250" stroke="#94A3B8" stroke-width="2.5" marker-end="url(#f4-slate)"/>
+  <text x="676" y="200" text-anchor="middle" font-size="11" font-weight="600">derived belief</text>
+
+  <!-- ===================== ORDINAL LADDER ===================== -->
+  <text x="855" y="150" text-anchor="middle" font-size="12" font-weight="700">belief magnitude</text>
+  <rect class="sci-belief-4" x="780" y="160" width="150" height="60" rx="4"/>
+  <text class="sci-belief-text-inverse" x="855" y="195" text-anchor="middle" font-size="13">well_supported</text>
+  <rect class="sci-belief-3" x="780" y="220" width="150" height="60" rx="4"/>
+  <text x="855" y="255" text-anchor="middle" font-size="13">supported</text>
+  <rect class="sci-belief-2" x="780" y="280" width="150" height="60" rx="4"/>
+  <text x="855" y="315" text-anchor="middle" font-size="13">fragile</text>
+  <rect class="sci-belief-1" x="780" y="340" width="150" height="60" rx="4"/>
+  <text x="855" y="375" text-anchor="middle" font-size="13">speculative</text>
+
+  <!-- cap marker lines on the ladder -->
+  <!-- (2) dataset-QA cap: conditional, at supported ceiling -->
+  <line x1="600" y1="220" x2="946" y2="220" stroke="#94A3B8" stroke-width="1.5" stroke-dasharray="6 5"/>
+  <circle cx="590" cy="220" r="10" fill="none" stroke="#94A3B8" stroke-width="1.5"/>
+  <text x="590" y="224" text-anchor="middle" font-size="11" font-weight="700">2</text>
+  <!-- (1) authored-only ceiling and (3) refutation cap: both at fragile ceiling -->
+  <line x1="600" y1="280" x2="946" y2="280" stroke="#94A3B8" stroke-width="1.5" stroke-dasharray="6 5"/>
+  <circle cx="590" cy="280" r="10" fill="none" stroke="#94A3B8" stroke-width="1.5"/>
+  <text x="590" y="284" text-anchor="middle" font-size="11" font-weight="700">1</text>
+  <circle cx="956" cy="280" r="10" fill="none" stroke="#94A3B8" stroke-width="1.5"/>
+  <text x="956" y="284" text-anchor="middle" font-size="11" font-weight="700">3</text>
+
+  <!-- ===================== CAP LEGEND ===================== -->
+  <line x1="24" y1="424" x2="956" y2="424" stroke="#94A3B8" stroke-width="1"/>
+
+  <circle cx="40" cy="452" r="11" fill="none" stroke="#94A3B8" stroke-width="1.5"/>
+  <text x="40" y="456" text-anchor="middle" font-size="12" font-weight="700">1</text>
+  <text x="62" y="450" font-size="13" font-weight="700">authored-only support ceiling — belief ≤ fragile</text>
+  <text x="62" y="469" font-size="12" class="muted">Without re-analyzed data of our own, authored support cannot raise belief above fragile.</text>
+
+  <circle cx="40" cy="507" r="11" fill="none" stroke="#94A3B8" stroke-width="1.5"/>
+  <text x="40" y="511" text-anchor="middle" font-size="12" font-weight="700">2</text>
+  <text x="62" y="505" font-size="13" font-weight="700">dataset-QA cap (conditional)</text>
+  <text x="62" y="524" font-size="12" class="muted">Applies only when the achieved magnitude depends on QA-failed support and QA-clean support can't reach it alone.</text>
+
+  <circle cx="40" cy="562" r="11" fill="none" stroke="#94A3B8" stroke-width="1.5"/>
+  <text x="40" y="566" text-anchor="middle" font-size="12" font-weight="700">3</text>
+  <text x="62" y="560" font-size="13" font-weight="700">refutation cap — belief ≤ fragile</text>
+  <text x="62" y="579" font-size="12" class="muted">A decisive, independent, whole-claim direct refutation caps belief at fragile.</text>
+</svg>

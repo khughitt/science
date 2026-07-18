@@ -55,3 +55,11 @@ Authored state lives in source files. Derived graph files, summaries, snapshots,
 and health reports should be rebuilt from those sources. If the graph is wrong,
 fix the source artifact and rebuild the graph rather than patching generated
 TriG directly.
+
+```mermaid
+--8<-- "figures/f2-sources-derived.mmd"
+```
+
+*Authored sources of every class feed graph build; the graph, dashboards,
+snapshots, and health reports are derived. Fix the source and rebuild — never
+hand-patch generated TriG.*

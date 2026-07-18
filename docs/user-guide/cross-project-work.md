@@ -3,6 +3,11 @@
 Science projects can recognize peers, compose graphs, and synchronize shared
 knowledge. Peers are declared project namespaces in `science.yaml`.
 
+<figure markdown="span">
+--8<-- "figures/f3-patchwork.svg"
+<figcaption>Peer graphs compose, a registry indexes, and projects borrow canonical owners from the commons.</figcaption>
+</figure>
+
 Cross-project work has three separate surfaces:
 
 - `peers:` in a project `science.yaml` declares local names for other projects.
@@ -127,4 +132,4 @@ source records remain the durable basis, and derived graph views are rebuilt.
 Federation connects patches, projects, and project collections without erasing
 local context.
 
-For the deeper model, see [`docs/federation.md`](../federation.md).
+For the deeper model, see [`docs/federation.md`](https://github.com/khughitt/science/blob/main/docs/federation.md).

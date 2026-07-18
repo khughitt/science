@@ -6,6 +6,14 @@ fragility, and missing evidence visible.
 
 ## Core Types
 
+```mermaid
+--8<-- "figures/f1-belief-spine.mmd"
+```
+
+*The belief spine: evidence and observations bear on a proposition; belief is
+derived, then persisted as a snapshot. This is a teaching order, not a required
+one.*
+
 | Type | Purpose |
 |---|---|
 | `question` | Frames what the project wants to learn. |
@@ -258,6 +266,11 @@ built-in policy is `DEFAULT_BELIEF_POLICY`, with `policy_id: core-default` and
 curation-step penalty, reduction vocabulary, magnitude thresholds, refutation-cap
 conditions, authored-assertion gates, and dataset-QA ceiling into one immutable
 object.
+
+<figure markdown="span">
+--8<-- "figures/f4-belief-ceilings.svg"
+<figcaption>Evidence lines reduce into a proposition's belief; ceilings and a refutation cap bound it.</figcaption>
+</figure>
 
 The default policy preserves the core belief math: evidence lines are reduced by
 independence group and quality, clean support determines the ordinal magnitude,

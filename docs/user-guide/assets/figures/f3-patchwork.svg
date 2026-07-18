@@ -1,0 +1,122 @@
+<svg class="sci-figure" role="img" viewBox="0 0 1000 660" xmlns="http://www.w3.org/2000/svg">
+  <title>Patchwork of epistemic neighborhoods across projects, over a shared commons</title>
+  <desc>Two project cards, each holding dashed inquiry neighborhoods (authored: a focal
+  hypothesis or question, member propositions, and a dataset, wired by slate plumbing edges)
+  and one derived graph panel. Project B's derived graph composes into Project A's derived
+  graph; a registry indexes both projects; a project borrows a canonical dataset from the
+  commons band, which holds shared canonical owners (a dataset and a reference-graph).</desc>
+
+  <defs>
+    <marker id="arrow-slate" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#94A3B8"/>
+    </marker>
+  </defs>
+
+  <!-- ===================== REGISTRY ===================== -->
+  <rect class="sci-derived" x="440" y="24" width="120" height="40" rx="8"/>
+  <text x="500" y="49" text-anchor="middle" font-size="13" font-weight="700">registry</text>
+
+  <!-- indexes arrows: registry -> each project card -->
+  <line x1="482" y1="62" x2="300" y2="86" stroke="#94A3B8" stroke-width="2.5" marker-end="url(#arrow-slate)"/>
+  <text x="360" y="60" text-anchor="middle" font-size="11" font-weight="600">indexes</text>
+  <line x1="518" y1="62" x2="700" y2="86" stroke="#94A3B8" stroke-width="2.5" marker-end="url(#arrow-slate)"/>
+  <text x="640" y="60" text-anchor="middle" font-size="11" font-weight="600">indexes</text>
+
+  <!-- composes arrow: Project B graph -> Project A graph (graph-panel to graph-panel) -->
+  <line x1="548" y1="146" x2="458" y2="146" stroke="#94A3B8" stroke-width="2.5" marker-end="url(#arrow-slate)"/>
+  <text x="503" y="138" text-anchor="middle" font-size="11" font-weight="600">composes</text>
+
+  <!-- ===================== PROJECT A ===================== -->
+  <rect x="30" y="84" width="440" height="350" rx="12" fill="none" stroke="#94A3B8" stroke-width="1.5"/>
+  <text x="48" y="110" font-size="14" font-weight="700">Project A</text>
+
+  <!-- derived graph panel A -->
+  <rect class="sci-derived" x="48" y="120" width="404" height="52" rx="6"/>
+  <rect class="sci-badge" x="406" y="113" width="46" height="15" rx="3"/>
+  <text class="sci-badge-text" x="429" y="124" text-anchor="middle">derived</text>
+  <text x="250" y="151" text-anchor="middle" font-size="12">Project A graph (derived)</text>
+
+  <!-- neighborhood A1 (dashed = boundary) -->
+  <rect class="sci-epistemic" x="48" y="186" width="404" height="112" rx="10" stroke-dasharray="6 5"/>
+  <text x="58" y="201" class="muted" font-size="10">inquiry</text>
+  <line class="sci-edge-plumbing" x1="150" y1="242" x2="208" y2="222"/>
+  <line class="sci-edge-plumbing" x1="150" y1="242" x2="208" y2="262"/>
+  <line class="sci-edge-plumbing" x1="292" y1="262" x2="368" y2="242"/>
+  <polygon class="sci-epistemic" points="65,242 83,222 137,222 155,242 137,262 83,262"/>
+  <text x="110" y="284" text-anchor="middle" font-size="10">hypothesis</text>
+  <rect class="sci-proposition" x="208" y="207" width="84" height="30" rx="6"/>
+  <rect class="sci-proposition" x="208" y="247" width="84" height="30" rx="6"/>
+  <path class="sci-operational" d="M368,231 V253 A22,6 0 0 0 412,253 V231"/>
+  <ellipse class="sci-operational" cx="390" cy="231" rx="22" ry="6"/>
+  <text x="390" y="284" text-anchor="middle" font-size="10">dataset</text>
+
+  <!-- neighborhood A2 -->
+  <rect class="sci-epistemic" x="48" y="310" width="404" height="112" rx="10" stroke-dasharray="6 5"/>
+  <text x="58" y="325" class="muted" font-size="10">inquiry</text>
+  <line class="sci-edge-plumbing" x1="155" y1="366" x2="208" y2="346"/>
+  <line class="sci-edge-plumbing" x1="155" y1="366" x2="208" y2="386"/>
+  <line class="sci-edge-plumbing" x1="292" y1="386" x2="368" y2="366"/>
+  <rect class="sci-epistemic" x="65" y="350" width="90" height="32" rx="16"/>
+  <text x="110" y="405" text-anchor="middle" font-size="10">question</text>
+  <rect class="sci-proposition" x="208" y="331" width="84" height="30" rx="6"/>
+  <rect class="sci-proposition" x="208" y="371" width="84" height="30" rx="6"/>
+  <path class="sci-operational" d="M368,355 V377 A22,6 0 0 0 412,377 V355"/>
+  <ellipse class="sci-operational" cx="390" cy="355" rx="22" ry="6"/>
+  <text x="390" y="405" text-anchor="middle" font-size="10">dataset</text>
+
+  <!-- ===================== PROJECT B ===================== -->
+  <rect x="530" y="84" width="440" height="350" rx="12" fill="none" stroke="#94A3B8" stroke-width="1.5"/>
+  <text x="548" y="110" font-size="14" font-weight="700">Project B</text>
+
+  <!-- derived graph panel B -->
+  <rect class="sci-derived" x="548" y="120" width="404" height="52" rx="6"/>
+  <rect class="sci-badge" x="906" y="113" width="46" height="15" rx="3"/>
+  <text class="sci-badge-text" x="929" y="124" text-anchor="middle">derived</text>
+  <text x="750" y="151" text-anchor="middle" font-size="12">Project B graph (derived)</text>
+
+  <!-- neighborhood B1 -->
+  <rect class="sci-epistemic" x="548" y="186" width="404" height="112" rx="10" stroke-dasharray="6 5"/>
+  <text x="558" y="201" class="muted" font-size="10">inquiry</text>
+  <line class="sci-edge-plumbing" x1="650" y1="242" x2="708" y2="222"/>
+  <line class="sci-edge-plumbing" x1="650" y1="242" x2="708" y2="262"/>
+  <line class="sci-edge-plumbing" x1="792" y1="262" x2="868" y2="242"/>
+  <polygon class="sci-epistemic" points="565,242 583,222 637,222 655,242 637,262 583,262"/>
+  <text x="610" y="284" text-anchor="middle" font-size="10">hypothesis</text>
+  <rect class="sci-proposition" x="708" y="207" width="84" height="30" rx="6"/>
+  <rect class="sci-proposition" x="708" y="247" width="84" height="30" rx="6"/>
+  <path class="sci-operational" d="M868,231 V253 A22,6 0 0 0 912,253 V231"/>
+  <ellipse class="sci-operational" cx="890" cy="231" rx="22" ry="6"/>
+  <text x="890" y="284" text-anchor="middle" font-size="10">dataset</text>
+
+  <!-- neighborhood B2 -->
+  <rect class="sci-epistemic" x="548" y="310" width="404" height="112" rx="10" stroke-dasharray="6 5"/>
+  <text x="558" y="325" class="muted" font-size="10">inquiry</text>
+  <line class="sci-edge-plumbing" x1="655" y1="366" x2="708" y2="346"/>
+  <line class="sci-edge-plumbing" x1="655" y1="366" x2="708" y2="386"/>
+  <line class="sci-edge-plumbing" x1="792" y1="386" x2="868" y2="366"/>
+  <rect class="sci-epistemic" x="565" y="350" width="90" height="32" rx="16"/>
+  <text x="610" y="405" text-anchor="middle" font-size="10">question</text>
+  <rect class="sci-proposition" x="708" y="331" width="84" height="30" rx="6"/>
+  <rect class="sci-proposition" x="708" y="371" width="84" height="30" rx="6"/>
+  <path class="sci-operational" d="M868,355 V377 A22,6 0 0 0 912,377 V355"/>
+  <ellipse class="sci-operational" cx="890" cy="355" rx="22" ry="6"/>
+  <text x="890" y="405" text-anchor="middle" font-size="10">dataset</text>
+
+  <!-- borrows arrow: Project A dataset -> commons canonical dataset -->
+  <line x1="390" y1="384" x2="390" y2="524" stroke="#94A3B8" stroke-width="2.5" marker-end="url(#arrow-slate)"/>
+  <text x="412" y="452" text-anchor="start" font-size="11" font-weight="600">borrows</text>
+
+  <!-- ===================== COMMONS ===================== -->
+  <rect x="30" y="452" width="940" height="180" rx="12" fill="none" stroke="#94A3B8" stroke-width="1.5"/>
+  <text x="50" y="480" font-size="14" font-weight="700">commons — shared canonical owners</text>
+
+  <!-- canonical dataset -->
+  <path class="sci-operational" d="M360,548 V566 A30,9 0 0 0 420,566 V548"/>
+  <ellipse class="sci-operational" cx="390" cy="548" rx="30" ry="9"/>
+  <text x="390" y="600" text-anchor="middle" font-size="12">dataset (canonical)</text>
+
+  <!-- reference-graph -->
+  <polygon class="sci-reference" points="675,532 760,532 778,556 760,580 675,580"/>
+  <circle class="muted" cx="690" cy="556" r="5"/>
+  <text x="722" y="600" text-anchor="middle" font-size="12">reference-graph</text>
+</svg>

@@ -1,0 +1,52 @@
+<svg class="sci-figure" role="img" viewBox="0 0 760 420" xmlns="http://www.w3.org/2000/svg">
+  <title>Entity file anatomy</title>
+  <desc>A single entity file drawn as a card with a heavy epistemic border. A kind:id header
+  strip sits on top. The upper zone is YAML frontmatter — machine-readable identity and
+  relationships (id, kind, title, status, related). The lower zone is body prose —
+  human-readable context. A slate plumbing arrow runs from the file into a derived graph node,
+  captioned "graph build".</desc>
+
+  <defs>
+    <marker id="f8-slate" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#94A3B8"/>
+    </marker>
+  </defs>
+
+  <!-- entity file card (epistemic example -> heavy proposition border) -->
+  <rect class="sci-proposition" x="30" y="30" width="400" height="300" rx="12"/>
+
+  <!-- header strip: kind:id -->
+  <text x="48" y="61" font-family="monospace" font-size="16" font-weight="700">proposition:example</text>
+  <line x1="30" y1="74" x2="430" y2="74" stroke="#94A3B8" stroke-width="1"/>
+
+  <!-- frontmatter zone: machine-readable identity & relationships -->
+  <text x="48" y="98" font-family="monospace" font-size="13"><tspan class="muted">id:</tspan> proposition:example</text>
+  <text x="48" y="120" font-family="monospace" font-size="13"><tspan class="muted">kind:</tspan> proposition</text>
+  <text x="48" y="142" font-family="monospace" font-size="13"><tspan class="muted">title:</tspan> "Example proposition"</text>
+  <text x="48" y="164" font-family="monospace" font-size="13"><tspan class="muted">status:</tspan> draft</text>
+  <text x="48" y="186" font-family="monospace" font-size="13"><tspan class="muted">related:</tspan> [hypothesis:h01]</text>
+
+  <line x1="30" y1="200" x2="430" y2="200" stroke="#94A3B8" stroke-width="1"/>
+
+  <!-- body zone: human-readable context -->
+  <text x="48" y="226" font-size="13">Explanation, caveats, rationale,</text>
+  <text x="48" y="248" font-size="13">and review context — the human</text>
+  <text x="48" y="270" font-size="13">reading of this record.</text>
+
+  <!-- zone brackets + callouts -->
+  <path d="M438,80 h8 V194 h-8" fill="none" stroke="#94A3B8" stroke-width="1.5"/>
+  <text x="454" y="128" font-size="12" font-weight="600"><tspan x="454" dy="0">machine-readable</tspan><tspan x="454" dy="15">identity &amp; relationships</tspan></text>
+
+  <path d="M438,206 h8 V294 h-8" fill="none" stroke="#94A3B8" stroke-width="1.5"/>
+  <text x="454" y="254" font-size="12" font-weight="600">human-readable context</text>
+
+  <!-- plumbing arrow: file -> derived graph node -->
+  <line x1="215" y1="330" x2="520" y2="360" stroke="#94A3B8" stroke-width="2.5" stroke-dasharray="6 5" marker-end="url(#f8-slate)"/>
+  <text x="360" y="338" text-anchor="middle" font-size="12" font-weight="600">graph build</text>
+
+  <!-- derived graph node -->
+  <rect class="sci-derived" x="520" y="344" width="200" height="52" rx="6"/>
+  <rect class="sci-badge" x="674" y="337" width="46" height="15" rx="3"/>
+  <text class="sci-badge-text" x="697" y="348" text-anchor="middle">derived</text>
+  <text x="612" y="375" text-anchor="middle" font-size="12">graph node</text>
+</svg>

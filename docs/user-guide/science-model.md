@@ -7,12 +7,7 @@ has provenance, and the current state of belief should remain inspectable.
 ## Big Picture
 
 ```mermaid
-flowchart LR
-    A[Authored project files] --> B[Graph build]
-    B --> C[Knowledge graph]
-    C --> D[Dashboard summaries]
-    C --> E[Belief snapshots]
-    C --> F[Health and validation]
+--8<-- "figures/f2-sources-derived.mmd"
 ```
 
 The authored files are the source of truth. The graph, summaries, snapshots, and
@@ -58,6 +53,11 @@ Science's working model is a federated patchwork of small epistemic
 neighborhoods. A neighborhood is a local cluster around some research concern:
 a question, hypothesis, proposition, inquiry, dataset, method, evidence cluster,
 or analysis result.
+
+<figure markdown="span">
+--8<-- "figures/f3-patchwork.svg"
+<figcaption>Neighborhoods within a project; derived graphs compose across peers; canonical owners live in the commons.</figcaption>
+</figure>
 
 Each neighborhood can carry:
 

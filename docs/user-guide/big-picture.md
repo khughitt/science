@@ -10,6 +10,11 @@ This chapter is not the same as [Big-Picture Synthesis](big-picture-synthesis.md
 generated per-project report produced by `/science:big-picture` from a project's
 own authored sources.
 
+!!! info "How to read the figures"
+    Diagrams in this guide share one visual vocabulary — see the
+    [figure key](entities.md#figure-key). Color marks entity class, shape marks
+    kind family, and derived state is drawn in slate with a `derived` badge.
+
 ## Stance
 
 Science is skeptical and data-driven by default. The creed:
@@ -46,16 +51,23 @@ reusable canonical owners — shared datasets and reference graphs — and proje
 recognize peers and synchronize shared knowledge without flattening away local
 context.
 
+<figure markdown="span">
+--8<-- "figures/f3-patchwork.svg"
+<figcaption>A patchwork of epistemic neighborhoods across projects, over a shared commons.</figcaption>
+</figure>
+
 → full detail: [Science Model](science-model.md), [Cross-Project Work](cross-project-work.md)
 
 ## Epistemic Model & Key Players
 
 Belief flows along a spine of typed players:
 
-```text
-question → hypothesis → proposition → observation / evidence-line →
-belief → snapshot
+```mermaid
+--8<-- "figures/f1-belief-spine.mmd"
 ```
+
+*The belief spine — a teaching order, not a required one: evidence and
+observations bear on a proposition, whose belief is derived and then snapshotted.*
 
 - **question** frames what the project wants to learn.
 - **hypothesis** organizes one or more propositions into a working conjecture;

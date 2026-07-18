@@ -5,6 +5,18 @@ Markdown files with YAML frontmatter and body prose. The frontmatter provides
 machine-readable identity and relationships; the body provides human-readable
 context.
 
+## Figure Key
+
+The figures in this guide share one visual vocabulary. Color marks an entity's
+**class**; shape reinforces its **kind family** and the label names the exact
+kind. Derived state (belief, snapshots, the graph) is drawn in slate with a
+`derived` badge — never as authored source.
+
+<figure markdown="span">
+--8<-- "figures/f0-vocabulary.svg"
+<figcaption>Entity vocabulary reader's key.</figcaption>
+</figure>
+
 ## Entity Shape
 
 ```markdown
@@ -42,6 +54,11 @@ Important fields:
 carry a `type` projection internally, but catalog, profile, and
 project-extension kinds load as open-ended strings rather than being forced
 through a closed enum or an `unknown` fallback. Kind matching is exact.
+
+<figure markdown="span">
+--8<-- "figures/f8-entity-anatomy.svg"
+<figcaption>An entity file: <code>kind:id</code>, machine-readable frontmatter, human-readable body.</figcaption>
+</figure>
 
 ## Authored And Derived Fields
 
@@ -449,7 +466,7 @@ build and may recommend adding a catalog to `science.yaml`.
 Catalogs are flat in the current model: Science validates names and prefixes but
 does not perform ontology hierarchy reasoning, runtime ontology fetching, or
 external assertion import. Add new domains through the documented catalog
-process in [Adding a Domain](../process/adding-a-domain.md).
+process in [Adding a Domain](https://github.com/khughitt/science/blob/main/docs/process/adding-a-domain.md).
 
 ## Reference Semantics
 
@@ -552,7 +569,7 @@ store. It can synthesize lightweight paper or book records so `paper:` and
 but it does not claim ownership over a project-authored literature note.
 For app-facing citation rendering, Science exports a separate
 `science.references` bundle from the same bibliography authority. See
-[Citations And Reference Bundles](../conventions/citations-and-references.md)
+[Citations And Reference Bundles](https://github.com/khughitt/science/blob/main/docs/conventions/citations-and-references.md)
 for the normalized record shape, citation grammar, and Labnote package contract.
 
 CURIE-backed external references live in
