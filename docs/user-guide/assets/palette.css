@@ -75,6 +75,13 @@
 .sci-belief-3 { fill: var(--sci-belief-3); stroke: var(--sci-epistemic-stroke); stroke-width: 2; }
 .sci-belief-4 { fill: var(--sci-belief-4); stroke: var(--sci-epistemic-stroke); stroke-width: 2; }
 
+/* Derived-graph glyph: a small node-link network drawn inside a faint derived
+   panel. Uses the derived stroke (constant across schemes), so it reads in both
+   light and dark. Wrap the edges in `.sci-graph-edge` and the nodes in
+   `.sci-graph-node` so children inherit stroke/fill. */
+.sci-graph-edge { stroke: var(--sci-derived-stroke); stroke-width: 1.1; fill: none; }
+.sci-graph-node { fill: var(--sci-derived-stroke); }
+
 .sci-edge-support  { stroke: var(--sci-support);  stroke-width: 2.5; fill: none; }
 .sci-edge-dispute  { stroke: var(--sci-dispute);  stroke-width: 2.5; fill: none; }
 .sci-edge-plumbing { stroke: var(--sci-plumbing); stroke-width: 2; stroke-dasharray: 6 5; fill: none; }

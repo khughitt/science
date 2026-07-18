@@ -48,8 +48,26 @@
 
   <!-- ===================== KNOWLEDGE GRAPH (derived) ===================== -->
   <rect class="sci-derived" x="540" y="176" width="188" height="58" rx="8"/>
-  <text x="634" y="201" text-anchor="middle" font-size="13">knowledge graph</text>
-  <text x="634" y="220" text-anchor="middle" font-size="11" class="muted">derived</text>
+  <g class="sci-graph-edge">
+    <line x1="556" y1="206" x2="571" y2="193"/>
+    <line x1="556" y1="206" x2="574" y2="219"/>
+    <line x1="571" y1="193" x2="574" y2="219"/>
+    <line x1="571" y1="193" x2="588" y2="201"/>
+    <line x1="574" y1="219" x2="585" y2="222"/>
+    <line x1="588" y1="201" x2="585" y2="222"/>
+    <line x1="588" y1="201" x2="602" y2="212"/>
+    <line x1="585" y1="222" x2="602" y2="212"/>
+  </g>
+  <g class="sci-graph-node">
+    <circle cx="556" cy="206" r="3.2"/>
+    <circle cx="571" cy="193" r="3.2"/>
+    <circle cx="574" cy="219" r="3.2"/>
+    <circle cx="588" cy="201" r="3.2"/>
+    <circle cx="585" cy="222" r="3.2"/>
+    <circle cx="602" cy="212" r="3.2"/>
+  </g>
+  <text x="666" y="201" text-anchor="middle" font-size="13">knowledge graph</text>
+  <text x="666" y="220" text-anchor="middle" font-size="11" class="muted">derived</text>
 
   <!-- ===================== DERIVED OUTPUTS ===================== -->
   <rect class="sci-derived" x="786" y="66" width="176" height="56" rx="6"/>

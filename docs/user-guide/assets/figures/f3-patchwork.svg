@@ -32,9 +32,27 @@
 
   <!-- derived graph panel A -->
   <rect class="sci-derived" x="48" y="120" width="404" height="52" rx="6"/>
+  <g class="sci-graph-edge">
+    <line x1="60" y1="144" x2="75" y2="131"/>
+    <line x1="60" y1="144" x2="78" y2="157"/>
+    <line x1="75" y1="131" x2="78" y2="157"/>
+    <line x1="75" y1="131" x2="92" y2="139"/>
+    <line x1="78" y1="157" x2="89" y2="160"/>
+    <line x1="92" y1="139" x2="89" y2="160"/>
+    <line x1="92" y1="139" x2="106" y2="150"/>
+    <line x1="89" y1="160" x2="106" y2="150"/>
+  </g>
+  <g class="sci-graph-node">
+    <circle cx="60" cy="144" r="3.2"/>
+    <circle cx="75" cy="131" r="3.2"/>
+    <circle cx="78" cy="157" r="3.2"/>
+    <circle cx="92" cy="139" r="3.2"/>
+    <circle cx="89" cy="160" r="3.2"/>
+    <circle cx="106" cy="150" r="3.2"/>
+  </g>
   <rect class="sci-badge" x="406" y="113" width="46" height="15" rx="3"/>
   <text class="sci-badge-text" x="429" y="124" text-anchor="middle">derived</text>
-  <text x="250" y="151" text-anchor="middle" font-size="12">Project A graph (derived)</text>
+  <text x="256" y="151" text-anchor="middle" font-size="12">Project A graph (derived)</text>
 
   <!-- neighborhood A1 (dashed = boundary) -->
   <rect class="sci-epistemic" x="48" y="186" width="404" height="112" rx="10" stroke-dasharray="6 5"/>
@@ -72,9 +90,27 @@
 
   <!-- derived graph panel B -->
   <rect class="sci-derived" x="548" y="120" width="404" height="52" rx="6"/>
+  <g class="sci-graph-edge">
+    <line x1="560" y1="144" x2="575" y2="131"/>
+    <line x1="560" y1="144" x2="578" y2="157"/>
+    <line x1="575" y1="131" x2="578" y2="157"/>
+    <line x1="575" y1="131" x2="592" y2="139"/>
+    <line x1="578" y1="157" x2="589" y2="160"/>
+    <line x1="592" y1="139" x2="589" y2="160"/>
+    <line x1="592" y1="139" x2="606" y2="150"/>
+    <line x1="589" y1="160" x2="606" y2="150"/>
+  </g>
+  <g class="sci-graph-node">
+    <circle cx="560" cy="144" r="3.2"/>
+    <circle cx="575" cy="131" r="3.2"/>
+    <circle cx="578" cy="157" r="3.2"/>
+    <circle cx="592" cy="139" r="3.2"/>
+    <circle cx="589" cy="160" r="3.2"/>
+    <circle cx="606" cy="150" r="3.2"/>
+  </g>
   <rect class="sci-badge" x="906" y="113" width="46" height="15" rx="3"/>
   <text class="sci-badge-text" x="929" y="124" text-anchor="middle">derived</text>
-  <text x="750" y="151" text-anchor="middle" font-size="12">Project B graph (derived)</text>
+  <text x="756" y="151" text-anchor="middle" font-size="12">Project B graph (derived)</text>
 
   <!-- neighborhood B1 -->
   <rect class="sci-epistemic" x="548" y="186" width="404" height="112" rx="10" stroke-dasharray="6 5"/>

@@ -105,14 +105,38 @@
   <text class="sci-badge-text" x="453" y="341" text-anchor="middle">derived</text>
   <text x="436" y="406" text-anchor="middle" font-size="12">snapshot</text>
 
-  <!-- graph / dashboards / health: panel -->
+  <!-- graph: node-link network inside a faint derived panel -->
+  <rect class="sci-derived" x="556" y="340" width="64" height="44" rx="4"/>
+  <g class="sci-graph-edge">
+    <line x1="566" y1="362" x2="581" y2="349"/>
+    <line x1="566" y1="362" x2="584" y2="375"/>
+    <line x1="581" y1="349" x2="584" y2="375"/>
+    <line x1="581" y1="349" x2="598" y2="357"/>
+    <line x1="584" y1="375" x2="595" y2="378"/>
+    <line x1="598" y1="357" x2="595" y2="378"/>
+    <line x1="598" y1="357" x2="612" y2="368"/>
+    <line x1="595" y1="378" x2="612" y2="368"/>
+  </g>
+  <g class="sci-graph-node">
+    <circle cx="566" cy="362" r="3.2"/>
+    <circle cx="581" cy="349" r="3.2"/>
+    <circle cx="584" cy="375" r="3.2"/>
+    <circle cx="598" cy="357" r="3.2"/>
+    <circle cx="595" cy="378" r="3.2"/>
+    <circle cx="612" cy="368" r="3.2"/>
+  </g>
+  <rect class="sci-badge" x="565" y="326" width="46" height="15" rx="3"/>
+  <text class="sci-badge-text" x="588" y="337" text-anchor="middle">derived</text>
+  <text x="588" y="406" text-anchor="middle" font-size="12">graph</text>
+
+  <!-- dashboards / health: bar panel -->
   <rect class="sci-derived" x="700" y="338" width="80" height="46" rx="4"/>
   <rect class="muted" x="712" y="366" width="10" height="12"/>
   <rect class="muted" x="730" y="358" width="10" height="20"/>
   <rect class="muted" x="748" y="350" width="10" height="28"/>
   <rect class="sci-badge" x="736" y="326" width="46" height="15" rx="3"/>
   <text class="sci-badge-text" x="759" y="337" text-anchor="middle">derived</text>
-  <text x="740" y="406" text-anchor="middle" font-size="12">graph / dashboards / health</text>
+  <text x="740" y="406" text-anchor="middle" font-size="12">dashboards / health</text>
 
   <!-- ============ RELATIONS (band) ============ -->
   <text x="16" y="446" font-size="14" font-weight="700">RELATIONS</text>
