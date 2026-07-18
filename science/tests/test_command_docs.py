@@ -1436,3 +1436,28 @@ def test_create_project_docs_keep_data_payload_dirs_gitignored() -> None:
     assert "science.yaml" in text
     assert "data.root" in text
     assert "`data/raw` maps to" in text
+
+
+def test_agents_template_and_guide_document_import_interception_in_sequence() -> None:
+    # Both surfaces must carry the full write-then-import sequence IN ORDER:
+    # save-plan preview -> inspect the manual-hit list -> apply-plan -> commit the
+    # canonical entity. Order matters: it is the interception's whole contract.
+    sequence = ["--save-plan", "manual-hit", "--apply-plan", "commit the canonical entity"]
+
+    def _in_order(text: str, tokens: list[str], where: str) -> None:
+        idx = -1
+        for tok in tokens:
+            nxt = text.find(tok, idx + 1)
+            assert nxt > idx, f"{where}: token missing or out of order: {tok!r}"
+            idx = nxt
+
+    for path in ("templates/agents-md.md", "docs/user-guide/entities.md"):
+        text = _read(path).lower()
+        assert "science entities import" in text, path
+        _in_order(text, sequence, path)
+
+    # Surface-specific anchors.
+    template = _read("templates/agents-md.md")
+    assert "staging file" in template
+    assert "not committed" in template
+    assert "existing adopters" in _read("docs/user-guide/entities.md").lower()
