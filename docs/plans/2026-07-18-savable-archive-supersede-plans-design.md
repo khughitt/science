@@ -351,35 +351,50 @@ class SupersedePlan(BaseModel):
    or unchanged frontmatter. So for each write, read the **live** source file and
    assert its bytes hash to `w.pre.content_sha256` — this binds the write-source
    identity the material does not carry. Re-render the expected postimage by
-   applying the permitted edits to those verified bytes through the body-preserving
-   writer (§5.4); require it byte-for-byte equal to `w.postimage`; re-derive and
-   compare `w.pre`/`w.post`.
+   applying the permitted edits to those verified bytes through the shared
+   preparation path (§5.4); require it byte-for-byte equal to `w.postimage`;
+   re-derive and compare `w.pre`/`w.post`.
 5. Snapshot; execute each saved postimage via §3.4; verify `matches(w.post, …)`.
 6. On failure → §3.3 rollback.
 
-### 5.4 Byte-stable, injectable writer — matching current semantics
+### 5.4 Injectable-timestamp writer — matching current semantics exactly
 
-Gate B's byte-for-byte compare is impossible against today's writer:
+Gate B's byte-for-byte compare needs the apply-time re-render to reproduce the
+preview's bytes. Exactly **one** thing in today's writer prevents that:
 `_prepare_write` **`setdefault`s** `updated` from `date.today()`
-(`entities.py:1067`) — it sets the field only when *absent*, preserving an
-existing value — and `_render_markdown` reserializes YAML while the parser strips
-leading body newlines. t855 refactors the supersession write path to:
+(`entities.py:1067`), a fresh clock read each invocation. Everything else is
+already deterministic — `_dump_frontmatter` is `yaml.safe_dump(sort_keys=False)`,
+and `_parse_markdown_file` (`entities.py:1885`) normalizes the body the *same way
+every time*: it `lstrip("\n")`s leading newlines and normalizes line endings via
+text-mode reads. That normalization is **not** an instability — it is the byte
+output the legacy writer already produces on every edit, so it is fully
+compatible with saved-postimage replay.
 
-- render through the **body-preserving** parser/writer (body round-trips
-  byte-for-byte, no leading-newline loss);
-- change exactly `status`, `superseded_by`, and `updated` — the last **only when
-  the `updated` key is absent**, set to the plan's frozen `preview_date`; a member
-  that already has the key keeps its value. This is `setdefault`, reproduced.
+t855 therefore makes the **minimal** refactor and does **not** switch parsers
+(that would be an unrelated, observable behavior change — see the end of this
+section):
 
-The refactor extracts a **shared preparation function** from `_prepare_write`
-that retains all three of its boundary checks — the schema gate
-(`_schema_gate_or_raise`, `entities.py:1072`), prospective-corpus validation
-(`_validate_prospective_write`, `entities.py:1075`), and successor resolution
-(`_resolution_check_or_raise`, `entities.py:1083`). The injected timestamp and
-body-preserving render are added *inside* this shared function, not forked from
-it, so **both** the legacy re-derive `--apply` and gate B run all three checks
-for every write before any mutation begins. Byte comparison is not a substitute
-for the boundary — a well-formed postimage can still be an illegal corpus write.
+- extract a **shared preparation function** from `_prepare_write` that **retains
+  `_parse_markdown_file`'s existing body normalization** (lstrip + line-ending
+  normalization) and all three of its boundary checks — the schema gate
+  (`_schema_gate_or_raise`, `entities.py:1072`), prospective-corpus validation
+  (`_validate_prospective_write`, `entities.py:1075`), and successor resolution
+  (`_resolution_check_or_raise`, `entities.py:1083`);
+- make **only** the `updated` default injectable — `date.today()` becomes a
+  `preview_date` parameter frozen in the plan; a member that already has the
+  `updated` key keeps its value (`setdefault`, unchanged);
+- route **preview, legacy `--apply`, and `--apply-plan`** through this one
+  preparation path, so all three produce byte-identical output and all three run
+  the boundary checks before any mutation.
+
+Gate B compares each saved postimage against **the normalized postimage the
+legacy writer would produce** — not against the authored source bytes. The body
+does **not** round-trip byte-for-byte: leading newlines are stripped and CRLF is
+normalized, exactly as legacy `--apply` already does. Byte comparison is not a
+substitute for the boundary — a well-formed postimage can still be an illegal
+corpus write. A future move to true body preservation is a separate, deliberate
+writer-contract change; the hybrid (preserving only in replay) is **rejected**
+because it would create two write semantics.
 
 The test is **presence, not truthiness**: `updated = live[updated] if 'updated'
 in live else preview_date`. `setdefault` preserves an existing *falsey* value
@@ -477,9 +492,12 @@ Mirror `tests/test_entity_import.py` / `test_entity_import_cli.py` and
 - **Gate-B semantic safety** — an edited `to_mark` / `superseded_by` / `ArchiveRow`
   / index postimage inconsistent with the sources is refused even when internally
   self-consistent; relation defects / unbacked inverses refuse apply.
-- **Byte-stable writer** — save-then-apply reproduces the legacy re-derive result;
-  a member lacking the `updated` key gets `preview_date`, not the clock; body
-  newlines round-trip.
+- **Byte-stable writer** — save-then-apply reproduces the legacy re-derive result
+  byte-for-byte; a member lacking the `updated` key gets `preview_date`, not the
+  clock. Characterize body **normalization** across all three paths (preview,
+  legacy `--apply`, `--apply-plan`): a leading-newline body and a CRLF body are
+  normalized identically by each — the writer's normal form, not the authored
+  bytes (no body-preservation claim).
 - **`updated` presence semantics** — at the render layer (low-level), a
   present-but-empty `updated` is *preserved* (presence, not truthiness).
   Separately: on a schema-backed project an empty `updated` is date-typed
