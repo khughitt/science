@@ -93,3 +93,23 @@ def test_structural_is_context_gated_for_sizes_not_facts():
     # a download size is structural; a genome size is a factual claim
     assert classify_structural("516.9", "the 516.9 MB download completed", 5) == "file-size"
     assert classify_structural("3.2", "the human genome is 3.2 Gb", 21) is None
+
+
+def test_structural_does_not_overmask_claims_near_structural_tokens():
+    # a real count near a hardware word must NOT be masked
+    assert classify_structural(
+        "4096", "the GPU processed 4096 samples", "the GPU processed 4096 samples".find("4096") + 1
+    ) is None
+    # the fps count near RTX must NOT be masked (only the model number 3070 is)
+    assert classify_structural(
+        "45", "the RTX 3070 achieved 45 fps", "the RTX 3070 achieved 45 fps".find("45") + 1
+    ) is None
+    assert classify_structural(
+        "3070", "the RTX 3070 achieved 45 fps", "the RTX 3070 achieved 45 fps".find("3070") + 1
+    ) == "hardware-id"
+    # a genome size followed later by 'file'/'archived' must NOT be file-size
+    assert classify_structural(
+        "3.2",
+        "the 3.2 Gb genome file was archived",
+        "the 3.2 Gb genome file was archived".find("3.2") + 1,
+    ) is None
