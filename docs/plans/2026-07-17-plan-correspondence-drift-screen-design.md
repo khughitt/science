@@ -32,7 +32,7 @@ deliverable, the blinded reviewer saw a 20-file module-boundary list named in pr
 So the design is bound by the program's own doctrine — *an uncertified instrument may not fail
 anyone's build* — and by the fact that the deterministic extractor is exactly such an instrument.
 A deterministic check that **gates** would betray the doctrine. A deterministic check that
-**advises**, leans on the extractor's *safe failure direction*, and hands its output to review, is
+**advises**, screens in the *lower-risk advisory direction*, and hands its output to review, is
 sound. The confidence contract in §5 is what makes it sound.
 
 ### 2.1 Reconciliation with adjacent, already-landed work
@@ -196,7 +196,8 @@ The check **does not** consult `review_state`: `science entity review` only stam
 timestamp, and a review that did not change the status must not silence a still-true correspondence
 signal. So findings clear in exactly two ways:
 
-1. **A true positive self-heals.** The author corrects `draft` → `active`; adjudication then agrees
+1. **A true positive self-heals.** The author corrects the claimed status to the adjudicated state
+   (`draft → active`, `draft → complete`, or `active → complete`); adjudication then agrees
    (`rank(claimed) == rank(adjudicated)`); the WARN disappears. This is the intended review→act loop
    and needs no suppression at all.
 2. **A confirmed false positive is suppressed, evidence-scoped, through the *existing*
@@ -225,10 +226,12 @@ acceptance entries and the diagnostic agree on the path spelling.
 **Signature.** The token is `evidence-signature: v1:<hex>`, where `<hex>` is the **full SHA-256** of
 a **versioned canonical JSON** encoding of the evidence tuple —
 `{"v": 1, "claimed": <status>, "deliverables": [[<target>, <probe-result>], … sorted],
-"tasks": [[<task-ref>, <state>], … sorted], "adjudicated": <status>}` — serialized with sorted keys
-and no insignificant whitespace. Because these signatures are persisted into committed `science.yaml`,
-the encoding is versioned (`v1:`): a future change to what the evidence covers is a new signature
-version, not a silent reinterpretation of old entries.
+"tasks": [[<task-ref>, <state>], … sorted], "adjudicated": <status>}`. The hashed bytes are exactly
+`json.dumps(payload, sort_keys=True, separators=(",", ":"), ensure_ascii=True).encode("utf-8")` — so
+key order, whitespace, and Unicode escaping are all pinned, not implementation-dependent. Because
+these signatures are persisted into committed `science.yaml`, the encoding is versioned (`v1:`): a
+future change to what the evidence covers is a new signature version, not a silent reinterpretation
+of old entries.
 
 **Exact-token acceptance.** An `accepted_validation` entry counts as evidence-scoped only if its
 `message_contains` holds a **complete, well-formed** `evidence-signature: v1:<64-hex>` token
@@ -236,19 +239,21 @@ version, not a silent reinterpretation of old entries.
 does not qualify. A valid entry is `rule: plan.correspondence-drift` + `path` (project-relative) +
 that `message_contains` + a non-empty `reason`.
 
-**One acceptance authority, both surfaces.** Loading, matching, and the evidence-scope policy move
-into a single reusable module (promote `validate/acceptance.py`, or a new `science_tool/acceptance.py`)
-exposing a field-based match predicate plus `EVIDENCE_SCOPED_RULES = {"plan.correspondence-drift"}`
-and an entry-validity policy. **Both** consumers delegate to it: `validate`'s
-`filter_accepted_warnings` **and** `graph/health.py`'s `_partition_accepted_validation_findings`,
-which today carries its **own** independent copy (`health.py:145–173`). Suppression is granted only
+**One acceptance authority, both surfaces.** `science_tool.validate.acceptance` is the authority:
+loading, matching, and the evidence-scope policy live there, exposing a field-based match predicate
+plus `EVIDENCE_SCOPED_RULES = {"plan.correspondence-drift"}` and an entry-validity policy. **Both**
+consumers delegate to it: `validate`'s own `filter_accepted_warnings` **and** `graph/health.py`,
+which today carries its **own** independent copy (`health.py:145–173`) and instead **imports** the
+authority. (A `graph.health` → `validate.acceptance` import is acceptable; the reverse would not be.) Suppression is granted only
 when the shared matcher matches **and** the entry satisfies the evidence-scope policy — so an
 unscoped `plan.correspondence-drift` entry fails closed on **both** surfaces. Removing health's
 duplicate is required, not optional; otherwise the hole this amendment closes stays open in `health`.
 
 **Malformed acceptance is a canonical finding, not a filter side effect.** The "unscoped acceptance
-entry" WARN is emitted by a **canonical validation check** that scans `accepted_validation`, under
-the **stable rule id `accepted-validation.evidence-scope-required`**. It is **not** appended inside
+entry" WARN is emitted by a **canonical validation check** — a new module
+`validate/checks/accepted_validation.py`, registered as `"accepted_validation"` — that scans
+`accepted_validation`, under the **stable rule id `accepted-validation.evidence-scope-required`**.
+It is **not** appended inside
 `filter_accepted_warnings`: `validate/cli.py:152` (`_with_accepted_warnings_filtered`) treats
 filtering as removal-only and uses `len(filtered) == len(original)` as its unchanged test, which an
 appended finding would violate. Keeping the filter pure-removal preserves that invariant.
@@ -272,13 +277,13 @@ Therefore:
 
 ## 7. Canonical registration
 
-A check runs only if it is registered. Add **both** `"correspondence_drift"` and the
-`accepted-validation.evidence-scope-required` check module (§5.5) to `CANONICAL_CHECK_MODULES` in
-`science/src/science_tool/validate/checks/__init__.py` (the tuple `_load_canonical_checks` imports).
-A **registry test** asserts both are present in `CANONICAL_CHECKS` after load and appear in a full
-runner pass — direct unit tests can pass while a check never runs.
+A check runs only if it is registered. Add **both** `"correspondence_drift"` and `"accepted_validation"`
+(§5.5) to `CANONICAL_CHECK_MODULES` in `science/src/science_tool/validate/checks/__init__.py` (the
+tuple `_load_canonical_checks` imports). A **registry test** asserts both are present in
+`CANONICAL_CHECKS` after load and appear in a full runner pass — direct unit tests can pass while a
+check never runs.
 
-## 8. Testing strategy (three separated concerns)
+## 8. Testing strategy (four separated concerns)
 
 1. **Unit** (`science/tests/test_correspondence_adjudicate.py` + a rank/direction test): under-claim
    fires; over-claim silent; agreement silent; no-deliverables silent; `indeterminate` silent;
@@ -329,8 +334,9 @@ permanently and out of every gate tier regardless of any future `_CERTIFIED_KIND
   `adjudicate`/`Adjudicated` out of `drift_sample/score.py` → `correspondence/adjudicate.py`.
   No compatibility shims.
 - **Create:** `science/src/science_tool/correspondence/{__init__,probe,extract,adjudicate}.py`;
-  `science/src/science_tool/validate/checks/correspondence_drift.py`; the
-  `accepted-validation.evidence-scope-required` check module; the shared acceptance module (if new);
+  `science/src/science_tool/validate/checks/correspondence_drift.py`;
+  `science/src/science_tool/validate/checks/accepted_validation.py` (rule
+  `accepted-validation.evidence-scope-required`);
   `science/tests/test_correspondence_adjudicate.py`; check-level, both-surface acceptance, CLI
   exit-code, and `real_projects` tests.
 - **Modify:**
@@ -342,10 +348,9 @@ permanently and out of every gate tier regardless of any future `_CERTIFIED_KIND
     `correspondence.probe`, and `Adjudicated`/`adjudicate` → `correspondence.adjudicate` (leaving
     `verdict`/`manski`/`gate` on `drift_sample.score`).
   - `validate/context.py` — `body()` + shared `(frontmatter, body)` parse.
-  - `validate/checks/__init__.py` — register `correspondence_drift` and the evidence-scope check.
-  - the shared acceptance authority (`validate/acceptance.py` promoted, or new
-    `science_tool/acceptance.py`) — loading + matching + evidence-scope policy.
-  - `graph/health.py` — delegate to the shared acceptance authority; **remove** its duplicate
+  - `validate/checks/__init__.py` — register `correspondence_drift` and `accepted_validation`.
+  - `validate/acceptance.py` — the acceptance authority: loading + matching + evidence-scope policy.
+  - `graph/health.py` — import `validate.acceptance` and delegate; **remove** its duplicate
     `_accepted_validation_entries` / `_accepts_validation_finding` / `_text_matches`
     (`health.py:135–173`).
   - `docs/plans/2026-07-17-drift-sample/result.md` — label-only (§9).
