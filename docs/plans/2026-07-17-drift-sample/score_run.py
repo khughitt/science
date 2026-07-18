@@ -13,9 +13,10 @@ from collections import Counter, defaultdict
 from pathlib import Path
 
 from science_tool.drift_sample.frame import Pin, pinned_worktree
-from science_tool.drift_sample.probe import probe_path, resolve_task
+from science_tool.correspondence.probe import probe_path, resolve_task
+from science_tool.correspondence.adjudicate import Adjudicated, adjudicate
 from science_tool.drift_sample.normalize import normalize_claim
-from science_tool.drift_sample.score import Adjudicated, adjudicate, verdict, manski, gate
+from science_tool.drift_sample.score import verdict, manski, gate
 
 _HERE = Path("../docs/plans/2026-07-17-drift-sample")
 rec = json.loads((_HERE / "prereg.json").read_text())

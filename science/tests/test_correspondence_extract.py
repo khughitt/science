@@ -1,4 +1,4 @@
-from science_tool.drift_sample.extract import extract_deliverables, extract_task_refs
+from science_tool.correspondence.extract import extract_deliverables, extract_task_refs
 
 
 def test_extracts_backticked_code_paths():

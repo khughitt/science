@@ -1,6 +1,6 @@
 from pathlib import Path
 
-from science_tool.drift_sample.probe import (
+from science_tool.correspondence.probe import (
     ProbeResult,
     TaskState,
     probe_path,

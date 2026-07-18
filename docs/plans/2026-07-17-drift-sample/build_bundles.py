@@ -12,7 +12,7 @@ from collections import defaultdict
 from pathlib import Path
 
 from science_tool.drift_sample.blind import blind_plan
-from science_tool.drift_sample.extract import extract_deliverables, extract_task_refs
+from science_tool.correspondence.extract import extract_deliverables, extract_task_refs
 from science_tool.drift_sample.frame import Pin, pinned_worktree
 
 _HERE = Path(__file__).resolve().parent

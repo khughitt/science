@@ -11,9 +11,6 @@ from pathlib import Path
 from time import perf_counter
 from typing import NotRequired, TypedDict, cast
 
-import yaml as _yaml
-
-from science_tool.data_root import project_config_path
 from science_tool.graph.health_checks import (
     HEALTH_CHECKS,
     HealthCheck,
@@ -36,6 +33,7 @@ from science_tool.graph.health_checks.validate import ValidationFinding
 from science_tool.graph.migrate import LayeredClaimMigrationReport
 from science_tool.graph.sources import load_project_sources
 from science_tool.instruments import InstrumentResult
+from science_tool.validate.acceptance import accepted_validation_entries, entry_suppresses
 
 
 class AcceptedValidationFinding(ValidationFinding):
@@ -132,66 +130,36 @@ def _drain_instrument_results(
     return rows, unwired
 
 
-def _text_matches(value: str | None, needles: object) -> bool:
-    if needles is None:
-        return True
-    if isinstance(needles, str):
-        return needles in (value or "")
-    if isinstance(needles, list):
-        return all(isinstance(needle, str) and needle in (value or "") for needle in needles)
-    return False
-
-
-def _accepted_validation_entries(project_root: Path) -> list[dict[str, object]]:
-    manifest_path = project_config_path(project_root)
-    try:
-        manifest = _yaml.safe_load(manifest_path.read_text(encoding="utf-8")) or {}
-    except OSError:
-        return []
-    health = manifest.get("health") if isinstance(manifest, dict) else None
-    if not isinstance(health, dict):
-        return []
-    entries = health.get("accepted_validation")
-    if not isinstance(entries, list):
-        return []
-    return [entry for entry in entries if isinstance(entry, dict)]
-
-
-def _accepts_validation_finding(entry: dict[str, object], finding: ValidationFinding) -> bool:
-    rule = entry.get("rule")
-    if not isinstance(rule, str) or finding.get("rule") != rule:
-        return False
-    severity = entry.get("severity")
-    if isinstance(severity, str) and finding.get("severity") != severity:
-        return False
-    path = entry.get("path")
-    if isinstance(path, str) and finding.get("path") != path:
-        return False
-    task = entry.get("task")
-    if isinstance(task, str) and finding.get("task") != task:
-        return False
-    return _text_matches(finding.get("message"), entry.get("message_contains"))
-
-
 def _partition_accepted_validation_findings(
     project_root: Path,
     findings: list[ValidationFinding],
 ) -> tuple[list[ValidationFinding], list[AcceptedValidationFinding]]:
-    entries = _accepted_validation_entries(project_root)
+    entries = accepted_validation_entries(project_root)
     if not entries:
         return findings, []
     remaining: list[ValidationFinding] = []
     accepted: list[AcceptedValidationFinding] = []
     for finding in findings:
-        match = next((entry for entry in entries if _accepts_validation_finding(entry, finding)), None)
+        match = next(
+            (
+                entry
+                for entry in entries
+                if entry_suppresses(
+                    entry,
+                    rule=finding.get("rule"),
+                    severity=finding.get("severity") or "",
+                    path=finding.get("path"),
+                    task=finding.get("task"),
+                    message=finding.get("message") or "",
+                )
+            ),
+            None,
+        )
         if match is None:
             remaining.append(finding)
             continue
         reason = match.get("reason")
-        if not isinstance(reason, str) or not reason.strip():
-            remaining.append(finding)
-            continue
-        accepted.append({**finding, "accepted_reason": reason.strip()})
+        accepted.append({**finding, "accepted_reason": str(reason).strip()})
     return remaining, accepted
 
 
