@@ -29,6 +29,7 @@ Then gather deterministic evidence:
 
 ```bash
 uv run science curate inventory --project-root . --format json
+uv run science entity rotation --format json
 uv run science health --project-root . --format json
 uv run science tasks list --format json
 uv run science big-picture resolve-questions --project-root .
@@ -97,9 +98,29 @@ canonical entity home.
 
 ## Phase 2: Candidate triage
 
-Group findings into curation themes and choose a bounded reading set. Use the
-weighted attention sample as the default way to choose epistemic entities for
-close reading; do not collapse the pass to deterministic top-N priority rows.
+Group findings into curation themes and choose a bounded reading set in two
+layers:
+
+1. **Coverage floor — `science entity rotation`.** This is the default reading
+   set. It ranks the reviewable corpus least-recently-reviewed first and prints
+   an adaptive per-sweep budget. Read every row it marks `selected`. For each
+   selected row you actually review, record a reasoned review artifact and
+   advance its state with
+   `science entity review <ref> --note "<what you inspected and changed>"`. That
+   stamp is what moves the entity out of the least-recently-reviewed prefix;
+   without it the same prefix recurs on the next sweep. Rotation drives the
+   corpus toward full coverage in a bounded number of sweeps only when each sweep
+   completes its budget **and** its review stamps carry a date strictly later
+   than the corpus's current maximum `last_reviewed`. Under `--dry-run` or
+   `--no-write`, do **not** call `entity review`: rotation state does not advance
+   and the same rows reappear on the next real sweep.
+2. **Enrichment / alarm — the weighted attention sample.** Use
+   `science graph attention-sample` to pull *additional* high-attention
+   epistemic entities into the pass beyond the rotation floor. Attention biases
+   toward what changed or is contested; rotation, once its stamps land, drives
+   floor coverage. They are complementary, not alternatives — do not drop the
+   rotation floor in favor of attention alone.
+
 Read targeted source artifacts, not the entire corpus.
 
 Prefer source documents over generated summaries when deciding whether a metadata edit is warranted.

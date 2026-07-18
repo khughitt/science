@@ -82,6 +82,23 @@ science graph attention-rank
 science graph attention-rank --kind proposition --limit 20
 ```
 
+`science entity rotation` is the coverage *floor* that complements
+`attention-rank`'s weighted queue. It ranks the reviewable corpus — the same
+domain `entity review` resolves — least-recently-reviewed first and prints an
+adaptive per-sweep budget, so the least-recently-touched entities are read first.
+It is stateless and read-only, advisory like the other attention surfaces: it
+selects but never reviews, so a selected row only leaves the least-recently-
+reviewed prefix once you stamp it with `science entity review <ref> --note ...`.
+It reaches full coverage in a bounded number of sweeps only when each sweep both
+completes its budget and stamps reviews with a date strictly later than the
+corpus's current maximum `last_reviewed`; the two tools are complementary —
+attention biases toward what changed, rotation drives floor coverage.
+
+```bash
+science entity rotation
+science entity rotation --all --format json
+```
+
 `science entity review` requires a review artifact through `--note`. A review
 should record what was inspected and what changed, not merely bump a timestamp.
 Programmatic callers can still use the lower-level review function without the
