@@ -232,14 +232,21 @@ def _call_sites(target: str) -> set[tuple[str, str]]:
 
 
 def test_the_unrestricted_MECHANISM_has_exactly_the_call_sites_we_sanctioned() -> None:
-    # `_prepare_write(project_root, ref, fields: Mapping)` CAN set `superseded_by` -- it is the
-    # mechanism, and a mechanism that could not set a derived field would be useless to the thing
-    # that derives it. The guarantee is not that it refuses; it is that the only caller supplying
-    # that key is the one that DERIVES it from an admitted edge. So pin the call sites BY NAME: a
-    # third one is how this arrangement would quietly stop being true.
+    # `_prepare_write_with_date(project_root, ref, fields: Mapping, *, updated_default)` CAN set
+    # `superseded_by` -- it is the mechanism, and a mechanism that could not set a derived field would
+    # be useless to the thing that derives it. The guarantee is not that it refuses; it is that the
+    # only caller supplying that key is the one that DERIVES it from an admitted edge. So pin the call
+    # sites BY NAME: a third one is how this arrangement would quietly stop being true.
+    #
+    # `_prepare_write` is now a thin, DATE-INJECTING wrapper over the mechanism above -- it exists so
+    # `edit_entity` (which has no plan-preview date to inject) keeps its historical "today" behavior --
+    # so it is pinned separately, to exactly the one caller that still needs it.
+    assert _call_sites("_prepare_write_with_date") == {
+        ("entities.py", "_prepare_write"),  # the legacy wrapper -- injects today's date
+        ("consolidation.py", "_prepare_supersession"),  # derived -- reads it off the graph
+    }
     assert _call_sites("_prepare_write") == {
         ("entities.py", "edit_entity"),  # authored -- cannot express the field
-        ("consolidation.py", "_prepare_supersession"),  # derived -- reads it off the graph
     }
 
 
