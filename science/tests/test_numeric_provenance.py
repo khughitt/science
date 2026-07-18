@@ -72,3 +72,9 @@ def test_resolution_index_resolves_real_refs_and_rejects_fakes(tmp_path):
     assert idx.resolve("results/qap.json") is True
     assert idx.resolve("results/invented.json") is False   # finding 5
     assert idx.resolve("https://example.org/x") is True
+
+
+def test_resolution_index_rejects_absolute_and_traversal_paths(tmp_path):
+    idx = build_resolution_index(_project(tmp_path))
+    assert idx.resolve("/etc/hostname") is False
+    assert idx.resolve("../../etc/passwd") is False

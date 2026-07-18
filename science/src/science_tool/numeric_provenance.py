@@ -216,7 +216,13 @@ class ResolutionIndex:
             return ref.split(":")[-1] in self.pmid_corpus
         if _TYPED_REF_RE.match(ref):
             return ref in self.entity_ids
-        # Treat anything else as a candidate artifact path.
+        # Treat anything else as a candidate artifact path. Reject non-relative
+        # paths outright: `Path(base) / ref` silently discards `base` when `ref`
+        # is absolute, and `..` segments can escape the project root — a
+        # fabricated/malicious absolute or traversal ref must never resolve.
+        candidate = Path(ref)
+        if candidate.is_absolute() or ".." in candidate.parts:
+            return False
         for base in (self.project_root, self.data_root):
             if (base / ref).is_file():
                 return True
