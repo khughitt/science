@@ -4,9 +4,9 @@ import hashlib
 import os
 import stat
 from pathlib import Path
-from typing import Literal
+from typing import Annotated, Literal
 
-from pydantic import BaseModel, ConfigDict, model_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 
 class UnsupportedPathType(RuntimeError):
@@ -103,3 +103,56 @@ class PathTransition(BaseModel):
         if self.role == "created-dir" and self.post.type != "dir":
             raise ValueError("created-dir post must be a directory")
         return self
+
+
+def _canonical_nonempty(values: list[str]) -> list[str]:
+    if not values:
+        raise ValueError("explicit selection list must be non-empty")
+    if len(set(values)) != len(values):
+        raise ValueError("explicit selection list must be unique")
+    if list(values) != sorted(values):
+        raise ValueError("explicit selection list must be canonically (sorted) ordered")
+    return values
+
+
+class ArchiveStatusSweep(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    kind: Literal["all_by_status"]
+    statuses: list[str]
+
+    @field_validator("statuses")
+    @classmethod
+    def _v(cls, v: list[str]) -> list[str]:
+        return _canonical_nonempty(v)
+
+
+class ExplicitArchiveIds(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    kind: Literal["explicit_ids"]
+    ids: list[str]
+    allowed_statuses: list[str]
+
+    @field_validator("ids", "allowed_statuses")
+    @classmethod
+    def _v(cls, v: list[str]) -> list[str]:
+        return _canonical_nonempty(v)
+
+
+class AllSupersessionMembers(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    kind: Literal["all"]
+
+
+class ExplicitSupersessionIds(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    kind: Literal["explicit_ids"]
+    ids: list[str]
+
+    @field_validator("ids")
+    @classmethod
+    def _v(cls, v: list[str]) -> list[str]:
+        return _canonical_nonempty(v)
+
+
+ArchiveSelection = Annotated[ArchiveStatusSweep | ExplicitArchiveIds, Field(discriminator="kind")]
+SupersedeSelection = Annotated[AllSupersessionMembers | ExplicitSupersessionIds, Field(discriminator="kind")]

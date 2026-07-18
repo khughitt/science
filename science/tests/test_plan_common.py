@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib as _hashlib
 import hashlib
 import os
 from pathlib import Path
@@ -8,6 +9,8 @@ import pytest
 
 from science_tool.plan_common import (
     StateFingerprint, UnsupportedPathType, fingerprint, matches,
+    ArchiveStatusSweep, ExplicitArchiveIds, AllSupersessionMembers, ExplicitSupersessionIds,
+    PathTransition,
 )
 
 
@@ -94,11 +97,6 @@ def test_state_fingerprint_rejects_incoherent_combinations(kwargs: dict) -> None
         StateFingerprint(**kwargs)  # type: ignore[arg-type]
 
 
-import hashlib as _hashlib
-
-from science_tool.plan_common import PathTransition
-
-
 def _file_fp(content: str) -> StateFingerprint:
     return StateFingerprint(existed=True, type="file",
                             content_sha256=_hashlib.sha256(content.encode()).hexdigest(),
@@ -136,3 +134,20 @@ def test_created_dir_has_no_postimage_and_absent_pre() -> None:
     with pytest.raises(ValueError):
         PathTransition(role="created-dir", rel_path="entities/_archive/x",
                        pre=_absent_fp(), post=dir_post, postimage="oops")
+
+
+def test_explicit_ids_reject_empty_and_unsorted_and_duplicate() -> None:
+    with pytest.raises(ValueError):
+        ExplicitSupersessionIds(kind="explicit_ids", ids=[])
+    with pytest.raises(ValueError):
+        ExplicitSupersessionIds(kind="explicit_ids", ids=["b:2", "a:1"])  # unsorted
+    with pytest.raises(ValueError):
+        ExplicitSupersessionIds(kind="explicit_ids", ids=["a:1", "a:1"])  # duplicate
+    ok = ExplicitSupersessionIds(kind="explicit_ids", ids=["a:1", "b:2"])
+    assert ok.ids == ["a:1", "b:2"]
+
+
+def test_archive_status_sweep_and_explicit_ids_shapes() -> None:
+    ArchiveStatusSweep(kind="all_by_status", statuses=["archived", "superseded"])
+    ExplicitArchiveIds(kind="explicit_ids", ids=["x:1"], allowed_statuses=["superseded"])
+    AllSupersessionMembers(kind="all")
