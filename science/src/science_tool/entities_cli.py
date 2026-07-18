@@ -583,6 +583,66 @@ def entity_needs_review(output_format: str) -> None:
     )
 
 
+@entity_group.command("rotation")
+@click.option(
+    "--all",
+    "show_all",
+    is_flag=True,
+    default=False,
+    help="Show the whole ranked queue, not just this sweep's budget.",
+)
+@click.option("--format", "output_format", type=click.Choice(OUTPUT_FORMATS), default="table", show_default=True)
+def entity_rotation(show_all: bool, output_format: str) -> None:
+    """Rank the reviewable corpus least-recently-reviewed first, printing this sweep's budget.
+
+    Advisory and stateless: it reviews nothing. Review a listed entity with
+    `science entity review <ref> --note ...`. Rotation reaches full coverage in a
+    bounded number of sweeps only when each sweep both completes its budget AND stamps
+    its reviews with a date strictly later than the corpus's current maximum
+    last_reviewed; completing the budget alone does not guarantee coverage.
+    """
+    from datetime import date
+
+    from science_tool.curate.rotation import RotationError, select_rotation
+
+    try:
+        result = select_rotation(Path.cwd(), today=date.today())
+    except (EntityCommandError, RotationError) as exc:
+        raise click.ClickException(str(exc)) from exc
+
+    shown = result.rows if show_all else result.rows[: result.budget]
+    coverage_clause = f" (coverage: {result.coverage_rounds} sweeps)" if result.coverage_rounds else ""
+    title = f"rotation — {result.budget} of {result.pool_size}{coverage_clause}"
+
+    def _never(value: object, _row: object) -> str:
+        return "never" if value is None else str(value)
+
+    def _selected(value: object, _row: object) -> str:
+        return "✓" if value else ""
+
+    emit_query_rows(
+        output_format=output_format,
+        title=title,
+        columns=[
+            ("rank", "#"),
+            ("id", "ID"),
+            ("last_reviewed", "Last reviewed"),
+            ("age_days", "Age (days)"),
+            ("selected", "Sweep"),
+            ("freshness", "Freshness"),
+        ],
+        rows=shown,
+        meta={
+            "pool_size": result.pool_size,
+            "budget": result.budget,
+            "displayed": len(shown),
+            "coverage_rounds": result.coverage_rounds,
+            "graph_source": result.graph_source,
+        },
+        renderers={"last_reviewed": _never, "age_days": _never, "selected": _selected},
+    )
+
+
 def _emit_entity_removal_plan(plan: EntityRemovalPlan, *, applied: bool) -> None:
     action = "Removed" if applied else "DRY RUN"
     click.echo(f"{action} {plan.entity_id}")
