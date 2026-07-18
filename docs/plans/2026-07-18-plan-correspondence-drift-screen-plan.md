@@ -30,7 +30,7 @@ Move `probe`/`extract`/`adjudicate` out of the study package into a production p
 
 **Files:**
 - Create: `science/src/science_tool/correspondence/__init__.py`
-- Create: `science/src/science_tool/correspondence/probe.py` (from `drift_sample/probe.py`, verbatim)
+- Create: `science/src/science_tool/correspondence/probe.py` (from `drift_sample/probe.py`; logic verbatim, docstring first line corrected in Step 2a)
 - Create: `science/src/science_tool/correspondence/extract.py` (from `drift_sample/extract.py`; logic verbatim, one docstring paragraph corrected in Step 2a)
 - Create: `science/src/science_tool/correspondence/adjudicate.py` (`Adjudicated` + `adjudicate`, lifted from `drift_sample/score.py`)
 - Delete: `science/src/science_tool/drift_sample/probe.py`, `science/src/science_tool/drift_sample/extract.py`
@@ -65,10 +65,15 @@ git mv src/science_tool/drift_sample/probe.py src/science_tool/correspondence/pr
 git mv src/science_tool/drift_sample/extract.py src/science_tool/correspondence/extract.py
 ```
 
-The modules have no intra-`drift_sample` imports, so no import edits are needed. One
-docstring correction follows in the next step; the executable logic is unchanged.
+The modules have no intra-`drift_sample` imports, so no import edits are needed. Two
+docstring corrections follow in the next step; the executable logic is unchanged.
 
-- [ ] **Step 2a: Correct the relocated `extract.py` docstring (comment-only)**
+- [ ] **Step 2a: Correct the relocated `probe.py` and `extract.py` docstrings (comment-only)**
+
+`probe.py`'s docstring opens "Tri-state probes against a pinned worktree." In the study the
+worktree was pinned; in production this same code probes the project's **live tree**. Change the
+first line to "Tri-state probes against the project tree." (the `Design §5.2/§6.3` paragraph below
+is unchanged).
 
 `extract.py`'s module docstring currently claims "Under-extraction shows up as
 `indeterminate` (honest)." That is false: extracting *fewer* deliverables than a
@@ -217,7 +222,7 @@ The surviving `normalize`/`verdict`/`manski`/`gate` tests reference `Adjudicated
 
 Run: `cd science && uv run --frozen pytest -q`
 Expected: PASS (same count as before the task, minus zero — tests moved, not removed).
-Run: `uv run pyright && uv run ruff check`
+Run: `cd science && uv run pyright && uv run ruff check`
 Expected: 0 errors.
 
 - [ ] **Step 9: Prove the frozen-study scripts' imports actually RESOLVE**
@@ -670,14 +675,6 @@ from science_tool.validate.result import Result, Severity
 # draft < active < complete. Anything else (terminal, unknown) is off-axis: silent.
 _LIFECYCLE_RANK = {"draft": 0, "active": 1, "complete": 2}
 
-# The rule is derived as f"{kind}.correspondence-drift" so the screen extends to a
-# second correspondence-scoped kind without renaming (design §3 "plans only, extensible").
-# Today only "plan" reaches the emit path, so the emitted rule is always
-# "plan.correspondence-drift" -- the exact literal `EVIDENCE_SCOPED_RULES` (Task 5)
-# and the never-gated guard name.
-_SCREENED_KIND = "plan"
-
-
 def _names(probes: list[Probe], result: ProbeResult) -> str:
     return ", ".join(p.target for p in probes if p.result is result) or "none"
 
@@ -714,7 +711,10 @@ def check_correspondence_drift(ctx: ValidateContext) -> Iterator[Result]:
     for path in iter_entity_markdown(entities_root):
         fm = ctx.frontmatter(path)
         kind, status = fm.get("kind"), fm.get("status")
-        if kind != _SCREENED_KIND or not isinstance(status, str) or not status:
+        # Plans only, by explicit design decision (§3): adding a second correspondence-
+        # scoped kind is a deliberate design task, not a config change. The rule id is
+        # still derived so that task needs no rename here.
+        if kind != "plan" or not isinstance(status, str) or not status:
             continue
         rule = f"{kind}.correspondence-drift"
         claimed_rank = _LIFECYCLE_RANK.get(status)
@@ -869,11 +869,14 @@ def test_stale_signature_entry_does_not_suppress():
     )
 
 
-def test_entry_is_evidence_scoped_requires_a_complete_labeled_token():
-    assert not entry_is_evidence_scoped({"message_contains": "evidence-signature:"})   # label, no hash
-    assert not entry_is_evidence_scoped({"message_contains": "v1:short"})              # malformed hash
-    assert not entry_is_evidence_scoped({"message_contains": _SIG})                    # hash, no label
-    assert entry_is_evidence_scoped({"message_contains": f"x {_LABELED} y"})           # complete token
+def test_entry_is_evidence_scoped_requires_the_exact_token_spelling():
+    assert not entry_is_evidence_scoped({"message_contains": "evidence-signature:"})    # label, no hash
+    assert not entry_is_evidence_scoped({"message_contains": "v1:short"})               # malformed hash
+    assert not entry_is_evidence_scoped({"message_contains": _SIG})                     # hash, no label
+    assert not entry_is_evidence_scoped({"message_contains": f"evidence-signature:{_SIG}"})    # no space
+    assert not entry_is_evidence_scoped({"message_contains": f"evidence-signature:  {_SIG}"})  # two spaces
+    assert not entry_is_evidence_scoped({"message_contains": f"evidence-signature:\n{_SIG}"})  # newline
+    assert entry_is_evidence_scoped({"message_contains": f"x {_LABELED} y"})            # exact token
 
 
 def test_other_rules_are_unaffected_by_evidence_scoping(tmp_path: Path):
@@ -884,6 +887,47 @@ def test_other_rules_are_unaffected_by_evidence_scoping(tmp_path: Path):
     )
     kept = filter_accepted_warnings(tmp_path, [_warn("code.metadata-gap", "x.py", "gap")])
     assert kept == []  # a non-scoped rule still suppresses with a path-only entry
+
+
+# filter_accepted_warnings is the `validate` surface (cli.py:152 _with_accepted_warnings_filtered
+# delegates to it). These exercise the whole filter for the drift rule, not just the predicates.
+
+def _drift_manifest(root: Path, entry_lines: str) -> None:
+    (root / "science.yaml").write_text(
+        "name: f\nprofile: research\nhealth:\n  accepted_validation:\n" + entry_lines,
+        encoding="utf-8",
+    )
+
+
+def _drift_warn() -> Result:
+    return _warn("plan.correspondence-drift", "entities/plans/0001-x.md", f"under-claims ... {_LABELED}")
+
+
+def test_filter_keeps_drift_for_a_path_only_entry(tmp_path: Path):
+    _drift_manifest(
+        tmp_path,
+        '    - rule: "plan.correspondence-drift"\n      path: "entities/plans/0001-x.md"\n'
+        '      reason: "path only"\n',
+    )
+    assert filter_accepted_warnings(tmp_path, [_drift_warn()]) == [_drift_warn()]
+
+
+def test_filter_suppresses_drift_for_a_valid_signature_entry(tmp_path: Path):
+    _drift_manifest(
+        tmp_path,
+        '    - rule: "plan.correspondence-drift"\n      path: "entities/plans/0001-x.md"\n'
+        f'      reason: "input, not a deliverable"\n      message_contains: "{_LABELED}"\n',
+    )
+    assert filter_accepted_warnings(tmp_path, [_drift_warn()]) == []
+
+
+def test_filter_keeps_drift_for_a_stale_signature_entry(tmp_path: Path):
+    _drift_manifest(
+        tmp_path,
+        '    - rule: "plan.correspondence-drift"\n      path: "entities/plans/0001-x.md"\n'
+        '      reason: "stale"\n      message_contains: "evidence-signature: v1:' + "b" * 64 + '"\n',
+    )
+    assert filter_accepted_warnings(tmp_path, [_drift_warn()]) == [_drift_warn()]
 ```
 
 - [ ] **Step 2: Run to verify it fails**
@@ -909,10 +953,11 @@ from science_tool.validate.result import Result, Severity
 
 EVIDENCE_SCOPED_RULES: frozenset[str] = frozenset({"plan.correspondence-drift"})
 
-# The COMPLETE labeled token — a bare `v1:<hex>` or a bare `evidence-signature:` prefix
-# is NOT evidence-scoped. Only `evidence-signature: v1:<64-hex>` counts (design §5.5), so a
-# stray hash-like string in an unrelated message can never accidentally scope an entry.
-_SIGNATURE_RE = re.compile(r"\bevidence-signature:\s*v1:[0-9a-f]{64}\b")
+# The EXACT emitted token — one literal ": " separator, no `\s*`. A bare `v1:<hex>`, a
+# bare `evidence-signature:` prefix, or a variant-whitespace spelling (`:v1:`, two spaces,
+# a newline) is NOT evidence-scoped: it would pass a lax guard yet never substring-match the
+# literal the check emits (`evidence-signature: {signature}`), so it must not qualify (§5.5).
+_SIGNATURE_RE = re.compile(r"\bevidence-signature: v1:[0-9a-f]{64}\b")
 
 
 def accepted_validation_entries(project_root: Path) -> list[dict[str, Any]]:
@@ -1047,7 +1092,7 @@ def filter_accepted_warnings(project_root: Path, results: list[Result]) -> list[
 - [ ] **Step 4: Run the new tests + the existing acceptance callers**
 
 Run: `cd science && uv run --frozen pytest tests/test_acceptance_authority.py -q`
-Expected: PASS (9 tests).
+Expected: PASS (12 tests).
 Run: `cd science && uv run --frozen pytest tests/test_consolidate_acceptance.py tests/test_archive_acceptance.py -q`
 Expected: PASS (no regression in existing `accepted_validation` users).
 
