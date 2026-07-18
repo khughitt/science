@@ -5,6 +5,18 @@ Markdown files with YAML frontmatter and body prose. The frontmatter provides
 machine-readable identity and relationships; the body provides human-readable
 context.
 
+## Figure Key
+
+The figures in this guide share one visual vocabulary. Color marks an entity's
+**class**; shape reinforces its **kind family** and the label names the exact
+kind. Derived state (belief, snapshots, the graph) is drawn in slate with a
+`derived` badge — never as authored source.
+
+<figure markdown="span">
+--8<-- "figures/f0-vocabulary.svg"
+<figcaption>Entity vocabulary reader's key.</figcaption>
+</figure>
+
 ## Entity Shape
 
 ```markdown

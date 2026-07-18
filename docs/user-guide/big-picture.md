@@ -10,6 +10,11 @@ This chapter is not the same as [Big-Picture Synthesis](big-picture-synthesis.md
 generated per-project report produced by `/science:big-picture` from a project's
 own authored sources.
 
+!!! info "How to read the figures"
+    Diagrams in this guide share one visual vocabulary — see the
+    [figure key](entities.md#figure-key). Color marks entity class, shape marks
+    kind family, and derived state is drawn in slate with a `derived` badge.
+
 ## Stance
 
 Science is skeptical and data-driven by default. The creed:
