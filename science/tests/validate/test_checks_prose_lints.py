@@ -110,7 +110,7 @@ def test_strict_numeric_anchor_emits_warn_message(tmp_path: Path) -> None:
             Severity.WARN,
             Path("doc/note.md"),
             1,
-            "numeric claim '123' has no anchor in this paragraph",
+            "numeric claim '123' has no resolvable source",
             "prose_lints.numeric-anchor",
         )
     ]
@@ -230,7 +230,7 @@ def test_strict_include_all_checks_promotes_disabled_info_lints(tmp_path: Path) 
         Severity.WARN,
         Path("doc/note.md"),
         1,
-        "numeric claim '123' has no anchor in this paragraph",
+        "numeric claim '123' has no resolvable source",
         "prose_lints.numeric-anchor",
     ) in _located_summary(results)
 
