@@ -73,6 +73,9 @@ DEFAULT_ANCHOR_PATTERNS: list[str] = [
     "scripts/",
 ]
 
+DEFAULT_SPEC_CLASS_KINDS: list[str] = ["pre-registration", "plan"]
+DEFAULT_PROVENANCE_FIELDS: list[str] = ["source_refs", "task_links", "input"]
+
 
 class ProseLintConfig(BaseModel):
     """Configuration for `science prose lint`."""
@@ -81,6 +84,12 @@ class ProseLintConfig(BaseModel):
 
     enabled_checks: list[str] | None = None
     anchor_patterns: list[str] = Field(default_factory=lambda: list(DEFAULT_ANCHOR_PATTERNS))
+    # Additive vocabulary merged on top of whatever `anchor_patterns` resolves to.
+    # Unlike `anchor_patterns` (a full-override escape hatch), this always applies,
+    # so shared vocabulary reaches projects that have overridden anchor_patterns.
+    additional_anchor_patterns: list[str] = Field(default_factory=list)
+    spec_class_kinds: list[str] = Field(default_factory=lambda: list(DEFAULT_SPEC_CLASS_KINDS))
+    provenance_fields: list[str] = Field(default_factory=lambda: list(DEFAULT_PROVENANCE_FIELDS))
     exclude_paths: list[str] = Field(default_factory=list)
     short_form_ids_deny: list[str] = Field(default_factory=list)
     bare_author_year_deny: list[str] = Field(default_factory=list)
