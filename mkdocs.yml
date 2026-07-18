@@ -67,20 +67,25 @@ validation:
 
 nav:
   - Home: index.md
-  - Introduction: introduction.md
-  - Big Picture: big-picture.md
-  - Science Model: science-model.md
-  - Project Layout: project-layout.md
-  - Entities: entities.md
-  - Epistemic Model: epistemic-model.md
-  - Evidence Lines: evidence-lines.md
-  - Graph And Derived State: graph-and-derived-state.md
-  - Big-Picture Synthesis: big-picture-synthesis.md
-  - Health And Validation: health-and-validation.md
-  - CLI And Workflows: cli-and-workflows.md
-  - Agent Workflows: agent-workflows.md
-  - Codex: codex.md
-  - Feedback And Telemetry: feedback-and-telemetry.md
-  - Benchmarking: benchmarking.md
-  - Project Packaging: project-packaging.md
-  - Cross-Project Work: cross-project-work.md
+  - Getting Started:
+    - Introduction: introduction.md
+    - Big Picture: big-picture.md
+  - Core Model:
+    - Science Model: science-model.md
+    - Project Layout: project-layout.md
+    - Entities: entities.md
+    - Datasets: datasets.md
+    - Epistemic Model: epistemic-model.md
+    - Evidence Lines: evidence-lines.md
+    - Graph And Derived State: graph-and-derived-state.md
+  - Workflows & Tooling:
+    - CLI And Workflows: cli-and-workflows.md
+    - Agent Workflows: agent-workflows.md
+    - Codex: codex.md
+    - Big-Picture Synthesis: big-picture-synthesis.md
+    - Health And Validation: health-and-validation.md
+    - Benchmarking: benchmarking.md
+    - Feedback And Telemetry: feedback-and-telemetry.md
+  - Multi-Project:
+    - Cross-Project Work: cross-project-work.md
+    - Project Packaging: project-packaging.md

@@ -11,11 +11,14 @@ cross-project work.
 
 ## Reading Path
 
-1. Start with [Introduction](introduction.md), then the [Big Picture](big-picture.md).
-2. Read the [Science Model](science-model.md) for the authored-sources-and-derived-views model.
-3. Learn [Project Layout](project-layout.md) and [Entities](entities.md).
-4. Learn the [Epistemic Model](epistemic-model.md) and [Evidence Lines](evidence-lines.md).
-5. Learn [Graph And Derived State](graph-and-derived-state.md), [Big-Picture Synthesis](big-picture-synthesis.md), [Health And Validation](health-and-validation.md), [CLI And Workflows](cli-and-workflows.md), [Agent Workflows](agent-workflows.md), [Codex](codex.md), [Feedback And Telemetry](feedback-and-telemetry.md), [Benchmarking](benchmarking.md), [Project Packaging](project-packaging.md), and [Cross-Project Work](cross-project-work.md).
+The chapters are grouped into four sections in the sidebar — **Getting Started**,
+**Core Model**, **Workflows & Tooling**, and **Multi-Project** — and read well in
+that order:
+
+1. **Getting Started** — [Introduction](introduction.md), then the [Big Picture](big-picture.md).
+2. **Core Model** — the [Science Model](science-model.md), then [Project Layout](project-layout.md), [Entities](entities.md), and [Datasets](datasets.md), then the [Epistemic Model](epistemic-model.md), [Evidence Lines](evidence-lines.md), and [Graph And Derived State](graph-and-derived-state.md).
+3. **Workflows & Tooling** — [CLI And Workflows](cli-and-workflows.md), [Agent Workflows](agent-workflows.md), [Codex](codex.md), [Big-Picture Synthesis](big-picture-synthesis.md), [Health And Validation](health-and-validation.md), [Benchmarking](benchmarking.md), and [Feedback And Telemetry](feedback-and-telemetry.md).
+4. **Multi-Project** — [Cross-Project Work](cross-project-work.md) and [Project Packaging](project-packaging.md).
 
 ## Chapters
 
@@ -25,7 +28,8 @@ cross-project work.
 | [Big Picture](big-picture.md) | Concise conceptual map: stance, substrate, epistemic model, and data model, each linking down to its detailed chapter. |
 | [Science Model](science-model.md) | The big-picture model: authored sources, derived graph views, epistemic neighborhoods, provenance, and federation. |
 | [Project Layout](project-layout.md) | The steady-state filesystem, `science.yaml`, `pyproject.toml`, and source/generated boundaries. |
-| [Entities](entities.md) | What entity files look like, which core entity kinds Science understands, and the dataset lifecycle. |
+| [Entities](entities.md) | The entity file shape, the source-entity CLI, consolidation and archiving, ontologies, and the core entity kinds Science understands. |
+| [Datasets](datasets.md) | Dataset entities end to end: paper usage, gene-set collections, external and derived datasets, runtime state, QA, and split storage. |
 | [Epistemic Model](epistemic-model.md) | Propositions, hypotheses, belief, and uncertainty. |
 | [Evidence Lines](evidence-lines.md) | How to author durable support or dispute with provenance, role, strength, and independence. |
 | [Graph And Derived State](graph-and-derived-state.md) | How authored files become graph state, summaries, snapshots, and reports. |
