@@ -93,6 +93,11 @@ class ValidateContext:
         return self._yaml_cache[key]
 
     def _split(self, path: Path) -> tuple[dict[str, Any], str]:
+        # `read_text_cached` applies universal-newline translation, so `body()` is
+        # LF-normalized rather than byte-verbatim (split_frontmatter's newline="" contract
+        # is intentionally not honored here). That is fine for validation: body() only feeds
+        # regex extraction and validation never rewrites files. Do not "fix" this to newline=""
+        # without checking every read_text_cached consumer.
         key = self._cache_key(path)
         if key not in self._split_cache:
             fm, body = split_frontmatter(self.read_text_cached(key[0]))
