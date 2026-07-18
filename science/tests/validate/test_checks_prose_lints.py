@@ -110,7 +110,7 @@ def test_strict_numeric_anchor_emits_warn_message(tmp_path: Path) -> None:
             Severity.WARN,
             Path("doc/note.md"),
             1,
-            "numeric claim '123' has no anchor in this paragraph",
+            "numeric claim '123' has no resolvable source",
             "prose_lints.numeric-anchor",
         )
     ]
@@ -230,7 +230,7 @@ def test_strict_include_all_checks_promotes_disabled_info_lints(tmp_path: Path) 
         Severity.WARN,
         Path("doc/note.md"),
         1,
-        "numeric claim '123' has no anchor in this paragraph",
+        "numeric claim '123' has no resolvable source",
         "prose_lints.numeric-anchor",
     ) in _located_summary(results)
 
@@ -259,6 +259,40 @@ def test_strict_frontmatter_inline_gap_stays_summary_only(tmp_path: Path) -> Non
             "prose_lints.frontmatter-inline-gap",
         )
     ]
+
+
+def test_config_forwards_additional_anchor_patterns_to_numeric_anchor(tmp_path: Path) -> None:
+    # Parity with tests/test_prose_lint_cli.py::test_additional_anchor_patterns_reach_numeric_anchor —
+    # proves the validate-check caller (not just the CLI) forwards
+    # `additional_anchor_patterns` into the additive merge that reaches the
+    # numeric-anchor engine.
+    from science_tool.validate.checks.prose_lints import check_prose_lints
+
+    _write_doc(
+        tmp_path,
+        "---\nkind: report\n---\n\nGrounded via paper:Foo2024 the value 7.94 holds.\n",
+    )
+
+    results = list(
+        check_prose_lints(
+            _ctx(
+                tmp_path,
+                strict=True,
+                prose_lint="\n".join(
+                    [
+                        "prose_lint:",
+                        "  anchor_patterns:",
+                        "    - 'task:'",
+                        "  additional_anchor_patterns:",
+                        "    - 'paper:'",
+                    ]
+                ),
+            )
+        )
+    )
+
+    # `paper:` is only reachable because it was *additional*, not in anchor_patterns
+    assert all(result.rule != "prose_lints.numeric-anchor" for result in results)
 
 
 def test_registration_includes_prose_lints_after_cross_references() -> None:

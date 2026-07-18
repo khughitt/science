@@ -42,8 +42,13 @@ from typing import TYPE_CHECKING
 
 from science_tool.bibliography import load_bib_author_surnames
 from science_tool.data_root import project_config_path
-from science_tool.project_config import DEFAULT_ANCHOR_PATTERNS, load_project_config
-from science_tool.prose_lint import CHECKS, LintIssue, build_short_form_resolver, scan_root
+from science_tool.project_config import (
+    DEFAULT_ANCHOR_PATTERNS,
+    DEFAULT_PROVENANCE_FIELDS,
+    DEFAULT_SPEC_CLASS_KINDS,
+    load_project_config,
+)
+from science_tool.prose_lint import CHECKS, LintIssue, build_short_form_resolver, merge_anchor_patterns, scan_root
 from science_tool.validate.checks import Check
 from science_tool.validate.result import Result, Severity
 
@@ -70,6 +75,9 @@ def check_prose_lints(ctx: "ValidateContext") -> Iterable[Result]:
     configured_checks: list[str] | None = None
     selected: list[str] | None = None
     anchor_patterns = list(DEFAULT_ANCHOR_PATTERNS)
+    additional_anchor_patterns: list[str] = []
+    spec_class_kinds = list(DEFAULT_SPEC_CLASS_KINDS)
+    provenance_fields = list(DEFAULT_PROVENANCE_FIELDS)
     exclude_paths: list[str] = []
     short_form_ids_deny: list[str] = []
     bare_author_year_deny: list[str] = []
@@ -77,6 +85,9 @@ def check_prose_lints(ctx: "ValidateContext") -> Iterable[Result]:
         config = load_project_config(ctx.project_root)
         if config.prose_lint is not None:
             anchor_patterns = config.prose_lint.anchor_patterns
+            additional_anchor_patterns = config.prose_lint.additional_anchor_patterns
+            spec_class_kinds = config.prose_lint.spec_class_kinds
+            provenance_fields = config.prose_lint.provenance_fields
             configured_checks = config.prose_lint.enabled_checks
             if not ctx.include_all_checks:
                 selected = configured_checks
@@ -84,6 +95,7 @@ def check_prose_lints(ctx: "ValidateContext") -> Iterable[Result]:
             short_form_ids_deny = config.prose_lint.short_form_ids_deny
             bare_author_year_deny = config.prose_lint.bare_author_year_deny
 
+    effective_anchor_patterns = merge_anchor_patterns(anchor_patterns, additional_anchor_patterns)
     effective_checks = selected if selected is not None else list(CHECKS)
     # The resolver doubles as the alias map for frontmatter-inline-gap (a body
     # mention via a project shorthand satisfies a canonical `related:` entry),
@@ -104,7 +116,9 @@ def check_prose_lints(ctx: "ValidateContext") -> Iterable[Result]:
         ctx.project_root,
         checks=selected,
         strict=ctx.strict,
-        anchor_patterns=anchor_patterns,
+        anchor_patterns=effective_anchor_patterns,
+        spec_class_kinds=spec_class_kinds,
+        provenance_fields=provenance_fields,
         exclude_paths=exclude_paths,
         short_form_ids_deny=short_form_ids_deny,
         resolver=resolver,

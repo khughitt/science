@@ -1,0 +1,17 @@
+{
+ "project": "seq-feats",
+ "n": 40,
+ "by_origin": {"internal-result": 24, "external-cite": 5, "stipulated-param": 6, "structural": 5, "ambiguous": 0},
+ "by_category": {"count": 4, "sample-size-N": 0, "statistic": 21, "percentage": 2, "threshold-cutoff": 6, "parameter": 5, "measurement": 0, "estimate": 0, "date-version": 0, "identifier": 1, "other": 1},
+ "by_traceability": {"frontmatter-source-covers": 9, "cited-elsewhere-in-doc": 20, "truly-orphaned": 11},
+ "handwavy": 0,
+ "notable_examples": [
+  {"number": "0.560", "snippet": "residualized LR AUC dropped ... to 0.560 to 0.514 for Caduceus", "origin": "internal-result", "category": "statistic", "traceability": "truly-orphaned", "why": "Manuscript prose reports own computed AUCs with no inline task/citation anchor; provenance exists in project tasks but not recoverable from this doc."},
+  {"number": "0.522", "snippet": "T1 token-freq AUC is 0.489 (SP) and 0.522 (TMR) - indistinguishable from chance", "origin": "internal-result", "category": "statistic", "traceability": "frontmatter-source-covers", "why": "Interpretation title names task (t030); computed statistic, lint false positive."},
+  {"number": "5,930", "snippet": "predicts 5,930 human ... functional genomic tracks", "origin": "external-cite", "category": "count", "traceability": "cited-elsewhere-in-doc", "why": "Value from the AlphaGenome paper being summarized; doc carries citation, just not in-paragraph."},
+  {"number": "0.05", "snippet": "If A1 permutation p > 0.05 for DNABERT-2 T3C", "origin": "stipulated-param", "category": "threshold-cutoff", "traceability": "truly-orphaned", "why": "Pre-registered alpha level chosen by author; benign design orphan, not a data claim needing a source."},
+  {"number": "768", "snippet": "maps 4096-d token-frequency vectors to 768-d embeddings (DNABERT-2)", "origin": "structural", "category": "parameter", "traceability": "truly-orphaned", "why": "DNABERT-2 hidden dimension quoted structurally; self-evident model spec, benign orphan."},
+  {"number": "4,096", "snippet": "6-mer vocabulary covers all 4^6 = 4,096 possible hexamers", "origin": "structural", "category": "count", "traceability": "cited-elsewhere-in-doc", "why": "Self-justifying combinatorial fact (4^6) shown in-paragraph; doc also carries task/citation flags."}
+ ],
+ "observations": "Internal-result dominates (24/40), overwhelmingly AUC/R2/delta statistics (statistic=21). Interpretation/question entities whose title or filename names a task (t0NN) are systematic lint false positives -> frontmatter-source-covers (9). truly-orphaned (11) clusters in three benign or doc-local pools: (a) manuscript prose (results-act1.md) restating own AUCs with zero inline anchors (12,17,20,29) - the only real doc-level gaps; (b) author-stipulated thresholds/alphas (0.55, 0.10, 0.05); (c) structural model dims / phase labels (768, 768, Phase 2.5). External-cite numbers all live in paper/topic docs carrying citations. A better check should exempt structural model-dims and stipulated design params, credit title/filename task-IDs and inline (tNNN) mentions as anchors, and focus the genuine signal on narrative/manuscript docs that restate computed statistics without task provenance."
+}

@@ -14,13 +14,16 @@ import re
 from dataclasses import dataclass
 from fnmatch import fnmatch
 from pathlib import Path
-from typing import Callable
+from typing import TYPE_CHECKING, Callable
 
 from science_tool.markdown_utils import (
     is_fence_line,
     frontmatter_span,
     strip_inline_code,
 )
+
+if TYPE_CHECKING:
+    from science_tool.numeric_provenance import ResolutionIndex
 
 logger = logging.getLogger(__name__)
 
@@ -497,110 +500,64 @@ def detect_numeric_anchor(
     *,
     strict: bool = False,
     anchor_patterns: list[str] | None = None,
+    resolution_index: "ResolutionIndex | None" = None,
+    spec_class_kinds: list[str] | None = None,
+    provenance_fields: list[str] | None = None,
 ) -> list[LintIssue]:
-    """Flag numeric claims in body prose without an anchor token in the same paragraph.
+    """Flag numeric claims that lack resolvable provenance (Part A).
 
-    `anchor_patterns` is a list of regex fragments. A claim is considered
-    anchored if any pattern matches anywhere in the same paragraph (lines
-    separated by blank lines).
+    Thin adapter over `numeric_provenance.assess_numeric_claims`: emits a
+    LintIssue for each Unanchored assessment with no weak local evidence.
     """
-    if anchor_patterns is None:
-        from science_tool.project_config import DEFAULT_ANCHOR_PATTERNS  # noqa: PLC0415
+    from science_tool.numeric_provenance import (  # noqa: PLC0415
+        NumericProvenanceConfig,
+        Unanchored,
+        assess_numeric_claims,
+        build_document_context,
+        build_resolution_index,
+    )
+    from science_tool.project_config import (  # noqa: PLC0415
+        DEFAULT_ANCHOR_PATTERNS,
+        DEFAULT_PROVENANCE_FIELDS,
+        DEFAULT_SPEC_CLASS_KINDS,
+    )
+    from science_model.frontmatter import nearest_project_root  # noqa: PLC0415
 
-        anchor_patterns = list(DEFAULT_ANCHOR_PATTERNS)
-    anchor_re = re.compile("|".join(anchor_patterns)) if anchor_patterns else None
-
-    try:
-        text = path.read_text(encoding="utf-8")
-    except (OSError, UnicodeDecodeError):
+    document = build_document_context(path)
+    if document is None:
         return []
-    data, body_start = frontmatter_span(path)
-    if _paper_note_has_source_context(path, data) or _interpretation_has_artifact_context(data):
-        return []
-    lines = text.splitlines()
+    if resolution_index is None:
+        root = nearest_project_root(path) or path.parent
+        resolution_index = build_resolution_index(root)
+    config = NumericProvenanceConfig(
+        anchor_patterns=tuple(anchor_patterns if anchor_patterns is not None else DEFAULT_ANCHOR_PATTERNS),
+        spec_class_kinds=frozenset(spec_class_kinds if spec_class_kinds is not None else DEFAULT_SPEC_CLASS_KINDS),
+        provenance_fields=tuple(provenance_fields if provenance_fields is not None else DEFAULT_PROVENANCE_FIELDS),
+    )
     issues: list[LintIssue] = []
-    in_fence = False
-    in_list_item = False
-    # Pre-compute paragraph boundaries (1-based line index → paragraph index).
-    paragraph_id_per_line: list[int] = [0] * (len(lines) + 1)
-    para_id = 0
-    for idx, line in enumerate(lines, start=1):
-        if not line.strip():
-            para_id += 1
-        paragraph_id_per_line[idx] = para_id
-    paragraph_text: dict[int, str] = {}
-    for idx, line in enumerate(lines, start=1):
-        pid = paragraph_id_per_line[idx]
-        paragraph_text[pid] = paragraph_text.get(pid, "") + line + "\n"
-
-    for lineno_zero, raw_line in enumerate(lines):
-        lineno = lineno_zero + 1
-        if lineno < body_start:
-            continue
-        if is_fence_line(raw_line):
-            in_fence = not in_fence
-            continue
-        if in_fence:
-            continue
-        if not raw_line.strip():
-            in_list_item = False
-            continue
-        if _HEADER_OR_LIST_RE.match(raw_line):
-            in_list_item = bool(_LIST_RE.match(raw_line))
-            continue
-        if _BOLD_STRUCTURAL_LABEL_RE.match(raw_line):
-            continue
-        if in_list_item and raw_line.startswith((" ", "\t")):
-            continue
-        in_list_item = False
-        if raw_line.lstrip().startswith("|"):
-            continue
-        line = _mask_numeric_identifier_spans(strip_inline_code(raw_line))
-        crossref_spans = [m.span() for m in _CROSS_REFERENCE_RE.finditer(line)]
-        for match in _NUMERIC_CLAIM_RE.finditer(line):
-            value = match.group(0)
-            if _BARE_YEAR_RE.match(value):
-                continue  # standalone year, not a claim
-            if any(start <= match.start() < end for start, end in crossref_spans):
-                continue  # internal cross-reference (Figure/Section/Table/…)
-            paragraph = paragraph_text[paragraph_id_per_line[lineno]]
-            if anchor_re and anchor_re.search(paragraph):
-                continue
+    for assessment in assess_numeric_claims(document, resolution_index, config):
+        if isinstance(assessment, Unanchored) and not assessment.local_evidence:
             issues.append(
                 LintIssue(
                     file=path,
-                    line=lineno,
-                    col=match.start() + 1,
+                    line=assessment.claim.line,
+                    col=assessment.claim.col,
                     check="numeric-anchor",
                     severity=severity_for("numeric-anchor", strict=strict),
-                    message=f"numeric claim '{value}' has no anchor in this paragraph",
-                    match=value,
+                    message=_numeric_anchor_message(assessment),
+                    match=assessment.claim.value,
                 )
             )
     return issues
 
 
-def _paper_note_has_source_context(path: Path, frontmatter: dict) -> bool:
-    """Paper notes with explicit source identity are already single-source anchored."""
-    parts = path.parts
-    is_paper_path = any(left == "entities" and right == "papers" for left, right in zip(parts, parts[1:]))
-    if not is_paper_path:
-        return False
-    if frontmatter.get("kind") != "paper" and not str(frontmatter.get("id", "")).startswith("paper:"):
-        return False
-    source_refs = frontmatter.get("source_refs")
-    if isinstance(source_refs, list) and any(isinstance(ref, str) and ref.strip() for ref in source_refs):
-        return True
-    return any(
-        isinstance(frontmatter.get(key), str) and frontmatter[key].strip() for key in ("doi", "pmid", "url", "bibkey")
-    )
-
-
-def _interpretation_has_artifact_context(frontmatter: dict) -> bool:
-    """Interpretations with an artifact field are result reports over that artifact."""
-    if frontmatter.get("kind") != "interpretation" and not str(frontmatter.get("id", "")).startswith("interpretation:"):
-        return False
-    return isinstance(frontmatter.get("artifact"), str) and frontmatter["artifact"].strip()
+def _numeric_anchor_message(assessment) -> str:
+    if assessment.kind_hint == "stipulated":
+        return (
+            f"stipulated parameter '{assessment.claim.value}' lacks grounding — "
+            "mark as stipulated or provide resolvable provenance"
+        )
+    return f"numeric claim '{assessment.claim.value}' has no resolvable source"
 
 
 def detect_unsupported_citation_syntax(path: Path, *, strict: bool = False) -> list[LintIssue]:
@@ -761,6 +718,15 @@ def _archived_task_aliases(root: Path) -> dict[str, str]:
         return {}
 
 
+def merge_anchor_patterns(base: list[str], additional: list[str]) -> list[str]:
+    """base + additional, order-preserving, de-duplicated."""
+    merged: list[str] = []
+    for pattern in [*base, *additional]:
+        if pattern not in merged:
+            merged.append(pattern)
+    return merged
+
+
 def build_short_form_resolver(root: Path) -> dict[str, str] | None:
     """Build an alias → canonical-id map for resolver-aware short-form-ids.
 
@@ -795,6 +761,8 @@ def scan_root(
     checks: list[str] | None = None,
     strict: bool = False,
     anchor_patterns: list[str] | None = None,
+    spec_class_kinds: list[str] | None = None,
+    provenance_fields: list[str] | None = None,
     exclude_paths: list[str] | None = None,
     short_form_ids_deny: list[str] | None = None,
     resolver: dict[str, str] | None = None,
@@ -821,12 +789,26 @@ def scan_root(
         for path in _collect_markdown_files(root)
         if not _matches_excluded_path(root, path, exclude_paths or [])
     ]
+    resolution_index = None
+    if "numeric-anchor" in selected:
+        from science_tool.numeric_provenance import build_resolution_index  # noqa: PLC0415
+
+        resolution_index = build_resolution_index(root)
     hits: list[LintIssue] = []
     for path in files:
         for check in selected:
             detector = _DETECTORS[check]
             if check == "numeric-anchor":
-                hits.extend(detector(path, strict=strict, anchor_patterns=anchor_patterns))
+                hits.extend(
+                    detector(
+                        path,
+                        strict=strict,
+                        anchor_patterns=anchor_patterns,
+                        resolution_index=resolution_index,
+                        spec_class_kinds=spec_class_kinds,
+                        provenance_fields=provenance_fields,
+                    )
+                )
             elif check == "short-form-ids":
                 hits.extend(detector(path, strict=strict, deny=short_form_ids_deny, resolver=resolver))
             elif check == "frontmatter-inline-gap":

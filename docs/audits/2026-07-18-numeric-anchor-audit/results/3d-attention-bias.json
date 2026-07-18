@@ -1,0 +1,81 @@
+{
+  "project": "3d-attention-bias",
+  "n": 40,
+  "by_origin": {
+    "internal-result": 19,
+    "external-cite": 6,
+    "stipulated-param": 13,
+    "structural": 1,
+    "ambiguous": 1
+  },
+  "by_category": {
+    "count": 2,
+    "sample-size-N": 3,
+    "statistic": 12,
+    "percentage": 3,
+    "threshold-cutoff": 10,
+    "parameter": 3,
+    "measurement": 5,
+    "estimate": 1,
+    "date-version": 0,
+    "identifier": 1,
+    "other": 0
+  },
+  "by_traceability": {
+    "frontmatter-source-covers": 11,
+    "cited-elsewhere-in-doc": 25,
+    "truly-orphaned": 4
+  },
+  "handwavy": 3,
+  "notable_examples": [
+    {
+      "number": "0.010",
+      "snippet": "The +0.010 F1 effect is genuine (statistically significant, directionally consistent) but modest.",
+      "origin": "internal-result",
+      "category": "statistic",
+      "traceability": "frontmatter-source-covers",
+      "why": "Effect size produced by t033; the doc title names '(t033)', so the source task is title-declared — a lint false positive."
+    },
+    {
+      "number": "4,096",
+      "snippet": "BPE is applied to multi-species genome data to learn a vocabulary of 4,096 tokens.",
+      "origin": "external-cite",
+      "category": "parameter",
+      "traceability": "frontmatter-source-covers",
+      "why": "Fact from the DNABERT-2 paper; the file IS the Zhou2023 paper summary, so doc identity supplies provenance."
+    },
+    {
+      "number": "80%",
+      "snippet": "the 80% power detectable effect is +0.030 at alpha=0.10 one-sided.",
+      "origin": "stipulated-param",
+      "category": "parameter",
+      "traceability": "cited-elsewhere-in-doc",
+      "why": "Standard power convention chosen by author inside a power calc; conventions like this fire noisily without any real provenance gap."
+    },
+    {
+      "number": "~200",
+      "snippet": "Sample ~200 genomic sequences spanning 4 length scales.",
+      "origin": "stipulated-param",
+      "category": "sample-size-N",
+      "traceability": "truly-orphaned",
+      "why": "Loosely planned N in a design doc with no producing task or source — a genuine (if benign) orphan and handwavy."
+    },
+    {
+      "number": "10%",
+      "snippet": "This would be a lightweight modification affecting only 10% of the layers.",
+      "origin": "ambiguous",
+      "category": "percentage",
+      "traceability": "truly-orphaned",
+      "why": "Author's rough architectural speculation about Evo inside a paper-summary doc; no source, imprecise — genuine handwavy signal."
+    },
+    {
+      "number": "3070",
+      "snippet": "Runs on local RTX 3070 (sequences 17-112 tokens, well under VRAM envelope).",
+      "origin": "structural",
+      "category": "identifier",
+      "traceability": "truly-orphaned",
+      "why": "Hardware model number, not a quantitative claim; needs no provenance — pure lint noise the check should exclude."
+    }
+  ],
+  "observations": "Domain label (cognitive/visual attention) mismatches the actual content: DNA/RNA foundation models and geometric ('3D') attention-bias ML experiments. The dominant flag class is internal effect sizes, F1s, deltas, and pre-registered thresholds inside interpretation/pre-reg docs whose producing task (tNNN) is named in the doc title or body — the lint ignores title/frontmatter task tokens and paper-summary filenames as provenance, driving a very high false-positive rate (~36/40 traceable). Standard statistical conventions (alpha=0.05/0.10, 80% power, t-critical values) and pre-reg decision cutoffs also fire noisily. Truly-orphaned cases are rare and low-value: planned-N guesses, hardware IDs, loose author estimates. Redesign: treat tNNN title/frontmatter tokens and paper-doc identity as valid anchors, whitelist stat conventions and identifiers, and reserve flags for handwavy/planned estimates lacking any task or paper link."
+}

@@ -376,10 +376,34 @@ class TestNumericAnchor:
         assert detect_numeric_anchor(path) == []
 
     def test_no_flag_interpretation_with_artifact_context(self, tmp_path):
+        # Existence-checked: the artifact must actually resolve to clear the claim.
+        (tmp_path / "results").mkdir()
+        (tmp_path / "results" / "sweep.parquet").write_text("")
         path = _write(
             tmp_path,
             "The simulation produced recall 0.555 versus 0.320.\n",
             frontmatter="kind: interpretation\nartifact: results/sweep.parquet",
+        )
+        assert detect_numeric_anchor(path) == []
+
+    def test_interpretation_with_missing_artifact_now_flags(self, tmp_path):
+        # existence-checking: a nonexistent artifact path no longer clears (finding 5)
+        path = _write(
+            tmp_path,
+            "The effect was 7.94 fold.\n",
+            frontmatter="kind: interpretation\nartifact: results/does-not-exist.json",
+        )
+        issues = detect_numeric_anchor(path)
+        assert any(i.match == "7.94" for i in issues)
+
+    def test_interpretation_with_real_artifact_clears(self, tmp_path):
+        (tmp_path / "results").mkdir()
+        (tmp_path / "results" / "real.json").write_text("{}")
+        (tmp_path / "science.yaml").write_text("name: demo\n")
+        path = _write(
+            tmp_path,
+            "The effect was 7.94 fold.\n",
+            frontmatter="kind: interpretation\nartifact: results/real.json",
         )
         assert detect_numeric_anchor(path) == []
 
@@ -498,6 +522,10 @@ class TestNumericAnchor:
         assert [i.match for i in issues] == ["47%"]
 
     def test_no_flag_in_paper_note_with_source_context(self, tmp_path):
+        # Existence-checked: nearest_project_root must find the real project
+        # root (science.yaml) so the DOI corpus built from entities/papers/
+        # actually covers this note's own declared source_refs DOI.
+        (tmp_path / "science.yaml").write_text("name: demo\n")
         paper_dir = tmp_path / "entities" / "papers"
         paper_dir.mkdir(parents=True)
         path = paper_dir / "Smith2024.md"

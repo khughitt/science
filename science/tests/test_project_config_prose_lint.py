@@ -97,3 +97,23 @@ def test_bare_author_year_deny_explicit_list(tmp_path):
     )
     config = load_project_config(tmp_path)
     assert config.prose_lint.bare_author_year_deny == ["IMMULITE 2000", "CDC 2011"]
+
+
+def test_additive_anchor_patterns_default_empty(tmp_path):
+    (tmp_path / "science.yaml").write_text("name: demo\nprose_lint: {}\n")
+    from science_tool.project_config import load_project_config
+    config = load_project_config(tmp_path)
+    assert config.prose_lint.additional_anchor_patterns == []
+    assert config.prose_lint.spec_class_kinds == ["pre-registration", "plan"]
+    assert config.prose_lint.provenance_fields == ["source_refs", "task_links", "input"]
+
+
+def test_additional_anchor_patterns_are_additive(tmp_path):
+    (tmp_path / "science.yaml").write_text(
+        "name: demo\nprose_lint:\n  anchor_patterns: ['task:']\n"
+        "  additional_anchor_patterns: ['paper:', 'cite:']\n"
+    )
+    from science_tool.project_config import load_project_config
+    config = load_project_config(tmp_path)
+    assert config.prose_lint.anchor_patterns == ["task:"]
+    assert config.prose_lint.additional_anchor_patterns == ["paper:", "cite:"]
