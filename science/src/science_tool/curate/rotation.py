@@ -8,14 +8,12 @@ from dataclasses import dataclass
 from datetime import date
 from pathlib import Path
 
-from science_model.identity import CurationScope
-
-from science_tool.entities import CLOSED_LIFECYCLE_STATUSES, load_markdown_entities
-from science_tool.graph.sources import registry_for_project
-
 from rdflib import Dataset
 
-from science_tool.entities import graph_is_stale
+from science_model.identity import CurationScope
+
+from science_tool.entities import CLOSED_LIFECYCLE_STATUSES, graph_is_stale, load_markdown_entities
+from science_tool.graph.sources import registry_for_project
 from science_tool.graph.store import (
     DEFAULT_GRAPH_PATH,
     PROJECT_NS,
