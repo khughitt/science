@@ -4,7 +4,7 @@
 
 **Goal:** Add a deterministic, stateless `science entity rotation` command that ranks a project's reviewable corpus least-recently-reviewed first and prints the adaptive per-sweep budget `n(N)` as the work-list.
 
-**Architecture:** A pure-logic budget function plus a disk-reading selection core in the existing `science_tool/curate/` package (`rotation.py`), composed by `select_rotation`, surfaced by a thin `entity rotation` CLI command in `entities_cli.py`. The corpus is exactly `entity review`'s resolution domain via `load_markdown_entities`; ordering is a total order on `(last_reviewed, created, id)`; a best-effort graph read enriches epistemic rows with freshness. No graph writes, no git.
+**Architecture:** A pure-logic budget function plus a disk-reading selection core in the existing `science_tool/curate/` package (`rotation.py`), composed by `select_rotation`, surfaced by a thin `entity rotation` CLI command in `entities_cli.py`, and wired into `/science:curate` as the coverage floor. The corpus is exactly `entity review`'s resolution domain via `load_markdown_entities`; ordering is a total order on `(last_reviewed, created, id)`; a best-effort graph read enriches **epistemic-scoped** rows with freshness (correspondence rows never carry it). No graph writes, no git.
 
 **Tech Stack:** Python ≥3.11, Click, rdflib, pytest. Package `science/` (`cd science` before any `uv run`).
 
@@ -12,11 +12,12 @@
 
 - Command is `science entity rotation`; core lives in `science_tool/curate/rotation.py` (the **existing** `curate` package — do **not** create a `curation/` package).
 - **Stateless.** Reads entity frontmatter via `load_markdown_entities(project_root)`. No durable state, no sweep-id, no git-history reads, no file writes.
-- **Budget:** `n(0)=0`; `n(N)=N` for `1 ≤ N ≤ N_FULL`; else `min(N, max(1, ceil(ROTATION_B·ln(N) − ROTATION_A)))`. Constants: `ROTATION_A = 12.57`, `ROTATION_B = 11.53`, `N_FULL = 25`. Verified anchors: `n(25)=25`, `n(26)=25`, `n(100)=41`, `n(389)=57`.
+- **Budget:** `n(0)=0`; `n(N)=N` for `1 ≤ N ≤ N_FULL`; else `min(N, max(1, ceil(ROTATION_B·ln(N) − ROTATION_A)))`. A **negative** `pool_size` is a caller bug — raise `ValueError`, never return `0`. Constants: `ROTATION_A = 12.57`, `ROTATION_B = 11.53`, `N_FULL = 25`. Verified anchors: `n(25)=25`, `n(26)=25`, `n(100)=41`, `n(389)=57`.
 - **Order:** ascending `(last_reviewed or DATE_MIN, created or DATE_MIN, id)` where `DATE_MIN = date.min`; never-reviewed and missing-`created` sort first. Total order.
-- **Corpus eligibility (all must hold):** returned by `load_markdown_entities` (registered policy homes routed through the archived-excluding canonical scanner); `curation_scope_for_kind(kind) != CurationScope.NONE`; `status` not in `CLOSED_LIFECYCLE_STATUSES`.
-- **Date coercion:** accept a YAML `date`/`datetime` or a canonical `YYYY-MM-DD` string; missing → `None`; malformed → raise `RotationError` naming entity id, path, and field. Never silently coerce a malformed value to `None`.
-- **Graph enrichment:** single payload-level `meta.graph_source` with first-match precedence `absent → invalid → stale → current`, reusing `graph_is_stale`. Per-row `freshness` populated **only** when `graph_source == "current"`, else `null`; correspondence rows are always `null`.
+- **Corpus eligibility (all must hold):** returned by `load_markdown_entities` (registered policy homes routed through the archived-excluding canonical scanner, so `_archive/` files are never eligible); `curation_scope_for_kind(kind) != CurationScope.NONE`; `status` not in `CLOSED_LIFECYCLE_STATUSES`. The resolved `CurationScope` is preserved on each row (needed by the freshness scope guard).
+- **Date coercion (canonical only):** accept a YAML `date` **object** or a canonical `YYYY-MM-DD` **string** for which `date.fromisoformat(value).isoformat() == value` (round-trip). Reject a `datetime`, and reject noncanonical strings that `date.fromisoformat` happens to accept (`"20260718"`, `"2026-W29-6"`). Missing → `None`; malformed/noncanonical → raise `RotationError` naming entity id, **path**, and field. Never silently coerce a malformed value to `None`.
+- **Graph enrichment (best-effort):** single payload-level `meta.graph_source` with first-match precedence `absent → invalid → stale → current`, reusing `graph_is_stale`. Only the file-existence check may raise `absent`; **every** step after it (parse, staleness, triple extraction) is wrapped so that any exception yields `("invalid", {})`. Per-row `freshness` populated **only** when `graph_source == "current"` **and** the row's `scope is CurationScope.EPISTEMIC`, else `null`; correspondence rows are always `null`.
+- **Curation wiring:** `/science:curate` uses `science entity rotation` as its coverage-*floor* reading set (guaranteeing least-recently-reviewed entities are read), with the weighted attention sample retained as enrichment/alarm input. The command doc and user guide must reflect this.
 - **Output:** via `emit_query_rows`; payload `{"format":"json","meta":{...},"rows":[...]}`. Row keys `id`, `last_reviewed`, `age_days`, `rank`, `selected`, `freshness`. Meta keys `pool_size`, `budget`, `displayed`, `coverage_rounds`, `graph_source`. `coverage_rounds = 0` when `N = 0`. Dynamic table title states `budget of pool_size` plus a coverage clause omitted when `coverage_rounds == 0`. Null dates render `never` in the table; JSON keeps raw `null`.
 - **No `--with-drift` in v1.**
 - Project rules: composition over inheritance; explicit over defensive; fail early; no AI-attribution trailers on commits; **never `git add` `science/uv.lock`** (it drifts on `uv run` and must stay out of every commit).
@@ -73,8 +74,9 @@ def test_rotation_budget_monotone_nondecreasing() -> None:
     assert all(b <= a for b, a in zip(values, values[1:]))
 
 
-def test_rotation_budget_negative_is_zero() -> None:
-    assert rotation_budget(-5) == 0
+def test_rotation_budget_negative_raises() -> None:
+    with pytest.raises(ValueError):
+        rotation_budget(-5)
 ```
 
 - [ ] **Step 2: Run test to verify it fails**
@@ -105,10 +107,10 @@ DATE_MIN = date.min
 def rotation_budget(pool_size: int) -> int:
     """Per-sweep budget n(N). Full-read up to N_FULL, then a sublinear taper,
     clamped to [1, pool_size]; 0 for an empty corpus."""
-    if pool_size <= 0:
-        return 0
+    if pool_size < 0:
+        raise ValueError(f"pool_size must be non-negative, got {pool_size}")
     if pool_size <= N_FULL:
-        return pool_size
+        return pool_size  # covers 0..N_FULL, so n(0)=0
     raw = math.ceil(ROTATION_B * math.log(pool_size) - ROTATION_A)
     return min(pool_size, max(1, raw))
 ```
@@ -135,7 +137,7 @@ git commit -m "feat(curate): adaptive rotation budget formula"
 
 **Interfaces:**
 - Consumes: `DATE_MIN` (Task 1).
-- Produces: `class RotationError(Exception)`; `@dataclass(frozen=True) class EligibleEntity` with fields `id: str`, `kind: str`, `last_reviewed: date | None`, `created: date | None`; and `eligible_corpus(project_root: Path) -> list[EligibleEntity]`.
+- Produces: `class RotationError(Exception)`; `@dataclass(frozen=True) class EligibleEntity` with fields `id: str`, `kind: str`, `scope: CurationScope`, `last_reviewed: date | None`, `created: date | None`; and `eligible_corpus(project_root: Path) -> list[EligibleEntity]`. Also re-exports `CurationScope` (imported here) for Task 4's freshness scope guard.
 
 - [ ] **Step 1: Write the failing test**
 
@@ -197,6 +199,21 @@ def test_eligible_excludes_unregistered_directory(tmp_path: Path) -> None:
     assert ids == {"plan:0001"}
 
 
+def test_eligible_excludes_archive(tmp_path: Path) -> None:
+    root = _make_project(
+        tmp_path,
+        [("entities/plans/0001.md", {"id": "plan:0001", "kind": "plan", "title": "P", "status": "active"})],
+    )
+    # An archived plan under the reserved _archive/ subtree must never be eligible.
+    write_markdown_entity(
+        root,
+        "entities/plans/_archive/old.md",
+        {"id": "plan:old", "kind": "plan", "title": "Old", "status": "active"},
+    )
+    ids = {e.id for e in eligible_corpus(root)}
+    assert ids == {"plan:0001"}
+
+
 def test_eligible_reads_dates(tmp_path: Path) -> None:
     root = _make_project(
         tmp_path,
@@ -217,6 +234,37 @@ def test_eligible_reads_dates(tmp_path: Path) -> None:
     (entity,) = eligible_corpus(root)
     assert entity.created == date(2026, 1, 2)
     assert entity.last_reviewed == date(2026, 5, 6)
+
+
+def test_eligible_accepts_yaml_date_object(tmp_path: Path) -> None:
+    # An unquoted YAML date deserializes to a Python date object, not a string.
+    root = _make_project(
+        tmp_path,
+        [
+            (
+                "entities/plans/0001.md",
+                {"id": "plan:0001", "kind": "plan", "title": "P", "status": "active", "created": date(2026, 3, 4)},
+            )
+        ],
+    )
+    (entity,) = eligible_corpus(root)
+    assert entity.created == date(2026, 3, 4)
+
+
+@pytest.mark.parametrize("bad", ["20260718", "2026-W29-6", "2026-7-8"])
+def test_eligible_rejects_noncanonical_date_strings(tmp_path: Path, bad: str) -> None:
+    root = _make_project(
+        tmp_path,
+        [
+            (
+                "entities/plans/0001.md",
+                {"id": "plan:0001", "kind": "plan", "title": "P", "status": "active", "created": bad},
+            )
+        ],
+    )
+    with pytest.raises(RotationError) as excinfo:
+        eligible_corpus(root)
+    assert "plan:0001" in str(excinfo.value)
 
 
 def test_eligible_missing_dates_are_none(tmp_path: Path) -> None:
@@ -242,7 +290,10 @@ def test_eligible_malformed_date_raises_with_context(tmp_path: Path) -> None:
     with pytest.raises(RotationError) as excinfo:
         eligible_corpus(root)
     message = str(excinfo.value)
-    assert "plan:0001" in message and "created" in message
+    # All three context fields: entity id, path, and field name.
+    assert "plan:0001" in message
+    assert "created" in message
+    assert "0001.md" in message  # path fragment
 ```
 
 - [ ] **Step 2: Run test to verify it fails**
@@ -262,7 +313,7 @@ from __future__ import annotations
 
 import math
 from dataclasses import dataclass
-from datetime import date, datetime
+from datetime import date
 from pathlib import Path
 
 from science_model.identity import CurationScope
@@ -285,6 +336,7 @@ class RotationError(Exception):
 class EligibleEntity:
     id: str
     kind: str
+    scope: CurationScope
     last_reviewed: date | None
     created: date | None
 
@@ -292,28 +344,39 @@ class EligibleEntity:
 def rotation_budget(pool_size: int) -> int:
     """Per-sweep budget n(N). Full-read up to N_FULL, then a sublinear taper,
     clamped to [1, pool_size]; 0 for an empty corpus."""
-    if pool_size <= 0:
-        return 0
+    if pool_size < 0:
+        raise ValueError(f"pool_size must be non-negative, got {pool_size}")
     if pool_size <= N_FULL:
-        return pool_size
+        return pool_size  # covers 0..N_FULL, so n(0)=0
     raw = math.ceil(ROTATION_B * math.log(pool_size) - ROTATION_A)
     return min(pool_size, max(1, raw))
 
 
 def _coerce_date(value: object, *, entity_id: str, path: Path, field: str) -> date | None:
+    """Accept only a YAML date object or a canonical YYYY-MM-DD string. A datetime,
+    or a noncanonical string that date.fromisoformat happens to accept (basic
+    "20260718", week "2026-W29-6"), fails early with entity/path/field context."""
     if value is None:
         return None
-    if isinstance(value, datetime):
-        return value.date()
     if isinstance(value, date):
+        # datetime is a subclass of date; reject it explicitly (fail early).
+        if type(value) is not date:
+            raise RotationError(
+                f"{entity_id} ({path}): field {field!r} must be a date, not a datetime: {value!r}"
+            )
         return value
     if isinstance(value, str):
         try:
-            return date.fromisoformat(value)
+            parsed = date.fromisoformat(value)
         except ValueError as exc:
             raise RotationError(
                 f"{entity_id} ({path}): field {field!r} is not a valid YYYY-MM-DD date: {value!r}"
             ) from exc
+        if parsed.isoformat() != value:
+            raise RotationError(
+                f"{entity_id} ({path}): field {field!r} must be canonical YYYY-MM-DD, got {value!r}"
+            )
+        return parsed
     raise RotationError(
         f"{entity_id} ({path}): field {field!r} must be a date or YYYY-MM-DD string, got {type(value).__name__}"
     )
@@ -326,7 +389,8 @@ def eligible_corpus(project_root: Path) -> list[EligibleEntity]:
     corpus: list[EligibleEntity] = []
     for record in load_markdown_entities(project_root):
         kind = record["kind"]
-        if registry.curation_scope_for_kind(kind) is CurationScope.NONE:
+        scope = registry.curation_scope_for_kind(kind)
+        if scope is CurationScope.NONE:
             continue
         frontmatter = record["frontmatter"]
         status = frontmatter.get("status")
@@ -340,6 +404,7 @@ def eligible_corpus(project_root: Path) -> list[EligibleEntity]:
             EligibleEntity(
                 id=entity_id,
                 kind=kind,
+                scope=scope,
                 last_reviewed=_coerce_date(
                     last_reviewed_raw, entity_id=entity_id, path=path, field="review_state.last_reviewed"
                 ),
@@ -352,7 +417,7 @@ def eligible_corpus(project_root: Path) -> list[EligibleEntity]:
 - [ ] **Step 4: Run test to verify it passes**
 
 Run: `cd science && uv run --frozen pytest tests/test_curate_rotation_corpus.py -v`
-Expected: PASS (6 tests).
+Expected: PASS (9 test functions / 11 cases, counting the 3 parametrized noncanonical-string cases).
 
 - [ ] **Step 5: Run ruff + pyright on the module**
 
@@ -470,6 +535,21 @@ def test_graph_source_current_yields_states(tmp_path: Path) -> None:
     source, states = graph_freshness(root)
     assert source == "current"
     assert states.get("hypothesis:h1") == "needs-review"
+
+
+def test_graph_source_invalid_on_staleness_failure(tmp_path: Path, monkeypatch) -> None:
+    """A parseable graph whose staleness check raises degrades to invalid, not a crash."""
+    root = _project_with_hypothesis_and_task(tmp_path)
+    materialize_graph(root)
+
+    def _boom(*_args: object, **_kwargs: object) -> bool:
+        raise OSError("simulated read failure")
+
+    # Patch the name as bound inside the rotation module (best-effort must catch this).
+    monkeypatch.setattr("science_tool.curate.rotation.graph_is_stale", _boom)
+    source, states = graph_freshness(root)
+    assert source == "invalid"
+    assert states == {}
 ```
 
 - [ ] **Step 2: Run test to verify it fails**
@@ -502,32 +582,37 @@ def graph_freshness(project_root: Path) -> tuple[str, dict[str, str]]:
     Returns (graph_source, states). graph_source has first-match precedence
     absent -> invalid -> stale -> current. states maps canonical entity id to its
     freshnessState literal, and is non-empty only when graph_source == "current".
+
+    Only the file-existence probe can yield "absent"; every step after it (parse,
+    staleness check, triple extraction) is wrapped so that ANY failure degrades to
+    ("invalid", {}) rather than blocking selection. A stale graph is a normal
+    result, not a failure, so it returns before the extraction block.
     """
     graph_path = project_root / DEFAULT_GRAPH_PATH
     if not graph_path.exists():
         return "absent", {}
-    dataset = Dataset()
     try:
+        dataset = Dataset()
         dataset.parse(graph_path, format="trig")
+        if graph_is_stale(project_root, graph_path):
+            return "stale", {}
+        knowledge = dataset.graph(PROJECT_NS["graph/knowledge"])
+        states: dict[str, str] = {}
+        for subject, _, obj in knowledge.triples((None, SCI_NS.freshnessState, None)):
+            canonical_id = canonical_id_from_entity_uri(str(subject))
+            if canonical_id is not None:
+                states[canonical_id] = str(obj)
+        return "current", states
     except Exception:
         return "invalid", {}
-    if graph_is_stale(project_root, graph_path):
-        return "stale", {}
-    knowledge = dataset.graph(PROJECT_NS["graph/knowledge"])
-    states: dict[str, str] = {}
-    for subject, _, obj in knowledge.triples((None, SCI_NS.freshnessState, None)):
-        canonical_id = canonical_id_from_entity_uri(str(subject))
-        if canonical_id is not None:
-            states[canonical_id] = str(obj)
-    return "current", states
 ```
 
-Note: the broad `except Exception` is intentional — any parse/read failure means the graph cannot be trusted, which is exactly the `"invalid"` verdict. Ruff's default rule set does not flag it (BLE001 is not enabled; see `entities.py:932` for the same pattern).
+Note: the broad `except Exception` is intentional — any parse/staleness/read failure means the graph cannot be trusted, which is exactly the `"invalid"` verdict. Ruff's default rule set does not flag it (BLE001 is not enabled; see `entities.py:932` for the same pattern).
 
 - [ ] **Step 4: Run test to verify it passes**
 
 Run: `cd science && uv run --frozen pytest tests/test_curate_rotation_freshness.py -v`
-Expected: PASS (4 tests).
+Expected: PASS (5 tests).
 
 - [ ] **Step 5: Run ruff + pyright**
 
@@ -550,7 +635,7 @@ git commit -m "feat(curate): rotation graph-freshness enrichment reader"
 - Test: `science/tests/test_curate_rotation_select.py`
 
 **Interfaces:**
-- Consumes: `rotation_budget`, `eligible_corpus`, `EligibleEntity`, `DATE_MIN` (Tasks 1-2); `graph_freshness` (Task 3).
+- Consumes: `rotation_budget`, `eligible_corpus`, `EligibleEntity` (with `.scope`), `CurationScope`, `DATE_MIN` (Tasks 1-2, all module-level in `rotation.py`); `graph_freshness` (Task 3).
 - Produces: `@dataclass(frozen=True) class RotationResult` with fields `rows: list[dict]`, `pool_size: int`, `budget: int`, `coverage_rounds: int`, `graph_source: str`; and `select_rotation(project_root: Path, *, today: date) -> RotationResult`. Each row dict has keys `id: str`, `last_reviewed: str | None` (ISO), `age_days: int | None`, `rank: int` (1-based), `selected: bool`, `freshness: str | None`. `rows` is the full ranked queue (length `pool_size`).
 
 - [ ] **Step 1: Write the failing test**
@@ -660,6 +745,42 @@ def test_freshness_null_without_graph(tmp_path: Path) -> None:
     assert result.rows[0]["freshness"] is None
 
 
+def test_correspondence_row_never_gets_freshness(tmp_path: Path, monkeypatch) -> None:
+    """Scope guard: even when the graph is current AND carries a freshnessState for a
+    plan, a correspondence-scoped row's freshness stays null."""
+    root = _make_project(
+        tmp_path,
+        [("entities/plans/0001.md", _plan("0001", created="2026-01-01"))],
+    )
+    monkeypatch.setattr(
+        "science_tool.curate.rotation.graph_freshness",
+        lambda _root: ("current", {"plan:0001": "needs-review"}),
+    )
+    result = select_rotation(root, today=TODAY)
+    assert result.graph_source == "current"
+    assert result.rows[0]["id"] == "plan:0001"
+    assert result.rows[0]["freshness"] is None  # plan is correspondence-scoped
+
+
+def test_epistemic_row_gets_freshness_when_current(tmp_path: Path, monkeypatch) -> None:
+    """An epistemic row is enriched with its freshnessState when the graph is current."""
+    root = _make_project(
+        tmp_path,
+        [
+            (
+                "entities/hypotheses/h1.md",
+                {"id": "hypothesis:h1", "kind": "hypothesis", "title": "H", "status": "active", "created": "2026-01-01"},
+            )
+        ],
+    )
+    monkeypatch.setattr(
+        "science_tool.curate.rotation.graph_freshness",
+        lambda _root: ("current", {"hypothesis:h1": "needs-review"}),
+    )
+    result = select_rotation(root, today=TODAY)
+    assert result.rows[0]["freshness"] == "needs-review"
+
+
 def test_coverage_invariant_ordering(tmp_path: Path) -> None:
     """The n=1 coverage counterexample as an ordering property.
 
@@ -737,7 +858,11 @@ def select_rotation(project_root: Path, *, today: date) -> RotationResult:
                 "age_days": (today - entity.last_reviewed).days if entity.last_reviewed else None,
                 "rank": rank,
                 "selected": rank <= budget,
-                "freshness": states.get(entity.id) if graph_source == "current" else None,
+                "freshness": (
+                    states.get(entity.id)
+                    if graph_source == "current" and entity.scope is CurationScope.EPISTEMIC
+                    else None
+                ),
             }
         )
     return RotationResult(
@@ -748,7 +873,7 @@ def select_rotation(project_root: Path, *, today: date) -> RotationResult:
 - [ ] **Step 4: Run test to verify it passes**
 
 Run: `cd science && uv run --frozen pytest tests/test_curate_rotation_select.py -v`
-Expected: PASS (6 tests).
+Expected: PASS (8 tests).
 
 - [ ] **Step 5: Run ruff + pyright**
 
@@ -871,9 +996,14 @@ def test_rotation_table_renders_never(tmp_path: Path, monkeypatch) -> None:
     assert result.exit_code == 0, result.output
     assert "never" in result.output
     assert "1 of 1" in result.output  # dynamic title carries budget/pool
+    assert "coverage:" in result.output  # nonempty output carries the coverage clause
 
 
-def test_rotation_empty_corpus_no_coverage_clause(tmp_path: Path, monkeypatch) -> None:
+def test_rotation_empty_corpus_table_omits_coverage_clause(tmp_path: Path, monkeypatch) -> None:
+    """Table output only: the coverage clause is omitted when coverage_rounds == 0.
+
+    (JSON never renders a title, so clause omission can only be asserted on the table.)
+    """
     root = tmp_path / "proj"
     (root / "entities").mkdir(parents=True)
     (root / "science.yaml").write_text("name: demo\nknowledge_profiles:\n  local: core\n", encoding="utf-8")
@@ -881,11 +1011,10 @@ def test_rotation_empty_corpus_no_coverage_clause(tmp_path: Path, monkeypatch) -
         root, "entities/datasets/d1.md", {"id": "dataset:d1", "kind": "dataset", "title": "D", "status": "active"}
     )
     monkeypatch.chdir(root)
-    result = CliRunner().invoke(cli_main, ["entity", "rotation", "--format", "json"])
+    result = CliRunner().invoke(cli_main, ["entity", "rotation"])  # table
     assert result.exit_code == 0, result.output
-    payload = json.loads(result.output)
-    assert payload["meta"]["coverage_rounds"] == 0
-    assert payload["rows"] == []
+    assert "0 of 0" in result.output  # dynamic title still carries budget/pool
+    assert "coverage:" not in result.output  # clause omitted when coverage_rounds == 0
 ```
 
 - [ ] **Step 2: Run test to verify it fails**
@@ -911,8 +1040,10 @@ def entity_rotation(show_all: bool, output_format: str) -> None:
     """Rank the reviewable corpus least-recently-reviewed first, printing this sweep's budget.
 
     Advisory and stateless: it reviews nothing. Review a listed entity with
-    `science entity review <ref> --note ...`; rotation guarantees full coverage in a
-    bounded number of sweeps when each sweep's budget is completed.
+    `science entity review <ref> --note ...`. Rotation reaches full coverage in a
+    bounded number of sweeps only when each sweep both completes its budget AND stamps
+    its reviews with a date strictly later than the corpus's current maximum
+    last_reviewed; completing the budget alone does not guarantee coverage.
     """
     from datetime import date
 
@@ -971,6 +1102,114 @@ Expected: ruff clean, pyright 0 errors, full suite green (grep the tail for `fai
 ```bash
 git add science/src/science_tool/entities_cli.py science/tests/test_curate_rotation_cli.py
 git commit -m "feat(curate): add `science entity rotation` CLI command"
+```
+
+---
+
+### Task 6: Wire rotation into `/science:curate` and the user guide
+
+Rotation is the coverage *floor* for the curation sweep; the weighted attention
+sample stays as enrichment/alarm input. This task is documentation only — no
+Python, no tests — but its deliverable is verifiable: the command it references
+must exist (Task 5) and both docs must name it.
+
+**Files:**
+- Modify: `commands/curate.md` (Phase 1 evidence list; Phase 2 triage)
+- Modify: `docs/user-guide/health-and-validation.md` ("Needs Review And Freshness")
+
+**Interfaces:**
+- Consumes: the `science entity rotation` command (Task 5).
+- Produces: nothing importable.
+
+- [ ] **Step 1: Add rotation to the Phase 1 evidence commands in `commands/curate.md`**
+
+In the "gather deterministic evidence" fenced block (the one containing
+`uv run science curate inventory ...`), add this line immediately after the
+`uv run science curate inventory --project-root . --format json` line:
+
+```bash
+uv run science entity rotation --format json
+```
+
+(No `--project-root` flag: like `science tasks list` and `science entity
+needs-review`, rotation reads the current working directory, which the command
+preamble has already set to the project root.)
+
+- [ ] **Step 2: Rewrite the Phase 2 triage reading-set paragraph in `commands/curate.md`**
+
+Replace this paragraph:
+
+```markdown
+Group findings into curation themes and choose a bounded reading set. Use the
+weighted attention sample as the default way to choose epistemic entities for
+close reading; do not collapse the pass to deterministic top-N priority rows.
+Read targeted source artifacts, not the entire corpus.
+```
+
+with:
+
+```markdown
+Group findings into curation themes and choose a bounded reading set in two
+layers:
+
+1. **Coverage floor — `science entity rotation`.** This is the default reading
+   set. It ranks the reviewable corpus least-recently-reviewed first and prints
+   an adaptive per-sweep budget, so the least-recently-reviewed entities are
+   always read and none is starved across sweeps. Read the rows it marks
+   `selected`.
+2. **Enrichment / alarm — the weighted attention sample.** Use
+   `science graph attention-sample` to pull *additional* high-attention
+   epistemic entities into the pass beyond the rotation floor. Attention biases
+   toward what changed or is contested; rotation guarantees floor coverage. They
+   are complementary, not alternatives — do not drop the rotation floor in favor
+   of attention alone.
+
+Read targeted source artifacts, not the entire corpus.
+```
+
+- [ ] **Step 3: Document rotation in `docs/user-guide/health-and-validation.md`**
+
+In the "Needs Review And Freshness" section, immediately after the
+`science graph attention-rank` fenced example block (the one containing
+`science graph attention-rank --kind proposition --limit 20`) and before the
+paragraph beginning `` `science entity review` requires a review artifact ``,
+insert:
+
+````markdown
+`science entity rotation` is the coverage *floor* that complements
+`attention-rank`'s weighted queue. It ranks the reviewable corpus — the same
+domain `entity review` resolves — least-recently-reviewed first and prints an
+adaptive per-sweep budget, so the least-recently-touched entities are read first
+and none is starved across sweeps. It is stateless and read-only, advisory like
+the other attention surfaces. It reaches full coverage in a bounded number of
+sweeps only when each sweep both completes its budget and stamps reviews with a
+date strictly later than the corpus's current maximum `last_reviewed`; the two
+tools are complementary — attention biases toward what changed, rotation
+guarantees floor coverage.
+
+```bash
+science entity rotation
+science entity rotation --all --format json
+```
+````
+
+- [ ] **Step 4: Verify the referenced command exists and both docs name it**
+
+Run:
+
+```bash
+cd science && uv run science entity rotation --help
+cd .. && grep -n "entity rotation" commands/curate.md docs/user-guide/health-and-validation.md
+```
+
+Expected: the `--help` prints the command's usage (exit 0), and `grep` shows the
+new references in both files.
+
+- [ ] **Step 5: Commit**
+
+```bash
+git add commands/curate.md docs/user-guide/health-and-validation.md
+git commit -m "doc(curate): make adaptive rotation the curation coverage floor"
 ```
 
 ---
