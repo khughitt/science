@@ -16,8 +16,10 @@ Every task's requirements implicitly include these — copy exact values verbati
 
 - **Pydantic:** every persisted model sets `model_config = ConfigDict(extra="forbid")`.
 - **Approval envelope is MANDATORY** (design §1). `--apply-plan` requires `--expected-plan-sha256`; it is SHA-256 over the **raw plan-file bytes**, and the file is **read exactly once** into a `raw: bytes` buffer — hash `raw`, then parse `raw` — never reopen the path.
-- **Staged replacement uses `os.replace`**; `os.rename` is reserved for archive src→absent-dst moves and refuses `EXDEV` loudly (design §3.4, §4.3). New files/dirs are `fchmod`/`chmod`'d to the saved `mode` (umask-independent).
-- **Staging path is derived, never trusted from JSON:** `<rel_path>.<staging-token>.tmp`, sibling, contained, unique, created with `O_EXCL` (design §3.2, §3.4).
+- **Staged replacement uses `os.replace`**; `os.rename` is reserved for archive src→absent-dst moves and refuses `EXDEV` loudly (design §3.4, §4.3). A staged file is `fchmod`'d to the saved `mode` on its open descriptor **before** the file `fsync` (umask-independent); created dirs are `chmod`'d to their saved mode.
+- **Staging path is derived, never trusted from JSON:** `<rel_path>.<staging-token>.tmp`, sibling, contained, unique, created with `O_EXCL` (design §3.2, §3.4). Standalone CLI apply generates and reports a unique token; it is never a fixed constant.
+- **Every declared path is resolved through `resolve_within` before any filesystem access** (containment + canonical form; an absolute or `..`-bearing `rel_path` is rejected). Both apply paths authorize the **complete** surface by re-deriving the whole plan and comparing it (writes/moves/transitions/index + `preview_report`) — not a subset of fields (design §3.3, §4.4, §5.5).
+- **Snapshots capture complete pre-state** (existence, type, mode, symlink target, and file bytes), and rollback reconstructs files, directories, and symlinks — never `bytes | None` alone.
 - **The write path keeps `_parse_markdown_file`'s existing normalization** (lstrip leading newlines + line-ending normalization). Only the `updated` default becomes injectable via `preview_date`. Do NOT switch to a body-preserving parser (design §5.4). No "body round-trips byte-for-byte" claim — gate B compares against the **normalized** postimage the legacy writer produces.
 - **The shared preparation function retains all three `_prepare_write` boundary checks:** `_schema_gate_or_raise` (`entities.py:1072`), `_validate_prospective_write` (`entities.py:1075`), `_resolution_check_or_raise` (`entities.py:1083`). Preview, legacy `--apply`, and `--apply-plan` all route through it.
 - **The plan stores a `preview_report` (dry-run semantics), not an execution report.** `applied`/`repaired`/`skipped` are populated only after execution; apply emits a **separate** execution report (design §4.4, §5.5).
@@ -49,7 +51,7 @@ Every task's requirements implicitly include these — copy exact values verbati
 - Test: `science/tests/test_plan_common.py`
 
 **Interfaces:**
-- Produces: `StateFingerprint` (pydantic, fields `existed: bool`, `type: Literal["file","dir","symlink"] | None`, `content_sha256: str | None`, `mode: int | None`, `symlink_target: str | None`); `fingerprint(path: Path) -> StateFingerprint`; `matches(fp: StateFingerprint, path: Path) -> bool`.
+- Produces: `StateFingerprint` (pydantic, fields `existed: bool`, `type: Literal["file","dir","symlink"] | None`, `content_sha256: str | None`, `mode: int | None`, `symlink_target: str | None`; a `model_validator` enforces field coherence per existence/type); `fingerprint(path: Path) -> StateFingerprint` (raises `UnsupportedPathType` for anything that is not a regular file, directory, or symlink — a FIFO/socket/device must never be `read_bytes()`'d); `matches(fp: StateFingerprint, path: Path) -> bool`; `UnsupportedPathType(RuntimeError)`.
 
 - [ ] **Step 1: Write the failing test**
 
@@ -63,7 +65,9 @@ from pathlib import Path
 
 import pytest
 
-from science_tool.plan_common import StateFingerprint, fingerprint, matches
+from science_tool.plan_common import (
+    StateFingerprint, UnsupportedPathType, fingerprint, matches,
+)
 
 
 def test_fingerprint_of_a_file_captures_content_mode_and_type(tmp_path: Path) -> None:
@@ -98,6 +102,24 @@ def test_fingerprint_of_symlink_records_target_not_content(tmp_path: Path) -> No
     assert fp.content_sha256 is None
 
 
+def test_fingerprint_of_directory_records_mode_not_content(tmp_path: Path) -> None:
+    d = tmp_path / "sub"
+    d.mkdir()
+    os.chmod(d, 0o755)
+    fp = fingerprint(d)
+    assert fp.type == "dir"
+    assert fp.content_sha256 is None
+    assert fp.symlink_target is None
+    assert fp.mode == 0o755
+
+
+def test_fingerprint_refuses_unsupported_fs_object(tmp_path: Path) -> None:
+    fifo = tmp_path / "pipe"
+    os.mkfifo(fifo)  # a FIFO would block read_bytes()
+    with pytest.raises(UnsupportedPathType):
+        fingerprint(fifo)
+
+
 def test_matches_is_false_when_content_changes(tmp_path: Path) -> None:
     p = tmp_path / "a.txt"
     p.write_text("hello", encoding="utf-8")
@@ -110,6 +132,25 @@ def test_extra_forbid_on_state_fingerprint() -> None:
     with pytest.raises(ValueError):
         StateFingerprint(existed=False, type=None, content_sha256=None, mode=None,
                          symlink_target=None, bogus=1)  # type: ignore[call-arg]
+
+
+@pytest.mark.parametrize("kwargs", [
+    # present but no type
+    dict(existed=True, type=None, content_sha256=None, mode=0o644, symlink_target=None),
+    # absent but carries attributes
+    dict(existed=False, type=None, content_sha256="x" * 64, mode=None, symlink_target=None),
+    # file without content
+    dict(existed=True, type="file", content_sha256=None, mode=0o644, symlink_target=None),
+    # symlink without target
+    dict(existed=True, type="symlink", content_sha256=None, mode=0o777, symlink_target=None),
+    # dir carrying content
+    dict(existed=True, type="dir", content_sha256="x" * 64, mode=0o755, symlink_target=None),
+    # present without mode
+    dict(existed=True, type="file", content_sha256="x" * 64, mode=None, symlink_target=None),
+])
+def test_state_fingerprint_rejects_incoherent_combinations(kwargs: dict) -> None:
+    with pytest.raises(ValueError):
+        StateFingerprint(**kwargs)  # type: ignore[arg-type]
 ```
 
 - [ ] **Step 2: Run test to verify it fails**
@@ -129,7 +170,11 @@ import stat
 from pathlib import Path
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, model_validator
+
+
+class UnsupportedPathType(RuntimeError):
+    pass
 
 
 class StateFingerprint(BaseModel):
@@ -139,6 +184,28 @@ class StateFingerprint(BaseModel):
     content_sha256: str | None
     mode: int | None
     symlink_target: str | None
+
+    @model_validator(mode="after")
+    def _coherent(self) -> "StateFingerprint":
+        if not self.existed:
+            if any(v is not None for v in
+                   (self.type, self.content_sha256, self.mode, self.symlink_target)):
+                raise ValueError("absent fingerprint must carry all attributes None")
+            return self
+        if self.type is None:
+            raise ValueError("present fingerprint requires a type")
+        if self.mode is None:
+            raise ValueError("present fingerprint requires a mode")
+        if self.type == "file":
+            if self.content_sha256 is None or self.symlink_target is not None:
+                raise ValueError("file fingerprint needs content_sha256 and no symlink_target")
+        elif self.type == "dir":
+            if self.content_sha256 is not None or self.symlink_target is not None:
+                raise ValueError("dir fingerprint carries neither content nor symlink_target")
+        else:  # symlink
+            if self.symlink_target is None or self.content_sha256 is not None:
+                raise ValueError("symlink fingerprint needs symlink_target and no content_sha256")
+        return self
 
 
 def fingerprint(path: Path) -> StateFingerprint:
@@ -154,6 +221,12 @@ def fingerprint(path: Path) -> StateFingerprint:
     if stat.S_ISDIR(st.st_mode):
         return StateFingerprint(existed=True, type="dir", content_sha256=None,
                                 mode=mode, symlink_target=None)
+    if not stat.S_ISREG(st.st_mode):
+        # A FIFO, socket, or device: fail early -- read_bytes() on a FIFO blocks forever,
+        # and none of these are things this transaction machinery ever legitimately touches.
+        raise UnsupportedPathType(
+            f"unsupported filesystem object at {path}: not a regular file, directory, or symlink"
+        )
     sha = hashlib.sha256(path.read_bytes()).hexdigest()
     return StateFingerprint(existed=True, type="file", content_sha256=sha,
                             mode=mode, symlink_target=None)
@@ -243,8 +316,7 @@ Expected: FAIL — `ImportError: cannot import name 'PathTransition'`.
 
 ```python
 # add to science/src/science_tool/plan_common.py
-import hashlib
-from pydantic import model_validator
+# (`hashlib` and `model_validator` are already imported in Task 1's block.)
 
 _STAGED_ROLES = {"entity-rewrite", "archive-index"}
 
@@ -443,6 +515,9 @@ Expected: FAIL — import error.
 
 ```python
 # add to science/src/science_tool/plan_common.py
+import hmac
+
+
 class EnvelopeError(RuntimeError):
     pass
 
@@ -458,14 +533,12 @@ def plan_sha256(raw: bytes) -> str:
 
 def verify_envelope(raw: bytes, expected_sha256: str) -> None:
     actual = plan_sha256(raw)
-    if not hashlib.compare_digest(actual, expected_sha256):
+    if not hmac.compare_digest(actual, expected_sha256):  # constant-time; hashlib has no compare_digest
         raise EnvelopeError(
             "plan bytes do not match --expected-plan-sha256 (approval envelope); "
             "the saved plan was not the one approved"
         )
 ```
-
-Note: `hashlib.compare_digest` is an alias of `hmac.compare_digest`; if the linter objects, `import hmac` and use `hmac.compare_digest`.
 
 - [ ] **Step 4: Run test to verify it passes**
 
@@ -556,8 +629,8 @@ def staged_write(target: Path, postimage: str, mode: int, token: str) -> None:
         with os.fdopen(fd, "wb") as fh:
             fh.write(data)
             fh.flush()
-            os.fsync(fh.fileno())
-        os.chmod(staging, mode)  # O_EXCL mode is umask-masked; force exact bits
+            os.fchmod(fh.fileno(), mode)  # O_EXCL creation mode is umask-masked; force exact bits
+            os.fsync(fh.fileno())         # ...and fsync AFTER the mode is set, on the same fd
         os.replace(staging, target)
         dir_fd = os.open(target.parent, os.O_RDONLY)
         try:
@@ -596,20 +669,37 @@ git commit -m "feat(curation): staged-write (O_EXCL/fchmod/os.replace) + prefix 
 
 ---
 
-### Task 6: Snapshot + ownership-scoped rollback
+### Task 6: Full-state snapshot, ownership-scoped rollback, and structural validation
+
+This task carries three related pieces of the command-agnostic transaction mechanics: a
+snapshot that captures **complete** pre-state (not just bytes), a rollback that reconstructs
+files, directories, and symlinks from it, and the shared structural validator both apply paths
+run before touching the filesystem (containment, canonical rel-path, and declared-vs-derived
+surface equality). They ship together because rollback and the validator both depend on the
+snapshot record and on `resolve_within`.
 
 **Files:**
 - Modify: `science/src/science_tool/plan_common.py`
 - Test: `science/tests/test_plan_common.py`
 
 **Interfaces:**
-- Produces: `snapshot_paths(paths: list[Path]) -> dict[Path, bytes | None]` (bytes, or None if absent); `rollback_transitions(transitions: list[PathTransition], project_root: Path, snapshot: dict[Path, bytes | None]) -> None`. Rollback reverts a path only if live matches its `post`; skips if it matches `pre`; raises `RollbackHalt` otherwise. `RollbackHalt(RuntimeError)`.
+- Produces:
+  - `PathSnapshot` (frozen dataclass: `fp: StateFingerprint`, `content: bytes | None` — bytes only for regular files); `snapshot_paths(paths: list[Path]) -> dict[Path, PathSnapshot]`.
+  - `rollback_transitions(transitions, project_root, snapshot) -> None` — processes transitions in **reverse** order (so a created directory is removed only after the files moved into it are reverted); for each, reverts to `pre` **only if** live matches `post`, skips if live matches `pre`, else raises `RollbackHalt`. Reconstructs files (bytes + exact mode), directories (mkdir + mode, empty-only removal), and symlinks (recreate target). `RollbackHalt(RuntimeError)`.
+  - `resolve_within(project_root: Path, rel_path: str) -> Path` — refuses absolute paths, non-canonical forms (`os.path.normpath` mismatch), `..` escape; returns the contained absolute path. `PathEscape(RuntimeError)`.
+  - `assert_same_surface(declared: list[PathTransition], expected: list[PathTransition]) -> None` — order-independent equality over `(role, rel_path, pre, post, postimage)`; raises `SurfaceMismatch(RuntimeError)`.
+  - `assert_staging_unique(project_root: Path, staged_targets: list[Path], token: str) -> None` — staging paths distinct and contained; raises `StagingError`.
 
 - [ ] **Step 1: Write the failing test**
 
 ```python
 # append to science/tests/test_plan_common.py
-from science_tool.plan_common import RollbackHalt, rollback_transitions, snapshot_paths
+import os as _os
+
+from science_tool.plan_common import (
+    PathEscape, RollbackHalt, SurfaceMismatch, assert_same_surface, assert_staging_unique,
+    resolve_within, rollback_transitions, snapshot_paths,
+)
 
 
 def test_rollback_reverts_a_completed_write_to_pre(tmp_path: Path) -> None:
@@ -625,6 +715,59 @@ def test_rollback_reverts_a_completed_write_to_pre(tmp_path: Path) -> None:
     assert target.read_text(encoding="utf-8") == "OLD"
 
 
+def test_rollback_preserves_non_default_file_mode(tmp_path: Path) -> None:
+    target = tmp_path / "e.md"
+    target.write_text("OLD", encoding="utf-8")
+    _os.chmod(target, 0o640)
+    pre = fingerprint(target)
+    snap = snapshot_paths([target])
+    target.write_text("NEW", encoding="utf-8")
+    _os.chmod(target, 0o644)
+    post = fingerprint(target)
+    t = PathTransition(role="entity-rewrite", rel_path="e.md", pre=pre, post=post, postimage="NEW")
+    rollback_transitions([t], tmp_path, snap)
+    assert (_os.stat(target).st_mode & 0o777) == 0o640  # exact mode restored
+
+
+def test_rollback_restores_symlink_not_a_regular_file(tmp_path: Path) -> None:
+    link = tmp_path / "l"
+    link.symlink_to("t.txt")
+    pre = fingerprint(link)
+    snap = snapshot_paths([link])
+    link.unlink()
+    link.write_text("clobbered-as-file", encoding="utf-8")  # simulate a bad landing
+    post = fingerprint(link)
+    t = PathTransition(role="entity-rewrite", rel_path="l", pre=pre, post=post,
+                       postimage="clobbered-as-file")
+    rollback_transitions([t], tmp_path, snap)
+    assert link.is_symlink()
+    assert _os.readlink(link) == "t.txt"
+
+
+def test_rollback_removes_nested_created_dirs_bottom_up(tmp_path: Path) -> None:
+    # archive-dst moved a file into a freshly created nested dir; rollback removes both.
+    created_outer = tmp_path / "entities" / "_archive"
+    created_inner = created_outer / "interpretations"
+    created_inner.mkdir(parents=True)
+    _os.chmod(created_inner, 0o755)
+    _os.chmod(created_outer, 0o755)
+    moved = created_inner / "x.md"
+    moved.write_text("X", encoding="utf-8")
+    absent = StateFingerprint(existed=False, type=None, content_sha256=None, mode=None, symlink_target=None)
+    dir_fp = StateFingerprint(existed=True, type="dir", content_sha256=None, mode=0o755, symlink_target=None)
+    dst = PathTransition(role="archive-dst", rel_path="entities/_archive/interpretations/x.md",
+                         pre=absent, post=fingerprint(moved))
+    outer = PathTransition(role="created-dir", rel_path="entities/_archive", pre=absent, post=dir_fp)
+    inner = PathTransition(role="created-dir", rel_path="entities/_archive/interpretations",
+                           pre=absent, post=dir_fp)
+    snap = snapshot_paths([tmp_path / t.rel_path for t in (outer, inner, dst)])
+    # declared order is outer, inner, dst; rollback must process dst -> inner -> outer.
+    rollback_transitions([outer, inner, dst], tmp_path, snap)
+    assert not moved.exists()
+    assert not created_inner.exists()
+    assert not created_outer.exists()
+
+
 def test_rollback_halts_on_concurrent_change(tmp_path: Path) -> None:
     target = tmp_path / "e.md"
     target.write_text("OLD", encoding="utf-8")
@@ -636,6 +779,30 @@ def test_rollback_halts_on_concurrent_change(tmp_path: Path) -> None:
     target.write_text("SOMEONE-ELSE", encoding="utf-8")  # matches neither pre nor post
     with pytest.raises(RollbackHalt):
         rollback_transitions([t], tmp_path, snap)
+
+
+def test_resolve_within_rejects_absolute_and_escaping_and_noncanonical(tmp_path: Path) -> None:
+    assert resolve_within(tmp_path, "entities/x/1.md") == tmp_path.resolve() / "entities/x/1.md"
+    for bad in ["/etc/passwd", "../evil", "a/../b", "a/./b", "a//b", "", "sub/"]:
+        with pytest.raises(PathEscape):
+            resolve_within(tmp_path, bad)
+
+
+def test_assert_same_surface_is_order_independent_and_strict() -> None:
+    a = PathTransition(role="created-dir", rel_path="d1", pre=_absent_fp(),
+                       post=StateFingerprint(existed=True, type="dir", content_sha256=None, mode=0o755, symlink_target=None))
+    b = PathTransition(role="created-dir", rel_path="d2", pre=_absent_fp(),
+                       post=StateFingerprint(existed=True, type="dir", content_sha256=None, mode=0o755, symlink_target=None))
+    assert_same_surface([a, b], [b, a])  # no raise
+    with pytest.raises(SurfaceMismatch):
+        assert_same_surface([a], [a, b])
+
+
+def test_assert_staging_unique_flags_collisions(tmp_path: Path) -> None:
+    t1 = tmp_path / "a.md"
+    assert_staging_unique(tmp_path, [t1, tmp_path / "b.md"], "tok")  # no raise
+    with pytest.raises(StagingError):
+        assert_staging_unique(tmp_path, [t1, t1], "tok")
 ```
 
 - [ ] **Step 2: Run test to verify it fails**
@@ -647,22 +814,74 @@ Expected: FAIL — import error.
 
 ```python
 # add to science/src/science_tool/plan_common.py
+from dataclasses import dataclass
+
+
 class RollbackHalt(RuntimeError):
     pass
 
 
-def snapshot_paths(paths: list[Path]) -> dict[Path, bytes | None]:
-    snap: dict[Path, bytes | None] = {}
+class PathEscape(RuntimeError):
+    pass
+
+
+class SurfaceMismatch(RuntimeError):
+    pass
+
+
+@dataclass(frozen=True)
+class PathSnapshot:
+    fp: StateFingerprint
+    content: bytes | None  # regular-file bytes only; None for absent/dir/symlink
+
+
+def snapshot_paths(paths: list[Path]) -> dict[Path, PathSnapshot]:
+    """Capture COMPLETE pre-state: existence, type, mode, symlink target, and (for regular
+    files) the bytes. `bytes | None` alone conflated absent with directory and dropped mode
+    and symlink identity, so rollback could not faithfully reconstruct the tree."""
+    snap: dict[Path, PathSnapshot] = {}
     for p in paths:
-        snap[p] = p.read_bytes() if p.exists() and not p.is_dir() else None
+        fp = fingerprint(p)
+        content = p.read_bytes() if fp.existed and fp.type == "file" else None
+        snap[p] = PathSnapshot(fp=fp, content=content)
     return snap
 
 
+def _remove_live(path: Path) -> None:
+    try:
+        st = os.lstat(path)
+    except FileNotFoundError:
+        return
+    if stat.S_ISDIR(st.st_mode):
+        os.rmdir(path)  # created dirs are empty by the time we reverse-process them
+    else:
+        os.unlink(path)
+
+
+def _materialize(path: Path, snap: PathSnapshot) -> None:
+    _remove_live(path)
+    fp = snap.fp
+    if not fp.existed:
+        return
+    if fp.type == "file":
+        fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, fp.mode or 0o644)
+        with os.fdopen(fd, "wb") as fh:
+            fh.write(snap.content or b"")
+            fh.flush()
+            os.fchmod(fh.fileno(), fp.mode or 0o644)
+            os.fsync(fh.fileno())
+    elif fp.type == "dir":
+        path.mkdir(parents=False, exist_ok=True)
+        os.chmod(path, fp.mode or 0o755)
+    else:  # symlink
+        os.symlink(fp.symlink_target, path)
+
+
 def rollback_transitions(
-    transitions: list[PathTransition], project_root: Path, snapshot: dict[Path, bytes | None]
+    transitions: list[PathTransition], project_root: Path, snapshot: dict[Path, PathSnapshot]
 ) -> None:
-    for t in transitions:
-        path = project_root / t.rel_path
+    for t in reversed(transitions):  # dirs removed only after their moved-in contents revert
+        path = resolve_within(project_root, t.rel_path)
         if matches(t.pre, path):
             continue  # never got written, or already reverted
         if not matches(t.post, path):
@@ -670,23 +889,64 @@ def rollback_transitions(
                 f"live state of {t.rel_path} matches neither pre nor post; "
                 "a concurrent change occurred — refusing to clobber"
             )
-        saved = snapshot.get(path)
-        if saved is None:
-            path.unlink(missing_ok=True)
-        else:
-            path.write_bytes(saved)
+        snap = snapshot.get(path)
+        if snap is None:
+            snap = PathSnapshot(fp=t.pre, content=None)
+        _materialize(path, snap)
+
+
+def resolve_within(project_root: Path, rel_path: str) -> Path:
+    """Resolve rel_path under project_root, refusing absolute paths, `..` escape, and any
+    non-canonical spelling. Called for EVERY declared path before filesystem access, so a
+    plan with an absolute or traversing rel_path cannot reach outside the corpus."""
+    if (
+        rel_path == ""
+        or Path(rel_path).is_absolute()
+        or rel_path != os.path.normpath(rel_path)
+        or rel_path.split("/", 1)[0] == ".."
+    ):
+        raise PathEscape(f"non-canonical or escaping rel_path: {rel_path!r}")
+    root = project_root.resolve()
+    candidate = Path(os.path.normpath(root / rel_path))
+    if candidate != root and root not in candidate.parents:
+        raise PathEscape(f"rel_path escapes project root: {rel_path!r}")
+    return candidate
+
+
+def _surface_key(t: PathTransition) -> tuple[str, str, str, str, str | None]:
+    return (t.role, t.rel_path, t.pre.model_dump_json(), t.post.model_dump_json(), t.postimage)
+
+
+def assert_same_surface(
+    declared: list[PathTransition], expected: list[PathTransition]
+) -> None:
+    if sorted(map(_surface_key, declared)) != sorted(map(_surface_key, expected)):
+        raise SurfaceMismatch(
+            "declared transition surface differs from the freshly derived surface"
+        )
+
+
+def assert_staging_unique(project_root: Path, staged_targets: list[Path], token: str) -> None:
+    root = project_root.resolve()
+    staging = [staging_path_for(t, token) for t in staged_targets]
+    if len(set(staging)) != len(staging):
+        raise StagingError("staging path collision among staged writes")
+    for s in staging:
+        normalized = Path(os.path.normpath(s))
+        if root not in normalized.parents:
+            raise StagingError(f"staging path escapes project root: {s}")
 ```
 
 - [ ] **Step 4: Run test to verify it passes**
 
 Run: `uv run --frozen pytest science/tests/test_plan_common.py -q`
-Expected: PASS.
+Expected: PASS (rollback for file/mode/symlink/nested-dir/halt; `resolve_within`; surface; staging).
 
 - [ ] **Step 5: Commit**
 
 ```bash
 git add science/src/science_tool/plan_common.py science/tests/test_plan_common.py
-git commit -m "feat(curation): ownership-scoped rollback with halt-on-concurrent-change"
+git commit -m "feat(curation): full-state snapshot/rollback + containment & surface validators"
 ```
 
 ---
@@ -756,6 +1016,27 @@ def test_two_invocations_with_same_date_produce_identical_bytes(tmp_path: Path) 
     b = _prepare_write_with_date(tmp_path, "interpretation:0001-x", {"status": "superseded"},
                                  updated_default="2026-07-18")
     assert a.text == b.text
+
+
+def test_write_boundary_is_retained_invalid_status_is_refused(tmp_path: Path) -> None:
+    # Proves the refactor kept the prospective-write boundary (entities.py:1072/1075/1083):
+    # a status the kind cannot carry must still raise, exactly as legacy _prepare_write did.
+    import pytest
+    _seed(tmp_path)
+    with pytest.raises(Exception):
+        _prepare_write_with_date(tmp_path, "interpretation:0001-x",
+                                 {"status": "not-a-real-status"}, updated_default="2026-07-18")
+
+
+def test_prepare_write_legacy_wrapper_injects_today(tmp_path: Path) -> None:
+    # The legacy _prepare_write must still exist and default `updated` to today's date.
+    from datetime import date
+
+    from science_tool.entities import _prepare_write
+    _seed(tmp_path)
+    prepared = _prepare_write(tmp_path, "interpretation:0001-x", {"status": "superseded"})
+    fm = yaml.safe_load(prepared.text.split("---\n", 2)[1])
+    assert fm["updated"] == date.today().isoformat()
 ```
 
 - [ ] **Step 2: Run test to verify it fails**
@@ -870,15 +1151,24 @@ git commit -m "refactor(entities): injectable updated default via _prepare_write
 
 ## Phase 2 — Supersession decision material (`consolidation.py`)
 
-### Task 8: `SupersessionDecisionMaterial` + `build_decision_material` + `decision_digest`
+### Task 8: `SupersessionDecisionMaterial` = the classifier's INPUT projections
+
+**The material is the INPUT to derivation, not a serialization of the graph's OUTPUT.** It must
+be built from `SupersessionInputs` **before any graph exists**, capturing exactly what
+`build_supersedes_graph` reads — the per-entry projections (canonical id, status, kind, authored
+`superseded_by` raw + its canonical resolution), the **admitted supersedes relation stream**
+(`src`, `dst|None`, `source_path` — duplicates preserved, because collapsing to a set is the very
+bug the graph builder's set-vs-list comment warns about), the full defect records, and the
+mutable/archived populations. A digest over this reproduces the whole derivation, including
+`superseded_by_id`, `unbacked_inverses`, `archived_targets`, and `unmanaged_targets` — not just
+the three fields a graph-output serialization would keep.
 
 **Files:**
 - Modify: `science/src/science_tool/consolidation.py`
 - Test: `science/tests/test_decision_material.py`
 
 **Interfaces:**
-- Produces: `SupersessionDecisionMaterial` (pydantic, `extra="forbid"`, `material_version: int`, plus serialized projections of `SupersessionInputs` — entries as `list[tuple[str, str]]` of `(posix_path, canonical_json_of_frontmatter)`, and a stable serialization of `resolution`/`audit` sufficient to rebuild the graph); `build_decision_material(project_root) -> SupersessionDecisionMaterial`; `decision_digest(material) -> str`.
-- Design note (§5.2): the material must be what `build_supersedes_graph` consumes (Task 9 wires that). For this task, capture entries + the admitted supersedes edges + statuses/kinds + archived/mutable populations + invalid defects — everything `build_supersedes_graph` reads off `SupersessionInputs`. Serialize deterministically (sorted, duplicates preserved).
+- Produces: projection models `EntryProjection` (`eid`, `status: str|None`, `kind`, `superseded_by_raw: str|None`, `superseded_by_canonical: str|None`), `EdgeProjection` (`src`, `dst: str|None`, `source_path`), `DefectProjection` (`code`, `path`, `subject`, `predicate`, `object`, `message`); `SupersessionDecisionMaterial` (`material_version`, `entries: list[EntryProjection]`, `admitted_supersedes: list[EdgeProjection]`, `defects: list[DefectProjection]`, `mutable_population: list[str]`, `archived_population: list[str]`); `_project_inputs(inputs: SupersessionInputs) -> SupersessionDecisionMaterial`; `build_decision_material(project_root) -> SupersessionDecisionMaterial` (`= _project_inputs(load_supersession_inputs(project_root))` — **never** calls `build_supersedes_graph`); `decision_digest(material) -> str`.
 
 - [ ] **Step 1: Write the failing test**
 
@@ -890,7 +1180,9 @@ from pathlib import Path
 
 import yaml
 
-from science_tool.consolidation import build_decision_material, decision_digest
+from science_tool.consolidation import (
+    _SUPERSEDES, build_decision_material, decision_digest, load_supersession_inputs,
+)
 
 
 def _seed(root: Path) -> None:
@@ -903,7 +1195,8 @@ def _seed(root: Path) -> None:
         encoding="utf-8",
     )
     (d / "0002-b.md").write_text(
-        "---\nid: interpretation:0002-b\nkind: interpretation\ntitle: B\nstatus: active\n---\nbody\n",
+        "---\nid: interpretation:0002-b\nkind: interpretation\ntitle: B\nstatus: active\n"
+        "superseded_by: interpretation:0001-a\n---\nbody\n",
         encoding="utf-8",
     )
 
@@ -924,6 +1217,38 @@ def test_decision_digest_changes_when_a_material_field_changes(tmp_path: Path) -
     p.write_text("---\n" + yaml.safe_dump(fm, sort_keys=False) + "---\nbody\n", encoding="utf-8")
     after = decision_digest(build_decision_material(tmp_path))
     assert before != after
+
+
+def test_material_captures_authored_superseded_by_not_just_edges(tmp_path: Path) -> None:
+    # 0002-b authors a superseded_by inverse; the material must carry that per-entry projection
+    # so the derived unbacked-inverse rule (Task 9) can be reproduced from the digest alone.
+    _seed(tmp_path)
+    mat = build_decision_material(tmp_path)
+    b = [e for e in mat.entries if e.eid == "interpretation:0002-b"][0]
+    assert b.superseded_by_raw == "interpretation:0001-a"
+    assert b.superseded_by_canonical == "interpretation:0001-a"
+
+
+def test_material_preserves_the_admitted_relation_stream(tmp_path: Path) -> None:
+    # The admitted-edge projection must count admitted relations, NOT a collapsed edge set —
+    # collapsing to a set is the degree-miscount bug the graph builder documents.
+    _seed(tmp_path)
+    inputs = load_supersession_inputs(tmp_path)
+    mat = build_decision_material(tmp_path)
+    assert len(mat.admitted_supersedes) == len(inputs.audit.relations(_SUPERSEDES))
+
+
+def test_build_decision_material_does_not_build_a_graph(monkeypatch, tmp_path: Path) -> None:
+    # Guardrail for finding 2: the material is the INPUT projection; it must not be derived
+    # from the graph OUTPUT.
+    import science_tool.consolidation as c
+    _seed(tmp_path)
+
+    def _boom(*a, **k):
+        raise AssertionError("build_decision_material must not call build_supersedes_graph")
+
+    monkeypatch.setattr(c, "build_supersedes_graph", _boom)
+    build_decision_material(tmp_path)  # must not raise
 ```
 
 - [ ] **Step 2: Run test to verify it fails**
@@ -936,52 +1261,94 @@ Expected: FAIL — import error.
 ```python
 # add to science/src/science_tool/consolidation.py
 import hashlib
-import json
 from pydantic import BaseModel, ConfigDict
 
 _MATERIAL_VERSION = 1
 
 
+class EntryProjection(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    eid: str
+    status: str | None
+    kind: str
+    superseded_by_raw: str | None
+    superseded_by_canonical: str | None
+
+
+class EdgeProjection(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    src: str
+    dst: str | None
+    source_path: str
+
+
+class DefectProjection(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    code: str
+    path: str
+    subject: str
+    predicate: str
+    object: str
+    message: str
+
+
 class SupersessionDecisionMaterial(BaseModel):
     model_config = ConfigDict(extra="forbid")
     material_version: int
-    entries: list[tuple[str, str]]        # (posix_path, canonical_json(frontmatter)), sorted
-    admitted_supersedes: list[tuple[str, str]]  # (superseder, superseded) canonical, sorted, dups kept
-    status_by_id: list[tuple[str, str]]   # (canonical_id, status_or_""), sorted
-    kind_by_id: list[tuple[str, str]]     # (canonical_id, kind), sorted
-    mutable_population: list[str]         # sorted
-    archived_population: list[str]        # sorted
-    invalid: list[str]                    # defect messages, sorted
+    entries: list[EntryProjection]            # canonical order (sorted by eid)
+    admitted_supersedes: list[EdgeProjection] # sorted by (src, dst or "", source_path); DUPS KEPT
+    defects: list[DefectProjection]           # sorted; DUPS KEPT
+    mutable_population: list[str]             # sorted
+    archived_population: list[str]            # sorted
+
+
+def _project_inputs(inputs: SupersessionInputs) -> SupersessionDecisionMaterial:
+    """Serialize exactly what `build_supersedes_graph` reads off `SupersessionInputs`, resolving
+    the two things the classifier needs the resolver for (each entry's canonical id and each
+    authored `superseded_by`'s canonical) so the classifier can run without a resolver. Sorted for
+    a deterministic digest; admitted relations and defects keep duplicates."""
+    resolution = inputs.resolution
+    entries: list[EntryProjection] = []
+    for _path, fm in inputs.entries:
+        eid = resolution.canonical(str(fm["id"])) or str(fm["id"])
+        raw_inverse = fm.get("superseded_by")
+        raw = raw_inverse if isinstance(raw_inverse, str) and raw_inverse else None
+        entries.append(EntryProjection(
+            eid=eid,
+            status=fm.get("status"),
+            kind=_kind_of(eid, fm),
+            superseded_by_raw=raw,
+            superseded_by_canonical=(resolution.canonical(raw) if raw else None),
+        ))
+    edges = [
+        EdgeProjection(src=a.subject.canonical_id, dst=a.object_canonical_id,
+                       source_path=a.relation.source_path)
+        for a in inputs.audit.relations(_SUPERSEDES)
+    ]
+    defects = [
+        DefectProjection(code=d.code, path=d.path, subject=d.subject, predicate=d.predicate,
+                         object=d.object, message=d.message)
+        for d in inputs.audit.defects
+    ]
+    return SupersessionDecisionMaterial(
+        material_version=_MATERIAL_VERSION,
+        entries=sorted(entries, key=lambda e: e.eid),
+        admitted_supersedes=sorted(edges, key=lambda e: (e.src, e.dst or "", e.source_path)),
+        defects=sorted(defects, key=lambda d: (d.code, d.subject, d.predicate, d.object, d.path, d.message)),
+        mutable_population=sorted(resolution.mutable),
+        archived_population=sorted(resolution.archived),
+    )
 
 
 def build_decision_material(project_root: Path) -> SupersessionDecisionMaterial:
-    inputs = load_supersession_inputs(project_root)
-    resolution = inputs.resolution
-    graph = build_supersedes_graph(inputs)
-    entries = sorted(
-        (path.relative_to(project_root).as_posix(), json.dumps(fm, sort_keys=True, default=str))
-        for path, fm in inputs.entries
-    )
-    admitted = sorted(list(graph.edges))
-    return SupersessionDecisionMaterial(
-        material_version=_MATERIAL_VERSION,
-        entries=entries,
-        admitted_supersedes=[(a, b) for a, b in admitted],
-        status_by_id=sorted((k, v or "") for k, v in graph.status_by_id.items()),
-        kind_by_id=sorted(graph.kind_by_id.items()),
-        mutable_population=sorted(resolution.mutable),
-        archived_population=sorted(resolution.archived),
-        invalid=sorted(d.message for d in graph.invalid),
-    )
+    return _project_inputs(load_supersession_inputs(project_root))
 
 
 def decision_digest(material: SupersessionDecisionMaterial) -> str:
-    return hashlib.sha256(
-        material.model_dump_json().encode("utf-8")
-    ).hexdigest()
+    return hashlib.sha256(material.model_dump_json().encode("utf-8")).hexdigest()
 ```
 
-Note for the implementer: `resolution.mutable`/`.archived` and `graph.edges`/`.status_by_id`/`.kind_by_id`/`.invalid` are all real attributes (see `IdResolution` `consolidation.py:116` and `SupersedesGraph` `consolidation.py:290`). This material is intentionally a superset of the graph inputs; Task 9 makes `build_supersedes_graph` able to consume it so the digest surface and the derivation surface are provably the same.
+Implementer notes: `AdmittedRelation.subject.canonical_id`, `.object_canonical_id`, `.relation.source_path` are the exact attributes `build_supersedes_graph` reads at `consolidation.py:363-365`; `RelationDefect` fields are `code/path/subject/predicate/object/message` (`graph/relation_audit.py:68`). `_kind_of` and `_SUPERSEDES` (`= "supersedes"`) already exist in this module. Do **not** import or call `build_supersedes_graph` here — that inverts input and output (finding 2).
 
 - [ ] **Step 4: Run test to verify it passes**
 
@@ -992,41 +1359,70 @@ Expected: PASS.
 
 ```bash
 git add science/src/science_tool/consolidation.py science/tests/test_decision_material.py
-git commit -m "feat(supersede): serializable SupersessionDecisionMaterial + decision_digest"
+git commit -m "feat(supersede): decision material as classifier input projections"
 ```
 
 ---
 
-### Task 9: `build_supersedes_graph` consumes the material (equivalence-preserving)
+### Task 9: One classifier, two entry points (full-field equivalence)
+
+`build_supersedes_graph(inputs)` and `build_supersedes_graph_from_material(material)` must produce
+the **same** `SupersedesGraph` — every field, not just `linear`/`edges`/`superseder_by_id`. The
+way to guarantee that is structural: extract the classification body into
+`_classify_from_projections(material, *, path_by_id)` and have **both** entry points call it, with
+`build_supersedes_graph` first projecting its live inputs through `_project_inputs`. Then the only
+difference between the two is `path_by_id` (live-only; not decision-bearing).
 
 **Files:**
 - Modify: `science/src/science_tool/consolidation.py`
 - Test: `science/tests/test_decision_material.py`
 
 **Interfaces:**
-- Produces: `build_supersedes_graph_from_material(material: SupersessionDecisionMaterial) -> SupersedesGraph`, deriving the same `SupersedesGraph` fields the existing `build_supersedes_graph(inputs)` produces for the linear/non-linear/disposition data `mark_superseded` reads. Existing `build_supersedes_graph(inputs)` stays (Task 8 uses it to build the material); this task proves a material round-trips to the same disposition.
+- Produces: `_classify_from_projections(material: SupersessionDecisionMaterial, *, path_by_id: Mapping[str, Path]) -> SupersedesGraph`; `build_supersedes_graph_from_material(material) -> SupersedesGraph` (`path_by_id={}`). `build_supersedes_graph(inputs)` keeps its signature but is re-expressed as `_classify_from_projections(_project_inputs(inputs), path_by_id=<eid→path>)`.
 
-**Design intent:** gate B (Task 13) re-derives the disposition from the *material*, not from live `SupersessionInputs`. This task provides that pure function and pins its equivalence to the live derivation.
+**Behavior-preservation risk (read before coding):** the report lists `archived_targets` /
+`unmanaged_targets` / `unbacked_inverses` / `invalid` now iterate the **sorted** projections, so
+their order becomes canonical instead of audit/scan order. `test_consolidation_mark_superseded.py`
+is the guard. If an assertion there pinned the old order, sorted order is the new canonical form
+for these "report, don't block" lists — update that assertion; do not reintroduce nondeterministic
+order to satisfy it.
 
 - [ ] **Step 1: Write the failing test**
 
 ```python
 # append to science/tests/test_decision_material.py
 from science_tool.consolidation import (
-    build_decision_material, build_supersedes_graph, build_supersedes_graph_from_material,
-    load_supersession_inputs,
+    build_supersedes_graph, build_supersedes_graph_from_material,
 )
 
 
-def test_graph_from_material_matches_live_disposition(tmp_path: Path) -> None:
+def _all_fields(g):
+    return {
+        "linear": [(c.survivor, c.superseded) for c in g.linear],
+        "non_linear": [(n.nodes, n.reason) for n in g.non_linear],
+        "status_by_id": dict(g.status_by_id),
+        "kind_by_id": dict(g.kind_by_id),
+        "edges": sorted(g.edges),
+        "superseder_by_id": dict(g.superseder_by_id),
+        "superseded_by_id": dict(g.superseded_by_id),
+        "invalid": [(d.code, d.subject, d.object, d.message) for d in g.invalid],
+        "archived_targets": list(g.archived_targets),
+        "unmanaged_targets": list(g.unmanaged_targets),
+        "unbacked_inverses": list(g.unbacked_inverses),
+    }
+
+
+def test_graph_from_material_equals_live_on_every_field(tmp_path: Path) -> None:
     _seed(tmp_path)
     live = build_supersedes_graph(load_supersession_inputs(tmp_path))
     mat = build_supersedes_graph_from_material(build_decision_material(tmp_path))
-    live_chains = [(c.survivor, c.superseded) for c in live.linear]
-    mat_chains = [(c.survivor, c.superseded) for c in mat.linear]
-    assert live_chains == mat_chains
-    assert dict(live.superseder_by_id) == dict(mat.superseder_by_id)
-    assert sorted(live.edges) == sorted(mat.edges)
+    assert _all_fields(live) == _all_fields(mat)  # every decision/report field, not a subset
+
+
+def test_graph_from_material_has_empty_path_by_id(tmp_path: Path) -> None:
+    _seed(tmp_path)
+    mat = build_supersedes_graph_from_material(build_decision_material(tmp_path))
+    assert dict(mat.path_by_id) == {}  # paths are not decision-bearing; gate B never reads them
 ```
 
 - [ ] **Step 2: Run test to verify it fails**
@@ -1036,43 +1432,144 @@ Expected: FAIL — `ImportError: cannot import name 'build_supersedes_graph_from
 
 - [ ] **Step 3: Write minimal implementation**
 
-The cleanest equivalence-preserving move is to refactor the *topology* half of `build_supersedes_graph` into a helper that operates on the plain projections the material carries (edges, status_by_id, kind_by_id, populations, invalid), and have both entry points call it. Add:
+Replace the body of `build_supersedes_graph` (`consolidation.py:323-490`) with the extraction below. The middle block (`cyclic_nodes` → `_connected_components` → `linear`/`non_linear` → `superseder_by_id`) moves **verbatim**; only the loaders above it and the `superseded_by` loop below it change to read projections instead of `entries`/`resolution`/`audit`.
 
 ```python
-# add to science/src/science_tool/consolidation.py
+# in science/src/science_tool/consolidation.py
+from science_tool.graph.relation_audit import RelationDefect
+
+
+def _classify_from_projections(
+    material: SupersessionDecisionMaterial, *, path_by_id: Mapping[str, Path]
+) -> SupersedesGraph:
+    """The single supersession classifier. Pure function of the material projections plus a
+    live-only path map. Both `build_supersedes_graph` and `build_supersedes_graph_from_material`
+    call it, so the digest surface IS the derivation surface (finding 2)."""
+    mutable = frozenset(material.mutable_population)
+    archived = frozenset(material.archived_population)
+    status_by_id: dict[str, str | None] = {e.eid: e.status for e in material.entries}
+    kind_by_id: dict[str, str] = {e.eid: e.kind for e in material.entries}
+
+    edges: set[tuple[str, str]] = set()
+    archived_targets: list[dict[str, str]] = []
+    unmanaged_targets: list[dict[str, str]] = []
+    for ep in material.admitted_supersedes:
+        src, dst, path_of_edge = ep.src, ep.dst, ep.source_path
+        if dst is None:
+            continue  # external term: a real edge, but not a node of this project
+        if dst in archived:
+            archived_targets.append({
+                "id": dst, "superseder": src, "path": path_of_edge,
+                "reason": "target is archived (frozen); no live record to stamp",
+            })
+            continue
+        if dst not in mutable:
+            unmanaged_targets.append({
+                "id": dst, "superseder": src, "path": path_of_edge,
+                "reason": ("target resolves but is not a live markdown entity of this project; "
+                           "nothing here to stamp"),
+            })
+            continue
+        edges.add((src, dst))
+
+    cyclic_nodes = frozenset(
+        node for d in material.defects if d.code == "cycle" for node in (d.subject, d.object)
+    )
+
+    # --- UNCHANGED from the current build_supersedes_graph body -------------------------------
+    admitted = sorted(edges)
+    nodes = {n for edge in admitted for n in edge}
+    linear: list[SupersededChain] = []
+    non_linear: list[NonLinearComponent] = []
+    for comp in _connected_components(nodes, admitted):
+        if len(comp) < 2:
+            continue
+        if comp & cyclic_nodes:
+            continue
+        is_linear, survivor, members = _classify(comp, admitted)
+        if not is_linear or survivor is None:
+            non_linear.append(
+                NonLinearComponent(nodes=tuple(sorted(comp)), reason="branched supersedes chain")
+            )
+            continue
+        linear.append(SupersededChain(survivor=survivor, superseded=tuple(sorted(members))))
+
+    superseder_by_id: dict[str, str] = {}
+    for chain in linear:
+        chain_members = {chain.survivor, *chain.superseded}
+        for src, dst in admitted:
+            if src in chain_members and dst in chain_members:
+                superseder_by_id[dst] = src
+    # --- end UNCHANGED block ------------------------------------------------------------------
+
+    superseded_by_id: dict[str, str] = {}
+    unbacked_inverses: list[dict[str, str]] = []
+    for e in material.entries:
+        if e.superseded_by_raw is None:
+            continue
+        superseder = e.superseded_by_canonical
+        if superseder is None:
+            continue  # a DANGLING inverse -- check_resolution owns that one
+        if (superseder, e.eid) not in edges:
+            unbacked_inverses.append({
+                "id": e.eid, "superseder": superseder,
+                "reason": "authored superseded_by has no canonical sci:supersedes edge behind it",
+            })
+        superseded_by_id[e.eid] = superseder
+
+    invalid = tuple(
+        RelationDefect(code=d.code, path=d.path, subject=d.subject, predicate=d.predicate,
+                       object=d.object, message=d.message)
+        for d in material.defects
+    )
+    return SupersedesGraph(
+        linear=tuple(linear),
+        non_linear=tuple(non_linear),
+        status_by_id=MappingProxyType(status_by_id),
+        kind_by_id=MappingProxyType(kind_by_id),
+        path_by_id=MappingProxyType(dict(path_by_id)),
+        edges=frozenset(edges),
+        superseder_by_id=MappingProxyType(superseder_by_id),
+        superseded_by_id=MappingProxyType(superseded_by_id),
+        invalid=invalid,
+        archived_targets=tuple(archived_targets),
+        unmanaged_targets=tuple(unmanaged_targets),
+        unbacked_inverses=tuple(unbacked_inverses),
+    )
+
+
+def build_supersedes_graph(inputs: SupersessionInputs) -> SupersedesGraph:
+    """Classify the supersession lineage from the loaded `inputs` (see the extended docstring on
+    the pre-refactor version for the domain rules). Now a thin wrapper: project the inputs, keep
+    the live-only path map, and run the shared classifier."""
+    material = _project_inputs(inputs)
+    resolution = inputs.resolution
+    path_by_id: dict[str, Path] = {}
+    for path, fm in inputs.entries:
+        eid = resolution.canonical(str(fm["id"])) or str(fm["id"])
+        path_by_id[eid] = path
+    return _classify_from_projections(material, path_by_id=path_by_id)
+
+
 def build_supersedes_graph_from_material(
     material: SupersessionDecisionMaterial,
 ) -> SupersedesGraph:
-    """Rebuild the disposition from the frozen material — the pure projection
-    `build_supersedes_graph` computes, minus any filesystem read. Used by
-    apply-plan gate B so the digest surface IS the derivation surface."""
-    edges = frozenset((a, b) for a, b in material.admitted_supersedes)
-    status_by_id = {k: (v or None) for k, v in material.status_by_id}
-    kind_by_id = dict(material.kind_by_id)
-    return _classify_supersedes_topology(
-        edges=edges,
-        status_by_id=status_by_id,
-        kind_by_id=kind_by_id,
-        mutable=frozenset(material.mutable_population),
-        archived=frozenset(material.archived_population),
-        invalid_messages=tuple(material.invalid),
-    )
+    """Gate-B derivation: rebuild the disposition from the frozen material, no filesystem read."""
+    return _classify_from_projections(material, path_by_id={})
 ```
 
-Then extract `_classify_supersedes_topology(...)` from the existing `build_supersedes_graph` body (`consolidation.py:352-490`) — the part after it has read `entries`/`resolution`/`audit` into `edges`/`status_by_id`/`kind_by_id`/populations/invalid — and have `build_supersedes_graph(inputs)` call it too. This keeps ONE topology classifier. The extraction must preserve the exact `SupersedesGraph` fields the existing tests assert; run `test_consolidation_mark_superseded.py` to prove it.
-
-Implementer note: if the existing `build_supersedes_graph` builds `path_by_id` (live-only, `SupersedesGraph.path_by_id`), the material path cannot populate it (paths are not decision-bearing for the disposition). Have `build_supersedes_graph_from_material` pass `path_by_id={}`; gate B never reads `path_by_id` (it uses each write's `rel_path`), so this is safe. Assert that in the test if practical.
+Preserve the domain docstrings/comments from the original `build_supersedes_graph` on the moved block — they carry the set-vs-list and audit-verdict reasoning and must not be lost in the move.
 
 - [ ] **Step 4: Run tests to verify they pass**
 
 Run: `uv run --frozen pytest science/tests/test_decision_material.py science/tests/test_consolidation_mark_superseded.py -q`
-Expected: PASS (equivalence test + all existing mark-superseded tests — the topology extraction changed no behavior).
+Expected: PASS (full-field equivalence + all existing mark-superseded tests; reconcile any order-pinned assertion per the behavior-preservation note).
 
 - [ ] **Step 5: Commit**
 
 ```bash
 git add science/src/science_tool/consolidation.py science/tests/test_decision_material.py
-git commit -m "refactor(supersede): shared topology classifier; graph-from-material"
+git commit -m "refactor(supersede): single classifier shared by live + material paths"
 ```
 
 ---
@@ -1086,7 +1583,8 @@ git commit -m "refactor(supersede): shared topology classifier; graph-from-mater
 - Test: `science/tests/test_supersede_plan.py`
 
 **Interfaces:**
-- Produces: `SupersedePreviewReport` (pydantic, `extra="forbid"`) mirroring the dry-run keys `mark_superseded` returns — `chains`, `non_linear`, `to_mark`, `skipped_kinds`, `to_repair`, `invalid_relations`, `archived_targets`, `unmanaged_targets`, `unbacked_inverses` (NOT `applied`/`repaired` — those are execution-only). `SupersedePlan` (fields per design §5.2: `schema_version`, `project_root`, `material_version`, `preview_date`, `selection: SupersedeSelection`, `decision_inputs_sha256`, `to_mark`, `to_repair`, `writes: list[PathTransition]`, `preview_report`).
+- Produces: strict nested report models — `SupersededChainReport` (`survivor`, `members: list[str]`, `linear: bool`), `NonLinearReport` (`nodes: list[str]`, `reason`), `SkippedKind` (`id`, `kind`), `InvalidRelation` (`code`, `path`, `subject`, `predicate`, `object`, `message`), `TargetReport` (`id`, `superseder`, `path`, `reason`), `UnbackedInverse` (`id`, `superseder`, `reason`) — all `extra="forbid"`. `SupersedePreviewReport` composes them (NOT `applied`/`repaired` — execution-only). `SupersedePlan` (design §5.2: `schema_version`, `project_root`, `material_version`, `preview_date`, `selection: SupersedeSelection`, `decision_inputs_sha256`, `to_mark`, `to_repair`, `writes: list[PathTransition]`, `preview_report`).
+- The nested shapes mirror `mark_superseded`'s dry-run dict exactly (`consolidation.py:555-611`): a plan is untrusted JSON, so `extra="forbid"` on every nested model is what makes a tampered/extra key a load-time rejection rather than a silently ignored field.
 
 - [ ] **Step 1: Write the failing test**
 
@@ -1097,14 +1595,19 @@ from __future__ import annotations
 import pytest
 
 from science_tool.plan_common import AllSupersessionMembers, PathTransition, StateFingerprint
-from science_tool.supersede_plan import SupersedePlan, SupersedePreviewReport
+from science_tool.supersede_plan import (
+    InvalidRelation, SupersededChainReport, SupersedePlan, SupersedePreviewReport,
+)
+
+
+def _empty_report() -> SupersedePreviewReport:
+    return SupersedePreviewReport(
+        chains=[], non_linear=[], to_mark=[], skipped_kinds=[], to_repair=[],
+        invalid_relations=[], archived_targets=[], unmanaged_targets=[], unbacked_inverses=[])
 
 
 def test_preview_report_forbids_execution_keys() -> None:
-    rpt = SupersedePreviewReport(
-        chains=[], non_linear=[], to_mark=[], skipped_kinds=[], to_repair=[],
-        invalid_relations=[], archived_targets=[], unmanaged_targets=[], unbacked_inverses=[],
-    )
+    rpt = _empty_report()
     assert rpt.to_mark == []
     with pytest.raises(ValueError):
         SupersedePreviewReport(chains=[], non_linear=[], to_mark=[], skipped_kinds=[], to_repair=[],
@@ -1112,14 +1615,33 @@ def test_preview_report_forbids_execution_keys() -> None:
                                unbacked_inverses=[], applied=[])  # type: ignore[call-arg]
 
 
+def test_nested_report_models_forbid_extra_keys() -> None:
+    # A tampered plan cannot smuggle an unknown key past a nested model.
+    with pytest.raises(ValueError):
+        SupersededChainReport(survivor="a", members=["b"], linear=True, bogus=1)  # type: ignore[call-arg]
+    with pytest.raises(ValueError):
+        InvalidRelation(code="c", path="p", subject="s", predicate="pr", object="o",
+                        message="m", extra="x")  # type: ignore[call-arg]
+
+
+def test_preview_report_coerces_dicts_into_nested_models() -> None:
+    rpt = SupersedePreviewReport(
+        chains=[{"survivor": "a", "members": ["b"], "linear": True}],
+        non_linear=[], to_mark=["b"], skipped_kinds=[], to_repair=[],
+        invalid_relations=[], archived_targets=[], unmanaged_targets=[], unbacked_inverses=[])
+    assert rpt.chains[0].survivor == "a"  # a typed model, not a bare dict
+    with pytest.raises(ValueError):
+        SupersedePreviewReport(chains=[{"survivor": "a", "members": ["b"], "linear": True, "x": 1}],
+                               non_linear=[], to_mark=[], skipped_kinds=[], to_repair=[],
+                               invalid_relations=[], archived_targets=[], unmanaged_targets=[],
+                               unbacked_inverses=[])
+
+
 def test_supersede_plan_roundtrips_and_forbids_extra() -> None:
     plan = SupersedePlan(
         schema_version=1, project_root="/p", material_version=1, preview_date="2026-07-18",
         selection=AllSupersessionMembers(kind="all"), decision_inputs_sha256="a" * 64,
-        to_mark=[], to_repair=[], writes=[],
-        preview_report=SupersedePreviewReport(
-            chains=[], non_linear=[], to_mark=[], skipped_kinds=[], to_repair=[],
-            invalid_relations=[], archived_targets=[], unmanaged_targets=[], unbacked_inverses=[]),
+        to_mark=[], to_repair=[], writes=[], preview_report=_empty_report(),
     )
     again = SupersedePlan.model_validate_json(plan.model_dump_json())
     assert again == plan
@@ -1136,24 +1658,66 @@ Expected: FAIL — module missing.
 # science/src/science_tool/supersede_plan.py
 from __future__ import annotations
 
-from typing import Any
-
 from pydantic import BaseModel, ConfigDict
 
 from science_tool.plan_common import PathTransition, SupersedeSelection
 
 
+class SupersededChainReport(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    survivor: str
+    members: list[str]
+    linear: bool
+
+
+class NonLinearReport(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    nodes: list[str]
+    reason: str
+
+
+class SkippedKind(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    id: str
+    kind: str
+
+
+class InvalidRelation(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    code: str
+    path: str
+    subject: str
+    predicate: str
+    object: str
+    message: str
+
+
+class TargetReport(BaseModel):  # archived_targets / unmanaged_targets
+    model_config = ConfigDict(extra="forbid")
+    id: str
+    superseder: str
+    path: str
+    reason: str
+
+
+class UnbackedInverse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    id: str
+    superseder: str
+    reason: str
+
+
 class SupersedePreviewReport(BaseModel):
     model_config = ConfigDict(extra="forbid")
-    chains: list[dict[str, Any]]
-    non_linear: list[dict[str, Any]]
+    chains: list[SupersededChainReport]
+    non_linear: list[NonLinearReport]
     to_mark: list[str]
-    skipped_kinds: list[dict[str, str]]
+    skipped_kinds: list[SkippedKind]
     to_repair: list[str]
-    invalid_relations: list[dict[str, Any]]
-    archived_targets: list[dict[str, str]]
-    unmanaged_targets: list[dict[str, str]]
-    unbacked_inverses: list[dict[str, str]]
+    invalid_relations: list[InvalidRelation]
+    archived_targets: list[TargetReport]
+    unmanaged_targets: list[TargetReport]
+    unbacked_inverses: list[UnbackedInverse]
 
 
 class SupersedePlan(BaseModel):
@@ -1230,6 +1794,18 @@ def test_plan_supersede_freezes_writes_and_digest(tmp_path: Path) -> None:
     assert "status: superseded" in w.postimage
     assert plan.decision_inputs_sha256  # non-empty
     assert plan.preview_report.to_mark == ["interpretation:0002-b"]
+
+
+def test_plan_supersede_post_mode_matches_the_live_file(tmp_path: Path) -> None:
+    import os
+    _chain(tmp_path)
+    live = tmp_path / "entities" / "interpretations" / "0002-b.md"
+    os.chmod(live, 0o640)  # a non-default mode a rewrite must preserve
+    plan = plan_supersede(tmp_path, selection=AllSupersessionMembers(kind="all"),
+                          preview_date="2026-07-18")
+    w = plan.writes[0]
+    assert w.post.mode == 0o640  # NOT a nominal 0o644
+    assert w.pre.mode == 0o640
 ```
 
 - [ ] **Step 2: Run test to verify it fails**
@@ -1278,7 +1854,8 @@ def plan_supersede(
         )
         rel = prepared.path.relative_to(project_root).as_posix()
         pre = fingerprint(prepared.path)
-        post = _fingerprint_of_text(prepared.text)
+        # A supersession rewrite REPLACES an existing file, so post preserves the live mode.
+        post = _fingerprint_of_text(prepared.text, mode=pre.mode)
         writes.append(PathTransition(role="entity-rewrite", rel_path=rel, pre=pre, post=post,
                                      postimage=prepared.text))
 
@@ -1298,14 +1875,16 @@ def plan_supersede(
     )
 
 
-def _fingerprint_of_text(text: str) -> StateFingerprint:
+def _fingerprint_of_text(text: str, *, mode: int | None) -> StateFingerprint:
     import hashlib
+    if mode is None:
+        raise ValueError("a staged entity-rewrite requires a concrete file mode")
     return StateFingerprint(existed=True, type="file",
                             content_sha256=hashlib.sha256(text.encode("utf-8")).hexdigest(),
-                            mode=0o644, symlink_target=None)
+                            mode=mode, symlink_target=None)
 ```
 
-Implementer note: the `post.mode` here is a nominal `0o644`; apply (Task 13) realizes the live file's actual mode via the staged write. If a member's live file has a non-default mode you want preserved, read `fingerprint(prepared.path).mode` for `post.mode` — but a supersession rewrite keeps the existing file, so match its current mode: set `post` mode to `fingerprint(prepared.path).mode`. Update `_fingerprint_of_text` to take the live mode; a test in Task 13 will pin mode preservation.
+The `post.mode` is the live file's actual mode (`pre.mode`), so the frozen post-state is exact — not a nominal `0o644` that apply would have to reconcile. `_fingerprint_of_text` refuses a `None` mode, so a staged transition can never be built without one.
 
 - [ ] **Step 4: Run test to verify it passes**
 
@@ -1328,33 +1907,43 @@ git commit -m "feat(supersede): plan_supersede freezes disposition, writes, dige
 - Test: `science/tests/test_supersede_plan.py`
 
 **Interfaces:**
-- Produces: `apply_supersede_plan(project_root: Path, plan: SupersedePlan, *, staging_token: str) -> dict` (returns the execution report `{"applied": [...], "repaired": [...]}`). Assumes the envelope was already verified by the CLI before parsing (Task 19). Runs: structural checks → gate A (rebuild material, compare digest + material_version) → gate B disposition (graph-from-material, apply selection, equal to `to_mark`/`to_repair`; blockers refuse) → gate B postimage (read live source, assert `matches(w.pre)`, re-render via `_prepare_write_with_date(..., updated_default=plan.preview_date)`, assert equals `w.postimage`) → snapshot → `staged_write` each → verify `matches(w.post)` → rollback on failure. `SupersedeApplyError(RuntimeError)`.
+- Produces: `apply_supersede_plan(project_root: Path, plan: SupersedePlan, *, staging_token: str) -> dict` (returns the execution report `{"applied": [...], "repaired": [...]}`). Assumes the envelope was already verified by the CLI before parsing (Task 16). Runs, in order: **structural** (project_root match, `resolve_within` every write path for containment/canonical form, `assert_staging_unique`, writes↔members bijection, `prepared.path == w.rel_path`) → **gate A** (rebuild material, compare `material_version` + digest) → **gate B by full re-derivation** (`expected = plan_supersede(project_root, selection=plan.selection, preview_date=plan.preview_date)`; `assert_same_surface(plan.writes, expected.writes)`; `expected.preview_report == plan.preview_report`; `expected.to_mark/to_repair == plan.to_mark/to_repair`; blockers in the re-derived report refuse) → **pre-state** (`matches(w.pre)`) → snapshot → `staged_write` each → verify `matches(w.post)` → rollback on failure. Re-deriving the whole plan and comparing the complete surface subsumes the ad-hoc per-write pre/postimage checks: a drifted pre, a tampered postimage, or a forged transition all make `assert_same_surface` (or the digest) fail. `SupersedeApplyError(RuntimeError)`.
 
 - [ ] **Step 1: Write the failing test**
 
 ```python
 # append to science/tests/test_supersede_plan.py
-from science_tool.plan_common import fingerprint
+import os
+
+from science_tool.plan_common import StateFingerprint, fingerprint
 from science_tool.supersede_plan import SupersedeApplyError, apply_supersede_plan, plan_supersede
 
 
-def test_apply_supersede_plan_matches_legacy_apply(tmp_path: Path) -> None:
-    _chain(tmp_path)
-    plan = plan_supersede(tmp_path, selection=AllSupersessionMembers(kind="all"),
-                          preview_date="2026-07-18")
-    report = apply_supersede_plan(tmp_path, plan, staging_token="tkn")
+def test_apply_supersede_plan_matches_legacy_apply_byte_for_byte(tmp_path: Path) -> None:
+    # Build TWO identical corpora. Apply the plan to one; run the legacy `mark_superseded(apply=True)`
+    # on the other. The stamped file bytes must be identical — the actual "replay == legacy" claim.
+    from science_tool.consolidation import mark_superseded
+    a, b = tmp_path / "a", tmp_path / "b"
+    a.mkdir(); b.mkdir()
+    _chain(a); _chain(b)
+    plan = plan_supersede(a, selection=AllSupersessionMembers(kind="all"), preview_date="2026-07-18")
+    report = apply_supersede_plan(a, plan, staging_token="tkn")
     assert report["applied"] == ["interpretation:0002-b"]
-    text = (tmp_path / "entities" / "interpretations" / "0002-b.md").read_text(encoding="utf-8")
-    assert "status: superseded" in text
-    assert "superseded_by: interpretation:0001-a" in text
-    assert text == plan.writes[0].postimage  # byte-exact replay
+
+    # Legacy path renders `updated` from date.today(); pin the same date for a byte comparison by
+    # normalizing the one clock-dependent line out of both files before comparing.
+    mark_superseded(b, ids=None, apply=True)
+    ra = (a / "entities/interpretations/0002-b.md").read_text(encoding="utf-8")
+    rb = (b / "entities/interpretations/0002-b.md").read_text(encoding="utf-8")
+    strip = lambda s: "\n".join(l for l in s.splitlines() if not l.startswith("updated:"))
+    assert strip(ra) == strip(rb)
+    assert ra == plan.writes[0].postimage  # plan replay is byte-exact
 
 
 def test_apply_refuses_when_corpus_drifted(tmp_path: Path) -> None:
     _chain(tmp_path)
     plan = plan_supersede(tmp_path, selection=AllSupersessionMembers(kind="all"),
                           preview_date="2026-07-18")
-    # mutate an unrelated-but-material-bearing field after freezing the plan
     a = tmp_path / "entities" / "interpretations" / "0001-a.md"
     a.write_text(a.read_text(encoding="utf-8").replace("title: A", "title: A2"), encoding="utf-8")
     with pytest.raises(SupersedeApplyError):
@@ -1362,18 +1951,38 @@ def test_apply_refuses_when_corpus_drifted(tmp_path: Path) -> None:
 
 
 def test_apply_refuses_tampered_postimage(tmp_path: Path) -> None:
+    import hashlib
     _chain(tmp_path)
     plan = plan_supersede(tmp_path, selection=AllSupersessionMembers(kind="all"),
                           preview_date="2026-07-18")
     w = plan.writes[0]
     tampered = w.postimage.replace("superseded_by: interpretation:0001-a",
                                    "superseded_by: interpretation:9999-z")
-    from science_tool.plan_common import StateFingerprint
-    import hashlib
     bad_post = StateFingerprint(existed=True, type="file",
                                 content_sha256=hashlib.sha256(tampered.encode()).hexdigest(),
                                 mode=w.post.mode, symlink_target=None)
     plan.writes[0] = w.model_copy(update={"postimage": tampered, "post": bad_post})
+    with pytest.raises(SupersedeApplyError):
+        apply_supersede_plan(tmp_path, plan, staging_token="tkn")
+
+
+def test_apply_refuses_tampered_preview_report(tmp_path: Path) -> None:
+    # A report key the re-derivation would not produce must be rejected even if the writes are honest.
+    _chain(tmp_path)
+    plan = plan_supersede(tmp_path, selection=AllSupersessionMembers(kind="all"),
+                          preview_date="2026-07-18")
+    bad = plan.preview_report.model_copy(update={"to_mark": ["interpretation:9999-z"]})
+    plan = plan.model_copy(update={"preview_report": bad})
+    with pytest.raises(SupersedeApplyError):
+        apply_supersede_plan(tmp_path, plan, staging_token="tkn")
+
+
+def test_apply_refuses_absolute_rel_path_escape(tmp_path: Path) -> None:
+    _chain(tmp_path)
+    plan = plan_supersede(tmp_path, selection=AllSupersessionMembers(kind="all"),
+                          preview_date="2026-07-18")
+    w = plan.writes[0]
+    plan.writes[0] = w.model_copy(update={"rel_path": "/etc/evil.md"})
     with pytest.raises(SupersedeApplyError):
         apply_supersede_plan(tmp_path, plan, staging_token="tkn")
 ```
@@ -1389,7 +1998,8 @@ Expected: FAIL — `apply_supersede_plan` missing.
 # add to science/src/science_tool/supersede_plan.py
 from science_tool.consolidation import SupersessionError
 from science_tool.plan_common import (
-    matches, rollback_transitions, snapshot_paths, staged_write,
+    PathEscape, StagingError, SurfaceMismatch, assert_same_surface, assert_staging_unique,
+    matches, resolve_within, rollback_transitions, snapshot_paths, staged_write,
 )
 
 
@@ -1401,10 +2011,15 @@ def apply_supersede_plan(project_root: Path, plan: SupersedePlan, *, staging_tok
     project_root = project_root.resolve()
     if plan.project_root != str(project_root):
         raise SupersedeApplyError("plan project_root does not match")
-    # bijection: writes <-> to_mark ∪ to_repair
+
+    # Structural — containment, canonical paths, staging uniqueness, bijection (before any FS write)
     members = [*plan.to_mark, *plan.to_repair]
-    write_paths = {w.rel_path for w in plan.writes}
-    if len(write_paths) != len(plan.writes):
+    try:
+        targets = [resolve_within(project_root, w.rel_path) for w in plan.writes]
+        assert_staging_unique(project_root, targets, staging_token)
+    except (PathEscape, StagingError) as exc:
+        raise SupersedeApplyError(str(exc)) from exc
+    if len({w.rel_path for w in plan.writes}) != len(plan.writes):
         raise SupersedeApplyError("duplicate write paths")
     if len(members) != len(set(members)) or len(members) != len(plan.writes):
         raise SupersedeApplyError("writes/disposition are not a bijection")
@@ -1416,40 +2031,36 @@ def apply_supersede_plan(project_root: Path, plan: SupersedePlan, *, staging_tok
     if decision_digest(material) != plan.decision_inputs_sha256:
         raise SupersedeApplyError("corpus changed since preview (decision digest mismatch)")
 
-    # Gate B — disposition from material
-    graph = build_supersedes_graph_from_material(material)
-    ids = _selected_ids(plan.selection)
+    # Gate B — re-derive the WHOLE plan and compare the complete authorized surface
     try:
-        re_report = mark_superseded(project_root, ids=ids, apply=False)
+        expected = plan_supersede(project_root, selection=plan.selection,
+                                  preview_date=plan.preview_date)
     except SupersessionError as exc:
         raise SupersedeApplyError(str(exc)) from exc
-    if list(re_report["to_mark"]) != plan.to_mark or list(re_report["to_repair"]) != plan.to_repair:
+    try:
+        assert_same_surface(plan.writes, expected.writes)
+    except SurfaceMismatch as exc:
+        raise SupersedeApplyError(f"declared writes differ from re-derived: {exc}") from exc
+    if expected.preview_report != plan.preview_report:
+        raise SupersedeApplyError("re-derived preview report differs from the plan")
+    if expected.to_mark != plan.to_mark or expected.to_repair != plan.to_repair:
         raise SupersedeApplyError("re-derived disposition differs from the plan")
-    if re_report["invalid_relations"] or re_report["unbacked_inverses"]:
+    rpt = expected.preview_report
+    if rpt.invalid_relations or rpt.unbacked_inverses:
         raise SupersedeApplyError("corpus-wide blockers present; refusing")
 
-    # Gate B — postimage from live source (bound by pre fingerprint)
-    by_member = dict(zip(members, plan.writes, strict=True))
-    for member, w in by_member.items():
-        target = project_root / w.rel_path
+    # Pre-state gate
+    for target, w in zip(targets, plan.writes, strict=True):
         if not matches(w.pre, target):
             raise SupersedeApplyError(f"pre-state changed for {w.rel_path}")
-        prepared = _prepare_write_with_date(
-            project_root, member,
-            {"status": "superseded", "superseded_by": graph.superseder_by_id[member]},
-            updated_default=plan.preview_date,
-        )
-        if prepared.text != w.postimage:
-            raise SupersedeApplyError(f"re-rendered postimage differs for {w.rel_path}")
 
     # Execute
-    targets = [project_root / w.rel_path for w in plan.writes]
     snap = snapshot_paths(targets)
     try:
-        for w in plan.writes:
-            staged_write(project_root / w.rel_path, w.postimage, w.post.mode or 0o644, staging_token)
-        for w in plan.writes:
-            if not matches(w.post, project_root / w.rel_path):
+        for target, w in zip(targets, plan.writes, strict=True):
+            staged_write(target, w.postimage, w.post.mode, staging_token)  # mode is concrete (Task 11)
+        for target, w in zip(targets, plan.writes, strict=True):
+            if not matches(w.post, target):
                 raise SupersedeApplyError(f"post-state verification failed for {w.rel_path}")
     except Exception:
         rollback_transitions(plan.writes, project_root, snap)
@@ -1457,10 +2068,12 @@ def apply_supersede_plan(project_root: Path, plan: SupersedePlan, *, staging_tok
     return {"applied": list(plan.to_mark), "repaired": list(plan.to_repair)}
 ```
 
+Note: `w.post.mode` is a concrete int by Task 11's `_fingerprint_of_text` guard, so no `or 0o644` fallback is needed or wanted — a `None` here would be a real defect, not something to paper over.
+
 - [ ] **Step 4: Run test to verify it passes**
 
 Run: `uv run --frozen pytest science/tests/test_supersede_plan.py -q`
-Expected: PASS (legacy-match, drift-refusal, tamper-refusal).
+Expected: PASS (legacy byte-match, drift, postimage tamper, report tamper, path escape).
 
 - [ ] **Step 5: Commit**
 
@@ -1480,7 +2093,7 @@ git commit -m "feat(supersede): apply_supersede_plan three-layer authorization +
 - Test: `science/tests/test_archive_plan.py`
 
 **Interfaces:**
-- Produces: `ArchivePreviewReport` (`extra="forbid"`; `candidates: list[dict]` — the dry-run candidate list `archive_entities` returns, each `{id, kind, status, original_path, superseded_by, resynthesized_into, inbound_live_refs}`). `ArchiveMove` (`id`, `original_path`, `archive_path`, `row: dict` — the frozen ArchiveRow as a dict). `ArchivePlan` (design §4.1: `schema_version`, `project_root`, `op`, `now`, `selection: ArchiveSelection`, `moves`, `index: PathTransition`, `transitions: list[PathTransition]`, `preview_report`).
+- Produces: `ArchiveCandidate` (`extra="forbid"`; `id`, `kind: str|None`, `status: str|None`, `original_path: str|None`, `superseded_by: str|None`, `resynthesized_into: list[str]`, `inbound_live_refs: list[str]`) mirroring `archive_entities`' candidate dict; `PlannedArchiveRow` (subclass of the canonical `ArchiveRow` that tightens `model_config` to `extra="forbid"` — a plan is untrusted, so a frozen row must reject unknown keys even though the shared `ArchiveRow` that parses append-only index files tolerates future ones); `ArchivePreviewReport` (`candidates: list[ArchiveCandidate]`); `ArchiveMove` (`id`, `original_path`, `archive_path`, `row: PlannedArchiveRow`); `ArchivePlan` (design §4.1: `schema_version`, `project_root`, `op`, `now`, `selection: ArchiveSelection`, `moves`, `index: PathTransition`, `transitions: list[PathTransition]`, `preview_report`).
 
 - [ ] **Step 1: Write the failing test**
 
@@ -1491,7 +2104,9 @@ from __future__ import annotations
 import pytest
 
 from science_tool.plan_common import ArchiveStatusSweep, PathTransition, StateFingerprint
-from science_tool.archive_plan import ArchiveMove, ArchivePlan, ArchivePreviewReport
+from science_tool.archive_plan import (
+    ArchiveCandidate, ArchiveMove, ArchivePlan, ArchivePreviewReport, PlannedArchiveRow,
+)
 
 
 def _fp_file(sha: str) -> StateFingerprint:
@@ -1511,8 +2126,24 @@ def test_archive_plan_roundtrips_and_forbids_extra() -> None:
         preview_report=ArchivePreviewReport(candidates=[]),
     )
     assert ArchivePlan.model_validate_json(plan.model_dump_json()) == plan
+
+
+def test_nested_archive_models_forbid_extra_keys() -> None:
     with pytest.raises(ValueError):
         ArchivePreviewReport(candidates=[], bogus=1)  # type: ignore[call-arg]
+    with pytest.raises(ValueError):
+        ArchiveCandidate(id="x:1", kind="k", status="superseded", original_path="p",
+                         superseded_by=None, resynthesized_into=[], inbound_live_refs=[],
+                         bogus=1)  # type: ignore[call-arg]
+    with pytest.raises(ValueError):
+        PlannedArchiveRow(op="archive", id="x:1", unknown_future_key="v")  # type: ignore[call-arg]
+
+
+def test_planned_row_is_a_valid_archive_row() -> None:
+    # PlannedArchiveRow IS an ArchiveRow (subclass), so a frozen row is guaranteed row-shaped.
+    from science_tool.archive import ArchiveRow
+    row = PlannedArchiveRow(op="archive", id="interpretation:0001-x", archived_at="2026-07-18T00:00:00Z")
+    assert isinstance(row, ArchiveRow)
 ```
 
 - [ ] **Step 2: Run test to verify it fails**
@@ -1526,16 +2157,34 @@ Expected: FAIL — module missing.
 # science/src/science_tool/archive_plan.py
 from __future__ import annotations
 
-from typing import Any, Literal
+from typing import Literal
 
 from pydantic import BaseModel, ConfigDict
 
+from science_tool.archive import ArchiveRow
 from science_tool.plan_common import ArchiveSelection, PathTransition
+
+
+class PlannedArchiveRow(ArchiveRow):
+    # The canonical ArchiveRow tolerates unknown keys (it parses append-only index files that may
+    # carry future fields); a frozen plan is untrusted, so tighten to extra="forbid" here.
+    model_config = ConfigDict(extra="forbid")
+
+
+class ArchiveCandidate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    id: str
+    kind: str | None
+    status: str | None
+    original_path: str | None
+    superseded_by: str | None
+    resynthesized_into: list[str]
+    inbound_live_refs: list[str]
 
 
 class ArchivePreviewReport(BaseModel):
     model_config = ConfigDict(extra="forbid")
-    candidates: list[dict[str, Any]]
+    candidates: list[ArchiveCandidate]
 
 
 class ArchiveMove(BaseModel):
@@ -1543,7 +2192,7 @@ class ArchiveMove(BaseModel):
     id: str
     original_path: str
     archive_path: str
-    row: dict[str, Any]
+    row: PlannedArchiveRow
 
 
 class ArchivePlan(BaseModel):
@@ -1610,13 +2259,34 @@ def test_plan_archive_freezes_move_and_literal_index(tmp_path: Path) -> None:
     assert m.id == "interpretation:0001-x"
     assert m.original_path == "entities/interpretations/0001-x.md"
     assert m.archive_path == "entities/_archive/interpretations/0001-x.md"
-    assert m.row["archived_at"] == "2026-07-18T00:00:00Z"
+    assert m.row.archived_at == "2026-07-18T00:00:00Z"  # a typed PlannedArchiveRow, not a dict
     assert plan.index.role == "archive-index"
     assert plan.index.postimage.endswith("\n")
     assert "interpretation:0001-x" in plan.index.postimage
     # a src transition exists with the live pre-state
     src = [t for t in plan.transitions if t.role == "archive-src"][0]
     assert src.pre == fingerprint(tmp_path / src.rel_path)
+
+
+def test_index_postimage_matches_canonical_append_row_serialization(tmp_path: Path) -> None:
+    # The frozen index bytes must be exactly what append_row would have written, or the index
+    # will not round-trip through load_archive_index.
+    import json
+    _superseded(tmp_path)
+    plan = plan_archive(tmp_path, selection=ArchiveStatusSweep(kind="all_by_status", statuses=["superseded"]),
+                        now="2026-07-18T00:00:00Z")
+    expected = json.dumps(plan.moves[0].row.model_dump(), sort_keys=True) + "\n"
+    assert plan.index.postimage == expected
+
+
+def test_plan_archive_declares_every_missing_ancestor_dir(tmp_path: Path) -> None:
+    # Finding 4: apply does mkdir(parents=True); every ancestor it would create must be declared,
+    # or rollback has no state for the undeclared ones.
+    _superseded(tmp_path)
+    plan = plan_archive(tmp_path, selection=ArchiveStatusSweep(kind="all_by_status", statuses=["superseded"]),
+                        now="2026-07-18T00:00:00Z")
+    created = sorted(t.rel_path for t in plan.transitions if t.role == "created-dir")
+    assert created == ["entities/_archive", "entities/_archive/interpretations"]
 ```
 
 - [ ] **Step 2: Run test to verify it fails**
@@ -1633,17 +2303,36 @@ import json
 from pathlib import Path
 
 from science_tool.archive import (
-    DEFAULT_ARCHIVE_STATUSES, archive_index_path, derive_archive_path, _candidate_rows,
+    archive_index_path, derive_archive_path, _candidate_rows,
     _inbound_live_refs, _scope_rows_to_allowlist,
 )
 from science_tool.plan_common import (
     ArchiveStatusSweep, ExplicitArchiveIds, StateFingerprint, fingerprint,
 )
 
+_ABSENT = StateFingerprint(existed=False, type=None, content_sha256=None, mode=None, symlink_target=None)
+
 
 def _fp_of_bytes(data: bytes, mode: int) -> StateFingerprint:
     return StateFingerprint(existed=True, type="file",
                             content_sha256=hashlib.sha256(data).hexdigest(), mode=mode, symlink_target=None)
+
+
+def _missing_ancestor_dirs(project_root: Path, dst_abs: Path, declared: set[Path]) -> list[Path]:
+    """Every directory apply's `mkdir(parents=True)` would create for `dst_abs`, that does not yet
+    exist and is not already declared — ordered OUTER→INNER so reverse-order rollback removes the
+    innermost first. Finding 4: declaring only `dst.parent` leaves ancestors like `entities/_archive`
+    with no transition or rollback state."""
+    root = project_root.resolve()
+    chain: list[Path] = []
+    cur = dst_abs.parent
+    while cur != root:
+        chain.append(cur)  # inner first
+        if root not in cur.parents:
+            break  # safety: never walk above the project root
+        cur = cur.parent
+    chain.reverse()  # outer -> inner
+    return [d for d in chain if not d.exists() and d not in declared]
 
 
 def plan_archive(project_root: Path, *, selection: ArchiveSelection, now: str) -> ArchivePlan:
@@ -1660,37 +2349,35 @@ def plan_archive(project_root: Path, *, selection: ArchiveSelection, now: str) -
     moves: list[ArchiveMove] = []
     transitions: list[PathTransition] = []
     created_dirs: set[Path] = set()
+    dir_post = StateFingerprint(existed=True, type="dir", content_sha256=None, mode=0o755,
+                                symlink_target=None)
     for r in rows:
-        frozen = r.model_copy(update={"archived_at": now})
+        frozen = PlannedArchiveRow(**r.model_copy(update={"archived_at": now}).model_dump())
         original = r.original_path
         archived = derive_archive_path(original)
         src_abs = project_root / original
         dst_abs = project_root / archived
         src_pre = fingerprint(src_abs)
-        moves.append(ArchiveMove(id=r.id, original_path=original, archive_path=archived,
-                                 row=frozen.model_dump()))
+        moves.append(ArchiveMove(id=r.id, original_path=original, archive_path=archived, row=frozen))
+        # created-dir transitions FIRST (outer→inner), then src, then dst -- so reverse-order
+        # rollback removes dst, restores src, then rmdir's inner→outer.
+        for d in _missing_ancestor_dirs(project_root, dst_abs, created_dirs):
+            created_dirs.add(d)
+            transitions.append(PathTransition(role="created-dir",
+                               rel_path=d.relative_to(project_root).as_posix(),
+                               pre=_ABSENT, post=dir_post))
         transitions.append(PathTransition(role="archive-src", rel_path=original, pre=src_pre,
-                                          post=StateFingerprint(existed=False, type=None,
-                                          content_sha256=None, mode=None, symlink_target=None)))
-        transitions.append(PathTransition(role="archive-dst", rel_path=archived,
-                                          pre=StateFingerprint(existed=False, type=None,
-                                          content_sha256=None, mode=None, symlink_target=None),
+                                          post=_ABSENT))
+        transitions.append(PathTransition(role="archive-dst", rel_path=archived, pre=_ABSENT,
                                           post=StateFingerprint(existed=True, type="file",
                                           content_sha256=src_pre.content_sha256, mode=src_pre.mode,
                                           symlink_target=None)))
-        parent = dst_abs.parent
-        if not parent.exists() and parent not in created_dirs:
-            created_dirs.add(parent)
-            transitions.append(PathTransition(role="created-dir",
-                               rel_path=parent.relative_to(project_root).as_posix(),
-                               pre=StateFingerprint(existed=False, type=None, content_sha256=None,
-                                                    mode=None, symlink_target=None),
-                               post=StateFingerprint(existed=True, type="dir", content_sha256=None,
-                                                     mode=0o755, symlink_target=None)))
 
     index_abs = archive_index_path(project_root)
     pre_bytes = index_abs.read_bytes() if index_abs.exists() else b""
-    appended = "".join(json.dumps(m.row, sort_keys=True) + "\n" for m in moves)
+    # EXACTLY append_row's serialization (json.dumps(model_dump, sort_keys=True) + "\n"), so the
+    # frozen index round-trips through load_archive_index.
+    appended = "".join(json.dumps(m.row.model_dump(), sort_keys=True) + "\n" for m in moves)
     post_bytes = pre_bytes + appended.encode("utf-8")
     index_pre = fingerprint(index_abs)
     index_mode = index_pre.mode if index_pre.existed else 0o644
@@ -1700,15 +2387,15 @@ def plan_archive(project_root: Path, *, selection: ArchiveSelection, now: str) -
                            postimage=post_bytes.decode("utf-8"))
 
     report = ArchivePreviewReport(candidates=[
-        {"id": r.id, "kind": r.kind, "status": r.status, "original_path": r.original_path,
-         "superseded_by": r.superseded_by, "resynthesized_into": r.resynthesized_into,
-         "inbound_live_refs": inbound.get(r.id, [])} for r in rows])
+        ArchiveCandidate(id=r.id, kind=r.kind, status=r.status, original_path=r.original_path,
+                         superseded_by=r.superseded_by, resynthesized_into=list(r.resynthesized_into),
+                         inbound_live_refs=inbound.get(r.id, [])) for r in rows])
     return ArchivePlan(schema_version=1, project_root=str(project_root), op="archive", now=now,
                        selection=selection, moves=moves, index=index, transitions=transitions,
                        preview_report=report)
 ```
 
-Implementer note: confirm `ArchiveRow` has a `.model_copy`/`.model_dump` (it is a pydantic `BaseModel`, `archive.py:25`) and that `_candidate_rows` returns rows carrying `original_path`, `kind`, `status`, `superseded_by`, `resynthesized_into`. `derive_archive_path` and `archive_index_path` are module functions (`archive.py:65`, `archive.py:61`).
+Implementer note: `_candidate_rows` returns `ArchiveRow`s carrying `id`/`kind`/`status`/`superseded_by`/`resynthesized_into`/`original_path` (`archive.py:118-148`); `PlannedArchiveRow(**row.model_dump())` re-validates the frozen row under `extra="forbid"`. `derive_archive_path`/`archive_index_path` are module functions (`archive.py:65`, `:61`).
 
 - [ ] **Step 4: Run test to verify it passes**
 
@@ -1731,13 +2418,14 @@ git commit -m "feat(archive): plan_archive freezes moves + literal index postima
 - Test: `science/tests/test_archive_plan.py`
 
 **Interfaces:**
-- Produces: `apply_archive_plan(project_root: Path, plan: ArchivePlan, *, staging_token: str) -> dict` (returns `{"applied": [...], "skipped": [...]}`). Envelope pre-verified by CLI. Runs: structural (containment via `plan_common` containment helper, `archive_path == derive_archive_path(original_path)`, move↔transition bijection, no dup ids/paths) → gate B (re-derive selected rows + literal index from live sources; compare each `row` and `index.postimage` byte-for-byte) → pre-state assert → snapshot → create dirs, `os.rename` moves (EXDEV refusal) + parent fsync, `os.replace` index via `staged_write` → post verify → rollback on failure. `ArchiveApplyError(RuntimeError)`.
+- Produces: `apply_archive_plan(project_root: Path, plan: ArchivePlan, *, staging_token: str) -> dict` (returns `{"applied": [...], "skipped": [...]}`). Envelope pre-verified by CLI. Runs, in order: **structural** (project_root match, `resolve_within` every transition/move path, `archive_path == derive_archive_path(original_path)`, `assert_staging_unique` for the index, no dup move ids/paths) → **gate B by full re-derivation** (`expected = plan_archive(project_root, selection=plan.selection, now=plan.now)`; `expected.moves == plan.moves`; `assert_same_surface([*plan.transitions, plan.index], [*expected.transitions, expected.index])`; `expected.preview_report == plan.preview_report`) → **pre-state** (`matches(t.pre)`) → snapshot → create each **declared** dir (`mkdir(parents=False)` — every ancestor is its own transition), `os.rename` moves (EXDEV refusal) + parent fsync, `staged_write` index (`os.replace`) → post verify → rollback on failure. `ArchiveApplyError(RuntimeError)`.
 
 - [ ] **Step 1: Write the failing test**
 
 ```python
 # append to science/tests/test_archive_plan.py
 from science_tool.archive_plan import ArchiveApplyError, apply_archive_plan, plan_archive
+from science_tool.plan_common import staging_path_for
 
 
 def test_apply_archive_plan_moves_entity_and_writes_index(tmp_path: Path) -> None:
@@ -1751,15 +2439,59 @@ def test_apply_archive_plan_moves_entity_and_writes_index(tmp_path: Path) -> Non
     idx = (tmp_path / "entities" / "_archive" / "archive-index.jsonl").read_text(encoding="utf-8")
     assert "interpretation:0001-x" in idx
     assert idx == plan.index.postimage
+    # index round-trips through the canonical loader
+    from science_tool.archive import load_archive_index
+    assert "interpretation:0001-x" in load_archive_index(tmp_path).active_by_id
 
 
 def test_apply_archive_refuses_tampered_row(tmp_path: Path) -> None:
     _superseded(tmp_path)
     plan = plan_archive(tmp_path, selection=ArchiveStatusSweep(kind="all_by_status", statuses=["superseded"]),
                         now="2026-07-18T00:00:00Z")
-    plan.moves[0].row["title"] = "TAMPERED"
+    bad = plan.moves[0].row.model_copy(update={"title": "TAMPERED"})
+    plan.moves[0] = plan.moves[0].model_copy(update={"row": bad})
     with pytest.raises(ArchiveApplyError):
         apply_archive_plan(tmp_path, plan, staging_token="tok")
+
+
+def test_apply_archive_refuses_absolute_rel_path_escape(tmp_path: Path) -> None:
+    _superseded(tmp_path)
+    plan = plan_archive(tmp_path, selection=ArchiveStatusSweep(kind="all_by_status", statuses=["superseded"]),
+                        now="2026-07-18T00:00:00Z")
+    src = [t for t in plan.transitions if t.role == "archive-src"][0]
+    idx = plan.transitions.index(src)
+    plan.transitions[idx] = src.model_copy(update={"rel_path": "/etc/evil.md"})
+    with pytest.raises(ArchiveApplyError):
+        apply_archive_plan(tmp_path, plan, staging_token="tok")
+
+
+def test_apply_archive_rolls_back_when_index_write_is_blocked(tmp_path: Path) -> None:
+    # Kill-boundary / move-rollback: a stale, non-prefix staging survivor at the index path makes
+    # the staged index write fail AFTER the entity has moved. Rollback must return the corpus to its
+    # exact pre-state — src restored, dst removed, created dirs removed.
+    _superseded(tmp_path)
+    plan = plan_archive(tmp_path, selection=ArchiveStatusSweep(kind="all_by_status", statuses=["superseded"]),
+                        now="2026-07-18T00:00:00Z")
+    index_abs = tmp_path / "entities" / "_archive" / "archive-index.jsonl"
+    index_abs.parent.mkdir(parents=True, exist_ok=True)
+    # NB: parent now exists, so re-plan to keep the surface consistent with the live tree.
+    plan = plan_archive(tmp_path, selection=ArchiveStatusSweep(kind="all_by_status", statuses=["superseded"]),
+                        now="2026-07-18T00:00:00Z")
+    staging_path_for(index_abs, "tok").write_text("garbage-not-a-prefix", encoding="utf-8")
+    with pytest.raises(ArchiveApplyError):
+        apply_archive_plan(tmp_path, plan, staging_token="tok")
+    assert (tmp_path / "entities" / "interpretations" / "0001-x.md").exists()  # src restored
+    assert not (tmp_path / "entities" / "_archive" / "interpretations" / "0001-x.md").exists()  # dst gone
+
+
+def test_apply_archive_index_leaves_no_staging_survivor(tmp_path: Path) -> None:
+    # Clean kill-boundary: after a successful apply the batch-tokened `.tmp` is consumed.
+    _superseded(tmp_path)
+    plan = plan_archive(tmp_path, selection=ArchiveStatusSweep(kind="all_by_status", statuses=["superseded"]),
+                        now="2026-07-18T00:00:00Z")
+    apply_archive_plan(tmp_path, plan, staging_token="tok")
+    index_abs = tmp_path / "entities" / "_archive" / "archive-index.jsonl"
+    assert not staging_path_for(index_abs, "tok").exists()
 ```
 
 - [ ] **Step 2: Run test to verify it fails**
@@ -1775,7 +2507,8 @@ import errno
 import os
 
 from science_tool.plan_common import (
-    matches, rollback_transitions, snapshot_paths, staged_write,
+    PathEscape, StagingError, SurfaceMismatch, assert_same_surface, assert_staging_unique,
+    matches, resolve_within, rollback_transitions, snapshot_paths, staged_write,
 )
 
 
@@ -1788,7 +2521,16 @@ def apply_archive_plan(project_root: Path, plan: ArchivePlan, *, staging_token: 
     if plan.project_root != str(project_root):
         raise ArchiveApplyError("plan project_root does not match")
 
-    # Structural: canonical archive paths + bijection
+    all_t = [*plan.transitions, plan.index]
+    # Structural — containment for every declared path, canonical archive paths, staging uniqueness
+    try:
+        abs_by_t = {id(t): resolve_within(project_root, t.rel_path) for t in all_t}
+        for m in plan.moves:
+            resolve_within(project_root, m.original_path)
+            resolve_within(project_root, m.archive_path)
+        assert_staging_unique(project_root, [abs_by_t[id(plan.index)]], staging_token)
+    except (PathEscape, StagingError) as exc:
+        raise ArchiveApplyError(str(exc)) from exc
     for m in plan.moves:
         if derive_archive_path(m.original_path) != m.archive_path:
             raise ArchiveApplyError(f"non-canonical archive_path for {m.id}")
@@ -1796,26 +2538,29 @@ def apply_archive_plan(project_root: Path, plan: ArchivePlan, *, staging_token: 
     if len(ids) != len(set(ids)):
         raise ArchiveApplyError("duplicate move ids")
 
-    # Gate B: re-derive rows + index from live sources, compare byte-for-byte
+    # Gate B — re-derive the WHOLE plan and compare the complete authorized surface
     expected = plan_archive(project_root, selection=plan.selection, now=plan.now)
-    if [m.model_dump() for m in expected.moves] != [m.model_dump() for m in plan.moves]:
+    if expected.moves != plan.moves:
         raise ArchiveApplyError("re-derived moves/rows differ from the plan")
-    if expected.index.postimage != plan.index.postimage:
-        raise ArchiveApplyError("re-derived index postimage differs from the plan")
+    try:
+        assert_same_surface([*plan.transitions, plan.index], [*expected.transitions, expected.index])
+    except SurfaceMismatch as exc:
+        raise ArchiveApplyError(f"declared transitions differ from re-derived: {exc}") from exc
+    if expected.preview_report != plan.preview_report:
+        raise ArchiveApplyError("re-derived preview report differs from the plan")
 
     # Pre-state gate
-    all_t = [*plan.transitions, plan.index]
     for t in all_t:
-        if not matches(t.pre, project_root / t.rel_path):
+        if not matches(t.pre, abs_by_t[id(t)]):
             raise ArchiveApplyError(f"pre-state changed for {t.rel_path}")
 
-    snap = snapshot_paths([project_root / t.rel_path for t in all_t])
+    snap = snapshot_paths([abs_by_t[id(t)] for t in all_t])
     try:
         for t in plan.transitions:
             if t.role == "created-dir":
-                d = project_root / t.rel_path
-                d.mkdir(parents=True, exist_ok=True)
-                os.chmod(d, t.post.mode or 0o755)
+                d = abs_by_t[id(t)]
+                d.mkdir(parents=False, exist_ok=True)  # every ancestor is its own transition
+                os.chmod(d, t.post.mode)
         for m in plan.moves:
             src = project_root / m.original_path
             dst = project_root / m.archive_path
@@ -1828,10 +2573,10 @@ def apply_archive_plan(project_root: Path, plan: ArchivePlan, *, staging_token: 
                 raise
             _fsync_dir(src.parent)
             _fsync_dir(dst.parent)
-        staged_write(project_root / plan.index.rel_path, plan.index.postimage,
-                     plan.index.post.mode or 0o644, staging_token)
+        staged_write(abs_by_t[id(plan.index)], plan.index.postimage,
+                     plan.index.post.mode, staging_token)  # mode is concrete
         for t in all_t:
-            if not matches(t.post, project_root / t.rel_path):
+            if not matches(t.post, abs_by_t[id(t)]):
                 raise ArchiveApplyError(f"post-state verification failed for {t.rel_path}")
     except Exception:
         rollback_transitions(all_t, project_root, snap)
@@ -1847,12 +2592,12 @@ def _fsync_dir(directory: Path) -> None:
         os.close(fd)
 ```
 
-Implementer note: `rollback_transitions` handles `entity-rewrite`/file transitions; for `archive-src` (post absent) and `archive-dst` (pre absent) it reverts correctly given `snapshot_paths` captured both. Verify the move rollback restores the src and removes the dst in a dedicated test (add one mirroring `test_rollback_*`).
+Rollback correctness: `all_t` is ordered created-dirs(outer→inner) → src → dst per move, then the index last; `rollback_transitions` processes it **reversed**, so it reverts the index, removes the moved `dst`, restores the `src` from its snapshot bytes, then `rmdir`s the created dirs innermost-first. `snapshot_paths` captured the src bytes at pre, which is what makes src restoration exact.
 
 - [ ] **Step 4: Run test to verify it passes**
 
 Run: `uv run --frozen pytest science/tests/test_archive_plan.py -q`
-Expected: PASS.
+Expected: PASS (move+index, tampered row, path escape, rollback-on-blocked-index, clean staging boundary).
 
 - [ ] **Step 5: Commit**
 
@@ -1962,10 +2707,13 @@ Replace `entities_mark_superseded_command` (`entities_inventory_cli.py:76-102`) 
 @click.option("--apply-plan", "apply_plan_path", type=click.Path(exists=True, dir_okay=False, path_type=Path),
               default=None, help="Apply a plan saved by an earlier preview.")
 @click.option("--expected-plan-sha256", default=None, help="Required with --apply-plan: SHA-256 of the raw plan bytes.")
-@click.option("--staging-token", default="apply", help="Batch token for staging paths (default: apply).")
+@click.option("--staging-token", default=None,
+              help="Batch token for staging paths. Omit for standalone use: a unique token is "
+                   "generated and reported so two concurrent applies never collide.")
 def entities_mark_superseded_command(project_root, ids, ids_from, apply_changes, save_plan,
                                      overwrite_plan, apply_plan_path, expected_plan_sha256, staging_token):
     """Auto-derive `superseded` status from linear supersedes chains (report / --save-plan / --apply-plan)."""
+    import secrets
     from datetime import date
 
     from science_tool.consolidation import SupersessionError, mark_superseded
@@ -1990,11 +2738,13 @@ def entities_mark_superseded_command(project_root, ids, ids_from, apply_changes,
         except EnvelopeError as exc:
             raise click.ClickException(str(exc)) from exc
         plan = SupersedePlan.model_validate_json(raw)
+        token = staging_token or secrets.token_hex(8)  # unique per standalone apply
         try:
-            report = apply_supersede_plan(project_root.resolve(), plan, staging_token=staging_token)
+            report = apply_supersede_plan(project_root.resolve(), plan, staging_token=token)
         except SupersedeApplyError as exc:
             raise click.ClickException(str(exc)) from exc
-        emit(output_format="json", payload=report, render_text=lambda: None)
+        emit(output_format="json", payload={**report, "staging_token": token},
+             render_text=lambda: None)
         return
 
     allowlist = _collect_ids(ids, ids_from)
@@ -2116,10 +2866,13 @@ Replace `entities_archive_command` (`entities_inventory_cli.py:105-138`) mirrori
 @click.option("--apply-plan", "apply_plan_path", type=click.Path(exists=True, dir_okay=False, path_type=Path),
               default=None, help="Apply a plan saved by an earlier preview.")
 @click.option("--expected-plan-sha256", default=None, help="Required with --apply-plan: SHA-256 of the raw plan bytes.")
-@click.option("--staging-token", default="apply", help="Batch token for staging paths (default: apply).")
+@click.option("--staging-token", default=None,
+              help="Batch token for staging paths. Omit for standalone use: a unique token is "
+                   "generated and reported so two concurrent applies never collide.")
 def entities_archive_command(project_root, statuses, ids, ids_from, apply_changes, save_plan,
                              overwrite_plan, apply_plan_path, expected_plan_sha256, staging_token):
     """Relocate hidden-status entities into entities/_archive/ (report / --save-plan / --apply-plan)."""
+    import secrets
     from datetime import datetime, timezone
 
     from science_tool.archive import DEFAULT_ARCHIVE_STATUSES, ArchiveError, archive_entities
@@ -2144,11 +2897,13 @@ def entities_archive_command(project_root, statuses, ids, ids_from, apply_change
         except EnvelopeError as exc:
             raise click.ClickException(str(exc)) from exc
         plan = ArchivePlan.model_validate_json(raw)
+        token = staging_token or secrets.token_hex(8)  # unique per standalone apply
         try:
-            report = apply_archive_plan(project_root.resolve(), plan, staging_token=staging_token)
+            report = apply_archive_plan(project_root.resolve(), plan, staging_token=token)
         except ArchiveApplyError as exc:
             raise click.ClickException(str(exc)) from exc
-        emit(output_format="json", payload=report, render_text=lambda: None)
+        emit(output_format="json", payload={**report, "staging_token": token},
+             render_text=lambda: None)
         return
 
     status_set = frozenset(statuses) if statuses else DEFAULT_ARCHIVE_STATUSES
@@ -2275,11 +3030,12 @@ Not part of this upstream branch, but the acceptance the design §8 requires bef
 
 ## Self-Review
 
-**Spec coverage:** §1 three-layer authorization → Tasks 4 (envelope), 8/9 (gate A material+digest), 11/12 & 14/15 (gate B). §3.1 StateFingerprint → Task 1. §3.2 PathTransition → Task 2. §3.3 rollback → Task 6. §3.4 staging → Task 5. §3.5 selections → Task 3. §4 archive → Tasks 13-15, 17. §5 supersede → Tasks 8-12, 16, incl. §5.4 injectable writer → Task 7. §6 CLI → Tasks 16-17. §8 release → Task 18. §9 tests are distributed across the task tests; the kill-classification characterization tests (§9 last bullet) should be added as a dedicated test in Task 15/12 follow-up — **add them during execution** where `staged_write`/`os.rename` boundaries exist.
+**Spec coverage:** §1 three-layer authorization → Tasks 4 (envelope), 8/9 (material+digest, gate A), 12 & 15 (gate B by full re-derivation). §3.1 StateFingerprint (+ coherence validators) → Task 1. §3.2 PathTransition → Task 2. §3.3 snapshot/rollback/containment/surface validators → Task 6. §3.4 staging (fchmod-before-fsync) → Task 5. §3.5 selections → Task 3. §4 archive (incl. §4.x ancestor-complete created-dir set) → Tasks 13-15, 17. §5 supersede (incl. §5.4 injectable writer → Task 7, decision material as classifier **input** → Tasks 8-9) → Tasks 8-12, 16. §6 CLI (unique standalone staging token) → Tasks 16-17. §8 release → Task 18. §9 tests: kill-classification and move-rollback are now explicit failing-test steps in Task 15 (`test_apply_archive_rolls_back_when_index_write_is_blocked`, `test_apply_archive_index_leaves_no_staging_survivor`) and Task 5 (`classify_staging`); rollback of files/modes/symlinks/nested dirs in Task 6.
 
-**Known decomposition gaps for the executor to close (not placeholders — explicit follow-ups):**
-- Task 11 `post.mode`: set to the live file's mode, not a nominal `0o644` (noted inline).
-- Task 15: add a move-rollback test and the §9 kill-classification tests (kill mid-staging leaves a prefix `.tmp`, kill after rename leaves classifiable state).
-- Task 9: the topology extraction must be behavior-preserving; the existing `test_consolidation_mark_superseded.py` is the guard.
+**Formerly-deferred items, now first-class acceptance criteria (no remaining "close during execution" gaps):**
+- `post.mode` is the live file's actual mode, pinned by `test_plan_supersede_post_mode_matches_the_live_file` (Task 11) and `_fingerprint_of_text`'s `None`-mode guard; apply passes `w.post.mode` with no `or 0o644` fallback.
+- Move rollback + kill-boundary are tested in Task 15, not left as a note.
+- The single classifier (`_classify_from_projections`) is shared by both entry points, so equivalence is structural; `test_graph_from_material_equals_live_on_every_field` (Task 9) checks **every** field and `test_consolidation_mark_superseded.py` guards behavior. The one intentional change — report-list order becomes canonical/sorted — is documented in Task 9's behavior-preservation note.
+- Decision material is built by `_project_inputs` from `SupersessionInputs`, never from the graph output; `test_build_decision_material_does_not_build_a_graph` (Task 8) enforces it.
 
-**Type consistency:** `PathTransition`, `StateFingerprint`, `ArchiveSelection`/`SupersedeSelection`, `plan_supersede`/`apply_supersede_plan`, `plan_archive`/`apply_archive_plan`, `_prepare_write_with_date`, `build_supersedes_graph_from_material`, `build_decision_material`/`decision_digest` names are used consistently across tasks.
+**Type consistency:** `StateFingerprint`/`PathTransition`/`PathSnapshot`, `resolve_within`/`assert_same_surface`/`assert_staging_unique`, `ArchiveSelection`/`SupersedeSelection`, the nested report models (`SupersededChainReport`/`InvalidRelation`/`TargetReport`/… and `ArchiveCandidate`/`PlannedArchiveRow`), `plan_supersede`/`apply_supersede_plan`, `plan_archive`/`apply_archive_plan`, `_prepare_write_with_date`, `_project_inputs`/`_classify_from_projections`/`build_supersedes_graph_from_material`, `build_decision_material`/`decision_digest` are used consistently across tasks.
