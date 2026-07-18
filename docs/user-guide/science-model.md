@@ -7,12 +7,7 @@ has provenance, and the current state of belief should remain inspectable.
 ## Big Picture
 
 ```mermaid
-flowchart LR
-    A[Authored project files] --> B[Graph build]
-    B --> C[Knowledge graph]
-    C --> D[Dashboard summaries]
-    C --> E[Belief snapshots]
-    C --> F[Health and validation]
+--8<-- "figures/f2-sources-derived.mmd"
 ```
 
 The authored files are the source of truth. The graph, summaries, snapshots, and
