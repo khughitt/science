@@ -54,6 +54,11 @@ neighborhoods. A neighborhood is a local cluster around some research concern:
 a question, hypothesis, proposition, inquiry, dataset, method, evidence cluster,
 or analysis result.
 
+<figure markdown="span">
+--8<-- "figures/f3-patchwork.svg"
+<figcaption>Neighborhoods within a project; derived graphs compose across peers; canonical owners live in the commons.</figcaption>
+</figure>
+
 Each neighborhood can carry:
 
 - domain objects and variables;

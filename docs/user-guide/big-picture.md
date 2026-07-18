@@ -51,6 +51,11 @@ reusable canonical owners — shared datasets and reference graphs — and proje
 recognize peers and synchronize shared knowledge without flattening away local
 context.
 
+<figure markdown="span">
+--8<-- "figures/f3-patchwork.svg"
+<figcaption>A patchwork of epistemic neighborhoods across projects, over a shared commons.</figcaption>
+</figure>
+
 → full detail: [Science Model](science-model.md), [Cross-Project Work](cross-project-work.md)
 
 ## Epistemic Model & Key Players
