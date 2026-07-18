@@ -86,6 +86,73 @@ for diagnostic guidance on whether your project actually needs a deny-list.
 This is why `bare-author-year` is a `warn`-tier check: like `short-form-ids` it has
 both a resolver and a deny-list, so a well-maintained project can drive it to zero.
 
+## numeric-anchor (numeric provenance)
+
+`numeric-anchor` classifies every numeric claim in a document's body prose into
+exactly one of **four outcomes** — a discriminated assessment, not a boolean pass/fail:
+
+- **NotClaim** — structural, not a quantitative claim (hardware id, accession
+  number, license version, download size). Narrow and context-gated: a number
+  is only excluded when it's adjacent to a triggering token (e.g. `RTX 3070`,
+  `GCST90441`, `CC-BY-4.0`), never blanket-masked, so a real claim like "3.2 Gb
+  genome" still counts.
+- **Exempt** — the author has explicitly marked the claim as a stipulated
+  parameter (marker syntax below). No provenance is expected for a stipulated
+  design constant (e.g. `alpha = 0.05`).
+- **Anchored** — declared, resolvable provenance covers the claim, at one of
+  two scopes:
+  - *entity scope* — a frontmatter provenance field (`source_refs`,
+    `task_links`, `input`), paper identity (`doi`/`pmid`/`url`/`bibkey`),
+    interpretation `artifact`/`artifacts`, or an owning `tNNN` named in the
+    title — covers every claim in the document.
+  - *local scope* — a resolvable `task:tNNN`, `[@citekey]`, `cite:key`, or
+    `dataset:slug` reference in the **same paragraph** — covers only that
+    paragraph.
+- **Unanchored** — the genuine signal. No structural exclusion, no stipulated
+  marker, and no resolvable source at either scope. This is what surfaces as a
+  `numeric-anchor` finding.
+
+**What a firing finding means.** A finding says "this number lacks a declared,
+resolvable source at the appropriate scope" — it does **not** mean the value is
+wrong. Treat it as a provenance gap to close, not a correctness accusation.
+
+**Remediation is two-way.** Either:
+
+1. **Mark it as stipulated**, if the number is a genuine design/methodology
+   parameter that doesn't need an external source (see marker syntax below); or
+2. **Provide resolvable provenance** — add/point to a frontmatter provenance
+   field, or cite a `task:`/`[@key]`/`cite:`/`dataset:` reference in the same
+   paragraph that actually resolves.
+
+### Stipulated markers
+
+Marker syntax is fixed (not a config knob), so tooling and templates agree
+across projects:
+
+| Form | Scope | Notes |
+|------|-------|-------|
+| Frontmatter `stipulated: true` | whole document | **Pure-spec docs only** (e.g. a `kind: pre-registration` or `kind: plan` doc that is *entirely* stipulated parameters). Never set this as a template default — it must be an explicit per-document author decision. |
+| `<!-- stipulated -->` on the line under a heading | that heading's section | Fail-closed: covers down to (but not past) the next equal-or-higher-level heading. |
+| `<!-- stipulated:start -->` … `<!-- stipulated:end -->` | the lines between the fence pair | Use inside an otherwise mixed section — e.g. a parameter block embedded in narrative prose that itself needs citations. |
+
+Documents whose `kind` is in `spec_class_kinds` (default: `pre-registration`,
+`plan`) get a more specific message when a claim is still unanchored —
+`"stipulated parameter '<value>' lacks grounding"` — as a hint that these doc
+kinds are exactly where marking-as-stipulated is expected. That hint does
+**not** grant an automatic exemption; the doc still needs an explicit marker
+or resolvable provenance like any other.
+
+### Existence-checking
+
+Provenance is now existence-checked, not just pattern-matched: a `task:t999`
+that no task ledger declares, or an `artifact:` path that doesn't resolve to a
+real file, is treated as **unresolved** and does not clear the claim. This is a
+deliberate tightening (not a regression) — expect a few previously-hidden
+fabricated references to newly surface as findings alongside the much larger
+drop in false positives from entity/local-scope anchoring. See
+[`docs/plans/2026-07-18-numeric-provenance-check-design.md`](../plans/2026-07-18-numeric-provenance-check-design.md)
+for the full redesign rationale and empirical grounding.
+
 ## Tooling
 
 - `science prose lint --root . --format table` — run all lints, render to terminal.
