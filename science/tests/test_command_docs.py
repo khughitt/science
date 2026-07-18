@@ -346,8 +346,8 @@ def test_plan_pipeline_data_gate_mentions_identity_publish_boundary() -> None:
     assert "initial planning" in normalized
 
 
-def test_entities_doc_documents_workflow_identity_contract() -> None:
-    text = _read("docs/user-guide/entities.md")
+def test_datasets_doc_documents_workflow_identity_contract() -> None:
+    text = _read("docs/user-guide/datasets.md")
 
     assert "outputs[].identity" in text
     assert "colocated with `resource_names`" in text
