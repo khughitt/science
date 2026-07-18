@@ -1,6 +1,8 @@
+from pathlib import Path
+
 from science_tool.numeric_provenance import (
     Anchored, Exempt, NotClaim, NumericClaim, NumericProvenanceConfig,
-    SourceCandidate, Unanchored,
+    SourceCandidate, Unanchored, build_document_context,
 )
 
 
@@ -15,3 +17,31 @@ def test_types_construct_and_are_frozen():
     cfg = NumericProvenanceConfig(anchor_patterns=("task:",), spec_class_kinds=frozenset({"plan"}),
                                   provenance_fields=("source_refs",))
     assert "task:" in cfg.anchor_patterns
+
+
+def _doc(tmp_path: Path, body: str, frontmatter: str = "") -> Path:
+    p = tmp_path / "doc.md"
+    p.write_text(f"---\n{frontmatter}\n---\n{body}" if frontmatter else body)
+    return p
+
+
+def test_document_context_parses_kind_title_paragraphs(tmp_path):
+    path = _doc(tmp_path, "# Results\n\nThe effect was 7.94 fold.\n\nAnother para 12.3.\n",
+                frontmatter="kind: interpretation")
+    ctx = build_document_context(path)
+    assert ctx.kind == "interpretation"
+    assert ctx.title == "Results"
+    # the two body paragraphs land in distinct paragraph ids
+    pid_first = ctx.paragraph_id_per_line[ctx.lines.index("The effect was 7.94 fold.") + 1]
+    pid_second = ctx.paragraph_id_per_line[ctx.lines.index("Another para 12.3.") + 1]
+    assert pid_first != pid_second
+
+
+def test_section_scope_is_fail_closed_at_equal_or_higher_heading(tmp_path):
+    body = ("## Decision thresholds\n\nUse alpha 0.05.\n\n"
+            "## Results\n\nWe saw 7.94 fold.\n")
+    path = _doc(tmp_path, body, frontmatter="kind: plan")
+    ctx = build_document_context(path)
+    sid_alpha = ctx.section_id_per_line[ctx.lines.index("Use alpha 0.05.") + 1]
+    sid_result = ctx.section_id_per_line[ctx.lines.index("We saw 7.94 fold.") + 1]
+    assert sid_alpha != sid_result   # the second H2 closes the first section
