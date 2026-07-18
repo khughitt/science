@@ -27,6 +27,82 @@ def _seed(root: Path) -> None:
     )
 
 
+def _write_entity(root: Path, kind_dir: str, name: str, fm: dict) -> None:
+    fm = {"title": name, **fm}
+    d = root / "entities" / kind_dir
+    d.mkdir(parents=True, exist_ok=True)
+    (d / f"{name}.md").write_text(
+        "---\n" + yaml.safe_dump(fm, sort_keys=False) + "---\nbody\n", encoding="utf-8"
+    )
+
+
+def _supersedes_edge(target: str) -> dict[str, str]:
+    return {"predicate": "sci:supersedes", "target": target}
+
+
+def _seed_rich(root: Path) -> None:
+    """A corpus rich enough to populate every SECONDARY `SupersedesGraph` field, on both the
+    live (filesystem) path and the frozen-material (replay) path — not just the one clean
+    linear edge `_seed` authors, which leaves `non_linear` / `archived_targets` /
+    `unmanaged_targets` / `unbacked_inverses` / `invalid` empty on both sides and so proves
+    nothing about the replay guarantee for exactly the fields it is about (Task 9 review).
+
+    Deliberately a SEPARATE corpus builder rather than a change to `_seed`: other tests in this
+    file rely on `_seed`'s minimal, single-clean-edge shape.
+    """
+    from science_tool.archive import archive_entities
+
+    (root / "science.yaml").write_text("name: rich\n", encoding="utf-8")
+
+    # non_linear: two supersedors into one target -- a branch, ambiguous survivor.
+    _write_entity(root, "interpretations", "i-branch-old",
+                  {"id": "interpretation:i-branch-old", "kind": "interpretation", "status": "active"})
+    _write_entity(root, "interpretations", "i-branch-x",
+                  {"id": "interpretation:i-branch-x", "kind": "interpretation",
+                   "relations": [_supersedes_edge("interpretation:i-branch-old")]})
+    _write_entity(root, "interpretations", "i-branch-y",
+                  {"id": "interpretation:i-branch-y", "kind": "interpretation",
+                   "relations": [_supersedes_edge("interpretation:i-branch-old")]})
+
+    # archived_targets: a live supersedes edge into a target the archive op then relocates.
+    _write_entity(root, "interpretations", "i-arch-old",
+                  {"id": "interpretation:i-arch-old", "kind": "interpretation", "status": "superseded"})
+    archive_entities(root, apply=True)  # through the REAL op -- moves the file, appends the index row
+    _write_entity(root, "interpretations", "i-arch-new",
+                  {"id": "interpretation:i-arch-new", "kind": "interpretation",
+                   "relations": [_supersedes_edge("interpretation:i-arch-old")]})
+
+    # unmanaged_targets: a LEGAL edge into a `report` entity that resolves (MarkdownAdapter also
+    # scans `research/packages`) but is not live markdown under `entities/` and not archived --
+    # so there is nothing here for the writer to stamp.
+    pkg_dir = root / "research" / "packages" / "pkg1"
+    pkg_dir.mkdir(parents=True, exist_ok=True)
+    (pkg_dir / "report.md").write_text(
+        "---\nid: report:pkg-report\nkind: report\ntitle: Pkg Report\nstatus: active\n"
+        "created: '2026-07-16'\nupdated: '2026-07-16'\n---\nbody\n",
+        encoding="utf-8",
+    )
+    _write_entity(root, "interpretations", "i-unmanaged-new",
+                  {"id": "interpretation:i-unmanaged-new", "kind": "interpretation",
+                   "relations": [_supersedes_edge("report:pkg-report")]})
+
+    # unbacked_inverses: an authored `superseded_by` whose claimed superseder resolves but never
+    # authored the canonical edge back.
+    _write_entity(root, "interpretations", "i-phantom",
+                  {"id": "interpretation:i-phantom", "kind": "interpretation", "status": "active"})
+    _write_entity(root, "interpretations", "i-unbacked",
+                  {"id": "interpretation:i-unbacked", "kind": "interpretation",
+                   "status": "superseded", "superseded_by": "interpretation:i-phantom"})
+
+    # invalid: an authored relation `materialize` refuses outright -- an illegal kind pair
+    # (`workflow-run` may only supersede `workflow-run`).
+    _write_entity(root, "interpretations", "i-w1",
+                  {"id": "interpretation:i-w1", "kind": "interpretation", "status": "active"})
+    _write_entity(root, "workflow-runs", "wr-1",
+                  {"id": "workflow-run:wr-1", "kind": "workflow-run",
+                   "relations": [_supersedes_edge("interpretation:i-w1")]})
+
+
 def test_decision_digest_is_stable_across_runs(tmp_path: Path) -> None:
     _seed(tmp_path)
     d1 = decision_digest(build_decision_material(tmp_path))
@@ -135,7 +211,10 @@ def _all_fields(g):
         "edges": sorted(g.edges),
         "superseder_by_id": dict(g.superseder_by_id),
         "superseded_by_id": dict(g.superseded_by_id),
-        "invalid": [(d.code, d.subject, d.object, d.message) for d in g.invalid],
+        # ALL SIX RelationDefect fields (was 4, dropping `path`/`predicate`) -- a per-field
+        # divergence between the live and material-derived defect must be visible here, not
+        # masked by comparing a projection narrower than the record.
+        "invalid": [(d.code, d.path, d.subject, d.predicate, d.object, d.message) for d in g.invalid],
         "archived_targets": list(g.archived_targets),
         "unmanaged_targets": list(g.unmanaged_targets),
         "unbacked_inverses": list(g.unbacked_inverses),
@@ -144,9 +223,24 @@ def _all_fields(g):
 
 
 def test_graph_from_material_equals_live_on_every_field(tmp_path: Path) -> None:
-    _seed(tmp_path)
+    # `_seed` alone authors exactly one clean linear edge, on which `non_linear`,
+    # `archived_targets`, `unmanaged_targets`, `unbacked_inverses`, and `invalid` are all `()` on
+    # BOTH paths -- so the equality assertion below would reduce to `[] == []` for exactly the
+    # fields the replay guarantee is about, and could not catch a live/material divergence in any
+    # of them. `_seed_rich` exercises all five; the guard assertions below make that a standing
+    # requirement of the corpus, not an incidental fact about today's fixture.
+    _seed_rich(tmp_path)
     live = build_supersedes_graph(load_supersession_inputs(tmp_path))
     mat = build_supersedes_graph_from_material(build_decision_material(tmp_path))
+
+    # GUARD: the corpus must exercise every secondary field, on the live path, or this test is
+    # back to comparing empties. Fails loudly (not silently) if the corpus regresses.
+    assert live.non_linear, "corpus must produce a non-linear (branched) component"
+    assert live.archived_targets, "corpus must produce an archived supersedes target"
+    assert live.unmanaged_targets, "corpus must produce an unmanaged (unowned) supersedes target"
+    assert live.unbacked_inverses, "corpus must produce a groundless authored superseded_by"
+    assert live.invalid, "corpus must produce an authored relation the audit refuses"
+
     assert _all_fields(live) == _all_fields(mat)  # every decision/report field, not a subset
 
 
