@@ -3,8 +3,10 @@
 Usage: uv run python scripts/numeric_provenance_before_after.py PROJECT_ROOT [PROJECT_ROOT ...]
 
 Prints per-project numeric-anchor finding counts under the new engine, so the
-order-of-magnitude drop (e.g. pan-disease ~587 -> tens) can be confirmed and
-survivors spot-checked. Kept as a reproducible acceptance harness, not a
+reduction can be confirmed and survivors spot-checked (e.g. pan-disease ~587
+under the old paragraph-substring check → 218 under the new engine; the residual
+is dominated by genuinely-ungrounded computed statistics plus not-yet-migrated
+project config, not by old false positives). Kept as a reproducible acceptance harness, not a
 throwaway probe — re-run it whenever the numeric-provenance engine or a swept
 project's vocabulary changes.
 """

@@ -146,7 +146,7 @@ or resolvable provenance like any other.
 
 Provenance is now existence-checked, not just pattern-matched: a `task:t999`
 that no task ledger declares, or an `artifact:` path that doesn't resolve to a
-real file, is treated as **unresolved** and does not clear the claim. This is a
+real file or directory, is treated as **unresolved** and does not clear the claim. This is a
 deliberate tightening (not a regression) — expect a few previously-hidden
 fabricated references to newly surface as findings alongside the much larger
 drop in false positives from entity/local-scope anchoring. See
