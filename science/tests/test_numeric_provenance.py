@@ -83,6 +83,18 @@ def test_resolution_index_rejects_absolute_and_traversal_paths(tmp_path):
     assert idx.resolve("../../etc/passwd") is False
 
 
+def test_resolution_index_resolves_directory_artifacts(tmp_path):
+    proj = _project(tmp_path)
+    (proj / "outputs").mkdir()               # a directory artifact
+    (proj / "outputs" / "run1").mkdir()
+    idx = build_resolution_index(proj)
+    assert idx.resolve("outputs") is True            # directory exists -> resolves
+    assert idx.resolve("outputs/run1") is True
+    assert idx.resolve("outputs/nope") is False      # nonexistent -> not resolved
+    assert idx.resolve("/etc") is False              # absolute still guarded (even though it exists)
+    assert idx.resolve("../outside") is False        # traversal still guarded
+
+
 def test_structural_masks_hardware_and_accession_and_license():
     # col is the number's real 1-based column within `line` (verified via str.find).
     assert classify_structural("3070", "trained on an RTX 3070 GPU", 19) == "hardware-id"

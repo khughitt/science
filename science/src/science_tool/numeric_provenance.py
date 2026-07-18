@@ -224,7 +224,7 @@ class ResolutionIndex:
         if candidate.is_absolute() or ".." in candidate.parts:
             return False
         for base in (self.project_root, self.data_root):
-            if (base / ref).is_file():
+            if (base / ref).exists():
                 return True
         return False
 
