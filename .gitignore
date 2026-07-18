@@ -17,3 +17,6 @@ meta/doc/plans/*-plan-review.md
 # bib-add lockfile (never commit)
 meta/papers/.references.bib.lock
 **/.references.bib.lock
+
+# MkDocs build output (never commit)
+site/

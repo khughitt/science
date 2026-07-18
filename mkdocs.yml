@@ -1,0 +1,90 @@
+site_name: Science User Guide
+site_description: The canonical user-facing manual for Science.
+site_url: https://khughitt.github.io/science/
+repo_url: https://github.com/khughitt/science
+repo_name: khughitt/science
+edit_uri: edit/main/docs/user-guide/
+docs_dir: docs/user-guide
+
+theme:
+  name: material
+  palette:
+    - media: "(prefers-color-scheme: light)"
+      scheme: default
+      primary: indigo
+      accent: indigo
+      toggle:
+        icon: material/weather-night
+        name: Switch to dark mode
+    - media: "(prefers-color-scheme: dark)"
+      scheme: slate
+      primary: indigo
+      accent: indigo
+      toggle:
+        icon: material/weather-sunny
+        name: Switch to light mode
+  features:
+    - navigation.sections
+    - navigation.top
+    - navigation.tracking
+    - content.code.copy
+    - toc.follow
+    - search.suggest
+    - search.highlight
+
+extra_css:
+  - assets/palette.css
+
+markdown_extensions:
+  - admonition
+  - attr_list
+  - md_in_html
+  - tables
+  - toc:
+      permalink: true
+  - pymdownx.details
+  - pymdownx.tabbed:
+      alternate_style: true
+  - pymdownx.superfences:
+      custom_fences:
+        - name: mermaid
+          class: mermaid
+          format: !!python/name:pymdownx.superfences.fence_code_format
+  - pymdownx.snippets:
+      base_path:
+        - docs/user-guide/assets
+      check_paths: true
+
+plugins:
+  - search
+
+validation:
+  nav:
+    omitted_files: warn
+    not_found: warn
+    absolute_links: warn
+  links:
+    not_found: warn
+    absolute_links: warn
+    unrecognized_links: warn
+    anchors: warn
+
+nav:
+  - Home: index.md
+  - Introduction: introduction.md
+  - Big Picture: big-picture.md
+  - Science Model: science-model.md
+  - Project Layout: project-layout.md
+  - Entities: entities.md
+  - Epistemic Model: epistemic-model.md
+  - Evidence Lines: evidence-lines.md
+  - Graph And Derived State: graph-and-derived-state.md
+  - Big-Picture Synthesis: big-picture-synthesis.md
+  - Health And Validation: health-and-validation.md
+  - CLI And Workflows: cli-and-workflows.md
+  - Agent Workflows: agent-workflows.md
+  - Codex: codex.md
+  - Feedback And Telemetry: feedback-and-telemetry.md
+  - Benchmarking: benchmarking.md
+  - Project Packaging: project-packaging.md
+  - Cross-Project Work: cross-project-work.md
