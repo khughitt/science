@@ -357,7 +357,11 @@ def _restore(snapshot: _TreeSnapshot, *, restrict: set[Path] | None = None) -> N
 
 
 def audit_moved_references(
-    project_root: Path, moved_rel: str, *, exclude: frozenset[Path] = frozenset()
+    project_root: Path,
+    moved_rel: str,
+    *,
+    exclude: frozenset[Path] = frozenset(),
+    restrict_missing_to: frozenset[str] | None = None,
 ) -> list[str]:
     """Every unresolved reference into or out of `moved_rel`. Empty list means clean.
 
@@ -369,6 +373,12 @@ def audit_moved_references(
     Anchors are checked against the target's ATX headings, slugified the way the
     corpus writes them, because a link to `#section-gone` is broken in exactly
     the way a path check cannot see.
+
+    `restrict_missing_to`, when given, limits every "link to missing X" report to
+    targets in that set. A batch move (e.g. `migrate-specs`) passes the paths IT
+    vacated: the only targets it can newly break. A referrer's pre-existing broken
+    link to an unrelated file is then left for that file's own audit, not blamed on
+    this move. None (a single import/archival) reports every unresolved target.
     """
     project_root = Path(project_root).resolve()
     moved_path = project_root / moved_rel
@@ -387,13 +397,15 @@ def audit_moved_references(
         resolved = _resolve_link(head, moved_dir) if head else moved_rel
         if head and resolved is None:
             continue  # external or non-local; not ours to check
-        problems.extend(_check_target(project_root, moved_rel, resolved or moved_rel, tail))
+        problems.extend(
+            _check_target(project_root, moved_rel, resolved or moved_rel, tail, restrict_missing_to=restrict_missing_to)
+        )
 
     # Outbound structured refs: the moved document's own frontmatter. The claim
     # is a "link/reference audit"; frontmatter refs are references, and v3 checked
     # only inline links -- so an import could repoint a related: entry at a path
     # that does not exist and call the move clean.
-    problems.extend(_check_frontmatter_refs(project_root, moved_rel, text))
+    problems.extend(_check_frontmatter_refs(project_root, moved_rel, text, restrict_missing_to=restrict_missing_to))
 
     # Inbound: nothing may still point at where the document used to be.
     for path in iter_scannable_files(project_root, exclude=exclude):
@@ -415,18 +427,23 @@ def audit_moved_references(
             # referrer's outbound concern (caught when *it* is audited), not the
             # moved document's. Re-validating it here would blame moved_rel for
             # every pre-existing bad anchor anyone else points at it with.
-            if not (project_root / resolved).exists():
+            if not (project_root / resolved).exists() and (restrict_missing_to is None or resolved in restrict_missing_to):
                 problems.append(f"{rel_path}: link to missing {resolved}")
-        problems.extend(_check_frontmatter_refs(project_root, rel_path, other))
+        problems.extend(_check_frontmatter_refs(project_root, rel_path, other, restrict_missing_to=restrict_missing_to))
     return sorted(set(problems))
 
 
-def _check_frontmatter_refs(project_root: Path, rel_path: str, text: str) -> list[str]:
+def _check_frontmatter_refs(
+    project_root: Path, rel_path: str, text: str, *, restrict_missing_to: frozenset[str] | None = None
+) -> list[str]:
     """Structured refs that name a PATH must resolve; ids are the graph's job.
 
     Only path-shaped values are checked. A canonical id (`plan:0042-new`) is
     resolved by `science validate` against the entity graph, and duplicating that
     resolution here would be a second, weaker implementation of it.
+
+    `restrict_missing_to` (see `audit_moved_references`) limits reports to targets a
+    batch move vacated; None reports every missing path-shaped ref.
     """
     frontmatter, _body = split_frontmatter(text)
     if not frontmatter:
@@ -457,13 +474,19 @@ def _check_frontmatter_refs(project_root: Path, rel_path: str, text: str) -> lis
         if resolved is None:
             continue
         if not (project_root / resolved).exists() and not (project_root / value).exists():
+            if restrict_missing_to is not None and resolved not in restrict_missing_to and value not in restrict_missing_to:
+                continue  # a pre-existing broken ref, not one this batch move vacated
             problems.append(f"{rel_path}: {key} points at missing {value}")
     return problems
 
 
-def _check_target(project_root: Path, referrer_rel: str, target_rel: str, fragment: str) -> list[str]:
+def _check_target(
+    project_root: Path, referrer_rel: str, target_rel: str, fragment: str, *, restrict_missing_to: frozenset[str] | None = None
+) -> list[str]:
     target = project_root / target_rel
     if not target.exists():
+        if restrict_missing_to is not None and target_rel not in restrict_missing_to:
+            return []  # a pre-existing broken link, not one this batch move vacated
         return [f"{referrer_rel}: link to missing {target_rel}"]
     if not fragment.startswith("#"):
         return []
