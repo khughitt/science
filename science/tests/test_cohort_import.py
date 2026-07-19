@@ -392,6 +392,7 @@ def test_cohort_apply_survives_mid_claim_source_edit(tmp_path, monkeypatch):
     assert b.read_text(encoding="utf-8") == "# Beta EDITED\n\nnew body\n"
     assert a.exists()
     assert not (root / "entities/plans/0001-alpha.md").exists()
+    assert not (root / "entities/plans/0002-beta.md").exists()
 
 
 def test_cohort_apply_refuses_tampered_report_before_snapshot(tmp_path, monkeypatch):
@@ -477,6 +478,7 @@ def test_cohort_apply_rolls_back_on_inbound_rewrite_failure(tmp_path, monkeypatc
         apply_cohort_import(root, plan)
     assert a.exists() and b.exists()
     assert not (root / "entities/plans/0001-alpha.md").exists()
+    assert not (root / "entities/plans/0002-beta.md").exists()
     assert notes.read_text(encoding="utf-8") == before
 
 
@@ -495,4 +497,5 @@ def test_cohort_apply_rolls_back_real_referrer_on_audit_failure(tmp_path, monkey
         apply_cohort_import(root, plan)
     assert a.exists() and b.exists()
     assert not (root / "entities/plans/0001-alpha.md").exists()
+    assert not (root / "entities/plans/0002-beta.md").exists()
     assert notes.read_text(encoding="utf-8") == before
