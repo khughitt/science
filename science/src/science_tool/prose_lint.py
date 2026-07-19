@@ -523,6 +523,8 @@ def detect_numeric_anchor(
     )
     from science_model.frontmatter import nearest_project_root  # noqa: PLC0415
 
+    from science_tool.numeric_binding import parse_claim_bindings  # noqa: PLC0415
+
     document = build_document_context(path)
     if document is None:
         return []
@@ -534,8 +536,10 @@ def detect_numeric_anchor(
         spec_class_kinds=frozenset(spec_class_kinds if spec_class_kinds is not None else DEFAULT_SPEC_CLASS_KINDS),
         provenance_fields=tuple(provenance_fields if provenance_fields is not None else DEFAULT_PROVENANCE_FIELDS),
     )
+    bindings, _binding_errors = parse_claim_bindings(document)
+    bound_spans = frozenset(b.span for b in bindings)
     issues: list[LintIssue] = []
-    for assessment in assess_numeric_claims(document, resolution_index, config):
+    for assessment in assess_numeric_claims(document, resolution_index, config, bound_spans=bound_spans):
         if isinstance(assessment, Unanchored) and not assessment.local_evidence:
             issues.append(
                 LintIssue(
