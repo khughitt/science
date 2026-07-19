@@ -7,6 +7,7 @@ from typing import Any, Literal
 
 import yaml
 
+from science_tool.skills_lint.discovery import iter_skill_files
 from science_tool.skills_lint.sources import (
     SourcesRegistry,
     leaf_frontmatter,
@@ -138,7 +139,7 @@ def check_index_coverage(root: Path) -> list[SkillIssue]:
 
     indexed_paths = _collect_indexed_paths(index_path.read_text(encoding="utf-8"))
     issues: list[SkillIssue] = []
-    for path in sorted(root.rglob("*.md")):
+    for path in iter_skill_files(root):
         relative_path = path.relative_to(root).as_posix()
         if relative_path == "INDEX.md" or relative_path in indexed_paths:
             continue
@@ -203,7 +204,7 @@ def check_skills(root: Path) -> list[SkillIssue]:
             root,
         )
     )
-    for path in sorted(root.rglob("*.md")):
+    for path in iter_skill_files(root):
         issues.extend(_relative_issues(check_frontmatter(path), root))
         issues.extend(_relative_issues(check_companion_skills(path), root))
         issues.extend(_relative_issues(check_halt_on_conditions(path, root), root))

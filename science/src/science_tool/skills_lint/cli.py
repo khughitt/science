@@ -8,6 +8,7 @@ from urllib.parse import urlparse
 import click
 
 from science_tool.output import emit
+from science_tool.skills_lint.discovery import iter_skill_files
 from science_tool.skills_lint.lint import SkillIssue, check_skills
 from science_tool.skills_lint.sources import (
     FETCH_HOST_ALLOWLIST,
@@ -63,7 +64,7 @@ def build_dependency_views(
     by_source: dict[str, list[str]] = {sid: [] for sid in registry.declared_ids}
     by_leaf: dict[str, list[str]] = {}
     leaf_errors: list[tuple[str, str]] = []
-    for path in sorted(root.rglob("*.md")):
+    for path in iter_skill_files(root):
         refs, error = leaf_source_refs(path)
         rel = path.relative_to(root).as_posix()
         if error is not None:
