@@ -459,13 +459,13 @@ uv run --frozen pyright src/science_tool/refs.py src/science_tool/numeric_proven
 ```
 Expected: clean on these files (pre-existing findings in untouched files are out of scope).
 
-- [ ] **Step 3: pan-disease overlay — short `plan:` refs clear, no new breakage**
+- [ ] **Step 3: pan-disease overlay — short digit-lead prefixes clear, no new breakage**
 
 From the pan-disease project root, overlay the worktree's science and compare `refs check --include-body` against the current pinned behavior:
 
 ```bash
 cd ~/d/health/comparisons/pan-disease
-# Current pin (short plan: prefixes flagged):
+# Current pin (short digit-lead prefixes flagged):
 uv run --frozen science refs check --include-body --format json \
   > /tmp/refs-before.json 2>/dev/null; echo "before exit: $?"
 # Worktree overlay (prefix resolution active):
@@ -474,36 +474,40 @@ uv run --with-editable ~/d/science/.worktrees/refs-prefix-resolution/science \
   > /tmp/refs-after.json 2>/dev/null; echo "after exit: $?"
 ```
 
-Then confirm the delta is exactly the short `plan:NNNN` clears and nothing else regressed (any newly-*appeared* broken ref is a failure):
+Then confirm each cleared ref is backed by **exactly one canonical owner** (a genuine unique digit-lead prefix) and nothing regressed. The shape regex alone is insufficient — a fabricated `interpretation:9999` also matches `<kind>:<digits>`; it simply never *clears* (0 owners → still broken in both runs). The authoritative proof is the owner count, so run the check **under the overlay env** and rebuild the same index + owner map the overlay's scan used:
 
 ```bash
-python3 - <<'PY'
-import json, re
+uv run --with-editable ~/d/science/.worktrees/refs-prefix-resolution/science \
+  python3 - <<'PY'
+import json
+from pathlib import Path
+from science_tool import refs
 before = json.load(open("/tmp/refs-before.json"))
 after = json.load(open("/tmp/refs-after.json"))
 def keyset(d):
     items = d if isinstance(d, list) else d.get("issues", d.get("broken", []))
     return {(i.get("file"), i.get("value") or i.get("ref_value"), i.get("line")) for i in items}
-b, a = keyset(before), keyset(after)
-cleared = b - a
-appeared = a - b
-print("cleared:", len(cleared))
+cleared = keyset(before) - keyset(after)
+appeared = keyset(after) - keyset(before)
+print("cleared:", len(cleared), " appeared:", len(appeared))
 for c in sorted(cleared): print("  -", c)
-print("appeared (must be empty):", len(appeared))
 for c in sorted(appeared): print("  +", c)
-# Short-prefix shape: `<kind>:<digits>` with NO descriptive suffix. Prefix
-# resolution only ever clears these; a genuinely-broken full id (with a
-# suffix) or a fabricated ref must NOT clear.
-SHORT_PREFIX = re.compile(r"[a-z][a-z-]*:\d+")  # anchored by .fullmatch below
+# Rebuild the exact index + owner map the overlay refs scan used.
+root = Path(".")
+idx = refs._resolve_entity_index(root, refs._load_refs_config(root))
+owners = refs.build_entity_prefix_owners(idx)
 assert not appeared, "REGRESSION: new broken refs appeared under overlay"
 assert cleared, "NO-OP: nothing cleared — prefix resolution is not active"
-bad = [v for _, v, _ in cleared if not (v and SHORT_PREFIX.fullmatch(v))]
-assert not bad, f"unexpected non-short-prefix clears (would indicate over-broad resolution): {bad}"
-print("OK: only short digit-lead prefixes cleared, no regressions")
+# Every clear must be a `<kind>:<digits>` prefix with exactly ONE canonical
+# owner. This rejects fabricated refs (owners.get -> None), ambiguous prefixes
+# (> 1), and suffixed full ids (never a key in the owner map) in one check.
+notunique = [v for _, v, _ in cleared if owners.get(v) != 1]
+assert not notunique, f"clears not backed by a unique canonical owner: {notunique}"
+print("OK: every clear is a unique digit-lead prefix; no regressions")
 PY
 ```
 
-Expected: `cleared` is non-empty and every entry is a `<kind>:<digits>` short prefix (e.g. `plan:0019`, and any pre-existing `interpretation:NNNN` / `pre-registration:NNNN` body short-refs that now resolve); `appeared` is empty. Inspect `/tmp/refs-before.json` first and adjust the `keyset` extractor if the JSON shape differs — do not let a mis-parsed empty keyset pass (the `assert cleared` guards against that).
+Expected: `cleared` is non-empty and every entry is a `<kind>:<digits>` prefix with owner count 1 (e.g. `plan:0019`, plus any pre-existing `interpretation:NNNN` / `pre-registration:NNNN` body short-refs that now resolve); `appeared` is empty. Inspect `/tmp/refs-before.json` first and adjust the `keyset` extractor if the JSON shape differs — the `assert cleared` guards against a mis-parsed empty keyset silently passing.
 
 - [ ] **Step 4: `science validate` unchanged under the overlay**
 
@@ -512,15 +516,22 @@ cd ~/d/health/comparisons/pan-disease
 uv run --frozen science validate --format json > /tmp/validate-before.json 2>/dev/null
 uv run --with-editable ~/d/science/.worktrees/refs-prefix-resolution/science \
   science validate --format json > /tmp/validate-after.json 2>/dev/null
-# Let `diff`'s own exit status gate acceptance — a mismatch must fail the step.
-if diff <(python3 -m json.tool /tmp/validate-before.json) \
-        <(python3 -m json.tool /tmp/validate-after.json); then
-  echo "VALIDATE IDENTICAL"
-else
-  echo "VALIDATE DIFF — investigate"; exit 1
-fi
+# One script loads BOTH payloads and asserts structural equality. A parse
+# failure (empty/invalid JSON from either run) raises -> nonzero exit, so a
+# double-empty render cannot false-pass the way a `diff` of two empty renders
+# would.
+python3 - <<'PY'
+import json, sys
+before = json.load(open("/tmp/validate-before.json"))  # raises on empty/invalid
+after = json.load(open("/tmp/validate-after.json"))
+if before == after:
+    print("VALIDATE IDENTICAL")
+else:
+    print("VALIDATE DIFF — investigate", file=sys.stderr)
+    sys.exit(1)
+PY
 ```
-Expected: `VALIDATE IDENTICAL` (this change never reaches `validate`); a diff exits nonzero and fails the step.
+Expected: `VALIDATE IDENTICAL` (this change never reaches `validate`); a difference or an unparseable payload exits nonzero and fails the step.
 
 - [ ] **Step 5: Record acceptance evidence**
 
