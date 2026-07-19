@@ -102,6 +102,7 @@ _LOCAL_ENTITY_KINDS = frozenset(
         "observation",
         "book",
         "paper",
+        "plan",
         "pre-registration",
         "proposition",
         "question",

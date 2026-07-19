@@ -349,3 +349,200 @@ def test_same_line_bound_and_unbound_numbers_are_column_discriminated(tmp_path):
     unbound_col = body_line.index("2.71828") + 1
     assert line7[0].col == unbound_col
     assert line7[0].col != bound_col
+
+
+def _interp(tmp_path: Path, slug: str) -> None:
+    d = tmp_path / "entities" / "interpretations"
+    d.mkdir(parents=True, exist_ok=True)
+    (d / f"{slug}.md").write_text(
+        f"---\nid: interpretation:{slug}\nkind: interpretation\n---\n\nbody\n"
+    )
+
+
+def test_resolve_full_id_and_unique_numeric_prefix(tmp_path):
+    _project(tmp_path)
+    _interp(tmp_path, "0007-altview")
+    idx = build_resolution_index(tmp_path)
+    assert idx.resolve("interpretation:0007-altview") is True   # exact full id
+    assert idx.resolve("interpretation:0007") is True           # unique numeric prefix
+    assert idx.resolve("interpretation:9999") is False          # fabricated
+
+
+def test_resolve_ambiguous_numeric_prefix_fails(tmp_path):
+    _project(tmp_path)
+    _interp(tmp_path, "0013-alpha")
+    _interp(tmp_path, "0013-beta")
+    idx = build_resolution_index(tmp_path)
+    assert idx.resolve("interpretation:0013-alpha") is True     # exact still resolves
+    assert idx.resolve("interpretation:0013") is False          # 2 owners -> ambiguous, fail-closed
+
+
+def test_resolve_non_numeric_prefix_is_not_expanded(tmp_path):
+    _project(tmp_path)
+    d = tmp_path / "entities" / "datasets"
+    (d / "cptac.md").write_text(
+        "---\nid: dataset:cptac-gbm-2021-proteogenomics\nkind: dataset\n---\n\nbody\n"
+    )
+    idx = build_resolution_index(tmp_path)
+    assert idx.resolve("dataset:cptac-gbm-2021-proteogenomics") is True  # exact
+    assert idx.resolve("dataset:cptac") is False                # non-numeric lead: never a short form
+
+
+def _refs(para, idx):
+    return {c.reference for c in local_candidates_for_paragraph(para, idx)}
+
+def _resolved_refs(para, idx):
+    return {c.reference for c in local_candidates_for_paragraph(para, idx) if c.resolution_status == "resolved"}
+
+
+def test_provenance_entity_ref_extracts_and_resolves(tmp_path):
+    _project(tmp_path)
+    _interp(tmp_path, "0007-altview")
+    idx = build_resolution_index(tmp_path)
+    assert "interpretation:0007-altview" in _resolved_refs(
+        "value 7.94 (`interpretation:0007-altview`)", idx)          # full id
+    assert "interpretation:0007" in _resolved_refs(
+        "value 7.94 per `interpretation:0007`.", idx)                # short prefix
+    assert "dataset:xyz" in _resolved_refs("value 7.94 in `dataset:xyz`", idx)
+
+
+def test_hyphenated_kind_extracts_and_prefix_resolves(tmp_path):
+    # A hyphenated allowlist kind (pre-registration) must extract whole via the
+    # longest-first alternation (not sub-match `registration`) AND resolve by
+    # unique digit-lead prefix, exactly like the single-word kinds.
+    _project(tmp_path)
+    d = tmp_path / "entities" / "pre-registrations"
+    d.mkdir(parents=True, exist_ok=True)
+    (d / "0012-tissue.md").write_text(
+        "---\nid: pre-registration:0012-tissue\nkind: pre-registration\n---\n\nbody\n"
+    )
+    idx = build_resolution_index(tmp_path)
+    assert "pre-registration:0012-tissue" in _resolved_refs(
+        "value 7.94 (`pre-registration:0012-tissue`)", idx)      # full hyphenated-kind id
+    assert "pre-registration:0012" in _resolved_refs(
+        "value 7.94 per `pre-registration:0012`.", idx)          # short prefix, hyphenated kind
+
+
+def test_dotted_verbatim_paper_id_extracts(tmp_path):
+    _project(tmp_path)
+    d = tmp_path / "entities" / "papers"
+    d.mkdir(parents=True, exist_ok=True)
+    # id: is read from frontmatter, not the filename; keep the file name plain.
+    (d / "volker2023-source.md").write_text(
+        "---\nid: paper:Volker2023.source\nkind: paper\n---\n\nbody\n"
+    )
+    idx = build_resolution_index(tmp_path)
+    assert "paper:Volker2023.source" in _resolved_refs(
+        "value 7.94 (`paper:Volker2023.source`)", idx)
+
+
+def test_dotted_id_not_truncated_before_continuation(tmp_path):
+    # Atomic id-body guard: a dotted id followed by @host / /path / :extra must
+    # not backtrack to a resolvable shorter id (paper:Volker2023).
+    _project(tmp_path)
+    d = tmp_path / "entities" / "papers"
+    d.mkdir(parents=True, exist_ok=True)
+    (d / "volker2023.md").write_text(
+        "---\nid: paper:Volker2023\nkind: paper\n---\n\nbody\n"
+    )
+    idx = build_resolution_index(tmp_path)
+    assert "paper:Volker2023" in _resolved_refs("value 7.94 (`paper:Volker2023`)", idx)  # bare id resolves
+    for para in (
+        "value 7.94 paper:Volker2023.source@host here",
+        "value 7.94 paper:Volker2023.source/path here",
+        "value 7.94 paper:Volker2023.source:extra here",
+    ):
+        assert "paper:Volker2023" not in _resolved_refs(para, idx)
+
+
+def _paper(tmp_path: Path, entity_id: str, fname: str) -> None:
+    d = tmp_path / "entities" / "papers"
+    d.mkdir(parents=True, exist_ok=True)
+    (d / fname).write_text(f"---\nid: {entity_id}\nkind: paper\n---\n\nbody\n")
+
+
+def test_double_dot_id_masks_no_shorter_ref(tmp_path):
+    # No-`..` rule (mirrors _VERBATIM_RE): a malformed id with consecutive dots
+    # must extract NOTHING — not even a shorter, resolvable prefix. `paper:bad`
+    # is a REAL entity here, so a truncating grammar would mask the number; the
+    # no-`..` lookahead must prevent any candidate at that position.
+    _project(tmp_path)
+    _paper(tmp_path, "paper:bad", "bad.md")
+    idx = build_resolution_index(tmp_path)
+    assert idx.resolve("paper:bad") is True                       # the short id really exists…
+    assert _refs("value 7.94 (`paper:bad..id`)", idx) == set()    # …yet `..` yields no candidate
+    assert _resolved_refs("value 7.94 (`paper:bad..id`)", idx) == set()
+
+
+def test_internal_dot_hyphen_id_extracts_whole(tmp_path):
+    # `paper:good.-id` is a legal _VERBATIM_RE form (only `..` is banned);
+    # the grammar must extract it whole, not truncate to `paper:good`.
+    _project(tmp_path)
+    _paper(tmp_path, "paper:good.-id", "good.md")
+    idx = build_resolution_index(tmp_path)
+    assert "paper:good.-id" in _resolved_refs("value 7.94 (`paper:good.-id`)", idx)
+
+
+def test_topical_kinds_are_not_extracted(tmp_path):
+    _project(tmp_path)
+    idx = build_resolution_index(tmp_path)
+    # hypothesis / question are not provenance-bearing: no candidate at all
+    assert _refs("value 7.94 supports `hypothesis:0001-molecular-truth`.", idx) == set()
+    assert _refs("value 7.94 for `question:0016-tissue`.", idx) == set()
+
+
+def test_embedded_tokens_do_not_yield_resolvable_ref(tmp_path):
+    _project(tmp_path)
+    _interp(tmp_path, "0007-altview")
+    idx = build_resolution_index(tmp_path)
+    for para in (
+        "see x_interpretation:0007 here",
+        "see x-interpretation:0007 here",
+        "path/interpretation:0007-altview.md",
+        "interpretation:0007@host",
+        "interpretation:0007/panel",
+        "see a:interpretation:0007 here",  # `:`-lead embed (left guard rejects)
+    ):
+        assert "interpretation:0007" not in _resolved_refs(para, idx)
+        assert "interpretation:0007-altview" not in _resolved_refs(para, idx)
+
+
+def test_dataset_under_guard_boundaries(tmp_path):
+    _project(tmp_path)
+    idx = build_resolution_index(tmp_path)
+    assert "dataset:xyz" not in _resolved_refs("path/dataset:xyz here", idx)   # embedded path
+    assert "dataset:xyz" in _resolved_refs("computed from `dataset:xyz`.", idx)  # trailing period ok
+
+
+def _hypothesis(tmp_path: Path, slug: str) -> None:
+    d = tmp_path / "entities" / "hypotheses"
+    d.mkdir(parents=True, exist_ok=True)
+    (d / f"{slug}.md").write_text(
+        f"---\nid: hypothesis:{slug}\nkind: hypothesis\n---\n\nbody\n"
+    )
+
+
+def test_number_anchored_by_provenance_entity_ref(tmp_path):
+    _project(tmp_path)
+    _interp(tmp_path, "0007-altview")
+    idx = build_resolution_index(tmp_path)
+    path = _doc(tmp_path, "The window retained 7399 genes (`interpretation:0007`).",
+                frontmatter="kind: interpretation")
+    out = assess_numeric_claims(build_document_context(path), idx, _CFG)
+    kinds = {type(a).__name__ for a in out if a.claim.value == "7399"}
+    assert kinds == {"Anchored"}
+
+
+def test_number_not_anchored_by_topical_hypothesis_ref(tmp_path):
+    # The hypothesis is REAL and resolvable in the index — proving the claim
+    # stays Unanchored because `hypothesis` is a topical (non-provenance) KIND,
+    # not merely because the ref is fabricated.
+    _project(tmp_path)
+    _hypothesis(tmp_path, "0001-molecular-truth")
+    idx = build_resolution_index(tmp_path)
+    assert idx.resolve("hypothesis:0001-molecular-truth") is True  # it exists…
+    path = _doc(tmp_path, "The ARI z was 221 (`hypothesis:0001-molecular-truth`).",
+                frontmatter="kind: interpretation")
+    out = assess_numeric_claims(build_document_context(path), idx, _CFG)
+    kinds = {type(a).__name__ for a in out if a.claim.value == "221"}
+    assert kinds == {"Unanchored"}   # …yet a topical citation must not clear the claim

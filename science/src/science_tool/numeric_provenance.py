@@ -196,6 +196,7 @@ class ResolutionIndex:
     doi_corpus: frozenset[str]
     pmid_corpus: frozenset[str]
     data_root: Path
+    entity_prefix_owners: dict[str, int]
 
     def resolve(self, reference: str) -> bool:
         ref = reference.strip()
@@ -215,7 +216,12 @@ class ResolutionIndex:
         if _PMID_RE.match(ref):
             return ref.split(":")[-1] in self.pmid_corpus
         if _TYPED_REF_RE.match(ref):
-            return ref in self.entity_ids
+            # Exact canonical id, or a digit-lead short prefix owned by exactly
+            # one entity (`interpretation:0013` -> the sole `interpretation:0013-…`).
+            # Non-numeric leads never enter the map; ambiguous (multi-owner)
+            # prefixes have owners > 1 — neither resolves, so a citation cannot
+            # silently anchor to a guessed entity.
+            return ref in self.entity_ids or self.entity_prefix_owners.get(ref) == 1
         # Treat anything else as a candidate artifact path. Reject non-relative
         # paths outright: `Path(base) / ref` silently discards `base` when `ref`
         # is absolute, and `..` segments can escape the project root — a
@@ -436,11 +442,46 @@ def entity_source_candidates(
 # that paragraph's finding but produces no `SourceCandidate` and never clears
 # entity-wide.
 
+# Provenance-bearing entity kinds whose typed citations may anchor a numeric
+# claim. Deliberately EXCLUDES topical/framing kinds (hypothesis, question,
+# topic, theme, concept, discussion, …): existence-checking proves identity,
+# not that the number is sourced there. `task:`/`[@]`/`cite:` remain anchors
+# through their own alternatives below.
+_ANCHOR_ENTITY_KINDS = frozenset({
+    # result / evidence artifacts produced by project work
+    "interpretation", "report", "synthesis", "observation", "finding",
+    "evidence-line", "validation-report", "experiment", "workflow-run",
+    "data-package",
+    # external sources
+    "dataset", "paper", "book", "source",
+    # registered / planned parameters
+    "pre-registration", "plan",
+})
+
+# Longest-first so hyphenated kinds (validation-report) win over any prefix.
+_ANCHOR_KIND_ALT = "|".join(sorted(_ANCHOR_ENTITY_KINDS, key=len, reverse=True))
+
 _BODY_REF_RE = re.compile(
     r"(?:(?<![A-Za-z])task:t\d{2,}"
     r"|\[@[A-Za-z][A-Za-z0-9_:.-]*\]"
     r"|(?<![A-Za-z])cite:[A-Za-z][A-Za-z0-9_:.-]*"
-    r"|(?<![A-Za-z])dataset:[A-Za-z0-9][A-Za-z0-9_.-]*"
+    # Provenance-bearing typed entity-ref (incl. dataset). Three guards:
+    #  (1) left lookbehind — rejects an id embedded in a larger token
+    #      (x_interpretation, path/…, a:…);
+    #  (2) id-scoped no-`..` lookahead — a malformed id whose char-run contains
+    #      consecutive dots matches NOTHING here (not even a truncated prefix),
+    #      mirroring _VERBATIM_RE's sole no-`..` prohibition;
+    #  (3) atomic id body `(?>…)` over the FULL _VERBATIM_RE id charset
+    #      (`[0-9A-Za-z](?:[0-9A-Za-z._-]*[0-9A-Za-z])?` — alnum start, alnum
+    #      terminal so a trailing sentence period stays outside, arbitrary
+    #      internal `._-` incl. `.-`), locked so it cannot backtrack to a
+    #      shorter id: `interpretation:0007.foo@host` fails outright rather
+    #      than truncating to a resolvable `interpretation:0007`;
+    #  followed by a right lookahead rejecting @host / /path / :extra.
+    r"|(?<![A-Za-z0-9_.:/@-])(?:" + _ANCHOR_KIND_ALT + r"):"
+    r"(?![A-Za-z0-9._-]*\.\.)"
+    r"(?>[0-9A-Za-z](?:[0-9A-Za-z._-]*[0-9A-Za-z])?)"
+    r"(?![A-Za-z0-9_:/@-])"
     r"|\[\[[^\]\n]+\]\])"
 )
 
@@ -450,8 +491,10 @@ def local_candidates_for_paragraph(
 ) -> tuple[SourceCandidate, ...]:
     """Extract resolvable body references scoped to a single paragraph.
 
-    Matches `task:tNNN`, `[@key]`, `cite:key`, `dataset:slug`. A `[[wiki]]`
-    link is topical (like `related`) — treated as evidence, not a candidate.
+    Matches `task:tNNN`, `[@key]`, `cite:key`, and provenance-bearing typed
+    entity-refs (`_ANCHOR_ENTITY_KINDS`, e.g. `interpretation:0011-…`,
+    `dataset:slug`), full-id or unique digit-lead prefix. A `[[wiki]]` link is
+    topical (like `related`) — treated as evidence, not a candidate.
     """
     out: list[SourceCandidate] = []
     for m in _BODY_REF_RE.finditer(paragraph_text):
@@ -606,12 +649,21 @@ def build_resolution_index(project_root: Path) -> ResolutionIndex:
 
     root = project_root.resolve()
     task_numbers = {_normalize_task_number(n) for n in refs._load_task_ids(root)}
+    entity_ids = frozenset(refs._load_entity_index(root))
+    entity_prefix_owners: dict[str, int] = {}
+    for eid in entity_ids:
+        kind, _, ident = eid.partition(":")
+        lead = ident.split("-", 1)[0]
+        if lead.isdigit() and lead != ident:
+            key = f"{kind}:{lead}"
+            entity_prefix_owners[key] = entity_prefix_owners.get(key, 0) + 1
     return ResolutionIndex(
         project_root=root,
         task_numbers=frozenset(task_numbers),
-        entity_ids=frozenset(refs._load_entity_index(root)),
+        entity_ids=entity_ids,
         bib_keys=frozenset(load_bib_keys(root)),
         doi_corpus=frozenset(d.strip().lower() for d in refs._load_doi_corpus(root)),
         pmid_corpus=frozenset(refs._load_pmid_corpus(root)),
         data_root=resolve_data_root(root),
+        entity_prefix_owners=entity_prefix_owners,
     )
