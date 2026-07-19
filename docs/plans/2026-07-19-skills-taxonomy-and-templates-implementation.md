@@ -773,44 +773,20 @@ Did the agent carry out the cross-cutting practice according to its workflow, ju
 - Consumes: `archetype:`/`depth:`/provenance validation (Tasks 2–3); the templates (Task 5); the design doc as the exact prose source.
 - Produces: three linted, indexed skills. `meta/SKILL.md` `name: skill-development` (exact — Task 7's codex check asserts it).
 
-- [ ] **Step 1: Author `skills/meta/SKILL.md` verbatim**
+- [ ] **Step 1: Author `skills/meta/SKILL.md` from the router contract**
 
-```markdown
----
-name: skill-development
-description: Use when creating, classifying, naming, organizing, or reviewing a Science skill. Routes to the taxonomy contract and the authoring procedure.
-provenance: internal
----
+Use the fixed `name: skill-development`, `provenance: internal`, and a description whose activation surface explicitly covers creating, **extending**, classifying, naming, organizing, and reviewing a Science skill. Keep the router navigation-only and include these `##` sections in order:
 
-# Skill Development
+1. `Routing trigger` — explicitly includes extending as well as create/classify/name/organize/split/review.
+2. `Scope boundary`.
+3. `Leaves` — routes classification/frontmatter work to `skill-taxonomy.md` and create/**extend**/name/place/split work to `skill-authoring.md`.
+4. `Decision / compose order` — taxonomy first, then authoring when both apply; otherwise load only the matching leaf.
+5. `Parent & neighbors` — links the parent index and neighboring subject routers.
+6. `Templates` — optional extra navigation to the seven scaffolds.
+7. `Success test`.
+8. `Companion Skills`.
 
-A router carries no methodology; the doctrine lives in the leaves below.
-
-## Routing trigger
-
-Load before creating, classifying, naming, splitting, or reviewing any skill under `skills/`.
-
-## Scope boundary
-
-Governs how Science skills are structured and authored. It does not contain domain methodology — that lives in the subject skills the index routes to.
-
-## Leaves
-
-| Leaf | Load when | Do not load when |
-|---|---|---|
-| [`skill-taxonomy.md`](skill-taxonomy.md) | classifying a skill, choosing its archetype, or applying the frontmatter contract | doing domain analysis |
-| [`skill-authoring.md`](skill-authoring.md) | creating, naming, placing, or splitting a skill | the archetype is already fixed and you only need the contract |
-
-## Templates
-
-Author a new leaf from the matching scaffold: `templates/measurement-qa.md`, `templates/method-guide.md`, `templates/analysis-discipline.md`, `templates/normative-reference.md`, `templates/tool-guide.md`, `templates/practice-guide.md`; author a router from `templates/router.md`.
-
-## Companion Skills
-
-- `../INDEX.md` — the skill index.
-```
-
-(Templates are referenced as inline code above — they exist by Task 5, but keeping them inline-code also matches the index's reference style and avoids coupling the router's link-check to scaffold paths.)
+This outline is the canonical router-profile contract from the approved design. Do not add substantive methodology to the router.
 
 - [ ] **Step 2: Author `skills/meta/skill-taxonomy.md`**
 
@@ -823,17 +799,19 @@ archetype: normative-reference
 provenance: internal
 ---
 ```
-Body: `# Skill Taxonomy`, then the following sections, each filled by copying the named design-doc source **verbatim** (adjust only heading text to match this list; do not paraphrase or invent):
+Body: `# Skill Taxonomy`, then the complete `normative-reference` contract in this `##` order:
 
-| Leaf section (`##`) | Exact source in the design doc |
-|---|---|
-| Scope | one sentence: "The classification contract every skill is described by." |
-| The five axes | the axis table under *"The model — three layers + orthogonal attributes"* |
-| Leaf archetypes | all six blocks under *"The six leaf archetypes"* (Answers / Classification test / Slots / Success test), verbatim |
-| The router profile | the bullet list under *"The router profile"* |
-| Frontmatter contract | the bullets under *"Frontmatter contract + linter wiring"* describing `archetype:` / `depth:` / `provenance:`; state that structural role and subject are derived, not fields |
-| Invalid cases | enumerate what the linter rejects: a present `type:`; `archetype:` on a router/index; unknown/`null`/list `archetype:` or `depth:`; `sources:` + `provenance:` together; malformed `sources:` |
-| Companion Skills | `- \`../INDEX.md\` — the skill index.` |
+1. `Scope`.
+2. `Vocabulary / schema / enums` — preserve the five-axis table and all six archetype definitions, including their answers, classification tests, slots, and success tests.
+3. `Invariants` — preserve the exactly-one-primary-archetype rule, orthogonal-axis model, and navigation-only router profile.
+4. `Conformance rules` — preserve the executable frontmatter contract and the mechanical/itemized checking boundary.
+5. `Examples` — use only examples already ratified by the design and current doctrine.
+6. `Versioning / migration` — preserve stable-name, `type:`→`depth:`, optional-archetype, and deferred-migration doctrine.
+7. `Invalid cases` — include unknown, `null`, list, **and mapping** values for scalar `archetype:`/`depth:` fields.
+8. `Success test`.
+9. `Companion Skills` — link the authoring leaf and parent index.
+
+The design and existing doctrine remain the prose source. Organize them under the declared archetype slots; do not invent taxonomy policy.
 
 - [ ] **Step 3: Author `skills/meta/skill-authoring.md`**
 
@@ -846,25 +824,18 @@ archetype: practice-guide
 provenance: internal
 ---
 ```
-Body: `# Skill Authoring`, then these sections copied **verbatim** from the design's *"Authoring policy — naming, placement, create/split/extend"* plus the router invariant and eligibility rule:
+Body: `# Skill Authoring`, then the complete `practice-guide` contract in this `##` order:
 
-| Leaf section (`##`) | Exact source in the design doc |
-|---|---|
-| When to apply | one sentence: "Before creating, naming, placing, splitting, or extending a skill." |
-| Naming | the **Naming (stable identifiers)** bullets |
-| Placement (pre-migration) | the **Placement (pre-migration)** bullets |
-| Create vs extend vs split | the **Create vs. extend vs. split** bullets |
-| Router invariant and the hub anti-pattern | the *"The router profile"* target-invariant paragraph (router = nav-only; hub = migration smell) |
-| Template-eligibility rule | the recorded doctrine sentence under *"Template-eligibility rule"* |
-| Common pitfalls | these three bullets, verbatim (see below) |
-| Companion Skills | `- \`../INDEX.md\` — the skill index.` |
+1. `When to apply`.
+2. `Workflow steps` — classify, choose CREATE/EXTEND/SPLIT, name, place, and author from the matching template; extract methodology when making a router.
+3. `Judgment rules` — preserve naming, placement, CREATE/EXTEND/SPLIT, router/hub, and template-eligibility doctrine under subsections.
+4. `Quality criteria` — express the approved doctrine as observable artifact criteria.
+5. `Common pitfalls` — preserve the existing three pitfalls.
+6. `Outputs` — record the decision and produce the typed leaf or navigation-only router, stable name, and placement outcome.
+7. `Success test`.
+8. `Companion Skills` — link the taxonomy leaf and parent index.
 
-The **Common pitfalls** section body is exactly:
-```markdown
-- Do not overload one field with two axes. Structural role, subject, depth, and source-basis are separate; `type:` was retired precisely because it conflated structural role with content contract.
-- Do not encode the archetype in the skill name. The name states the operation on its subject; `archetype:` carries the contract.
-- Do not begin the corpus reorganization (renames, moves, archetype backfill, hub extraction) while authoring a single skill. That is a separate migration phase, driven by the corpus matrix.
-```
+Derive workflow, quality, output, and success-test wording only from the approved design and preserved doctrine; do not add new authoring policy.
 
 - [ ] **Step 4: Update `skills/INDEX.md` — add entries AND broaden the intro**
 
@@ -1021,6 +992,6 @@ cd science && uv run python ../scripts/generate_codex_skills.py && git status --
 
 - **Spec coverage:** iterator (T1) · depth+fixtures (T2) · archetype (T3) · baselines-before-doctrine (T4) · templates + conformance/full-linter tests (T5) · meta router+leaves+INDEX-broaden (T6) · codex meta+templates+de-hard-coded counts (T7) · with-doctrine + acceptance (T8). Every design success-criterion and every reviewer finding maps to a step.
 - **Failing-first:** T4 baselines precede all doctrine; T5 conformance tests are observed RED before the templates exist; T7 codex tests observed RED before wiring; T2/T3 unit tests RED before impl.
-- **No placeholders:** all linter/codex/test steps carry exact code; the seven templates are given verbatim; the two doctrine leaves are specified by an exact section→design-source mapping copied verbatim (the design prose is committed).
-- **Crash-safety:** `depth`/`archetype` validation is presence-and-`isinstance(str)` explicit; `null`/list tests cover both fields.
+- **No placeholders:** all linter/codex/test steps carry exact code; the seven templates are given verbatim; the two doctrine leaves are specified by complete archetype-contract outlines grounded in the committed design prose.
+- **Crash-safety:** `depth`/`archetype` validation is presence-and-`isinstance(str)` explicit; `null`/list/mapping tests cover scalar-field rejection.
 - **Type/name consistency:** `iter_skill_files`, `VALID_DEPTHS`, `VALID_ARCHETYPES`, `STRUCTURAL_FILENAMES`, `COMPANION_SKILLS`/`companion_to_skill_name`, the six archetype spellings, and the three fixed names are used identically wherever referenced.

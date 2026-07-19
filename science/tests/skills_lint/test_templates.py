@@ -7,6 +7,7 @@ from science_tool.skills_lint.lint import check_skills
 
 REPO = Path(__file__).resolve().parents[3]
 TEMPLATES = REPO / "skills" / "meta" / "templates"
+META = REPO / "skills" / "meta"
 
 # Approved heading lists — the CONTRACT, encoded here, NOT derived from the files.
 EXPECTED_HEADINGS = {
@@ -32,6 +33,18 @@ EXPECTED_HEADINGS = {
 }
 ROUTER_HEADINGS = ["Routing trigger", "Scope boundary", "Leaves", "Decision / compose order",
                    "Parent & neighbors", "Success test", "Companion Skills"]
+CANONICAL_HEADINGS = {
+    "SKILL.md": ROUTER_HEADINGS,
+    "skill-taxonomy.md": [
+        "Scope", "Vocabulary / schema / enums", "Invariants", "Conformance rules",
+        "Examples", "Versioning / migration", "Invalid cases", "Success test",
+        "Companion Skills",
+    ],
+    "skill-authoring.md": [
+        "When to apply", "Workflow steps", "Judgment rules", "Quality criteria",
+        "Common pitfalls", "Outputs", "Success test", "Companion Skills",
+    ],
+}
 
 
 def _headings(text: str) -> list[str]:
@@ -47,6 +60,27 @@ def test_template_headings_match_contract(archetype: str) -> None:
 def test_router_template_headings_match_contract() -> None:
     text = (TEMPLATES / "router.md").read_text(encoding="utf-8")
     assert _headings(text) == ROUTER_HEADINGS
+
+
+def _is_subsequence(required: list[str], actual: list[str]) -> bool:
+    remaining = iter(actual)
+    return all(any(candidate == heading for candidate in remaining) for heading in required)
+
+
+@pytest.mark.parametrize("filename", sorted(CANONICAL_HEADINGS))
+def test_canonical_meta_skills_dogfood_declared_contract(filename: str) -> None:
+    headings = _headings((META / filename).read_text(encoding="utf-8"))
+    assert _is_subsequence(CANONICAL_HEADINGS[filename], headings)
+
+
+def test_extension_requests_activate_and_route_to_authoring_doctrine() -> None:
+    router = (META / "SKILL.md").read_text(encoding="utf-8")
+    frontmatter, body = router.split("\n---\n", maxsplit=1)
+    routing_surface, leaves = body.split("## Leaves", maxsplit=1)
+
+    assert "extending" in frontmatter.lower()
+    assert "extending" in routing_surface.lower()
+    assert "extending" in leaves.lower()
 
 
 def _body_of(template_text: str) -> str:

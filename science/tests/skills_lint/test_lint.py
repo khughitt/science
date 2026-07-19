@@ -453,6 +453,11 @@ def test_archetype_list_is_invalid_not_crash(tmp_path: Path) -> None:
     assert any(i.kind == "invalid-field" and i.field == "archetype" for i in check_frontmatter(_write_leaf(tmp_path, "archetype: [measurement-qa]\n")))
 
 
+def test_archetype_mapping_is_invalid_not_crash(tmp_path: Path) -> None:
+    issues = check_frontmatter(_write_leaf(tmp_path, "archetype: {primary: measurement-qa}\n"))
+    assert any(i.kind == "invalid-field" and i.field == "archetype" for i in issues)
+
+
 def _write_named(tmp_path: Path, filename: str, fields: str) -> Path:
     path = tmp_path / filename
     path.write_text(f"---\nname: x\ndescription: y\n{fields}---\n\n## Companion Skills\n", encoding="utf-8")
