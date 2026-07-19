@@ -1,6 +1,7 @@
 ---
 name: statistics-survival-and-hierarchical-models
 description: Use when designing or reviewing Cox, Weibull, AFT, frailty, mixed-effects, Bayesian hierarchical, or multi-dataset causal models.
+sources: [baygent-skills]
 ---
 
 # Survival and Hierarchical Models
@@ -58,20 +59,17 @@ single-number verdict when hazards clearly cross.
 
 ## Bayesian Diagnostics
 
-Minimum requirements:
+For the general Bayesian convergence gate (R-hat, ESS, divergences),
+posterior-predictive and calibration checks, and prior sensitivity, use
+[`bayesian-workflow.md`](bayesian-workflow.md). This leaf adds only the
+survival/hierarchical-specific pieces:
 
-- R-hat near 1.00 for all verdict-bearing parameters.
-- Effective sample size adequate for posterior means, intervals, and tail
-  probabilities used in the verdict.
-- No unresolved divergent transitions.
-- Trace plots for key parameters and group-level scales.
-- Posterior predictive checks on the outcome scale.
-- Prior predictive checks when priors influence scale or sign.
-- Sensitivity to weakly informative vs domain-informed priors when the posterior
-  is data-sparse.
-
-If diagnostics fail, fix the model or downgrade the verdict. Do not increase
-draws to hide divergences or non-identifiability.
+- Trace plots and R-hat for **group-level scale parameters**, not just fixed
+  effects — the funnel lives in the scales.
+- Posterior predictive checks on the **survival/hazard scale** (e.g. predicted vs
+  observed Kaplan-Meier), not only on the linear predictor.
+- If diagnostics fail, fix the model or downgrade the verdict; do not raise draws
+  to hide divergences.
 
 ## Common Failure Modes
 
@@ -121,6 +119,7 @@ non-identifiability, divergences, or sensitivity disagreement.
 
 ## Companion Skills
 
+- [`bayesian-workflow.md`](bayesian-workflow.md) - the general convergence/calibration/sensitivity gate this leaf specializes.
 - [`sensitivity-arbitration.md`](sensitivity-arbitration.md) - pre-committed verdict rules for model diagnostics and sensitivity runs.
 - [`power-floor-acknowledgement.md`](power-floor-acknowledgement.md) - independent-unit power floors for survival and hierarchical models.
 - [`compositional-data.md`](compositional-data.md) - denominator and zero-handling rules for fraction-valued model inputs.
