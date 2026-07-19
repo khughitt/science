@@ -319,6 +319,7 @@ def _materialize(path: Path, snap: PathSnapshot) -> None:
         path.mkdir(parents=False, exist_ok=True)
         os.chmod(path, fp.mode)  # exact bits, incl. 0o000 — no `or 0o755` fallback
     else:  # symlink
+        assert fp.symlink_target is not None  # a present symlink fingerprint always carries its target
         os.symlink(fp.symlink_target, path)
 
 

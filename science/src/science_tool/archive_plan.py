@@ -165,7 +165,11 @@ def plan_archive(project_root: Path, *, selection: ArchiveSelection, now: str) -
         appended = "".join(json.dumps(m.row.model_dump(), sort_keys=True) + "\n" for m in moves)
         post_bytes = pre_bytes + appended.encode("utf-8")
         index_pre = fingerprint(index_abs)
-        index_mode = index_pre.mode if index_pre.existed else 0o644
+        if index_pre.existed:
+            assert index_pre.mode is not None  # a present fingerprint always carries its exact mode
+            index_mode = index_pre.mode
+        else:
+            index_mode = 0o644
         index = PathTransition(role="archive-index",
                                rel_path=index_abs.relative_to(project_root).as_posix(),
                                pre=index_pre, post=_fp_of_bytes(post_bytes, index_mode),
@@ -280,6 +284,7 @@ def apply_archive_plan(project_root: Path, plan: ArchivePlan, *, staging_token: 
             if t.role == "created-dir":
                 d = abs_by_t[id(t)]
                 d.mkdir(parents=False, exist_ok=True)  # every ancestor is its own transition
+                assert t.post.mode is not None  # post.existed=True dir fingerprint always carries a mode
                 os.chmod(d, t.post.mode)
         for m in plan.moves:
             src = project_root / m.original_path
@@ -295,6 +300,8 @@ def apply_archive_plan(project_root: Path, plan: ArchivePlan, *, staging_token: 
             _fsync_dir(dst.parent)
             fault(f"renamed:{m.id}")  # kill boundary: after each rename, before the index write
         if plan.index is not None:
+            assert plan.index.postimage is not None  # archive-index role always carries a postimage
+            assert plan.index.post.mode is not None  # post.existed=True fingerprint always carries a mode
             staged_write(abs_by_t[id(plan.index)], plan.index.postimage,
                          plan.index.post.mode, staging_token,
                          target_pre=plan.index.pre)  # mode concrete; target_pre guards cleanup

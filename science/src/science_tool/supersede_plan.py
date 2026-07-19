@@ -258,6 +258,8 @@ def apply_supersede_plan(project_root: Path, plan: SupersedePlan, *, staging_tok
     snap = snapshot_paths(targets)
     try:
         for target, w in zip(targets, plan.writes, strict=True):
+            assert w.postimage is not None  # entity-rewrite role always carries a postimage
+            assert w.post.mode is not None  # post.existed=True fingerprint always carries a mode
             staged_write(target, w.postimage, w.post.mode, staging_token, target_pre=w.pre)
             fault(f"written:{w.rel_path}")  # kill boundary: after each entity write
         for target, w in zip(targets, plan.writes, strict=True):
