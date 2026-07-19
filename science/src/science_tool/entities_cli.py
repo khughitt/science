@@ -406,10 +406,9 @@ def entity_migrate_specs(apply_changes: bool, resume_interrupted: bool, output_f
     `spec:` references still resolve as annotation-only today — this command makes a project
     flip-ready; it does not change resolution. Plan-then-`--apply`; an interrupted apply is `--resume`d.
     """
-    import json as _json
-
     from science_tool.entities import EntityCommandError
     from science_tool.migrate_specs import SpecMigrationRefused, migrate, resume
+    from science_tool.output import emit
     from science_tool.reference_rewrite import ReferenceDriftError
 
     if apply_changes and resume_interrupted:
@@ -420,18 +419,17 @@ def entity_migrate_specs(apply_changes: bool, resume_interrupted: bool, output_f
     except (SpecMigrationRefused, EntityCommandError, ReferenceDriftError) as exc:
         raise click.ClickException(str(exc)) from exc
 
-    if output_format == "json":
-        click.echo(_json.dumps(report, indent=2))
-        return
+    def _render_text() -> None:
+        if apply_changes or resume_interrupted:
+            click.echo(f"migration applied; flip_ready={report['flip_ready']}")
+            click.echo(f"references now: {report['references']}")
+        else:
+            click.echo(f"would migrate {len(report['migrated'])} legacy spec(s); flip_ready={report['flip_ready']}")
+            if report["manual_retarget_count"]:
+                click.echo(f"manual-retarget ({report['manual_retarget_count']}): see --format json")
+            click.echo("(dry run — nothing written; re-run with --apply)")
 
-    if apply_changes or resume_interrupted:
-        click.echo(f"migration applied; flip_ready={report['flip_ready']}")
-        click.echo(f"references now: {report['references']}")
-    else:
-        click.echo(f"would migrate {len(report['migrated'])} legacy spec(s); flip_ready={report['flip_ready']}")
-        if report["manual_retarget_count"]:
-            click.echo(f"manual-retarget ({report['manual_retarget_count']}): see --format json")
-        click.echo("(dry run — nothing written; re-run with --apply)")
+    emit(output_format=output_format, payload=report, render_text=_render_text)
 
 
 @entity_group.command("sections")
