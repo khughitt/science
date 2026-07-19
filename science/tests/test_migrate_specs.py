@@ -772,3 +772,10 @@ def test_cli_apply_and_resume_mutually_exclusive(tmp_path: Path, monkeypatch: py
     monkeypatch.chdir(project)
     result = CliRunner().invoke(entity_group, ["migrate-specs", "--apply", "--resume"])
     assert result.exit_code != 0 and "mutually exclusive" in result.output
+
+
+def test_spec_remains_annotation_only() -> None:
+    """S3b ships the migration only; the resolution flip is a separate later effort."""
+    from science_tool.graph.sources import _ANNOTATION_REF_PREFIXES
+
+    assert _ANNOTATION_REF_PREFIXES == frozenset({"meta", "spec"})
