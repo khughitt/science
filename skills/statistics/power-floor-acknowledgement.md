@@ -1,6 +1,7 @@
 ---
 name: statistics-power-floor-acknowledgement
 description: Use before interpreting null, weak, or boundary results from finite-sample analyses, especially pre-registrations, replication attempts, subgroup tests, and negative findings.
+provenance: internal
 ---
 
 # Power-Floor Acknowledgement
