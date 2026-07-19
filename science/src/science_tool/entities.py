@@ -1344,6 +1344,8 @@ _REMOVABLE_FRONTMATTER_REF_KEYS: frozenset[str] = frozenset(
     }
 )
 
+# `.worktrees` is this toolkit's own convention; `worktrees` also covers nested linked-worktree
+# containers such as `.claude/worktrees/<agent>/` — another branch's checkout, never project content.
 _REFERENCE_SCAN_SKIP_DIRS: frozenset[str] = frozenset(
     {
         ".git",
@@ -1355,6 +1357,7 @@ _REFERENCE_SCAN_SKIP_DIRS: frozenset[str] = frozenset(
         ".worktrees",
         "__pycache__",
         "node_modules",
+        "worktrees",
     }
 )
 
