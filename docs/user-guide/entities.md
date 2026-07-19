@@ -119,10 +119,11 @@ science entities import docs/_staging/my-design.md --kind spec --save-plan /tmp/
 ```
 
 **Inspect the manual-hit list** in the preview before applying — those prose/code path
-mentions are not auto-repointed. Then apply the saved plan:
+mentions are not auto-repointed. The `--save-plan` step prints a `plan_sha256`; apply the
+saved plan under that approval envelope, so a plan edited or swapped after review is refused:
 
 ```bash
-science entities import --apply-plan /tmp/p.json
+science entities import --apply-plan /tmp/p.json --expected-plan-sha256 <plan_sha256>
 ```
 
 Finally, **commit the canonical entity** at `entities/specs/NNNN-slug.md` (or

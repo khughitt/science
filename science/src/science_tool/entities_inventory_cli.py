@@ -477,6 +477,7 @@ def entities_register_kind_command(kind: str, entity_class: str, project_path: P
     default=None,
     help="Apply a plan saved by an earlier preview. Mutually exclusive with SOURCE.",
 )
+@click.option("--expected-plan-sha256", default=None, help="Required with --apply-plan: SHA-256 of the raw plan bytes.")
 def entities_import_command(
     source: Path | None,
     kind: str | None,
@@ -487,11 +488,12 @@ def entities_import_command(
     save_plan: Path | None,
     overwrite_plan: bool,
     apply_plan_path: Path | None,
+    expected_plan_sha256: str | None,
 ) -> None:
     """Import a loose markdown document as a canonical entity.
 
     Preview:  science entities import SRC --kind plan --save-plan p.json
-    Apply:    science entities import --apply-plan p.json
+    Apply:    science entities import --apply-plan p.json --expected-plan-sha256 SHA
 
     There is deliberately no --apply flag on the preview form. Re-deriving the
     plan inside the applying invocation would mean the operator approves one
@@ -502,20 +504,30 @@ def entities_import_command(
     from science_tool.entity_import import (
         EntityImportError,
         apply_import,
-        load_import_plan,
+        parse_import_plan,
         plan_import,
     )
+    from science_tool.plan_common import EnvelopeError, plan_sha256, read_plan_bytes, verify_envelope
     from science_tool.reference_rewrite import ReferenceDriftError
 
     if apply_plan_path is not None:
         if source is not None or kind is not None:
             raise click.UsageError("--apply-plan takes the saved plan only; do not repeat SOURCE or --kind.")
+        if not expected_plan_sha256:
+            raise click.UsageError("--apply-plan requires --expected-plan-sha256")
         # Exclude the plan artifact from the apply-time corpus scan: it lives in
         # the corpus, `.json` is scannable, and its body repeats the moving source
         # path, so an unexcluded plan drifts against itself and every replay fails.
         exclude = frozenset({apply_plan_path.resolve()})
+        # Single read: hash and parse the SAME bytes, so nothing can swap the plan
+        # between the envelope check and the parse (matches archive/mark-superseded).
+        raw = read_plan_bytes(apply_plan_path)
         try:
-            plan = load_import_plan(apply_plan_path)
+            verify_envelope(raw, expected_plan_sha256)
+        except EnvelopeError as exc:
+            raise click.ClickException(str(exc)) from exc
+        try:
+            plan = parse_import_plan(raw)
             payload = {**plan.model_dump(), "applied": apply_import(project_root, plan, exclude=exclude)}
         except (EntityImportError, EntityCommandError, ReferenceDriftError) as exc:
             raise click.ClickException(str(exc)) from exc
@@ -524,6 +536,8 @@ def entities_import_command(
 
     if source is None or kind is None:
         raise click.UsageError("SOURCE and --kind are required unless --apply-plan is given.")
+    if expected_plan_sha256:
+        raise click.UsageError("--expected-plan-sha256 requires --apply-plan")
     # --save-plan must never clobber. `--save-plan doc/plans/x.md` (a typo for the
     # source, or any real repo file) would otherwise destroy that file during what
     # the command presents as a read-only preview. Refuse the source outright, and
@@ -541,16 +555,22 @@ def entities_import_command(
     except (EntityImportError, EntityCommandError) as exc:
         raise click.ClickException(str(exc)) from exc
     if save_plan is not None:
-        payload_json = plan.model_dump_json(indent=2)
+        # Write the exact bytes we hash, in binary, so plan_sha256 == the on-disk
+        # bytes an --apply-plan will later read (no text-mode newline translation).
+        payload_bytes = plan.model_dump_json(indent=2).encode("utf-8")
         try:
-            with save_plan.open("x", encoding="utf-8") as fh:  # exclusive create
-                fh.write(payload_json)
+            with open(save_plan, "xb") as fh:  # exclusive create
+                fh.write(payload_bytes)
         except FileExistsError:
             if not overwrite_plan:
                 raise click.UsageError(
                     f"--save-plan target {save_plan} exists; pass --overwrite-plan to replace it"
                 ) from None
-            save_plan.write_text(payload_json, encoding="utf-8")
+            save_plan.write_bytes(payload_bytes)
         except OSError as exc:
             raise click.UsageError(f"cannot write --save-plan to {save_plan}: {exc}") from exc
+        emit(output_format="json",
+             payload={**plan.model_dump(), "plan_sha256": plan_sha256(payload_bytes)},
+             render_text=lambda: None)
+        return
     emit(output_format="json", payload=plan.model_dump(), render_text=lambda: None)

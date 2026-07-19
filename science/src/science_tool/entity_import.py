@@ -244,6 +244,20 @@ def load_import_plan(path: Path) -> ImportPlan:
         raise EntityImportError(f"{path} is not a readable import plan: {exc}") from exc
 
 
+def parse_import_plan(raw: bytes) -> ImportPlan:
+    """Parse plan bytes the caller already read for the approval envelope.
+
+    Same typing guarantee as `load_import_plan`, but on bytes that were hashed and
+    verified in the same read -- re-reading the file would open a swap window
+    between the envelope check and the parse. Identity/path safety is still
+    untrusted until `apply_import` validates it.
+    """
+    try:
+        return ImportPlan.model_validate_json(raw)
+    except PydanticValidationError as exc:
+        raise EntityImportError(f"plan bytes are not a readable import plan: {exc}") from exc
+
+
 @dataclass(frozen=True)
 class _FileState:
     """What a path was, not merely what bytes it held.

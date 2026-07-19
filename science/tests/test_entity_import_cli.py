@@ -2,12 +2,26 @@
 """CLI: science entities import (report-then-apply)."""
 from __future__ import annotations
 
+import hashlib
 import json
 from pathlib import Path
 
 from click.testing import CliRunner
 
 from science_tool.cli import main
+
+
+def _sha(plan_file: Path) -> str:
+    return hashlib.sha256(plan_file.read_bytes()).hexdigest()
+
+
+def _apply(root: Path, plan_file: Path):
+    """Apply a saved plan through the mandatory approval envelope (sha over the file bytes)."""
+    return CliRunner().invoke(
+        main,
+        ["entities", "import", "--apply-plan", str(plan_file),
+         "--project-root", str(root), "--expected-plan-sha256", _sha(plan_file)],
+    )
 
 
 def _project(tmp_path: Path) -> Path:
@@ -41,9 +55,7 @@ def test_dry_run_then_apply_use_the_same_id(tmp_path: Path) -> None:
     previewed = payload["entity_id"]
     assert previewed == "plan:0001-a-thing"
 
-    r2 = CliRunner().invoke(
-        main, ["entities", "import", "--apply-plan", str(plan_file), "--project-root", str(root)]
-    )
+    r2 = _apply(root, plan_file)
     assert r2.exit_code == 0, r2.output
     assert json.loads(r2.output)["applied"]["id"] == previewed
     assert not source.exists()
@@ -64,9 +76,7 @@ def test_apply_plan_saved_inside_the_corpus_does_not_self_drift(tmp_path: Path) 
     assert plan_file.parent == root, "this test only means something with the plan inside the corpus"
     before = plan_file.read_text(encoding="utf-8")
 
-    result = CliRunner().invoke(
-        main, ["entities", "import", "--apply-plan", str(plan_file), "--project-root", str(root)]
-    )
+    result = _apply(root, plan_file)
 
     assert result.exit_code == 0, result.output  # not rejected as self-drift
     assert (root / "entities" / "plans" / "0001-a-thing.md").exists()
@@ -92,9 +102,7 @@ def test_apply_refuses_when_the_previewed_number_was_claimed_between_invocations
         "---\nid: plan:0001-squatter\n---\n", encoding="utf-8"
     )
 
-    result = CliRunner().invoke(
-        main, ["entities", "import", "--apply-plan", str(plan_file), "--project-root", str(root)]
-    )
+    result = _apply(root, plan_file)
 
     assert result.exit_code != 0, "applied a plan whose number was taken"
     assert "0001" in result.output
@@ -119,9 +127,7 @@ def test_apply_refuses_when_a_referrer_changed_between_invocations(tmp_path: Pat
         encoding="utf-8",
     )
 
-    result = CliRunner().invoke(
-        main, ["entities", "import", "--apply-plan", str(plan_file), "--project-root", str(root)]
-    )
+    result = _apply(root, plan_file)
 
     assert result.exit_code != 0
     assert source.exists()
@@ -148,9 +154,7 @@ def test_apply_plan_rejects_a_plan_from_another_project(tmp_path: Path) -> None:
     root_b = _project(tmp_path / "b")
     _payload, plan_file = _preview(root_a, root_a / "doc" / "plans" / "x.md")
 
-    result = CliRunner().invoke(
-        main, ["entities", "import", "--apply-plan", str(plan_file), "--project-root", str(root_b)]
-    )
+    result = _apply(root_b, plan_file)
 
     assert result.exit_code != 0, "applied a plan built against a different corpus"
 
@@ -199,9 +203,7 @@ def test_explicit_title_overrides_heading(tmp_path: Path) -> None:
     source = root / "doc" / "plans" / "x.md"
 
     _payload, plan_file = _preview(root, source, "--title", "Explicit Title")
-    result = CliRunner().invoke(
-        main, ["entities", "import", "--apply-plan", str(plan_file), "--project-root", str(root)]
-    )
+    result = _apply(root, plan_file)
 
     assert result.exit_code == 0, result.output
     assert (root / "entities" / "plans" / "0001-explicit-title.md").exists()
@@ -274,3 +276,74 @@ def test_save_plan_to_a_missing_parent_dir_is_a_clean_error(tmp_path: Path) -> N
     # (click's clean-error exit), not the raw OSError leaking past click's handling.
     assert isinstance(result.exception, SystemExit), result.exception
     assert "cannot write --save-plan" in result.output
+
+
+# ---- approval envelope (uniform with archive / mark-superseded) --------------
+
+
+def test_apply_plan_requires_expected_sha(tmp_path: Path) -> None:
+    root = _project(tmp_path)
+    source = root / "doc" / "plans" / "x.md"
+    _payload, plan_file = _preview(root, source)
+
+    result = CliRunner().invoke(
+        main, ["entities", "import", "--apply-plan", str(plan_file), "--project-root", str(root)]
+    )
+
+    assert result.exit_code != 0
+    assert "--expected-plan-sha256" in result.output
+    assert source.exists(), "a refused apply moved the source"
+    assert list((root / "entities" / "plans").iterdir()) == []
+
+
+def test_apply_plan_rejects_a_sha_that_does_not_match_the_bytes(tmp_path: Path) -> None:
+    root = _project(tmp_path)
+    source = root / "doc" / "plans" / "x.md"
+    _payload, plan_file = _preview(root, source)
+
+    result = CliRunner().invoke(
+        main, ["entities", "import", "--apply-plan", str(plan_file),
+               "--project-root", str(root), "--expected-plan-sha256", "0" * 64]
+    )
+
+    assert result.exit_code != 0
+    assert "approval envelope" in result.output
+    assert source.exists(), "a refused apply moved the source"
+    assert list((root / "entities" / "plans").iterdir()) == []
+
+
+def test_apply_plan_rejects_a_swapped_plan_file(tmp_path: Path) -> None:
+    """The envelope binds the exact approved bytes: editing the file after preview refuses."""
+    root = _project(tmp_path)
+    source = root / "doc" / "plans" / "x.md"
+    payload, plan_file = _preview(root, source)
+    approved_sha = payload["plan_sha256"]
+
+    plan_file.write_bytes(plan_file.read_bytes() + b" ")  # a one-byte edit after approval
+    result = CliRunner().invoke(
+        main, ["entities", "import", "--apply-plan", str(plan_file),
+               "--project-root", str(root), "--expected-plan-sha256", approved_sha]
+    )
+
+    assert result.exit_code != 0
+    assert "approval envelope" in result.output
+    assert source.exists()
+
+
+def test_save_plan_emits_plan_sha256_matching_the_file(tmp_path: Path) -> None:
+    root = _project(tmp_path)
+    payload, plan_file = _preview(root, root / "doc" / "plans" / "x.md")
+    assert payload["plan_sha256"] == _sha(plan_file)
+
+
+def test_expected_sha_without_apply_plan_is_rejected(tmp_path: Path) -> None:
+    root = _project(tmp_path)
+    source = root / "doc" / "plans" / "x.md"
+
+    result = CliRunner().invoke(
+        main, ["entities", "import", str(source), "--kind", "plan",
+               "--project-root", str(root), "--expected-plan-sha256", "abc"]
+    )
+
+    assert result.exit_code != 0
+    assert "requires --apply-plan" in result.output

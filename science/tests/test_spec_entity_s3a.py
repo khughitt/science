@@ -101,7 +101,8 @@ def test_cli_import_spec_roundtrip_rewrites_link_and_reports_manual_hit(tmp_path
 
     apply = runner.invoke(
         main,
-        ["entities", "import", "--apply-plan", str(plan_path), "--project-root", str(root)],
+        ["entities", "import", "--apply-plan", str(plan_path), "--project-root", str(root),
+         "--expected-plan-sha256", preview_payload["plan_sha256"]],
     )
     assert apply.exit_code == 0, apply.output
 
