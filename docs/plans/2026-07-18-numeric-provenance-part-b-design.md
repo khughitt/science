@@ -16,6 +16,13 @@ interval uses a **display quantum** `q` (correct under exponent notation);
 **directly into `Decimal`**. The default precision interval is now **open**
 with midpoint → `unverifiable` (author tolerances stay closed).
 
+**Revision 4 (2026-07-18, plan-review).** Closed an `opaque` fail-open path:
+`opaque` and `%` bindings now **still resolve** the artifact (existence,
+containment, ambiguity, regular-file) and `error` on a missing/escaping
+artifact — only the *content read* is skipped. `opaque` bindings must **pin a
+numeric literal** (a non-number can no longer inflate coverage), and
+`numeric_claims` ids are restricted to the marker charset `^[A-Za-z0-9_-]+$`.
+
 This is the **first Part B cycle**: a working, testable vertical slice —
 *authoring surface + verifier* — of the structured-numeric-claims end-state
 sketched in `docs/plans/2026-07-18-numeric-provenance-check-design.md` (§ "Part
@@ -115,7 +122,7 @@ numeric_claims:
     artifact: "figures/panel_b.png"
     locator: {opaque: "read off figure panel B"}
 ---
-The QAP enrichment was **7.94×**[^b1] (p < 0.0001[^b2]); effect visible[^b3].
+The QAP enrichment was **7.94×**[^b1] (p < 0.0001[^b2]); peak near **2.1×**[^b3].
 ```
 
 `numeric_claims:` (not bare `claims:`) is explicit and collision-safe —
@@ -123,15 +130,17 @@ confirmed absent from health-family entity frontmatter and science schemas.
 
 ### Marker ↔ claim attachment (fail-closed, Part-B grammar)
 
-- The token bound by `[^id]` is the **maximal numeric token immediately
-  preceding** the marker on the **same line**, parsed by Part B's grammar
-  (§ "Numeric grammar"). Intervening inline markup (`**`, `×`, `%`, `)`) is
-  allowed. An `opaque` binding may instead pin a **non-numeric** anchor word
-  (as in `visible[^b3]`), since there is nothing to compare.
-- For a **non-opaque** binding, if the preceding token is **not a single scalar
-  literal** (a ratio `12/15`, a range `3–5`, prose), → **`error`**.
-  Prefix-parsing is forbidden: `12/15[^id]` must not verify `12`.
-- If a non-opaque binding has no numeric token preceding the marker → `error`.
+- **Every** binding — `opaque` included — pins the **maximal numeric token
+  immediately preceding** the marker on the **same line**, parsed by Part B's
+  grammar (§ "Numeric grammar"). Intervening inline markup (`**`, `×`, `%`) is
+  stripped. Requiring a numeric pin even for `opaque` keeps numeric-claim
+  coverage honest — a non-number must never be counted as a bound claim.
+- If the preceding token is **not a single scalar literal** (a ratio `12/15`, a
+  range `3–5`, prose), → **`error`**. Prefix-parsing is forbidden:
+  `12/15[^id]` must not verify `12`.
+- If no numeric token precedes the marker → `error`.
+- An `id` must match the marker charset `^[A-Za-z0-9_-]+$`; a `numeric_claims`
+  key outside it can never be referenced → `error` (not a silent orphan).
 
 ### Marker cardinality & graceful degradation
 
@@ -154,18 +163,22 @@ model. Not changing it for the MVP.
 **`error`**:
 
 - `numeric_claims` must be a **mapping**; a list/scalar → `error`.
-- Each `id` key is a **string**; each value a mapping over exactly
-  `{artifact, locator, tolerance?}` — unknown fields → `error`.
-- `artifact` is a required non-empty **string path** (never a `task:`/`cite:`
+- Each `id` key is a **string matching `^[A-Za-z0-9_-]+$`**; each value a mapping
+  (not a list/scalar) over exactly `{artifact, locator, tolerance?}` — unknown
+  fields → `error`.
+- `artifact` is a required **non-empty string path** (never a `task:`/`cite:`
   ref in this MVP).
-- `locator` is a **discriminated union**, exactly one shape:
+- `locator` is a **discriminated union**, exactly one shape (each with a
+  **non-empty** value; `extra="forbid"` at the locator level too):
   - `{pointer: "<json-pointer>"}` — JSON artifacts only.
   - `{column: "<name>"}` or `{column, where: {<col>: <value>, …}}` — feather
     only; `where` (if present) must be a **non-empty** mapping.
   - `{opaque: "<non-empty reason>"}` — any artifact; declares the value
-    human-read / not machine-extractable → outcome `unverifiable`.
-  - Zero or more-than-one of `{pointer, column, opaque}`, or an empty
-    `where: {}`, → `error`.
+    human-read / not machine-extractable → outcome `unverifiable` (but the
+    artifact is still resolved, §3/§4).
+  - Zero or more-than-one of `{pointer, column, opaque}`, an empty
+    `where: {}`, an empty locator value, or a locator-level extra field →
+    `error`.
 - For `pointer`/`column` the locator shape must match the `artifact`
   **extension** (`pointer`↔`.json`, `column`↔`.feather`); mismatch → `error`.
   `opaque` imposes no extension constraint.
@@ -184,10 +197,12 @@ model. Not changing it for the MVP.
     columns; never a positional index. `where:` matching **0** or **>1** rows →
     `error`.
   - Column absent, or selected cell non-numeric → `error`.
-- **opaque** — no read is attempted; outcome `unverifiable` regardless of the
-  artifact's existence or extension. This is the *only* route to a declared
-  `unverifiable` (a data locator on a non-data extension is an `error`, not
-  `unverifiable`).
+- **opaque** — no *content read* is attempted, but the artifact is **still
+  resolved** for existence, containment, ambiguity, and regular-file status
+  (§4 step 2). A missing / escaping / ambiguous / non-regular-file opaque
+  artifact → **`error`**; only a *resolved* opaque artifact yields
+  `unverifiable`. This is the sole route to a declared `unverifiable` (a data
+  locator on a non-data extension is an `error`, not `unverifiable`).
 
 ## Numeric grammar (shared core)
 
@@ -212,22 +227,25 @@ One grammar governs prose extraction, marker attachment, and comparison:
 
 ## 4. Verification & match semantics
 
-Per bound claim:
+Per bound claim (resolution is **never** skipped — `opaque` and `%` fail
+closed on a missing/escaping artifact just like data bindings):
 
-1. If the locator is `opaque` → `unverifiable` (no I/O).
-2. **Resolve the artifact** via the typed resolver (§ "Module boundaries") to
+1. **Resolve the artifact** via the typed resolver (§ "Module boundaries") to
    one canonical, regular-file path within an allowed root. Missing/dangling,
-   absolute/`..`, ambiguous (present under both roots), symlink-escaping,
-   non-regular-file, or over the size cap → `error`.
+   absolute/`..`, ambiguous (present under both roots), symlink-escaping, or
+   non-regular-file → `error`. Data bindings additionally enforce the
+   per-format size cap; `opaque` resolves for existence/safety only (no size
+   cap, no read).
+2. **If the locator is `opaque`** → `unverifiable` (artifact resolved above; no
+   content read).
 3. **Dispatch on extension**: `.json` → JSON reader; `.feather` → feather
-   reader. (A non-data extension cannot reach here: with a `pointer`/`column`
-   locator it failed §2 extension validation; with `opaque` it returned at
-   step 1.)
+   reader. (A non-data extension cannot reach here for a `pointer`/`column`
+   locator — it failed §2 extension validation; `opaque` returned at step 2.)
 4. **Extract the scalar** at the locator (§3), normalized to `Decimal` at the
    reader boundary (§ "Numeric normalization"). Extraction failure, or a
    `bool`/`NaN`/`±inf` value → `error`.
 5. **Parse the prose literal** (§ "Numeric grammar"). Not a whole single
-   literal → `error`. A `%` unit → `unverifiable`.
+   literal → `error`. A `%` unit → `unverifiable` (after resolution succeeds).
 6. **Interval membership.** Let `q` be the literal's display quantum.
    - **Default (no tolerance):** the **open** interval `(v − q/2, v + q/2)`;
      `verified` iff `v − q/2 < a < v + q/2`. A value exactly on a boundary
@@ -363,23 +381,24 @@ Presentation changes are explicit deliverables:
 | condition | outcome |
 |---|---|
 | `numeric_claims` not a mapping / entry not a mapping | `error` |
+| `id` key not matching `^[A-Za-z0-9_-]+$` | `error` |
 | unknown field in an entry; missing/empty `artifact` | `error` |
-| `locator` not exactly one of `{pointer, column, opaque}`; empty `where: {}` | `error` |
+| `locator` not exactly one of `{pointer, column, opaque}`; empty locator value; empty `where: {}`; locator extra field | `error` |
 | `pointer`/`column` locator ↔ artifact extension mismatch | `error` |
 | `tolerance` not finite `> 0`, or present with `opaque` | `error` |
-| non-opaque `[^id]` not preceded by a numeric token | `error` |
-| non-opaque preceding token not a whole single scalar (ratio/range/prose) | `error` |
+| `[^id]` (any binding) not preceded by a numeric token | `error` |
+| preceding token not a whole single scalar (ratio/range/prose) | `error` |
 | `id` referenced by 0 markers (orphan) or >1 markers (duplicate) | `error` |
 | `[^id]` present but `id` absent from map | *ignored* (real footnote) |
-| artifact missing / dangling / absolute / `..` | `error` |
+| artifact missing / dangling / absolute / `..` (**incl. `opaque`/`%`**) | `error` |
 | artifact present under **both** roots (ambiguous) | `error` |
 | artifact symlink resolving outside its root; non-regular file | `error` |
-| artifact over `max_json_bytes` / `max_feather_bytes` | `error` |
+| artifact over `max_json_bytes` / `max_feather_bytes` (data bindings) | `error` |
 | JSON pointer misses / non-scalar / non-numeric / `bool` / `null` | `error` |
 | feather column absent; cell non-numeric; `bool`/`NaN`/`±inf` | `error` |
 | feather `where:` matches 0, or >1 (or >1 row with no `where:`) | `error` |
-| `opaque` locator (any artifact) | `unverifiable` |
-| prose `%` unit | `unverifiable` |
+| `opaque` locator, artifact **resolves** | `unverifiable` |
+| prose `%` unit, artifact **resolves** | `unverifiable` |
 | value read, exactly on a default-precision boundary | `unverifiable` |
 | value read, inside open interval / closed `tolerance` | `verified` |
 | value read, outside interval / `tolerance` | `mismatch` |
@@ -391,9 +410,9 @@ Presentation changes are explicit deliverables:
   multiple, prose), asserting `q` per case; `compare_at_precision` across the
   worked table, exponent scale, **open-boundary → unverifiable**, and the
   closed `tolerance` override; `parse_claim_bindings` for every §2
-  schema/cardinality branch, the three locator shapes, opaque-on-non-numeric-
-  anchor, fail-closed attachment, orphan, duplicate, and real-footnote
-  passthrough.
+  schema/cardinality branch, the three locator shapes, the `id`-charset
+  rule, an `opaque` binding that still pins a numeric literal, fail-closed
+  attachment, orphan, duplicate, and real-footnote passthrough.
 - **Resolver units**: ambiguity (both roots); symlink escape (fixture symlink
   outside the root → `error`); non-regular file; `..`; absolute; over-cap.
 - **Reader units** against tiny committed fixtures — JSON `Decimal` fidelity
