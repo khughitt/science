@@ -3,7 +3,7 @@ title: Cohort Import for `science entities import` — Design
 status: proposed
 created: '2026-07-19'
 updated: '2026-07-19'
-revision: v4 (folds design-review round 3 — per-source pre-unlink re-hash + primitive-change wording)
+revision: v5 (name the two apply-time single-import safety tightenings from the shared validator)
 ---
 
 # Cohort Import — Design
@@ -56,12 +56,22 @@ referrers repointed in **one** reference scan.
   (SIGKILL) can still leave a partial cohort on disk. Acceptable **only** because
   Plan 2 wraps every apply in its own snapshot + write-ahead journal and owns
   crash recovery. Stated, not hidden.
-- **The single-import contract is preserved with one deliberate exception.**
-  Single-source preview and apply semantics, the single `ImportPlan` bytes, and
-  the object-shaped `applied` result are unchanged. The **one** intentional
-  tightening: `--apply-plan` now rejects the preview-only options it previously
-  ignored (`--title`, `--status`, `--slug`, `--save-plan`, `--overwrite-plan`) in
-  addition to `SOURCE`/`--kind`. This tightening is tested, not silent.
+- **The single-import contract is preserved with three named tightenings.**
+  Single-source preview (`plan_import`) is fully behavior-preserving; the single
+  `ImportPlan` bytes and the object-shaped `applied` result are unchanged. The
+  three intentional tightenings, all tested and all strictly safer:
+  1. **CLI:** `--apply-plan` now rejects the preview-only options it previously
+     ignored (`--title`, `--status`, `--slug`, `--save-plan`, `--overwrite-plan`)
+     in addition to `SOURCE`/`--kind`.
+  2. **Apply:** an unknown/invalid `kind` in a persisted single plan now raises
+     `EntityImportError` instead of a raw, CLI-uncaught `KeyError`. This falls out
+     of sharing one `_validate_member_identity` core between single and cohort
+     apply, and closes a latent single-import bug.
+  3. **Apply:** a persisted single plan whose *rendered* frontmatter `kind`
+     disagrees with its declared `kind` is now rejected (the validator previously
+     checked only the rendered `id`).
+  Tightenings 2–3 fire only on tampered/invalid plans, so every existing
+  single-import test still passes.
 
 ## Primitive changes to shared code
 

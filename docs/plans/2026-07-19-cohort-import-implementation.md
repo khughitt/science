@@ -12,7 +12,11 @@
 
 - **Run everything from the nested `science/` subdir** (there is no root `pyproject.toml`): `cd science && uv run --frozen pytest ...`, `uv run --frozen python -m ...`. The repo root is one level up.
 - **Version floor:** this change bumps `0.5.1 → 0.5.2`. Exact strings updated in `science/pyproject.toml`, `.claude-plugin/plugin.json`, `science/tests/test_cli_version.py`, and `science/uv.lock` (re-locked). Only Task 9 touches versions.
-- **Single-import contract is preserved** with exactly one deliberate tightening: `--apply-plan` now rejects the preview-only options it previously ignored. The single `ImportPlan` saved bytes and the object-shaped `applied` result are byte-for-byte unchanged.
+- **Single-import contract is preserved**, with three named tightenings and nothing else changed. The single `ImportPlan` saved bytes and the object-shaped `applied` result are byte-for-byte unchanged; preview (`plan_import`) is fully behavior-preserving. The tightenings, all apply-time and all strictly safer:
+  1. `--apply-plan` now rejects the preview-only options it previously ignored (`--title`/`--status`/`--slug`/`--save-plan`/`--overwrite-plan`).
+  2. An unknown/invalid `kind` in a persisted plan now raises `EntityImportError` instead of a raw, CLI-uncaught `KeyError` (the shared validator translates it) — a latent single-import bug this refactor closes.
+  3. A persisted plan whose *rendered* frontmatter `kind` disagrees with its declared `kind` is now rejected (the shared validator previously checked only the rendered `id`).
+  Tightenings 2–3 fall out of sharing one `_validate_member_identity` core between single and cohort apply; they fire only on tampered/invalid plans, so every existing single-import test still passes.
 - **Cohorts are reference-independent:** a member may not link to or bare-path-mention another member (or itself); this is rejected at plan time, never assumed.
 - **Standalone cohort apply is exception-atomic, not crash-durable:** caught failures roll back everything already mutated; SIGKILL durability is out of scope (delegated to the downstream journal).
 - **No AI-attribution trailers or footers** in any commit message.
@@ -697,6 +701,16 @@ def test_parse_cohort_rejects_garbage():
         parse_cohort_import_plan(b'{"not": "a plan"}')
 
 
+def test_parse_cohort_rejects_non_integer_schema_version():
+    """StrictInt: a boolean or string schema_version must NOT coerce to 1."""
+    base = CohortImportPlan(project_root="/r", kind="plan", members=[_member(1), _member(2)])
+    payload = base.model_dump(mode="json")
+    for bad in (True, "1"):  # JSON true and JSON "1"
+        raw = json.dumps({**payload, "schema_version": bad}).encode("utf-8")
+        with pytest.raises(EntityImportError):
+            parse_cohort_import_plan(raw)
+
+
 def test_ref_dependent_error_is_import_error():
     assert issubclass(RefDependentCohortError, EntityImportError)
 ```
@@ -708,7 +722,9 @@ Expected: FAIL — `cannot import name 'CohortImportPlan'`.
 
 - [ ] **Step 3: Write minimal implementation**
 
-Add `Literal` to typing imports: `from typing import Any, Literal`. Add after `ImportMember`/`PlannedMember`:
+Add `Literal` to typing imports: `from typing import Any, Literal`, and `StrictInt` to
+the pydantic import: `from pydantic import BaseModel, ConfigDict, StrictInt`. Add after
+`ImportMember`/`PlannedMember`:
 ```python
 class AttributedWarning(BaseModel):
     """A cohort warning tagged with the source that raised it."""
@@ -727,7 +743,11 @@ class CohortImportPlan(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     plan_type: Literal["cohort-import"] = "cohort-import"
-    schema_version: int = 1
+    # StrictInt, NOT int: a lax int field coerces JSON `true` (True == 1) and `"1"`
+    # to integer 1, so parse_cohort_import_plan would accept a mistyped schema stamp
+    # and apply would run it. Strict typing makes the discriminator authoritative at
+    # the MODEL layer, not only in the CLI probe.
+    schema_version: StrictInt = 1
     project_root: str
     kind: str
     members: list[ImportMember]
@@ -1210,7 +1230,11 @@ def _validate_member_identity(
     )
     return source
 ```
-Rewrite `_validate_plan_for_apply` to call it (behavior-preserving):
+Rewrite `_validate_plan_for_apply` to call the shared core. This preserves single
+import on all valid plans and every case the existing tests exercise, and adds two
+strictly-safer apply-time tightenings on tampered/invalid plans (an unknown `kind`
+now raises `EntityImportError` instead of a raw uncaught `KeyError`; a rendered-kind
+tamper is now rejected) — both named in the Global Constraints:
 ```python
 def _validate_plan_for_apply(project_root: Path, plan: ImportPlan) -> Path:
     return _validate_member_identity(
@@ -1254,7 +1278,7 @@ def _validate_cohort_plan_for_apply(project_root: Path, plan: CohortImportPlan) 
 - [ ] **Step 4: Run tests to verify they pass**
 
 Run: `cd science && uv run --frozen pytest tests/test_cohort_import.py tests/test_entity_import.py -v`
-Expected: PASS (cohort validation tests plus the existing single-import apply tests, since `_validate_plan_for_apply` is behavior-preserving).
+Expected: PASS (cohort validation tests plus the existing single-import apply tests — the shared core preserves single-import behavior on every case those tests exercise; the two added tightenings fire only on tampered/invalid plans, which the existing suite does not cover).
 
 - [ ] **Step 5: Commit**
 
