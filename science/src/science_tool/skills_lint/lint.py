@@ -7,7 +7,13 @@ from typing import Literal
 
 import yaml
 
-from science_tool.skills_lint.sources import SourcesRegistry, leaf_source_refs, load_sources
+from science_tool.skills_lint.sources import (
+    SourcesRegistry,
+    leaf_frontmatter,
+    leaf_source_refs,
+    load_sources,
+    sources_wellformed,
+)
 
 Severity = Literal["error", "warn"]
 
@@ -23,6 +29,12 @@ IssueKind = Literal[
     "invalid-source-record",
     "missing-provenance",
     "invalid-provenance",
+]
+
+MISSING_PROVENANCE_SEVERITY: Severity = "warn"
+
+ProvenanceState = Literal[
+    "attributed", "internal", "undeclared", "contradiction", "bad-marker", "malformed-sources"
 ]
 
 
@@ -65,14 +77,16 @@ def check_frontmatter(path: Path) -> list[SkillIssue]:
     text = path.read_text(encoding="utf-8")
     if not text.startswith("---\n"):
         return [SkillIssue(path, "missing-frontmatter")]
-    end = text.find("\n---\n", 4)
+    end = text.find("\n---\n", 3)
     if end == -1:
         return [SkillIssue(path, "missing-frontmatter", detail="unterminated YAML block")]
     block = text[4:end]
     try:
-        parsed = yaml.safe_load(block) or {}
+        parsed = yaml.safe_load(block)
     except yaml.YAMLError as exc:
         return [SkillIssue(path, "invalid-yaml", detail=str(exc))]
+    if parsed is None:
+        parsed = {}  # empty frontmatter block is a valid, empty mapping
     if not isinstance(parsed, dict):
         return [SkillIssue(path, "invalid-yaml", detail="frontmatter is not a mapping")]
 
@@ -145,6 +159,38 @@ def check_source_refs(path: Path, registry: SourcesRegistry) -> list[SkillIssue]
     ]
 
 
+def classify_provenance(frontmatter: dict) -> ProvenanceState:
+    has_sources = "sources" in frontmatter
+    has_provenance = "provenance" in frontmatter
+    if has_sources and has_provenance:
+        return "contradiction"
+    if has_sources:
+        # A present `sources` key is a declaration attempt; well-formedness is the
+        # source-ref check's job to REPORT, but the classifier must not call a
+        # malformed list "attributed" (design: sources: [] is invalid, not attributed).
+        return "attributed" if sources_wellformed(frontmatter["sources"]) else "malformed-sources"
+    if has_provenance:
+        return "internal" if frontmatter.get("provenance") == "internal" else "bad-marker"
+    return "undeclared"
+
+
+def check_provenance(path: Path) -> list[SkillIssue]:
+    frontmatter = leaf_frontmatter(path)
+    if frontmatter is None:
+        return []  # missing/unterminated/unparsable/non-mapping frontmatter already reported; no cascade
+    state = classify_provenance(frontmatter)
+    if state == "undeclared":
+        return [SkillIssue(path, "missing-provenance", severity=MISSING_PROVENANCE_SEVERITY)]
+    if state == "contradiction":
+        return [SkillIssue(path, "invalid-provenance", detail="sources: and provenance: are mutually exclusive")]
+    if state == "bad-marker":
+        value = frontmatter.get("provenance")
+        return [SkillIssue(path, "invalid-provenance", field="provenance", detail=f"unknown value {value!r}; only 'internal' is allowed")]
+    # attributed / internal → clean. malformed-sources → silent HERE; check_source_refs
+    # reports it as invalid-field (single report, no missing-provenance cascade).
+    return []
+
+
 def check_skills(root: Path) -> list[SkillIssue]:
     issues: list[SkillIssue] = []
     registry = load_sources(root / "sources.yaml")
@@ -163,6 +209,8 @@ def check_skills(root: Path) -> list[SkillIssue]:
         issues.extend(_relative_issues(check_halt_on_conditions(path, root), root))
         issues.extend(_relative_issues(check_relative_links(path), root))
         issues.extend(_relative_issues(check_source_refs(path, registry), root))
+        if path != root / "INDEX.md":
+            issues.extend(_relative_issues(check_provenance(path), root))
     issues.extend(check_index_coverage(root))
     return issues
 

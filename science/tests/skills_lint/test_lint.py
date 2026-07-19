@@ -226,3 +226,160 @@ def test_sources_not_a_list_flagged_as_invalid_field(tmp_path: Path) -> None:
     assert len(issues) == 1
     assert issues[0].kind == "invalid-field"
     assert issues[0].field == "sources"
+
+
+def _leaf(dirpath: Path, name: str, body: str) -> Path:
+    p = dirpath / name
+    p.write_text(body, encoding="utf-8")
+    return p
+
+
+def test_classify_provenance_outcomes() -> None:
+    from science_tool.skills_lint.lint import classify_provenance
+    assert classify_provenance({"sources": ["a"]}) == "attributed"
+    assert classify_provenance({"provenance": "internal"}) == "internal"
+    assert classify_provenance({"name": "x"}) == "undeclared"
+    assert classify_provenance({"sources": ["a"], "provenance": "internal"}) == "contradiction"
+    assert classify_provenance({"provenance": "external"}) == "bad-marker"
+    # malformed sources is NOT "attributed" (design: sources: [] is invalid)
+    assert classify_provenance({"sources": []}) == "malformed-sources"
+    assert classify_provenance({"sources": ["  "]}) == "malformed-sources"
+    assert classify_provenance({"sources": "oops"}) == "malformed-sources"
+
+
+def test_undeclared_leaf_yields_warn(tmp_path: Path) -> None:
+    from science_tool.skills_lint.lint import check_provenance
+    leaf = _leaf(tmp_path, "leaf.md", "---\nname: x\ndescription: d\n---\n# X\n")
+    issues = check_provenance(leaf)
+    assert len(issues) == 1
+    assert issues[0].kind == "missing-provenance"
+    assert issues[0].severity == "warn"
+
+
+def test_internal_and_attributed_yield_no_coverage_finding(tmp_path: Path) -> None:
+    from science_tool.skills_lint.lint import check_provenance
+    internal = _leaf(tmp_path, "i.md", "---\nname: x\ndescription: d\nprovenance: internal\n---\n# X\n")
+    attributed = _leaf(tmp_path, "a.md", "---\nname: x\ndescription: d\nsources: [known]\n---\n# X\n")
+    assert check_provenance(internal) == []
+    assert check_provenance(attributed) == []
+
+
+def test_contradiction_and_bad_marker_yield_invalid_provenance(tmp_path: Path) -> None:
+    from science_tool.skills_lint.lint import check_provenance
+    both = _leaf(tmp_path, "b.md", "---\nname: x\ndescription: d\nsources: [k]\nprovenance: internal\n---\n# X\n")
+    bad = _leaf(tmp_path, "m.md", "---\nname: x\ndescription: d\nprovenance: nope\n---\n# X\n")
+    for leaf in (both, bad):
+        issues = check_provenance(leaf)
+        assert len(issues) == 1
+        assert issues[0].kind == "invalid-provenance"
+        assert issues[0].severity == "error"
+
+
+def test_no_cascade_on_broken_frontmatter(tmp_path: Path) -> None:
+    from science_tool.skills_lint.lint import check_provenance
+    # Every "classification impossible" shape must yield NO missing-provenance.
+    broken = {
+        "n.md": "# no frontmatter\n",
+        "unterminated.md": "---\nname: x\n# never closes\n",
+        "unparsable.md": "---\nfoo: [unclosed\n---\n# X\n",
+        "nonmap-list.md": "---\n[]\n---\n# X\n",
+        "nonmap-false.md": "---\nfalse\n---\n# X\n",
+    }
+    for name, body in broken.items():
+        leaf = _leaf(tmp_path, name, body)
+        assert check_provenance(leaf) == [], name
+
+
+def test_empty_or_blank_sources_are_invalid_field_not_missing_provenance(tmp_path: Path) -> None:
+    skills_root = tmp_path / "skills"
+    skills_root.mkdir()
+    (skills_root / "sources.yaml").write_text("", encoding="utf-8")
+    (skills_root / "INDEX.md").write_text(
+        "---\nname: idx\ndescription: d\n---\n# Index\n`skills/e.md`\n`skills/b.md`\n## Companion Skills\n- none\n",
+        encoding="utf-8",
+    )
+    (skills_root / "e.md").write_text(
+        "---\nname: e\ndescription: d\nsources: []\n---\n# E\n## Companion Skills\n- none\n", encoding="utf-8")
+    (skills_root / "b.md").write_text(
+        '---\nname: b\ndescription: d\nsources: ["  "]\n---\n# B\n## Companion Skills\n- none\n', encoding="utf-8")
+    from science_tool.skills_lint.lint import check_skills
+    per = {(i.path.as_posix(), i.kind) for i in check_skills(skills_root)}
+    assert ("e.md", "invalid-field") in per      # empty list rejected by source-ref check
+    assert ("b.md", "invalid-field") in per      # blank string rejected
+    assert not any(kind == "missing-provenance" for _, kind in per)  # never cascaded
+
+
+def test_nonmapping_frontmatter_is_invalid_yaml_not_missing_field(tmp_path: Path) -> None:
+    # check_frontmatter's `or {}` used to turn falsy non-mappings ([], false) into
+    # {}, which then emitted missing-field for name/description. A non-mapping is an
+    # invalid frontmatter document (invalid-yaml), and it must NOT cascade into
+    # missing-field or missing-provenance.
+    skills_root = tmp_path / "skills"
+    skills_root.mkdir()
+    (skills_root / "sources.yaml").write_text("", encoding="utf-8")
+    (skills_root / "INDEX.md").write_text(
+        "---\nname: idx\ndescription: d\n---\n# Index\n`skills/lst.md`\n`skills/fls.md`\n## Companion Skills\n- none\n",
+        encoding="utf-8",
+    )
+    (skills_root / "lst.md").write_text("---\n[]\n---\n# L\n## Companion Skills\n- none\n", encoding="utf-8")
+    (skills_root / "fls.md").write_text("---\nfalse\n---\n# F\n## Companion Skills\n- none\n", encoding="utf-8")
+    from science_tool.skills_lint.lint import check_skills
+    per = {(i.path.as_posix(), i.kind) for i in check_skills(skills_root)}
+    for name in ("lst.md", "fls.md"):
+        assert (name, "invalid-yaml") in per                        # non-mapping => invalid-yaml
+        assert (name, "missing-field") not in per                   # not treated as an empty mapping
+        assert (name, "missing-provenance") not in per              # no provenance cascade
+
+
+def test_missing_provenance_not_double_reported_with_unknown_ref(tmp_path: Path) -> None:
+    skills_root = tmp_path / "skills"
+    skills_root.mkdir()
+    (skills_root / "sources.yaml").write_text("", encoding="utf-8")
+    (skills_root / "INDEX.md").write_text("`skills/leaf.md`\n", encoding="utf-8")
+    (skills_root / "leaf.md").write_text(
+        "---\nname: leaf\ndescription: d\nsources: [ghost]\n---\n# Leaf\n## Companion Skills\n- none\n",
+        encoding="utf-8",
+    )
+    from science_tool.skills_lint.lint import check_skills
+    kinds = {i.kind for i in check_skills(skills_root)}
+    assert "unknown-source-ref" in kinds
+    assert "missing-provenance" not in kinds  # sources present => attributed, not undeclared
+
+
+def test_index_md_excluded_from_coverage(tmp_path: Path) -> None:
+    skills_root = tmp_path / "skills"
+    skills_root.mkdir()
+    # INDEX.md has valid frontmatter but no declaration; must NOT be flagged.
+    (skills_root / "INDEX.md").write_text(
+        "---\nname: idx\ndescription: d\n---\n# Index\n`skills/leaf.md`\n## Companion Skills\n- none\n",
+        encoding="utf-8",
+    )
+    (skills_root / "leaf.md").write_text(
+        "---\nname: leaf\ndescription: d\nprovenance: internal\n---\n# Leaf\n## Companion Skills\n- none\n",
+        encoding="utf-8",
+    )
+    from science_tool.skills_lint.lint import check_skills
+    provenance_paths = {i.path.as_posix() for i in check_skills(skills_root) if i.kind == "missing-provenance"}
+    assert provenance_paths == set()
+
+
+def test_warn_only_run_exits_zero(tmp_path: Path) -> None:
+    import json
+    from click.testing import CliRunner
+    from science_tool.cli import main
+    skills_root = tmp_path / "skills"
+    skills_root.mkdir()
+    # INDEX.md itself must be error-free (valid frontmatter + companion section +
+    # it indexes leaf.md), so the ONLY finding is leaf.md's WARN.
+    (skills_root / "INDEX.md").write_text(
+        "---\nname: idx\ndescription: d\n---\n# Index\n`skills/leaf.md`\n## Companion Skills\n- none\n",
+        encoding="utf-8",
+    )
+    (skills_root / "leaf.md").write_text(
+        "---\nname: leaf\ndescription: d\n---\n# Leaf\n## Companion Skills\n- none\n",
+        encoding="utf-8",
+    )
+    result = CliRunner().invoke(main, ["skills", "lint", "--root", str(skills_root), "--format", "json"])
+    assert result.exit_code == 0  # WARN-only => exit 0
+    kinds = {(i["kind"], i["severity"]) for i in json.loads(result.output)["issues"]}
+    assert ("missing-provenance", "warn") in kinds  # severity reported in JSON
