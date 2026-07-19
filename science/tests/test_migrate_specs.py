@@ -18,6 +18,7 @@ from science_tool.migrate_specs import (
     SpecMigrationRefused,
     _plan_transaction,
     allocate_ids,
+    build_report,
     classify_references,
     discover_specs,
     project_legacy_frontmatter,
@@ -440,3 +441,69 @@ def test_transaction_alias_dedup_avoids_false_self_collision(tmp_path: Path) -> 
     dest = next(d for d in _plan(project).destinations if d.old_id == "spec:date-a")
     fm, _ = split_frontmatter(dest.rendered_text)
     assert fm["aliases"] == ["spec:date-a"]  # deduped, single occurrence
+
+
+_SCHEMA_KEYS = {"flip_ready", "legacy_spec_count", "singleton_count", "manual_retarget_count", "singletons", "migrated", "references", "manual_retarget", "scan_complete", "scan_skips"}
+
+
+def test_report_dry_run_has_schema_and_is_not_flip_ready(tmp_path: Path) -> None:
+    project = _spec_project(tmp_path)
+    _legacy_spec(project, "doc/plans/a.md", "spec:date-a", "Alpha")
+    report = build_report(project)
+    assert set(report) == _SCHEMA_KEYS
+    assert set(report["references"]) == {"rewritten", "alias_resolved", "identity_preserved", "unchanged", "manual_retarget"}
+    assert report["legacy_spec_count"] == 1
+    assert report["flip_ready"] is False
+    assert report["migrated"][0]["old_id"] == "spec:date-a"
+    assert report["manual_retarget_count"] == report["references"]["manual_retarget"]
+    assert list((project / "entities/specs").glob("*.md")) == []  # dry run wrote nothing
+
+
+def test_report_dry_run_refuses_where_apply_would(tmp_path: Path) -> None:
+    # duplicate old ids must refuse in the DRY RUN, not only at apply
+    project = _spec_project(tmp_path)
+    _legacy_spec(project, "doc/plans/a.md", "spec:dup", "Alpha")
+    _legacy_spec(project, "doc/specs/a.md", "spec:dup", "Alpha Two")
+    with pytest.raises(SpecMigrationRefused, match="duplicate old id"):
+        build_report(project)
+
+
+def test_report_clean_project_is_flip_ready(tmp_path: Path) -> None:
+    project = _spec_project(tmp_path)
+    _write(project / "entities/specs/0001-a.md", {"id": "spec:0001-a", "kind": "spec", "title": "A"})
+    report = build_report(project)
+    assert (report["legacy_spec_count"], report["singleton_count"], report["manual_retarget_count"]) == (0, 0, 0)
+    assert report["scan_complete"] is True and report["flip_ready"] is True
+
+
+def test_report_singleton_blocks_flip_ready(tmp_path: Path) -> None:
+    project = _spec_project(tmp_path)
+    _write(project / "entities/research-question.md", {"id": "spec:research-question", "kind": "spec", "title": "RQ"})
+    report = build_report(project)
+    assert report["singleton_count"] == 1 and report["flip_ready"] is False
+
+
+def test_report_manual_retarget_blocks_flip_ready(tmp_path: Path) -> None:
+    project = _spec_project(tmp_path)
+    _write(project / "entities/specs/0001-a.md", {"id": "spec:0001-a", "kind": "spec", "title": "A"})
+    _write(project / "doc/ref.md", {"id": "design:0001-r", "kind": "design", "title": "R", "discusses": ["spec:0001-a"]})
+    report = build_report(project)
+    assert report["manual_retarget_count"] >= 1 and report["flip_ready"] is False
+
+
+def test_report_oversized_file_forces_scan_incomplete(tmp_path: Path) -> None:
+    project = _spec_project(tmp_path)
+    from science_tool.text_scan import MAX_SCANNABLE_BYTES
+
+    (project / "doc/plans").mkdir(parents=True, exist_ok=True)
+    (project / "doc/plans/huge.md").write_text("x" * (MAX_SCANNABLE_BYTES + 1), encoding="utf-8")
+    report = build_report(project)
+    assert report["scan_complete"] is False and report["flip_ready"] is False
+    assert any(s["path"] == "doc/plans/huge.md" for s in report["scan_skips"])
+
+
+def test_report_refuses_unprojectable_legacy_doc(tmp_path: Path) -> None:
+    project = _spec_project(tmp_path)
+    _write(project / "doc/plans/a.md", {"id": "spec:date-a", "type": "spec", "title": "A", "date": "2026-01-01", "status": "approved"})
+    with pytest.raises(SpecMigrationRefused, match="approved"):
+        build_report(project)

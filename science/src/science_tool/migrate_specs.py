@@ -702,3 +702,76 @@ def _plan_transaction(project_root: Path, disc: Discovery, alloc: Allocation) ->
     exclude = frozenset((project_root / rel) for rel in (source_rels | dest_rels))
     ref_report = plan_reference_rewrite(project_root, id_substitutions=id_subs, path_substitutions=path_subs, exclude=exclude)
     return Transaction(destinations=destinations, ref_report=ref_report, source_rels=source_rels, dest_rels=dest_rels)
+
+
+@dataclass(frozen=True)
+class PlanResult:
+    report: dict
+    transaction: Transaction
+
+
+def _assemble_report(disc: Discovery, alloc: Allocation, records: list[RefRecord], class_skips: list[ScanSkip]) -> dict:
+    counts = {group: 0 for group in ("rewritten", "alias_resolved", "identity_preserved", "unchanged", "manual_retarget")}
+    for record in records:
+        counts[record.group] += 1
+    manual = [
+        {"ref": r.ref, "surface": r.surface, "reason": "discusses" if r.surface == "discusses" else r.target, "in": r.in_file}
+        for r in records
+        if r.group == "manual_retarget"
+    ]
+    migrated = [
+        {"old_id": s.old_id, "new_id": alloc.id_substitutions.get(s.old_id, s.old_id), "dest": alloc.dest_rel[s.old_id]}
+        for s in disc.legacy
+    ]
+
+    # scan_skips is the UNION of discovery skips (oversized/unreadable, all suffixes) and classification
+    # skips (unreadable scannable files), so a spec: ref in any unreadable file forces scan_complete=false.
+    skip_by_path = {skip.path: skip.reason for skip in disc.scan_skips}
+    for skip in class_skips:
+        skip_by_path.setdefault(skip.path, skip.reason)
+    scan_skips = [{"path": path, "reason": reason} for path, reason in sorted(skip_by_path.items())]
+
+    legacy_spec_count = len(disc.legacy)
+    singleton_count = len(disc.singletons)
+    manual_retarget_count = counts["manual_retarget"]
+    scan_complete = not scan_skips
+    flip_ready = legacy_spec_count == 0 and singleton_count == 0 and manual_retarget_count == 0 and scan_complete
+
+    return {
+        "flip_ready": flip_ready,
+        "legacy_spec_count": legacy_spec_count,
+        "singleton_count": singleton_count,
+        "manual_retarget_count": manual_retarget_count,
+        "singletons": [s.rel_path for s in disc.singletons],
+        "migrated": migrated,
+        "references": dict(counts),
+        "manual_retarget": manual,
+        "scan_complete": scan_complete,
+        "scan_skips": scan_skips,
+    }
+
+
+def _plan_all(project_root: Path) -> PlanResult:
+    """The ONE planning authority. Runs every refusal a `--apply` would, then classifies for the report."""
+    project_root = Path(project_root).resolve()
+    disc = discover_specs(project_root)
+
+    old_ids = [spec.old_id for spec in disc.legacy]
+    if len(old_ids) != len(set(old_ids)):
+        raise SpecMigrationRefused("duplicate old id(s) in the discovered batch.")
+    for spec in disc.legacy:
+        project_legacy_frontmatter(spec.frontmatter, source_rel=spec.source_rel)  # refuse early
+
+    alloc = allocate_ids(project_root, disc.legacy)
+    transaction = _plan_transaction(project_root, disc, alloc)
+
+    source_rels = frozenset(spec.source_rel for spec in disc.legacy)
+    live = _live_spec_ids(project_root) | set(alloc.preserved_ids)
+    records, class_skips = classify_references(project_root, id_substitutions=alloc.id_substitutions, live_spec_ids=live, source_rels=source_rels)
+    report = _assemble_report(disc, alloc, records, class_skips)
+    return PlanResult(report=report, transaction=transaction)
+
+
+def build_report(project_root: Path) -> dict:
+    """The read-only flip-readiness report (== the single planning authority's report)."""
+    return _plan_all(project_root).report
