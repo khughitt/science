@@ -4,7 +4,7 @@ from pathlib import Path
 
 import pytest
 
-from science_tool.archive import ArchiveRow
+from science_tool.archive import ArchiveRow, append_row, archive_entities, archive_index_path
 from science_tool.plan_common import ArchiveStatusSweep, PathTransition, StateFingerprint, fingerprint
 from science_tool.archive_plan import (
     ArchiveCandidate, ArchiveMove, ArchivePlan, ArchivePreviewReport, PlannedArchiveRow, plan_archive,
@@ -81,6 +81,21 @@ def _superseded(root: Path) -> None:
         encoding="utf-8")
 
 
+def _oracle_append_bytes(rows: list[ArchiveRow], scratch_dir: Path, *, prior_bytes: bytes = b"") -> bytes:
+    """The ORACLE for what `plan_archive` should freeze as its index postimage: the REAL
+    `append_row` (archive.py:84-92), called once per row against a scratch index file that starts
+    from `prior_bytes` (empty for a fresh index, or real prior content for the append branch).
+    If append_row's serialization ever diverges from plan_archive's literal, this helper's output
+    diverges too."""
+    scratch_dir.mkdir(parents=True, exist_ok=True)
+    index_path = scratch_dir / "oracle-index.jsonl"
+    if prior_bytes:
+        index_path.write_bytes(prior_bytes)
+    for row in rows:
+        append_row(index_path, row)
+    return index_path.read_bytes()
+
+
 def test_plan_archive_freezes_move_and_literal_index(tmp_path: Path) -> None:
     _superseded(tmp_path)
     plan = plan_archive(tmp_path, selection=ArchiveStatusSweep(kind="all_by_status", statuses=["superseded"]),
@@ -100,14 +115,52 @@ def test_plan_archive_freezes_move_and_literal_index(tmp_path: Path) -> None:
 
 
 def test_index_postimage_matches_canonical_append_row_serialization(tmp_path: Path) -> None:
-    # The frozen index bytes must be exactly what append_row would have written, or the index
-    # will not round-trip through load_archive_index.
-    import json
+    # ORACLE check: `expected` comes from the REAL append_row (archive.py:84-92) writing to a
+    # real file on disk, NOT from re-deriving plan_archive's own json.dumps(...)+"\n" formula. If
+    # append_row's serialization ever drifts from plan_archive's literal, this test must fail.
     _superseded(tmp_path)
     plan = plan_archive(tmp_path, selection=ArchiveStatusSweep(kind="all_by_status", statuses=["superseded"]),
                         now="2026-07-18T00:00:00Z")
-    expected = json.dumps(plan.moves[0].row.model_dump(), sort_keys=True) + "\n"
-    assert plan.index.postimage == expected
+    oracle_bytes = _oracle_append_bytes([m.row for m in plan.moves], tmp_path / "_oracle")
+    assert plan.index.postimage.encode("utf-8") == oracle_bytes
+
+
+def test_plan_archive_appends_onto_a_real_prior_index(tmp_path: Path) -> None:
+    # Covers the pre-existing-index APPEND branch: `pre_bytes = index.read_bytes()` when the index
+    # already exists and is non-empty, not the `else b""` arm every other test exercises.
+    (tmp_path / "science.yaml").write_text("name: t\n", encoding="utf-8")
+    d = tmp_path / "entities" / "interpretations"
+    d.mkdir(parents=True)
+    (d / "0001-x.md").write_text(
+        "---\nid: interpretation:0001-x\nkind: interpretation\ntitle: X\nstatus: superseded\n---\nbody\n",
+        encoding="utf-8")
+    (d / "0002-y.md").write_text(
+        "---\nid: interpretation:0002-y\nkind: interpretation\ntitle: Y\nstatus: superseded\n---\nbody\n",
+        encoding="utf-8")
+
+    # Batch 1: really archive 0001-x via the production op (apply=True), seeding a REAL prior
+    # archive-index.jsonl -- not a hand-written fixture.
+    first = archive_entities(
+        tmp_path, statuses=frozenset({"superseded"}), ids=frozenset({"interpretation:0001-x"}),
+        apply=True, now="2026-07-18T00:00:00Z")
+    assert first["applied"] == ["interpretation:0001-x"]
+    prior_bytes = archive_index_path(tmp_path).read_bytes()
+    assert prior_bytes != b""  # the non-empty pre_bytes arm this test exists to exercise
+
+    # Batch 2: plan_archive for the second (still-live) candidate must prepend the REAL prior bytes.
+    plan = plan_archive(tmp_path, selection=ArchiveStatusSweep(kind="all_by_status", statuses=["superseded"]),
+                        now="2026-07-18T01:00:00Z")
+    assert len(plan.moves) == 1
+    assert plan.moves[0].id == "interpretation:0002-y"
+    postimage_bytes = plan.index.postimage.encode("utf-8")
+    assert postimage_bytes.startswith(prior_bytes)
+    assert len(postimage_bytes) > len(prior_bytes)
+
+    # Oracle: appending the plan's own row onto the real prior index via the REAL append_row
+    # reproduces the frozen literal byte-for-byte.
+    oracle_bytes = _oracle_append_bytes(
+        [m.row for m in plan.moves], tmp_path / "_oracle2", prior_bytes=prior_bytes)
+    assert postimage_bytes == oracle_bytes
 
 
 def test_plan_archive_declares_every_missing_ancestor_dir(tmp_path: Path) -> None:
