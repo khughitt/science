@@ -2,6 +2,8 @@
 title: Cohort Import for `science entities import` — Design
 status: proposed
 created: '2026-07-19'
+updated: '2026-07-19'
+revision: v2 (folds design-review round 1 — 5 critical + 8 contract fixes)
 ---
 
 # Cohort Import — Design
@@ -28,232 +30,293 @@ referrers repointed in **one** reference scan.
 - **In:** a cohort mode on the existing `science entities import` command that
   imports 2+ loose documents of **one uniform kind** in a single
   save-plan/apply-plan cycle; sequential number-block assignment against the
-  real root; one combined inbound reference rewrite over external referrers;
-  exception-atomic all-or-nothing apply; the mandatory approval envelope
-  (`--expected-plan-sha256`, science 0.5.1).
+  real root; one combined inbound reference rewrite over auto-rewritable external
+  referrers; exception-atomic all-or-nothing apply; the mandatory approval
+  envelope (`--expected-plan-sha256`, science 0.5.1).
 - **Out:** mixed kinds in one cohort; per-member title/slug overrides;
   cross-member reference repointing (cohorts are required to be
   reference-independent — see below); crash-durability of standalone cohort
-  apply (delegated to the caller's transaction journal); any change to the
-  single-import contract.
+  apply (delegated to the caller's transaction journal).
+- **Two shared-code primitive changes** (behavior-preserving for single import),
+  detailed in *Primitive changes* below: a self-cleaning claim, and a
+  content-override on the reference scanner.
 
 ## Non-goals / explicit boundaries
 
-- **Cohorts are reference-independent.** A member may not link to another member
-  of the same cohort. This is enforced (rejected at plan time), not assumed. It
-  keeps all cross-member link-repointing logic out of scope. Cross-referencing
-  documents are imported in **separate** batches, where the existing
-  single-import inbound rewrite already repoints each still-loose referrer as its
-  target lands — so correctness is preserved without cohort-internal cross-member
-  logic.
-- **Standalone cohort apply is exception-atomic, not crash-durable.** Sequential
-  `claim_number_in_dir` calls create/write/release one member at a time; rollback
+- **Cohorts are reference-independent.** A member may not link to (or bare-path
+  mention) another member of the same cohort. Enforced (rejected at plan time),
+  not assumed. Cross-referencing documents are imported in **separate** batches,
+  where the existing single-import inbound rewrite already repoints each
+  still-loose referrer as its target lands — correctness preserved without
+  cohort-internal cross-member logic.
+- **Standalone cohort apply is exception-atomic, not crash-durable.** Rollback
   covers *caught* failures (a failed claim, source drift, a raised rewrite, a
   failed audit) by restoring everything already mutated. Abrupt process death
-  (SIGKILL) can still leave a partial cohort on disk. That is acceptable **only**
-  because Plan 2 wraps every apply in its own snapshot + write-ahead journal and
-  owns crash recovery. This boundary is stated, not hidden.
+  (SIGKILL) can still leave a partial cohort on disk. Acceptable **only** because
+  Plan 2 wraps every apply in its own snapshot + write-ahead journal and owns
+  crash recovery. Stated, not hidden.
+- **The single-import contract is preserved with one deliberate exception.**
+  Single-source preview and apply semantics, the single `ImportPlan` bytes, and
+  the object-shaped `applied` result are unchanged. The **one** intentional
+  tightening: `--apply-plan` now rejects the preview-only options it previously
+  ignored (`--title`, `--status`, `--slug`, `--save-plan`, `--overwrite-plan`) in
+  addition to `SOURCE`/`--kind`. This tightening is tested, not silent.
+
+## Primitive changes to shared code
+
+Both are used by single import; both are behavior-preserving on the success path
+and only add safety on the failure path.
+
+1. **Self-cleaning claim (`claim_number_in_dir`, `entity_reservation.py`).**
+   Today the destination is created with `open(path, "x")` and written; a caught
+   write/close failure leaves a **partial destination** (the `finally` unlinks
+   only the `.NNNN.reserving` sentinel, `:204`). Change: wrap the exclusive
+   create+write so that on any exception **after** the exclusive `open` the
+   partially-written destination it created is unlinked before re-raising — the
+   function exclusively created that file, so it owns it. Success path unchanged;
+   the returned path is always a complete file or the call raised having left no
+   destination. (SIGKILL between `open` and cleanup is the crash boundary,
+   delegated to the caller's journal.) This lets cohort/single apply treat a
+   destination as mutated **only** on a successful claim, with no external
+   "creation began" hook.
+
+2. **Content-override on the reference scanner
+   (`plan_reference_rewrite`/`_scan`, `reference_rewrite.py`).** `_scan` reads
+   each file once from disk (`:311`, `# the ONLY read of this file`). Add an
+   optional `source_overrides: Mapping[str, str]` (rel_path → already-read text);
+   for any path present, the scanner uses the supplied bytes instead of reading.
+   This lets a caller that has **already** read a file (the cohort planner, which
+   reads each source once) feed those exact bytes to the scan, so a source cannot
+   be read twice and produce a torn plan. Default empty ⇒ current behavior;
+   single import is unaffected.
 
 ## Public surface
 
-Single-source invocation is **unchanged** — same command, same `ImportPlan`,
-same `--title`/`--slug` ergonomics, same result shape, same tests. The cohort
-path is triggered purely by passing **2+ positional sources**:
+Single-source invocation is unchanged (per the boundary above). The cohort path
+is triggered purely by passing **2+ positional sources**:
 
 ```
-# preview (writes a self-contained plan)
 science entities import A.md B.md C.md --kind plan --save-plan p.json
-
-# apply (approval envelope mandatory, science 0.5.1)
 science entities import --apply-plan p.json --expected-plan-sha256 SHA
 ```
 
 ### CLI option matrix (enforced, not ignored)
 
-| Invocation | `--kind` | `--status` | `--title` / `--slug` | sources | `--save-plan` |
+| Invocation | `--kind` | `--status` | `--title`/`--slug` | sources | `--save-plan` |
 |---|---|---|---|---|---|
 | 1 source (single) | required | optional | **allowed** | exactly 1 | optional |
-| 2+ sources (cohort) | required, uniform | optional, uniform | **rejected** (UsageError) | 2+ distinct | optional |
-| `--apply-plan` | rejected | rejected | rejected | **none** | rejected |
+| 2+ sources (cohort) | required, uniform | optional, uniform | **rejected** | 2+ distinct | optional |
+| `--apply-plan` | rejected | **rejected** | **rejected** | none | **rejected** |
 
-`--kind` and (if retained) `--status` apply uniformly to the whole cohort.
-Passing `--title`/`--slug` with 2+ sources is a hard `UsageError`, never a silent
-ignore. `--apply-plan` continues to reject all sources and all preview options.
+`--kind`/`--status` apply uniformly to the whole cohort. `--title`/`--slug` with
+2+ sources is a hard `UsageError`, never a silent ignore. **Save-plan/source
+collision:** the resolved `--save-plan` path must differ from **every** resolved
+source in the cohort (generalizing the single guard at
+`entities_inventory_cli.py:545`), enforced **even with** `--overwrite-plan` — a
+preview must never destroy a document it is about to import.
+
+The single-vs-cohort selection happens in the **CLI**, on the count of resolved
+sources; the cohort planner itself raises if handed fewer than 2.
 
 ## Data model
 
 ### The shared member-planner refactor
 
 Extract the number-taking core of `plan_import` into a helper that does **no**
-inbound scan:
+inbound scan and returns its warnings out-of-band:
 
 ```python
+@dataclass(frozen=True)
+class PlannedMember:            # internal, not persisted
+    member: ImportMember
+    warnings: list[str]
+
 def _plan_member(
-    project_root: Path, source: Path, *, kind: str, number: int,
-    title: str | None = None, status: str | None = None, slug: str | None = None,
-    today: date | None = None,
-) -> ImportMember:
-    """Parse one source, construct identity, rebase its OWN outbound links into
-    rendered_text, run prospective-write validation, and render. Takes a FORCED
-    number; performs NO inbound reference scan."""
+    project_root: Path, source_rel: str, text: str, *, kind: str, number: int,
+    status: str | None = None, today: date | None = None,
+) -> PlannedMember:
+    """From ALREADY-READ source bytes: construct identity, rebase the member's
+    OWN outbound links into rendered_text, run prospective-write validation, and
+    render. Forced number; NO inbound scan; NO second read of the source."""
 ```
 
-`plan_import` becomes `_plan_member(..., number=propose_number(root, kind))`
-followed by its existing single-source inbound scan — behavior-preserving for
-single import. `plan_cohort_import` calls `_plan_member` per source with forced
-sequential numbers, then runs **one** combined inbound scan. Single and cohort
-share exactly one member-planner; only the inbound-scan wrapper differs.
+`plan_import` becomes: read the source once → `_plan_member(...,
+number=propose_number(root, kind))` → its existing single-source inbound scan
+(feeding the cached text via `source_overrides`) → attach `PlannedMember.warnings`
+to the single plan. Behavior-preserving for single import. `plan_cohort_import`
+calls `_plan_member` per cached source with forced sequential numbers.
 
-`ImportMember` carries the per-document facts:
-`source_rel, source_sha256, entity_id, kind, number, dest_rel, title, status,
-frontmatter, rendered_text` (the member's own outbound links already rebased
-into `rendered_text` via `rewrite_outbound_links`, exactly as single import
-bakes them today).
+### `ImportMember` (persisted, nested)
 
-### `CohortImportPlan`
+`source_rel, source_sha256, entity_id, number, dest_rel, title, status,
+frontmatter, rendered_text` — **no `kind`** (see below), no warnings field.
+`extra="forbid"`.
+
+### `CohortImportPlan` (persisted, top-level)
 
 ```
 CohortImportPlan {
   plan_type: "cohort-import"          # discriminator (single ImportPlan has none)
   schema_version: 1
   project_root: str                    # embedded + apply-checked, like single
-  kind: str                            # uniform across members
-  members: list[ImportMember]          # 2+, in plan-member order
+  kind: str                            # THE single authority for member kind
+  members: list[ImportMember]          # 2+, in PLAN-MEMBER (input) order
   ref_report: RewriteReport            # ONE combined inbound rewrite, external referrers only
-  warnings: list[dict]                 # each attributed to a source_rel
+  warnings: list[AttributedWarning]    # {source_rel, message}, sorted
 }
 ```
 
-- `extra="forbid"` on the model.
-- `warnings` are aggregated across members but each entry names its
-  `source_rel`, so a warning is never ambiguous about which document raised it.
-- The single `ImportPlan` gains **no** field, stays byte- and schema-compatible;
-  its saved plans and result shape are untouched.
+- `extra="forbid"` on `CohortImportPlan`, `ImportMember`, and `AttributedWarning`.
+- **`kind` has one authority.** `ImportMember` carries no `kind`; `plan.kind` is
+  used for every member's `claim_number_in_dir` and destination derivation. Apply
+  additionally asserts the path returned by `claim_number_in_dir` equals the
+  validated `dest_rel`, closing any directory-mismatch gap.
+- **Member order is input order** and is preserved for numbering, validation, and
+  results. Only `warnings` and report collections are sorted; `members` are not
+  reordered.
+- Each warning names its `source_rel`, so an aggregated warning is never
+  ambiguous about which document raised it.
 
-## Planning — `plan_cohort_import(project_root, sources, *, kind, status=None, today=None)`
+## Planning — `plan_cohort_import(project_root, sources, *, kind, status=None, exclude=frozenset(), today=None)`
 
-1. **Pre-flight:** ≥2 sources; resolve each; reject **duplicate resolved
-   sources** before any planning; each source is a readable UTF-8 file.
-2. **Number block:** `base = propose_number(root, kind)`; assign
-   `number_i = base + i` for member `i` in **input order** (contiguous, ordered).
-3. **Per member:** `member_i = _plan_member(root, source_i, kind=kind,
-   number=number_i, status=status, today=today)` — derives title/slug/dest,
-   rebases its own outbound links into `rendered_text`, hashes the source.
-4. **Reference-independence guard (one proven scan):** run
+1. **Pre-flight:** raise if `< 2` sources; resolve each; reject **duplicate
+   resolved sources**; each is a readable UTF-8 file.
+2. **Read each source once** into an internal cache `{source_rel: (text, sha256)}`
+   — the single read that both `_plan_member` and the reference scan consume
+   (via `source_overrides`), so no source is read twice.
+3. **Number block:** `base = propose_number(root, kind)`; assign
+   `number_i = base + i` for member `i` in input order (contiguous, ordered).
+4. **Per member:** `_plan_member(root, source_rel_i, cached_text_i, kind=kind,
+   number=number_i, status=status, today=today)`.
+5. **One scan — independence guard *and* external report:**
    `plan_reference_rewrite(root, id_substitutions={source_rel_i → entity_id_i},
-   path_substitutions={source_rel_i → dest_rel_i}, exclude={saved-plan artifact
-   only})` — i.e. **do not exclude the members**. Inspect the resulting report:
-   any `hit` **or** `manual` whose `rel_path` is a member source ⇒ the cohort is
-   reference-dependent (a member links to, or bare-path-mentions, another member,
-   or itself) ⇒ raise `RefDependentCohortError` naming the offending
-   source/target pair. (A self-link — a member substituting into its own body —
-   is treated as member-local and likewise rejected; degenerate and not worth a
-   special case.) If there are **no** member-local findings, the members
-   contributed nothing to the report, so that same report **is** the external
-   inbound report — reuse it directly as `ref_report`.
-5. **Assemble** `CohortImportPlan`, sorted deterministically; warnings keyed by
-   `source_rel`.
+   path_substitutions={source_rel_i → dest_rel_i},
+   source_overrides={source_rel_i → cached_text_i},
+   exclude=exclude` *(the prospective saved-plan artifact only — members are NOT
+   excluded)*`)`. Inspect the report: any `hit` **or** `manual` whose `rel_path`
+   is a member source ⇒ `RefDependentCohortError` naming the offending
+   source/target pair (a member linking to another member, bare-path-mentioning
+   one, or itself — the self case is member-local and likewise rejected). If
+   there are **no** member-local findings, members contributed nothing, so that
+   report **is** the external inbound report — reuse it as `ref_report`.
+6. **Assemble** `CohortImportPlan` with `members` in input order; warnings and
+   report collections sorted.
 
-The scan in step 4 does double duty — it is the independence guard **and** the
-external inbound report — so external referrers are repointed against the whole
-cohort map in a single pass (the scanner already applies an N-entry
-substitution map; only single-move callers exist today).
+External `manual` findings (auto-unrewritable references, surfaced by the
+scanner) are carried in `ref_report.manual`. The cohort is still valid; it is
+Plan 2's policy (its existing `manual_refs` acknowledgment gate) to decide
+whether to require acknowledgment before applying — this design surfaces them, it
+does not silently drop or auto-rewrite them.
 
-## Apply — `apply_cohort_import(project_root, plan, *, exclude=frozenset())`
+## Apply — `apply_cohort_import(project_root, plan, *, exclude=frozenset()) -> list[str]`
 
-Mirrors single `apply_import`'s snapshot + mutated-set self-rollback, extended
-across the whole cohort.
+Returns the **id list** directly (no wrapping dict), so the CLI's existing
+`{**plan.model_dump(), "applied": apply(...)}` merge yields a flat result.
+Mirrors single `apply_import`'s snapshot + mutated-set self-rollback, cohort-wide.
 
-1. **Root + shape validation (before any byte moves):**
-   `plan.project_root == str(project_root)`; `plan_type`/`schema_version` known;
-   `len(members) ≥ 2`; numbers **ordered and contiguous** from their base;
-   entity_ids, source_rels, dest_rels each **unique**; source set and destination
-   set **disjoint**; and the `ref_report` substitution maps **exactly equal** the
-   member mapping (`{source_rel_i: dest_rel_i}` / `{source_rel_i: entity_id_i}`) —
-   no extra, no missing. Per-member: containment, canonical destination, identity
-   coherence (reuse `_validate_plan_for_apply` per member).
-2. **Source drift:** every source still hashes to its `source_sha256`, else
-   refuse (a source edited during review must force a fresh preview).
-3. **Snapshot:** every source, every destination, and every file named in
-   `ref_report.edits` (the concrete writes — not merely `hits`).
-4. **Claim the number block:** for each member in order,
-   `claim_number_in_dir(root, kind, number_i, dest_stem_i, rendered_text_i)`.
-   A destination joins the mutated set **as soon as its exclusive creation
-   begins** (so a partially-written destination from a raised write is still
-   rolled back). Any failed claim (number committed/archived/reserved since
-   preview) → roll back all mutations, raise.
-5. **Unlink sources** (each after its destination is claimed) → mutated set.
-6. **Inbound rewrite:** `apply_reference_rewrite(root, plan.ref_report,
-   exclude=exclude | {all sources, all dests}, written=...)` for external
-   referrers; drift against the frozen report → roll back, raise.
-7. **Post-move audit:** resolve every inbound/outbound link for every destination;
+1. **Root + shape validation (before any read set or byte move):**
+   `plan.project_root == str(project_root)`; `plan_type`/`schema_version` known
+   (else clean error, no mutation); `len(members) ≥ 2`; numbers ordered and
+   **contiguous**; entity_ids, source_rels, dest_rels each **unique**; source and
+   destination sets **disjoint**. Per member: containment (`resolve_within`),
+   canonical destination for `plan.kind`, identity coherence (reuse
+   `_validate_plan_for_apply` per member with `plan.kind`).
+2. **Source drift:** every source still hashes to its `source_sha256`, else refuse.
+3. **Re-derive and compare the external report from the LIVE corpus** *before*
+   any snapshot: `plan_reference_rewrite(root, {source→entity_id}, {source→dest},
+   exclude=exclude | {all sources, all dests, plan artifact})`; require the
+   re-derived report's substitution maps **and** `edits` to equal the frozen
+   `plan.ref_report` **exactly**. This proves the persisted edit paths against the
+   real corpus so a hand-edited (but correctly re-enveloped) plan cannot feed
+   escaping/incoherent paths into the snapshot. (The subsequent
+   `apply_reference_rewrite` retains its own immediate pre-write re-derivation to
+   close the write-time race.)
+4. **Snapshot** the now-verified read set: every source, every destination, and
+   every file named in the (verified) `ref_report.edits`.
+5. **Claim the number block:** for each member in order,
+   `claim_number_in_dir(root, plan.kind, number_i, dest_stem_i, rendered_text_i)`
+   (self-cleaning — a caught failure leaves no destination); assert the returned
+   path == the validated `dest_rel_i`; add the destination to the mutated set on
+   success. Any failed claim → roll back all → raise.
+6. **Unlink sources** (each after its destination is claimed) → mutated set.
+7. **Inbound rewrite:** `apply_reference_rewrite(root, plan.ref_report,
+   exclude=exclude | {all sources, all dests}, written=...)` → mutated set; drift
+   → roll back, raise.
+8. **Post-move audit:** resolve every inbound/outbound link for every destination;
    any dangling reference → roll back, raise.
-8. **Result:** `{"applied": [entity_id for each member in plan-member order],
-   ...}` — `applied` is a **list** (consistent with archive/mark-superseded;
-   single import keeps its object shape). The plan already carries the complete
-   mapping, so an id list is sufficient.
+9. **Return** `[entity_id for each member in plan-member order]`.
 
-Rollback restores only paths this transaction mutated (the `mutated` set), never
-a referrer another writer changed — the snapshot bounds what *can* be restored;
-`mutated` bounds what *should* be, exactly as single import documents.
+Rollback restores only paths this transaction mutated — the snapshot bounds what
+*can* be restored, the mutated set bounds what *should* be.
 
 ## Apply-plan dispatch (CLI)
 
-The `--apply-plan` branch reads the raw bytes once, verifies the envelope
-(`verify_envelope`, single read before parse), then dispatches on the parsed
-discriminator: `plan_type == "cohort-import"` → `parse_cohort_import_plan` +
-`apply_cohort_import`; absent `plan_type` → legacy `parse_import_plan` +
-`apply_import`; any other/unknown `plan_type` or unknown `schema_version` → a
-clean error, no mutation.
+Read raw bytes once → `verify_envelope` (single read before parse) → parse JSON
+once → dispatch on the discriminator: `plan_type == "cohort-import"` →
+`parse_cohort_import_plan` + `apply_cohort_import`; **no** `plan_type` (legacy) →
+`parse_import_plan` + `apply_import`; any other `plan_type` or unknown
+`schema_version` → clean error, no mutation.
 
 ## Error handling
 
 | Condition | When | Result |
 |---|---|---|
-| < 2 sources to cohort planner | plan | falls through to single path (not a cohort) |
+| `< 2` sources to cohort planner | plan | raises (CLI selects single path by count) |
 | duplicate resolved sources | plan | `EntityImportError`, nothing written |
-| member links to another member / self | plan | `RefDependentCohortError` naming the pair |
+| member links to / mentions another member or itself | plan | `RefDependentCohortError` naming the pair |
 | `--title`/`--slug` with 2+ sources | CLI | `UsageError` |
+| `--save-plan` equals any resolved source (even `--overwrite-plan`) | CLI | `UsageError` |
+| re-derived report ≠ frozen `ref_report` | apply | refuse before snapshot |
 | number committed/archived/reserved since preview | apply | whole-cohort rollback + raise |
 | any source changed since preview | apply | refuse before mutation |
-| ref-rewrite drift vs frozen report | apply | whole-cohort rollback + raise |
-| post-move audit dangling ref | apply | whole-cohort rollback + raise |
+| claim path ≠ validated destination | apply | whole-cohort rollback + raise |
+| ref-rewrite drift / audit dangling ref | apply | whole-cohort rollback + raise |
 | envelope missing / sha mismatch | apply | existing upstream refusal, no mutation |
 | unknown `plan_type` / `schema_version` | apply | clean error, no mutation |
 
 ## Testing
 
 - **Happy path:** cohort of 3 independent plans → contiguous numbers `base..base+2`;
-  all three sources moved to canonical destinations; a shared **external**
-  referrer of two members has **both** links repointed in one pass; `applied` is
-  the id list in member order.
-- **Independence guard:** a cohort where member B links to member A (markdown
-  link) → `RefDependentCohortError`; a bare-prose path mention of a member →
-  rejected too (proves the `manual` branch); a self-link → rejected.
-- **Atomicity:** pre-claim one of the cohort's numbers in the live tree after
-  preview → apply fails with **no partial** (no destination created, no source
-  unlinked, referrers untouched); a raised inbound-rewrite → full rollback;
-  a dangling-ref audit failure → full rollback.
-- **Drift:** edit one source after preview → apply refuses; tamper the plan bytes
-  → envelope refusal.
-- **Shape validation:** a plan with non-contiguous numbers / duplicate ids /
-  overlapping source∩dest / a `ref_report` map that disagrees with the members →
-  rejected at apply before mutation.
-- **CLI matrix:** 2+ sources with `--title` → `UsageError`; `--apply-plan` with a
-  source → `UsageError`.
+  all sources moved; a shared **external** referrer of two members has **both**
+  links repointed in one pass; `applied` is the id list in member order.
+- **One-read:** a source whose bytes would differ between two reads is planned
+  from a single cached read (scanner `source_overrides`) — no torn plan.
+- **Independence guard:** member B links member A (markdown) → reject; a bare-prose
+  path mention of a member → reject (proves the `manual` branch); a self-link →
+  reject.
+- **Self-cleaning claim:** inject a write/close failure after the exclusive
+  `open` → no partial destination remains (single-importer regression too).
+- **Atomicity:** pre-claim one cohort number after preview → apply fails with **no
+  partial** (no dest created, no source unlinked, referrers untouched); a raised
+  inbound-rewrite → full rollback; a dangling-ref audit → full rollback.
+- **Persisted-report safety:** a hand-edited (correctly re-enveloped) plan whose
+  `ref_report.edits` name an escaping/incoherent path → refused at the re-derive
+  equality check **before** snapshot.
+- **`kind` single authority:** a member destination that would resolve into
+  another kind's directory is impossible (no `member.kind`); the claim-path ==
+  validated-dest assertion is exercised.
+- **Drift / envelope:** edit a source after preview → refuse; tamper plan bytes →
+  envelope refusal.
+- **Shape validation:** non-contiguous numbers / duplicate ids / overlapping
+  source∩dest / a `ref_report` map disagreeing with members → refused at apply
+  before mutation.
+- **CLI matrix:** 2+ sources with `--title` → `UsageError`; `--save-plan` equal to
+  a source (with and without `--overwrite-plan`) → `UsageError`; `--apply-plan`
+  with a source → `UsageError`; `--apply-plan` with `--title`/`--status`/`--slug`/
+  `--save-plan`/`--overwrite-plan` → `UsageError` (the deliberate tightening).
+- **Manual findings:** a cohort with an auto-unrewritable external reference plans
+  successfully and surfaces it in `ref_report.manual`.
 - **Regression / compat:** single-source import unchanged end-to-end (byte-equal
-  saved plan, object-shaped `applied`); the `_plan_member` extraction is
-  behavior-preserving for single import (existing suite green); a legacy
-  single-plan file (no `plan_type`) still applies via the single path.
-- **Discriminator:** an unknown `plan_type` and an unknown `schema_version` each
-  refuse cleanly.
+  saved plan, object-shaped `applied`); `_plan_member` extraction behavior-preserving;
+  a legacy single-plan file (no `plan_type`) still applies via the single path.
+- **Discriminator:** unknown `plan_type` and unknown `schema_version` each refuse
+  cleanly.
 
 ## Versioning
 
 Bump `0.5.1 → 0.5.2`: `science/pyproject.toml`, `.claude-plugin/plugin.json`,
 `science/tests/test_cli_version.py`, and `science/uv.lock` (re-locked). The
-acceptance/compat test that checks a floor (`test_agent_cli_compatibility.py`)
-needs no pinned-value edit.
+floor-checking `test_agent_cli_compatibility.py` needs no pinned-value edit.
 
 ## Consumer delivery
 
@@ -265,7 +328,7 @@ overlay and calls cohort import for its batch's import moves.
 ## Alternatives considered
 
 1. **Sibling `CohortImportPlan` (chosen)** — additive; preserves the single-import
-   saved-plan and result contracts intact.
+   saved-plan and result contracts (bar the deliberate apply-plan tightening).
 2. **Unified one-or-many plan** — internally tidy, but needlessly changes the
    established single saved-plan and result shapes and their tests.
 3. **Composition of single plans** — smallest code, but cannot provide one
