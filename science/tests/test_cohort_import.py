@@ -11,11 +11,13 @@ from science_tool.entity_import import (
     EntityImportError,
     ImportMember,
     RefDependentCohortError,
+    _source_digest,
     _validate_cohort_plan_for_apply,
     apply_cohort_import,
     parse_cohort_import_plan,
     plan_cohort_import,
 )
+from science_tool.reference_rewrite import plan_reference_rewrite
 
 
 def _project(tmp_path: Path) -> Path:
@@ -280,7 +282,18 @@ def _valid_plan(root: Path) -> CohortImportPlan:
 def test_validate_accepts_a_fresh_plan(tmp_path):
     root = _project(tmp_path)
     sources = _validate_cohort_plan_for_apply(root, _valid_plan(root))
-    assert [source.name for source in sources] == ["a.md", "b.md"]
+    assert sources == [
+        (root / "doc/plans/a.md").resolve(),
+        (root / "doc/plans/b.md").resolve(),
+    ]
+
+
+def test_validate_rejects_fewer_than_two_members(tmp_path):
+    root = _project(tmp_path)
+    plan = _valid_plan(root)
+    plan.members.pop()
+    with pytest.raises(EntityImportError, match="fewer than 2"):
+        _validate_cohort_plan_for_apply(root, plan)
 
 
 def test_validate_rejects_non_contiguous_numbers(tmp_path):
@@ -296,6 +309,15 @@ def test_validate_rejects_duplicate_entity_ids(tmp_path):
     plan = _valid_plan(root)
     plan.members[1].entity_id = plan.members[0].entity_id
     with pytest.raises(EntityImportError):
+        _validate_cohort_plan_for_apply(root, plan)
+
+
+@pytest.mark.parametrize("field", ["source_rel", "dest_rel"])
+def test_validate_rejects_duplicate_source_or_destination(tmp_path, field):
+    root = _project(tmp_path)
+    plan = _valid_plan(root)
+    setattr(plan.members[1], field, getattr(plan.members[0], field))
+    with pytest.raises(EntityImportError, match=field):
         _validate_cohort_plan_for_apply(root, plan)
 
 
@@ -332,6 +354,94 @@ def test_validate_rejects_rendered_kind_tamper(tmp_path):
     member.rendered_text = member.rendered_text.replace("kind: plan", "kind: question")
     with pytest.raises(EntityImportError):
         _validate_cohort_plan_for_apply(root, plan)
+
+
+def test_validate_rejects_stored_frontmatter_tamper(tmp_path):
+    root = _project(tmp_path)
+    plan = _valid_plan(root)
+    plan.members[0].frontmatter["kind"] = "question"
+    with pytest.raises(EntityImportError, match="frontmatter"):
+        _validate_cohort_plan_for_apply(root, plan)
+
+
+def test_validate_rejects_sources_with_the_same_resolved_identity(tmp_path):
+    root = _project(tmp_path)
+    plan = _valid_plan(root)
+    plan.members[1].source_rel = "doc/plans//a.md"
+
+    with pytest.raises(EntityImportError, match="same resolved source"):
+        _validate_cohort_plan_for_apply(root, plan)
+
+
+def test_cohort_apply_consumes_validated_source_behind_symlink_alias(tmp_path):
+    root = _project(tmp_path)
+    a = _loose(root, "doc/plans/a.md", "# Alpha\n\nbody\n")
+    b = _loose(root, "doc/plans/b.md", "# Beta\n\nbody\n")
+    alias = root / "doc/plans/alias.md"
+    alias.symlink_to("a.md")
+    plan = plan_cohort_import(root, [a, b], kind="plan")
+    plan.members[0].source_rel = "doc/plans/alias.md"
+    source_paths = {alias, b}
+    destinations = {root / member.dest_rel for member in plan.members}
+    plan.ref_report = plan_reference_rewrite(
+        root,
+        id_substitutions={
+            member.source_rel: member.entity_id for member in plan.members
+        },
+        path_substitutions={
+            member.source_rel: member.dest_rel for member in plan.members
+        },
+        exclude=frozenset(source_paths | destinations),
+    )
+
+    apply_cohort_import(root, plan)
+
+    assert not a.exists(), "validated source bytes were not consumed"
+    assert not alias.is_symlink(), "lexical source alias was not consumed"
+    assert not b.exists()
+
+
+def test_cohort_planner_rejects_outside_source_before_reading(tmp_path, monkeypatch):
+    project_dir = tmp_path / "project"
+    project_dir.mkdir()
+    root = _project(project_dir)
+    inside = _loose(root, "doc/plans/a.md", "# Alpha\n\nbody\n")
+    outside = _loose(tmp_path, "outside.md", "# Outside\n\nbody\n")
+    real_read_text = Path.read_text
+
+    def guarded_read_text(path, *args, **kwargs):
+        if path == outside:
+            pytest.fail("outside source was read before containment validation")
+        return real_read_text(path, *args, **kwargs)
+
+    monkeypatch.setattr(Path, "read_text", guarded_read_text)
+    with pytest.raises(EntityImportError, match="outside project root"):
+        plan_cohort_import(root, [outside, inside], kind="plan")
+
+
+def test_cohort_planner_outside_excluded_source_has_domain_error(tmp_path):
+    project_dir = tmp_path / "project"
+    project_dir.mkdir()
+    root = _project(project_dir)
+    inside = _loose(root, "doc/plans/a.md", "# Alpha\n\nbody\n")
+    outside = _loose(tmp_path, "outside.md", "# Outside\n\nbody\n")
+
+    with pytest.raises(EntityImportError, match="outside project root"):
+        plan_cohort_import(
+            root, [outside, inside], kind="plan", exclude=frozenset({outside})
+        )
+
+
+def test_source_digest_translates_invalid_utf8(tmp_path):
+    source = tmp_path / "bad.md"
+    source.write_bytes(b"\xff")
+    with pytest.raises(EntityImportError, match="valid UTF-8"):
+        _source_digest(source, "bad.md")
+
+
+def test_source_digest_translates_missing_file(tmp_path):
+    with pytest.raises(EntityImportError, match="could not be read"):
+        _source_digest(tmp_path / "missing.md", "missing.md")
 
 
 def test_cohort_apply_happy_path(tmp_path):

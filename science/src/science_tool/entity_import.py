@@ -335,7 +335,16 @@ def plan_cohort_import(
     if len(sources) < 2:
         raise EntityImportError("a cohort import needs at least 2 sources")
 
-    resolved = [Path(source).resolve() for source in sources]
+    resolved: list[Path] = []
+    source_rels: list[str] = []
+    for source_arg in sources:
+        source = Path(source_arg).resolve()
+        try:
+            source_rel = source.relative_to(project_root).as_posix()
+        except ValueError as exc:
+            raise EntityImportError(f"source is outside project root: {source}") from exc
+        resolved.append(source)
+        source_rels.append(source_rel)
     if len(set(resolved)) != len(resolved):
         raise EntityImportError("cohort sources contain a duplicate")
     excluded = {Path(path).resolve() for path in exclude}
@@ -349,17 +358,13 @@ def plan_cohort_import(
 
     cache: dict[str, str] = {}
     order: list[str] = []
-    for source in resolved:
+    for source, source_rel in zip(resolved, source_rels, strict=True):
         if not source.is_file():
             raise EntityImportError(f"source not found: {source}")
         try:
             text = source.read_text(encoding="utf-8")
         except UnicodeDecodeError as exc:
             raise EntityImportError(f"{source} is not valid UTF-8: {exc}") from exc
-        try:
-            source_rel = source.relative_to(project_root).as_posix()
-        except ValueError as exc:
-            raise EntityImportError(f"source is outside project root: {source}") from exc
         cache[source_rel] = text
         order.append(source_rel)
 
@@ -824,7 +829,7 @@ def _validate_cohort_plan_for_apply(
             f"cohort source and destination sets overlap: {sorted(overlap)}"
         )
 
-    return [
+    validated_sources = [
         _validate_member_identity(
             project_root,
             kind=plan.kind,
@@ -837,6 +842,9 @@ def _validate_cohort_plan_for_apply(
         )
         for member in plan.members
     ]
+    if len(set(validated_sources)) != len(validated_sources):
+        raise EntityImportError("cohort members share the same resolved source")
+    return validated_sources
 
 
 def _source_digest(source: Path, rel: str) -> str:
@@ -880,7 +888,8 @@ def apply_cohort_import(
                 f"{member.source_rel} changed since the preview; re-run the preview"
             )
 
-    all_sources = {project_root / member.source_rel for member in plan.members}
+    lexical_sources = {project_root / member.source_rel for member in plan.members}
+    all_sources = set(sources) | lexical_sources
     all_destinations = {project_root / member.dest_rel for member in plan.members}
     scan_exclude = exclude | all_sources | all_destinations
     fresh_report = plan_reference_rewrite(
@@ -930,15 +939,23 @@ def apply_cohort_import(
                     f"expected {destination}"
                 )
 
-        for member in plan.members:
-            source = project_root / member.source_rel
+        for member, source in zip(plan.members, sources, strict=True):
             if _source_digest(source, member.source_rel) != member.source_sha256:
                 raise EntityImportError(
                     f"{member.source_rel} changed during apply; rolled back — "
                     "re-run the preview"
                 )
+            lexical_source = project_root / member.source_rel
+            if lexical_source != source and lexical_source.resolve() != source:
+                raise EntityImportError(
+                    f"{member.source_rel} changed identity during apply; rolled back — "
+                    "re-run the preview"
+                )
             source.unlink()
             mutated.add(source)
+            if lexical_source != source:
+                lexical_source.unlink()
+                mutated.add(lexical_source)
 
         apply_reference_rewrite(
             project_root,

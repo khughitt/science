@@ -188,28 +188,30 @@ def claim_number_in_dir(
         raise EntityCommandError(
             f"number {number:0{LOCAL_PART_WIDTH}d} is being reserved by another writer; re-run the preview"
         ) from exc
+    owned_path: Path | None = None
     try:
-        if _number_is_committed(directory, number):
-            raise EntityCommandError(
-                f"number {number:0{LOCAL_PART_WIDTH}d} was committed since the preview; re-run the preview"
-            )
-        if number in _archived_numbers(Path(project_root), kind):
-            raise EntityCommandError(
-                f"number {number:0{LOCAL_PART_WIDTH}d} was archived since the preview; re-run the preview"
-            )
-        path = directory / f"{local_part}.md"
-        # Exclusive create first: a FileExistsError here means the file predates us
-        # (another writer holds the number) and must propagate untouched.
-        handle = open(path, "x", encoding="utf-8")
         try:
+            if _number_is_committed(directory, number):
+                raise EntityCommandError(
+                    f"number {number:0{LOCAL_PART_WIDTH}d} was committed since the preview; re-run the preview"
+                )
+            if number in _archived_numbers(Path(project_root), kind):
+                raise EntityCommandError(
+                    f"number {number:0{LOCAL_PART_WIDTH}d} was archived since the preview; re-run the preview"
+                )
+            path = directory / f"{local_part}.md"
+            # Exclusive create first: a FileExistsError here means the file predates
+            # us and must propagate untouched. Ownership begins only after open returns.
+            handle = open(path, "x", encoding="utf-8")
+            owned_path = path
             with handle:
                 handle.write(text)
-        except Exception:
-            # We exclusively created this path, so a write/close failure leaves a
-            # partial file we own. Remove it before re-raising; the returned path is
-            # thereafter always a complete file or the call raised leaving no dest.
-            path.unlink(missing_ok=True)
-            raise
-        return path
-    finally:
-        sentinel.unlink(missing_ok=True)
+            return path
+        finally:
+            sentinel.unlink(missing_ok=True)
+    except Exception:
+        # Any exception after exclusive destination creation belongs to this claim,
+        # including a sentinel-cleanup failure raised while unwinding the return.
+        if owned_path is not None:
+            owned_path.unlink(missing_ok=True)
+        raise
