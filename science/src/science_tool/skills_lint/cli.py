@@ -73,7 +73,7 @@ def build_dependency_views(
     return by_source, by_leaf, leaf_errors
 
 
-def _run_git(args: list[str], *, timeout: int, env: dict[str, str], max_bytes: int) -> tuple[int | None, bytes]:
+def _run_git(args: list[str], *, timeout: float, env: dict[str, str], max_bytes: int) -> tuple[int | None, bytes]:
     """Run a git command, reading at most ``max_bytes + 1`` bytes. The child is
     always reaped: on a read that outlasts ``timeout`` we kill and wait (returning
     ``None``); once the reader returns we never block on ``wait()`` for a still-live
@@ -105,7 +105,7 @@ def _run_git(args: list[str], *, timeout: int, env: dict[str, str], max_bytes: i
     return proc.returncode, box.get("out", b"")
 
 
-def fetch_remote_head_sha(url: str, *, timeout: int = 10, max_bytes: int = 4096, run=_run_git) -> tuple[str | None, str]:
+def fetch_remote_head_sha(url: str, *, timeout: float = 10, max_bytes: int = 4096, run=_run_git) -> tuple[str | None, str]:
     if urlparse(url).hostname not in FETCH_HOST_ALLOWLIST:
         return None, "host not in allowlist"
     env = {**os.environ, "GIT_TERMINAL_PROMPT": "0"}
