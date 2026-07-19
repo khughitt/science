@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import pytest
 
+from science_tool.archive import ArchiveRow
 from science_tool.plan_common import ArchiveStatusSweep, PathTransition, StateFingerprint
 from science_tool.archive_plan import (
     ArchiveCandidate, ArchiveMove, ArchivePlan, ArchivePreviewReport, PlannedArchiveRow,
@@ -52,6 +53,14 @@ def test_nested_archive_models_forbid_extra_keys() -> None:
                          bogus=1)  # type: ignore[call-arg]
     with pytest.raises(ValueError):
         PlannedArchiveRow(op="archive", id="x:1", unknown_future_key="v")  # type: ignore[call-arg]
+
+
+def test_base_archive_row_tolerates_unknown_key() -> None:
+    # The base ArchiveRow (extra="ignore" by default) tolerates unknown keys that future versions
+    # may add, whereas PlannedArchiveRow (extra="forbid") rejects them. This test demonstrates
+    # the differential: base accepts and silently drops the unknown key.
+    row = ArchiveRow(op="archive", id="x:1", unknown_future_key="v")  # type: ignore[call-arg]
+    assert "unknown_future_key" not in row.model_dump()
 
 
 def test_planned_row_is_a_valid_archive_row() -> None:
