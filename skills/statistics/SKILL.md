@@ -1,6 +1,7 @@
 ---
 name: statistics
 description: Use when designing, pre-registering, or reviewing finite-sample quantitative analyses, especially bootstrap, permutation, Monte Carlo, downsampling, MCMC, power, bias-vs-variance, sensitivity arbitration, defensive instrumentation for multi-candidate pre-registered tests, or any analysis that would otherwise choose a round-number default.
+provenance: internal
 ---
 
 # Statistics

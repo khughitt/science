@@ -1,6 +1,7 @@
 ---
 name: research-annotation-curation-qa
 description: Use when creating or auditing curated labels, extracted claims, taxonomy/facet assignments, model annotations, literature-derived tables, or LLM-assisted annotation workflows.
+provenance: internal
 ---
 
 # Annotation and Curation QA

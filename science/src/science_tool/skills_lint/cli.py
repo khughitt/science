@@ -40,17 +40,21 @@ def lint_cmd(root: str, fmt: str) -> None:
         payload={"issues": [issue.to_json() for issue in issues]},
         render_text=_render,
     )
-    if issues:
+    if _has_error(issues):
         raise click.exceptions.Exit(1)
 
 
 def _format_text_issue(issue: SkillIssue) -> str:
-    parts = [issue.path.as_posix(), issue.kind]
+    parts = [issue.severity, issue.path.as_posix(), issue.kind]
     if issue.field is not None:
         parts.append(issue.field)
     if issue.detail:
         parts.append(issue.detail)
     return ": ".join(parts)
+
+
+def _has_error(issues: list[SkillIssue]) -> bool:
+    return any(issue.severity == "error" for issue in issues)
 
 
 def build_dependency_views(

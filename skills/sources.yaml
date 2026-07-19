@@ -68,3 +68,185 @@ rosenbaum-sensitivity:
   kind: book
   doi: "10.1007/978-1-4757-3692-2_4"
   last_checked: "2026-07-18"
+
+umap:
+  title: "UMAP: Uniform Manifold Approximation and Projection"
+  authors: ["Leland McInnes", "John Healy", "James Melville"]
+  url: "https://umap-learn.readthedocs.io/"
+  kind: software
+  last_checked: "2026-07-19"
+
+hdbscan:
+  title: "HDBSCAN: Hierarchical Density-Based Clustering"
+  authors: ["Leland McInnes", "John Healy", "Steve Astels"]
+  url: "https://hdbscan.readthedocs.io/"
+  kind: software
+  last_checked: "2026-07-19"
+
+depmap:
+  title: "DepMap: The Cancer Dependency Map Project"
+  authors: ["Broad Institute"]
+  url: "https://depmap.org/portal/"
+  kind: software
+  last_checked: "2026-07-19"
+
+mageck:
+  title: "MAGeCK: Model-based Analysis of Genome-wide CRISPR-Cas9 Knockout"
+  authors: ["Wei Li Lab"]
+  url: "https://sourceforge.net/p/mageck/wiki/Home/"
+  kind: software
+  last_checked: "2026-07-19"
+
+uniprot:
+  title: "UniProt: the Universal Protein Knowledgebase"
+  authors: ["The UniProt Consortium"]
+  url: "https://www.uniprot.org/"
+  kind: software
+  last_checked: "2026-07-19"
+
+foldseek:
+  title: "Foldseek: fast and accurate protein structure search"
+  authors:
+    - "Michel van Kempen"
+    - "Stephanie S. Kim"
+    - "Charlotte Tumescheit"
+    - "Milot Mirdita"
+    - "Jeongjae Lee"
+    - "Cameron L. M. Gilchrist"
+    - "Johannes Söding"
+    - "Martin Steinegger"
+  url: "https://github.com/steineggerlab/foldseek"
+  kind: software
+  last_checked: "2026-07-19"
+
+deseq2:
+  title: "DESeq2: Moderated Estimation of Fold Change and Dispersion for RNA-seq Data"
+  authors: ["Michael I. Love", "Wolfgang Huber", "Simon Anders"]
+  url: "https://bioconductor.org/packages/release/bioc/html/DESeq2.html"
+  kind: software
+  last_checked: "2026-07-19"
+
+edger:
+  title: "edgeR: differential expression analysis of digital gene expression data"
+  authors: ["Mark D. Robinson", "Davis J. McCarthy", "Gordon K. Smyth"]
+  url: "https://bioconductor.org/packages/release/bioc/html/edgeR.html"
+  kind: software
+  last_checked: "2026-07-19"
+
+limma:
+  title: "limma: Linear Models for Microarray and RNA-Seq Data"
+  authors: ["Gordon K. Smyth"]
+  url: "https://bioconductor.org/packages/release/bioc/html/limma.html"
+  kind: software
+  last_checked: "2026-07-19"
+
+scanpy:
+  title: "Scanpy: Single-Cell Analysis in Python"
+  authors: ["scverse"]
+  url: "https://scanpy.readthedocs.io/"
+  kind: software
+  last_checked: "2026-07-19"
+
+tirosh-2016:
+  title: "Dissecting the multicellular ecosystem of metastatic melanoma by single-cell RNA-seq"
+  authors:
+    - "Itay Tirosh"
+    - "Benjamin Izar"
+    - "Sanjay M. Prakadan"
+    - "Marc H. Wadsworth II"
+    - "Daniel Treacy"
+    - "John J. Trombetta"
+    - "et al."
+  url: "https://doi.org/10.1126/science.aad0501"
+  kind: paper
+  doi: "10.1126/science.aad0501"
+  last_checked: "2026-07-19"
+
+ampliconarchitect:
+  title: "AmpliconArchitect: reconstructing focal amplifications in cancer genomes"
+  authors: ["Viraj Deshpande", "Jens Luebeck", "Vineet Bafna"]
+  url: "https://github.com/AmpliconSuite/AmpliconArchitect"
+  kind: software
+  last_checked: "2026-07-19"
+
+cosmic-signatures:
+  title: "COSMIC Mutational Signatures"
+  authors: ["Wellcome Sanger Institute"]
+  url: "https://cancer.sanger.ac.uk/signatures/"
+  kind: software
+  last_checked: "2026-07-19"
+
+dndscv:
+  title: "dNdScv: dN/dS methods to quantify selection in cancer and somatic evolution"
+  authors: ["Inigo Martincorena"]
+  url: "https://github.com/im3sanger/dndscv"
+  kind: software
+  last_checked: "2026-07-19"
+
+frictionless-spec:
+  title: "Data Package"
+  authors: ["Open Knowledge Foundation"]
+  url: "https://specs.frictionlessdata.io/data-package/"
+  kind: spec
+  last_checked: "2026-07-19"
+
+frictionless:
+  title: "Frictionless Framework"
+  authors: ["Open Knowledge Foundation"]
+  url: "https://framework.frictionlessdata.io/"
+  kind: software
+  last_checked: "2026-07-19"
+
+edam:
+  title: "EDAM: the ontology of data analysis and management"
+  authors: ["Jon Ison", "Matúš Kalaš"]
+  url: "https://edamontology.org/"
+  kind: spec
+  last_checked: "2026-07-19"
+
+openalex:
+  title: "OpenAlex API"
+  authors: ["OurResearch"]
+  url: "https://docs.openalex.org/"
+  kind: software
+  last_checked: "2026-07-19"
+
+ncbi-eutilities:
+  title: "Entrez Programming Utilities (E-utilities)"
+  authors: ["National Center for Biotechnology Information"]
+  url: "https://www.ncbi.nlm.nih.gov/books/NBK25501/"
+  kind: software
+  last_checked: "2026-07-19"
+
+snakemake:
+  title: "Snakemake"
+  authors: ["Snakemake developers"]
+  url: "https://snakemake.readthedocs.io/"
+  kind: software
+  last_checked: "2026-07-19"
+
+molder-snakemake:
+  title: "Sustainable data analysis with Snakemake"
+  authors:
+    - "Felix Mölder"
+    - "Kim Philipp Jablonski"
+    - "Brice Letcher"
+    - "et al."
+  url: "https://doi.org/10.12688/f1000research.29032.2"
+  kind: paper
+  doi: "10.12688/f1000research.29032.2"
+  last_checked: "2026-07-19"
+
+marimo:
+  title: "marimo"
+  authors: ["Marimo Inc."]
+  url: "https://marimo.io/"
+  kind: software
+  last_checked: "2026-07-19"
+
+runpod:
+  title: "RunPod"
+  authors: ["Runpod, Inc."]
+  url: "https://www.runpod.io/"
+  kind: software
+  last_checked: "2026-07-19"

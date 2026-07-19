@@ -1,6 +1,7 @@
 ---
 name: data-expression-scrna-qa
 description: Use when ingesting or QA-reviewing single-cell RNA-Seq cohorts, especially before pseudobulk meta-analysis or cell-type composition claims.
+sources: [scanpy, tirosh-2016]
 ---
 
 # Single-Cell RNA-Seq QA

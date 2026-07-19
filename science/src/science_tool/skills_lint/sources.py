@@ -10,7 +10,7 @@ from urllib.parse import urlparse
 import yaml
 
 GIT_BACKED_KINDS = frozenset({"skill-repo", "package-docs"})
-REFERENCE_KINDS = frozenset({"book", "paper", "course"})
+REFERENCE_KINDS = frozenset({"book", "paper", "course", "spec", "software"})
 VALID_KINDS = GIT_BACKED_KINDS | REFERENCE_KINDS
 FETCH_HOST_ALLOWLIST = frozenset({"github.com"})
 SOURCE_KNOWN_KEYS = frozenset(
@@ -178,25 +178,32 @@ def load_sources(path: Path) -> SourcesRegistry:
     return SourcesRegistry(records=records, errors=errors, declared_ids=frozenset(str(k) for k in raw))
 
 
-def _leaf_frontmatter(path: Path) -> dict[str, Any] | None:
+def leaf_frontmatter(path: Path) -> dict[str, Any] | None:
     text = path.read_text(encoding="utf-8")
     if not text.startswith("---\n"):
         return None
-    end = text.find("\n---\n", 4)
+    end = text.find("\n---\n", 3)
     if end == -1:
         return None
     try:
-        parsed = yaml.safe_load(text[4:end]) or {}
+        parsed = yaml.safe_load(text[4:end])
     except yaml.YAMLError:
         return None
-    return parsed if isinstance(parsed, dict) else None
+    if parsed is None:
+        return {}  # an empty frontmatter block is a valid, empty mapping
+    return parsed if isinstance(parsed, dict) else None  # reject [] / false / scalars
+
+
+def sources_wellformed(raw: object) -> bool:
+    return isinstance(raw, list) and bool(raw) and all(
+        isinstance(x, str) and x.strip() for x in raw
+    )
 
 
 def leaf_source_refs(path: Path) -> tuple[list[str] | None, str | None]:
-    frontmatter = _leaf_frontmatter(path)
+    frontmatter = leaf_frontmatter(path)
     if frontmatter is None or "sources" not in frontmatter:
         return None, None
-    raw = frontmatter["sources"]
-    if not isinstance(raw, list) or not all(isinstance(x, str) for x in raw):
-        return None, "sources must be a list of strings"
-    return list(raw), None
+    if not sources_wellformed(frontmatter["sources"]):
+        return None, "sources must be a non-empty list of non-blank strings"
+    return list(frontmatter["sources"]), None

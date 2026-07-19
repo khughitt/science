@@ -1,6 +1,7 @@
 ---
 name: scientific-writing
 description: Scientific writing conventions for research documents. This skill should be used whenever writing or editing research documents, background sections, paper summaries, hypothesis descriptions, overview documents, or any content in the doc/ directory. Also use when the user asks to write, draft, revise, or edit any scientific or technical prose, or when creating content that will be part of a research project's documentation.
+provenance: internal
 ---
 
 # Scientific Writing

@@ -140,6 +140,32 @@ def test_check_invalid_record_reports_unknown_freshness_and_fails(tmp_path: Path
     assert report.failed() is True
 
 
+def test_spec_and_software_report_not_applicable_freshness(tmp_path: Path) -> None:
+    root = tmp_path / "skills"
+    root.mkdir()
+    (root / "sources.yaml").write_text(
+        "spec1:\n  title: S\n  authors: [Org]\n  url: https://specs.example.org/x\n"
+        "  kind: spec\n  last_checked: 2026-07-18\n"
+        "soft1:\n  title: T\n  authors: [Org]\n  url: https://tool.example.org/\n"
+        "  kind: software\n  last_checked: 2026-07-18\n",
+        encoding="utf-8",
+    )
+    (root / "INDEX.md").write_text("`skills/leaf.md`\n", encoding="utf-8")
+    (root / "leaf.md").write_text(
+        "---\nname: leaf\ndescription: d\nsources: [spec1, soft1]\n---\n"
+        "# Leaf\n## Companion Skills\n- none\n",
+        encoding="utf-8",
+    )
+    # fetch_upstream=True proves reference kinds are never fetched (fetch raises if called).
+    def _boom(url):  # pragma: no cover - must not be invoked
+        raise AssertionError("reference kinds must not be fetched")
+    report = check_sources(root, fetch_upstream=True, fetch=_boom)
+    freshness = {s.id: s.freshness for s in report.sources}
+    assert freshness["spec1"] == "not_applicable"
+    assert freshness["soft1"] == "not_applicable"
+    assert report.failed() is False
+
+
 def test_check_malformed_leaf_sources_field_fails(tmp_path: Path) -> None:
     root = _make_repo(tmp_path)
     (root / "leaf.md").write_text(

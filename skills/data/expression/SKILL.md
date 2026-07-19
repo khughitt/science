@@ -1,6 +1,7 @@
 ---
 name: data-expression
 description: Use when ingesting, preprocessing, or QA-reviewing transcriptomic datasets, including bulk RNA-seq, microarray, scRNA-seq, GEO, ArrayExpress, MMRF, HCA, recount, or ARCHS4 cohorts, especially before meta-analysis or when suspicious results may be preprocessing artifacts.
+provenance: internal
 ---
 
 # Expression Data — Preprocessing & QA

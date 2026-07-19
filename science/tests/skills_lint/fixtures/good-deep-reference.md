@@ -2,6 +2,7 @@
 name: test-good-deep-reference
 description: Use when verifying the linter accepts a deep-reference skill.
 type: deep-reference
+provenance: internal
 ---
 
 # Good Deep Reference

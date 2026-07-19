@@ -1,6 +1,7 @@
 ---
 name: research-methodology
 description: Core research methodology for scientific investigation. This skill should be used whenever conducting literature review, evaluating scientific sources, synthesizing findings across papers, assessing evidence quality, identifying gaps in knowledge, or working with hypotheses. Also use when the user mentions research, papers, citations, evidence, or scientific literature — even if they don't explicitly ask for "research methodology."
+provenance: internal
 ---
 
 # Research Methodology

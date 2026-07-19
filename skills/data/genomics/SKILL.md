@@ -1,6 +1,7 @@
 ---
 name: data-genomics
 description: Source of truth for genomic-mutation data ingestion and QA. Use when working with somatic mutation calls, mutational signatures, dN/dS, or driver-selection analyses.
+provenance: internal
 ---
 
 # Genomics - Data Ingestion & QA
