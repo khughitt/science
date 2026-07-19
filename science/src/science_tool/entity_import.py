@@ -338,6 +338,14 @@ def plan_cohort_import(
     resolved = [Path(source).resolve() for source in sources]
     if len(set(resolved)) != len(resolved):
         raise EntityImportError("cohort sources contain a duplicate")
+    excluded = {Path(path).resolve() for path in exclude}
+    if overlap := excluded.intersection(resolved):
+        rendered = ", ".join(
+            path.relative_to(project_root).as_posix() for path in sorted(overlap)
+        )
+        raise EntityImportError(
+            f"exclude may not contain a cohort member: {rendered}"
+        )
 
     cache: dict[str, str] = {}
     order: list[str] = []
@@ -397,7 +405,14 @@ def plan_cohort_import(
         return resolved_target if resolved_target in member_rels else None
 
     def manual_targets(hit: ManualHit) -> list[str]:
-        return sorted(source_rel for source_rel in member_rels if source_rel in hit.text)
+        return sorted(
+            source_rel
+            for source_rel in member_rels
+            if re.search(
+                rf"(?<![A-Za-z0-9._/-]){re.escape(source_rel)}(?![A-Za-z0-9._/-])",
+                hit.text,
+            )
+        )
 
     pairs: list[tuple[str, str]] = []
     for hit in report.hits:

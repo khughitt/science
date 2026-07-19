@@ -235,3 +235,23 @@ def test_cohort_rejects_duplicate_sources(tmp_path):
     a = _loose(root, "doc/plans/a.md", "# Alpha\n\nbody\n")
     with pytest.raises(EntityImportError):
         plan_cohort_import(root, [a, a], kind="plan")
+
+
+def test_cohort_rejects_excluding_a_member_from_independence_scan(tmp_path):
+    root = _project(tmp_path)
+    a = _loose(root, "doc/plans/a.md", "# Alpha\n\nsee [me](a.md)\n")
+    b = _loose(root, "doc/plans/b.md", "# Beta\n\nbody\n")
+    with pytest.raises(EntityImportError, match="exclude.*member"):
+        plan_cohort_import(root, [a, b], kind="plan", exclude=frozenset({a}))
+
+
+def test_cohort_manual_pair_attribution_uses_exact_overlapping_path(tmp_path):
+    root = _project(tmp_path)
+    short = _loose(root, "a.md", "# Alpha\n\nbody\n")
+    nested = _loose(root, "docs/a.md", "# Beta\n\nbody\n")
+    referrer = _loose(root, "member.md", "# Gamma\n\nmentions docs/a.md\n")
+    with pytest.raises(RefDependentCohortError) as excinfo:
+        plan_cohort_import(root, [short, nested, referrer], kind="plan")
+    message = str(excinfo.value)
+    assert "member.md -> docs/a.md" in message
+    assert "member.md -> a.md" not in message
