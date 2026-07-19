@@ -32,7 +32,7 @@ from pathlib import Path, PurePosixPath
 from typing import Any
 
 import yaml
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 from pydantic import ValidationError as PydanticValidationError
 
 from science_tool.entities import (
@@ -99,11 +99,125 @@ class ImportPlan(BaseModel):
     warnings: list[str] = []
 
 
+class ImportMember(BaseModel):
+    """One member of a cohort.
+
+    Carries no ``kind``: the cohort plan's ``kind`` is the single authority for
+    every member's directory and number claim.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    source_rel: str
+    source_sha256: str
+    entity_id: str
+    number: int
+    dest_rel: str
+    title: str
+    status: str
+    frontmatter: dict[str, Any]
+    rendered_text: str
+
+
+@dataclass(frozen=True)
+class PlannedMember:
+    """Internal, not persisted: a member plus the warnings its render raised."""
+
+    member: ImportMember
+    warnings: list[str]
+
+
 def _derive_title(text: str, source: Path) -> str:
     match = _HEADING_RE.search(text)
     if match is not None:
         return match.group(1).strip()
     raise EntityImportError(f"{source} has no level-1 heading to derive a title from; pass --title explicitly")
+
+
+def _plan_member(
+    project_root: Path,
+    source_rel: str,
+    text: str,
+    *,
+    kind: str,
+    number: int,
+    status: str | None = None,
+    title: str | None = None,
+    slug: str | None = None,
+    today: date | None = None,
+) -> PlannedMember:
+    """Plan one member from already-read source bytes with a forced number.
+
+    Performs the loose check, identity resolution, own-outbound-link rebase,
+    render, and prospective-write validation. It runs no inbound scan and does
+    not re-read the source.
+    """
+    project_root = Path(project_root).resolve()
+    source_sha256 = hashlib.sha256(text.encode("utf-8")).hexdigest()
+    try:
+        frontmatter, body = split_frontmatter(text)
+    except yaml.YAMLError as exc:
+        raise EntityImportError(f"{source_rel} has a malformed frontmatter block: {exc}") from exc
+    if frontmatter:
+        raise EntityImportError(
+            f"{source_rel} already has frontmatter; import is for loose documents. "
+            "An entity that already carries an id needs a move, not an import."
+        )
+
+    resolved_title = title if title is not None else _derive_title(text, Path(source_rel))
+
+    try:
+        resolved_status = status if status is not None else default_status(kind, project_root=project_root)
+        allowed = valid_statuses(kind, project_root=project_root)
+        if allowed is not None and resolved_status not in allowed:
+            raise EntityImportError(
+                f"status {resolved_status!r} is not in the {kind} vocabulary {sorted(allowed)}"
+            )
+        slug_value = validate_slug(slug) if slug is not None else derive_slug(resolved_title)
+        policy = resolve_path_policy(kind)
+    except KeyError as exc:
+        raise EntityImportError(f"unknown entity kind: {kind}") from exc
+    except EntityCommandError as exc:
+        raise EntityImportError(str(exc)) from exc
+
+    local_part = f"{number:0{LOCAL_PART_WIDTH}d}-{slug_value}"
+    entity_id = f"{kind}:{local_part}"
+    dest = project_root / policy.root / f"{local_part}.md"
+    dest_rel = dest.relative_to(project_root).as_posix()
+
+    body_rebased, _outbound_hits = rewrite_outbound_links(
+        body, PurePosixPath(source_rel).parent, PurePosixPath(dest_rel).parent
+    )
+    stamp = (today or date.today()).isoformat()
+    new_frontmatter: dict[str, Any] = {
+        "kind": kind,
+        "title": resolved_title,
+        "status": resolved_status,
+        "created": stamp,
+        "updated": stamp,
+        "id": entity_id,
+    }
+    rendered_text = _render_markdown(new_frontmatter, body_rebased)
+    warnings, _sources = _validate_prospective_write(
+        project_root=project_root,
+        rel_path=Path(dest_rel),
+        text=rendered_text,
+        target_entity_id=entity_id,
+    )
+    return PlannedMember(
+        member=ImportMember(
+            source_rel=source_rel,
+            source_sha256=source_sha256,
+            entity_id=entity_id,
+            number=number,
+            dest_rel=dest_rel,
+            title=resolved_title,
+            status=resolved_status,
+            frontmatter=new_frontmatter,
+            rendered_text=rendered_text,
+        ),
+        warnings=list(warnings),
+    )
 
 
 def plan_import(
@@ -120,84 +234,33 @@ def plan_import(
     """Plan the import of a loose markdown file. Touches nothing."""
     project_root = Path(project_root).resolve()
     source = Path(source).resolve()
-
     if not source.is_file():
         raise EntityImportError(f"source not found: {source}")
-
-    # ONE read of the source. `_parse_markdown_file` re-opened the path, so a
-    # source changing between the two reads produced a plan whose title/body and
-    # whose hash described different bytes. split_frontmatter parses the text we
-    # already hold, and that same text is what the hash below commits to.
     try:
         text = source.read_text(encoding="utf-8")
     except UnicodeDecodeError as exc:
         raise EntityImportError(f"{source} is not valid UTF-8: {exc}") from exc
-    source_sha256 = hashlib.sha256(text.encode("utf-8")).hexdigest()
+    source_rel = source.relative_to(project_root).as_posix()
+    # Keep number proposal outside the member planner: a cohort assigns its
+    # members' forced numbers in one batch, while a single import proposes one.
     try:
-        frontmatter, body = split_frontmatter(text)
-    except yaml.YAMLError as exc:
-        raise EntityImportError(f"{source} has a malformed frontmatter block: {exc}") from exc
-    if frontmatter:
-        raise EntityImportError(
-            f"{source} already has frontmatter; import is for loose documents. "
-            "An entity that already carries an id needs a move, not an import."
-        )
-
-    resolved_title = title if title is not None else _derive_title(text, source)
-
-    # Identity resolution: everything here calls into entities.py / entity_reservation.py,
-    # which raise their OWN exception types (a bare KeyError for a kind unknown to both the
-    # built-in table and the local manifest; EntityCommandError for an unsupported kind, a
-    # non-numeric kind, or an unsluggable title) on bad user input. plan_import advertises
-    # EntityImportError as its sole error type -- every test in this module raises it -- so
-    # a caller catching EntityImportError must not see these leak through unwrapped.
-    try:
-        resolved_status = status if status is not None else default_status(kind, project_root=project_root)
-        allowed = valid_statuses(kind, project_root=project_root)
-        # None is an OPEN set (entities.py:1697), not an empty one -- do not refuse on it.
-        # This check raises EntityImportError directly, which the except clauses below do
-        # NOT catch (it is unrelated to EntityCommandError/KeyError) -- it passes through
-        # unwrapped, exactly as if it sat outside the try.
-        if allowed is not None and resolved_status not in allowed:
-            raise EntityImportError(
-                f"status {resolved_status!r} is not in the {kind} vocabulary {sorted(allowed)}"
-            )
         number = propose_number(project_root, kind)
-        slug_value = validate_slug(slug) if slug is not None else derive_slug(resolved_title)
-        policy = resolve_path_policy(kind)
     except KeyError as exc:
         raise EntityImportError(f"unknown entity kind: {kind}") from exc
     except EntityCommandError as exc:
         raise EntityImportError(str(exc)) from exc
-
-    local_part = f"{number:0{LOCAL_PART_WIDTH}d}-{slug_value}"
-    entity_id = f"{kind}:{local_part}"
-
-    dest = project_root / policy.root / f"{local_part}.md"
-    source_rel = source.relative_to(project_root).as_posix()
-    dest_rel = dest.relative_to(project_root).as_posix()
-
-    body_rebased, _outbound_hits = rewrite_outbound_links(
-        body, PurePosixPath(source_rel).parent, PurePosixPath(dest_rel).parent
+    planned = _plan_member(
+        project_root,
+        source_rel,
+        text,
+        kind=kind,
+        number=number,
+        status=status,
+        title=title,
+        slug=slug,
+        today=today,
     )
-
-    stamp = (today or date.today()).isoformat()
-    new_frontmatter: dict[str, Any] = {
-        "kind": kind,
-        "title": resolved_title,
-        "status": resolved_status,
-        "created": stamp,
-        "updated": stamp,
-        "id": entity_id,
-    }
-    rendered_text = _render_markdown(new_frontmatter, body_rebased)
-
-    warnings, _sources = _validate_prospective_write(
-        project_root=project_root,
-        rel_path=Path(dest_rel),
-        text=rendered_text,
-        target_entity_id=entity_id,
-    )
+    member = planned.member
 
     # Exclude the moved source from the INBOUND scan. Its own links are rebased by
     # rewrite_outbound_links above; scanning it again as an inbound referrer would
@@ -206,25 +269,25 @@ def plan_import(
     # self-referential document would drift against its own plan every time.
     ref_report = plan_reference_rewrite(
         project_root,
-        id_substitutions={source_rel: entity_id},
-        path_substitutions={source_rel: dest_rel},
+        id_substitutions={source_rel: member.entity_id},
+        path_substitutions={source_rel: member.dest_rel},
         exclude=exclude | frozenset({source}),
     )
 
     return ImportPlan(
         project_root=str(project_root),
-        source_rel=source_rel,
-        source_sha256=source_sha256,
-        entity_id=entity_id,
+        source_rel=member.source_rel,
+        source_sha256=member.source_sha256,
+        entity_id=member.entity_id,
         kind=kind,
-        number=number,
-        dest_rel=dest_rel,
-        title=resolved_title,
-        status=resolved_status,
-        frontmatter=new_frontmatter,
-        rendered_text=rendered_text,
+        number=member.number,
+        dest_rel=member.dest_rel,
+        title=member.title,
+        status=member.status,
+        frontmatter=member.frontmatter,
+        rendered_text=member.rendered_text,
         ref_report=ref_report,
-        warnings=list(warnings),
+        warnings=planned.warnings,
     )
 
 
