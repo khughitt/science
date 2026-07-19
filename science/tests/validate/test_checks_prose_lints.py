@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import importlib
+import json
 from collections.abc import Iterable
 from pathlib import Path
 
@@ -52,6 +53,27 @@ def _write_doc(root: Path, text: str) -> None:
     path.write_text(text, encoding="utf-8")
 
 
+def _write_numeric_project(root: Path, *, claim_id: str, artifact_value: object, claim_value: str) -> None:
+    """A project with one bound `numeric_claims` entry against `score.json`."""
+    root.joinpath("score.json").write_text(json.dumps({"v": artifact_value}), encoding="utf-8")
+    _write_doc(
+        root,
+        "\n".join(
+            [
+                "---",
+                "numeric_claims:",
+                f"  {claim_id}:",
+                "    artifact: score.json",
+                "    locator: {pointer: /v}",
+                "---",
+                "",
+                f"The reported value was **{claim_value}**[^{claim_id}] overall.",
+                "",
+            ]
+        ),
+    )
+
+
 def _summary(results: Iterable[Result]) -> list[tuple[Severity, str, str | None]]:
     return [(result.severity, result.message, result.rule) for result in results]
 
@@ -82,7 +104,14 @@ def test_non_strict_bare_author_year_emits_exact_warn_message(tmp_path: Path) ->
             1,
             "bare author-year mention 'Smith 2020' has no adjacent [@key]",
             "prose_lints.bare-author-year",
-        )
+        ),
+        (
+            Severity.INFO,
+            None,
+            None,
+            "numeric-verification coverage: 0 verified, 0 unverifiable, 0 mismatch, 0 error",
+            "prose_lints.numeric-verification.coverage",
+        ),
     ]
 
 
@@ -94,7 +123,12 @@ def test_non_strict_numeric_anchor_is_silent(tmp_path: Path) -> None:
     results = list(check_prose_lints(_ctx(tmp_path)))
 
     assert _summary(results) == [
-        (Severity.INFO, "1 prose lint issue(s): numeric-anchor (use --strict to promote)", "prose_lints.numeric-anchor")
+        (
+            Severity.INFO,
+            "numeric-verification coverage: 0 verified, 0 unverifiable, 0 mismatch, 0 error",
+            "prose_lints.numeric-verification.coverage",
+        ),
+        (Severity.INFO, "1 prose lint issue(s): numeric-anchor (use --strict to promote)", "prose_lints.numeric-anchor"),
     ]
 
 
@@ -112,7 +146,14 @@ def test_strict_numeric_anchor_emits_warn_message(tmp_path: Path) -> None:
             1,
             "numeric claim '123' has no resolvable source",
             "prose_lints.numeric-anchor",
-        )
+        ),
+        (
+            Severity.INFO,
+            None,
+            None,
+            "numeric-verification coverage: 0 verified, 0 unverifiable, 0 mismatch, 0 error",
+            "prose_lints.numeric-verification.coverage",
+        ),
     ]
 
 
@@ -150,9 +191,15 @@ def test_project_config_controls_enabled_checks_and_anchor_patterns(tmp_path: Pa
     assert _summary(results) == [
         (
             Severity.INFO,
-            "prose lint checks limited by science.yaml: 1/6 enabled (numeric-anchor); disabled: bare-author-year, short-form-ids, frontmatter-inline-gap, numeric-verification, unsupported-citation-syntax",
+            "prose lint checks limited by science.yaml: 2/6 enabled (numeric-anchor, numeric-verification); "
+            "disabled: bare-author-year, short-form-ids, frontmatter-inline-gap, unsupported-citation-syntax",
             "prose_lints.config",
-        )
+        ),
+        (
+            Severity.INFO,
+            "numeric-verification coverage: 0 verified, 0 unverifiable, 0 mismatch, 0 error",
+            "prose_lints.numeric-verification.coverage",
+        ),
     ]
 
 
@@ -191,7 +238,8 @@ def test_include_all_checks_overrides_project_enabled_checks(tmp_path: Path) -> 
     assert _summary(results)[:1] == [
         (
             Severity.INFO,
-            "prose lint checks limited by science.yaml but --all is active; running all 6 checks (science.yaml enabled: numeric-anchor)",
+            "prose lint checks limited by science.yaml but --all is active; running all 6 checks "
+            "(science.yaml enabled: numeric-anchor, numeric-verification)",
             "prose_lints.config",
         )
     ]
@@ -255,9 +303,14 @@ def test_strict_frontmatter_inline_gap_stays_summary_only(tmp_path: Path) -> Non
     assert _summary(results) == [
         (
             Severity.INFO,
+            "numeric-verification coverage: 0 verified, 0 unverifiable, 0 mismatch, 0 error",
+            "prose_lints.numeric-verification.coverage",
+        ),
+        (
+            Severity.INFO,
             "2 prose lint issue(s): frontmatter-inline-gap (graph metadata advisory)",
             "prose_lints.frontmatter-inline-gap",
-        )
+        ),
     ]
 
 
@@ -293,6 +346,77 @@ def test_config_forwards_additional_anchor_patterns_to_numeric_anchor(tmp_path: 
 
     # `paper:` is only reachable because it was *additional*, not in anchor_patterns
     assert all(result.rule != "prose_lints.numeric-anchor" for result in results)
+
+
+def test_mismatch_numeric_claim_emits_warn_result(tmp_path: Path) -> None:
+    from science_tool.validate.checks.prose_lints import check_prose_lints
+
+    _write_numeric_project(tmp_path, claim_id="m1", artifact_value=42, claim_value="99")
+
+    results = list(check_prose_lints(_ctx(tmp_path)))
+
+    warn_results = [result for result in results if result.severity == Severity.WARN]
+    assert len(warn_results) == 1
+    assert warn_results[0].rule == "prose_lints.numeric-verification"
+    assert warn_results[0].message == (
+        "prose value '99' does not match artifact value 42 at score.json"
+    )
+
+    coverage_results = [result for result in results if result.rule == "prose_lints.numeric-verification.coverage"]
+    assert len(coverage_results) == 1
+    assert coverage_results[0].severity == Severity.INFO
+    assert coverage_results[0].message == "numeric-verification coverage: 0 verified, 0 unverifiable, 1 mismatch, 0 error"
+
+
+def test_verified_numeric_claim_emits_coverage_advisory_and_no_warn(tmp_path: Path) -> None:
+    from science_tool.prose_lint import scan_root
+    from science_tool.validate.checks.prose_lints import check_prose_lints
+
+    _write_numeric_project(tmp_path, claim_id="v1", artifact_value=0.978, claim_value="0.978")
+
+    results = list(check_prose_lints(_ctx(tmp_path)))
+
+    assert all(result.severity != Severity.WARN for result in results)
+
+    coverage_results = [result for result in results if result.rule == "prose_lints.numeric-verification.coverage"]
+    assert len(coverage_results) == 1
+    assert coverage_results[0].severity == Severity.INFO
+    assert coverage_results[0].message == "numeric-verification coverage: 1 verified, 0 unverifiable, 0 mismatch, 0 error"
+
+    # The advisory is emitted independently of the `counts`-derived numeric
+    # compare path: a verified claim is silent (contributes nothing to `hits`,
+    # so `counts["numeric-verification"]` is absent/0), yet the coverage
+    # advisory still fires because it reads `lint_result["coverage"]` directly
+    # rather than going through the counts loop.
+    lint_result = scan_root(tmp_path)
+    assert lint_result["counts"].get("numeric-verification", 0) == 0
+
+
+def test_coupling_makes_disabled_checks_message_coupling_aware(tmp_path: Path) -> None:
+    from science_tool.validate.checks.prose_lints import check_prose_lints
+
+    _write_doc(tmp_path, "No numeric mentions or bare author-year text here.\n")
+
+    results = list(
+        check_prose_lints(
+            _ctx(
+                tmp_path,
+                prose_lint="\n".join(
+                    [
+                        "prose_lint:",
+                        "  enabled_checks:",
+                        "    - numeric-anchor",
+                    ]
+                ),
+            )
+        )
+    )
+
+    config_results = [result for result in results if result.rule == "prose_lints.config"]
+    assert len(config_results) == 1
+    message = config_results[0].message
+    assert "numeric-verification" not in message.split("disabled: ")[-1].split(", ")
+    assert "numeric-anchor, numeric-verification" in message
 
 
 def test_registration_includes_prose_lints_after_cross_references() -> None:
