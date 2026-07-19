@@ -406,6 +406,23 @@ def test_provenance_entity_ref_extracts_and_resolves(tmp_path):
     assert "dataset:xyz" in _resolved_refs("value 7.94 in `dataset:xyz`", idx)
 
 
+def test_hyphenated_kind_extracts_and_prefix_resolves(tmp_path):
+    # A hyphenated allowlist kind (pre-registration) must extract whole via the
+    # longest-first alternation (not sub-match `registration`) AND resolve by
+    # unique digit-lead prefix, exactly like the single-word kinds.
+    _project(tmp_path)
+    d = tmp_path / "entities" / "pre-registrations"
+    d.mkdir(parents=True, exist_ok=True)
+    (d / "0012-tissue.md").write_text(
+        "---\nid: pre-registration:0012-tissue\nkind: pre-registration\n---\n\nbody\n"
+    )
+    idx = build_resolution_index(tmp_path)
+    assert "pre-registration:0012-tissue" in _resolved_refs(
+        "value 7.94 (`pre-registration:0012-tissue`)", idx)      # full hyphenated-kind id
+    assert "pre-registration:0012" in _resolved_refs(
+        "value 7.94 per `pre-registration:0012`.", idx)          # short prefix, hyphenated kind
+
+
 def test_dotted_verbatim_paper_id_extracts(tmp_path):
     _project(tmp_path)
     d = tmp_path / "entities" / "papers"
@@ -484,6 +501,7 @@ def test_embedded_tokens_do_not_yield_resolvable_ref(tmp_path):
         "path/interpretation:0007-altview.md",
         "interpretation:0007@host",
         "interpretation:0007/panel",
+        "see a:interpretation:0007 here",  # `:`-lead embed (left guard rejects)
     ):
         assert "interpretation:0007" not in _resolved_refs(para, idx)
         assert "interpretation:0007-altview" not in _resolved_refs(para, idx)
