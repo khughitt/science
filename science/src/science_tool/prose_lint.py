@@ -929,6 +929,13 @@ def scan_root(
                     )
                 )
             elif check == "numeric-verification":
+                # Inlined rather than delegated to `detect_numeric_verification`:
+                # this branch needs the per-binding `VerificationResult`s for
+                # `coverage`, not just the issues the wrapper returns. The
+                # guard-and-call shape (build context, check
+                # `_document_opts_into_verification`, call
+                # `run_numeric_verification`) is intentionally duplicated with
+                # that wrapper — keep the two in sync.
                 document = build_document_context(path)
                 if document is not None and _document_opts_into_verification(document):
                     issues, results = run_numeric_verification(

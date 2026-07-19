@@ -859,6 +859,39 @@ class TestNumericVerificationWiring:
         path.write_text("# Plain\n\nNo numeric claims here at all.\n")
         assert detect_numeric_verification(path, project_root=tmp_path, data_root=tmp_path) == []
 
+    def test_detect_numeric_verification_present_but_malformed_still_errors(self, tmp_path):
+        # The guard keys on KEY PRESENCE, not validity: `numeric_claims`
+        # present as a non-mapping (a list) must still reach the runner and
+        # surface its document-level "must be a mapping" error -- proving the
+        # opt-in gate is not silently swallowing a present-but-malformed
+        # declaration the way it (correctly) swallows an absent one.
+        (tmp_path / "entities").mkdir()
+        path = tmp_path / "entities" / "malformed.md"
+        path.write_text("---\nnumeric_claims:\n  - 1\n  - 2\n---\n\nSome text with no markers at all.\n")
+        issues = detect_numeric_verification(path, project_root=tmp_path, data_root=tmp_path)
+        assert len(issues) == 1
+        assert issues[0].check == "numeric-verification"
+        assert issues[0].severity == "warn"
+        assert issues[0].match == "numeric_claims"
+        assert "must be a mapping" in issues[0].message
+
+    def test_scan_root_present_but_malformed_numeric_claims_still_errors(self, tmp_path):
+        # Same contract, exercised through the wired `scan_root` path (not
+        # just the `detect_numeric_verification` wrapper) -- coverage/counts
+        # must reflect the one document-level error.
+        (tmp_path / "entities").mkdir()
+        (tmp_path / "entities" / "malformed.md").write_text(
+            "---\nnumeric_claims:\n  - 1\n  - 2\n---\n\nSome text with no markers at all.\n"
+        )
+        result = scan_root(tmp_path, checks=["numeric-anchor"])
+        assert result["counts"]["numeric-verification"] == 1
+        assert result["coverage"]["numeric-verification"] == {
+            "verified": 0,
+            "unverifiable": 0,
+            "mismatch": 0,
+            "error": 1,
+        }
+
     def test_scan_root_coupling_produces_coverage_and_counts(self, tmp_path):
         self._write_fixture_project(tmp_path)
         result = scan_root(
