@@ -7,6 +7,7 @@ from pathlib import Path
 
 import pytest
 
+from science_tool.plan_common import PathEscape
 from science_tool.reference_rewrite import (
     ReferenceDriftError,
     RewriteReport,
@@ -100,6 +101,41 @@ def test_override_examines_oversize_file_the_disk_scan_would_drop(tmp_path):
         source_overrides={"doc/loose.md": "# L\n\nsee [other](other.md)\n"},
     )
     assert any(h.rel_path == "doc/loose.md" for h in report.hits)
+
+
+def test_override_symlink_keeps_lexical_entry_identity(tmp_path: Path) -> None:
+    """A symlink override neither scans twice nor displaces its distinct target entry."""
+    root = _corpus(tmp_path)
+    _write(root, "doc/target.md", "see [disk](disk-target.md)\n")
+    (root / "doc/source.md").symlink_to("target.md")
+
+    report = plan_reference_rewrite(
+        root,
+        id_substitutions={},
+        path_substitutions={
+            "doc/disk-target.md": "entities/plans/disk-target.md",
+            "doc/override-target.md": "entities/plans/override-target.md",
+        },
+        source_overrides={"doc/source.md": "see [override](override-target.md)\n"},
+    )
+
+    assert [(hit.rel_path, hit.old) for hit in report.hits] == [
+        ("doc/source.md", "override-target.md"),
+        ("doc/target.md", "disk-target.md"),
+    ]
+
+
+@pytest.mark.parametrize("rel_path", ["", "./doc/a.md", "doc//a.md"])
+def test_override_rejects_noncanonical_key(tmp_path: Path, rel_path: str) -> None:
+    root = _corpus(tmp_path)
+
+    with pytest.raises(PathEscape, match="non-canonical"):
+        plan_reference_rewrite(
+            root,
+            id_substitutions={},
+            path_substitutions={},
+            source_overrides={rel_path: "body\n"},
+        )
 
 
 # ---- frontmatter surface -------------------------------------------------

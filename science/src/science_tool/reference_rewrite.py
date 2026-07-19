@@ -41,6 +41,7 @@ from science_tool.entities import (
     _render_markdown,
 )
 from science_tool.markdown_scan import iter_prose_matches, prose_spans
+from science_tool.plan_common import resolve_within
 from science_tool.text_scan import (
     _CODE_SUFFIXES,
     Skip,
@@ -317,15 +318,10 @@ def _scan(
     }
     override_texts: dict[str, str] = {}
     for rel, text in source_overrides.items():
-        pure = PurePosixPath(rel)
-        if pure.is_absolute() or rel.startswith("/") or ".." in pure.parts:
-            raise ValueError(f"source_overrides key {rel!r} is not a project-relative path")
-        resolved = (project_root / rel).resolve()
-        if not resolved.is_relative_to(project_root):
-            raise ValueError(f"source_overrides key {rel!r} escapes the project root")
+        resolved = resolve_within(project_root, rel)
         if resolved in excluded:
             continue  # exclude wins over an override
-        entries[resolved] = rel
+        entries[project_root / rel] = rel
         override_texts[rel] = text
 
     for path in sorted(entries):
