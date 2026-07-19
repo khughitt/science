@@ -24,6 +24,7 @@ from science_tool.markdown_utils import (
 
 if TYPE_CHECKING:
     from science_tool.numeric_provenance import ResolutionIndex
+    from science_tool.numeric_verification import VerificationResult
 
 logger = logging.getLogger(__name__)
 
@@ -32,6 +33,7 @@ CHECKS: tuple[str, ...] = (
     "short-form-ids",
     "frontmatter-inline-gap",
     "numeric-anchor",
+    "numeric-verification",
     "unsupported-citation-syntax",
 )
 
@@ -40,8 +42,32 @@ DEFAULT_SEVERITY: dict[str, str] = {
     "short-form-ids": "warn",
     "frontmatter-inline-gap": "info",
     "numeric-anchor": "info",
+    "numeric-verification": "warn",
     "unsupported-citation-syntax": "warn",
 }
+
+# `numeric-anchor` (Part A) and `numeric-verification` (Part B) are an atomic
+# pair: a bound claim's span is always both suppressed from numeric-anchor and
+# verified by numeric-verification, never one without the other (see
+# docs/plans/2026-07-18-numeric-provenance-part-b-design.md, Goals).
+_NUMERIC_COUPLE: tuple[str, str] = ("numeric-anchor", "numeric-verification")
+
+
+def couple_checks(selected: list[str]) -> list[str]:
+    """If either `numeric-anchor` or `numeric-verification` is selected, select both.
+
+    Order-stable: the input order is preserved and any missing partner check is
+    appended at the end, deterministically. A selection touching neither check
+    is returned unchanged.
+    """
+    selected_set = set(selected)
+    if selected_set.isdisjoint(_NUMERIC_COUPLE):
+        return list(selected)
+    result = list(selected)
+    for check in _NUMERIC_COUPLE:
+        if check not in selected_set:
+            result.append(check)
+    return result
 
 
 @dataclass(frozen=True)
@@ -564,6 +590,64 @@ def _numeric_anchor_message(assessment) -> str:
     return f"numeric claim '{assessment.claim.value}' has no resolvable source"
 
 
+def _document_opts_into_verification(document) -> bool:
+    """A document opts into `numeric-verification` only by declaring `numeric_claims`.
+
+    Binding is opt-in *per claim* (design goal), not a blanket requirement — a
+    document that never mentions `numeric_claims` must stay silent rather than
+    surface `run_numeric_verification`'s document-level "must be a mapping"
+    error for every unrelated file in a project.
+    """
+    return isinstance(document.frontmatter, dict) and "numeric_claims" in document.frontmatter
+
+
+def detect_numeric_verification(
+    path: Path,
+    *,
+    strict: bool = False,
+    project_root: "Path | None" = None,
+    data_root: "Path | None" = None,
+    max_json_bytes: "int | None" = None,
+    max_feather_bytes: "int | None" = None,
+) -> list[LintIssue]:
+    """Flag mismatched/erroring bound numeric claims (Part B).
+
+    Thin wrapper over `numeric_verification.run_numeric_verification`: builds
+    the `DocumentContext` and returns the ISSUES list only, so the generic
+    `_DETECTORS` map and the unknown-check guard stay complete. `project_root`/
+    `data_root` are resolved the same way `detect_numeric_anchor` resolves its
+    project root when not supplied; `max_json_bytes`/`max_feather_bytes` fall
+    back to the `ProseLintConfig` defaults when not supplied. `strict` is
+    accepted for signature parity with the other detectors; verification
+    severity is fixed at `warn` regardless (there is no `info` tier to
+    promote).
+    """
+    from science_tool.data_root import resolve_data_root  # noqa: PLC0415
+    from science_tool.numeric_provenance import build_document_context  # noqa: PLC0415
+    from science_tool.numeric_verification import run_numeric_verification  # noqa: PLC0415
+    from science_tool.project_config import (  # noqa: PLC0415
+        DEFAULT_MAX_FEATHER_BYTES,
+        DEFAULT_MAX_JSON_BYTES,
+    )
+    from science_model.frontmatter import nearest_project_root  # noqa: PLC0415
+
+    document = build_document_context(path)
+    if document is None or not _document_opts_into_verification(document):
+        return []
+    if project_root is None:
+        project_root = nearest_project_root(path) or path.parent
+    if data_root is None:
+        data_root = resolve_data_root(project_root)
+    issues, _results = run_numeric_verification(
+        document,
+        project_root,
+        data_root,
+        max_json_bytes=max_json_bytes if max_json_bytes is not None else DEFAULT_MAX_JSON_BYTES,
+        max_feather_bytes=max_feather_bytes if max_feather_bytes is not None else DEFAULT_MAX_FEATHER_BYTES,
+    )
+    return issues
+
+
 def detect_unsupported_citation_syntax(path: Path, *, strict: bool = False) -> list[LintIssue]:
     """Flag `@key` tokens outside a recognized `[@key]` block.
 
@@ -668,6 +752,7 @@ _DETECTORS: dict[str, Callable[..., list[LintIssue]]] = {
     "short-form-ids": detect_short_form_ids,
     "frontmatter-inline-gap": detect_frontmatter_inline_gaps,
     "numeric-anchor": detect_numeric_anchor,
+    "numeric-verification": detect_numeric_verification,
     "unsupported-citation-syntax": detect_unsupported_citation_syntax,
 }
 _SCAN_DIRS = ("doc", "entities")
@@ -772,8 +857,10 @@ def scan_root(
     resolver: dict[str, str] | None = None,
     bare_author_year_deny: list[str] | None = None,
     bib_surnames: set[str] | None = None,
+    max_json_bytes: int | None = None,
+    max_feather_bytes: int | None = None,
 ) -> dict:
-    """Scan a project tree and return ``{"counts": {check: N}, "hits": [...]}``.
+    """Scan a project tree; return ``{"counts": {...}, "hits": [...], "coverage": {...}}``.
 
     `resolver` (alias → canonical-id map) is forwarded to the short-form-ids
     detector so references that resolve to real entities are not flagged. Build
@@ -783,8 +870,17 @@ def scan_root(
     `bare_author_year_deny` are forwarded to the bare-author-year detector so it
     flags only mentions of papers actually in the bibliography (minus deny-listed
     residuals). Build the surnames with `science_tool.bibliography.load_bib_author_surnames`.
+
+    `numeric-anchor` and `numeric-verification` are an atomic pair (see
+    `couple_checks`): selecting either one selects both. `counts` stays FLAT
+    (`{check: emitted_issue_count}`, derived from `hits` alone, same as every
+    other check); `coverage["numeric-verification"]` is the separate 4-key
+    verified/unverifiable/mismatch/error tally (`coverage_from_results`),
+    present whenever the check is selected. `max_json_bytes`/`max_feather_bytes`
+    are forwarded to the verification runner's artifact reader; unset falls
+    back to the `ProseLintConfig` defaults.
     """
-    selected = checks or list(CHECKS)
+    selected = couple_checks(checks or list(CHECKS))
     unknown = [c for c in selected if c not in _DETECTORS]
     if unknown:
         raise ValueError(f"unknown checks: {unknown!r}; known: {list(CHECKS)}")
@@ -798,6 +894,25 @@ def scan_root(
         from science_tool.numeric_provenance import build_resolution_index  # noqa: PLC0415
 
         resolution_index = build_resolution_index(root)
+    verification_results: list["VerificationResult"] = []
+    if "numeric-verification" in selected:
+        from science_tool.numeric_provenance import build_document_context  # noqa: PLC0415
+        from science_tool.numeric_verification import run_numeric_verification  # noqa: PLC0415
+        from science_tool.project_config import (  # noqa: PLC0415
+            DEFAULT_MAX_FEATHER_BYTES,
+            DEFAULT_MAX_JSON_BYTES,
+        )
+
+        # `couple_checks` guarantees "numeric-anchor" is also selected, so
+        # `resolution_index` (built above) is always available here — it
+        # already carries the same project_root/data_root resolution
+        # `detect_numeric_anchor` uses.
+        verification_project_root = resolution_index.project_root
+        verification_data_root = resolution_index.data_root
+        effective_max_json_bytes = max_json_bytes if max_json_bytes is not None else DEFAULT_MAX_JSON_BYTES
+        effective_max_feather_bytes = (
+            max_feather_bytes if max_feather_bytes is not None else DEFAULT_MAX_FEATHER_BYTES
+        )
     hits: list[LintIssue] = []
     for path in files:
         for check in selected:
@@ -813,6 +928,18 @@ def scan_root(
                         provenance_fields=provenance_fields,
                     )
                 )
+            elif check == "numeric-verification":
+                document = build_document_context(path)
+                if document is not None and _document_opts_into_verification(document):
+                    issues, results = run_numeric_verification(
+                        document,
+                        verification_project_root,
+                        verification_data_root,
+                        max_json_bytes=effective_max_json_bytes,
+                        max_feather_bytes=effective_max_feather_bytes,
+                    )
+                    hits.extend(issues)
+                    verification_results.extend(results)
             elif check == "short-form-ids":
                 hits.extend(detector(path, strict=strict, deny=short_form_ids_deny, resolver=resolver))
             elif check == "frontmatter-inline-gap":
@@ -821,10 +948,15 @@ def scan_root(
                 hits.extend(detector(path, strict=strict, deny=bare_author_year_deny, bib_surnames=bib_surnames))
             else:
                 hits.extend(detector(path, strict=strict))
+    coverage: dict[str, dict] = {}
+    if "numeric-verification" in selected:
+        from science_tool.numeric_verification import coverage_from_results  # noqa: PLC0415
+
+        coverage["numeric-verification"] = coverage_from_results(verification_results)
     counts: dict[str, int] = {}
     for hit in hits:
         counts[hit.check] = counts.get(hit.check, 0) + 1
-    return {"counts": counts, "hits": hits}
+    return {"counts": counts, "hits": hits, "coverage": coverage}
 
 
 def _matches_excluded_path(root: Path, path: Path, patterns: list[str]) -> bool:

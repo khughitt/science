@@ -150,7 +150,7 @@ def test_project_config_controls_enabled_checks_and_anchor_patterns(tmp_path: Pa
     assert _summary(results) == [
         (
             Severity.INFO,
-            "prose lint checks limited by science.yaml: 1/5 enabled (numeric-anchor); disabled: bare-author-year, short-form-ids, frontmatter-inline-gap, unsupported-citation-syntax",
+            "prose lint checks limited by science.yaml: 1/6 enabled (numeric-anchor); disabled: bare-author-year, short-form-ids, frontmatter-inline-gap, numeric-verification, unsupported-citation-syntax",
             "prose_lints.config",
         )
     ]
@@ -191,7 +191,7 @@ def test_include_all_checks_overrides_project_enabled_checks(tmp_path: Path) -> 
     assert _summary(results)[:1] == [
         (
             Severity.INFO,
-            "prose lint checks limited by science.yaml but --all is active; running all 5 checks (science.yaml enabled: numeric-anchor)",
+            "prose lint checks limited by science.yaml but --all is active; running all 6 checks (science.yaml enabled: numeric-anchor)",
             "prose_lints.config",
         )
     ]

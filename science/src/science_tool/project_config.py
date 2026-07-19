@@ -76,6 +76,11 @@ DEFAULT_ANCHOR_PATTERNS: list[str] = [
 DEFAULT_SPEC_CLASS_KINDS: list[str] = ["pre-registration", "plan"]
 DEFAULT_PROVENANCE_FIELDS: list[str] = ["source_refs", "task_links", "input"]
 
+# numeric-verification (Part B) artifact-read caps, forwarded to
+# `resolve_artifact`/`read_scalar` via `run_numeric_verification`.
+DEFAULT_MAX_JSON_BYTES: int = 50 * 1024 * 1024
+DEFAULT_MAX_FEATHER_BYTES: int = 256 * 1024 * 1024
+
 
 class ProseLintConfig(BaseModel):
     """Configuration for `science prose lint`."""
@@ -93,6 +98,8 @@ class ProseLintConfig(BaseModel):
     exclude_paths: list[str] = Field(default_factory=list)
     short_form_ids_deny: list[str] = Field(default_factory=list)
     bare_author_year_deny: list[str] = Field(default_factory=list)
+    max_json_bytes: int = DEFAULT_MAX_JSON_BYTES
+    max_feather_bytes: int = DEFAULT_MAX_FEATHER_BYTES
 
 
 class EntityIndexSource(StrEnum):
