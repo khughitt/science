@@ -243,7 +243,11 @@ Add to `TestBodyTypedRefScan` in `science/tests/test_refs.py` (the class's `_pro
 - [ ] **Step 2: Run the tests to verify they fail**
 
 Run: `cd ~/d/science/.worktrees/refs-prefix-resolution/science && uv run --frozen pytest tests/test_refs.py::TestBodyTypedRefScan -v`
-Expected: the four new tests FAIL — `test_short_digit_lead_prefix_resolves` still flags `plan:0019`; the message assertions fail on the old wording.
+Expected: **three** new tests FAIL and **one** already passes:
+- FAIL `test_short_digit_lead_prefix_resolves` — current exact-match still flags `plan:0019`.
+- FAIL `test_ambiguous_short_prefix_gets_ambiguity_diagnostic` — no ambiguity message exists yet.
+- FAIL `test_not_found_message_is_source_neutral` — current message still says "frontmatter `id:` index".
+- PASS `test_non_numeric_short_prefix_still_flagged` — `dataset:gtex` is already flagged under current behavior, and the old not-found message contains no "ambiguous"; this test is a regression guard confirming the exact-only path for non-numeric leads is preserved by the change.
 
 - [ ] **Step 3: Update `_scan_body_typed_refs` signature and resolution logic**
 
@@ -325,14 +329,15 @@ In the worktree-root file `docs/conventions/refs-check.md`, replace the "Default
 ```markdown
 Scans `paths.doc_dir` (default `doc/`), `paths.entities_dir` (default
 `entities/`), and root `README.md`. The body-prose typed-ref scan
-(opt-in via `--include-body`) validates against the frontmatter `id:`
-sweep — a walk over every markdown file's `id:` field, collecting
-`<kind>:<slug>` strings whose kind is in the canonical local-entity-kinds
-set. A body ref resolves by **exact canonical id or unique digit-lead
-prefix** — so `plan:0019` resolves to the sole `plan:0019-…` entity, but a
-prefix owned by two or more entities is reported as an ambiguous short ref
-(cite the full id), and a non-numeric short prefix (`dataset:gtex`) resolves
-by exact id only.
+(opt-in via `--include-body`) validates each `<kind>:<slug>` ref against the
+project's configured entity ID index — the frontmatter `id:` sweep by
+default, or `knowledge/graph.trig` when `entity_index_source:
+knowledge_graph` is set (see `entity_index_source` below). A body ref
+resolves by **exact canonical id or unique digit-lead prefix** — so
+`plan:0019` resolves to the sole `plan:0019-…` entity, while a prefix owned
+by two or more entities is reported as an ambiguous short ref (cite the full
+id), and a non-numeric short prefix (`dataset:gtex`) resolves by exact id
+only.
 ```
 
 - [ ] **Step 8: Lint & type-check the changed files**
@@ -473,7 +478,7 @@ Then confirm the delta is exactly the short `plan:NNNN` clears and nothing else 
 
 ```bash
 python3 - <<'PY'
-import json
+import json, re
 before = json.load(open("/tmp/refs-before.json"))
 after = json.load(open("/tmp/refs-after.json"))
 def keyset(d):
@@ -486,13 +491,19 @@ print("cleared:", len(cleared))
 for c in sorted(cleared): print("  -", c)
 print("appeared (must be empty):", len(appeared))
 for c in sorted(appeared): print("  +", c)
+# Short-prefix shape: `<kind>:<digits>` with NO descriptive suffix. Prefix
+# resolution only ever clears these; a genuinely-broken full id (with a
+# suffix) or a fabricated ref must NOT clear.
+SHORT_PREFIX = re.compile(r"[a-z][a-z-]*:\d+")  # anchored by .fullmatch below
 assert not appeared, "REGRESSION: new broken refs appeared under overlay"
-assert all("plan:" in (v or "") for _, v, _ in cleared), "unexpected non-plan clears"
-print("OK: only short plan: prefixes cleared, no regressions")
+assert cleared, "NO-OP: nothing cleared — prefix resolution is not active"
+bad = [v for _, v, _ in cleared if not (v and SHORT_PREFIX.fullmatch(v))]
+assert not bad, f"unexpected non-short-prefix clears (would indicate over-broad resolution): {bad}"
+print("OK: only short digit-lead prefixes cleared, no regressions")
 PY
 ```
 
-Expected: `cleared` are all `plan:NNNN` entries; `appeared` is empty. Adjust the `keyset` extractor to the actual JSON shape if the schema differs (inspect `/tmp/refs-before.json` first).
+Expected: `cleared` is non-empty and every entry is a `<kind>:<digits>` short prefix (e.g. `plan:0019`, and any pre-existing `interpretation:NNNN` / `pre-registration:NNNN` body short-refs that now resolve); `appeared` is empty. Inspect `/tmp/refs-before.json` first and adjust the `keyset` extractor if the JSON shape differs — do not let a mis-parsed empty keyset pass (the `assert cleared` guards against that).
 
 - [ ] **Step 4: `science validate` unchanged under the overlay**
 
@@ -501,11 +512,15 @@ cd ~/d/health/comparisons/pan-disease
 uv run --frozen science validate --format json > /tmp/validate-before.json 2>/dev/null
 uv run --with-editable ~/d/science/.worktrees/refs-prefix-resolution/science \
   science validate --format json > /tmp/validate-after.json 2>/dev/null
-diff <(python3 -m json.tool /tmp/validate-before.json) \
-     <(python3 -m json.tool /tmp/validate-after.json) \
-  && echo "VALIDATE IDENTICAL" || echo "VALIDATE DIFF — investigate"
+# Let `diff`'s own exit status gate acceptance — a mismatch must fail the step.
+if diff <(python3 -m json.tool /tmp/validate-before.json) \
+        <(python3 -m json.tool /tmp/validate-after.json); then
+  echo "VALIDATE IDENTICAL"
+else
+  echo "VALIDATE DIFF — investigate"; exit 1
+fi
 ```
-Expected: `VALIDATE IDENTICAL` (this change never reaches `validate`).
+Expected: `VALIDATE IDENTICAL` (this change never reaches `validate`); a diff exits nonzero and fails the step.
 
 - [ ] **Step 5: Record acceptance evidence**
 
