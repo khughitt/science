@@ -10,6 +10,7 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass
 from pathlib import Path
+from collections.abc import Set as AbstractSet
 
 from science_model.frontmatter import parse_frontmatter
 
@@ -351,12 +352,46 @@ def _resolve_entity_index(root: Path, refs_config) -> set[str]:
     return _load_entity_index(root)
 
 
+def build_entity_prefix_owners(entity_ids: AbstractSet[str]) -> dict[str, int]:
+    """Count owners of each `<kind>:<digit-lead>` short prefix.
+
+    For a canonical id `<kind>:<ident>`, the lead is the segment before the
+    first `-`. A lead that is all-digits and is not the whole ident (so a
+    bare-numeric id does not count itself) registers one owner under
+    `<kind>:<lead>`. A short ref resolves only when its owner count is exactly
+    one (see `resolve_local_entity_ref`), so this map is the fail-closed
+    ambiguity guard. Takes a read-only set so duplicate values cannot inflate
+    a count.
+    """
+    owners: dict[str, int] = {}
+    for eid in entity_ids:
+        kind, _, ident = eid.partition(":")
+        lead = ident.split("-", 1)[0]
+        if lead.isdigit() and lead != ident:
+            key = f"{kind}:{lead}"
+            owners[key] = owners.get(key, 0) + 1
+    return owners
+
+
+def resolve_local_entity_ref(
+    ref: str, entity_ids: AbstractSet[str], prefix_owners: dict[str, int]
+) -> bool:
+    """True if `ref` is an exact canonical id or a unique digit-lead prefix.
+
+    Non-numeric leads never enter `prefix_owners`, and ambiguous multi-owner
+    prefixes have a count > 1, so neither resolves — a citation can never
+    silently anchor to a guessed entity.
+    """
+    return ref in entity_ids or prefix_owners.get(ref) == 1
+
+
 def _scan_body_typed_refs(
     file_path: Path,
     rel_path: str,
     lines: list[str],
     frontmatter_lines: set[int],
     entity_index: set[str],
+    prefix_owners: dict[str, int],
 ) -> list[RefIssue]:
     """Scan body prose for typed `<kind>:<slug>` refs not in the entity index.
 
@@ -376,15 +411,23 @@ def _scan_body_typed_refs(
             # preceding character is `:` (signaling a triple-form like mm30:task:t050).
             if match.start() > 0 and scan_line[match.start() - 1] == ":":
                 continue
-            if ref in entity_index:
+            if resolve_local_entity_ref(ref, entity_index, prefix_owners):
                 continue
+            owners = prefix_owners.get(ref, 0)
+            if owners > 1:
+                message = (
+                    f"{ref} — ambiguous short entity ref: matches {owners} "
+                    "entities by prefix; cite the full id"
+                )
+            else:
+                message = f"{ref} — typed entity ref not found in project entity id index"
             issues.append(
                 RefIssue(
                     file=rel_path,
                     line=line_num,
                     ref_type="body-entity-ref",
                     ref_value=ref,
-                    message=f"{ref} — typed entity ref not found in project frontmatter `id:` index",
+                    message=message,
                 )
             )
     return issues
@@ -562,6 +605,7 @@ def check_refs(root: Path, *, include_body: bool = False) -> list[RefIssue]:
     hyp_ids = _load_hypothesis_ids(root)
     bib_keys = _load_bib_keys(root)
     entity_index = _resolve_entity_index(root, refs_config) if include_body else set()
+    prefix_owners = build_entity_prefix_owners(entity_index) if include_body else {}
     task_ids = _load_task_ids(root)
     project_ids = _load_project_ids(root)
     doi_corpus = _load_doi_corpus(root)
@@ -786,6 +830,7 @@ def check_refs(root: Path, *, include_body: bool = False) -> list[RefIssue]:
                     lines,
                     frontmatter_lines,
                     entity_index,
+                    prefix_owners,
                 )
             )
 

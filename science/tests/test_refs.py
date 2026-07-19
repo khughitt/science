@@ -1409,6 +1409,60 @@ def test_load_entity_index_from_graph_returns_empty_when_missing(tmp_path):
     assert index == set()
 
 
+class TestEntityPrefixResolution:
+    def test_build_counts_unique_digit_lead_owner(self):
+        from science_tool.refs import build_entity_prefix_owners
+
+        owners = build_entity_prefix_owners({"plan:0019-t071-panel", "plan:0020-other"})
+        assert owners == {"plan:0019": 1, "plan:0020": 1}
+
+    def test_build_counts_multiple_owners_for_same_prefix(self):
+        from science_tool.refs import build_entity_prefix_owners
+
+        owners = build_entity_prefix_owners({"plan:0019-a", "plan:0019-b"})
+        assert owners == {"plan:0019": 2}
+
+    def test_build_excludes_non_digit_and_bare_numeric_leads(self):
+        from science_tool.refs import build_entity_prefix_owners
+
+        # non-numeric lead (dataset:gtex-v8 -> lead "gtex") excluded;
+        # bare-numeric id (plan:0019, lead == ident) does not self-count.
+        owners = build_entity_prefix_owners({"dataset:gtex-v8", "plan:0019"})
+        assert owners == {}
+
+    def test_resolve_exact_id(self):
+        from science_tool.refs import resolve_local_entity_ref
+
+        ids = {"plan:0019-t071-panel"}
+        assert resolve_local_entity_ref("plan:0019-t071-panel", ids, {}) is True
+
+    def test_resolve_unique_digit_lead_prefix(self):
+        from science_tool.refs import resolve_local_entity_ref
+
+        ids = {"plan:0019-t071-panel"}
+        owners = {"plan:0019": 1}
+        assert resolve_local_entity_ref("plan:0019", ids, owners) is True
+
+    def test_resolve_rejects_ambiguous_prefix(self):
+        from science_tool.refs import resolve_local_entity_ref
+
+        ids = {"plan:0019-a", "plan:0019-b"}
+        owners = {"plan:0019": 2}
+        assert resolve_local_entity_ref("plan:0019", ids, owners) is False
+
+    def test_resolve_rejects_absent_ref(self):
+        from science_tool.refs import resolve_local_entity_ref
+
+        assert resolve_local_entity_ref("plan:9999", {"plan:0019-a"}, {}) is False
+
+    def test_build_accepts_frozenset(self):
+        # ResolutionIndex.entity_ids is a frozenset — the param type must accept it.
+        from science_tool.refs import build_entity_prefix_owners
+
+        owners = build_entity_prefix_owners(frozenset({"interpretation:0011-x"}))
+        assert owners == {"interpretation:0011": 1}
+
+
 class TestBodyTypedRefScan:
     def _project(self, tmp_path):
         (tmp_path / "doc").mkdir()
@@ -1498,6 +1552,68 @@ class TestBodyTypedRefScan:
         )
         issues = check_refs(root, include_body=True)
         assert [i for i in issues if i.ref_type == "body-entity-ref"] == []
+
+    def test_short_digit_lead_prefix_resolves(self, tmp_path):
+        from science_tool.refs import check_refs
+
+        root = self._project(tmp_path)
+        (root / "doc" / "plan19.md").write_text(
+            "---\nid: plan:0019-t071-panel\nkind: plan\n---\nBody.\n"
+        )
+        (root / "doc" / "report.md").write_text(
+            "---\nkind: report\n---\nSee plan:0019 for the design.\n"
+        )
+        issues = check_refs(root, include_body=True)
+        assert [i for i in issues if i.ref_type == "body-entity-ref"] == []
+
+    def test_ambiguous_short_prefix_gets_ambiguity_diagnostic(self, tmp_path):
+        from science_tool.refs import check_refs
+
+        root = self._project(tmp_path)
+        (root / "doc" / "plan19a.md").write_text(
+            "---\nid: plan:0019-alpha\nkind: plan\n---\nBody.\n"
+        )
+        (root / "doc" / "plan19b.md").write_text(
+            "---\nid: plan:0019-beta\nkind: plan\n---\nBody.\n"
+        )
+        (root / "doc" / "report.md").write_text(
+            "---\nkind: report\n---\nSee plan:0019 for the design.\n"
+        )
+        issues = check_refs(root, include_body=True)
+        body = [i for i in issues if i.ref_type == "body-entity-ref"]
+        assert len(body) == 1
+        assert body[0].ref_value == "plan:0019"
+        assert "ambiguous short entity ref" in body[0].message
+        assert "2" in body[0].message
+
+    def test_non_numeric_short_prefix_still_flagged(self, tmp_path):
+        from science_tool.refs import check_refs
+
+        root = self._project(tmp_path)
+        (root / "doc" / "gtex.md").write_text(
+            "---\nid: dataset:gtex-v8\nkind: dataset\n---\nBody.\n"
+        )
+        (root / "doc" / "report.md").write_text(
+            "---\nkind: report\n---\nSee dataset:gtex for the source.\n"
+        )
+        issues = check_refs(root, include_body=True)
+        body = [i for i in issues if i.ref_type == "body-entity-ref"]
+        assert len(body) == 1
+        assert body[0].ref_value == "dataset:gtex"
+        assert "ambiguous" not in body[0].message
+
+    def test_not_found_message_is_source_neutral(self, tmp_path):
+        from science_tool.refs import check_refs
+
+        root = self._project(tmp_path)
+        (root / "doc" / "report.md").write_text(
+            "---\nkind: report\n---\nSee task:t999 for the gap.\n"
+        )
+        issues = check_refs(root, include_body=True)
+        body = [i for i in issues if i.ref_type == "body-entity-ref"]
+        assert len(body) == 1
+        assert "frontmatter" not in body[0].message
+        assert "not found in project entity id index" in body[0].message
 
 
 def test_refs_check_include_body_flag_emits_typed_ref_issues(tmp_path):
