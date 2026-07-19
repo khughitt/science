@@ -6,7 +6,7 @@ description: Source of truth for test fixture skill coverage.
 # Test Index
 
 - `skills/bad-broken-relative-link.md`
-- `skills/bad-invalid-type.md`
+- `skills/bad-legacy-type-key.md`
 - `skills/bad-missing-description.md`
 - `skills/bad-missing-name.md`
 - `skills/bad-no-companion-skills.md`

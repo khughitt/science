@@ -7,6 +7,7 @@ from typing import Any, Literal
 
 import yaml
 
+from science_tool.skills_lint.discovery import iter_skill_files
 from science_tool.skills_lint.sources import (
     SourcesRegistry,
     leaf_frontmatter,
@@ -57,7 +58,12 @@ class SkillIssue:
 
 
 REQUIRED_FIELDS = ("name", "description")
-VALID_SKILL_TYPES = {"skill", "deep-reference"}
+VALID_DEPTHS = {"standard", "deep-reference"}
+VALID_ARCHETYPES = {
+    "measurement-qa", "method-guide", "analysis-discipline",
+    "normative-reference", "tool-guide", "practice-guide",
+}
+STRUCTURAL_FILENAMES = {"SKILL.md", "INDEX.md"}
 MARKDOWN_LINK_RE = re.compile(r"\]\(([^)]+)\)")
 INLINE_CODE_RE = re.compile(r"`([^`]+\.md)`")
 HALT_ON_REQUIRED = {
@@ -94,9 +100,16 @@ def check_frontmatter(path: Path) -> list[SkillIssue]:
     for field in REQUIRED_FIELDS:
         if not parsed.get(field):
             issues.append(SkillIssue(path, "missing-field", field=field))
-    skill_type = parsed.get("type", "skill")
-    if skill_type not in VALID_SKILL_TYPES:
-        issues.append(SkillIssue(path, "invalid-field", field="type", detail=str(skill_type)))
+    if "type" in parsed:
+        issues.append(SkillIssue(path, "invalid-field", field="type", detail="'type' was renamed to 'depth'"))
+    if "depth" in parsed and (not isinstance(parsed["depth"], str) or parsed["depth"] not in VALID_DEPTHS):
+        issues.append(SkillIssue(path, "invalid-field", field="depth", detail=str(parsed["depth"])))
+    if "archetype" in parsed:
+        archetype = parsed["archetype"]
+        if path.name in STRUCTURAL_FILENAMES:
+            issues.append(SkillIssue(path, "invalid-field", field="archetype", detail="leaf-only field; routers and INDEX derive structural role"))
+        elif not isinstance(archetype, str) or archetype not in VALID_ARCHETYPES:
+            issues.append(SkillIssue(path, "invalid-field", field="archetype", detail=str(archetype)))
     return issues
 
 
@@ -138,7 +151,7 @@ def check_index_coverage(root: Path) -> list[SkillIssue]:
 
     indexed_paths = _collect_indexed_paths(index_path.read_text(encoding="utf-8"))
     issues: list[SkillIssue] = []
-    for path in sorted(root.rglob("*.md")):
+    for path in iter_skill_files(root):
         relative_path = path.relative_to(root).as_posix()
         if relative_path == "INDEX.md" or relative_path in indexed_paths:
             continue
@@ -203,7 +216,7 @@ def check_skills(root: Path) -> list[SkillIssue]:
             root,
         )
     )
-    for path in sorted(root.rglob("*.md")):
+    for path in iter_skill_files(root):
         issues.extend(_relative_issues(check_frontmatter(path), root))
         issues.extend(_relative_issues(check_companion_skills(path), root))
         issues.extend(_relative_issues(check_halt_on_conditions(path, root), root))

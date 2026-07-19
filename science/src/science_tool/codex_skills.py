@@ -17,6 +17,7 @@ class CompanionSkill(NamedTuple):
 COMPANION_SKILLS: tuple[CompanionSkill, ...] = (
     CompanionSkill("research-methodology", Path("skills/research/SKILL.md")),
     CompanionSkill("scientific-writing", Path("skills/writing/SKILL.md")),
+    CompanionSkill("skill-development", Path("skills/meta/SKILL.md")),
 )
 
 
@@ -173,6 +174,10 @@ def _generate_companion_skill(repo_root: Path, output_root: Path, companion: Com
         if resource_path.name == "SKILL.md":
             continue
         shutil.copy2(resource_path, skill_dir / resource_path.name)
+
+    templates_dir = source_path.parent / "templates"
+    if templates_dir.is_dir():
+        shutil.copytree(templates_dir, skill_dir / "templates")
 
     escaped_description = description.replace('"', '\\"')
     body = _rewrite_companion_body_links(body)

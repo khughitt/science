@@ -1,13 +1,13 @@
 ---
 name: science-skill-index
-description: Source of truth for finding Science methodology skills during analysis-readiness planning.
+description: Source of truth for finding Science methodology skills and the skill-authoring doctrine.
 ---
 
 # Science Skill Index
 
-Use this index before planning or running a data analysis. Load only the leaves
-that match the current task. Do not load every leaf "just in case"; that defeats
-progressive disclosure.
+Use this index before planning or running a data analysis, and when creating,
+naming, or organizing a skill. Load only the leaves that match the current task.
+Do not load every leaf "just in case"; that defeats progressive disclosure.
 
 ## Core Analysis Checks
 
@@ -15,6 +15,12 @@ progressive disclosure.
 - `statistics`: `skills/statistics/SKILL.md`
 - `research-methodology`: `skills/research/SKILL.md`
 - `scientific-writing`: `skills/writing/SKILL.md`
+
+## Meta / Skill Authoring
+
+- `skill-development`: `skills/meta/SKILL.md`
+- `skill-taxonomy`: `skills/meta/skill-taxonomy.md`
+- `skill-authoring`: `skills/meta/skill-authoring.md`
 
 ## Data Modalities
 
