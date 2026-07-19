@@ -18,10 +18,12 @@ from science_model.frontmatter import split_frontmatter
 
 from science_tool.entities import (
     _REFERENCE_SCAN_SKIP_DIRS,
+    derive_slug,
     local_part_conforms,
     markdown_entity_kinds,
     resolve_path_policy,
 )
+from science_tool.entity_reservation import propose_number
 from science_tool.text_scan import MAX_SCANNABLE_BYTES, TEXT_SUFFIXES
 
 JOURNAL_PATH: Path = Path(".science/spec-migration.journal")
@@ -270,3 +272,83 @@ def discover_specs(project_root: Path) -> Discovery:
         )
 
     return Discovery(legacy=legacy, singletons=singletons, scan_skips=scan_skips)
+
+
+_NUMERIC_LOCAL_RE = re.compile(r"^(\d{4})-")
+
+
+@dataclass(frozen=True)
+class Allocation:
+    id_substitutions: dict[str, str]
+    dest_rel: dict[str, str]
+    new_local_part: dict[str, str]
+    aliased: frozenset[str]
+    preserved_ids: frozenset[str]
+
+
+def _number_taken_at_home(project_root: Path, number: int) -> bool:
+    """True iff `number` is backed by a committed spec .md OR an archived spec id."""
+    from science_tool.archive import load_archive_index
+
+    directory = Path(project_root) / _spec_root(Path(project_root))
+    if directory.is_dir():
+        for entry in directory.glob("*.md"):
+            match = _NUMERIC_LOCAL_RE.match(entry.stem)
+            if match is not None and int(match.group(1)) == number:
+                return True
+    for entity_id in load_archive_index(Path(project_root)).resolvable_ids():
+        prefix, _, local = entity_id.partition(":")
+        if prefix != "spec":
+            continue
+        match = _NUMERIC_LOCAL_RE.match(local)
+        if match is not None and int(match.group(1)) == number:
+            return True
+    return False
+
+
+def allocate_ids(project_root: Path, legacy: list[LegacySpec]) -> Allocation:
+    """Assign a deterministic `spec:NNNN-slug` to each legacy doc (see design Component 4)."""
+    project_root = Path(project_root).resolve()
+    spec_root = _spec_root(project_root)
+    start = propose_number(project_root, "spec")
+
+    id_subs: dict[str, str] = {}
+    dest_rel: dict[str, str] = {}
+    new_local: dict[str, str] = {}
+    aliased: set[str] = set()
+    preserved: set[str] = set()
+    forbidden: set[int] = set()
+
+    for spec in legacy:  # preserved relocations first: keep the id, spend its number
+        if spec.already_numeric is None:
+            continue
+        if _number_taken_at_home(project_root, spec.already_numeric):
+            raise SpecMigrationRefused(
+                f"{spec.source_rel}: already-numeric spec {spec.old_id} keeps number "
+                f"{spec.already_numeric:04d}, which is taken at {spec_root}/. Resolve the clash."
+            )
+        local = spec.old_id.split(":", 1)[1]
+        new_local[spec.old_id] = local
+        dest_rel[spec.old_id] = f"{spec_root}/{local}.md"
+        preserved.add(spec.old_id)
+        forbidden.add(spec.already_numeric)
+
+    number = start
+    for spec in sorted((s for s in legacy if s.already_numeric is None), key=lambda s: s.old_id):
+        while number in forbidden:
+            number += 1
+        local = f"{number:04d}-{derive_slug(spec.frontmatter['title'])}"
+        id_subs[spec.old_id] = f"spec:{local}"
+        new_local[spec.old_id] = local
+        dest_rel[spec.old_id] = f"{spec_root}/{local}.md"
+        aliased.add(spec.old_id)
+        forbidden.add(number)
+        number += 1
+
+    return Allocation(
+        id_substitutions=id_subs,
+        dest_rel=dest_rel,
+        new_local_part=new_local,
+        aliased=frozenset(aliased),
+        preserved_ids=frozenset(preserved),
+    )

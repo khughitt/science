@@ -14,6 +14,7 @@ from science_tool.migrate_specs import (
     LEGACY_ALIAS,
     RUNTIME_ONLY,
     SpecMigrationRefused,
+    allocate_ids,
     discover_specs,
     project_legacy_frontmatter,
 )
@@ -224,3 +225,52 @@ def test_discovery_unreadable_markdown_becomes_scan_skip(tmp_path: Path) -> None
     (project / "doc/plans").mkdir(parents=True, exist_ok=True)
     (project / "doc/plans/bad.md").write_bytes(b"\xff\xfe not utf-8")
     assert any(s.path == "doc/plans/bad.md" for s in discover_specs(project).scan_skips)
+
+
+def test_allocation_mints_distinct_sequential_numbers(tmp_path: Path) -> None:
+    project = _spec_project(tmp_path)
+    _write(project / "doc/plans/a.md", {"id": "spec:date-a", "type": "spec", "title": "Alpha Title"})
+    _write(project / "doc/plans/b.md", {"id": "spec:date-b", "type": "spec", "title": "Beta Title"})
+    alloc = allocate_ids(project, discover_specs(project).legacy)
+    assert alloc.id_substitutions == {"spec:date-a": "spec:0001-alpha-title", "spec:date-b": "spec:0002-beta-title"}
+    assert alloc.dest_rel["spec:date-a"] == "entities/specs/0001-alpha-title.md"
+    assert alloc.aliased == frozenset({"spec:date-a", "spec:date-b"})
+
+
+def test_allocation_slug_is_from_title_not_id(tmp_path: Path) -> None:
+    project = _spec_project(tmp_path)
+    # A non-numeric-conforming legacy id whose local part disagrees with the title, so a title-vs-id
+    # slug mixup would be caught. NOTE: a date-prefixed id like "2026-01-01-old-filename" cannot be
+    # used here — its leading 4 digits satisfy entities._NUMERIC_LOCAL_PART_RE, so discover_specs
+    # would misclassify it as an already-numeric relocation (number 2026) instead of a mint candidate.
+    # See the Task 4 report for this pre-existing (Task 3) discovery-layer ambiguity.
+    _write(project / "doc/plans/drift.md", {"id": "spec:old-filename", "type": "spec", "title": "A Wholly Different Title"})
+    alloc = allocate_ids(project, discover_specs(project).legacy)
+    assert alloc.new_local_part["spec:old-filename"] == "0001-a-wholly-different-title"
+
+
+def test_allocation_preserves_already_numeric_relocation(tmp_path: Path) -> None:
+    project = _spec_project(tmp_path)
+    _write(project / "doc/plans/keep.md", {"id": "spec:0007-keep", "type": "spec", "title": "Keep It"})
+    alloc = allocate_ids(project, discover_specs(project).legacy)
+    assert alloc.id_substitutions == {}
+    assert alloc.preserved_ids == frozenset({"spec:0007-keep"})
+    assert alloc.dest_rel["spec:0007-keep"] == "entities/specs/0007-keep.md"
+    assert "spec:0007-keep" not in alloc.aliased
+
+
+def test_allocation_refuses_relocation_number_taken_at_home(tmp_path: Path) -> None:
+    project = _spec_project(tmp_path)
+    _write(project / "entities/specs/0007-existing.md", {"id": "spec:0007-existing", "kind": "spec", "title": "Existing"})
+    _write(project / "doc/plans/keep.md", {"id": "spec:0007-keep", "type": "spec", "title": "Keep It"})
+    with pytest.raises(SpecMigrationRefused, match="0007"):
+        allocate_ids(project, discover_specs(project).legacy)
+
+
+def test_allocation_mixed_batch_skips_preserved_number(tmp_path: Path) -> None:
+    project = _spec_project(tmp_path)
+    _write(project / "doc/plans/keep.md", {"id": "spec:0001-keep", "type": "spec", "title": "Keep It"})
+    _write(project / "doc/plans/mint.md", {"id": "spec:date-mint", "type": "spec", "title": "Mint Me"})
+    alloc = allocate_ids(project, discover_specs(project).legacy)
+    assert alloc.id_substitutions == {"spec:date-mint": "spec:0002-mint-me"}
+    assert alloc.preserved_ids == frozenset({"spec:0001-keep"})
