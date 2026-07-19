@@ -1,9 +1,50 @@
 from __future__ import annotations
 
+import builtins
 from pathlib import Path
 
+import pytest
+
 from science_tool.entities import LOCAL_PART_WIDTH
-from science_tool.entity_reservation import reserve_entity
+from science_tool.entity_reservation import claim_number_in_dir, reserve_entity
+
+
+def _project(tmp_path: Path) -> Path:
+    (tmp_path / "science.yaml").write_text("name: t\nknowledge_profiles: {local: local}\n", encoding="utf-8")
+    (tmp_path / "entities" / "plans").mkdir(parents=True, exist_ok=True)
+    return tmp_path
+
+
+class _ExplodingHandle:
+    """A context-manager handle whose write() raises, but which really created the file."""
+    def __init__(self, real):
+        self._real = real
+    def __enter__(self):
+        return self
+    def __exit__(self, *exc):
+        return self._real.__exit__(*exc)
+    def write(self, _data):
+        raise OSError("simulated disk-full during write")
+
+
+def test_claim_self_cleans_partial_destination_on_write_failure(tmp_path, monkeypatch):
+    root = _project(tmp_path)
+    real_open = builtins.open
+
+    def exploding_open(file, mode="r", *args, **kwargs):
+        handle = real_open(file, mode, *args, **kwargs)
+        if "x" in mode:  # the exclusive destination create — file now exists on disk
+            return _ExplodingHandle(handle)
+        return handle
+
+    monkeypatch.setattr(builtins, "open", exploding_open)
+
+    with pytest.raises(OSError):
+        claim_number_in_dir(root, "plan", 1, "0001-a-thing", "# A Thing\n\nbody\n")
+
+    plans_dir = root / "entities" / "plans"
+    assert not (plans_dir / "0001-a-thing.md").exists(), "partial destination survived a failed write"
+    assert not list(plans_dir.glob(".*.reserving")), "sentinel leaked"
 
 
 def test_reserve_first_is_0001(tmp_path: Path) -> None:

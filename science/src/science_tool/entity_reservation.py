@@ -198,8 +198,18 @@ def claim_number_in_dir(
                 f"number {number:0{LOCAL_PART_WIDTH}d} was archived since the preview; re-run the preview"
             )
         path = directory / f"{local_part}.md"
-        with open(path, "x", encoding="utf-8") as handle:
-            handle.write(text)
+        # Exclusive create first: a FileExistsError here means the file predates us
+        # (another writer holds the number) and must propagate untouched.
+        handle = open(path, "x", encoding="utf-8")
+        try:
+            with handle:
+                handle.write(text)
+        except Exception:
+            # We exclusively created this path, so a write/close failure leaves a
+            # partial file we own. Remove it before re-raising; the returned path is
+            # thereafter always a complete file or the call raised leaving no dest.
+            path.unlink(missing_ok=True)
+            raise
         return path
     finally:
         sentinel.unlink(missing_ok=True)
