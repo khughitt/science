@@ -550,6 +550,8 @@ def entities_import_command(
 
         plan_type = probe.get("plan_type")
         schema_version = probe.get("schema_version")
+        has_plan_type = "plan_type" in probe
+        has_schema_version = "schema_version" in probe
         cohort_version = (
             isinstance(schema_version, int)
             and not isinstance(schema_version, bool)
@@ -562,7 +564,7 @@ def entities_import_command(
                     project_root, cohort_plan, exclude=exclude
                 )
                 payload = {**cohort_plan.model_dump(), "applied": applied}
-            elif plan_type is None and schema_version is None:
+            elif not has_plan_type and not has_schema_version:
                 single_plan = parse_import_plan(raw)
                 applied = apply_import(project_root, single_plan, exclude=exclude)
                 payload = {**single_plan.model_dump(), "applied": applied}

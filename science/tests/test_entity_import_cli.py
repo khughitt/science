@@ -475,6 +475,10 @@ def test_cli_legacy_single_plan_still_applies(tmp_path: Path) -> None:
         ({"plan_type": "cohort-import", "schema_version": 999}, "unsupported plan"),
         ({"schema_version": 1, "source_rel": "x"}, "unsupported plan"),
         ({"plan_type": "cohort-import", "schema_version": True}, "unsupported plan"),
+        ({"plan_type": "cohort-import", "schema_version": "1"}, "unsupported plan"),
+        ({"plan_type": None}, "unsupported plan"),
+        ({"schema_version": None}, "unsupported plan"),
+        ({"plan_type": None, "schema_version": None}, "unsupported plan"),
     ],
 )
 def test_cli_apply_plan_rejects_unsupported_discriminator(
