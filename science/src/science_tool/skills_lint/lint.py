@@ -59,6 +59,11 @@ class SkillIssue:
 
 REQUIRED_FIELDS = ("name", "description")
 VALID_DEPTHS = {"standard", "deep-reference"}
+VALID_ARCHETYPES = {
+    "measurement-qa", "method-guide", "analysis-discipline",
+    "normative-reference", "tool-guide", "practice-guide",
+}
+STRUCTURAL_FILENAMES = {"SKILL.md", "INDEX.md"}
 MARKDOWN_LINK_RE = re.compile(r"\]\(([^)]+)\)")
 INLINE_CODE_RE = re.compile(r"`([^`]+\.md)`")
 HALT_ON_REQUIRED = {
@@ -99,6 +104,12 @@ def check_frontmatter(path: Path) -> list[SkillIssue]:
         issues.append(SkillIssue(path, "invalid-field", field="type", detail="'type' was renamed to 'depth'"))
     if "depth" in parsed and (not isinstance(parsed["depth"], str) or parsed["depth"] not in VALID_DEPTHS):
         issues.append(SkillIssue(path, "invalid-field", field="depth", detail=str(parsed["depth"])))
+    if "archetype" in parsed:
+        archetype = parsed["archetype"]
+        if path.name in STRUCTURAL_FILENAMES:
+            issues.append(SkillIssue(path, "invalid-field", field="archetype", detail="leaf-only field; routers and INDEX derive structural role"))
+        elif not isinstance(archetype, str) or archetype not in VALID_ARCHETYPES:
+            issues.append(SkillIssue(path, "invalid-field", field="archetype", detail=str(archetype)))
     return issues
 
 

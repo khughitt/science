@@ -431,3 +431,39 @@ def test_depth_null_is_invalid_not_crash(tmp_path: Path) -> None:
 
 def test_depth_list_is_invalid_not_crash(tmp_path: Path) -> None:
     assert any(i.kind == "invalid-field" and i.field == "depth" for i in check_frontmatter(_write_leaf(tmp_path, "depth: [standard]\n")))
+
+
+def test_archetype_absent_is_ok(tmp_path: Path) -> None:
+    assert [i for i in check_frontmatter(_write_leaf(tmp_path, "")) if i.field == "archetype"] == []
+
+
+def test_archetype_valid_is_ok(tmp_path: Path) -> None:
+    assert [i for i in check_frontmatter(_write_leaf(tmp_path, "archetype: measurement-qa\n")) if i.field == "archetype"] == []
+
+
+def test_archetype_unknown_is_invalid(tmp_path: Path) -> None:
+    assert any(i.kind == "invalid-field" and i.field == "archetype" for i in check_frontmatter(_write_leaf(tmp_path, "archetype: mega-qa\n")))
+
+
+def test_archetype_null_is_invalid(tmp_path: Path) -> None:
+    assert any(i.kind == "invalid-field" and i.field == "archetype" for i in check_frontmatter(_write_leaf(tmp_path, "archetype: null\n")))
+
+
+def test_archetype_list_is_invalid_not_crash(tmp_path: Path) -> None:
+    assert any(i.kind == "invalid-field" and i.field == "archetype" for i in check_frontmatter(_write_leaf(tmp_path, "archetype: [measurement-qa]\n")))
+
+
+def _write_named(tmp_path: Path, filename: str, fields: str) -> Path:
+    path = tmp_path / filename
+    path.write_text(f"---\nname: x\ndescription: y\n{fields}---\n\n## Companion Skills\n", encoding="utf-8")
+    return path
+
+
+def test_archetype_on_router_is_invalid(tmp_path: Path) -> None:
+    p = _write_named(tmp_path, "SKILL.md", "provenance: internal\narchetype: practice-guide\n")
+    assert any(i.kind == "invalid-field" and i.field == "archetype" for i in check_frontmatter(p))
+
+
+def test_archetype_on_index_is_invalid(tmp_path: Path) -> None:
+    p = _write_named(tmp_path, "INDEX.md", "archetype: normative-reference\n")
+    assert any(i.kind == "invalid-field" and i.field == "archetype" for i in check_frontmatter(p))
