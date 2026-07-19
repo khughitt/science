@@ -20,7 +20,7 @@
 - **Cohorts are reference-independent:** a member may not link to or bare-path-mention another member (or itself); this is rejected at plan time, never assumed.
 - **Standalone cohort apply is exception-atomic, not crash-durable:** caught failures roll back everything already mutated; SIGKILL durability is out of scope (delegated to the downstream journal).
 - **No AI-attribution trailers or footers** in any commit message.
-- **The design is the source of truth:** `docs/plans/2026-07-19-cohort-import-design.md` (revision v4). Where this plan and the design disagree, stop and ask.
+- **The design is the source of truth:** `docs/plans/2026-07-19-cohort-import-design.md` (revision v5). Where this plan and the design disagree, stop and ask.
 
 The canonical source signatures this plan builds on (verified against the pinned tree):
 - `claim_number_in_dir(project_root, kind, number, local_part, text) -> Path` — `entity_reservation.py:165`.
@@ -636,7 +636,7 @@ git commit -m "refactor(import): extract _plan_member/ImportMember; plan_import 
 - Consumes: `ImportMember`, `RewriteReport`.
 - Produces:
   - `class AttributedWarning(BaseModel)` — `extra="forbid"`, fields `source_rel: str`, `message: str`.
-  - `class CohortImportPlan(BaseModel)` — `extra="forbid"`, fields `plan_type: Literal["cohort-import"] = "cohort-import"`, `schema_version: int = 1`, `project_root: str`, `kind: str`, `members: list[ImportMember]`, `ref_report: RewriteReport = RewriteReport()`, `warnings: list[AttributedWarning] = []`.
+  - `class CohortImportPlan(BaseModel)` — `extra="forbid"`, fields `plan_type: Literal["cohort-import"] = "cohort-import"`, `schema_version: StrictInt = 1`, `project_root: str`, `kind: str`, `members: list[ImportMember]`, `ref_report: RewriteReport = RewriteReport()`, `warnings: list[AttributedWarning] = []`.
   - `class RefDependentCohortError(EntityImportError)`.
   - `parse_cohort_import_plan(raw: bytes) -> CohortImportPlan`.
 
@@ -852,7 +852,7 @@ def test_cohort_rejects_member_linking_member(tmp_path):
     b = _loose(root, "doc/plans/b.md", "# Beta\n\nbody\n")
     with pytest.raises(RefDependentCohortError) as excinfo:
         plan_cohort_import(root, [a, b], kind="plan")
-    # The error names the offending source -> target PAIR (design v4).
+    # The error names the offending source -> target PAIR (design v5).
     msg = str(excinfo.value)
     assert "doc/plans/a.md" in msg and "doc/plans/b.md" in msg
 
@@ -1082,6 +1082,7 @@ git commit -m "feat(import): plan_cohort_import with independence guard and comb
 **Files:**
 - Modify: `science/src/science_tool/entity_import.py` (add `_validate_cohort_plan_for_apply`; extract a per-member core from `_validate_plan_for_apply`)
 - Test: `science/tests/test_cohort_import.py`
+- Test: `science/tests/test_entity_import.py` (direct single-import regressions for the two shared-validator tightenings)
 
 **Interfaces:**
 - Consumes: `CohortImportPlan`, existing `_validate_plan_for_apply` logic.
@@ -1164,11 +1165,36 @@ def test_validate_rejects_rendered_kind_tamper(tmp_path):
     m.rendered_text = m.rendered_text.replace("kind: plan", "kind: question")
     with pytest.raises(EntityImportError):
         _validate_cohort_plan_for_apply(root, plan)
+
+
+# in tests/test_entity_import.py — replace its existing entity_import import with:
+from science_tool.entity_import import EntityImportError, apply_import, plan_import
+
+# Then use the file's existing _project/_loose fixtures:
+def test_single_apply_translates_unknown_kind_in_tampered_plan(tmp_path):
+    root = _project(tmp_path)
+    source = _loose(root, "doc/plans/x.md")
+    plan = plan_import(root, source, kind="plan")
+    # Keep the id prefix coherent with the bad kind so validation reaches the
+    # resolve_path_policy call whose raw KeyError must be translated.
+    plan.kind = "notarealkind"
+    plan.entity_id = "notarealkind:0001-a-thing"
+    with pytest.raises(EntityImportError):
+        apply_import(root, plan)
+
+
+def test_single_apply_rejects_rendered_kind_tamper(tmp_path):
+    root = _project(tmp_path)
+    source = _loose(root, "doc/plans/x.md")
+    plan = plan_import(root, source, kind="plan")
+    plan.rendered_text = plan.rendered_text.replace("kind: plan", "kind: question")
+    with pytest.raises(EntityImportError):
+        apply_import(root, plan)
 ```
 
 - [ ] **Step 2: Run tests to verify they fail**
 
-Run: `cd science && uv run --frozen pytest tests/test_cohort_import.py -k validate -v`
+Run: `cd science && uv run --frozen pytest tests/test_cohort_import.py tests/test_entity_import.py -k "validate or single_apply" -v`
 Expected: FAIL — `cannot import name '_validate_cohort_plan_for_apply'`.
 
 - [ ] **Step 3: Write minimal implementation**
@@ -1393,6 +1419,26 @@ def test_cohort_apply_refuses_hand_edited_ref_report_before_snapshot(tmp_path, m
     with pytest.raises(EntityImportError):
         apply_cohort_import(root, plan)
     assert a.exists() and b.exists()  # nothing moved
+
+
+def test_cohort_apply_refuses_ref_report_map_mismatch_before_snapshot(tmp_path, monkeypatch):
+    """The frozen substitution maps must agree exactly with the member-derived maps."""
+    root = _project(tmp_path)
+    a = _loose(root, "doc/plans/a.md", "# Alpha\n\nbody\n")
+    b = _loose(root, "doc/plans/b.md", "# Beta\n\nbody\n")
+    plan = plan_cohort_import(root, [a, b], kind="plan")
+    plan.ref_report.path_substitutions[plan.members[0].source_rel] = (
+        "entities/plans/9999-wrong.md"
+    )
+    import science_tool.entity_import as ei
+
+    def unreached_snapshot(_paths):
+        raise AssertionError("_snapshot reached; the mismatched map was not rejected first")
+
+    monkeypatch.setattr(ei, "_snapshot", unreached_snapshot)
+    with pytest.raises(EntityImportError):
+        apply_cohort_import(root, plan)
+    assert a.exists() and b.exists()
 
 
 def test_cohort_apply_refuses_initial_source_drift(tmp_path):
@@ -1642,6 +1688,7 @@ git commit -m "feat(import): apply_cohort_import — atomic block claim with per
 ```python
 # in tests/test_entity_import_cli.py — reuse the file's existing runner/fixtures.
 import json
+import pytest
 from click.testing import CliRunner
 from science_tool.cli import main
 
@@ -1672,7 +1719,14 @@ def test_cli_cohort_save_and_apply(tmp_path, monkeypatch):
     assert (root / "entities/plans/0002-beta.md").exists()
 
 
-def test_cli_cohort_rejects_title(tmp_path, monkeypatch):
+@pytest.mark.parametrize(
+    "identity_option",
+    [("--title", "X"), ("--slug", "x")],
+    ids=["title", "slug"],
+)
+def test_cli_cohort_rejects_per_document_identity_options(
+    tmp_path, monkeypatch, identity_option,
+):
     root = tmp_path
     (root / "science.yaml").write_text("name: t\nknowledge_profiles: {local: local}\n", encoding="utf-8")
     (root / "doc").mkdir()
@@ -1680,12 +1734,19 @@ def test_cli_cohort_rejects_title(tmp_path, monkeypatch):
     (root / "doc/b.md").write_text("# B\n\nb\n", encoding="utf-8")
     monkeypatch.chdir(root)
     res = CliRunner().invoke(main, ["entities", "import", "doc/a.md", "doc/b.md",
-                                    "--kind", "plan", "--title", "X"])
+                                    "--kind", "plan", *identity_option])
     assert res.exit_code != 0
-    assert "title" in res.output.lower()
+    assert identity_option[0].removeprefix("--") in res.output.lower()
 
 
-def test_cli_cohort_save_plan_equal_to_a_source_is_rejected(tmp_path, monkeypatch):
+@pytest.mark.parametrize(
+    "overwrite_args",
+    [(), ("--overwrite-plan",)],
+    ids=["without-overwrite", "with-overwrite"],
+)
+def test_cli_cohort_save_plan_equal_to_a_source_is_rejected(
+    tmp_path, monkeypatch, overwrite_args,
+):
     root = tmp_path
     (root / "science.yaml").write_text("name: t\nknowledge_profiles: {local: local}\n", encoding="utf-8")
     (root / "doc").mkdir()
@@ -1693,19 +1754,32 @@ def test_cli_cohort_save_plan_equal_to_a_source_is_rejected(tmp_path, monkeypatc
     (root / "doc/b.md").write_text("# B\n\nb\n", encoding="utf-8")
     monkeypatch.chdir(root)
     res = CliRunner().invoke(main, ["entities", "import", "doc/a.md", "doc/b.md",
-                                    "--kind", "plan", "--save-plan", "doc/a.md", "--overwrite-plan"])
+                                    "--kind", "plan", "--save-plan", "doc/a.md",
+                                    *overwrite_args])
     assert res.exit_code != 0
     assert "source" in res.output.lower()
 
 
-def test_cli_apply_plan_rejects_preview_options(tmp_path, monkeypatch):
+@pytest.mark.parametrize(
+    "preview_args",
+    [
+        ("--title", "T"),
+        ("--status", "proposed"),
+        ("--slug", "custom"),
+        ("--save-plan", "other.json"),
+        ("--overwrite-plan",),
+    ],
+    ids=["title", "status", "slug", "save-plan", "overwrite-plan"],
+)
+def test_cli_apply_plan_rejects_preview_options(tmp_path, monkeypatch, preview_args):
     root = tmp_path
     (root / "science.yaml").write_text("name: t\nknowledge_profiles: {local: local}\n", encoding="utf-8")
     (root / "p.json").write_text("{}", encoding="utf-8")
     monkeypatch.chdir(root)
     res = CliRunner().invoke(main, ["entities", "import", "--apply-plan", "p.json",
-                                    "--expected-plan-sha256", "x", "--title", "T"])
+                                    "--expected-plan-sha256", "x", *preview_args])
     assert res.exit_code != 0
+    assert "may not be combined with --apply-plan" in res.output
 
 
 def test_cli_legacy_single_plan_still_applies(tmp_path, monkeypatch):
@@ -1855,7 +1929,7 @@ Replace the command body (from `if apply_plan_path is not None:` to the end) wit
     if apply_plan_path is not None:
         if sources or kind is not None:
             raise click.UsageError("--apply-plan takes the saved plan only; do not repeat SOURCE or --kind.")
-        # The one deliberate tightening: reject the preview-only options apply
+        # The CLI-specific tightening: reject the preview-only options apply
         # previously ignored, so an operator cannot believe they had any effect.
         # Use `is not None` for value options so an explicit empty string (--title "")
         # is still rejected; overwrite_plan is a bool flag, so truthiness is correct.

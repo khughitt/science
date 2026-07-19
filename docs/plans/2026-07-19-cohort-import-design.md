@@ -3,7 +3,7 @@ title: Cohort Import for `science entities import` — Design
 status: proposed
 created: '2026-07-19'
 updated: '2026-07-19'
-revision: v5 (name the two apply-time single-import safety tightenings from the shared validator)
+revision: v5 (strict persisted schema version + named single-import safety tightenings)
 ---
 
 # Cohort Import — Design
@@ -197,7 +197,7 @@ frontmatter, rendered_text` — **no `kind`** (see below), no warnings field.
 ```
 CohortImportPlan {
   plan_type: "cohort-import"          # discriminator (single ImportPlan has none)
-  schema_version: 1
+  schema_version: 1                    # strict integer; bool/string coercion rejected
   project_root: str                    # embedded + apply-checked, like single
   kind: str                            # THE single authority for member kind
   members: list[ImportMember]          # 2+, in PLAN-MEMBER (input) order
@@ -377,18 +377,21 @@ once → dispatch on the discriminator:
 - **Shape validation:** non-contiguous numbers / duplicate ids / overlapping
   source∩dest / a `ref_report` map disagreeing with members → refused at apply
   before mutation.
-- **CLI matrix:** 2+ sources with `--title` → `UsageError`; `--save-plan` equal to
+- **CLI matrix:** 2+ sources with `--title` or `--slug` → `UsageError`; `--save-plan` equal to
   a source (with and without `--overwrite-plan`) → `UsageError`; `--apply-plan`
   with a source → `UsageError`; `--apply-plan` with `--title`/`--status`/`--slug`/
-  `--save-plan`/`--overwrite-plan` → `UsageError` (the deliberate tightening).
+  `--save-plan`/`--overwrite-plan` → `UsageError` (the CLI-specific tightening).
 - **Manual findings:** a cohort with an auto-unrewritable external reference plans
   successfully and surfaces it in `ref_report.manual`.
-- **Regression / compat:** single-source import unchanged end-to-end (byte-equal
-  saved plan, object-shaped `applied`); `_plan_member` extraction behavior-preserving;
+- **Regression / compat:** single-source preview remains byte-equal and successful
+  apply retains its object-shaped `applied` result; the three named tightenings
+  above are covered explicitly; `_plan_member` extraction is behavior-preserving;
   a legacy single-plan file (no `plan_type`) still applies via the single path.
 - **Discriminator:** unknown `plan_type`, unknown `schema_version`, and a
   `schema_version` present with **no** `plan_type` each refuse cleanly; a legacy
-  plan with neither field still routes to the single path.
+  plan with neither field still routes to the single path. Boolean and string
+  `schema_version` values are rejected by the strict persisted model as well as
+  by CLI dispatch.
 - **Claim-path proof:** the destination is proven from `plan.kind`+`dest_stem`
   before the primitive runs; a forced post-claim mismatch unlinks the
   exclusively-created file (nothing escapes the mutated set).
@@ -409,7 +412,8 @@ overlay and calls cohort import for its batch's import moves.
 ## Alternatives considered
 
 1. **Sibling `CohortImportPlan` (chosen)** — additive; preserves the single-import
-   saved-plan and result contracts (bar the deliberate apply-plan tightening).
+   saved-plan and successful-result contracts, with only the three named safety
+   tightenings above.
 2. **Unified one-or-many plan** — internally tidy, but needlessly changes the
    established single saved-plan and result shapes and their tests.
 3. **Composition of single plans** — smallest code, but cannot provide one
