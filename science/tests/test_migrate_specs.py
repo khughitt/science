@@ -176,6 +176,31 @@ def test_discovery_finds_loose_specs_and_skips_conforming(tmp_path: Path) -> Non
     assert disc.scan_skips == []
 
 
+def test_discovery_skips_nested_worktree_copies(tmp_path: Path) -> None:
+    """A nested git worktree (e.g. `.claude/worktrees/agent-x/`) is another branch's checkout, not
+    project content. Discovery must not descend into it, or every spec is double-counted."""
+    project = _spec_project(tmp_path)
+    _write(project / "doc/plans/a.md", {"id": "spec:2026-01-01-a", "type": "spec", "title": "A"})
+    _write(
+        project / ".claude/worktrees/agent-x/doc/plans/a.md",
+        {"id": "spec:2026-01-01-a", "type": "spec", "title": "A"},
+    )
+
+    disc = discover_specs(project)
+    assert [ls.old_id for ls in disc.legacy] == ["spec:2026-01-01-a"]
+
+
+def test_plan_does_not_refuse_on_nested_worktree_duplicate(tmp_path: Path) -> None:
+    """The exact failure a stray `.claude/worktrees/` checkout caused: a spec doc copied inside a
+    nested worktree collided with its real home as a false 'duplicate old id' refusal."""
+    project = _spec_project(tmp_path)
+    _legacy_spec(project, "doc/plans/a.md", "spec:2026-01-01-a", "Alpha design")
+    _legacy_spec(project, ".claude/worktrees/agent-x/doc/plans/a.md", "spec:2026-01-01-a", "Alpha design")
+
+    report = build_report(project)
+    assert len(report["migrated"]) == 1
+
+
 def test_discovery_reports_singleton_home(tmp_path: Path) -> None:
     project = _spec_project(tmp_path)
     _write(project / "entities/research-question.md", {"id": "spec:research-question", "kind": "spec", "title": "RQ"})
