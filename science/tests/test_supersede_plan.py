@@ -189,7 +189,7 @@ def test_apply_refuses_on_decision_drift(tmp_path: Path) -> None:
     a.write_text(
         "---\nid: interpretation:0001-a\nkind: interpretation\ntitle: A\nstatus: active\n---\nbody\n",
         encoding="utf-8")  # supersedes relation removed -> re-derived cohort marks nothing
-    with pytest.raises(SupersedeApplyError):
+    with pytest.raises(SupersedeApplyError, match="corpus changed since preview"):
         apply_supersede_plan(tmp_path, plan, staging_token="tkn")
 
 
@@ -205,7 +205,7 @@ def test_apply_refuses_on_write_source_drift(tmp_path: Path) -> None:
                           preview_date="2026-07-18")
     b = tmp_path / "entities" / "interpretations" / "0002-b.md"
     b.write_text(b.read_text(encoding="utf-8").replace("title: B", "title: B-EDITED"), encoding="utf-8")
-    with pytest.raises(SupersedeApplyError):
+    with pytest.raises(SupersedeApplyError, match="declared writes differ from re-derived"):
         apply_supersede_plan(tmp_path, plan, staging_token="tkn")
 
 
