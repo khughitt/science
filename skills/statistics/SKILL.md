@@ -29,6 +29,7 @@ For analysis-readiness planning, start at [`../INDEX.md`](../INDEX.md) or run
 | [`likelihood-model-comparison.md`](./likelihood-model-comparison.md) | Comparing parametric models by likelihood — AIC/BIC/LRT, nested vs non-nested, numerical precision, bootstrap selection stability |
 | [`population-genetics-likelihood.md`](./population-genetics-likelihood.md) | Wright-Fisher / Moran / binomial-segregation likelihoods; selection vs neutral null |
 | [`estimator-certification.md`](./estimator-certification.md) | An analysis fits parameters numerically — an optimiser, a profile likelihood, an ODE — and a threshold, budget, or gate is about to depend on the fit |
+| [`bayesian-workflow.md`](./bayesian-workflow.md) | Building/fitting/reviewing a Bayesian model — priors, MCMC, convergence, calibration, comparison |
 
 ## Principles
 
@@ -111,6 +112,12 @@ For analysis-readiness planning, start at [`../INDEX.md`](../INDEX.md) or run
     numeric fit, certify well-posedness, forward-map accuracy, reproducibility, and
     threshold calibration — in that order, cheapest first. See
     [`estimator-certification`](./estimator-certification.md).
+
+13. **A Bayesian fit is a gated sequence, not a menu.** Prior-predictive check
+    before fitting; a convergence gate before reading the posterior; calibration
+    (LOO-PIT / coverage / SBC) is out-of-sample and distinct from posterior-
+    predictive fit; power-scale the prior before trusting the verdict. See
+    [`bayesian-workflow`](./bayesian-workflow.md).
 
 ## When to invoke
 
