@@ -1,9 +1,11 @@
 from __future__ import annotations
 
+import errno
 import hashlib
 import json
+import os
 from pathlib import Path
-from typing import Literal
+from typing import Callable, Literal
 
 from pydantic import BaseModel, ConfigDict, model_validator
 
@@ -18,9 +20,19 @@ from science_tool.archive import (
 from science_tool.plan_common import (
     ArchiveSelection,
     ArchiveStatusSweep,
+    PathEscape,
     PathTransition,
+    StagingError,
     StateFingerprint,
+    SurfaceMismatch,
+    assert_same_surface,
+    assert_staging_unique,
     fingerprint,
+    matches,
+    resolve_within,
+    rollback_transitions,
+    snapshot_paths,
+    staged_write,
 )
 
 
@@ -166,3 +178,133 @@ def plan_archive(project_root: Path, *, selection: ArchiveSelection, now: str) -
     return ArchivePlan(schema_version=1, project_root=str(project_root), op="archive", now=now,
                        selection=selection, moves=moves, index=index, transitions=transitions,
                        preview_report=report)
+
+
+_ARCHIVE_PLAN_SCHEMA = 1
+
+
+class ArchiveApplyError(RuntimeError):
+    pass
+
+
+def _fsync_dir(directory: Path) -> None:
+    fd = os.open(directory, os.O_RDONLY)
+    try:
+        os.fsync(fd)
+    finally:
+        os.close(fd)
+
+
+def apply_archive_plan(project_root: Path, plan: ArchivePlan, *, staging_token: str,
+                       _fault: Callable[[str], None] | None = None) -> dict:
+    """Replay a saved `ArchivePlan`: move each entity file with `os.rename` and append the
+    archive-index atomically, rolling back on any failure.
+
+    Gate order is load-bearing and MUST NOT be reordered (design/brief task-15):
+      schema_version -> project_root -> Gate B (full re-derivation, FIRST) -> empty-cohort no-op
+      -> structural -> pre-state -> execute (snapshot, mkdir declared dirs, os.rename moves,
+      staged_write index, post-verify, rollback-on-failure).
+
+    Unlike supersede, archive has NO Gate A digest -- Gate B's full re-derivation via `plan_archive`
+    IS the primary drift gate, and it runs BEFORE the empty-cohort short-circuit so a corpus that
+    gained an eligible entity since preview is caught as drift (I5), never reported as a silent
+    successful no-op.
+    """
+
+    def fault(label: str) -> None:
+        if _fault is not None:
+            _fault(label)  # test-only kill seam; a BaseException here bypasses rollback
+
+    project_root = project_root.resolve()
+    if plan.schema_version != _ARCHIVE_PLAN_SCHEMA:
+        raise ArchiveApplyError(
+            f"unsupported plan schema_version {plan.schema_version} (this tool writes {_ARCHIVE_PLAN_SCHEMA})")
+    if plan.project_root != str(project_root):
+        raise ArchiveApplyError("plan project_root does not match")
+
+    # Gate B FIRST -- re-derive the WHOLE plan from live sources and compare the complete surface.
+    # Running this BEFORE the empty-cohort short-circuit means a corpus that gained an eligible
+    # entity after preview is caught as drift, not silently reported as a successful no-op (I5).
+    # `plan_archive` is read-only and derives its own paths from the live corpus, so it never
+    # touches an untrusted plan path before containment is checked below.
+    plan_index_list = [plan.index] if plan.index is not None else []
+    expected = plan_archive(project_root, selection=plan.selection, now=plan.now)
+    if expected.moves != plan.moves or expected.index != plan.index:
+        raise ArchiveApplyError("re-derived moves/rows/index differ from the plan (corpus changed since preview)")
+    exp_index = [expected.index] if expected.index is not None else []
+    try:
+        assert_same_surface([*plan.transitions, *plan_index_list], [*expected.transitions, *exp_index])
+    except SurfaceMismatch as exc:
+        raise ArchiveApplyError(f"declared transitions differ from re-derived: {exc}") from exc
+    if expected.preview_report != plan.preview_report:
+        raise ArchiveApplyError("re-derived preview report differs from the plan")
+
+    # Empty cohort -- a no-op plan writes nothing (legacy `archive_entities` no-ops too). Only
+    # reachable once Gate B has confirmed the live corpus ALSO derives an empty cohort.
+    if not plan.moves:
+        if plan.index is not None or plan.transitions:
+            raise ArchiveApplyError("empty cohort must carry no index or transitions")
+        return {"applied": [], "skipped": []}
+
+    index_list = plan_index_list
+    all_t = [*plan.transitions, *index_list]
+    # Structural -- containment for every declared path, canonical archive paths, staging
+    # uniqueness, no duplicate move ids.
+    try:
+        abs_by_t = {id(t): resolve_within(project_root, t.rel_path) for t in all_t}
+        for m in plan.moves:
+            resolve_within(project_root, m.original_path)
+            resolve_within(project_root, m.archive_path)
+        if plan.index is not None:
+            assert_staging_unique(project_root, [abs_by_t[id(plan.index)]], staging_token)
+    except (PathEscape, StagingError) as exc:
+        raise ArchiveApplyError(str(exc)) from exc
+    for m in plan.moves:
+        if derive_archive_path(m.original_path) != m.archive_path:
+            raise ArchiveApplyError(f"non-canonical archive_path for {m.id}")
+    ids = [m.id for m in plan.moves]
+    if len(ids) != len(set(ids)):
+        raise ArchiveApplyError("duplicate move ids")
+
+    # Pre-state gate -- do NOT write until every declared path's live state matches its frozen pre.
+    for t in all_t:
+        if not matches(t.pre, abs_by_t[id(t)]):
+            raise ArchiveApplyError(f"pre-state changed for {t.rel_path}")
+
+    # Execute -- snapshot every declared path, create declared dirs, rename each move (never
+    # os.replace -- a move must fail loud, not silently clobber), stage+commit the index, verify
+    # post-state, roll back atomically on any failure.
+    snap = snapshot_paths([abs_by_t[id(t)] for t in all_t])
+    try:
+        for t in plan.transitions:
+            if t.role == "created-dir":
+                d = abs_by_t[id(t)]
+                d.mkdir(parents=False, exist_ok=True)  # every ancestor is its own transition
+                os.chmod(d, t.post.mode)
+        for m in plan.moves:
+            src = project_root / m.original_path
+            dst = project_root / m.archive_path
+            try:
+                os.rename(src, dst)  # NOT os.replace -- a move must refuse rather than clobber
+            except OSError as exc:
+                if exc.errno == errno.EXDEV:
+                    raise ArchiveApplyError(
+                        f"cross-device move refused for {m.id}: archive must be same filesystem") from exc
+                raise
+            _fsync_dir(src.parent)
+            _fsync_dir(dst.parent)
+            fault(f"renamed:{m.id}")  # kill boundary: after each rename, before the index write
+        if plan.index is not None:
+            staged_write(abs_by_t[id(plan.index)], plan.index.postimage,
+                         plan.index.post.mode, staging_token,
+                         target_pre=plan.index.pre)  # mode concrete; target_pre guards cleanup
+            fault("index-written")  # kill boundary: after index replacement
+        for t in all_t:
+            if not matches(t.post, abs_by_t[id(t)]):
+                raise ArchiveApplyError(f"post-state verification failed for {t.rel_path}")
+    except Exception as exc:
+        rollback_transitions(all_t, project_root, snap)  # may raise RollbackHalt (propagates)
+        if isinstance(exc, ArchiveApplyError):
+            raise
+        raise ArchiveApplyError(f"archive apply failed and rolled back: {exc}") from exc
+    return {"applied": [m.id for m in plan.moves], "skipped": []}

@@ -5,9 +5,10 @@ from pathlib import Path
 import pytest
 
 from science_tool.archive import ArchiveRow, append_row, archive_entities, archive_index_path
-from science_tool.plan_common import ArchiveStatusSweep, PathTransition, StateFingerprint, fingerprint
+from science_tool.plan_common import ArchiveStatusSweep, PathTransition, StateFingerprint, fingerprint, staging_path_for
 from science_tool.archive_plan import (
-    ArchiveCandidate, ArchiveMove, ArchivePlan, ArchivePreviewReport, PlannedArchiveRow, plan_archive,
+    ArchiveApplyError, ArchiveCandidate, ArchiveMove, ArchivePlan, ArchivePreviewReport, PlannedArchiveRow,
+    apply_archive_plan, plan_archive,
 )
 
 
@@ -183,3 +184,240 @@ def test_plan_archive_empty_cohort_is_a_noop_plan(tmp_path: Path) -> None:
     assert plan.transitions == []
     assert plan.index is None
     assert plan.preview_report.candidates == []
+
+
+class _Kill(BaseException):
+    """Simulates an uncaught process kill — NOT an Exception, so apply's rollback never runs."""
+
+
+def test_apply_archive_plan_moves_entity_and_writes_index(tmp_path: Path) -> None:
+    _superseded(tmp_path)
+    plan = plan_archive(tmp_path, selection=ArchiveStatusSweep(kind="all_by_status", statuses=["superseded"]),
+                        now="2026-07-18T00:00:00Z")
+    report = apply_archive_plan(tmp_path, plan, staging_token="tok")
+    assert report["applied"] == ["interpretation:0001-x"]
+    assert not (tmp_path / "entities" / "interpretations" / "0001-x.md").exists()
+    assert (tmp_path / "entities" / "_archive" / "interpretations" / "0001-x.md").exists()
+    idx = (tmp_path / "entities" / "_archive" / "archive-index.jsonl").read_text(encoding="utf-8")
+    assert "interpretation:0001-x" in idx
+    assert idx == plan.index.postimage
+    from science_tool.archive import load_archive_index
+    assert "interpretation:0001-x" in load_archive_index(tmp_path).active_by_id
+
+
+def test_apply_archive_empty_cohort_is_a_noop(tmp_path: Path) -> None:
+    # No candidates → apply writes nothing and never touches a (possibly-absent) _archive/.
+    (tmp_path / "science.yaml").write_text("name: t\n", encoding="utf-8")
+    (tmp_path / "entities" / "interpretations").mkdir(parents=True)
+    plan = plan_archive(tmp_path, selection=ArchiveStatusSweep(kind="all_by_status", statuses=["superseded"]),
+                        now="2026-07-18T00:00:00Z")
+    report = apply_archive_plan(tmp_path, plan, staging_token="tok")
+    assert report == {"applied": [], "skipped": []}
+    assert not (tmp_path / "entities" / "_archive").exists()  # no debris
+
+
+def test_apply_empty_cohort_refuses_when_corpus_gained_an_eligible_entity(tmp_path: Path) -> None:
+    # I5: an empty saved plan must still pass Gate B. If the corpus gained an eligible entity between
+    # preview and apply, the re-derivation is non-empty ≠ the empty plan → refused as drift, NOT a
+    # silent successful no-op.
+    (tmp_path / "science.yaml").write_text("name: t\n", encoding="utf-8")
+    d = tmp_path / "entities" / "interpretations"
+    d.mkdir(parents=True)
+    plan = plan_archive(tmp_path, selection=ArchiveStatusSweep(kind="all_by_status", statuses=["superseded"]),
+                        now="2026-07-18T00:00:00Z")
+    assert plan.moves == []
+    # a new superseded entity appears after preview
+    (d / "0001-x.md").write_text(
+        "---\nid: interpretation:0001-x\nkind: interpretation\ntitle: X\nstatus: superseded\n---\nbody\n",
+        encoding="utf-8")
+    with pytest.raises(ArchiveApplyError, match="differ from the plan|corpus changed"):
+        apply_archive_plan(tmp_path, plan, staging_token="tok")
+
+
+def test_apply_archive_refuses_cross_device_move_loudly(tmp_path: Path, monkeypatch) -> None:
+    # I8 / design §4.3: a cross-device rename raises EXDEV; apply must surface it as a clean refusal
+    # (archive must be on the same filesystem), not a partial/ambiguous move.
+    import errno
+    import os
+    _superseded(tmp_path)
+    plan = plan_archive(tmp_path, selection=ArchiveStatusSweep(kind="all_by_status", statuses=["superseded"]),
+                        now="2026-07-18T00:00:00Z")
+
+    def exdev(src, dst):
+        raise OSError(errno.EXDEV, "Invalid cross-device link")
+
+    monkeypatch.setattr(os, "rename", exdev)
+    with pytest.raises(ArchiveApplyError, match="cross-device"):
+        apply_archive_plan(tmp_path, plan, staging_token="tok")
+    # rolled back: the source is still in place, nothing half-moved
+    assert (tmp_path / "entities" / "interpretations" / "0001-x.md").exists()
+
+
+def test_apply_archive_refuses_when_source_changed_after_preview(tmp_path: Path) -> None:
+    # design §9 (drift rejection — src changed): mutating the source after preview is refused (the
+    # re-derived row/pre-state no longer matches the plan).
+    _superseded(tmp_path)
+    plan = plan_archive(tmp_path, selection=ArchiveStatusSweep(kind="all_by_status", statuses=["superseded"]),
+                        now="2026-07-18T00:00:00Z")
+    (tmp_path / "entities" / "interpretations" / "0001-x.md").write_text(
+        "---\nid: interpretation:0001-x\nkind: interpretation\ntitle: CHANGED\nstatus: superseded\n---\nbody\n",
+        encoding="utf-8")
+    with pytest.raises(ArchiveApplyError):
+        apply_archive_plan(tmp_path, plan, staging_token="tok")
+    assert (tmp_path / "entities" / "interpretations" / "0001-x.md").exists()  # not moved
+
+
+def test_apply_archive_refuses_project_root_mismatch(tmp_path: Path) -> None:
+    # design §9 (drift rejection — project mismatch).
+    _superseded(tmp_path)
+    plan = plan_archive(tmp_path, selection=ArchiveStatusSweep(kind="all_by_status", statuses=["superseded"]),
+                        now="2026-07-18T00:00:00Z")
+    other = plan.model_copy(update={"project_root": str(tmp_path / "nope")})
+    with pytest.raises(ArchiveApplyError, match="project_root"):
+        apply_archive_plan(tmp_path, other, staging_token="tok")
+
+
+def test_apply_archive_refuses_when_index_changed_after_preview(tmp_path: Path) -> None:
+    # design §9 (drift rejection — INDEX changed), ISOLATED from created-dir drift: `_archive/` exists
+    # BEFORE preview, so `plan_archive` emits no created-dir transition for it and the transition surface
+    # is identical at preview and apply (`_archive/interpretations/` stays absent throughout — it is
+    # never touched here). The ONLY thing that diverges afterward is the index file, so a failure is
+    # specifically the index guard: re-derivation reads the new bytes and produces a different index
+    # postimage/pre, and Gate B refuses rather than clobber a concurrently-written index. Source stays put.
+    _superseded(tmp_path)
+    (tmp_path / "entities" / "_archive").mkdir(parents=True)  # created-dir surface fixed BEFORE preview
+    plan = plan_archive(tmp_path, selection=ArchiveStatusSweep(kind="all_by_status", statuses=["superseded"]),
+                        now="2026-07-18T00:00:00Z")
+    index_abs = tmp_path / "entities" / "_archive" / "archive-index.jsonl"
+    index_abs.write_text('{"id":"interpretation:9999-z"}\n', encoding="utf-8")  # ONLY the index diverges
+    with pytest.raises(ArchiveApplyError):
+        apply_archive_plan(tmp_path, plan, staging_token="tok")
+    assert (tmp_path / "entities" / "interpretations" / "0001-x.md").exists()  # not moved
+
+
+def test_apply_archive_refuses_when_destination_appeared_after_preview(tmp_path: Path) -> None:
+    # design §9 (drift rejection — DST appeared), ISOLATED from created-dir drift: the destination's
+    # PARENT exists BEFORE preview, so `plan_archive` emits NO created-dir transitions (both `_archive/`
+    # and `_archive/interpretations/` already exist) and the transition surface is identical at preview
+    # and apply. The ONLY change afterward is the destination FILE appearing, so a failure is specifically
+    # the dst guard: `plan_archive` freezes archive-dst with `pre=_ABSENT`, and the pre-state gate
+    # (`matches(pre=absent, live=exists)` is False) refuses BEFORE any rename, leaving both untouched.
+    _superseded(tmp_path)
+    dst = tmp_path / "entities" / "_archive" / "interpretations" / "0001-x.md"
+    dst.parent.mkdir(parents=True)  # created-dir surface fixed BEFORE preview
+    plan = plan_archive(tmp_path, selection=ArchiveStatusSweep(kind="all_by_status", statuses=["superseded"]),
+                        now="2026-07-18T00:00:00Z")
+    dst.write_text("SOMETHING ALREADY HERE", encoding="utf-8")  # ONLY the destination file appears
+    with pytest.raises(ArchiveApplyError):
+        apply_archive_plan(tmp_path, plan, staging_token="tok")
+    assert (tmp_path / "entities" / "interpretations" / "0001-x.md").exists()  # src not moved
+    assert dst.read_text(encoding="utf-8") == "SOMETHING ALREADY HERE"          # dst untouched
+
+
+def test_apply_archive_refuses_report_hiding_an_inbound_reference(tmp_path: Path) -> None:
+    # I8 / design §9 "Report binding": a plan whose preview_report omits a live inbound reference to
+    # an archived entity is refused at Gate B (the re-derived report carries the inbound ref).
+    _superseded(tmp_path)
+    # a live entity references the to-be-archived 0001-x
+    (tmp_path / "entities" / "interpretations" / "0009-live.md").write_text(
+        "---\nid: interpretation:0009-live\nkind: interpretation\ntitle: L\nstatus: active\n"
+        "relations:\n  - predicate: sci:relatedTo\n    target: interpretation:0001-x\n---\nbody\n",
+        encoding="utf-8")
+    plan = plan_archive(tmp_path, selection=ArchiveStatusSweep(kind="all_by_status", statuses=["superseded"]),
+                        now="2026-07-18T00:00:00Z")
+    cand = plan.preview_report.candidates[0]
+    assert "interpretation:0009-live" in cand.inbound_live_refs  # preview surfaced it
+    hidden = cand.model_copy(update={"inbound_live_refs": []})
+    tampered = plan.model_copy(update={
+        "preview_report": plan.preview_report.model_copy(update={"candidates": [hidden]})})
+    with pytest.raises(ArchiveApplyError, match="preview report"):
+        apply_archive_plan(tmp_path, tampered, staging_token="tok")
+
+
+def test_apply_archive_refuses_unsupported_schema_version(tmp_path: Path) -> None:
+    _superseded(tmp_path)
+    plan = plan_archive(tmp_path, selection=ArchiveStatusSweep(kind="all_by_status", statuses=["superseded"]),
+                        now="2026-07-18T00:00:00Z")
+    plan = plan.model_copy(update={"schema_version": 999})
+    with pytest.raises(ArchiveApplyError):
+        apply_archive_plan(tmp_path, plan, staging_token="tok")
+
+
+def test_apply_archive_refuses_tampered_row(tmp_path: Path) -> None:
+    _superseded(tmp_path)
+    plan = plan_archive(tmp_path, selection=ArchiveStatusSweep(kind="all_by_status", statuses=["superseded"]),
+                        now="2026-07-18T00:00:00Z")
+    bad = plan.moves[0].row.model_copy(update={"title": "TAMPERED"})
+    plan.moves[0] = plan.moves[0].model_copy(update={"row": bad})
+    with pytest.raises(ArchiveApplyError):
+        apply_archive_plan(tmp_path, plan, staging_token="tok")
+
+
+def test_apply_archive_refuses_absolute_rel_path_escape(tmp_path: Path) -> None:
+    _superseded(tmp_path)
+    plan = plan_archive(tmp_path, selection=ArchiveStatusSweep(kind="all_by_status", statuses=["superseded"]),
+                        now="2026-07-18T00:00:00Z")
+    src = [t for t in plan.transitions if t.role == "archive-src"][0]
+    idx = plan.transitions.index(src)
+    plan.transitions[idx] = src.model_copy(update={"rel_path": "/etc/evil.md"})
+    with pytest.raises(ArchiveApplyError):
+        apply_archive_plan(tmp_path, plan, staging_token="tok")
+
+
+def test_apply_archive_rolls_back_when_index_write_is_blocked(tmp_path: Path) -> None:
+    # Move-rollback: a stale, non-prefix staging survivor makes the index write fail AFTER the entity
+    # moved. The StagingError is wrapped as ArchiveApplyError only after rollback returns the corpus
+    # to its pre-state — src restored, dst removed.
+    _superseded(tmp_path)
+    index_abs = tmp_path / "entities" / "_archive" / "archive-index.jsonl"
+    index_abs.parent.mkdir(parents=True, exist_ok=True)  # so the parent exists before planning
+    plan = plan_archive(tmp_path, selection=ArchiveStatusSweep(kind="all_by_status", statuses=["superseded"]),
+                        now="2026-07-18T00:00:00Z")
+    staging_path_for(index_abs, "tok").write_text("garbage-not-a-prefix", encoding="utf-8")
+    with pytest.raises(ArchiveApplyError):
+        apply_archive_plan(tmp_path, plan, staging_token="tok")
+    assert (tmp_path / "entities" / "interpretations" / "0001-x.md").exists()  # src restored
+    assert not (tmp_path / "entities" / "_archive" / "interpretations" / "0001-x.md").exists()  # dst gone
+
+
+def test_kill_after_rename_leaves_a_classifiable_declared_state(tmp_path: Path) -> None:
+    # Kill matrix — after each archive rename: src moved away, dst present, index NOT yet written.
+    _superseded(tmp_path)
+    plan = plan_archive(tmp_path, selection=ArchiveStatusSweep(kind="all_by_status", statuses=["superseded"]),
+                        now="2026-07-18T00:00:00Z")
+
+    def fault(label: str) -> None:
+        if label == "renamed:interpretation:0001-x":
+            raise _Kill()
+
+    with pytest.raises(_Kill):
+        apply_archive_plan(tmp_path, plan, staging_token="tok", _fault=fault)
+    assert not (tmp_path / "entities" / "interpretations" / "0001-x.md").exists()
+    assert (tmp_path / "entities" / "_archive" / "interpretations" / "0001-x.md").exists()
+    assert not (tmp_path / "entities" / "_archive" / "archive-index.jsonl").exists()  # index == pre (absent)
+
+
+def test_kill_after_index_replacement_leaves_complete_index_no_survivor(tmp_path: Path) -> None:
+    # Kill matrix — after index replacement: index is complete, no staging survivor left behind.
+    _superseded(tmp_path)
+    plan = plan_archive(tmp_path, selection=ArchiveStatusSweep(kind="all_by_status", statuses=["superseded"]),
+                        now="2026-07-18T00:00:00Z")
+
+    def fault(label: str) -> None:
+        if label == "index-written":
+            raise _Kill()
+
+    with pytest.raises(_Kill):
+        apply_archive_plan(tmp_path, plan, staging_token="tok", _fault=fault)
+    index_abs = tmp_path / "entities" / "_archive" / "archive-index.jsonl"
+    assert index_abs.read_text(encoding="utf-8") == plan.index.postimage  # complete
+    assert not staging_path_for(index_abs, "tok").exists()  # no undeclared debris
+
+
+def test_apply_archive_index_leaves_no_staging_survivor(tmp_path: Path) -> None:
+    _superseded(tmp_path)
+    plan = plan_archive(tmp_path, selection=ArchiveStatusSweep(kind="all_by_status", statuses=["superseded"]),
+                        now="2026-07-18T00:00:00Z")
+    apply_archive_plan(tmp_path, plan, staging_token="tok")
+    index_abs = tmp_path / "entities" / "_archive" / "archive-index.jsonl"
+    assert not staging_path_for(index_abs, "tok").exists()
