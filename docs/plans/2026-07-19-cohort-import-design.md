@@ -3,7 +3,7 @@ title: Cohort Import for `science entities import` — Design
 status: proposed
 created: '2026-07-19'
 updated: '2026-07-19'
-revision: v3 (folds design-review round 2 — 2 critical + 1 high + 2 clarifications)
+revision: v4 (folds design-review round 3 — per-source pre-unlink re-hash + primitive-change wording)
 ---
 
 # Cohort Import — Design
@@ -37,9 +37,10 @@ referrers repointed in **one** reference scan.
   cross-member reference repointing (cohorts are required to be
   reference-independent — see below); crash-durability of standalone cohort
   apply (delegated to the caller's transaction journal).
-- **Two shared-code primitive changes** (behavior-preserving for single import),
-  detailed in *Primitive changes* below: a self-cleaning claim, and a
-  content-override on the reference scanner.
+- **Two shared-code primitive changes** (behavior-preserving on the success
+  path), detailed in *Primitive changes* below: a self-cleaning claim (used by
+  single import too) and a content-override on the reference scanner (used **only**
+  by the cohort planner — single import passes no source override).
 
 ## Non-goals / explicit boundaries
 
@@ -64,8 +65,12 @@ referrers repointed in **one** reference scan.
 
 ## Primitive changes to shared code
 
-Both are used by single import; both are behavior-preserving on the success path
-and only add safety on the failure path.
+Both are behavior-preserving on the success path and only add safety on the
+failure path. The **self-cleaning claim** is used by single import too; the
+**scanner content-override** is used **only** by the cohort planner — single
+import retains its existing excluded-source inbound scan and passes no source
+override (an override for its own excluded source would be inert and would flip
+self-reference handling; see change 2).
 
 1. **Self-cleaning claim (`claim_number_in_dir`, `entity_reservation.py`).**
    Today the destination is created with `open(path, "x")` and written; a caught
@@ -246,7 +251,10 @@ Mirrors single `apply_import`'s snapshot + mutated-set self-rollback, cohort-wid
    destination sets **disjoint**. Per member: containment (`resolve_within`),
    canonical destination for `plan.kind`, identity coherence (reuse
    `_validate_plan_for_apply` per member with `plan.kind`).
-2. **Source drift:** every source still hashes to its `source_sha256`, else refuse.
+2. **Source drift (initial gate):** every source still hashes to its
+   `source_sha256`, else refuse. This is an early-out; each source is
+   **re-hashed again immediately before its own unlink** (step 6), because this
+   gate and the unlink are far apart and lock-free.
 3. **Re-derive and compare the external report from the LIVE corpus** *before*
    any snapshot: `plan_reference_rewrite(root, {source→entity_id}, {source→dest},
    exclude=exclude | {all sources, all dests, plan artifact})`; require the
@@ -271,7 +279,16 @@ Mirrors single `apply_import`'s snapshot + mutated-set self-rollback, cohort-wid
    pre-proof, explicitly unlink that exclusively-created path and raise. Any
    failed claim → roll back all → raise. The path is proven before creation, not
    after, so no created file can escape the mutated set.
-6. **Unlink sources** (each after its destination is claimed) → mutated set.
+6. **Unlink sources** (each after its destination is claimed). The initial drift
+   gate (step 2) and this unlink are far apart, so a source could be edited in
+   between; deleting it here would destroy the newer content and a later rollback
+   would replace it with the stale snapshot. So per source, **immediately before
+   its unlink**: (a) re-read and re-hash it; (b) if it differs from
+   `source_sha256`, leave it **out** of `mutated`, roll back claimed destinations
+   and previously-unlinked sources, and raise; (c) if it matches, unlink it in the
+   **adjacent** statement and add it to `mutated`. This narrows the lock-free
+   window to the unavoidable adjacent re-hash/unlink pair, matching
+   reference-rewrite's per-write re-derivation discipline.
 7. **Inbound rewrite:** `apply_reference_rewrite(root, plan.ref_report,
    exclude=exclude | {all sources, all dests}, written=...)` → mutated set; drift
    → roll back, raise.
@@ -306,7 +323,8 @@ once → dispatch on the discriminator:
 | `--save-plan` equals any resolved source (even `--overwrite-plan`) | CLI | `UsageError` |
 | re-derived report ≠ frozen `ref_report` | apply | refuse before snapshot |
 | number committed/archived/reserved since preview | apply | whole-cohort rollback + raise |
-| any source changed since preview | apply | refuse before mutation |
+| any source changed since preview | apply | refuse before mutation (initial gate) |
+| a source changed after the gate, before its unlink | apply | per-source re-hash catches it → whole-cohort rollback + raise; edited source survives |
 | claim path ≠ validated destination | apply | whole-cohort rollback + raise |
 | ref-rewrite drift / audit dangling ref | apply | whole-cohort rollback + raise |
 | envelope missing / sha mismatch | apply | existing upstream refusal, no mutation |
@@ -342,6 +360,10 @@ once → dispatch on the discriminator:
   validated-dest assertion is exercised.
 - **Drift / envelope:** edit a source after preview → refuse; tamper plan bytes →
   envelope refusal.
+- **Mid-claim source edit:** edit one member source *after* the initial drift gate
+  but *during* the claim block → the per-source re-hash before its unlink catches
+  it; the edited source **survives** on disk (its newer bytes intact) and every
+  cohort mutation (claimed destinations, previously-unlinked sources) rolls back.
 - **Shape validation:** non-contiguous numbers / duplicate ids / overlapping
   source∩dest / a `ref_report` map disagreeing with members → refused at apply
   before mutation.
