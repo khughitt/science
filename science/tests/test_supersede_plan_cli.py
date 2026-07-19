@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+import pytest
 from click.testing import CliRunner
 
 from science_tool.cli import main
@@ -127,3 +128,44 @@ def test_apply_plan_reads_plan_file_exactly_once(tmp_path: Path, monkeypatch) ->
                                    "--apply-plan", str(plan_file), "--expected-plan-sha256", sha])
     assert r2.exit_code == 0, r2.output
     assert calls["n"] == 1  # one read feeds BOTH the envelope hash and the parse
+
+
+@pytest.mark.parametrize("flag", [
+    "--id",
+    "--ids-from",
+    "--save-plan",
+    "--overwrite-plan",
+    "--apply",
+])
+def test_apply_plan_rejects_conflicting_flags(tmp_path: Path, flag: str) -> None:
+    """Assert that --apply-plan rejects each of five mutually-exclusive flags before reading the plan."""
+    _chain(tmp_path)
+
+    # Create a valid plan file first (required by --apply-plan)
+    plan_file = tmp_path / "plan.json"
+    r_save = CliRunner().invoke(main, ["entities", "mark-superseded", "--project-root", str(tmp_path),
+                                       "--save-plan", str(plan_file)])
+    assert r_save.exit_code == 0, r_save.output
+    sha = json.loads(r_save.output)["plan_sha256"]
+
+    # Build the command with --apply-plan and the conflicting flag
+    cmd = ["entities", "mark-superseded", "--project-root", str(tmp_path),
+           "--apply-plan", str(plan_file), "--expected-plan-sha256", sha]
+
+    if flag == "--id":
+        cmd.extend(["--id", "interpretation:0001-a"])
+    elif flag == "--ids-from":
+        ids_file = tmp_path / "ids.txt"
+        ids_file.write_text("interpretation:0001-a\n")
+        cmd.extend(["--ids-from", str(ids_file)])
+    elif flag == "--save-plan":
+        save_file = tmp_path / "save.json"
+        cmd.extend(["--save-plan", str(save_file)])
+    else:  # --overwrite-plan or --apply
+        cmd.append(flag)
+
+    # Invoke and verify rejection
+    r = CliRunner().invoke(main, cmd)
+    assert r.exit_code != 0, f"Expected {flag} to be rejected with --apply-plan, but got: {r.output}"
+    assert flag in r.output or "may not be combined" in r.output, \
+        f"Error should mention {flag} or the mutual exclusion. Got: {r.output}"
