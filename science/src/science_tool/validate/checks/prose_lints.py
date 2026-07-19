@@ -162,10 +162,14 @@ def check_prose_lints(ctx: "ValidateContext") -> Iterable[Result]:
             continue
         results.append(_hit_result(ctx, hit))
     numeric_coverage = lint_result.get("coverage", {}).get("numeric-verification")
-    if numeric_coverage is not None:
+    if numeric_coverage is not None and any(numeric_coverage.values()):
         # Standalone advisory, independent of the `counts`-derived "use
-        # --strict to promote" path below: it reports the verification
-        # tally even when every outcome is `verified` (silent, zero counts).
+        # --strict to promote" path below: it reports the verification tally
+        # whenever at least one claim was bound (a fully-`verified` project
+        # still shows, since `verified` > 0). Suppressed when every tally is
+        # zero — i.e. the project uses no `numeric_claims` at all — so the
+        # check stays silent on projects that don't opt in, like every other
+        # prose lint.
         results.append(
             _result(
                 Severity.INFO,

@@ -281,6 +281,12 @@ Because `verified`/`unverifiable` never appear as findings, both
 document still reports how much of its numeric-claim surface is bound and
 checked rather than showing "no issues found."
 
+`science validate` suppresses this advisory when every tally is zero — a
+project that uses no `numeric_claims` at all stays silent, like every other
+prose lint that finds nothing. `science prose lint` is an explicit,
+targeted invocation, so it always renders the coverage line (including an
+all-zero one) to confirm the check ran.
+
 ## Tooling
 
 - `science prose lint --root . --format table` — run all lints, render to terminal.

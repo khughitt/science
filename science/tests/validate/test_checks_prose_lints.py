@@ -105,13 +105,6 @@ def test_non_strict_bare_author_year_emits_exact_warn_message(tmp_path: Path) ->
             "bare author-year mention 'Smith 2020' has no adjacent [@key]",
             "prose_lints.bare-author-year",
         ),
-        (
-            Severity.INFO,
-            None,
-            None,
-            "numeric-verification coverage: 0 verified, 0 unverifiable, 0 mismatch, 0 error",
-            "prose_lints.numeric-verification.coverage",
-        ),
     ]
 
 
@@ -123,11 +116,6 @@ def test_non_strict_numeric_anchor_is_silent(tmp_path: Path) -> None:
     results = list(check_prose_lints(_ctx(tmp_path)))
 
     assert _summary(results) == [
-        (
-            Severity.INFO,
-            "numeric-verification coverage: 0 verified, 0 unverifiable, 0 mismatch, 0 error",
-            "prose_lints.numeric-verification.coverage",
-        ),
         (Severity.INFO, "1 prose lint issue(s): numeric-anchor (use --strict to promote)", "prose_lints.numeric-anchor"),
     ]
 
@@ -146,13 +134,6 @@ def test_strict_numeric_anchor_emits_warn_message(tmp_path: Path) -> None:
             1,
             "numeric claim '123' has no resolvable source",
             "prose_lints.numeric-anchor",
-        ),
-        (
-            Severity.INFO,
-            None,
-            None,
-            "numeric-verification coverage: 0 verified, 0 unverifiable, 0 mismatch, 0 error",
-            "prose_lints.numeric-verification.coverage",
         ),
     ]
 
@@ -194,11 +175,6 @@ def test_project_config_controls_enabled_checks_and_anchor_patterns(tmp_path: Pa
             "prose lint checks limited by science.yaml: 2/6 enabled (numeric-anchor, numeric-verification); "
             "disabled: bare-author-year, short-form-ids, frontmatter-inline-gap, unsupported-citation-syntax",
             "prose_lints.config",
-        ),
-        (
-            Severity.INFO,
-            "numeric-verification coverage: 0 verified, 0 unverifiable, 0 mismatch, 0 error",
-            "prose_lints.numeric-verification.coverage",
         ),
     ]
 
@@ -303,11 +279,6 @@ def test_strict_frontmatter_inline_gap_stays_summary_only(tmp_path: Path) -> Non
     assert _summary(results) == [
         (
             Severity.INFO,
-            "numeric-verification coverage: 0 verified, 0 unverifiable, 0 mismatch, 0 error",
-            "prose_lints.numeric-verification.coverage",
-        ),
-        (
-            Severity.INFO,
             "2 prose lint issue(s): frontmatter-inline-gap (graph metadata advisory)",
             "prose_lints.frontmatter-inline-gap",
         ),
@@ -390,6 +361,20 @@ def test_verified_numeric_claim_emits_coverage_advisory_and_no_warn(tmp_path: Pa
     # rather than going through the counts loop.
     lint_result = scan_root(tmp_path)
     assert lint_result["counts"].get("numeric-verification", 0) == 0
+
+
+def test_no_coverage_advisory_when_project_has_no_numeric_claims(tmp_path: Path) -> None:
+    from science_tool.validate.checks.prose_lints import check_prose_lints
+
+    # A project that never opts into numeric_claims must stay silent — no
+    # all-zero coverage advisory — like every other prose lint that finds
+    # nothing. The advisory is suppressed when every tally is zero.
+    _write_doc(tmp_path, "Body text with no numeric bindings whatsoever.\n")
+
+    results = list(check_prose_lints(_ctx(tmp_path)))
+
+    coverage_results = [result for result in results if result.rule == "prose_lints.numeric-verification.coverage"]
+    assert coverage_results == []
 
 
 def test_coupling_makes_disabled_checks_message_coupling_aware(tmp_path: Path) -> None:
