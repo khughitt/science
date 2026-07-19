@@ -1,6 +1,7 @@
 ---
 name: research-package-rendering
 description: Use when rendering research-package materials into notebook-like review views, summaries, or inspection pages.
+provenance: internal
 ---
 
 # Research Package Rendering
