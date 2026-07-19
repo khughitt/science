@@ -954,8 +954,8 @@ def test_cli_apply_and_resume_mutually_exclusive(tmp_path: Path, monkeypatch: py
     assert result.exit_code != 0 and "mutually exclusive" in result.output
 
 
-def test_spec_remains_annotation_only() -> None:
-    """S3b ships the migration only; the resolution flip is a separate later effort."""
+def test_spec_resolution_is_flipped_on() -> None:
+    """S3b flip: spec: resolution is ON, so spec is no longer annotation-only; only meta remains."""
     from science_tool.graph.sources import _ANNOTATION_REF_PREFIXES
 
-    assert _ANNOTATION_REF_PREFIXES == frozenset({"meta", "spec"})
+    assert _ANNOTATION_REF_PREFIXES == frozenset({"meta"})

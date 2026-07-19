@@ -800,23 +800,21 @@ def is_external_reference(raw: str, *, known_prefixes: frozenset[str] | None = N
 
 
 # Annotation-only reference namespaces: pointer FIELDS an author keeps in source
-# files (e.g. `meta:<phase>` process tags, `spec:<design-doc>` pointers) whose
-# individual metadata-reference edges are intentionally NOT materialized and
-# require no resolvable target. As of S3a `spec` is a first-class entity kind, so
-# a spec FILE materializes as a node and an authored `spec -> spec` supersedes
-# edge materializes; only ordinary `spec:` metadata-reference fields stay
-# suppressed here. Removing `spec` (turning that resolution on) is S3b.
-_ANNOTATION_REF_PREFIXES = frozenset({"meta", "spec"})
+# files (e.g. `meta:<phase>` process tags) whose individual metadata-reference
+# edges are intentionally NOT materialized and require no resolvable target. As of
+# S3b `spec` is a fully resolved first-class entity kind: a spec FILE materializes
+# as a node and every `spec:` reference (ordinary pointer fields included) resolves
+# to it and materializes an edge, so `spec` is no longer suppressed here.
+_ANNOTATION_REF_PREFIXES = frozenset({"meta"})
 
 
 def is_metadata_reference(raw: str) -> bool:
-    """Return True for annotation-only refs (`meta:*`, `spec:*`).
+    """Return True for annotation-only refs (`meta:*`).
 
     These are intentional annotations preserved in source files but excluded from
     KG materialization at the metadata-reference edge level (no target required,
-    no edge created). `spec:` stays here in S3a even though `spec` is now a
-    first-class kind: its ordinary pointer fields remain annotation-only until
-    S3b turns `spec:*` reference resolution on.
+    no edge created). `spec:` is NOT among them as of S3b: it resolves to a real
+    spec entity and materializes an edge like any other kind reference.
     """
     return any(raw.startswith(f"{prefix}:") for prefix in _ANNOTATION_REF_PREFIXES)
 

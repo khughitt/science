@@ -21,11 +21,12 @@ class TestIsMetadataReference:
         assert is_metadata_reference("meta:cycle1") is True
         assert is_metadata_reference("meta:") is True
 
-    def test_spec_prefix_recognized(self) -> None:
-        # spec: pointers reference design documents, not entities — annotation-only.
-        assert is_metadata_reference("spec:2026-04-12-catalog-health-design") is True
-        assert is_metadata_reference("spec:scope-boundaries") is True
-        assert is_metadata_reference("spec:") is True
+    def test_spec_prefix_not_metadata(self) -> None:
+        # S3b flipped spec: resolution ON: spec is now a first-class entity kind and a
+        # spec: pointer resolves to a real spec entity, so it is NO LONGER annotation-only.
+        assert is_metadata_reference("spec:2026-04-12-catalog-health-design") is False
+        assert is_metadata_reference("spec:scope-boundaries") is False
+        assert is_metadata_reference("spec:") is False
 
     def test_other_prefixes_not_metadata(self) -> None:
         assert is_metadata_reference("topic:genomics") is False

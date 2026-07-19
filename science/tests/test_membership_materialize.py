@@ -109,8 +109,9 @@ def test_non_bundle_frame_is_loud_fail(tmp_path: Path):
 
 
 def test_metadata_ref_in_discusses_is_skipped_not_membership(tmp_path: Path):
-    # meta:/spec: are the global annotation escape hatch — skipped, never rejected,
-    # and never producing a membership node.
+    # meta: is the global annotation escape hatch — skipped, never rejected, and never
+    # producing a membership node. (spec: is no longer an escape hatch as of S3b: it
+    # resolves, and a spec: in discusses would fail as a non-bundle frame.)
     _prop(tmp_path, "p1", '["meta:see-also"]')
     knowledge = _knowledge(tmp_path)
     prop = _entity_uri("proposition:p1")

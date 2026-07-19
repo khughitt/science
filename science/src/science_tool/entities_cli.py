@@ -403,8 +403,9 @@ def entity_migrate_hypothesis(
 def entity_migrate_specs(apply_changes: bool, resume_interrupted: bool, output_format: str) -> None:
     """Canonicalize this project's legacy/loose spec docs to numeric `entities/specs/NNNN-slug.md`.
 
-    `spec:` references still resolve as annotation-only today — this command makes a project
-    flip-ready; it does not change resolution. Plan-then-`--apply`; an interrupted apply is `--resume`d.
+    `spec:` references resolve to real spec entities (S3b flip is live), so canonicalizing keeps
+    every pointer valid; old ids are preserved as aliases. Plan-then-`--apply`; an interrupted
+    apply is `--resume`d.
     """
     from science_tool.entities import EntityCommandError
     from science_tool.migrate_specs import SpecMigrationRefused, migrate, resume
