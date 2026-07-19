@@ -8,10 +8,15 @@ links, DOIs, PMIDs, typed entity refs in frontmatter, and (with
 
 Scans `paths.doc_dir` (default `doc/`), `paths.entities_dir` (default
 `entities/`), and root `README.md`. The body-prose typed-ref scan
-(opt-in via `--include-body`) validates against the frontmatter `id:`
-sweep — a walk over every markdown file's `id:` field, collecting
-`<kind>:<slug>` strings whose kind is in the canonical local-entity-kinds
-set.
+(opt-in via `--include-body`) validates each `<kind>:<slug>` ref against the
+project's configured entity ID index — the frontmatter `id:` sweep by
+default, or `knowledge/graph.trig` when `entity_index_source:
+knowledge_graph` is set (see `entity_index_source` below). A body ref
+resolves by **exact canonical id or unique digit-lead prefix** — so
+`plan:0019` resolves to the sole `plan:0019-…` entity, while a prefix owned
+by two or more entities is reported as an ambiguous short ref (cite the full
+id), and a non-numeric short prefix (`dataset:gtex`) resolves by exact id
+only.
 
 ## Project config
 

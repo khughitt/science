@@ -1553,6 +1553,68 @@ class TestBodyTypedRefScan:
         issues = check_refs(root, include_body=True)
         assert [i for i in issues if i.ref_type == "body-entity-ref"] == []
 
+    def test_short_digit_lead_prefix_resolves(self, tmp_path):
+        from science_tool.refs import check_refs
+
+        root = self._project(tmp_path)
+        (root / "doc" / "plan19.md").write_text(
+            "---\nid: plan:0019-t071-panel\nkind: plan\n---\nBody.\n"
+        )
+        (root / "doc" / "report.md").write_text(
+            "---\nkind: report\n---\nSee plan:0019 for the design.\n"
+        )
+        issues = check_refs(root, include_body=True)
+        assert [i for i in issues if i.ref_type == "body-entity-ref"] == []
+
+    def test_ambiguous_short_prefix_gets_ambiguity_diagnostic(self, tmp_path):
+        from science_tool.refs import check_refs
+
+        root = self._project(tmp_path)
+        (root / "doc" / "plan19a.md").write_text(
+            "---\nid: plan:0019-alpha\nkind: plan\n---\nBody.\n"
+        )
+        (root / "doc" / "plan19b.md").write_text(
+            "---\nid: plan:0019-beta\nkind: plan\n---\nBody.\n"
+        )
+        (root / "doc" / "report.md").write_text(
+            "---\nkind: report\n---\nSee plan:0019 for the design.\n"
+        )
+        issues = check_refs(root, include_body=True)
+        body = [i for i in issues if i.ref_type == "body-entity-ref"]
+        assert len(body) == 1
+        assert body[0].ref_value == "plan:0019"
+        assert "ambiguous short entity ref" in body[0].message
+        assert "2" in body[0].message
+
+    def test_non_numeric_short_prefix_still_flagged(self, tmp_path):
+        from science_tool.refs import check_refs
+
+        root = self._project(tmp_path)
+        (root / "doc" / "gtex.md").write_text(
+            "---\nid: dataset:gtex-v8\nkind: dataset\n---\nBody.\n"
+        )
+        (root / "doc" / "report.md").write_text(
+            "---\nkind: report\n---\nSee dataset:gtex for the source.\n"
+        )
+        issues = check_refs(root, include_body=True)
+        body = [i for i in issues if i.ref_type == "body-entity-ref"]
+        assert len(body) == 1
+        assert body[0].ref_value == "dataset:gtex"
+        assert "ambiguous" not in body[0].message
+
+    def test_not_found_message_is_source_neutral(self, tmp_path):
+        from science_tool.refs import check_refs
+
+        root = self._project(tmp_path)
+        (root / "doc" / "report.md").write_text(
+            "---\nkind: report\n---\nSee task:t999 for the gap.\n"
+        )
+        issues = check_refs(root, include_body=True)
+        body = [i for i in issues if i.ref_type == "body-entity-ref"]
+        assert len(body) == 1
+        assert "frontmatter" not in body[0].message
+        assert "not found in project entity id index" in body[0].message
+
 
 def test_refs_check_include_body_flag_emits_typed_ref_issues(tmp_path):
     """The CLI `--include-body` flag enables body-typed-ref scanning."""
