@@ -257,6 +257,43 @@ def test_oversized_markdown_still_blocks(tmp_path: Path) -> None:
     assert report["scan_complete"] is False
 
 
+def test_audit_restrict_missing_to_scopes_reports(tmp_path: Path) -> None:
+    """`restrict_missing_to` limits 'link to missing' reports to the paths a batch move vacated, so a
+    referrer's pre-existing broken link to an unrelated file is not blamed on the move."""
+    from science_tool.entity_import import audit_moved_references
+
+    project = _spec_project(tmp_path)
+    (project / "entities/specs/0001-a.md").write_text(
+        "---\nid: spec:0001-a\nkind: spec\ntitle: Alpha\n---\nBody.\n", encoding="utf-8"
+    )
+    (project / "doc").mkdir(exist_ok=True)
+    # One link points at a vacated spec path; one is a pre-existing broken link to an unrelated file.
+    (project / "doc/ref.md").write_text("[old](./plans/a.md) and [other](./gone.md)\n", encoding="utf-8")
+
+    unrestricted = audit_moved_references(project, "entities/specs/0001-a.md")
+    assert any("doc/plans/a.md" in p for p in unrestricted)
+    assert any("doc/gone.md" in p for p in unrestricted)
+
+    restricted = audit_moved_references(
+        project, "entities/specs/0001-a.md", restrict_missing_to=frozenset({"doc/plans/a.md"})
+    )
+    assert any("doc/plans/a.md" in p for p in restricted)
+    assert not any("doc/gone.md" in p for p in restricted)
+
+
+def test_apply_ignores_preexisting_broken_link(tmp_path: Path) -> None:
+    """A pre-existing broken prose link elsewhere in the project must not roll back a spec move — the
+    post-move audit fails only on references to the paths this migration vacated."""
+    project = _spec_project(tmp_path)
+    _legacy_spec(project, "doc/plans/a.md", "spec:2026-01-01-a", "Alpha design")
+    (project / "doc/notes").mkdir(parents=True)
+    (project / "doc/notes/unrelated.md").write_text("See [gone](./missing-sibling.md).\n", encoding="utf-8")
+
+    report = migrate(project, apply=True)
+    assert report["legacy_spec_count"] == 0
+    assert list((project / "entities/specs").glob("0001-*.md"))
+
+
 def test_discovery_already_numeric_out_of_home_carries_number(tmp_path: Path) -> None:
     project = _spec_project(tmp_path)
     _write(project / "doc/plans/keep.md", {"id": "spec:0007-keep", "type": "spec", "title": "Keep"})

@@ -842,7 +842,9 @@ def _apply_transaction(project_root: Path, txn: Transaction) -> None:
             mutated.add(source)
         apply_reference_rewrite(project_root, txn.ref_report, exclude=exclude, written=written)
         for dest in txn.destinations:
-            problems = audit_moved_references(project_root, dest.dest_rel, exclude=exclude)
+            problems = audit_moved_references(
+                project_root, dest.dest_rel, exclude=exclude, restrict_missing_to=txn.source_rels
+            )
             if problems:
                 raise SpecMigrationRefused("post-move reference audit failed; the batch was rolled back:\n  " + "\n  ".join(problems))
     except BaseException:
@@ -931,10 +933,11 @@ def resume(project_root: Path) -> dict:
         elif entry["role"] == "moved-source":
             path.unlink(missing_ok=True)
 
+    vacated = frozenset(entry["rel"] for entry in entries if entry["role"] == "moved-source")
     for entry in entries:
         if entry["role"] != "moved-dest":
             continue
-        problems = audit_moved_references(project_root, entry["rel"])
+        problems = audit_moved_references(project_root, entry["rel"], restrict_missing_to=vacated)
         if problems:
             raise SpecMigrationRefused("post-move reference audit failed after resume:\n  " + "\n  ".join(problems))
 
