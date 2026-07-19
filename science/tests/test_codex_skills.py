@@ -2,7 +2,12 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from science_tool.codex_skills import command_to_skill_name, generate_codex_skills
+from science_tool.codex_skills import (
+    COMPANION_SKILLS,
+    command_to_skill_name,
+    companion_to_skill_name,
+    generate_codex_skills,
+)
 
 ROOT = Path(__file__).resolve().parents[2]
 
@@ -70,8 +75,8 @@ def test_generate_codex_skills_emits_all_commands(tmp_path: Path) -> None:
     generated = generate_codex_skills(ROOT, tmp_path)
 
     command_count = len(list((ROOT / "commands").glob("*.md")))
-    assert len(generated) == command_count + 2
-    assert len(list(tmp_path.glob("science-*/SKILL.md"))) == command_count + 2
+    assert len(generated) == command_count + len(COMPANION_SKILLS)
+    assert len(list(tmp_path.glob("science-*/SKILL.md"))) == command_count + len(COMPANION_SKILLS)
 
 
 def test_generate_codex_skills_emits_companion_methodology_skills(tmp_path: Path) -> None:
@@ -91,6 +96,17 @@ def test_generate_codex_skills_emits_companion_methodology_skills(tmp_path: Path
     assert "../research/SKILL.md" not in writing_skill
     assert "../../skills/statistics/SKILL.md" in writing_skill
     assert "../statistics/SKILL.md" not in writing_skill
+
+
+def test_meta_skill_is_mirrored_with_templates(tmp_path: Path) -> None:
+    generated = generate_codex_skills(ROOT, tmp_path)
+    assert "science-skill-development" in generated
+    skill_dir = generated["science-skill-development"].parent
+    assert (skill_dir / "skill-taxonomy.md").is_file()
+    assert (skill_dir / "skill-authoring.md").is_file()
+    assert (skill_dir / "templates" / "router.md").is_file()
+    assert (skill_dir / "templates" / "measurement-qa.md").is_file()
+    assert (skill_dir / "templates" / "practice-guide.md").is_file()
 
 
 def test_add_theme_codex_skill_uses_schema_driven_entity_creation() -> None:
@@ -126,6 +142,15 @@ def test_generate_codex_skills_writes_index(tmp_path: Path) -> None:
         in text
     )
     assert "| `status` | `science-status` | `science-status/SKILL.md` | `commands/status.md` |" in text
+
+
+def test_meta_skill_row_in_index(tmp_path: Path) -> None:
+    generate_codex_skills(ROOT, tmp_path)
+    text = (tmp_path / "INDEX.md").read_text(encoding="utf-8")
+    assert (
+        "| `skill-development` | `science-skill-development` | "
+        "`science-skill-development/SKILL.md` | `skills/meta/SKILL.md` |" in text
+    )
 
 
 def test_codex_install_docs_use_codex_home_skills() -> None:
@@ -745,8 +770,9 @@ def test_agents_md_template_has_no_at_core_includes() -> None:
 def test_generated_command_skills_embed_cli_compatibility_gate(tmp_path: Path) -> None:
     generated = generate_codex_skills(ROOT, tmp_path)
 
+    companion_names = {companion_to_skill_name(c.canonical_name) for c in COMPANION_SKILLS}
     for name, path in generated.items():
-        if name in {"science-research-methodology", "science-scientific-writing"}:
+        if name in companion_names:
             continue
         text = path.read_text(encoding="utf-8")
         assert "SCIENCE_REQUIRED_VERSION=0.3.0" in text, name
