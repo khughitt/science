@@ -26,7 +26,7 @@ For analysis-readiness planning, start at [`../INDEX.md`](../INDEX.md) or run
 | [`survival-and-hierarchical-models.md`](./survival-and-hierarchical-models.md) | Cox / Weibull / mixed-effects / Bayesian hierarchical models |
 | [`compositional-data.md`](./compositional-data.md) | Proportions, fractions, deconvolution outputs, microbiome relative abundance |
 | [`time-series-and-longitudinal-models.md`](./time-series-and-longitudinal-models.md) | Repeated-measure, wearable, sensor, EMA, actigraphy, symptom-diary, cross-lag, or longitudinal models |
-| [`likelihood-model-comparison.md`](./likelihood-model-comparison.md) | Comparing parametric models by likelihood — AIC/BIC/LRT, nested vs non-nested, numerical precision, bootstrap selection stability |
+| [`likelihood-model-comparison.md`](./likelihood-model-comparison.md) | Comparing parametric models by likelihood — AIC/BIC/LRT, nested vs non-nested, numerical precision, bootstrap stability, and Bayesian LOO/ELPD/stacking |
 | [`population-genetics-likelihood.md`](./population-genetics-likelihood.md) | Wright-Fisher / Moran / binomial-segregation likelihoods; selection vs neutral null |
 | [`estimator-certification.md`](./estimator-certification.md) | An analysis fits parameters numerically — an optimiser, a profile likelihood, an ODE — and a threshold, budget, or gate is about to depend on the fit |
 | [`bayesian-workflow.md`](./bayesian-workflow.md) | Building/fitting/reviewing a Bayesian model — priors, MCMC, convergence, calibration, comparison |
