@@ -494,3 +494,37 @@ def test_dataset_under_guard_boundaries(tmp_path):
     idx = build_resolution_index(tmp_path)
     assert "dataset:xyz" not in _resolved_refs("path/dataset:xyz here", idx)   # embedded path
     assert "dataset:xyz" in _resolved_refs("computed from `dataset:xyz`.", idx)  # trailing period ok
+
+
+def _hypothesis(tmp_path: Path, slug: str) -> None:
+    d = tmp_path / "entities" / "hypotheses"
+    d.mkdir(parents=True, exist_ok=True)
+    (d / f"{slug}.md").write_text(
+        f"---\nid: hypothesis:{slug}\nkind: hypothesis\n---\n\nbody\n"
+    )
+
+
+def test_number_anchored_by_provenance_entity_ref(tmp_path):
+    _project(tmp_path)
+    _interp(tmp_path, "0007-altview")
+    idx = build_resolution_index(tmp_path)
+    path = _doc(tmp_path, "The window retained 7399 genes (`interpretation:0007`).",
+                frontmatter="kind: interpretation")
+    out = assess_numeric_claims(build_document_context(path), idx, _CFG)
+    kinds = {type(a).__name__ for a in out if a.claim.value == "7399"}
+    assert kinds == {"Anchored"}
+
+
+def test_number_not_anchored_by_topical_hypothesis_ref(tmp_path):
+    # The hypothesis is REAL and resolvable in the index — proving the claim
+    # stays Unanchored because `hypothesis` is a topical (non-provenance) KIND,
+    # not merely because the ref is fabricated.
+    _project(tmp_path)
+    _hypothesis(tmp_path, "0001-molecular-truth")
+    idx = build_resolution_index(tmp_path)
+    assert idx.resolve("hypothesis:0001-molecular-truth") is True  # it exists…
+    path = _doc(tmp_path, "The ARI z was 221 (`hypothesis:0001-molecular-truth`).",
+                frontmatter="kind: interpretation")
+    out = assess_numeric_claims(build_document_context(path), idx, _CFG)
+    kinds = {type(a).__name__ for a in out if a.claim.value == "221"}
+    assert kinds == {"Unanchored"}   # …yet a topical citation must not clear the claim
