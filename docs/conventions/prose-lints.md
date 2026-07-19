@@ -1,6 +1,6 @@
 # Prose Lints
 
-`science prose lint` detects four classes of prose-quality issue surfaced
+`science prose lint` detects several classes of prose-quality issue surfaced
 by the natural-systems t466 citation-audit pilot. Each lint is mechanically
 detectable; LLM-judgment claims (e.g., "field-state consensus claims") are
 handled by the [annotation-token vocabulary](annotation-tokens.md), not by these lints.
@@ -13,12 +13,13 @@ handled by the [annotation-token vocabulary](annotation-tokens.md), not by these
 | `short-form-ids`          | Bare `Q1`, `t088`, `q54` etc. — short forms of canonical entity refs                                                 | `warn`           |
 | `frontmatter-inline-gap`  | Frontmatter `related:` entries that never appear in the document body                                                | `info`           |
 | `numeric-anchor`          | Numeric claims (`ρ = 0.168`, `30%`, `n = 184`) without an anchor token (`task:`, `pipeline/`, `[@…]`) in the same paragraph | `info` |
+| `numeric-verification`    | Bound numeric claims (`numeric_claims:` + `[^id]`) whose prose value disagrees with the artifact value, or whose binding is broken | `warn` |
 
 `--strict` promotes all `info` issues to `warn` and exits non-zero on any issue.
 
 ## Lexical scope
 
-All four lints respect the same scope rules as `science markers scan`:
+All prose lints respect the same scope rules as `science markers scan`:
 
 - Skips YAML frontmatter.
 - Skips fenced code blocks (triple-backtick).
@@ -56,7 +57,7 @@ prose_lint:
     - "CDC 2011"        # org+year, not an author-year citation
 ```
 
-Defaults: all four checks enabled; `anchor_patterns` defaults to `["task:", "pipeline/", "\\[@", "data/", "scripts/"]`; `exclude_paths` defaults to `[]`.
+Defaults: all configured checks enabled; `anchor_patterns` defaults to `["task:", "pipeline/", "\\[@", "data/", "scripts/"]`; `exclude_paths` defaults to `[]`.
 
 `exclude_paths` is a list of project-relative glob patterns for markdown files that
 should not be scanned. Use it for archived/generated prose snapshots whose text is
@@ -295,7 +296,7 @@ checked rather than showing "no issues found."
 
 These lints were extracted from the natural-systems citation-audit pilot
 (t466) which identified six recurring patterns across audited prose. The
-four mechanically-detectable patterns are implemented here. The two
+mechanically-detectable patterns are implemented here. The two
 LLM-judgment patterns ("field-state consensus claims unsupported" and the
 broader "load-bearing claim has no anchor") are handled by the
 [annotation-token vocabulary](annotation-tokens.md): an LLM auditor or
