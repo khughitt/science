@@ -847,3 +847,76 @@ def migrate(project_root: Path, *, apply: bool = False) -> dict:
         )
     _apply_transaction(project_root, plan.transaction)
     return build_report(project_root)  # recompute against the mutated tree
+
+
+_SENTINEL_RE = re.compile(r"^\.(\d+)\.reserving$")
+# moved-dest and referrer must land BEFORE moved-source: never unlink a source until its dest exists.
+_RESUME_ROLE_ORDER = {"moved-dest": 0, "referrer": 1, "moved-source": 2}
+
+
+def _disk_state(path: Path) -> tuple[str, str | None]:
+    if not path.exists() and not path.is_symlink():
+        return ("absent", None)
+    return ("content", hashlib.sha256(path.read_bytes()).hexdigest())
+
+
+def _journal_state(sha_or_none: str | None) -> tuple[str, str | None]:
+    return ("absent", None) if sha_or_none is None else ("content", sha_or_none)
+
+
+def _postimage_state(entry: dict) -> tuple[str, str | None]:
+    post = entry["postimage"]
+    return ("absent", None) if post is None else ("content", hashlib.sha256(post.encode("utf-8")).hexdigest())
+
+
+def resume(project_root: Path) -> dict:
+    """Finish an INTERRUPTED write pass from its journal. Never re-plans."""
+    project_root = Path(project_root).resolve()
+    journal = project_root / JOURNAL_PATH
+    if not journal.is_file():
+        raise SpecMigrationRefused(f"{JOURNAL_PATH} does not exist: there is no interrupted transaction.")
+
+    entries = json.loads(journal.read_text(encoding="utf-8"))["entries"]
+    spec_dir = project_root / _spec_root(project_root)
+
+    journaled_numbers = {entry["number"] for entry in entries if entry["role"] == "moved-dest"}
+    if spec_dir.is_dir():
+        for sentinel in spec_dir.glob(".*.reserving"):
+            match = _SENTINEL_RE.match(sentinel.name)
+            if match is not None and int(match.group(1)) not in journaled_numbers:
+                raise SpecMigrationRefused(f"{sentinel.name}: a reservation sentinel for a number this migration does not own; refusing (single-writer).")
+
+    todo: list[dict] = []
+    refusals: list[str] = []
+    for entry in entries:
+        state = _disk_state(project_root / entry["rel"])
+        if state == _postimage_state(entry):
+            continue
+        if state == _journal_state(entry["preimage_sha256"]):
+            todo.append(entry)
+            continue
+        refusals.append(f"{entry['rel']}: neither the pre-image nor the post-image the migration planned (a partial or externally-changed file). Restore it and re-run.")
+    if refusals:
+        raise SpecMigrationRefused("The interrupted migration cannot be resumed. NOTHING further was written.\n  " + "\n  ".join(refusals))
+
+    for number in journaled_numbers:  # clear sentinels at BOTH crash points (dest-absent and dest-committed)
+        (spec_dir / f".{number:04d}.reserving").unlink(missing_ok=True)
+
+    for entry in sorted(todo, key=lambda e: _RESUME_ROLE_ORDER[e["role"]]):
+        path = project_root / entry["rel"]
+        if entry["role"] == "moved-dest":
+            claim_number_in_dir(project_root, "spec", entry["number"], entry["local_part"], entry["postimage"])
+        elif entry["role"] == "referrer":
+            atomic_write_text(path, entry["postimage"])
+        elif entry["role"] == "moved-source":
+            path.unlink(missing_ok=True)
+
+    for entry in entries:
+        if entry["role"] != "moved-dest":
+            continue
+        problems = audit_moved_references(project_root, entry["rel"])
+        if problems:
+            raise SpecMigrationRefused("post-move reference audit failed after resume:\n  " + "\n  ".join(problems))
+
+    journal.unlink()
+    return build_report(project_root)

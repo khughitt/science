@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json as _json
 from pathlib import Path
 from unittest import mock
 
@@ -24,6 +25,7 @@ from science_tool.migrate_specs import (
     discover_specs,
     migrate,
     project_legacy_frontmatter,
+    resume,
 )
 
 
@@ -609,3 +611,126 @@ def test_migrate_apply_refuses_incomplete_scan_before_any_mutation(tmp_path: Pat
     assert not list((project / "entities/specs").glob("*.md"))      # no destination minted
     assert ref.read_text(encoding="utf-8") == ref_pre               # referrer untouched
     assert not (project / JOURNAL_PATH).exists()                    # no journal written
+
+
+def _journal(project: Path, entries: list[dict]) -> None:
+    journal = project / JOURNAL_PATH
+    journal.parent.mkdir(parents=True, exist_ok=True)
+    journal.write_text(_json.dumps({"entries": entries}, indent=2) + "\n", encoding="utf-8")
+
+
+def _sha(text: str) -> str:
+    import hashlib
+
+    return hashlib.sha256(text.encode("utf-8")).hexdigest()
+
+
+_DEST_TEXT = "---\nid: spec:0001-alpha\nkind: spec\ntitle: Alpha\naliases:\n- spec:date-a\ncreated: '2026-01-01'\nupdated: '2026-01-01'\n---\n\nBody.\n"
+
+
+def test_resume_finishes_interrupted_pass(tmp_path: Path) -> None:
+    project = _spec_project(tmp_path)
+    src = _legacy_spec(project, "doc/plans/a.md", "spec:date-a", "Alpha")
+    src_text = src.read_text(encoding="utf-8")
+    ref = _write(project / "doc/ref.md", {"id": "design:0001-r", "kind": "design", "title": "R", "related": ["spec:date-a"]})
+    ref_pre = ref.read_text(encoding="utf-8")
+    ref_post = ref_pre.replace("spec:date-a", "spec:0001-alpha")
+    _journal(project, [
+        {"role": "moved-source", "rel": "doc/plans/a.md", "preimage_sha256": _sha(src_text), "postimage": None},
+        {"role": "moved-dest", "rel": "entities/specs/0001-alpha.md", "preimage_sha256": None, "postimage": _DEST_TEXT, "number": 1, "local_part": "0001-alpha"},
+        {"role": "referrer", "rel": "doc/ref.md", "preimage_sha256": _sha(ref_pre), "postimage": ref_post},
+    ])
+
+    resume(project)
+
+    assert not (project / "doc/plans/a.md").exists()
+    assert (project / "entities/specs/0001-alpha.md").read_text(encoding="utf-8") == _DEST_TEXT
+    assert (project / "doc/ref.md").read_text(encoding="utf-8") == ref_post
+    assert not (project / JOURNAL_PATH).exists()
+
+
+def test_resume_replays_dest_before_source_so_source_survives_claim_failure(tmp_path: Path) -> None:
+    project = _spec_project(tmp_path)
+    src = _legacy_spec(project, "doc/plans/a.md", "spec:date-a", "Alpha")
+    src_text = src.read_text(encoding="utf-8")
+    _journal(project, [
+        {"role": "moved-source", "rel": "doc/plans/a.md", "preimage_sha256": _sha(src_text), "postimage": None},
+        {"role": "moved-dest", "rel": "entities/specs/0001-alpha.md", "preimage_sha256": None, "postimage": _DEST_TEXT, "number": 1, "local_part": "0001-alpha"},
+    ])
+
+    from science_tool import migrate_specs
+
+    with mock.patch.object(migrate_specs, "claim_number_in_dir", mock.Mock(side_effect=OSError("boom"))):
+        with pytest.raises(OSError, match="boom"):
+            resume(project)
+
+    # the source must NOT have been unlinked before the (failed) dest claim
+    assert (project / "doc/plans/a.md").read_text(encoding="utf-8") == src_text
+
+
+def test_resume_refuses_partial_moved_dest_third_state(tmp_path: Path) -> None:
+    project = _spec_project(tmp_path)
+    partial = project / "entities/specs/0001-alpha.md"
+    partial.parent.mkdir(parents=True, exist_ok=True)
+    partial.write_text("PARTIAL", encoding="utf-8")
+    _journal(project, [{"role": "moved-dest", "rel": "entities/specs/0001-alpha.md", "preimage_sha256": None, "postimage": "FULL", "number": 1, "local_part": "0001-alpha"}])
+    with pytest.raises(SpecMigrationRefused, match="neither"):
+        resume(project)
+
+
+def test_resume_clears_sentinel_when_dest_already_committed(tmp_path: Path) -> None:
+    project = _spec_project(tmp_path)
+    (project / "entities/specs").mkdir(parents=True, exist_ok=True)
+    (project / "entities/specs/0001-alpha.md").write_text(_DEST_TEXT, encoding="utf-8")  # already at postimage
+    (project / "entities/specs/.0001.reserving").write_text("", encoding="utf-8")  # dest-committed + sentinel
+    _journal(project, [{"role": "moved-dest", "rel": "entities/specs/0001-alpha.md", "preimage_sha256": None, "postimage": _DEST_TEXT, "number": 1, "local_part": "0001-alpha"}])
+    resume(project)
+    assert not (project / "entities/specs/.0001.reserving").exists()  # cleared at the dest-committed crash point
+    assert not (project / JOURNAL_PATH).exists()
+
+
+def test_resume_reclaims_dest_when_absent_with_sentinel(tmp_path: Path) -> None:
+    # the OTHER crash point: sentinel created but the dest was never written. Resume clears the
+    # sentinel and re-claims the dest (claim's own `finally` removes the sentinel it re-creates).
+    project = _spec_project(tmp_path)
+    (project / "entities/specs").mkdir(parents=True, exist_ok=True)
+    (project / "entities/specs/.0001.reserving").write_text("", encoding="utf-8")  # dest-absent + sentinel
+    _journal(project, [{"role": "moved-dest", "rel": "entities/specs/0001-alpha.md", "preimage_sha256": None, "postimage": _DEST_TEXT, "number": 1, "local_part": "0001-alpha"}])
+    resume(project)
+    assert (project / "entities/specs/0001-alpha.md").read_text(encoding="utf-8") == _DEST_TEXT
+    assert not (project / "entities/specs/.0001.reserving").exists()
+    assert not (project / JOURNAL_PATH).exists()
+
+
+def test_resume_retains_journal_when_post_move_audit_fails(tmp_path: Path) -> None:
+    # a NON-empty post-move audit must NOT delete the journal: the operator fixes the tree and re-resumes.
+    project = _spec_project(tmp_path)
+    src = _legacy_spec(project, "doc/plans/a.md", "spec:date-a", "Alpha")
+    src_text = src.read_text(encoding="utf-8")
+    _journal(project, [
+        {"role": "moved-source", "rel": "doc/plans/a.md", "preimage_sha256": _sha(src_text), "postimage": None},
+        {"role": "moved-dest", "rel": "entities/specs/0001-alpha.md", "preimage_sha256": None, "postimage": _DEST_TEXT, "number": 1, "local_part": "0001-alpha"},
+    ])
+
+    from science_tool import migrate_specs
+
+    with mock.patch.object(migrate_specs, "audit_moved_references", mock.Mock(return_value=["boom"])):
+        with pytest.raises(SpecMigrationRefused, match="audit"):
+            resume(project)
+
+    assert (project / JOURNAL_PATH).exists()  # retained for a retry
+
+
+def test_resume_refuses_with_no_journal(tmp_path: Path) -> None:
+    project = _spec_project(tmp_path)
+    with pytest.raises(SpecMigrationRefused, match="no interrupted"):
+        resume(project)
+
+
+def test_resume_refuses_stray_sentinel_for_non_journaled_number(tmp_path: Path) -> None:
+    project = _spec_project(tmp_path)
+    (project / "entities/specs").mkdir(parents=True, exist_ok=True)
+    (project / "entities/specs/.0009.reserving").write_text("", encoding="utf-8")
+    _journal(project, [{"role": "moved-dest", "rel": "entities/specs/0001-a.md", "preimage_sha256": None, "postimage": "FULL", "number": 1, "local_part": "0001-a"}])
+    with pytest.raises(SpecMigrationRefused, match="does not own"):
+        resume(project)
