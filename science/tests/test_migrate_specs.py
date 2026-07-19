@@ -14,6 +14,7 @@ from science_tool.migrate_specs import (
     LEGACY_ALIAS,
     RUNTIME_ONLY,
     SpecMigrationRefused,
+    discover_specs,
     project_legacy_frontmatter,
 )
 
@@ -134,3 +135,92 @@ def test_projection_refuses_missing_id_or_title() -> None:
         project_legacy_frontmatter({"type": "spec", "title": "T", "date": "2026-01-01"}, source_rel="doc/x.md")
     with pytest.raises(SpecMigrationRefused, match="title"):
         project_legacy_frontmatter({"id": "spec:x", "type": "spec", "date": "2026-01-01"}, source_rel="doc/x.md")
+
+
+def _write(path: Path, frontmatter: dict, body: str = "Body.\n") -> Path:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(f"---\n{yaml.safe_dump(frontmatter, sort_keys=False)}---\n\n{body}", encoding="utf-8")
+    return path
+
+
+def _legacy_spec(project: Path, rel: str, spec_id: str, title: str, **extra: object) -> Path:
+    """A canonical legacy spec doc — always carries `date` and a mappable `status` so projection
+    accepts it. Use everywhere a migrating doc must survive `_plan_all`."""
+    fm: dict[str, object] = {"id": spec_id, "type": "spec", "title": title, "date": "2026-01-01", "status": "draft"}
+    fm.update(extra)
+    return _write(project / rel, fm)
+
+
+def test_discovery_finds_loose_specs_and_skips_conforming(tmp_path: Path) -> None:
+    project = _spec_project(tmp_path)
+    _write(project / "doc/plans/a.md", {"id": "spec:2026-01-01-a", "type": "spec", "title": "A"})
+    _write(project / "doc/specs/b.md", {"id": "spec:semantic-b", "kind": "spec", "title": "B"})
+    _write(project / "entities/specs/0009-c.md", {"id": "spec:0009-c", "kind": "spec", "title": "C"})  # conforming
+    _write(project / "doc/plans/d.md", {"id": "design:0001-d", "kind": "design", "title": "D"})  # not a spec
+
+    disc = discover_specs(project)
+    assert {ls.old_id for ls in disc.legacy} == {"spec:2026-01-01-a", "spec:semantic-b"}
+    assert disc.singletons == []
+    assert disc.scan_skips == []
+
+
+def test_discovery_reports_singleton_home(tmp_path: Path) -> None:
+    project = _spec_project(tmp_path)
+    _write(project / "entities/research-question.md", {"id": "spec:research-question", "kind": "spec", "title": "RQ"})
+    disc = discover_specs(project)
+    assert [s.rel_path for s in disc.singletons] == ["entities/research-question.md"]
+    assert disc.legacy == []
+
+
+def test_discovery_already_numeric_out_of_home_carries_number(tmp_path: Path) -> None:
+    project = _spec_project(tmp_path)
+    _write(project / "doc/plans/keep.md", {"id": "spec:0007-keep", "type": "spec", "title": "Keep"})
+    disc = discover_specs(project)
+    assert len(disc.legacy) == 1 and disc.legacy[0].already_numeric == 7
+
+
+def test_discovery_refuses_spec_doc_without_id(tmp_path: Path) -> None:
+    project = _spec_project(tmp_path)
+    _write(project / "doc/plans/noid.md", {"type": "spec", "title": "No Id"})
+    with pytest.raises(SpecMigrationRefused, match="without a declared"):
+        discover_specs(project)
+
+
+def test_discovery_refuses_malformed_spec_id_with_separators(tmp_path: Path) -> None:
+    project = _spec_project(tmp_path)
+    _write(project / "doc/plans/evil.md", {"id": "spec:0007-x/../../outside", "type": "spec", "title": "Evil"})
+    with pytest.raises(SpecMigrationRefused, match="malformed"):
+        discover_specs(project)
+
+
+def test_discovery_refuses_in_home_stem_id_mismatch(tmp_path: Path) -> None:
+    project = _spec_project(tmp_path)
+    # conforming filename stem 0009-c, but the declared id says 0008 — do not silently skip
+    _write(project / "entities/specs/0009-c.md", {"id": "spec:0008-c", "kind": "spec", "title": "C"})
+    with pytest.raises(SpecMigrationRefused, match="disagree"):
+        discover_specs(project)
+
+
+def test_discovery_oversized_markdown_becomes_scan_skip(tmp_path: Path) -> None:
+    project = _spec_project(tmp_path)
+    from science_tool.text_scan import MAX_SCANNABLE_BYTES
+
+    (project / "doc/plans").mkdir(parents=True, exist_ok=True)
+    (project / "doc/plans/huge.md").write_text("x" * (MAX_SCANNABLE_BYTES + 1), encoding="utf-8")
+    assert any(s.path == "doc/plans/huge.md" for s in discover_specs(project).scan_skips)
+
+
+def test_discovery_oversized_non_markdown_becomes_scan_skip(tmp_path: Path) -> None:
+    project = _spec_project(tmp_path)
+    from science_tool.text_scan import MAX_SCANNABLE_BYTES
+
+    (project / "src").mkdir(parents=True, exist_ok=True)
+    (project / "src/huge.py").write_text("x" * (MAX_SCANNABLE_BYTES + 1), encoding="utf-8")
+    assert any(s.path == "src/huge.py" for s in discover_specs(project).scan_skips)
+
+
+def test_discovery_unreadable_markdown_becomes_scan_skip(tmp_path: Path) -> None:
+    project = _spec_project(tmp_path)
+    (project / "doc/plans").mkdir(parents=True, exist_ok=True)
+    (project / "doc/plans/bad.md").write_bytes(b"\xff\xfe not utf-8")
+    assert any(s.path == "doc/plans/bad.md" for s in discover_specs(project).scan_skips)
