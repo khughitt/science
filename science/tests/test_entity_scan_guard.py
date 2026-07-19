@@ -37,6 +37,7 @@ ALLOWLIST: set[str] = {
     "entities_inventory.py",                # _latest_activity scans project_root (skip-set added)
     "prose.py", "prose_lint.py", "markers.py", "refs.py",
     "skills_lint/lint.py", "cli.py",
+    "skills_lint/cli.py",  # scans skills/ (source-provenance dependency views), not entities/
 }
 
 

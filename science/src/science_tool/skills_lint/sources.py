@@ -178,7 +178,7 @@ def load_sources(path: Path) -> SourcesRegistry:
     return SourcesRegistry(records=records, errors=errors, declared_ids=frozenset(str(k) for k in raw))
 
 
-def parse_frontmatter(path: Path) -> dict[str, Any] | None:
+def _leaf_frontmatter(path: Path) -> dict[str, Any] | None:
     text = path.read_text(encoding="utf-8")
     if not text.startswith("---\n"):
         return None
@@ -193,7 +193,7 @@ def parse_frontmatter(path: Path) -> dict[str, Any] | None:
 
 
 def leaf_source_refs(path: Path) -> tuple[list[str] | None, str | None]:
-    frontmatter = parse_frontmatter(path)
+    frontmatter = _leaf_frontmatter(path)
     if frontmatter is None or "sources" not in frontmatter:
         return None, None
     raw = frontmatter["sources"]
