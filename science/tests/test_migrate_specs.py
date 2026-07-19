@@ -8,8 +8,10 @@ from unittest import mock
 
 import pytest
 import yaml
+from click.testing import CliRunner
 from science_model.frontmatter import split_frontmatter
 
+from science_tool.entities_cli import entity_group
 from science_tool.entity_reservation import claim_number_in_dir
 from science_tool.migrate_specs import (
     CANONICAL_SPEC_STATUS,
@@ -734,3 +736,39 @@ def test_resume_refuses_stray_sentinel_for_non_journaled_number(tmp_path: Path) 
     _journal(project, [{"role": "moved-dest", "rel": "entities/specs/0001-a.md", "preimage_sha256": None, "postimage": "FULL", "number": 1, "local_part": "0001-a"}])
     with pytest.raises(SpecMigrationRefused, match="does not own"):
         resume(project)
+
+
+def test_cli_json_dry_run_emits_schema(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    project = _spec_project(tmp_path)
+    _legacy_spec(project, "doc/plans/a.md", "spec:date-a", "Alpha")
+    monkeypatch.chdir(project)
+    result = CliRunner().invoke(entity_group, ["migrate-specs", "--format", "json"])
+    assert result.exit_code == 0, result.output
+    payload = _json.loads(result.output)
+    assert payload["flip_ready"] is False and payload["legacy_spec_count"] == 1
+    assert list((project / "entities/specs").glob("*.md")) == []
+
+
+def test_cli_apply_then_flip_ready(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    project = _spec_project(tmp_path)
+    _legacy_spec(project, "doc/plans/a.md", "spec:date-a", "Alpha")
+    monkeypatch.chdir(project)
+    applied = CliRunner().invoke(entity_group, ["migrate-specs", "--apply", "--format", "json"])
+    assert applied.exit_code == 0, applied.output
+    assert _json.loads(applied.output)["flip_ready"] is True
+    assert (project / "entities/specs/0001-alpha.md").exists()
+
+
+def test_cli_refusal_becomes_click_exception(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    project = _spec_project(tmp_path)
+    _write(project / "doc/plans/a.md", {"id": "spec:date-a", "type": "spec", "title": "A", "date": "2026-01-01", "status": "approved"})
+    monkeypatch.chdir(project)
+    result = CliRunner().invoke(entity_group, ["migrate-specs", "--format", "json"])
+    assert result.exit_code != 0 and "approved" in result.output
+
+
+def test_cli_apply_and_resume_mutually_exclusive(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    project = _spec_project(tmp_path)
+    monkeypatch.chdir(project)
+    result = CliRunner().invoke(entity_group, ["migrate-specs", "--apply", "--resume"])
+    assert result.exit_code != 0 and "mutually exclusive" in result.output
