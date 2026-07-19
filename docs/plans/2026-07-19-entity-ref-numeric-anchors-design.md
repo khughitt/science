@@ -1,6 +1,9 @@
 # Entity-ref citations as numeric-anchor anchors — design
 
-**Status:** rev 4 (2026-07-19) — pending review
+**Status:** rev 5 (2026-07-19) — pending review. rev 5 corrects the extraction
+grammar: the id body is now an **atomic** group with an id-scoped no-`..`
+lookahead, closing two truncation-masking vectors (`interpretation:0007.foo@host`
+and `paper:bad..id`) that the rev-4 non-atomic pattern left open.
 **Scope:** `numeric-anchor` prose lint (Part A engine). Single subsystem.
 **Origin:** pan-disease t108. Surfaced while dogfooding numeric-provenance on
 pan-disease: some residual numeric-anchor findings are numbers whose paragraph
@@ -110,7 +113,7 @@ are topical, so they keep their current behavior; only `dataset`, now an
 entity-ref anchor, moves under the guard.
 
 ```
-(?<![A-Za-z0-9_.:/@-])(interpretation|validation-report|pre-registration|dataset|…):([0-9A-Za-z](?:[0-9A-Za-z._-]*[0-9A-Za-z])?)(?![A-Za-z0-9_:/@-])
+(?<![A-Za-z0-9_.:/@-])(interpretation|validation-report|pre-registration|dataset|…):(?![A-Za-z0-9._-]*\.\.)(?>[0-9A-Za-z](?:[0-9A-Za-z._-]*[0-9A-Za-z])?)(?![A-Za-z0-9_:/@-])
 ```
 
 Boundary guards:
@@ -120,12 +123,22 @@ Boundary guards:
   `path/interpretation:0013`, `a:interpretation:0013`.
 - Explicit kind alternation — only allowlisted kinds match; `hypothesis:` etc.
   never match.
-- id charset `[0-9A-Za-z](?:[0-9A-Za-z._-]*[0-9A-Za-z])?` — an alnum start, an
-  **alnum terminal**, and internal `. _ -`. This matches the `_VERBATIM_RE` id
-  policy (entities.py:193) so legal dotted ids extract
-  (`paper:Volker2023.source`, allowlisted `paper`), while the required alnum
-  terminal keeps a trailing sentence period outside the match
-  (`interpretation:0013.` captures `interpretation:0013`).
+- id-scoped no-`..` lookahead `(?![A-Za-z0-9._-]*\.\.)` — if the id char-run
+  contains consecutive dots, the whole alternative fails and yields **no**
+  candidate (not a truncated prefix). This is the sole malformed-id
+  restriction, exactly matching `_VERBATIM_RE`'s single no-`..` rule
+  (entities.py:193); legal forms with internal `.-`/`--` (`paper:good.-id`)
+  still extract whole.
+- **Atomic** id body `(?>[0-9A-Za-z](?:[0-9A-Za-z._-]*[0-9A-Za-z])?)` — the
+  full `_VERBATIM_RE` charset (alnum start, **alnum terminal**, internal
+  `. _ -`), so legal dotted ids extract (`paper:Volker2023.source`,
+  allowlisted `paper`) and a trailing sentence period stays outside
+  (`interpretation:0013.` → `interpretation:0013`). The atomic group is
+  load-bearing: without it the id could **backtrack to a shorter, resolvable
+  form** when a longer match fails the right lookahead
+  (`interpretation:0007.foo@host` would otherwise truncate to a resolvable
+  `interpretation:0007`). Locked, it fails outright instead. Python 3.13's
+  `re` supports `(?>…)`.
 - Right `(?![A-Za-z0-9_:/@-])` — rejects `interpretation:0013@host`,
   `interpretation:0013/x`, `interpretation:0013:extra`.
 

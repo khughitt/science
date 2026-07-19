@@ -4,7 +4,7 @@
 
 **Goal:** Let `numeric-anchor` recognize resolvable, provenance-bearing typed entity-ref citations (`interpretation:0011-…`, short `plan:0023`, `dataset:gtex`) as paragraph-local anchors, without masking — so genuinely-grounded numbers stop flagging while topical citations, fabricated refs, ambiguous prefixes, and embedded substrings still flag.
 
-**Architecture:** Three contained changes in `src/science_tool/numeric_provenance.py` (a provenance-kind allowlist driving one guarded `_BODY_REF_RE` branch; short numeric-prefix resolution on `ResolutionIndex`), plus a one-kind correction to `refs._LOCAL_ENTITY_KINDS` and a detector-version bump. Design: [`2026-07-19-entity-ref-numeric-anchors-design.md`](2026-07-19-entity-ref-numeric-anchors-design.md) (rev 4, approved).
+**Architecture:** Three contained changes in `src/science_tool/numeric_provenance.py` (a provenance-kind allowlist driving one guarded `_BODY_REF_RE` branch; short numeric-prefix resolution on `ResolutionIndex`), plus a one-kind correction to `refs._LOCAL_ENTITY_KINDS` and a detector-version bump. Design: [`2026-07-19-entity-ref-numeric-anchors-design.md`](2026-07-19-entity-ref-numeric-anchors-design.md) (rev 5).
 
 **Tech Stack:** Python 3.13, `re`, pydantic-free dataclasses; pytest; run from `science/` with `uv run --frozen`.
 
@@ -230,7 +230,7 @@ resolve, so a citation cannot silently anchor to a guessed entity."
 
 **Interfaces:**
 - Consumes: `ResolutionIndex.resolve` (Task 2) via `local_candidates_for_paragraph`.
-- Produces: `_ANCHOR_ENTITY_KINDS: frozenset[str]`; `_BODY_REF_RE` matches allowlisted `<kind>:<id>` (full or short, incl. dotted ids like `paper:Volker2023.source`) with two-sided boundary guards and an **atomic** id-body match, and no longer has a standalone `dataset:` alternative. The id body is `[0-9A-Za-z]+(?:[._-][0-9A-Za-z]+)*` wrapped in an atomic group `(?>…)`: alnum runs joined by *single* separators (so consecutive `..`/`--` never match, mirroring `_VERBATIM_RE`'s no-`..` rule and guaranteeing an alnum terminal), and atomicity forbids backtracking to a shorter id — so `interpretation:0007.foo@host` fails entirely instead of truncating to a resolvable `interpretation:0007`.
+- Produces: `_ANCHOR_ENTITY_KINDS: frozenset[str]`; `_BODY_REF_RE` matches allowlisted `<kind>:<id>` (full or short, incl. dotted ids like `paper:Volker2023.source` and `paper:good.-id`) with two-sided boundary guards, an **id-scoped no-`..` lookahead**, and an **atomic** id-body match, and no longer has a standalone `dataset:` alternative. The id body uses the full `_VERBATIM_RE` charset `[0-9A-Za-z](?:[0-9A-Za-z._-]*[0-9A-Za-z])?` inside an atomic group `(?>…)`: alnum start/terminal (a trailing sentence period stays outside), arbitrary internal `._-`. The **only** malformed-id restriction is the preceding `(?![A-Za-z0-9._-]*\.\.)` lookahead — a `..` anywhere in the id run makes the whole alternative fail (no truncated `paper:bad` survives), exactly matching `_VERBATIM_RE`'s single no-`..` rule. Atomicity forbids backtracking to a shorter id, so `interpretation:0007.foo@host` fails entirely instead of truncating to a resolvable `interpretation:0007`.
 
 - [ ] **Step 1: Write the failing tests**
 
@@ -287,13 +287,32 @@ def test_dotted_id_not_truncated_before_continuation(tmp_path):
         assert "paper:Volker2023" not in _resolved_refs(para, idx)
 
 
-def test_double_dot_id_is_not_a_valid_ref(tmp_path):
+def _paper(tmp_path: Path, entity_id: str, fname: str) -> None:
+    d = tmp_path / "entities" / "papers"
+    d.mkdir(parents=True, exist_ok=True)
+    (d / fname).write_text(f"---\nid: {entity_id}\nkind: paper\n---\n\nbody\n")
+
+
+def test_double_dot_id_masks_no_shorter_ref(tmp_path):
     # No-`..` rule (mirrors _VERBATIM_RE): a malformed id with consecutive dots
-    # cannot be extracted as its own full form, so it never resolves even if an
-    # entity index somehow carried it.
+    # must extract NOTHING — not even a shorter, resolvable prefix. `paper:bad`
+    # is a REAL entity here, so a truncating grammar would mask the number; the
+    # no-`..` lookahead must prevent any candidate at that position.
     _project(tmp_path)
+    _paper(tmp_path, "paper:bad", "bad.md")
     idx = build_resolution_index(tmp_path)
-    assert "paper:bad..id" not in _refs("value 7.94 (`paper:bad..id`)", idx)
+    assert idx.resolve("paper:bad") is True                       # the short id really exists…
+    assert _refs("value 7.94 (`paper:bad..id`)", idx) == set()    # …yet `..` yields no candidate
+    assert _resolved_refs("value 7.94 (`paper:bad..id`)", idx) == set()
+
+
+def test_internal_dot_hyphen_id_extracts_whole(tmp_path):
+    # `paper:good.-id` is a legal _VERBATIM_RE form (only `..` is banned);
+    # the grammar must extract it whole, not truncate to `paper:good`.
+    _project(tmp_path)
+    _paper(tmp_path, "paper:good.-id", "good.md")
+    idx = build_resolution_index(tmp_path)
+    assert "paper:good.-id" in _resolved_refs("value 7.94 (`paper:good.-id`)", idx)
 
 
 def test_topical_kinds_are_not_extracted(tmp_path):
@@ -328,8 +347,8 @@ def test_dataset_under_guard_boundaries(tmp_path):
 
 - [ ] **Step 2: Run tests to verify they fail**
 
-Run: `uv run --frozen pytest tests/test_numeric_provenance.py -k "provenance_entity_ref or dotted_verbatim or dotted_id_not_truncated or double_dot_id or topical_kinds or embedded_tokens or dataset_under_guard" -v`
-Expected: FAIL — the positive/extraction tests (`provenance_entity_ref`, `dotted_verbatim`) fail because entity-ref kinds are not yet extracted, and `dataset_under_guard` fails because the old `dataset:` branch masks `path/dataset:xyz` and drops the trailing period. (The negative guards — `dotted_id_not_truncated`, `double_dot_id`, `topical_kinds`, `embedded_tokens` — may pass trivially pre-change since nothing is extracted; they lock the post-change contract.)
+Run: `uv run --frozen pytest tests/test_numeric_provenance.py -k "provenance_entity_ref or dotted_verbatim or dotted_id_not_truncated or double_dot_id or internal_dot_hyphen or topical_kinds or embedded_tokens or dataset_under_guard" -v`
+Expected: FAIL — the positive/extraction tests (`provenance_entity_ref`, `dotted_verbatim`, `internal_dot_hyphen`) fail because entity-ref kinds are not yet extracted, and `dataset_under_guard` fails because the old `dataset:` branch masks `path/dataset:xyz` and drops the trailing period. (The negative guards — `dotted_id_not_truncated`, `double_dot_id_masks_no_shorter_ref`, `topical_kinds`, `embedded_tokens` — may pass trivially pre-change since nothing is extracted; they lock the post-change contract.)
 
 - [ ] **Step 3: Add `_ANCHOR_ENTITY_KINDS` and rebuild `_BODY_REF_RE`**
 
@@ -359,23 +378,32 @@ _BODY_REF_RE = re.compile(
     r"(?:(?<![A-Za-z])task:t\d{2,}"
     r"|\[@[A-Za-z][A-Za-z0-9_:.-]*\]"
     r"|(?<![A-Za-z])cite:[A-Za-z][A-Za-z0-9_:.-]*"
-    # Provenance-bearing typed entity-ref (incl. dataset). Two-sided token
-    # guards: the left lookbehind rejects an id embedded in a larger token
-    # (x_interpretation, path/…, a:…); the right lookahead rejects
-    # @host / /path / :extra continuations. The id body is an ATOMIC group
-    # `(?>…)` of alnum runs joined by single `._-` separators — so it always
-    # ends in alnum (a trailing sentence period stays outside), never matches
-    # `..`/`--` (mirrors _VERBATIM_RE), and cannot backtrack to a shorter id:
-    # `interpretation:0007.foo@host` fails outright rather than truncating to a
-    # resolvable `interpretation:0007`.
+    # Provenance-bearing typed entity-ref (incl. dataset). Three guards:
+    #  (1) left lookbehind — rejects an id embedded in a larger token
+    #      (x_interpretation, path/…, a:…);
+    #  (2) id-scoped no-`..` lookahead — a malformed id whose char-run contains
+    #      consecutive dots matches NOTHING here (not even a truncated prefix),
+    #      mirroring _VERBATIM_RE's sole no-`..` prohibition;
+    #  (3) atomic id body `(?>…)` over the FULL _VERBATIM_RE id charset
+    #      (`[0-9A-Za-z](?:[0-9A-Za-z._-]*[0-9A-Za-z])?` — alnum start, alnum
+    #      terminal so a trailing sentence period stays outside, arbitrary
+    #      internal `._-` incl. `.-`), locked so it cannot backtrack to a
+    #      shorter id: `interpretation:0007.foo@host` fails outright rather
+    #      than truncating to a resolvable `interpretation:0007`;
+    #  followed by a right lookahead rejecting @host / /path / :extra.
     r"|(?<![A-Za-z0-9_.:/@-])(?:" + _ANCHOR_KIND_ALT + r"):"
-    r"(?>[0-9A-Za-z]+(?:[._-][0-9A-Za-z]+)*)(?![A-Za-z0-9_:/@-])"
+    r"(?![A-Za-z0-9._-]*\.\.)"
+    r"(?>[0-9A-Za-z](?:[0-9A-Za-z._-]*[0-9A-Za-z])?)"
+    r"(?![A-Za-z0-9_:/@-])"
     r"|\[\[[^\]\n]+\]\])"
 )
 ```
 
 Python 3.13's `re` supports atomic groups `(?>…)`; do not substitute a
-non-atomic group — atomicity is the load-bearing anti-truncation guard.
+non-atomic group and do not narrow the charset to single-separator runs —
+atomicity is the load-bearing anti-truncation guard, and the no-`..`
+lookahead (not the charset) is what enforces the malformed-id rule while
+still accepting valid `_VERBATIM_RE` forms like `paper:good.-id`.
 
 - [ ] **Step 4: Update the `local_candidates_for_paragraph` docstring**
 
@@ -393,7 +421,7 @@ Change its docstring line listing recognized refs to:
 
 - [ ] **Step 5: Run tests to verify they pass**
 
-Run: `uv run --frozen pytest tests/test_numeric_provenance.py -k "provenance_entity_ref or dotted_verbatim or dotted_id_not_truncated or double_dot_id or topical_kinds or embedded_tokens or dataset_under_guard" -v`
+Run: `uv run --frozen pytest tests/test_numeric_provenance.py -k "provenance_entity_ref or dotted_verbatim or dotted_id_not_truncated or double_dot_id or internal_dot_hyphen or topical_kinds or embedded_tokens or dataset_under_guard" -v`
 Expected: PASS
 
 - [ ] **Step 6: Confirm existing extraction tests stay green**
@@ -594,39 +622,63 @@ uv run pyright
 ```
 Expected: all green. Investigate any failure before proceeding; a refs-integrity delta from Task 1 must be an intended, explained change.
 
-- [ ] **Step 2: pan-disease numeric-anchor acceptance (overlay, no pin bump)**
+All pan-disease steps capture **pinned (before)** and **overlay (after)**
+JSON and compare **normalized finding identities**, not just aggregate counts
+— a wrong finding vanishing while an expected one persists preserves the count
+and would slip past a count-only check. Every capture command tolerates its
+expected nonzero exit (`|| true`) so a check that flags findings does not abort
+the script before the after-scan runs. `pinned` = current `--frozen` science
+(0.5.0); `overlay` = the worktree via `--with-editable`.
+
+- [ ] **Step 2: pan-disease numeric-anchor before/after (identity diff, not count)**
 
 From the pan-disease checkout (use `~/d/`, not an absolute Dropbox path):
 ```bash
 cd ~/d/health/comparisons/pan-disease
+uv run --frozen \
+  science prose lint --check numeric-anchor --format json > /tmp/na-before.json || true
 uv run --with-editable ~/d/science/.worktrees/entity-ref-anchors/science \
-  science prose lint --check numeric-anchor --format json > /tmp/after.json
+  science prose lint --check numeric-anchor --format json > /tmp/na-after.json || true
+
+# Normalized finding identity = (file, line, matched literal). Adjust the jq
+# path to the check's findings array if the schema differs; inspect one file
+# first with `jq 'keys' /tmp/na-before.json`.
+jq -S '[.findings[] | {file,line,value:(.value // .literal // .match)}]' /tmp/na-before.json > /tmp/na-before.ids
+jq -S '[.findings[] | {file,line,value:(.value // .literal // .match)}]' /tmp/na-after.json  > /tmp/na-after.ids
+echo "=== before count ==="; jq length /tmp/na-before.ids
+echo "=== after count  ==="; jq length /tmp/na-after.ids
+echo "=== findings that CLEARED (in before, not after) ==="
+jq -S -n --slurpfile a /tmp/na-before.ids --slurpfile b /tmp/na-after.ids '$a[0] - $b[0]'
+echo "=== findings that APPEARED (in after, not before) ==="
+jq -S -n --slurpfile a /tmp/na-before.ids --slurpfile b /tmp/na-after.ids '$b[0] - $a[0]'
 ```
-Compare against the pre-change baseline (196). Expected: ~13 fewer findings (interpretation/plan/pre-registration citations clear, including pre-reg 0012's `interpretation:0010/0011` values); hypothesis/question/discussion-adjacent numbers remain flagged. Record the exact delta.
+Expected: before ≈ 196. The **cleared** set is ~13 entity-ref-grounded numbers (interpretation/plan/pre-registration citations, incl. pre-reg 0012's `interpretation:0010/0011` values). The **appeared** set MUST be empty — a non-empty appeared set means the change created a new finding and blocks the merge until explained. Record both sets verbatim; every cleared item must trace to a resolvable provenance entity-ref in its paragraph.
 
-- [ ] **Step 3: pan-disease refs-integrity delta (explicit before/after; validate cannot see it)**
+- [ ] **Step 3: pan-disease refs-integrity before/after (validate cannot see body refs)**
 
-`science validate` calls `check_refs()` **without** `include_body=True`, so newly-recognized `plan:` body refs are invisible to it. Diff the body-ref scan directly, pinned pre-change vs. the overlay:
+`science validate` calls `check_refs()` **without** `include_body=True`, so newly-recognized `plan:` body refs are invisible to it. Diff the body-ref scan directly (it exits 1 when broken refs exist — tolerate that):
 
 ```bash
 cd ~/d/health/comparisons/pan-disease
-# BEFORE: current pinned science (no overlay)
-uv run --frozen science refs check --include-body --format json > /tmp/refs-before.json
-# AFTER: worktree overlay
+uv run --frozen \
+  science refs check --include-body --format json > /tmp/refs-before.json || true
 uv run --with-editable ~/d/science/.worktrees/entity-ref-anchors/science \
-  science refs check --include-body --format json > /tmp/refs-after.json
-diff <(jq -S . /tmp/refs-before.json) <(jq -S . /tmp/refs-after.json) || true
+  science refs check --include-body --format json > /tmp/refs-after.json || true
+diff <(jq -S '.broken' /tmp/refs-before.json) <(jq -S '.broken' /tmp/refs-after.json) || true
 ```
-Expected delta, entirely from the Task 1 `plan` index addition: some `plan:` body refs that were unindexed (and thus silently skipped) before now either **resolve** (full-id `plan:NNNN-slug` citations drop out of any broken list) or **surface as broken** where a short `plan:NNNN` prefix fails refs' exact-match body scan (refs has no prefix resolution — that lives only in numeric-anchor). Record the exact broken-ref delta; it is intended, not a regression. Do not rely on `science validate`'s tail summary to establish "no unexpected deltas."
+Expected delta, entirely from the Task 1 `plan` index addition: `plan:` body refs that were unindexed (and thus silently skipped) before now either **resolve** (full-id `plan:NNNN-slug` citations drop out of `broken`) or **surface as broken** where a short `plan:NNNN` prefix fails refs' exact-match body scan (refs has no prefix resolution — that lives only in numeric-anchor). Record the exact broken-ref delta; changes must be confined to `plan:` refs. Any non-`plan:` movement blocks the merge.
 
-- [ ] **Step 4: Full validation summary (retain, don't truncate)**
+- [ ] **Step 4: pan-disease full-validation before/after (JSON, retain both)**
 
 ```bash
 cd ~/d/health/comparisons/pan-disease
+uv run --frozen \
+  science validate --format json > /tmp/validate-before.json 2>/dev/null || true
 uv run --with-editable ~/d/science/.worktrees/entity-ref-anchors/science \
-  science validate --verbose 2>&1 | tee /tmp/validate-after.txt
+  science validate --format json > /tmp/validate-after.json 2>/dev/null || true
+diff <(jq -S . /tmp/validate-before.json) <(jq -S . /tmp/validate-after.json) || true
 ```
-Expected: PASSED. Keep the full summary (not a 3-line tail) so the numeric-anchor reduction and any `plan:`-ref changes are both visible and attributable.
+Expected: overall status stays **PASSED** in both. The only diff is the numeric-anchor finding-count drop (validate cannot see the body-ref changes from Step 3, by design). Retain both full JSON payloads — not a text tail — so every changed field is attributable. Any status regression or non-numeric-anchor check delta blocks the merge.
 
 - [ ] **Step 5: Finish the branch**
 
@@ -639,4 +691,5 @@ Use superpowers:finishing-a-development-branch. Merge target: science `main`.
 - **Spec coverage:** allowlist (T3) · prefix+ambiguity, count-map contract (T2) · non-numeric-prefix guard (T2) · dotted ids + no-`..` + atomic anti-truncation (T3) · boundary guards incl. dataset fold (T3) · plan index + refs contract (T1) · detector bump (T5) · docs (T6) · numeric-anchor + refs-body + validation deltas (T7). All design sections map to a task.
 - **Type consistency:** `entity_prefix_owners: dict[str, int]` (no default — the sole constructor `build_resolution_index` always computes it; verified no other `ResolutionIndex(...)` call site and nothing hashes the instance, so the dict field is safe under `frozen=True`, which still blocks attribute reassignment); `resolve()` reads it via `.get(ref) == 1`, matching validator.py's single-owner precedent. `_ANCHOR_ENTITY_KINDS`/`_ANCHOR_KIND_ALT` module constants; `resolve()` signature unchanged.
 - **No placeholders:** every code step carries complete code; the `_interp`/`_hypothesis`/`_refs`/`_resolved_refs` test helpers are defined in T2/T3/T4 before use.
-- **Anti-masking invariant (design rev 4):** (1) kind allowlist at extraction; (2) exact-id or single-owner digit-lead prefix at resolution; (3) two-sided boundary guards with an atomic id-body that forbids backtrack-truncation before an internal dot. Topical kinds, fabricated refs, ambiguous/non-numeric prefixes, `..`-malformed ids, and embedded substrings all leave the number `Unanchored`.
+- **Anti-masking invariant (design rev 5):** (1) kind allowlist at extraction; (2) exact-id or single-owner digit-lead prefix at resolution; (3) two-sided boundary guards + an id-scoped no-`..` lookahead + an atomic id-body (full `_VERBATIM_RE` charset) that forbids backtrack-truncation. Topical kinds, fabricated refs, ambiguous/non-numeric prefixes, `..`-malformed ids (which yield *no* candidate, not a truncated one), and embedded substrings all leave the number `Unanchored`. Grammar verified against Python 3.13 `re` over 24 cases incl. every reviewer truncation vector.
+- **Delta rigor (T7):** every pan-disease acceptance step diffs normalized finding *identities* (file, line, literal) pinned-vs-overlay, not aggregate counts, and asserts the "appeared" set is empty — a count-preserving swap cannot pass. Captures tolerate expected nonzero exits.
