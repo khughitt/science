@@ -1682,3 +1682,22 @@ class TestRefsScanRoots:
         issues = check_refs(tmp_path, include_body=True)
         body_issues = [i for i in issues if i.ref_type == "body-entity-ref"]
         assert not any(i.ref_value == "task:t999" for i in body_issues)
+
+
+def test_plan_body_entity_ref_validated_after_index_fix() -> None:
+    runner = CliRunner()
+    with runner.isolated_filesystem() as td:
+        root = Path(td)
+        _scaffold(root)
+        (root / "entities" / "plans").mkdir(parents=True, exist_ok=True)
+        (root / "entities" / "plans" / "0084-reading.md").write_text(
+            "---\nid: plan:0084-reading\nkind: plan\ntitle: Reading\n---\n\nbody\n"
+        )
+        # Bare refs: the refs body scan strips inline code, so backtick-wrapping
+        # would hide them (unlike numeric-anchor's local-candidate scan).
+        (root / "doc" / "background" / "topics" / "test.md").write_text(
+            "# Test\nGood ref plan:0084-reading; bad ref plan:9999-ghost.\n"
+        )
+        issues = check_refs(root, include_body=True)
+        plan_refs = [i for i in issues if i.ref_type == "body-entity-ref" and i.ref_value.startswith("plan:")]
+        assert [i.ref_value for i in plan_refs] == ["plan:9999-ghost"]
