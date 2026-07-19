@@ -1,13 +1,13 @@
 # Skills Provenance Coverage — Design
 
 Date: 2026-07-18
-Status: design approved; spec under review
+Status: approved; implementation planning
 
 ## Goal
 
 Make the merged skills-provenance system (registry + `sources:` frontmatter +
 three-axis freshness) **load-bearing across the whole skills corpus**. Today only
-5 of 41 in-scope leaves declare provenance — all from the baygent pull. This
+5 of 41 in-scope files declare provenance — all from the baygent pull. This
 effort brings every canonical skill to an explicit provenance declaration —
 either registered external sources or an explicit internal marker — and teaches
 the linter to enforce that coverage, WARN first and then ratcheted to ERROR once
@@ -107,7 +107,7 @@ The linter has **no severity model today**: `SkillIssue` carries no severity and
 - **Text output** renders severity in a fixed, user-facing order: each line is
   `"<severity>: <path>: <kind>[: <field>][: <detail>]"` — severity is the
   **leading** token, lowercase (`error` / `warn`), matching the compiler/linter
-  convention (`error:` / `warning:`). **JSON output** (`to_json`) gains a
+  convention (`error:` / `warn:`). **JSON output** (`to_json`) gains a
   `"severity"` key alongside the existing keys.
 - **Exit code** becomes severity-aware: `lint_cmd` exits nonzero iff **any**
   finding has `severity == "error"`. A run whose only findings are WARN
@@ -207,8 +207,9 @@ task that ends with those files declared and the registry extended:
   and the nested `expression/` and `genomics/` **leaves**
   (`embeddings-manifold-qa`, `functional-genomics-qa`,
   `protein-sequence-structure-qa`, `proteomics-qa`, `expression/{bulk-rnaseq,
-  microarray, scrna}-qa`, `genomics/{copy-number-sv, somatic-mutation,
-  mutational-signatures}-qa`) — tool + method-paper attribution.
+  microarray, scrna}-qa`, `genomics/copy-number-sv-qa`,
+  `genomics/somatic-mutation-qa`, `genomics/mutational-signatures-and-selection.md`)
+  — tool + method-paper attribution.
 - **Wave C — data specs, sources & routers:** `data/frictionless.md`
   (spec + tool), `data/sources/openalex.md`, `data/sources/pubmed.md`
   (API `software`), and **all `data/` routers** — `data/SKILL.md`,
