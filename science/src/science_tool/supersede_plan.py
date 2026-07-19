@@ -2,16 +2,25 @@ from __future__ import annotations
 
 import hashlib
 from pathlib import Path
+from typing import Callable
 
 from pydantic import BaseModel, ConfigDict
 
 from science_tool.consolidation import (
-    SupersessionDecisionMaterial, _disposition_report, _prepare_supersession,
+    SupersessionDecisionMaterial, SupersessionError, _disposition_report, _prepare_supersession,
     build_decision_material, build_supersedes_graph_from_material, decision_digest,
 )
 from science_tool.plan_common import (
-    ExplicitSupersessionIds, PathTransition, StateFingerprint, SupersedeSelection, fingerprint,
+    ExplicitSupersessionIds, PathEscape, PathTransition, StagingError, StateFingerprint,
+    SupersedeSelection, SurfaceMismatch, assert_same_surface, assert_staging_unique, fingerprint,
+    matches, resolve_within, rollback_transitions, snapshot_paths, staged_write,
 )
+
+_SUPERSEDE_PLAN_SCHEMA = 1
+
+
+class SupersedeApplyError(RuntimeError):
+    pass
 
 
 class SupersededChainReport(BaseModel):
@@ -164,3 +173,100 @@ def derive_supersede_plan(
         decision_inputs_sha256=decision_digest(material),
         to_mark=to_mark, to_repair=to_repair, writes=writes, preview_report=preview_report,
     )
+
+
+def apply_supersede_plan(project_root: Path, plan: SupersedePlan, *, staging_token: str,
+                         _fault: Callable[[str], None] | None = None) -> dict:
+    """Replay a saved `SupersedePlan` after three independent authorization layers pass, then
+    execute through the staged-write primitive with atomic rollback on any failure.
+
+    Gate order is load-bearing (design §9) and MUST NOT be reordered or merged:
+      structural -> Gate A (decision digest) -> Gate B (full re-derivation from the SAME,
+      Gate-A-verified material) -> pre-state -> execute (snapshot, staged_write, post-verify,
+      rollback-on-failure).
+
+    `build_decision_material` is called EXACTLY ONCE, in Gate A. Gate B re-derives the whole plan
+    via `derive_supersede_plan(project_root, material, ...)`, reusing that same material rather than
+    loading decision inputs a second time -- so the digest surface Gate A authenticated IS the
+    surface Gate B derives from.
+    """
+
+    def fault(label: str) -> None:
+        if _fault is not None:
+            _fault(label)  # test-only kill seam; a BaseException here bypasses rollback
+
+    project_root = project_root.resolve()
+    if plan.schema_version != _SUPERSEDE_PLAN_SCHEMA:
+        raise SupersedeApplyError(
+            f"unsupported plan schema_version {plan.schema_version} (this tool writes "
+            f"{_SUPERSEDE_PLAN_SCHEMA})")
+    if plan.project_root != str(project_root):
+        raise SupersedeApplyError("plan project_root does not match")
+
+    # Structural -- containment, canonical paths, staging uniqueness, bijection (before any FS write
+    # or digest/derivation work).
+    members = [*plan.to_mark, *plan.to_repair]
+    try:
+        targets = [resolve_within(project_root, w.rel_path) for w in plan.writes]
+        assert_staging_unique(project_root, targets, staging_token)
+    except (PathEscape, StagingError) as exc:
+        raise SupersedeApplyError(str(exc)) from exc
+    if len({w.rel_path for w in plan.writes}) != len(plan.writes):
+        raise SupersedeApplyError("duplicate write paths")
+    if len(members) != len(set(members)) or len(members) != len(plan.writes):
+        raise SupersedeApplyError("writes/disposition are not a bijection")
+    # `prepared.path == w.rel_path` (design §9) is guaranteed by construction: `derive_supersede_plan`
+    # builds each `PathTransition.rel_path` directly from `_prepare_supersession`'s returned path
+    # (`rel = prepared.path.relative_to(project_root).as_posix()`), and Gate B's `assert_same_surface`
+    # below re-verifies `plan.writes` against a freshly re-derived `expected.writes` built the same
+    # way -- so a plan whose `rel_path` diverged from what re-derivation would produce is caught there.
+
+    # Gate A -- rebuild the decision material ONCE, compare version + digest against the plan.
+    material = build_decision_material(project_root)
+    if material.material_version != plan.material_version:
+        raise SupersedeApplyError("material_version mismatch")
+    if decision_digest(material) != plan.decision_inputs_sha256:
+        raise SupersedeApplyError("corpus changed since preview (decision digest mismatch)")
+
+    # Gate B -- re-derive the WHOLE plan from the GATE-A-VERIFIED material (no second decision
+    # load): `derive_supersede_plan` never calls `build_decision_material` itself, so the digest
+    # surface authenticated above IS the derivation surface.
+    try:
+        expected = derive_supersede_plan(project_root, material, selection=plan.selection,
+                                         preview_date=plan.preview_date)
+    except SupersessionError as exc:
+        raise SupersedeApplyError(str(exc)) from exc
+    try:
+        assert_same_surface(plan.writes, expected.writes)
+    except SurfaceMismatch as exc:
+        raise SupersedeApplyError(f"declared writes differ from re-derived: {exc}") from exc
+    if expected.preview_report != plan.preview_report:
+        raise SupersedeApplyError("re-derived preview report differs from the plan")
+    if expected.to_mark != plan.to_mark or expected.to_repair != plan.to_repair:
+        raise SupersedeApplyError("re-derived disposition differs from the plan")
+    rpt = expected.preview_report
+    if rpt.invalid_relations or rpt.unbacked_inverses:
+        raise SupersedeApplyError("corpus-wide blockers present; refusing")
+
+    # Pre-state gate -- do NOT write until every target's live state matches its frozen pre.
+    for target, w in zip(targets, plan.writes, strict=True):
+        if not matches(w.pre, target):
+            raise SupersedeApplyError(f"pre-state changed for {w.rel_path}")
+
+    # Execute -- snapshot every target, stage+commit each write, verify post-state, roll back
+    # atomically on any failure.
+    snap = snapshot_paths(targets)
+    try:
+        for target, w in zip(targets, plan.writes, strict=True):
+            staged_write(target, w.postimage, w.post.mode, staging_token, target_pre=w.pre)
+            fault(f"written:{w.rel_path}")  # kill boundary: after each entity write
+        for target, w in zip(targets, plan.writes, strict=True):
+            if not matches(w.post, target):
+                raise SupersedeApplyError(f"post-state verification failed for {w.rel_path}")
+    except Exception as exc:
+        rollback_transitions(plan.writes, project_root, snap)  # may raise RollbackHalt (propagates)
+        if isinstance(exc, SupersedeApplyError):
+            raise
+        # A staged-write StagingError etc. becomes a SupersedeApplyError once the corpus is restored.
+        raise SupersedeApplyError(f"apply failed and rolled back: {exc}") from exc
+    return {"applied": list(plan.to_mark), "repaired": list(plan.to_repair)}
