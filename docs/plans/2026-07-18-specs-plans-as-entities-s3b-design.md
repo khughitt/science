@@ -97,9 +97,21 @@ at all (neither rewrite nor report; see Component 3), so the command must scan
    (`id:` and its `aliases:` entries, which contain `spec:` tokens) are **not**
    counted as inbound references to itself.
 
-The whole-tree walk uses the canonical `iter_scannable_files`
-(`text_scan.py:66`) — the same scanner `reference_rewrite` and
-`audit_moved_references` use — not a bespoke glob, because
+Two distinct passes with different completeness requirements:
+
+- **Entity discovery** (identifying legacy spec docs, feeding `legacy_spec_count`)
+  must be **complete**. It cannot use `iter_scannable_files` (`text_scan.py:66`)
+  alone: that scanner silently `continue`s on any file over `MAX_SCANNABLE_BYTES`
+  (`text_scan.py:25-26`) without emitting a `Skip`, so an oversized Markdown spec
+  would vanish from the count while `scan_complete` stayed true. Discovery uses a
+  complete Markdown walk; a candidate that is size-excluded or unreadable is
+  emitted as a **`scan_skip`** (`{path, reason}`), which forces
+  `scan_complete = false` and therefore `flip_ready = false`.
+- **Inbound-reference scanning** reuses the canonical `iter_scannable_files` (the
+  same scanner `reference_rewrite` and `audit_moved_references` use), so the
+  rewrite and the audit see an identical file set.
+
+The whole-tree reach (not just `entities/`) is required because
 `entity_conformance` skips singleton homes and only scans existing
 `entities/<kind>/` dirs while the loose docs live under `doc/plans/` and
 `doc/specs/`.
@@ -133,10 +145,14 @@ authority — it omits authored relationship keys like `supersedes` and includes
 load-derived fields like `project`, `file_path`, `content`. The projection uses
 an explicit two-set authority instead:
 
-- **RUNTIME_ONLY** — load-derived fields that `_enrich_raw` fills at load
-  (`project`, `file_path`, `content`, `content_preview`, and the other
-  `setdefault` keys). A legacy doc that carries any of these in its authored
-  frontmatter **refuses** planning — they are not authorable.
+- **RUNTIME_ONLY** — the load-derived fields, enumerated **exactly** (not "and
+  the others"): **`project`, `file_path`, `content`, `content_preview`**. These
+  are the four values `_enrich_raw` derives at load (`sources.py:852-869`);
+  every *other* `setdefault` there (`related`, `aliases`, `same_as`, `scope`,
+  `source_refs`, `relations`, `evidence_refs`, `xrefs`, `provisional`,
+  `deprecated_ids`, `ontology_terms`) is an **authored** field with an empty
+  default, not runtime-only. A legacy doc carrying any of the four in authored
+  frontmatter **refuses** planning.
 - **LEGACY_ALIAS** — the named legacy spellings the projection rewrites (`type`,
   `date`, `related_questions`, `related_specs`).
 
@@ -154,8 +170,9 @@ and the LEGACY_ALIAS rewrite set are enumerated.
 | `title` | `title` | Preserved. |
 | `related_questions`, `related_specs` | `related` | Folded into canonical `related` so they actually participate in the graph; under `extra="allow"` they would otherwise persist as inert extension fields no consumer reads. **Existing `related` is preserved and the union is order-preservingly deduplicated** (first occurrence wins). |
 | existing `aliases` | `aliases` | Preserved; the old id is appended and the list order-preservingly deduplicated (identity contract below). |
-| `supersedes`, `superseded_by`, other authored keys | (identity) | Preserved untouched (`extra="allow"`); their `spec:` values are subject to intra-batch id substitution like any migrating-spec reference. |
-| any RUNTIME_ONLY key (`project`, `file_path`, `content`, …) | — | **Refuse** planning, naming the key and file — these are load-derived, not authorable. |
+| `supersedes`, `superseded_by` (and the other 9 rewriter-handled keys) | (identity) | Preserved; their `spec:` values **do** get intra-batch id substitution (they are in `_REMOVABLE_FRONTMATTER_REF_KEYS`). |
+| any other authored / extension key | (identity) | Preserved verbatim (`extra="allow"`); **not** substituted (the rewriter cannot see it) — a migrating-spec value here stays alias/identity-covered. |
+| RUNTIME_ONLY key (`project`, `file_path`, `content`, `content_preview`) | — | **Refuse** planning, naming the key and file — load-derived, not authorable. |
 
 ### Status adjudication
 
@@ -287,13 +304,19 @@ composes a **new** coordinator from the extractable low-level primitives —
 The new id is `spec:NNNN-<slug>`, both parts pinned deterministically:
 
 - **Number.** `propose_number` (`entity_reservation.py:167-181`) is read-only and
-  idempotent — called once per doc it returns the same `highest+1` every time. So
-  the plan calls it **once** for the starting number, sorts the discovered legacy
-  specs by a deterministic key (old id), and assigns `start, start+1, …`
-  sequentially. The real collision gate is per-doc `claim_number_in_dir` at apply,
-  whose `O_CREAT|O_EXCL` sentinel re-checks committed + archived numbers — so a
-  number consumed by concurrent work between plan and apply fails the claim and
-  rolls the batch back (tested via live/archive collision drift).
+  idempotent — called once it returns `highest+1` over committed + archived
+  numbers. But `propose_number` **cannot see preserved-relocation numbers** (an
+  already-numeric out-of-home spec keeping its `spec:0007-…` id is not yet in the
+  canonical home), so the minted sequence must treat those as **spent**. The
+  allocator's forbidden set is `committed ∪ archived ∪ preserved-relocation
+  numbers`; the discovered mint-docs are sorted by old id and assigned the next
+  free numbers ≥ the `propose_number` start, **skipping the forbidden set**. So a
+  preserved `spec:0001-x` and a freshly-minted doc never both land on `0001`
+  (tested with a mixed batch). The real per-doc collision gate remains
+  `claim_number_in_dir` at apply, whose `O_CREAT|O_EXCL` sentinel re-checks
+  committed + archived — a number consumed by concurrent work between plan and
+  apply fails the claim and rolls the batch back (tested via live/archive
+  collision drift).
 - **Slug.** `slug = derive_slug(title)` — the same derivation the reservation path
   uses (`entity_reservation.py:122`, `slug = … derive_slug(title)`). Not the
   old-id-minus-date and not the filename stem, so a doc whose id/filename drifted
@@ -340,7 +363,8 @@ The single corpus-wide `apply_reference_rewrite` then rewrites only the
 ### The batch transaction
 
 1. **Preflight all** — project-root check; project each legacy doc (Component 2,
-   refusing on unmappable status / unknown key / missing id / unresolved date);
+   refusing on unmappable status / RUNTIME_ONLY key / missing id or title /
+   unresolved date);
    render every destination, apply intra-batch id substitution, and validate it
    through `_validate_prospective_write`; assign sequential numbers; build the
    merged `id_substitutions` / `path_substitutions`, the single merged
@@ -349,9 +373,17 @@ The single corpus-wide `apply_reference_rewrite` then rewrites only the
    any refusal aborts the whole batch.**
 2. **Snapshot all** — one `_snapshot` over the union of every source, every
    destination, and every non-migrating referrer named in the merged report.
-3. **Move all** — per doc: verify source SHA, `claim_number_in_dir` the
-   destination, write the projected+rebased+substituted entity, unlink the
-   source (each path enters `mutated` only after its step succeeds).
+3. **Move all** — per doc: verify source SHA; **add the destination to `mutated`
+   *before* calling `claim_number_in_dir`**, then claim + write the
+   projected+rebased+substituted entity, then unlink the source. The
+   pre-registration is required because `claim_number_in_dir`
+   (`entity_reservation.py:201-203`) writes with `open(path,"x")` and only
+   `return`s the path on success — a mid-write failure leaves a **partial
+   destination** the coordinator would otherwise never have recorded, so
+   `_restore` (dest snapshotted absent) would not remove it. The source enters
+   `mutated` after its unlink. (A future hardening of `claim_number_in_dir` to
+   clean its own partial file is noted out of scope; the coordinator's
+   pre-registration covers the batch today.)
 4. **Replay once** — a single `apply_reference_rewrite` over the merged report
    (same exclusion as plan), accumulating `written`.
 5. **Audit all** — `audit_moved_references` for every moved destination.
@@ -366,34 +398,46 @@ Coarse phase markers are insufficient: a crash *within* "move all" or
 `apply_reference_rewrite` is **not idempotent** — an already-written postimage
 fails its fresh-report comparison on a naive replay. Hashes alone let resume
 *detect* a state but not *reconstruct* the target, so the journal stores, for
-every path the transaction will touch, its role (moved-source / moved-dest /
-referrer), its **preimage hash**, and its **exact postimage content** — or an
-explicit **absent** state (a moved-source's postimage is "deleted"). The journal
-is written **atomically** (temp file + rename) **before the first mutation**.
+every path the transaction will touch, its **role** and both its **preimage** and
+**postimage** as `content | absent`. Per role:
+
+| Role | preimage | postimage | replay op |
+|---|---|---|---|
+| moved-source | content | **absent** | `unlink` |
+| moved-dest | **absent** | content | `claim_number_in_dir` (writes the content) |
+| referrer | content | content | atomic replace (temp + rename) with stored bytes |
+
+The journal is written **atomically** (temp file + rename) **before the first
+mutation**.
 
 `--resume` never re-plans and never re-runs `apply_reference_rewrite`:
 
-1. **Classify every journaled path first**, before writing anything: for each,
-   hash the current on-disk file and match it to the recorded preimage,
-   postimage, or absent state.
-2. **Any path in a third state** (matching none) → external drift since planning;
-   **refuse the whole resume** (do not guess).
-3. Otherwise **replay each not-yet-done path directly from its stored postimage**
-   — write the recorded postimage bytes (or unlink for an absent moved-source).
-   Partially-applied referrers are completed by writing their stored postimage,
-   never by re-deriving a rewrite.
+1. **Classify every journaled path first**, before writing anything: hash the
+   current on-disk file and match it to the recorded preimage or postimage
+   (each `content | absent`).
+2. **Any path matching neither** → external drift since planning; **refuse the
+   whole resume** (do not guess).
+3. Otherwise **perform each not-yet-done path by its role's replay op** — a
+   moved-dest via `claim_number_in_dir`, a referrer via atomic replacement of the
+   stored postimage bytes, a moved-source via `unlink`. Not one generic write.
+4. **Run `audit_moved_references` for every destination** before finishing —
+   post-move audit is the semantic check (a dangling ref the move introduced),
+   which per-path hash equality does **not** capture.
 
 **Crashed reservation sentinels.** `claim_number_in_dir` refuses on *any*
-existing `.NNNN.reserving` sentinel (`entity_reservation.py`, "being reserved by
-another writer"), and a hard crash between claim and its `finally: unlink` leaves
-the sentinel behind with no owner identity. v1 makes an explicit
-**single-writer** assumption: resume treats a leftover sentinel whose number is
-in *its own* journal (and has no committed `NNNN-*.md`) as its own crash residue
-and clears it before re-claiming; a sentinel for a non-journaled number is out of
-scope (a concurrent foreign migration writer is unsupported, stated in the docs).
-Token-owned reservations are the robust upgrade, deferred.
+existing `.NNNN.reserving` sentinel (`entity_reservation.py:187-190`), and its
+`finally: unlink` runs only if the process survives. **Two** crash points leave a
+sentinel: (a) after sentinel-create but before the destination is written (dest
+absent + sentinel), and (b) after the destination is written but before `finally`
+(dest committed + sentinel). Resume clears the leftover sentinel for any number in
+*its own* journal in **both** cases before acting (case (b)'s dest is already at
+its postimage, so only the sentinel needs clearing). This rests on an explicit
+**single-writer** assumption that excludes **every** concurrent number consumer —
+not just another `migrate-specs` run but any `entity create` / `entities import`
+touching `entities/specs/`; a sentinel for a non-journaled number is unsupported
+and refuses. Token-owned reservations are the robust upgrade, deferred.
 
-After completing every remaining action, resume verifies all postimages and
+After completing every remaining action and the destination audits, resume
 deletes the journal. A successful **caught-failure restore also deletes the
 journal** (step 6); a later `--resume` then finds no journal and **refuses —
 "no interrupted transaction"** — rather than acting. Plan-only (no `--apply`)
@@ -403,9 +447,9 @@ writes nothing and no journal.
 
 - **User guide** (`docs/user-guide/entities.md`, near the Source Entity CLI
   material): document `science entity migrate-specs` — plan-then-`--apply`, the
-  projection rules, the four report groups (rewritten / alias-resolved /
-  identity-preserved / manual-retarget), the singleton report, the `flip_ready`
-  field, and the refusal cases. State plainly that **`spec:` references still
+  projection rules, the five report groups (rewritten / alias-resolved /
+  identity-preserved / unchanged / manual-retarget), the singleton report, the
+  `flip_ready` field, and the refusal cases. State plainly that **`spec:` references still
   resolve as annotation-only today** — the command makes a project flip-ready; it
   does not change resolution.
 - **Sequencing contract, stated honestly:** the resolution flip is a **future,
@@ -450,6 +494,7 @@ refuses on a non-`flip_ready` recomputation.
   "flip_ready": bool,
   "legacy_spec_count": int,
   "singleton_count": int,
+  "manual_retarget_count": int,
   "singletons": [ "<path>", … ],
   "migrated": [ { "old_id": str, "new_id": str, "dest": "<path>" }, … ],
   "references": {
@@ -457,9 +502,14 @@ refuses on a non-`flip_ready` recomputation.
     "identity_preserved": int, "unchanged": int, "manual_retarget": int
   },
   "manual_retarget": [ { "ref": str, "surface": str, "reason": str, "in": "<path>" }, … ],
-  "scan_complete": bool
+  "scan_complete": bool,
+  "scan_skips": [ { "path": str, "reason": str }, … ]
 }
 ```
+
+`manual_retarget_count` is the top-level scalar the readiness formula reads
+(equal to `references.manual_retarget`); `scan_complete` is `false` iff
+`scan_skips` is non-empty.
 
 Tests assert this schema and every `flip_ready` transition.
 
@@ -468,7 +518,8 @@ Tests assert this schema and every `flip_ready` transition.
 Planning refuses (writes nothing) on: a legacy spec doc without a declared `id:`
 or `title`; `type`/`kind` disagreement; an unmappable legacy status; a
 `created`/`updated` still absent after date projection; a RUNTIME_ONLY frontmatter
-key (`project`, `file_path`, `content`, …); a duplicate old id in the batch; any
+key (`project`, `file_path`, `content`, `content_preview`); a duplicate old id in
+the batch; any
 batch id or preserved alias colliding with an existing canonical id / alias /
 archive token or with another batch member (the Component 2 collision preflight);
 an already-numeric out-of-home spec whose number is taken at the canonical home;
@@ -502,7 +553,8 @@ doc):
   appears (live or archive) between plan and apply → `claim` fails → whole batch
   restored; an **already-numeric out-of-home** `spec:0007-…` doc is relocated
   preserving its id (no renumber, no alias), and **refuses** if `0007` is taken at
-  the canonical home.
+  the canonical home; a **mixed batch** where a preserved relocation holds `0001`
+  and a minted doc is present — the minted doc is assigned `0002`, never `0001`.
 - **Reference classification & token boundary**: `related: [spec:<old>]` →
   rewritten to numeric; `discusses: [spec:<old>]` → **manual-retarget** (both
   failure modes documented, no "migration fixes it" assertion); `same_as:
@@ -520,8 +572,10 @@ doc):
   manual-retarget remains; `flip_ready == true` only when
   `legacy_spec_count == singleton_count == manual_retarget_count == 0`, even with
   alias-resolved / identity-preserved / unchanged findings present; an
-  unreadable-file scan forces `flip_ready == false` + `scan_complete == false`;
-  the JSON output matches the pinned schema.
+  **oversized (`> MAX_SCANNABLE_BYTES`) legacy-spec Markdown** file and an
+  unreadable file each appear in `scan_skips` and force
+  `scan_complete == false` + `flip_ready == false`; the JSON output matches the
+  pinned schema.
 - **Identity/collision preflight**: missing `id:` refuses; duplicate old ids
   refuse; a new canonical id, a preserved alias, or an appended old id colliding
   with a live entity/archive token refuses at plan time.
@@ -530,13 +584,16 @@ doc):
 - **Transaction/resume**: apply relocates all docs, rewrites the covered refs
   (including an intra-batch spec→spec ref rewritten to its neighbor's new id),
   audits, and leaves a loadable tree (migrated entities build with their aliases
-  and no `AliasCollisionError`); a per-path resume completes an interrupted
-  journal by **replaying stored postimages** (postimage paths skipped, preimage
-  paths written, an absent moved-source unlinked) without re-planning or
-  re-running `apply_reference_rewrite`; a journaled path forced to a **third state
-  refuses**; a leftover journaled sentinel is cleared under the single-writer
-  assumption; a caught-failure restore deletes the journal so a subsequent
-  `--resume` **refuses with "no interrupted transaction."**
+  and no `AliasCollisionError`); an **injected write failure mid-`claim` leaves a
+  partial destination that global restore removes** (proving the pre-registration
+  in "Move all"); a per-path resume performs each remaining path **by its role's
+  op** (moved-dest re-claimed, referrer atomic-replaced from its stored postimage,
+  moved-source unlinked), then **runs `audit_moved_references` per destination**,
+  without re-planning or re-running `apply_reference_rewrite`; a journaled path
+  matching neither preimage nor postimage **refuses**; leftover journaled
+  sentinels are cleared at **both** crash points (dest-absent and dest-committed);
+  a caught-failure restore deletes the journal so a subsequent `--resume`
+  **refuses with "no interrupted transaction."**
 - **Guard**: full suite green; `spec` remains in `_ANNOTATION_REF_PREFIXES`
   (assert the switch is untouched); the S3a guard tests still pass unchanged.
 
