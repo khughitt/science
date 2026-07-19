@@ -6,6 +6,7 @@ import hashlib
 import json
 from pathlib import Path
 
+import pytest
 from click.testing import CliRunner
 
 from science_tool.cli import main
@@ -347,3 +348,196 @@ def test_expected_sha_without_apply_plan_is_rejected(tmp_path: Path) -> None:
 
     assert result.exit_code != 0
     assert "requires --apply-plan" in result.output
+
+
+# ---- cohort import and discriminated plan dispatch --------------------------
+
+
+def _cohort_sources(root: Path) -> tuple[Path, Path]:
+    _project(root)
+    a = root / "doc" / "plans" / "a.md"
+    b = root / "doc" / "plans" / "b.md"
+    a.write_text("# Alpha\n\nbody\n", encoding="utf-8")
+    b.write_text("# Beta\n\nbody\n", encoding="utf-8")
+    return a, b
+
+
+def _envelope_sha(raw: bytes) -> str:
+    from science_tool.plan_common import plan_sha256
+
+    return plan_sha256(raw)
+
+
+def test_cli_cohort_save_and_apply(tmp_path: Path) -> None:
+    root = tmp_path
+    a, b = _cohort_sources(root)
+    saved = root / "cohort.json"
+    preview = CliRunner().invoke(
+        main,
+        [
+            "entities", "import", str(a), str(b), "--kind", "plan",
+            "--project-root", str(root), "--save-plan", str(saved),
+        ],
+    )
+    assert preview.exit_code == 0, preview.output
+    payload = json.loads(preview.output)
+    assert payload["plan_type"] == "cohort-import"
+
+    applied = _apply(root, saved)
+
+    assert applied.exit_code == 0, applied.output
+    assert json.loads(applied.output)["applied"] == [
+        "plan:0001-alpha",
+        "plan:0002-beta",
+    ]
+    assert (root / "entities/plans/0001-alpha.md").exists()
+    assert (root / "entities/plans/0002-beta.md").exists()
+
+
+@pytest.mark.parametrize("option", [("--title", "X"), ("--slug", "x")])
+def test_cli_cohort_rejects_per_document_identity_options(
+    tmp_path: Path, option: tuple[str, str]
+) -> None:
+    root = tmp_path
+    a, b = _cohort_sources(root)
+    result = CliRunner().invoke(
+        main,
+        [
+            "entities", "import", str(a), str(b), "--kind", "plan",
+            "--project-root", str(root), *option,
+        ],
+    )
+    assert result.exit_code != 0
+    assert option[0].removeprefix("--") in result.output.lower()
+
+
+@pytest.mark.parametrize("overwrite", [False, True])
+def test_cli_cohort_save_plan_equal_to_any_source_is_rejected(
+    tmp_path: Path, overwrite: bool
+) -> None:
+    root = tmp_path
+    a, b = _cohort_sources(root)
+    args = [
+        "entities", "import", str(a), str(b), "--kind", "plan",
+        "--project-root", str(root), "--save-plan", str(b),
+    ]
+    if overwrite:
+        args.append("--overwrite-plan")
+    before = b.read_bytes()
+    result = CliRunner().invoke(main, args)
+    assert result.exit_code != 0
+    assert "source" in result.output.lower()
+    assert b.read_bytes() == before
+
+
+@pytest.mark.parametrize(
+    "preview_args",
+    [
+        ("--title", ""),
+        ("--status", "proposed"),
+        ("--slug", "custom"),
+        ("--save-plan", "other.json"),
+        ("--overwrite-plan",),
+    ],
+)
+def test_cli_apply_plan_rejects_preview_options(
+    tmp_path: Path, preview_args: tuple[str, ...]
+) -> None:
+    root = _project(tmp_path)
+    plan_file = root / "p.json"
+    plan_file.write_text("{}", encoding="utf-8")
+    result = CliRunner().invoke(
+        main,
+        [
+            "entities", "import", "--apply-plan", str(plan_file),
+            "--project-root", str(root), "--expected-plan-sha256", _sha(plan_file),
+            *preview_args,
+        ],
+    )
+    assert result.exit_code != 0
+    assert "may not be combined with --apply-plan" in result.output
+
+
+def test_cli_legacy_single_plan_still_applies(tmp_path: Path) -> None:
+    root = _project(tmp_path)
+    source = root / "doc/plans/x.md"
+    payload, saved = _preview(root, source)
+    assert "plan_type" not in json.loads(saved.read_text(encoding="utf-8"))
+    result = _apply(root, saved)
+    assert result.exit_code == 0, result.output
+    assert json.loads(result.output)["applied"]["id"] == payload["entity_id"]
+
+
+@pytest.mark.parametrize(
+    ("probe", "expected"),
+    [
+        ({"plan_type": "something-else", "schema_version": 1}, "unsupported plan"),
+        ({"plan_type": "cohort-import", "schema_version": 999}, "unsupported plan"),
+        ({"schema_version": 1, "source_rel": "x"}, "unsupported plan"),
+        ({"plan_type": "cohort-import", "schema_version": True}, "unsupported plan"),
+        ({"plan_type": "cohort-import", "schema_version": "1"}, "unsupported plan"),
+        ({"plan_type": None}, "unsupported plan"),
+        ({"schema_version": None}, "unsupported plan"),
+        ({"plan_type": None, "schema_version": None}, "unsupported plan"),
+    ],
+)
+def test_cli_apply_plan_rejects_unsupported_discriminator(
+    tmp_path: Path, probe: dict, expected: str
+) -> None:
+    root = _project(tmp_path)
+    raw = json.dumps(probe).encode("utf-8")
+    saved = root / "p.json"
+    saved.write_bytes(raw)
+    result = CliRunner().invoke(
+        main,
+        [
+            "entities", "import", "--apply-plan", str(saved),
+            "--project-root", str(root),
+            "--expected-plan-sha256", _envelope_sha(raw),
+        ],
+    )
+    assert result.exit_code != 0
+    assert expected in result.output.lower()
+
+
+def test_cli_apply_plan_rejects_non_object_json(tmp_path: Path) -> None:
+    root = _project(tmp_path)
+    raw = b"[1, 2, 3]"
+    saved = root / "p.json"
+    saved.write_bytes(raw)
+    result = CliRunner().invoke(
+        main,
+        [
+            "entities", "import", "--apply-plan", str(saved),
+            "--project-root", str(root),
+            "--expected-plan-sha256", _envelope_sha(raw),
+        ],
+    )
+    assert result.exit_code != 0
+    assert "json object" in result.output.lower()
+
+
+def test_cli_apply_plan_rejects_invalid_utf8(tmp_path: Path) -> None:
+    root = _project(tmp_path)
+    raw = b"\xff\xfe not valid utf-8"
+    saved = root / "p.json"
+    saved.write_bytes(raw)
+    result = CliRunner().invoke(
+        main,
+        [
+            "entities", "import", "--apply-plan", str(saved),
+            "--project-root", str(root),
+            "--expected-plan-sha256", _envelope_sha(raw),
+        ],
+    )
+    assert result.exit_code != 0
+    assert "not valid json" in result.output.lower()
+
+
+def test_cli_single_import_preserves_explicit_slug(tmp_path: Path) -> None:
+    root = _project(tmp_path)
+    source = root / "doc/plans/x.md"
+    _payload, saved = _preview(root, source, "--slug", "custom-slug")
+    result = _apply(root, saved)
+    assert result.exit_code == 0, result.output
+    assert (root / "entities/plans/0001-custom-slug.md").exists()

@@ -7,7 +7,14 @@ from pathlib import Path
 
 import pytest
 
-from science_tool.entity_import import EntityImportError, plan_import
+from science_tool.entity_import import (
+    EntityImportError,
+    ImportMember,
+    PlannedMember,
+    _plan_member,
+    apply_import,
+    plan_import,
+)
 
 
 def _project(tmp_path: Path) -> Path:
@@ -28,6 +35,71 @@ def _write_md(root: Path, rel: str, text: str) -> Path:
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(text, encoding="utf-8")
     return path
+
+
+def test_plan_member_from_cached_bytes(tmp_path: Path) -> None:
+    root = _project(tmp_path)
+    text = "# A Thing\n\nbody\n"
+
+    planned = _plan_member(root, "doc/plans/x.md", text, kind="plan", number=7)
+
+    assert isinstance(planned, PlannedMember)
+    member = planned.member
+    assert member.entity_id == "plan:0007-a-thing"
+    assert member.number == 7
+    assert member.dest_rel == "entities/plans/0007-a-thing.md"
+    assert member.source_rel == "doc/plans/x.md"
+    assert "id: plan:0007-a-thing" in member.rendered_text
+    assert "kind" not in ImportMember.model_fields
+
+
+def test_plan_member_honors_title_and_slug(tmp_path: Path) -> None:
+    root = _project(tmp_path)
+
+    planned = _plan_member(
+        root,
+        "doc/plans/x.md",
+        "# Ignored\n\nbody\n",
+        kind="plan",
+        number=1,
+        title="Custom Title",
+        slug="custom-slug",
+    )
+
+    assert planned.member.title == "Custom Title"
+    assert planned.member.entity_id == "plan:0001-custom-slug"
+
+
+def test_plan_member_rejects_document_with_frontmatter(tmp_path: Path) -> None:
+    root = _project(tmp_path)
+
+    with pytest.raises(EntityImportError):
+        _plan_member(
+            root,
+            "doc/plans/x.md",
+            "---\nid: x\n---\n# T\n",
+            kind="plan",
+            number=1,
+        )
+
+
+def test_single_apply_translates_unknown_kind_in_tampered_plan(tmp_path):
+    root = _project(tmp_path)
+    source = _loose(root, "doc/plans/x.md")
+    plan = plan_import(root, source, kind="plan")
+    plan.kind = "notarealkind"
+    plan.entity_id = "notarealkind:0001-a-thing"
+    with pytest.raises(EntityImportError):
+        apply_import(root, plan)
+
+
+def test_single_apply_rejects_rendered_kind_tamper(tmp_path):
+    root = _project(tmp_path)
+    source = _loose(root, "doc/plans/x.md")
+    plan = plan_import(root, source, kind="plan")
+    plan.rendered_text = plan.rendered_text.replace("kind: plan", "kind: question")
+    with pytest.raises(EntityImportError):
+        apply_import(root, plan)
 
 
 def test_proposes_id_and_destination(tmp_path: Path) -> None:

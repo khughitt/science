@@ -25,14 +25,14 @@ from __future__ import annotations
 import hashlib
 import os
 import re
-from collections.abc import Iterator
+from collections.abc import Iterator, Sequence
 from dataclasses import dataclass
 from datetime import date
 from pathlib import Path, PurePosixPath
-from typing import Any
+from typing import Any, Literal
 
 import yaml
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict, StrictInt
 from pydantic import ValidationError as PydanticValidationError
 
 from science_tool.entities import (
@@ -53,6 +53,8 @@ from science_tool.reference_rewrite import (
     _REMOVABLE_FRONTMATTER_REF_KEYS,
     RELATIONS_KEY,
     RELATIONS_TARGET_KEY,
+    ManualHit,
+    RefHit,
     RewriteReport,
     _resolve_link,
     _split_target,
@@ -99,11 +101,152 @@ class ImportPlan(BaseModel):
     warnings: list[str] = []
 
 
+class ImportMember(BaseModel):
+    """One member of a cohort.
+
+    Carries no ``kind``: the cohort plan's ``kind`` is the single authority for
+    every member's directory and number claim.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    source_rel: str
+    source_sha256: str
+    entity_id: str
+    number: int
+    dest_rel: str
+    title: str
+    status: str
+    frontmatter: dict[str, Any]
+    rendered_text: str
+
+
+class AttributedWarning(BaseModel):
+    """A cohort warning tagged with the source that raised it."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    source_rel: str
+    message: str
+
+
+class CohortImportPlan(BaseModel):
+    """A persisted plan for importing a reference-independent cohort."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    plan_type: Literal["cohort-import"] = "cohort-import"
+    schema_version: StrictInt = 1
+    project_root: str
+    kind: str
+    members: list[ImportMember]
+    ref_report: RewriteReport = RewriteReport()
+    warnings: list[AttributedWarning] = []
+
+
+class RefDependentCohortError(EntityImportError):
+    """A cohort member references another member or itself."""
+
+
+@dataclass(frozen=True)
+class PlannedMember:
+    """Internal, not persisted: a member plus the warnings its render raised."""
+
+    member: ImportMember
+    warnings: list[str]
+
+
 def _derive_title(text: str, source: Path) -> str:
     match = _HEADING_RE.search(text)
     if match is not None:
         return match.group(1).strip()
     raise EntityImportError(f"{source} has no level-1 heading to derive a title from; pass --title explicitly")
+
+
+def _plan_member(
+    project_root: Path,
+    source_rel: str,
+    text: str,
+    *,
+    kind: str,
+    number: int,
+    status: str | None = None,
+    title: str | None = None,
+    slug: str | None = None,
+    today: date | None = None,
+) -> PlannedMember:
+    """Plan one member from already-read source bytes with a forced number.
+
+    Performs the loose check, identity resolution, own-outbound-link rebase,
+    render, and prospective-write validation. It runs no inbound scan and does
+    not re-read the source.
+    """
+    project_root = Path(project_root).resolve()
+    source_sha256 = hashlib.sha256(text.encode("utf-8")).hexdigest()
+    try:
+        frontmatter, body = split_frontmatter(text)
+    except yaml.YAMLError as exc:
+        raise EntityImportError(f"{source_rel} has a malformed frontmatter block: {exc}") from exc
+    if frontmatter:
+        raise EntityImportError(
+            f"{source_rel} already has frontmatter; import is for loose documents. "
+            "An entity that already carries an id needs a move, not an import."
+        )
+
+    resolved_title = title if title is not None else _derive_title(text, Path(source_rel))
+
+    try:
+        resolved_status = status if status is not None else default_status(kind, project_root=project_root)
+        allowed = valid_statuses(kind, project_root=project_root)
+        if allowed is not None and resolved_status not in allowed:
+            raise EntityImportError(
+                f"status {resolved_status!r} is not in the {kind} vocabulary {sorted(allowed)}"
+            )
+        slug_value = validate_slug(slug) if slug is not None else derive_slug(resolved_title)
+        policy = resolve_path_policy(kind)
+    except KeyError as exc:
+        raise EntityImportError(f"unknown entity kind: {kind}") from exc
+    except EntityCommandError as exc:
+        raise EntityImportError(str(exc)) from exc
+
+    local_part = f"{number:0{LOCAL_PART_WIDTH}d}-{slug_value}"
+    entity_id = f"{kind}:{local_part}"
+    dest = project_root / policy.root / f"{local_part}.md"
+    dest_rel = dest.relative_to(project_root).as_posix()
+
+    body_rebased, _outbound_hits = rewrite_outbound_links(
+        body, PurePosixPath(source_rel).parent, PurePosixPath(dest_rel).parent
+    )
+    stamp = (today or date.today()).isoformat()
+    new_frontmatter: dict[str, Any] = {
+        "kind": kind,
+        "title": resolved_title,
+        "status": resolved_status,
+        "created": stamp,
+        "updated": stamp,
+        "id": entity_id,
+    }
+    rendered_text = _render_markdown(new_frontmatter, body_rebased)
+    warnings, _sources = _validate_prospective_write(
+        project_root=project_root,
+        rel_path=Path(dest_rel),
+        text=rendered_text,
+        target_entity_id=entity_id,
+    )
+    return PlannedMember(
+        member=ImportMember(
+            source_rel=source_rel,
+            source_sha256=source_sha256,
+            entity_id=entity_id,
+            number=number,
+            dest_rel=dest_rel,
+            title=resolved_title,
+            status=resolved_status,
+            frontmatter=new_frontmatter,
+            rendered_text=rendered_text,
+        ),
+        warnings=list(warnings),
+    )
 
 
 def plan_import(
@@ -120,84 +263,33 @@ def plan_import(
     """Plan the import of a loose markdown file. Touches nothing."""
     project_root = Path(project_root).resolve()
     source = Path(source).resolve()
-
     if not source.is_file():
         raise EntityImportError(f"source not found: {source}")
-
-    # ONE read of the source. `_parse_markdown_file` re-opened the path, so a
-    # source changing between the two reads produced a plan whose title/body and
-    # whose hash described different bytes. split_frontmatter parses the text we
-    # already hold, and that same text is what the hash below commits to.
     try:
         text = source.read_text(encoding="utf-8")
     except UnicodeDecodeError as exc:
         raise EntityImportError(f"{source} is not valid UTF-8: {exc}") from exc
-    source_sha256 = hashlib.sha256(text.encode("utf-8")).hexdigest()
+    source_rel = source.relative_to(project_root).as_posix()
+    # Keep number proposal outside the member planner: a cohort assigns its
+    # members' forced numbers in one batch, while a single import proposes one.
     try:
-        frontmatter, body = split_frontmatter(text)
-    except yaml.YAMLError as exc:
-        raise EntityImportError(f"{source} has a malformed frontmatter block: {exc}") from exc
-    if frontmatter:
-        raise EntityImportError(
-            f"{source} already has frontmatter; import is for loose documents. "
-            "An entity that already carries an id needs a move, not an import."
-        )
-
-    resolved_title = title if title is not None else _derive_title(text, source)
-
-    # Identity resolution: everything here calls into entities.py / entity_reservation.py,
-    # which raise their OWN exception types (a bare KeyError for a kind unknown to both the
-    # built-in table and the local manifest; EntityCommandError for an unsupported kind, a
-    # non-numeric kind, or an unsluggable title) on bad user input. plan_import advertises
-    # EntityImportError as its sole error type -- every test in this module raises it -- so
-    # a caller catching EntityImportError must not see these leak through unwrapped.
-    try:
-        resolved_status = status if status is not None else default_status(kind, project_root=project_root)
-        allowed = valid_statuses(kind, project_root=project_root)
-        # None is an OPEN set (entities.py:1697), not an empty one -- do not refuse on it.
-        # This check raises EntityImportError directly, which the except clauses below do
-        # NOT catch (it is unrelated to EntityCommandError/KeyError) -- it passes through
-        # unwrapped, exactly as if it sat outside the try.
-        if allowed is not None and resolved_status not in allowed:
-            raise EntityImportError(
-                f"status {resolved_status!r} is not in the {kind} vocabulary {sorted(allowed)}"
-            )
         number = propose_number(project_root, kind)
-        slug_value = validate_slug(slug) if slug is not None else derive_slug(resolved_title)
-        policy = resolve_path_policy(kind)
     except KeyError as exc:
         raise EntityImportError(f"unknown entity kind: {kind}") from exc
     except EntityCommandError as exc:
         raise EntityImportError(str(exc)) from exc
-
-    local_part = f"{number:0{LOCAL_PART_WIDTH}d}-{slug_value}"
-    entity_id = f"{kind}:{local_part}"
-
-    dest = project_root / policy.root / f"{local_part}.md"
-    source_rel = source.relative_to(project_root).as_posix()
-    dest_rel = dest.relative_to(project_root).as_posix()
-
-    body_rebased, _outbound_hits = rewrite_outbound_links(
-        body, PurePosixPath(source_rel).parent, PurePosixPath(dest_rel).parent
+    planned = _plan_member(
+        project_root,
+        source_rel,
+        text,
+        kind=kind,
+        number=number,
+        status=status,
+        title=title,
+        slug=slug,
+        today=today,
     )
-
-    stamp = (today or date.today()).isoformat()
-    new_frontmatter: dict[str, Any] = {
-        "kind": kind,
-        "title": resolved_title,
-        "status": resolved_status,
-        "created": stamp,
-        "updated": stamp,
-        "id": entity_id,
-    }
-    rendered_text = _render_markdown(new_frontmatter, body_rebased)
-
-    warnings, _sources = _validate_prospective_write(
-        project_root=project_root,
-        rel_path=Path(dest_rel),
-        text=rendered_text,
-        target_entity_id=entity_id,
-    )
+    member = planned.member
 
     # Exclude the moved source from the INBOUND scan. Its own links are rebased by
     # rewrite_outbound_links above; scanning it again as an inbound referrer would
@@ -206,25 +298,168 @@ def plan_import(
     # self-referential document would drift against its own plan every time.
     ref_report = plan_reference_rewrite(
         project_root,
-        id_substitutions={source_rel: entity_id},
-        path_substitutions={source_rel: dest_rel},
+        id_substitutions={source_rel: member.entity_id},
+        path_substitutions={source_rel: member.dest_rel},
         exclude=exclude | frozenset({source}),
     )
 
     return ImportPlan(
         project_root=str(project_root),
-        source_rel=source_rel,
-        source_sha256=source_sha256,
-        entity_id=entity_id,
+        source_rel=member.source_rel,
+        source_sha256=member.source_sha256,
+        entity_id=member.entity_id,
         kind=kind,
-        number=number,
-        dest_rel=dest_rel,
-        title=resolved_title,
-        status=resolved_status,
-        frontmatter=new_frontmatter,
-        rendered_text=rendered_text,
+        number=member.number,
+        dest_rel=member.dest_rel,
+        title=member.title,
+        status=member.status,
+        frontmatter=member.frontmatter,
+        rendered_text=member.rendered_text,
         ref_report=ref_report,
-        warnings=list(warnings),
+        warnings=planned.warnings,
+    )
+
+
+def plan_cohort_import(
+    project_root: Path,
+    sources: Sequence[Path],
+    *,
+    kind: str,
+    status: str | None = None,
+    exclude: frozenset[Path] = frozenset(),
+    today: date | None = None,
+) -> CohortImportPlan:
+    """Plan 2+ reference-independent loose documents as one import cohort."""
+
+    project_root = Path(project_root).resolve()
+    if len(sources) < 2:
+        raise EntityImportError("a cohort import needs at least 2 sources")
+
+    resolved: list[Path] = []
+    source_rels: list[str] = []
+    for source_arg in sources:
+        source = Path(source_arg).resolve()
+        try:
+            source_rel = source.relative_to(project_root).as_posix()
+        except ValueError as exc:
+            raise EntityImportError(f"source is outside project root: {source}") from exc
+        resolved.append(source)
+        source_rels.append(source_rel)
+    if len(set(resolved)) != len(resolved):
+        raise EntityImportError("cohort sources contain a duplicate")
+    excluded = {Path(path).resolve() for path in exclude}
+    if overlap := excluded.intersection(resolved):
+        rendered = ", ".join(
+            path.relative_to(project_root).as_posix() for path in sorted(overlap)
+        )
+        raise EntityImportError(
+            f"exclude may not contain a cohort member: {rendered}"
+        )
+
+    cache: dict[str, str] = {}
+    order: list[str] = []
+    for source, source_rel in zip(resolved, source_rels, strict=True):
+        if not source.is_file():
+            raise EntityImportError(f"source not found: {source}")
+        try:
+            text = source.read_text(encoding="utf-8")
+        except UnicodeDecodeError as exc:
+            raise EntityImportError(f"{source} is not valid UTF-8: {exc}") from exc
+        cache[source_rel] = text
+        order.append(source_rel)
+
+    try:
+        base = propose_number(project_root, kind)
+    except KeyError as exc:
+        raise EntityImportError(f"unknown entity kind: {kind}") from exc
+    except EntityCommandError as exc:
+        raise EntityImportError(str(exc)) from exc
+
+    planned = [
+        _plan_member(
+            project_root,
+            source_rel,
+            cache[source_rel],
+            kind=kind,
+            number=base + offset,
+            status=status,
+            title=None,
+            slug=None,
+            today=today,
+        )
+        for offset, source_rel in enumerate(order)
+    ]
+    members = [item.member for item in planned]
+    member_rels = set(order)
+
+    report = plan_reference_rewrite(
+        project_root,
+        id_substitutions={member.source_rel: member.entity_id for member in members},
+        path_substitutions={member.source_rel: member.dest_rel for member in members},
+        exclude=exclude,
+        source_overrides=cache,
+    )
+
+    def hit_target(hit: RefHit) -> str | None:
+        head, _tail = _split_target(hit.old)
+        if head in member_rels:
+            return head
+        resolved_target = (
+            _resolve_link(head, PurePosixPath(hit.rel_path).parent) if head else None
+        )
+        return resolved_target if resolved_target in member_rels else None
+
+    def manual_targets(hit: ManualHit) -> list[str]:
+        occurrences: list[tuple[str, int, int]] = []
+        for source_rel in member_rels:
+            offset = 0
+            while (start := hit.text.find(source_rel, offset)) != -1:
+                occurrences.append((source_rel, start, start + len(source_rel)))
+                offset = start + 1
+
+        targets: set[str] = set()
+        for source_rel, start, end in occurrences:
+            shadowed = any(
+                other_start <= start
+                and end <= other_end
+                and (other_start < start or end < other_end)
+                for _other, other_start, other_end in occurrences
+            )
+            if not shadowed:
+                targets.add(source_rel)
+        return sorted(targets)
+
+    pairs: list[tuple[str, str]] = []
+    for hit in report.hits:
+        if hit.rel_path in member_rels:
+            pairs.append((hit.rel_path, hit_target(hit) or hit.old))
+    for manual in report.manual:
+        if manual.rel_path in member_rels:
+            targets = manual_targets(manual) or [manual.text.strip()]
+            pairs.extend((manual.rel_path, target) for target in targets)
+    if pairs:
+        rendered = ", ".join(
+            f"{source} -> {target}" for source, target in sorted(set(pairs))
+        )
+        raise RefDependentCohortError(
+            "cohort members reference each other or themselves; import them in "
+            f"separate batches. Offending source -> target pairs: {rendered}"
+        )
+
+    warnings = sorted(
+        (
+            AttributedWarning(source_rel=item.member.source_rel, message=warning)
+            for item in planned
+            for warning in item.warnings
+        ),
+        key=lambda warning: (warning.source_rel, warning.message),
+    )
+    return CohortImportPlan(
+        project_root=str(project_root),
+        kind=kind,
+        members=members,
+        ref_report=report,
+        warnings=warnings,
     )
 
 
@@ -256,6 +491,17 @@ def parse_import_plan(raw: bytes) -> ImportPlan:
         return ImportPlan.model_validate_json(raw)
     except PydanticValidationError as exc:
         raise EntityImportError(f"plan bytes are not a readable import plan: {exc}") from exc
+
+
+def parse_cohort_import_plan(raw: bytes) -> CohortImportPlan:
+    """Parse already-read cohort-plan bytes for the approval envelope."""
+
+    try:
+        return CohortImportPlan.model_validate_json(raw)
+    except PydanticValidationError as exc:
+        raise EntityImportError(
+            f"plan bytes are not a readable cohort import plan: {exc}"
+        ) from exc
 
 
 @dataclass(frozen=True)
@@ -507,19 +753,19 @@ def _slugify_anchor(value: str) -> str:
     return re.sub(r"[\s_]+", "-", slug)
 
 
-def _validate_plan_for_apply(project_root: Path, plan: ImportPlan) -> Path:
-    """Reject a persisted plan that does not describe a safe, self-consistent move,
-    BEFORE any mutation. Returns the validated, resolved source path.
+def _validate_member_identity(
+    project_root: Path,
+    *,
+    kind: str,
+    source_rel: str,
+    dest_rel: str,
+    entity_id: str,
+    number: int,
+    frontmatter: dict[str, Any],
+    rendered_text: str,
+) -> Path:
+    """Validate one persisted member's paths and identity before mutation."""
 
-    A saved plan is an on-disk artifact that can be hand-edited or corrupted
-    between preview and apply. `load_import_plan` proves it is well-TYPED; nothing
-    proves its path and identity fields are TRUE. `apply_import` then unlinks the
-    source and writes the destination, so those fields are untrusted input to a
-    filesystem mutation. `Path("/root") / "/etc/x"` silently discards the root and
-    `Path("/root") / "../x"` escapes it, so a validly typed plan could otherwise
-    name `/etc/passwd`, `../other-repo/file`, or `.git/config` and have apply
-    unlink it.
-    """
     def _contained(rel: str, label: str) -> Path:
         pure = PurePosixPath(rel)
         if pure.is_absolute() or rel.startswith("/") or ".." in pure.parts:
@@ -529,46 +775,228 @@ def _validate_plan_for_apply(project_root: Path, plan: ImportPlan) -> Path:
             raise EntityImportError(f"plan {label} {rel!r} escapes the project root")
         return resolved
 
-    source = _contained(plan.source_rel, "source")
-    _contained(plan.dest_rel, "destination")
-    if not plan.source_rel.endswith(".md"):
-        raise EntityImportError(f"plan source {plan.source_rel!r} is not a markdown file")
+    source = _contained(source_rel, "source")
+    _contained(dest_rel, "destination")
+    if not source_rel.endswith(".md"):
+        raise EntityImportError(f"plan source {source_rel!r} is not a markdown file")
 
-    # Identity: entity_id, kind and number must agree, and the destination must be
-    # EXACTLY the canonical path they imply -- computed here, never trusted from the
-    # plan. This is what makes dest_rel tamper-evident: it is fully determined by
-    # (kind, number, slug), so any other value is a redirect of the write target.
-    id_kind, sep, local_part = plan.entity_id.partition(":")
-    if not sep or id_kind != plan.kind:
-        raise EntityImportError(f"plan entity_id {plan.entity_id!r} disagrees with kind {plan.kind!r}")
+    id_kind, sep, local_part = entity_id.partition(":")
+    if not sep or id_kind != kind:
+        raise EntityImportError(f"plan entity_id {entity_id!r} disagrees with kind {kind!r}")
     match = re.match(rf"(\d{{{LOCAL_PART_WIDTH}}})-", local_part)
-    if match is None or int(match.group(1)) != plan.number:
-        raise EntityImportError(f"plan entity_id {plan.entity_id!r} does not carry number {plan.number}")
-    expected_dest = f"{resolve_path_policy(plan.kind).root}/{local_part}.md"
-    if plan.dest_rel != expected_dest:
+    if match is None or int(match.group(1)) != number:
+        raise EntityImportError(f"plan entity_id {entity_id!r} does not carry number {number}")
+    try:
+        policy_root = resolve_path_policy(kind).root
+    except KeyError as exc:
+        raise EntityImportError(f"unknown entity kind: {kind}") from exc
+    except EntityCommandError as exc:
+        raise EntityImportError(str(exc)) from exc
+    expected_dest = f"{policy_root}/{local_part}.md"
+    if dest_rel != expected_dest:
         raise EntityImportError(
-            f"plan destination {plan.dest_rel!r} is not canonical for {plan.entity_id!r} "
+            f"plan destination {dest_rel!r} is not canonical for {entity_id!r} "
             f"(expected {expected_dest!r})"
         )
 
-    # Frontmatter and rendered text must describe THIS entity: apply writes
-    # rendered_text verbatim and never re-renders it, so a mismatch here would land
-    # bytes the identity checks above never saw.
-    if plan.frontmatter.get("id") != plan.entity_id or plan.frontmatter.get("kind") != plan.kind:
+    if frontmatter.get("id") != entity_id or frontmatter.get("kind") != kind:
         raise EntityImportError("plan frontmatter id/kind disagree with the entity_id")
-    rendered_fm, _body = split_frontmatter(plan.rendered_text)
-    if rendered_fm.get("id") != plan.entity_id:
-        raise EntityImportError("plan rendered_text frontmatter does not carry the entity_id")
-
-    # And it must still be valid against the CURRENT corpus, not only the one the
-    # preview saw -- the same boundary create_entity and plan_import write through.
+    rendered_fm, _body = split_frontmatter(rendered_text)
+    if rendered_fm.get("id") != entity_id or rendered_fm.get("kind") != kind:
+        raise EntityImportError(
+            "plan rendered_text frontmatter id/kind disagree with the entity_id"
+        )
     _validate_prospective_write(
         project_root=project_root,
-        rel_path=Path(plan.dest_rel),
-        text=plan.rendered_text,
-        target_entity_id=plan.entity_id,
+        rel_path=Path(dest_rel),
+        text=rendered_text,
+        target_entity_id=entity_id,
     )
     return source
+
+
+def _validate_plan_for_apply(project_root: Path, plan: ImportPlan) -> Path:
+    return _validate_member_identity(
+        project_root,
+        kind=plan.kind,
+        source_rel=plan.source_rel,
+        dest_rel=plan.dest_rel,
+        entity_id=plan.entity_id,
+        number=plan.number,
+        frontmatter=plan.frontmatter,
+        rendered_text=plan.rendered_text,
+    )
+
+
+def _validate_cohort_plan_for_apply(
+    project_root: Path, plan: CohortImportPlan
+) -> list[Path]:
+    """Validate a persisted cohort's shape and every member before mutation."""
+
+    if len(plan.members) < 2:
+        raise EntityImportError("cohort plan has fewer than 2 members")
+
+    numbers = [member.number for member in plan.members]
+    if numbers != list(range(numbers[0], numbers[0] + len(numbers))):
+        raise EntityImportError(f"cohort numbers are not contiguous and ordered: {numbers}")
+
+    for field in ("entity_id", "source_rel", "dest_rel"):
+        values = [getattr(member, field) for member in plan.members]
+        if len(set(values)) != len(values):
+            raise EntityImportError(f"cohort members share a {field}")
+
+    sources = {member.source_rel for member in plan.members}
+    destinations = {member.dest_rel for member in plan.members}
+    if overlap := sources & destinations:
+        raise EntityImportError(
+            f"cohort source and destination sets overlap: {sorted(overlap)}"
+        )
+
+    validated_sources = [
+        _validate_member_identity(
+            project_root,
+            kind=plan.kind,
+            source_rel=member.source_rel,
+            dest_rel=member.dest_rel,
+            entity_id=member.entity_id,
+            number=member.number,
+            frontmatter=member.frontmatter,
+            rendered_text=member.rendered_text,
+        )
+        for member in plan.members
+    ]
+    if len(set(validated_sources)) != len(validated_sources):
+        raise EntityImportError("cohort members share the same resolved source")
+    for member, source in zip(plan.members, validated_sources, strict=True):
+        canonical_rel = source.relative_to(project_root).as_posix()
+        if member.source_rel != canonical_rel:
+            raise EntityImportError(
+                f"cohort member source {member.source_rel!r} is not the canonical "
+                f"source path {canonical_rel!r}"
+            )
+    return validated_sources
+
+
+def _source_digest(source: Path, rel: str) -> str:
+    """Hash a UTF-8 source while keeping apply's error surface domain-specific."""
+
+    try:
+        text = source.read_text(encoding="utf-8")
+    except UnicodeDecodeError as exc:
+        raise EntityImportError(f"{rel} is not valid UTF-8: {exc}") from exc
+    except OSError as exc:
+        raise EntityImportError(f"{rel} could not be read: {exc}") from exc
+    return hashlib.sha256(text.encode("utf-8")).hexdigest()
+
+
+def apply_cohort_import(
+    project_root: Path,
+    plan: CohortImportPlan,
+    *,
+    exclude: frozenset[Path] = frozenset(),
+) -> list[str]:
+    """Apply a cohort as one exception-atomic unit."""
+
+    project_root = Path(project_root).resolve()
+    if plan.plan_type != "cohort-import" or plan.schema_version != 1:
+        raise EntityImportError(
+            "unsupported cohort plan "
+            f"(plan_type={plan.plan_type!r}, schema_version={plan.schema_version})"
+        )
+    if plan.project_root != str(project_root):
+        raise EntityImportError(
+            f"plan was built against {plan.project_root}, not {project_root}; "
+            "re-run the preview here"
+        )
+
+    sources = _validate_cohort_plan_for_apply(project_root, plan)
+    for member, source in zip(plan.members, sources, strict=True):
+        if not source.is_file():
+            raise EntityImportError(f"source not found: {member.source_rel}")
+        if _source_digest(source, member.source_rel) != member.source_sha256:
+            raise EntityImportError(
+                f"{member.source_rel} changed since the preview; re-run the preview"
+            )
+
+    all_sources = set(sources)
+    all_destinations = {project_root / member.dest_rel for member in plan.members}
+    scan_exclude = exclude | all_sources | all_destinations
+    fresh_report = plan_reference_rewrite(
+        project_root,
+        id_substitutions={member.source_rel: member.entity_id for member in plan.members},
+        path_substitutions={member.source_rel: member.dest_rel for member in plan.members},
+        exclude=scan_exclude,
+    )
+    if fresh_report != plan.ref_report:
+        raise EntityImportError(
+            "the corpus changed since the preview (external references no longer match); "
+            "re-run the preview"
+        )
+
+    touched = [
+        *all_sources,
+        *all_destinations,
+        *{project_root / edit.rel_path for edit in plan.ref_report.edits},
+    ]
+    snapshot = _snapshot(touched)
+    mutated: set[Path] = set()
+    written_refs: list[str] = []
+    try:
+        for member in plan.members:
+            destination = project_root / member.dest_rel
+            expected = f"{resolve_path_policy(plan.kind).root}/{destination.stem}.md"
+            if member.dest_rel != expected:
+                raise EntityImportError(
+                    f"member destination {member.dest_rel!r} is not canonical "
+                    f"for {member.entity_id!r}"
+                )
+            try:
+                claimed = claim_number_in_dir(
+                    project_root,
+                    plan.kind,
+                    member.number,
+                    destination.stem,
+                    member.rendered_text,
+                )
+            except EntityCommandError as exc:
+                raise EntityImportError(str(exc)) from exc
+            mutated.add(claimed)
+            if claimed != destination:
+                claimed.unlink(missing_ok=True)
+                raise EntityImportError(
+                    f"claim returned {claimed} for member {member.entity_id!r}, "
+                    f"expected {destination}"
+                )
+
+        for member, source in zip(plan.members, sources, strict=True):
+            if _source_digest(source, member.source_rel) != member.source_sha256:
+                raise EntityImportError(
+                    f"{member.source_rel} changed during apply; rolled back — "
+                    "re-run the preview"
+                )
+            source.unlink()
+            mutated.add(source)
+
+        apply_reference_rewrite(
+            project_root,
+            plan.ref_report,
+            exclude=scan_exclude,
+            written=written_refs,
+        )
+        for member in plan.members:
+            if problems := audit_moved_references(
+                project_root, member.dest_rel, exclude=exclude
+            ):
+                raise EntityImportError(
+                    "post-move reference audit failed; the cohort import was rolled back:\n  "
+                    + "\n  ".join(problems)
+                )
+    except Exception:
+        restrict = {*mutated, *(project_root / rel for rel in written_refs)}
+        _restore(snapshot, restrict=restrict)
+        raise
+
+    return [member.entity_id for member in plan.members]
 
 
 def apply_import(

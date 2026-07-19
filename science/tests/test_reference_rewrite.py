@@ -2,10 +2,12 @@
 """Substituting cross-reference rewriter (repoint, not drop), both surfaces."""
 from __future__ import annotations
 
+from collections.abc import Mapping  # noqa: F401  (documentation of the new param type)
 from pathlib import Path
 
 import pytest
 
+from science_tool.plan_common import PathEscape
 from science_tool.reference_rewrite import (
     ReferenceDriftError,
     RewriteReport,
@@ -20,6 +22,11 @@ def _project(tmp_path: Path) -> Path:
     return tmp_path
 
 
+def _corpus(tmp_path: Path) -> Path:
+    (tmp_path / "science.yaml").write_text("name: t\nknowledge_profiles: {local: local}\n", encoding="utf-8")
+    return tmp_path
+
+
 def _write(root: Path, rel: str, text: str) -> Path:
     path = root / rel
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -31,6 +38,104 @@ def _apply(root: Path, **subs) -> RewriteReport:
     """Plan, then apply the frozen plan. Apply never re-derives the edit set."""
     plan = plan_reference_rewrite(root, **subs)
     return apply_reference_rewrite(root, plan)
+
+
+def test_override_drives_enumeration_for_absent_source(tmp_path):
+    """An override is scanned even when its file no longer exists on disk."""
+    root = _corpus(tmp_path)
+    # No file at doc/loose.md exists; the override supplies its bytes. Its body
+    # links to another loose doc's path, which we are substituting.
+    report = plan_reference_rewrite(
+        root,
+        id_substitutions={"doc/other.md": "plan:0002-other"},
+        path_substitutions={"doc/other.md": "entities/plans/0002-other.md"},
+        source_overrides={"doc/loose.md": "# L\n\nsee [other](other.md)\n"},
+    )
+    # The override was examined: its link to other.md is reported (a hit),
+    # proving enumeration used the virtual entry, not the (absent) disk file.
+    assert any(h.rel_path == "doc/loose.md" for h in report.hits)
+
+
+def test_override_examined_once_when_also_on_disk(tmp_path):
+    """A key present both on disk and as an override is scanned once, from override bytes."""
+    root = _corpus(tmp_path)
+    (root / "doc").mkdir()
+    (root / "doc/loose.md").write_text("# L\n\nno links here\n", encoding="utf-8")
+    report = plan_reference_rewrite(
+        root,
+        id_substitutions={"doc/other.md": "plan:0002-other"},
+        path_substitutions={"doc/other.md": "entities/plans/0002-other.md"},
+        source_overrides={"doc/loose.md": "# L\n\nsee [other](other.md)\n"},
+    )
+    hits_for_loose = [h for h in report.hits if h.rel_path == "doc/loose.md"]
+    assert len(hits_for_loose) == 1  # examined once, and from the override bytes (which DO link)
+
+
+def test_exclude_wins_over_override(tmp_path):
+    """An excluded path is not scanned even if an override names it."""
+    root = _corpus(tmp_path)
+    report = plan_reference_rewrite(
+        root,
+        id_substitutions={"doc/other.md": "plan:0002-other"},
+        path_substitutions={"doc/other.md": "entities/plans/0002-other.md"},
+        exclude=frozenset({(root / "doc/loose.md").resolve()}),
+        source_overrides={"doc/loose.md": "# L\n\nsee [other](other.md)\n"},
+    )
+    assert not any(h.rel_path == "doc/loose.md" for h in report.hits)
+
+
+def test_override_examines_oversize_file_the_disk_scan_would_drop(tmp_path):
+    """A file too big for the disk size filter is still examined via its override."""
+    from science_tool.text_scan import MAX_SCANNABLE_BYTES
+    root = _corpus(tmp_path)
+    (root / "doc").mkdir()
+    # On-disk file exceeds the scan-size limit, so iter_scannable_files drops it.
+    big = "# L\n\n" + ("x " * MAX_SCANNABLE_BYTES) + "\nsee [other](other.md)\n"
+    (root / "doc/loose.md").write_text(big, encoding="utf-8")
+    assert (root / "doc/loose.md").stat().st_size > MAX_SCANNABLE_BYTES
+    # The override supplies a small text with the link; enumeration must include it.
+    report = plan_reference_rewrite(
+        root,
+        id_substitutions={"doc/other.md": "plan:0002-other"},
+        path_substitutions={"doc/other.md": "entities/plans/0002-other.md"},
+        source_overrides={"doc/loose.md": "# L\n\nsee [other](other.md)\n"},
+    )
+    assert any(h.rel_path == "doc/loose.md" for h in report.hits)
+
+
+def test_override_symlink_keeps_lexical_entry_identity(tmp_path: Path) -> None:
+    """A symlink override neither scans twice nor displaces its distinct target entry."""
+    root = _corpus(tmp_path)
+    _write(root, "doc/target.md", "see [disk](disk-target.md)\n")
+    (root / "doc/source.md").symlink_to("target.md")
+
+    report = plan_reference_rewrite(
+        root,
+        id_substitutions={},
+        path_substitutions={
+            "doc/disk-target.md": "entities/plans/disk-target.md",
+            "doc/override-target.md": "entities/plans/override-target.md",
+        },
+        source_overrides={"doc/source.md": "see [override](override-target.md)\n"},
+    )
+
+    assert [(hit.rel_path, hit.old) for hit in report.hits] == [
+        ("doc/source.md", "override-target.md"),
+        ("doc/target.md", "disk-target.md"),
+    ]
+
+
+@pytest.mark.parametrize("rel_path", ["", "./doc/a.md", "doc//a.md"])
+def test_override_rejects_noncanonical_key(tmp_path: Path, rel_path: str) -> None:
+    root = _corpus(tmp_path)
+
+    with pytest.raises(PathEscape, match="non-canonical"):
+        plan_reference_rewrite(
+            root,
+            id_substitutions={},
+            path_substitutions={},
+            source_overrides={rel_path: "body\n"},
+        )
 
 
 # ---- frontmatter surface -------------------------------------------------
