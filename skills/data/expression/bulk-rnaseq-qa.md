@@ -1,6 +1,7 @@
 ---
 name: data-expression-bulk-rnaseq-qa
 description: Use when ingesting or QA-reviewing bulk RNA-Seq cohorts (TCGA, GTEx, recount3, ARCHS4, GEO, MMRF), especially before meta-analysis.
+sources: [deseq2, edger]
 ---
 
 # Bulk RNA-Seq QA

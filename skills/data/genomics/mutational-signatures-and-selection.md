@@ -1,6 +1,7 @@
 ---
 name: data-genomics-mutational-signatures-and-selection
 description: Use when analyzing SBS/DBS/ID mutational signatures, tumor mutational burden, replication-timing bias, driver-gene enrichment, dN/dS, dNdScv, or selection signals.
+sources: [cosmic-signatures, dndscv]
 ---
 
 # Mutational Signatures and Selection
