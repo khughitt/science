@@ -135,6 +135,47 @@ first-class: author a staging file and import it, committing the resulting entit
 than the loose file. Newly scaffolded or imported projects carry this in their
 `AGENTS.md`; **existing adopters need a manual AGENTS.md update** to adopt it.
 
+### Migrating Legacy Specs (`science entity migrate-specs`)
+
+Older projects hold `spec`-typed design docs at loose paths (`doc/plans/…`,
+`doc/specs/…`) with date-slug or semantic ids. `science entity migrate-specs`
+canonicalizes them into numeric `entities/specs/NNNN-slug.md` entities, preserving
+each old id as an alias and repointing the references it can safely rewrite.
+
+**`spec:` references still resolve as annotation-only today.** This command makes a
+project *flip-ready*; it does not change resolution. Turning on `spec:` resolution
+is a separate, later, gated step — run the migration first, land clean, then adopt
+the revision that flips resolution (migrate-then-flip across revisions).
+
+Plan first (writes nothing), then apply:
+
+```bash
+science entity migrate-specs                 # dry run: the plan + a flip-readiness report
+science entity migrate-specs --format json   # the machine-readable report (flip_ready, counts)
+science entity migrate-specs --apply         # relocate, rewrite, and report
+science entity migrate-specs --resume        # finish an interrupted --apply from its journal
+```
+
+**What it projects.** Legacy frontmatter is mapped to the canonical spec schema:
+`type: spec` → `kind: spec`; `date:` seeds `created`/`updated`; `related_questions`
+/ `related_specs` fold into `related`; unambiguous legacy statuses map to the
+canonical vocabulary (`draft/active/complete/superseded/retired/archived`).
+Anything ambiguous — an unmappable status like `approved`, a missing `id:`/`title`,
+an authored load-derived key — is **refused, per file**; the migration never guesses.
+A date-slug id (`spec:2026-03-16-…`) is minted a fresh numeric id, not mistaken for
+an already-numbered spec.
+
+**How references are reported.** Each `spec:` reference is classified into five
+groups: **rewritten** (auto-repointed), **alias_resolved** (resolves via the old-id
+alias, optional cleanup), **identity_preserved** (inert prose/key mentions),
+**unchanged** (already points at a live numeric spec), and **manual_retarget**
+(`discusses` frames and unresolved ids — a human must fix these).
+
+**Flip-readiness.** `flip_ready` is `true` only when no un-relocated legacy spec, no
+`kind: spec` file at a singleton home, and no `manual_retarget` reference remains,
+and the scan was complete. A singleton-home `spec` file is **reported, never
+auto-relocated** — reconciling it is a project judgment.
+
 ### CLI Path And Identity Policy
 
 The source entity CLI creates only kinds that have a built-in Markdown path

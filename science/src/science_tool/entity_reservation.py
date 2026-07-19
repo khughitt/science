@@ -198,8 +198,18 @@ def claim_number_in_dir(
                 f"number {number:0{LOCAL_PART_WIDTH}d} was archived since the preview; re-run the preview"
             )
         path = directory / f"{local_part}.md"
+        # `open(..., "x")` == O_CREAT|O_EXCL: reaching this line PROVES we own the
+        # path (no bystander held it). So a write failure is ours to clean up --
+        # leaving the partial file would strand debris a caller's rollback (which
+        # snapshotted this path absent) cannot see. This covers the in-process
+        # exception path only; a SIGKILL mid-write leaves a partial that resume
+        # classifies as a third state and refuses on.
         with open(path, "x", encoding="utf-8") as handle:
-            handle.write(text)
+            try:
+                handle.write(text)
+            except BaseException:
+                path.unlink(missing_ok=True)
+                raise
         return path
     finally:
         sentinel.unlink(missing_ok=True)

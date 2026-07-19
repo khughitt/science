@@ -6,7 +6,7 @@ import os
 import re
 import secrets
 import unicodedata
-from collections.abc import Mapping, Sequence
+from collections.abc import Collection, Mapping, Sequence
 from dataclasses import dataclass
 from datetime import date
 from pathlib import Path
@@ -1752,22 +1752,20 @@ def _resolve_destination_rel_path(
     return explicit_path
 
 
-def _validate_prospective_write(
+def _validate_prospective_writes(
     *,
     project_root: Path,
-    rel_path: Path,
-    text: str,
-    target_entity_id: str,
+    markdown_overrides: Mapping[str, str],
+    allowed_unresolved_sources: Collection[str],
     include_commons: bool = True,
 ) -> tuple[list[str], ProjectSources]:
-    """Audit warnings, AND the corpus as it would be after this write.
+    """Audit warnings, AND the corpus as it would be after these writes — the ONE core.
 
-    It hands the prospective sources back because it already built them, and the caller's next
-    question — does this record's successor resolve? — is a question about exactly that corpus.
-    Loading it a second time to ask would be waste, and loading the BASELINE instead would answer a
-    question about a corpus this write is in the middle of changing.
+    `markdown_overrides` maps rel path -> content (`""` models a REMOVED file). Forward
+    `related`/`source_refs` unresolved references whose source is in `allowed_unresolved_sources`
+    are downgraded to warnings (they resolve via the alias net); any other new blocking audit
+    failure raises `EntityCommandError`. Returns the prospective sources it already built.
     """
-    rel_path_text = rel_path.as_posix()
     def _audit_rows(project_sources: ProjectSources) -> list[AuditRow]:
         verdict = audit_project_sources(project_sources)
         if verdict.status == "unwired":
@@ -1776,7 +1774,7 @@ def _validate_prospective_write(
 
     baseline_rows = _audit_rows(load_project_sources(project_root, include_commons=include_commons))
     prospective = load_project_sources(
-        project_root, markdown_overrides={rel_path_text: text}, include_commons=include_commons
+        project_root, markdown_overrides=dict(markdown_overrides), include_commons=include_commons
     )
     prospective_rows = _audit_rows(prospective)
 
@@ -1785,7 +1783,7 @@ def _validate_prospective_write(
     warnings = [_format_preexisting_warning(row) for row in baseline_rows if row.get("status") == "fail"]
     blocking_rows: list[Mapping[str, object]] = []
     for row in new_rows:
-        if _is_allowed_unresolved_target_warning(row, target_entity_id):
+        if _is_allowed_unresolved_target_warning(row, allowed_unresolved_sources):
             warnings.append(_format_new_warning(row))
             continue
         if row.get("status") == "fail":
@@ -1793,6 +1791,23 @@ def _validate_prospective_write(
     if blocking_rows:
         raise EntityCommandError("; ".join(_format_blocking_row(row) for row in blocking_rows))
     return warnings, prospective
+
+
+def _validate_prospective_write(
+    *,
+    project_root: Path,
+    rel_path: Path,
+    text: str,
+    target_entity_id: str,
+    include_commons: bool = True,
+) -> tuple[list[str], ProjectSources]:
+    """Single-document prospective validation — delegates to the batch core."""
+    return _validate_prospective_writes(
+        project_root=project_root,
+        markdown_overrides={rel_path.as_posix(): text},
+        allowed_unresolved_sources={target_entity_id},
+        include_commons=include_commons,
+    )
 
 
 def _audit_row_key(row: Mapping[str, object]) -> tuple[str, str, str, str, str, str]:
@@ -1806,11 +1821,11 @@ def _audit_row_key(row: Mapping[str, object]) -> tuple[str, str, str, str, str, 
     )
 
 
-def _is_allowed_unresolved_target_warning(row: Mapping[str, object], target_entity_id: str) -> bool:
+def _is_allowed_unresolved_target_warning(row: Mapping[str, object], allowed_sources: Collection[str]) -> bool:
     return (
         row.get("check") == "unresolved_reference"
         and row.get("status") == "fail"
-        and row.get("source") == target_entity_id
+        and row.get("source") in allowed_sources
         and row.get("field") in {"related", "source_refs"}
     )
 
