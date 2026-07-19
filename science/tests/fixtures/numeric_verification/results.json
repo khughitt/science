@@ -1,0 +1,22 @@
+{
+  "that_key": 0.100000000000000005,
+  "a": [
+    1,
+    2,
+    3
+  ],
+  "nested": {
+    "b/c": 42,
+    "d~e": 43
+  },
+  "s_node": "hello",
+  "bool_node": true,
+  "null_node": null,
+  "list_node": [
+    1,
+    2
+  ],
+  "obj_node": {
+    "x": 1
+  }
+}

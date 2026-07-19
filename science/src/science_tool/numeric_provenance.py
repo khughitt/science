@@ -476,16 +476,42 @@ def paragraph_has_anchor_evidence(paragraph_text: str, anchor_patterns: tuple[st
     return re.search("|".join(anchor_patterns), paragraph_text) is not None
 
 
+def _within_bound_span(line: int, col: int, length: int, spans: frozenset[tuple[int, int, int]]) -> bool:
+    """True if the claim occupying columns `[col, col+length)` on `line` overlaps
+    any `(sl, cs, ce)` span (1-based, `ce` exclusive) with `sl == line`.
+
+    A real overlap test, not exact-equality: the claim and the bound token are
+    the same token in practice, but this must hold even if their extents
+    merely intersect.
+    """
+    claim_start, claim_end = col, col + length
+    for sl, cs, ce in spans:
+        if sl == line and claim_start < ce and cs < claim_end:
+            return True
+    return False
+
+
 def assess_numeric_claims(
-    document: DocumentContext, index: ResolutionIndex, config: NumericProvenanceConfig
+    document: DocumentContext,
+    index: ResolutionIndex,
+    config: NumericProvenanceConfig,
+    *,
+    bound_spans: frozenset[tuple[int, int, int]] = frozenset(),
 ) -> list[ClaimAssessment]:
     """Classify every numeric claim in a document's body prose.
 
-    Resolution order per claim (first match wins): NotClaim -> Exempt ->
-    Anchored(entity) -> Anchored(local) -> Unanchored. Reuses the claim
-    extraction and line-walking gates from `prose_lint.detect_numeric_anchor`
-    rather than re-implementing them, so behavior stays consistent with the
-    existing detector.
+    Resolution order per claim (first match wins): skip-if-bound -> NotClaim
+    -> Exempt -> Anchored(entity) -> Anchored(local) -> Unanchored. Reuses the
+    claim extraction and line-walking gates from
+    `prose_lint.detect_numeric_anchor` rather than re-implementing them, so
+    behavior stays consistent with the existing detector.
+
+    `bound_spans` are (line, col_start, col_end) spans (1-based, col_end
+    exclusive) of numeric tokens already pinned by a Part-B `numeric_claims`
+    binding (see `numeric_binding.parse_claim_bindings`). A claim whose span
+    falls inside a bound span is skipped entirely -- no assessment is
+    emitted for it -- because Part B verifies it instead. The default empty
+    frozenset preserves existing callers' behavior byte-for-byte.
     """
     from science_tool.prose_lint import (  # reuse, do not duplicate
         _BARE_YEAR_RE, _BOLD_STRUCTURAL_LABEL_RE, _CROSS_REFERENCE_RE,
@@ -536,6 +562,8 @@ def assess_numeric_claims(
                 continue
             claim = NumericClaim(value=value, line=lineno, col=match.start() + 1,
                                  paragraph_id=pid, section_id=sid)
+            if _within_bound_span(lineno, match.start() + 1, len(value), bound_spans):
+                continue
             # 1 — NotClaim
             reason = classify_structural(value, raw, match.start() + 1)
             if reason is not None:

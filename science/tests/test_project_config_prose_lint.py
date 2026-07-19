@@ -117,3 +117,38 @@ def test_additional_anchor_patterns_are_additive(tmp_path):
     config = load_project_config(tmp_path)
     assert config.prose_lint.anchor_patterns == ["task:"]
     assert config.prose_lint.additional_anchor_patterns == ["paper:", "cite:"]
+
+
+def test_max_json_and_feather_bytes_default(tmp_path):
+    (tmp_path / "science.yaml").write_text("name: demo\nprose_lint: {}\n")
+    config = load_project_config(tmp_path)
+    assert config.prose_lint.max_json_bytes == 50 * 1024 * 1024
+    assert config.prose_lint.max_feather_bytes == 256 * 1024 * 1024
+
+
+def test_max_json_bytes_round_trips():
+    from science_tool.project_config import ProseLintConfig
+
+    config = ProseLintConfig(max_json_bytes=10)
+    assert config.max_json_bytes == 10
+    # Untouched field keeps its own default.
+    assert config.max_feather_bytes == 256 * 1024 * 1024
+
+
+def test_max_feather_bytes_round_trips():
+    from science_tool.project_config import ProseLintConfig
+
+    config = ProseLintConfig(max_feather_bytes=99)
+    assert config.max_feather_bytes == 99
+
+
+def test_unknown_field_still_rejected_with_new_fields_present():
+    from pydantic import ValidationError
+    from science_tool.project_config import ProseLintConfig
+
+    try:
+        ProseLintConfig(max_json_bytes=10, totally_unknown_field=1)
+    except ValidationError:
+        pass
+    else:
+        raise AssertionError("expected ValidationError for unknown field")

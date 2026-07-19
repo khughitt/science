@@ -1,6 +1,6 @@
 # Prose Lints
 
-`science prose lint` detects four classes of prose-quality issue surfaced
+`science prose lint` detects several classes of prose-quality issue surfaced
 by the natural-systems t466 citation-audit pilot. Each lint is mechanically
 detectable; LLM-judgment claims (e.g., "field-state consensus claims") are
 handled by the [annotation-token vocabulary](annotation-tokens.md), not by these lints.
@@ -13,12 +13,13 @@ handled by the [annotation-token vocabulary](annotation-tokens.md), not by these
 | `short-form-ids`          | Bare `Q1`, `t088`, `q54` etc. — short forms of canonical entity refs                                                 | `warn`           |
 | `frontmatter-inline-gap`  | Frontmatter `related:` entries that never appear in the document body                                                | `info`           |
 | `numeric-anchor`          | Numeric claims (`ρ = 0.168`, `30%`, `n = 184`) without an anchor token (`task:`, `pipeline/`, `[@…]`) in the same paragraph | `info` |
+| `numeric-verification`    | Bound numeric claims (`numeric_claims:` + `[^id]`) whose prose value disagrees with the artifact value, or whose binding is broken | `warn` |
 
 `--strict` promotes all `info` issues to `warn` and exits non-zero on any issue.
 
 ## Lexical scope
 
-All four lints respect the same scope rules as `science markers scan`:
+All prose lints respect the same scope rules as `science markers scan`:
 
 - Skips YAML frontmatter.
 - Skips fenced code blocks (triple-backtick).
@@ -56,7 +57,7 @@ prose_lint:
     - "CDC 2011"        # org+year, not an author-year citation
 ```
 
-Defaults: all four checks enabled; `anchor_patterns` defaults to `["task:", "pipeline/", "\\[@", "data/", "scripts/"]`; `exclude_paths` defaults to `[]`.
+Defaults: all configured checks enabled; `anchor_patterns` defaults to `["task:", "pipeline/", "\\[@", "data/", "scripts/"]`; `exclude_paths` defaults to `[]`.
 
 `exclude_paths` is a list of project-relative glob patterns for markdown files that
 should not be scanned. Use it for archived/generated prose snapshots whose text is
@@ -153,6 +154,139 @@ drop in false positives from entity/local-scope anchoring. See
 [`docs/plans/2026-07-18-numeric-provenance-check-design.md`](../plans/2026-07-18-numeric-provenance-check-design.md)
 for the full redesign rationale and empirical grounding.
 
+## numeric-verification (structured numeric claims)
+
+`numeric-anchor` (above) checks that a numeric claim has *declared,
+resolvable provenance* — a citation, task, or artifact reference nearby. It
+does not check that the number is *correct*. `numeric-verification` is the
+companion check that closes that gap for claims an author opts into binding:
+it reads the claim's value out of a real artifact (a `.feather` cell or a
+`.json` node) and compares it against the prose literal.
+
+### Authoring shape
+
+A binding is a **footnote-style sidecar with an inline pin**: a frontmatter
+`numeric_claims:` map declares `id → {artifact, locator, tolerance?}`, and an
+inline `[^id]` marker pins the claim by attaching to the numeric literal
+immediately before it on the same line. The binding does **not** restate the
+prose value — the verifier reads both the prose number and the artifact
+value independently and compares them, so a stale or fabricated prose number
+is caught rather than trusted.
+
+```markdown
+---
+numeric_claims:
+  b1:
+    artifact: "output/mm/qap.feather"
+    locator: {column: enrichment, where: {disease: "MESH:D009101"}}
+  b2:
+    artifact: "results/qap.json"
+    locator: {pointer: "/results/0/pvalue"}
+    tolerance: 5.0e-4
+  b3:
+    artifact: "figures/panel_b.png"
+    locator: {opaque: "read off figure panel B"}
+---
+The QAP enrichment was **7.94×**[^b1] (p < 0.0001[^b2]); peak near **2.1×**[^b3].
+```
+
+`id` must match the marker charset `^[A-Za-z0-9_-]+$` — a `numeric_claims`
+key outside it can never be referenced by a `[^id]` marker and is an
+authoring error. Every binding — **`opaque` included** — must pin a numeric
+literal immediately before its marker; a non-number, a ratio (`12/15`), or a
+range (`3–5`) in that position is an error, never a silently-dropped
+coverage gap. A `[^id]` whose `id` has no `numeric_claims` entry is an
+ordinary markdown footnote and is left untouched.
+
+### Locator forms
+
+A `locator` is exactly one of three shapes:
+
+- **`pointer:`** — an RFC-6901 JSON pointer into a `.json` artifact, e.g.
+  `{pointer: "/results/0/pvalue"}`. Must address exactly one numeric scalar
+  node.
+- **`column:`** (+ optional `where:`) — reads a `.feather` artifact.
+  `column` names the value column. `where:` selects exactly one row by an
+  **equality match on named columns** — never a positional index — so
+  `{column: enrichment, where: {disease: "MESH:D009101"}}` reads the
+  `enrichment` cell of the row keyed by `disease`. Omitting `where:` is only
+  valid against a single-row table; a `where:` that matches zero or more
+  than one row is an error.
+- **`opaque:`** — any artifact, with a free-text reason (e.g. "read off
+  figure panel B"). The value is **not machine-read** — the claim always
+  comes out `unverifiable` — but the artifact path is still resolved (must
+  exist, must be a regular file, must not escape its root); a missing or
+  invalid `opaque` artifact is still an **`error`**, not a silent pass.
+
+### Outcomes and severity
+
+Each bound claim is classified into exactly one of four outcomes:
+
+| outcome | emits a finding? | meaning |
+|---|---|---|
+| `verified` | no (silent) | artifact value matches the prose literal |
+| `unverifiable` | no (silent, counted) | honestly not machine-checkable (`opaque`, or a `%`-unit claim) |
+| `mismatch` | **warn** | artifact value contradicts the prose literal — the signal |
+| `error` | **warn** | the binding itself is broken (bad schema, unresolvable artifact, missing column/pointer, ambiguous row, etc.) |
+
+Only `mismatch` and `error` produce a lint issue; `verified` and
+`unverifiable` are silent in the findings list and show up only in the
+coverage tally (below).
+
+### Coupling with `numeric-anchor`
+
+`numeric-anchor` and `numeric-verification` are an **atomic pair**: selecting
+either one in `--check`, `enabled_checks`, or `science validate` runs both.
+This guarantees a bound claim is always both suppressed from
+`numeric-anchor` (a bound number never draws an "unanchored" finding — its
+provenance is the binding itself) *and* actually verified — never
+suppressed-but-unchecked, and never flagged for lacking an anchor it doesn't
+need.
+
+### `%` and `opaque` are unverifiable, but still resolve
+
+A `%`-unit prose literal (e.g. `58%`) and an `opaque` locator both report
+`unverifiable` unconditionally — percent-scale normalization isn't
+attempted, and an opaque value is by definition not machine-read. Neither
+of these skips artifact resolution, though: the artifact path must still
+exist, stay within its allowed root, and be a regular file. A missing,
+escaping, or ambiguous artifact is an `error` in both cases — fail-closed,
+so `opaque`/`%` can never be used to launder a broken binding into a quiet
+pass.
+
+### Displayed-precision matching
+
+Without an explicit `tolerance:`, a claim verifies if the artifact value
+falls in the **open interval** implied by the prose literal's displayed
+precision — `± half the last displayed digit's place value`. For example
+`7.94×` has a place value of `0.01`, so it verifies against any artifact
+value in `(7.935, 7.945)`. A value that lands exactly on that boundary is
+**`unverifiable`**, not `verified` — it's equally consistent with the
+adjacent displayed value (`7.945` could round to either `7.94` or `7.95`).
+An explicit `tolerance:` (a positive number) replaces this with a **closed**
+interval `[value − tolerance, value + tolerance]` and no boundary carve-out.
+
+### Config
+
+Reads are size-bounded: `max_json_bytes` (default 50 MiB, whole-file parse)
+and `max_feather_bytes` (default 256 MiB) cap how large a bound artifact may
+be. An over-cap artifact is an `error`, not a silent skip.
+
+### Coverage tally
+
+Because `verified`/`unverifiable` never appear as findings, both
+`science prose lint` and `science validate` surface a separate per-project
+**coverage** tally — counts of `verified` / `unverifiable` / `mismatch` /
+`error` across all bound claims — as an advisory, so a fully-verified
+document still reports how much of its numeric-claim surface is bound and
+checked rather than showing "no issues found."
+
+`science validate` suppresses this advisory when every tally is zero — a
+project that uses no `numeric_claims` at all stays silent, like every other
+prose lint that finds nothing. `science prose lint` is an explicit,
+targeted invocation, so it always renders the coverage line (including an
+all-zero one) to confirm the check ran.
+
 ## Tooling
 
 - `science prose lint --root . --format table` — run all lints, render to terminal.
@@ -168,7 +302,7 @@ for the full redesign rationale and empirical grounding.
 
 These lints were extracted from the natural-systems citation-audit pilot
 (t466) which identified six recurring patterns across audited prose. The
-four mechanically-detectable patterns are implemented here. The two
+mechanically-detectable patterns are implemented here. The two
 LLM-judgment patterns ("field-state consensus claims unsupported" and the
 broader "load-bearing claim has no anchor") are handled by the
 [annotation-token vocabulary](annotation-tokens.md): an LLM auditor or

@@ -46,9 +46,17 @@ from science_tool.project_config import (
     DEFAULT_ANCHOR_PATTERNS,
     DEFAULT_PROVENANCE_FIELDS,
     DEFAULT_SPEC_CLASS_KINDS,
+    ProseLintConfig,
     load_project_config,
 )
-from science_tool.prose_lint import CHECKS, LintIssue, build_short_form_resolver, merge_anchor_patterns, scan_root
+from science_tool.prose_lint import (
+    CHECKS,
+    LintIssue,
+    build_short_form_resolver,
+    couple_checks,
+    merge_anchor_patterns,
+    scan_root,
+)
 from science_tool.validate.checks import Check
 from science_tool.validate.result import Result, Severity
 
@@ -81,19 +89,33 @@ def check_prose_lints(ctx: "ValidateContext") -> Iterable[Result]:
     exclude_paths: list[str] = []
     short_form_ids_deny: list[str] = []
     bare_author_year_deny: list[str] = []
+    prose_lint_config: ProseLintConfig | None = None
     if project_config_path(ctx.project_root).is_file():
         config = load_project_config(ctx.project_root)
         if config.prose_lint is not None:
-            anchor_patterns = config.prose_lint.anchor_patterns
-            additional_anchor_patterns = config.prose_lint.additional_anchor_patterns
-            spec_class_kinds = config.prose_lint.spec_class_kinds
-            provenance_fields = config.prose_lint.provenance_fields
-            configured_checks = config.prose_lint.enabled_checks
+            prose_lint_config = config.prose_lint
+            anchor_patterns = prose_lint_config.anchor_patterns
+            additional_anchor_patterns = prose_lint_config.additional_anchor_patterns
+            spec_class_kinds = prose_lint_config.spec_class_kinds
+            provenance_fields = prose_lint_config.provenance_fields
+            configured_checks = prose_lint_config.enabled_checks
+            if configured_checks is not None:
+                # `numeric-anchor`/`numeric-verification` are an atomic pair
+                # (see `couple_checks`); coupling here makes BOTH the scan
+                # selection and the "disabled checks" message below coupling-
+                # aware, so enabling one no longer reports the other as
+                # disabled when it in fact ran.
+                configured_checks = couple_checks(configured_checks)
             if not ctx.include_all_checks:
                 selected = configured_checks
-            exclude_paths = config.prose_lint.exclude_paths
-            short_form_ids_deny = config.prose_lint.short_form_ids_deny
-            bare_author_year_deny = config.prose_lint.bare_author_year_deny
+            exclude_paths = prose_lint_config.exclude_paths
+            short_form_ids_deny = prose_lint_config.short_form_ids_deny
+            bare_author_year_deny = prose_lint_config.bare_author_year_deny
+    if prose_lint_config is None:
+        # No science.yaml / no `prose_lint:` section: fall back to the same
+        # `ProseLintConfig` defaults a configured project would get, rather
+        # than letting validate's own notion of "default" silently diverge.
+        prose_lint_config = ProseLintConfig()
 
     effective_anchor_patterns = merge_anchor_patterns(anchor_patterns, additional_anchor_patterns)
     effective_checks = selected if selected is not None else list(CHECKS)
@@ -124,6 +146,8 @@ def check_prose_lints(ctx: "ValidateContext") -> Iterable[Result]:
         resolver=resolver,
         bare_author_year_deny=bare_author_year_deny,
         bib_surnames=bib_surnames,
+        max_json_bytes=prose_lint_config.max_json_bytes,
+        max_feather_bytes=prose_lint_config.max_feather_bytes,
     )
 
     severity_by_check: dict[str, str] = {}
@@ -137,6 +161,26 @@ def check_prose_lints(ctx: "ValidateContext") -> Iterable[Result]:
         if hit.severity != "warn":
             continue
         results.append(_hit_result(ctx, hit))
+    numeric_coverage = lint_result.get("coverage", {}).get("numeric-verification")
+    if numeric_coverage is not None and any(numeric_coverage.values()):
+        # Standalone advisory, independent of the `counts`-derived "use
+        # --strict to promote" path below: it reports the verification tally
+        # whenever at least one claim was bound (a fully-`verified` project
+        # still shows, since `verified` > 0). Suppressed when every tally is
+        # zero — i.e. the project uses no `numeric_claims` at all — so the
+        # check stays silent on projects that don't opt in, like every other
+        # prose lint.
+        results.append(
+            _result(
+                Severity.INFO,
+                "numeric-verification coverage: "
+                f"{numeric_coverage.get('verified', 0)} verified, "
+                f"{numeric_coverage.get('unverifiable', 0)} unverifiable, "
+                f"{numeric_coverage.get('mismatch', 0)} mismatch, "
+                f"{numeric_coverage.get('error', 0)} error",
+                rule="prose_lints.numeric-verification.coverage",
+            )
+        )
     for check, count in sorted(lint_result.get("counts", {}).items()):
         if count <= 0:
             continue

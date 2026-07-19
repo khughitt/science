@@ -314,3 +314,38 @@ def test_incidental_body_anchor_does_not_clear_distant_number(tmp_path):
     out = _assess(tmp_path, body, frontmatter="kind: report")
     hit = next(a for a in out if a.claim.value == "7.94")
     assert isinstance(hit, Unanchored)   # finding 2: paragraph-scoped, not entity-wide
+
+
+# --- bound_spans suppression seam (Part B, Task 5) ---------------------------
+
+def test_bound_claim_suppressed_from_anchor(tmp_path):
+    from science_tool.prose_lint import detect_numeric_anchor
+    fm = "numeric_claims:\n  b1:\n    artifact: nope.feather\n    locator: {column: c}"
+    p = tmp_path / "e.md"
+    # fm is 4 lines, so: L6=---, L7=Bound..., L8=blank, L9=Unbound...
+    p.write_text(f"---\n{fm}\n---\nBound 3.14159[^b1] here.\n\nUnbound 2.71828 there.\n")
+    lines = {i.line for i in detect_numeric_anchor(p)}
+    assert 7 not in lines        # bound line suppressed even though artifact is dangling
+    assert 9 in lines            # unbound ungrounded number still flags
+
+
+def test_same_line_bound_and_unbound_numbers_are_column_discriminated(tmp_path):
+    """One line carries both a bound number ([^b1]) and a distinct unbound
+    number with no marker. Suppression must be column-scoped, not
+    whole-line: the unbound number still flags and the surviving finding's
+    column must be the unbound token's, not the bound token's. This
+    transitively exercises Task 4's span[1]/span[2] column arithmetic.
+    """
+    from science_tool.prose_lint import detect_numeric_anchor
+    fm = "numeric_claims:\n  b1:\n    artifact: nope.feather\n    locator: {column: c}"
+    p = tmp_path / "e.md"
+    body_line = "Bound 3.14159[^b1] and unbound 2.71828 apart.\n"
+    p.write_text(f"---\n{fm}\n---\n{body_line}")
+    issues = detect_numeric_anchor(p)
+    line7 = [i for i in issues if i.line == 7]
+    assert len(line7) == 1
+    assert line7[0].match == "2.71828"
+    bound_col = body_line.index("3.14159") + 1
+    unbound_col = body_line.index("2.71828") + 1
+    assert line7[0].col == unbound_col
+    assert line7[0].col != bound_col

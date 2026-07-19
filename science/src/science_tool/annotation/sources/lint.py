@@ -34,7 +34,7 @@ from science_tool.prose_lint import (
 DETECTOR_VERSIONS: dict[str, str] = {
     "bare-author-year": "v2026-05-11",
     "short-form-ids":   "v2026-05-11",
-    "numeric-anchor":   "v2026-07-18",
+    "numeric-anchor":   "v2026-07-18b",
 }
 
 

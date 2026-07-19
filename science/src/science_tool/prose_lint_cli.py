@@ -15,9 +15,10 @@ from science_tool.project_config import (
     DEFAULT_ANCHOR_PATTERNS,
     DEFAULT_PROVENANCE_FIELDS,
     DEFAULT_SPEC_CLASS_KINDS,
+    ProseLintConfig,
     load_project_config,
 )
-from science_tool.prose_lint import CHECKS, build_short_form_resolver, merge_anchor_patterns, scan_root
+from science_tool.prose_lint import CHECKS, build_short_form_resolver, couple_checks, merge_anchor_patterns, scan_root
 
 
 @click.group("prose")
@@ -47,20 +48,29 @@ def lint_cmd(root: Path, fmt: str, checks: tuple[str, ...], strict: bool) -> Non
     exclude_paths: list[str] = []
     short_form_ids_deny: list[str] = []
     bare_author_year_deny: list[str] = []
+    prose_lint_config: ProseLintConfig | None = None
     science_yaml = project_config_path(root)
     if science_yaml.is_file():
         config = load_project_config(root)
         if config.prose_lint is not None:
-            anchor_patterns = config.prose_lint.anchor_patterns
-            additional_anchor_patterns = config.prose_lint.additional_anchor_patterns
-            spec_class_kinds = config.prose_lint.spec_class_kinds
-            provenance_fields = config.prose_lint.provenance_fields
-            enabled_from_config = config.prose_lint.enabled_checks
-            exclude_paths = config.prose_lint.exclude_paths
-            short_form_ids_deny = config.prose_lint.short_form_ids_deny
-            bare_author_year_deny = config.prose_lint.bare_author_year_deny
+            prose_lint_config = config.prose_lint
+            anchor_patterns = prose_lint_config.anchor_patterns
+            additional_anchor_patterns = prose_lint_config.additional_anchor_patterns
+            spec_class_kinds = prose_lint_config.spec_class_kinds
+            provenance_fields = prose_lint_config.provenance_fields
+            enabled_from_config = prose_lint_config.enabled_checks
+            exclude_paths = prose_lint_config.exclude_paths
+            short_form_ids_deny = prose_lint_config.short_form_ids_deny
+            bare_author_year_deny = prose_lint_config.bare_author_year_deny
+    if prose_lint_config is None:
+        # No science.yaml / no `prose_lint:` section: fall back to the same
+        # `ProseLintConfig` defaults a configured project would get, rather
+        # than letting the CLI's own notion of "default" silently diverge.
+        prose_lint_config = ProseLintConfig()
     if selected is None and enabled_from_config:
         selected = enabled_from_config
+    if selected is not None:
+        selected = couple_checks(selected)
     effective_anchor_patterns = merge_anchor_patterns(anchor_patterns, additional_anchor_patterns)
 
     effective_checks = selected if selected is not None else list(CHECKS)
@@ -83,6 +93,8 @@ def lint_cmd(root: Path, fmt: str, checks: tuple[str, ...], strict: bool) -> Non
         resolver=resolver,
         bare_author_year_deny=bare_author_year_deny,
         bib_surnames=bib_surnames,
+        max_json_bytes=prose_lint_config.max_json_bytes,
+        max_feather_bytes=prose_lint_config.max_feather_bytes,
     )
 
     payload = {
@@ -91,6 +103,7 @@ def lint_cmd(root: Path, fmt: str, checks: tuple[str, ...], strict: bool) -> Non
             {**asdict(h), "file": str(h.file.relative_to(root))}
             for h in result["hits"]
         ],
+        "coverage": result.get("coverage", {}),
     }
 
     emit(output_format=fmt, payload=payload, render_text=lambda: _render_table(result, root))
@@ -101,8 +114,19 @@ def lint_cmd(root: Path, fmt: str, checks: tuple[str, ...], strict: bool) -> Non
 
 
 def _render_table(result: dict, root: Path) -> None:
-    if not result["hits"]:
-        click.echo("prose lint: no issues found.")
+    hits = result["hits"]
+    numeric_coverage = (result.get("coverage") or {}).get("numeric-verification")
+    if numeric_coverage:
+        click.echo(
+            "numeric-verification: "
+            f"{numeric_coverage.get('verified', 0)} verified, "
+            f"{numeric_coverage.get('unverifiable', 0)} unverifiable, "
+            f"{numeric_coverage.get('mismatch', 0)} mismatch, "
+            f"{numeric_coverage.get('error', 0)} error"
+        )
+    if not hits:
+        if not numeric_coverage:
+            click.echo("prose lint: no issues found.")
         return
     by_file: dict[Path, list] = {}
     for hit in result["hits"]:

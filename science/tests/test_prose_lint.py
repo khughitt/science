@@ -1,16 +1,21 @@
 """Unit tests for prose_lint detectors."""
 
+import shutil
 from pathlib import Path
 
 from science_tool.prose_lint import (
     LintIssue,
     _archived_task_aliases,
+    couple_checks,
     detect_bare_author_year,
     detect_frontmatter_inline_gaps,
     detect_numeric_anchor,
+    detect_numeric_verification,
     detect_short_form_ids,
     scan_root,
 )
+
+_NUMERIC_VERIFICATION_FIXTURES = Path(__file__).resolve().parent / "fixtures" / "numeric_verification"
 
 
 def _write(tmp_path: Path, body: str, frontmatter: str = "") -> Path:
@@ -770,3 +775,179 @@ class TestUnsupportedCitationSyntax:
         (tmp_path / "doc" / "note.md").write_text("Retrieval reports P'@k for each run.\n", encoding="utf-8")
         result = scan_root(tmp_path, checks=["unsupported-citation-syntax"])
         assert result["counts"].get("unsupported-citation-syntax", 0) == 0
+
+
+class TestCoupleChecks:
+    def test_numeric_anchor_pulls_in_numeric_verification(self):
+        assert couple_checks(["numeric-anchor"]) == ["numeric-anchor", "numeric-verification"]
+
+    def test_numeric_verification_pulls_in_numeric_anchor(self):
+        result = couple_checks(["numeric-verification"])
+        # Order-stable: the input order is preserved; the missing partner is appended.
+        assert result[0] == "numeric-verification"
+        assert set(result) == {"numeric-verification", "numeric-anchor"}
+
+    def test_both_present_is_unchanged(self):
+        assert couple_checks(["numeric-anchor", "numeric-verification"]) == [
+            "numeric-anchor",
+            "numeric-verification",
+        ]
+
+    def test_unrelated_selection_is_unchanged(self):
+        assert couple_checks(["short-form-ids"]) == ["short-form-ids"]
+
+    def test_unrelated_selection_alongside_coupled_pair_preserves_order(self):
+        assert couple_checks(["short-form-ids", "numeric-anchor"]) == [
+            "short-form-ids",
+            "numeric-anchor",
+            "numeric-verification",
+        ]
+
+
+class TestNumericVerificationWiring:
+    """`numeric-verification` (Part B) wired into the registry/scan/coverage/config."""
+
+    def _write_fixture_project(self, tmp_path: Path) -> Path:
+        (tmp_path / "entities").mkdir()
+        shutil.copy(_NUMERIC_VERIFICATION_FIXTURES / "summary.feather", tmp_path / "summary.feather")
+        shutil.copy(_NUMERIC_VERIFICATION_FIXTURES / "results.json", tmp_path / "results.json")
+        (tmp_path / "entities" / "e.md").write_text(
+            "---\n"
+            "numeric_claims:\n"
+            "  v1:\n"
+            "    artifact: summary.feather\n"
+            "    locator: {column: score}\n"
+            "  m1:\n"
+            "    artifact: results.json\n"
+            "    locator: {pointer: /nested/b~1c}\n"
+            "---\n\n"
+            "Accuracy on the holdout set was **0.978**[^v1] overall.\n\n"
+            "The nested value used in this claim was **99**[^m1] units.\n"
+        )
+        return tmp_path
+
+    def test_detect_numeric_verification_thin_wrapper(self, tmp_path):
+        self._write_fixture_project(tmp_path)
+        path = tmp_path / "entities" / "e.md"
+        issues = detect_numeric_verification(
+            path,
+            project_root=tmp_path,
+            data_root=tmp_path,
+            max_json_bytes=1_000_000,
+            max_feather_bytes=1_000_000,
+        )
+        assert len(issues) == 1
+        assert issues[0].check == "numeric-verification"
+        assert issues[0].severity == "warn"
+        assert issues[0].match == "99"
+
+    def test_detect_numeric_verification_resolves_roots_like_numeric_anchor(self, tmp_path):
+        # No project_root/data_root supplied -- must self-resolve, mirroring
+        # detect_numeric_anchor's nearest_project_root fallback.
+        self._write_fixture_project(tmp_path)
+        (tmp_path / "science.yaml").write_text("name: demo\n")
+        path = tmp_path / "entities" / "e.md"
+        issues = detect_numeric_verification(path, max_json_bytes=1_000_000, max_feather_bytes=1_000_000)
+        assert len(issues) == 1
+        assert issues[0].match == "99"
+
+    def test_detect_numeric_verification_skips_docs_without_numeric_claims(self, tmp_path):
+        # Binding is opt-in per claim -- a document that never declares
+        # `numeric_claims` must stay silent, not surface a document-level error.
+        (tmp_path / "entities").mkdir()
+        path = tmp_path / "entities" / "plain.md"
+        path.write_text("# Plain\n\nNo numeric claims here at all.\n")
+        assert detect_numeric_verification(path, project_root=tmp_path, data_root=tmp_path) == []
+
+    def test_detect_numeric_verification_present_but_malformed_still_errors(self, tmp_path):
+        # The guard keys on KEY PRESENCE, not validity: `numeric_claims`
+        # present as a non-mapping (a list) must still reach the runner and
+        # surface its document-level "must be a mapping" error -- proving the
+        # opt-in gate is not silently swallowing a present-but-malformed
+        # declaration the way it (correctly) swallows an absent one.
+        (tmp_path / "entities").mkdir()
+        path = tmp_path / "entities" / "malformed.md"
+        path.write_text("---\nnumeric_claims:\n  - 1\n  - 2\n---\n\nSome text with no markers at all.\n")
+        issues = detect_numeric_verification(path, project_root=tmp_path, data_root=tmp_path)
+        assert len(issues) == 1
+        assert issues[0].check == "numeric-verification"
+        assert issues[0].severity == "warn"
+        assert issues[0].match == "numeric_claims"
+        assert "must be a mapping" in issues[0].message
+
+    def test_scan_root_present_but_malformed_numeric_claims_still_errors(self, tmp_path):
+        # Same contract, exercised through the wired `scan_root` path (not
+        # just the `detect_numeric_verification` wrapper) -- coverage/counts
+        # must reflect the one document-level error.
+        (tmp_path / "entities").mkdir()
+        (tmp_path / "entities" / "malformed.md").write_text(
+            "---\nnumeric_claims:\n  - 1\n  - 2\n---\n\nSome text with no markers at all.\n"
+        )
+        result = scan_root(tmp_path, checks=["numeric-anchor"])
+        assert result["counts"]["numeric-verification"] == 1
+        assert result["coverage"]["numeric-verification"] == {
+            "verified": 0,
+            "unverifiable": 0,
+            "mismatch": 0,
+            "error": 1,
+        }
+
+    def test_scan_root_coupling_produces_coverage_and_counts(self, tmp_path):
+        self._write_fixture_project(tmp_path)
+        result = scan_root(
+            tmp_path,
+            checks=["numeric-anchor"],
+            max_json_bytes=1_000_000,
+            max_feather_bytes=1_000_000,
+        )
+        assert "coverage" in result
+        coverage = result["coverage"]["numeric-verification"]
+        assert coverage == {"verified": 1, "unverifiable": 0, "mismatch": 1, "error": 0}
+        # counts stays FLAT and equals the emitted-issue count (mismatch+error only).
+        assert result["counts"]["numeric-verification"] == 1
+        assert all(isinstance(h, LintIssue) for h in result["hits"])
+
+    def test_scan_root_selecting_only_numeric_verification_still_couples(self, tmp_path):
+        self._write_fixture_project(tmp_path)
+        result = scan_root(
+            tmp_path,
+            checks=["numeric-verification"],
+            max_json_bytes=1_000_000,
+            max_feather_bytes=1_000_000,
+        )
+        assert result["coverage"]["numeric-verification"] == {
+            "verified": 1,
+            "unverifiable": 0,
+            "mismatch": 1,
+            "error": 0,
+        }
+
+    def test_docs_without_numeric_claims_do_not_pollute_coverage(self, tmp_path):
+        self._write_fixture_project(tmp_path)
+        (tmp_path / "entities" / "unrelated.md").write_text("# Unrelated\n\nNo claims here at all.\n")
+        result = scan_root(
+            tmp_path,
+            checks=["numeric-anchor"],
+            max_json_bytes=1_000_000,
+            max_feather_bytes=1_000_000,
+        )
+        assert result["coverage"]["numeric-verification"] == {
+            "verified": 1,
+            "unverifiable": 0,
+            "mismatch": 1,
+            "error": 0,
+        }
+
+    def test_scan_root_default_config_caps_accept_tiny_fixtures(self, tmp_path):
+        self._write_fixture_project(tmp_path)
+        # No max_json_bytes/max_feather_bytes override -- scan_root must fall
+        # back to the ProseLintConfig defaults (50MB/256MB), well above these
+        # tiny fixtures.
+        result = scan_root(tmp_path, checks=["numeric-anchor"])
+        assert result["coverage"]["numeric-verification"]["verified"] == 1
+
+    def test_unrelated_check_selection_has_no_coverage_entry(self, tmp_path):
+        (tmp_path / "doc").mkdir()
+        (tmp_path / "doc" / "a.md").write_text("# A\n\nBrunton 2022 showed it.\n")
+        result = scan_root(tmp_path, checks=["bare-author-year"])
+        assert result["coverage"] == {}
