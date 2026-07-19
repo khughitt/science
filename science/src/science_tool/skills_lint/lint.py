@@ -9,6 +9,8 @@ import yaml
 
 from science_tool.skills_lint.sources import SourcesRegistry, leaf_source_refs, load_sources
 
+Severity = Literal["error", "warn"]
+
 IssueKind = Literal[
     "missing-frontmatter",
     "invalid-yaml",
@@ -19,6 +21,8 @@ IssueKind = Literal[
     "missing-index-entry",
     "unknown-source-ref",
     "invalid-source-record",
+    "missing-provenance",
+    "invalid-provenance",
 ]
 
 
@@ -28,6 +32,7 @@ class SkillIssue:
     kind: IssueKind
     field: str | None = None
     detail: str = ""
+    severity: Severity = "error"
 
     def to_json(self) -> dict[str, str | None]:
         return {
@@ -35,6 +40,7 @@ class SkillIssue:
             "kind": self.kind,
             "field": self.field,
             "detail": self.detail,
+            "severity": self.severity,
         }
 
 
@@ -198,6 +204,7 @@ def _relative_issues(issues: list[SkillIssue], root: Path) -> list[SkillIssue]:
             kind=issue.kind,
             field=issue.field,
             detail=issue.detail,
+            severity=issue.severity,
         )
         for issue in issues
     ]

@@ -141,7 +141,36 @@ def test_skill_issue_json_uses_posix_path() -> None:
         "kind": "missing-frontmatter",
         "field": None,
         "detail": "",
+        "severity": "error",
     }
+
+
+def test_skill_issue_defaults_to_error_severity() -> None:
+    assert SkillIssue(Path("x.md"), "missing-frontmatter").severity == "error"
+
+
+def test_relative_issues_preserves_severity() -> None:
+    from science_tool.skills_lint.lint import _relative_issues
+    root = Path("/root")
+    warn = SkillIssue(root / "leaf.md", "missing-provenance", severity="warn")
+    out = _relative_issues([warn], root)
+    assert out[0].severity == "warn"
+    assert out[0].path == Path("leaf.md")
+
+
+def test_has_error_is_severity_aware() -> None:
+    from science_tool.skills_lint.cli import _has_error
+    warn = SkillIssue(Path("a.md"), "missing-provenance", severity="warn")
+    err = SkillIssue(Path("b.md"), "missing-frontmatter")
+    assert _has_error([]) is False
+    assert _has_error([warn]) is False
+    assert _has_error([warn, err]) is True
+
+
+def test_text_render_leads_with_severity() -> None:
+    from science_tool.skills_lint.cli import _format_text_issue
+    warn = SkillIssue(Path("leaf.md"), "missing-provenance", severity="warn")
+    assert _format_text_issue(warn) == "warn: leaf.md: missing-provenance"
 
 
 def test_unknown_source_ref_flagged(tmp_path: Path) -> None:
