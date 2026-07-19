@@ -974,14 +974,17 @@ homepage/docs (verify). Only `scrna-qa` has an in-file paper citation.
 
 ### Task 6: Wave C — data specs, sources & routers (6 files)
 
-3 EXTERNAL leaves + 3 INTERNAL routers.
+4 EXTERNAL (`frictionless`, `openalex`, `pubmed`, and `data/SKILL.md` which
+embeds EDAM term URIs) + 2 INTERNAL navigation routers (`expression/SKILL.md`,
+`genomics/SKILL.md`). *(As originally planned this was 3+3 with `edam` on
+`frictionless.md`; review moved `edam` to `data/SKILL.md` — see the table.)*
 
 | File | Verdict | Source(s) → id (kind) / outcome | Acceptance |
 |---|---|---|---|
-| frictionless.md | EXTERNAL | `frictionless-spec` (spec), `frictionless` (software), `edam` (spec) → `sources: [frictionless-spec, frictionless, edam]` | file teaches the Data Package spec + the `frictionless` CLI, and embeds `edamontology.org` term URIs |
+| frictionless.md | EXTERNAL | `frictionless-spec` (spec), `frictionless` (software) → `sources: [frictionless-spec, frictionless]` | file teaches the Data Package spec + the `frictionless` CLI. **(Correction, applied in review:** the file's body does NOT reference EDAM — the concrete `edamontology.org` term URIs live in `data/SKILL.md`, so `edam` moved there.**)** |
 | sources/openalex.md | EXTERNAL | `openalex` (software) → `sources: [openalex]` | documents the OpenAlex `works` API (url present: developers.openalex.org) |
 | sources/pubmed.md | EXTERNAL | `ncbi-eutilities` (software) → `sources: [ncbi-eutilities]` | documents the PubMed E-utilities (esearch/esummary/efetch) |
-| SKILL.md (data) | INTERNAL | `provenance: internal` | data-management conventions hub; EDAM/Frictionless delegated to leaves |
+| SKILL.md (data) | **EXTERNAL** | `edam` (spec) → `sources: [edam]` | **(Correction, applied in review:** its "Sequence Outputs" section embeds specific EDAM term URIs `data_2044`/`format_1929` it instructs users to apply — a concrete external-ontology dependency, so `edam` is grounded here, not on `frictionless.md`.**)** |
 | expression/SKILL.md | INTERNAL | `provenance: internal` | navigation hub over the modality leaves |
 | genomics/SKILL.md | INTERNAL | `provenance: internal` | navigation hub + native ordering convention |
 
