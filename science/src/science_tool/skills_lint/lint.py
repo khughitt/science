@@ -58,7 +58,7 @@ class SkillIssue:
 
 
 REQUIRED_FIELDS = ("name", "description")
-VALID_SKILL_TYPES = {"skill", "deep-reference"}
+VALID_DEPTHS = {"standard", "deep-reference"}
 MARKDOWN_LINK_RE = re.compile(r"\]\(([^)]+)\)")
 INLINE_CODE_RE = re.compile(r"`([^`]+\.md)`")
 HALT_ON_REQUIRED = {
@@ -95,9 +95,10 @@ def check_frontmatter(path: Path) -> list[SkillIssue]:
     for field in REQUIRED_FIELDS:
         if not parsed.get(field):
             issues.append(SkillIssue(path, "missing-field", field=field))
-    skill_type = parsed.get("type", "skill")
-    if skill_type not in VALID_SKILL_TYPES:
-        issues.append(SkillIssue(path, "invalid-field", field="type", detail=str(skill_type)))
+    if "type" in parsed:
+        issues.append(SkillIssue(path, "invalid-field", field="type", detail="'type' was renamed to 'depth'"))
+    if "depth" in parsed and (not isinstance(parsed["depth"], str) or parsed["depth"] not in VALID_DEPTHS):
+        issues.append(SkillIssue(path, "invalid-field", field="depth", detail=str(parsed["depth"])))
     return issues
 
 

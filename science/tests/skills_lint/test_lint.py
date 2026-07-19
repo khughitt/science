@@ -16,6 +16,15 @@ from science_tool.skills_lint.lint import (
 FIXTURES = Path(__file__).parent / "fixtures"
 
 
+def _write_leaf(tmp_path: Path, extra_fields: str) -> Path:
+    path = tmp_path / "leaf.md"
+    path.write_text(
+        f"---\nname: x\ndescription: y\nprovenance: internal\n{extra_fields}---\n\n## Companion Skills\n",
+        encoding="utf-8",
+    )
+    return path
+
+
 def test_good_frontmatter_returns_no_issues() -> None:
     issues = check_frontmatter(FIXTURES / "good.md")
     assert issues == []
@@ -41,13 +50,13 @@ def test_missing_description_returns_issue() -> None:
     assert issues[0].field == "description"
 
 
-def test_deep_reference_type_is_valid() -> None:
+def test_deep_reference_depth_is_valid() -> None:
     issues = check_frontmatter(FIXTURES / "good-deep-reference.md")
     assert issues == []
 
 
-def test_invalid_type_returns_issue() -> None:
-    issues = check_frontmatter(FIXTURES / "bad-invalid-type.md")
+def test_legacy_type_key_is_rejected() -> None:
+    issues = check_frontmatter(FIXTURES / "bad-legacy-type-key.md")
     assert len(issues) == 1
     assert issues[0].kind == "invalid-field"
     assert issues[0].field == "type"
@@ -123,7 +132,7 @@ def test_lint_cli_against_fixtures(tmp_path: Path) -> None:
     assert "bad-no-frontmatter.md" in result.output
     assert "bad-missing-name.md" in result.output
     assert "bad-missing-description.md" in result.output
-    assert "bad-invalid-type.md" in result.output
+    assert "bad-legacy-type-key.md" in result.output
     assert "bad-no-companion-skills.md" in result.output
     assert "bad-broken-relative-link.md" in result.output
     assert "data/functional-genomics-qa.md" in result.output
@@ -404,3 +413,21 @@ def test_index_md_excluded_from_coverage(tmp_path: Path) -> None:
     assert provenance_paths == set()
 
 
+def test_depth_absent_defaults_standard(tmp_path: Path) -> None:
+    assert [i for i in check_frontmatter(_write_leaf(tmp_path, "")) if i.field == "depth"] == []
+
+
+def test_depth_deep_reference_is_valid(tmp_path: Path) -> None:
+    assert [i for i in check_frontmatter(_write_leaf(tmp_path, "depth: deep-reference\n")) if i.field == "depth"] == []
+
+
+def test_depth_unknown_value_is_invalid(tmp_path: Path) -> None:
+    assert any(i.kind == "invalid-field" and i.field == "depth" for i in check_frontmatter(_write_leaf(tmp_path, "depth: shallow\n")))
+
+
+def test_depth_null_is_invalid_not_crash(tmp_path: Path) -> None:
+    assert any(i.kind == "invalid-field" and i.field == "depth" for i in check_frontmatter(_write_leaf(tmp_path, "depth: null\n")))
+
+
+def test_depth_list_is_invalid_not_crash(tmp_path: Path) -> None:
+    assert any(i.kind == "invalid-field" and i.field == "depth" for i in check_frontmatter(_write_leaf(tmp_path, "depth: [standard]\n")))
