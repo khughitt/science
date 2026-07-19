@@ -130,7 +130,7 @@ Finally, **commit the canonical entity** at `entities/specs/NNNN-slug.md` (or
 project root; the saved plan (`/tmp/p.json`) lives outside the project tree, since a
 stale plan file is itself a scannable reference artifact. Use `--kind spec` for design
 docs and `--kind plan` for implementation plans. This keeps design docs and plans
-first-class: author a staging file, import it, then commit the canonical entity rather
+first-class: author a staging file and import it, committing the resulting entity rather
 than the loose file. Newly scaffolded or imported projects carry this in their
 `AGENTS.md`; **existing adopters need a manual AGENTS.md update** to adopt it.
 

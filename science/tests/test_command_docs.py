@@ -1445,11 +1445,11 @@ def test_agents_template_and_guide_document_import_interception_in_sequence() ->
     sequence = ["--save-plan", "manual-hit", "--apply-plan", "commit the canonical entity"]
 
     def _in_order(text: str, tokens: list[str], where: str) -> None:
-        idx = -1
+        pos = 0
         for tok in tokens:
-            nxt = text.find(tok, idx + 1)
-            assert nxt > idx, f"{where}: token missing or out of order: {tok!r}"
-            idx = nxt
+            nxt = text.find(tok, pos)
+            assert nxt >= pos, f"{where}: token missing or out of order: {tok!r}"
+            pos = nxt + len(tok)
 
     for path in ("templates/agents-md.md", "docs/user-guide/entities.md"):
         text = _read(path).lower()
