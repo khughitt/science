@@ -1409,6 +1409,60 @@ def test_load_entity_index_from_graph_returns_empty_when_missing(tmp_path):
     assert index == set()
 
 
+class TestEntityPrefixResolution:
+    def test_build_counts_unique_digit_lead_owner(self):
+        from science_tool.refs import build_entity_prefix_owners
+
+        owners = build_entity_prefix_owners({"plan:0019-t071-panel", "plan:0020-other"})
+        assert owners == {"plan:0019": 1, "plan:0020": 1}
+
+    def test_build_counts_multiple_owners_for_same_prefix(self):
+        from science_tool.refs import build_entity_prefix_owners
+
+        owners = build_entity_prefix_owners({"plan:0019-a", "plan:0019-b"})
+        assert owners == {"plan:0019": 2}
+
+    def test_build_excludes_non_digit_and_bare_numeric_leads(self):
+        from science_tool.refs import build_entity_prefix_owners
+
+        # non-numeric lead (dataset:gtex-v8 -> lead "gtex") excluded;
+        # bare-numeric id (plan:0019, lead == ident) does not self-count.
+        owners = build_entity_prefix_owners({"dataset:gtex-v8", "plan:0019"})
+        assert owners == {}
+
+    def test_resolve_exact_id(self):
+        from science_tool.refs import resolve_local_entity_ref
+
+        ids = {"plan:0019-t071-panel"}
+        assert resolve_local_entity_ref("plan:0019-t071-panel", ids, {}) is True
+
+    def test_resolve_unique_digit_lead_prefix(self):
+        from science_tool.refs import resolve_local_entity_ref
+
+        ids = {"plan:0019-t071-panel"}
+        owners = {"plan:0019": 1}
+        assert resolve_local_entity_ref("plan:0019", ids, owners) is True
+
+    def test_resolve_rejects_ambiguous_prefix(self):
+        from science_tool.refs import resolve_local_entity_ref
+
+        ids = {"plan:0019-a", "plan:0019-b"}
+        owners = {"plan:0019": 2}
+        assert resolve_local_entity_ref("plan:0019", ids, owners) is False
+
+    def test_resolve_rejects_absent_ref(self):
+        from science_tool.refs import resolve_local_entity_ref
+
+        assert resolve_local_entity_ref("plan:9999", {"plan:0019-a"}, {}) is False
+
+    def test_build_accepts_frozenset(self):
+        # ResolutionIndex.entity_ids is a frozenset — the param type must accept it.
+        from science_tool.refs import build_entity_prefix_owners
+
+        owners = build_entity_prefix_owners(frozenset({"interpretation:0011-x"}))
+        assert owners == {"interpretation:0011": 1}
+
+
 class TestBodyTypedRefScan:
     def _project(self, tmp_path):
         (tmp_path / "doc").mkdir()

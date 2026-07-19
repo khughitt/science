@@ -10,6 +10,7 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass
 from pathlib import Path
+from collections.abc import Set as AbstractSet
 
 from science_model.frontmatter import parse_frontmatter
 
@@ -349,6 +350,39 @@ def _resolve_entity_index(root: Path, refs_config) -> set[str]:
             file=sys.stderr,
         )
     return _load_entity_index(root)
+
+
+def build_entity_prefix_owners(entity_ids: AbstractSet[str]) -> dict[str, int]:
+    """Count owners of each `<kind>:<digit-lead>` short prefix.
+
+    For a canonical id `<kind>:<ident>`, the lead is the segment before the
+    first `-`. A lead that is all-digits and is not the whole ident (so a
+    bare-numeric id does not count itself) registers one owner under
+    `<kind>:<lead>`. A short ref resolves only when its owner count is exactly
+    one (see `resolve_local_entity_ref`), so this map is the fail-closed
+    ambiguity guard. Takes a read-only set so duplicate values cannot inflate
+    a count.
+    """
+    owners: dict[str, int] = {}
+    for eid in entity_ids:
+        kind, _, ident = eid.partition(":")
+        lead = ident.split("-", 1)[0]
+        if lead.isdigit() and lead != ident:
+            key = f"{kind}:{lead}"
+            owners[key] = owners.get(key, 0) + 1
+    return owners
+
+
+def resolve_local_entity_ref(
+    ref: str, entity_ids: AbstractSet[str], prefix_owners: dict[str, int]
+) -> bool:
+    """True if `ref` is an exact canonical id or a unique digit-lead prefix.
+
+    Non-numeric leads never enter `prefix_owners`, and ambiguous multi-owner
+    prefixes have a count > 1, so neither resolves — a citation can never
+    silently anchor to a guessed entity.
+    """
+    return ref in entity_ids or prefix_owners.get(ref) == 1
 
 
 def _scan_body_typed_refs(
