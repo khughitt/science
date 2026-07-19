@@ -1440,9 +1440,11 @@ def test_create_project_docs_keep_data_payload_dirs_gitignored() -> None:
 
 def test_agents_template_and_guide_document_import_interception_in_sequence() -> None:
     # Both surfaces must carry the full write-then-import sequence IN ORDER:
-    # save-plan preview -> inspect the manual-hit list -> apply-plan -> commit the
-    # canonical entity. Order matters: it is the interception's whole contract.
-    sequence = ["--save-plan", "manual-hit", "--apply-plan", "commit the canonical entity"]
+    # save-plan preview -> inspect the manual-hit list -> apply-plan under the
+    # approval envelope -> commit the canonical entity. Order matters: it is the
+    # interception's whole contract, and the envelope is mandatory on apply.
+    sequence = ["--save-plan", "manual-hit", "--apply-plan", "--expected-plan-sha256",
+                "commit the canonical entity"]
 
     def _in_order(text: str, tokens: list[str], where: str) -> None:
         pos = 0

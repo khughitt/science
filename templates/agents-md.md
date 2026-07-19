@@ -101,7 +101,9 @@ plan, do NOT commit the loose file — import it so it gains a canonical id and 
 2. Preview: `science entities import docs/_staging/x.md --kind spec --save-plan /tmp/p.json`
    (use `--kind plan` for implementation plans). **Inspect the manual-hit list** in
    the preview — plain prose/code path mentions are reported, not auto-repointed.
-3. Apply: `science entities import --apply-plan /tmp/p.json`, then delete the plan file.
+3. Apply: `science entities import --apply-plan /tmp/p.json --expected-plan-sha256 <plan_sha256>`
+   (the `--save-plan` step prints `plan_sha256`; the apply refuses a plan edited after review),
+   then delete the plan file.
 4. **Commit the canonical entity** at `entities/specs/NNNN-slug.md` (or
    `entities/plans/NNNN-slug.md`), not the staging file — the staging file is moved
    away by apply.
