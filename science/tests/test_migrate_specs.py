@@ -9,6 +9,13 @@ import pytest
 import yaml
 
 from science_tool.entity_reservation import claim_number_in_dir
+from science_tool.migrate_specs import (
+    CANONICAL_SPEC_STATUS,
+    LEGACY_ALIAS,
+    RUNTIME_ONLY,
+    SpecMigrationRefused,
+    project_legacy_frontmatter,
+)
 
 
 def _spec_project(tmp_path: Path) -> Path:
@@ -37,3 +44,93 @@ def test_claim_number_unlinks_its_own_partial_on_write_failure(tmp_path: Path) -
 
     assert not dest.exists(), "a caught write failure must leave no partial destination"
     assert not (project / "entities/specs" / ".0001.reserving").exists(), "sentinel cleared"
+
+
+def test_runtime_only_set_is_exact() -> None:
+    assert RUNTIME_ONLY == frozenset({"project", "file_path", "content", "content_preview", "canonical_id"})
+    assert LEGACY_ALIAS == frozenset({"type", "date", "related_questions", "related_specs"})
+    assert CANONICAL_SPEC_STATUS == frozenset(
+        {"draft", "active", "complete", "superseded", "retired", "archived"}
+    )
+
+
+def test_projection_maps_type_date_status_related_and_preserves_supersedes() -> None:
+    old_id, fm = project_legacy_frontmatter(
+        {
+            "id": "spec:2026-03-16-meta-model-design",
+            "type": "spec",
+            "title": "Meta-Model Design",
+            "date": "2026-03-16",
+            "status": "design",
+            "related": ["question:0001-x"],
+            "related_questions": ["question:0005-y"],
+            "aliases": ["spec:old-alias"],
+            "supersedes": ["spec:2026-01-01-older"],
+        },
+        source_rel="doc/plans/meta-model.md",
+    )
+    assert old_id == "spec:2026-03-16-meta-model-design"
+    assert fm["kind"] == "spec"
+    assert "type" not in fm
+    assert fm["created"] == "2026-03-16" and fm["updated"] == "2026-03-16"
+    assert fm["status"] == "draft"
+    assert fm["related"] == ["question:0001-x", "question:0005-y"]
+    assert "related_questions" not in fm
+    assert fm["aliases"] == ["spec:old-alias"]  # old id NOT appended here
+    assert fm["supersedes"] == ["spec:2026-01-01-older"]
+    assert fm["id"] == old_id
+
+
+@pytest.mark.parametrize(
+    ("legacy", "canonical"),
+    [("proposed", "draft"), ("in-progress", "active"), ("implemented", "complete"), ("superseded", "superseded"), ("active", "active")],
+)
+def test_projection_status_adjudication(legacy: str, canonical: str) -> None:
+    _old, fm = project_legacy_frontmatter(
+        {"id": "spec:x", "type": "spec", "title": "T", "created": "2026-01-01", "updated": "2026-01-01", "status": legacy},
+        source_rel="doc/x.md",
+    )
+    assert fm["status"] == canonical
+
+
+def test_projection_refuses_unmappable_status() -> None:
+    with pytest.raises(SpecMigrationRefused, match="approved"):
+        project_legacy_frontmatter(
+            {"id": "spec:x", "type": "spec", "title": "T", "date": "2026-01-01", "status": "approved"},
+            source_rel="doc/x.md",
+        )
+
+
+def test_projection_refuses_runtime_only_key() -> None:
+    with pytest.raises(SpecMigrationRefused, match="content"):
+        project_legacy_frontmatter(
+            {"id": "spec:x", "type": "spec", "title": "T", "date": "2026-01-01", "content": "x"}, source_rel="doc/x.md"
+        )
+
+
+def test_projection_refuses_authored_canonical_id() -> None:
+    with pytest.raises(SpecMigrationRefused, match="canonical_id"):
+        project_legacy_frontmatter(
+            {"id": "spec:x", "type": "spec", "title": "T", "date": "2026-01-01", "canonical_id": "spec:x"}, source_rel="doc/x.md"
+        )
+
+
+def test_projection_refuses_created_without_updated_or_date() -> None:
+    with pytest.raises(SpecMigrationRefused, match="updated"):
+        project_legacy_frontmatter(
+            {"id": "spec:x", "type": "spec", "title": "T", "created": "2026-01-01"}, source_rel="doc/x.md"
+        )
+
+
+def test_projection_refuses_kind_type_disagreement() -> None:
+    with pytest.raises(SpecMigrationRefused, match="disagree"):
+        project_legacy_frontmatter(
+            {"id": "spec:x", "kind": "design", "type": "spec", "title": "T", "date": "2026-01-01"}, source_rel="doc/x.md"
+        )
+
+
+def test_projection_refuses_missing_id_or_title() -> None:
+    with pytest.raises(SpecMigrationRefused, match="id"):
+        project_legacy_frontmatter({"type": "spec", "title": "T", "date": "2026-01-01"}, source_rel="doc/x.md")
+    with pytest.raises(SpecMigrationRefused, match="title"):
+        project_legacy_frontmatter({"id": "spec:x", "type": "spec", "date": "2026-01-01"}, source_rel="doc/x.md")
