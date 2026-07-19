@@ -1,7 +1,12 @@
 # refs body-entity-ref prefix resolution — design
 
-**Status:** approved (rev 2)
+**Status:** approved (rev 3)
 **Date:** 2026-07-19
+
+**rev 3 changes** (design review): Acceptance adds `ruff check` and `pyright`
+on the changed files (the checks that catch the `AbstractSet` typing and new
+import); "affected every other kind" narrowed to "other numeric-leading kinds"
+to match the exact-only semantics for non-numeric leads.
 **Scope:** `science` — `refs.py`, `numeric_provenance.py`, tests, docs
 
 **rev 2 changes** (design review): helper params typed as read-only
@@ -35,8 +40,10 @@ entity.
 This surfaced concretely when `plan` was added to `_LOCAL_ENTITY_KINDS`
 (t108): pan-disease's short `plan:0019` / `plan:0023` / `plan:0024` citations
 began flagging under `--include-body`. The same latent asymmetry already
-affected every other kind (`interpretation:0011`, `pre-registration:0012`, …);
-adding `plan` merely made it visible. `refs check --include-body` is the only
+affected other numeric-leading kinds (`interpretation:0011`,
+`pre-registration:0012`, …); adding `plan` merely made it visible.
+(Non-numeric-leading kinds are intentionally exact-only and unaffected — see
+the semantics table.) `refs check --include-body` is the only
 surface affected — `science validate` calls `check_refs()` **without**
 `include_body`, so nothing here reaches validation.
 
@@ -188,10 +195,21 @@ flagged.
 
 ## Acceptance
 
-1. `uv run --frozen pytest` green from `science/`.
-2. Overlay-verify on pan-disease with `--with-editable`: `refs check
+All run from `science/`:
+
+1. `uv run --frozen pytest` green.
+2. `uv run --frozen ruff check` clean on the changed files (catches the new
+   `AbstractSet` import and the added function-local `refs` import).
+3. `uv run --frozen pyright` clean on the changed files (catches the
+   `frozenset`-vs-`AbstractSet` param typing on both new helpers and the
+   refactored callers).
+4. Overlay-verify on pan-disease with `--with-editable`: `refs check
    --include-body` no longer reports the short `plan:NNNN` entries, with no
    new breakage introduced; `science validate` output unchanged.
+
+(As recorded during the t108 acceptance, this repo already carries some
+pre-existing ruff/pyright findings in files this branch does not touch; the
+gate is that the **changed** files are clean, not that the whole tree is.)
 
 ## Docs
 
