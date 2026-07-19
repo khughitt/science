@@ -1,6 +1,6 @@
 # Entity-ref citations as numeric-anchor anchors — design
 
-**Status:** approved, rev 2 (2026-07-19)
+**Status:** rev 3 (2026-07-19) — pending review
 **Scope:** `numeric-anchor` prose lint (Part A engine). Single subsystem.
 **Origin:** pan-disease t108. Surfaced while dogfooding numeric-provenance on
 pan-disease: some residual numeric-anchor findings are numbers whose paragraph
@@ -102,7 +102,7 @@ Append a single alternative built from the allowlist (kinds sorted
 longest-first so hyphenated names win over prefixes):
 
 ```
-(?<![A-Za-z0-9_.:/@-])(interpretation|validation-report|pre-registration|…):([0-9A-Za-z][0-9A-Za-z-]*)(?![A-Za-z0-9_:/@-])
+(?<![A-Za-z0-9_.:/@-])(interpretation|validation-report|pre-registration|…):([0-9A-Za-z](?:[0-9A-Za-z._-]*[0-9A-Za-z])?)(?![A-Za-z0-9_:/@-])
 ```
 
 Existing alternatives are untouched (additive), so current extraction is
@@ -113,9 +113,12 @@ byte-identical. Boundary guards:
   `path/interpretation:0013`, `a:interpretation:0013`.
 - Explicit kind alternation — only allowlisted kinds match; `hypothesis:` etc.
   never match.
-- id charset `[0-9A-Za-z][0-9A-Za-z-]*` (kebab, no `.`/`_`) — matches
-  `0013` and `0013-h01-a2-bc2`; a trailing sentence period is left outside the
-  match (so `interpretation:0013.` matches `interpretation:0013`).
+- id charset `[0-9A-Za-z](?:[0-9A-Za-z._-]*[0-9A-Za-z])?` — an alnum start, an
+  **alnum terminal**, and internal `. _ -`. This matches the `_VERBATIM_RE` id
+  policy (entities.py:193) so legal dotted ids extract
+  (`paper:Volker2023.source`, allowlisted `paper`), while the required alnum
+  terminal keeps a trailing sentence period outside the match
+  (`interpretation:0013.` captures `interpretation:0013`).
 - Right `(?![A-Za-z0-9_:/@-])` — rejects `interpretation:0013@host`,
   `interpretation:0013/x`, `interpretation:0013:extra`.
 
@@ -125,22 +128,28 @@ An allowlisted kind that resolves to nothing (typo, fabrication) stays an
 ### 3. Short-prefix resolution with ambiguity handling
 
 Add `entity_prefix_owners: dict[str, int]` to `ResolutionIndex`, built in
-`build_resolution_index` by the same rule as the big-picture validator's
-`_index_by_prefix` (validator.py:125): for each canonical id
-`<kind>:<lead>-<rest>`, count owners of `<kind>:<lead>`. In `resolve()`'s
+`build_resolution_index` like the big-picture validator's `_index_by_prefix`
+(validator.py:125) **but restricted to digit-only leads**: for each canonical
+id `<kind>:<lead>-<rest>`, count owners of `<kind>:<lead>` **only when
+`lead.isdigit()`**. The short-form convention is `<kind>:<NNNN>`
+(`_NUMERIC_LOCAL_PART_RE`, entities.py); non-numbered ids (`dataset:cptac-…`,
+`paper:Volker2023.source`) have no short prefix form. In `resolve()`'s
 typed-ref branch:
 
 ```python
 if _TYPED_REF_RE.match(ref):
     if ref in self.entity_ids:          # exact full-id
         return True
-    return self.entity_prefix_owners.get(ref, 0) == 1   # unique prefix only
+    return self.entity_prefix_owners.get(ref, 0) == 1   # unique numeric prefix only
 ```
 
-A prefix with **two or more** owners does **not** resolve (fail-closed): the
-ambiguous citation cannot silently anchor to the wrong entity — the claim stays
-flagged. This mirrors the validator's stated contract ("an AMBIGUOUS prefix is
-a LOUDER failure"). Full-id refs keep resolving by exact membership.
+Restricting to digit leads closes a masking hole: `dataset:cptac` must **not**
+resolve to a unique `dataset:cptac-gbm-2021-proteogenomics` when no
+`dataset:cptac` entity exists — a non-numeric lead is never a valid short form,
+so it is never indexed and the claim stays flagged. A numeric prefix with
+**two or more** owners also does not resolve (fail-closed), mirroring the
+validator's contract ("an AMBIGUOUS prefix is a LOUDER failure"). Full-id refs
+keep resolving by exact membership.
 
 ### 4. Index correction — add `plan` to `_LOCAL_ENTITY_KINDS`
 
@@ -178,7 +187,10 @@ prefix all leave the number `Unanchored`.
 
 Positives:
 - Full-id provenance ref (`interpretation:0007-h01-…`) → resolved candidate.
-- Short unique-prefix ref (`interpretation:0013`) → resolved via prefix owners.
+- Short unique numeric-prefix ref (`interpretation:0013`) → resolved via prefix
+  owners.
+- Dotted verbatim id (`paper:Volker2023.source`) → extracts and, when the
+  entity exists, resolves.
 - End-to-end: a number in a paragraph citing a resolvable `interpretation:NNNN`
   classifies as `Anchored`.
 - `plan:NNNN` resolves after the index correction.
@@ -186,8 +198,10 @@ Positives:
 Negatives (the anti-masking core):
 - Topical kind: a number whose only citation is a **real** `hypothesis:NNNN`
   (or `question:NNNN`) stays `Unanchored`.
-- Ambiguity: a prefix owned by two entities does not resolve; the claim stays
-  `Unanchored`.
+- Numeric-prefix ambiguity: a numeric prefix owned by two entities does not
+  resolve; the claim stays `Unanchored`.
+- Non-numeric prefix: a **unique** non-numeric prefix (`dataset:cptac` with only
+  `dataset:cptac-gbm-2021-proteogenomics` present) does **not** resolve.
 - Embedded token, left: `x_interpretation:0013`, `x-interpretation:0013`,
   `path/interpretation:0013` do not yield a resolvable `interpretation:0013`.
 - Embedded token, right: `interpretation:0013@host`, `interpretation:0013/p`.
@@ -196,9 +210,12 @@ Negatives (the anti-masking core):
 Regression / contract:
 - Existing extraction/resolution/word-boundary/wiki-link/`config/`-path tests
   stay green unchanged.
-- Detector-version contract test updated to `v2026-07-19`.
-- `ruff check`, `pyright`, full `pytest` from `science/` (watch `refs` /
-  ref-integrity tests for the `plan` addition).
+- Detector-version contract test updated to `v2026-07-19`
+  (`test_annotation_lint_source_numeric.py`).
+- `test_refs.py` contract test: with `plan` now indexed, a known `plan:NNNN-…`
+  reference resolves and a nonexistent `plan:9999` does not — pinning the
+  intended refs-integrity broadening.
+- `ruff check`, `pyright`, full `pytest` from `science/`.
 
 ## Acceptance (pan-disease)
 
@@ -208,7 +225,10 @@ run `science prose lint --check numeric-anchor`. Expect:
 - ~13 provenance-cited numbers clear (interpretation/plan/pre-registration),
   including pre-reg 0012's values cited via `interpretation:0010/0011`.
 - hypothesis/question/discussion-adjacent numbers **remain flagged**.
-- No regressions in other checks or counts.
+- **No unexpected deltas.** The `plan` index addition intentionally broadens
+  refs-integrity, so record the expected refs delta (any newly-validated or
+  newly-flagged `plan:` references) rather than asserting counts are unchanged;
+  every other check's counts must be unchanged.
 
 ## Docs
 
@@ -226,10 +246,12 @@ does not resolve.
 - `src/science_tool/refs.py` — add `"plan"` to `_LOCAL_ENTITY_KINDS`.
 - `src/science_tool/annotation/sources/lint.py` — bump
   `DETECTOR_VERSIONS["numeric-anchor"]`.
-- `tests/test_numeric_provenance.py` — positives, negatives, ambiguity,
-  boundaries; confirm existing green.
+- `tests/test_numeric_provenance.py` — positives (incl. dotted id), negatives
+  (topical, numeric-prefix ambiguity, non-numeric prefix, embedded tokens,
+  fabricated), boundaries; confirm existing green.
 - `tests/test_annotation_lint_source_numeric.py` — update the expected
   `v2026-07-18b → v2026-07-19` (lines 12–13).
+- `tests/test_refs.py` — contract test for known + nonexistent `plan:` refs.
 - `docs/conventions/prose-lints.md` — one paragraph.
 
 ## Out of scope / follow-ups
