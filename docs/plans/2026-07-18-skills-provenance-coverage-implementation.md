@@ -638,14 +638,26 @@ Expected: FAIL (`classify_provenance` / `check_provenance` absent; the
 - [ ] **Step 3: Fix the `check_frontmatter` parser (same `or {}` bug)**
 
 Task 1 fixed `leaf_frontmatter` in `sources.py`, but `check_frontmatter` in
-`lint.py:67` has the identical defect: `yaml.safe_load(block) or {}` turns falsy
-non-mappings (`[]`, `false`, `0`, `""`) into `{}`, defeating the `isinstance`
-guard two lines below so they emit `missing-field` instead of `invalid-yaml`.
+`lint.py` has **two** parity defects vs. the now-fixed `leaf_frontmatter`:
+1. `yaml.safe_load(block) or {}` turns falsy non-mappings (`[]`, `false`, `0`,
+   `""`) into `{}`, defeating the `isinstance` guard below so they emit
+   `missing-field` instead of `invalid-yaml`.
+2. `text.find("\n---\n", 4)` misses a truly-empty block (`---\n---\n`), because
+   the closing delimiter's leading newline is at index 3 (the same newline that
+   closes the opening `---`). Task 1 fixed the identical bug in
+   `leaf_frontmatter` by searching from `3`; `check_frontmatter` must match so
+   an empty frontmatter block parses to `{}` (→ `missing-field`) instead of
+   being misreported as `missing-frontmatter`/unterminated.
+
 Handle `None` (empty block → empty mapping) separately and let every actual
 non-mapping fall through to the existing `invalid-yaml` return. In `lint.py`,
 replace:
 
 ```python
+    end = text.find("\n---\n", 4)
+    if end == -1:
+        return [SkillIssue(path, "missing-frontmatter", detail="unterminated YAML block")]
+    block = text[4:end]
     try:
         parsed = yaml.safe_load(block) or {}
     except yaml.YAMLError as exc:
@@ -657,6 +669,10 @@ replace:
 with:
 
 ```python
+    end = text.find("\n---\n", 3)
+    if end == -1:
+        return [SkillIssue(path, "missing-frontmatter", detail="unterminated YAML block")]
+    block = text[4:end]
     try:
         parsed = yaml.safe_load(block)
     except yaml.YAMLError as exc:
@@ -666,6 +682,10 @@ with:
     if not isinstance(parsed, dict):
         return [SkillIssue(path, "invalid-yaml", detail="frontmatter is not a mapping")]
 ```
+
+(For a truly-empty block `end` becomes `3` and `text[4:3]` is `""`, which
+`safe_load` returns as `None` → `{}`; for every non-empty block the searched
+index is unchanged from before.)
 
 - [ ] **Step 4: Implement the classifier and coverage check**
 
