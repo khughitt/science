@@ -4,7 +4,7 @@
 
 **Goal:** Ship `science entity migrate-specs`, a command that canonicalizes a project's legacy / loose `spec`-typed docs into numeric `entities/specs/NNNN-slug.md` entities (old id preserved as an alias), repoints the references the rewrite engine can safely rewrite, and reports a machine-checkable `flip_ready` verdict — while `spec` stays annotation-only (the resolution flip is a separate later effort).
 
-**Architecture:** A new `migrate_specs.py` module composes the existing audited primitives (`_snapshot`/`_restore`, `claim_number_in_dir`, `plan_reference_rewrite`/`apply_reference_rewrite`, `audit_moved_references`) into a **new batch coordinator**. **One planning authority** (`_plan_all`) produces *both* the flip-readiness report *and* the frozen transaction, so a dry run exercises every refusal a `--apply` would. Legacy frontmatter is *projected* to the canonical spec schema (not imported), files are relocated with deterministic numeric ids, references are classified on two axes (surface × target) into five report groups, and the whole batch is one crash-safe transaction with a per-path role-tagged recovery journal. The one edit to an existing primitive is a behavior-preserving self-cleanup in `claim_number_in_dir`.
+**Architecture:** A new `migrate_specs.py` module composes the existing audited primitives (`_snapshot`/`_restore`, `claim_number_in_dir`, `plan_reference_rewrite`/`apply_reference_rewrite`, `audit_moved_references`) into a **new batch coordinator**. **One planning authority** (`_plan_all`) produces *both* the flip-readiness report *and* the frozen transaction. Every plan-time fault refuses identically in preview and `--apply`; an incomplete scan is *reported* by the dry run (`scan_complete: false`, `flip_ready: false`) and converted to a hard refusal by `--apply` before any mutation — so the preview always predicts what `--apply` will do. Batch prospective validation goes through **one** shared core in `entities.py` (`_validate_prospective_writes`), which the existing single-document `_validate_prospective_write` also delegates to — no second validation policy. Legacy frontmatter is *projected* to the canonical spec schema (not imported), files are relocated with deterministic numeric ids, references are classified on two axes (surface × target) into five report groups, and the whole batch is one crash-safe transaction with a per-path role-tagged recovery journal. The one edit to an existing primitive is a behavior-preserving self-cleanup in `claim_number_in_dir`.
 
 **Tech Stack:** Python `>=3.11` (matches both packages and Pyright — do not assume 3.12-only syntax), `click` CLI, `pydantic` (`RewriteReport`), `pytest`. Package is `science` under `science/` (run everything from `science/`). Design doc: `docs/plans/2026-07-18-specs-plans-as-entities-s3b-design.md` (read it; this plan implements it verbatim).
 
@@ -31,6 +31,7 @@
 - **Create `science/src/science_tool/migrate_specs.py`** — the whole feature: constants, `SpecMigrationRefused`, projection, discovery, id allocation, reference classification, the planning authority + report assembly, the batch coordinator (plan / apply / resume), and the journal. One module because these pieces share the projection/allocation/classification/render data and change together.
 - **Create `science/tests/test_migrate_specs.py`** — all tests.
 - **Modify `science/src/science_tool/entity_reservation.py:200-205`** — `claim_number_in_dir` self-cleaning partial-dest (Task 1).
+- **Modify `science/src/science_tool/entities.py`** — extract the shared prospective-validation core `_validate_prospective_writes` (batch-capable: many overrides, many allowed-unresolved sources); the existing single-document `_validate_prospective_write` delegates to it, unchanged signature. No second validation policy (Task 6).
 - **Modify `science/src/science_tool/entities_cli.py`** — register `@entity_group.command("migrate-specs")` (Task 10).
 - **Modify `docs/user-guide/entities.md`** (repo-root tree) — document the command (Task 12).
 
@@ -100,7 +101,6 @@ Create `science/tests/test_migrate_specs.py` with this content:
 
 from __future__ import annotations
 
-import json as _json
 from pathlib import Path
 from unittest import mock
 
@@ -1178,12 +1178,14 @@ git commit -m "feat(migrate-specs): two-axis reference classification (skip-pres
 ### Task 6: Transaction plan builder (render + batch validate + collision preflight)
 
 **Files:**
+- Modify: `science/src/science_tool/entities.py` (extract `_validate_prospective_writes`; `_validate_prospective_write` delegates to it)
 - Modify: `science/src/science_tool/migrate_specs.py`
 - Test: `science/tests/test_migrate_specs.py`
 
 **Interfaces:**
-- Consumes: `plan_reference_rewrite`, `rewrite_outbound_links`, `_relative_link`, `_sub_prose_matches`, `RewriteReport` from `science_tool.reference_rewrite`; `render_frontmatter` from `science_model.frontmatter`; `load_project_sources` from `science_tool.graph.sources`; `audit_project_sources` from `science_tool.graph.migrate`; `load_archive_index` from `science_tool.archive`; `hashlib`.
-- Produces: `Destination`, `Transaction`, `_render_destination`, `_validate_batch`, `_all_project_claims`, `_collision_preflight`, `_plan_transaction(project_root, disc, alloc) -> Transaction`. Render substitutes **list and scalar** `_REMOVABLE` values plus `relations[].target`, rebases outbound links, and applies intra-batch path substitutions. Validation is **batch-aware**: one prospective corpus with **all** destinations written and **all** sources removed, so an intra-batch `supersedes: spec:<sibling>` resolves. Collision preflight checks the **rendered, deduplicated** claim set of the whole batch against the project's **global** id/alias/archive authority (excluding the batch's own current claims).
+- Consumes: `plan_reference_rewrite`, `rewrite_outbound_links`, `_relative_link`, `_sub_prose_matches`, `RewriteReport` from `science_tool.reference_rewrite`; `render_frontmatter` from `science_model.frontmatter`; `_validate_prospective_writes` from `science_tool.entities` (the shared prospective-validation core, extracted in this task); `load_project_sources` from `science_tool.graph.sources`; `hashlib`.
+- Produces (in `entities.py`): `_validate_prospective_writes(*, project_root, markdown_overrides, allowed_unresolved_sources, include_commons=True) -> (list[str], ProjectSources)` — the **single** prospective-validation authority; `_validate_prospective_write` (single-document, unchanged public signature) delegates to it, and `_is_allowed_unresolved_target_warning` takes a `Collection[str]` of allowed sources.
+- Produces (in `migrate_specs.py`): `Destination`, `Transaction`, `_render_destination`, `_validate_batch`, `_all_project_claims`, `_collision_preflight`, `_plan_transaction(project_root, disc, alloc) -> Transaction`. Render substitutes **list and scalar** `_REMOVABLE` values plus `relations[].target`, rebases outbound links, and applies intra-batch path substitutions. Validation is **batch-aware and delegates to the one core**: `_validate_batch` builds the override map (**all** destinations written, **all** sources removed, so an intra-batch `supersedes: spec:<sibling>` resolves) and calls `_validate_prospective_writes` — it defines no second audit-diff. `_all_project_claims` returns `token -> set of owner ids` (every entity id + alias owned by that entity's id, plus every `manual_aliases`/archive key owned by a non-entity sentinel). Collision preflight excludes a claim **only when every owner is a migrating spec's old id** — a token-based subtraction would wrongly drop an unrelated entity that merely shares the token — and checks the **rendered, deduplicated** claim set of the whole batch against that authority.
 
 - [ ] **Step 1: Write the failing tests**
 
@@ -1263,7 +1265,100 @@ def test_transaction_alias_dedup_avoids_false_self_collision(tmp_path: Path) -> 
 Run: `cd science && uv run --frozen pytest tests/test_migrate_specs.py -k transaction -v`
 Expected: FAIL (import error for `_plan_transaction`).
 
-- [ ] **Step 3: Implement the transaction plan builder**
+- [ ] **Step 3: Extract the one shared prospective-validation core in `entities.py`**
+
+`_validate_batch` must NOT reimplement the baseline/prospective audit diff. Extract the core so
+the single-document `_validate_prospective_write` and the batch both delegate to it. In
+`science/src/science_tool/entities.py`:
+
+Add `Collection` to the existing `collections.abc` import (line 9):
+
+```python
+from collections.abc import Collection, Mapping, Sequence
+```
+
+Replace `_validate_prospective_write` (currently the whole function body at lines 1735-1775) with the
+batch-capable core plus a thin single-document delegator:
+
+```python
+def _validate_prospective_writes(
+    *,
+    project_root: Path,
+    markdown_overrides: Mapping[str, str],
+    allowed_unresolved_sources: Collection[str],
+    include_commons: bool = True,
+) -> tuple[list[str], ProjectSources]:
+    """Audit warnings, AND the corpus as it would be after these writes — the ONE core.
+
+    `markdown_overrides` maps rel path -> content (`""` models a REMOVED file). Forward
+    `related`/`source_refs` unresolved references whose source is in `allowed_unresolved_sources`
+    are downgraded to warnings (they resolve via the alias net); any other new blocking audit
+    failure raises `EntityCommandError`. Returns the prospective sources it already built.
+    """
+    def _audit_rows(project_sources: ProjectSources) -> list[AuditRow]:
+        verdict = audit_project_sources(project_sources)
+        if verdict.status == "unwired":
+            raise EntityCommandError(f"source audit could not run ({verdict.code}): {verdict.reason}")
+        return verdict.rows
+
+    baseline_rows = _audit_rows(load_project_sources(project_root, include_commons=include_commons))
+    prospective = load_project_sources(
+        project_root, markdown_overrides=dict(markdown_overrides), include_commons=include_commons
+    )
+    prospective_rows = _audit_rows(prospective)
+
+    baseline_keys = {_audit_row_key(row) for row in baseline_rows}
+    new_rows = [row for row in prospective_rows if _audit_row_key(row) not in baseline_keys]
+    warnings = [_format_preexisting_warning(row) for row in baseline_rows if row.get("status") == "fail"]
+    blocking_rows: list[Mapping[str, object]] = []
+    for row in new_rows:
+        if _is_allowed_unresolved_target_warning(row, allowed_unresolved_sources):
+            warnings.append(_format_new_warning(row))
+            continue
+        if row.get("status") == "fail":
+            blocking_rows.append(row)
+    if blocking_rows:
+        raise EntityCommandError("; ".join(_format_blocking_row(row) for row in blocking_rows))
+    return warnings, prospective
+
+
+def _validate_prospective_write(
+    *,
+    project_root: Path,
+    rel_path: Path,
+    text: str,
+    target_entity_id: str,
+    include_commons: bool = True,
+) -> tuple[list[str], ProjectSources]:
+    """Single-document prospective validation — delegates to the batch core."""
+    return _validate_prospective_writes(
+        project_root=project_root,
+        markdown_overrides={rel_path.as_posix(): text},
+        allowed_unresolved_sources={target_entity_id},
+        include_commons=include_commons,
+    )
+```
+
+Widen `_is_allowed_unresolved_target_warning` to accept a collection (replace its signature + membership test):
+
+```python
+def _is_allowed_unresolved_target_warning(row: Mapping[str, object], allowed_sources: Collection[str]) -> bool:
+    return (
+        row.get("check") == "unresolved_reference"
+        and row.get("status") == "fail"
+        and row.get("source") in allowed_sources
+        and row.get("field") in {"related", "source_refs"}
+    )
+```
+
+- [ ] **Step 4: Prove single-document validation is regression-free**
+
+The delegation must not change existing behavior. Run the suites that exercise `_validate_prospective_write`:
+
+Run: `cd science && uv run --frozen pytest tests/test_entity_create.py tests/test_entity_import.py tests/test_datasets_catalog.py -q`
+Expected: PASS (same behavior through the extracted core).
+
+- [ ] **Step 5: Implement the transaction plan builder**
 
 Add to the imports of `migrate_specs.py`:
 
@@ -1284,6 +1379,12 @@ from science_tool.reference_rewrite import (
 Append the code:
 
 ```python
+# Owner sentinels for non-entity claim sources: never equal to a `spec:` old id, so a batch's own
+# old ids can be excluded from the claim authority without ever excluding these.
+_MANUAL_ALIAS_OWNER = "<mappings.yaml>"
+_ARCHIVE_OWNER = "<archive>"
+
+
 @dataclass(frozen=True)
 class Destination:
     old_id: str
@@ -1342,73 +1443,74 @@ def _render_destination(spec: LegacySpec, alloc: Allocation, id_subs: dict[str, 
     return render_frontmatter(fm, body)
 
 
-def _audit_row_key(row: Mapping[str, object]) -> tuple:
-    return (str(row.get("check", "")), str(row.get("status", "")), str(row.get("source", "")), str(row.get("field", "")), str(row.get("target", "")), str(row.get("details", "")))
-
-
 def _validate_batch(project_root: Path, destinations: list[Destination]) -> None:
-    """Batch-aware prospective validation: one corpus with EVERY destination written and EVERY source
-    removed, so an intra-batch `supersedes: spec:<sibling>` resolves rather than failing as unresolved.
-    Refuses on any NEW blocking audit failure the batch introduces (allowing forward `related`/
-    `source_refs` unresolved refs, which resolve via the alias net post-flip)."""
-    from science_tool.graph.migrate import audit_project_sources
-    from science_tool.graph.sources import load_project_sources
+    """Batch-aware prospective validation — DELEGATES to the one core in `entities.py`.
+
+    Builds the override map (EVERY destination written, EVERY source removed via `""`, so an
+    intra-batch `supersedes: spec:<sibling>` resolves) and hands it to `_validate_prospective_writes`,
+    allowing forward `related`/`source_refs` unresolved refs for the migrated ids (they resolve via
+    the alias net post-flip). Defines no second audit-diff. `EntityCommandError` propagates to the CLI,
+    which normalizes it to a refusal (Task 10)."""
+    from science_tool.entities import _validate_prospective_writes
 
     if not destinations:
         return
-    baseline = audit_project_sources(load_project_sources(project_root))
-    if baseline.status == "unwired":
-        raise SpecMigrationRefused(f"source audit could not run: {baseline.reason}")
     overrides: dict[str, str] = {}
     for dest in destinations:
         overrides[dest.source_rel] = ""  # post-move: the source is gone
         overrides[dest.dest_rel] = dest.rendered_text
-    prospective = audit_project_sources(load_project_sources(project_root, markdown_overrides=overrides))
-    if prospective.status == "unwired":
-        raise SpecMigrationRefused(f"prospective source audit could not run: {prospective.reason}")
-
-    baseline_keys = {_audit_row_key(row) for row in baseline.rows}
-    dest_ids = {dest.new_id for dest in destinations}
-    for row in prospective.rows:
-        if _audit_row_key(row) in baseline_keys or row.get("status") != "fail":
-            continue
-        if row.get("check") == "unresolved_reference" and row.get("source") in dest_ids and row.get("field") in {"related", "source_refs"}:
-            continue
-        raise SpecMigrationRefused(f"a migrated spec would fail validation: {dict(row)}")
+    _validate_prospective_writes(
+        project_root=project_root,
+        markdown_overrides=overrides,
+        allowed_unresolved_sources={dest.new_id for dest in destinations},
+    )
 
 
-def _all_project_claims(project_root: Path) -> set[str]:
-    """Every id + alias across ALL kinds, plus archived tokens (the project's global claim authority)."""
+def _all_project_claims(project_root: Path) -> dict[str, set[str]]:
+    """`token -> set of owner ids`: the project's global claim authority, OWNER-tagged.
+
+    Every entity id and every alias is owned by that entity's OWN id; every `manual_aliases`
+    (project `mappings.yaml`) and archive key is owned by a non-entity sentinel. Owner tags let the
+    caller exclude a migrating spec's own claim WITHOUT dropping an unrelated entity that merely
+    shares the token — a flat token set cannot tell those apart. `manual_aliases` is folded in
+    explicitly (it is the superset; `archive_alias_tokens` is only its archived subset)."""
     from science_tool.graph.sources import load_project_sources
 
-    claims: set[str] = set()
+    claims: dict[str, set[str]] = {}
+
+    def _add(token: object, owner: str) -> None:
+        if isinstance(token, str) and token:
+            claims.setdefault(token, set()).add(owner)
+
     sources = load_project_sources(project_root)
     for entity in sources.entities:
-        if getattr(entity, "id", None):
-            claims.add(entity.id)
-        claims.update(getattr(entity, "aliases", None) or [])
-    claims.update(getattr(sources, "archive_alias_tokens", None) or [])
+        _add(entity.id, entity.id)
+        for alias in entity.aliases or []:
+            _add(alias, entity.id)
+    for token in sources.manual_aliases or {}:
+        _add(token, _MANUAL_ALIAS_OWNER)
+    for token in sources.archive_alias_tokens or frozenset():
+        _add(token, _ARCHIVE_OWNER)
     return claims
 
 
 def _collision_preflight(project_root: Path, disc: Discovery, alloc: Allocation) -> None:
     """Refuse if the batch's rendered, deduplicated claims clash with the project's global authority
-    or with each other. The batch's OWN current claims are excluded (they are being moved/renamed)."""
-    own: set[str] = set()
-    for spec in disc.legacy:
-        own.add(spec.old_id)
-        own.update(a for a in _as_list(spec.frontmatter.get("aliases")) if isinstance(a, str))
-    existing = _all_project_claims(project_root) - own
-
+    or with each other. A claim is EXISTING only when it has an owner that is not one of the batch's
+    own old ids — so a migrating spec's own token (an in-home legacy spec loads as an entity) is
+    excluded, but an unrelated entity sharing the token is NOT."""
     old_ids = [spec.old_id for spec in disc.legacy]
     if len(old_ids) != len(set(old_ids)):
         raise SpecMigrationRefused("duplicate old id(s) in the discovered batch.")
+
+    migrating_owner_ids = set(old_ids)
+    existing = {token for token, owners in _all_project_claims(project_root).items() if owners - migrating_owner_ids}
 
     seen: dict[str, str] = {}
 
     def _check(token: str, where: str) -> None:
         if token in existing:
-            raise SpecMigrationRefused(f"{where}: {token!r} collides with an existing id/alias/archive token.")
+            raise SpecMigrationRefused(f"{where}: {token!r} collides with an existing id/alias/mapping/archive token.")
         if token in seen and seen[token] != where:
             raise SpecMigrationRefused(f"{where}: {token!r} collides with {seen[token]}.")
         seen[token] = where
@@ -1462,18 +1564,18 @@ def _plan_transaction(project_root: Path, disc: Discovery, alloc: Allocation) ->
     return Transaction(destinations=destinations, ref_report=ref_report, source_rels=source_rels, dest_rels=dest_rels)
 ```
 
-- [ ] **Step 4: Run to verify pass**
+- [ ] **Step 6: Run to verify pass**
 
 Run: `cd science && uv run --frozen pytest tests/test_migrate_specs.py -k transaction -v`
 Expected: PASS.
 
-- [ ] **Step 5: Lint + types + commit**
+- [ ] **Step 7: Lint + types + commit**
 
 ```bash
 cd science
-uv run ruff check src/science_tool/migrate_specs.py && uv run pyright src/science_tool/migrate_specs.py
-git add src/science_tool/migrate_specs.py tests/test_migrate_specs.py
-git commit -m "feat(migrate-specs): frozen batch plan — render, batch validate, global collision preflight"
+uv run ruff check src/science_tool/entities.py src/science_tool/migrate_specs.py && uv run pyright src/science_tool/entities.py src/science_tool/migrate_specs.py
+git add src/science_tool/entities.py src/science_tool/migrate_specs.py tests/test_migrate_specs.py
+git commit -m "feat(migrate-specs): frozen batch plan — render, shared batch validate, owner-based collision preflight"
 ```
 
 ---
@@ -1668,7 +1770,7 @@ git commit -m "feat(migrate-specs): single planning authority and flip-readiness
 
 **Interfaces:**
 - Consumes: `_snapshot`, `_restore`, `apply_reference_rewrite`, `audit_moved_references` from `science_tool.entity_import`; `claim_number_in_dir` from `science_tool.entity_reservation`; `atomic_write_text` from `science_model.frontmatter`; `json`.
-- Produces: `_journal_write`, `_apply_transaction`, `migrate(project_root, *, apply=False) -> dict`. `migrate` refuses if a journal exists. Plan-only returns `build_report`; `--apply` runs the transaction then returns a fresh post-apply `build_report` (recomputed against the mutated tree). `claim_number_in_dir` failures (drift) and `ReferenceDriftError` roll the whole batch back.
+- Produces: `_journal_write`, `_apply_transaction`, `migrate(project_root, *, apply=False) -> dict`. `migrate` refuses if a journal exists. `--apply` also refuses **before any mutation** when the dry-run report is incomplete (`scan_complete == false`), so an unreadable/oversized reference surface can never be half-migrated (the dry run predicts this via `scan_complete`/`flip_ready`). Plan-only returns `build_report`; `--apply` runs the transaction then returns a fresh post-apply `build_report` (recomputed against the mutated tree). `claim_number_in_dir` failures (drift) and `ReferenceDriftError` roll the whole batch back.
 
 - [ ] **Step 1: Write the failing tests**
 
@@ -1757,6 +1859,25 @@ def test_migrate_refuses_when_journal_exists(tmp_path: Path) -> None:
     journal.write_text("{}", encoding="utf-8")
     with pytest.raises(SpecMigrationRefused, match="INTERRUPTED"):
         migrate(project, apply=True)
+
+
+def test_migrate_apply_refuses_incomplete_scan_before_any_mutation(tmp_path: Path) -> None:
+    # an unreadable/oversized reference surface -> scan_complete false -> --apply refuses, writing NOTHING
+    project = _spec_project(tmp_path)
+    _legacy_spec(project, "doc/plans/a.md", "spec:date-a", "Alpha")
+    ref = _write(project / "doc/ref.md", {"id": "design:0001-r", "kind": "design", "title": "R", "related": ["spec:date-a"]})
+    ref_pre = ref.read_text(encoding="utf-8")
+    from science_tool.text_scan import MAX_SCANNABLE_BYTES
+
+    (project / "doc/plans/huge.md").write_text("x" * (MAX_SCANNABLE_BYTES + 1), encoding="utf-8")
+
+    with pytest.raises(SpecMigrationRefused, match="incomplete"):
+        migrate(project, apply=True)
+
+    assert (project / "doc/plans/a.md").exists()                    # source untouched
+    assert not list((project / "entities/specs").glob("*.md"))      # no destination minted
+    assert ref.read_text(encoding="utf-8") == ref_pre               # referrer untouched
+    assert not (project / JOURNAL_PATH).exists()                    # no journal written
 ```
 
 - [ ] **Step 2: Run to verify failure**
@@ -1841,6 +1962,11 @@ def migrate(project_root: Path, *, apply: bool = False) -> dict:
     plan = _plan_all(project_root)
     if not apply:
         return plan.report
+    if not plan.report["scan_complete"]:
+        raise SpecMigrationRefused(
+            "the reference scan is incomplete (unreadable or oversized files) — see `scan_skips` in the "
+            "dry-run report. --apply is refused before any mutation; resolve the skips and re-run."
+        )
     _apply_transaction(project_root, plan.transaction)
     return build_report(project_root)  # recompute against the mutated tree
 ```
@@ -1873,9 +1999,11 @@ git commit -m "feat(migrate-specs): crash-safe batch apply transaction with reco
 
 - [ ] **Step 1: Write the failing tests**
 
-Add to `science/tests/test_migrate_specs.py`:
+Add to `science/tests/test_migrate_specs.py` (`import json as _json` is added here — its first consumer):
 
 ```python
+import json as _json
+
 from science_tool.migrate_specs import resume
 
 
@@ -1953,6 +2081,38 @@ def test_resume_clears_sentinel_when_dest_already_committed(tmp_path: Path) -> N
     resume(project)
     assert not (project / "entities/specs/.0001.reserving").exists()  # cleared at the dest-committed crash point
     assert not (project / JOURNAL_PATH).exists()
+
+
+def test_resume_reclaims_dest_when_absent_with_sentinel(tmp_path: Path) -> None:
+    # the OTHER crash point: sentinel created but the dest was never written. Resume clears the
+    # sentinel and re-claims the dest (claim's own `finally` removes the sentinel it re-creates).
+    project = _spec_project(tmp_path)
+    (project / "entities/specs").mkdir(parents=True, exist_ok=True)
+    (project / "entities/specs/.0001.reserving").write_text("", encoding="utf-8")  # dest-absent + sentinel
+    _journal(project, [{"role": "moved-dest", "rel": "entities/specs/0001-alpha.md", "preimage_sha256": None, "postimage": _DEST_TEXT, "number": 1, "local_part": "0001-alpha"}])
+    resume(project)
+    assert (project / "entities/specs/0001-alpha.md").read_text(encoding="utf-8") == _DEST_TEXT
+    assert not (project / "entities/specs/.0001.reserving").exists()
+    assert not (project / JOURNAL_PATH).exists()
+
+
+def test_resume_retains_journal_when_post_move_audit_fails(tmp_path: Path) -> None:
+    # a NON-empty post-move audit must NOT delete the journal: the operator fixes the tree and re-resumes.
+    project = _spec_project(tmp_path)
+    src = _legacy_spec(project, "doc/plans/a.md", "spec:date-a", "Alpha")
+    src_text = src.read_text(encoding="utf-8")
+    _journal(project, [
+        {"role": "moved-source", "rel": "doc/plans/a.md", "preimage_sha256": _sha(src_text), "postimage": None},
+        {"role": "moved-dest", "rel": "entities/specs/0001-alpha.md", "preimage_sha256": None, "postimage": _DEST_TEXT, "number": 1, "local_part": "0001-alpha"},
+    ])
+
+    from science_tool import migrate_specs
+
+    with mock.patch.object(migrate_specs, "audit_moved_references", mock.Mock(return_value=["boom"])):
+        with pytest.raises(SpecMigrationRefused, match="audit"):
+            resume(project)
+
+    assert (project / JOURNAL_PATH).exists()  # retained for a retry
 
 
 def test_resume_refuses_with_no_journal(tmp_path: Path) -> None:
@@ -2319,8 +2479,8 @@ git commit -m "docs(entities): document science entity migrate-specs"
 | Component 3 — two-axis classification + token boundary + five groups + skip-preserving | Task 5 |
 | Component 4 — id allocation | Task 4 |
 | Component 4 — `claim_number_in_dir` hardening | Task 1 |
-| Component 4 — render/rebase/substitute (list+scalar) + batch validate + global collision preflight | Task 6 |
-| Component 4 — single planning authority (dry-run == apply plan) | Task 7 |
+| Component 4 — render/rebase/substitute (list+scalar) + shared batch-validate core + owner-based collision preflight | Task 6 |
+| Component 4 — single planning authority (dry-run predicts apply; `--apply` refuses on incomplete scan) | Tasks 7, 8 |
 | Component 4 — batch transaction + journal | Task 8 |
 | Journal + resume (per-role, dest-before-source, sentinels, third-state refusal) | Task 9 |
 | Flip-readiness contract + JSON schema (skip union) | Task 7 |
@@ -2340,7 +2500,14 @@ git commit -m "docs(entities): document science entity migrate-specs"
 - **`scan_complete` over skipped surfaces** → Task 5 returns skips; Task 7 unions them into `scan_skips`; oversized non-Markdown caught by Task 3's all-suffix walk (tests for oversized non-md and unreadable files).
 - **TDD couldn't run** → `_legacy_spec` fixture (dates + mappable status) used from Task 6 on; imports added in their consuming task; the minimal `_spec_project` is verified audit-capable (no executor guesswork).
 
-**Smaller fixes applied:** `--apply`/`--resume` mutually exclusive and `EntityCommandError`/`ReferenceDriftError` normalized to refusals (Task 10); `Python >=3.11` (Tech Stack); `~/d/…` in Task 12's commit `cd`; added tests for sentinel-at-both-crash-points (Task 9), collision-drift rollback (Task 8), post-migration loadability (Task 8), and resume audit (Task 9).
+**Resolved review findings (rev 3):**
+- **Collision exclusion was token-based, not owner-based** → Task 6 `_all_project_claims` now returns `token -> set of owner ids`; `_collision_preflight` excludes a claim only when *every* owner is a migrating spec's old id, so an unrelated entity sharing the token is no longer dropped (the global-alias test now genuinely exercises the refusal). `manual_aliases` (the `mappings.yaml` superset, not just its archived subset) is folded into the authority.
+- **`_validate_batch` was a second prospective-validation authority** → Task 6 extracts one core `_validate_prospective_writes` in `entities.py` (recorded in the file map); `_validate_prospective_write` (unchanged signature) and `_validate_batch` both delegate to it; `_is_allowed_unresolved_target_warning` now takes a `Collection`. A regression step runs the existing entity-create/import/datasets suites.
+- **Incomplete scan could still reach apply** → Task 8 `migrate(apply=True)` refuses **before** journaling or mutation when `scan_complete == false`, with a test asserting no source/destination/referrer/journal change; the architecture language now says the dry run *predicts* this refusal (via `scan_complete`/`flip_ready`) rather than returning identically.
+- **Resume test gaps** → Task 9 adds the dest-absent-plus-sentinel crash point and the non-empty-audit/journal-retained cases (both sentinel crash points and both audit outcomes now covered).
+- **Premature import** → `import json as _json` moved from Task 1 to Task 9 (its first consumer), honoring the consuming-task import rule.
+
+**Smaller fixes applied (rev 2):** `--apply`/`--resume` mutually exclusive and `EntityCommandError`/`ReferenceDriftError` normalized to refusals (Task 10); `Python >=3.11` (Tech Stack); `~/d/…` in Task 12's commit `cd`; added tests for sentinel-at-both-crash-points (Task 9), collision-drift rollback (Task 8), post-migration loadability (Task 8), and resume audit (Task 9).
 
 **Notes for the executor:**
 - Run everything from `science/`. Never `git add science/uv.lock`.
