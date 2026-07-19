@@ -1,0 +1,70 @@
+baygent-skills:
+  title: "Baygent Skills — Learning Bayesian Statistics"
+  authors: ["Alexandre Andorra"]
+  url: "https://github.com/Learning-Bayesian-Statistics/baygent-skills"
+  kind: skill-repo
+  license: MIT
+  attribution_notice: "Copyright (c) 2026 Learning Bayesian Statistics — MIT; used on an ideas/practices-only basis."
+  upstream_ref: "aa940481ebb9fbd087b2fc41dba3af386b5bdb31"
+  last_checked: "2026-07-18"
+  notes: >
+    Pulled: gated Bayesian-workflow spine, calibration, power-scaling prior
+    sensitivity, LOO/stacking model comparison, DAG-first identification with the
+    M-bias/collider caveat. Radev co-authored the (unused) amortized-workflow.
+
+gelman-bayesian-workflow:
+  title: "Bayesian Workflow"
+  authors:
+    - "Andrew Gelman"
+    - "Aki Vehtari"
+    - "Daniel Simpson"
+    - "Charles C. Margossian"
+    - "Bob Carpenter"
+    - "Yuling Yao"
+    - "Lauren Kennedy"
+    - "Jonah Gabry"
+    - "Paul-Christian Bürkner"
+    - "Martin Modrák"
+  url: "https://arxiv.org/abs/2011.01808"
+  kind: paper
+  arxiv: "2011.01808"
+  last_checked: "2026-07-18"
+
+vehtari-loo:
+  title: "Practical Bayesian model evaluation using leave-one-out cross-validation and WAIC"
+  authors: ["Aki Vehtari", "Andrew Gelman", "Jonah Gabry"]
+  url: "https://doi.org/10.1007/s11222-016-9696-4"
+  kind: paper
+  doi: "10.1007/s11222-016-9696-4"
+  last_checked: "2026-07-18"
+
+hernan-robins-whatif:
+  title: "Causal Inference: What If"
+  authors: ["Miguel A. Hernán", "James M. Robins"]
+  url: "https://www.hsph.harvard.edu/miguel-hernan/causal-inference-book/"
+  kind: book
+  last_checked: "2026-07-18"
+
+pearl-primer:
+  title: "Causal Inference in Statistics: A Primer"
+  authors: ["Judea Pearl", "Madelyn Glymour", "Nicholas P. Jewell"]
+  url: "https://www.wiley.com/en-us/Causal+Inference+in+Statistics%3A+A+Primer-p-9781119186847"
+  kind: book
+  isbn: "9781119186847"
+  last_checked: "2026-07-18"
+
+vanderweele-ding-evalue:
+  title: "Sensitivity Analysis in Observational Research: Introducing the E-Value"
+  authors: ["Tyler J. VanderWeele", "Peng Ding"]
+  url: "https://doi.org/10.7326/M16-2607"
+  kind: paper
+  doi: "10.7326/M16-2607"
+  last_checked: "2026-07-18"
+
+rosenbaum-sensitivity:
+  title: "Observational Studies (2nd ed.), ch. 4 — Sensitivity to Hidden Bias"
+  authors: ["Paul R. Rosenbaum"]
+  url: "https://doi.org/10.1007/978-1-4757-3692-2_4"
+  kind: book
+  doi: "10.1007/978-1-4757-3692-2_4"
+  last_checked: "2026-07-18"
