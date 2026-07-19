@@ -1,11 +1,13 @@
 from __future__ import annotations
 
+from pathlib import Path
+
 import pytest
 
 from science_tool.archive import ArchiveRow
-from science_tool.plan_common import ArchiveStatusSweep, PathTransition, StateFingerprint
+from science_tool.plan_common import ArchiveStatusSweep, PathTransition, StateFingerprint, fingerprint
 from science_tool.archive_plan import (
-    ArchiveCandidate, ArchiveMove, ArchivePlan, ArchivePreviewReport, PlannedArchiveRow,
+    ArchiveCandidate, ArchiveMove, ArchivePlan, ArchivePreviewReport, PlannedArchiveRow, plan_archive,
 )
 
 
@@ -68,3 +70,63 @@ def test_planned_row_is_a_valid_archive_row() -> None:
     from science_tool.archive import ArchiveRow
     row = PlannedArchiveRow(op="archive", id="interpretation:0001-x", archived_at="2026-07-18T00:00:00Z")
     assert isinstance(row, ArchiveRow)
+
+
+def _superseded(root: Path) -> None:
+    (root / "science.yaml").write_text("name: t\n", encoding="utf-8")
+    d = root / "entities" / "interpretations"
+    d.mkdir(parents=True)
+    (d / "0001-x.md").write_text(
+        "---\nid: interpretation:0001-x\nkind: interpretation\ntitle: X\nstatus: superseded\n---\nbody\n",
+        encoding="utf-8")
+
+
+def test_plan_archive_freezes_move_and_literal_index(tmp_path: Path) -> None:
+    _superseded(tmp_path)
+    plan = plan_archive(tmp_path, selection=ArchiveStatusSweep(kind="all_by_status", statuses=["superseded"]),
+                        now="2026-07-18T00:00:00Z")
+    assert len(plan.moves) == 1
+    m = plan.moves[0]
+    assert m.id == "interpretation:0001-x"
+    assert m.original_path == "entities/interpretations/0001-x.md"
+    assert m.archive_path == "entities/_archive/interpretations/0001-x.md"
+    assert m.row.archived_at == "2026-07-18T00:00:00Z"  # a typed PlannedArchiveRow, not a dict
+    assert plan.index.role == "archive-index"
+    assert plan.index.postimage.endswith("\n")
+    assert "interpretation:0001-x" in plan.index.postimage
+    # a src transition exists with the live pre-state
+    src = [t for t in plan.transitions if t.role == "archive-src"][0]
+    assert src.pre == fingerprint(tmp_path / src.rel_path)
+
+
+def test_index_postimage_matches_canonical_append_row_serialization(tmp_path: Path) -> None:
+    # The frozen index bytes must be exactly what append_row would have written, or the index
+    # will not round-trip through load_archive_index.
+    import json
+    _superseded(tmp_path)
+    plan = plan_archive(tmp_path, selection=ArchiveStatusSweep(kind="all_by_status", statuses=["superseded"]),
+                        now="2026-07-18T00:00:00Z")
+    expected = json.dumps(plan.moves[0].row.model_dump(), sort_keys=True) + "\n"
+    assert plan.index.postimage == expected
+
+
+def test_plan_archive_declares_every_missing_ancestor_dir(tmp_path: Path) -> None:
+    # Finding 4: apply does mkdir(parents=True); every ancestor it would create must be declared,
+    # or rollback has no state for the undeclared ones.
+    _superseded(tmp_path)
+    plan = plan_archive(tmp_path, selection=ArchiveStatusSweep(kind="all_by_status", statuses=["superseded"]),
+                        now="2026-07-18T00:00:00Z")
+    created = sorted(t.rel_path for t in plan.transitions if t.role == "created-dir")
+    assert created == ["entities/_archive", "entities/_archive/interpretations"]
+
+
+def test_plan_archive_empty_cohort_is_a_noop_plan(tmp_path: Path) -> None:
+    # No superseded entities → no moves, no transitions, and NO index transition (legacy no-op).
+    (tmp_path / "science.yaml").write_text("name: t\n", encoding="utf-8")
+    (tmp_path / "entities" / "interpretations").mkdir(parents=True)
+    plan = plan_archive(tmp_path, selection=ArchiveStatusSweep(kind="all_by_status", statuses=["superseded"]),
+                        now="2026-07-18T00:00:00Z")
+    assert plan.moves == []
+    assert plan.transitions == []
+    assert plan.index is None
+    assert plan.preview_report.candidates == []
