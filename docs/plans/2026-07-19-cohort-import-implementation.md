@@ -856,6 +856,20 @@ def test_cohort_rejects_self_link(tmp_path):
     assert "doc/plans/a.md -> doc/plans/a.md" in str(excinfo.value)
 
 
+def test_cohort_pair_attribution_disambiguates_shared_basenames(tmp_path):
+    """Two members sharing a basename must report the EXACT target, not the first
+    basename match."""
+    root = _project(tmp_path)
+    # doc/a/x.md links the OTHER member (draft/x.md), which shares its basename.
+    a = _loose(root, "doc/a/x.md", "# A\n\nsee [t](../../draft/x.md)\n")
+    b = _loose(root, "draft/x.md", "# B\n\nbody\n")
+    with pytest.raises(RefDependentCohortError) as excinfo:
+        plan_cohort_import(root, [a, b], kind="plan")
+    msg = str(excinfo.value)
+    assert "doc/a/x.md -> draft/x.md" in msg  # resolved to the real target
+    assert "doc/a/x.md -> doc/a/x.md" not in msg  # not misattributed to itself
+
+
 def test_cohort_runs_one_combined_scan_with_cached_overrides(tmp_path, monkeypatch):
     """The planner reads each source once and feeds those exact bytes to ONE scan
     via source_overrides — no per-member scan, no second read of any source."""
@@ -910,7 +924,9 @@ Expected: FAIL — `cannot import name 'plan_cohort_import'`.
 
 - [ ] **Step 3: Write minimal implementation**
 
-Add `Sequence` to imports: `from collections.abc import Iterator, Sequence`. Add:
+Add `Sequence` to imports: `from collections.abc import Iterator, Sequence`. Also add
+`RefHit` and `ManualHit` to the existing `from science_tool.reference_rewrite import (...)`
+block (the pair-attribution helpers annotate them). Add:
 ```python
 def plan_cohort_import(
     project_root: Path,
@@ -977,26 +993,35 @@ def plan_cohort_import(
         exclude=exclude,
         source_overrides=cache,
     )
-    # Name the offending (source -> target) PAIRS, per design v4. Cross-member
-    # references in loose documents are always PATH-based (a member is not yet an
-    # entity, so it has no id to cite), so the target member's source path or its
-    # basename appears in the finding's original text: `RefHit.old` for a link/
-    # frontmatter hit, `ManualHit.text` for a bare mention. A self-reference maps
-    # the offending source to itself, which is likewise rejected.
-    def _target_source(text_field: str) -> str:
-        for m in members:
-            name = PurePosixPath(m.source_rel).name
-            if m.source_rel in text_field or name in text_field:
-                return m.source_rel
-        return "another member"
+    # Name the offending (source -> target) PAIRS by EXACT source path, per design
+    # v4. Cross-member references in loose documents are PATH-based (a member is not
+    # yet an entity, so it has no id to cite). Resolve each finding to a member
+    # source_rel exactly — basename matching is ambiguous when two members share a
+    # filename (doc/a/x.md vs draft/x.md). For a link hit, `RefHit.old` is a link
+    # target resolved against the referrer's directory; for a frontmatter hit it is
+    # the repo-relative substitution key itself. A manual hit's text may name more
+    # than one member; report every target present.
+    member_sources = set(member_rels)
+
+    def _hit_target(h: RefHit) -> str | None:
+        head, _tail = _split_target(h.old)
+        if head in member_sources:  # frontmatter path ref: the key is the source_rel
+            return head
+        resolved = _resolve_link(head, PurePosixPath(h.rel_path).parent) if head else None
+        return resolved if resolved in member_sources else None
+
+    def _manual_targets(man: ManualHit) -> list[str]:
+        return sorted(rel for rel in member_sources if rel in man.text)
 
     pairs: list[tuple[str, str]] = []
     for h in report.hits:
         if h.rel_path in member_rels:
-            pairs.append((h.rel_path, _target_source(h.old)))
+            target = _hit_target(h)
+            pairs.append((h.rel_path, target if target is not None else h.old))
     for man in report.manual:
         if man.rel_path in member_rels:
-            pairs.append((man.rel_path, _target_source(man.text)))
+            targets = _manual_targets(man) or [man.text.strip()]
+            pairs.extend((man.rel_path, t) for t in targets)
     if pairs:
         rendered = ", ".join(f"{src} -> {tgt}" for src, tgt in sorted(set(pairs)))
         raise RefDependentCohortError(
@@ -1092,6 +1117,33 @@ def test_validate_rejects_tampered_destination(tmp_path):
     plan.members[0].dest_rel = "entities/plans/9999-evil.md"  # not canonical for its id
     with pytest.raises(EntityImportError):
         _validate_cohort_plan_for_apply(root, plan)
+
+
+def test_validate_translates_unknown_kind(tmp_path):
+    """resolve_path_policy's bare KeyError must surface as EntityImportError.
+
+    The entity_id prefix is set to the bad kind too, so the id-vs-kind check passes
+    and execution actually reaches resolve_path_policy (the code path under test).
+    """
+    root = _project(tmp_path)
+    plan = _valid_plan(root)
+    plan.kind = "notarealkind"
+    for i, m in enumerate(plan.members, start=1):
+        m.entity_id = f"notarealkind:{i:04d}-x"
+    with pytest.raises(EntityImportError):
+        _validate_cohort_plan_for_apply(root, plan)
+
+
+def test_validate_rejects_rendered_kind_tamper(tmp_path):
+    """A rendered_text whose frontmatter kind disagrees with plan.kind is refused,
+    even when its id is correct."""
+    root = _project(tmp_path)
+    plan = _valid_plan(root)
+    m = plan.members[0]
+    # Keep the id line, corrupt only the kind line in the rendered frontmatter.
+    m.rendered_text = m.rendered_text.replace("kind: plan", "kind: question")
+    with pytest.raises(EntityImportError):
+        _validate_cohort_plan_for_apply(root, plan)
 ```
 
 - [ ] **Step 2: Run tests to verify they fail**
@@ -1130,16 +1182,28 @@ def _validate_member_identity(
     match = re.match(rf"(\d{{{LOCAL_PART_WIDTH}}})-", local_part)
     if match is None or int(match.group(1)) != number:
         raise EntityImportError(f"plan entity_id {entity_id!r} does not carry number {number}")
-    expected_dest = f"{resolve_path_policy(kind).root}/{local_part}.md"
+    # resolve_path_policy raises a bare KeyError (unknown kind) / EntityCommandError
+    # (non-numeric kind); translate both so this function only ever raises
+    # EntityImportError, matching its contract and the pre-refactor behavior.
+    try:
+        policy_root = resolve_path_policy(kind).root
+    except KeyError as exc:
+        raise EntityImportError(f"unknown entity kind: {kind}") from exc
+    except EntityCommandError as exc:
+        raise EntityImportError(str(exc)) from exc
+    expected_dest = f"{policy_root}/{local_part}.md"
     if dest_rel != expected_dest:
         raise EntityImportError(
             f"plan destination {dest_rel!r} is not canonical for {entity_id!r} (expected {expected_dest!r})"
         )
     if frontmatter.get("id") != entity_id or frontmatter.get("kind") != kind:
         raise EntityImportError("plan frontmatter id/kind disagree with the entity_id")
+    # Validate BOTH id and kind of the rendered frontmatter: apply writes rendered_text
+    # verbatim, so a plan whose rendered kind disagrees with plan.kind would land an
+    # entity in the wrong-kind body under a right-kind path.
     rendered_fm, _body = split_frontmatter(rendered_text)
-    if rendered_fm.get("id") != entity_id:
-        raise EntityImportError("plan rendered_text frontmatter does not carry the entity_id")
+    if rendered_fm.get("id") != entity_id or rendered_fm.get("kind") != kind:
+        raise EntityImportError("plan rendered_text frontmatter id/kind disagree with the entity_id")
     _validate_prospective_write(
         project_root=project_root, rel_path=Path(dest_rel),
         text=rendered_text, target_entity_id=entity_id,
@@ -1368,11 +1432,20 @@ def test_cohort_apply_rolls_back_on_inbound_rewrite_failure(tmp_path, monkeypatc
 
 
 def test_cohort_apply_rolls_back_on_dangling_audit(tmp_path, monkeypatch):
-    """A post-move audit that finds a dangling reference rolls the whole cohort back."""
+    """A post-move audit failure rolls the whole cohort back — INCLUDING a referrer
+    the real inbound rewrite already modified, restored to its exact preimage. This
+    is the path that catches a missing snapshot or broken written_refs bookkeeping;
+    audit runs AFTER apply_reference_rewrite, so the referrer has really been written.
+    """
     root = _project(tmp_path)
     a = _loose(root, "doc/plans/a.md", "# Alpha\n\nbody\n")
     b = _loose(root, "doc/plans/b.md", "# Beta\n\nbody\n")
+    referrer = _loose(root, "doc/notes.md", "see [a](plans/a.md)\n")
+    before = referrer.read_text(encoding="utf-8")
     plan = plan_cohort_import(root, [a, b], kind="plan")
+    # Sanity: the plan really rewrites this referrer, so the rollback assertion below
+    # exercises the written_refs restore path, not a no-op.
+    assert any(e.rel_path == "doc/notes.md" for e in plan.ref_report.edits)
     import science_tool.entity_import as ei
     monkeypatch.setattr(ei, "audit_moved_references", lambda *a, **k: ["dangling ref"])
     with pytest.raises(EntityImportError):
@@ -1380,6 +1453,7 @@ def test_cohort_apply_rolls_back_on_dangling_audit(tmp_path, monkeypatch):
     assert a.exists() and b.exists()
     assert not (root / "entities/plans/0001-alpha.md").exists()
     assert not (root / "entities/plans/0002-beta.md").exists()
+    assert referrer.read_text(encoding="utf-8") == before  # written, then restored exactly
 ```
 
 - [ ] **Step 2: Run tests to verify they fail**
@@ -1682,6 +1756,32 @@ def test_cli_apply_plan_rejects_non_object_json(tmp_path, monkeypatch):
     assert res.exit_code != 0  # a clean ClickException, not an AttributeError traceback
 
 
+def test_cli_apply_plan_rejects_invalid_utf8(tmp_path, monkeypatch):
+    """Non-UTF-8 plan bytes are refused cleanly, not with a raw UnicodeDecodeError."""
+    root = tmp_path
+    (root / "science.yaml").write_text("name: t\nknowledge_profiles: {local: local}\n", encoding="utf-8")
+    raw = b"\xff\xfe not valid utf-8"
+    (root / "p.json").write_bytes(raw)
+    monkeypatch.chdir(root)
+    res = CliRunner().invoke(main, ["entities", "import", "--apply-plan", "p.json",
+                                    "--expected-plan-sha256", _envelope_sha(raw)])
+    assert res.exit_code != 0
+    assert "not valid json" in res.output.lower()
+
+
+def test_cli_apply_plan_rejects_boolean_schema_version(tmp_path, monkeypatch):
+    """`"schema_version": true` must not satisfy the cohort discriminator (True == 1)."""
+    root = tmp_path
+    (root / "science.yaml").write_text("name: t\nknowledge_profiles: {local: local}\n", encoding="utf-8")
+    raw = json.dumps({"plan_type": "cohort-import", "schema_version": True}).encode("utf-8")
+    (root / "p.json").write_bytes(raw)
+    monkeypatch.chdir(root)
+    res = CliRunner().invoke(main, ["entities", "import", "--apply-plan", "p.json",
+                                    "--expected-plan-sha256", _envelope_sha(raw)])
+    assert res.exit_code != 0
+    assert "unsupported plan" in res.output.lower()
+
+
 def test_cli_single_import_preserves_explicit_slug(tmp_path, monkeypatch):
     """A single-source --slug flows end-to-end to the applied entity id."""
     root = tmp_path
@@ -1752,15 +1852,18 @@ Replace the command body (from `if apply_plan_path is not None:` to the end) wit
         # dispatch. no plan_type AND no schema_version -> legacy single; the cohort
         # discriminator -> cohort; anything else -> clean refusal.
         try:
-            probe = json.loads(raw)
-        except json.JSONDecodeError as exc:
+            probe = json.loads(raw)  # json.loads on bytes may raise UnicodeDecodeError
+        except (json.JSONDecodeError, UnicodeDecodeError) as exc:
             raise click.ClickException(f"plan is not valid JSON: {exc}") from exc
         if not isinstance(probe, dict):  # a JSON list/scalar has no discriminator
             raise click.ClickException("plan is not a JSON object")
         plan_type = probe.get("plan_type")
         schema_version = probe.get("schema_version")
+        # A GENUINE integer 1, not JSON true: `True == 1` in Python and Pydantic's int
+        # field would coerce a bool, so a `"schema_version": true` plan must not pass.
+        cohort_version = isinstance(schema_version, int) and not isinstance(schema_version, bool) and schema_version == 1
         try:
-            if plan_type == "cohort-import" and schema_version == 1:
+            if plan_type == "cohort-import" and cohort_version:
                 cohort = parse_cohort_import_plan(raw)
                 payload = {**cohort.model_dump(),
                            "applied": apply_cohort_import(project_root, cohort, exclude=exclude)}
@@ -1887,11 +1990,12 @@ git commit -m "chore(release): bump science 0.5.1 -> 0.5.2 (cohort import)"
 
 ## Final verification (before the whole-branch review)
 
-Run the full suite AND the linters from the nested dir (the suite alone is not enough — the branch touches type-checked modules):
+Run the full suite AND the linters from the nested dir (the suite alone is not enough — the branch touches type-checked modules). One `cd`, then the three commands:
 ```bash
-cd science && uv run --frozen pytest -q
-cd science && uv run --frozen ruff check
-cd science && uv run --frozen pyright
+cd science
+uv run --frozen pytest -q
+uv run --frozen ruff check
+uv run --frozen pyright
 ```
 Expected: green tests with no regressions in the single-import, reservation, or reference-rewrite suites; ruff and pyright both clean on the changed modules.
 
