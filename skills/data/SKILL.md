@@ -1,7 +1,7 @@
 ---
 name: data-management
 description: Data acquisition, preprocessing, and management for Science research projects. This skill should be used when working with datasets, downloading data from repositories, creating Frictionless Data Packages, preprocessing raw data, or managing data provenance. Also use when the user mentions data sources, data cleaning, data formats, or datapackage.json.
-provenance: internal
+sources: [edam]
 ---
 
 # Data Management
