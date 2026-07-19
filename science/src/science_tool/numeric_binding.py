@@ -107,9 +107,8 @@ def validate_entry(id: str, raw: Any, artifact_ext: str) -> ParsedEntry | Bindin
     except ValidationError as exc:
         return BindingError(id, None, str(exc))
 
-    if not isinstance(entry.locator, Mapping):
-        return BindingError(id, None, "locator must be a mapping")
-
+    # `_EntryModel.locator` is a required `dict[str, Any]`, so a non-mapping
+    # locator already failed `model_validate` above — no guard needed here.
     matches: list[BaseModel] = []
     for model_cls in _LOCATOR_MODELS:
         try:

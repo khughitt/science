@@ -129,14 +129,15 @@ def test_non_mapping_numeric_claims_is_document_level_error(tmp_path):
         document, _FIXTURES_DIR, _FIXTURES_DIR, **_KWARGS
     )
 
-    assert results == [
-        VerificationResult(
-            id=None,
-            line=1,
-            outcome="error",
-            detail="numeric_claims frontmatter must be a mapping",
-        )
-    ]
+    # Assert structure + a substring rather than the verbatim message, which is
+    # owned by numeric_binding.parse_claim_bindings — a reword there shouldn't
+    # break this verification-layer test.
+    assert len(results) == 1
+    result = results[0]
+    assert result.id is None
+    assert result.line == 1
+    assert result.outcome == "error"
+    assert "must be a mapping" in result.detail
     assert len(issues) == 1
     issue = issues[0]
     assert issue.line == 1
