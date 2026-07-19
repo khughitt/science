@@ -9,13 +9,14 @@ transaction, so a dry run exercises every refusal a `--apply` would. The design 
 from __future__ import annotations
 
 import hashlib
+import json
 import re
 from collections.abc import Mapping
 from dataclasses import dataclass
 from pathlib import Path, PurePosixPath
 from typing import Any
 
-from science_model.frontmatter import render_frontmatter, split_frontmatter
+from science_model.frontmatter import atomic_write_text, render_frontmatter, split_frontmatter
 
 from science_tool.entities import (
     _REFERENCE_SCAN_SKIP_DIRS,
@@ -25,7 +26,8 @@ from science_tool.entities import (
     markdown_entity_kinds,
     resolve_path_policy,
 )
-from science_tool.entity_reservation import propose_number
+from science_tool.entity_import import _restore, _snapshot, apply_reference_rewrite, audit_moved_references
+from science_tool.entity_reservation import claim_number_in_dir, propose_number
 from science_tool.markdown_scan import iter_prose_matches
 from science_tool.reference_rewrite import (
     _LINK_RE,
@@ -775,3 +777,73 @@ def _plan_all(project_root: Path) -> PlanResult:
 def build_report(project_root: Path) -> dict:
     """The read-only flip-readiness report (== the single planning authority's report)."""
     return _plan_all(project_root).report
+
+
+def _journal_write(project_root: Path, txn: Transaction) -> None:
+    """Recovery journal: every path's role, preimage, and postimage (content|absent). Atomic, pre-mutation.
+
+    `preimage_sha256=None` means absent; `postimage=None` means absent. moved-dest carries number +
+    local_part so resume can re-`claim` it.
+    """
+    entries: list[dict] = []
+    for dest in txn.destinations:
+        source = project_root / dest.source_rel
+        entries.append({"role": "moved-source", "rel": dest.source_rel, "preimage_sha256": hashlib.sha256(source.read_bytes()).hexdigest(), "postimage": None})
+        entries.append({"role": "moved-dest", "rel": dest.dest_rel, "preimage_sha256": None, "postimage": dest.rendered_text, "number": dest.number, "local_part": dest.local_part})
+    for edit in txn.ref_report.edits:
+        entries.append({"role": "referrer", "rel": edit.rel_path, "preimage_sha256": edit.preimage_sha256, "postimage": edit.postimage})
+    journal = project_root / JOURNAL_PATH
+    journal.parent.mkdir(parents=True, exist_ok=True)
+    atomic_write_text(journal, json.dumps({"entries": entries}, indent=2) + "\n")
+
+
+def _apply_transaction(project_root: Path, txn: Transaction) -> None:
+    """Snapshot-all → journal → move-all → replay-once → audit-all → global restore on any failure."""
+    project_root = Path(project_root).resolve()
+    sources = [project_root / dest.source_rel for dest in txn.destinations]
+    dests = [project_root / dest.dest_rel for dest in txn.destinations]
+    referrers = [project_root / edit.rel_path for edit in txn.ref_report.edits]
+    snapshot = _snapshot([*sources, *dests, *referrers])
+    _journal_write(project_root, txn)
+
+    exclude = frozenset((project_root / rel) for rel in (txn.source_rels | txn.dest_rels))
+    mutated: set[Path] = set()
+    written: list[str] = []
+    try:
+        for dest in txn.destinations:
+            source = project_root / dest.source_rel
+            current = source.read_text(encoding="utf-8")
+            if hashlib.sha256(current.encode("utf-8")).hexdigest() != dest.preimage_sha256:
+                raise SpecMigrationRefused(f"{dest.source_rel} changed since planning; re-run the preview.")
+            # dest joins `mutated` only AFTER the claim returns (claim self-cleans its own partial).
+            claim_number_in_dir(project_root, "spec", dest.number, dest.local_part, dest.rendered_text)
+            mutated.add(project_root / dest.dest_rel)
+            source.unlink()
+            mutated.add(source)
+        apply_reference_rewrite(project_root, txn.ref_report, exclude=exclude, written=written)
+        for dest in txn.destinations:
+            problems = audit_moved_references(project_root, dest.dest_rel, exclude=exclude)
+            if problems:
+                raise SpecMigrationRefused("post-move reference audit failed; the batch was rolled back:\n  " + "\n  ".join(problems))
+    except BaseException:
+        _restore(snapshot, restrict={*mutated, *(project_root / rel for rel in written)})
+        (project_root / JOURNAL_PATH).unlink(missing_ok=True)
+        raise
+    (project_root / JOURNAL_PATH).unlink()
+
+
+def migrate(project_root: Path, *, apply: bool = False) -> dict:
+    """Plan the whole batch, then — and only then — write it. Returns the flip-readiness report."""
+    project_root = Path(project_root).resolve()
+    if (project_root / JOURNAL_PATH).is_file():
+        raise SpecMigrationRefused(f"{JOURNAL_PATH} exists: a previous write pass was INTERRUPTED. Finish it with --resume.")
+    plan = _plan_all(project_root)
+    if not apply:
+        return plan.report
+    if not plan.report["scan_complete"]:
+        raise SpecMigrationRefused(
+            "the reference scan is incomplete (unreadable or oversized files) — see `scan_skips` in the "
+            "dry-run report. --apply is refused before any mutation; resolve the skips and re-run."
+        )
+    _apply_transaction(project_root, plan.transaction)
+    return build_report(project_root)  # recompute against the mutated tree

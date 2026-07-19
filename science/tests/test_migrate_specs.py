@@ -12,6 +12,7 @@ from science_model.frontmatter import split_frontmatter
 from science_tool.entity_reservation import claim_number_in_dir
 from science_tool.migrate_specs import (
     CANONICAL_SPEC_STATUS,
+    JOURNAL_PATH,
     LEGACY_ALIAS,
     RUNTIME_ONLY,
     RefRecord,
@@ -21,6 +22,7 @@ from science_tool.migrate_specs import (
     build_report,
     classify_references,
     discover_specs,
+    migrate,
     project_legacy_frontmatter,
 )
 
@@ -507,3 +509,103 @@ def test_report_refuses_unprojectable_legacy_doc(tmp_path: Path) -> None:
     _write(project / "doc/plans/a.md", {"id": "spec:date-a", "type": "spec", "title": "A", "date": "2026-01-01", "status": "approved"})
     with pytest.raises(SpecMigrationRefused, match="approved"):
         build_report(project)
+
+
+def test_migrate_apply_relocates_rewrites_and_leaves_loadable_tree(tmp_path: Path) -> None:
+    project = _spec_project(tmp_path)
+    _legacy_spec(project, "doc/plans/a.md", "spec:date-a", "Alpha", related=["spec:date-b"])
+    _legacy_spec(project, "doc/plans/b.md", "spec:date-b", "Beta")
+    (project / "doc/plans/b.md").write_text(
+        "---\nid: spec:date-b\ntype: spec\ntitle: Beta\ndate: '2026-01-01'\nstatus: draft\n---\n\nSee [A](a.md).\n", encoding="utf-8"
+    )
+    _write(project / "doc/ref.md", {"id": "design:0001-r", "kind": "design", "title": "R", "related": ["spec:date-a"]})
+
+    report = migrate(project, apply=True)
+
+    assert not (project / "doc/plans/a.md").exists()
+    assert (project / "entities/specs/0001-alpha.md").exists()
+    assert (project / "entities/specs/0002-beta.md").exists()
+
+    fm_a, _ = split_frontmatter((project / "entities/specs/0001-alpha.md").read_text(encoding="utf-8"))
+    assert fm_a["related"] == ["spec:0002-beta"] and "spec:date-a" in fm_a["aliases"]
+    fm_ref, _ = split_frontmatter((project / "doc/ref.md").read_text(encoding="utf-8"))
+    assert fm_ref["related"] == ["spec:0001-alpha"]
+    assert "0001-alpha.md" in (project / "entities/specs/0002-beta.md").read_text(encoding="utf-8")
+
+    assert not (project / JOURNAL_PATH).exists()
+    assert report["legacy_spec_count"] == 0  # recomputed post-apply
+
+    # loadable: the migrated tree builds with its aliases and no AliasCollisionError
+    from science_tool.graph.sources import load_project_sources
+
+    ids = {e.id for e in load_project_sources(project).entities}
+    assert {"spec:0001-alpha", "spec:0002-beta"} <= ids
+
+
+def test_migrate_apply_rolls_back_on_injected_claim_failure(tmp_path: Path) -> None:
+    project = _spec_project(tmp_path)
+    _legacy_spec(project, "doc/plans/a.md", "spec:date-a", "Alpha")
+    _legacy_spec(project, "doc/plans/b.md", "spec:date-b", "Beta")
+
+    from science_tool import migrate_specs
+
+    real_claim = migrate_specs.claim_number_in_dir
+    calls = {"n": 0}
+
+    def _flaky(*args: object, **kwargs: object):
+        calls["n"] += 1
+        if calls["n"] == 2:
+            raise OSError("disk full")
+        return real_claim(*args, **kwargs)  # type: ignore[arg-type]
+
+    with mock.patch.object(migrate_specs, "claim_number_in_dir", _flaky):
+        with pytest.raises(OSError, match="disk full"):
+            migrate(project, apply=True)
+
+    assert (project / "doc/plans/a.md").exists() and (project / "doc/plans/b.md").exists()
+    assert not list((project / "entities/specs").glob("*.md"))
+    assert not (project / JOURNAL_PATH).exists()
+
+
+def test_migrate_apply_rolls_back_on_collision_drift(tmp_path: Path) -> None:
+    # a 0001 entity appears at the canonical home between plan and apply -> claim refuses -> rollback
+    project = _spec_project(tmp_path)
+    _legacy_spec(project, "doc/plans/a.md", "spec:date-a", "Alpha")
+    from science_tool.entities import EntityCommandError
+    from science_tool.migrate_specs import _apply_transaction, _plan_transaction, allocate_ids, discover_specs
+
+    disc = discover_specs(project)
+    txn = _plan_transaction(project, disc, allocate_ids(project, disc.legacy))
+    _write(project / "entities/specs/0001-drift.md", {"id": "spec:0001-drift", "kind": "spec", "title": "Drift"})  # drift
+    with pytest.raises(EntityCommandError):
+        _apply_transaction(project, txn)
+    assert (project / "doc/plans/a.md").exists()  # source restored
+    assert not (project / JOURNAL_PATH).exists()
+
+
+def test_migrate_refuses_when_journal_exists(tmp_path: Path) -> None:
+    project = _spec_project(tmp_path)
+    journal = project / JOURNAL_PATH
+    journal.parent.mkdir(parents=True, exist_ok=True)
+    journal.write_text("{}", encoding="utf-8")
+    with pytest.raises(SpecMigrationRefused, match="INTERRUPTED"):
+        migrate(project, apply=True)
+
+
+def test_migrate_apply_refuses_incomplete_scan_before_any_mutation(tmp_path: Path) -> None:
+    # an unreadable/oversized reference surface -> scan_complete false -> --apply refuses, writing NOTHING
+    project = _spec_project(tmp_path)
+    _legacy_spec(project, "doc/plans/a.md", "spec:date-a", "Alpha")
+    ref = _write(project / "doc/ref.md", {"id": "design:0001-r", "kind": "design", "title": "R", "related": ["spec:date-a"]})
+    ref_pre = ref.read_text(encoding="utf-8")
+    from science_tool.text_scan import MAX_SCANNABLE_BYTES
+
+    (project / "doc/plans/huge.md").write_text("x" * (MAX_SCANNABLE_BYTES + 1), encoding="utf-8")
+
+    with pytest.raises(SpecMigrationRefused, match="incomplete"):
+        migrate(project, apply=True)
+
+    assert (project / "doc/plans/a.md").exists()                    # source untouched
+    assert not list((project / "entities/specs").glob("*.md"))      # no destination minted
+    assert ref.read_text(encoding="utf-8") == ref_pre               # referrer untouched
+    assert not (project / JOURNAL_PATH).exists()                    # no journal written
