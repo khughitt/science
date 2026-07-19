@@ -23,9 +23,16 @@ runs from `science/` (`science/pyproject.toml`).
 
 ## Global Constraints
 
-- Run all commands from `science/`: `uv run --frozen pytest`,
-  `uv run ruff check`, `uv run pyright`. Default pytest excludes `snapshot` /
-  `real_projects` markers.
+- **Working directory:** all `uv run` commands (pytest, ruff, pyright, the
+  `science` CLI) run from `science/`. All `git` commands (the `git add …` /
+  `git commit` steps, whose paths like `science/…` and `skills/…` are
+  **repository-root-relative**) run from the **repository root**. The `--root
+  ../skills` argument in verification commands is relative to `science/`.
+  Default pytest excludes `snapshot` / `real_projects` markers.
+- **Registry `last_checked` uses the actual verification date** — the day the
+  research for that record is performed — not a hardcoded value. Plan snippets
+  that show `2026-07-18` in *registry records* are placeholders for that date;
+  test fixtures may keep a literal date.
 - Python floor is 3.11. Test directories are not type-checked by pyright.
 - No AI-attribution trailers on commits (no `Co-Authored-By`, no "Generated
   with" footer). Use `~/d/` in any doc/code path text.
@@ -131,6 +138,34 @@ def test_leaf_source_refs_rejects_empty_and_blank(tmp_path) -> None:
     ok.write_text("---\nname: x\ndescription: d\nsources: [real-id]\n---\n# X\n", encoding="utf-8")
     refs, err = leaf_source_refs(ok)
     assert refs == ["real-id"] and err is None
+
+
+def test_leaf_frontmatter_rejects_non_mappings(tmp_path) -> None:
+    from science_tool.skills_lint.sources import leaf_frontmatter
+    cases = {
+        "list.md": "---\n[]\n---\n# X\n",          # falsy non-mapping
+        "false.md": "---\nfalse\n---\n# X\n",       # falsy scalar
+        "scalar.md": "---\n42\n---\n# X\n",         # truthy scalar
+        "unterminated.md": "---\nname: x\n# no close\n",
+        "unparsable.md": "---\nfoo: [unclosed\n---\n# X\n",
+        "none.md": "not frontmatter at all\n",
+    }
+    for name, body in cases.items():
+        p = tmp_path / name
+        p.write_text(body, encoding="utf-8")
+        assert leaf_frontmatter(p) is None, name
+    empty = tmp_path / "empty.md"
+    empty.write_text("---\n---\n# X\n", encoding="utf-8")
+    assert leaf_frontmatter(empty) == {}   # empty block is a valid empty mapping
+
+
+def test_sources_wellformed_predicate() -> None:
+    from science_tool.skills_lint.sources import sources_wellformed
+    assert sources_wellformed(["a", "b"]) is True
+    assert sources_wellformed([]) is False
+    assert sources_wellformed(["  "]) is False
+    assert sources_wellformed("oops") is False
+    assert sources_wellformed([1]) is False
 ```
 
 - [ ] **Step 2: Run tests to verify they fail**
@@ -150,10 +185,12 @@ REFERENCE_KINDS = frozenset({"book", "paper", "course", "spec", "software"})
 the existing `elif kind in REFERENCE_KINDS and "upstream_ref" in raw` guard at
 `sources.py:134` now rejects `upstream_ref` on `spec`/`software` for free.)
 
-- [ ] **Step 4: Strengthen `leaf_source_refs` and expose `leaf_frontmatter`**
+- [ ] **Step 4: Fix the frontmatter parser, extract `sources_wellformed`, strengthen `leaf_source_refs`, expose `leaf_frontmatter`**
 
-Rename `_leaf_frontmatter` to `leaf_frontmatter` (public) and update
-`leaf_source_refs`:
+Rename `_leaf_frontmatter` → public `leaf_frontmatter` and **fix its non-mapping
+bug**: `yaml.safe_load(...) or {}` turns falsy non-mappings (`[]`, `false`, `0`,
+`""`) into `{}`, masking a malformed block as valid-empty. Handle the empty
+document (`None`) separately and reject every actual non-mapping:
 
 ```python
 def leaf_frontmatter(path: Path) -> dict[str, Any] | None:
@@ -164,40 +201,80 @@ def leaf_frontmatter(path: Path) -> dict[str, Any] | None:
     if end == -1:
         return None
     try:
-        parsed = yaml.safe_load(text[4:end]) or {}
+        parsed = yaml.safe_load(text[4:end])
     except yaml.YAMLError:
         return None
-    return parsed if isinstance(parsed, dict) else None
+    if parsed is None:
+        return {}  # an empty frontmatter block is a valid, empty mapping
+    return parsed if isinstance(parsed, dict) else None  # reject [] / false / scalars
+
+
+def sources_wellformed(raw: object) -> bool:
+    return isinstance(raw, list) and bool(raw) and all(
+        isinstance(x, str) and x.strip() for x in raw
+    )
 
 
 def leaf_source_refs(path: Path) -> tuple[list[str] | None, str | None]:
     frontmatter = leaf_frontmatter(path)
     if frontmatter is None or "sources" not in frontmatter:
         return None, None
-    raw = frontmatter["sources"]
-    if (
-        not isinstance(raw, list)
-        or not raw
-        or not all(isinstance(x, str) and x.strip() for x in raw)
-    ):
+    if not sources_wellformed(frontmatter["sources"]):
         return None, "sources must be a non-empty list of non-blank strings"
-    return list(raw), None
+    return list(frontmatter["sources"]), None
 ```
 
-- [ ] **Step 5: Run the full sources suite**
+`sources_wellformed` is the **single source of truth** for source-field
+well-formedness, reused by the provenance classifier in Task 3 (so `sources: []`
+is classified consistently, not re-derived).
+
+- [ ] **Step 5: Add the `spec`/`software` freshness `not_applicable` test**
+
+In `science/tests/skills_lint/test_sources_cli.py`, add (the design requires
+proving the new reference kinds report `not_applicable`, as `book` already does
+at `test_check_offline_is_clean`):
+
+```python
+def test_spec_and_software_report_not_applicable_freshness(tmp_path: Path) -> None:
+    root = tmp_path / "skills"
+    root.mkdir()
+    (root / "sources.yaml").write_text(
+        "spec1:\n  title: S\n  authors: [Org]\n  url: https://specs.example.org/x\n"
+        "  kind: spec\n  last_checked: 2026-07-18\n"
+        "soft1:\n  title: T\n  authors: [Org]\n  url: https://tool.example.org/\n"
+        "  kind: software\n  last_checked: 2026-07-18\n",
+        encoding="utf-8",
+    )
+    (root / "INDEX.md").write_text("`skills/leaf.md`\n", encoding="utf-8")
+    (root / "leaf.md").write_text(
+        "---\nname: leaf\ndescription: d\nsources: [spec1, soft1]\n---\n"
+        "# Leaf\n## Companion Skills\n- none\n",
+        encoding="utf-8",
+    )
+    # fetch_upstream=True proves reference kinds are never fetched (fetch raises if called).
+    def _boom(url):  # pragma: no cover - must not be invoked
+        raise AssertionError("reference kinds must not be fetched")
+    report = check_sources(root, fetch_upstream=True, fetch=_boom)
+    freshness = {s.id: s.freshness for s in report.sources}
+    assert freshness["spec1"] == "not_applicable"
+    assert freshness["soft1"] == "not_applicable"
+    assert report.failed() is False
+```
+
+- [ ] **Step 6: Run the full sources suite**
 
 Run: `cd science && uv run --frozen pytest tests/skills_lint/test_sources.py tests/skills_lint/test_sources_cli.py tests/skills_lint/test_sources_registry_repo.py -q`
 Expected: PASS.
 
-- [ ] **Step 6: Lint + types**
+- [ ] **Step 7: Lint + types**
 
 Run: `cd science && uv run ruff check && uv run pyright`
 Expected: clean.
 
-- [ ] **Step 7: Commit**
+- [ ] **Step 8: Commit** (from the repository root)
 
 ```bash
-git add science/src/science_tool/skills_lint/sources.py science/tests/skills_lint/test_sources.py
+git add science/src/science_tool/skills_lint/sources.py science/tests/skills_lint/test_sources.py science/tests/skills_lint/test_sources_cli.py
 git commit -m "feat(skills): add spec/software source kinds; require non-empty sources"
 ```
 
@@ -400,13 +477,17 @@ def _leaf(dirpath: Path, name: str, body: str) -> Path:
     return p
 
 
-def test_classify_provenance_four_outcomes() -> None:
+def test_classify_provenance_outcomes() -> None:
     from science_tool.skills_lint.lint import classify_provenance
     assert classify_provenance({"sources": ["a"]}) == "attributed"
     assert classify_provenance({"provenance": "internal"}) == "internal"
     assert classify_provenance({"name": "x"}) == "undeclared"
     assert classify_provenance({"sources": ["a"], "provenance": "internal"}) == "contradiction"
     assert classify_provenance({"provenance": "external"}) == "bad-marker"
+    # malformed sources is NOT "attributed" (design: sources: [] is invalid)
+    assert classify_provenance({"sources": []}) == "malformed-sources"
+    assert classify_provenance({"sources": ["  "]}) == "malformed-sources"
+    assert classify_provenance({"sources": "oops"}) == "malformed-sources"
 
 
 def test_undeclared_leaf_yields_warn(tmp_path: Path) -> None:
@@ -439,8 +520,36 @@ def test_contradiction_and_bad_marker_yield_invalid_provenance(tmp_path: Path) -
 
 def test_no_cascade_on_broken_frontmatter(tmp_path: Path) -> None:
     from science_tool.skills_lint.lint import check_provenance
-    nofm = _leaf(tmp_path, "n.md", "# no frontmatter\n")
-    assert check_provenance(nofm) == []
+    # Every "classification impossible" shape must yield NO missing-provenance.
+    broken = {
+        "n.md": "# no frontmatter\n",
+        "unterminated.md": "---\nname: x\n# never closes\n",
+        "unparsable.md": "---\nfoo: [unclosed\n---\n# X\n",
+        "nonmap-list.md": "---\n[]\n---\n# X\n",
+        "nonmap-false.md": "---\nfalse\n---\n# X\n",
+    }
+    for name, body in broken.items():
+        leaf = _leaf(tmp_path, name, body)
+        assert check_provenance(leaf) == [], name
+
+
+def test_empty_or_blank_sources_are_invalid_field_not_missing_provenance(tmp_path: Path) -> None:
+    skills_root = tmp_path / "skills"
+    skills_root.mkdir()
+    (skills_root / "sources.yaml").write_text("", encoding="utf-8")
+    (skills_root / "INDEX.md").write_text(
+        "---\nname: idx\ndescription: d\n---\n# Index\n`skills/e.md`\n`skills/b.md`\n## Companion Skills\n- none\n",
+        encoding="utf-8",
+    )
+    (skills_root / "e.md").write_text(
+        "---\nname: e\ndescription: d\nsources: []\n---\n# E\n## Companion Skills\n- none\n", encoding="utf-8")
+    (skills_root / "b.md").write_text(
+        '---\nname: b\ndescription: d\nsources: ["  "]\n---\n# B\n## Companion Skills\n- none\n', encoding="utf-8")
+    from science_tool.skills_lint.lint import check_skills
+    per = {(i.path.as_posix(), i.kind) for i in check_skills(skills_root)}
+    assert ("e.md", "invalid-field") in per      # empty list rejected by source-ref check
+    assert ("b.md", "invalid-field") in per      # blank string rejected
+    assert not any(kind == "missing-provenance" for _, kind in per)  # never cascaded
 
 
 def test_missing_provenance_not_double_reported_with_unknown_ref(tmp_path: Path) -> None:
@@ -512,12 +621,13 @@ from science_tool.skills_lint.sources import (
     leaf_frontmatter,
     leaf_source_refs,
     load_sources,
+    sources_wellformed,
 )
 
 MISSING_PROVENANCE_SEVERITY: Severity = "warn"
 
 ProvenanceState = Literal[
-    "attributed", "internal", "undeclared", "contradiction", "bad-marker"
+    "attributed", "internal", "undeclared", "contradiction", "bad-marker", "malformed-sources"
 ]
 
 
@@ -527,7 +637,10 @@ def classify_provenance(frontmatter: dict) -> ProvenanceState:
     if has_sources and has_provenance:
         return "contradiction"
     if has_sources:
-        return "attributed"  # source-ref check owns list validity
+        # A present `sources` key is a declaration attempt; well-formedness is the
+        # source-ref check's job to REPORT, but the classifier must not call a
+        # malformed list "attributed" (design: sources: [] is invalid, not attributed).
+        return "attributed" if sources_wellformed(frontmatter["sources"]) else "malformed-sources"
     if has_provenance:
         return "internal" if frontmatter.get("provenance") == "internal" else "bad-marker"
     return "undeclared"
@@ -536,7 +649,7 @@ def classify_provenance(frontmatter: dict) -> ProvenanceState:
 def check_provenance(path: Path) -> list[SkillIssue]:
     frontmatter = leaf_frontmatter(path)
     if frontmatter is None:
-        return []  # missing/unparsable frontmatter already reported; no cascade
+        return []  # missing/unterminated/unparsable/non-mapping frontmatter already reported; no cascade
     state = classify_provenance(frontmatter)
     if state == "undeclared":
         return [SkillIssue(path, "missing-provenance", severity=MISSING_PROVENANCE_SEVERITY)]
@@ -545,6 +658,8 @@ def check_provenance(path: Path) -> list[SkillIssue]:
     if state == "bad-marker":
         value = frontmatter.get("provenance")
         return [SkillIssue(path, "invalid-provenance", field="provenance", detail=f"unknown value {value!r}; only 'internal' is allowed")]
+    # attributed / internal → clean. malformed-sources → silent HERE; check_source_refs
+    # reports it as invalid-field (single report, no missing-provenance cascade).
     return []
 ```
 
@@ -628,172 +743,205 @@ git commit -m "feat(skills): enforce provenance coverage (WARN) with a declarati
    ```yaml
    <id>:
      title: "<canonical title>"
-     authors: ["<author or org>"]
-     url: "https://<canonical https url>"
-     kind: <paper|book|spec|software>
-     last_checked: "2026-07-18"
-     doi: "<10....>"        # papers, when available
-     isbn: "<digits>"       # books, when available
+     authors: ["<author or maintaining org>"]   # required, non-empty
+     url: "https://<canonical https homepage/docs/spec url>"
+     kind: <software|spec|paper|book>
+     last_checked: "<actual verification date>"
+     doi: "<10....>"        # papers only, when available
+     isbn: "<digits>"       # books only, when available
    ```
 
-   **Citation identifiers must be verified during execution** (WebSearch / known
-   DOIs), not invented. The tables below name each source's identity and kind;
-   execution finalizes the exact `url` / `doi` / `isbn`. This research is
-   well-suited to parallel subagents; the controller curates the registry.
+   **Register the PRIMARY 1–2 sources the leaf's guidance is materially built
+   on — not every tool it name-drops.** Acceptance criterion for "primary": the
+   tool/DB/method whose *specific behavior the QA guidance targets* (the caller
+   whose version must be pinned, the engine whose settings the leaf configures,
+   the DB whose label semantics the leaf keys on). Tools named only as
+   vocabulary or failure-mode labels are **not** registered. The classification
+   from a read-through is already captured in each wave table below; execution
+   confirms it and **verifies the canonical `url`** (and, for the one real
+   in-file citation, the DOI). Do not invent identifiers. Most external sources
+   here are `software` (a tool/service homepage) or `spec` (a standard/ontology);
+   only `data/expression/scrna-qa.md` carries a literal method-paper citation
+   (Tirosh et al. 2016). Research is subagent-friendly; the controller curates
+   the registry.
 4. Do **not** modify the 5 already-attributed statistics leaves unless research
    adds a citation.
 
-**Per-wave verification (identical shape).** After editing a wave's files:
+**Reuse ids across waves.** A source id is registered once and reused. If a
+later wave cites an id an earlier wave already registered, reference it — do not
+duplicate the record.
+
+**Per-wave verification (identical shape).** After editing a wave's files, run
+this from `science/`. It fails on **any** ERROR-severity finding (not a
+hand-picked subset — broken YAML, missing fields, links, sections all count) and
+asserts the **exact** remaining `missing-provenance` count for this wave:
 
 ```bash
-cd science && uv run --frozen python -c "
+cd science && EXPECT=<remaining-after-this-wave> uv run --frozen python -c "
+import os
 from pathlib import Path
 from science_tool.skills_lint.lint import check_skills
 issues = check_skills(Path('../skills'))
-bad = [(i.path.as_posix(), i.kind, i.detail) for i in issues
-       if i.kind in {'invalid-source-record','unknown-source-ref','invalid-provenance','invalid-field'}]
+errors = [(i.path.as_posix(), i.kind, i.detail) for i in issues if i.severity == 'error']
+assert errors == [], f'ERROR findings introduced: {errors}'
 mp = sorted(i.path.as_posix() for i in issues if i.kind == 'missing-provenance')
-print('ERRORS:', bad)
-print('remaining missing-provenance:', len(mp))
+expect = int(os.environ['EXPECT'])
+assert len(mp) == expect, f'expected {expect} undeclared, got {len(mp)}: {mp}'
+print('OK — 0 errors,', len(mp), 'undeclared remain')
 "
 ```
-Expected: `ERRORS: []` and `remaining missing-provenance` decreased by exactly
-the count of files this wave declared. Then
-`cd science && uv run --frozen pytest tests/skills_lint/test_sources_registry_repo.py -q`
-(registry still valid), and commit.
+
+Then confirm the real CLI exits 0 (WARN-only) and the registry is still valid:
+
+```bash
+cd science && uv run --frozen science skills lint --root ../skills; echo "lint exit=$?"   # require 0
+cd science && uv run --frozen pytest tests/skills_lint/test_sources_registry_repo.py -q
+```
+
+Expected: `lint exit=0`; registry test passes. Per-wave `EXPECT` values: Wave A
+→ 26, Wave B → 16, Wave C → 10, Wave D → 6, Wave E → 0. Then commit (from the
+repository root).
 
 ---
 
-### Task 4: Wave A — statistics (10 files)
+### Task 4: Wave A — statistics (10 files, all INTERNAL)
 
-**Files (modify each):** `skills/statistics/{bias-vs-variance-decomposition,
-compositional-data, estimator-certification, population-genetics-likelihood,
-power-floor-acknowledgement, prereg-amendment-vs-fresh,
-prereg-defensive-instrumentation, replicate-count-justification,
-time-series-and-longitudinal-models}.md`, `skills/statistics/SKILL.md`.
+A read-through classified **all 10** as `provenance: internal`: each teaches
+Science-native epistemic/design doctrine and names external methods only as
+standard vocabulary (e.g. `estimator-certification` names Cox–Reid/Neyman–Scott;
+`time-series` names GEE/state-space). No registry changes in this wave.
 
-**Classification guidance (confirm per file during execution):**
-
-| File | Likely | Candidate source(s) → id (kind) |
+| File | Verdict | Frontmatter outcome |
 |---|---|---|
-| bias-vs-variance-decomposition | external | Hastie, Tibshirani, Friedman, *Elements of Statistical Learning* → `hastie-esl` (book) |
-| compositional-data | external | Aitchison, *The Statistical Analysis of Compositional Data* → `aitchison-compositional` (book) |
-| estimator-certification | internal | Science-native doctrine (a check must be able to fail) |
-| population-genetics-likelihood | external | Wakeley, *Coalescent Theory: An Introduction* → `wakeley-coalescent` (book) |
-| power-floor-acknowledgement | internal (confirm) | Science-native framing; cite Cohen, *Statistical Power Analysis* (`cohen-power`, book) only if guidance is materially derived |
-| prereg-amendment-vs-fresh | internal | Science-native pre-registration workflow |
-| prereg-defensive-instrumentation | internal | Science-native |
-| replicate-count-justification | internal (confirm) | Science-native; cite a power reference only if materially derived |
-| time-series-and-longitudinal-models | external | Hyndman & Athanasopoulos, *Forecasting: Principles and Practice* → `hyndman-fpp` (book) |
-| statistics/SKILL.md | internal | navigational router |
+| bias-vs-variance-decomposition.md | INTERNAL | `provenance: internal` |
+| estimator-certification.md | INTERNAL | `provenance: internal` |
+| power-floor-acknowledgement.md | INTERNAL | `provenance: internal` |
+| prereg-amendment-vs-fresh.md | INTERNAL | `provenance: internal` |
+| prereg-defensive-instrumentation.md | INTERNAL | `provenance: internal` |
+| replicate-count-justification.md | INTERNAL | `provenance: internal` |
+| time-series-and-longitudinal-models.md | INTERNAL | `provenance: internal` |
+| SKILL.md | INTERNAL | `provenance: internal` |
+| compositional-data.md | INTERNAL — **bounded** | default `provenance: internal` |
+| population-genetics-likelihood.md | INTERNAL — **bounded** | default `provenance: internal` |
 
-- [ ] Step 1: Classify + edit each of the 10 files (frontmatter line(s)); add
-  the confirmed `book` records to `skills/sources.yaml`.
-- [ ] Step 2: Run the per-wave verification (ERRORS empty; `missing-provenance`
-  down by 10).
-- [ ] Step 3: `uv run ruff check` (no code changed, but keep the habit) and the
-  registry test.
-- [ ] Step 4: Commit — `git add skills/statistics skills/sources.yaml && git commit -m "docs(skills): declare provenance for statistics leaves + routers"`.
+**Bounded decision (2 files).** `compositional-data` rests on Aitchison
+log-ratio transforms; `population-genetics-likelihood` on Wright–Fisher/Moran
+likelihoods. Both teach native QA discipline *over* those methods. **Decision
+rule:** keep `provenance: internal` unless, on reading, the leaf's *load-bearing
+claims are the external method's mechanics* (the transform/model derivation)
+rather than QA discipline over it. **Acceptance:** if justifying the leaf's core
+claims would require citing the textbook, register `aitchison-compositional`
+(book) / `wakeley-coalescent` (book) and use `sources:` instead; otherwise
+`internal`. The read-through recommends `internal` for both.
+
+- [ ] Step 1: Add `provenance: internal` to all 10 files (resolve the 2 bounded
+  cases per the rule above; if either flips to external, register the book
+  record with a verified ISBN/URL and use `sources:`).
+- [ ] Step 2: Per-wave verification with `EXPECT=26`.
+- [ ] Step 3: `uv run ruff check`; registry test.
+- [ ] Step 4: Commit (repo root) — `git add skills/statistics && git commit -m "docs(skills): declare provenance for statistics leaves + router"` (add `skills/sources.yaml` only if a bounded case flipped).
 
 ---
 
-### Task 5: Wave B — data QA leaves (10 files)
+### Task 5: Wave B — data QA leaves (10 files, all EXTERNAL)
 
-**Files (modify each):** `skills/data/{embeddings-manifold-qa,
-functional-genomics-qa, protein-sequence-structure-qa, proteomics-qa}.md`,
-`skills/data/expression/{bulk-rnaseq-qa, microarray-qa, scrna-qa}.md`,
-`skills/data/genomics/{copy-number-sv-qa, somatic-mutation-qa,
-mutational-signatures-and-selection}.md`.
+Each leaf is QA guidance keyed to specific external tools/DBs. Register the
+**primary** source(s) per the acceptance rule; `url` is the tool/DB canonical
+homepage/docs (verify). Only `scrna-qa` has an in-file paper citation.
 
-**Classification guidance:** these are externally derived from domain tools +
-method papers. Confirm the canonical source per file:
+| File | Primary source(s) → id (kind) | Acceptance criterion (why primary) | `sources:` |
+|---|---|---|---|
+| embeddings-manifold-qa.md | `umap` (software), `hdbscan` (software) | the projection + clustering tools whose parameters the QA tunes (neighbors/min_dist; min_cluster_size) | `[umap, hdbscan]` |
+| functional-genomics-qa.md | `depmap` (software/service), `mageck` (software) | the screen resource + screen-analysis tool the QA normalizes/targets | `[depmap, mageck]` |
+| protein-sequence-structure-qa.md | `uniprot` (software/service), `foldseek` (software) | the annotation DB + structure-search tool whose label/cluster semantics the QA keys on | `[uniprot, foldseek]` |
+| proteomics-qa.md | `maxquant` (software) | the search/quant engine whose settings the QA locks (TMT plex, search params) | `[maxquant]` |
+| expression/bulk-rnaseq-qa.md | `deseq2` (software), `edger` (software) | the DE tools the QA is explicitly "required for" | `[deseq2, edger]` |
+| expression/microarray-qa.md | `limma` (software) | the linear-model package + normalization the QA configures | `[limma]` |
+| expression/scrna-qa.md | `scanpy` (software), `tirosh-2016` (**paper**, DOI) | the QC toolkit + the literally-cited cell-cycle method ("Tirosh et al. 2016") | `[scanpy, tirosh-2016]` |
+| genomics/copy-number-sv-qa.md | `ampliconarchitect` (software) | the CN/SV caller whose version + output non-independence the QA targets | `[ampliconarchitect]` |
+| genomics/somatic-mutation-qa.md | `cbioportal` (software/service) | the ingestion service/format the QA targets (panel-version drift) | `[cbioportal]` |
+| genomics/mutational-signatures-and-selection.md | `cosmic-signatures` (software/spec), `dndscv` (software) | the signature DB whose version must be pinned + the selection method the QA names | `[cosmic-signatures, dndscv]` |
 
-| File | Candidate source(s) → id (kind) |
-|---|---|
-| expression/scrna-qa | scanpy (`scanpy`, software) + a QC method paper (e.g. Luecken & Theis best-practices) → `luecken-scrna-best-practices` (paper) |
-| expression/bulk-rnaseq-qa | limma/edgeR/DESeq2 (`deseq2`/`edger`, software) + method paper → `love-deseq2` (paper) |
-| expression/microarray-qa | limma (`limma`, software) + `ritchie-limma` (paper) |
-| genomics/somatic-mutation-qa | GATK best practices (`gatk`, software) |
-| genomics/copy-number-sv-qa | a CN/SV caller/tool (`gatk`/`cnvkit`, software) |
-| genomics/mutational-signatures-and-selection | COSMIC / SigProfiler (`cosmic-signatures`, spec/software) + Alexandrov et al. → `alexandrov-signatures` (paper) |
-| functional-genomics-qa | domain tool/method (confirm) → software + paper |
-| proteomics-qa | proteomics QC tool/method (confirm) → software + paper |
-| protein-sequence-structure-qa | UniProt/PDB/AlphaFold (`uniprot`/`alphafold`, software/spec) |
-| embeddings-manifold-qa | UMAP/t-SNE method papers → `mcinnes-umap` (paper) + software |
-
-- [ ] Step 1: Classify + edit each of the 10 leaves; register the confirmed
-  `software`/`paper`/`spec` records.
-- [ ] Step 2: Per-wave verification (`missing-provenance` down by 10; ERRORS
-  empty).
+- [ ] Step 1: For each leaf, add the `sources:` line and register each new id in
+  `skills/sources.yaml` (`software` for tools/services; `spec` for
+  `cosmic-signatures` if modeled as a catalog standard; `paper` for
+  `tirosh-2016` with its verified DOI). Verify each `url` and `authors`
+  (maintaining org, e.g. `scanpy` → `["scverse"]`, `depmap` → `["Broad Institute"]`).
+- [ ] Step 2: Per-wave verification with `EXPECT=16`.
 - [ ] Step 3: registry test.
-- [ ] Step 4: Commit — `git add skills/data skills/sources.yaml && git commit -m "docs(skills): declare provenance for data QA leaves"`.
+- [ ] Step 4: Commit (repo root) — `git add skills/data skills/sources.yaml && git commit -m "docs(skills): declare provenance for data QA leaves"`.
 
 ---
 
 ### Task 6: Wave C — data specs, sources & routers (6 files)
 
-**Files:** `skills/data/frictionless.md`, `skills/data/sources/openalex.md`,
-`skills/data/sources/pubmed.md`, `skills/data/SKILL.md`,
-`skills/data/expression/SKILL.md`, `skills/data/genomics/SKILL.md`.
+3 EXTERNAL leaves + 3 INTERNAL routers.
 
-| File | Likely | Source(s) → id (kind) |
-|---|---|---|
-| frictionless | external | Frictionless Data Package spec → `frictionless-spec` (spec) + `frictionless` (software) |
-| sources/openalex | external | OpenAlex API → `openalex` (software) |
-| sources/pubmed | external | NCBI PubMed E-utilities → `ncbi-eutilities` (software) |
-| data/SKILL.md | internal (confirm) | router; `provenance: internal` unless it materially summarizes EDAM — if it does, cite EDAM → `edam-ontology` (spec) |
-| data/expression/SKILL.md | internal | router |
-| data/genomics/SKILL.md | internal | router |
+| File | Verdict | Source(s) → id (kind) / outcome | Acceptance |
+|---|---|---|---|
+| frictionless.md | EXTERNAL | `frictionless-spec` (spec), `frictionless` (software), `edam` (spec) → `sources: [frictionless-spec, frictionless, edam]` | file teaches the Data Package spec + the `frictionless` CLI, and embeds `edamontology.org` term URIs |
+| sources/openalex.md | EXTERNAL | `openalex` (software) → `sources: [openalex]` | documents the OpenAlex `works` API (url present: developers.openalex.org) |
+| sources/pubmed.md | EXTERNAL | `ncbi-eutilities` (software) → `sources: [ncbi-eutilities]` | documents the PubMed E-utilities (esearch/esummary/efetch) |
+| SKILL.md (data) | INTERNAL | `provenance: internal` | data-management conventions hub; EDAM/Frictionless delegated to leaves |
+| expression/SKILL.md | INTERNAL | `provenance: internal` | navigation hub over the modality leaves |
+| genomics/SKILL.md | INTERNAL | `provenance: internal` | navigation hub + native ordering convention |
 
-- [ ] Step 1: Classify + edit; register `frictionless-spec` (spec),
-  `frictionless` (software), `openalex` (software), `ncbi-eutilities`
-  (software), and `edam-ontology` (spec) if the data router cites it.
-- [ ] Step 2: Per-wave verification (down by 6).
+- [ ] Step 1: Edit the 6 files; register `frictionless-spec` (spec; url
+  `https://specs.frictionlessdata.io/data-package/`, authors
+  `["Open Knowledge Foundation"]`), `frictionless` (software;
+  `https://framework.frictionlessdata.io/`), `edam` (spec;
+  `https://edamontology.org/`), `openalex` (software;
+  `https://docs.openalex.org/`), `ncbi-eutilities` (software;
+  `https://www.ncbi.nlm.nih.gov/books/NBK25501/`). Verify each url.
+- [ ] Step 2: Per-wave verification with `EXPECT=10`.
 - [ ] Step 3: registry test.
-- [ ] Step 4: Commit — `git add skills/data skills/sources.yaml && git commit -m "docs(skills): declare provenance for data specs, sources, and routers"`.
+- [ ] Step 4: Commit (repo root) — `git add skills/data skills/sources.yaml && git commit -m "docs(skills): declare provenance for data specs, sources, and routers"`.
 
 ---
 
 ### Task 7: Wave D — pipelines (4 files)
 
-**Files:** `skills/pipelines/{snakemake, marimo, runpod}.md`,
-`skills/pipelines/SKILL.md`.
+3 EXTERNAL leaves + 1 INTERNAL router.
 
-| File | Likely | Source(s) → id (kind) |
+| File | Verdict | Source(s) → id (kind) / outcome |
 |---|---|---|
-| snakemake | external | Snakemake tool → `snakemake` (software) + Mölder et al. 2021 → `molder-snakemake` (paper) |
-| marimo | external | marimo → `marimo` (software) |
-| runpod | external | RunPod service → `runpod` (software) |
-| pipelines/SKILL.md | internal | router |
+| snakemake.md | EXTERNAL | `snakemake` (software) → `sources: [snakemake]` (optionally add `molder-snakemake` (paper) only if you choose to cite the method paper — it is **not** referenced in-file) |
+| marimo.md | EXTERNAL | `marimo` (software) → `sources: [marimo]` |
+| runpod.md | EXTERNAL | `runpod` (software) → `sources: [runpod]` |
+| SKILL.md (pipelines) | INTERNAL | `provenance: internal` |
 
-- [ ] Step 1: Classify + edit; register `snakemake` (software),
-  `molder-snakemake` (paper), `marimo` (software), `runpod` (software).
-- [ ] Step 2: Per-wave verification (down by 4).
+- [ ] Step 1: Edit the 4 files; register `snakemake` (software;
+  `https://snakemake.readthedocs.io/`, authors `["Snakemake developers"]`),
+  `marimo` (software; `https://marimo.io/`), `runpod` (software;
+  `https://www.runpod.io/`). Verify urls.
+- [ ] Step 2: Per-wave verification with `EXPECT=6`.
 - [ ] Step 3: registry test.
-- [ ] Step 4: Commit — `git add skills/pipelines skills/sources.yaml && git commit -m "docs(skills): declare provenance for pipelines leaves + router"`.
+- [ ] Step 4: Commit (repo root) — `git add skills/pipelines skills/sources.yaml && git commit -m "docs(skills): declare provenance for pipelines leaves + router"`.
 
 ---
 
-### Task 8: Wave E — research & writing (6 files)
+### Task 8: Wave E — research & writing (6 files, all INTERNAL)
 
-**Files:** `skills/research/{annotation-curation-qa, proposition-schema,
-research-package-rendering, research-package-spec, SKILL}.md`,
-`skills/writing/SKILL.md`.
+A read-through classified **all 6** as Science-native: the `research/` leaves
+define Science's own proposition/evidence model, research-package profile, and
+rendering conventions (Frictionless/Vega are substrate they *extend*, not derive
+from); `writing/SKILL.md` is Science's writing conventions;
+`annotation-curation-qa` is native curation-as-measurement discipline (kappa/
+alpha named as standard metrics only). No registry changes.
 
-| File | Likely | Source(s) → id (kind) |
+| File | Verdict | Frontmatter outcome |
 |---|---|---|
-| annotation-curation-qa | external (confirm) | PubTator / annotation method → `pubtator` (software) if materially derived; else internal |
-| proposition-schema | internal | Science-native schema |
-| research-package-rendering | internal | Science-native |
-| research-package-spec | internal | Science-native (built on Frictionless — cite `frictionless-spec` only if it materially adapts the spec) |
-| research/SKILL.md | internal | router |
-| writing/SKILL.md | internal | Science-native writing conventions |
+| annotation-curation-qa.md | INTERNAL | `provenance: internal` |
+| proposition-schema.md | INTERNAL | `provenance: internal` |
+| research-package-rendering.md | INTERNAL | `provenance: internal` |
+| research-package-spec.md | INTERNAL | `provenance: internal` |
+| research/SKILL.md | INTERNAL | `provenance: internal` |
+| writing/SKILL.md | INTERNAL | `provenance: internal` |
 
-- [ ] Step 1: Classify + edit; register any confirmed external record
-  (`pubtator`, or reuse `frictionless-spec` from Wave C).
-- [ ] Step 2: Per-wave verification (down by 6 → **0** remaining).
+- [ ] Step 1: Add `provenance: internal` to all 6 files.
+- [ ] Step 2: Per-wave verification with `EXPECT=0` (corpus now fully declared).
 - [ ] Step 3: registry test.
-- [ ] Step 4: Commit — `git add skills/research skills/writing skills/sources.yaml && git commit -m "docs(skills): declare provenance for research + writing"`.
+- [ ] Step 4: Commit (repo root) — `git add skills/research skills/writing && git commit -m "docs(skills): declare provenance for research + writing"`.
 
 ---
 
@@ -886,18 +1034,32 @@ def test_undeclared_leaf_yields_error_and_nonzero_exit(tmp_path: Path) -> None:
     assert "missing-provenance" in result.output
 
 
-def test_warn_only_run_still_exits_zero_synthetic() -> None:
-    # Infrastructure guard: severity-aware exit must still let WARN-only pass,
-    # independent of which real rules are WARN.
-    from science_tool.skills_lint.cli import _has_error
+def test_warn_only_run_still_exits_zero_synthetic(tmp_path: Path, monkeypatch) -> None:
+    # Infrastructure guard: after the ratchet, NO shipped rule is WARN, so exercise
+    # the WARN-only exit path through the REAL CLI with a synthetic WARN issue —
+    # proving exit code and severity rendering, not just the _has_error predicate.
+    import json
+    from click.testing import CliRunner
+    from science_tool.cli import main
     from science_tool.skills_lint.lint import SkillIssue
-    synthetic = SkillIssue(Path("x.md"), "missing-provenance", severity="warn")
-    assert _has_error([synthetic]) is False
+    synthetic = [SkillIssue(Path("synthetic.md"), "missing-provenance", severity="warn")]
+    monkeypatch.setattr("science_tool.skills_lint.cli.check_skills", lambda root: list(synthetic))
+    root = tmp_path / "skills"
+    root.mkdir()
+
+    js = CliRunner().invoke(main, ["skills", "lint", "--root", str(root), "--format", "json"])
+    assert js.exit_code == 0  # WARN-only still exits 0
+    assert ("missing-provenance", "warn") in {(i["kind"], i["severity"]) for i in json.loads(js.output)["issues"]}
+
+    txt = CliRunner().invoke(main, ["skills", "lint", "--root", str(root)])
+    assert txt.exit_code == 0
+    assert "warn: synthetic.md: missing-provenance" in txt.output  # severity-leading render
 ```
 
 (Delete the now-superseded `test_warn_only_run_exits_zero` from Task 3, which
 asserted `missing-provenance` was WARN — that expectation is what this ratchet
-changes. The synthetic test preserves the WARN-only-exits-zero contract.)
+changes. This synthetic CLI test preserves the WARN-only-exits-zero contract
+independent of which real rules are WARN.)
 
 - [ ] **Step 2: Run to verify the new expectations fail pre-ratchet**
 
@@ -922,13 +1084,28 @@ fully declared, so the now-ERROR rule finds nothing).
 
 - [ ] **Step 5: Confirm real `science skills lint` exits 0**
 
-Run: `cd science && uv run --frozen python -c "import subprocess,sys; sys.exit(subprocess.run(['uv','run','--frozen','python','-c','from pathlib import Path;from science_tool.skills_lint.lint import check_skills;from science_tool.skills_lint.cli import _has_error;print(1 if _has_error(check_skills(Path(\"../skills\"))) else 0)']).returncode)"`
-Simpler: `cd science && uv run --frozen science skills lint --root ../skills; echo "exit=$?"`
-Expected: `exit=0` (corpus fully declared; no ERROR findings).
+Run: `cd science && uv run --frozen science skills lint --root ../skills; echo "exit=$?"`
+Expected: `exit=0` (corpus fully declared; the now-ERROR rule finds nothing).
 
-- [ ] **Step 6: Lint + types + commit**
+- [ ] **Step 6: Full-suite verification (whole package, not just skills-lint)**
 
-Run: `cd science && uv run ruff check && uv run pyright`
+Run:
+```bash
+cd science && uv run --frozen pytest
+cd science && uv run ruff check
+cd science && uv run pyright
+```
+Expected: ruff + pyright clean. For pytest, **this branch must introduce zero
+new failures vs. `main`.** The only acceptable reds are the two pre-existing,
+unrelated failures
+`tests/test_command_docs.py::test_entities_doc_documents_workflow_identity_contract`
+and `tests/test_user_guide_docs.py::test_entities_doc_documents_split_storage_data_root`
+(a concurrent entities-doc refactor; already red on `main` at this branch's base
+`95e032f6`). If any *other* test fails, fix it before committing. To confirm the
+two are pre-existing, run just those two node-ids in a detached worktree at
+`main` and verify they fail identically there.
+
+- [ ] **Step 7: Commit** (from the repository root)
 
 ```bash
 git add science/src/science_tool/skills_lint/lint.py science/tests/skills_lint/test_lint.py
@@ -940,28 +1117,42 @@ git commit -m "feat(skills): ratchet missing-provenance to ERROR"
 ## Self-Review
 
 **Spec coverage:**
-- Three states + invalid → Task 3 (`classify_provenance`, four outcomes +
-  attributed). ✓
-- No cascade on broken frontmatter / no double-report → Task 3
-  (`test_no_cascade…`, `test_missing_provenance_not_double_reported…`). ✓
+- Classifier contract — `attributed` / `internal` / `undeclared` /
+  `contradiction` / `bad-marker` / **`malformed-sources`**, with `sources: []`
+  classified `malformed-sources` (not attributed) and reported once as
+  `invalid-field` → Task 3 (`test_classify_provenance_outcomes`,
+  `test_empty_or_blank_sources_are_invalid_field_not_missing_provenance`). ✓
+- No cascade on broken frontmatter (absent, unterminated, unparsable,
+  non-mapping) + parser `or {}` bug fixed + no double-report → Task 1
+  (`leaf_frontmatter`, `test_leaf_frontmatter_rejects_non_mappings`) and Task 3
+  (`test_no_cascade_on_broken_frontmatter`,
+  `test_missing_provenance_not_double_reported_with_unknown_ref`). ✓
 - Severity model (default error, `_relative_issues` copies, text+JSON, exit) →
   Task 2. ✓
 - `_relative_issues` severity copy + real-tree CLI test → Task 2 Step 4 + Task 3
   `test_warn_only_run_exits_zero`. ✓
-- `spec`/`software` kinds + `upstream_ref` regression + `leaf_source_refs`
-  strengthening → Task 1. ✓
+- `spec`/`software` kinds + `upstream_ref` regression + `not_applicable`
+  freshness + `leaf_source_refs`/`sources_wellformed` strengthening → Task 1
+  (incl. `test_spec_and_software_report_not_applicable_freshness`). ✓
 - `INDEX.md` exclusion (valid frontmatter, still excluded) → Task 3 Step 4 +
   `test_index_md_excluded_from_coverage`. ✓
-- Sweep all 41 (36 edited) in waves → Tasks 4–8. ✓
+- Sweep all 41 (36 edited: 20 INTERNAL, 16 EXTERNAL) — decomposed per-file with
+  verdict + primary source ids + acceptance criteria + frontmatter outcome →
+  Tasks 4–8. ✓
+- Per-wave verification fails on any ERROR severity + asserts exact `EXPECT`
+  count + requires `science skills lint` exit 0 → shared method. ✓
 - Repository coverage test (coverage, not severity) → Task 9. ✓
-- Ratchet phase-specific + synthetic-WARN test → Task 10. ✓
+- Ratchet phase-specific + synthetic-WARN **CLI** test + full-suite verification
+  → Task 10. ✓
 
-**Placeholder scan:** No `TBD`/`TODO`. Sweep-wave citation identifiers are
-explicitly a verified-research step with a fixed record schema, not invented
-values — the one legitimate deferral, called out in the shared method.
+**Placeholder scan:** No `TBD`/`TODO`. Every sweep file has an explicit verdict
+and outcome; the only execution-time deferral is verifying each external
+source's canonical `url`/DOI (a bounded lookup with a fixed record schema and
+acceptance criteria), not open-ended "confirm." The two bounded statistics
+files carry an explicit decision rule.
 
 **Type consistency:** `Severity`, `SkillIssue.severity`,
-`MISSING_PROVENANCE_SEVERITY`, `classify_provenance`/`ProvenanceState`,
-`check_provenance`, `leaf_frontmatter`, `_has_error`, and the two new
-`IssueKind` members are named identically wherever referenced across Tasks 1–3,
-9, 10.
+`MISSING_PROVENANCE_SEVERITY`, `classify_provenance`/`ProvenanceState` (incl.
+`malformed-sources`), `check_provenance`, `leaf_frontmatter`,
+`sources_wellformed`, `_has_error`, and the two new `IssueKind` members are
+named identically wherever referenced across Tasks 1–3, 9, 10.
