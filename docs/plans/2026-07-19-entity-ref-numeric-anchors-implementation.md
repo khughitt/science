@@ -230,7 +230,7 @@ resolve, so a citation cannot silently anchor to a guessed entity."
 
 **Interfaces:**
 - Consumes: `ResolutionIndex.resolve` (Task 2) via `local_candidates_for_paragraph`.
-- Produces: `_ANCHOR_ENTITY_KINDS: frozenset[str]`; `_BODY_REF_RE` matches allowlisted `<kind>:<id>` (full or short, incl. dotted ids like `paper:Volker2023.source` and `paper:good.-id`) with two-sided boundary guards, an **id-scoped no-`..` lookahead**, and an **atomic** id-body match, and no longer has a standalone `dataset:` alternative. The id body uses the full `_VERBATIM_RE` charset `[0-9A-Za-z](?:[0-9A-Za-z._-]*[0-9A-Za-z])?` inside an atomic group `(?>…)`: alnum start/terminal (a trailing sentence period stays outside), arbitrary internal `._-`. The **only** malformed-id restriction is the preceding `(?![A-Za-z0-9._-]*\.\.)` lookahead — a `..` anywhere in the id run makes the whole alternative fail (no truncated `paper:bad` survives), exactly matching `_VERBATIM_RE`'s single no-`..` rule. Atomicity forbids backtracking to a shorter id, so `interpretation:0007.foo@host` fails entirely instead of truncating to a resolvable `interpretation:0007`.
+- Produces: `_ANCHOR_ENTITY_KINDS: frozenset[str]`; `_BODY_REF_RE` matches allowlisted `<kind>:<id>` (full or short, incl. dotted ids like `paper:Volker2023.source` and `paper:good.-id`) with two-sided boundary guards, an **id-scoped no-`..` lookahead**, and an **atomic** id-body match, and no longer has a standalone `dataset:` alternative. The id body is `[0-9A-Za-z](?:[0-9A-Za-z._-]*[0-9A-Za-z])?` inside an atomic group `(?>…)`: alnum start/terminal (a trailing sentence period stays outside), arbitrary internal `._-`. The malformed-id restriction is the preceding `(?![A-Za-z0-9._-]*\.\.)` lookahead — a `..` anywhere in the id run makes the whole alternative fail (no truncated `paper:bad` survives), mirroring `_VERBATIM_RE`'s no-`..` rule. This grammar is a **deliberate strict subset** of `_VERBATIM_RE` (which additionally permits a *trailing* separator like `paper:foo.`): the required alnum terminal is intentional so a sentence period is never captured — see the design's terminal-subset rationale. Atomicity forbids backtracking to a shorter id, so `interpretation:0007.foo@host` fails entirely instead of truncating to a resolvable `interpretation:0007`.
 
 - [ ] **Step 1: Write the failing tests**
 
@@ -632,27 +632,35 @@ the script before the after-scan runs. `pinned` = current `--frozen` science
 
 - [ ] **Step 2: pan-disease numeric-anchor before/after (identity diff, not count)**
 
+`science prose lint --format json` emits `{counts, hits, coverage}`; each hit
+carries `file, line, col, check, match`. Filter to the numeric-anchor check and
+compare normalized identities `(file, line, col, match)`. Non-strict `prose
+lint` exits 0, so no `|| true` is needed (it is included only to guard against a
+transient nonzero exit, never to mask a schema error — the `jq -e` assertions
+below are the real gate).
+
 From the pan-disease checkout (use `~/d/`, not an absolute Dropbox path):
 ```bash
 cd ~/d/health/comparisons/pan-disease
 uv run --frozen \
-  science prose lint --check numeric-anchor --format json > /tmp/na-before.json || true
+  science prose lint --check numeric-anchor --format json > /tmp/na-before.json
 uv run --with-editable ~/d/science/.worktrees/entity-ref-anchors/science \
-  science prose lint --check numeric-anchor --format json > /tmp/na-after.json || true
+  science prose lint --check numeric-anchor --format json > /tmp/na-after.json
 
-# Normalized finding identity = (file, line, matched literal). Adjust the jq
-# path to the check's findings array if the schema differs; inspect one file
-# first with `jq 'keys' /tmp/na-before.json`.
-jq -S '[.findings[] | {file,line,value:(.value // .literal // .match)}]' /tmp/na-before.json > /tmp/na-before.ids
-jq -S '[.findings[] | {file,line,value:(.value // .literal // .match)}]' /tmp/na-after.json  > /tmp/na-after.ids
-echo "=== before count ==="; jq length /tmp/na-before.ids
-echo "=== after count  ==="; jq length /tmp/na-after.ids
-echo "=== findings that CLEARED (in before, not after) ==="
+_ids() { jq -S '[.hits[] | select(.check=="numeric-anchor") | {file,line,col,match}]' "$1"; }
+_ids /tmp/na-before.json > /tmp/na-before.ids
+_ids /tmp/na-after.json  > /tmp/na-after.ids
+echo "before=$(jq length /tmp/na-before.ids)  after=$(jq length /tmp/na-after.ids)"
+echo "=== CLEARED (before − after) ==="
 jq -S -n --slurpfile a /tmp/na-before.ids --slurpfile b /tmp/na-after.ids '$a[0] - $b[0]'
-echo "=== findings that APPEARED (in after, not before) ==="
+echo "=== APPEARED (after − before) — MUST be empty ==="
 jq -S -n --slurpfile a /tmp/na-before.ids --slurpfile b /tmp/na-after.ids '$b[0] - $a[0]'
+# Hard gate: fail loudly if any new finding appeared.
+jq -e -n --slurpfile a /tmp/na-before.ids --slurpfile b /tmp/na-after.ids \
+  '(($b[0] - $a[0]) | length) == 0' >/dev/null \
+  && echo "OK: no new findings" || { echo "BLOCKED: new numeric-anchor finding(s) appeared"; exit 1; }
 ```
-Expected: before ≈ 196. The **cleared** set is ~13 entity-ref-grounded numbers (interpretation/plan/pre-registration citations, incl. pre-reg 0012's `interpretation:0010/0011` values). The **appeared** set MUST be empty — a non-empty appeared set means the change created a new finding and blocks the merge until explained. Record both sets verbatim; every cleared item must trace to a resolvable provenance entity-ref in its paragraph.
+Expected: before ≈ 196. The **CLEARED** set is ~13 entity-ref-grounded numbers (interpretation/plan/pre-registration citations, incl. pre-reg 0012's `interpretation:0010/0011` values). The **APPEARED** set MUST be empty — the `jq -e` gate exits 1 otherwise, blocking the merge until explained. Record both sets verbatim; every cleared item must trace to a resolvable provenance entity-ref in its paragraph.
 
 - [ ] **Step 3: pan-disease refs-integrity before/after (validate cannot see body refs)**
 
@@ -668,17 +676,26 @@ diff <(jq -S '.broken' /tmp/refs-before.json) <(jq -S '.broken' /tmp/refs-after.
 ```
 Expected delta, entirely from the Task 1 `plan` index addition: `plan:` body refs that were unindexed (and thus silently skipped) before now either **resolve** (full-id `plan:NNNN-slug` citations drop out of `broken`) or **surface as broken** where a short `plan:NNNN` prefix fails refs' exact-match body scan (refs has no prefix resolution — that lives only in numeric-anchor). Record the exact broken-ref delta; changes must be confined to `plan:` refs. Any non-`plan:` movement blocks the merge.
 
-- [ ] **Step 4: pan-disease full-validation before/after (JSON, retain both)**
+- [ ] **Step 4: pan-disease full-validation before/after (JSON must be identical)**
+
+`validate --format json`'s payload (`_json_payload`) **drops INFO-severity
+results** — and non-strict `numeric-anchor` is INFO — so the numeric-anchor
+delta does **not** surface here at all; Step 2 already proved it precisely. The
+correct expectation for validate is therefore **identical** before/after JSON.
+Validation is expected to pass (pan-disease is green post-t107), so run it
+**without** `|| true` — a nonzero exit is a real failure to investigate, not
+something to swallow.
 
 ```bash
 cd ~/d/health/comparisons/pan-disease
 uv run --frozen \
-  science validate --format json > /tmp/validate-before.json 2>/dev/null || true
+  science validate --format json > /tmp/validate-before.json
 uv run --with-editable ~/d/science/.worktrees/entity-ref-anchors/science \
-  science validate --format json > /tmp/validate-after.json 2>/dev/null || true
-diff <(jq -S . /tmp/validate-before.json) <(jq -S . /tmp/validate-after.json) || true
+  science validate --format json > /tmp/validate-after.json
+diff <(jq -S . /tmp/validate-before.json) <(jq -S . /tmp/validate-after.json) \
+  && echo "OK: validation JSON unchanged" || { echo "BLOCKED: validation payload changed"; exit 1; }
 ```
-Expected: overall status stays **PASSED** in both. The only diff is the numeric-anchor finding-count drop (validate cannot see the body-ref changes from Step 3, by design). Retain both full JSON payloads — not a text tail — so every changed field is attributable. Any status regression or non-numeric-anchor check delta blocks the merge.
+Expected: **no diff** — status stays `PASSED` and, because INFO results are excluded, the numeric-anchor reduction is intentionally invisible here (that is Step 2's job). Any diff means an ERROR/WARN-level check moved and blocks the merge. Retain both full JSON payloads for the record.
 
 - [ ] **Step 5: Finish the branch**
 

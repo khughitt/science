@@ -125,20 +125,29 @@ Boundary guards:
   never match.
 - id-scoped no-`..` lookahead `(?![A-Za-z0-9._-]*\.\.)` — if the id char-run
   contains consecutive dots, the whole alternative fails and yields **no**
-  candidate (not a truncated prefix). This is the sole malformed-id
-  restriction, exactly matching `_VERBATIM_RE`'s single no-`..` rule
-  (entities.py:193); legal forms with internal `.-`/`--` (`paper:good.-id`)
-  still extract whole.
-- **Atomic** id body `(?>[0-9A-Za-z](?:[0-9A-Za-z._-]*[0-9A-Za-z])?)` — the
-  full `_VERBATIM_RE` charset (alnum start, **alnum terminal**, internal
-  `. _ -`), so legal dotted ids extract (`paper:Volker2023.source`,
-  allowlisted `paper`) and a trailing sentence period stays outside
-  (`interpretation:0013.` → `interpretation:0013`). The atomic group is
+  candidate (not a truncated prefix). This mirrors `_VERBATIM_RE`'s single
+  no-`..` rule (`entities.py:192`), so legal forms with internal `.-`/`--`
+  (`paper:good.-id`) still extract whole.
+- **Atomic** id body `(?>[0-9A-Za-z](?:[0-9A-Za-z._-]*[0-9A-Za-z])?)` — alnum
+  start, **alnum terminal**, internal `. _ -`. The atomic group is
   load-bearing: without it the id could **backtrack to a shorter, resolvable
   form** when a longer match fails the right lookahead
   (`interpretation:0007.foo@host` would otherwise truncate to a resolvable
   `interpretation:0007`). Locked, it fails outright instead. Python 3.13's
   `re` supports `(?>…)`.
+
+  **Deliberately a strict subset of `_VERBATIM_RE`, not an equivalent.**
+  `_VERBATIM_RE = ^(?!.*\.\.)[A-Za-z0-9][A-Za-z0-9._-]*$` permits a *trailing*
+  separator (`paper:foo.`, `id_`, `x-`); the anchor grammar's required alnum
+  terminal rejects those. This is intentional: in flowing prose a trailing `.`
+  is overwhelmingly a sentence period, and honoring it would make
+  `…grounded in dataset:foo.` capture `dataset:foo.` and then fail to resolve
+  the real `dataset:foo`. The trade-off is that an entity whose canonical id
+  literally ends in a separator (a pathological, discouraged id) cannot be
+  cited as an inline anchor — its full-id `[^id]` binding (Part B) and
+  frontmatter provenance still work. If canonical-id policy is ever tightened
+  to forbid trailing separators, the two grammars converge with no change
+  here. We do **not** claim exact equivalence with `_VERBATIM_RE`.
 - Right `(?![A-Za-z0-9_:/@-])` — rejects `interpretation:0013@host`,
   `interpretation:0013/x`, `interpretation:0013:extra`.
 
