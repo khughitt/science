@@ -1,6 +1,7 @@
 ---
 name: statistics-sensitivity-arbitration
 description: Use when an analysis includes multiple robustness checks, alternate operationalisations, filters, covariate sets, priors, models, or negative controls whose results could change interpretation.
+sources: [baygent-skills]
 ---
 
 # Sensitivity Arbitration
@@ -71,6 +72,21 @@ read it at all.
 A frozen arbitration rule (above) plus per-arm diagnostic attribution is what
 lets a clean primary fit survive an alarming-looking aggregate log — without
 either ignoring the warning or being spooked into discarding a sound verdict.
+
+## Power-Scaling Prior/Likelihood Sensitivity (Bayesian)
+
+For a Bayesian primary analysis, make prior sensitivity a *pre-committed*
+diagnostic rather than an after-the-fact reassurance:
+
+- **Power-scale** the prior (and, separately, the likelihood) by raising it to a
+  power and re-weighting the existing posterior draws via PSIS — **no refit**.
+- Quantify the shift with the cumulative Jensen-Shannon (CJS) distance between the
+  base and power-scaled posteriors; a common flag is **CJS > 0.05**.
+- **Prior-dominated** (prior-scaling moves the posterior, likelihood-scaling does
+  not) means the data are not driving the conclusion — a verdict downgrade, decided
+  by the arbitration rule above, not chosen after seeing the number.
+- Attribute the diagnostic to the arm that produced it, as with any other
+  sensitivity (see "Attribute Diagnostics to the Arm That Produced Them").
 
 ## Anti-Patterns
 
