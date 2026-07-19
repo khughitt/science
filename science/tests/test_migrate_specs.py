@@ -7,6 +7,7 @@ from unittest import mock
 
 import pytest
 import yaml
+from science_model.frontmatter import split_frontmatter
 
 from science_tool.entity_reservation import claim_number_in_dir
 from science_tool.migrate_specs import (
@@ -15,6 +16,7 @@ from science_tool.migrate_specs import (
     RUNTIME_ONLY,
     RefRecord,
     SpecMigrationRefused,
+    _plan_transaction,
     allocate_ids,
     classify_references,
     discover_specs,
@@ -351,3 +353,90 @@ def test_classification_reports_unreadable_scannable_file_as_skip(tmp_path: Path
     (project / "src/bad.py").write_bytes(b"\xff\xfe spec:old-a")  # undecodable but scannable
     _records, skips = classify_references(project, id_substitutions={"spec:old-a": "spec:0001-a"}, live_spec_ids=set(), source_rels=frozenset())
     assert any(s.path == "src/bad.py" for s in skips)
+
+
+def _plan(project: Path):
+    disc = discover_specs(project)
+    return _plan_transaction(project, disc, allocate_ids(project, disc.legacy))
+
+
+def test_transaction_renders_new_id_and_old_id_alias(tmp_path: Path) -> None:
+    project = _spec_project(tmp_path)
+    _legacy_spec(project, "doc/plans/a.md", "spec:date-a", "Alpha")
+    dest = next(d for d in _plan(project).destinations if d.old_id == "spec:date-a")
+    fm, _body = split_frontmatter(dest.rendered_text)
+    assert fm["id"] == "spec:0001-alpha"
+    assert "spec:date-a" in fm["aliases"]
+    assert dest.dest_rel == "entities/specs/0001-alpha.md"
+
+
+def test_transaction_intra_batch_id_substitution_list_and_scalar(tmp_path: Path) -> None:
+    project = _spec_project(tmp_path)
+    _legacy_spec(project, "doc/plans/a.md", "spec:date-a", "Alpha", related=["spec:date-b"], superseded_by="spec:date-b")
+    _legacy_spec(project, "doc/plans/b.md", "spec:date-b", "Beta")
+    dest_a = next(d for d in _plan(project).destinations if d.old_id == "spec:date-a")
+    fm, _ = split_frontmatter(dest_a.rendered_text)
+    assert fm["related"] == ["spec:0002-beta"]     # list value substituted
+    assert fm["superseded_by"] == "spec:0002-beta"  # scalar value substituted
+
+
+def test_transaction_intra_batch_path_substitution_with_anchor(tmp_path: Path) -> None:
+    project = _spec_project(tmp_path)
+    _legacy_spec(project, "doc/plans/a.md", "spec:date-a", "Alpha")
+    (project / "doc/plans/a.md").write_text(
+        "---\nid: spec:date-a\ntype: spec\ntitle: Alpha\ndate: '2026-01-01'\nstatus: draft\n---\n\nSee [B](b.md#sec).\n",
+        encoding="utf-8",
+    )
+    _legacy_spec(project, "doc/plans/b.md", "spec:date-b", "Beta")
+    dest_a = next(d for d in _plan(project).destinations if d.old_id == "spec:date-a")
+    assert "0002-beta.md#sec" in dest_a.rendered_text
+
+
+def test_transaction_collision_preflight_refuses_duplicate_old_ids(tmp_path: Path) -> None:
+    project = _spec_project(tmp_path)
+    _legacy_spec(project, "doc/plans/a.md", "spec:dup", "Alpha")
+    _legacy_spec(project, "doc/specs/a.md", "spec:dup", "Alpha Two")
+    with pytest.raises(SpecMigrationRefused, match="duplicate old id"):
+        _plan(project)
+
+
+def test_transaction_collision_preflight_uses_global_alias_authority(tmp_path: Path) -> None:
+    project = _spec_project(tmp_path)
+    # an UNRELATED live spec entity (owned by ITS path, not a migrating source) already claims the
+    # token the migrated spec's old-id alias would take
+    _write(project / "entities/specs/0009-live.md", {"id": "spec:0009-live", "kind": "spec", "title": "Live", "aliases": ["spec:date-a"]})
+    _legacy_spec(project, "doc/plans/a.md", "spec:date-a", "Alpha")
+    with pytest.raises(SpecMigrationRefused, match="collides"):
+        _plan(project)
+
+
+def test_transaction_collision_preflight_uses_global_mappings_authority(tmp_path: Path) -> None:
+    project = _spec_project(tmp_path)
+    # a project mappings.yaml (owned by the non-path mappings sentinel, never a migrating source)
+    # already claims the token the migrated spec's old-id alias would take
+    _write(project / "entities/specs/0009-live.md", {"id": "spec:0009-live", "kind": "spec", "title": "Live"})
+    mappings = project / "knowledge/sources/local/mappings.yaml"
+    mappings.parent.mkdir(parents=True, exist_ok=True)
+    mappings.write_text(yaml.safe_dump({"aliases": {"spec:date-a": "spec:0009-live"}}), encoding="utf-8")
+    _legacy_spec(project, "doc/plans/a.md", "spec:date-a", "Alpha")
+    with pytest.raises(SpecMigrationRefused, match="collides"):
+        _plan(project)
+
+
+def test_transaction_collision_preflight_is_case_insensitive(tmp_path: Path) -> None:
+    project = _spec_project(tmp_path)
+    # a live entity claims an UPPERCASE variant of the token the old-id alias would take; a case-blind
+    # preflight would miss it and let build_alias_map raise an unnormalized AliasCollisionError
+    _write(project / "entities/specs/0009-live.md", {"id": "spec:0009-live", "kind": "spec", "title": "Live", "aliases": ["SPEC:DATE-A"]})
+    _legacy_spec(project, "doc/plans/a.md", "spec:date-a", "Alpha")
+    with pytest.raises(SpecMigrationRefused, match="collides"):
+        _plan(project)
+
+
+def test_transaction_alias_dedup_avoids_false_self_collision(tmp_path: Path) -> None:
+    project = _spec_project(tmp_path)
+    # doc already lists its own old id in aliases; appending it must not read as a collision
+    _legacy_spec(project, "doc/plans/a.md", "spec:date-a", "Alpha", aliases=["spec:date-a"])
+    dest = next(d for d in _plan(project).destinations if d.old_id == "spec:date-a")
+    fm, _ = split_frontmatter(dest.rendered_text)
+    assert fm["aliases"] == ["spec:date-a"]  # deduped, single occurrence

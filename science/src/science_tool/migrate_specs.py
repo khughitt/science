@@ -8,13 +8,14 @@ transaction, so a dry run exercises every refusal a `--apply` would. The design 
 
 from __future__ import annotations
 
+import hashlib
 import re
 from collections.abc import Mapping
 from dataclasses import dataclass
 from pathlib import Path, PurePosixPath
 from typing import Any
 
-from science_model.frontmatter import split_frontmatter
+from science_model.frontmatter import render_frontmatter, split_frontmatter
 
 from science_tool.entities import (
     _REFERENCE_SCAN_SKIP_DIRS,
@@ -26,7 +27,16 @@ from science_tool.entities import (
 )
 from science_tool.entity_reservation import propose_number
 from science_tool.markdown_scan import iter_prose_matches
-from science_tool.reference_rewrite import _LINK_RE, _resolve_link, _split_target
+from science_tool.reference_rewrite import (
+    _LINK_RE,
+    RewriteReport,
+    _relative_link,
+    _resolve_link,
+    _split_target,
+    _sub_prose_matches,
+    plan_reference_rewrite,
+    rewrite_outbound_links,
+)
 from science_tool.text_scan import (
     MAX_SCANNABLE_BYTES,
     TEXT_SUFFIXES,
@@ -500,3 +510,195 @@ def classify_references(
             records.append(RefRecord(ref=token, surface="mention", target=tclass, group=_group_for("mention", tclass), in_file=rel))
 
     return records, skips
+
+
+# Owner ORIGINS for non-entity claim sources: never a migrating source PATH, so a batch's own
+# in-home claims can be excluded by origin without ever excluding a mapping/archive token.
+_MANUAL_ALIAS_OWNER = "<mappings.yaml>"
+_ARCHIVE_OWNER = "<archive>"
+
+
+@dataclass(frozen=True)
+class Destination:
+    old_id: str
+    new_id: str
+    source_rel: str
+    dest_rel: str
+    number: int
+    local_part: str
+    rendered_text: str
+    preimage_sha256: str
+
+
+@dataclass(frozen=True)
+class Transaction:
+    destinations: list[Destination]
+    ref_report: RewriteReport
+    source_rels: frozenset[str]
+    dest_rels: frozenset[str]
+
+
+def _apply_path_subs_to_body(body: str, new_dir: PurePosixPath, path_subs: dict[str, str]) -> str:
+    """Repoint a moved body's links whose (rebased) target is another migrating source's old path."""
+    def _replace(match: re.Match[str]) -> str:
+        target = match.group("target")
+        head, tail = _split_target(target)
+        resolved = _resolve_link(head, new_dir) if head else None
+        if resolved is not None and resolved in path_subs:
+            return f"[{match.group('text')}]({_relative_link(new_dir, path_subs[resolved]) + tail})"
+        return match.group(0)
+
+    return _sub_prose_matches(_LINK_RE, body, _replace)
+
+
+def _render_destination(spec: LegacySpec, alloc: Allocation, id_subs: dict[str, str], path_subs: dict[str, str], new_id: str, dest_rel: str) -> str:
+    """Project + assign identity + intra-batch substitute (list AND scalar) + rebase links."""
+    _old_id, fm = project_legacy_frontmatter(spec.frontmatter, source_rel=spec.source_rel)
+
+    if spec.old_id in alloc.aliased:  # minted: new id, old id appended to aliases (deduped)
+        fm["id"] = new_id
+        fm["aliases"] = _dedup([*_as_list(fm.get("aliases")), spec.old_id])
+
+    for key in _REMOVABLE_FRONTMATTER_REF_KEYS:  # engine rewrites list AND scalar values; mirror that
+        value = fm.get(key)
+        if isinstance(value, list):
+            fm[key] = [id_subs.get(item, item) if isinstance(item, str) else item for item in value]
+        elif isinstance(value, str):
+            fm[key] = id_subs.get(value, value)
+    for relation in fm.get("relations") or []:
+        if isinstance(relation, dict) and isinstance(relation.get("target"), str):
+            relation["target"] = id_subs.get(relation["target"], relation["target"])
+
+    old_dir = PurePosixPath(spec.source_rel).parent
+    new_dir = PurePosixPath(dest_rel).parent
+    body, _hits = rewrite_outbound_links(spec.body, old_dir, new_dir)
+    body = _apply_path_subs_to_body(body, new_dir, path_subs)
+    return render_frontmatter(fm, body)
+
+
+def _validate_batch(project_root: Path, destinations: list[Destination]) -> None:
+    """Batch-aware prospective validation — DELEGATES to the one core in `entities.py`.
+
+    Builds the override map (EVERY destination written, EVERY source removed via `""`, so an
+    intra-batch `supersedes: spec:<sibling>` resolves) and hands it to `_validate_prospective_writes`,
+    allowing forward `related`/`source_refs` unresolved refs for the migrated ids (they resolve via
+    the alias net post-flip). Defines no second audit-diff. `EntityCommandError` propagates to the CLI,
+    which normalizes it to a refusal (Task 10)."""
+    from science_tool.entities import _validate_prospective_writes
+
+    if not destinations:
+        return
+    overrides: dict[str, str] = {}
+    for dest in destinations:
+        overrides[dest.source_rel] = ""  # post-move: the source is gone
+        overrides[dest.dest_rel] = dest.rendered_text
+    _validate_prospective_writes(
+        project_root=project_root,
+        markdown_overrides=overrides,
+        allowed_unresolved_sources={dest.new_id for dest in destinations},
+    )
+
+
+def _all_project_claims(project_root: Path) -> dict[str, set[str]]:
+    """`token -> set of owner ORIGINS`, mirroring `build_alias_map`'s claim universe.
+
+    For every entity, its `canonical_id` and every alias are registered in BOTH exact and lowercase
+    form — `build_alias_map` normalizes case, so a preflight that ignored case would let a live
+    `SPEC:DATE-A` escape and then detonate as an unnormalized `AliasCollisionError` during prospective
+    validation. The owner is the entity's SOURCE PATH (`entity.file_path`, project-relative posix,
+    same shape as `source_rel`), so a claim is excluded by ORIGIN — an unrelated record whose id merely
+    coincides with a migrating old id is NOT dropped. `manual_aliases` (the `mappings.yaml` superset;
+    `archive_alias_tokens` is only its archived subset) is folded in, owned by a non-path sentinel that
+    is never a migrating source."""
+    from science_tool.graph.sources import load_project_sources
+
+    claims: dict[str, set[str]] = {}
+
+    def _add(token: object, owner: str) -> None:
+        if isinstance(token, str) and token:
+            claims.setdefault(token, set()).add(owner)
+            claims.setdefault(token.lower(), set()).add(owner)
+
+    sources = load_project_sources(project_root)
+    for entity in sources.entities:
+        _add(entity.canonical_id, entity.file_path)
+        for alias in entity.aliases or []:
+            _add(alias, entity.file_path)
+    for token in sources.manual_aliases or {}:
+        _add(token, _MANUAL_ALIAS_OWNER)
+    for token in sources.archive_alias_tokens or frozenset():
+        _add(token, _ARCHIVE_OWNER)
+    return claims
+
+
+def _collision_preflight(project_root: Path, disc: Discovery, alloc: Allocation) -> None:
+    """Refuse if the batch's rendered, deduplicated claims clash with the project's global authority
+    or with each other. A claim is EXISTING only when it has an owner ORIGIN outside the migrating
+    source set — so a migrating spec's own claim (an in-home legacy spec loads as an entity at its
+    source path) is excluded, but an unrelated record is NOT, even one whose id coincides with a
+    migrating old id. Case is normalized to mirror `build_alias_map`, so a case-variant live token is
+    caught here rather than at prospective validation."""
+    old_ids = [spec.old_id for spec in disc.legacy]
+    if len(old_ids) != len(set(old_ids)):
+        raise SpecMigrationRefused("duplicate old id(s) in the discovered batch.")
+
+    migrating_origins = {spec.source_rel for spec in disc.legacy}
+    existing = {token for token, owners in _all_project_claims(project_root).items() if owners - migrating_origins}
+
+    seen: dict[str, str] = {}
+
+    def _check(token: str, where: str) -> None:
+        if token in existing or token.lower() in existing:
+            raise SpecMigrationRefused(f"{where}: {token!r} collides with an existing id/alias/mapping/archive token.")
+        key = token.lower()
+        if key in seen and seen[key] != where:
+            raise SpecMigrationRefused(f"{where}: {token!r} collides with {seen[key]}.")
+        seen[key] = where
+
+    for spec in disc.legacy:
+        new_id = alloc.id_substitutions.get(spec.old_id, spec.old_id)
+        final_aliases = _dedup(
+            [
+                *[a for a in _as_list(spec.frontmatter.get("aliases")) if isinstance(a, str)],
+                *([spec.old_id] if spec.old_id in alloc.aliased else []),
+            ]
+        )
+        for token in _dedup([new_id, *final_aliases]):
+            _check(token, spec.source_rel)
+
+
+def _plan_transaction(project_root: Path, disc: Discovery, alloc: Allocation) -> Transaction:
+    """Build the frozen batch plan. Writes nothing; any refusal aborts the whole batch."""
+    project_root = Path(project_root).resolve()
+    id_subs = dict(alloc.id_substitutions)
+    path_subs = {spec.source_rel: alloc.dest_rel[spec.old_id] for spec in disc.legacy}
+
+    _collision_preflight(project_root, disc, alloc)
+
+    destinations: list[Destination] = []
+    for spec in disc.legacy:
+        new_id = id_subs.get(spec.old_id, spec.old_id)
+        dest_rel = alloc.dest_rel[spec.old_id]
+        local_part = alloc.new_local_part[spec.old_id]
+        rendered = _render_destination(spec, alloc, id_subs, path_subs, new_id, dest_rel)
+        preimage = hashlib.sha256((project_root / spec.source_rel).read_bytes()).hexdigest()
+        destinations.append(
+            Destination(
+                old_id=spec.old_id,
+                new_id=new_id,
+                source_rel=spec.source_rel,
+                dest_rel=dest_rel,
+                number=int(local_part[:4]),
+                local_part=local_part,
+                rendered_text=rendered,
+                preimage_sha256=preimage,
+            )
+        )
+
+    _validate_batch(project_root, destinations)
+
+    source_rels = frozenset(spec.source_rel for spec in disc.legacy)
+    dest_rels = frozenset(alloc.dest_rel[spec.old_id] for spec in disc.legacy)
+    exclude = frozenset((project_root / rel) for rel in (source_rels | dest_rels))
+    ref_report = plan_reference_rewrite(project_root, id_substitutions=id_subs, path_substitutions=path_subs, exclude=exclude)
+    return Transaction(destinations=destinations, ref_report=ref_report, source_rels=source_rels, dest_rels=dest_rels)
