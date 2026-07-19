@@ -180,6 +180,15 @@ def test_discovery_already_numeric_out_of_home_carries_number(tmp_path: Path) ->
     assert len(disc.legacy) == 1 and disc.legacy[0].already_numeric == 7
 
 
+def test_discovery_iso_date_prefixed_id_is_not_already_numeric(tmp_path: Path) -> None:
+    # A date-slug id (the dominant legacy convention) has a calendar-YEAR head, not a sequence number,
+    # so it is discovered as a MINT candidate (already_numeric is None), never a preserved relocation.
+    project = _spec_project(tmp_path)
+    _write(project / "doc/plans/dated.md", {"id": "spec:2026-03-16-meta-model-design", "type": "spec", "title": "Meta Model"})
+    disc = discover_specs(project)
+    assert len(disc.legacy) == 1 and disc.legacy[0].already_numeric is None
+
+
 def test_discovery_refuses_spec_doc_without_id(tmp_path: Path) -> None:
     project = _spec_project(tmp_path)
     _write(project / "doc/plans/noid.md", {"type": "spec", "title": "No Id"})
@@ -239,14 +248,12 @@ def test_allocation_mints_distinct_sequential_numbers(tmp_path: Path) -> None:
 
 def test_allocation_slug_is_from_title_not_id(tmp_path: Path) -> None:
     project = _spec_project(tmp_path)
-    # A non-numeric-conforming legacy id whose local part disagrees with the title, so a title-vs-id
-    # slug mixup would be caught. NOTE: a date-prefixed id like "2026-01-01-old-filename" cannot be
-    # used here — its leading 4 digits satisfy entities._NUMERIC_LOCAL_PART_RE, so discover_specs
-    # would misclassify it as an already-numeric relocation (number 2026) instead of a mint candidate.
-    # See the Task 4 report for this pre-existing (Task 3) discovery-layer ambiguity.
-    _write(project / "doc/plans/drift.md", {"id": "spec:old-filename", "type": "spec", "title": "A Wholly Different Title"})
+    # An ISO-date-prefixed legacy id (the dominant convention) whose local part disagrees with the
+    # title. The leading 4 digits are a calendar YEAR, so this must be MINTED (not preserved as an
+    # already-numeric relocation), and its slug must come from the title, not the old id.
+    _write(project / "doc/plans/drift.md", {"id": "spec:2026-01-01-old-filename", "type": "spec", "title": "A Wholly Different Title"})
     alloc = allocate_ids(project, discover_specs(project).legacy)
-    assert alloc.new_local_part["spec:old-filename"] == "0001-a-wholly-different-title"
+    assert alloc.new_local_part["spec:2026-01-01-old-filename"] == "0001-a-wholly-different-title"
 
 
 def test_allocation_preserves_already_numeric_relocation(tmp_path: Path) -> None:

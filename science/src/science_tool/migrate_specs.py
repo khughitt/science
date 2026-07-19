@@ -149,6 +149,10 @@ def project_legacy_frontmatter(frontmatter: Mapping[str, Any], *, source_rel: st
 # A well-formed spec id: `spec:` + a local part with no path separators or traversal.
 _SPEC_ID_RE = re.compile(r"^spec:[A-Za-z0-9][A-Za-z0-9._-]*$")
 _MARKDOWN_SUFFIXES = frozenset({".md", ".markdown"})
+# A leading ISO date (`YYYY-MM-DD-…`) is the dominant legacy id convention. Its 4-digit head is a
+# CALENDAR YEAR, not a canonical spec sequence number, so such a doc must be MINTED a fresh
+# `spec:NNNN-slug`, never mistaken for an already-numeric relocation. See `_numeric_of`.
+_ISO_DATE_PREFIX = re.compile(r"^\d{4}-\d{2}-\d{2}(-|$)")
 
 
 @dataclass(frozen=True)
@@ -193,9 +197,15 @@ def _singleton_homes(project_root: Path) -> set[str]:
 
 
 def _numeric_of(old_id: str) -> int | None:
-    """The NNNN of a FULL conforming `spec:NNNN-slug` id, else None. A prefix-only match (e.g.
-    `spec:0007-x/../../outside`) is rejected — `local_part_conforms` requires the whole numeric shape."""
+    """The NNNN of a FULL conforming `spec:NNNN-slug` sequence id, else None.
+
+    A prefix-only match (e.g. `spec:0007-x/../../outside`) is rejected — `local_part_conforms`
+    requires the whole numeric shape. An ISO-date-prefixed id (`spec:2026-03-16-…`) is also rejected:
+    its 4-digit head is a calendar year, not a spec sequence number, so it is minted fresh rather than
+    preserved as an already-numeric relocation."""
     local = old_id.split(":", 1)[1] if ":" in old_id else old_id
+    if _ISO_DATE_PREFIX.match(local):
+        return None
     if local_part_conforms("spec", local):
         return int(local[:4])
     return None
