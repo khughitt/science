@@ -20,14 +20,15 @@ registered as reference-style records whose freshness reports `not_applicable`.
 ## Scope
 
 - **In scope:** every canonical `skills/**/*.md`, **excluding only
-  `skills/INDEX.md`** (the generated index). 41 files: 7 `SKILL.md` routers +
-  34 leaves.
+  `skills/INDEX.md`** (the corpus/navigation index). 41 files: 7 `SKILL.md`
+  routers + 34 leaves. Of these, **5 are already attributed** (the baygent
+  statistics leaves) and **36 are currently undeclared**.
 - **Out of scope:** the generated `codex-skills/` tree (produced by
   `codex_skills.py`). The linter already defaults to `--root skills`, so
   `codex-skills/` is never walked; this design does not change that.
 - **Out of scope:** any change to `GIT_BACKED_KINDS`, the `_run_git` /
-  `fetch_remote_head_sha` freshness machinery, or the `science skills check`
-  freshness command. Freshness behavior is unchanged.
+  `fetch_remote_head_sha` freshness machinery, or the `science skills sources
+  check` freshness command. Freshness behavior is unchanged.
 
 ## Decisions already made (from brainstorming)
 
@@ -69,9 +70,15 @@ frontmatter finding already speaks.
 
 Invalid provenance *declarations* (contradiction, bad marker value, malformed
 `sources:`) are reported as ERROR:
-- malformed / empty `sources:` continues to surface via the existing
-  `invalid-field` on field `sources` (from `check_source_refs` /
-  `leaf_source_refs`); the plan verifies `sources: []` reaches that path.
+- malformed `sources:` surfaces via the existing `invalid-field` on field
+  `sources` (from `check_source_refs` / `leaf_source_refs`). **`leaf_source_refs`
+  is currently too permissive** — it accepts `sources: []` and blank strings
+  (`sources.py:195`, where `all(isinstance(x, str) …)` is vacuously true on an
+  empty list). This effort **strengthens `leaf_source_refs` in `sources.py`** to
+  require a **non-empty list of non-blank strings**, so that an empty or blank
+  `sources:` is rejected. Because both `skills lint` (via `check_source_refs`)
+  and `science skills sources check` (via `leaf_source_refs`) consume that one
+  function, the fix rejects `sources: []` on both surfaces.
 - `provenance:` with a non-`internal` value, and the both-keys contradiction,
   surface as a new `invalid-provenance` ERROR finding.
 
@@ -90,8 +97,18 @@ The linter has **no severity model today**: `SkillIssue` carries no severity and
 - Per-rule severity is a **named module constant**. `missing-provenance` is
   emitted at `MISSING_PROVENANCE_SEVERITY`, initialized to `"warn"`. All other
   kinds are ERROR.
-- **Text output** appends the severity to each line; **JSON output**
-  (`to_json`) gains a `"severity"` key.
+- **`_relative_issues` must copy `severity`.** That helper (`lint.py:194`)
+  reconstructs every `SkillIssue` during path-normalization and today copies
+  only `path`, `kind`, `field`, `detail` — so a WARN would silently revert to
+  the `"error"` default. The reconstruction must forward `severity=issue.severity`.
+  Because this is exactly the kind of bug a mocked-issue test cannot catch, the
+  WARN CLI test (below) drives a **real minimal skills tree through
+  `check_skills`**, not a hand-built issue list.
+- **Text output** renders severity in a fixed, user-facing order: each line is
+  `"<severity>: <path>: <kind>[: <field>][: <detail>]"` — severity is the
+  **leading** token, lowercase (`error` / `warn`), matching the compiler/linter
+  convention (`error:` / `warning:`). **JSON output** (`to_json`) gains a
+  `"severity"` key alongside the existing keys.
 - **Exit code** becomes severity-aware: `lint_cmd` exits nonzero iff **any**
   finding has `severity == "error"`. A run whose only findings are WARN
   **exits zero**. (Existing ERROR-only behavior is preserved because all prior
@@ -109,8 +126,17 @@ Chosen over the two alternatives:
 The final task flips the single named constant
 `MISSING_PROVENANCE_SEVERITY` from `"warn"` to `"error"`. This is safe **only
 after** the corpus sweep brings `missing-provenance` to zero, so the ratchet is
-the last task, gated on a clean repository run. Its test proves the exit-code
-flip (undeclared fixture: WARN + exit 0 before, ERROR + exit nonzero after).
+the last task, gated on a clean repository run.
+
+The tests are **phase-specific**, not a single test spanning both states:
+- Before the ratchet, the undeclared-fixture test asserts **WARN + exit 0**.
+- The ratchet task **updates that same test's expectation to ERROR + exit
+  nonzero** — the flip is the code change and the test change together.
+- Because after the flip no shipped rule is WARN, the warning exit-code path
+  (any-WARN-only ⇒ exit 0) would lose coverage. The ratchet task therefore adds
+  a **synthetic/infrastructure WARN fixture** — a test-only issue emitted at
+  `"warn"` — asserting a WARN-only run still exits 0. This keeps the
+  severity-aware exit contract tested independent of which real rules are WARN.
 
 ### 4. Source-kind taxonomy — two new reference-style kinds
 
@@ -135,13 +161,18 @@ method paper (`paper`) is made per source during the sweep, and a leaf may cite
 both.
 
 `spec`/`software` records require the same base fields as any record
-(`title`, `authors`, `url` https, `kind`, `last_checked`). To make the
-`software`-vs-`package-docs` boundary structural rather than advisory,
-`validate_record` gains one guard: **`upstream_ref` is rejected on
-non-git-backed kinds** (a pinned revision belongs to `package-docs` /
-`skill-repo`). This closes the escape-hatch gap — you cannot pin a revision on
-a `software` record. A `spec`/`software` record therefore carries no
-`upstream_ref` and reports freshness `not_applicable`.
+(`title`, `authors`, `url` https, `kind`, `last_checked`). The
+`software`-vs-`package-docs` boundary is **already structural**: `validate_record`
+(`sources.py:134`) rejects `upstream_ref` on any `REFERENCE_KINDS` member
+(`"reference-only source must not set upstream_ref"`). Adding `spec` and
+`software` to `REFERENCE_KINDS` therefore covers them **for free** — you cannot
+pin a revision on a `software` record. This effort adds no new guard code; it
+adds **regression tests** asserting a `spec`/`software` record with
+`upstream_ref` is rejected. (The plan may optionally generalize the existing
+`elif kind in REFERENCE_KINDS` to `elif kind not in GIT_BACKED_KINDS` for
+clearer expression — a pure refactor, not a behavior change.) A `spec`/`software`
+record therefore carries no `upstream_ref` and reports freshness
+`not_applicable`.
 
 ### 5. What `provenance: internal` claims
 
@@ -172,11 +203,17 @@ task that ends with those files declared and the registry extended:
   `prereg-defensive-instrumentation`, `replicate-count-justification`,
   `time-series-and-longitudinal-models`) plus `statistics/SKILL.md`. Mix of
   external (textbook/method) and internal (Science-native prereg conventions).
-- **Wave B — data QA leaves:** `data/` QA leaves and the nested `expression/`
-  and `genomics/` subtrees (tool + method-paper attribution).
-- **Wave C — data specs & sources:** `data/frictionless.md` (spec + tool),
-  `data/sources/openalex.md`, `data/sources/pubmed.md` (API `software`),
-  `data/SKILL.md`, and subtree routers.
+- **Wave B — data QA leaves (leaves only, no routers):** the `data/` QA leaves
+  and the nested `expression/` and `genomics/` **leaves**
+  (`embeddings-manifold-qa`, `functional-genomics-qa`,
+  `protein-sequence-structure-qa`, `proteomics-qa`, `expression/{bulk-rnaseq,
+  microarray, scrna}-qa`, `genomics/{copy-number-sv, somatic-mutation,
+  mutational-signatures}-qa`) — tool + method-paper attribution.
+- **Wave C — data specs, sources & routers:** `data/frictionless.md`
+  (spec + tool), `data/sources/openalex.md`, `data/sources/pubmed.md`
+  (API `software`), and **all `data/` routers** — `data/SKILL.md`,
+  `data/expression/SKILL.md`, `data/genomics/SKILL.md`. Wave C owns every router
+  under `data/`; Wave B owns none.
 - **Wave D — pipelines:** `snakemake` (tool + Mölder et al. paper), `marimo`,
   `runpod`, `pipelines/SKILL.md`.
 - **Wave E — research & writing:** `research/` leaves and routers,
@@ -200,13 +237,17 @@ throughout; the ratchet task runs only after Wave E.
   `check_provenance` (composed into `check_skills`, sharing the parsed
   frontmatter, suppressed on broken frontmatter).
 - `science/src/science_tool/skills_lint/sources.py` — add `spec`, `software`
-  to `REFERENCE_KINDS`; add the `upstream_ref`-on-non-git-backed-kind guard to
-  `validate_record`.
+  to `REFERENCE_KINDS` (the existing reference-kind `upstream_ref` rejection then
+  covers them); strengthen `leaf_source_refs` to require a non-empty list of
+  non-blank strings.
 - `science/src/science_tool/skills_lint/cli.py` — severity in text +
   JSON rendering; severity-aware exit code.
 - `skills/sources.yaml` — new `spec` / `software` / `paper` records surfaced by
   the sweep.
-- `skills/**/*.md` (41 files) — `sources:` or `provenance: internal` on each.
+- `skills/**/*.md` — all **41** in-scope files end **covered**; the **36
+  currently-undeclared** files are necessarily edited to add `sources:` or
+  `provenance: internal`. The **5 already-attributed** baygent leaves need no
+  change unless a wave's research expands their citations.
 - `science/tests/skills_lint/` — new tests (below).
 
 ## Testing
@@ -225,20 +266,31 @@ conflates severity, coverage, and exit code:
 - **Non-double-report unit test** — `sources: [unregistered-id]` yields
   `unknown-source-ref` only, **not** `missing-provenance`.
 - **CLI severity test** — a WARN-only lint run **exits zero** and its text +
-  JSON output **report severity**.
+  JSON output **report severity**. This test drives a **real minimal `skills/`
+  tree through `check_skills`** (an undeclared fixture file), **not** a hand-built
+  issue list — so it exercises the full path including `_relative_issues`
+  severity-copying and would fail if a WARN silently reverts to ERROR.
 - **CLI error-exit test** — a run containing any ERROR finding exits nonzero
   (severity-aware exit preserved for existing kinds).
 - **Repository coverage test** — the real `skills/` corpus produces **zero**
   `missing-provenance` findings (the sweep is complete). This asserts *coverage*,
   not severity — severity is proven by the fixture tests above, since a clean
   corpus has no findings to grade.
-- **Ratchet test** — with `MISSING_PROVENANCE_SEVERITY` promoted to `"error"`,
-  the undeclared fixture yields **ERROR** and the run **exits nonzero**.
+- **Ratchet test (phase-specific)** — the undeclared-fixture severity test
+  reads **WARN + exit 0** before the ratchet; the ratchet task updates *that
+  test* to **ERROR + exit nonzero**. A separate **synthetic-WARN test** (a
+  test-only issue emitted at `"warn"`) asserts a WARN-only run still exits 0
+  after the ratchet, preserving warning exit-code coverage once no shipped rule
+  is WARN.
 - **Registry / source tests** — `spec` and `software` records validate; a
   `spec`/`software` record without `upstream_ref` reports freshness
   `not_applicable`; a `spec`/`software` record **with** `upstream_ref` is
-  **rejected** by `validate_record`; the freshness axis is unchanged for
-  git-backed kinds.
+  **rejected** (a **regression test** on the existing reference-kind guard, now
+  extended to the two new kinds); the freshness axis is unchanged for git-backed
+  kinds.
+- **`leaf_source_refs` strengthening test** — `sources: []` and `sources:
+  ["  "]` (blank) are rejected with an error, on both `check_source_refs` (lint)
+  and the `leaf_source_refs` return contract (freshness `sources check`).
 
 ## Non-goals
 
