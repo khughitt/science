@@ -144,3 +144,72 @@ def test_leaf_without_sources_returns_none(tmp_path: Path) -> None:
     leaf = tmp_path / "leaf.md"
     leaf.write_text("---\nname: x\ndescription: y\n---\n# X\n", encoding="utf-8")
     assert leaf_source_refs(leaf) == (None, None)
+
+
+def test_spec_and_software_kinds_validate() -> None:
+    from science_tool.skills_lint.sources import validate_record
+    base = {
+        "title": "Frictionless Data Package",
+        "authors": ["Frictionless Data"],
+        "url": "https://specs.frictionlessdata.io/data-package/",
+        "last_checked": "2026-07-18",
+    }
+    assert validate_record("frictionless-spec", {**base, "kind": "spec"}) == []
+    assert validate_record("snakemake-tool", {**base, "kind": "software"}) == []
+
+
+def test_spec_software_reject_upstream_ref() -> None:
+    from science_tool.skills_lint.sources import validate_record
+    rec = {
+        "title": "T", "authors": ["A"], "url": "https://example.org/x",
+        "last_checked": "2026-07-18", "kind": "software",
+        "upstream_ref": "a" * 40,
+    }
+    problems = validate_record("x", rec)
+    assert any("must not set upstream_ref" in p for p in problems)
+
+
+def test_leaf_source_refs_rejects_empty_and_blank(tmp_path) -> None:
+    from science_tool.skills_lint.sources import leaf_source_refs
+    empty = tmp_path / "empty.md"
+    empty.write_text("---\nname: x\ndescription: d\nsources: []\n---\n# X\n", encoding="utf-8")
+    refs, err = leaf_source_refs(empty)
+    assert refs is None and err is not None
+
+    blank = tmp_path / "blank.md"
+    blank.write_text('---\nname: x\ndescription: d\nsources: ["  "]\n---\n# X\n', encoding="utf-8")
+    refs, err = leaf_source_refs(blank)
+    assert refs is None and err is not None
+
+    ok = tmp_path / "ok.md"
+    ok.write_text("---\nname: x\ndescription: d\nsources: [real-id]\n---\n# X\n", encoding="utf-8")
+    refs, err = leaf_source_refs(ok)
+    assert refs == ["real-id"] and err is None
+
+
+def test_leaf_frontmatter_rejects_non_mappings(tmp_path) -> None:
+    from science_tool.skills_lint.sources import leaf_frontmatter
+    cases = {
+        "list.md": "---\n[]\n---\n# X\n",          # falsy non-mapping
+        "false.md": "---\nfalse\n---\n# X\n",       # falsy scalar
+        "scalar.md": "---\n42\n---\n# X\n",         # truthy scalar
+        "unterminated.md": "---\nname: x\n# no close\n",
+        "unparsable.md": "---\nfoo: [unclosed\n---\n# X\n",
+        "none.md": "not frontmatter at all\n",
+    }
+    for name, body in cases.items():
+        p = tmp_path / name
+        p.write_text(body, encoding="utf-8")
+        assert leaf_frontmatter(p) is None, name
+    empty = tmp_path / "empty.md"
+    empty.write_text("---\n---\n# X\n", encoding="utf-8")
+    assert leaf_frontmatter(empty) == {}   # empty block is a valid empty mapping
+
+
+def test_sources_wellformed_predicate() -> None:
+    from science_tool.skills_lint.sources import sources_wellformed
+    assert sources_wellformed(["a", "b"]) is True
+    assert sources_wellformed([]) is False
+    assert sources_wellformed(["  "]) is False
+    assert sources_wellformed("oops") is False
+    assert sources_wellformed([1]) is False
