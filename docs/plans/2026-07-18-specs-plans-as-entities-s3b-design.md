@@ -146,13 +146,21 @@ load-derived fields like `project`, `file_path`, `content`. The projection uses
 an explicit two-set authority instead:
 
 - **RUNTIME_ONLY** — the load-derived fields, enumerated **exactly** (not "and
-  the others"): **`project`, `file_path`, `content`, `content_preview`**. These
-  are the four values `_enrich_raw` derives at load (`sources.py:852-869`);
-  every *other* `setdefault` there (`related`, `aliases`, `same_as`, `scope`,
-  `source_refs`, `relations`, `evidence_refs`, `xrefs`, `provisional`,
-  `deprecated_ids`, `ontology_terms`) is an **authored** field with an empty
-  default, not runtime-only. A legacy doc carrying any of the four in authored
-  frontmatter **refuses** planning.
+  the others"): **`project`, `file_path`, `content`, `content_preview`,
+  `canonical_id`**. The first four are values `_enrich_raw` derives at load
+  (`sources.py:852-869`); `canonical_id` is derived from `id` immediately after
+  (`sources.py:879-881`, `canonical_id = raw.get("canonical_id") or raw.get("id")`)
+  — because an authored `canonical_id` there *overrides* the id-derived value, a
+  legacy doc that carried one would load with an identity disagreeing with the
+  freshly minted numeric `id`, so it must refuse. Every *other* `setdefault` in
+  `_enrich_raw` (`related`, `aliases`, `same_as`, `scope`, `source_refs`,
+  `relations`, `evidence_refs`, `xrefs`, `provisional`, `deprecated_ids`,
+  `ontology_terms`) is an **authored** field with an empty default, not
+  runtime-only. `profile` is also defaulted there (`sources.py:884-892`) but
+  **only when absent**, so an authored `profile` is legitimately preserved; it is
+  deliberately left **authorable** (not in RUNTIME_ONLY), consistent with the
+  kind-descriptor contract. A legacy doc carrying any of the five RUNTIME_ONLY
+  keys in authored frontmatter **refuses** planning.
 - **LEGACY_ALIAS** — the named legacy spellings the projection rewrites (`type`,
   `date`, `related_questions`, `related_specs`).
 
@@ -172,7 +180,7 @@ and the LEGACY_ALIAS rewrite set are enumerated.
 | existing `aliases` | `aliases` | Preserved; the old id is appended and the list order-preservingly deduplicated (identity contract below). |
 | `supersedes`, `superseded_by` (and the other 9 rewriter-handled keys) | (identity) | Preserved; their `spec:` values **do** get intra-batch id substitution (they are in `_REMOVABLE_FRONTMATTER_REF_KEYS`). |
 | any other authored / extension key | (identity) | Preserved verbatim (`extra="allow"`); **not** substituted (the rewriter cannot see it) — a migrating-spec value here stays alias/identity-covered. |
-| RUNTIME_ONLY key (`project`, `file_path`, `content`, `content_preview`) | — | **Refuse** planning, naming the key and file — load-derived, not authorable. |
+| RUNTIME_ONLY key (`project`, `file_path`, `content`, `content_preview`, `canonical_id`) | — | **Refuse** planning, naming the key and file — load-derived, not authorable. |
 
 ### Status adjudication
 
@@ -298,6 +306,11 @@ composes a **new** coordinator from the extractable low-level primitives —
 `_snapshot`/`_restore` (arbitrary path list + `restrict` set), `claim_number_in_dir`,
 `apply_reference_rewrite` (already batch-friendly: `written` accumulator +
 `exclude`), and `audit_moved_references` — welding none of them into per-doc order.
+`claim_number_in_dir` itself gets one **behavior-preserving hardening**
+(`entity_reservation.py`): after its `O_CREAT|O_EXCL` open proves ownership, a
+failed write unlinks the primitive's own partial file before re-raising, so a
+mid-`claim` crash leaves nothing behind for any caller (see "Move all"). This is
+the only edit to an existing primitive; the rest are consumed unchanged.
 
 ### Deterministic canonical id (number + slug)
 
@@ -373,17 +386,22 @@ The single corpus-wide `apply_reference_rewrite` then rewrites only the
    any refusal aborts the whole batch.**
 2. **Snapshot all** — one `_snapshot` over the union of every source, every
    destination, and every non-migrating referrer named in the merged report.
-3. **Move all** — per doc: verify source SHA; **add the destination to `mutated`
-   *before* calling `claim_number_in_dir`**, then claim + write the
-   projected+rebased+substituted entity, then unlink the source. The
-   pre-registration is required because `claim_number_in_dir`
-   (`entity_reservation.py:201-203`) writes with `open(path,"x")` and only
-   `return`s the path on success — a mid-write failure leaves a **partial
-   destination** the coordinator would otherwise never have recorded, so
-   `_restore` (dest snapshotted absent) would not remove it. The source enters
-   `mutated` after its unlink. (A future hardening of `claim_number_in_dir` to
-   clean its own partial file is noted out of scope; the coordinator's
-   pre-registration covers the batch today.)
+3. **Move all** — per doc: verify source SHA; call `claim_number_in_dir` to
+   claim + write the projected+rebased+substituted entity; **add the destination
+   to `mutated` only after the claim returns successfully**; then unlink the
+   source and add it to `mutated`. The coordinator must **not** pre-register the
+   destination before the claim: between our snapshot (dest recorded **absent**)
+   and our claim, a concurrent writer could create that exact path, and a
+   pre-registered `mutated` entry would then make `_restore` delete the
+   bystander's file. Instead, `claim_number_in_dir` is **hardened** to clean up
+   after itself: `open(path,"x")` (O_CREAT|O_EXCL) succeeding *proves* the
+   coordinator owns that path (no bystander held it), so if the subsequent
+   `handle.write(text)` fails the primitive unlinks its own partial file before
+   re-raising (`entity_reservation.py:201-203`, wrap the write body in
+   `try/except` that unlinks on failure). Ownership-proven cleanup and
+   claim-then-register together give both rollback completeness and
+   concurrent-writer safety: the coordinator only ever records — and only ever
+   restores — paths a successful claim confirmed it owns.
 4. **Replay once** — a single `apply_reference_rewrite` over the merged report
    (same exclusion as plan), accumulating `written`.
 5. **Audit all** — `audit_moved_references` for every moved destination.
@@ -518,7 +536,7 @@ Tests assert this schema and every `flip_ready` transition.
 Planning refuses (writes nothing) on: a legacy spec doc without a declared `id:`
 or `title`; `type`/`kind` disagreement; an unmappable legacy status; a
 `created`/`updated` still absent after date projection; a RUNTIME_ONLY frontmatter
-key (`project`, `file_path`, `content`, `content_preview`); a duplicate old id in
+key (`project`, `file_path`, `content`, `content_preview`, `canonical_id`); a duplicate old id in
 the batch; any
 batch id or preserved alias colliding with an existing canonical id / alias /
 archive token or with another batch member (the Component 2 collision preflight);
@@ -544,7 +562,8 @@ doc):
   `related` preserved and deduplicated (order-preserving), old id appended to an
   existing `aliases` list and deduplicated, and an authored **`supersedes` key
   survives** untouched; assert `status: approved` **refuses**; assert a
-  RUNTIME_ONLY key (`content`) refuses; assert a doc with `created` but no
+  RUNTIME_ONLY key (`content`) refuses; assert an authored `canonical_id:`
+  refuses (it would otherwise override the minted numeric id); assert a doc with `created` but no
   `updated` and no `date` **refuses**; assert mappable statuses (`design→draft`,
   `implemented→complete`) project.
 - **Canonical id**: `slug == derive_slug(title)` even when the old id/filename
@@ -584,9 +603,10 @@ doc):
 - **Transaction/resume**: apply relocates all docs, rewrites the covered refs
   (including an intra-batch spec→spec ref rewritten to its neighbor's new id),
   audits, and leaves a loadable tree (migrated entities build with their aliases
-  and no `AliasCollisionError`); an **injected write failure mid-`claim` leaves a
-  partial destination that global restore removes** (proving the pre-registration
-  in "Move all"); a per-path resume performs each remaining path **by its role's
+  and no `AliasCollisionError`); an **injected write failure mid-`claim` leaves no
+  partial destination behind** (proving `claim_number_in_dir`'s
+  ownership-proven self-cleanup), and the batch is left fully rolled back; a
+  per-path resume performs each remaining path **by its role's
   op** (moved-dest re-claimed, referrer atomic-replaced from its stored postimage,
   moved-source unlinked), then **runs `audit_moved_references` per destination**,
   without re-planning or re-running `apply_reference_rewrite`; a journaled path
@@ -628,6 +648,10 @@ mitigated by composing only the audited primitives, one global snapshot/restore,
 the per-doc claim + hash + drift gates inherited from `apply_import`, and a
 resume journal. The heavy real-world blast radius (NS's ~151 references) sits
 entirely behind the out-of-scope per-repo migrations, and the alias safety-net
-plus the honest (surface × target) report mean an un-rewritten reference resolves
-rather than dangles once the flip finally lands — with `discusses` the one
-documented exception that must be retargeted by hand.
+plus the honest (surface × target) report mean an un-rewritten **resolving**
+reference keeps resolving via the old id → `aliases` mapping rather than dangling
+once the flip finally lands. Two documented exceptions do **not** resolve and are
+reported as manual-retarget, never silently fixed: `discusses`/membership refs
+(which the alias net cannot save — a resolved `spec:` target is not a valid
+bundle) and identity-preserved inert canonical-id mentions in prose (deliberately
+left as text, not references).
