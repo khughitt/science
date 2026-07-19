@@ -168,7 +168,7 @@ an already-numbered spec.
 groups: **rewritten** (auto-repointed), **alias_resolved** (resolves via the old-id
 alias, optional cleanup), **identity_preserved** (inert prose/key mentions),
 **unchanged** (already points at a live numeric spec), and **manual_retarget**
-(`discusses`/membership refs and unresolved ids — a human must fix these).
+(`discusses` frames and unresolved ids — a human must fix these).
 
 **Flip-readiness.** `flip_ready` is `true` only when no un-relocated legacy spec, no
 `kind: spec` file at a singleton home, and no `manual_retarget` reference remains,

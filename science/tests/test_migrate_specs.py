@@ -285,6 +285,17 @@ def test_allocation_refuses_relocation_number_taken_at_home(tmp_path: Path) -> N
         allocate_ids(project, discover_specs(project).legacy)
 
 
+def test_allocation_refuses_two_preserved_relocations_sharing_a_number(tmp_path: Path) -> None:
+    # Two out-of-home already-numeric specs both keep number 7. Neither is committed, so both pass
+    # `_number_taken_at_home`; without a batch-internal guard the second would only detonate at the
+    # apply-time `claim`. The plan must refuse so the dry run predicts the apply.
+    project = _spec_project(tmp_path)
+    _write(project / "doc/plans/a.md", {"id": "spec:0007-alpha", "type": "spec", "title": "Alpha"})
+    _write(project / "doc/specs/b.md", {"id": "spec:0007-beta", "type": "spec", "title": "Beta"})
+    with pytest.raises(SpecMigrationRefused, match="another migrating spec"):
+        allocate_ids(project, discover_specs(project).legacy)
+
+
 def test_allocation_mixed_batch_skips_preserved_number(tmp_path: Path) -> None:
     project = _spec_project(tmp_path)
     _write(project / "doc/plans/keep.md", {"id": "spec:0001-keep", "type": "spec", "title": "Keep It"})
@@ -613,6 +624,24 @@ def test_migrate_apply_refuses_incomplete_scan_before_any_mutation(tmp_path: Pat
     assert not list((project / "entities/specs").glob("*.md"))      # no destination minted
     assert ref.read_text(encoding="utf-8") == ref_pre               # referrer untouched
     assert not (project / JOURNAL_PATH).exists()                    # no journal written
+
+
+def test_migrate_apply_accepts_crlf_authored_source(tmp_path: Path) -> None:
+    # A legacy spec authored with CRLF line endings (plausible in the older/loose repos this targets).
+    # The plan-time preimage hashes the raw bytes; the apply-time drift check must hash raw bytes too,
+    # else universal-newline translation would make a pristine CRLF source mismatch its own preimage
+    # and refuse forever.
+    project = _spec_project(tmp_path)
+    (project / "doc/plans").mkdir(parents=True, exist_ok=True)
+    crlf = "---\r\nid: spec:date-a\r\ntype: spec\r\ntitle: Alpha\r\ndate: '2026-01-01'\r\nstatus: draft\r\n---\r\n\r\nBody.\r\n"
+    (project / "doc/plans/a.md").write_bytes(crlf.encode("utf-8"))
+
+    report = migrate(project, apply=True)
+
+    assert not (project / "doc/plans/a.md").exists()
+    assert (project / "entities/specs/0001-alpha.md").exists()
+    assert not (project / JOURNAL_PATH).exists()
+    assert report["legacy_spec_count"] == 0
 
 
 def _journal(project: Path, entries: list[dict]) -> None:

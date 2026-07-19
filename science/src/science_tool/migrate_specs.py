@@ -358,6 +358,14 @@ def allocate_ids(project_root: Path, legacy: list[LegacySpec]) -> Allocation:
                 f"{spec.source_rel}: already-numeric spec {spec.old_id} keeps number "
                 f"{spec.already_numeric:04d}, which is taken at {spec_root}/. Resolve the clash."
             )
+        if spec.already_numeric in forbidden:
+            # A second preserved relocation wants a number an earlier one already spends. Both would
+            # pass `_number_taken_at_home` (neither is committed yet) and detonate at apply on the
+            # second `claim`; refuse in the plan so the dry run predicts the apply.
+            raise SpecMigrationRefused(
+                f"{spec.source_rel}: already-numeric spec {spec.old_id} keeps number "
+                f"{spec.already_numeric:04d}, which another migrating spec also keeps. Resolve the clash."
+            )
         local = spec.old_id.split(":", 1)[1]
         new_local[spec.old_id] = local
         dest_rel[spec.old_id] = f"{spec_root}/{local}.md"
@@ -812,8 +820,10 @@ def _apply_transaction(project_root: Path, txn: Transaction) -> None:
     try:
         for dest in txn.destinations:
             source = project_root / dest.source_rel
-            current = source.read_text(encoding="utf-8")
-            if hashlib.sha256(current.encode("utf-8")).hexdigest() != dest.preimage_sha256:
+            # Hash the RAW bytes, exactly as the plan-time preimage and the journal do. Reading as
+            # text would universal-newline-translate CRLF -> LF, so a CRLF-authored source would
+            # mismatch its own preimage on a pristine tree and refuse forever.
+            if hashlib.sha256(source.read_bytes()).hexdigest() != dest.preimage_sha256:
                 raise SpecMigrationRefused(f"{dest.source_rel} changed since planning; re-run the preview.")
             # dest joins `mutated` only AFTER the claim returns (claim self-cleans its own partial).
             claim_number_in_dir(project_root, "spec", dest.number, dest.local_part, dest.rendered_text)
