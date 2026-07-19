@@ -106,9 +106,16 @@ exactly one of **four outcomes** — a discriminated assessment, not a boolean p
     `task_links`, `input`), paper identity (`doi`/`pmid`/`url`/`bibkey`),
     interpretation `artifact`/`artifacts`, or an owning `tNNN` named in the
     title — covers every claim in the document.
-  - *local scope* — a resolvable `task:tNNN`, `[@citekey]`, `cite:key`, or
-    `dataset:slug` reference in the **same paragraph** — covers only that
-    paragraph.
+  - *local scope* — a resolvable reference in the **same paragraph** covers
+    only that paragraph: `task:tNNN`, `[@citekey]`, `cite:key`, or a
+    **provenance-bearing typed entity-ref** (interpretation, report, synthesis,
+    observation, finding, evidence-line, validation-report, experiment,
+    workflow-run, data-package, dataset, paper, book, source, pre-registration,
+    plan), cited full-id or as a unique numeric prefix (`interpretation:0013`).
+    Topical/framing kinds (hypothesis, question, topic, theme, concept,
+    discussion, …) are **not** anchors — citing one next to a number is
+    adjacency, not provenance. An ambiguous numeric prefix (two owners) or a
+    non-numeric prefix does not resolve.
 - **Unanchored** — the genuine signal. No structural exclusion, no stipulated
   marker, and no resolvable source at either scope. This is what surfaces as a
   `numeric-anchor` finding.
@@ -153,6 +160,11 @@ fabricated references to newly surface as findings alongside the much larger
 drop in false positives from entity/local-scope anchoring. See
 [`docs/plans/2026-07-18-numeric-provenance-check-design.md`](../plans/2026-07-18-numeric-provenance-check-design.md)
 for the full redesign rationale and empirical grounding.
+
+The same existence check governs entity-ref anchors: a typed entity-ref
+resolves only against the project's frontmatter `id:` index (exact id or a
+unique digit-lead prefix), so a fabricated `interpretation:9999` or an
+ambiguous prefix leaves the claim flagged.
 
 ## numeric-verification (structured numeric claims)
 
