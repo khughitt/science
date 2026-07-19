@@ -117,6 +117,58 @@ def test_missing_png_content_false_is_error_not_pass(tmp_path):
     assert isinstance(resolved, ArtifactError)
 
 
+def test_directory_ref_is_rejected_content_true(tmp_path):
+    project_root = tmp_path / "project"
+    data_root = tmp_path / "data"
+    project_root.mkdir()
+    data_root.mkdir()
+    (project_root / "some_dir").mkdir()
+
+    resolved = resolve_artifact("some_dir", project_root, data_root,
+                                 max_json_bytes=1_000_000, max_feather_bytes=1_000_000,
+                                 content=True)
+
+    assert isinstance(resolved, ArtifactError)
+
+
+def test_directory_ref_is_rejected_content_false(tmp_path):
+    project_root = tmp_path / "project"
+    data_root = tmp_path / "data"
+    project_root.mkdir()
+    data_root.mkdir()
+    (project_root / "some_dir").mkdir()
+
+    resolved = resolve_artifact("some_dir", project_root, data_root,
+                                 max_json_bytes=1_000_000, max_feather_bytes=1_000_000,
+                                 content=False)
+
+    assert isinstance(resolved, ArtifactError)
+
+
+def test_contained_symlink_to_directory_is_rejected(tmp_path):
+    project_root = tmp_path / "project"
+    data_root = tmp_path / "data"
+    project_root.mkdir()
+    data_root.mkdir()
+    real_dir = project_root / "real_dir"
+    real_dir.mkdir()
+    link = project_root / "dir_link"
+    link.symlink_to(real_dir)
+
+    # Verify the setup: the symlink stays inside root (passes containment)
+    # but resolves to a directory (must fail the regular-file check, not
+    # the containment check).
+    resolved_link = link.resolve(strict=True)
+    assert resolved_link.is_relative_to(project_root.resolve())
+    assert resolved_link.is_dir()
+
+    resolved = resolve_artifact("dir_link", project_root, data_root,
+                                 max_json_bytes=1_000_000, max_feather_bytes=1_000_000,
+                                 content=False)
+
+    assert isinstance(resolved, ArtifactError)
+
+
 def test_real_png_content_false_resolves_opaque(tmp_path):
     project_root = tmp_path / "project"
     data_root = tmp_path / "data"
