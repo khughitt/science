@@ -209,6 +209,47 @@ def test_discovery_reports_singleton_home(tmp_path: Path) -> None:
     assert disc.legacy == []
 
 
+def test_discovery_does_not_crash_on_unparseable_frontmatter(tmp_path: Path) -> None:
+    """A Markdown file whose frontmatter is not valid YAML (mm30's `.ai/templates/gene-note.md`
+    carries `symbol: {{SYMBOL}}` placeholders) must be reported as a scan_skip, never crash the
+    whole command with an uncaught YAML error."""
+    project = _spec_project(tmp_path)
+    (project / "doc/plans").mkdir(parents=True, exist_ok=True)
+    (project / "doc/plans/broken.md").write_text("---\nsymbol: {{SYMBOL}}\n---\n\nBody.\n", encoding="utf-8")
+
+    disc = discover_specs(project)  # must not raise
+
+    assert any(s.path == "doc/plans/broken.md" for s in disc.scan_skips)
+    assert disc.legacy == []
+
+
+def test_discovery_skips_snakemake_tool_dir(tmp_path: Path) -> None:
+    """A vendored Snakemake conda tree is not project content. A `type: spec` doc (or any `spec:`
+    token) buried inside `.snakemake/` must not be discovered — this is the cbioportal false positive."""
+    project = _spec_project(tmp_path)
+    _write(
+        project / ".snakemake/conda/env/doc/plans/a.md",
+        {"id": "spec:2026-01-01-a", "type": "spec", "title": "A"},
+    )
+    disc = discover_specs(project)
+    assert disc.legacy == []
+    assert disc.scan_skips == []
+
+
+def test_discovery_skips_dot_ai_scaffolding(tmp_path: Path) -> None:
+    """`.ai/templates` and `.ai/prompts` are toolkit-canonical scaffolding paths (paths.py). A
+    template there is never an entity: neither discovered nor recorded as a scan_skip, so it cannot
+    hold a project below flip-readiness."""
+    project = _spec_project(tmp_path)
+    (project / ".ai/templates").mkdir(parents=True, exist_ok=True)
+    (project / ".ai/templates/gene-note.md").write_text("---\nsymbol: {{SYMBOL}}\n---\n\nBody.\n", encoding="utf-8")
+
+    disc = discover_specs(project)
+
+    assert disc.legacy == []
+    assert disc.scan_skips == []
+
+
 def _write_sized(path: Path, size: int) -> Path:
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text("x" * size, encoding="utf-8")

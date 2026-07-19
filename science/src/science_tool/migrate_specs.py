@@ -16,6 +16,8 @@ from dataclasses import dataclass
 from pathlib import Path, PurePosixPath
 from typing import Any
 
+import yaml
+
 from science_model.frontmatter import atomic_write_text, render_frontmatter, split_frontmatter
 
 from science_tool.entities import (
@@ -278,7 +280,13 @@ def discover_specs(project_root: Path) -> Discovery:
             scan_skips.append(ScanSkip(path=rel, reason=str(exc)))
             continue
 
-        frontmatter, body = split_frontmatter(text)
+        try:
+            frontmatter, body = split_frontmatter(text)
+        except yaml.YAMLError as exc:
+            # A Markdown file whose frontmatter is not valid YAML (a placeholder template, a
+            # hand-editing typo) is unreadable for discovery — report it, never crash the command.
+            scan_skips.append(ScanSkip(path=rel, reason=f"unparseable frontmatter: {exc}"))
+            continue
         if not frontmatter:
             continue
         if frontmatter.get("type") != "spec" and frontmatter.get("kind") != "spec":

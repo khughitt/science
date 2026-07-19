@@ -76,6 +76,21 @@ def test_skip_dirs_are_honoured(tmp_path: Path) -> None:
     assert names == {"keep.md"}
 
 
+def test_tool_managed_dirs_are_skipped(tmp_path: Path) -> None:
+    """A Snakemake working dir and the `.ai/` agent-scaffolding tree are tool-managed, not project
+    reference surfaces. A `spec:`/link token vendored inside `.snakemake/conda/...` (a real cbioportal
+    false positive) or a placeholder in `.ai/templates/` must never be scanned as a referrer."""
+    (tmp_path / ".snakemake/conda/env/lib").mkdir(parents=True)
+    (tmp_path / ".snakemake/conda/env/lib/test_common.py").write_text("open('spec://x')\n", encoding="utf-8")
+    (tmp_path / ".ai/templates").mkdir(parents=True)
+    (tmp_path / ".ai/templates/gene-note.md").write_text("---\nsymbol: '{{SYMBOL}}'\n---\n", encoding="utf-8")
+    (tmp_path / "keep.md").write_text("x\n", encoding="utf-8")
+
+    names = {p.name for p in iter_scannable_files(tmp_path)}
+
+    assert names == {"keep.md"}
+
+
 def test_oversize_file_is_not_scannable(tmp_path: Path, monkeypatch) -> None:
     """A hundreds-of-MB data file or generated artifact is not a prose reference
     site. Reading it to scan for links is what made a corpus-wide import balloon

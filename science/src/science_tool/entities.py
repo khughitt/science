@@ -1346,12 +1346,17 @@ _REMOVABLE_FRONTMATTER_REF_KEYS: frozenset[str] = frozenset(
 
 # `.worktrees` is this toolkit's own convention; `worktrees` also covers nested linked-worktree
 # containers such as `.claude/worktrees/<agent>/` — another branch's checkout, never project content.
+# `.snakemake` is Snakemake's working dir (vendored conda envs, logs); `.ai` is this toolkit's own
+# agent-scaffolding root (`.ai/templates`, `.ai/prompts` per paths.py) — placeholder templates, not
+# entities. All are tool-managed and never reference surfaces, like `.venv`/`.tox`/`node_modules`.
 _REFERENCE_SCAN_SKIP_DIRS: frozenset[str] = frozenset(
     {
+        ".ai",
         ".git",
         ".mypy_cache",
         ".pytest_cache",
         ".ruff_cache",
+        ".snakemake",
         ".tox",
         ".venv",
         ".worktrees",
