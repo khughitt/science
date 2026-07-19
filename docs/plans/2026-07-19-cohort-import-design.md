@@ -3,7 +3,7 @@ title: Cohort Import for `science entities import` — Design
 status: proposed
 created: '2026-07-19'
 updated: '2026-07-19'
-revision: v2 (folds design-review round 1 — 5 critical + 8 contract fixes)
+revision: v3 (folds design-review round 2 — 2 critical + 1 high + 2 clarifications)
 ---
 
 # Cohort Import — Design
@@ -81,14 +81,32 @@ and only add safety on the failure path.
    "creation began" hook.
 
 2. **Content-override on the reference scanner
-   (`plan_reference_rewrite`/`_scan`, `reference_rewrite.py`).** `_scan` reads
-   each file once from disk (`:311`, `# the ONLY read of this file`). Add an
-   optional `source_overrides: Mapping[str, str]` (rel_path → already-read text);
-   for any path present, the scanner uses the supplied bytes instead of reading.
-   This lets a caller that has **already** read a file (the cohort planner, which
-   reads each source once) feed those exact bytes to the scan, so a source cannot
-   be read twice and produce a torn plan. Default empty ⇒ current behavior;
-   single import is unaffected.
+   (`plan_reference_rewrite`/`_scan`, `reference_rewrite.py`).** `_scan` iterates
+   `iter_scannable_files` (disk enumeration: `rglob`, then a **size filter**,
+   `text_scan.py:90`) and reads each once (`:311`, `# the ONLY read of this
+   file`). Add an optional `source_overrides: Mapping[str, str]` (rel_path →
+   already-read text) that participates in **enumeration**, not just reads —
+   overriding only the read is insufficient, because a cached source deleted,
+   renamed, or grown past the size limit between plan and scan would drop out of
+   `rglob`/size enumeration and never be examined, so a member-local reference in
+   the approved cached text could slip past the independence guard. Contract:
+   - Each override key is validated as a **contained** project-relative path
+     (`resolve_within`) and becomes an **authoritative virtual scan entry**:
+     included even if absent on disk or no longer size-eligible, examined
+     **exactly once**, and deduplicated against the disk enumeration (a key that
+     also enumerates from disk is scanned once, from the override bytes).
+   - `exclude` still wins: an excluded path is not scanned even if an override
+     names it.
+   - The scan runs on `sorted(disk_entries ∪ override_keys)` (minus `exclude`),
+     preserving deterministic report order.
+
+   Default empty ⇒ current behavior. **Single import is unaffected and continues
+   excluding its own source from its inbound scan** (source ∈ `exclude`); it does
+   not pass an override for that source — an override for an excluded path is
+   inert (exclude wins), and feeding one would flip self-reference handling and
+   break byte-equivalent compatibility. Overrides are for the cohort planner's
+   *non-excluded* member sources, whose already-read bytes must drive the
+   independence guard.
 
 ## Public surface
 
@@ -133,18 +151,25 @@ class PlannedMember:            # internal, not persisted
 
 def _plan_member(
     project_root: Path, source_rel: str, text: str, *, kind: str, number: int,
-    status: str | None = None, today: date | None = None,
+    status: str | None = None, title: str | None = None, slug: str | None = None,
+    today: date | None = None,
 ) -> PlannedMember:
-    """From ALREADY-READ source bytes: construct identity, rebase the member's
-    OWN outbound links into rendered_text, run prospective-write validation, and
-    render. Forced number; NO inbound scan; NO second read of the source."""
+    """From ALREADY-READ source bytes: construct identity (honoring the optional
+    `title`/`slug` overrides exactly as single import does today), rebase the
+    member's OWN outbound links into rendered_text, run prospective-write
+    validation, and render. Forced number; NO inbound scan; NO second read."""
 ```
 
-`plan_import` becomes: read the source once → `_plan_member(...,
-number=propose_number(root, kind))` → its existing single-source inbound scan
-(feeding the cached text via `source_overrides`) → attach `PlannedMember.warnings`
-to the single plan. Behavior-preserving for single import. `plan_cohort_import`
-calls `_plan_member` per cached source with forced sequential numbers.
+`title`/`slug` are retained so the single-import path keeps its `--title`/`--slug`
+behavior. `plan_import` becomes: read the source once → `_plan_member(...,
+number=propose_number(root, kind), title=<CLI --title>, slug=<CLI --slug>)` → its
+existing single-source inbound scan (feeding the cached text via
+`source_overrides` — see the compat note in *Primitive changes*: the single
+source stays in `exclude`, so it passes **no** override for itself) → attach
+`PlannedMember.warnings` to the single plan. Behavior-preserving for single
+import. `plan_cohort_import` calls `_plan_member` per cached source with forced
+sequential numbers and `title=None, slug=None` (cohorts reject per-member
+title/slug).
 
 ### `ImportMember` (persisted, nested)
 
@@ -225,19 +250,27 @@ Mirrors single `apply_import`'s snapshot + mutated-set self-rollback, cohort-wid
 3. **Re-derive and compare the external report from the LIVE corpus** *before*
    any snapshot: `plan_reference_rewrite(root, {source→entity_id}, {source→dest},
    exclude=exclude | {all sources, all dests, plan artifact})`; require the
-   re-derived report's substitution maps **and** `edits` to equal the frozen
-   `plan.ref_report` **exactly**. This proves the persisted edit paths against the
-   real corpus so a hand-edited (but correctly re-enveloped) plan cannot feed
-   escaping/incoherent paths into the snapshot. (The subsequent
-   `apply_reference_rewrite` retains its own immediate pre-write re-derivation to
-   close the write-time race.)
+   re-derived `RewriteReport` to equal the frozen `plan.ref_report` **in its
+   entirety** — substitution maps, `edits`, **and** every other collection
+   (`manual`, `skipped`, …) — not merely its maps and edits. A divergence in any
+   field means the live corpus no longer matches what was approved, so refuse.
+   This proves the persisted edit paths against the real corpus so a hand-edited
+   (but correctly re-enveloped) plan cannot feed escaping/incoherent paths into
+   the snapshot. (The subsequent `apply_reference_rewrite` retains its own
+   immediate pre-write re-derivation to close the write-time race.)
 4. **Snapshot** the now-verified read set: every source, every destination, and
    every file named in the (verified) `ref_report.edits`.
-5. **Claim the number block:** for each member in order,
-   `claim_number_in_dir(root, plan.kind, number_i, dest_stem_i, rendered_text_i)`
-   (self-cleaning — a caught failure leaves no destination); assert the returned
-   path == the validated `dest_rel_i`; add the destination to the mutated set on
-   success. Any failed claim → roll back all → raise.
+5. **Claim the number block:** for each member in order, **first prove** the
+   destination the primitive will create — `plan.kind` + `dest_stem_i` resolves to
+   exactly the validated `dest_rel_i` — *before* calling
+   `claim_number_in_dir(root, plan.kind, number_i, dest_stem_i, rendered_text_i)`.
+   The claim is self-cleaning (a caught failure leaves no destination). On a
+   successful return, **immediately** record the returned path in the mutated set
+   (so rollback owns the file the claim just created); then a defensive
+   postcondition (returned path == `dest_rel_i`) — if it ever fires despite the
+   pre-proof, explicitly unlink that exclusively-created path and raise. Any
+   failed claim → roll back all → raise. The path is proven before creation, not
+   after, so no created file can escape the mutated set.
 6. **Unlink sources** (each after its destination is claimed) → mutated set.
 7. **Inbound rewrite:** `apply_reference_rewrite(root, plan.ref_report,
    exclude=exclude | {all sources, all dests}, written=...)` → mutated set; drift
@@ -252,10 +285,15 @@ Rollback restores only paths this transaction mutated — the snapshot bounds wh
 ## Apply-plan dispatch (CLI)
 
 Read raw bytes once → `verify_envelope` (single read before parse) → parse JSON
-once → dispatch on the discriminator: `plan_type == "cohort-import"` →
-`parse_cohort_import_plan` + `apply_cohort_import`; **no** `plan_type` (legacy) →
-`parse_import_plan` + `apply_import`; any other `plan_type` or unknown
-`schema_version` → clean error, no mutation.
+once → dispatch on the discriminator:
+- `plan_type == "cohort-import"` and known `schema_version` →
+  `parse_cohort_import_plan` + `apply_cohort_import`.
+- **no** `plan_type` **and no** `schema_version` (legacy single plan) →
+  `parse_import_plan` + `apply_import`.
+- any other `plan_type`, an unknown `schema_version`, **or** a plan with a
+  `schema_version` but no `plan_type` → clean error, no mutation. A version
+  stamp without a discriminator is not treated as permissive legacy; it is
+  rejected rather than silently routed to the single-plan parser.
 
 ## Error handling
 
@@ -272,7 +310,7 @@ once → dispatch on the discriminator: `plan_type == "cohort-import"` →
 | claim path ≠ validated destination | apply | whole-cohort rollback + raise |
 | ref-rewrite drift / audit dangling ref | apply | whole-cohort rollback + raise |
 | envelope missing / sha mismatch | apply | existing upstream refusal, no mutation |
-| unknown `plan_type` / `schema_version` | apply | clean error, no mutation |
+| unknown `plan_type` / `schema_version`, or `schema_version` with no `plan_type` | apply | clean error, no mutation |
 
 ## Testing
 
@@ -281,6 +319,13 @@ once → dispatch on the discriminator: `plan_type == "cohort-import"` →
   links repointed in one pass; `applied` is the id list in member order.
 - **One-read:** a source whose bytes would differ between two reads is planned
   from a single cached read (scanner `source_overrides`) — no torn plan.
+- **Override enumeration:** a member source that is deleted / renamed / grown past
+  the scan-size limit **after** its cached read is still examined by the
+  independence guard via its override entry (proves overrides drive enumeration,
+  not just reads); an excluded path with an override is not scanned (exclude wins).
+- **Single-import title/slug preserved:** `--title`/`--slug` on a single source
+  still set the entity's title/slug end-to-end (byte-equal to today), confirming
+  the `_plan_member` extraction kept those parameters.
 - **Independence guard:** member B links member A (markdown) → reject; a bare-prose
   path mention of a member → reject (proves the `manual` branch); a self-link →
   reject.
@@ -309,8 +354,12 @@ once → dispatch on the discriminator: `plan_type == "cohort-import"` →
 - **Regression / compat:** single-source import unchanged end-to-end (byte-equal
   saved plan, object-shaped `applied`); `_plan_member` extraction behavior-preserving;
   a legacy single-plan file (no `plan_type`) still applies via the single path.
-- **Discriminator:** unknown `plan_type` and unknown `schema_version` each refuse
-  cleanly.
+- **Discriminator:** unknown `plan_type`, unknown `schema_version`, and a
+  `schema_version` present with **no** `plan_type` each refuse cleanly; a legacy
+  plan with neither field still routes to the single path.
+- **Claim-path proof:** the destination is proven from `plan.kind`+`dest_stem`
+  before the primitive runs; a forced post-claim mismatch unlinks the
+  exclusively-created file (nothing escapes the mutated set).
 
 ## Versioning
 
