@@ -31,7 +31,7 @@ IssueKind = Literal[
     "invalid-provenance",
 ]
 
-MISSING_PROVENANCE_SEVERITY: Severity = "warn"
+MISSING_PROVENANCE_SEVERITY: Severity = "error"
 
 ProvenanceState = Literal[
     "attributed", "internal", "undeclared", "contradiction", "bad-marker", "malformed-sources"

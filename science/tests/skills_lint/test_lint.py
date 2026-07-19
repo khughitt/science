@@ -247,13 +247,52 @@ def test_classify_provenance_outcomes() -> None:
     assert classify_provenance({"sources": "oops"}) == "malformed-sources"
 
 
-def test_undeclared_leaf_yields_warn(tmp_path: Path) -> None:
+def test_undeclared_leaf_yields_error_and_nonzero_exit(tmp_path: Path) -> None:
+    from click.testing import CliRunner
+    from science_tool.cli import main
     from science_tool.skills_lint.lint import check_provenance
     leaf = _leaf(tmp_path, "leaf.md", "---\nname: x\ndescription: d\n---\n# X\n")
     issues = check_provenance(leaf)
-    assert len(issues) == 1
     assert issues[0].kind == "missing-provenance"
-    assert issues[0].severity == "warn"
+    assert issues[0].severity == "error"
+
+    skills_root = tmp_path / "skills"
+    skills_root.mkdir()
+    # INDEX.md is error-free so the ONLY error is the ratcheted missing-provenance
+    # on leaf.md — otherwise exit==1 could pass for the wrong reason.
+    (skills_root / "INDEX.md").write_text(
+        "---\nname: idx\ndescription: d\n---\n# Index\n`skills/leaf.md`\n## Companion Skills\n- none\n",
+        encoding="utf-8",
+    )
+    (skills_root / "leaf.md").write_text(
+        "---\nname: leaf\ndescription: d\n---\n# Leaf\n## Companion Skills\n- none\n",
+        encoding="utf-8",
+    )
+    result = CliRunner().invoke(main, ["skills", "lint", "--root", str(skills_root)])
+    assert result.exit_code == 1  # ratcheted: undeclared now blocks
+    assert "missing-provenance" in result.output
+
+
+def test_warn_only_run_still_exits_zero_synthetic(tmp_path: Path, monkeypatch) -> None:
+    # Infrastructure guard: after the ratchet, NO shipped rule is WARN, so exercise
+    # the WARN-only exit path through the REAL CLI with a synthetic WARN issue —
+    # proving exit code and severity rendering, not just the _has_error predicate.
+    import json
+    from click.testing import CliRunner
+    from science_tool.cli import main
+    from science_tool.skills_lint.lint import SkillIssue
+    synthetic = [SkillIssue(Path("synthetic.md"), "missing-provenance", severity="warn")]
+    monkeypatch.setattr("science_tool.skills_lint.cli.check_skills", lambda root: list(synthetic))
+    root = tmp_path / "skills"
+    root.mkdir()
+
+    js = CliRunner().invoke(main, ["skills", "lint", "--root", str(root), "--format", "json"])
+    assert js.exit_code == 0  # WARN-only still exits 0
+    assert ("missing-provenance", "warn") in {(i["kind"], i["severity"]) for i in json.loads(js.output)["issues"]}
+
+    txt = CliRunner().invoke(main, ["skills", "lint", "--root", str(root)])
+    assert txt.exit_code == 0
+    assert "warn: synthetic.md: missing-provenance" in txt.output  # severity-leading render
 
 
 def test_internal_and_attributed_yield_no_coverage_finding(tmp_path: Path) -> None:
@@ -363,23 +402,3 @@ def test_index_md_excluded_from_coverage(tmp_path: Path) -> None:
     assert provenance_paths == set()
 
 
-def test_warn_only_run_exits_zero(tmp_path: Path) -> None:
-    import json
-    from click.testing import CliRunner
-    from science_tool.cli import main
-    skills_root = tmp_path / "skills"
-    skills_root.mkdir()
-    # INDEX.md itself must be error-free (valid frontmatter + companion section +
-    # it indexes leaf.md), so the ONLY finding is leaf.md's WARN.
-    (skills_root / "INDEX.md").write_text(
-        "---\nname: idx\ndescription: d\n---\n# Index\n`skills/leaf.md`\n## Companion Skills\n- none\n",
-        encoding="utf-8",
-    )
-    (skills_root / "leaf.md").write_text(
-        "---\nname: leaf\ndescription: d\n---\n# Leaf\n## Companion Skills\n- none\n",
-        encoding="utf-8",
-    )
-    result = CliRunner().invoke(main, ["skills", "lint", "--root", str(skills_root), "--format", "json"])
-    assert result.exit_code == 0  # WARN-only => exit 0
-    kinds = {(i["kind"], i["severity"]) for i in json.loads(result.output)["issues"]}
-    assert ("missing-provenance", "warn") in kinds  # severity reported in JSON
