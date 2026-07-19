@@ -220,11 +220,30 @@ def test_exclude_wins_over_override(tmp_path):
         source_overrides={"doc/loose.md": "# L\n\nsee [other](other.md)\n"},
     )
     assert not any(h.rel_path == "doc/loose.md" for h in report.hits)
+
+
+def test_override_examines_oversize_file_the_disk_scan_would_drop(tmp_path):
+    """A file too big for the disk size filter is still examined via its override."""
+    from science_tool.text_scan import MAX_SCANNABLE_BYTES
+    root = _corpus(tmp_path)
+    (root / "doc").mkdir()
+    # On-disk file exceeds the scan-size limit, so iter_scannable_files drops it.
+    big = "# L\n\n" + ("x " * MAX_SCANNABLE_BYTES) + "\nsee [other](other.md)\n"
+    (root / "doc/loose.md").write_text(big, encoding="utf-8")
+    assert (root / "doc/loose.md").stat().st_size > MAX_SCANNABLE_BYTES
+    # The override supplies a small text with the link; enumeration must include it.
+    report = plan_reference_rewrite(
+        root,
+        id_substitutions={"doc/other.md": "plan:0002-other"},
+        path_substitutions={"doc/other.md": "entities/plans/0002-other.md"},
+        source_overrides={"doc/loose.md": "# L\n\nsee [other](other.md)\n"},
+    )
+    assert any(h.rel_path == "doc/loose.md" for h in report.hits)
 ```
 
 - [ ] **Step 2: Run tests to verify they fail**
 
-Run: `cd science && uv run --frozen pytest tests/test_reference_rewrite.py -k override_or_exclude -v` (the three new tests)
+Run: `cd science && uv run --frozen pytest tests/test_reference_rewrite.py -k "override or exclude" -v` (the four new tests; the bare `override_or_exclude` token matches no test name and would deselect everything)
 Expected: FAIL — `plan_reference_rewrite() got an unexpected keyword argument 'source_overrides'`.
 
 - [ ] **Step 3: Write minimal implementation**
@@ -546,7 +565,16 @@ Now refactor `plan_import` to delegate. Replace its body from the source read th
         raise EntityImportError(f"{source} is not valid UTF-8: {exc}") from exc
 
     source_rel = source.relative_to(project_root).as_posix()
-    number = propose_number(project_root, kind)
+    # propose_number resolves the path policy and can raise a bare KeyError (kind
+    # unknown to both the built-in table and the local manifest) or EntityCommandError
+    # (non-numeric kind); translate both, as the pre-refactor plan_import did, so the
+    # bad-kind regression test still sees EntityImportError.
+    try:
+        number = propose_number(project_root, kind)
+    except KeyError as exc:
+        raise EntityImportError(f"unknown entity kind: {kind}") from exc
+    except EntityCommandError as exc:
+        raise EntityImportError(str(exc)) from exc
     planned = _plan_member(
         project_root, source_rel, text,
         kind=kind, number=number, status=status, title=title, slug=slug, today=today,
@@ -802,16 +830,63 @@ def test_cohort_rejects_member_linking_member(tmp_path):
     root = _project(tmp_path)
     a = _loose(root, "doc/plans/a.md", "# Alpha\n\nsee [b](b.md)\n")
     b = _loose(root, "doc/plans/b.md", "# Beta\n\nbody\n")
-    with pytest.raises(RefDependentCohortError):
+    with pytest.raises(RefDependentCohortError) as excinfo:
         plan_cohort_import(root, [a, b], kind="plan")
+    # The error names the offending source -> target PAIR (design v4).
+    msg = str(excinfo.value)
+    assert "doc/plans/a.md" in msg and "doc/plans/b.md" in msg
 
 
 def test_cohort_rejects_bare_path_mention_of_member(tmp_path):
     root = _project(tmp_path)
     a = _loose(root, "doc/plans/a.md", "# Alpha\n\nmentions doc/plans/b.md inline\n")
     b = _loose(root, "doc/plans/b.md", "# Beta\n\nbody\n")
-    with pytest.raises(RefDependentCohortError):
+    with pytest.raises(RefDependentCohortError) as excinfo:
         plan_cohort_import(root, [a, b], kind="plan")
+    assert "doc/plans/a.md" in str(excinfo.value) and "doc/plans/b.md" in str(excinfo.value)
+
+
+def test_cohort_rejects_self_link(tmp_path):
+    root = _project(tmp_path)
+    a = _loose(root, "doc/plans/a.md", "# Alpha\n\nsee [me](a.md)\n")
+    b = _loose(root, "doc/plans/b.md", "# Beta\n\nbody\n")
+    with pytest.raises(RefDependentCohortError) as excinfo:
+        plan_cohort_import(root, [a, b], kind="plan")
+    # A self-reference maps the offending source to itself.
+    assert "doc/plans/a.md -> doc/plans/a.md" in str(excinfo.value)
+
+
+def test_cohort_runs_one_combined_scan_with_cached_overrides(tmp_path, monkeypatch):
+    """The planner reads each source once and feeds those exact bytes to ONE scan
+    via source_overrides — no per-member scan, no second read of any source."""
+    root = _project(tmp_path)
+    a = _loose(root, "doc/plans/a.md", "# Alpha\n\nbody\n")
+    b = _loose(root, "doc/plans/b.md", "# Beta\n\nbody\n")
+    import science_tool.entity_import as ei
+    calls: list[dict] = []
+    real = ei.plan_reference_rewrite
+
+    def spy(project_root, **kwargs):
+        calls.append(kwargs)
+        return real(project_root, **kwargs)
+
+    monkeypatch.setattr(ei, "plan_reference_rewrite", spy)
+    plan_cohort_import(root, [a, b], kind="plan")
+    assert len(calls) == 1  # ONE combined scan, not one per member
+    overrides = calls[0]["source_overrides"]
+    assert set(overrides) == {"doc/plans/a.md", "doc/plans/b.md"}
+    assert overrides["doc/plans/a.md"] == "# Alpha\n\nbody\n"  # the cached bytes
+
+
+def test_cohort_preserves_external_manual_finding(tmp_path):
+    """An auto-unrewritable reference in an EXTERNAL file (a bare prose path
+    mention of a member) is surfaced in ref_report.manual, not a rejection."""
+    root = _project(tmp_path)
+    a = _loose(root, "doc/plans/a.md", "# Alpha\n\nbody\n")
+    b = _loose(root, "doc/plans/b.md", "# Beta\n\nbody\n")
+    _loose(root, "doc/notes.md", "the file doc/plans/a.md is worth reading\n")
+    plan = plan_cohort_import(root, [a, b], kind="plan")
+    assert any(m.rel_path == "doc/notes.md" for m in plan.ref_report.manual)
 
 
 def test_cohort_requires_two_sources(tmp_path):
@@ -875,7 +950,12 @@ def plan_cohort_import(
         cache[rel] = text
         order.append(rel)
 
-    base = propose_number(project_root, kind)
+    try:
+        base = propose_number(project_root, kind)
+    except KeyError as exc:
+        raise EntityImportError(f"unknown entity kind: {kind}") from exc
+    except EntityCommandError as exc:
+        raise EntityImportError(str(exc)) from exc
     planned: list[PlannedMember] = []
     for i, rel in enumerate(order):
         planned.append(
@@ -897,13 +977,31 @@ def plan_cohort_import(
         exclude=exclude,
         source_overrides=cache,
     )
-    local_hits = [h.rel_path for h in report.hits if h.rel_path in member_rels]
-    local_manual = [m.rel_path for m in report.manual if m.rel_path in member_rels]
-    if local_hits or local_manual:
-        offenders = sorted(set(local_hits) | set(local_manual))
+    # Name the offending (source -> target) PAIRS, per design v4. Cross-member
+    # references in loose documents are always PATH-based (a member is not yet an
+    # entity, so it has no id to cite), so the target member's source path or its
+    # basename appears in the finding's original text: `RefHit.old` for a link/
+    # frontmatter hit, `ManualHit.text` for a bare mention. A self-reference maps
+    # the offending source to itself, which is likewise rejected.
+    def _target_source(text_field: str) -> str:
+        for m in members:
+            name = PurePosixPath(m.source_rel).name
+            if m.source_rel in text_field or name in text_field:
+                return m.source_rel
+        return "another member"
+
+    pairs: list[tuple[str, str]] = []
+    for h in report.hits:
+        if h.rel_path in member_rels:
+            pairs.append((h.rel_path, _target_source(h.old)))
+    for man in report.manual:
+        if man.rel_path in member_rels:
+            pairs.append((man.rel_path, _target_source(man.text)))
+    if pairs:
+        rendered = ", ".join(f"{src} -> {tgt}" for src, tgt in sorted(set(pairs)))
         raise RefDependentCohortError(
             "cohort members reference each other or themselves; import them in "
-            f"separate batches. Offending member sources: {offenders}"
+            f"separate batches. Offending source -> target pairs: {rendered}"
         )
 
     warnings = sorted(
@@ -1186,19 +1284,102 @@ def test_cohort_apply_survives_mid_claim_source_edit(tmp_path):
     assert not (root / "entities/plans/0001-alpha.md").exists()  # claimed dest rolled back
 
 
-def test_cohort_apply_refuses_hand_edited_ref_report(tmp_path):
-    """A re-enveloped plan whose ref_report was tampered is refused before snapshot."""
+def test_cohort_apply_refuses_hand_edited_ref_report_before_snapshot(tmp_path, monkeypatch):
+    """A re-enveloped plan whose ref_report was tampered is refused BEFORE snapshot.
+
+    Proven by making _snapshot fail if reached: the equality check must reject first.
+    """
     root = _project(tmp_path)
     a = _loose(root, "doc/plans/a.md", "# Alpha\n\nbody\n")
     b = _loose(root, "doc/plans/b.md", "# Beta\n\nbody\n")
     plan = plan_cohort_import(root, [a, b], kind="plan")
-    # Inject an edit the live corpus will not reproduce.
     from science_tool.reference_rewrite import FileEdit
     plan.ref_report.edits.append(
         FileEdit(rel_path="doc/evil.md", preimage_sha256="0" * 64, postimage="x"))
+    import science_tool.entity_import as ei
+
+    def unreached_snapshot(_paths):
+        raise AssertionError("_snapshot reached; the tampered report was not rejected first")
+
+    monkeypatch.setattr(ei, "_snapshot", unreached_snapshot)
     with pytest.raises(EntityImportError):
         apply_cohort_import(root, plan)
     assert a.exists() and b.exists()  # nothing moved
+
+
+def test_cohort_apply_refuses_initial_source_drift(tmp_path):
+    """A source edited BEFORE apply is refused by the initial drift gate."""
+    root = _project(tmp_path)
+    a = _loose(root, "doc/plans/a.md", "# Alpha\n\nbody\n")
+    b = _loose(root, "doc/plans/b.md", "# Beta\n\nbody\n")
+    plan = plan_cohort_import(root, [a, b], kind="plan")
+    a.write_text("# Alpha CHANGED\n\nbody\n", encoding="utf-8")
+    with pytest.raises(EntityImportError):
+        apply_cohort_import(root, plan)
+    assert a.exists() and b.exists()
+    assert not (root / "entities/plans/0001-alpha.md").exists()
+
+
+def test_cohort_apply_cleans_up_on_claim_path_mismatch(tmp_path, monkeypatch):
+    """If the claim primitive returns an unexpected path, apply unlinks that
+    exclusively-created file and rolls back (nothing escapes the mutated set)."""
+    root = _project(tmp_path)
+    a = _loose(root, "doc/plans/a.md", "# Alpha\n\nbody\n")
+    b = _loose(root, "doc/plans/b.md", "# Beta\n\nbody\n")
+    plan = plan_cohort_import(root, [a, b], kind="plan")
+    import science_tool.entity_import as ei
+    real_claim = ei.claim_number_in_dir
+
+    def wrong_path_claim(pr, kind, number, local_part, text):
+        canonical = real_claim(pr, kind, number, local_part, text)
+        canonical.unlink(missing_ok=True)  # leave the canonical slot clean
+        rogue = root / "entities/plans" / f"{number:04d}-rogue.md"
+        rogue.write_text(text, encoding="utf-8")
+        return rogue  # a path apply did not expect
+
+    monkeypatch.setattr(ei, "claim_number_in_dir", wrong_path_claim)
+    with pytest.raises(EntityImportError):
+        apply_cohort_import(root, plan)
+    assert not (root / "entities/plans/0001-rogue.md").exists()  # defensively cleaned up
+    assert a.exists() and b.exists()  # sources never unlinked
+
+
+def test_cohort_apply_rolls_back_on_inbound_rewrite_failure(tmp_path, monkeypatch):
+    """A raised inbound rewrite restores claimed dests and unlinked sources."""
+    root = _project(tmp_path)
+    a = _loose(root, "doc/plans/a.md", "# Alpha\n\nbody\n")
+    b = _loose(root, "doc/plans/b.md", "# Beta\n\nbody\n")
+    referrer = _loose(root, "doc/notes.md", "see [a](plans/a.md)\n")
+    before = referrer.read_text(encoding="utf-8")
+    plan = plan_cohort_import(root, [a, b], kind="plan")
+    import science_tool.entity_import as ei
+    from science_tool.reference_rewrite import ReferenceDriftError
+
+    def boom(*args, **kwargs):
+        raise ReferenceDriftError("simulated mid-rewrite failure")
+
+    monkeypatch.setattr(ei, "apply_reference_rewrite", boom)
+    with pytest.raises(ReferenceDriftError):
+        apply_cohort_import(root, plan)
+    assert a.exists() and b.exists()
+    assert not (root / "entities/plans/0001-alpha.md").exists()
+    assert not (root / "entities/plans/0002-beta.md").exists()
+    assert referrer.read_text(encoding="utf-8") == before
+
+
+def test_cohort_apply_rolls_back_on_dangling_audit(tmp_path, monkeypatch):
+    """A post-move audit that finds a dangling reference rolls the whole cohort back."""
+    root = _project(tmp_path)
+    a = _loose(root, "doc/plans/a.md", "# Alpha\n\nbody\n")
+    b = _loose(root, "doc/plans/b.md", "# Beta\n\nbody\n")
+    plan = plan_cohort_import(root, [a, b], kind="plan")
+    import science_tool.entity_import as ei
+    monkeypatch.setattr(ei, "audit_moved_references", lambda *a, **k: ["dangling ref"])
+    with pytest.raises(EntityImportError):
+        apply_cohort_import(root, plan)
+    assert a.exists() and b.exists()
+    assert not (root / "entities/plans/0001-alpha.md").exists()
+    assert not (root / "entities/plans/0002-beta.md").exists()
 ```
 
 - [ ] **Step 2: Run tests to verify they fail**
@@ -1209,6 +1390,20 @@ Expected: FAIL — `cannot import name 'apply_cohort_import'`.
 - [ ] **Step 3: Write minimal implementation**
 
 ```python
+def _source_digest(source: Path, rel: str) -> str:
+    """Read a source and return its sha256, translating I/O and decode faults into
+    EntityImportError so apply never leaks a raw OSError/UnicodeDecodeError. Used by
+    both source-drift passes so their failure surface is identical (FileNotFoundError
+    is an OSError subclass, so a source that vanishes mid-apply is covered)."""
+    try:
+        text = source.read_text(encoding="utf-8")
+    except UnicodeDecodeError as exc:
+        raise EntityImportError(f"{rel} is not valid UTF-8: {exc}") from exc
+    except OSError as exc:
+        raise EntityImportError(f"{rel} could not be read: {exc}") from exc
+    return hashlib.sha256(text.encode("utf-8")).hexdigest()
+
+
 def apply_cohort_import(
     project_root: Path, plan: CohortImportPlan, *, exclude: frozenset[Path] = frozenset()
 ) -> list[str]:
@@ -1234,8 +1429,7 @@ def apply_cohort_import(
     for member, source in zip(plan.members, sources, strict=True):
         if not source.is_file():
             raise EntityImportError(f"source not found: {member.source_rel}")
-        current = source.read_text(encoding="utf-8")
-        if hashlib.sha256(current.encode("utf-8")).hexdigest() != member.source_sha256:
+        if _source_digest(source, member.source_rel) != member.source_sha256:
             raise EntityImportError(
                 f"{member.source_rel} changed since the preview; re-run the preview"
             )
@@ -1292,8 +1486,7 @@ def apply_cohort_import(
         # be deleted. Match -> unlink in the adjacent statement and mark mutated.
         for member in plan.members:
             source = project_root / member.source_rel
-            current = source.read_text(encoding="utf-8")
-            if hashlib.sha256(current.encode("utf-8")).hexdigest() != member.source_sha256:
+            if _source_digest(source, member.source_rel) != member.source_sha256:
                 raise EntityImportError(
                     f"{member.source_rel} changed during apply; rolled back — re-run the preview"
                 )
@@ -1433,11 +1626,83 @@ def test_cli_legacy_single_plan_still_applies(tmp_path, monkeypatch):
     res2 = _run(["entities", "import", "--apply-plan", str(save), "--expected-plan-sha256", sha], root)
     assert res2.exit_code == 0, res2.output
     assert (root / "entities/plans/0001-alpha.md").exists()
+
+
+def _envelope_sha(raw: bytes) -> str:
+    from science_tool.plan_common import plan_sha256
+    return plan_sha256(raw)
+
+
+def test_cli_apply_plan_rejects_unknown_plan_type(tmp_path, monkeypatch):
+    root = tmp_path
+    (root / "science.yaml").write_text("name: t\nknowledge_profiles: {local: local}\n", encoding="utf-8")
+    raw = json.dumps({"plan_type": "something-else", "schema_version": 1}).encode("utf-8")
+    (root / "p.json").write_bytes(raw)
+    monkeypatch.chdir(root)
+    res = CliRunner().invoke(main, ["entities", "import", "--apply-plan", "p.json",
+                                    "--expected-plan-sha256", _envelope_sha(raw)])
+    assert res.exit_code != 0
+    assert "unsupported plan" in res.output.lower()
+
+
+def test_cli_apply_plan_rejects_unknown_schema_version(tmp_path, monkeypatch):
+    root = tmp_path
+    (root / "science.yaml").write_text("name: t\nknowledge_profiles: {local: local}\n", encoding="utf-8")
+    raw = json.dumps({"plan_type": "cohort-import", "schema_version": 999}).encode("utf-8")
+    (root / "p.json").write_bytes(raw)
+    monkeypatch.chdir(root)
+    res = CliRunner().invoke(main, ["entities", "import", "--apply-plan", "p.json",
+                                    "--expected-plan-sha256", _envelope_sha(raw)])
+    assert res.exit_code != 0
+    assert "unsupported plan" in res.output.lower()
+
+
+def test_cli_apply_plan_rejects_schema_version_without_plan_type(tmp_path, monkeypatch):
+    """A version stamp with no discriminator is rejected, not routed to the single parser."""
+    root = tmp_path
+    (root / "science.yaml").write_text("name: t\nknowledge_profiles: {local: local}\n", encoding="utf-8")
+    raw = json.dumps({"schema_version": 1, "source_rel": "x"}).encode("utf-8")
+    (root / "p.json").write_bytes(raw)
+    monkeypatch.chdir(root)
+    res = CliRunner().invoke(main, ["entities", "import", "--apply-plan", "p.json",
+                                    "--expected-plan-sha256", _envelope_sha(raw)])
+    assert res.exit_code != 0
+    assert "unsupported plan" in res.output.lower()
+
+
+def test_cli_apply_plan_rejects_non_object_json(tmp_path, monkeypatch):
+    """A JSON list/scalar must be refused cleanly, not crash on .get()."""
+    root = tmp_path
+    (root / "science.yaml").write_text("name: t\nknowledge_profiles: {local: local}\n", encoding="utf-8")
+    raw = b"[1, 2, 3]"
+    (root / "p.json").write_bytes(raw)
+    monkeypatch.chdir(root)
+    res = CliRunner().invoke(main, ["entities", "import", "--apply-plan", "p.json",
+                                    "--expected-plan-sha256", _envelope_sha(raw)])
+    assert res.exit_code != 0  # a clean ClickException, not an AttributeError traceback
+
+
+def test_cli_single_import_preserves_explicit_slug(tmp_path, monkeypatch):
+    """A single-source --slug flows end-to-end to the applied entity id."""
+    root = tmp_path
+    (root / "science.yaml").write_text("name: t\nknowledge_profiles: {local: local}\n", encoding="utf-8")
+    (root / "entities" / "plans").mkdir(parents=True)
+    (root / "doc").mkdir()
+    (root / "doc/a.md").write_text("# Alpha\n\nbody\n", encoding="utf-8")
+    monkeypatch.chdir(root)
+    save = root / "single.json"
+    res = _run(["entities", "import", "doc/a.md", "--kind", "plan",
+                "--slug", "custom-slug", "--save-plan", str(save)], root)
+    assert res.exit_code == 0, res.output
+    sha = json.loads(res.output)["plan_sha256"]
+    res2 = _run(["entities", "import", "--apply-plan", str(save), "--expected-plan-sha256", sha], root)
+    assert res2.exit_code == 0, res2.output
+    assert (root / "entities/plans/0001-custom-slug.md").exists()
 ```
 
 - [ ] **Step 2: Run tests to verify they fail**
 
-Run: `cd science && uv run --frozen pytest tests/test_entity_import_cli.py -k "cohort or apply_plan_rejects or legacy_single" -v`
+Run: `cd science && uv run --frozen pytest tests/test_entity_import_cli.py -k "cohort or apply_plan_rejects or legacy_single or explicit_slug or non_object" -v`
 Expected: FAIL — the command takes a single `SOURCE` and cannot accept two.
 
 - [ ] **Step 3: Write minimal implementation**
@@ -1468,8 +1733,11 @@ Replace the command body (from `if apply_plan_path is not None:` to the end) wit
             raise click.UsageError("--apply-plan takes the saved plan only; do not repeat SOURCE or --kind.")
         # The one deliberate tightening: reject the preview-only options apply
         # previously ignored, so an operator cannot believe they had any effect.
-        for bad, name in [(title, "--title"), (status, "--status"), (slug, "--slug"),
-                          (save_plan, "--save-plan"), (overwrite_plan, "--overwrite-plan")]:
+        # Use `is not None` for value options so an explicit empty string (--title "")
+        # is still rejected; overwrite_plan is a bool flag, so truthiness is correct.
+        for bad, name in [(title is not None, "--title"), (status is not None, "--status"),
+                          (slug is not None, "--slug"), (save_plan is not None, "--save-plan"),
+                          (overwrite_plan, "--overwrite-plan")]:
             if bad:
                 raise click.UsageError(f"{name} may not be combined with --apply-plan")
         if not expected_plan_sha256:
@@ -1487,6 +1755,8 @@ Replace the command body (from `if apply_plan_path is not None:` to the end) wit
             probe = json.loads(raw)
         except json.JSONDecodeError as exc:
             raise click.ClickException(f"plan is not valid JSON: {exc}") from exc
+        if not isinstance(probe, dict):  # a JSON list/scalar has no discriminator
+            raise click.ClickException("plan is not a JSON object")
         plan_type = probe.get("plan_type")
         schema_version = probe.get("schema_version")
         try:
@@ -1617,11 +1887,13 @@ git commit -m "chore(release): bump science 0.5.1 -> 0.5.2 (cohort import)"
 
 ## Final verification (before the whole-branch review)
 
-Run the full suite and lint from the nested dir:
+Run the full suite AND the linters from the nested dir (the suite alone is not enough — the branch touches type-checked modules):
 ```bash
 cd science && uv run --frozen pytest -q
+cd science && uv run --frozen ruff check
+cd science && uv run --frozen pyright
 ```
-Expected: green, no regressions in the single-import, reservation, or reference-rewrite suites.
+Expected: green tests with no regressions in the single-import, reservation, or reference-rewrite suites; ruff and pyright both clean on the changed modules.
 
 ## Post-merge consumer delivery (out of scope for this plan, tracked separately)
 
