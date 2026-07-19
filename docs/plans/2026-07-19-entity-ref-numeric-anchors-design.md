@@ -1,159 +1,240 @@
 # Entity-ref citations as numeric-anchor anchors — design
 
-**Status:** approved (2026-07-19)
+**Status:** approved, rev 2 (2026-07-19)
 **Scope:** `numeric-anchor` prose lint (Part A engine). Single subsystem.
 **Origin:** pan-disease t108. Surfaced while dogfooding numeric-provenance on
-pan-disease: ~48 of the project's residual numeric-anchor findings are numbers
-that *are* grounded — their paragraph cites a resolvable typed entity-ref
-(`interpretation:0011-…`, `question:0016`) — but the detector cannot see that
-citation as provenance.
+pan-disease: some residual numeric-anchor findings are numbers whose paragraph
+cites a resolvable **provenance-bearing** typed entity-ref (an
+`interpretation:…`, `pre-registration:…`, `plan:…`) yet flag because the
+detector cannot see typed entity-refs as provenance.
 
 ## Problem
 
 `numeric-anchor` classifies a prose numeric claim as grounded when its
-paragraph carries a resolvable body reference (an existence-checked
-paragraph-local candidate). The extraction regex `_BODY_REF_RE`
-(`numeric_provenance.py`) recognizes only:
+paragraph carries a resolvable body reference. The extraction regex
+`_BODY_REF_RE` (`numeric_provenance.py`) recognizes only `task:tNNN`,
+`[@bibkey]`, `cite:bibkey`, `dataset:slug`, and `[[wiki]]` (topical — not a
+candidate). Typed entity-refs — the dominant in-prose citation convention —
+are invisible, so a number whose only nearby provenance is
+`` `interpretation:0011-h01-a2-bc2-tissue-confound` `` flags as `Unanchored`.
 
-- `task:tNNN`
-- `[@bibkey]`
-- `cite:bibkey`
-- `dataset:slug`
-- `[[wiki]]` (topical — deliberately *not* a candidate)
-
-The dominant citation convention in real projects is the **typed entity-ref**:
-`` `interpretation:0011-h01-a2-bc2-tissue-confound` ``, `` `question:0016` ``,
-`` `hypothesis:0001-molecular-truth-axis` ``, `` `plan:0023` ``, etc. These are
-invisible to extraction, so a number whose only nearby provenance is such a
-citation is flagged `Unanchored`.
-
-The resolver already knows how to resolve these refs — `ResolutionIndex.resolve`
-routes any `_TYPED_REF_RE` match (`^[a-z][a-z0-9_-]*:[A-Za-z0-9][A-Za-z0-9_.-]*$`)
-to membership in `entity_ids`. The gap is purely **extraction** plus
-**short-prefix resolution** (citations appear as both full ids and bare
+The resolver already resolves typed refs (`ResolutionIndex.resolve` routes any
+`_TYPED_REF_RE` match to `entity_ids` membership). The gap is **extraction**
+plus **short-prefix resolution** (citations appear as both full ids and bare
 `interpretation:0013` prefixes).
+
+### Existence is not provenance (the load-bearing distinction)
+
+Recognizing *any* resolvable entity-ref as an anchor would mask real findings.
+Measured citation kinds within ±3 lines of a pan-disease numeric-anchor hit:
+
+| kind | hits nearby | provenance-bearing? |
+|---|---|---|
+| hypothesis | 21 | no — topical/framing |
+| question | 21 | no — topical/framing |
+| interpretation | 9 | yes |
+| plan | 3 | yes (registered/planned params) |
+| probe | 1 | yes, but project-local (unindexed) |
+| discussion | 1 | no — topical |
+| pre-registration | 1 | yes |
+
+A `hypothesis:` or `question:` citation next to a number is topical adjacency,
+not the number's source. Anchoring on those would silently clear ~34 findings
+that must stay flagged. `EntityClass` cannot serve as the filter either:
+`interpretation` is `EPISTEMIC` alongside `hypothesis`, so that axis (belief
+propagation) does not separate provenance from framing. The distinction must be
+an **explicit, curated allowlist of provenance-bearing kinds.**
 
 ### Measured impact (pan-disease, 2026-07-19)
 
 - Residual numeric-anchor after the t107 config migration: **196**.
-- Numbers with a resolvable-style entity-ref within ±3 lines: **~48**.
-- Citation forms across the affected files: **545 full-id** (with slug),
-  **58 short numeric-only prefixes** (`interpretation:0013`). Both forms must
-  resolve.
+- Numbers whose paragraph cites a **provenance-bearing** entity-ref:
+  interpretation (9) + plan (3) + pre-registration (1) ≈ **13** legitimately
+  anchor. The ~34 hypothesis/question-adjacent numbers **stay flagged** — the
+  correct, non-masking outcome.
+- Citation forms across affected files: 545 full-id (with slug), 58 short
+  numeric-only prefixes. Both must resolve.
 
 ## Non-goals
 
-- No change to `additional_anchor_patterns` / `anchor_patterns`. That path is
-  weak regex-only suppression (masking); this design deliberately routes
-  through existence-checked resolution instead.
-- No change to the shared refs-integrity check, the graph, or Part B
-  (`numeric-verification`).
-- No new dependency, no config surface, no schema change.
+- No change to `additional_anchor_patterns` / `anchor_patterns` (weak regex-only
+  suppression); this routes through existence-checked resolution instead.
+- No anchoring on topical/framing kinds (hypothesis, question, topic, theme,
+  concept, discussion, assumption, story, inquiry, falsification, mechanism,
+  method, model, proposition, meta).
+- No support for project-local kinds not in the shared index (`probe`,
+  `review`); the shared entity index only carries built-in kinds. Documented as
+  a follow-up.
+- No change to Part B (`numeric-verification`), the graph, or the shared
+  refs-integrity semantics beyond the one-kind index correction below.
 
 ## Design
 
-Three contained changes, all in `src/science_tool/numeric_provenance.py`.
+Changes span `numeric_provenance.py` (extraction, resolution), `refs.py` (one
+missing kind), and the detector-version registry.
 
-### 1. Extraction — additive generic alternative in `_BODY_REF_RE`
+### 1. Provenance-bearing anchor allowlist
 
-Append **one** alternative after the existing five (additive: every current
-extraction stays byte-identical because earlier alternatives win at a given
-start position, and the new alternative only fires on `type:id` shapes none of
-the existing ones match):
+A new module constant in `numeric_provenance.py`:
+
+```python
+_ANCHOR_ENTITY_KINDS = frozenset({
+    # result / evidence artifacts produced by project work
+    "interpretation", "report", "synthesis", "observation", "finding",
+    "evidence-line", "validation-report", "experiment", "workflow-run",
+    "data-package",
+    # external sources
+    "dataset", "paper", "book", "source",
+    # registered / planned parameters
+    "pre-registration", "plan",
+})
+```
+
+`task:` (via `task_numbers`) and `cite:`/`[@]` (via `bib_keys`) remain anchors
+through their existing alternatives — they are provenance too. Topical entity
+kinds are simply absent from every alternative, so they are never extracted,
+never become candidates, and cannot anchor. The extraction allowlist **is** the
+provenance gate.
+
+### 2. Extraction — one added, boundary-guarded alternative in `_BODY_REF_RE`
+
+Append a single alternative built from the allowlist (kinds sorted
+longest-first so hyphenated names win over prefixes):
 
 ```
-(?<![A-Za-z])[a-z][a-z0-9_-]*:[A-Za-z0-9][A-Za-z0-9_.-]*
+(?<![A-Za-z0-9_.:/@-])(interpretation|validation-report|pre-registration|…):([0-9A-Za-z][0-9A-Za-z-]*)(?![A-Za-z0-9_:/@-])
 ```
 
-The kind-token charset `[a-z][a-z0-9_-]*` matches the resolver's
-`_TYPED_REF_RE` exactly, so extraction is never narrower than resolution.
+Existing alternatives are untouched (additive), so current extraction is
+byte-identical. Boundary guards:
 
-Guards and why they hold:
+- Left `(?<![A-Za-z0-9_.:/@-])` — rejects an id embedded in a larger token:
+  `x_interpretation:0013`, `x-interpretation:0013`, `foo.plan:1`,
+  `path/interpretation:0013`, `a:interpretation:0013`.
+- Explicit kind alternation — only allowlisted kinds match; `hypothesis:` etc.
+  never match.
+- id charset `[0-9A-Za-z][0-9A-Za-z-]*` (kebab, no `.`/`_`) — matches
+  `0013` and `0013-h01-a2-bc2`; a trailing sentence period is left outside the
+  match (so `interpretation:0013.` matches `interpretation:0013`).
+- Right `(?![A-Za-z0-9_:/@-])` — rejects `interpretation:0013@host`,
+  `interpretation:0013/x`, `interpretation:0013:extra`.
 
-- `(?<![A-Za-z])` — preserves the anti-substring guard
-  (`recite:Foo2024` is its own token, not a `cite:` substring).
-- Leading `[a-z]` (lowercase) — `MESH:D009101`, `Note: foo`, `Fig. 3:` never
-  match; only lowercase-initial type tokens.
-- Required `[A-Za-z0-9]` immediately after the colon — `https://…` (slash),
-  `note: foo` (space), `12:30` (the whole token starts with a digit) never
-  match.
-- Kind token allows internal hyphens (`pre-registration`, `evidence-line`).
+An allowlisted kind that resolves to nothing (typo, fabrication) stays an
+*unresolved* candidate — it never anchors and never emits a finding.
 
-Anything the regex over-captures (e.g. a literal `note:foo` in prose) is
-**existence-checked** and resolves to nothing, so it becomes an *unresolved*
-candidate: it neither anchors a number nor emits any finding.
+### 3. Short-prefix resolution with ambiguity handling
 
-### 2. Short-prefix resolution — `ResolutionIndex`
-
-Add a precomputed `entity_prefixes: frozenset[str]` to `ResolutionIndex`,
-built in `build_resolution_index`: for each canonical `entity_id` of the shape
-`<kind>:<digits>-<slug>`, add `<kind>:<digits>` (e.g.
-`interpretation:0010-h01-a2-bc2-residualization-deskcheck` →
-`interpretation:0010`). Entities without a numeric prefix (`dataset:gtex`)
-contribute nothing here and resolve by exact id as today.
-
-In `resolve()`'s typed-ref branch:
+Add `entity_prefix_owners: dict[str, int]` to `ResolutionIndex`, built in
+`build_resolution_index` by the same rule as the big-picture validator's
+`_index_by_prefix` (validator.py:125): for each canonical id
+`<kind>:<lead>-<rest>`, count owners of `<kind>:<lead>`. In `resolve()`'s
+typed-ref branch:
 
 ```python
 if _TYPED_REF_RE.match(ref):
-    return ref in self.entity_ids or ref in self.entity_prefixes
+    if ref in self.entity_ids:          # exact full-id
+        return True
+    return self.entity_prefix_owners.get(ref, 0) == 1   # unique prefix only
 ```
 
-O(1). Deterministic: entity numbers are unique per kind, so a bare
-`interpretation:0013` maps to exactly one entity. Full-id refs keep resolving
-via exact `entity_ids` membership.
+A prefix with **two or more** owners does **not** resolve (fail-closed): the
+ambiguous citation cannot silently anchor to the wrong entity — the claim stays
+flagged. This mirrors the validator's stated contract ("an AMBIGUOUS prefix is
+a LOUDER failure"). Full-id refs keep resolving by exact membership.
 
-### 3. `local_candidates_for_paragraph` — no logic change
+### 4. Index correction — add `plan` to `_LOCAL_ENTITY_KINDS`
 
-It already iterates `_BODY_REF_RE.finditer`, skips `[[wiki]]`, and stamps each
-ref `resolved`/`unresolved` via `index.resolve`. It transparently consumes the
-broadened regex and the prefix-aware resolver.
+`_LOCAL_ENTITY_KINDS` (refs.py:85) is a hardcoded snapshot that omits `plan`, a
+core kind (`science_model/profiles/core.py`), so `plan:*` ids are never indexed
+and `plan:0023` cannot resolve. Add `"plan"`. All other allowlisted kinds are
+already present. This also lets the shared body-prose ref scanner
+(`_TYPED_ENTITY_REF_RE`) validate `plan:` refs — a correct broadening. Full
+reconciliation of `_LOCAL_ENTITY_KINDS` with the authoritative registry
+(`markdown_entity_kinds`) is a separate follow-up, not attempted here.
+
+### 5. Detector-version bump
+
+`numeric-anchor` output changes materially, and annotation persistence /
+audit ledgers key findings by `DETECTOR_VERSIONS["numeric-anchor"]`
+(annotation/sources/lint.py:34). Bump `v2026-07-18b → v2026-07-19` and update
+its contract test, so re-keyed findings are not mistaken for previously-audited
+output under the old behavior.
+
+### 6. `local_candidates_for_paragraph` — no logic change
+
+It consumes the broadened `_BODY_REF_RE` and existence-checks each ref via the
+prefix-aware `resolve()`, exactly as it does today. Still skips `[[wiki]]`.
 
 ## Safety invariant ("don't mask")
 
-Extraction never anchors on its own. A number is `Anchored(local)` only when a
-paragraph-local candidate **resolves** against the real entity index. A
-fabricated `interpretation:9999` extracts but does not resolve → the number
-stays `Unanchored` (flagged). This is genuine, existence-checked provenance
-recognition — the opposite of regex suppression.
+Three independent gates, all required for a number to anchor on an entity-ref:
+(1) the citation's kind is in the provenance allowlist (extraction); (2) the
+ref resolves against the real entity index — exact id or **unique** prefix
+(existence + non-ambiguity); (3) the ref token is not a substring of a larger
+token (boundary guards). A fabricated ref, a topical kind, or an ambiguous
+prefix all leave the number `Unanchored`.
 
-## Testing
+## Testing (`tests/test_numeric_provenance.py`, unless noted)
 
-New unit tests in `tests/test_numeric_provenance.py`:
+Positives:
+- Full-id provenance ref (`interpretation:0007-h01-…`) → resolved candidate.
+- Short unique-prefix ref (`interpretation:0013`) → resolved via prefix owners.
+- End-to-end: a number in a paragraph citing a resolvable `interpretation:NNNN`
+  classifies as `Anchored`.
+- `plan:NNNN` resolves after the index correction.
 
-- Full-id typed ref (`interpretation:0007-h01-…`) extracts and, when the entity
-  exists, resolves → paragraph-local candidate `resolved`.
-- Short-prefix typed ref (`interpretation:0013`) resolves via `entity_prefixes`.
-- Fabricated ref (`interpretation:9999`) extracts but is `unresolved`; a number
-  whose only provenance is that ref stays `Unanchored`.
-- Over-capture (`note:foo`) yields at most an `unresolved` candidate and never
-  anchors.
-- End-to-end: a numeric claim in a paragraph citing a resolvable
-  `interpretation:NNNN` classifies as `Anchored`.
-- Regression: the existing extraction/resolution/word-boundary/wiki-link/
-  `config/`-path tests stay green unchanged.
+Negatives (the anti-masking core):
+- Topical kind: a number whose only citation is a **real** `hypothesis:NNNN`
+  (or `question:NNNN`) stays `Unanchored`.
+- Ambiguity: a prefix owned by two entities does not resolve; the claim stays
+  `Unanchored`.
+- Embedded token, left: `x_interpretation:0013`, `x-interpretation:0013`,
+  `path/interpretation:0013` do not yield a resolvable `interpretation:0013`.
+- Embedded token, right: `interpretation:0013@host`, `interpretation:0013/p`.
+- Fabricated: `interpretation:9999` extracts but is `unresolved`.
 
-Plus `ruff check`, `pyright`, and the full `pytest` suite from `science/`.
+Regression / contract:
+- Existing extraction/resolution/word-boundary/wiki-link/`config/`-path tests
+  stay green unchanged.
+- Detector-version contract test updated to `v2026-07-19`.
+- `ruff check`, `pyright`, full `pytest` from `science/` (watch `refs` /
+  ref-integrity tests for the `plan` addition).
 
 ## Acceptance (pan-disease)
 
-Run pan-disease's `science prose lint --check numeric-anchor` with the worktree
-science overlaid (`uv run --with-editable <worktree>/science`). Expect:
+Overlay the worktree science (`uv run --with-editable <worktree>/science`) and
+run `science prose lint --check numeric-anchor`. Expect:
 
-- The ~48 entity-ref-grounded findings clear.
-- Mixed spec docs that embed empirically-grounded values cited by entity-ref
-  (e.g. `pre-registration:0012`) anchor those values.
-- No regressions elsewhere (other checks and counts unchanged).
+- ~13 provenance-cited numbers clear (interpretation/plan/pre-registration),
+  including pre-reg 0012's values cited via `interpretation:0010/0011`.
+- hypothesis/question/discussion-adjacent numbers **remain flagged**.
+- No regressions in other checks or counts.
 
 ## Docs
 
-Update `docs/conventions/prose-lints.md` numeric-anchor section: resolvable
-typed entity-ref citations (both full-id and short numeric-prefix forms) count
-as paragraph-local anchors, existence-checked against the entity index.
+`docs/conventions/prose-lints.md` numeric-anchor section: resolvable
+**provenance-bearing** typed entity-ref citations (list the kinds; both full-id
+and unique short-prefix forms) count as paragraph anchors; topical kinds
+(hypothesis, question, topic, …) explicitly do not, and an ambiguous prefix
+does not resolve.
 
 ## Files
 
-- `src/science_tool/numeric_provenance.py` — `_BODY_REF_RE`, `ResolutionIndex`
-  (add `entity_prefixes`), `build_resolution_index`, `resolve`.
-- `tests/test_numeric_provenance.py` — new tests + confirm regressions green.
+- `src/science_tool/numeric_provenance.py` — `_ANCHOR_ENTITY_KINDS`,
+  `_BODY_REF_RE`, `ResolutionIndex` (+ `entity_prefix_owners`),
+  `build_resolution_index`, `resolve`.
+- `src/science_tool/refs.py` — add `"plan"` to `_LOCAL_ENTITY_KINDS`.
+- `src/science_tool/annotation/sources/lint.py` — bump
+  `DETECTOR_VERSIONS["numeric-anchor"]`.
+- `tests/test_numeric_provenance.py` — positives, negatives, ambiguity,
+  boundaries; confirm existing green.
+- `tests/test_annotation_lint_source_numeric.py` — update the expected
+  `v2026-07-18b → v2026-07-19` (lines 12–13).
 - `docs/conventions/prose-lints.md` — one paragraph.
+
+## Out of scope / follow-ups
+
+- Project-local provenance kinds (`probe`, `review`) are not in the shared
+  entity index and will not anchor; needs index reconciliation with the
+  project-local kind registry.
+- Full reconciliation of `_LOCAL_ENTITY_KINDS` with `markdown_entity_kinds`.
