@@ -1185,7 +1185,7 @@ git commit -m "feat(migrate-specs): two-axis reference classification (skip-pres
 **Interfaces:**
 - Consumes: `plan_reference_rewrite`, `rewrite_outbound_links`, `_relative_link`, `_sub_prose_matches`, `RewriteReport` from `science_tool.reference_rewrite`; `render_frontmatter` from `science_model.frontmatter`; `_validate_prospective_writes` from `science_tool.entities` (the shared prospective-validation core, extracted in this task); `load_project_sources` from `science_tool.graph.sources`; `hashlib`.
 - Produces (in `entities.py`): `_validate_prospective_writes(*, project_root, markdown_overrides, allowed_unresolved_sources, include_commons=True) -> (list[str], ProjectSources)` — the **single** prospective-validation authority; `_validate_prospective_write` (single-document, unchanged public signature) delegates to it, and `_is_allowed_unresolved_target_warning` takes a `Collection[str]` of allowed sources.
-- Produces (in `migrate_specs.py`): `Destination`, `Transaction`, `_render_destination`, `_validate_batch`, `_all_project_claims`, `_collision_preflight`, `_plan_transaction(project_root, disc, alloc) -> Transaction`. Render substitutes **list and scalar** `_REMOVABLE` values plus `relations[].target`, rebases outbound links, and applies intra-batch path substitutions. Validation is **batch-aware and delegates to the one core**: `_validate_batch` builds the override map (**all** destinations written, **all** sources removed, so an intra-batch `supersedes: spec:<sibling>` resolves) and calls `_validate_prospective_writes` — it defines no second audit-diff. `_all_project_claims` returns `token -> set of owner ids` (every entity id + alias owned by that entity's id, plus every `manual_aliases`/archive key owned by a non-entity sentinel). Collision preflight excludes a claim **only when every owner is a migrating spec's old id** — a token-based subtraction would wrongly drop an unrelated entity that merely shares the token — and checks the **rendered, deduplicated** claim set of the whole batch against that authority.
+- Produces (in `migrate_specs.py`): `Destination`, `Transaction`, `_render_destination`, `_validate_batch`, `_all_project_claims`, `_collision_preflight`, `_plan_transaction(project_root, disc, alloc) -> Transaction`. Render substitutes **list and scalar** `_REMOVABLE` values plus `relations[].target`, rebases outbound links, and applies intra-batch path substitutions. Validation is **batch-aware and delegates to the one core**: `_validate_batch` builds the override map (**all** destinations written, **all** sources removed, so an intra-batch `supersedes: spec:<sibling>` resolves) and calls `_validate_prospective_writes` — it defines no second audit-diff. `_all_project_claims` mirrors `build_alias_map`: it registers each entity's `canonical_id` and aliases (plus `manual_aliases`/archive tokens) in **both exact and lowercase** form, `token -> set of owner ORIGINS` where an entity's origin is its **source path** (`entity.file_path`) and mappings/archive tokens get a non-path sentinel. Collision preflight excludes a claim **only when every owner origin is in the migrating source set** — owner-by-id would wrongly drop an unrelated record whose id coincides with a migrating old id; a flat token-set would drop an unrelated entity that merely shares the token; a case-blind check would let a live `SPEC:DATE-A` escape and detonate as an unnormalized `AliasCollisionError` in validation. It checks the **rendered, deduplicated, case-normalized** claim set of the whole batch against that authority.
 
 - [ ] **Step 1: Write the failing tests**
 
@@ -1244,8 +1244,32 @@ def test_transaction_collision_preflight_refuses_duplicate_old_ids(tmp_path: Pat
 
 def test_transaction_collision_preflight_uses_global_alias_authority(tmp_path: Path) -> None:
     project = _spec_project(tmp_path)
-    # a NON-spec entity already claims the token the migrated spec's old-id alias would take
+    # an UNRELATED live spec entity (owned by ITS path, not a migrating source) already claims the
+    # token the migrated spec's old-id alias would take
     _write(project / "entities/specs/0009-live.md", {"id": "spec:0009-live", "kind": "spec", "title": "Live", "aliases": ["spec:date-a"]})
+    _legacy_spec(project, "doc/plans/a.md", "spec:date-a", "Alpha")
+    with pytest.raises(SpecMigrationRefused, match="collides"):
+        _plan(project)
+
+
+def test_transaction_collision_preflight_uses_global_mappings_authority(tmp_path: Path) -> None:
+    project = _spec_project(tmp_path)
+    # a project mappings.yaml (owned by the non-path mappings sentinel, never a migrating source)
+    # already claims the token the migrated spec's old-id alias would take
+    _write(project / "entities/specs/0009-live.md", {"id": "spec:0009-live", "kind": "spec", "title": "Live"})
+    mappings = project / "knowledge/sources/local/mappings.yaml"
+    mappings.parent.mkdir(parents=True, exist_ok=True)
+    mappings.write_text(yaml.safe_dump({"aliases": {"spec:date-a": "spec:0009-live"}}), encoding="utf-8")
+    _legacy_spec(project, "doc/plans/a.md", "spec:date-a", "Alpha")
+    with pytest.raises(SpecMigrationRefused, match="collides"):
+        _plan(project)
+
+
+def test_transaction_collision_preflight_is_case_insensitive(tmp_path: Path) -> None:
+    project = _spec_project(tmp_path)
+    # a live entity claims an UPPERCASE variant of the token the old-id alias would take; a case-blind
+    # preflight would miss it and let build_alias_map raise an unnormalized AliasCollisionError
+    _write(project / "entities/specs/0009-live.md", {"id": "spec:0009-live", "kind": "spec", "title": "Live", "aliases": ["SPEC:DATE-A"]})
     _legacy_spec(project, "doc/plans/a.md", "spec:date-a", "Alpha")
     with pytest.raises(SpecMigrationRefused, match="collides"):
         _plan(project)
@@ -1379,8 +1403,8 @@ from science_tool.reference_rewrite import (
 Append the code:
 
 ```python
-# Owner sentinels for non-entity claim sources: never equal to a `spec:` old id, so a batch's own
-# old ids can be excluded from the claim authority without ever excluding these.
+# Owner ORIGINS for non-entity claim sources: never a migrating source PATH, so a batch's own
+# in-home claims can be excluded by origin without ever excluding a mapping/archive token.
 _MANUAL_ALIAS_OWNER = "<mappings.yaml>"
 _ARCHIVE_OWNER = "<archive>"
 
@@ -1467,13 +1491,16 @@ def _validate_batch(project_root: Path, destinations: list[Destination]) -> None
 
 
 def _all_project_claims(project_root: Path) -> dict[str, set[str]]:
-    """`token -> set of owner ids`: the project's global claim authority, OWNER-tagged.
+    """`token -> set of owner ORIGINS`, mirroring `build_alias_map`'s claim universe.
 
-    Every entity id and every alias is owned by that entity's OWN id; every `manual_aliases`
-    (project `mappings.yaml`) and archive key is owned by a non-entity sentinel. Owner tags let the
-    caller exclude a migrating spec's own claim WITHOUT dropping an unrelated entity that merely
-    shares the token — a flat token set cannot tell those apart. `manual_aliases` is folded in
-    explicitly (it is the superset; `archive_alias_tokens` is only its archived subset)."""
+    For every entity, its `canonical_id` and every alias are registered in BOTH exact and lowercase
+    form — `build_alias_map` normalizes case, so a preflight that ignored case would let a live
+    `SPEC:DATE-A` escape and then detonate as an unnormalized `AliasCollisionError` during prospective
+    validation. The owner is the entity's SOURCE PATH (`entity.file_path`, project-relative posix,
+    same shape as `source_rel`), so a claim is excluded by ORIGIN — an unrelated record whose id merely
+    coincides with a migrating old id is NOT dropped. `manual_aliases` (the `mappings.yaml` superset;
+    `archive_alias_tokens` is only its archived subset) is folded in, owned by a non-path sentinel that
+    is never a migrating source."""
     from science_tool.graph.sources import load_project_sources
 
     claims: dict[str, set[str]] = {}
@@ -1481,12 +1508,13 @@ def _all_project_claims(project_root: Path) -> dict[str, set[str]]:
     def _add(token: object, owner: str) -> None:
         if isinstance(token, str) and token:
             claims.setdefault(token, set()).add(owner)
+            claims.setdefault(token.lower(), set()).add(owner)
 
     sources = load_project_sources(project_root)
     for entity in sources.entities:
-        _add(entity.id, entity.id)
+        _add(entity.canonical_id, entity.file_path)
         for alias in entity.aliases or []:
-            _add(alias, entity.id)
+            _add(alias, entity.file_path)
     for token in sources.manual_aliases or {}:
         _add(token, _MANUAL_ALIAS_OWNER)
     for token in sources.archive_alias_tokens or frozenset():
@@ -1496,24 +1524,27 @@ def _all_project_claims(project_root: Path) -> dict[str, set[str]]:
 
 def _collision_preflight(project_root: Path, disc: Discovery, alloc: Allocation) -> None:
     """Refuse if the batch's rendered, deduplicated claims clash with the project's global authority
-    or with each other. A claim is EXISTING only when it has an owner that is not one of the batch's
-    own old ids — so a migrating spec's own token (an in-home legacy spec loads as an entity) is
-    excluded, but an unrelated entity sharing the token is NOT."""
+    or with each other. A claim is EXISTING only when it has an owner ORIGIN outside the migrating
+    source set — so a migrating spec's own claim (an in-home legacy spec loads as an entity at its
+    source path) is excluded, but an unrelated record is NOT, even one whose id coincides with a
+    migrating old id. Case is normalized to mirror `build_alias_map`, so a case-variant live token is
+    caught here rather than at prospective validation."""
     old_ids = [spec.old_id for spec in disc.legacy]
     if len(old_ids) != len(set(old_ids)):
         raise SpecMigrationRefused("duplicate old id(s) in the discovered batch.")
 
-    migrating_owner_ids = set(old_ids)
-    existing = {token for token, owners in _all_project_claims(project_root).items() if owners - migrating_owner_ids}
+    migrating_origins = {spec.source_rel for spec in disc.legacy}
+    existing = {token for token, owners in _all_project_claims(project_root).items() if owners - migrating_origins}
 
     seen: dict[str, str] = {}
 
     def _check(token: str, where: str) -> None:
-        if token in existing:
+        if token in existing or token.lower() in existing:
             raise SpecMigrationRefused(f"{where}: {token!r} collides with an existing id/alias/mapping/archive token.")
-        if token in seen and seen[token] != where:
-            raise SpecMigrationRefused(f"{where}: {token!r} collides with {seen[token]}.")
-        seen[token] = where
+        key = token.lower()
+        if key in seen and seen[key] != where:
+            raise SpecMigrationRefused(f"{where}: {token!r} collides with {seen[key]}.")
+        seen[key] = where
 
     for spec in disc.legacy:
         new_id = alloc.id_substitutions.get(spec.old_id, spec.old_id)
@@ -2501,7 +2532,7 @@ git commit -m "docs(entities): document science entity migrate-specs"
 - **TDD couldn't run** → `_legacy_spec` fixture (dates + mappable status) used from Task 6 on; imports added in their consuming task; the minimal `_spec_project` is verified audit-capable (no executor guesswork).
 
 **Resolved review findings (rev 3):**
-- **Collision exclusion was token-based, not owner-based** → Task 6 `_all_project_claims` now returns `token -> set of owner ids`; `_collision_preflight` excludes a claim only when *every* owner is a migrating spec's old id, so an unrelated entity sharing the token is no longer dropped (the global-alias test now genuinely exercises the refusal). `manual_aliases` (the `mappings.yaml` superset, not just its archived subset) is folded into the authority.
+- **Collision authority: owner-ORIGIN, canonical_id, case-normalized** → Task 6 `_all_project_claims` mirrors `build_alias_map`: it keys claims by `entity.canonical_id` (not `id`) plus aliases/`manual_aliases`/archive tokens, in **both exact and lowercase** form, `token -> set of owner ORIGINS` where an entity's origin is its **source path** (`entity.file_path`, verified project-relative posix, same shape as `source_rel`). `_collision_preflight` excludes a claim only when every owner origin is in the migrating **source set** — so an unrelated record whose id coincides with a migrating old id is no longer dropped, and a case-variant live `SPEC:DATE-A` is caught in preflight rather than raising an unnormalized `AliasCollisionError` in validation. Tests: unrelated-entity alias, `mappings.yaml`-owned token (deterministic — the fixture's local profile is `local`), and the uppercase-variant case.
 - **`_validate_batch` was a second prospective-validation authority** → Task 6 extracts one core `_validate_prospective_writes` in `entities.py` (recorded in the file map); `_validate_prospective_write` (unchanged signature) and `_validate_batch` both delegate to it; `_is_allowed_unresolved_target_warning` now takes a `Collection`. A regression step runs the existing entity-create/import/datasets suites.
 - **Incomplete scan could still reach apply** → Task 8 `migrate(apply=True)` refuses **before** journaling or mutation when `scan_complete == false`, with a test asserting no source/destination/referrer/journal change; the architecture language now says the dry run *predicts* this refusal (via `scan_complete`/`flip_ready`) rather than returning identically.
 - **Resume test gaps** → Task 9 adds the dest-absent-plus-sentinel crash point and the non-empty-audit/journal-retained cases (both sentinel crash points and both audit outcomes now covered).
