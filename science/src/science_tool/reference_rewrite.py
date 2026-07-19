@@ -27,7 +27,7 @@ from __future__ import annotations
 
 import hashlib
 import re
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from pathlib import Path, PurePosixPath
 from typing import Any
 
@@ -288,6 +288,7 @@ def _scan(
     id_substitutions: dict[str, str],
     path_substitutions: dict[str, str],
     exclude: frozenset[Path] = frozenset(),
+    source_overrides: Mapping[str, str] = {},
 ) -> RewriteReport:
     """Derive the edit set. Writes NOTHING. Reads each file EXACTLY once.
 
@@ -306,9 +307,33 @@ def _scan(
         path_substitutions=dict(path_substitutions),
     )
 
-    for path in iter_scannable_files(project_root, exclude=exclude):
-        rel_path = path.relative_to(project_root).as_posix()
-        text, skip = read_text_or_skip(path, rel_path)  # the ONLY read of this file
+    excluded = {p.resolve() for p in exclude}
+    # Disk enumeration, then override virtual entries unioned in. Overrides are
+    # authoritative: included even if absent/oversize on disk, deduped against the
+    # disk set, and always sourced from the supplied bytes. exclude still wins.
+    entries: dict[Path, str] = {
+        path: path.relative_to(project_root).as_posix()
+        for path in iter_scannable_files(project_root, exclude=exclude)
+    }
+    override_texts: dict[str, str] = {}
+    for rel, text in source_overrides.items():
+        pure = PurePosixPath(rel)
+        if pure.is_absolute() or rel.startswith("/") or ".." in pure.parts:
+            raise ValueError(f"source_overrides key {rel!r} is not a project-relative path")
+        resolved = (project_root / rel).resolve()
+        if not resolved.is_relative_to(project_root):
+            raise ValueError(f"source_overrides key {rel!r} escapes the project root")
+        if resolved in excluded:
+            continue  # exclude wins over an override
+        entries[resolved] = rel
+        override_texts[rel] = text
+
+    for path in sorted(entries):
+        rel_path = entries[path]
+        if rel_path in override_texts:
+            text, skip = override_texts[rel_path], None
+        else:
+            text, skip = read_text_or_skip(path, rel_path)  # the ONLY read of this file
         if text is None:
             assert skip is not None
             report.skipped.append(skip)
@@ -374,13 +399,21 @@ def plan_reference_rewrite(
     id_substitutions: dict[str, str],
     path_substitutions: dict[str, str],
     exclude: frozenset[Path] = frozenset(),
+    source_overrides: Mapping[str, str] = {},
 ) -> RewriteReport:
-    """Report every reference a rewrite would change. Touches nothing."""
+    """Report every reference a rewrite would change. Touches nothing.
+
+    `source_overrides` (rel_path -> already-read text) makes a caller's cached bytes
+    authoritative virtual scan entries: examined even if absent/oversize on disk,
+    deduped against disk enumeration, sourced from the supplied bytes. `exclude`
+    still wins. Default empty -> disk-only behavior.
+    """
     return _scan(
         project_root,
         id_substitutions=id_substitutions,
         path_substitutions=path_substitutions,
         exclude=exclude,
+        source_overrides=source_overrides,
     )
 
 
