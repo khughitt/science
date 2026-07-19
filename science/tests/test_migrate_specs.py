@@ -13,8 +13,10 @@ from science_tool.migrate_specs import (
     CANONICAL_SPEC_STATUS,
     LEGACY_ALIAS,
     RUNTIME_ONLY,
+    RefRecord,
     SpecMigrationRefused,
     allocate_ids,
+    classify_references,
     discover_specs,
     project_legacy_frontmatter,
 )
@@ -281,3 +283,71 @@ def test_allocation_mixed_batch_skips_preserved_number(tmp_path: Path) -> None:
     alloc = allocate_ids(project, discover_specs(project).legacy)
     assert alloc.id_substitutions == {"spec:date-mint": "spec:0002-mint-me"}
     assert alloc.preserved_ids == frozenset({"spec:0001-keep"})
+
+
+def _by_group(records: list[RefRecord]) -> dict[str, list[RefRecord]]:
+    out: dict[str, list[RefRecord]] = {}
+    for record in records:
+        out.setdefault(record.group, []).append(record)
+    return out
+
+
+def test_classification_two_axes(tmp_path: Path) -> None:
+    project = _spec_project(tmp_path)
+    _write(
+        project / "doc/ref.md",
+        {"id": "design:0001-r", "kind": "design", "title": "R", "related": ["spec:old-a"], "discusses": ["spec:old-a"], "same_as": ["spec:old-a"]},
+        body="Prose mention of spec:old-a and spec:ghost and spec:0009-live here.\n",
+    )
+    _write(project / "entities/specs/0009-live.md", {"id": "spec:0009-live", "kind": "spec", "title": "Live"})
+    records, skips = classify_references(
+        project, id_substitutions={"spec:old-a": "spec:0001-a"}, live_spec_ids={"spec:0009-live"}, source_rels=frozenset()
+    )
+    assert skips == []
+    groups = _by_group(records)
+    assert any(r.surface == "related" for r in groups["rewritten"])
+    assert any(r.surface == "same_as" for r in groups["alias_resolved"])
+    assert any(r.surface == "discusses" for r in groups["manual_retarget"])
+    assert any(r.ref == "spec:ghost" for r in groups["manual_retarget"])
+    assert any(r.surface == "mention" and r.ref == "spec:old-a" for r in groups["identity_preserved"])
+    assert any(r.ref == "spec:0009-live" for r in groups["unchanged"])
+
+
+def test_classification_scalar_removable_key_is_rewritten(tmp_path: Path) -> None:
+    project = _spec_project(tmp_path)
+    _write(project / "doc/ref.md", {"id": "design:0001-r", "kind": "design", "title": "R", "superseded_by": "spec:old-a"})
+    records, _ = classify_references(
+        project, id_substitutions={"spec:old-a": "spec:0001-a"}, live_spec_ids=set(), source_rels=frozenset()
+    )
+    assert any(r.surface == "superseded_by" and r.group == "rewritten" for r in records)
+
+
+def test_classification_token_boundary(tmp_path: Path) -> None:
+    project = _spec_project(tmp_path)
+    _write(project / "doc/b.md", {"id": "design:0001-b", "kind": "design", "title": "B"}, body="ignore science-spec:old-a here. But spec:old-a. ends a sentence.\n")
+    records, _ = classify_references(project, id_substitutions={"spec:old-a": "spec:0001-a"}, live_spec_ids=set(), source_rels=frozenset())
+    mentions = [r for r in records if r.surface == "mention"]
+    assert {r.ref for r in mentions} == {"spec:old-a"}
+    assert all(not r.ref.endswith(".") for r in mentions)
+
+
+def test_classification_markdown_link_to_migrating_source_is_rewritten(tmp_path: Path) -> None:
+    project = _spec_project(tmp_path)
+    _write(project / "doc/plans/a.md", {"id": "spec:old-a", "type": "spec", "title": "A"}, body="See [B](b.md#sec).\n")
+    records, _ = classify_references(project, id_substitutions={}, live_spec_ids=set(), source_rels=frozenset({"doc/plans/b.md"}))
+    assert any(r.surface == "markdown-link" and r.group == "rewritten" for r in records)
+
+
+def test_classification_excludes_migrating_source_own_identity(tmp_path: Path) -> None:
+    project = _spec_project(tmp_path)
+    _write(project / "doc/plans/src.md", {"id": "spec:old-a", "type": "spec", "title": "A", "aliases": ["spec:old-a-alias"]}, body="Body.\n")
+    records, _ = classify_references(project, id_substitutions={"spec:old-a": "spec:0001-a"}, live_spec_ids=set(), source_rels=frozenset({"doc/plans/src.md"}))
+    assert not any(r.ref in {"spec:old-a", "spec:old-a-alias"} for r in records)
+
+
+def test_classification_reports_unreadable_scannable_file_as_skip(tmp_path: Path) -> None:
+    project = _spec_project(tmp_path)
+    (project / "src").mkdir(parents=True, exist_ok=True)
+    (project / "src/bad.py").write_bytes(b"\xff\xfe spec:old-a")  # undecodable but scannable
+    _records, skips = classify_references(project, id_substitutions={"spec:old-a": "spec:0001-a"}, live_spec_ids=set(), source_rels=frozenset())
+    assert any(s.path == "src/bad.py" for s in skips)

@@ -11,20 +11,29 @@ from __future__ import annotations
 import re
 from collections.abc import Mapping
 from dataclasses import dataclass
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 from typing import Any
 
 from science_model.frontmatter import split_frontmatter
 
 from science_tool.entities import (
     _REFERENCE_SCAN_SKIP_DIRS,
+    _REMOVABLE_FRONTMATTER_REF_KEYS,
     derive_slug,
     local_part_conforms,
     markdown_entity_kinds,
     resolve_path_policy,
 )
 from science_tool.entity_reservation import propose_number
-from science_tool.text_scan import MAX_SCANNABLE_BYTES, TEXT_SUFFIXES
+from science_tool.markdown_scan import iter_prose_matches
+from science_tool.reference_rewrite import _LINK_RE, _resolve_link, _split_target
+from science_tool.text_scan import (
+    MAX_SCANNABLE_BYTES,
+    TEXT_SUFFIXES,
+    _CODE_SUFFIXES,
+    iter_scannable_files,
+    read_text_or_skip,
+)
 
 JOURNAL_PATH: Path = Path(".science/spec-migration.journal")
 
@@ -362,3 +371,132 @@ def allocate_ids(project_root: Path, legacy: list[LegacySpec]) -> Allocation:
         aliased=frozenset(aliased),
         preserved_ids=frozenset(preserved),
     )
+
+
+_SPEC_TOKEN_RE = re.compile(r"(?<![A-Za-z0-9_-])spec:[A-Za-z0-9._/-]+")
+_TRAILING_PUNCT = ".,;:)"
+_READ_INVISIBLE_FIELDS = ("same_as", "blocked_by", "evidence_refs", "participants", "propositions", "source", "commits_to")
+
+
+@dataclass(frozen=True)
+class RefRecord:
+    ref: str
+    surface: str
+    target: str  # "migrated" | "canonical" | "unresolved"
+    group: str
+    in_file: str
+
+
+def _live_spec_ids(project_root: Path) -> set[str]:
+    """Ids + aliases of the specs already living under entities/specs/ (already-canonical targets)."""
+    ids: set[str] = set()
+    directory = Path(project_root) / _spec_root(Path(project_root))
+    if not directory.is_dir():
+        return ids
+    for path in directory.glob("*.md"):
+        try:
+            frontmatter, _body = split_frontmatter(path.read_text(encoding="utf-8"))
+        except (OSError, UnicodeDecodeError):
+            continue
+        if isinstance(frontmatter.get("id"), str):
+            ids.add(frontmatter["id"])
+        for alias in frontmatter.get("aliases") or []:
+            if isinstance(alias, str):
+                ids.add(alias)
+    return ids
+
+
+def _iter_fm_ref_values(frontmatter: dict) -> list[tuple[str, str]]:
+    """(surface, token) for every structured frontmatter reference surface. Skips id/aliases."""
+
+    def _tokens(value: Any) -> list[str]:
+        return [item for item in _as_list(value) if isinstance(item, str)]
+
+    out: list[tuple[str, str]] = []
+    for key in _REMOVABLE_FRONTMATTER_REF_KEYS:
+        out.extend((key, token) for token in _tokens(frontmatter.get(key)))
+    for relation in frontmatter.get("relations") or []:
+        if isinstance(relation, dict) and isinstance(relation.get("target"), str):
+            out.append(("relations[].target", relation["target"]))
+    out.extend(("discusses", token) for token in _tokens(frontmatter.get("discusses")))
+    if "spec" in frontmatter:
+        out.extend(("spec-key", token) for token in _tokens(frontmatter.get("spec")))
+    for key in _READ_INVISIBLE_FIELDS:
+        out.extend((key, token) for token in _tokens(frontmatter.get(key)))
+    return out
+
+
+def _group_for(surface: str, target_class: str) -> str:
+    if surface == "discusses":
+        return "manual_retarget"  # never a valid bundle frame, regardless of target
+    if target_class == "unresolved":
+        return "manual_retarget"
+    if target_class == "canonical":
+        return "unchanged"
+    # target_class == "migrated"
+    if surface in _REMOVABLE_FRONTMATTER_REF_KEYS or surface in ("relations[].target", "markdown-link"):
+        return "rewritten"
+    if surface in _READ_INVISIBLE_FIELDS:
+        return "alias_resolved"
+    return "identity_preserved"  # spec-key, prose/code mention
+
+
+def classify_references(
+    project_root: Path,
+    *,
+    id_substitutions: dict[str, str],
+    live_spec_ids: set[str],
+    source_rels: frozenset[str],
+) -> tuple[list[RefRecord], list[ScanSkip]]:
+    """Classify every inbound `spec:` reference on two axes and RETURN read skips too.
+
+    Reuses the canonical `iter_scannable_files` so the rewrite and audit see an identical file set.
+    A migrating source's own `id`/`aliases` are never scanned, so they never count as inbound refs.
+    """
+    project_root = Path(project_root).resolve()
+    records: list[RefRecord] = []
+    skips: list[ScanSkip] = []
+
+    def target_class(token: str) -> str:
+        if token in id_substitutions:
+            return "migrated"
+        if token in live_spec_ids:
+            return "canonical"
+        return "unresolved"
+
+    for path in iter_scannable_files(project_root):
+        rel = path.relative_to(project_root).as_posix()
+        text, skip = read_text_or_skip(path, rel)
+        if text is None:
+            assert skip is not None
+            skips.append(ScanSkip(path=rel, reason=skip.reason))
+            continue
+        is_code = path.suffix.lower() in _CODE_SUFFIXES
+        is_markdown = path.suffix.lower() in _MARKDOWN_SUFFIXES
+        frontmatter: dict = {}
+        body = text
+        if is_markdown:
+            frontmatter, body = split_frontmatter(text)
+
+        for surface, token in _iter_fm_ref_values(frontmatter):
+            if not token.startswith("spec:"):
+                continue
+            tclass = target_class(token)
+            records.append(RefRecord(ref=token, surface=surface, target=tclass, group=_group_for(surface, tclass), in_file=rel))
+
+        if is_markdown:
+            referrer_dir = PurePosixPath(rel).parent
+            for match in iter_prose_matches(_LINK_RE, body):
+                head, _tail = _split_target(match.group("target"))
+                resolved = _resolve_link(head, referrer_dir) if head else None
+                if resolved is not None and resolved in source_rels:
+                    records.append(RefRecord(ref=match.group("target"), surface="markdown-link", target="migrated", group="rewritten", in_file=rel))
+
+        scan_text = text if is_code else body
+        matches = _SPEC_TOKEN_RE.finditer(scan_text) if is_code else iter_prose_matches(_SPEC_TOKEN_RE, scan_text)
+        for match in matches:
+            token = match.group(0).rstrip(_TRAILING_PUNCT)
+            tclass = target_class(token)
+            records.append(RefRecord(ref=token, surface="mention", target=tclass, group=_group_for("mention", tclass), in_file=rel))
+
+    return records, skips
