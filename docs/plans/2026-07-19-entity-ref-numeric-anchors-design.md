@@ -1,6 +1,6 @@
 # Entity-ref citations as numeric-anchor anchors — design
 
-**Status:** rev 3 (2026-07-19) — pending review
+**Status:** rev 4 (2026-07-19) — pending review
 **Scope:** `numeric-anchor` prose lint (Part A engine). Single subsystem.
 **Origin:** pan-disease t108. Surfaced while dogfooding numeric-provenance on
 pan-disease: some residual numeric-anchor findings are numbers whose paragraph
@@ -98,15 +98,22 @@ provenance gate.
 
 ### 2. Extraction — one added, boundary-guarded alternative in `_BODY_REF_RE`
 
-Append a single alternative built from the allowlist (kinds sorted
-longest-first so hyphenated names win over prefixes):
+Add one alternative built from the allowlist (kinds sorted longest-first so
+hyphenated names win over prefixes) **and remove the dedicated `dataset:`
+alternative** — `dataset` is in `_ANCHOR_ENTITY_KINDS`, so the guarded branch
+handles it. Leaving the old unguarded `dataset:[A-Za-z0-9][A-Za-z0-9_.-]*`
+branch would let alternation precedence bypass the boundary gates
+(`path/dataset:xyz` masks a claim; `dataset:xyz.` captures the period and fails
+to resolve). The remaining pre-existing alternatives — `task:`, `[@key]`,
+`cite:`, `[[wiki]]` — resolve via non-entity paths (task numbers, bib keys) or
+are topical, so they keep their current behavior; only `dataset`, now an
+entity-ref anchor, moves under the guard.
 
 ```
-(?<![A-Za-z0-9_.:/@-])(interpretation|validation-report|pre-registration|…):([0-9A-Za-z](?:[0-9A-Za-z._-]*[0-9A-Za-z])?)(?![A-Za-z0-9_:/@-])
+(?<![A-Za-z0-9_.:/@-])(interpretation|validation-report|pre-registration|dataset|…):([0-9A-Za-z](?:[0-9A-Za-z._-]*[0-9A-Za-z])?)(?![A-Za-z0-9_:/@-])
 ```
 
-Existing alternatives are untouched (additive), so current extraction is
-byte-identical. Boundary guards:
+Boundary guards:
 
 - Left `(?<![A-Za-z0-9_.:/@-])` — rejects an id embedded in a larger token:
   `x_interpretation:0013`, `x-interpretation:0013`, `foo.plan:1`,
@@ -205,6 +212,9 @@ Negatives (the anti-masking core):
 - Embedded token, left: `x_interpretation:0013`, `x-interpretation:0013`,
   `path/interpretation:0013` do not yield a resolvable `interpretation:0013`.
 - Embedded token, right: `interpretation:0013@host`, `interpretation:0013/p`.
+- `dataset` now under the guard: `path/dataset:xyz` does not resolve
+  `dataset:xyz`; sentence-final `dataset:xyz.` resolves `dataset:xyz` (period
+  left outside) — the old unguarded branch failed both.
 - Fabricated: `interpretation:9999` extracts but is `unresolved`.
 
 Regression / contract:
@@ -241,7 +251,8 @@ does not resolve.
 ## Files
 
 - `src/science_tool/numeric_provenance.py` — `_ANCHOR_ENTITY_KINDS`,
-  `_BODY_REF_RE`, `ResolutionIndex` (+ `entity_prefix_owners`),
+  `_BODY_REF_RE` (add guarded allowlist branch, remove the dedicated `dataset:`
+  branch, update its docstring), `ResolutionIndex` (+ `entity_prefix_owners`),
   `build_resolution_index`, `resolve`.
 - `src/science_tool/refs.py` — add `"plan"` to `_LOCAL_ENTITY_KINDS`.
 - `src/science_tool/annotation/sources/lint.py` — bump
