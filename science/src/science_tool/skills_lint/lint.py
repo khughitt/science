@@ -3,7 +3,7 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Literal
+from typing import Any, Literal
 
 import yaml
 
@@ -159,7 +159,7 @@ def check_source_refs(path: Path, registry: SourcesRegistry) -> list[SkillIssue]
     ]
 
 
-def classify_provenance(frontmatter: dict) -> ProvenanceState:
+def classify_provenance(frontmatter: dict[str, Any]) -> ProvenanceState:
     has_sources = "sources" in frontmatter
     has_provenance = "provenance" in frontmatter
     if has_sources and has_provenance:

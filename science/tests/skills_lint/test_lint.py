@@ -241,6 +241,8 @@ def test_classify_provenance_outcomes() -> None:
     assert classify_provenance({"name": "x"}) == "undeclared"
     assert classify_provenance({"sources": ["a"], "provenance": "internal"}) == "contradiction"
     assert classify_provenance({"provenance": "external"}) == "bad-marker"
+    assert classify_provenance({"provenance": None}) == "bad-marker"  # null value, not the string "internal"
+    assert classify_provenance({"provenance": ["internal"]}) == "bad-marker"  # non-string value
     # malformed sources is NOT "attributed" (design: sources: [] is invalid)
     assert classify_provenance({"sources": []}) == "malformed-sources"
     assert classify_provenance({"sources": ["  "]}) == "malformed-sources"
