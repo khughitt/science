@@ -725,19 +725,19 @@ def _slugify_anchor(value: str) -> str:
     return re.sub(r"[\s_]+", "-", slug)
 
 
-def _validate_plan_for_apply(project_root: Path, plan: ImportPlan) -> Path:
-    """Reject a persisted plan that does not describe a safe, self-consistent move,
-    BEFORE any mutation. Returns the validated, resolved source path.
+def _validate_member_identity(
+    project_root: Path,
+    *,
+    kind: str,
+    source_rel: str,
+    dest_rel: str,
+    entity_id: str,
+    number: int,
+    frontmatter: dict[str, Any],
+    rendered_text: str,
+) -> Path:
+    """Validate one persisted member's paths and identity before mutation."""
 
-    A saved plan is an on-disk artifact that can be hand-edited or corrupted
-    between preview and apply. `load_import_plan` proves it is well-TYPED; nothing
-    proves its path and identity fields are TRUE. `apply_import` then unlinks the
-    source and writes the destination, so those fields are untrusted input to a
-    filesystem mutation. `Path("/root") / "/etc/x"` silently discards the root and
-    `Path("/root") / "../x"` escapes it, so a validly typed plan could otherwise
-    name `/etc/passwd`, `../other-repo/file`, or `.git/config` and have apply
-    unlink it.
-    """
     def _contained(rel: str, label: str) -> Path:
         pure = PurePosixPath(rel)
         if pure.is_absolute() or rel.startswith("/") or ".." in pure.parts:
@@ -747,46 +747,96 @@ def _validate_plan_for_apply(project_root: Path, plan: ImportPlan) -> Path:
             raise EntityImportError(f"plan {label} {rel!r} escapes the project root")
         return resolved
 
-    source = _contained(plan.source_rel, "source")
-    _contained(plan.dest_rel, "destination")
-    if not plan.source_rel.endswith(".md"):
-        raise EntityImportError(f"plan source {plan.source_rel!r} is not a markdown file")
+    source = _contained(source_rel, "source")
+    _contained(dest_rel, "destination")
+    if not source_rel.endswith(".md"):
+        raise EntityImportError(f"plan source {source_rel!r} is not a markdown file")
 
-    # Identity: entity_id, kind and number must agree, and the destination must be
-    # EXACTLY the canonical path they imply -- computed here, never trusted from the
-    # plan. This is what makes dest_rel tamper-evident: it is fully determined by
-    # (kind, number, slug), so any other value is a redirect of the write target.
-    id_kind, sep, local_part = plan.entity_id.partition(":")
-    if not sep or id_kind != plan.kind:
-        raise EntityImportError(f"plan entity_id {plan.entity_id!r} disagrees with kind {plan.kind!r}")
+    id_kind, sep, local_part = entity_id.partition(":")
+    if not sep or id_kind != kind:
+        raise EntityImportError(f"plan entity_id {entity_id!r} disagrees with kind {kind!r}")
     match = re.match(rf"(\d{{{LOCAL_PART_WIDTH}}})-", local_part)
-    if match is None or int(match.group(1)) != plan.number:
-        raise EntityImportError(f"plan entity_id {plan.entity_id!r} does not carry number {plan.number}")
-    expected_dest = f"{resolve_path_policy(plan.kind).root}/{local_part}.md"
-    if plan.dest_rel != expected_dest:
+    if match is None or int(match.group(1)) != number:
+        raise EntityImportError(f"plan entity_id {entity_id!r} does not carry number {number}")
+    try:
+        policy_root = resolve_path_policy(kind).root
+    except KeyError as exc:
+        raise EntityImportError(f"unknown entity kind: {kind}") from exc
+    except EntityCommandError as exc:
+        raise EntityImportError(str(exc)) from exc
+    expected_dest = f"{policy_root}/{local_part}.md"
+    if dest_rel != expected_dest:
         raise EntityImportError(
-            f"plan destination {plan.dest_rel!r} is not canonical for {plan.entity_id!r} "
+            f"plan destination {dest_rel!r} is not canonical for {entity_id!r} "
             f"(expected {expected_dest!r})"
         )
 
-    # Frontmatter and rendered text must describe THIS entity: apply writes
-    # rendered_text verbatim and never re-renders it, so a mismatch here would land
-    # bytes the identity checks above never saw.
-    if plan.frontmatter.get("id") != plan.entity_id or plan.frontmatter.get("kind") != plan.kind:
+    if frontmatter.get("id") != entity_id or frontmatter.get("kind") != kind:
         raise EntityImportError("plan frontmatter id/kind disagree with the entity_id")
-    rendered_fm, _body = split_frontmatter(plan.rendered_text)
-    if rendered_fm.get("id") != plan.entity_id:
-        raise EntityImportError("plan rendered_text frontmatter does not carry the entity_id")
-
-    # And it must still be valid against the CURRENT corpus, not only the one the
-    # preview saw -- the same boundary create_entity and plan_import write through.
+    rendered_fm, _body = split_frontmatter(rendered_text)
+    if rendered_fm.get("id") != entity_id or rendered_fm.get("kind") != kind:
+        raise EntityImportError(
+            "plan rendered_text frontmatter id/kind disagree with the entity_id"
+        )
     _validate_prospective_write(
         project_root=project_root,
-        rel_path=Path(plan.dest_rel),
-        text=plan.rendered_text,
-        target_entity_id=plan.entity_id,
+        rel_path=Path(dest_rel),
+        text=rendered_text,
+        target_entity_id=entity_id,
     )
     return source
+
+
+def _validate_plan_for_apply(project_root: Path, plan: ImportPlan) -> Path:
+    return _validate_member_identity(
+        project_root,
+        kind=plan.kind,
+        source_rel=plan.source_rel,
+        dest_rel=plan.dest_rel,
+        entity_id=plan.entity_id,
+        number=plan.number,
+        frontmatter=plan.frontmatter,
+        rendered_text=plan.rendered_text,
+    )
+
+
+def _validate_cohort_plan_for_apply(
+    project_root: Path, plan: CohortImportPlan
+) -> list[Path]:
+    """Validate a persisted cohort's shape and every member before mutation."""
+
+    if len(plan.members) < 2:
+        raise EntityImportError("cohort plan has fewer than 2 members")
+
+    numbers = [member.number for member in plan.members]
+    if numbers != list(range(numbers[0], numbers[0] + len(numbers))):
+        raise EntityImportError(f"cohort numbers are not contiguous and ordered: {numbers}")
+
+    for field in ("entity_id", "source_rel", "dest_rel"):
+        values = [getattr(member, field) for member in plan.members]
+        if len(set(values)) != len(values):
+            raise EntityImportError(f"cohort members share a {field}")
+
+    sources = {member.source_rel for member in plan.members}
+    destinations = {member.dest_rel for member in plan.members}
+    if overlap := sources & destinations:
+        raise EntityImportError(
+            f"cohort source and destination sets overlap: {sorted(overlap)}"
+        )
+
+    return [
+        _validate_member_identity(
+            project_root,
+            kind=plan.kind,
+            source_rel=member.source_rel,
+            dest_rel=member.dest_rel,
+            entity_id=member.entity_id,
+            number=member.number,
+            frontmatter=member.frontmatter,
+            rendered_text=member.rendered_text,
+        )
+        for member in plan.members
+    ]
 
 
 def apply_import(

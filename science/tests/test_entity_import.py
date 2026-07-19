@@ -12,6 +12,7 @@ from science_tool.entity_import import (
     ImportMember,
     PlannedMember,
     _plan_member,
+    apply_import,
     plan_import,
 )
 
@@ -80,6 +81,25 @@ def test_plan_member_rejects_document_with_frontmatter(tmp_path: Path) -> None:
             kind="plan",
             number=1,
         )
+
+
+def test_single_apply_translates_unknown_kind_in_tampered_plan(tmp_path):
+    root = _project(tmp_path)
+    source = _loose(root, "doc/plans/x.md")
+    plan = plan_import(root, source, kind="plan")
+    plan.kind = "notarealkind"
+    plan.entity_id = "notarealkind:0001-a-thing"
+    with pytest.raises(EntityImportError):
+        apply_import(root, plan)
+
+
+def test_single_apply_rejects_rendered_kind_tamper(tmp_path):
+    root = _project(tmp_path)
+    source = _loose(root, "doc/plans/x.md")
+    plan = plan_import(root, source, kind="plan")
+    plan.rendered_text = plan.rendered_text.replace("kind: plan", "kind: question")
+    with pytest.raises(EntityImportError):
+        apply_import(root, plan)
 
 
 def test_proposes_id_and_destination(tmp_path: Path) -> None:

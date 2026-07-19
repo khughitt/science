@@ -11,6 +11,7 @@ from science_tool.entity_import import (
     EntityImportError,
     ImportMember,
     RefDependentCohortError,
+    _validate_cohort_plan_for_apply,
     parse_cohort_import_plan,
     plan_cohort_import,
 )
@@ -267,3 +268,66 @@ def test_cohort_manual_pair_attribution_handles_symbol_prefix(tmp_path):
     message = str(excinfo.value)
     assert "member.md -> @a.md" in message
     assert "member.md -> a.md" not in message
+
+
+def _valid_plan(root: Path) -> CohortImportPlan:
+    a = _loose(root, "doc/plans/a.md", "# Alpha\n\nbody\n")
+    b = _loose(root, "doc/plans/b.md", "# Beta\n\nbody\n")
+    return plan_cohort_import(root, [a, b], kind="plan")
+
+
+def test_validate_accepts_a_fresh_plan(tmp_path):
+    root = _project(tmp_path)
+    sources = _validate_cohort_plan_for_apply(root, _valid_plan(root))
+    assert [source.name for source in sources] == ["a.md", "b.md"]
+
+
+def test_validate_rejects_non_contiguous_numbers(tmp_path):
+    root = _project(tmp_path)
+    plan = _valid_plan(root)
+    plan.members[1].number = 9
+    with pytest.raises(EntityImportError):
+        _validate_cohort_plan_for_apply(root, plan)
+
+
+def test_validate_rejects_duplicate_entity_ids(tmp_path):
+    root = _project(tmp_path)
+    plan = _valid_plan(root)
+    plan.members[1].entity_id = plan.members[0].entity_id
+    with pytest.raises(EntityImportError):
+        _validate_cohort_plan_for_apply(root, plan)
+
+
+def test_validate_rejects_source_dest_overlap(tmp_path):
+    root = _project(tmp_path)
+    plan = _valid_plan(root)
+    plan.members[0].dest_rel = plan.members[1].source_rel
+    with pytest.raises(EntityImportError):
+        _validate_cohort_plan_for_apply(root, plan)
+
+
+def test_validate_rejects_tampered_destination(tmp_path):
+    root = _project(tmp_path)
+    plan = _valid_plan(root)
+    plan.members[0].dest_rel = "entities/plans/9999-evil.md"
+    with pytest.raises(EntityImportError):
+        _validate_cohort_plan_for_apply(root, plan)
+
+
+def test_validate_translates_unknown_kind(tmp_path):
+    root = _project(tmp_path)
+    plan = _valid_plan(root)
+    plan.kind = "notarealkind"
+    for number, member in enumerate(plan.members, start=1):
+        member.entity_id = f"notarealkind:{number:04d}-x"
+    with pytest.raises(EntityImportError):
+        _validate_cohort_plan_for_apply(root, plan)
+
+
+def test_validate_rejects_rendered_kind_tamper(tmp_path):
+    root = _project(tmp_path)
+    plan = _valid_plan(root)
+    member = plan.members[0]
+    member.rendered_text = member.rendered_text.replace("kind: plan", "kind: question")
+    with pytest.raises(EntityImportError):
+        _validate_cohort_plan_for_apply(root, plan)
