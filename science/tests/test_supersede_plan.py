@@ -1,6 +1,9 @@
 from __future__ import annotations
 
+import json
+
 import pytest
+from pydantic import ValidationError
 
 from science_tool.plan_common import AllSupersessionMembers
 from science_tool.supersede_plan import (
@@ -53,3 +56,9 @@ def test_supersede_plan_roundtrips_and_forbids_extra() -> None:
     )
     again = SupersedePlan.model_validate_json(plan.model_dump_json())
     assert again == plan
+
+    # Verify that extra top-level keys are rejected (tampered plan protection).
+    tampered = json.loads(plan.model_dump_json())
+    tampered["bogus_key"] = 1
+    with pytest.raises(ValidationError):
+        SupersedePlan.model_validate_json(json.dumps(tampered))
