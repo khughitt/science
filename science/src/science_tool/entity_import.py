@@ -29,10 +29,10 @@ from collections.abc import Iterator
 from dataclasses import dataclass
 from datetime import date
 from pathlib import Path, PurePosixPath
-from typing import Any
+from typing import Any, Literal
 
 import yaml
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, StrictInt
 from pydantic import ValidationError as PydanticValidationError
 
 from science_tool.entities import (
@@ -117,6 +117,33 @@ class ImportMember(BaseModel):
     status: str
     frontmatter: dict[str, Any]
     rendered_text: str
+
+
+class AttributedWarning(BaseModel):
+    """A cohort warning tagged with the source that raised it."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    source_rel: str
+    message: str
+
+
+class CohortImportPlan(BaseModel):
+    """A persisted plan for importing a reference-independent cohort."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    plan_type: Literal["cohort-import"] = "cohort-import"
+    schema_version: StrictInt = 1
+    project_root: str
+    kind: str
+    members: list[ImportMember]
+    ref_report: RewriteReport = RewriteReport()
+    warnings: list[AttributedWarning] = []
+
+
+class RefDependentCohortError(EntityImportError):
+    """A cohort member references another member or itself."""
 
 
 @dataclass(frozen=True)
@@ -319,6 +346,17 @@ def parse_import_plan(raw: bytes) -> ImportPlan:
         return ImportPlan.model_validate_json(raw)
     except PydanticValidationError as exc:
         raise EntityImportError(f"plan bytes are not a readable import plan: {exc}") from exc
+
+
+def parse_cohort_import_plan(raw: bytes) -> CohortImportPlan:
+    """Parse already-read cohort-plan bytes for the approval envelope."""
+
+    try:
+        return CohortImportPlan.model_validate_json(raw)
+    except PydanticValidationError as exc:
+        raise EntityImportError(
+            f"plan bytes are not a readable cohort import plan: {exc}"
+        ) from exc
 
 
 @dataclass(frozen=True)
