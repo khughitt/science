@@ -38,3 +38,14 @@ def parse_prose_literal(text: str) -> ParsedLiteral | None:
     quantum = Decimal(10) ** (exp - len(frac))
     unit = "%" if unit_glyph == "%" else None   # × is dropped
     return ParsedLiteral(value=value, quantum=quantum, unit=unit)
+
+def compare_at_precision(parsed: ParsedLiteral, value: Decimal, tolerance: Decimal | None = None) -> str:
+    if parsed.unit == "%":
+        return UNVERIFIABLE            # scale normalization deferred; tolerance cannot bridge
+    if tolerance is not None:
+        return VERIFIED if abs(value - parsed.value) <= tolerance else MISMATCH
+    half = parsed.quantum / 2
+    lo, hi = parsed.value - half, parsed.value + half
+    if value == lo or value == hi:
+        return UNVERIFIABLE            # exact midpoint shared with adjacent display value
+    return VERIFIED if lo < value < hi else MISMATCH
