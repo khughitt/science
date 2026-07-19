@@ -7,6 +7,8 @@ from typing import Literal
 
 import yaml
 
+from science_tool.skills_lint.sources import SourcesRegistry, leaf_source_refs, load_sources
+
 IssueKind = Literal[
     "missing-frontmatter",
     "invalid-yaml",
@@ -15,6 +17,8 @@ IssueKind = Literal[
     "missing-section",
     "broken-relative-link",
     "missing-index-entry",
+    "unknown-source-ref",
+    "invalid-source-record",
 ]
 
 
@@ -122,13 +126,37 @@ def check_index_coverage(root: Path) -> list[SkillIssue]:
     return issues
 
 
+def check_source_refs(path: Path, registry: SourcesRegistry) -> list[SkillIssue]:
+    refs, error = leaf_source_refs(path)
+    if error is not None:
+        return [SkillIssue(path, "invalid-field", field="sources", detail=error)]
+    if refs is None:
+        return []
+    return [
+        SkillIssue(path, "unknown-source-ref", detail=ref)
+        for ref in refs
+        if ref not in registry.declared_ids
+    ]
+
+
 def check_skills(root: Path) -> list[SkillIssue]:
     issues: list[SkillIssue] = []
+    registry = load_sources(root / "sources.yaml")
+    issues.extend(
+        _relative_issues(
+            [
+                SkillIssue(root / "sources.yaml", "invalid-source-record", field=sid, detail="; ".join(problems))
+                for sid, problems in registry.errors.items()
+            ],
+            root,
+        )
+    )
     for path in sorted(root.rglob("*.md")):
         issues.extend(_relative_issues(check_frontmatter(path), root))
         issues.extend(_relative_issues(check_companion_skills(path), root))
         issues.extend(_relative_issues(check_halt_on_conditions(path, root), root))
         issues.extend(_relative_issues(check_relative_links(path), root))
+        issues.extend(_relative_issues(check_source_refs(path, registry), root))
     issues.extend(check_index_coverage(root))
     return issues
 
