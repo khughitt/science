@@ -1,6 +1,7 @@
 ---
 name: data-source-pubmed
 description: PubMed E-utilities source guidance for literature search and metadata normalization. Use when running `/science:search-literature` for biomedical topics or validating biomedical identifiers.
+sources: [ncbi-eutilities]
 ---
 
 # PubMed Source Guide

@@ -1,6 +1,7 @@
 ---
 name: data-frictionless
 description: Frictionless Data Package creation and validation. Use when creating datapackage.json descriptors, validating data files against schemas, or connecting datasets to analysis pipelines. Also use when the user mentions data packages, data validation, or data schemas.
+sources: [frictionless-spec, frictionless, edam]
 ---
 
 # Frictionless Data Packages

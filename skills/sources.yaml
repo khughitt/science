@@ -182,3 +182,38 @@ dndscv:
   url: "https://github.com/im3sanger/dndscv"
   kind: software
   last_checked: "2026-07-19"
+
+frictionless-spec:
+  title: "Data Package"
+  authors: ["Open Knowledge Foundation"]
+  url: "https://specs.frictionlessdata.io/data-package/"
+  kind: spec
+  last_checked: "2026-07-19"
+
+frictionless:
+  title: "Frictionless Framework"
+  authors: ["Open Knowledge Foundation"]
+  url: "https://framework.frictionlessdata.io/"
+  kind: software
+  last_checked: "2026-07-19"
+
+edam:
+  title: "EDAM: the ontology of data analysis and management"
+  authors: ["Jon Ison", "Matúš Kalaš"]
+  url: "https://edamontology.org/"
+  kind: spec
+  last_checked: "2026-07-19"
+
+openalex:
+  title: "OpenAlex API"
+  authors: ["OurResearch"]
+  url: "https://docs.openalex.org/"
+  kind: software
+  last_checked: "2026-07-19"
+
+ncbi-eutilities:
+  title: "Entrez Programming Utilities (E-utilities)"
+  authors: ["National Center for Biotechnology Information"]
+  url: "https://www.ncbi.nlm.nih.gov/books/NBK25501/"
+  kind: software
+  last_checked: "2026-07-19"
