@@ -839,6 +839,129 @@ def _validate_cohort_plan_for_apply(
     ]
 
 
+def _source_digest(source: Path, rel: str) -> str:
+    """Hash a UTF-8 source while keeping apply's error surface domain-specific."""
+
+    try:
+        text = source.read_text(encoding="utf-8")
+    except UnicodeDecodeError as exc:
+        raise EntityImportError(f"{rel} is not valid UTF-8: {exc}") from exc
+    except OSError as exc:
+        raise EntityImportError(f"{rel} could not be read: {exc}") from exc
+    return hashlib.sha256(text.encode("utf-8")).hexdigest()
+
+
+def apply_cohort_import(
+    project_root: Path,
+    plan: CohortImportPlan,
+    *,
+    exclude: frozenset[Path] = frozenset(),
+) -> list[str]:
+    """Apply a cohort as one exception-atomic unit."""
+
+    project_root = Path(project_root).resolve()
+    if plan.plan_type != "cohort-import" or plan.schema_version != 1:
+        raise EntityImportError(
+            "unsupported cohort plan "
+            f"(plan_type={plan.plan_type!r}, schema_version={plan.schema_version})"
+        )
+    if plan.project_root != str(project_root):
+        raise EntityImportError(
+            f"plan was built against {plan.project_root}, not {project_root}; "
+            "re-run the preview here"
+        )
+
+    sources = _validate_cohort_plan_for_apply(project_root, plan)
+    for member, source in zip(plan.members, sources, strict=True):
+        if not source.is_file():
+            raise EntityImportError(f"source not found: {member.source_rel}")
+        if _source_digest(source, member.source_rel) != member.source_sha256:
+            raise EntityImportError(
+                f"{member.source_rel} changed since the preview; re-run the preview"
+            )
+
+    all_sources = {project_root / member.source_rel for member in plan.members}
+    all_destinations = {project_root / member.dest_rel for member in plan.members}
+    scan_exclude = exclude | all_sources | all_destinations
+    fresh_report = plan_reference_rewrite(
+        project_root,
+        id_substitutions={member.source_rel: member.entity_id for member in plan.members},
+        path_substitutions={member.source_rel: member.dest_rel for member in plan.members},
+        exclude=scan_exclude,
+    )
+    if fresh_report != plan.ref_report:
+        raise EntityImportError(
+            "the corpus changed since the preview (external references no longer match); "
+            "re-run the preview"
+        )
+
+    touched = [
+        *all_sources,
+        *all_destinations,
+        *{project_root / edit.rel_path for edit in plan.ref_report.edits},
+    ]
+    snapshot = _snapshot(touched)
+    mutated: set[Path] = set()
+    written_refs: list[str] = []
+    try:
+        for member in plan.members:
+            destination = project_root / member.dest_rel
+            expected = f"{resolve_path_policy(plan.kind).root}/{destination.stem}.md"
+            if member.dest_rel != expected:
+                raise EntityImportError(
+                    f"member destination {member.dest_rel!r} is not canonical "
+                    f"for {member.entity_id!r}"
+                )
+            try:
+                claimed = claim_number_in_dir(
+                    project_root,
+                    plan.kind,
+                    member.number,
+                    destination.stem,
+                    member.rendered_text,
+                )
+            except EntityCommandError as exc:
+                raise EntityImportError(str(exc)) from exc
+            mutated.add(claimed)
+            if claimed != destination:
+                claimed.unlink(missing_ok=True)
+                raise EntityImportError(
+                    f"claim returned {claimed} for member {member.entity_id!r}, "
+                    f"expected {destination}"
+                )
+
+        for member in plan.members:
+            source = project_root / member.source_rel
+            if _source_digest(source, member.source_rel) != member.source_sha256:
+                raise EntityImportError(
+                    f"{member.source_rel} changed during apply; rolled back — "
+                    "re-run the preview"
+                )
+            source.unlink()
+            mutated.add(source)
+
+        apply_reference_rewrite(
+            project_root,
+            plan.ref_report,
+            exclude=scan_exclude,
+            written=written_refs,
+        )
+        for member in plan.members:
+            if problems := audit_moved_references(
+                project_root, member.dest_rel, exclude=exclude
+            ):
+                raise EntityImportError(
+                    "post-move reference audit failed; the cohort import was rolled back:\n  "
+                    + "\n  ".join(problems)
+                )
+    except Exception:
+        restrict = {*mutated, *(project_root / rel for rel in written_refs)}
+        _restore(snapshot, restrict=restrict)
+        raise
+
+    return [member.entity_id for member in plan.members]
+
+
 def apply_import(
     project_root: Path, plan: ImportPlan, *, exclude: frozenset[Path] = frozenset()
 ) -> dict:

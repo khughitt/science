@@ -12,6 +12,7 @@ from science_tool.entity_import import (
     ImportMember,
     RefDependentCohortError,
     _validate_cohort_plan_for_apply,
+    apply_cohort_import,
     parse_cohort_import_plan,
     plan_cohort_import,
 )
@@ -331,3 +332,167 @@ def test_validate_rejects_rendered_kind_tamper(tmp_path):
     member.rendered_text = member.rendered_text.replace("kind: plan", "kind: question")
     with pytest.raises(EntityImportError):
         _validate_cohort_plan_for_apply(root, plan)
+
+
+def test_cohort_apply_happy_path(tmp_path):
+    root = _project(tmp_path)
+    a = _loose(root, "doc/plans/a.md", "# Alpha\n\nbody\n")
+    b = _loose(root, "doc/plans/b.md", "# Beta\n\nbody\n")
+    notes = _loose(root, "doc/notes.md", "see [a](plans/a.md) and [b](plans/b.md)\n")
+    plan = plan_cohort_import(root, [a, b], kind="plan")
+    assert apply_cohort_import(root, plan) == ["plan:0001-alpha", "plan:0002-beta"]
+    assert not a.exists() and not b.exists()
+    assert (root / "entities/plans/0001-alpha.md").exists()
+    assert (root / "entities/plans/0002-beta.md").exists()
+    rewritten = notes.read_text(encoding="utf-8")
+    assert "0001-alpha.md" in rewritten and "0002-beta.md" in rewritten
+
+
+def test_cohort_apply_rolls_back_on_preclaimed_number(tmp_path):
+    root = _project(tmp_path)
+    a = _loose(root, "doc/plans/a.md", "# Alpha\n\nbody\n")
+    b = _loose(root, "doc/plans/b.md", "# Beta\n\nbody\n")
+    notes = _loose(root, "doc/notes.md", "see [b](plans/b.md)\n")
+    before = notes.read_text(encoding="utf-8")
+    plan = plan_cohort_import(root, [a, b], kind="plan")
+    (root / "entities/plans/0002-someone.md").write_text(
+        "---\nkind: plan\ntitle: Someone\nstatus: proposed\n"
+        "created: '2026-07-19'\nupdated: '2026-07-19'\n"
+        "id: plan:0002-someone\n---\n# Someone\n",
+        encoding="utf-8",
+    )
+    with pytest.raises(EntityImportError):
+        apply_cohort_import(root, plan)
+    assert a.exists() and b.exists()
+    assert not (root / "entities/plans/0001-alpha.md").exists()
+    assert notes.read_text(encoding="utf-8") == before
+
+
+def test_cohort_apply_survives_mid_claim_source_edit(tmp_path, monkeypatch):
+    root = _project(tmp_path)
+    a = _loose(root, "doc/plans/a.md", "# Alpha\n\nbody\n")
+    b = _loose(root, "doc/plans/b.md", "# Beta\n\nbody\n")
+    plan = plan_cohort_import(root, [a, b], kind="plan")
+    import science_tool.entity_import as ei
+
+    real_claim = ei.claim_number_in_dir
+    claims = 0
+
+    def hooked_claim(*args, **kwargs):
+        nonlocal claims
+        path = real_claim(*args, **kwargs)
+        claims += 1
+        if claims == 1:
+            b.write_text("# Beta EDITED\n\nnew body\n", encoding="utf-8")
+        return path
+
+    monkeypatch.setattr(ei, "claim_number_in_dir", hooked_claim)
+    with pytest.raises(EntityImportError):
+        apply_cohort_import(root, plan)
+    assert b.read_text(encoding="utf-8") == "# Beta EDITED\n\nnew body\n"
+    assert a.exists()
+    assert not (root / "entities/plans/0001-alpha.md").exists()
+
+
+def test_cohort_apply_refuses_tampered_report_before_snapshot(tmp_path, monkeypatch):
+    root = _project(tmp_path)
+    a = _loose(root, "doc/plans/a.md", "# Alpha\n\nbody\n")
+    b = _loose(root, "doc/plans/b.md", "# Beta\n\nbody\n")
+    plan = plan_cohort_import(root, [a, b], kind="plan")
+    from science_tool.reference_rewrite import FileEdit
+
+    plan.ref_report.edits.append(
+        FileEdit(rel_path="doc/evil.md", preimage_sha256="0" * 64, postimage="x")
+    )
+    import science_tool.entity_import as ei
+
+    monkeypatch.setattr(ei, "_snapshot", lambda _paths: pytest.fail("snapshot reached"))
+    with pytest.raises(EntityImportError):
+        apply_cohort_import(root, plan)
+
+
+def test_cohort_apply_refuses_report_map_mismatch_before_snapshot(tmp_path, monkeypatch):
+    root = _project(tmp_path)
+    a = _loose(root, "doc/plans/a.md", "# Alpha\n\nbody\n")
+    b = _loose(root, "doc/plans/b.md", "# Beta\n\nbody\n")
+    plan = plan_cohort_import(root, [a, b], kind="plan")
+    plan.ref_report.path_substitutions[plan.members[0].source_rel] = "entities/plans/9999-wrong.md"
+    import science_tool.entity_import as ei
+
+    monkeypatch.setattr(ei, "_snapshot", lambda _paths: pytest.fail("snapshot reached"))
+    with pytest.raises(EntityImportError):
+        apply_cohort_import(root, plan)
+
+
+def test_cohort_apply_refuses_initial_source_drift(tmp_path):
+    root = _project(tmp_path)
+    a = _loose(root, "doc/plans/a.md", "# Alpha\n\nbody\n")
+    b = _loose(root, "doc/plans/b.md", "# Beta\n\nbody\n")
+    plan = plan_cohort_import(root, [a, b], kind="plan")
+    a.write_text("# Alpha CHANGED\n\nbody\n", encoding="utf-8")
+    with pytest.raises(EntityImportError):
+        apply_cohort_import(root, plan)
+    assert a.exists() and b.exists()
+
+
+def test_cohort_apply_cleans_up_on_claim_path_mismatch(tmp_path, monkeypatch):
+    root = _project(tmp_path)
+    a = _loose(root, "doc/plans/a.md", "# Alpha\n\nbody\n")
+    b = _loose(root, "doc/plans/b.md", "# Beta\n\nbody\n")
+    plan = plan_cohort_import(root, [a, b], kind="plan")
+    import science_tool.entity_import as ei
+
+    real_claim = ei.claim_number_in_dir
+
+    def wrong_claim(project_root, kind, number, local_part, text):
+        canonical = real_claim(project_root, kind, number, local_part, text)
+        canonical.unlink()
+        rogue = root / "entities/plans" / f"{number:04d}-rogue.md"
+        rogue.write_text(text, encoding="utf-8")
+        return rogue
+
+    monkeypatch.setattr(ei, "claim_number_in_dir", wrong_claim)
+    with pytest.raises(EntityImportError):
+        apply_cohort_import(root, plan)
+    assert not (root / "entities/plans/0001-rogue.md").exists()
+    assert a.exists() and b.exists()
+
+
+def test_cohort_apply_rolls_back_on_inbound_rewrite_failure(tmp_path, monkeypatch):
+    root = _project(tmp_path)
+    a = _loose(root, "doc/plans/a.md", "# Alpha\n\nbody\n")
+    b = _loose(root, "doc/plans/b.md", "# Beta\n\nbody\n")
+    notes = _loose(root, "doc/notes.md", "see [a](plans/a.md)\n")
+    before = notes.read_text(encoding="utf-8")
+    plan = plan_cohort_import(root, [a, b], kind="plan")
+    import science_tool.entity_import as ei
+    from science_tool.reference_rewrite import ReferenceDriftError
+
+    monkeypatch.setattr(
+        ei,
+        "apply_reference_rewrite",
+        lambda *args, **kwargs: (_ for _ in ()).throw(ReferenceDriftError("boom")),
+    )
+    with pytest.raises(ReferenceDriftError):
+        apply_cohort_import(root, plan)
+    assert a.exists() and b.exists()
+    assert not (root / "entities/plans/0001-alpha.md").exists()
+    assert notes.read_text(encoding="utf-8") == before
+
+
+def test_cohort_apply_rolls_back_real_referrer_on_audit_failure(tmp_path, monkeypatch):
+    root = _project(tmp_path)
+    a = _loose(root, "doc/plans/a.md", "# Alpha\n\nbody\n")
+    b = _loose(root, "doc/plans/b.md", "# Beta\n\nbody\n")
+    notes = _loose(root, "doc/notes.md", "see [a](plans/a.md)\n")
+    before = notes.read_text(encoding="utf-8")
+    plan = plan_cohort_import(root, [a, b], kind="plan")
+    assert any(edit.rel_path == "doc/notes.md" for edit in plan.ref_report.edits)
+    import science_tool.entity_import as ei
+
+    monkeypatch.setattr(ei, "audit_moved_references", lambda *args, **kwargs: ["dangling"])
+    with pytest.raises(EntityImportError):
+        apply_cohort_import(root, plan)
+    assert a.exists() and b.exists()
+    assert not (root / "entities/plans/0001-alpha.md").exists()
+    assert notes.read_text(encoding="utf-8") == before
