@@ -89,6 +89,25 @@ uv run --with-editable ~/d/science/science <command>
   with concrete fix commands.
 - <other bullets — how tasks are run, where commits go, etc.>
 
+## Design docs and plans
+
+Design docs and implementation plans are first-class `spec` / `plan` entities in
+this project. When a brainstorming or planning skill would write a design doc or
+plan, do NOT commit the loose file — import it so it gains a canonical id and an
+`entities/` home:
+
+1. Author the doc as a project-local **staging file** (e.g. `docs/_staging/x.md`,
+   no frontmatter). This staging file is **not committed**.
+2. Preview: `science entities import docs/_staging/x.md --kind spec --save-plan /tmp/p.json`
+   (use `--kind plan` for implementation plans). **Inspect the manual-hit list** in
+   the preview — plain prose/code path mentions are reported, not auto-repointed.
+3. Apply: `science entities import --apply-plan /tmp/p.json`, then delete the plan file.
+4. **Commit the canonical entity** at `entities/specs/NNNN-slug.md` (or
+   `entities/plans/NNNN-slug.md`), not the staging file — the staging file is moved
+   away by apply.
+
+This overrides any skill default that writes and commits the loose design doc.
+
 ## Known issues / nuances
 
 - <bullets — gotchas not derivable from the code>

@@ -105,6 +105,35 @@ Use them when they add kind-specific ergonomics:
 | `science propositions create` | Durable proposition sources; use this instead of retired `graph add proposition` for project work. |
 | `science evidence-lines create` | Durable support/dispute evidence line sources. |
 
+### Importing Loose Design Docs And Plans
+
+`science entities import` turns a loose Markdown document into a canonical entity:
+it proposes a numeric id, stamps frontmatter, relocates the file under the kind's
+home, and repoints structured references (frontmatter reference fields and Markdown
+links). Plain prose or code path mentions are reported separately and never rewritten.
+
+Preview the import read-only and save the plan outside the project tree:
+
+```bash
+science entities import docs/_staging/my-design.md --kind spec --save-plan /tmp/p.json
+```
+
+**Inspect the manual-hit list** in the preview before applying — those prose/code path
+mentions are not auto-repointed. Then apply the saved plan:
+
+```bash
+science entities import --apply-plan /tmp/p.json
+```
+
+Finally, **commit the canonical entity** at `entities/specs/NNNN-slug.md` (or
+`entities/plans/NNNN-slug.md`), not the staging file. The source must live inside the
+project root; the saved plan (`/tmp/p.json`) lives outside the project tree, since a
+stale plan file is itself a scannable reference artifact. Use `--kind spec` for design
+docs and `--kind plan` for implementation plans. This keeps design docs and plans
+first-class: author a staging file and import it, committing the resulting entity rather
+than the loose file. Newly scaffolded or imported projects carry this in their
+`AGENTS.md`; **existing adopters need a manual AGENTS.md update** to adopt it.
+
 ### CLI Path And Identity Policy
 
 The source entity CLI creates only kinds that have a built-in Markdown path

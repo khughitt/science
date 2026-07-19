@@ -122,8 +122,8 @@ def test_legacy_entity_roots_reports_only_registered_markdown_entity_kinds(tmp_p
         project / "doc" / "plans" / "design.md",
         """
         ---
-        type: spec
-        id: spec:design
+        type: memo
+        id: memo:design
         title: Design note
         ---
         This is doc metadata, not a registered entity kind.

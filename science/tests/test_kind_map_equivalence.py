@@ -43,6 +43,7 @@ FROZEN_MARKDOWN_POLICIES = {
     "story": EntityPathPolicy(Path("entities/stories"), "slug"),
     "report": EntityPathPolicy(Path("entities/reports"), "numeric"),
     "plan": EntityPathPolicy(Path("entities/plans"), "numeric"),
+    "spec": EntityPathPolicy(Path("entities/specs"), "numeric"),
     "search": EntityPathPolicy(Path("entities/searches"), "numeric"),
     "method": EntityPathPolicy(Path("entities/methods"), "slug"),
     "pre-registration": EntityPathPolicy(Path("entities/pre-registrations"), "numeric"),
@@ -87,6 +88,7 @@ FROZEN_DEFAULT_STATUS = {
     "story": "draft",
     "report": "active",
     "plan": "active",
+    "spec": "active",
     "search": "active",
     "method": "active",
     "pre-registration": "active",
@@ -130,6 +132,7 @@ FROZEN_STATUS_VALUES = {
     # was FINISHED. `plan: proposed` deliberately NOT minted -- it is drift toward `draft`.
     "report": frozenset({"draft", "active", "complete", "superseded", "retired", "archived"}),
     "plan": frozenset({"draft", "active", "complete", "superseded", "retired", "archived"}),
+    "spec": frozenset({"draft", "active", "complete", "superseded", "retired", "archived"}),
     "search": frozenset({"active", "complete", "retired", "archived"}),
     "method": frozenset({"active", "superseded", "retired", "archived"}),
     # `committed` added: the freeze point, and the status both templates/pre-registration.md

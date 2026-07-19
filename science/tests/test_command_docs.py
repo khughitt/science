@@ -346,8 +346,8 @@ def test_plan_pipeline_data_gate_mentions_identity_publish_boundary() -> None:
     assert "initial planning" in normalized
 
 
-def test_entities_doc_documents_workflow_identity_contract() -> None:
-    text = _read("docs/user-guide/entities.md")
+def test_datasets_doc_documents_workflow_identity_contract() -> None:
+    text = _read("docs/user-guide/datasets.md")
 
     assert "outputs[].identity" in text
     assert "colocated with `resource_names`" in text
@@ -1436,3 +1436,28 @@ def test_create_project_docs_keep_data_payload_dirs_gitignored() -> None:
     assert "science.yaml" in text
     assert "data.root" in text
     assert "`data/raw` maps to" in text
+
+
+def test_agents_template_and_guide_document_import_interception_in_sequence() -> None:
+    # Both surfaces must carry the full write-then-import sequence IN ORDER:
+    # save-plan preview -> inspect the manual-hit list -> apply-plan -> commit the
+    # canonical entity. Order matters: it is the interception's whole contract.
+    sequence = ["--save-plan", "manual-hit", "--apply-plan", "commit the canonical entity"]
+
+    def _in_order(text: str, tokens: list[str], where: str) -> None:
+        pos = 0
+        for tok in tokens:
+            nxt = text.find(tok, pos)
+            assert nxt >= pos, f"{where}: token missing or out of order: {tok!r}"
+            pos = nxt + len(tok)
+
+    for path in ("templates/agents-md.md", "docs/user-guide/entities.md"):
+        text = _read(path).lower()
+        assert "science entities import" in text, path
+        _in_order(text, sequence, path)
+
+    # Surface-specific anchors.
+    template = _read("templates/agents-md.md")
+    assert "staging file" in template
+    assert "not committed" in template
+    assert "existing adopters" in _read("docs/user-guide/entities.md").lower()

@@ -61,8 +61,8 @@ def _core_kinds_by_class() -> dict[str, list[str]]:
     return {key: sorted(value) for key, value in grouped.items()}
 
 
-def test_entities_doc_documents_split_storage_data_root() -> None:
-    text = (ROOT / "docs/user-guide/entities.md").read_text(encoding="utf-8")
+def test_datasets_doc_documents_split_storage_data_root() -> None:
+    text = (ROOT / "docs/user-guide/datasets.md").read_text(encoding="utf-8")
     assert "## Split storage: version-controlled provenance vs out-of-tree bulk" in text
     assert "SCIENCE_DATA_ROOT" in text
     assert "science.yaml" in text
