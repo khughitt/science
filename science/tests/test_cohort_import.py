@@ -17,7 +17,6 @@ from science_tool.entity_import import (
     parse_cohort_import_plan,
     plan_cohort_import,
 )
-from science_tool.reference_rewrite import plan_reference_rewrite
 
 
 def _project(tmp_path: Path) -> Path:
@@ -373,7 +372,7 @@ def test_validate_rejects_sources_with_the_same_resolved_identity(tmp_path):
         _validate_cohort_plan_for_apply(root, plan)
 
 
-def test_cohort_apply_consumes_validated_source_behind_symlink_alias(tmp_path):
+def test_cohort_apply_rejects_symlink_source_alias_before_mutation(tmp_path):
     root = _project(tmp_path)
     a = _loose(root, "doc/plans/a.md", "# Alpha\n\nbody\n")
     b = _loose(root, "doc/plans/b.md", "# Beta\n\nbody\n")
@@ -381,24 +380,13 @@ def test_cohort_apply_consumes_validated_source_behind_symlink_alias(tmp_path):
     alias.symlink_to("a.md")
     plan = plan_cohort_import(root, [a, b], kind="plan")
     plan.members[0].source_rel = "doc/plans/alias.md"
-    source_paths = {alias, b}
-    destinations = {root / member.dest_rel for member in plan.members}
-    plan.ref_report = plan_reference_rewrite(
-        root,
-        id_substitutions={
-            member.source_rel: member.entity_id for member in plan.members
-        },
-        path_substitutions={
-            member.source_rel: member.dest_rel for member in plan.members
-        },
-        exclude=frozenset(source_paths | destinations),
-    )
 
-    apply_cohort_import(root, plan)
+    with pytest.raises(EntityImportError, match="canonical source"):
+        apply_cohort_import(root, plan)
 
-    assert not a.exists(), "validated source bytes were not consumed"
-    assert not alias.is_symlink(), "lexical source alias was not consumed"
-    assert not b.exists()
+    assert a.exists() and b.exists()
+    assert alias.is_symlink()
+    assert not (root / plan.members[0].dest_rel).exists()
 
 
 def test_cohort_planner_rejects_outside_source_before_reading(tmp_path, monkeypatch):
