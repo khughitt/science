@@ -994,7 +994,7 @@ For each scenario S1–S3, dispatch ≥3 evaluators with `fork_turns="none"`. Gi
 
 - [ ] **Step 2: Record outcomes + acceptance verdict**
 
-Append a results table per scenario (baseline vs with-doctrine) and a verdict. **Acceptance:** with-doctrine reaches the designed outcome on all three scenarios (S1 → `analysis-discipline`; S2 → `measurement-qa` slots; S3 → EXTEND then SPLIT), and differs from the recorded baseline on at least S1 and S2.
+Append a results table per scenario (baseline vs with-doctrine) and a verdict. **Acceptance:** with-doctrine reaches the designed outcome on all three scenarios: S1 → 3/3 `analysis-discipline`, with consistent doctrine-specific reasoning that applies the audit/justify verb boundary, method-independent pre-interpretation gate, and contract slots; S2 → 3/3 complete `measurement-qa` slot sets, including an explicit disposition for each halt condition and a fixed minimum output-package tree; S3 Request A → separate DE-tool selection into a distinct `method-guide` by SPLIT/extracting the existing method content or creating a distinct leaf, never extending the `measurement-qa` leaf; S3 Request B → SPLIT. The required baseline differences are S1's doctrine-specific reasoning consistency and S2's structural convergence.
 
 If a scenario fails acceptance, the doctrine leaf is under-specified. Do NOT weaken the acceptance criterion. Repair via this exact loop, because a doctrine leaf under `skills/meta/` is mirrored into `codex-skills/` and editing the leaf alone staled the mirror (this exact class of miss shipped once before):
 1. Edit the leaf (`skill-taxonomy.md` and/or `skill-authoring.md`).

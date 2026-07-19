@@ -1,6 +1,6 @@
 # Skills Taxonomy Behavioral Scenarios
 
-**Status:** no-doctrine baseline captured 2026-07-19
+**Status:** with-doctrine acceptance passed 2026-07-19
 
 This record defines the behavioral scenario families used to evaluate the
 skills-taxonomy and skill-authoring doctrine. The baseline was captured before
@@ -14,8 +14,8 @@ artifact, not to use tools, and not to inspect files or a repository. They were
 not given the design, implementation plan, doctrine, acceptance criteria,
 expected verdicts, earlier outputs, or any other repository context.
 
-All nine recorded repetitions followed that contract. No runs were discarded
-as contaminated.
+All nine no-doctrine baseline repetitions followed that contract. No baseline
+runs were discarded as contaminated.
 
 ## Scenario definitions
 
@@ -33,10 +33,12 @@ as contaminated.
 > [The stripped `bias-vs-variance-decomposition.md` body in Appendix A followed
 > verbatim.]
 
-**With-doctrine acceptance criterion:** returns `analysis-discipline` by
-applying the verb test: the central operation is to justify, audit, or otherwise
-gate interpretation rather than to select, construct, fit, estimate, or compare
-a method.
+**With-doctrine acceptance criterion:** returns `analysis-discipline` in every
+run and consistently applies the doctrine-specific boundary: the central
+operation is to justify or audit through a method-independent,
+pre-interpretation gate, rather than to select, construct, fit, estimate, or
+compare a method. This reasoning consistency is the required improvement over
+the already-correct baseline label.
 
 ### S2 — Authoring
 
@@ -50,8 +52,8 @@ a method.
 
 **With-doctrine acceptance criterion:** produces the `measurement-qa` slot set:
 sources and ingestion/construction; pre-flight checklist; QA metrics table;
-common failure modes; halt-on conditions; and a minimum output package shown as
-a fixed directory tree.
+common failure modes; halt-on conditions with an explicit disposition for each;
+and a minimum output package shown as a fixed directory tree.
 
 ### S3 — Create, extend, or split
 
@@ -76,8 +78,9 @@ a fixed directory tree.
 > [The stripped `frictionless.md` body in Appendix C followed verbatim.]
 
 **With-doctrine acceptance criterion:** applies the observable
-create/extend/split criteria. Request A is EXTEND because the guidance shares
-the existing leaf's archetype, primary decision, and load occasion. Request B
+create/extend/split criteria. Request A separates DE-tool selection into a
+distinct `method-guide`: either SPLIT/extract the existing DE method content or
+CREATE the distinct leaf, but never EXTEND the `measurement-qa` leaf. Request B
 is SPLIT because the datapackage contract and operation of a named CLI are
 distinct archetypes and independently loadable decisions.
 
@@ -976,3 +979,432 @@ Add a `sources` field to track where data came from:
 - [`../pipelines/snakemake.md`](../pipelines/snakemake.md) - workflow rules that generate package descriptors as terminal artifacts.
 - [`../research/research-package-spec.md`](../research/research-package-spec.md) - research-package profile built on Frictionless data-package structure.
 ````
+
+## With-doctrine results
+
+### Evaluation isolation and discarded runs
+
+Each counted repetition ran in a newly spawned evaluator with
+`fork_turns="none"`. Every evaluator received only the corresponding Task 4
+request/artifact plus the complete current `skill-taxonomy.md` and
+`skill-authoring.md` contents. Evaluators were told to answer only from supplied
+context without using tools, inspecting files, or accessing a repository. They
+did not receive the design, implementation plan, acceptance criteria, expected
+outcomes, baseline results, or other evaluator outputs.
+
+All nine counted responses were uncontaminated. Two preliminary S1 runs were
+discarded before scoring because the controller detected a prompt-fidelity
+error: one clause (`else → leaf`) had been omitted while transcribing the
+complete doctrine. Fresh agents repeated both runs with the corrected complete
+payload. The discarded response bodies are not included below.
+
+### S1 with-doctrine results
+
+#### Repetition 1 — verbatim
+
+````text
+**Verdict: `analysis-discipline`.**
+
+Its central operation is to **audit and justify the error decomposition before interpreting a result or increasing computation**. It requires analysts to name the estimand, estimator, random and systematic errors, determine which terms replicates can shrink, and then follow explicit decision and reporting rules.
+
+It is not primarily a `method-guide`: it does not select or fit one particular estimator or model. Nor is it `measurement-qa`, because its scope extends well beyond measurement fidelity to estimator bias, sampling variance, Monte Carlo error, confounding, leakage, and misspecification. The decomposition is a required reasoning gate applied across methods, with downgrade and halt conditions—exactly the `analysis-discipline` contract.
+````
+
+#### Repetition 2 — verbatim
+
+````text
+**Verdict: `analysis-discipline`.**
+
+Its central operation is to **audit and explicitly decompose bias versus variance before interpreting a result or allocating more computation**. It imposes a required pre-interpretation reasoning step: name the estimand and estimator, classify error terms, determine what replicates can shrink, run diagnostics, then downgrade or qualify the verdict when bias remains.
+
+That matches the analysis-discipline contract:
+
+- **Trigger:** stochastic noise and systematic error may be confused.
+- **Required check:** complete the bias/variance decomposition.
+- **Decision rules:** increase replicates, increase independent units, change estimator, mitigate bias, or downgrade the verdict.
+- **Evidence/artifacts:** decomposition table, diagnostics, sensitivities, and residual-bias report.
+- **Permitted reporting:** call inseparable effects confounded or measurement-limited rather than clean support/null.
+
+It is not primarily `method-guide` because it does not select and fit one particular inferential procedure; the discipline applies across bootstrap, permutation, MCMC, entropy estimation, scRNA analysis, and other methods. It is broader than `measurement-qa`, since measurement bias is only one error class alongside confounding, estimator bias, misspecification, and algorithmic variance.
+````
+
+#### Repetition 3 — verbatim
+
+````text
+**Verdict: `analysis-discipline`.**
+
+Its central requirement is to **audit and name bias and variance components before interpreting a result or allocating more computation**. It applies across estimators and procedures rather than selecting or fitting one specific method. The pre-flight questions, decomposition table, decision rules, verdict downgrades, halt condition (“do not solve…by increasing R”), and required reporting language align directly with the `analysis-discipline` contract.
+
+It is not primarily:
+
+- `method-guide`: it does not teach one model/procedure or fitting workflow.
+- `measurement-qa`: measurement bias is only one error class; the scope includes sampling, algorithmic variance, confounding, and misspecification.
+- `normative-reference`: the table is a reasoning template, not an artifact schema or conformance contract.
+- `practice-guide`: the activity is specifically an interpretation gate, which the taxonomy assigns to `analysis-discipline`.
+````
+
+### S2 with-doctrine results
+
+#### Repetition 1 — verbatim
+
+````text
+```markdown
+---
+name: <subject>-<assay>-qa
+description: Use when assessing whether <assay> measurements are trustworthy for downstream inference, from ingestion through a documented QA verdict.
+archetype: measurement-qa
+provenance: internal
+---
+
+# <Assay> QA
+
+## Scope
+
+Define the measurement being assessed, the downstream assumptions it must support, and what this skill does not evaluate.
+
+## Sources and ingestion/construction
+
+- Accepted inputs and required metadata
+- Provenance and sample identifiers
+- Construction or preprocessing assumptions
+- Input validation and normalization
+- Traceability from source data to QA artifacts
+
+## Pre-flight checklist
+
+- Required files are present and readable
+- Samples and identifiers reconcile
+- Experimental design and controls are available
+- Units, reference versions, and processing versions are explicit
+- Known exclusions or transformations are recorded
+
+## QA metrics
+
+| Metric | What it tests | Calculation/input | Expected range or decision rule | Caveats |
+|---|---|---|---|---|
+| `<metric>` | `<measurement property>` | `<how derived>` | `<pass/warn/halt rule>` | `<limitations>` |
+
+## Common failure modes
+
+### `<failure mode>`
+
+- Signal
+- Likely causes
+- Confirmation check
+- Permitted remediation
+- Effect on downstream interpretation
+
+## Halt-on conditions
+
+Halt downstream interpretation when any of the following apply:
+
+- `<condition and threshold>`
+- `<condition and threshold>`
+
+For each condition, record `pass`, `fail`, or `not evaluated`, with supporting evidence. Do not silently continue after a failed or unevaluated mandatory condition.
+
+## QA verdict
+
+State:
+
+- whether the assay faithfully measures or represents what downstream analysis assumes;
+- the overall verdict: `pass`, `conditional`, or `halt`;
+- failed or unevaluated halt-on conditions;
+- limitations and permitted downstream uses;
+- any required remediation or escalation.
+
+## Minimum output package
+
+```text
+<assay>-qa/
+├── README.md
+├── summary.md
+├── metrics.tsv
+├── halt-conditions.tsv
+├── figures/
+└── provenance/
+```
+
+Required contents:
+
+- `README.md` — package layout and reproduction instructions
+- `summary.md` — verdict, limitations, and evaluated halt-on conditions
+- `metrics.tsv` — metric values, rules, and statuses
+- `halt-conditions.tsv` — every named halt condition with status and evidence
+- `figures/` — diagnostic plots referenced by the summary
+- `provenance/` — input inventory, versions, parameters, and processing trace
+
+## Completion check
+
+The QA package is complete only when all named files exist and `summary.md` explicitly states which halt-on conditions were evaluated and the resulting verdict.
+
+## Companion Skills
+
+- `<relative path>` — `<related routing or downstream-analysis skill>`
+```
+
+This is a `measurement-qa` leaf because its primary question is whether the assay’s observed or derived measurement is trustworthy for inference. Replace placeholders with modality-specific metrics and thresholds; if those are externally governed, replace `provenance: internal` with valid `sources:` rather than using both.
+````
+
+#### Repetition 2 — verbatim
+
+````text
+Classify it as `measurement-qa`: its primary question is whether the assay’s measurements faithfully support downstream inference.
+
+```markdown
+---
+name: <subject-prefix>-<assay>-qa
+description: Use when assessing whether <assay> measurements are trustworthy for downstream analysis.
+archetype: measurement-qa
+provenance: internal
+---
+
+# <Assay> QA
+
+## Scope
+
+What this skill evaluates, the measurement product covered, and what is explicitly out of scope.
+
+## Sources and ingestion/construction
+
+- Accepted inputs and formats
+- Required metadata
+- How the measurement product was generated
+- Provenance and integrity checks
+- Assumptions introduced during ingestion or construction
+
+## Pre-flight checklist
+
+- [ ] Required files are present and readable
+- [ ] Sample identifiers reconcile across inputs and metadata
+- [ ] Controls, batches, and assay-specific covariates are identified
+- [ ] Units, transformations, and reference definitions are explicit
+- [ ] Expected sample and feature counts are recorded
+
+## QA metrics
+
+| Metric | What it tests | Expected range/pattern | Warning condition | Halt condition | Required evidence |
+|---|---|---|---|---|---|
+| `<metric>` | `<measurement assumption>` | `<criterion>` | `<criterion>` | `<criterion>` | `<artifact>` |
+
+## Cross-metric interpretation
+
+How metrics combine into an overall verdict, including cases where one apparently acceptable metric cannot compensate for another failure.
+
+## Common failure modes
+
+### `<failure mode>`
+
+- Signal:
+- Likely causes:
+- Checks:
+- Corrective action:
+- Effect on interpretation:
+
+## Halt-on conditions
+
+Stop downstream analysis when any of the following hold:
+
+- `<condition>`
+- `<condition>`
+- `<condition>`
+
+For every condition, record `evaluated: yes/no`, the evidence examined, and the resulting verdict. Unevaluated required conditions yield an indeterminate verdict, not a pass.
+
+## Verdicts and permitted reporting
+
+- **Pass:** `<criteria and permitted claim>`
+- **Conditional pass:** `<criteria, restrictions, and required caveats>`
+- **Fail:** `<criteria and prohibited downstream uses>`
+- **Indeterminate:** `<missing evidence or unresolved condition>`
+
+## Minimum output package
+
+```text
+<assay>-qa/
+├── README.md
+├── summary.md
+├── verdict.yaml
+├── metrics.tsv
+├── halt-conditions.tsv
+├── inputs/
+│   └── manifest.tsv
+├── figures/
+└── logs/
+```
+
+Define the required contents and schema of each named file. `summary.md` must state the overall verdict and identify every halt-on condition evaluated.
+
+## Completion check
+
+- [ ] Every required QA metric was computed or explicitly marked unavailable
+- [ ] Every halt-on condition was evaluated or marked unresolved
+- [ ] The verdict follows the stated criteria
+- [ ] The complete minimum output package exists
+- [ ] Reporting language matches the verdict
+
+## Companion Skills
+
+- `<relative path>` — `<when it should also be loaded>`
+```
+
+Use the existing matching subject directory and its transitional subject prefix in `name`. If the guidance is externally sourced, replace `provenance: internal` with valid `sources:` metadata; never include both.
+````
+
+#### Repetition 3 — verbatim
+
+````text
+```markdown
+---
+name: <modality>-qa
+description: Use when assessing whether <modality> measurements are trustworthy for downstream inference, from source ingestion through delivery of the QA package.
+archetype: measurement-qa
+provenance: internal
+---
+
+# <Modality> QA
+
+## Scope
+
+Define the measurement product being evaluated, the downstream assumptions it must support, and explicit exclusions.
+
+## Sources and ingestion
+
+- Accepted inputs and required metadata
+- Input integrity and provenance checks
+- Parsing, normalization, or construction steps that affect interpretation
+- Expected units, identifiers, dimensions, and assay-specific controls
+
+## Pre-flight checklist
+
+- Sample and assay metadata complete
+- Expected controls present
+- Files readable and mutually consistent
+- Sample identities and experimental design reconcile
+- Required software/reference versions recorded
+
+## QA metrics
+
+| Metric | What it evaluates | Calculation/input | Expected range or decision rule | Caveats |
+|---|---|---|---|---|
+| `<metric>` | `<measurement property>` | `<method>` | `<rule>` | `<limitations>` |
+
+## Common failure modes
+
+### <Failure mode>
+
+- **Signal:** What reveals the problem
+- **Likely causes:** Plausible assay, ingestion, or construction causes
+- **Impact:** Which downstream assumptions or analyses are compromised
+- **Resolution:** Corrective action or escalation
+- **Recheck:** Evidence required after correction
+
+## Halt-on conditions
+
+| Condition | Evidence | Required action | Permitted override |
+|---|---|---|---|
+| `<condition>` | `<metric/check>` | Halt `<affected inference/workflow>` | `<none or documented authority>` |
+
+State explicitly that every condition must receive an `evaluated`, `not evaluable`, or `not applicable` disposition; silence is not a pass.
+
+## Minimum output package
+
+```text
+<modality>-qa/
+├── README.md
+├── summary.md
+├── metrics.tsv
+├── sample-status.tsv
+├── halt-conditions.tsv
+├── figures/
+└── provenance/
+    ├── inputs.tsv
+    └── methods.md
+```
+
+Define the required columns and contents of every named file. `summary.md` must state the overall verdict, limitations, and the disposition of every halt-on condition.
+
+## Verdict and reporting
+
+Define the allowed verdicts, their decision rules, and language permitted for downstream reporting. Distinguish failure, indeterminate assessment, and limited fitness for a particular use.
+
+## Success check
+
+Confirm that:
+
+- every pre-flight check and QA metric has a recorded result;
+- every halt-on condition has a recorded disposition;
+- the verdict follows the stated decision rules; and
+- the complete minimum output package exists with the required contents.
+
+## Companion Skills
+
+- `../INDEX.md` — the skill index.
+- `<relevant downstream method or analysis-discipline skills>`
+```
+
+This should be a `measurement-qa` leaf because its primary decision is whether the assay’s observed or derived measurements faithfully support downstream inference. Extend an existing leaf only if it concerns the same modality/product, decision, and loading context; otherwise create a new leaf in the existing matching subject directory. Name it for the modality operation—such as `<modality>-qa`—without encoding the archetype in the name.
+````
+
+### S3 with-doctrine results
+
+#### Repetition 1 — verbatim
+
+````text
+- **Request A — SPLIT.** The existing `Bulk RNA-Seq QA` skill is primarily `measurement-qa`: it evaluates whether expression measurements are trustworthy and produces a per-cohort QA package. Choosing a differential-expression tool is a separate `method-guide` decision involving applicability, estimands, assumptions, model selection, fitting, and diagnostics. Extract the existing “Counts-based testing” material and the new DE-tool guidance into a dedicated leaf, while leaving only a routing pointer in `bulk-rnaseq-qa`.
+
+- **Request B — SPLIT.** The supplied Frictionless skill combines a `normative-reference`—what `datapackage.json` means and must contain—with a `tool-guide`—how to operate `frictionless validate`. The authoring guide explicitly identifies Frictionless’s datapackage contract versus CLI tooling as a split case. Keep descriptor schema, invariants, examples, and conformance requirements in one leaf; create a separate CLI leaf covering installation/version assumptions, end-to-end validation, interpreting output, correcting common failures, rerunning, and a verified smoke test.
+````
+
+#### Repetition 2 — verbatim
+
+````text
+Request A — CREATE a new skill.
+
+`bulk-rnaseq-qa` is a `measurement-qa` skill whose primary artifact is the per-cohort QA package. Choosing among DESeq2, edgeR, limma-voom, or continuous-scale alternatives is a separate model-selection decision with the `method-guide` archetype. It may be needed after QA or independently, so it fails the “same archetype, decision, and load task” test for extension.
+
+Keep only boundary-level rules in the QA skill—such as prohibiting count models on TPM—and link to the new differential-expression method guide. The existing “Counts-based testing” material can seed that guide.
+
+Request B — SPLIT the supplied skill.
+
+The current Frictionless skill combines two independent contracts:
+
+- What a `datapackage.json` means and must contain: `normative-reference`.
+- How to operate `frictionless validate` end-to-end: `tool-guide`.
+
+This is the exact split case identified by `skill-authoring`: the datapackage contract and CLI tooling have different archetypes, primary outcomes, and success tests. Retain a descriptor/schema skill with explicit conformance rules, and create a separate Frictionless CLI guide covering setup/version assumptions, a representative validation run, interpretation of output, correction of a common failure, rerun, and successful verification.
+````
+
+#### Repetition 3 — verbatim
+
+````text
+Request A — CREATE a new skill.
+
+Choosing a differential-expression procedure is a `method-guide` decision: select a model/tool based on the data scale, design, assumptions, contrasts, and diagnostic needs. The supplied bulk RNA-seq skill is primarily `measurement-qa`, producing a per-cohort QA package and deciding whether measurements are trustworthy. Because the archetypes and primary decisions differ, extending it would violate the exactly-one-archetype rule.
+
+Create a leaf such as `bulk-rnaseq-differential-expression`, and keep only a concise routing boundary in the QA skill. The new guide should absorb or elaborate the existing “Counts-based testing” and model-formula guidance, covering choices such as DESeq2, edgeR, limma-voom, and continuous-scale alternatives when counts are unavailable.
+
+Request B — SPLIT the supplied skill.
+
+The current Frictionless skill already combines two independently loadable contracts:
+
+- What `datapackage.json` means and must contain: `normative-reference`.
+- How to operate `frictionless validate` end-to-end: `tool-guide`.
+
+This is precisely the split case identified by `skill-authoring`: “the datapackage contract vs. the CLI tooling.” Retain or create a normative Data Package leaf for schemas, invariants, provenance, and conformance. Extract a separate Frictionless CLI leaf covering installation/version assumptions, descriptor creation, a complete validation run, interpreting reports, correcting common failures, rerunning validation, and a verified smoke test.
+````
+
+## Baseline comparison and acceptance verdict
+
+| Scenario | No-doctrine baseline | With-doctrine | Comparison and verdict |
+|---|---|---|---|
+| S1 — classification | 3/3 `analysis-discipline`; reasoning varied but was already directionally correct | 3/3 `analysis-discipline`; 3/3 explicitly applied the audit/justify boundary and a method-independent pre-interpretation gate, and tied the verdict to contract slots | **PASS.** The label remains correct while the reasoning becomes doctrine-specific and consistent. |
+| S2 — authoring | 0/3 complete six-slot skeletons; 0/3 fixed output-package trees | 3/3 supplied sources/ingestion, pre-flight, a QA metrics table, common failure modes, halt-on conditions with explicit disposition, and a fixed minimum output-package tree | **PASS.** The doctrine produced the required structural convergence absent from baseline. |
+| S3 — create/extend/split | Request A: 3/3 EXTEND; Request B: 3/3 EXTEND | Request A: 1/3 SPLIT/extract and 2/3 CREATE, with 3/3 separating a distinct `method-guide` and 0/3 EXTEND; Request B: 3/3 SPLIT | **PASS.** Both arms apply the archetype and independent-load criteria: DE selection is separated from measurement QA, and Frictionless CLI operation is split from the datapackage contract. |
+
+**Overall verdict: PASS.** All three with-doctrine scenario families reached
+their adjudicated designed outcomes. S1 materially differs from its baseline
+through consistent doctrine-specific classification reasoning; S2 materially
+differs through complete slot coverage, explicit halt disposition, and fixed
+output-package structure. S3 cleanly separates both cross-archetype additions.
+No doctrine repair was needed.
