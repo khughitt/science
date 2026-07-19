@@ -196,6 +196,7 @@ class ResolutionIndex:
     doi_corpus: frozenset[str]
     pmid_corpus: frozenset[str]
     data_root: Path
+    entity_prefix_owners: dict[str, int]
 
     def resolve(self, reference: str) -> bool:
         ref = reference.strip()
@@ -215,7 +216,12 @@ class ResolutionIndex:
         if _PMID_RE.match(ref):
             return ref.split(":")[-1] in self.pmid_corpus
         if _TYPED_REF_RE.match(ref):
-            return ref in self.entity_ids
+            # Exact canonical id, or a digit-lead short prefix owned by exactly
+            # one entity (`interpretation:0013` -> the sole `interpretation:0013-…`).
+            # Non-numeric leads never enter the map; ambiguous (multi-owner)
+            # prefixes have owners > 1 — neither resolves, so a citation cannot
+            # silently anchor to a guessed entity.
+            return ref in self.entity_ids or self.entity_prefix_owners.get(ref) == 1
         # Treat anything else as a candidate artifact path. Reject non-relative
         # paths outright: `Path(base) / ref` silently discards `base` when `ref`
         # is absolute, and `..` segments can escape the project root — a
@@ -606,12 +612,21 @@ def build_resolution_index(project_root: Path) -> ResolutionIndex:
 
     root = project_root.resolve()
     task_numbers = {_normalize_task_number(n) for n in refs._load_task_ids(root)}
+    entity_ids = frozenset(refs._load_entity_index(root))
+    entity_prefix_owners: dict[str, int] = {}
+    for eid in entity_ids:
+        kind, _, ident = eid.partition(":")
+        lead = ident.split("-", 1)[0]
+        if lead.isdigit() and lead != ident:
+            key = f"{kind}:{lead}"
+            entity_prefix_owners[key] = entity_prefix_owners.get(key, 0) + 1
     return ResolutionIndex(
         project_root=root,
         task_numbers=frozenset(task_numbers),
-        entity_ids=frozenset(refs._load_entity_index(root)),
+        entity_ids=entity_ids,
         bib_keys=frozenset(load_bib_keys(root)),
         doi_corpus=frozenset(d.strip().lower() for d in refs._load_doi_corpus(root)),
         pmid_corpus=frozenset(refs._load_pmid_corpus(root)),
         data_root=resolve_data_root(root),
+        entity_prefix_owners=entity_prefix_owners,
     )

@@ -349,3 +349,40 @@ def test_same_line_bound_and_unbound_numbers_are_column_discriminated(tmp_path):
     unbound_col = body_line.index("2.71828") + 1
     assert line7[0].col == unbound_col
     assert line7[0].col != bound_col
+
+
+def _interp(tmp_path: Path, slug: str) -> None:
+    d = tmp_path / "entities" / "interpretations"
+    d.mkdir(parents=True, exist_ok=True)
+    (d / f"{slug}.md").write_text(
+        f"---\nid: interpretation:{slug}\nkind: interpretation\n---\n\nbody\n"
+    )
+
+
+def test_resolve_full_id_and_unique_numeric_prefix(tmp_path):
+    _project(tmp_path)
+    _interp(tmp_path, "0007-altview")
+    idx = build_resolution_index(tmp_path)
+    assert idx.resolve("interpretation:0007-altview") is True   # exact full id
+    assert idx.resolve("interpretation:0007") is True           # unique numeric prefix
+    assert idx.resolve("interpretation:9999") is False          # fabricated
+
+
+def test_resolve_ambiguous_numeric_prefix_fails(tmp_path):
+    _project(tmp_path)
+    _interp(tmp_path, "0013-alpha")
+    _interp(tmp_path, "0013-beta")
+    idx = build_resolution_index(tmp_path)
+    assert idx.resolve("interpretation:0013-alpha") is True     # exact still resolves
+    assert idx.resolve("interpretation:0013") is False          # 2 owners -> ambiguous, fail-closed
+
+
+def test_resolve_non_numeric_prefix_is_not_expanded(tmp_path):
+    _project(tmp_path)
+    d = tmp_path / "entities" / "datasets"
+    (d / "cptac.md").write_text(
+        "---\nid: dataset:cptac-gbm-2021-proteogenomics\nkind: dataset\n---\n\nbody\n"
+    )
+    idx = build_resolution_index(tmp_path)
+    assert idx.resolve("dataset:cptac-gbm-2021-proteogenomics") is True  # exact
+    assert idx.resolve("dataset:cptac") is False                # non-numeric lead: never a short form
