@@ -405,14 +405,24 @@ def plan_cohort_import(
         return resolved_target if resolved_target in member_rels else None
 
     def manual_targets(hit: ManualHit) -> list[str]:
-        return sorted(
-            source_rel
-            for source_rel in member_rels
-            if re.search(
-                rf"(?<![A-Za-z0-9._/-]){re.escape(source_rel)}(?![A-Za-z0-9._/-])",
-                hit.text,
+        occurrences: list[tuple[str, int, int]] = []
+        for source_rel in member_rels:
+            offset = 0
+            while (start := hit.text.find(source_rel, offset)) != -1:
+                occurrences.append((source_rel, start, start + len(source_rel)))
+                offset = start + 1
+
+        targets: set[str] = set()
+        for source_rel, start, end in occurrences:
+            shadowed = any(
+                other_start <= start
+                and end <= other_end
+                and (other_start < start or end < other_end)
+                for _other, other_start, other_end in occurrences
             )
-        )
+            if not shadowed:
+                targets.add(source_rel)
+        return sorted(targets)
 
     pairs: list[tuple[str, str]] = []
     for hit in report.hits:

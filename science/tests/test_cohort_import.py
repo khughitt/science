@@ -255,3 +255,15 @@ def test_cohort_manual_pair_attribution_uses_exact_overlapping_path(tmp_path):
     message = str(excinfo.value)
     assert "member.md -> docs/a.md" in message
     assert "member.md -> a.md" not in message
+
+
+def test_cohort_manual_pair_attribution_handles_symbol_prefix(tmp_path):
+    root = _project(tmp_path)
+    short = _loose(root, "a.md", "# Alpha\n\nbody\n")
+    symbol = _loose(root, "@a.md", "# Beta\n\nbody\n")
+    referrer = _loose(root, "member.md", "# Gamma\n\nmentions @a.md\n")
+    with pytest.raises(RefDependentCohortError) as excinfo:
+        plan_cohort_import(root, [short, symbol, referrer], kind="plan")
+    message = str(excinfo.value)
+    assert "member.md -> @a.md" in message
+    assert "member.md -> a.md" not in message
