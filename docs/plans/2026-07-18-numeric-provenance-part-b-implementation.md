@@ -8,7 +8,7 @@
 
 **Tech Stack:** Python 3.12, pydantic v2 (`extra="forbid"` models), pandas/pyarrow (feather), stdlib `json`/`decimal`. No new dependency.
 
-**Design:** `docs/plans/2026-07-18-numeric-provenance-part-b-design.md` (rev 3). Read it before starting; every task below implements a section of it.
+**Design:** `docs/plans/2026-07-18-numeric-provenance-part-b-design.md` (rev 4). Read it before starting; every task below implements a section of it.
 
 ## Global Constraints
 
@@ -73,10 +73,14 @@ class ReaderError:
 # numeric_verification.py — per-binding record (drives BOTH coverage and the oracle)
 @dataclass(frozen=True)
 class VerificationResult:
-    id: str
-    line: int
+    id: str | None                    # None ONLY for a document-level BindingError (e.g. non-map numeric_claims)
+    line: int                         # ALWAYS an int; a BindingError with line=None normalizes to 1
     outcome: str                      # VERIFIED | MISMATCH | UNVERIFIABLE | ERROR
     detail: str                       # message (for mismatch/error); "" otherwise
+
+# BindingError → result-type normalization (fixed contract; a BindingError may carry id=None/line=None):
+#   VerificationResult(id=error.id, line=error.line or 1, outcome=ERROR, detail=error.message)
+#   LintIssue(line=error.line or 1, col=1, match=error.id or "numeric_claims", ...)  # ERROR always emits a warn LintIssue
 
 # coverage payload (scan_root return, new key alongside "counts"/"hits"), DERIVED from VerificationResults:
 # coverage["numeric-verification"] = {"verified": int, "unverifiable": int, "mismatch": int, "error": int}
@@ -396,11 +400,11 @@ def test_bound_claim_suppressed_from_anchor(tmp_path):
 **Interfaces:**
 - Produces: `ResolvedArtifact(path, kind)`, `ArtifactError(detail)`; `resolve_artifact(ref: str, project_root: Path, data_root: Path, *, max_json_bytes: int, max_feather_bytes: int, content: bool = True) -> ResolvedArtifact | ArtifactError`.
 
-Rules (§4/§6): reject absolute / `..`; locate under `project_root` then `data_root`; present under **both** → ambiguity error; `realpath` must stay within the **same** chosen root (symlink escape → error); must be a **regular file**. When `content=True` (data bindings): extension `.json`→kind `json` (cap `max_json_bytes`), `.feather`→kind `feather` (cap `max_feather_bytes`); any other extension or over-cap → error. When `content=False` (**opaque / `%` bindings**): existence/containment/ambiguity/regular-file **only** — kind `"opaque"`, **no** extension requirement, **no** size cap, no read. This is the fix for the opaque fail-open path: opaque still fails closed on a missing/escaping artifact.
+Rules (§4/§6): reject absolute / `..`; locate under `project_root` then `data_root`. **Ambiguity means two _distinct_ resolved files** — canonicalize each candidate (`(root / ref).resolve()`) and dedupe before counting, so `project_root == data_root` (or two roots that resolve to the same file) yields **one** candidate, not a false ambiguity. Two distinct resolved paths → ambiguity error. `realpath` must stay within the chosen root (symlink escape → error); must be a **regular file**. When `content=True` (data bindings): extension `.json`→kind `json` (cap `max_json_bytes`), `.feather`→kind `feather` (cap `max_feather_bytes`); any other extension or over-cap → error. When `content=False` (**opaque / `%` bindings**): existence/containment/ambiguity/regular-file **only** — kind `"opaque"`, **no** extension requirement, **no** size cap, no read. This is the fix for the opaque fail-open path: opaque still fails closed on a missing/escaping artifact.
 
-- [ ] **Step 1: Write the failing test** — tmp project with a real `.json` under root (`content=True` resolves, kind `json`); one under both roots (ambiguity error); a symlink pointing outside root (escape error); a `../x` (rejected); an absolute path (rejected); an over-cap `.json` (error); a **missing** `.png` under `content=False` (**error**, not a pass); a real `.png` under `content=False` (resolves, kind `opaque`). Assert `ResolvedArtifact.kind` and `ArtifactError` per case.
+- [ ] **Step 1: Write the failing test** — tmp project with a real `.json` under root (`content=True` resolves, kind `json`); the **equal-roots case** `resolve_artifact(ref, root, root, ...)` where the same file exists once — asserts it **resolves** (NOT ambiguity), since T14 and same-root callers pass `root, root`; one file under **two distinct** roots (ambiguity error); a symlink pointing outside root (escape error); a `../x` (rejected); an absolute path (rejected); an over-cap `.json` (error); a **missing** `.png` under `content=False` (**error**, not a pass); a real `.png` under `content=False` (resolves, kind `opaque`). Assert `ResolvedArtifact.kind` and `ArtifactError` per case.
 - [ ] **Step 2: Run — expect fail.**
-- [ ] **Step 3: Implement** using `Path.resolve(strict=True)` for realpath, `Path.is_relative_to` for containment against `root.resolve()`, `stat().st_size` for the cap, `.is_file()` after realpath (rejects dirs/symlinks-to-dir). Absolute/`..` guard first, mirroring `ResolutionIndex.resolve` (`numeric_provenance.py:224`). Branch on `content` for the extension/size stage.
+- [ ] **Step 3: Implement** using `Path.resolve(strict=True)` for realpath, `Path.is_relative_to` for containment against `root.resolve()`, `stat().st_size` for the cap, `.is_file()` after realpath (rejects dirs/symlinks-to-dir). Absolute/`..` guard first, mirroring `ResolutionIndex.resolve` (`numeric_provenance.py:224`). Collect the containing resolved path for each root that contains a resolvable file, **dedupe by the canonical resolved `Path`** (so equal/overlapping roots collapse to one candidate), then: 0 → not-found error, ≥2 distinct → ambiguity error, exactly 1 → proceed. Branch on `content` for the extension/size stage.
 - [ ] **Step 4: Run — expect PASS.**
 - [ ] **Step 5: Commit** — `git add science/src/science_tool/artifact_value_reader.py science/tests/test_artifact_value_reader.py && git commit -m "feat(numeric-verification): typed symlink-safe artifact resolver"`
 
@@ -438,13 +442,13 @@ Rules (§3/§4): JSON via `json.load(fh, parse_float=Decimal, parse_int=Decimal,
 - Produces: `run_numeric_verification(document, project_root, data_root, *, max_json_bytes, max_feather_bytes) -> tuple[list[LintIssue], list[VerificationResult]]`. It calls `parse_claim_bindings(document)` internally. It returns **per-binding `VerificationResult` records** (id, line, outcome, detail) — coverage is *derived* by counting outcomes (so the oracle in Task 14 can assert each `{id,line}` row, including the silent `verified`/`unverifiable`), and `LintIssue`s are emitted only for `mismatch`/`error` (`warn`).
 
 Note: put the runner in a new `numeric_verification.py` (imports `LintIssue` from `prose_lint` lazily, like `detect_numeric_anchor` does, to avoid a cycle). Per binding:
-1. Each `BindingError` from `parse_claim_bindings` → a `VerificationResult(id, line, ERROR, msg)` + a `warn` `LintIssue`.
+1. Each `BindingError` from `parse_claim_bindings` → a `VerificationResult(id=err.id, line=err.line or 1, outcome=ERROR, detail=err.message)` + a `warn` `LintIssue(line=err.line or 1, col=1, match=err.id or "numeric_claims")`. This is the fixed normalization for the optional `BindingError.id`/`.line` (a document-level error such as a non-map `numeric_claims` has both `None`).
 2. **Resolve first, always** — `content=False` for `opaque` locators and for `%`-unit literals (parse `binding.value_text` to detect `%`), else `content=True`. A resolver `ArtifactError` → `ERROR` (even for opaque/`%`).
 3. If resolved and locator is `opaque`, or the literal has a `%` unit → `UNVERIFIABLE` (no read).
 4. Else `read_scalar` → on `ReaderError` `ERROR`; else `compare_at_precision(parse_prose_literal(binding.value_text), value, binding.tolerance)` → `VERIFIED`/`MISMATCH`/`UNVERIFIABLE`.
 - Helper `coverage_from_results(results) -> {"verified","unverifiable","mismatch","error"}`.
 
-- [ ] **Step 1: Write the failing test** — a fixture doc binding to the Task-7 fixtures: one `verified`, one `mismatch`, one dangling-artifact `error`, one `opaque` on a **present** artifact (`unverifiable`), and one `opaque` on a **missing** artifact (**`error`**, proving opaque fails closed). Assert: the `VerificationResult` list (each id→outcome, incl. the two silent ones), that `LintIssue`s exist only for the mismatch + the two errors with `severity == "warn"`, and `coverage_from_results(...)` counts.
+- [ ] **Step 1: Write the failing test** — a fixture doc binding to the Task-7 fixtures: one `verified`, one `mismatch`, one dangling-artifact `error`, one `opaque` on a **present** artifact (`unverifiable`), and one `opaque` on a **missing** artifact (**`error`**, proving opaque fails closed). Assert: the `VerificationResult` list (each id→outcome, incl. the two silent ones), that `LintIssue`s exist only for the mismatch + the two errors with `severity == "warn"`, and `coverage_from_results(...)` counts. **Add a separate case**: a doc whose `numeric_claims` frontmatter is a **list, not a mapping** (a document-level `BindingError` with `id=None`, `line=None`) — assert the runner yields exactly one `VerificationResult(id=None, line=1, outcome=ERROR)` and one `warn` `LintIssue(line=1, col=1, match="numeric_claims")` (proves the `id or "numeric_claims"` / `line or 1` normalization).
 - [ ] **Step 2: Run — expect fail.**
 - [ ] **Step 3: Implement** the runner + `coverage_from_results`.
 - [ ] **Step 4: Run — expect PASS.**
@@ -462,7 +466,7 @@ Note: put the runner in a new `numeric_verification.py` (imports `LintIssue` fro
 **Interfaces:**
 - Produces: `couple_checks(selected: list[str]) -> list[str]` (if either of `numeric-anchor`/`numeric-verification` present, ensure both, order-stable); `detect_numeric_verification(path, *, strict=False, project_root=None, data_root=None, max_json_bytes=..., max_feather_bytes=...) -> list[LintIssue]`; `scan_root(...)` return dict gains `"coverage": {check: {...}}`.
 
-- [ ] **Step 1: Write the failing test** — `scan_root(root, checks=["numeric-anchor"])` returns a result whose selected checks include `numeric-verification` (coupling) and whose `["coverage"]["numeric-verification"]` tallies the fixture project; `counts["numeric-verification"]` equals `mismatch+error` only. Config test: `ProseLintConfig(max_json_bytes=10)` round-trips; unknown field still rejected (`extra="forbid"`).
+- [ ] **Step 1: Write the failing test** — coupling is asserted **directly** on the pure helper (`scan_root` does not return its selected-check list, so coupling is not observable from its result): `couple_checks(["numeric-anchor"]) == ["numeric-anchor", "numeric-verification"]`, `couple_checks(["numeric-verification"])` also yields both, order-stable, and an unrelated selection is unchanged. Then prove the *scan* honors coupling by its observable effect: `scan_root(root, checks=["numeric-anchor"])` returns a `["coverage"]["numeric-verification"]` block tallying the fixture project (coverage only appears because verification ran), and `counts["numeric-verification"]` equals `mismatch+error` only. Config test: `ProseLintConfig(max_json_bytes=10)` round-trips; unknown field still rejected (`extra="forbid"`).
 - [ ] **Step 2: Run — expect fail.**
 - [ ] **Step 3: Implement** — add `"numeric-verification"` to `CHECKS`, `DEFAULT_SEVERITY` (`"warn"`), `_DETECTORS` (a thin `detect_numeric_verification` wrapper returning issues-only, so the `unknown`-check guard and generic map stay complete); add `couple_checks` and call it on `selected` at `scan_root:783`; special-case `numeric-verification` in the scan loop to call `run_numeric_verification` (issues + results), extend `hits`, and accumulate `coverage[check] = coverage_from_results(all_results)`; return `{"counts", "hits", "coverage"}`; add the two `int` config fields with defaults `50*1024*1024` / `256*1024*1024`; forward them from `scan_root` params.
 - [ ] **Step 4: Run — expect PASS** (plus full `tests/test_prose_lint.py`).
@@ -492,17 +496,17 @@ Note: put the runner in a new `numeric_verification.py` (imports `LintIssue` fro
 
 **Files:**
 - Modify: `science/src/science_tool/validate/checks/prose_lints.py`
-- Test: `science/tests/` (the validation check's test; mirror existing prose-lint validation test)
+- Test: `science/tests/validate/test_checks_prose_lints.py` (the existing prose-lint validation test — extend it)
 
 **Interfaces:**
 - Consumes: `couple_checks`, `coverage`.
 - Produces: validation runs the atomic pair; `mismatch`/`error` `warn` hits become detailed `Result`s (existing path at `prose_lints.py:139`); `coverage` is surfaced as a single **advisory** (`info`) `Result` per project, separate from `counts`.
 
-- [ ] **Step 1: Write the failing test** — a fixture project with one `mismatch` binding produces a `warn` validation Result on that line; a fully-`verified` project produces the advisory coverage Result and **no** `warn`. Assert the coverage advisory does not go through the `counts` numeric compare. (Mirror the existing prose-lint validation test file — locate it via `grep -rl prose_lints tests/`.)
+- [ ] **Step 1: Write the failing test** — a fixture project with one `mismatch` binding produces a `warn` validation Result on that line; a fully-`verified` project produces the advisory coverage Result and **no** `warn`. Assert the coverage advisory does not go through the `counts` numeric compare. (Extend `science/tests/validate/test_checks_prose_lints.py`.)
 - [ ] **Step 2: Run — expect fail.**
 - [ ] **Step 3: Implement** — apply `couple_checks` where `configured_checks` is resolved; after the existing hit loop, append one advisory `Result` built from `lint_result.get("coverage", {})`.
 - [ ] **Step 4: Run — expect PASS.**
-- [ ] **Step 5: Commit** — `git add science/src/science_tool/validate/checks/prose_lints.py <the validation test file> && git commit -m "feat(numeric-verification): validation coupling and coverage advisory"`
+- [ ] **Step 5: Commit** — `git add science/src/science_tool/validate/checks/prose_lints.py science/tests/validate/test_checks_prose_lints.py && git commit -m "feat(numeric-verification): validation coupling and coverage advisory"`
 
 ---
 
@@ -516,7 +520,7 @@ Note: put the runner in a new `numeric_verification.py` (imports `LintIssue` fro
 
 - [ ] **Step 1: Write the failing test** — assert `lint_source_name("numeric-anchor")` reflects the new version string; assert a document with a bound number yields no numeric-anchor annotation on that span (adapter suppression via the internal `parse_claim_bindings` from Task 5).
 - [ ] **Step 2: Run — expect fail.**
-- [ ] **Step 3: Implement** — bump `"numeric-anchor"` to `"v2026-07-18b"` (or dated to today). 
+- [ ] **Step 3: Implement** — bump `DETECTOR_VERSIONS["numeric-anchor"]` from `"v2026-07-18"` to `"v2026-07-18b"` (exact string; the test in Step 1 asserts this literal).
 - [ ] **Step 4: Run — expect PASS.**
 - [ ] **Step 5: Commit** — `git add science/src/science_tool/annotation/sources/lint.py science/tests/test_annotation_lint_source_numeric.py && git commit -m "chore(numeric-verification): bump numeric-anchor detector version"`
 
@@ -554,6 +558,8 @@ Note: put the runner in a new `numeric_verification.py` (imports `LintIssue` fro
 - **Spec coverage:** §1 authoring → T3,T4; §2 schema → T3; §3 locator → T3,T7; grammar → T1; §4 verify/compare → T2,T6,T7,T8; §5 outcomes/severity/coverage/composition → T5,T8,T9,T10,T11; §6 modules → T1–T8; §7 config → T9; §8 error matrix → exercised across T3,T4,T6,T7,T8,T14; §9 testing → every task + T14; §10 deferred → not built (correct). All sections covered.
 - **Type consistency:** `ParsedLiteral`, `ParsedEntry` (the single `validate_entry` success type), `ClaimBinding` (`value_text` always a numeric literal), locator union, `ResolvedArtifact`/`ArtifactError`/`ReaderError`, `VerificationResult`, and the `coverage` dict shape are pinned in Shared Types and used identically across tasks. Outcome strings `verified/mismatch/unverifiable/error` are the single vocabulary from T1 onward.
 - **Fail-closed provenance:** `opaque`/`%` bindings resolve via `resolve_artifact(..., content=False)` (T6) so a missing/escaping artifact is `error`, not a silent `unverifiable`. `opaque` still pins a numeric literal (T4) so coverage counts only real numbers.
+- **Equal-roots is not ambiguity:** T6 dedupes canonical candidate paths, so `resolve_artifact(ref, root, root, ...)` (the shape T14 and same-root callers use) resolves to one file; ambiguity requires two _distinct_ resolved files.
+- **Authoring errors normalize cleanly:** a `BindingError` with optional `id`/`line` maps to `VerificationResult(id=err.id, line=err.line or 1, ...)` (`id: str | None`) and `LintIssue(line=err.line or 1, col=1, match=err.id or "numeric_claims")` — one fixed contract in Shared Types, exercised by T8's non-map case.
 - **Oracle per-row:** the runner returns per-binding `VerificationResult`s (T8), so T14 can assert the *silent* `verified`/`unverifiable` rows by id — not only the `warn` hits.
 - **Placeholder scan:** T3's pydantic schema and T7's reader are pinned by exhaustive boundary tests (the full §2 matrix in T3; the JSON `0.100000000000000005` fidelity value and the `where`≠value-column union in T7), so a fresh body cannot pass while violating the design. Every commit step stages its own files explicitly.
 - **Ordering:** pure cores (T1–T5) before I/O (T6–T8) before wiring (T9–T12) before docs/oracle (T13–T14); each task ends with an independently testable deliverable.
