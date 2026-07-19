@@ -36,8 +36,8 @@ ALLOWLIST: set[str] = {
     "validate/_helpers.py",
     "entities_inventory.py",                # _latest_activity scans project_root (skip-set added)
     "prose.py", "prose_lint.py", "markers.py", "refs.py",
-    "skills_lint/lint.py", "cli.py",
-    "skills_lint/cli.py",  # scans skills/ (source-provenance dependency views), not entities/
+    "cli.py",
+    "skills_lint/discovery.py",  # shared skills/ discovery, not entities/
 }
 
 
