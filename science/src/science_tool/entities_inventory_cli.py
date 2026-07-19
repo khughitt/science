@@ -89,14 +89,103 @@ def entities_audit_identifiers_command(project_path: Path) -> None:
     help="File of entity ids, one per line; '#' comments and blanks ignored.",
 )
 @click.option("--apply", "apply_changes", is_flag=True, default=False, help="Apply changes (default: dry-run report).")
+@click.option(
+    "--save-plan",
+    type=click.Path(dir_okay=False, path_type=Path),
+    default=None,
+    help="Write the preview plan here, for a later --apply-plan. Refuses to overwrite.",
+)
+@click.option("--overwrite-plan", is_flag=True, default=False, help="Allow --save-plan to replace an existing file.")
+@click.option(
+    "--apply-plan",
+    "apply_plan_path",
+    type=click.Path(exists=True, dir_okay=False, path_type=Path),
+    default=None,
+    help="Apply a plan saved by an earlier preview.",
+)
+@click.option("--expected-plan-sha256", default=None, help="Required with --apply-plan: SHA-256 of the raw plan bytes.")
+@click.option(
+    "--staging-token",
+    default=None,
+    help="Batch token for staging paths. Omit for standalone use: a unique token is "
+         "generated and reported so two concurrent applies never collide.",
+)
 def entities_mark_superseded_command(
-    project_root: Path, ids: tuple[str, ...], ids_from: Path | None, apply_changes: bool
+    project_root: Path,
+    ids: tuple[str, ...],
+    ids_from: Path | None,
+    apply_changes: bool,
+    save_plan: Path | None,
+    overwrite_plan: bool,
+    apply_plan_path: Path | None,
+    expected_plan_sha256: str | None,
+    staging_token: str | None,
 ) -> None:
-    """Auto-derive `superseded` status from linear supersedes chains (report, then --apply)."""
-    from science_tool.consolidation import SupersessionError, mark_superseded
+    """Auto-derive `superseded` status from linear supersedes chains (report / --save-plan / --apply-plan)."""
+    import secrets
+    from datetime import date
 
+    from science_tool.consolidation import SupersessionError, mark_superseded
+    from science_tool.plan_common import (
+        AllSupersessionMembers, EnvelopeError, ExplicitSupersessionIds, plan_sha256,
+        read_plan_bytes, verify_envelope,
+    )
+    from science_tool.supersede_plan import (
+        SupersedeApplyError, SupersedePlan, apply_supersede_plan, plan_supersede,
+    )
+
+    if apply_plan_path is not None:
+        for bad, name in [(ids, "--id"), (ids_from, "--ids-from"), (save_plan, "--save-plan"),
+                          (overwrite_plan, "--overwrite-plan"), (apply_changes, "--apply")]:
+            if bad:
+                raise click.UsageError(f"{name} may not be combined with --apply-plan")
+        if not expected_plan_sha256:
+            raise click.UsageError("--apply-plan requires --expected-plan-sha256")
+        raw = read_plan_bytes(apply_plan_path)
+        try:
+            verify_envelope(raw, expected_plan_sha256)
+        except EnvelopeError as exc:
+            raise click.ClickException(str(exc)) from exc
+        plan = SupersedePlan.model_validate_json(raw)
+        token = staging_token or secrets.token_hex(8)  # unique per standalone apply
+        try:
+            report = apply_supersede_plan(project_root.resolve(), plan, staging_token=token)
+        except SupersedeApplyError as exc:
+            raise click.ClickException(str(exc)) from exc
+        emit(output_format="json", payload={**report, "staging_token": token},
+             render_text=lambda: None)
+        return
+
+    allowlist = _collect_ids(ids, ids_from)
+    if save_plan is not None:
+        # --apply-plan-only flags are invalid while saving.
+        for bad, name in [(apply_changes, "--apply"), (expected_plan_sha256, "--expected-plan-sha256"),
+                          (staging_token, "--staging-token")]:
+            if bad:
+                raise click.UsageError(f"{name} may not be combined with --save-plan")
+        selection = (ExplicitSupersessionIds(kind="explicit_ids", ids=sorted(allowlist))
+                     if allowlist else AllSupersessionMembers(kind="all"))
+        plan = plan_supersede(project_root.resolve(), selection=selection,
+                              preview_date=date.today().isoformat())
+        payload = plan.model_dump_json(indent=2).encode("utf-8")
+        mode = "wb" if overwrite_plan else "xb"
+        try:
+            with open(save_plan, mode) as fh:
+                fh.write(payload)
+        except FileExistsError:
+            raise click.UsageError(f"--save-plan target {save_plan} exists; pass --overwrite-plan") from None
+        emit(output_format="json",
+             payload={"report": plan.preview_report.model_dump(), "plan_sha256": plan_sha256(payload)},
+             render_text=lambda: None)
+        return
+
+    # Plain report mode — flags that only make sense with a plan are rejected here.
+    for bad, name in [(overwrite_plan, "--overwrite-plan"), (expected_plan_sha256, "--expected-plan-sha256"),
+                      (staging_token, "--staging-token")]:
+        if bad:
+            raise click.UsageError(f"{name} requires --save-plan or --apply-plan")
     try:
-        report = mark_superseded(project_root, ids=_collect_ids(ids, ids_from), apply=apply_changes)
+        report = mark_superseded(project_root, ids=allowlist, apply=apply_changes)
     except SupersessionError as exc:
         raise click.ClickException(str(exc)) from exc
     emit(output_format="json", payload=report, render_text=lambda: None)
@@ -119,19 +208,110 @@ def entities_mark_superseded_command(
     help="File of entity ids, one per line; '#' comments and blanks ignored.",
 )
 @click.option("--apply", "apply_changes", is_flag=True, default=False, help="Apply changes (default: dry-run report).")
+@click.option(
+    "--save-plan",
+    type=click.Path(dir_okay=False, path_type=Path),
+    default=None,
+    help="Write the preview plan here, for a later --apply-plan. Refuses to overwrite.",
+)
+@click.option("--overwrite-plan", is_flag=True, default=False, help="Allow --save-plan to replace an existing file.")
+@click.option(
+    "--apply-plan",
+    "apply_plan_path",
+    type=click.Path(exists=True, dir_okay=False, path_type=Path),
+    default=None,
+    help="Apply a plan saved by an earlier preview.",
+)
+@click.option("--expected-plan-sha256", default=None, help="Required with --apply-plan: SHA-256 of the raw plan bytes.")
+@click.option(
+    "--staging-token",
+    default=None,
+    help="Batch token for staging paths. Omit for standalone use: a unique token is "
+         "generated and reported so two concurrent applies never collide.",
+)
 def entities_archive_command(
-    project_root: Path, statuses: tuple[str, ...], ids: tuple[str, ...], ids_from: Path | None, apply_changes: bool
+    project_root: Path,
+    statuses: tuple[str, ...],
+    ids: tuple[str, ...],
+    ids_from: Path | None,
+    apply_changes: bool,
+    save_plan: Path | None,
+    overwrite_plan: bool,
+    apply_plan_path: Path | None,
+    expected_plan_sha256: str | None,
+    staging_token: str | None,
 ) -> None:
-    """Relocate hidden-status entities into entities/_archive/ (report, then --apply)."""
+    """Relocate hidden-status entities into entities/_archive/ (report / --save-plan / --apply-plan)."""
+    import secrets
     from datetime import datetime, timezone
 
     from science_tool.archive import DEFAULT_ARCHIVE_STATUSES, ArchiveError, archive_entities
+    from science_tool.archive_plan import (
+        ArchiveApplyError, ArchivePlan, apply_archive_plan, plan_archive,
+    )
+    from science_tool.plan_common import (
+        ArchiveStatusSweep, EnvelopeError, ExplicitArchiveIds, plan_sha256, read_plan_bytes, verify_envelope,
+    )
+
+    if apply_plan_path is not None:
+        for bad, name in [(statuses, "--status"), (ids, "--id"), (ids_from, "--ids-from"),
+                          (save_plan, "--save-plan"), (overwrite_plan, "--overwrite-plan"),
+                          (apply_changes, "--apply")]:
+            if bad:
+                raise click.UsageError(f"{name} may not be combined with --apply-plan")
+        if not expected_plan_sha256:
+            raise click.UsageError("--apply-plan requires --expected-plan-sha256")
+        raw = read_plan_bytes(apply_plan_path)
+        try:
+            verify_envelope(raw, expected_plan_sha256)
+        except EnvelopeError as exc:
+            raise click.ClickException(str(exc)) from exc
+        plan = ArchivePlan.model_validate_json(raw)
+        token = staging_token or secrets.token_hex(8)  # unique per standalone apply
+        try:
+            report = apply_archive_plan(project_root.resolve(), plan, staging_token=token)
+        except ArchiveApplyError as exc:
+            raise click.ClickException(str(exc)) from exc
+        emit(output_format="json", payload={**report, "staging_token": token},
+             render_text=lambda: None)
+        return
 
     status_set = frozenset(statuses) if statuses else DEFAULT_ARCHIVE_STATUSES
+    allowlist = _collect_ids(ids, ids_from)
     now = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    if save_plan is not None:
+        for bad, name in [(apply_changes, "--apply"), (expected_plan_sha256, "--expected-plan-sha256"),
+                          (staging_token, "--staging-token")]:
+            if bad:
+                raise click.UsageError(f"{name} may not be combined with --save-plan")
+        selection = (ExplicitArchiveIds(kind="explicit_ids", ids=sorted(allowlist),
+                                        allowed_statuses=sorted(status_set))
+                     if allowlist else
+                     ArchiveStatusSweep(kind="all_by_status", statuses=sorted(status_set)))
+        try:
+            plan = plan_archive(project_root.resolve(), selection=selection, now=now)
+        except ArchiveError as exc:
+            raise click.ClickException(str(exc)) from exc
+        payload = plan.model_dump_json(indent=2).encode("utf-8")
+        mode = "wb" if overwrite_plan else "xb"
+        try:
+            with open(save_plan, mode) as fh:
+                fh.write(payload)
+        except FileExistsError:
+            raise click.UsageError(f"--save-plan target {save_plan} exists; pass --overwrite-plan") from None
+        emit(output_format="json",
+             payload={"report": plan.preview_report.model_dump(), "plan_sha256": plan_sha256(payload)},
+             render_text=lambda: None)
+        return
+
+    # Plain report mode — plan-only flags are rejected here.
+    for bad, name in [(overwrite_plan, "--overwrite-plan"), (expected_plan_sha256, "--expected-plan-sha256"),
+                      (staging_token, "--staging-token")]:
+        if bad:
+            raise click.UsageError(f"{name} requires --save-plan or --apply-plan")
     try:
         report = archive_entities(
-            project_root, statuses=status_set, ids=_collect_ids(ids, ids_from), apply=apply_changes, now=now
+            project_root, statuses=status_set, ids=allowlist, apply=apply_changes, now=now
         )
     except ArchiveError as exc:
         raise click.ClickException(str(exc)) from exc

@@ -1028,11 +1028,12 @@ class _PreparedWrite:
             )
 
 
-def _prepare_write(
+def _prepare_write_with_date(
     project_root: Path,
     ref: str,
     fields: Mapping[str, object],
     *,
+    updated_default: str,
     appends: Mapping[str, list[str]] | None = None,
 ) -> _PreparedWrite:
     """PRIVATE. Merge, render, validate, SEAL. Writes NOTHING.
@@ -1052,6 +1053,10 @@ def _prepare_write(
     nothing, fails BEFORE a byte reaches the disk instead of landing and surfacing as a `validate`
     WARN afterwards. Both entry points inherit it because both come through here. A boundary that
     governed only the path nobody was going to corrupt would be decoration.
+
+    `updated_default` is INJECTED rather than read from the clock, so a preview and a later apply
+    of the same plan produce byte-identical output. `_prepare_write` is the legacy entry point that
+    injects today's date; `consolidation._prepare_supersession` injects the plan's preview date.
     """
     project_root = project_root.resolve()
     _reject_if_archived(project_root, ref)
@@ -1064,7 +1069,7 @@ def _prepare_write(
         if key == "status":
             _validate_status(project_root, location.kind, str(value))
         frontmatter[key] = value
-    frontmatter.setdefault("updated", date.today().isoformat())
+    frontmatter.setdefault("updated", updated_default)
 
     # Cheapest authority first: the composed schema decides SHAPE, and it decides it about one
     # record, so it needs no corpus at all. On an UNPINNED project it still refuses the schema-2
@@ -1088,6 +1093,21 @@ def _prepare_write(
         text=text,
         warnings=tuple(warnings),
         seal=_seal(location.entity_id, location.path, text),
+    )
+
+
+def _prepare_write(
+    project_root: Path,
+    ref: str,
+    fields: Mapping[str, object],
+    *,
+    appends: Mapping[str, list[str]] | None = None,
+) -> _PreparedWrite:
+    """Legacy entry point: inject today's date as the `updated` default. See
+    `_prepare_write_with_date` for the full contract; this is a thin delegator preserved for its
+    existing call sites (`edit_entity`)."""
+    return _prepare_write_with_date(
+        project_root, ref, fields, updated_default=date.today().isoformat(), appends=appends
     )
 
 

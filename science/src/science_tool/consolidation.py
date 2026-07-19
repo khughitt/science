@@ -41,13 +41,16 @@ already `superseded` but whose inverse is missing or stale is *repaired*, not sk
 
 from __future__ import annotations
 
+import hashlib
 from dataclasses import dataclass
 from pathlib import Path
 from types import MappingProxyType
 from typing import TYPE_CHECKING, Any, Mapping
 
+from pydantic import BaseModel, ConfigDict
+
 from science_tool.big_picture.frontmatter import read_frontmatter
-from science_tool.entities import _commit_write, _prepare_write, _PreparedWrite, _STATUS_VALUES
+from science_tool.entities import _commit_write, _PreparedWrite, _STATUS_VALUES
 from science_tool.entity_scan import iter_entity_markdown
 from science_tool.graph.reference_resolution import ReferenceResolver
 from science_tool.graph.relation_audit import RelationAudit, RelationDefect, audit_relations
@@ -318,33 +321,33 @@ class SupersedesGraph:
     archived_targets: tuple[dict[str, str], ...]  # edge resolves INTO the archive -- historical
     unmanaged_targets: tuple[dict[str, str], ...]  # edge resolves, but to nothing WE can stamp
     unbacked_inverses: tuple[dict[str, str], ...]  # authored inverse with NO admitted edge behind it
+    supported_kinds: frozenset[str]  # the frozen auto-apply policy (I4) -- travels WITH the graph
 
 
-def build_supersedes_graph(inputs: SupersessionInputs) -> SupersedesGraph:
-    """Classify the supersession lineage from the loaded `inputs`.
+def _classify_from_projections(
+    material: SupersessionDecisionMaterial, *, path_by_id: Mapping[str, Path]
+) -> SupersedesGraph:
+    """The single supersession classifier. A pure function of the material projections plus a
+    live-only path map.
+
+    Both `build_supersedes_graph` (live, FS-backed) and `build_supersedes_graph_from_material`
+    (frozen material, no filesystem) call this. `path_by_id` is the ONLY thing that differs between
+    the two callers -- it is live-only and not decision-bearing (`Result` needs a FILE, but nothing
+    that decides WHAT to stamp reads a path) -- so the two entry points are structurally guaranteed
+    to classify identically wherever it matters.
 
     The audit has already decided WHICH EDGES ARE REAL — resolvable, legal, non-self-referential,
-    acyclic — by asking `materialize`'s own admission. This function asks the one question left:
+    acyclic — by asking `materialize`'s own admission, and `_project_inputs` froze that verdict into
+    `material.admitted_supersedes` / `material.defects`. This function asks the one question left:
     OF THE REAL EDGES, WHICH TARGETS CAN WE STAMP? Archived (frozen: report, don't block), unmanaged
     (not our markdown: report, don't block), or ours (stamp it).
-
-    A pure function of its inputs: it never touches the filesystem, which is what lets a test
-    construct the commons/non-markdown populations — and the audit's verdict — as the data they are.
     """
-    entries = inputs.entries
-    resolution = inputs.resolution
-    audit = inputs.audit
+    mutable = frozenset(material.mutable_population)
+    archived = frozenset(material.archived_population)
+    status_by_id: dict[str, str | None] = {e.eid: e.status for e in material.entries}
+    kind_by_id: dict[str, str] = {e.eid: e.kind for e in material.entries}
 
-    status_by_id: dict[str, str | None] = {}
-    kind_by_id: dict[str, str] = {}
-    path_by_id: dict[str, Path] = {}
-    for path, fm in entries:
-        eid = resolution.canonical(str(fm["id"])) or str(fm["id"])
-        status_by_id[eid] = fm.get("status")
-        kind_by_id[eid] = _kind_of(eid, fm)
-        path_by_id[eid] = path
-
-    # THE EDGE IS ALREADY REAL. `audit.relations("supersedes")` yields only relations `materialize`
+    # THE EDGE IS ALREADY REAL. `material.admitted_supersedes` is exactly the relations `materialize`
     # ADMITTED: the subject is a live loaded entity, the object resolves to a live entity or an
     # active archived row, the kind pair is allowed, it is not a self-edge, and the lineage it sits
     # in is acyclic. Not one of those questions is re-asked here, because every time this module
@@ -359,14 +362,12 @@ def build_supersedes_graph(inputs: SupersessionInputs) -> SupersedesGraph:
     archived_targets: list[dict[str, str]] = []
     unmanaged_targets: list[dict[str, str]] = []
 
-    for admitted_relation in audit.relations(_SUPERSEDES):
-        src = admitted_relation.subject.canonical_id
-        dst = admitted_relation.object_canonical_id
-        path_of_edge = admitted_relation.relation.source_path
+    for ep in material.admitted_supersedes:
+        src, dst, path_of_edge = ep.src, ep.dst, ep.source_path
         if dst is None:
             continue  # an EXTERNAL term: a real edge, but not a node of this project, so unstampable
 
-        if dst in resolution.archived:
+        if dst in archived:
             # A VALID historical supersession into a frozen record -- the ordinary end of a lineage
             # (supersede, then archive). Not an error, and not a mutation. Report it, keep it out of
             # the topology, and do NOT block.
@@ -379,7 +380,7 @@ def build_supersedes_graph(inputs: SupersessionInputs) -> SupersedesGraph:
                 }
             )
             continue
-        if dst not in resolution.mutable:
+        if dst not in mutable:
             # ADMITTED, but not ours: a commons-overlay entity, a non-markdown source. `materialize`
             # builds this edge happily; we simply have no markdown file here to write.
             unmanaged_targets.append(
@@ -402,10 +403,10 @@ def build_supersedes_graph(inputs: SupersessionInputs) -> SupersedesGraph:
     # leave the `supersedes` edges perfectly linear, so this component would otherwise be advertised
     # as a STAMPABLE chain. Nothing inside a cycle is stampable.
     cyclic_nodes = frozenset(
-        node for defect in audit.defects if defect.code == "cycle"
-        for node in (defect.subject, defect.object)
+        node for d in material.defects if d.code == "cycle" for node in (d.subject, d.object)
     )
 
+    # --- UNCHANGED from the pre-refactor build_supersedes_graph body -------------------------------
     # SORTED, so the topology and every id it yields are deterministic -- a set's iteration order is
     # not. Everything below reads THIS list; nothing re-derives an admission.
     admitted = sorted(edges)
@@ -434,10 +435,11 @@ def build_supersedes_graph(inputs: SupersessionInputs) -> SupersedesGraph:
     # ambiguous survivor and must not acquire a lineage claim here.
     superseder_by_id: dict[str, str] = {}
     for chain in linear:
-        members = {chain.survivor, *chain.superseded}
+        chain_members = {chain.survivor, *chain.superseded}
         for src, dst in admitted:
-            if src in members and dst in members:
+            if src in chain_members and dst in chain_members:
                 superseder_by_id[dst] = src  # a linear chain is a path: exactly one in-edge
+    # --- end UNCHANGED block ------------------------------------------------------------------------
 
     # THE FOURTH OUTCOME, derived from the ADMITTED edges and nothing else.
     #
@@ -451,43 +453,212 @@ def build_supersedes_graph(inputs: SupersessionInputs) -> SupersedesGraph:
     # of a BRANCHED component has a real in-edge and IS backed, even though it is never stamped.
     superseded_by_id: dict[str, str] = {}
     unbacked_inverses: list[dict[str, str]] = []
-    for _path, fm in entries:
-        raw_inverse = fm.get("superseded_by")
-        if not isinstance(raw_inverse, str) or not raw_inverse:
+    for e in material.entries:
+        if e.superseded_by_raw is None:
             continue
-        eid = resolution.canonical(str(fm["id"])) or str(fm["id"])
-        superseder = resolution.canonical(raw_inverse)
+        superseder = e.superseded_by_canonical
         if superseder is None:
             continue  # a DANGLING inverse -- `check_resolution` owns that one, not this check
-        if (superseder, eid) not in edges:
+        if (superseder, e.eid) not in edges:
             # SAME SHAPE as the other outcomes -- {id, superseder, reason}. `SupersessionError`
             # formats a blocking list uniformly, so a bespoke key name would KeyError inside the
             # raise: the failure path would fail.
             unbacked_inverses.append(
                 {
-                    "id": eid,
+                    "id": e.eid,
                     "superseder": superseder,
                     "reason": (
                         "authored superseded_by has no canonical sci:supersedes edge behind it"
                     ),
                 }
             )
-        superseded_by_id[eid] = superseder  # canonicalized, so reconciliation compares like-for-like
+        superseded_by_id[e.eid] = superseder  # canonicalized, so reconciliation compares like-for-like
 
+    invalid = tuple(
+        RelationDefect(code=d.code, path=d.path, subject=d.subject, predicate=d.predicate,
+                       object=d.object, message=d.message)
+        for d in material.defects
+    )
     return SupersedesGraph(
         linear=tuple(linear),
         non_linear=tuple(non_linear),
         status_by_id=MappingProxyType(status_by_id),
         kind_by_id=MappingProxyType(kind_by_id),
-        path_by_id=MappingProxyType(path_by_id),
+        path_by_id=MappingProxyType(dict(path_by_id)),
         edges=frozenset(edges),
         superseder_by_id=MappingProxyType(superseder_by_id),
         superseded_by_id=MappingProxyType(superseded_by_id),
-        invalid=audit.defects,
+        invalid=invalid,
         archived_targets=tuple(archived_targets),
         unmanaged_targets=tuple(unmanaged_targets),
         unbacked_inverses=tuple(unbacked_inverses),
+        supported_kinds=frozenset(material.supported_kinds),  # I4: policy travels on the graph
     )
+
+
+def build_supersedes_graph(inputs: SupersessionInputs) -> SupersedesGraph:
+    """Classify the supersession lineage from the loaded `inputs`.
+
+    A thin wrapper now: project the inputs through `_project_inputs` (the SAME projection Gate A
+    freezes into a `SupersessionDecisionMaterial`), keep the live-only path map, and run the shared
+    classifier `_classify_from_projections`. This is what makes the live path and the
+    material-derived path (`build_supersedes_graph_from_material`) produce the SAME graph on every
+    decision-bearing field: they are the same function, called with the same material, differing
+    only in `path_by_id`.
+
+    A pure function of its inputs: it never touches the filesystem itself (the loader does), which
+    is what lets a test construct the commons/non-markdown populations — and the audit's verdict —
+    as the data they are.
+    """
+    material = _project_inputs(inputs)
+    resolution = inputs.resolution
+    path_by_id: dict[str, Path] = {}
+    for path, fm in inputs.entries:
+        eid = resolution.canonical(str(fm["id"])) or str(fm["id"])
+        path_by_id[eid] = path
+    return _classify_from_projections(material, path_by_id=path_by_id)
+
+
+def build_supersedes_graph_from_material(
+    material: SupersessionDecisionMaterial,
+) -> SupersedesGraph:
+    """Gate-B derivation: rebuild the disposition from the frozen material, no filesystem read.
+
+    `path_by_id` is empty on purpose -- paths are not decision-bearing (see `_classify_from_projections`)
+    -- so a caller that needs a path (there is none here: the material carries no filesystem) never
+    gets one silently wrong.
+    """
+    return _classify_from_projections(material, path_by_id={})
+
+
+# ---------------------------------------------------------------------------------------------
+# decision material — the classifier's INPUT projections, frozen for a Gate A drift digest
+# ---------------------------------------------------------------------------------------------
+
+_MATERIAL_VERSION = 1
+
+
+class EntryProjection(BaseModel):
+    """One entity's decision-relevant frontmatter: identity, status, kind, and the authored
+    `superseded_by` inverse, both as-written and canonicalized."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    eid: str
+    status: str | None
+    kind: str
+    superseded_by_raw: str | None
+    superseded_by_canonical: str | None
+
+
+class EdgeProjection(BaseModel):
+    """One ADMITTED `sci:supersedes` relation. Duplicates are NOT collapsed: the admitted stream
+    is a list here, on purpose — collapsing it to a set is the exact degree-miscount bug
+    `build_supersedes_graph` warns about for its own `edges` set."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    src: str
+    dst: str | None
+    source_path: str
+
+
+class DefectProjection(BaseModel):
+    """One relation the audit refused — the full `RelationDefect` record, not a summary."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    code: str
+    path: str
+    subject: str
+    predicate: str
+    object: str
+    message: str
+
+
+class SupersessionDecisionMaterial(BaseModel):
+    """Everything `build_supersedes_graph` reads off `SupersessionInputs`, frozen BEFORE any
+    graph exists. A digest over this reproduces the whole derivation — `superseded_by_id`,
+    `unbacked_inverses`, `archived_targets`, `unmanaged_targets` all fall out of these same
+    fields — not just the handful a graph-OUTPUT serialization would happen to keep.
+
+    Every list is sorted for a deterministic digest, EXCEPT that sorting `admitted_supersedes`
+    and `defects` never collapses a duplicate: sort is a total order over the projected tuples,
+    not a dedup.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    material_version: int
+    entries: list[EntryProjection]
+    admitted_supersedes: list[EdgeProjection]
+    defects: list[DefectProjection]
+    mutable_population: list[str]
+    archived_population: list[str]
+    supported_kinds: list[str]  # the frozen auto-apply policy the classifier reads (I4)
+
+
+def _project_inputs(inputs: SupersessionInputs) -> SupersessionDecisionMaterial:
+    """Serialize exactly what `build_supersedes_graph` reads off `SupersessionInputs`, resolving
+    the two things the classifier needs the resolver for (each entry's canonical id and each
+    authored `superseded_by`'s canonical) so the classifier can run without a resolver. Sorted for
+    a deterministic digest; admitted relations and defects keep duplicates."""
+    resolution = inputs.resolution
+    entries: list[EntryProjection] = []
+    for _path, fm in inputs.entries:
+        eid = resolution.canonical(str(fm["id"])) or str(fm["id"])
+        raw_inverse = fm.get("superseded_by")
+        raw = raw_inverse if isinstance(raw_inverse, str) and raw_inverse else None
+        entries.append(
+            EntryProjection(
+                eid=eid,
+                status=fm.get("status"),
+                kind=_kind_of(eid, fm),
+                superseded_by_raw=raw,
+                superseded_by_canonical=(resolution.canonical(raw) if raw else None),
+            )
+        )
+    edges = [
+        EdgeProjection(
+            src=admitted_relation.subject.canonical_id,
+            dst=admitted_relation.object_canonical_id,
+            source_path=admitted_relation.relation.source_path,
+        )
+        for admitted_relation in inputs.audit.relations(_SUPERSEDES)
+    ]
+    defects = [
+        DefectProjection(
+            code=d.code, path=d.path, subject=d.subject, predicate=d.predicate,
+            object=d.object, message=d.message,
+        )
+        for d in inputs.audit.defects
+    ]
+    return SupersessionDecisionMaterial(
+        material_version=_MATERIAL_VERSION,
+        entries=sorted(entries, key=lambda e: e.eid),
+        admitted_supersedes=sorted(edges, key=lambda e: (e.src, e.dst or "", e.source_path)),
+        defects=sorted(
+            defects, key=lambda d: (d.code, d.subject, d.predicate, d.object, d.path, d.message)
+        ),
+        mutable_population=sorted(resolution.mutable),
+        archived_population=sorted(resolution.archived),
+        # The auto-apply supported-kind policy IS a decision input (design §5.2): serialize it so
+        # the digest covers it. `_supports_superseded(k)` is `_SUPERSEDED in _STATUS_VALUES.get(k,
+        # ...)`, so the supported set is exactly the kinds whose status vocab admits `superseded`.
+        supported_kinds=sorted(k for k, v in _STATUS_VALUES.items() if _SUPERSEDED in v),
+    )
+
+
+def build_decision_material(project_root: Path) -> SupersessionDecisionMaterial:
+    """The classifier's frozen INPUT — never the graph's output. Never calls
+    `build_supersedes_graph`: that would invert input and output, and defeat the whole point of a
+    digest that has to reproduce the derivation independently of it."""
+    return _project_inputs(load_supersession_inputs(project_root))
+
+
+def decision_digest(material: SupersessionDecisionMaterial) -> str:
+    """A stable digest over the full decision material — Gate A's apply-time drift check."""
+    return hashlib.sha256(material.model_dump_json().encode("utf-8")).hexdigest()
 
 
 # ---------------------------------------------------------------------------------------------
@@ -496,7 +667,7 @@ def build_supersedes_graph(inputs: SupersessionInputs) -> SupersedesGraph:
 
 
 def _prepare_supersession(
-    project_root: Path, graph: SupersedesGraph, member: str
+    project_root: Path, graph: SupersedesGraph, member: str, *, preview_date: str
 ) -> _PreparedWrite:
     """Prepare `status: superseded` + its derived inverse for one member. Writes NOTHING.
 
@@ -504,12 +675,105 @@ def _prepare_supersession(
     populated from the admitted canonical edges and nothing else — so there is no argument a caller
     could corrupt, and a groundless inverse is *unexpressible* rather than merely unreached. A field
     nobody can author is not the same as a field nobody can pass; this is the latter, closed.
+
+    `preview_date` is threaded through to `_prepare_write_with_date` as the `updated` default, so a
+    saved plan's preview and its later apply stamp the same date.
     """
-    return _prepare_write(
+    from science_tool.entities import _prepare_write_with_date
+
+    return _prepare_write_with_date(
         project_root,
         member,
         {"status": _SUPERSEDED, "superseded_by": graph.superseder_by_id[member]},
+        updated_default=preview_date,
     )
+
+
+def _disposition_report(graph: SupersedesGraph, *, ids: frozenset[str] | None) -> dict[str, Any]:
+    """The dry-run report, as a PURE function of a `SupersedesGraph`. Lifted out of `mark_superseded`
+    so `mark_superseded` (FS-loaded graph) and the future `plan_supersede` preview (material-derived
+    graph) both call it — the disposition needs the graph and nothing else, so preview never needs a
+    second filesystem load. Raises `SupersessionError` when an allowlisted id is not a derivable
+    member, exactly as `mark_superseded` did before the extraction.
+
+    Reads `graph.supported_kinds` -- the AUTHENTICATED policy carried on the graph (I4) -- not the
+    live module-level `_supports_superseded`: a preview built from a saved material must derive the
+    same disposition even if the live project's policy has since moved.
+    """
+    chains: list[dict[str, Any]] = []
+    to_mark: list[str] = []
+    to_repair: list[str] = []
+    skipped_kinds: list[dict[str, str]] = []
+    for chain in graph.linear:
+        chains.append(
+            {"survivor": chain.survivor, "members": list(chain.superseded), "linear": True}
+        )
+        for member in chain.superseded:
+            kind = graph.kind_by_id.get(member, member.split(":", 1)[0])
+            if kind not in graph.supported_kinds:
+                skipped_kinds.append({"id": member, "kind": kind})
+                continue
+            # THE PROJECTION IS RECONCILED, NOT MERELY INITIALIZED. A bare `status == superseded`
+            # short-circuit conflates "the status is already right" with "the projection is already
+            # right", so a missing or stale inverse stays broken forever and no re-run repairs it.
+            if graph.status_by_id.get(member) != _SUPERSEDED:
+                to_mark.append(member)  # status not yet stamped
+            elif graph.superseded_by_id.get(member) != graph.superseder_by_id[member]:
+                to_repair.append(member)  # status fine, inverse MISSING or STALE
+            # else: fully reconciled -- touch nothing, not one byte.
+
+    if ids is not None:
+        derivable = set(to_mark) | set(to_repair)
+        unresolved = sorted(ids - derivable)
+        if unresolved:
+            raise SupersessionError(
+                [f"allowlisted id is not derivable as a supersession member: {entity_id}" for entity_id in unresolved]
+            )
+        to_mark = [member for member in to_mark if member in ids]
+        to_repair = [member for member in to_repair if member in ids]
+
+    return {
+        "chains": chains,
+        "non_linear": [{"nodes": list(c.nodes), "reason": c.reason} for c in graph.non_linear],
+        "to_mark": to_mark,
+        "applied": [],
+        "skipped_kinds": skipped_kinds,
+        "to_repair": to_repair,
+        "repaired": [],
+        # The outcomes come OFF THE GRAPH. They are not recomputed here: the audit and the builder
+        # decided, and a second classification could disagree with the first.
+        #
+        # SORTED, so the four secondary lists are CANONICAL rather than audit/scan order -- an
+        # OBSERVABLE 0.5.0 behavior change (Task 18 release notes). Blocking semantics are UNCHANGED:
+        # `invalid_relations` and `unbacked_inverses` still refuse apply; `archived_targets` and
+        # `unmanaged_targets` still do not block. Only the order is now deterministic.
+        "invalid_relations": sorted(
+            (
+                {
+                    "code": d.code,
+                    "path": d.path,
+                    "subject": d.subject,
+                    "predicate": d.predicate,
+                    "object": d.object,
+                    "message": d.message,
+                }
+                for d in graph.invalid
+            ),
+            key=lambda d: (d["code"], d["path"], d["subject"], d["predicate"], d["object"], d["message"]),
+        ),
+        "archived_targets": sorted(
+            (dict(a) for a in graph.archived_targets),
+            key=lambda a: (a["id"], a["superseder"], a["path"]),
+        ),
+        "unmanaged_targets": sorted(
+            (dict(u) for u in graph.unmanaged_targets),
+            key=lambda u: (u["id"], u["superseder"], u["path"]),
+        ),
+        "unbacked_inverses": sorted(
+            (dict(u) for u in graph.unbacked_inverses),
+            key=lambda u: (u["id"], u["superseder"]),
+        ),
+    }
 
 
 def mark_superseded(
@@ -551,66 +815,12 @@ def mark_superseded(
     """
     project_root = project_root.resolve()
     graph = build_supersedes_graph(load_supersession_inputs(project_root))
-
-    chains: list[dict[str, Any]] = []
-    to_mark: list[str] = []
-    to_repair: list[str] = []
-    skipped_kinds: list[dict[str, str]] = []
-    for chain in graph.linear:
-        chains.append(
-            {"survivor": chain.survivor, "members": list(chain.superseded), "linear": True}
-        )
-        for member in chain.superseded:
-            kind = graph.kind_by_id.get(member, member.split(":", 1)[0])
-            if not _supports_superseded(kind):
-                skipped_kinds.append({"id": member, "kind": kind})
-                continue
-            # THE PROJECTION IS RECONCILED, NOT MERELY INITIALIZED. A bare `status == superseded`
-            # short-circuit conflates "the status is already right" with "the projection is already
-            # right", so a missing or stale inverse stays broken forever and no re-run repairs it.
-            if graph.status_by_id.get(member) != _SUPERSEDED:
-                to_mark.append(member)  # status not yet stamped
-            elif graph.superseded_by_id.get(member) != graph.superseder_by_id[member]:
-                to_repair.append(member)  # status fine, inverse MISSING or STALE
-            # else: fully reconciled -- touch nothing, not one byte.
-
-    if ids is not None:
-        derivable = set(to_mark) | set(to_repair)
-        unresolved = sorted(ids - derivable)
-        if unresolved:
-            raise SupersessionError(
-                [f"allowlisted id is not derivable as a supersession member: {entity_id}" for entity_id in unresolved]
-            )
-        to_mark = [member for member in to_mark if member in ids]
-        to_repair = [member for member in to_repair if member in ids]
-
-    report: dict[str, Any] = {
-        "chains": chains,
-        "non_linear": [{"nodes": list(c.nodes), "reason": c.reason} for c in graph.non_linear],
-        "to_mark": to_mark,
-        "applied": [],
-        "skipped_kinds": skipped_kinds,
-        "to_repair": to_repair,
-        "repaired": [],
-        # The outcomes come OFF THE GRAPH. They are not recomputed here: the audit and the builder
-        # decided, and a second classification could disagree with the first.
-        "invalid_relations": [
-            {
-                "code": d.code,
-                "path": d.path,
-                "subject": d.subject,
-                "predicate": d.predicate,
-                "object": d.object,
-                "message": d.message,
-            }
-            for d in graph.invalid
-        ],
-        "archived_targets": [dict(a) for a in graph.archived_targets],
-        "unmanaged_targets": [dict(u) for u in graph.unmanaged_targets],
-        "unbacked_inverses": [dict(u) for u in graph.unbacked_inverses],
-    }
+    report = _disposition_report(graph, ids=ids)
     if not apply:
         return report
+
+    to_mark = report["to_mark"]
+    to_repair = report["to_repair"]
 
     # ALL-OR-NONE, PHASE 1: the authored graph must BE a graph, and the corpus must not contradict
     # it. `archived_targets`/`unmanaged_targets` are NOT here -- both are edges the graph resolves
@@ -638,7 +848,13 @@ def mark_superseded(
     # Individual writes are atomic; the loop is not. What makes that survivable is the reconciliation
     # above -- a re-run recomputes the graph, sees the members whose projection is missing or stale,
     # and finishes the job.
-    prepared = [_prepare_supersession(project_root, graph, m) for m in (*to_mark, *to_repair)]
+    from datetime import date
+
+    _preview_date = date.today().isoformat()
+    prepared = [
+        _prepare_supersession(project_root, graph, m, preview_date=_preview_date)
+        for m in (*to_mark, *to_repair)
+    ]
     for write in prepared:  # validation is BEHIND us; this loop only commits
         _commit_write(write)
 
