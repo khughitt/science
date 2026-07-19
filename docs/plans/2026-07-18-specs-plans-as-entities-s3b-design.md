@@ -308,9 +308,14 @@ composes a **new** coordinator from the extractable low-level primitives —
 `exclude`), and `audit_moved_references` — welding none of them into per-doc order.
 `claim_number_in_dir` itself gets one **behavior-preserving hardening**
 (`entity_reservation.py`): after its `O_CREAT|O_EXCL` open proves ownership, a
-failed write unlinks the primitive's own partial file before re-raising, so a
-mid-`claim` crash leaves nothing behind for any caller (see "Move all"). This is
-the only edit to an existing primitive; the rest are consumed unchanged.
+**caught** write failure unlinks the primitive's own partial file before
+re-raising, so an in-process error leaves nothing behind for any caller (see
+"Move all"). This covers the exception path only — a `SIGKILL`/process death
+between the open and the completed write runs no handler and **can** leave a
+partial destination; that residue is a **third state** the resume classifier
+recognizes and safely refuses on (see "Journal + resume"), not something this
+hardening claims to prevent. This is the only edit to an existing primitive; the
+rest are consumed unchanged.
 
 ### Deterministic canonical id (number + slug)
 
@@ -401,7 +406,10 @@ The single corpus-wide `apply_reference_rewrite` then rewrites only the
    `try/except` that unlinks on failure). Ownership-proven cleanup and
    claim-then-register together give both rollback completeness and
    concurrent-writer safety: the coordinator only ever records — and only ever
-   restores — paths a successful claim confirmed it owns.
+   restores — paths a successful claim confirmed it owns. (The cleanup covers the
+   in-process exception path; a `SIGKILL` between open and the completed write can
+   still leave a partial destination, which resume classifies as a third state
+   and refuses on — see "Journal + resume".)
 4. **Replay once** — a single `apply_reference_rewrite` over the merged report
    (same exclusion as plan), accumulating `written`.
 5. **Audit all** — `audit_moved_references` for every moved destination.
@@ -433,8 +441,12 @@ mutation**.
 1. **Classify every journaled path first**, before writing anything: hash the
    current on-disk file and match it to the recorded preimage or postimage
    (each `content | absent`).
-2. **Any path matching neither** → external drift since planning; **refuse the
-   whole resume** (do not guess).
+2. **Any path matching neither** → **refuse the whole resume** (do not guess).
+   This is the one state the ownership-proven cleanup cannot reach: a `SIGKILL`
+   mid-`claim` leaves a **partial moved-dest** whose content is neither `absent`
+   (its preimage) nor the recorded postimage. Resume names the path and refuses;
+   the operator removes the partial file and re-runs, which then classifies that
+   dest as `absent` and re-claims it cleanly.
 3. Otherwise **perform each not-yet-done path by its role's replay op** — a
    moved-dest via `claim_number_in_dir`, a referrer via atomic replacement of the
    stored postimage bytes, a moved-source via `unlink`. Not one generic write.
@@ -610,7 +622,10 @@ doc):
   op** (moved-dest re-claimed, referrer atomic-replaced from its stored postimage,
   moved-source unlinked), then **runs `audit_moved_references` per destination**,
   without re-planning or re-running `apply_reference_rewrite`; a journaled path
-  matching neither preimage nor postimage **refuses**; leftover journaled
+  matching neither preimage nor postimage **refuses** — exercised with a
+  **partial moved-dest** (content that is neither `absent` nor the postimage,
+  standing in for a `SIGKILL` between open and completed write), asserting resume
+  names it and does not re-claim; leftover journaled
   sentinels are cleared at **both** crash points (dest-absent and dest-committed);
   a caught-failure restore deletes the journal so a subsequent `--resume`
   **refuses with "no interrupted transaction."**
@@ -650,8 +665,10 @@ resume journal. The heavy real-world blast radius (NS's ~151 references) sits
 entirely behind the out-of-scope per-repo migrations, and the alias safety-net
 plus the honest (surface × target) report mean an un-rewritten **resolving**
 reference keeps resolving via the old id → `aliases` mapping rather than dangling
-once the flip finally lands. Two documented exceptions do **not** resolve and are
-reported as manual-retarget, never silently fixed: `discusses`/membership refs
-(which the alias net cannot save — a resolved `spec:` target is not a valid
-bundle) and identity-preserved inert canonical-id mentions in prose (deliberately
-left as text, not references).
+once the flip finally lands. The **manual-retarget** group — `discusses`/membership
+refs (which the alias net cannot save — a resolved `spec:` target is not a valid
+bundle) and `unresolved` refs — is reported for hand-fixing and **blocks
+readiness** (`manual_retarget_count` must be 0). Separately, identity-preserved
+inert canonical-id mentions in prose are deliberately left as text, not
+references; they belong to the **identity-preserved** group, are **not**
+manual-retarget, and do **not** block readiness.
