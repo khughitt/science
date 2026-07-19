@@ -10,6 +10,7 @@ from typing import Callable, Literal
 from pydantic import BaseModel, ConfigDict, model_validator
 
 from science_tool.archive import (
+    ArchiveError,
     ArchiveRow,
     _candidate_rows,
     _inbound_live_refs,
@@ -232,7 +233,10 @@ def apply_archive_plan(project_root: Path, plan: ArchivePlan, *, staging_token: 
     # `plan_archive` is read-only and derives its own paths from the live corpus, so it never
     # touches an untrusted plan path before containment is checked below.
     plan_index_list = [plan.index] if plan.index is not None else []
-    expected = plan_archive(project_root, selection=plan.selection, now=plan.now)
+    try:
+        expected = plan_archive(project_root, selection=plan.selection, now=plan.now)
+    except ArchiveError as exc:
+        raise ArchiveApplyError(f"corpus changed since preview: {exc}") from exc
     if expected.moves != plan.moves or expected.index != plan.index:
         raise ArchiveApplyError("re-derived moves/rows/index differ from the plan (corpus changed since preview)")
     exp_index = [expected.index] if expected.index is not None else []

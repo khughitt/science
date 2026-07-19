@@ -5,7 +5,9 @@ from pathlib import Path
 import pytest
 
 from science_tool.archive import ArchiveRow, append_row, archive_entities, archive_index_path
-from science_tool.plan_common import ArchiveStatusSweep, PathTransition, StateFingerprint, fingerprint, staging_path_for
+from science_tool.plan_common import (
+    ArchiveStatusSweep, ExplicitArchiveIds, PathTransition, StateFingerprint, fingerprint, staging_path_for,
+)
 from science_tool.archive_plan import (
     ArchiveApplyError, ArchiveCandidate, ArchiveMove, ArchivePlan, ArchivePreviewReport, PlannedArchiveRow,
     apply_archive_plan, plan_archive,
@@ -231,6 +233,28 @@ def test_apply_empty_cohort_refuses_when_corpus_gained_an_eligible_entity(tmp_pa
         "---\nid: interpretation:0001-x\nkind: interpretation\ntitle: X\nstatus: superseded\n---\nbody\n",
         encoding="utf-8")
     with pytest.raises(ArchiveApplyError, match="differ from the plan|corpus changed"):
+        apply_archive_plan(tmp_path, plan, staging_token="tok")
+
+
+def test_apply_explicit_ids_wraps_gate_b_archive_error_as_archive_apply_error(tmp_path: Path) -> None:
+    # Finding (whole-branch review): for an EXPLICIT-IDS plan, if an allowlisted entity is deleted
+    # or changes status between preview and apply, Gate B's re-derivation calls plan_archive ->
+    # _scope_rows_to_allowlist, which raises a raw ArchiveError. apply_archive_plan must wrap that
+    # as ArchiveApplyError (the SUPERSEDE sibling does the analogous wrap for SupersessionError),
+    # not let the raw ArchiveError escape as an uncaught traceback.
+    _superseded(tmp_path)
+    plan = plan_archive(
+        tmp_path,
+        selection=ExplicitArchiveIds(kind="explicit_ids", ids=["interpretation:0001-x"],
+                                     allowed_statuses=["superseded"]),
+        now="2026-07-18T00:00:00Z")
+    assert plan.moves and plan.moves[0].id == "interpretation:0001-x"
+
+    # Between preview and apply, the allowlisted entity is deleted outright, so re-derivation's
+    # `_scope_rows_to_allowlist` finds it unresolved and raises a raw ArchiveError ("not found").
+    (tmp_path / "entities" / "interpretations" / "0001-x.md").unlink()
+
+    with pytest.raises(ArchiveApplyError, match="corpus changed since preview"):
         apply_archive_plan(tmp_path, plan, staging_token="tok")
 
 
