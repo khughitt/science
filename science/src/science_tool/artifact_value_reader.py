@@ -13,8 +13,15 @@ See docs/plans/2026-07-18-numeric-provenance-check-design.md (Part B).
 
 from __future__ import annotations
 
+import json
+import math
+import re
 from dataclasses import dataclass
+from decimal import Decimal
 from pathlib import Path
+from typing import Any
+
+import pandas as pd
 
 _JSON_KIND = "json"
 _FEATHER_KIND = "feather"
@@ -100,3 +107,149 @@ def resolve_artifact(
         return ArtifactError(detail=f"artifact exceeds size cap for kind {kind!r}: {ref!r} ({size} > {cap})")
 
     return ResolvedArtifact(path=real, kind=kind)
+
+
+@dataclass(frozen=True)
+class ReaderError:
+    detail: str
+
+
+# RFC-6901 pointer path-segment tokens are unescaped ~1 -> "/" then ~0 -> "~",
+# in that order (escaping ~0 first would turn a literal "~1" in the source
+# key into "/" instead of leaving it as "~1"-decoded-to-"~1"). A segment
+# indexing into a list must be "0" or a non-zero digit run (no leading
+# zeros, no sign) per the spec; anything else is treated as a miss rather
+# than silently truncated/parsed leniently.
+_LIST_INDEX_RE = re.compile(r"0|[1-9][0-9]*")
+
+
+class _NonFiniteLiteral(Exception):
+    """Raised by `_reject_nonfinite` when json.load hits NaN/Infinity/-Infinity."""
+
+
+def _reject_nonfinite(literal: str) -> Any:
+    raise _NonFiniteLiteral(f"non-finite JSON literal is not a valid numeric scalar: {literal!r}")
+
+
+def _unescape_pointer_token(token: str) -> str:
+    return token.replace("~1", "/").replace("~0", "~")
+
+
+def _json_pointer(doc: Any, pointer: str) -> Any:
+    """Resolve an RFC-6901 JSON pointer against `doc`.
+
+    Raises `LookupError` (or a subclass) or `TypeError` on any miss --
+    unknown key, out-of-range/malformed list index, or indexing through a
+    scalar. The empty-string pointer resolves to the whole document.
+    """
+    if pointer == "":
+        return doc
+    if not pointer.startswith("/"):
+        raise LookupError(f"JSON pointer must start with '/' or be empty: {pointer!r}")
+
+    node = doc
+    for raw_token in pointer.split("/")[1:]:
+        token = _unescape_pointer_token(raw_token)
+        if isinstance(node, list):
+            if _LIST_INDEX_RE.fullmatch(token) is None:
+                raise LookupError(f"not a valid list index token: {token!r}")
+            index = int(token)
+            if index >= len(node):
+                raise IndexError(f"list index out of range: {index}")
+            node = node[index]
+        elif isinstance(node, dict):
+            if token not in node:
+                raise KeyError(token)
+            node = node[token]
+        else:
+            raise TypeError(f"cannot index into a non-container node with token {token!r}")
+    return node
+
+
+def read_scalar(resolved: ResolvedArtifact, locator: Any) -> Decimal | ReaderError:
+    """Read a single numeric scalar out of a resolved JSON or feather artifact.
+
+    JSON reads parse straight to `Decimal` (no `float` in the path, so full
+    literal fidelity is preserved) and resolve an RFC-6901 pointer to
+    exactly one numeric-scalar node. Feather reads column-select the union
+    of the value column and any `where` filter columns, apply an equality
+    filter, require exactly one surviving row, and convert the cell to
+    `Decimal` via `str()`.
+    """
+    if resolved.kind == _JSON_KIND:
+        return _read_json_scalar(resolved.path, locator)
+    if resolved.kind == _FEATHER_KIND:
+        return _read_feather_scalar(resolved.path, locator)
+    return ReaderError(detail=f"unsupported artifact kind for scalar read: {resolved.kind!r}")
+
+
+def _read_json_scalar(path: Path, locator: Any) -> Decimal | ReaderError:
+    pointer = getattr(locator, "pointer", None)
+    if pointer is None:
+        return ReaderError(detail=f"json artifact requires a PointerLocator, got {type(locator).__name__}")
+
+    try:
+        with path.open("r", encoding="utf-8") as fh:
+            doc = json.load(
+                fh,
+                parse_float=Decimal,
+                parse_int=Decimal,
+                parse_constant=_reject_nonfinite,
+            )
+    except _NonFiniteLiteral as exc:
+        return ReaderError(detail=str(exc))
+    except (json.JSONDecodeError, OSError, UnicodeDecodeError) as exc:
+        return ReaderError(detail=f"failed to parse JSON artifact {path}: {exc}")
+
+    try:
+        node = _json_pointer(doc, pointer)
+    except (LookupError, TypeError) as exc:
+        return ReaderError(detail=f"JSON pointer {pointer!r} did not resolve in {path}: {exc}")
+
+    # JSON true/false decode straight to Python bool (never routed through
+    # parse_int/parse_float, so never a Decimal) -- reject explicitly rather
+    # than relying on that, since bool is a subclass of int and a naive
+    # `isinstance(node, (int, float, Decimal))` check would silently admit it.
+    if isinstance(node, bool):
+        return ReaderError(detail=f"JSON pointer {pointer!r} resolved to a bool, not a numeric scalar")
+    if isinstance(node, Decimal):
+        return node
+    return ReaderError(
+        detail=f"JSON pointer {pointer!r} resolved to a non-numeric node ({type(node).__name__}): {node!r}"
+    )
+
+
+def _read_feather_scalar(path: Path, locator: Any) -> Decimal | ReaderError:
+    column = getattr(locator, "column", None)
+    if column is None:
+        return ReaderError(detail=f"feather artifact requires a ColumnLocator, got {type(locator).__name__}")
+    where: dict[str, Any] = getattr(locator, "where", None) or {}
+
+    # Load the union of [column] + where.keys() -- the where-filter columns
+    # must be present in the frame to filter on, even though only `column`
+    # is ultimately extracted.
+    cols = [column] + [k for k in where if k != column]
+    try:
+        frame = pd.read_feather(path, columns=cols)
+    except Exception as exc:  # pyarrow raises its own error types for a missing column
+        return ReaderError(detail=f"failed to read feather columns {cols!r} from {path}: {exc}")
+
+    for key, expected in where.items():
+        frame = frame[frame[key] == expected]
+
+    if len(frame) != 1:
+        return ReaderError(
+            detail=f"expected exactly one matching row in {path} for where={where!r}, got {len(frame)}"
+        )
+
+    cell = frame[column].iloc[0]
+    value = cell.item() if hasattr(cell, "item") else cell
+
+    if isinstance(value, bool):
+        return ReaderError(detail=f"feather column {column!r} cell is a bool, not a numeric scalar")
+    if isinstance(value, float) and not math.isfinite(value):
+        return ReaderError(detail=f"feather column {column!r} cell is non-finite (NaN/inf): {value!r}")
+    try:
+        return Decimal(str(value))
+    except Exception as exc:
+        return ReaderError(detail=f"feather column {column!r} cell {value!r} is not a numeric scalar: {exc}")

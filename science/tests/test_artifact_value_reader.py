@@ -1,4 +1,16 @@
-from science_tool.artifact_value_reader import ArtifactError, ResolvedArtifact, resolve_artifact
+from decimal import Decimal
+from pathlib import Path
+
+import pytest
+
+from science_tool.artifact_value_reader import (
+    ArtifactError,
+    ReaderError,
+    ResolvedArtifact,
+    read_scalar,
+    resolve_artifact,
+)
+from science_tool.numeric_binding import ColumnLocator, PointerLocator
 
 
 def test_real_json_under_root_resolves_content_true(tmp_path):
@@ -182,3 +194,127 @@ def test_real_png_content_false_resolves_opaque(tmp_path):
 
     assert isinstance(resolved, ResolvedArtifact)
     assert resolved.kind == "opaque"
+
+
+# --- read_scalar ------------------------------------------------------------
+#
+# Fixtures under tests/fixtures/numeric_verification/ are built once by the
+# committed `_build.py` helper (run it to regenerate, do not hand-edit the
+# generated files). `read_scalar` is exercised directly against
+# `ResolvedArtifact` values pointed at those fixtures -- no need to route
+# through `resolve_artifact` since the fixtures are read-only test data, not
+# security-sensitive path input.
+
+_FIXTURES_DIR = Path(__file__).resolve().parent / "fixtures" / "numeric_verification"
+_RESULTS_JSON = ResolvedArtifact(path=_FIXTURES_DIR / "results.json", kind="json")
+_NONFINITE_JSON = ResolvedArtifact(path=_FIXTURES_DIR / "nonfinite.json", kind="json")
+_SUMMARY_FEATHER = ResolvedArtifact(path=_FIXTURES_DIR / "summary.feather", kind="feather")
+_PER_DISEASE_FEATHER = ResolvedArtifact(path=_FIXTURES_DIR / "per_disease.feather", kind="feather")
+
+
+def test_json_scalar_fidelity_survives_binary_float_corruption():
+    # 0.100000000000000005 is not exactly representable in binary float; a
+    # float->str round trip collapses it to "0.1". This only passes if the
+    # JSON number is parsed directly to Decimal (parse_float=Decimal), never
+    # routed through a Python float.
+    value = read_scalar(_RESULTS_JSON, PointerLocator(pointer="/that_key"))
+    assert value == Decimal("0.100000000000000005")
+    assert str(value) != "0.1"
+
+
+def test_json_pointer_indexes_list_numerically():
+    value = read_scalar(_RESULTS_JSON, PointerLocator(pointer="/a/0"))
+    assert value == Decimal(1)
+
+
+def test_json_pointer_unescapes_tilde_one_as_slash():
+    value = read_scalar(_RESULTS_JSON, PointerLocator(pointer="/nested/b~1c"))
+    assert value == Decimal(42)
+
+
+def test_json_pointer_unescapes_tilde_zero_as_tilde():
+    value = read_scalar(_RESULTS_JSON, PointerLocator(pointer="/nested/d~0e"))
+    assert value == Decimal(43)
+
+
+def test_json_pointer_miss_is_reader_error():
+    result = read_scalar(_RESULTS_JSON, PointerLocator(pointer="/does/not/exist"))
+    assert isinstance(result, ReaderError)
+
+
+def test_json_pointer_out_of_range_index_is_reader_error():
+    result = read_scalar(_RESULTS_JSON, PointerLocator(pointer="/a/99"))
+    assert isinstance(result, ReaderError)
+
+
+@pytest.mark.parametrize(
+    "pointer",
+    ["/list_node", "/obj_node", "/bool_node", "/null_node", "/s_node"],
+    ids=["list", "dict", "bool", "null", "string"],
+)
+def test_json_non_scalar_or_non_numeric_node_is_reader_error(pointer):
+    result = read_scalar(_RESULTS_JSON, PointerLocator(pointer=pointer))
+    assert isinstance(result, ReaderError)
+
+
+def test_json_nonfinite_literal_is_reader_error():
+    result = read_scalar(_NONFINITE_JSON, PointerLocator(pointer="/n"))
+    assert isinstance(result, ReaderError)
+
+
+def test_feather_single_row_hit_no_where():
+    value = read_scalar(_SUMMARY_FEATHER, ColumnLocator(column="score"))
+    assert value == Decimal("0.978")
+
+
+def test_feather_keyed_row_hit_proves_union_load():
+    # `where` uses "disease", a column distinct from the value column
+    # "score" -- this only passes if the reader loads the union of
+    # [column] + where.keys(), not just [column].
+    value = read_scalar(
+        _PER_DISEASE_FEATHER,
+        ColumnLocator(column="score", where={"disease": "MESH:D009101"}),
+    )
+    assert value == Decimal("0.42")
+
+
+def test_feather_zero_match_is_reader_error():
+    result = read_scalar(
+        _PER_DISEASE_FEATHER,
+        ColumnLocator(column="score", where={"disease": "NOT_A_REAL_DISEASE"}),
+    )
+    assert isinstance(result, ReaderError)
+
+
+def test_feather_multi_match_with_where_is_reader_error():
+    result = read_scalar(
+        _PER_DISEASE_FEATHER,
+        ColumnLocator(column="score", where={"disease": "DUP"}),
+    )
+    assert isinstance(result, ReaderError)
+
+
+def test_feather_multi_row_no_where_is_reader_error():
+    result = read_scalar(_PER_DISEASE_FEATHER, ColumnLocator(column="score"))
+    assert isinstance(result, ReaderError)
+
+
+def test_feather_missing_value_column_is_reader_error():
+    result = read_scalar(_PER_DISEASE_FEATHER, ColumnLocator(column="not_a_column"))
+    assert isinstance(result, ReaderError)
+
+
+def test_feather_missing_where_column_is_reader_error():
+    result = read_scalar(
+        _PER_DISEASE_FEATHER,
+        ColumnLocator(column="score", where={"not_a_column": "x"}),
+    )
+    assert isinstance(result, ReaderError)
+
+
+def test_feather_nan_cell_is_reader_error():
+    result = read_scalar(
+        _PER_DISEASE_FEATHER,
+        ColumnLocator(column="score", where={"disease": "NAN_ROW"}),
+    )
+    assert isinstance(result, ReaderError)
