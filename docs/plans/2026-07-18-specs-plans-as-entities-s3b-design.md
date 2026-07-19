@@ -121,14 +121,22 @@ related_questions:
 
 ### Field mapping
 
+The **field authority** — what counts as "recognized" — is explicit, because
+`extra=ignore` makes "unrecognized" otherwise undefined: a key is recognized iff
+it is a declared field of the canonical `Entity` model (`Entity.model_fields`)
+**or** one of the projection's named legacy-alias keys (`type`, `date`,
+`related_questions`, `related_specs`). Any frontmatter key outside that union
+refuses planning.
+
 | Legacy | Canonical | Rule |
 |---|---|---|
-| `id: spec:<old>` | `id: spec:NNNN-slug` | Old id is authoritative for identity + the alias; the new numeric id is minted (Component 4). Old id → `aliases:`. |
+| `id: spec:<old>` | `id: spec:NNNN-slug` | Old id is authoritative for identity + the alias; the new numeric id is minted (Component 4). Old id appended to `aliases:`. |
 | `type: spec` | `kind: spec` | `type` is the legacy spelling; project to `kind`. If both present and disagree → refuse. |
-| `date: <d>` | `created: <d>`, `updated: <d>` | A single `date` seeds both when neither `created` nor `updated` is present; an existing `created`/`updated` is preserved and `date` is dropped. |
+| `date: <d>` | `created`, `updated` | **Independent**: `created = existing created or date`; `updated = existing updated or date`. **Refuse** if either is still absent afterward (e.g. a doc with `created` but no `updated` and no `date`). `date` is dropped once consumed. |
 | `title` | `title` | Preserved. |
-| `related_questions`, `related_specs` | `related` | Known legacy list fields are folded into canonical `related` (they hold entity refs). Because `Entity` is `extra=ignore`, leaving them unprojected would **silently drop** them on load — so projection is mandatory, not cosmetic. |
-| any other unrecognized key | — | **Refuse** planning, naming the key and file. No silent drop; the operator decides (pre-edit or extend the projection). |
+| `related_questions`, `related_specs` | `related` | Folded into canonical `related` (they hold entity refs); `extra=ignore` would otherwise silently drop them on load, so projection is mandatory. **Existing `related` is preserved and the union is order-preservingly deduplicated** (first occurrence wins). |
+| existing `aliases` | `aliases` | Preserved; the old id is appended and the list order-preservingly deduplicated (Component 2 identity contract). |
+| any other key not in the field authority | — | **Refuse** planning, naming the key and file. No silent drop; the operator pre-edits or the projection is extended. |
 
 ### Status adjudication
 
@@ -147,10 +155,13 @@ Any status **outside both** the canonical set and this table — notably
 `approved` (the dominant NS status), `ready-with-caveats`, `draft-for-review`,
 `not-ready` — is **refused**, listed per file. These encode "design approved,
 implementation not started," which straddles `draft` and `active`; auto-choosing
-either would be tuning metadata to pass, which the program forbids. The operator
-resolves them by pre-editing the doc's status or supplying an explicit
-`--status <canonical>` override that applies to the whole batch. The projection
-never invents a status silently.
+either would be tuning metadata to pass, which the program forbids. **The operator
+resolves each by pre-editing that doc's status** — the v1 contract has no
+`--status` override. A single batch-wide override would silently recolor
+already-unambiguous docs (an `implemented→complete` and a `draft→draft` doc both
+forced to the operator's choice for an unrelated `approved` record); a
+per-old-id adjudication map is possible later but is deferred as unnecessary
+complexity. The projection never invents a status silently.
 
 ### Identity and alias contract
 
@@ -186,33 +197,49 @@ machine-rewritable, and by which map):
 | `participants`, `propositions`, `same_as`, `blocked_by`, `evidence_refs`, `source`, `commits_to` | **not touched, not reported** — invisible |
 | prose/code mention of an old *canonical id* (not a path) | **not touched, not reported** — invisible |
 
-**Target — what the reference points to:**
+**Token boundary (deterministic scanning).** The inventory scanner matches a
+`spec:` token only with an explicit **left boundary** (not preceded by
+`[A-Za-z0-9_-]`) so `science-spec:2026-04-19-…` — which really occurs in mm — is
+**not** parsed as an embedded `spec:` token, and a **right boundary** that stops
+at the id charset (`[A-Za-z0-9._/-]`) with trailing punctuation trimmed (mm has a
+`spec:…design.` sentence-final case).
 
-| Target class | Meaning |
+**Target — classified by evidence, never by similarity:**
+
+| Target class | Evidence (exact, deterministic) |
 |---|---|
-| migrated-spec | names a legacy spec this batch relocates (has an `id_substitution`) |
-| already-canonical-spec | already `spec:NNNN-slug`; **unchanged** — not a migration target |
-| dead | a `spec:` id with no findable target (e.g. `spec:2026-01-01-x`) |
-| cross-kind | a `spec:` id whose real home is another kind (e.g. mm's
-  `spec:2026-04-11-bayesian-causal-dag-design` → `design:0025-…`) |
+| migrated-spec | the token **exactly equals** a discovered legacy spec's declared old id (has an `id_substitution`) |
+| already-canonical | the token **exactly equals** a live numeric spec id or one of its aliases |
+| cross-kind | the token appears in an **explicit operator retarget mapping** (`old-id → other-kind-id`); never inferred |
+| unresolved | everything else — no matching id, no operator mapping |
+
+No title/slug-similarity inference is used to guess a target: an unmatched token
+is `unresolved`, not silently attached to a look-alike entity.
 
 **The command's rewrite rule:** auto-rewrite a reference **iff** its surface is
 one `reference_rewrite` handles **and** its target is `migrated-spec`. Everything
-else is **reported**, grouped by (surface, target), with an explicit count. The
-report distinguishes:
+else is **reported**, grouped by (surface, target) with counts. The report groups
+are:
 
 - **rewritten** — surface-handled, target migrated-spec.
-- **alias-covered** — target migrated-spec but on an invisible surface
-  (`discusses` excepted); not rewritten, but the old-id alias keeps it resolving
-  post-flip. Reported so the operator can optionally clean it up.
+- **alias-resolved** — target migrated-spec, on a materializer-**read** but
+  rewriter-invisible frontmatter field (`same_as`, `blocked_by`, `evidence_refs`,
+  `participants`, `propositions`, `source`, `commits_to`). Not rewritten, but a
+  consumer reads the field and the old-id alias makes it resolve post-flip.
+  Reported for optional cleanup; does **not** block flip-readiness.
+- **identity-preserved (inert)** — target migrated-spec, but on a surface **no
+  consumer reads** (prose/code mentions of the old id, the `spec:` frontmatter
+  *key*). The alias preserves the identity mapping but nothing resolves these —
+  they are informational, not a resolution concern, and do not block
+  flip-readiness. (Wording matters: these are *preserved*, not *resolved*.)
 - **manual-retarget** — `discusses`/membership refs (invalid post-flip
-  regardless — Issue 1) and all `dead` / `cross-kind` targets. The alias does not
-  save these; a human must retarget or remove them.
+  regardless — the alias cannot save them, Issue 1), `cross-kind`, and
+  `unresolved` targets. A human must retarget or remove them; these **block
+  flip-readiness** (Flip-readiness contract).
 
 This is the **honest narrow contract**: the command does not claim to rewrite
-surfaces the engine cannot. Building a shared structured-reference traversal
-authority that covers all frontmatter fields is a real, separable piece of work
-and is listed out of scope.
+surfaces the engine cannot. A shared structured-reference traversal authority
+covering all frontmatter fields is separable work, listed out of scope.
 
 ## Component 4 — the batch coordinator (new orchestration)
 
@@ -237,44 +264,86 @@ real collision gate is per-doc `claim_number_in_dir` at apply, whose
 consumed by concurrent work between plan and apply fails the claim and rolls the
 batch back (tested via live/archive collision drift).
 
+### The moved docs are excluded from the corpus replay
+
+The merged `RewriteReport` is frozen at plan time and replayed after the moves,
+so its inbound scan must exclude **every source and every destination**, at
+**both** plan and replay, identically — otherwise the post-move fresh scan
+diverges from the frozen plan and `apply_reference_rewrite` raises
+`ReferenceDriftError`. `apply_import` already does this for one doc
+(`entity_import.py:211`, `exclude=exclude | {source}`); the batch coordinator
+excludes the whole `{sources ∪ destinations}` set. Consequently each **migrating
+doc is handled per-destination, not by the corpus replay**, and each destination
+separately receives, immediately before its own mutation:
+
+- **source-SHA verification** against the plan's recorded hash (the per-doc gate
+  from `apply_import:570-578`, which cannot be batched away);
+- **outbound-link rebasing** via `rewrite_outbound_links`
+  (`reference_rewrite.py:252`) — its own relative Markdown links move with it
+  from `doc/plans/…` to `entities/specs/…`;
+- **intra-batch id substitution** in its projected frontmatter — a migrating spec
+  that references *another* migrating spec must have that ref rewritten to the
+  neighbor's new numeric id (the merged `id_substitutions`), since the corpus
+  replay skips it.
+
+The single corpus-wide `apply_reference_rewrite` then rewrites only the
+**non-migrating referrers**.
+
 ### The batch transaction
 
-1. **Preflight all** — project-root check; project each legacy doc's frontmatter
-   (Component 2, refusing on unmappable status / unknown key / missing id);
-   render every destination and validate it through `_validate_prospective_write`;
-   assign sequential numbers; build the merged `id_substitutions` /
-   `path_substitutions` and the single merged `RewriteReport`; pre-check alias
-   collisions. **Nothing is written; any refusal aborts the whole batch.**
+1. **Preflight all** — project-root check; project each legacy doc (Component 2,
+   refusing on unmappable status / unknown key / missing id / unresolved date);
+   render every destination, apply intra-batch id substitution, and validate it
+   through `_validate_prospective_write`; assign sequential numbers; build the
+   merged `id_substitutions` / `path_substitutions`, the single merged
+   `RewriteReport` (scanned with the `{sources ∪ destinations}` exclusion), and
+   the per-path journal plan; pre-check alias collisions. **Nothing is written;
+   any refusal aborts the whole batch.**
 2. **Snapshot all** — one `_snapshot` over the union of every source, every
-   destination, and every referrer named in the merged report.
-3. **Move all** — per doc: `claim_number_in_dir` the destination, write the
-   projected entity, unlink the source (each path added to `mutated` only after
-   its own step succeeds — the concurrency-safety bookkeeping from
-   `apply_import`).
-4. **Replay once** — a single `apply_reference_rewrite` over the merged report,
-   accumulating `written`.
+   destination, and every non-migrating referrer named in the merged report.
+3. **Move all** — per doc: verify source SHA, `claim_number_in_dir` the
+   destination, write the projected+rebased+substituted entity, unlink the
+   source (each path enters `mutated` only after its step succeeds).
+4. **Replay once** — a single `apply_reference_rewrite` over the merged report
+   (same exclusion as plan), accumulating `written`.
 5. **Audit all** — `audit_moved_references` for every moved destination.
 6. **Global restore on any caught failure** — `_restore(snapshot,
-   restrict={*mutated, *written})`, then re-raise. One rollback set for the whole
-   batch.
+   restrict={*mutated, *written})`, delete the journal, then re-raise. One
+   rollback set for the whole batch.
 
-### Journal + resume
+### Journal + resume (per-path, crash-safe)
 
-Mirror `migrate_hypothesis`'s journal discipline with batch-aware phases: the
-plan is journaled before the first write; `--resume` replays an interrupted write
-pass from the journal and never re-plans (so a crash between "move all" and
-"replay once" resumes deterministically). Phases recorded: `planned`,
-`moved`, `rewritten`, `audited`. Plan-only (no `--apply`) writes nothing and no
+Coarse phase markers are insufficient: a crash *within* "move all" or
+`apply_reference_rewrite` lands before any phase advances, and
+`apply_reference_rewrite` is **not idempotent** — an already-written postimage
+fails its fresh-report comparison on a naive replay. So the journal is
+**per-path**, recording for every path the transaction will touch: its role
+(moved-source / moved-dest / referrer), its **preimage hash**, and its expected
+**postimage hash**.
+
+`--resume` never re-plans. For each journaled path it reads the current on-disk
+state and:
+
+- **postimage hash** → that action already completed; skip it.
+- **preimage hash** → not yet done; perform it.
+- **any third state** → external drift since planning; **refuse** (do not guess),
+  leaving the operator to restore or re-plan.
+
+After completing every remaining action the resume verifies all postimages, then
+deletes the journal. A successful **caught-failure restore also deletes the
+journal** (step 6) — otherwise a later `--resume` could reapply a transaction
+that was already rolled back. Plan-only (no `--apply`) writes nothing and no
 journal.
 
 ## Component 5 — docs and the sequencing contract
 
 - **User guide** (`docs/user-guide/entities.md`, near the Source Entity CLI
   material): document `science entity migrate-specs` — plan-then-`--apply`, the
-  projection rules, the three report groups (rewritten / alias-covered /
-  manual-retarget), the singleton report, and the refusal cases. State plainly
-  that **`spec:` references still resolve as annotation-only today** — the command
-  makes a project flip-ready; it does not change resolution.
+  projection rules, the four report groups (rewritten / alias-resolved /
+  identity-preserved / manual-retarget), the singleton report, the `flip_ready`
+  field, and the refusal cases. State plainly that **`spec:` references still
+  resolve as annotation-only today** — the command makes a project flip-ready; it
+  does not change resolution.
 - **Sequencing contract, stated honestly:** the resolution flip is a **future,
   separately-shipped** step gated on the surveyed projects being migrated. A
   project runs `migrate-specs` (bumping its pin to a revision that has the
@@ -284,18 +353,40 @@ journal.
 - No `sources.py` comment changes in this effort (the switch is not touched); the
   S3a comment already names the flip as S3b's future work.
 
+## Flip-readiness contract (machine, not prose)
+
+The command emits a machine-checkable `flip_ready` boolean in its report — the
+actual gate the later resolution-flip step keys on, so "flip-ready" is never a
+prose judgment. Given a project (post-`--apply`, or in a plan-only dry run):
+
+- `flip_ready = true` **iff** `singleton_count == 0` **and**
+  `manual_retarget_count == 0`.
+- `singleton_count` = `kind:/type: spec` files at singleton homes still awaiting
+  reconciliation (Component 1).
+- `manual_retarget_count` = references in the **manual-retarget** group
+  (`discusses`/membership, `cross-kind`, `unresolved`).
+- `alias-resolved` and `identity-preserved` findings **may remain** with
+  `flip_ready = true` — they resolve (or are inert) via the old-id alias.
+
+The flip step (out of scope here) must refuse to run against a project whose
+latest `migrate-specs` report is not `flip_ready`. The value is pinned in the
+output schema and asserted in tests.
+
 ## Error handling / refusal cases (consolidated)
 
 Planning refuses (writes nothing) on: a legacy spec doc without a declared `id:`;
-`type`/`kind` disagreement; an unmappable legacy status; an unrecognized
-frontmatter key; a duplicate old id in the batch; a proposed old-id alias that
+`type`/`kind` disagreement; an unmappable legacy status; a `created`/`updated`
+still absent after date projection; an unrecognized frontmatter key (outside the
+field authority); a duplicate old id in the batch; a proposed old-id alias that
 collides with an existing canonical id / alias / archive token; a rendered
 destination that fails `_validate_prospective_write`. Apply additionally rolls
 the whole batch back on: a `claim_number_in_dir` failure (number consumed since
 planning), a `ReferenceDriftError` from `apply_reference_rewrite` (corpus changed
 since planning), a `preimage_sha256` mismatch, or any non-empty
-`audit_moved_references` result. `discusses` / dead / cross-kind references are
-**reported**, never silently resolved.
+`audit_moved_references` result. `--resume` refuses on any journaled path in a
+third state (neither preimage nor postimage). `manual-retarget` references
+(`discusses`/membership, `cross-kind`, `unresolved`) are **reported**, never
+silently resolved.
 
 ## Testing (real legacy shapes, synthetic project)
 
@@ -303,29 +394,40 @@ A fixture project built from the **real legacy shapes** (not an already-conformi
 doc):
 
 - **Projection**: a `type: spec` + `date:` + `status: approved` +
-  `related_questions:` doc — assert `type→kind`, `date→created`/`updated`,
-  `related_questions→related`, old id → `aliases`; assert `status: approved`
-  **refuses** planning; assert an unrecognized key refuses; assert a mappable
-  status (`design→draft`, `implemented→complete`) projects; assert `--status`
-  override applies.
+  `related_questions:` doc — assert `type→kind`, both `created` and `updated`
+  seeded from `date`, `related_questions` folded into `related` with existing
+  `related` preserved and deduplicated (order-preserving), old id appended to an
+  existing `aliases` list and deduplicated; assert `status: approved` **refuses**;
+  assert a key outside the field authority refuses; assert a doc with `created`
+  but no `updated` and no `date` **refuses**; assert mappable statuses
+  (`design→draft`, `implemented→complete`) project.
 - **Batch numbering**: **≥2** legacy docs get **distinct sequential** ids
   (`spec:0001-…`, `spec:0002-…`); a collision-drift test where a `0001` entity
   appears (live or archive) between plan and apply → `claim` fails → whole batch
   restored.
-- **Reference classification**: `related: [spec:<old>]` → rewritten to numeric;
-  a `discusses: [spec:<old>]` → **manual-retarget** (documented both failure
-  modes, no "migration fixes it" assertion); a `same_as: [spec:<old>]` →
-  **alias-covered** (not rewritten, reported); a prose old-id mention →
-  alias-covered/reported; a `dead` and a `cross-kind` ref → manual-retarget;
-  an already-`spec:NNNN` ref → unchanged.
+- **Reference classification & token boundary**: `related: [spec:<old>]` →
+  rewritten to numeric; `discusses: [spec:<old>]` → **manual-retarget** (both
+  failure modes documented, no "migration fixes it" assertion); `same_as:
+  [spec:<old>]` → **alias-resolved** (not rewritten, reported); a prose old-id
+  mention → **identity-preserved** (reported, not called "resolved"); an
+  operator-mapped `cross-kind` ref and an `unresolved` ref → manual-retarget; an
+  already-`spec:NNNN` ref → unchanged; a **`science-spec:<old>` token is NOT
+  matched** as a `spec:` reference, and a trailing-period `spec:<old>.` matches
+  without the period.
+- **Flip-readiness**: `flip_ready == false` while any singleton or
+  manual-retarget remains; `flip_ready == true` once both are zero even with
+  alias-resolved / identity-preserved findings present.
 - **Identity**: missing `id:` refuses; duplicate old ids refuse; an old-id alias
   colliding with a live entity refuses at plan time.
 - **Singleton**: a `kind: spec` file at `entities/research-question.md` is
-  **reported, not relocated**.
-- **Transaction/resume**: apply relocates all docs, rewrites the covered refs,
-  audits, and leaves a loadable tree (the migrated entities build with their
-  aliases and no `AliasCollisionError`); `--resume` finishes an interrupted
-  journal without re-planning.
+  **reported, not relocated** (and counts toward `flip_ready == false`).
+- **Transaction/resume**: apply relocates all docs, rewrites the covered refs
+  (including an intra-batch spec→spec ref rewritten to its neighbor's new id),
+  audits, and leaves a loadable tree (migrated entities build with their aliases
+  and no `AliasCollisionError`); a per-path resume completes an interrupted
+  journal (postimage paths skipped, preimage paths finished) without re-planning;
+  a journaled path forced to a **third state refuses**; a caught-failure restore
+  deletes the journal so a subsequent `--resume` does nothing.
 - **Guard**: full suite green; `spec` remains in `_ANNOTATION_REF_PREFIXES`
   (assert the switch is untouched); the S3a guard tests still pass unchanged.
 
@@ -344,8 +446,8 @@ Follow the `test_migrate_hypothesis*.py` layout for plan/apply/resume coverage.
 - **mm `design` → `spec` re-import** — a project migration.
 - **A shared structured-reference traversal authority** covering all frontmatter
   reference fields (`discusses`, the `spec:` key, `participants`, `same_as`, …).
-  Until it exists, those surfaces are alias-covered or manual-retarget, not
-  auto-rewritten.
+  Until it exists, those surfaces are alias-resolved, identity-preserved, or
+  manual-retarget, not auto-rewritten.
 - **Singleton reconciliation policy** — whether the `entities/research-question.md`
   `kind: spec` file becomes a numeric spec or is re-kinded is per-project
   judgment; the command reports it.
