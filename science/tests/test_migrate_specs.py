@@ -209,6 +209,54 @@ def test_discovery_reports_singleton_home(tmp_path: Path) -> None:
     assert disc.legacy == []
 
 
+def _write_sized(path: Path, size: int) -> Path:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text("x" * size, encoding="utf-8")
+    return path
+
+
+def test_scan_and_skips_exclude_the_derived_graph(tmp_path: Path) -> None:
+    """`knowledge/graph.trig` is the compiled graph — regenerated from source, never a rewrite
+    target. It must be excluded from the reference scan regardless of size, and never recorded as a
+    scan skip (even when oversized)."""
+    from science_tool.text_scan import iter_scannable_files
+
+    project = _spec_project(tmp_path)
+    _legacy_spec(project, "doc/plans/a.md", "spec:2026-01-01-a", "Alpha design")
+    _write_sized(project / "knowledge/graph.trig", 2048)
+
+    assert (project / "knowledge/graph.trig").resolve() not in iter_scannable_files(project)
+    with mock.patch("science_tool.migrate_specs.MAX_SCANNABLE_BYTES", 1024):
+        report = build_report(project)
+    assert all(s["path"] != "knowledge/graph.trig" for s in report["scan_skips"])
+
+
+def test_oversized_non_markdown_does_not_block_apply(tmp_path: Path) -> None:
+    """Authored `spec:` references live in markdown; an oversized non-markdown data file cannot be
+    read, but must not block `--apply` — its skip is informational and old ids remain aliases."""
+    project = _spec_project(tmp_path)
+    _legacy_spec(project, "doc/plans/a.md", "spec:2026-01-01-a", "Alpha design")
+    _write_sized(project / "data/per-lens-matrices.json", 2048)
+
+    with mock.patch("science_tool.migrate_specs.MAX_SCANNABLE_BYTES", 1024):
+        report = build_report(project)
+    assert any(s["path"] == "data/per-lens-matrices.json" for s in report["scan_skips"])
+    assert report["scan_complete"] is True
+
+
+def test_oversized_markdown_still_blocks(tmp_path: Path) -> None:
+    """An oversized MARKDOWN file could carry authored references we cannot read — it must still
+    force scan_complete=False so `--apply` refuses."""
+    project = _spec_project(tmp_path)
+    _legacy_spec(project, "doc/plans/a.md", "spec:2026-01-01-a", "Alpha design")
+    _write_sized(project / "doc/big-prose.md", 2048)
+
+    with mock.patch("science_tool.migrate_specs.MAX_SCANNABLE_BYTES", 1024):
+        report = build_report(project)
+    assert any(s["path"] == "doc/big-prose.md" for s in report["scan_skips"])
+    assert report["scan_complete"] is False
+
+
 def test_discovery_already_numeric_out_of_home_carries_number(tmp_path: Path) -> None:
     project = _spec_project(tmp_path)
     _write(project / "doc/plans/keep.md", {"id": "spec:0007-keep", "type": "spec", "title": "Keep"})

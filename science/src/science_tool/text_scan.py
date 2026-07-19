@@ -73,9 +73,15 @@ def iter_scannable_files(
     scannable prose suffix, so a plan left inside the corpus would be re-read as a
     referrer and every replay of it would drift against itself. The applying
     invocation excludes the plan artifact it was handed; see apply_import.
+
+    The compiled knowledge graph is always excluded: it is regenerated from source,
+    so it is never a reference source of truth and never a rewrite target.
     """
+    from science_tool.graph.store.constants import DEFAULT_GRAPH_PATH
+
     project_root = Path(project_root).resolve()
     excluded = {p.resolve() for p in exclude}
+    excluded.add((project_root / DEFAULT_GRAPH_PATH).resolve())
     files: list[Path] = []
     for path in project_root.rglob("*"):
         if not path.is_file():

@@ -28,6 +28,7 @@ from science_tool.entities import (
 )
 from science_tool.entity_import import _restore, _snapshot, apply_reference_rewrite, audit_moved_references
 from science_tool.entity_reservation import claim_number_in_dir, propose_number
+from science_tool.graph.store.constants import DEFAULT_GRAPH_PATH
 from science_tool.markdown_scan import iter_prose_matches
 from science_tool.reference_rewrite import (
     _LINK_RE,
@@ -48,6 +49,10 @@ from science_tool.text_scan import (
 )
 
 JOURNAL_PATH: Path = Path(".science/spec-migration.journal")
+
+# The compiled knowledge graph, relative to the project root. Regenerated from source, so it is
+# excluded from every reference scan — never a rewrite target, never a scan skip.
+_DERIVED_GRAPH_REL: str = DEFAULT_GRAPH_PATH.as_posix()
 
 # The load-derived keys, enumerated EXACTLY. `canonical_id` OVERRIDES the id-derived value at load,
 # so an authored one would disagree with the freshly minted numeric id.
@@ -253,6 +258,8 @@ def discover_specs(project_root: Path) -> Discovery:
         rel = path.relative_to(project_root).as_posix()
         if any(part in _REFERENCE_SCAN_SKIP_DIRS for part in path.relative_to(project_root).parts):
             continue
+        if rel == _DERIVED_GRAPH_REL:
+            continue  # the compiled graph is regenerated from source — never scanned, never a skip
         if path.suffix.lower() not in TEXT_SUFFIXES:
             continue
         try:
@@ -735,7 +742,10 @@ def _assemble_report(disc: Discovery, alloc: Allocation, records: list[RefRecord
     ]
 
     # scan_skips is the UNION of discovery skips (oversized/unreadable, all suffixes) and classification
-    # skips (unreadable scannable files), so a spec: ref in any unreadable file forces scan_complete=false.
+    # skips (unreadable scannable files). Every skip is reported for transparency, but only a skipped
+    # MARKDOWN file blocks completeness: authored `spec:` references live in markdown prose and
+    # frontmatter, and old ids stay resolvable aliases, so an unreadable data blob cannot hide a
+    # reference the rewrite must repoint.
     skip_by_path = {skip.path: skip.reason for skip in disc.scan_skips}
     for skip in class_skips:
         skip_by_path.setdefault(skip.path, skip.reason)
@@ -744,7 +754,7 @@ def _assemble_report(disc: Discovery, alloc: Allocation, records: list[RefRecord
     legacy_spec_count = len(disc.legacy)
     singleton_count = len(disc.singletons)
     manual_retarget_count = counts["manual_retarget"]
-    scan_complete = not scan_skips
+    scan_complete = not any(PurePosixPath(skip["path"]).suffix.lower() in _MARKDOWN_SUFFIXES for skip in scan_skips)
     flip_ready = legacy_spec_count == 0 and singleton_count == 0 and manual_retarget_count == 0 and scan_complete
 
     return {
