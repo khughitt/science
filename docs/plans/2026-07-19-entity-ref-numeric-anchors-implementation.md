@@ -100,7 +100,7 @@ validated. Needed for numeric-anchor to resolve plan: citations."
 
 **Interfaces:**
 - Consumes: `refs._load_entity_index(root)` → canonical `<kind>:<slug>` ids.
-- Produces: `ResolutionIndex.unique_entity_prefixes: frozenset[str]` — `<kind>:<digit-lead>` for every canonical id `<kind>:<digits>-<rest>` owned by **exactly one** entity. `resolve()` returns True for a `_TYPED_REF_RE` ref that is an exact id **or** a unique digit-lead prefix.
+- Produces: `ResolutionIndex.entity_prefix_owners: dict[str, int]` (no default) — maps `<kind>:<digit-lead>` to the count of canonical ids `<kind>:<digits>-<rest>` sharing that lead. `resolve()` returns True for a `_TYPED_REF_RE` ref that is an exact id **or** a prefix owned by **exactly one** entity (`owners == 1`). Matches the approved design's owner-count representation and validator.py's `_index_by_prefix` precedent (resolve only when the prefix has a single owner).
 
 - [ ] **Step 1: Write the failing tests**
 
@@ -147,15 +147,15 @@ def test_resolve_non_numeric_prefix_is_not_expanded(tmp_path):
 - [ ] **Step 2: Run tests to verify they fail**
 
 Run: `uv run --frozen pytest tests/test_numeric_provenance.py -k "unique_numeric_prefix or ambiguous_numeric_prefix or non_numeric_prefix" -v`
-Expected: FAIL — `ResolutionIndex` has no `unique_entity_prefixes`, and `resolve()` returns False for the prefix forms.
+Expected: FAIL — `ResolutionIndex` has no `entity_prefix_owners`, and `resolve()` returns False for the prefix forms.
 
-- [ ] **Step 3: Add the field to `ResolutionIndex`**
+- [ ] **Step 3: Add the field to `ResolutionIndex` (no default)**
 
-In `src/science_tool/numeric_provenance.py`, add a field to the frozen dataclass (after `data_root`):
+In `src/science_tool/numeric_provenance.py`, add a **non-defaulted** field to the frozen dataclass (after `data_root`). No default is deliberate: every construction must compute the map, so an index can never be silently built without prefix ownership (fail early > defensive). The sole constructor is `build_resolution_index` (verified — no other call site), so a required field is safe.
 
 ```python
     data_root: Path
-    unique_entity_prefixes: frozenset[str] = frozenset()
+    entity_prefix_owners: dict[str, int]
 ```
 
 - [ ] **Step 4: Extend `resolve()`'s typed-ref branch**
@@ -171,25 +171,27 @@ with:
 
 ```python
         if _TYPED_REF_RE.match(ref):
-            # Exact canonical id, or a unique digit-lead short prefix
-            # (`interpretation:0013` -> the sole `interpretation:0013-…`).
-            # Non-numeric leads and ambiguous (multi-owner) prefixes never
-            # resolve — a citation must not silently anchor to a guessed entity.
-            return ref in self.entity_ids or ref in self.unique_entity_prefixes
+            # Exact canonical id, or a digit-lead short prefix owned by exactly
+            # one entity (`interpretation:0013` -> the sole `interpretation:0013-…`).
+            # Non-numeric leads never enter the map; ambiguous (multi-owner)
+            # prefixes have owners > 1 — neither resolves, so a citation cannot
+            # silently anchor to a guessed entity.
+            return ref in self.entity_ids or self.entity_prefix_owners.get(ref) == 1
 ```
 
-- [ ] **Step 5: Populate the prefix set in `build_resolution_index`**
+- [ ] **Step 5: Populate the owner map in `build_resolution_index`**
 
-Replace the `return ResolutionIndex(...)` block body so `entity_ids` is captured and the prefix set computed:
+Replace the `return ResolutionIndex(...)` block body so `entity_ids` is captured and the owner map computed:
 
 ```python
     entity_ids = frozenset(refs._load_entity_index(root))
-    prefix_owner_counts: dict[str, int] = {}
+    entity_prefix_owners: dict[str, int] = {}
     for eid in entity_ids:
         kind, _, ident = eid.partition(":")
         lead = ident.split("-", 1)[0]
         if lead.isdigit() and lead != ident:
-            prefix_owner_counts[f"{kind}:{lead}"] = prefix_owner_counts.get(f"{kind}:{lead}", 0) + 1
+            key = f"{kind}:{lead}"
+            entity_prefix_owners[key] = entity_prefix_owners.get(key, 0) + 1
     return ResolutionIndex(
         project_root=root,
         task_numbers=frozenset(task_numbers),
@@ -198,7 +200,7 @@ Replace the `return ResolutionIndex(...)` block body so `entity_ids` is captured
         doi_corpus=frozenset(d.strip().lower() for d in refs._load_doi_corpus(root)),
         pmid_corpus=frozenset(refs._load_pmid_corpus(root)),
         data_root=resolve_data_root(root),
-        unique_entity_prefixes=frozenset(p for p, c in prefix_owner_counts.items() if c == 1),
+        entity_prefix_owners=entity_prefix_owners,
     )
 ```
 
@@ -228,7 +230,7 @@ resolve, so a citation cannot silently anchor to a guessed entity."
 
 **Interfaces:**
 - Consumes: `ResolutionIndex.resolve` (Task 2) via `local_candidates_for_paragraph`.
-- Produces: `_ANCHOR_ENTITY_KINDS: frozenset[str]`; `_BODY_REF_RE` matches allowlisted `<kind>:<id>` (full or short, incl. dotted ids) with two-sided boundary guards, and no longer has a standalone `dataset:` alternative.
+- Produces: `_ANCHOR_ENTITY_KINDS: frozenset[str]`; `_BODY_REF_RE` matches allowlisted `<kind>:<id>` (full or short, incl. dotted ids like `paper:Volker2023.source`) with two-sided boundary guards and an **atomic** id-body match, and no longer has a standalone `dataset:` alternative. The id body is `[0-9A-Za-z]+(?:[._-][0-9A-Za-z]+)*` wrapped in an atomic group `(?>…)`: alnum runs joined by *single* separators (so consecutive `..`/`--` never match, mirroring `_VERBATIM_RE`'s no-`..` rule and guaranteeing an alnum terminal), and atomicity forbids backtracking to a shorter id — so `interpretation:0007.foo@host` fails entirely instead of truncating to a resolvable `interpretation:0007`.
 
 - [ ] **Step 1: Write the failing tests**
 
@@ -266,6 +268,34 @@ def test_dotted_verbatim_paper_id_extracts(tmp_path):
         "value 7.94 (`paper:Volker2023.source`)", idx)
 
 
+def test_dotted_id_not_truncated_before_continuation(tmp_path):
+    # Atomic id-body guard: a dotted id followed by @host / /path / :extra must
+    # not backtrack to a resolvable shorter id (paper:Volker2023).
+    _project(tmp_path)
+    d = tmp_path / "entities" / "papers"
+    d.mkdir(parents=True, exist_ok=True)
+    (d / "volker2023.md").write_text(
+        "---\nid: paper:Volker2023\nkind: paper\n---\n\nbody\n"
+    )
+    idx = build_resolution_index(tmp_path)
+    assert "paper:Volker2023" in _resolved_refs("value 7.94 (`paper:Volker2023`)", idx)  # bare id resolves
+    for para in (
+        "value 7.94 paper:Volker2023.source@host here",
+        "value 7.94 paper:Volker2023.source/path here",
+        "value 7.94 paper:Volker2023.source:extra here",
+    ):
+        assert "paper:Volker2023" not in _resolved_refs(para, idx)
+
+
+def test_double_dot_id_is_not_a_valid_ref(tmp_path):
+    # No-`..` rule (mirrors _VERBATIM_RE): a malformed id with consecutive dots
+    # cannot be extracted as its own full form, so it never resolves even if an
+    # entity index somehow carried it.
+    _project(tmp_path)
+    idx = build_resolution_index(tmp_path)
+    assert "paper:bad..id" not in _refs("value 7.94 (`paper:bad..id`)", idx)
+
+
 def test_topical_kinds_are_not_extracted(tmp_path):
     _project(tmp_path)
     idx = build_resolution_index(tmp_path)
@@ -298,8 +328,8 @@ def test_dataset_under_guard_boundaries(tmp_path):
 
 - [ ] **Step 2: Run tests to verify they fail**
 
-Run: `uv run --frozen pytest tests/test_numeric_provenance.py -k "provenance_entity_ref or dotted_verbatim or topical_kinds or embedded_tokens or dataset_under_guard" -v`
-Expected: FAIL — entity-ref kinds are not extracted; the old `dataset:` branch still masks `path/dataset:xyz` and drops the trailing period.
+Run: `uv run --frozen pytest tests/test_numeric_provenance.py -k "provenance_entity_ref or dotted_verbatim or dotted_id_not_truncated or double_dot_id or topical_kinds or embedded_tokens or dataset_under_guard" -v`
+Expected: FAIL — the positive/extraction tests (`provenance_entity_ref`, `dotted_verbatim`) fail because entity-ref kinds are not yet extracted, and `dataset_under_guard` fails because the old `dataset:` branch masks `path/dataset:xyz` and drops the trailing period. (The negative guards — `dotted_id_not_truncated`, `double_dot_id`, `topical_kinds`, `embedded_tokens` — may pass trivially pre-change since nothing is extracted; they lock the post-change contract.)
 
 - [ ] **Step 3: Add `_ANCHOR_ENTITY_KINDS` and rebuild `_BODY_REF_RE`**
 
@@ -331,14 +361,21 @@ _BODY_REF_RE = re.compile(
     r"|(?<![A-Za-z])cite:[A-Za-z][A-Za-z0-9_:.-]*"
     # Provenance-bearing typed entity-ref (incl. dataset). Two-sided token
     # guards: the left lookbehind rejects an id embedded in a larger token
-    # (x_interpretation, path/…, a:…); the id requires an alnum terminal so a
-    # trailing sentence period stays outside; the right lookahead rejects
-    # @host / /path / :extra continuations.
+    # (x_interpretation, path/…, a:…); the right lookahead rejects
+    # @host / /path / :extra continuations. The id body is an ATOMIC group
+    # `(?>…)` of alnum runs joined by single `._-` separators — so it always
+    # ends in alnum (a trailing sentence period stays outside), never matches
+    # `..`/`--` (mirrors _VERBATIM_RE), and cannot backtrack to a shorter id:
+    # `interpretation:0007.foo@host` fails outright rather than truncating to a
+    # resolvable `interpretation:0007`.
     r"|(?<![A-Za-z0-9_.:/@-])(?:" + _ANCHOR_KIND_ALT + r"):"
-    r"[0-9A-Za-z](?:[0-9A-Za-z._-]*[0-9A-Za-z])?(?![A-Za-z0-9_:/@-])"
+    r"(?>[0-9A-Za-z]+(?:[._-][0-9A-Za-z]+)*)(?![A-Za-z0-9_:/@-])"
     r"|\[\[[^\]\n]+\]\])"
 )
 ```
+
+Python 3.13's `re` supports atomic groups `(?>…)`; do not substitute a
+non-atomic group — atomicity is the load-bearing anti-truncation guard.
 
 - [ ] **Step 4: Update the `local_candidates_for_paragraph` docstring**
 
@@ -356,7 +393,7 @@ Change its docstring line listing recognized refs to:
 
 - [ ] **Step 5: Run tests to verify they pass**
 
-Run: `uv run --frozen pytest tests/test_numeric_provenance.py -k "provenance_entity_ref or dotted_verbatim or topical_kinds or embedded_tokens or dataset_under_guard" -v`
+Run: `uv run --frozen pytest tests/test_numeric_provenance.py -k "provenance_entity_ref or dotted_verbatim or dotted_id_not_truncated or double_dot_id or topical_kinds or embedded_tokens or dataset_under_guard" -v`
 Expected: PASS
 
 - [ ] **Step 6: Confirm existing extraction tests stay green**
@@ -392,6 +429,14 @@ extracted, so they cannot anchor a number."
 Add to `tests/test_numeric_provenance.py`:
 
 ```python
+def _hypothesis(tmp_path: Path, slug: str) -> None:
+    d = tmp_path / "entities" / "hypotheses"
+    d.mkdir(parents=True, exist_ok=True)
+    (d / f"{slug}.md").write_text(
+        f"---\nid: hypothesis:{slug}\nkind: hypothesis\n---\n\nbody\n"
+    )
+
+
 def test_number_anchored_by_provenance_entity_ref(tmp_path):
     _project(tmp_path)
     _interp(tmp_path, "0007-altview")
@@ -404,16 +449,21 @@ def test_number_anchored_by_provenance_entity_ref(tmp_path):
 
 
 def test_number_not_anchored_by_topical_hypothesis_ref(tmp_path):
+    # The hypothesis is REAL and resolvable in the index — proving the claim
+    # stays Unanchored because `hypothesis` is a topical (non-provenance) KIND,
+    # not merely because the ref is fabricated.
     _project(tmp_path)
+    _hypothesis(tmp_path, "0001-molecular-truth")
     idx = build_resolution_index(tmp_path)
+    assert idx.resolve("hypothesis:0001-molecular-truth") is True  # it exists…
     path = _doc(tmp_path, "The ARI z was 221 (`hypothesis:0001-molecular-truth`).",
                 frontmatter="kind: interpretation")
     out = assess_numeric_claims(build_document_context(path), idx, _CFG)
     kinds = {type(a).__name__ for a in out if a.claim.value == "221"}
-    assert kinds == {"Unanchored"}   # topical citation must not clear the claim
+    assert kinds == {"Unanchored"}   # …yet a topical citation must not clear the claim
 ```
 
-Note: `_CFG` and `_assess` already exist near the bottom of the test file; if `_CFG` is defined after these tests, place these two tests below its definition. Build the index explicitly (as above) so the freshly-written entity files are picked up.
+Note: `_CFG` and `_assess` already exist near the bottom of the test file; if `_CFG` is defined after these tests, place these tests below its definition. Build the index explicitly (as above) so the freshly-written entity files are picked up. `hypothesis` is already in `refs._LOCAL_ENTITY_KINDS`, so the created hypothesis is indexed and `resolve()` returns True for it — the negative therefore isolates the KIND allowlist, exactly as the approved design requires.
 
 - [ ] **Step 2: Run tests to verify they fail (pre-Task-3 baseline) / pass (post-Task-3)**
 
@@ -544,25 +594,41 @@ uv run pyright
 ```
 Expected: all green. Investigate any failure before proceeding; a refs-integrity delta from Task 1 must be an intended, explained change.
 
-- [ ] **Step 2: pan-disease acceptance (overlay, no pin bump)**
+- [ ] **Step 2: pan-disease numeric-anchor acceptance (overlay, no pin bump)**
 
-From the pan-disease checkout:
+From the pan-disease checkout (use `~/d/`, not an absolute Dropbox path):
 ```bash
-cd /mnt/ssd/Dropbox/health/comparisons/pan-disease
+cd ~/d/health/comparisons/pan-disease
 uv run --with-editable ~/d/science/.worktrees/entity-ref-anchors/science \
   science prose lint --check numeric-anchor --format json > /tmp/after.json
 ```
 Compare against the pre-change baseline (196). Expected: ~13 fewer findings (interpretation/plan/pre-registration citations clear, including pre-reg 0012's `interpretation:0010/0011` values); hypothesis/question/discussion-adjacent numbers remain flagged. Record the exact delta.
 
-- [ ] **Step 3: pan-disease refs delta (record, do not assume unchanged)**
+- [ ] **Step 3: pan-disease refs-integrity delta (explicit before/after; validate cannot see it)**
+
+`science validate` calls `check_refs()` **without** `include_body=True`, so newly-recognized `plan:` body refs are invisible to it. Diff the body-ref scan directly, pinned pre-change vs. the overlay:
 
 ```bash
+cd ~/d/health/comparisons/pan-disease
+# BEFORE: current pinned science (no overlay)
+uv run --frozen science refs check --include-body --format json > /tmp/refs-before.json
+# AFTER: worktree overlay
 uv run --with-editable ~/d/science/.worktrees/entity-ref-anchors/science \
-  science validate 2>&1 | tail -3
+  science refs check --include-body --format json > /tmp/refs-after.json
+diff <(jq -S . /tmp/refs-before.json) <(jq -S . /tmp/refs-after.json) || true
 ```
-Expected: PASSED. If the `plan` index addition surfaces new `plan:` body-entity-ref warnings under the project's ref checks, record them as the expected refs delta (short `plan:` prefixes fail refs' exact-match body scan) — this is intended, not a regression.
+Expected delta, entirely from the Task 1 `plan` index addition: some `plan:` body refs that were unindexed (and thus silently skipped) before now either **resolve** (full-id `plan:NNNN-slug` citations drop out of any broken list) or **surface as broken** where a short `plan:NNNN` prefix fails refs' exact-match body scan (refs has no prefix resolution — that lives only in numeric-anchor). Record the exact broken-ref delta; it is intended, not a regression. Do not rely on `science validate`'s tail summary to establish "no unexpected deltas."
 
-- [ ] **Step 4: Finish the branch**
+- [ ] **Step 4: Full validation summary (retain, don't truncate)**
+
+```bash
+cd ~/d/health/comparisons/pan-disease
+uv run --with-editable ~/d/science/.worktrees/entity-ref-anchors/science \
+  science validate --verbose 2>&1 | tee /tmp/validate-after.txt
+```
+Expected: PASSED. Keep the full summary (not a 3-line tail) so the numeric-anchor reduction and any `plan:`-ref changes are both visible and attributable.
+
+- [ ] **Step 5: Finish the branch**
 
 Use superpowers:finishing-a-development-branch. Merge target: science `main`.
 
@@ -570,6 +636,7 @@ Use superpowers:finishing-a-development-branch. Merge target: science `main`.
 
 ## Self-review notes
 
-- **Spec coverage:** allowlist (T3) · prefix+ambiguity (T2) · non-numeric-prefix guard (T2) · dotted ids (T3) · boundary guards incl. dataset fold (T3) · plan index + refs contract (T1) · detector bump (T5) · docs (T6) · acceptance/deltas (T7). All design sections map to a task.
-- **Type consistency:** `unique_entity_prefixes: frozenset[str]` (defaulted, keeps `ResolutionIndex` hashable and existing single constructor valid); `_ANCHOR_ENTITY_KINDS`/`_ANCHOR_KIND_ALT` module constants; `resolve()` signature unchanged.
-- **No placeholders:** every code step carries complete code; the `_interp`/`_refs`/`_resolved_refs` test helpers are defined in T2/T3 before use.
+- **Spec coverage:** allowlist (T3) · prefix+ambiguity, count-map contract (T2) · non-numeric-prefix guard (T2) · dotted ids + no-`..` + atomic anti-truncation (T3) · boundary guards incl. dataset fold (T3) · plan index + refs contract (T1) · detector bump (T5) · docs (T6) · numeric-anchor + refs-body + validation deltas (T7). All design sections map to a task.
+- **Type consistency:** `entity_prefix_owners: dict[str, int]` (no default — the sole constructor `build_resolution_index` always computes it; verified no other `ResolutionIndex(...)` call site and nothing hashes the instance, so the dict field is safe under `frozen=True`, which still blocks attribute reassignment); `resolve()` reads it via `.get(ref) == 1`, matching validator.py's single-owner precedent. `_ANCHOR_ENTITY_KINDS`/`_ANCHOR_KIND_ALT` module constants; `resolve()` signature unchanged.
+- **No placeholders:** every code step carries complete code; the `_interp`/`_hypothesis`/`_refs`/`_resolved_refs` test helpers are defined in T2/T3/T4 before use.
+- **Anti-masking invariant (design rev 4):** (1) kind allowlist at extraction; (2) exact-id or single-owner digit-lead prefix at resolution; (3) two-sided boundary guards with an atomic id-body that forbids backtrack-truncation before an internal dot. Topical kinds, fabricated refs, ambiguous/non-numeric prefixes, `..`-malformed ids, and embedded substrings all leave the number `Unanchored`.
