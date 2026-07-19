@@ -25,7 +25,7 @@ from __future__ import annotations
 import hashlib
 import os
 import re
-from collections.abc import Iterator
+from collections.abc import Iterator, Sequence
 from dataclasses import dataclass
 from datetime import date
 from pathlib import Path, PurePosixPath
@@ -53,6 +53,8 @@ from science_tool.reference_rewrite import (
     _REMOVABLE_FRONTMATTER_REF_KEYS,
     RELATIONS_KEY,
     RELATIONS_TARGET_KEY,
+    ManualHit,
+    RefHit,
     RewriteReport,
     _resolve_link,
     _split_target,
@@ -315,6 +317,119 @@ def plan_import(
         rendered_text=member.rendered_text,
         ref_report=ref_report,
         warnings=planned.warnings,
+    )
+
+
+def plan_cohort_import(
+    project_root: Path,
+    sources: Sequence[Path],
+    *,
+    kind: str,
+    status: str | None = None,
+    exclude: frozenset[Path] = frozenset(),
+    today: date | None = None,
+) -> CohortImportPlan:
+    """Plan 2+ reference-independent loose documents as one import cohort."""
+
+    project_root = Path(project_root).resolve()
+    if len(sources) < 2:
+        raise EntityImportError("a cohort import needs at least 2 sources")
+
+    resolved = [Path(source).resolve() for source in sources]
+    if len(set(resolved)) != len(resolved):
+        raise EntityImportError("cohort sources contain a duplicate")
+
+    cache: dict[str, str] = {}
+    order: list[str] = []
+    for source in resolved:
+        if not source.is_file():
+            raise EntityImportError(f"source not found: {source}")
+        try:
+            text = source.read_text(encoding="utf-8")
+        except UnicodeDecodeError as exc:
+            raise EntityImportError(f"{source} is not valid UTF-8: {exc}") from exc
+        try:
+            source_rel = source.relative_to(project_root).as_posix()
+        except ValueError as exc:
+            raise EntityImportError(f"source is outside project root: {source}") from exc
+        cache[source_rel] = text
+        order.append(source_rel)
+
+    try:
+        base = propose_number(project_root, kind)
+    except KeyError as exc:
+        raise EntityImportError(f"unknown entity kind: {kind}") from exc
+    except EntityCommandError as exc:
+        raise EntityImportError(str(exc)) from exc
+
+    planned = [
+        _plan_member(
+            project_root,
+            source_rel,
+            cache[source_rel],
+            kind=kind,
+            number=base + offset,
+            status=status,
+            title=None,
+            slug=None,
+            today=today,
+        )
+        for offset, source_rel in enumerate(order)
+    ]
+    members = [item.member for item in planned]
+    member_rels = set(order)
+
+    report = plan_reference_rewrite(
+        project_root,
+        id_substitutions={member.source_rel: member.entity_id for member in members},
+        path_substitutions={member.source_rel: member.dest_rel for member in members},
+        exclude=exclude,
+        source_overrides=cache,
+    )
+
+    def hit_target(hit: RefHit) -> str | None:
+        head, _tail = _split_target(hit.old)
+        if head in member_rels:
+            return head
+        resolved_target = (
+            _resolve_link(head, PurePosixPath(hit.rel_path).parent) if head else None
+        )
+        return resolved_target if resolved_target in member_rels else None
+
+    def manual_targets(hit: ManualHit) -> list[str]:
+        return sorted(source_rel for source_rel in member_rels if source_rel in hit.text)
+
+    pairs: list[tuple[str, str]] = []
+    for hit in report.hits:
+        if hit.rel_path in member_rels:
+            pairs.append((hit.rel_path, hit_target(hit) or hit.old))
+    for manual in report.manual:
+        if manual.rel_path in member_rels:
+            targets = manual_targets(manual) or [manual.text.strip()]
+            pairs.extend((manual.rel_path, target) for target in targets)
+    if pairs:
+        rendered = ", ".join(
+            f"{source} -> {target}" for source, target in sorted(set(pairs))
+        )
+        raise RefDependentCohortError(
+            "cohort members reference each other or themselves; import them in "
+            f"separate batches. Offending source -> target pairs: {rendered}"
+        )
+
+    warnings = sorted(
+        (
+            AttributedWarning(source_rel=item.member.source_rel, message=warning)
+            for item in planned
+            for warning in item.warnings
+        ),
+        key=lambda warning: (warning.source_rel, warning.message),
+    )
+    return CohortImportPlan(
+        project_root=str(project_root),
+        kind=kind,
+        members=members,
+        ref_report=report,
+        warnings=warnings,
     )
 
 

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+from pathlib import Path
 
 import pytest
 
@@ -11,7 +12,23 @@ from science_tool.entity_import import (
     ImportMember,
     RefDependentCohortError,
     parse_cohort_import_plan,
+    plan_cohort_import,
 )
+
+
+def _project(tmp_path: Path) -> Path:
+    (tmp_path / "science.yaml").write_text(
+        "name: t\nknowledge_profiles: {local: local}\n", encoding="utf-8"
+    )
+    (tmp_path / "entities" / "plans").mkdir(parents=True, exist_ok=True)
+    return tmp_path
+
+
+def _loose(root: Path, rel: str, text: str) -> Path:
+    path = root / rel
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(text, encoding="utf-8")
+    return path
 
 
 def _member(n: int) -> ImportMember:
@@ -94,3 +111,127 @@ def test_parse_cohort_rejects_non_integer_schema_version():
 
 def test_ref_dependent_error_is_import_error():
     assert issubclass(RefDependentCohortError, EntityImportError)
+
+
+def test_cohort_assigns_contiguous_number_block(tmp_path):
+    root = _project(tmp_path)
+    a = _loose(root, "doc/plans/a.md", "# Alpha\n\nbody\n")
+    b = _loose(root, "doc/plans/b.md", "# Beta\n\nbody\n")
+    c = _loose(root, "doc/plans/c.md", "# Gamma\n\nbody\n")
+    plan = plan_cohort_import(root, [a, b, c], kind="plan")
+    assert [m.number for m in plan.members] == [1, 2, 3]
+    assert [m.entity_id for m in plan.members] == [
+        "plan:0001-alpha",
+        "plan:0002-beta",
+        "plan:0003-gamma",
+    ]
+    assert [m.source_rel for m in plan.members] == [
+        "doc/plans/a.md",
+        "doc/plans/b.md",
+        "doc/plans/c.md",
+    ]
+
+
+def test_cohort_one_combined_inbound_rewrite(tmp_path):
+    root = _project(tmp_path)
+    a = _loose(root, "doc/plans/a.md", "# Alpha\n\nbody\n")
+    b = _loose(root, "doc/plans/b.md", "# Beta\n\nbody\n")
+    _loose(
+        root,
+        "doc/notes.md",
+        "see [a](plans/a.md) and [b](plans/b.md)\n",
+    )
+    plan = plan_cohort_import(root, [a, b], kind="plan")
+    edited = [e.rel_path for e in plan.ref_report.edits]
+    assert "doc/notes.md" in edited
+    news = {h.new for h in plan.ref_report.hits if h.rel_path == "doc/notes.md"}
+    assert any("0001-alpha" in new for new in news)
+    assert any("0002-beta" in new for new in news)
+
+
+def test_cohort_rejects_member_linking_member(tmp_path):
+    root = _project(tmp_path)
+    a = _loose(root, "doc/plans/a.md", "# Alpha\n\nsee [b](b.md)\n")
+    b = _loose(root, "doc/plans/b.md", "# Beta\n\nbody\n")
+    with pytest.raises(RefDependentCohortError) as excinfo:
+        plan_cohort_import(root, [a, b], kind="plan")
+    msg = str(excinfo.value)
+    assert "doc/plans/a.md" in msg and "doc/plans/b.md" in msg
+
+
+def test_cohort_rejects_bare_path_mention_of_member(tmp_path):
+    root = _project(tmp_path)
+    a = _loose(
+        root,
+        "doc/plans/a.md",
+        "# Alpha\n\nmentions doc/plans/b.md inline\n",
+    )
+    b = _loose(root, "doc/plans/b.md", "# Beta\n\nbody\n")
+    with pytest.raises(RefDependentCohortError) as excinfo:
+        plan_cohort_import(root, [a, b], kind="plan")
+    assert "doc/plans/a.md" in str(excinfo.value)
+    assert "doc/plans/b.md" in str(excinfo.value)
+
+
+def test_cohort_rejects_self_link(tmp_path):
+    root = _project(tmp_path)
+    a = _loose(root, "doc/plans/a.md", "# Alpha\n\nsee [me](a.md)\n")
+    b = _loose(root, "doc/plans/b.md", "# Beta\n\nbody\n")
+    with pytest.raises(RefDependentCohortError) as excinfo:
+        plan_cohort_import(root, [a, b], kind="plan")
+    assert "doc/plans/a.md -> doc/plans/a.md" in str(excinfo.value)
+
+
+def test_cohort_pair_attribution_disambiguates_shared_basenames(tmp_path):
+    root = _project(tmp_path)
+    a = _loose(root, "doc/a/x.md", "# Alpha\n\nsee [t](../../draft/x.md)\n")
+    b = _loose(root, "draft/x.md", "# Beta\n\nbody\n")
+    with pytest.raises(RefDependentCohortError) as excinfo:
+        plan_cohort_import(root, [a, b], kind="plan")
+    msg = str(excinfo.value)
+    assert "doc/a/x.md -> draft/x.md" in msg
+    assert "doc/a/x.md -> doc/a/x.md" not in msg
+
+
+def test_cohort_runs_one_combined_scan_with_cached_overrides(tmp_path, monkeypatch):
+    root = _project(tmp_path)
+    a = _loose(root, "doc/plans/a.md", "# Alpha\n\nbody\n")
+    b = _loose(root, "doc/plans/b.md", "# Beta\n\nbody\n")
+    import science_tool.entity_import as ei
+
+    calls: list[dict] = []
+    real = ei.plan_reference_rewrite
+
+    def spy(project_root, **kwargs):
+        calls.append(kwargs)
+        return real(project_root, **kwargs)
+
+    monkeypatch.setattr(ei, "plan_reference_rewrite", spy)
+    plan_cohort_import(root, [a, b], kind="plan")
+    assert len(calls) == 1
+    overrides = calls[0]["source_overrides"]
+    assert set(overrides) == {"doc/plans/a.md", "doc/plans/b.md"}
+    assert overrides["doc/plans/a.md"] == "# Alpha\n\nbody\n"
+
+
+def test_cohort_preserves_external_manual_finding(tmp_path):
+    root = _project(tmp_path)
+    a = _loose(root, "doc/plans/a.md", "# Alpha\n\nbody\n")
+    b = _loose(root, "doc/plans/b.md", "# Beta\n\nbody\n")
+    _loose(root, "doc/notes.md", "the file doc/plans/a.md is worth reading\n")
+    plan = plan_cohort_import(root, [a, b], kind="plan")
+    assert any(man.rel_path == "doc/notes.md" for man in plan.ref_report.manual)
+
+
+def test_cohort_requires_two_sources(tmp_path):
+    root = _project(tmp_path)
+    a = _loose(root, "doc/plans/a.md", "# Alpha\n\nbody\n")
+    with pytest.raises(EntityImportError):
+        plan_cohort_import(root, [a], kind="plan")
+
+
+def test_cohort_rejects_duplicate_sources(tmp_path):
+    root = _project(tmp_path)
+    a = _loose(root, "doc/plans/a.md", "# Alpha\n\nbody\n")
+    with pytest.raises(EntityImportError):
+        plan_cohort_import(root, [a, a], kind="plan")
