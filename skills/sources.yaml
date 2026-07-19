@@ -217,3 +217,36 @@ ncbi-eutilities:
   url: "https://www.ncbi.nlm.nih.gov/books/NBK25501/"
   kind: software
   last_checked: "2026-07-19"
+
+snakemake:
+  title: "Snakemake"
+  authors: ["Snakemake developers"]
+  url: "https://snakemake.readthedocs.io/"
+  kind: software
+  last_checked: "2026-07-19"
+
+molder-snakemake:
+  title: "Sustainable data analysis with Snakemake"
+  authors:
+    - "Felix Mölder"
+    - "Kim Philipp Jablonski"
+    - "Brice Letcher"
+    - "et al."
+  url: "https://doi.org/10.12688/f1000research.29032.2"
+  kind: paper
+  doi: "10.12688/f1000research.29032.2"
+  last_checked: "2026-07-19"
+
+marimo:
+  title: "marimo"
+  authors: ["Marimo Inc."]
+  url: "https://marimo.io/"
+  kind: software
+  last_checked: "2026-07-19"
+
+runpod:
+  title: "RunPod"
+  authors: ["Runpod, Inc."]
+  url: "https://www.runpod.io/"
+  kind: software
+  last_checked: "2026-07-19"

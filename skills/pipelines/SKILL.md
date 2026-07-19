@@ -1,6 +1,7 @@
 ---
 name: pipelines
 description: Source of truth for choosing and combining computational-execution skills (Snakemake, marimo, RunPod). Load when planning the orchestration shape of an analysis after methodology is decided.
+provenance: internal
 ---
 
 # Pipelines

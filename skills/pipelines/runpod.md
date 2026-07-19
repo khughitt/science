@@ -1,6 +1,7 @@
 ---
 name: pipeline-runpod
 description: RunPod GPU workflow construction and operational best practices. Use when setting up rented GPU pods for uv-based projects, syncing code or data to RunPod, bootstrapping dependencies on a pod, or the user mentions RunPod, remote GPU pods, or pushing jobs to a rented GPU.
+sources: [runpod]
 ---
 
 # RunPod GPU Pods

@@ -1,6 +1,7 @@
 ---
 name: pipeline-marimo
 description: Marimo reactive notebook construction and best practices. Use when creating interactive analysis notebooks, exploratory data analysis, parameter exploration, or the user mentions marimo, notebooks, or interactive analysis.
+sources: [marimo]
 ---
 
 # Marimo Notebooks
