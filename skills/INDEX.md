@@ -55,6 +55,7 @@ progressive disclosure.
 - `statistics-population-genetics-likelihood`: `skills/statistics/population-genetics-likelihood.md`
 - `statistics-estimator-certification`: `skills/statistics/estimator-certification.md`
 - `statistics-bayesian-workflow`: `skills/statistics/bayesian-workflow.md`
+- `statistics-causal-identification`: `skills/statistics/causal-identification.md`
 
 ## Curation and Evidence
 

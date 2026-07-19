@@ -30,6 +30,7 @@ For analysis-readiness planning, start at [`../INDEX.md`](../INDEX.md) or run
 | [`population-genetics-likelihood.md`](./population-genetics-likelihood.md) | Wright-Fisher / Moran / binomial-segregation likelihoods; selection vs neutral null |
 | [`estimator-certification.md`](./estimator-certification.md) | An analysis fits parameters numerically — an optimiser, a profile likelihood, an ODE — and a threshold, budget, or gate is about to depend on the fit |
 | [`bayesian-workflow.md`](./bayesian-workflow.md) | Building/fitting/reviewing a Bayesian model — priors, MCMC, convergence, calibration, comparison |
+| [`causal-identification.md`](./causal-identification.md) | Choosing an adjustment set, backdoor/confounder/collider/M-bias checks, over-adjustment, or a non-identified estimand |
 
 ## Principles
 
@@ -118,6 +119,13 @@ For analysis-readiness planning, start at [`../INDEX.md`](../INDEX.md) or run
     (LOO-PIT / coverage / SBC) is out-of-sample and distinct from posterior-
     predictive fit; power-scale the prior before trusting the verdict. See
     [`bayesian-workflow`](./bayesian-workflow.md).
+
+14. **Identification is a DAG question, decided before fitting.** Missing edges are
+    the strongest assumptions; pre-treatment timing does not license adjustment
+    (M-bias); over-adjusting a mediator or collider is a bias, not caution. When the
+    effect is not identified, separate alternative identification (re-stating the
+    estimand), partial-identification bounds, hidden-bias sensitivity, and a
+    fail-closed verdict. See [`causal-identification`](./causal-identification.md).
 
 ## When to invoke
 
