@@ -1,6 +1,7 @@
 ---
 name: statistics-likelihood-model-comparison
-description: Use when comparing parametric models by likelihood — AIC, BIC, likelihood-ratio tests, nested vs non-nested comparison, identifiability and rare-event numerical-precision audits, and bootstrap confidence intervals on the selected model.
+description: Use when comparing parametric models by likelihood — AIC, BIC, likelihood-ratio tests, nested vs non-nested comparison, identifiability and rare-event numerical-precision audits, bootstrap CIs, and Bayesian out-of-sample comparison (PSIS-LOO / ELPD / stacking weights).
+sources: [baygent-skills, vehtari-loo]
 ---
 
 # Likelihood Model Comparison
@@ -81,6 +82,33 @@ Likelihoods that sum over rare events or large state spaces underflow silently.
 - Record the minimum representable likelihood contribution and whether any
   verdict-bearing term is near it.
 
+## Bayesian Arm — LOO / ELPD / Stacking
+
+For Bayesian models, prefer out-of-sample predictive comparison over information
+criteria computed from a point fit:
+
+- **PSIS-LOO (`elpd_loo`)** estimates expected log predictive density by
+  leave-one-out cross-validation using Pareto-smoothed importance sampling — no
+  refitting. Report the ELPD difference **and its standard error**; a difference
+  smaller than a few SE is not a selection.
+- **Prefer LOO over WAIC.** WAIC is an asymptotic approximation to the same
+  quantity and is less robust; report WAIC only as a cross-check.
+- **Stacking weights** (predictive-distribution averaging) beat picking a single
+  winner when several models are close — and are more honest than model-probability
+  weights when the true model is not in the set.
+- **Reliability guard:** LOO is untrustworthy when the Pareto k̂ for influential
+  observations exceeds the library-reported `good_k` threshold — `min(1 − 1/log10(S),
+  0.7)` for `S` posterior draws, **not** a fixed 0.7. Report k̂ and the threshold;
+  refit-based exact LOO or moment-matching is required for the bad points before
+  the comparison stands.
+- **Compare genuinely different assumptions, not for variable selection.** LOO
+  differences among near-identical nested models are noisy; use it to adjudicate
+  substantively different structures.
+
+This arm assumes the models passed the convergence gate in
+[`bayesian-workflow.md`](bayesian-workflow.md); an unconverged fit makes ELPD
+meaningless.
+
 ## Bootstrap Confidence and Selection Stability
 
 - Report bootstrap CIs for the parameters and for the ΔAIC/ΔBIC between the top
@@ -119,6 +147,7 @@ non-identifiability, or selection instability.
 - [`estimator-certification.md`](./estimator-certification.md) — certify the estimator
   before the comparison is read; this leaf's numerical-precision audit assumes what that
   one establishes.
+- [`bayesian-workflow.md`](./bayesian-workflow.md) — the convergence gate the Bayesian LOO/ELPD arm assumes.
 
 - [`sensitivity-arbitration.md`](./sensitivity-arbitration.md) — pre-commit which comparison metric is verdict-bearing and which are reported alongside.
 - [`power-floor-acknowledgement.md`](./power-floor-acknowledgement.md) — the minimum effect a likelihood comparison can resolve at the available n.

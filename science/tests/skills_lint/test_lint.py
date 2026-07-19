@@ -142,3 +142,58 @@ def test_skill_issue_json_uses_posix_path() -> None:
         "field": None,
         "detail": "",
     }
+
+
+def test_unknown_source_ref_flagged(tmp_path: Path) -> None:
+    skills_root = tmp_path / "skills"
+    skills_root.mkdir()
+    (skills_root / "sources.yaml").write_text(
+        "known:\n  title: K\n  authors: [A]\n  url: https://doi.org/x\n"
+        "  kind: paper\n  last_checked: 2026-07-18\n",
+        encoding="utf-8",
+    )
+    (skills_root / "INDEX.md").write_text("`skills/leaf.md`\n", encoding="utf-8")
+    (skills_root / "leaf.md").write_text(
+        "---\nname: leaf\ndescription: d\nsources: [known, missing]\n---\n"
+        "# Leaf\n## Companion Skills\n- none\n",
+        encoding="utf-8",
+    )
+    from science_tool.skills_lint.lint import check_skills
+
+    kinds = {(i.kind, i.detail) for i in check_skills(skills_root)}
+    assert ("unknown-source-ref", "missing") in kinds
+    assert ("unknown-source-ref", "known") not in kinds
+
+
+def test_declared_but_invalid_source_is_not_also_unknown_ref(tmp_path: Path) -> None:
+    skills_root = tmp_path / "skills"
+    skills_root.mkdir()
+    (skills_root / "sources.yaml").write_text(
+        "brokensrc:\n  title: B\n  authors: [A]\n  kind: paper\n  last_checked: 2026-07-18\n",  # missing url
+        encoding="utf-8",
+    )
+    (skills_root / "INDEX.md").write_text("`skills/leaf.md`\n", encoding="utf-8")
+    (skills_root / "leaf.md").write_text(
+        "---\nname: leaf\ndescription: d\nsources: [brokensrc]\n---\n"
+        "# Leaf\n## Companion Skills\n- none\n",
+        encoding="utf-8",
+    )
+    from science_tool.skills_lint.lint import check_skills
+
+    issues = check_skills(skills_root)
+    invalid = [i for i in issues if i.kind == "invalid-source-record" and i.field == "brokensrc"]
+    unknown = [i for i in issues if i.kind == "unknown-source-ref"]
+    assert len(invalid) == 1  # aggregated: exactly one record report
+    assert unknown == []      # not double-flagged as a missing ref
+
+
+def test_sources_not_a_list_flagged_as_invalid_field(tmp_path: Path) -> None:
+    from science_tool.skills_lint.lint import check_source_refs
+    from science_tool.skills_lint.sources import SourcesRegistry
+
+    leaf = tmp_path / "leaf.md"
+    leaf.write_text("---\nname: x\ndescription: d\nsources: oops\n---\n# X\n", encoding="utf-8")
+    issues = check_source_refs(leaf, SourcesRegistry(records={}, errors={}, declared_ids=frozenset()))
+    assert len(issues) == 1
+    assert issues[0].kind == "invalid-field"
+    assert issues[0].field == "sources"
