@@ -220,8 +220,12 @@ class ResolutionIndex:
             # one entity (`interpretation:0013` -> the sole `interpretation:0013-…`).
             # Non-numeric leads never enter the map; ambiguous (multi-owner)
             # prefixes have owners > 1 — neither resolves, so a citation cannot
-            # silently anchor to a guessed entity.
-            return ref in self.entity_ids or self.entity_prefix_owners.get(ref) == 1
+            # silently anchor to a guessed entity. Shared with refs body-scan.
+            from science_tool import refs
+
+            return refs.resolve_local_entity_ref(
+                ref, self.entity_ids, self.entity_prefix_owners
+            )
         # Treat anything else as a candidate artifact path. Reject non-relative
         # paths outright: `Path(base) / ref` silently discards `base` when `ref`
         # is absolute, and `..` segments can escape the project root — a
@@ -650,13 +654,7 @@ def build_resolution_index(project_root: Path) -> ResolutionIndex:
     root = project_root.resolve()
     task_numbers = {_normalize_task_number(n) for n in refs._load_task_ids(root)}
     entity_ids = frozenset(refs._load_entity_index(root))
-    entity_prefix_owners: dict[str, int] = {}
-    for eid in entity_ids:
-        kind, _, ident = eid.partition(":")
-        lead = ident.split("-", 1)[0]
-        if lead.isdigit() and lead != ident:
-            key = f"{kind}:{lead}"
-            entity_prefix_owners[key] = entity_prefix_owners.get(key, 0) + 1
+    entity_prefix_owners = refs.build_entity_prefix_owners(entity_ids)
     return ResolutionIndex(
         project_root=root,
         task_numbers=frozenset(task_numbers),
