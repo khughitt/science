@@ -8,11 +8,12 @@ skills-taxonomy and skill-authoring doctrine. The baseline was captured before
 
 ## Evaluation isolation
 
-Each repetition ran in a fresh-context evaluator with no inherited
-conversation. Evaluators were instructed to use only the supplied request and
-artifact, not to use tools, and not to inspect files or a repository. They were
-not given the design, implementation plan, doctrine, acceptance criteria,
-expected verdicts, earlier outputs, or any other repository context.
+Each no-doctrine baseline repetition ran in a fresh-context evaluator with no
+inherited conversation. Baseline evaluators were instructed to use only the
+supplied request and artifact, not to use tools, and not to inspect files or a
+repository. They were not given the design, implementation plan, doctrine,
+acceptance criteria, expected verdicts, earlier outputs, or any other
+repository context.
 
 All nine no-doctrine baseline repetitions followed that contract. No baseline
 runs were discarded as contaminated.

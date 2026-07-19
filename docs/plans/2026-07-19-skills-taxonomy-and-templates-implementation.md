@@ -303,7 +303,7 @@ Runs **before** any loadable doctrine leaf or template exists. The committed des
 Write the three scenario families, each with an exact prompt and an acceptance criterion. Do **not** predict baseline behavior — it is measured.
 - **S1 Classification:** paste the body of `skills/statistics/bias-vs-variance-decomposition.md` (no name/archetype) and ask "Which of these six archetypes is this — measurement-qa, method-guide, analysis-discipline, normative-reference, tool-guide, practice-guide — and why?" Acceptance: with-doctrine returns `analysis-discipline` via the verb test.
 - **S2 Authoring:** "We need guidance for QA-ing a new assay modality. Draft the skill's section skeleton." Acceptance: with-doctrine produces the `measurement-qa` slot set.
-- **S3 Create/extend/split:** (a) "add guidance on choosing the DE tool for bulk RNA-seq" (should EXTEND `bulk-rnaseq-qa`); (b) "the frictionless skill also needs to teach the `frictionless validate` CLI end-to-end" (should SPLIT contract vs tooling). Acceptance: with-doctrine applies the create/extend/split criteria to reach EXTEND and SPLIT respectively.
+- **S3 Create/extend/split:** (a) "add guidance on choosing the DE tool for bulk RNA-seq"; (b) "the frictionless skill also needs to teach the `frictionless validate` CLI end-to-end". Acceptance: with-doctrine applies the create/extend/split criteria so Request A separates DE-tool selection into a distinct `method-guide` by SPLIT/extraction or CREATE and never EXTENDs the `measurement-qa` leaf; Request B SPLITs the datapackage contract from the CLI tooling.
 
 - [ ] **Step 2: Run isolated baselines (≥3 fresh-context repetitions per scenario arm)**
 
