@@ -442,11 +442,46 @@ def entity_source_candidates(
 # that paragraph's finding but produces no `SourceCandidate` and never clears
 # entity-wide.
 
+# Provenance-bearing entity kinds whose typed citations may anchor a numeric
+# claim. Deliberately EXCLUDES topical/framing kinds (hypothesis, question,
+# topic, theme, concept, discussion, …): existence-checking proves identity,
+# not that the number is sourced there. `task:`/`[@]`/`cite:` remain anchors
+# through their own alternatives below.
+_ANCHOR_ENTITY_KINDS = frozenset({
+    # result / evidence artifacts produced by project work
+    "interpretation", "report", "synthesis", "observation", "finding",
+    "evidence-line", "validation-report", "experiment", "workflow-run",
+    "data-package",
+    # external sources
+    "dataset", "paper", "book", "source",
+    # registered / planned parameters
+    "pre-registration", "plan",
+})
+
+# Longest-first so hyphenated kinds (validation-report) win over any prefix.
+_ANCHOR_KIND_ALT = "|".join(sorted(_ANCHOR_ENTITY_KINDS, key=len, reverse=True))
+
 _BODY_REF_RE = re.compile(
     r"(?:(?<![A-Za-z])task:t\d{2,}"
     r"|\[@[A-Za-z][A-Za-z0-9_:.-]*\]"
     r"|(?<![A-Za-z])cite:[A-Za-z][A-Za-z0-9_:.-]*"
-    r"|(?<![A-Za-z])dataset:[A-Za-z0-9][A-Za-z0-9_.-]*"
+    # Provenance-bearing typed entity-ref (incl. dataset). Three guards:
+    #  (1) left lookbehind — rejects an id embedded in a larger token
+    #      (x_interpretation, path/…, a:…);
+    #  (2) id-scoped no-`..` lookahead — a malformed id whose char-run contains
+    #      consecutive dots matches NOTHING here (not even a truncated prefix),
+    #      mirroring _VERBATIM_RE's sole no-`..` prohibition;
+    #  (3) atomic id body `(?>…)` over the FULL _VERBATIM_RE id charset
+    #      (`[0-9A-Za-z](?:[0-9A-Za-z._-]*[0-9A-Za-z])?` — alnum start, alnum
+    #      terminal so a trailing sentence period stays outside, arbitrary
+    #      internal `._-` incl. `.-`), locked so it cannot backtrack to a
+    #      shorter id: `interpretation:0007.foo@host` fails outright rather
+    #      than truncating to a resolvable `interpretation:0007`;
+    #  followed by a right lookahead rejecting @host / /path / :extra.
+    r"|(?<![A-Za-z0-9_.:/@-])(?:" + _ANCHOR_KIND_ALT + r"):"
+    r"(?![A-Za-z0-9._-]*\.\.)"
+    r"(?>[0-9A-Za-z](?:[0-9A-Za-z._-]*[0-9A-Za-z])?)"
+    r"(?![A-Za-z0-9_:/@-])"
     r"|\[\[[^\]\n]+\]\])"
 )
 
@@ -456,8 +491,10 @@ def local_candidates_for_paragraph(
 ) -> tuple[SourceCandidate, ...]:
     """Extract resolvable body references scoped to a single paragraph.
 
-    Matches `task:tNNN`, `[@key]`, `cite:key`, `dataset:slug`. A `[[wiki]]`
-    link is topical (like `related`) — treated as evidence, not a candidate.
+    Matches `task:tNNN`, `[@key]`, `cite:key`, and provenance-bearing typed
+    entity-refs (`_ANCHOR_ENTITY_KINDS`, e.g. `interpretation:0011-…`,
+    `dataset:slug`), full-id or unique digit-lead prefix. A `[[wiki]]` link is
+    topical (like `related`) — treated as evidence, not a candidate.
     """
     out: list[SourceCandidate] = []
     for m in _BODY_REF_RE.finditer(paragraph_text):
