@@ -108,5 +108,6 @@ Report:
 
 ## Companion Skills
 
-- [`SKILL.md`](SKILL.md) - research-methodology and citation-discipline conventions.
+- [`literature-evaluation.md`](literature-evaluation.md) - source hierarchy and source-quality assessment for literature-derived claims.
+- [`citation-discipline.md`](citation-discipline.md) - citation and source-pointer conformance.
 - [`../../skills/statistics/sensitivity-arbitration.md`](../../skills/statistics/sensitivity-arbitration.md) - verdict handling when curated labels or adjudication choices change results.

@@ -8,10 +8,11 @@ provenance: internal
 # Proposition and Evidence Schema
 
 Project-specific schema for the Science proposition/evidence model. For the
-generic methodology layer (source hierarchy, evaluating sources, citation
-discipline), see [`SKILL.md`](./SKILL.md). For the prose explanation of the
-model, see `docs/user-guide/epistemic-model.md` and
-`docs/user-guide/evidence-lines.md`.
+generic methodology layer, see
+[`literature-evaluation.md`](literature-evaluation.md) (source hierarchy,
+evaluating sources) and [`citation-discipline.md`](citation-discipline.md)
+(citation discipline). For the prose explanation of the model, see
+`docs/user-guide/epistemic-model.md` and `docs/user-guide/evidence-lines.md`.
 
 When the project uses layered-claim metadata:
 
@@ -84,7 +85,28 @@ views); they just don't drag the weakest-link belief down.
 - `sci:hasProposition` (mechanism steps) is always authoritatively `core` and
   cannot be demoted.
 
+## Evidence Types
+
+The typed evidence vocabulary is owned by the model enum
+(`science_model.reasoning.EvidenceType`). The canonical stored tokens carry
+**no** `_evidence` suffix:
+
+- `empirical_data` — project-run analyses over observed data
+- `benchmark` — benchmark tasks, evaluation suites, standardized comparisons
+- `simulation` — results that primarily come from a model world
+- `literature` — prior publications, reviews, meta-analyses
+- `expert_judgment` — structured expert assessment
+- `negative_result` — accepted for compatibility, but usually better understood as a result pattern; the line's `stance`, role, and scope should carry what the null or negative result does to the target proposition
+
+Authoring may still use the historical `_evidence` suffix — `literature_evidence`,
+`empirical_data_evidence` — which Science strips at the model boundary and
+stores as the canonical member. Unknown evidence types fail when parsed.
+
+Do not collapse these into a generic "computational evidence" label.
+
 ## Companion Skills
 
-- [`SKILL.md`](./SKILL.md) - generic research methodology that this schema overlays.
+- [`literature-evaluation.md`](./literature-evaluation.md) - evaluating the external sources that populate proposition entities.
+- [`citation-discipline.md`](./citation-discipline.md) - citation and source-pointer conformance for `source_refs`.
+- [`proposition-graph-reasoning.md`](./proposition-graph-reasoning.md) - reasoning over the graph these field values build.
 - [`annotation-curation-qa.md`](./annotation-curation-qa.md) - curated claims that will populate proposition entities.
