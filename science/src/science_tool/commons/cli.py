@@ -29,6 +29,7 @@ from science_tool.commons.errors import (
     PromoteWriteError,
 )
 from science_tool.commons.inventory import build_commons_inventory
+from science_tool.commons.promote_body_loss import format_body_loss
 from science_tool.commons.member_payload import resolve_virtual_member_payload
 from science_tool.commons.overlay import (
     MergedEntity,
@@ -77,6 +78,19 @@ def _wants_json(*, as_json: bool, output_format: str) -> bool:
     return as_json or output_format == "json"
 
 
+def _summarize_conflict_value(value: Any) -> str:
+    """Show a value, or describe it when dumping it raw would bury the prompt.
+
+    Body sections arrive here as whole multi-line documents; `repr()` on a
+    112-line section scrolls the choice off the screen.
+    """
+    if isinstance(value, str):
+        lines = value.strip().splitlines()
+        if len(lines) > 3:
+            return f"<{len(lines)} lines, starting {lines[0][:60].strip()!r}>"
+    return repr(value)
+
+
 def prompt_resolve(conflict: FieldConflict | ExistingCanonicalConflict) -> Any:
     """Interactive terminal prompt — the `resolve_conflict` callback the CLI passes.
 
@@ -98,9 +112,21 @@ def prompt_resolve(conflict: FieldConflict | ExistingCanonicalConflict) -> Any:
             f"(version {conflict.existing_version}) diverges on "
             f'field "{conflict.field}":'
         )
-        click.echo(f"  source : {conflict.source_value!r}")
-        click.echo(f"  existing: {conflict.existing_value!r}")
-        click.echo("  [k] keep existing (overlay)")
+        click.echo(f"  source : {_summarize_conflict_value(conflict.source_value)}")
+        click.echo(f"  existing: {_summarize_conflict_value(conflict.existing_value)}")
+        # Say what [k] costs before offering it. Keep-existing discards the whole
+        # source canonical body, and used to do so with no diff, warning, or
+        # count -- 347 measured lines across three real papers (fb-2026-07-16-004).
+        if conflict.body_loss is not None and conflict.body_loss.has_loss:
+            click.echo("")
+            for line in format_body_loss(
+                conflict.body_loss, kind=conflict.kind, slug=conflict.slug
+            ):
+                click.echo(line)
+            click.echo("")
+            click.echo("  [k] keep existing and DISCARD the source content above")
+        else:
+            click.echo("  [k] keep existing (overlay)")
         click.echo("  [a] abort batch")
         while True:
             try:
