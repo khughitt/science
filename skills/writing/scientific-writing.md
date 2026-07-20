@@ -1,11 +1,11 @@
 ---
-name: science-scientific-writing
-description: "Scientific writing conventions for research documents. This skill should be used whenever writing or editing research documents, background sections, paper summaries, hypothesis descriptions, overview documents, or any content in the doc/ directory. Also use when the user asks to write, draft, revise, or edit any scientific or technical prose, or when creating content that will be part of a research project's documentation."
+name: scientific-writing
+description: Scientific writing conventions for research documents. This skill should be used whenever writing or editing research documents, background sections, paper summaries, hypothesis descriptions, overview documents, or any content in the doc/ directory. Also use when the user asks to write, draft, revise, or edit any scientific or technical prose, or when creating content that will be part of a research project's documentation.
+archetype: practice-guide
+provenance: internal
 ---
 
 # Scientific Writing
-
-Adapted from canonical Science skill `skills/writing/scientific-writing.md`.
 
 Answers: how do I write project prose that is correctly hedged, sourced, and
 connected to the research framework?
@@ -100,9 +100,9 @@ Did the agent carry out the cross-cutting practice according to its workflow, ju
 
 ## Companion Skills
 
-- [`../science-research-methodology/citation-discipline.md`](../science-research-methodology/citation-discipline.md) - citation format, bibliography keys, and source-pointer conformance.
-- [`../science-research-methodology/literature-evaluation.md`](../science-research-methodology/literature-evaluation.md) - selecting and assessing the sources this prose cites.
-- [`../../skills/statistics/SKILL.md`](../../skills/statistics/SKILL.md) - statistical reporting language for pre-registrations, analyses, and verdicts.
+- [`../research/citation-discipline.md`](../research/citation-discipline.md) - citation format, bibliography keys, and source-pointer conformance.
+- [`../research/literature-evaluation.md`](../research/literature-evaluation.md) - selecting and assessing the sources this prose cites.
+- [`../statistics/SKILL.md`](../statistics/SKILL.md) - statistical reporting language for pre-registrations, analyses, and verdicts.
 - [`../INDEX.md`](../INDEX.md) — the skill index.
 
 For the project's reasoning model, see `docs/user-guide/epistemic-model.md`.

@@ -22,7 +22,7 @@ For analysis-readiness planning, start at [`../INDEX.md`](../INDEX.md) or run
 
 Covers how the project evaluates external sources and reasons over its own
 proposition graph. Excludes prose conventions (see
-[`../science-scientific-writing/SKILL.md`](../science-scientific-writing/SKILL.md)) and statistical interpretation
+[`../../skills/writing/SKILL.md`](../../skills/writing/SKILL.md)) and statistical interpretation
 (see [`../../skills/statistics/SKILL.md`](../../skills/statistics/SKILL.md)).
 
 ## Leaves
@@ -48,7 +48,7 @@ Leaves are independent except where noted:
 ## Parent & neighbors
 
 - Parent index: [`../INDEX.md`](../INDEX.md)
-- Neighboring routers: [`../science-scientific-writing/SKILL.md`](../science-scientific-writing/SKILL.md), [`../../skills/statistics/SKILL.md`](../../skills/statistics/SKILL.md), [`../../skills/data/SKILL.md`](../../skills/data/SKILL.md)
+- Neighboring routers: [`../../skills/writing/SKILL.md`](../../skills/writing/SKILL.md), [`../../skills/statistics/SKILL.md`](../../skills/statistics/SKILL.md), [`../../skills/data/SKILL.md`](../../skills/data/SKILL.md)
 
 ## Success test
 

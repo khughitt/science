@@ -91,9 +91,9 @@ def test_generate_codex_skills_emits_companion_methodology_skills(tmp_path: Path
     assert "Core research methodology for scientific investigation." in research_skill
     assert '\\"research methodology.\\"' in research_skill
     assert "name: science-scientific-writing" in writing_skill
-    assert "Adapted from canonical Science skill `skills/writing/SKILL.md`." in writing_skill
+    assert "Adapted from canonical Science skill `skills/writing/scientific-writing.md`." in writing_skill
     assert "scientific-writing" in writing_skill
-    assert "../science-research-methodology/SKILL.md" in writing_skill
+    assert "../science-research-methodology/citation-discipline.md" in writing_skill
     assert "../research/SKILL.md" not in writing_skill
     assert "../../skills/statistics/SKILL.md" in writing_skill
     assert "../statistics/SKILL.md" not in writing_skill
@@ -139,7 +139,7 @@ def test_generate_codex_skills_writes_index(tmp_path: Path) -> None:
         in text
     )
     assert (
-        "| `scientific-writing` | `science-scientific-writing` | `science-scientific-writing/SKILL.md` | `skills/writing/SKILL.md` |"
+        "| `scientific-writing` | `science-scientific-writing` | `science-scientific-writing/SKILL.md` | `skills/writing/scientific-writing.md` |"
         in text
     )
     assert "| `status` | `science-status` | `science-status/SKILL.md` | `commands/status.md` |" in text
@@ -850,3 +850,19 @@ def test_rewrites_link_to_non_companion_leaf(tmp_path: Path) -> None:
 
 def test_no_dangling_relative_links_in_generated_tree(tmp_path: Path) -> None:
     assert _dangling_links(_generate(tmp_path)) == []
+
+
+def test_rewrites_link_to_bundled_resource(tmp_path: Path) -> None:
+    writing_skill = (_generate(tmp_path) / "science-scientific-writing" / "SKILL.md").read_text(encoding="utf-8")
+    assert "../science-research-methodology/citation-discipline.md" in writing_skill
+    assert "](../research/citation-discipline.md)" not in writing_skill
+
+
+def test_rewrites_excluded_router_to_canonical_source(tmp_path: Path) -> None:
+    research_skill = (_generate(tmp_path) / "science-research-methodology" / "SKILL.md").read_text(encoding="utf-8")
+    assert "../../skills/writing/SKILL.md" in research_skill
+    assert "../science-scientific-writing/SKILL.md" not in research_skill
+
+
+def test_companion_source_leaf_is_not_also_a_resource(tmp_path: Path) -> None:
+    assert not (_generate(tmp_path) / "science-scientific-writing" / "scientific-writing.md").exists()

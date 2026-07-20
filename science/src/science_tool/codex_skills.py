@@ -16,7 +16,7 @@ class CompanionSkill(NamedTuple):
 
 COMPANION_SKILLS: tuple[CompanionSkill, ...] = (
     CompanionSkill("research-methodology", Path("skills/research/SKILL.md")),
-    CompanionSkill("scientific-writing", Path("skills/writing/SKILL.md")),
+    CompanionSkill("scientific-writing", Path("skills/writing/scientific-writing.md")),
     CompanionSkill("skill-development", Path("skills/meta/SKILL.md")),
 )
 

@@ -1,108 +1,48 @@
 ---
-name: scientific-writing
-description: Scientific writing conventions for research documents. This skill should be used whenever writing or editing research documents, background sections, paper summaries, hypothesis descriptions, overview documents, or any content in the doc/ directory. Also use when the user asks to write, draft, revise, or edit any scientific or technical prose, or when creating content that will be part of a research project's documentation.
+name: writing
+description: Use when scientific prose for a research project is in scope. Routes to the writing leaves below.
 provenance: internal
 ---
 
-# Scientific Writing
+# Writing Router
 
-This skill defines writing conventions for documents within a Science project. Read this before writing or editing any document in `doc/` or `specs/`.
+A router carries no methodology; teaching content belongs in a typed leaf.
 
-The default epistemic posture is skeptical:
-- write hypotheses as organizing conjectures
-- write propositions as uncertain unless the evidence base is unusually strong
-- describe evidence as supporting, disputing, or leaving a proposition unresolved
+## Routing trigger
+
+Load this router when writing or editing project prose is in scope, before
+loading any leaf.
 
 For analysis-readiness planning, start at [`../INDEX.md`](../INDEX.md) or run
 `science-plan-analysis`.
 
+## Scope boundary
+
+Covers prose conventions for project documents — voice, hedging, structure,
+and framework connection. Excludes citation conformance and source evaluation
+(see [`../research/SKILL.md`](../research/SKILL.md)).
+
 ## Leaves
 
-No leaves currently. Planned future areas: pre-registration prose,
-results-interpretation, paper-summary.
+| Leaf | Load when | Do not load when |
+|---|---|---|
+| [`scientific-writing.md`](scientific-writing.md) | Writing or editing any research document, entity description, or project prose | Only validating citation keys — load `../research/citation-discipline.md` |
 
-## Voice and Tone
+## Decision / compose order
 
-- **Precise.** Choose words carefully. "The model predicts" is different from "the model suggests."
-- **Evidence-based.** Every substantive claim should reference evidence or be explicitly marked as conjecture.
-- **Appropriately hedged.** Use "suggests," "indicates," "is consistent with," or "supports" for uncertain findings. Use stronger language only when the evidence base is genuinely strong and replicated.
-- **Active voice preferred.** "Smith et al. demonstrated" over "It was demonstrated by Smith et al."
-- **Concise.** Cut unnecessary words. Avoid throat-clearing introductions.
+Leaves are independent. Compose with
+[`../research/citation-discipline.md`](../research/citation-discipline.md)
+whenever the prose carries citations.
 
-## Hedging Guide
+## Parent & neighbors
 
-| Confidence Level | Language |
-|---|---|
-| Strong evidence, replicated | "X strongly supports / provides strong evidence for" |
-| Good evidence, limited scope | "X supports / indicates" |
-| Suggestive evidence | "X suggests / points toward / is consistent with" |
-| Preliminary / weak | "X may indicate / could suggest / tentatively supports" |
-| Speculation | "One possibility is / It is conceivable that / We hypothesize" |
+- Parent index: [`../INDEX.md`](../INDEX.md)
+- Neighboring routers: [`../research/SKILL.md`](../research/SKILL.md), [`../statistics/SKILL.md`](../statistics/SKILL.md)
 
-## Document Structure
+## Success test
 
-All documents follow framework templates unless the project defines an override in `.ai/templates/`. General structural principles:
-
-- **Lead with the point.** First paragraph should state the main takeaway.
-- **Sections are self-contained.** A reader should be able to read any section in isolation and get value.
-- **Cross-reference liberally.** Link to other project documents, for example `(see Background: Topic A)`.
-- **End with implications.** What does this mean for the project? What should we do next?
-
-## Annotation Tokens
-
-When drafting prose where a specific claim cannot be backed by an in-line citation, choose from the four-token vocabulary defined in `docs/conventions/annotation-tokens.md`:
-
-- `[UNVERIFIED]` — claim is verifiable in principle, not yet checked. Default for "I'll backfill the cite later."
-- `[MISSING_CITATION]` — the claim itself isn't in dispute, but a specific source pointer is needed.
-- `[SPECULATION]` — author conjecture / brainstorming layer. Marks the claim as belonging to the speculative tier.
-- `[INACCESSIBLE]` — source is paywalled / image-only / DACO-gated; resolution requires resources you don't have.
-
-These are bare tokens in prose. References to the *tokens themselves* (e.g., when documenting the convention) must be backticked: ``Use the `[UNVERIFIED]` token``. Validators exclude backticked occurrences automatically.
-
-`validate.sh` and `science refs check` count `[UNVERIFIED]` and `[MISSING_CITATION]` as warnings by default; `[SPECULATION]` and `[INACCESSIBLE]` are reported as info only (use `--strict` to treat them as warnings).
-
-## Citation Format
-
-- Inline: `[@AuthorYear]` using BibTeX keys from `papers/references.bib`
-- Multiple: `[@Smith2020; @Jones2021]`
-- With page: `[@Smith2020, p. 42]`
-- Narrative: `Smith et al. [@Smith2020] found that...`
-- Frontmatter bibliography source: `source_refs: ["cite:AuthorYear"]`
-- Graph-visible paper note: `paper:AuthorYear`
-
-Every BibTeX key used in a document must have a corresponding entry in `papers/references.bib`. If you create a new citation, add the BibTeX entry.
-
-## Connecting to the Project
-
-When writing any document, actively connect the content to the project's research framework:
-
-- Reference relevant **hypotheses** by ID: `(see Hypothesis H01)`
-- Reference important **propositions** when they are the real unit being updated
-- Note implications for **open questions** in `entities/questions/`
-- Suggest updates to **next steps** when findings change priorities
-- Flag any findings that affect the **causal model** in `models/`
-
-Avoid writing as if one result has proved a hypothesis or validated an edge unless that standard is genuinely met.
-
-For the project's reasoning model, see `docs/user-guide/epistemic-model.md`.
-
-## Formatting Conventions
-
-- Use ATX-style headers (`#`, `##`, `###`)
-- One sentence per line in source (for better diffs)
-- Use fenced code blocks with language tags for any code or data
-- Tables for structured comparisons
-- Bullet lists only when items are genuinely parallel; prefer prose otherwise
-
-## Length Guidelines
-
-- **Background topics** (`doc/background/topics/`): 500-1500 words. Comprehensive but focused.
-- **Paper summaries** (`doc/background/papers/`): 300-800 words. Capture what matters for this project.
-- **Hypothesis descriptions** (`entities/hypotheses/`): 300-1000 words. Thorough enough to be actionable.
-- **Open questions** (`entities/questions/`): 50-200 words per question. Concise and specific.
-- **Overview** (`doc/01-overview.md`): 500-1000 words. The "elevator pitch" for the whole project.
+Representative in-scope tasks route to the correct leaf (or the correct compose order when leaves combine) without any methodology being read from this router.
 
 ## Companion Skills
 
-- [`../research/SKILL.md`](../research/SKILL.md) - research-methodology conventions that govern factual claims, citations, and project awareness.
-- [`../statistics/SKILL.md`](../statistics/SKILL.md) - statistical reporting language for pre-registrations, analyses, and verdicts.
+- [`../INDEX.md`](../INDEX.md) — the skill index.
