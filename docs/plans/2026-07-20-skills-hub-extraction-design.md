@@ -53,7 +53,7 @@ this rename is load-bearing there.
 | Source sections | Destination | Archetype |
 |---|---|---|
 | Voice and Tone; Hedging Guide; Document Structure; Formatting Conventions; Length Guidelines; Connecting to the Project (merged with `research/`'s Project Awareness); Template Usage (moved from `research/`) | **`skills/writing/scientific-writing.md`** (new) | `practice-guide` |
-| Annotation Tokens | collapses to a pointer at `docs/conventions/annotation-tokens.md` | — |
+| Annotation Tokens | collapses to a pointer at `docs/conventions/annotation-tokens.md`, **placed in `scientific-writing.md`** | — |
 | Citation Format | merges into `research/citation-discipline.md` | — |
 
 `Template Usage` lands here, not in the citation leaf: reading and complying
@@ -61,6 +61,11 @@ with the applicable document template is part of the writing workflow. The
 citation leaf owns only citation and source-pointer meaning and conformance.
 Splitting it the other way would leave template structure duplicated across
 both leaves.
+
+The annotation-token pointer belongs in `scientific-writing.md` rather than the
+router, so an agent that loads the leaf directly — the normal case, since the
+leaf carries the `scientific-writing` name — still learns that the four-token
+vocabulary exists and where `docs/conventions/annotation-tokens.md` owns it.
 
 After extraction the router has one leaf of its own plus a cross-directory
 companion link to `../research/citation-discipline.md`. A one-leaf router is
@@ -108,7 +113,44 @@ gated on `knowledge/graph.trig` existing — not a standalone leaf. Its own leaf
 would have no independent task or output; leaving it in the router would
 violate the navigation-only invariant.
 
-Template-slot fit is direct rather than forced:
+#### Outcome contract (decided, not delegated)
+
+Outcomes are **non-exclusive flagged conditions**, not a ladder and not a
+verdict. Any number may hold at once. Each licenses a *prioritization* action;
+none licenses a claim about how well-supported a proposition is.
+
+| Condition | Fires when | Licenses |
+|---|---|---|
+| `migration-limited` | hypothesis prose carries the reasoning; scalar `confidence` is doing the epistemic work; propositions are not decomposed; evidence is not attached as support/dispute | prefer creating or refining propositions over editing prose; state that interpretation quality is bounded by migration state |
+| `contested` | support and dispute lines both bear on the proposition | read the disagreement before summarizing; do not report a direction of effect as settled |
+| `single-source-fragile` | support traces to one source, or to lines sharing an `independence_group` | treat support as fragile; prioritize independent replication |
+| `lacks-empirical-support` | support is present but no `empirical_data` line bears on it | name the evidence kind when reporting; prioritize empirical work |
+| `high-uncertainty` | the proposition sits in a neighborhood the dashboard reports as high-uncertainty | prioritize reading, replication, or model cleanup here |
+
+**No flagged condition is not certification.** This is the load-bearing rule of
+the leaf. The dashboard reports only over what has been *recorded*; silence is
+equally consistent with adequate support and with nothing having been entered.
+An instrument that cannot distinguish those two states cannot certify either,
+so the absence of a signal licenses proceeding — and nothing more. It must
+never be written up as adequate, sufficient, or well-supported.
+
+That reasoning is this repo's standing doctrine on silent instruments, not a
+local judgment: a check that cannot fail carries no information. The earlier
+`InstrumentResult` work exists precisely because instruments were reporting
+confident emptiness over absent inputs.
+
+There is deliberately **no `adequate` outcome.** Nothing in the source material
+establishes that the absence of dashboard warnings certifies support, and
+introducing one would convert a prioritization instrument into a completeness
+proof.
+
+**Unevaluated is a distinct state.** Dashboard summaries are conditional on
+`knowledge/graph.trig` existing. When it does not, the last four conditions
+cannot be evaluated at all, and that must be recorded as unevaluated — never
+collapsed into "no flagged condition." `migration-limited` is assessable from
+the entity files alone and remains available.
+
+Template-slot fit for the remaining slots is direct rather than forced:
 
 - "call out that the project still needs migration work when that affects
   interpretation quality" → **Halt / escalation**
@@ -188,7 +230,7 @@ churned — verified for `skills/data/SKILL.md:187–188` and
 ### Codex companion surface
 
 `codex-skills/` is a git-tracked generated mirror guarded by
-`test_committed_codex_skills_match_fresh_generation`. Three changes are
+`test_committed_codex_skills_match_fresh_generation`. Four changes are
 required in `science/src/science_tool/codex_skills.py`, and none is optional:
 
 1. **Companion source mapping** (`codex_skills.py:17–21`). The entry
@@ -210,28 +252,60 @@ required in `science/src/science_tool/codex_skills.py`, and none is optional:
 3. **Cross-directory leaf links** (`_rewrite_companion_body_links`,
    `codex_skills.py:200–212`). The rewriter matches only
    `\.\./([a-z0-9-]+)/SKILL\.md` — no arm for cross-directory *leaf* links.
-   Two distinct destinations are needed, because a leaf can be either another
-   companion's *source* or a resource *bundled inside* another companion:
+   **Classify by the emitted artifact set, not by parent directory.** A
+   parent-directory model is wrong once `writing/` contains a source leaf, a
+   router, and future leaves that are emitted three different ways. Resolve
+   each link path against what generation actually emits:
 
-   | Link target | Rewrites to | Why |
-   |---|---|---|
-   | Another companion's source leaf, e.g. `../writing/scientific-writing.md` | `../science-scientific-writing/SKILL.md` | that leaf *is* the companion; it is emitted as the companion's `SKILL.md`, not as a resource |
-   | A resource bundled in another companion, e.g. `../research/citation-discipline.md` | `../science-research-methodology/citation-discipline.md` | copied verbatim as a resource beside that companion's `SKILL.md` |
-   | A leaf in a non-companion directory | `../../skills/<dir>/<leaf>.md` | existing convention, unchanged |
+   | Test, in order | Rewrites to |
+   |---|---|
+   | Path equals some companion's `source_path` | `../<companion-skill-name>/SKILL.md` — that leaf *is* the companion, emitted as its `SKILL.md` |
+   | Path is included by the resource-copy predicate for some companion | `../<companion-skill-name>/<filename>` — copied verbatim beside that companion's `SKILL.md` |
+   | Anything else, **including an excluded `SKILL.md`** | `../../skills/<dir>/<file>` — canonical source path |
 
-   Distinguishing them requires consulting `COMPANION_SKILLS`: a leaf path
-   equal to some companion's `source_path` takes the first form; a leaf merely
-   *inside* a companion's parent directory takes the second.
+   The third row is the one a parent-directory model gets wrong. After the
+   rename, `writing/SKILL.md` is the router: it is neither the writing
+   companion's source (that is `scientific-writing.md`) nor a copied resource
+   (the `SKILL.md` exclusion drops it). It is emitted nowhere, so it must
+   resolve to `../../skills/writing/SKILL.md`. This is not hypothetical — the
+   new research router links to the writing router as a neighbor. Under a
+   parent-directory model that link would rewrite to
+   `../science-scientific-writing/SKILL.md`, which **resolves successfully**
+   while silently pointing at the scientific-writing leaf instead of the
+   router. A passing link check would not catch it.
+
+   Deriving the predicate from the emitted set also keeps the rewriter honest
+   if the exclusions change later: one definition governs both what is copied
+   and what links point at.
+
+   Regression cases are required for all three destinations, plus one for a
+   link rewritten *inside a copied resource* (see change 4).
 
 4. **Rewriting must reach copied resources.** `_rewrite_companion_body_links`
    is applied only to the companion's root body (`codex_skills.py:183`);
    resources are transferred by `shutil.copy2` (`codex_skills.py:176`) with no
-   rewriting at all. This is a live defect that this phase's links expose:
-   `research-package-rendering.md` is bundled as a resource of the research
-   companion and links to `../writing/SKILL.md` today — after extraction it
-   links to `../writing/scientific-writing.md`, which would dangle inside the
-   generated tree. Copied Markdown resources must go through the same
-   rewriting as the root body.
+   rewriting at all.
+
+   This is a **pre-existing live defect**, not one this phase introduces. Six
+   links across three copied resources dangle in the committed mirror today:
+
+   ```
+   science-research-methodology/annotation-curation-qa.md   -> ../data/frictionless.md
+   science-research-methodology/annotation-curation-qa.md   -> ../statistics/sensitivity-arbitration.md
+   science-research-methodology/research-package-rendering.md -> ../pipelines/snakemake.md
+   science-research-methodology/research-package-rendering.md -> ../writing/SKILL.md
+   science-research-methodology/research-package-spec.md    -> ../data/frictionless.md
+   science-research-methodology/research-package-spec.md    -> ../pipelines/snakemake.md
+   ```
+
+   `codex-skills/writing/`, `codex-skills/data/`, and `codex-skills/pipelines/`
+   do not exist. The phase does not cause these; it makes them unavoidable,
+   because `research-package-rendering.md`'s retarget cannot land correctly
+   while resources go unrewritten. Routing copied Markdown resources through
+   the same rewriting as the root body closes all six.
+
+   Acceptance therefore checks the *whole* generated tree for dangling links,
+   not only the files this phase touches.
 
 `science/tests/test_codex_skills.py:82–99` asserts the current source paths and
 link forms and must be updated in step.
@@ -273,15 +347,12 @@ link forms and must be updated in step.
    `skills/meta/templates/<archetype>.md` — every slot present, and each
    filled with content of the kind the slot names rather than restated prose.
 
-   The binding case is `proposition-graph-reasoning.md`, whose four hardest
-   slots have no direct source text and must be authored from the material:
-
-   | Slot | Must contain |
-   |---|---|
-   | Decision rule or reasoning criteria | the criteria that decide whether a proposition's support is adequate — not a restatement of the triggering condition |
-   | Outcomes | the branches actually reachable (adequate / fragile / contested / unsupported), each with what it licenses |
-   | Required evidence & artifacts | what gets recorded when the discipline fires, naming the entity or field |
-   | Permitted reporting language | the support / dispute / unresolved vocabulary, stated as permitted-vs-forbidden wording |
+   The binding case is `proposition-graph-reasoning.md`. Its outcome contract
+   is **decided here**, not left to implementers — see the next section.
+   `Required evidence & artifacts` must name the entity or field that records
+   each flagged condition; `Permitted reporting language` must state the
+   support / dispute / unresolved vocabulary as permitted-vs-forbidden
+   wording.
 
    The other three: `literature-evaluation.md` and `scientific-writing.md`
    each need a genuine **Common pitfalls** (pitfall → correction) and
@@ -291,11 +362,21 @@ link forms and must be updated in step.
 4. `cd science && uv run --frozen pytest` green, including
    `test_committed_codex_skills_match_fresh_generation` against a freshly
    regenerated mirror.
-5. No dangling links: every retargeted reference resolves, in both `skills/`
-   and the generated `codex-skills/` tree — including links inside copied
-   resources, which item 4 of the generator changes makes reachable for the
-   first time.
-6. Corpus count moves 34 → 38 classified leaves; `practice-guide` moves from
+5. `cd science && uv run ruff check` and `uv run pyright` both clean —
+   `codex_skills.py` changes, so both apply. Note four pre-existing ruff
+   errors in `science/tests/test_numeric_binding.py` and seven pre-existing
+   pyright errors in `prose_lint.py` at base `1feb088c`, in files this phase
+   does not touch; the requirement is no *new* findings.
+6. No dangling links **anywhere in the generated tree**, not only in files
+   this phase touches: the six pre-existing danglers listed above must be
+   gone. Verified by resolving every relative link in `codex-skills/` against
+   the filesystem.
+7. A link from the research router to `../writing/SKILL.md` resolves, in the
+   generated tree, to the writing **router** — not to
+   `science-scientific-writing/SKILL.md`. This is the case a link-existence
+   check passes while being wrong, so it is asserted by destination, not by
+   resolvability.
+8. Corpus count moves 34 → 38 classified leaves; `practice-guide` moves from
    1 (a force-fit) to 3, with `literature-evaluation` and `scientific-writing`
    as the two exemplars the eligibility rule named.
 
