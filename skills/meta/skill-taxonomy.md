@@ -86,7 +86,7 @@ A router is high-leverage — it governs progressive disclosure. Its minimal con
 
 ## Conformance rules
 
-- **Add `archetype:`** — MAY be absent; if present, MUST be exactly one recognized scalar from the six-value catalog. **Completeness is not enforced this phase** (leaves are not yet required to declare it). Routers and `INDEX.md` MUST NOT carry `archetype:` (structural role stays derived).
+- **Add `archetype:`** — every leaf MUST declare exactly one recognized scalar from the six-value catalog; a leaf without it is `missing-archetype`, severity ERROR. Routers and `INDEX.md` MUST NOT carry `archetype:` (structural role stays derived).
 - **Rename `type:` → `depth:`** — values `standard | deep-reference`; absent ⇒ `standard`. The old `type:` key becomes **invalid immediately**. **No compatibility alias** (matches the project's no-legacy-layer rule).
 - Every skill Markdown file (router and leaf) must carry `provenance: internal` or valid `sources:` — `missing-provenance` is ERROR.
 - **Structural role** — **Derived**: `INDEX.md` → index; `SKILL.md` → router; else → leaf. No field.
@@ -108,7 +108,7 @@ A router is high-leverage — it governs progressive disclosure. Its minimal con
 
 - A skill `name` is a stable identifier; renaming is a breaking, migration-scoped change.
 - `depth:` replaces `type:` immediately, with no compatibility alias.
-- Declaring `archetype:` remains optional in this phase. Reorganizing the corpus, backfilling all leaves, and extracting methodology from hubs are deferred to the migration driven by the corpus matrix.
+- Declaring `archetype:` is required on every leaf, and the corpus was backfilled in full on 2026-07-20. Reorganizing the corpus and extracting methodology from hubs remain deferred to the migration driven by the corpus matrix.
 
 ## Invalid cases
 
@@ -118,6 +118,7 @@ A router is high-leverage — it governs progressive disclosure. Its minimal con
 4. `sources:` and `provenance:` together.
 5. Malformed `sources:`.
 6. Treating secondary concerns as a hybrid archetype instead of choosing one primary contract or splitting the leaf.
+7. A leaf with no `archetype:` — every leaf must declare exactly one.
 
 ## Success test
 
