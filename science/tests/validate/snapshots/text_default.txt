@@ -1,7 +1,7 @@
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 Science Project Validation
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-Checks: 62 included, 0 skipped (profile: full)
+Checks: 65 included, 0 skipped (profile: full)
 ERROR validate.local.sh is no longer supported; migrate it using docs/migration/2026-05-19-validate-local-sh-porting-guide.md [validate.sidecar.legacy_removed]
 WARN pyproject.toml [tooling] pyproject.toml does not list science under [dependency-groups].dev (fix: add the dependency and configure `science = { git = "https://github.com/khughitt/science.git", subdirectory = "science" }`)
 WARN 2 broken refs: namespace [references]
