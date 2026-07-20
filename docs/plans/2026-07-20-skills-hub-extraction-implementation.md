@@ -12,50 +12,94 @@
 
 ## Global Constraints
 
-- Work in the worktree at `.claude/worktrees/skills-hub-extraction` on branch `skills-hub-extraction`. Verify with `git branch --show-current` before every commit.
-- All Python commands run from `science/`. There is **no root `pyproject.toml`**.
+- Work in the worktree at `.claude/worktrees/skills-hub-extraction` on branch `skills-hub-extraction`. Verify with `git branch --show-current` before every commit. **`$WT` below means the worktree root**; every command block declares its own starting directory and uses subshells, because repeated `cd science` in one pasted block fails after the first.
+- All Python commands run from `$WT/science`. There is **no root `pyproject.toml`**.
+- **`science skills lint` defaults to `--root skills`, which resolves to `science/skills` and does not exist.** Always pass `--root ../skills`. The wrong form exits **2**, and piping it through `tail` reports `0` — capture exit codes before any pipe.
 - No AI-attribution trailers or footers on commits. No `Co-Authored-By`, no generated-with footer.
 - No "legacy"/"compatibility" layers. No `Unified` prefix. Composition over inheritance; explicit over defensive; fail early rather than silent fallback.
 - Use `~/d/` in docs and code paths, never `/home/keith/` or `/mnt/ssd/Dropbox/`.
-- **Any change under `skills/` requires regenerating `codex-skills/` in the same commit.** `codex-skills/` is a git-tracked generated mirror guarded by `test_committed_codex_skills_match_fresh_generation`. Regenerate with `uv run python ../scripts/generate_codex_skills.py` from `science/`.
-- **Routers and `INDEX.md` must not declare `archetype:`.** Structural role stays derived from filename. Every leaf must declare exactly one of: `measurement-qa`, `method-guide`, `analysis-discipline`, `normative-reference`, `tool-guide`, `practice-guide`.
-- **Pre-existing failures, not caused by this branch:** 4 ruff errors in `science/tests/test_numeric_binding.py`, 7 pyright errors in `prose_lint.py`, both reproducible at base `1feb088c`. The bar is **no new findings**, not a clean global run.
-- Prose that **moves** is specified by exact source line range — copy it verbatim, do not paraphrase. Prose that must be **authored** (template slots with no source text) is pinned verbatim in this plan. Implementers invent neither.
+- **Any change under `skills/` requires regenerating `codex-skills/` in the same commit.** `codex-skills/` is a git-tracked generated mirror guarded by `test_committed_codex_skills_match_fresh_generation`.
+- **Routers and `INDEX.md` must not declare `archetype:`.** Every leaf declares exactly one of: `measurement-qa`, `method-guide`, `analysis-discipline`, `normative-reference`, `tool-guide`, `practice-guide`.
+- **Pre-existing failures, not caused by this branch:** 4 ruff errors in `science/tests/test_numeric_binding.py`, 7 pyright errors in `prose_lint.py`, both reproducible at base `1feb088c`. The bar is **no new findings**.
+- **Implementers invent no prose.** Text that *moves* is named by exact source range with a `git show` command to retrieve it — including text an earlier task has already deleted. Text that is *new* is pinned verbatim here.
 - Never bare `git stash` / `git stash pop` — the stash stack is shared across worktrees.
+
+**Declare `$WT` once per shell session before running any command block:**
+
+```bash
+export WT=/mnt/ssd/Dropbox/science/.claude/worktrees/skills-hub-extraction
+(cd "$WT" && git branch --show-current)   # must print: skills-hub-extraction
+```
+
+**Retrieving text deleted by an earlier task.** Tasks 3 and 4 need prose that Task 2 removes. Retrieve it from the pre-branch commit, never from the working tree — all ranges below are verified against `1feb088c`:
+
+```bash
+git show 1feb088c:skills/research/SKILL.md | sed -n '170,180p'   # Project Awareness
+git show 1feb088c:skills/research/SKILL.md | sed -n '185,187p'   # Template Usage
+git show 1feb088c:skills/writing/SKILL.md  | sed -n '24,40p'     # Voice/Tone + Hedging
+```
 
 ---
 
 ### Task 1: Generator — classify links by emitted artifacts, rewrite copied resources
 
-Pure toolkit change. No `skills/` edits. Closes six pre-existing dangling links in the committed mirror, then adds a guard so they cannot return. This is deliberately sweep-then-ratchet: fix first, ratchet second.
+Pure toolkit change. No `skills/` edits. Closes six pre-existing dangling links, then adds a guard so they cannot return. Sweep-then-ratchet: fix first, ratchet second.
 
 **Files:**
 - Modify: `science/src/science_tool/codex_skills.py:160-212`
 - Test: `science/tests/test_codex_skills.py`
-- Regenerate: `codex-skills/` (contents change — six links get rewritten)
+- Regenerate: `codex-skills/`
 
 **Interfaces:**
-- Produces: `_resource_paths(source_path: Path) -> list[Path]` — the single predicate for "which files become bundled resources", used by both the copy loop and the link rewriter.
-- Produces: `_companion_link_targets(repo_root: Path) -> dict[Path, str]` — maps a repo-relative `skills/...` path to its emitted location fragment.
-- Produces: `_rewrite_companion_body_links(body: str, repo_root: Path) -> str` — **signature change**, gains `repo_root`. Task 3 relies on this being data-driven from `COMPANION_SKILLS`.
+- Produces: `_resource_paths(source_path: Path) -> list[Path]` — the single predicate for the emitted resource set, used by both the copy loop and the rewriter.
+- Produces: `_companion_link_targets(repo_root: Path) -> dict[Path, str]` — repo-relative `skills/...` path → emitted location fragment.
+- Produces: `_rewrite_companion_body_links(body: str, repo_root: Path) -> str` — **signature change**, gains `repo_root`.
 
 - [ ] **Step 1: Write the failing tests**
 
-Add to `science/tests/test_codex_skills.py`:
+Add `import re` and `import os` to `science/tests/test_codex_skills.py` if absent, then append:
 
 ```python
+def _generate(tmp_path: Path) -> Path:
+    generated_root = tmp_path / "codex-skills"
+    generate_codex_skills(ROOT, generated_root)
+    return generated_root
+
+
+def _resolve_generated_link(source: Path, target: str, generated_root: Path) -> Path:
+    """Resolve a link as it would resolve in the committed layout.
+
+    `codex-skills/` sits at the repo root, so a `../../skills/...` fallback
+    points into the real corpus. Under a tmp_path generated tree that fallback
+    would escape into the temporary directory, so re-root it at ROOT.
+    """
+    if target.startswith("../../skills/"):
+        return ROOT / target[len("../../") :]
+    return source.parent / target
+
+
+def _dangling_links(generated_root: Path) -> list[str]:
+    dangling: list[str] = []
+    for path in sorted(generated_root.rglob("*.md")):
+        for raw in re.findall(r"]\((\.\.?/[^)]+)\)", path.read_text(encoding="utf-8")):
+            target = raw.split("#", 1)[0]
+            if not target:
+                continue
+            if not _resolve_generated_link(path, target, generated_root).exists():
+                dangling.append(f"{path.relative_to(generated_root)} -> {raw}")
+    return dangling
+
+
 def test_rewrites_link_to_companion_source_leaf(tmp_path: Path) -> None:
-    generate_codex_skills(ROOT, tmp_path)
-    rendering = (tmp_path / "science-research-methodology" / "research-package-rendering.md").read_text(
+    rendering = (_generate(tmp_path) / "science-research-methodology" / "research-package-rendering.md").read_text(
         encoding="utf-8"
     )
     assert "../science-scientific-writing/SKILL.md" in rendering
-    assert "../writing/SKILL.md" not in rendering
+    assert "](../writing/SKILL.md)" not in rendering
 
 
-def test_rewrites_link_to_non_companion_directory(tmp_path: Path) -> None:
-    generate_codex_skills(ROOT, tmp_path)
-    curation = (tmp_path / "science-research-methodology" / "annotation-curation-qa.md").read_text(
+def test_rewrites_link_to_non_companion_leaf(tmp_path: Path) -> None:
+    curation = (_generate(tmp_path) / "science-research-methodology" / "annotation-curation-qa.md").read_text(
         encoding="utf-8"
     )
     assert "../../skills/statistics/sensitivity-arbitration.md" in curation
@@ -63,28 +107,20 @@ def test_rewrites_link_to_non_companion_directory(tmp_path: Path) -> None:
 
 
 def test_no_dangling_relative_links_in_generated_tree(tmp_path: Path) -> None:
-    generate_codex_skills(ROOT, tmp_path)
-    dangling: list[str] = []
-    for path in sorted(tmp_path.rglob("*.md")):
-        for target in re.findall(r"]\((\.\.?/[^)]+)\)", path.read_text(encoding="utf-8")):
-            if not (path.parent / target).exists():
-                dangling.append(f"{path.relative_to(tmp_path)} -> {target}")
-    assert dangling == []
+    assert _dangling_links(_generate(tmp_path)) == []
 ```
-
-Add `import re` to the test file's imports if absent.
 
 - [ ] **Step 2: Run the tests to verify they fail**
 
 ```bash
-cd science && uv run --frozen pytest tests/test_codex_skills.py -k "rewrites_link or no_dangling" -v
+(cd "$WT/science" && uv run --frozen pytest tests/test_codex_skills.py -k "rewrites_link or no_dangling" -v)
 ```
 
-Expected: all three FAIL. The two rewrite tests fail because copied resources are never rewritten. `test_no_dangling_relative_links_in_generated_tree` fails listing exactly six entries (`../data/frictionless.md` ×2, `../pipelines/snakemake.md` ×2, `../statistics/sensitivity-arbitration.md`, `../writing/SKILL.md`).
+Expected: all three FAIL. `test_no_dangling_relative_links_in_generated_tree` lists exactly six entries — `../data/frictionless.md` ×2, `../pipelines/snakemake.md` ×2, `../statistics/sensitivity-arbitration.md`, `../writing/SKILL.md`. If it lists more, the resolver is wrong; fix the test before touching `codex_skills.py`.
 
 - [ ] **Step 3: Implement**
 
-In `science/src/science_tool/codex_skills.py`, replace the resource-copy loop at lines 173-176 with:
+Replace the resource-copy loop at `codex_skills.py:173-176`:
 
 ```python
     for resource_path in _resource_paths(source_path):
@@ -94,11 +130,7 @@ In `science/src/science_tool/codex_skills.py`, replace the resource-copy loop at
         )
 ```
 
-Update the body-rewrite call at line 183:
-
-```python
-    body = _rewrite_companion_body_links(body, repo_root)
-```
+Update the body-rewrite call at line 183 to `body = _rewrite_companion_body_links(body, repo_root)`.
 
 Replace `_rewrite_companion_body_links` (lines 200-212) with:
 
@@ -106,8 +138,8 @@ Replace `_rewrite_companion_body_links` (lines 200-212) with:
 def _resource_paths(source_path: Path) -> list[Path]:
     """Markdown files bundled as resources beside a companion's SKILL.md.
 
-    Excludes both the directory's router (SKILL.md) and the companion's own
-    source file, which is emitted as the companion's SKILL.md rather than as a
+    Excludes the directory's router (SKILL.md) and the companion's own source
+    file, which is emitted as the companion's SKILL.md rather than as a
     resource. This is the single definition of the emitted resource set: the
     copy loop and the link rewriter must agree, or links resolve to files that
     were never copied.
@@ -144,38 +176,25 @@ def _rewrite_companion_body_links(body: str, repo_root: Path) -> str:
     return re.sub(r"\.\./([a-z0-9-]+)/([A-Za-z0-9._-]+\.md)", replace_link, body)
 ```
 
-A path absent from `targets` is emitted nowhere and resolves to its canonical source. That covers a directory with no companion **and** a router excluded from its own companion's bundle — the case Task 3 creates.
+A path absent from `targets` is emitted nowhere and resolves to its canonical source. That covers a non-companion directory **and** a router excluded from its own companion's bundle — the case Task 3 creates, with no further edit.
 
-- [ ] **Step 4: Run the tests to verify they pass**
+- [ ] **Step 4: Verify green, regenerate, verify suite**
 
 ```bash
-cd science && uv run --frozen pytest tests/test_codex_skills.py -v
+(cd "$WT/science" && uv run --frozen pytest tests/test_codex_skills.py -v)
+(cd "$WT/science" && uv run python ../scripts/generate_codex_skills.py)
+(cd "$WT" && git diff --stat codex-skills/)
+(cd "$WT/science" && uv run --frozen pytest -q >/dev/null 2>&1; echo "PYTEST_EXIT=$?")
+(cd "$WT/science" && uv run ruff check; uv run pyright)
 ```
 
-Expected: all PASS, including the pre-existing `test_generate_codex_skills_emits_companion_methodology_skills`.
+Expected: all codex tests PASS; three files change under `codex-skills/science-research-methodology/`; `PYTEST_EXIT=0`; only the 4 known ruff and 7 known pyright errors.
 
-- [ ] **Step 5: Regenerate the mirror**
-
-```bash
-cd science && uv run python ../scripts/generate_codex_skills.py && cd .. && git diff --stat codex-skills/
-```
-
-Expected: three files change (`annotation-curation-qa.md`, `research-package-rendering.md`, `research-package-spec.md` under `science-research-methodology/`), six link rewrites total.
-
-- [ ] **Step 6: Verify the full suite and linters**
+- [ ] **Step 5: Commit**
 
 ```bash
-cd science && uv run --frozen pytest -q; echo "PYTEST_EXIT=$?"
-cd science && uv run ruff check; uv run pyright
-```
-
-Expected: `PYTEST_EXIT=0`. Ruff shows only the 4 known `test_numeric_binding.py` errors; pyright only the 7 known `prose_lint.py` errors. Capture the exit code **before** any pipe — `cmd | tail` reports `tail`'s status, not pytest's.
-
-- [ ] **Step 7: Commit**
-
-```bash
-git add science/src/science_tool/codex_skills.py science/tests/test_codex_skills.py codex-skills/
-git commit -m "fix(codex): rewrite links in copied resources and classify by emitted artifacts"
+(cd "$WT" && git add science/src/science_tool/codex_skills.py science/tests/test_codex_skills.py codex-skills/ \
+  && git commit -m "fix(codex): rewrite links in copied resources and classify by emitted artifacts")
 ```
 
 ---
@@ -184,15 +203,15 @@ git commit -m "fix(codex): rewrite links in copied resources and classify by emi
 
 **Files:**
 - Create: `skills/research/literature-evaluation.md`, `skills/research/citation-discipline.md`, `skills/research/proposition-graph-reasoning.md`
-- Modify: `skills/research/SKILL.md` (reduce to router), `skills/research/proposition-schema.md` (extend + retarget), `skills/research/annotation-curation-qa.md:111` (retarget)
+- Modify: `skills/research/SKILL.md`, `skills/research/proposition-schema.md`, `skills/research/annotation-curation-qa.md:111`
 - Regenerate: `codex-skills/`
 
 **Interfaces:**
-- Produces: leaves named `research-literature-evaluation`, `research-citation-discipline`, `research-proposition-graph-reasoning`. Task 3 and Task 4 link to these exact filenames.
+- Produces: leaves named `research-literature-evaluation`, `research-citation-discipline`, `research-proposition-graph-reasoning`, at those exact filenames. Tasks 3 and 4 link to them.
 
-- [ ] **Step 1: Create `literature-evaluation.md`**
+- [ ] **Step 1: Create `skills/research/literature-evaluation.md`**
 
-Frontmatter:
+Frontmatter and the authored slots are pinned. Moved prose is named by range.
 
 ```markdown
 ---
@@ -201,27 +220,38 @@ description: Use when reviewing literature, assessing source quality, or synthes
 archetype: practice-guide
 provenance: internal
 ---
-```
 
-Body follows `skills/meta/templates/practice-guide.md` slot-for-slot. Move verbatim from `skills/research/SKILL.md`: Source Hierarchy (L30-46) → **Workflow steps**; Confidence Calibration (L48-56) and Evaluating Sources (L70-78) → **Judgment rules**; Cross-Checking Key Facts (L58-68) → **Workflow steps** (final step); Synthesis, Not Just Summarization (L80-88) → **Quality criteria**.
+# Literature Evaluation
 
-**When to apply** and **Outputs** are authored — pin verbatim:
+Answers: how do I evaluate and synthesize external sources well?
 
-```markdown
 ## When to apply
 
 Before writing any durable output that rests on external sources: a paper
 summary, a topic synthesis, a background section, or an evidence line citing
 literature. Also when auditing claims someone else sourced.
 
-## Outputs
-
-A source set with each item's tier recorded (primary, preprint, secondary), the
-claims each source backs, and explicit `[UNVERIFIED]` marks on anything that
-could not be cross-checked.
+## Workflow steps
 ```
 
-**Common pitfalls** is authored — pin verbatim:
+Then, verbatim from `git show 1feb088c:skills/research/SKILL.md`:
+
+- lines 32-46 (the four-item Source Hierarchy list) as steps 1-4
+- lines 60-68 (Cross-Checking Key Facts, its bullet list and the `[UNVERIFIED]` sentence) as the final step, introduced by the pinned line: `5. **Cross-check before committing.** Always cross-check these via web search:`
+
+Then continue with pinned content:
+
+```markdown
+## Judgment rules
+```
+
+Verbatim from lines 50-56 (Confidence Calibration, including the closing "worst outcome" sentence) and lines 72-78 (the five Evaluating Sources bullets).
+
+```markdown
+## Quality criteria
+```
+
+Verbatim from lines 82-88 (the five Synthesis bullets).
 
 ```markdown
 ## Common pitfalls
@@ -230,9 +260,29 @@ could not be cross-checked.
 - Citing a paper read only at the abstract level → mark conclusions abstract-level and make no durable evidence update.
 - Reporting agreement across sources that share an origin → check whether the sources are independent before counting them as convergent.
 - Summarizing each source in turn and stopping → synthesis requires naming the disagreements and the gaps, not just the contents.
+
+## Outputs
+
+A source set with two axes recorded separately for each item — **provenance**
+(primary or secondary) and **publication status** (peer-reviewed, preprint, or
+informal) — since a peer-reviewed review article is secondary and a preprint may
+be primary. Plus the claims each source backs, and explicit `[UNVERIFIED]` marks
+on anything that could not be cross-checked.
+
+## Success test
+
+Did the agent carry out the cross-cutting practice according to its workflow, judgment rules, and quality criteria?
+
+## Companion Skills
+
+- [`citation-discipline.md`](citation-discipline.md) - citation and source-pointer conformance for what this practice produces.
+- [`proposition-graph-reasoning.md`](proposition-graph-reasoning.md) - reasoning over the project's own proposition graph, as opposed to external sources.
+- [`../INDEX.md`](../INDEX.md) — the skill index.
 ```
 
-- [ ] **Step 2: Create `citation-discipline.md`**
+- [ ] **Step 2: Create `skills/research/citation-discipline.md`**
+
+Fully pinned. The only moved content is the format list, and it is reproduced here in merged form because the merge of `research/SKILL.md:163-168` with `writing/SKILL.md:66-73` is a judgment the plan makes, not the implementer.
 
 ```markdown
 ---
@@ -241,18 +291,44 @@ description: Use when authoring or validating citations, source pointers, and bi
 archetype: normative-reference
 provenance: internal
 ---
-```
 
-Follows `skills/meta/templates/normative-reference.md`. Merge verbatim: `research/SKILL.md` Citation Discipline (L161-168) and `writing/SKILL.md` Citation Format (L64-73). The two overlap on `[@AuthorYear]`, `references.bib`, and the `cite:` vs `paper:` distinction — state each rule **once**.
+# Citation Contract
 
-**Invariants**, **Examples**, and **Invalid cases** are authored — pin verbatim:
+Answers: what must a citation or source pointer mean and contain?
 
-```markdown
+## Scope
+
+Governs every citation, bibliography key, and source pointer in project prose
+and entity frontmatter. It does not govern document structure or templates
+(see [`../writing/scientific-writing.md`](../writing/scientific-writing.md)),
+nor the annotation-token vocabulary, which is owned by
+`docs/conventions/annotation-tokens.md`.
+
+## Vocabulary / schema
+
+| Form | Where | Means |
+|---|---|---|
+| `[@AuthorYear]` | prose | inline citation; the key must resolve in `papers/references.bib` |
+| `[@Smith2020; @Jones2021]` | prose | multiple sources for one claim |
+| `[@Smith2020, p. 42]` | prose | citation with locator |
+| `Smith et al. [@Smith2020]` | prose | narrative citation |
+| `cite:AuthorYear` | `source_refs` frontmatter | bibliography backing |
+| `paper:AuthorYear` | `source_refs` frontmatter | link to a project paper note |
+
 ## Invariants
 
-- Every BibTeX key used in a document has a corresponding entry in `papers/references.bib`.
-- `cite:AuthorYear` in `source_refs` backs a bibliography entry; `paper:AuthorYear` links a project paper note. They are not interchangeable.
-- A factual claim carries either a citation or an annotation token. Never neither.
+- Every BibTeX key used in a document has a corresponding entry in `papers/references.bib`. Creating a citation means adding the entry.
+- `cite:AuthorYear` backs a bibliography entry; `paper:AuthorYear` links a project paper note. They are not interchangeable.
+- Every factual claim carries either a citation or one of the four annotation tokens from `docs/conventions/annotation-tokens.md`. Neither is not a permitted state.
+- Primary sources are preferred over secondary summaries.
+- Claims drawn from model knowledge are cross-checked via web search before they are committed.
+
+## Conformance rules
+
+Conformance is checked by `validate.sh` and `science refs check`, which resolve
+every `[@Key]` against `papers/references.bib` and report unresolved keys.
+`[UNVERIFIED]` and `[MISSING_CITATION]` are counted as warnings by default;
+`[SPECULATION]` and `[INACCESSIBLE]` are reported as info unless `--strict`.
 
 ## Examples
 
@@ -262,17 +338,34 @@ Follows `skills/meta/templates/normative-reference.md`. Merge verbatim: `researc
 - Narrative: `Smith et al. [@Smith2020] found that...`
 - Frontmatter: `source_refs: ["cite:Smith2020"]`
 
+## Versioning / migration
+
+This leaf supersedes the citation rules formerly duplicated in
+`research/SKILL.md` ("Citation Discipline") and `writing/SKILL.md` ("Citation
+Format"), extracted and merged 2026-07-20. Neither router states citation rules
+any longer; both link here.
+
 ## Invalid cases
 
 1. `[@Smith2020]` with no matching entry in `papers/references.bib` — the key must resolve.
 2. `paper:Smith2020` in `source_refs` where only a bibliography entry exists — use `cite:` unless a project paper note exists.
-3. An unsourced factual claim with no `[UNVERIFIED]` or `[MISSING_CITATION]` token — silence is not a permitted state.
+3. An unsourced factual claim carrying **no annotation token at all** — any of the four tokens is a permitted alternative to a citation, because each marks a different unsourced state (`[UNVERIFIED]` not yet checked, `[MISSING_CITATION]` needs a pointer, `[SPECULATION]` author conjecture, `[INACCESSIBLE]` source unreachable). Silence is what is forbidden, not the choice among tokens.
 4. A citation to a source read only at abstract level, presented as backing a specific numerical result.
+
+## Success test
+
+Is there an explicit conformance check against the vocabulary/invariants — mechanical (lint/validate) where available, an itemized checklist otherwise?
+
+## Companion Skills
+
+- [`literature-evaluation.md`](literature-evaluation.md) - how sources are selected and assessed before they are cited.
+- [`../writing/scientific-writing.md`](../writing/scientific-writing.md) - document structure, hedging, and annotation-token usage in prose.
+- [`../INDEX.md`](../INDEX.md) — the skill index.
 ```
 
-**Versioning / migration**: state that this leaf supersedes the citation rules formerly duplicated in `research/SKILL.md` and `writing/SKILL.md`, extracted 2026-07-20.
+Invalid case 3 resolves the contradiction an earlier draft carried: the invariant admits all four tokens, so the invalid case must forbid *absence*, not the three tokens the invariant allows.
 
-- [ ] **Step 3: Create `proposition-graph-reasoning.md`**
+- [ ] **Step 3: Create `skills/research/proposition-graph-reasoning.md`**
 
 ```markdown
 ---
@@ -281,14 +374,49 @@ description: Use when interpreting or updating the project's own proposition gra
 archetype: analysis-discipline
 provenance: internal
 ---
+
+# Proposition Graph Reasoning
+
+Answers: before interpreting the project's own evidence, what must be checked
+about how that evidence is recorded?
+
+## Triggering condition
+
+Fires whenever a conclusion is drawn from the project's own proposition graph
+rather than from external literature: writing an interpretation, updating
+hypothesis support, summarizing where the project stands, or choosing what to
+work on next.
+
+Science uses a skeptical, proposition-centric model:
 ```
 
-Follows `skills/meta/templates/analysis-discipline.md`. Move verbatim from `research/SKILL.md`: Working with Hypotheses (L90-102) → **Required reasoning / check / precommitment**; Recognizing Unmigrated Projects (L130-143) → **Triggering condition** and the `migration-limited` row; Using Dashboard Summaries (L145-159) → **Decision rule** inputs.
-
-**Outcomes** is the decided contract — pin verbatim from the design doc:
+Then verbatim from `git show 1feb088c:skills/research/SKILL.md` lines 12-16 (the five model bullets). These are the epistemic policy the router must **not** retain — propositions as belief units, sparse support as fragile, contested neighborhoods as prioritization signals.
 
 ```markdown
-## Outcomes
+## Required reasoning / check / precommitment
+```
+
+Verbatim from lines 94-99 (the six Working with Hypotheses bullets) and lines 101-102 (the pointer to `proposition-schema.md`).
+
+```markdown
+## Decision rule or reasoning criteria
+
+Assess each condition below against the entity files. When
+`knowledge/graph.trig` exists, the last four are additionally checked against
+the store summaries:
+
+- `science graph dashboard-summary --format json`
+- `science graph neighborhood-summary --format json`
+
+These summaries are a prioritization instrument. They report where recorded
+evidence is thin or contested; they do not measure whether a proposition is
+true.
+```
+
+**Outcomes** is the decided contract — pinned verbatim:
+
+```markdown
+## Outcomes (flagged conditions)
 
 Outcomes are **non-exclusive flagged conditions**, not a ladder and not a
 verdict. Any number may hold at once. Each licenses a prioritization action;
@@ -314,42 +442,139 @@ sufficient, or well-supported. There is deliberately no `adequate` outcome.
 cannot be evaluated at all, and that must be recorded as unevaluated — never
 collapsed into "no flagged condition." `migration-limited` remains assessable
 from the entity files alone.
+
+## Halt / escalation
 ```
 
-**Permitted reporting language** is authored — pin verbatim:
+Verbatim from lines 139-143 (the "In those cases" list), then this pinned sentence: `Call out that the project still needs migration work whenever that affects interpretation quality.`
 
 ```markdown
+## Required evidence & artifacts
+
+Record, on the entity that consumes the reasoning:
+
+- **On an interpretation** (`templates/interpretation.md`): which conditions fired, and which could not be evaluated and why, under `## Evidence Quality`; what the flags license, under `## Updated Priorities`.
+- **On a synthesis** (`templates/synthesis.md`): unevaluated and `lacks-empirical-support` conditions under `## Knowledge Gaps`; the prioritization the flags license under `## Research fronts`.
+- The dashboard command run and its output, when one was run.
+
 ## Permitted reporting language
 
 - Permitted: "supports", "disputes", "leaves unresolved", "is consistent with", "single-source", "contested".
 - Forbidden without a flagged-condition basis: "confirms", "proves", "validates", "establishes", "well-supported", "adequate".
 - Forbidden always: reporting the absence of flagged conditions as positive evidence of support.
+
+## Success test
+
+Was the required reasoning/precommitment carried out before interpretation, and does the conclusion follow from it — mechanically where a locked table applies, by the stated criteria otherwise?
+
+## Companion Skills
+
+- [`proposition-schema.md`](proposition-schema.md) - the strict enums and field semantics this reasoning writes against.
+- [`literature-evaluation.md`](literature-evaluation.md) - evaluating external sources, as opposed to the project's own graph.
+- [`../INDEX.md`](../INDEX.md) — the skill index.
 ```
 
-**Halt / escalation** — move from L141-143 verbatim: call out that the project still needs migration work when that affects interpretation quality.
+- [ ] **Step 4: Rewrite `skills/research/SKILL.md` as a router**
 
-**Required evidence & artifacts** is authored — pin verbatim:
+Replace the whole file with this, verbatim. The `description:` is unchanged from the current file — `codex_skills.py` copies it into the companion and a test asserts its text.
 
 ```markdown
-## Required evidence & artifacts
+---
+name: research-methodology
+description: Core research methodology for scientific investigation. This skill should be used whenever conducting literature review, evaluating scientific sources, synthesizing findings across papers, assessing evidence quality, identifying gaps in knowledge, or working with hypotheses. Also use when the user mentions research, papers, citations, evidence, or scientific literature — even if they don't explicitly ask for "research methodology."
+provenance: internal
+---
 
-Record, on the interpretation or synthesis entity that consumes the reasoning:
-which conditions fired, which could not be evaluated and why (typically a
-missing `knowledge/graph.trig`), and the dashboard command and its output if
-one was run.
+# Research Methodology Router
+
+A router carries no methodology; teaching content belongs in a typed leaf.
+
+## Routing trigger
+
+Load this router when any research activity is in scope — literature review,
+paper summarization, hypothesis development, evidence evaluation, curation, or
+topic exploration — before loading any leaf.
+
+For analysis-readiness planning, start at [`../INDEX.md`](../INDEX.md) or run
+`science-plan-analysis`.
+
+## Scope boundary
+
+Covers how the project evaluates external sources and reasons over its own
+proposition graph. Excludes prose conventions (see
+[`../writing/SKILL.md`](../writing/SKILL.md)) and statistical interpretation
+(see [`../statistics/SKILL.md`](../statistics/SKILL.md)).
+
+## Leaves
+
+| Leaf | Load when | Do not load when |
+|---|---|---|
+| [`literature-evaluation.md`](literature-evaluation.md) | Reviewing literature, assessing source quality, or synthesizing across papers | Reasoning about the project's own recorded evidence |
+| [`citation-discipline.md`](citation-discipline.md) | Authoring or validating citations, bibliography keys, or `source_refs` | Deciding which sources to trust |
+| [`proposition-graph-reasoning.md`](proposition-graph-reasoning.md) | Interpreting or updating the project's proposition graph, or deciding where to direct effort | Evaluating an external source |
+| [`proposition-schema.md`](proposition-schema.md) | Authoring proposition entities, evidence metadata, or layered-claim fields | Reasoning about support adequacy rather than field values |
+| [`annotation-curation-qa.md`](annotation-curation-qa.md) | Designing or reviewing claim extraction, labels, adjudication, or LLM-assisted curation | Curating nothing — reading only |
+| [`research-package-spec.md`](research-package-spec.md) | Defining research-package manifests, cells, provenance, or workflow integration | Rendering an existing package |
+| [`research-package-rendering.md`](research-package-rendering.md) | Rendering research packages and source routes in web experiences | Defining the package schema itself |
+
+## Decision / compose order
+
+Leaves are independent except where noted:
+
+1. `literature-evaluation.md` before `citation-discipline.md` — select and assess sources, then record them correctly.
+2. `proposition-schema.md` before `proposition-graph-reasoning.md` — know the field semantics before reasoning over their values.
+3. `research-package-spec.md` before `research-package-rendering.md` — the rendering leaf builds on the spec as layer 1.
+
+## Parent & neighbors
+
+- Parent index: [`../INDEX.md`](../INDEX.md)
+- Neighboring routers: [`../writing/SKILL.md`](../writing/SKILL.md), [`../statistics/SKILL.md`](../statistics/SKILL.md), [`../data/SKILL.md`](../data/SKILL.md)
+
+## Success test
+
+Representative in-scope tasks route to the correct leaf (or the correct compose order when leaves combine) without any methodology being read from this router.
+
+## Companion Skills
+
+- [`../INDEX.md`](../INDEX.md) — the skill index.
 ```
 
-- [ ] **Step 4: Reduce `skills/research/SKILL.md` to a router**
-
-Rewrite following `skills/meta/templates/router.md`. Keep `name: research-methodology`, keep `provenance: internal`, **do not add `archetype:`**. Keep the description verbatim (`codex_skills.py` copies it into the companion and a test asserts its text). Keep the framing paragraph at L11-19 (skeptical proposition-centric model + the INDEX pointer) — that is scope, not methodology.
-
-The Leaves table gains four rows. "Annotation and Curation" (L121-128) becomes the `annotation-curation-qa.md` row's "Load when" text — a table row, not a retained prose section. Delete every extracted section. `Project Awareness` (L170-180) and `Template Usage` (L185-187) move to Task 3's writing leaf — delete them here and hand the text to Task 3.
+Note what this removes and where it went: the proposition-centric model bullets (old L11-16) are epistemic policy and moved to `proposition-graph-reasoning.md` in Step 3 — the router keeps only the INDEX pointer and a one-sentence scope boundary. "Annotation and Curation" (old L121-128) is now the `annotation-curation-qa.md` table row. "Project Awareness" (old L170-180) and "Template Usage" (old L185-187) move to Task 3's writing leaf; retrieve them with the `git show` commands in Global Constraints.
 
 - [ ] **Step 5: Extend and retarget `proposition-schema.md`**
 
-Add an `## Evidence Types` section. Do **not** copy `research/SKILL.md` L106-119 verbatim — that list is written in the `_evidence` alias form. State the canonical tokens from `science/model/src/science_model/reasoning.py:134-139` — `empirical_data`, `benchmark`, `simulation`, `literature`, `expert_judgment`, `negative_result` — note that the `_evidence` suffix is an accepted authoring alias stripped at the model boundary (`docs/user-guide/evidence-lines.md:57-62`), and carry the `negative_result` caveat from `evidence-lines.md:53-55`: it is accepted for compatibility but usually better understood as a result pattern, with the line's stance, role, and scope carrying the meaning. Keep the hub's rule that these must not be collapsed into a generic "computational evidence" label.
+Retarget lines 9-11 — replace the sentence pointing at `SKILL.md` with:
 
-Retarget L9-11: `SKILL.md` → `./literature-evaluation.md` (source hierarchy, evaluating sources) and `./citation-discipline.md` (citation discipline).
+```markdown
+For the generic methodology layer, see
+[`literature-evaluation.md`](literature-evaluation.md) (source hierarchy,
+evaluating sources) and [`citation-discipline.md`](citation-discipline.md)
+(citation discipline). For the prose explanation of the model, see
+`docs/user-guide/epistemic-model.md` and `docs/user-guide/evidence-lines.md`.
+```
+
+Add an `## Evidence Types` section — pinned, because the canonical form differs from the hub's alias form:
+
+```markdown
+## Evidence Types
+
+The typed evidence vocabulary is owned by the model enum
+(`science_model.reasoning.EvidenceType`). The canonical stored tokens carry
+**no** `_evidence` suffix:
+
+- `empirical_data` — project-run analyses over observed data
+- `benchmark` — benchmark tasks, evaluation suites, standardized comparisons
+- `simulation` — results that primarily come from a model world
+- `literature` — prior publications, reviews, meta-analyses
+- `expert_judgment` — structured expert assessment
+- `negative_result` — accepted for compatibility, but usually better understood as a result pattern; the line's `stance`, role, and scope should carry what the null or negative result does to the target proposition
+
+Authoring may still use the historical `_evidence` suffix — `literature_evidence`,
+`empirical_data_evidence` — which Science strips at the model boundary and
+stores as the canonical member. Unknown evidence types fail when parsed.
+
+Do not collapse these into a generic "computational evidence" label.
+```
 
 - [ ] **Step 6: Retarget `annotation-curation-qa.md:111`**
 
@@ -363,30 +588,65 @@ Replace the single line with two:
 - [ ] **Step 7: Lint, regenerate, verify, commit**
 
 ```bash
-cd science && uv run science skills lint; echo "LINT_EXIT=$?"
-cd science && uv run python ../scripts/generate_codex_skills.py
-cd science && uv run --frozen pytest -q; echo "PYTEST_EXIT=$?"
+(cd "$WT/science" && uv run --frozen science skills lint --root ../skills; echo "LINT_EXIT=$?")
+(cd "$WT/science" && uv run python ../scripts/generate_codex_skills.py)
+(cd "$WT/science" && uv run --frozen pytest -q >/dev/null 2>&1; echo "PYTEST_EXIT=$?")
+(cd "$WT" && git add skills/research/ codex-skills/ \
+  && git commit -m "refactor(skills): extract research hub into literature-evaluation, citation-discipline, proposition-graph-reasoning")
 ```
 
 Expected: `LINT_EXIT=0`, `PYTEST_EXIT=0`.
-
-```bash
-git add skills/research/ codex-skills/
-git commit -m "refactor(skills): extract research hub into literature-evaluation, citation-discipline, proposition-graph-reasoning"
-```
 
 ---
 
 ### Task 3: Extract `skills/writing/` and transfer the `scientific-writing` identifier
 
-The leaf creation, the router rename, and the `COMPANION_SKILLS` mapping change **must land in one commit**. Generation raises `ValueError` on a name mismatch (`codex_skills.py:163-165`), so any intermediate state fails.
+Leaf creation, router rename, and the `COMPANION_SKILLS` change **must land in one commit** — generation raises `ValueError` on name mismatch (`codex_skills.py:163-165`), so any intermediate state fails.
 
 **Files:**
 - Create: `skills/writing/scientific-writing.md`
-- Modify: `skills/writing/SKILL.md` (router + `name:` change), `science/src/science_tool/codex_skills.py:18`, `science/tests/test_codex_skills.py:82-99`
+- Modify: `skills/writing/SKILL.md`, `science/src/science_tool/codex_skills.py:18`, `science/tests/test_codex_skills.py`
 - Regenerate: `codex-skills/`
 
-- [ ] **Step 1: Create `skills/writing/scientific-writing.md`**
+- [ ] **Step 1: Write the failing tests first**
+
+Update the existing assertions in `test_generate_codex_skills_emits_companion_methodology_skills`:
+
+- line 93: `` `skills/writing/SKILL.md` `` → `` `skills/writing/scientific-writing.md` ``
+- line 95: `"../science-research-methodology/SKILL.md"` → `"../science-research-methodology/citation-discipline.md"`
+
+Line 95 is the **bundled-resource** case: the writing leaf's companion link points at a research *leaf*, which is emitted as a resource of the research companion. Then append:
+
+```python
+def test_rewrites_link_to_bundled_resource(tmp_path: Path) -> None:
+    writing_skill = (_generate(tmp_path) / "science-scientific-writing" / "SKILL.md").read_text(encoding="utf-8")
+    assert "../science-research-methodology/citation-discipline.md" in writing_skill
+    assert "](../research/citation-discipline.md)" not in writing_skill
+
+
+def test_rewrites_excluded_router_to_canonical_source(tmp_path: Path) -> None:
+    research_skill = (_generate(tmp_path) / "science-research-methodology" / "SKILL.md").read_text(encoding="utf-8")
+    assert "../../skills/writing/SKILL.md" in research_skill
+    assert "../science-scientific-writing/SKILL.md" not in research_skill
+
+
+def test_companion_source_leaf_is_not_also_a_resource(tmp_path: Path) -> None:
+    assert not (_generate(tmp_path) / "science-scientific-writing" / "scientific-writing.md").exists()
+```
+
+Together with Task 1's two tests, the five destination classes are each covered once: source → companion root, bundled resource → companion resource, excluded router → canonical source, non-companion leaf → canonical source, and rewriting *within* a copied resource (Task 1's `test_rewrites_link_to_companion_source_leaf`, which reads a copied resource).
+
+- [ ] **Step 2: Run them to verify they fail**
+
+```bash
+(cd "$WT/science" && uv run --frozen pytest tests/test_codex_skills.py -k "bundled_resource or excluded_router or companion_methodology" -v)
+```
+
+Expected: `test_rewrites_link_to_bundled_resource`, `test_rewrites_excluded_router_to_canonical_source`, and the updated `test_generate_codex_skills_emits_companion_methodology_skills` all FAIL — the writing companion is still generated from the router, so it carries no citation link and the research router link still rewrites to the companion.
+
+`test_companion_source_leaf_is_not_also_a_resource` **passes vacuously** at this point, because `scientific-writing.md` does not exist yet. That is expected and is not evidence of anything; it only becomes meaningful after Step 3. Do not revert implementation code to manufacture a failure for it.
+
+- [ ] **Step 3: Create `skills/writing/scientific-writing.md`**
 
 ```markdown
 ---
@@ -395,25 +655,55 @@ description: Scientific writing conventions for research documents. This skill s
 archetype: practice-guide
 provenance: internal
 ---
+
+# Scientific Writing
+
+Answers: how do I write project prose that is correctly hedged, sourced, and
+connected to the research framework?
+
+## When to apply
+
+Before writing or editing any document in `doc/` or `specs/`, any entity
+description, or any prose that will become part of the project's durable
+record.
+
+The default epistemic posture is skeptical:
+- write hypotheses as organizing conjectures
+- write propositions as uncertain unless the evidence base is unusually strong
+- describe evidence as supporting, disputing, or leaving a proposition unresolved
+
+## Workflow steps
+
+1. **Check the project first.** Before writing any document, check:
 ```
 
-The description is transferred verbatim from the current router — it is the discovery surface for this behavior and must not be re-worded.
-
-Follows `skills/meta/templates/practice-guide.md`. Move verbatim from the current `writing/SKILL.md`: Voice and Tone (L24-30) and Hedging Guide (L32-40) → **Judgment rules**; Document Structure (L42-49), Formatting Conventions (L89-95), Length Guidelines (L97-103) → **Quality criteria**; Connecting to the Project (L75-87) merged with `research/SKILL.md`'s Project Awareness (L170-180) → **Workflow steps** (first step: check the project before writing); `research/SKILL.md`'s Template Usage (L185-187) → **Workflow steps**.
-
-Replace Annotation Tokens (L51-62) with a pointer — pin verbatim:
+Then verbatim from `git show 1feb088c:skills/research/SKILL.md | sed -n '174,180p'` (the five-item Project Awareness list and its closing sentence).
 
 ```markdown
-When a claim cannot carry an in-line citation, mark it with one of the four
-annotation tokens defined in `docs/conventions/annotation-tokens.md`:
-`[UNVERIFIED]`, `[MISSING_CITATION]`, `[SPECULATION]`, `[INACCESSIBLE]`. That
-document is the normative owner of the vocabulary and the validator behavior;
-do not restate the definitions here.
+2. **Read the template.**
 ```
 
-Delete Citation Format (L64-73) — it lives in `research/citation-discipline.md` now. Link it under **Companion Skills** as `../research/citation-discipline.md`.
+Then verbatim from `git show 1feb088c:skills/research/SKILL.md | sed -n '187p'` (the Template Usage paragraph).
 
-**Common pitfalls** and **Outputs** are authored — pin verbatim:
+```markdown
+3. **Draft, hedging to the evidence.** Apply the judgment rules below.
+4. **Mark what you could not source.** When a claim cannot carry an in-line citation, mark it with one of the four annotation tokens defined in `docs/conventions/annotation-tokens.md`: `[UNVERIFIED]`, `[MISSING_CITATION]`, `[SPECULATION]`, `[INACCESSIBLE]`. That document is the normative owner of the vocabulary and the validator behavior; do not restate the definitions here.
+5. **Connect the document to the framework.**
+```
+
+Then verbatim from `git show 1feb088c:skills/writing/SKILL.md | sed -n '79,85p'` (the five Connecting-to-the-Project bullets and the "Avoid writing as if" sentence). The range stops at 85 deliberately: line 87 is the `epistemic-model.md` pointer, which this leaf places once at the foot instead.
+
+```markdown
+## Judgment rules
+```
+
+Verbatim from `git show 1feb088c:skills/writing/SKILL.md | sed -n '26,40p'` (Voice and Tone bullets, then the Hedging Guide table).
+
+```markdown
+## Quality criteria
+```
+
+Verbatim from `sed -n '44,49p'` (Document Structure), `sed -n '91,95p'` (Formatting Conventions), and `sed -n '99,103p'` (Length Guidelines) of the same file.
 
 ```markdown
 ## Common pitfalls
@@ -428,78 +718,106 @@ Delete Citation Format (L64-73) — it lives in `research/citation-discipline.md
 A document conforming to its framework template, with every substantive claim
 either cited or annotated, hedging matched to evidence strength, and explicit
 links to the hypotheses, questions, or propositions it bears on.
+
+## Success test
+
+Did the agent carry out the cross-cutting practice according to its workflow, judgment rules, and quality criteria?
+
+## Companion Skills
+
+- [`../research/citation-discipline.md`](../research/citation-discipline.md) - citation format, bibliography keys, and source-pointer conformance.
+- [`../research/literature-evaluation.md`](../research/literature-evaluation.md) - selecting and assessing the sources this prose cites.
+- [`../statistics/SKILL.md`](../statistics/SKILL.md) - statistical reporting language for pre-registrations, analyses, and verdicts.
+- [`../INDEX.md`](../INDEX.md) — the skill index.
+
+For the project's reasoning model, see `docs/user-guide/epistemic-model.md`.
 ```
 
-- [ ] **Step 2: Reduce `skills/writing/SKILL.md` to a router**
+The Citation Format section (old L64-73) is **deleted**, not moved — it merged into `citation-discipline.md` in Task 2.
 
-Follow `skills/meta/templates/router.md`. Change `name: scientific-writing` → `name: writing`. Author a new router description (the old one transferred to the leaf) — pin verbatim:
+- [ ] **Step 4: Rewrite `skills/writing/SKILL.md` as a router**
+
+Replace the whole file with this, verbatim:
 
 ```markdown
+---
+name: writing
 description: Use when scientific prose for a research project is in scope. Routes to the writing leaves below.
+provenance: internal
+---
+
+# Writing Router
+
+A router carries no methodology; teaching content belongs in a typed leaf.
+
+## Routing trigger
+
+Load this router when writing or editing project prose is in scope, before
+loading any leaf.
+
+For analysis-readiness planning, start at [`../INDEX.md`](../INDEX.md) or run
+`science-plan-analysis`.
+
+## Scope boundary
+
+Covers prose conventions for project documents — voice, hedging, structure,
+and framework connection. Excludes citation conformance and source evaluation
+(see [`../research/SKILL.md`](../research/SKILL.md)).
+
+## Leaves
+
+| Leaf | Load when | Do not load when |
+|---|---|---|
+| [`scientific-writing.md`](scientific-writing.md) | Writing or editing any research document, entity description, or project prose | Only validating citation keys — load `../research/citation-discipline.md` |
+
+## Decision / compose order
+
+Leaves are independent. Compose with
+[`../research/citation-discipline.md`](../research/citation-discipline.md)
+whenever the prose carries citations.
+
+## Parent & neighbors
+
+- Parent index: [`../INDEX.md`](../INDEX.md)
+- Neighboring routers: [`../research/SKILL.md`](../research/SKILL.md), [`../statistics/SKILL.md`](../statistics/SKILL.md)
+
+## Success test
+
+Representative in-scope tasks route to the correct leaf (or the correct compose order when leaves combine) without any methodology being read from this router.
+
+## Companion Skills
+
+- [`../INDEX.md`](../INDEX.md) — the skill index.
 ```
 
-Do **not** add `archetype:`. Leaves table: one row for `scientific-writing.md`. Under **Parent & neighbors**, link `../research/SKILL.md`. Under **Companion Skills**, link `../research/citation-discipline.md`. Delete the "No leaves currently" note and every doctrine section.
+Planned future leaves (pre-registration prose, results-interpretation, paper-summary) are deliberately **not** listed — a router advertises what exists.
 
-- [ ] **Step 3: Update the companion mapping**
+- [ ] **Step 5: Update the companion mapping**
 
-In `science/src/science_tool/codex_skills.py:18`:
+`science/src/science_tool/codex_skills.py:18`:
 
 ```python
     CompanionSkill("scientific-writing", Path("skills/writing/scientific-writing.md")),
 ```
 
-No other generator change is needed — Task 1's `_companion_link_targets` derives everything from `COMPANION_SKILLS`, so `skills/writing/SKILL.md` now falls through to `../../skills/writing/SKILL.md` automatically.
+No other generator change — Task 1's `_companion_link_targets` derives everything from `COMPANION_SKILLS`.
 
-- [ ] **Step 4: Update the codex tests**
-
-In `science/tests/test_codex_skills.py`, update the assertion at line 91 to the new source path and **add** the destination assertion that item 7 of acceptance requires:
-
-```python
-    assert "Adapted from canonical Science skill `skills/writing/scientific-writing.md`." in writing_skill
-
-
-def test_research_router_neighbor_link_points_at_writing_router(tmp_path: Path) -> None:
-    generate_codex_skills(ROOT, tmp_path)
-    research_skill = (tmp_path / "science-research-methodology" / "SKILL.md").read_text(encoding="utf-8")
-    assert "../../skills/writing/SKILL.md" in research_skill
-    assert "../science-scientific-writing/SKILL.md" not in research_skill
-
-
-def test_companion_source_leaf_is_not_also_a_resource(tmp_path: Path) -> None:
-    generate_codex_skills(ROOT, tmp_path)
-    assert not (tmp_path / "science-scientific-writing" / "scientific-writing.md").exists()
-```
-
-`test_research_router_neighbor_link_points_at_writing_router` is the case a link-existence check passes while being wrong: under a parent-directory model the link resolves to the scientific-writing leaf. Assert the destination, not resolvability.
-
-- [ ] **Step 5: Run tests to verify the new ones fail**
+- [ ] **Step 6: Verify green, lint, regenerate, commit**
 
 ```bash
-cd science && uv run --frozen pytest tests/test_codex_skills.py -k "neighbor_link or not_also_a_resource" -v
+(cd "$WT/science" && uv run --frozen pytest tests/test_codex_skills.py -v)
+(cd "$WT/science" && uv run --frozen science skills lint --root ../skills; echo "LINT_EXIT=$?")
+(cd "$WT/science" && uv run python ../scripts/generate_codex_skills.py)
+(cd "$WT/science" && uv run --frozen pytest -q >/dev/null 2>&1; echo "PYTEST_EXIT=$?")
+(cd "$WT" && git add skills/writing/ science/src/science_tool/codex_skills.py science/tests/test_codex_skills.py codex-skills/ \
+  && git commit -m "refactor(skills): extract writing hub and transfer scientific-writing identifier to the leaf")
 ```
 
-Expected: FAIL before Steps 1-3 are applied. If Steps 1-3 are already applied, they PASS — in that case verify by reverting `codex_skills.py:18` alone and confirming generation raises `ValueError: Companion skill name mismatch`.
-
-- [ ] **Step 6: Lint, regenerate, verify, commit**
-
-```bash
-cd science && uv run science skills lint; echo "LINT_EXIT=$?"
-cd science && uv run python ../scripts/generate_codex_skills.py
-cd science && uv run --frozen pytest -q; echo "PYTEST_EXIT=$?"
-```
-
-Expected: both exit 0. `codex-skills/science-scientific-writing/SKILL.md` now carries the leaf's content, and `codex-skills/science-scientific-writing/scientific-writing.md` does **not** exist.
-
-```bash
-git add skills/writing/ science/src/science_tool/codex_skills.py science/tests/test_codex_skills.py codex-skills/
-git commit -m "refactor(skills): extract writing hub and transfer scientific-writing identifier to the leaf"
-```
+Expected: all codex tests PASS; `LINT_EXIT=0`; `PYTEST_EXIT=0`; `codex-skills/science-scientific-writing/scientific-writing.md` does **not** exist.
 
 ---
 
 ### Task 4: Cross-subject retargets, index, and doctrine
-
-Everything that needed both hubs extracted.
 
 **Files:**
 - Modify: `skills/data/sources/openalex.md:145`, `skills/data/sources/pubmed.md:126`, `skills/research/research-package-rendering.md:82`, `skills/INDEX.md`, `skills/meta/skill-taxonomy.md`, `skills/meta/skill-authoring.md:41`, `docs/plans/2026-07-19-skills-taxonomy-corpus-matrix.md`
@@ -525,9 +843,11 @@ Each names two methodologies now in different leaves. Replace one line with two.
 
 - [ ] **Step 2: Update `skills/INDEX.md`** — four operations:
 
-1. Under **Core Analysis Checks**, remap `scientific-writing` from `skills/writing/SKILL.md` to `skills/writing/scientific-writing.md`.
-2. Under **Core Analysis Checks**, add `- \`writing\`: \`skills/writing/SKILL.md\`` for the router.
-3. Under **Curation and Evidence** (which already holds `research-annotation-curation-qa`), add:
+1. Under **Core Analysis Checks**, change the `scientific-writing` line to:
+   `- \`scientific-writing\`: \`skills/writing/scientific-writing.md\``
+2. Directly below it, add the router:
+   `- \`writing\`: \`skills/writing/SKILL.md\``
+3. Under **Curation and Evidence**, add:
 
 ```markdown
 - `research-literature-evaluation`: `skills/research/literature-evaluation.md`
@@ -535,108 +855,109 @@ Each names two methodologies now in different leaves. Replace one line with two.
 - `research-proposition-graph-reasoning`: `skills/research/proposition-graph-reasoning.md`
 ```
 
-4. Leave the Companion Skills block at the foot pointing at routers — those references are correct as routers and must not be churned.
+4. Leave the Companion Skills block at the foot unchanged — those reference routers *as routers* and are correct.
 
 - [ ] **Step 3: Update `skills/meta/skill-authoring.md:41`**
 
-Live doctrine, false after this phase. Replace the router-invariant paragraph — pin verbatim:
+Replace the router-invariant paragraph with this, verbatim:
 
 ```markdown
-This is stated as a **target invariant** that the corpus is converging on: 4 of 7 current `SKILL.md` files are still **hubs** (route + teach). `research/SKILL.md` and `writing/SKILL.md` were extracted on 2026-07-20 and are now true routers; `data/genomics/SKILL.md` was already one. Every remaining hub is a migration extraction candidate (see the matrix). A document that routes *and* teaches is a hub; its teaching content is extracted into typed leaves before it is a true router.
+This is stated as a **target invariant** the corpus is converging on: 4 of 7 current `SKILL.md` files are still **hubs** (route + teach). `research/SKILL.md` and `writing/SKILL.md` were extracted on 2026-07-20 and are now true routers; `data/genomics/SKILL.md` was already one. Every remaining hub is a migration extraction candidate (see the matrix). A document that routes *and* teaches is a hub; its teaching content is extracted into typed leaves before it is a true router.
 ```
 
-Leave the `Placement (pre-migration)` guidance at L36-40 unchanged — this phase adds no directory.
+Leave `Placement (pre-migration)` at L36-40 unchanged — this phase adds no directory.
 
 - [ ] **Step 4: Update `skills/meta/skill-taxonomy.md`**
 
-In Versioning/migration, record that the router invariant now holds for `research/` and `writing/`, that four hubs remain, and that reorganization stays deferred to phase 3.
+In the Versioning/migration list, append this bullet verbatim:
+
+```markdown
+- The router invariant now holds for `research/` and `writing/`, extracted 2026-07-20 into `literature-evaluation`, `citation-discipline`, `proposition-graph-reasoning`, and `scientific-writing`. Four hubs remain (`data/`, `data/expression/`, `pipelines/`, `statistics/`). Reorganizing and renaming the corpus stays deferred to phase 3, because subject is derived from path.
+```
 
 - [ ] **Step 5: Update the corpus matrix**
 
-In `docs/plans/2026-07-19-skills-taxonomy-corpus-matrix.md`: set `router-state` to `pure-router` for `research/SKILL.md` and `writing/SKILL.md`; add the four new leaf rows; update the archetype tally (`practice-guide` 1 → 3, `normative-reference` 3 → 4, `analysis-discipline` 8 → 9, total 34 → 38); strike the two completed entries from "Hub extraction candidates" and note the date.
+In `docs/plans/2026-07-19-skills-taxonomy-corpus-matrix.md`:
 
-In the **Earns-a-template check**, `practice-guide` now has two clean corpus instances. Update the count, but **do not** rewrite the eligibility argument to rest on `research-package-rendering` — that force-fit is explicitly excluded from the practice-guide population, and its trip-wire stands.
+1. Header line 10: `**42 files** — 1 index, 7 routers (6 hubs, 1 pure), 34 leaves` → `**46 files** — 1 index, 7 routers (4 hubs, 3 pure), 38 leaves`.
+2. `research/SKILL.md` and `writing/SKILL.md` rows: `router-state` `hub` → `pure-router`; clear the `likely-split?` cell to `— (extracted 2026-07-20)`.
+3. Add four leaf rows with archetype, subject `research-methodology` / `writing`, depth `standard`, source-basis `internal`.
+4. Tally: `practice-guide` 1 → 3, `normative-reference` 3 → 4, `analysis-discipline` 8 → 9; total 34 → 38.
+5. Under "Hub extraction candidates", mark the `research/SKILL.md` and `writing/SKILL.md` entries `DONE 2026-07-20` and leave the other four.
+6. In the **Earns-a-template check**, update `practice-guide (0 clean leaves, 2+ trapped)` to `practice-guide (2 clean leaves, extracted 2026-07-20)`.
 
-- [ ] **Step 6: Regenerate, verify, commit**
+**Do not** rewrite the eligibility argument to rest on `research-package-rendering`. That force-fit is explicitly excluded from the practice-guide population and its trip-wire stands.
+
+- [ ] **Step 6: Lint, regenerate, verify, commit**
 
 ```bash
-cd science && uv run science skills lint; echo "LINT_EXIT=$?"
-cd science && uv run python ../scripts/generate_codex_skills.py
-cd science && uv run --frozen pytest -q; echo "PYTEST_EXIT=$?"
-```
-
-```bash
-git add skills/ docs/plans/ codex-skills/
-git commit -m "docs(skills): retarget cross-subject references, index, and router-invariant doctrine"
+(cd "$WT/science" && uv run --frozen science skills lint --root ../skills; echo "LINT_EXIT=$?")
+(cd "$WT/science" && uv run python ../scripts/generate_codex_skills.py)
+(cd "$WT/science" && uv run --frozen pytest -q >/dev/null 2>&1; echo "PYTEST_EXIT=$?")
+(cd "$WT" && git add skills/ docs/plans/ codex-skills/ \
+  && git commit -m "docs(skills): retarget cross-subject references, index, and router-invariant doctrine")
 ```
 
 ---
 
 ### Task 5: Acceptance sweep
 
-No new code. Verify every acceptance item from the design doc and report evidence.
+No new code. Verify every acceptance item from the design doc and report the command and output for each.
 
-- [ ] **Step 1: Lint and typed-leaf metadata**
+- [ ] **Step 1: Lint and router metadata**
 
 ```bash
-cd science && uv run science skills lint; echo "LINT_EXIT=$?"
-cd .. && git grep -c '^archetype:' skills/research/ skills/writing/
-git grep -n '^archetype:' skills/research/SKILL.md skills/writing/SKILL.md
+(cd "$WT/science" && uv run --frozen science skills lint --root ../skills; echo "LINT_EXIT=$?")
+(cd "$WT" && git grep -n '^archetype:' skills/research/SKILL.md skills/writing/SKILL.md; echo "ROUTER_ARCHETYPE_HITS=$?")
+(cd "$WT" && git grep -c '^archetype:' skills/research/ skills/writing/ | sort)
 ```
 
-Expected: `LINT_EXIT=0`. The second grep returns **nothing** — routers must not declare `archetype:`.
+Expected: `LINT_EXIT=0`. `ROUTER_ARCHETYPE_HITS=1` (git grep exits 1 on no match) — routers must not declare `archetype:`. The third command reports **eight** archetyped leaves across the two directories: seven under `skills/research/` and one under `skills/writing/`.
 
 - [ ] **Step 2: Router-profile conformance**
 
-Open `skills/research/SKILL.md` and `skills/writing/SKILL.md` beside
-`skills/meta/templates/router.md`. Confirm each carries `## Routing trigger`,
-`## Scope boundary`, `## Leaves`, `## Decision / compose order`,
-`## Parent & neighbors`, and `## Success test` — and that **no** section
-teaches. A router that retains a prose section re-acquires the hub smell even
-when the prose only routes; "Annotation and Curation" must be a table row, not
-a section.
+Open both routers beside `skills/meta/templates/router.md`. Confirm each carries `## Routing trigger`, `## Scope boundary`, `## Leaves`, `## Decision / compose order`, `## Parent & neighbors`, and `## Success test`, and that no section teaches. Confirm the research router's Leaves table has **seven** rows and retains no proposition-centric model bullets — those belong to `proposition-graph-reasoning.md`.
 
 - [ ] **Step 3: Leaf-template conformance, itemwise**
 
 For each of the four new leaves, open `skills/meta/templates/<archetype>.md` beside it and confirm every slot is present **and filled with content of the kind the slot names**. Lint cannot check this; a prose move can pass lint while failing the typed-leaf goal.
 
-Confirm specifically: `proposition-graph-reasoning.md` carries the five-condition table, the no-flag-is-not-certification paragraph, the unevaluated state, and permitted-vs-forbidden wording; no `adequate` outcome exists anywhere in it. Both practice-guides carry a real `Common pitfalls` and `Outputs`. `citation-discipline.md` carries `Invariants`, `Examples`, and `Invalid cases`.
+Confirm specifically: `proposition-graph-reasoning.md` carries the five-condition table, the no-flag-is-not-certification paragraph, the unevaluated state, permitted-vs-forbidden wording, and the interpretation/synthesis destinations — and that the string `adequate` appears only in the forbidden-language and no-`adequate`-outcome sentences. Both practice-guides carry a real `Common pitfalls` and `Outputs`. `citation-discipline.md` carries `Scope`, `Vocabulary / schema`, `Invariants`, `Conformance rules`, `Examples`, `Versioning / migration`, and `Invalid cases`.
 
 - [ ] **Step 4: Full suite and linters**
 
 ```bash
-cd science && uv run --frozen pytest -q; echo "PYTEST_EXIT=$?"
-cd science && uv run ruff check; uv run pyright
+(cd "$WT/science" && uv run --frozen pytest -q >/dev/null 2>&1; echo "PYTEST_EXIT=$?")
+(cd "$WT/science" && uv run ruff check; uv run pyright)
 ```
 
-Expected: `PYTEST_EXIT=0`; only the 4 known ruff and 7 known pyright pre-existing errors. Report any new finding as a failure.
+Expected: `PYTEST_EXIT=0`; only the 4 known ruff and 7 known pyright pre-existing errors. Report any new finding as a failure. The dangling-link sweep and all five destination-class assertions are automated here.
 
-- [ ] **Step 5: Mirror freshness and dangling-link sweep**
+- [ ] **Step 5: Mirror freshness**
 
 ```bash
-cd science && uv run python ../scripts/generate_codex_skills.py && cd .. && git status --porcelain codex-skills/
+(cd "$WT/science" && uv run python ../scripts/generate_codex_skills.py)
+(cd "$WT" && git status --porcelain codex-skills/)
 ```
 
-Expected: empty — the committed mirror is byte-identical to fresh generation.
-
-The dangling sweep and the router-destination assertion are automated by `test_no_dangling_relative_links_in_generated_tree` and `test_research_router_neighbor_link_points_at_writing_router`, both green in Step 3.
+Expected: empty output — the committed mirror is byte-identical to fresh generation.
 
 - [ ] **Step 6: Corpus count**
 
 ```bash
-cd .. && python3 -c "
+(cd "$WT" && python3 -c "
 import pathlib,re
 from collections import Counter
 leaves=[p for p in pathlib.Path('skills').rglob('*.md')
         if p.name not in {'SKILL.md','INDEX.md'} and p.parts[1] != 'meta']
 c=Counter(re.search(r'^archetype:\s*(\S+)',p.read_text(),re.M).group(1) for p in leaves)
-print(len(leaves), dict(c))"
+print(len(leaves), dict(sorted(c.items())))")
 ```
 
-Expected: `38 {'measurement-qa': 11, 'method-guide': 6, 'analysis-discipline': 9, 'normative-reference': 4, 'tool-guide': 5, 'practice-guide': 3}`.
+Expected: `38 {'analysis-discipline': 9, 'measurement-qa': 11, 'method-guide': 6, 'normative-reference': 4, 'practice-guide': 3, 'tool-guide': 5}`.
 
-`skills/meta/` is excluded entirely, not just its `templates/`. It holds two archetyped leaves (`skill-authoring.md`, `skill-taxonomy.md`) that sit outside the corpus matrix; counting them yields 36 at baseline instead of the matrix's 34 and produces a false failure. Baseline verified at `1feb088c`: 34 leaves, `practice-guide` 1.
+This runs from `$WT`, not `science/` — it is a corpus count over `skills/`, not a package command, so the "Python from `science/`" rule does not apply. `skills/meta/` is excluded **entirely**, not just its `templates/`: it holds two archetyped leaves outside the corpus matrix, and counting them yields 36 at baseline instead of 34. Baseline verified at `1feb088c`: 34 leaves, `practice-guide` 1.
 
 - [ ] **Step 7: Report**
 
-Report each acceptance item with the command run and its output. Do not report green from a piped command without capturing the exit code separately.
+Report each acceptance item with the command run and its output. Never report green from a piped command — capture the exit code before the pipe.
