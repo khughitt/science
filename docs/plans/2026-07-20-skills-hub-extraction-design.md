@@ -286,8 +286,9 @@ required in `science/src/science_tool/codex_skills.py`, and none is optional:
    resources are transferred by `shutil.copy2` (`codex_skills.py:176`) with no
    rewriting at all.
 
-   This is a **pre-existing live defect**, not one this phase introduces. Six
-   links across three copied resources dangle in the committed mirror today:
+   This is a **pre-existing live defect**, not one this phase introduces.
+   **Nine** links dangle in the committed mirror today. Six are copied
+   companion resources, closed by rewriting resources:
 
    ```
    science-research-methodology/annotation-curation-qa.md   -> ../data/frictionless.md
@@ -303,6 +304,22 @@ required in `science/src/science_tool/codex_skills.py`, and none is optional:
    because `research-package-rendering.md`'s retarget cannot land correctly
    while resources go unrewritten. Routing copied Markdown resources through
    the same rewriting as the root body closes all six.
+
+   The remaining **three** come from **command** bodies, which companion
+   rewriting never touches:
+
+   ```
+   science-health/SKILL.md        -> ../docs/user-guide/evidence-lines.md
+   science-plan-analysis/SKILL.md -> ../skills/statistics/estimator-certification.md
+   science-pre-register/SKILL.md  -> ../skills/statistics/estimator-certification.md
+   ```
+
+   Command sources live at `commands/<name>.md` (depth 1) and are emitted to
+   `codex-skills/science-<name>/SKILL.md` (depth 2), so every relative link in
+   a command body is short by exactly one `../`. All three point outside
+   `skills/` or at a non-companion leaf, so a depth rebase is correct and
+   sufficient — no companion mapping applies. This is a fifth generator change,
+   separate from the four companion changes above.
 
    Acceptance therefore checks the *whole* generated tree for dangling links,
    not only the files this phase touches.

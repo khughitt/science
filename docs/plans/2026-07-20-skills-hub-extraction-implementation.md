@@ -27,7 +27,7 @@
 **Declare `$WT` once per shell session before running any command block:**
 
 ```bash
-export WT=/mnt/ssd/Dropbox/science/.claude/worktrees/skills-hub-extraction
+export WT=~/d/science/.claude/worktrees/skills-hub-extraction
 (cd "$WT" && git branch --show-current)   # must print: skills-hub-extraction
 ```
 
@@ -57,7 +57,7 @@ Pure toolkit change. No `skills/` edits. Closes six pre-existing dangling links,
 
 - [ ] **Step 1: Write the failing tests**
 
-Add `import re` and `import os` to `science/tests/test_codex_skills.py` if absent, then append:
+Add `import re` to `science/tests/test_codex_skills.py` if absent, then append:
 
 ```python
 def _generate(tmp_path: Path) -> Path:
@@ -116,7 +116,21 @@ def test_no_dangling_relative_links_in_generated_tree(tmp_path: Path) -> None:
 (cd "$WT/science" && uv run --frozen pytest tests/test_codex_skills.py -k "rewrites_link or no_dangling" -v)
 ```
 
-Expected: all three FAIL. `test_no_dangling_relative_links_in_generated_tree` lists exactly six entries — `../data/frictionless.md` ×2, `../pipelines/snakemake.md` ×2, `../statistics/sensitivity-arbitration.md`, `../writing/SKILL.md`. If it lists more, the resolver is wrong; fix the test before touching `codex_skills.py`.
+Expected: all three FAIL. `test_no_dangling_relative_links_in_generated_tree` lists exactly **nine** entries, verified against the committed mirror at `1feb088c`:
+
+```
+science-health/SKILL.md                                    -> ../docs/user-guide/evidence-lines.md
+science-plan-analysis/SKILL.md                             -> ../skills/statistics/estimator-certification.md
+science-pre-register/SKILL.md                              -> ../skills/statistics/estimator-certification.md
+science-research-methodology/annotation-curation-qa.md     -> ../data/frictionless.md
+science-research-methodology/annotation-curation-qa.md     -> ../statistics/sensitivity-arbitration.md
+science-research-methodology/research-package-rendering.md -> ../writing/SKILL.md
+science-research-methodology/research-package-rendering.md -> ../pipelines/snakemake.md
+science-research-methodology/research-package-spec.md      -> ../data/frictionless.md
+science-research-methodology/research-package-spec.md      -> ../pipelines/snakemake.md
+```
+
+The first three come from **command** bodies, not companions, and need the separate fix in Step 3b. If the count differs from nine, investigate the generator — do **not** relax the test to match. A guard that gets weakened to fit an unexpected count stops being a guard.
 
 - [ ] **Step 3: Implement**
 
@@ -178,6 +192,45 @@ def _rewrite_companion_body_links(body: str, repo_root: Path) -> str:
 
 A path absent from `targets` is emitted nowhere and resolves to its canonical source. That covers a non-companion directory **and** a router excluded from its own companion's bundle — the case Task 3 creates, with no further edit.
 
+- [ ] **Step 3b: Rebase relative links in command bodies**
+
+Companion rewriting does not reach command skills. Command sources live in
+`commands/` (one level below the repo root) and are emitted to
+`codex-skills/science-<command>/SKILL.md` (two levels below), so every relative
+link in a command body is short by exactly one `../`. All three such links in
+the corpus point outside `skills/` or at a non-companion leaf, so a depth
+rebase is both correct and sufficient — no companion mapping applies.
+
+Add:
+
+```python
+def _rebase_command_body_links(body: str) -> str:
+    """Re-depth relative links for a command body's generated location.
+
+    Command sources sit at `commands/<name>.md` (depth 1) and are emitted to
+    `codex-skills/science-<name>/SKILL.md` (depth 2), so each relative link
+    needs one more `../` to reach the same target.
+    """
+    return re.sub(r"]\(\.\./", "](../../", body)
+```
+
+Call it in `_build_skill_text` alongside the existing rewrites, after
+`_rewrite_claude_specific_text`:
+
+```python
+    rewritten_body = _rebase_command_body_links(rewritten_body)
+```
+
+Verify the three command links afterwards:
+
+```bash
+(cd "$WT" && grep -rn '](\.\./\.\./' codex-skills/science-health/SKILL.md \
+  codex-skills/science-plan-analysis/SKILL.md codex-skills/science-pre-register/SKILL.md)
+```
+
+Expected: `../../docs/user-guide/evidence-lines.md` once and
+`../../skills/statistics/estimator-certification.md` twice.
+
 - [ ] **Step 4: Verify green, regenerate, verify suite**
 
 ```bash
@@ -188,7 +241,7 @@ A path absent from `targets` is emitted nowhere and resolves to its canonical so
 (cd "$WT/science" && uv run ruff check; uv run pyright)
 ```
 
-Expected: all codex tests PASS; three files change under `codex-skills/science-research-methodology/`; `PYTEST_EXIT=0`; only the 4 known ruff and 7 known pyright errors.
+Expected: all codex tests PASS; six files change under `codex-skills/` — three under `science-research-methodology/` (companion resources) and `science-health/`, `science-plan-analysis/`, `science-pre-register/` (command bodies); `PYTEST_EXIT=0`; only the 4 known ruff and 7 known pyright errors.
 
 - [ ] **Step 5: Commit**
 
@@ -237,7 +290,9 @@ literature. Also when auditing claims someone else sourced.
 Then, verbatim from `git show 1feb088c:skills/research/SKILL.md`:
 
 - lines 32-46 (the four-item Source Hierarchy list) as steps 1-4
-- lines 60-68 (Cross-Checking Key Facts, its bullet list and the `[UNVERIFIED]` sentence) as the final step, introduced by the pinned line: `5. **Cross-check before committing.** Always cross-check these via web search:`
+- lines 62-68 (the Cross-Checking Key Facts bullet list and the `[UNVERIFIED]` sentence) as the final step, introduced by the pinned line: `5. **Cross-check before committing.** Always cross-check these via web search:`
+
+  The range starts at 62, not 60: source line 60 is "Always cross-check via web search before committing to a document:", which the pinned lead-in above already says. Copying both would state it twice.
 
 Then continue with pinned content:
 
@@ -319,7 +374,7 @@ nor the annotation-token vocabulary, which is owned by
 
 - Every BibTeX key used in a document has a corresponding entry in `papers/references.bib`. Creating a citation means adding the entry.
 - `cite:AuthorYear` backs a bibliography entry; `paper:AuthorYear` links a project paper note. They are not interchangeable.
-- Every factual claim carries either a citation or one of the four annotation tokens from `docs/conventions/annotation-tokens.md`. Neither is not a permitted state.
+- Every factual claim carries either a citation or the annotation token that correctly describes its unsourced state, per [`../../docs/conventions/annotation-tokens.md`](../../docs/conventions/annotation-tokens.md). Unmarked and unsourced is not a permitted state. Which token is *appropriate* is decided by that document, not here — `[SPECULATION]`, for instance, marks author conjecture, which is not a factual claim awaiting a source at all.
 - Primary sources are preferred over secondary summaries.
 - Claims drawn from model knowledge are cross-checked via web search before they are committed.
 
@@ -349,8 +404,9 @@ any longer; both link here.
 
 1. `[@Smith2020]` with no matching entry in `papers/references.bib` — the key must resolve.
 2. `paper:Smith2020` in `source_refs` where only a bibliography entry exists — use `cite:` unless a project paper note exists.
-3. An unsourced factual claim carrying **no annotation token at all** — any of the four tokens is a permitted alternative to a citation, because each marks a different unsourced state (`[UNVERIFIED]` not yet checked, `[MISSING_CITATION]` needs a pointer, `[SPECULATION]` author conjecture, `[INACCESSIBLE]` source unreachable). Silence is what is forbidden, not the choice among tokens.
-4. A citation to a source read only at abstract level, presented as backing a specific numerical result.
+3. An unsourced factual claim carrying **no annotation token at all** — silence is not a permitted state. See [`../../docs/conventions/annotation-tokens.md`](../../docs/conventions/annotation-tokens.md) for which token applies.
+4. A factual claim marked `[SPECULATION]` — that token designates author conjecture, so using it on a claim that is awaiting a source misreports what the claim is. Use the token the canonical convention assigns to that state.
+5. A citation to a source read only at abstract level, presented as backing a specific numerical result.
 
 ## Success test
 
@@ -363,7 +419,7 @@ Is there an explicit conformance check against the vocabulary/invariants — mec
 - [`../INDEX.md`](../INDEX.md) — the skill index.
 ```
 
-Invalid case 3 resolves the contradiction an earlier draft carried: the invariant admits all four tokens, so the invalid case must forbid *absence*, not the three tokens the invariant allows.
+The invariant and invalid cases 3-4 are deliberately consistent: the requirement is the *appropriate* token, not any token. `[SPECULATION]` marks author conjecture rather than a claim awaiting support, so treating the four as interchangeable would weaken the canonical semantics. This leaf points at `docs/conventions/annotation-tokens.md` and does not restate the definitions — restating them would recreate exactly the duplication this extraction removes.
 
 - [ ] **Step 3: Create `skills/research/proposition-graph-reasoning.md`**
 
@@ -446,21 +502,22 @@ from the entity files alone.
 ## Halt / escalation
 ```
 
-Verbatim from lines 139-143 (the "In those cases" list), then this pinned sentence: `Call out that the project still needs migration work whenever that affects interpretation quality.`
+Verbatim from lines 139-143 — the "In those cases:" lead-in and its three bullets, the last of which already reads "call out that the project still needs migration work when that affects interpretation quality." Do **not** append that instruction again; the moved range supplies it.
 
 ```markdown
 ## Required evidence & artifacts
 
-Record, on the entity that consumes the reasoning:
+**Every** condition that fired is recorded, along with every condition that
+could not be evaluated and why. Nothing is dropped for being unsurprising.
 
-- **On an interpretation** (`templates/interpretation.md`): which conditions fired, and which could not be evaluated and why, under `## Evidence Quality`; what the flags license, under `## Updated Priorities`.
-- **On a synthesis** (`templates/synthesis.md`): unevaluated and `lacks-empirical-support` conditions under `## Knowledge Gaps`; the prioritization the flags license under `## Research fronts`.
-- The dashboard command run and its output, when one was run.
+- **On an interpretation** (`templates/interpretation.md`): the full fired set and the unevaluated set under `## Evidence Quality`; what those flags license under `## Updated Priorities`.
+- **On a synthesis** (`templates/synthesis.md`): the full fired set and the unevaluated set under `## Knowledge Gaps` — including `migration-limited`, `contested`, and `single-source-fragile`, not only the gap-shaped ones; the prioritization they license under `## Research fronts`.
+- The dashboard command run and its output, when one was run; when `knowledge/graph.trig` was absent, record that instead.
 
 ## Permitted reporting language
 
-- Permitted: "supports", "disputes", "leaves unresolved", "is consistent with", "single-source", "contested".
-- Forbidden without a flagged-condition basis: "confirms", "proves", "validates", "establishes", "well-supported", "adequate".
+- Permitted: "supports", "disputes", "leaves unresolved", "is consistent with", "single-source", "contested", "unevaluated".
+- **Not licensed by this discipline, ever:** "confirms", "proves", "validates", "establishes", "well-supported", "sufficient". No flagged condition licenses any of them — the conditions report where recorded evidence is thin or contested, and none of them measures whether a proposition is true. A positive support judgment requires a separate warrant this discipline does not supply.
 - Forbidden always: reporting the absence of flagged conditions as positive evidence of support.
 
 ## Success test
@@ -543,7 +600,9 @@ Note what this removes and where it went: the proposition-centric model bullets 
 
 - [ ] **Step 5: Extend and retarget `proposition-schema.md`**
 
-Retarget lines 9-11 — replace the sentence pointing at `SKILL.md` with:
+Two methodology-owning links here point at the router. Retarget **both**.
+
+First, lines 9-11 — replace the sentence pointing at `SKILL.md` with:
 
 ```markdown
 For the generic methodology layer, see
@@ -553,7 +612,18 @@ evaluating sources) and [`citation-discipline.md`](citation-discipline.md)
 `docs/user-guide/epistemic-model.md` and `docs/user-guide/evidence-lines.md`.
 ```
 
-Add an `## Evidence Types` section — pinned, because the canonical form differs from the hub's alias form:
+Second, the **Companion Skills** entry at line 89. Its description — "generic
+research methodology that this schema overlays" — becomes false once the router
+teaches nothing, and it preserves the same indirection removed everywhere else.
+Replace that single line with:
+
+```markdown
+- [`literature-evaluation.md`](./literature-evaluation.md) - evaluating the external sources that populate proposition entities.
+- [`citation-discipline.md`](./citation-discipline.md) - citation and source-pointer conformance for `source_refs`.
+- [`proposition-graph-reasoning.md`](./proposition-graph-reasoning.md) - reasoning over the graph these field values build.
+```
+
+Then add an `## Evidence Types` section — pinned, because the canonical form differs from the hub's alias form:
 
 ```markdown
 ## Evidence Types
@@ -909,7 +979,7 @@ No new code. Verify every acceptance item from the design doc and report the com
 ```bash
 (cd "$WT/science" && uv run --frozen science skills lint --root ../skills; echo "LINT_EXIT=$?")
 (cd "$WT" && git grep -n '^archetype:' skills/research/SKILL.md skills/writing/SKILL.md; echo "ROUTER_ARCHETYPE_HITS=$?")
-(cd "$WT" && git grep -c '^archetype:' skills/research/ skills/writing/ | sort)
+(cd "$WT" && git grep -c '^archetype:' skills/research/ skills/writing/; echo "GREP_EXIT=$?")
 ```
 
 Expected: `LINT_EXIT=0`. `ROUTER_ARCHETYPE_HITS=1` (git grep exits 1 on no match) — routers must not declare `archetype:`. The third command reports **eight** archetyped leaves across the two directories: seven under `skills/research/` and one under `skills/writing/`.
@@ -922,7 +992,11 @@ Open both routers beside `skills/meta/templates/router.md`. Confirm each carries
 
 For each of the four new leaves, open `skills/meta/templates/<archetype>.md` beside it and confirm every slot is present **and filled with content of the kind the slot names**. Lint cannot check this; a prose move can pass lint while failing the typed-leaf goal.
 
-Confirm specifically: `proposition-graph-reasoning.md` carries the five-condition table, the no-flag-is-not-certification paragraph, the unevaluated state, permitted-vs-forbidden wording, and the interpretation/synthesis destinations — and that the string `adequate` appears only in the forbidden-language and no-`adequate`-outcome sentences. Both practice-guides carry a real `Common pitfalls` and `Outputs`. `citation-discipline.md` carries `Scope`, `Vocabulary / schema`, `Invariants`, `Conformance rules`, `Examples`, `Versioning / migration`, and `Invalid cases`.
+Confirm specifically for `proposition-graph-reasoning.md`: the five-condition table; the no-flag-is-not-certification paragraph; the unevaluated state; the artifact rule naming `## Evidence Quality` / `## Updated Priorities` / `## Knowledge Gaps` / `## Research fronts`; and that the prohibited-language list is **unconditional** — it must read "not licensed by this discipline, ever", with no "without a flagged-condition basis" qualifier that would imply a flag could license a support judgment.
+
+Check `adequate` by reading, not by counting. It legitimately appears three times in the pinned prose — in the no-`adequate`-outcome sentence, in the "equally consistent with adequate support" contrast, and in the "never be written up as adequate" prohibition. What must **not** appear is `adequate` as a *flagged condition* in the outcomes table.
+
+Both practice-guides carry a real `Common pitfalls` and `Outputs`. `citation-discipline.md` carries `Scope`, `Vocabulary / schema`, `Invariants`, `Conformance rules`, `Examples`, `Versioning / migration`, and `Invalid cases` — and does **not** restate the four annotation-token definitions, which stay owned by `docs/conventions/annotation-tokens.md`.
 
 - [ ] **Step 4: Full suite and linters**
 
