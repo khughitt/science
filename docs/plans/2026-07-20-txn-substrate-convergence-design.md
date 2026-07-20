@@ -1,10 +1,18 @@
 # Transaction substrate convergence — design
 
-**Date:** 2026-07-20 (rev 4)
+**Date:** 2026-07-20 (rev 5)
 **Status:** Approved for implementation planning
 **Scope:** convergence **and** durability foundation — this PR is the durable-batch prerequisite
 **Package:** `science` (`src/science_tool/plan_common.py`, `entity_import.py`, `entity_reservation.py`, `reference_rewrite.py`, tests)
 
+> **Rev 5 (2026-07-20).** A fourth review found one Critical + one High architecture contradiction in
+> rev 4. Fixes: staged directory publication uses **no-clobber** `renameat2(RENAME_NOREPLACE)` (a bare
+> `os.replace` removes and thus clobbers a concurrent empty directory — F1); the substrate PR
+> **requires unique `rel_path`s** per transition set, so one capture-time snapshot maps to exactly one
+> occurrence — chained occurrences (`A→B`, `B→C`), which would need `previous.post == next.pre`
+> validation and an occurrence-vs-snapshot split, are deferred to the durable-batch design (F2). With
+> these, all remaining findings are implementation-level (TDD, not prose audit).
+>
 > **Rev 4 (2026-07-20).** A third review found four Critical + two High protocol issues in rev 3. All
 > verified. Fixes: forward-create callbacks fire at the **existence-changing** linearization point —
 > the `O_EXCL` open / the publish rename — not after later fallible work (F1); absent-preimage restore
@@ -87,8 +95,15 @@ def capture_and_verify(
 ) -> dict[Path, PathSnapshot]:
     """Capture a coherent snapshot of every transition's path AND verify each
     derived fingerprint equals that transition's expected `pre`. A mismatch
-    raises PreconditionRefused (the world changed between planning and capture)."""
+    raises PreconditionRefused (the world changed between planning and capture).
+    Requires unique rel_paths (see Piece 2): one snapshot maps to one occurrence,
+    so this single-snapshot comparison is well defined."""
 ```
+
+**Unique `rel_path`s are a precondition (F2).** One snapshot per path is what makes this comparison
+coherent; a chained pair (`A→B` then `B→C`) would fail the second check against the initial `A`
+snapshot. `capture_and_verify` first asserts the transition set has no repeated `rel_path` and raises
+`BoundaryError` otherwise.
 
 `PreconditionRefused` is a **clean refusal**, not `RollbackHalt`: nothing has mutated yet, so there
 is nothing to roll back. This does **not** replace the per-write recheck. Each mutator must still
@@ -119,9 +134,13 @@ failed is `WRITTEN` + `neither` → halt, which is correct: we *did* bring the p
 must own it. This is why the mark fires at the existence-changing point (Piece 4), not after later
 byte writes.
 
-**Totality is over transition occurrences, not paths** — a later batch may touch the same `rel_path`
-in two sequential transitions. The mutable authority is a **tracker built from the authoritative
-transition sequence**:
+**Totality is over transition occurrences, keyed by index.** In *this* substrate PR each `rel_path`
+appears at most once (validated — F2), so an occurrence is a path here; the index keying is what keeps
+the model forward-compatible with the durable-batch layer, where a batch may touch one `rel_path` in
+two sequential transitions (`A→B`, `B→C`). Supporting those chains is **deferred**: it additionally
+requires validating `previous.post == next.pre` and separating the initial rollback snapshot from
+per-occurrence preconditions — neither of which this PR's single-snapshot `capture_and_verify` does.
+The mutable authority is a **tracker built from the authoritative transition sequence**:
 
 ```python
 class OwnershipTracker:
@@ -213,7 +232,7 @@ fixes each callback point:
 | Seam | New durable API | Linearization / `on_commit` | Marks |
 | --- | --- | --- | --- |
 | exclusive dest create | `create_exclusive(path, text, mode, *, on_commit)` — `O_EXCL` open → **`on_commit`** → write → `fchmod` exact → `fsync` file → `fsync` parent | **immediately after the `O_EXCL` open**, before write/chmod/fsync (F1) | `import-dst` |
-| each ancestor mkdir | `mkdir_durable(path, mode, *, on_commit)` — mkdir *staging* dir → `chmod` exact → `os.replace(staging, path)` → **`on_commit`** → `fsync` parent | after the publish rename (F1) | that `created-dir` |
+| each ancestor mkdir | `mkdir_durable(path, mode, *, on_commit)` — mkdir *staging* dir → `chmod` exact → **`renameat2(staging, path, RENAME_NOREPLACE)`** → **`on_commit`** → `fsync` parent | after the no-clobber publish rename (rev-4 F1) | that `created-dir` |
 | source unlink | `unlink_durable(path, *, on_commit)` — `unlink` → **`on_commit`** → `fsync` parent | after `unlink` returns | `import-src` |
 | each referrer replace | `apply_reference_rewrite` uses a durable replace (`fsync` file → `os.replace` → **`on_commit`** → `fsync` parent) firing per edit | after each `os.replace` | that `entity-rewrite` |
 
@@ -223,10 +242,17 @@ recorded `NOT_WRITTEN` → rollback "leaves it untouched" → an orphaned partia
 Marking at the open makes a mid-write failure `WRITTEN` + `neither` → the accepted `import-dst`
 hard-halt (owner-approved scope): a create left in the third state is refused, not auto-restored.
 
-**Why the mkdir stages (F1).** A direct `mkdir` then `chmod` on the live path has a window where the
-dir exists with the wrong mode — `WRITTEN` + `neither` → an unacknowledged forward hard-halt. Staging
-the dir, setting its mode, then publishing by atomic rename removes that window: a `chmod` failure is
-on the staging dir (not yet live, not marked), so it is simply re-driven, matching Piece 5's restore.
+**Why the mkdir stages, and publishes no-clobber (rev-4 F1, rev-5 F1).** A direct `mkdir` then
+`chmod` on the live path has a window where the dir exists with the wrong mode — `WRITTEN` + `neither`
+→ an unacknowledged forward hard-halt. Staging the dir, setting its mode, then publishing by rename
+removes that window. But the publish must be `renameat2(RENAME_NOREPLACE)`, **not** `os.replace`:
+`rename(2)` removes an empty destination directory, so a bare `os.replace` would clobber an empty
+ancestor a concurrent writer created after the precheck — the same no-clobber invariant already held
+for moves and blobs. On `EEXIST` the occurrence stays `NOT_WRITTEN`, the attributable staging dir is
+removed, and the operation raises `PreconditionRefused` (re-preview) — consistent with the drift-gate
+philosophy. Directory publication therefore requires `renameat2` (Linux); there is no `link`-based
+fallback for directories, so a platform without it cannot create ancestors transactionally and the
+substrate refuses early rather than degrade the invariant.
 
 **`on_commit` contract** (every durable primitive above, plus `staged_write`, `atomic_write_bytes`,
 the move primitive): fires **exactly once**, at the existence/identity-changing linearization point,
@@ -362,7 +388,12 @@ only one event class:
 3. **Contended-unwritten (import port).** A referrer changed by another writer and rejected by the
    pre-write recheck stays `NOT_WRITTEN`; rollback leaves it untouched.
 4. **Coherent-capture race (rev-1 F5).** Single-fd capture; `O_NOFOLLOW` rejects a swapped-in
-   symlink; non-regular target takes no bytes.
+   symlink; non-regular target takes no bytes. A transition set with a repeated `rel_path` raises
+   `BoundaryError` at `capture_and_verify` (F2).
+4a. **Concurrent-dir no-clobber (rev-5 F1).** With an empty ancestor dir created by another writer
+   after the precheck, `mkdir_durable`'s `renameat2(RENAME_NOREPLACE)` publish leaves the occurrence
+   `NOT_WRITTEN`, removes the staging dir, and raises `PreconditionRefused` — the concurrent dir is
+   not clobbered.
 5. **Mark-at-linearization + monotonicity (F6).** Per primitive (`create_exclusive`, `mkdir_durable`,
    `unlink_durable`, durable replace, `move_no_clobber`), inject a fault at the parent-dir fsync
    (after the linearization point) and assert the occurrence is already `WRITTEN`; assert `mark`
