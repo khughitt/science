@@ -234,8 +234,17 @@ class ResolutionIndex:
         if candidate.is_absolute() or ".." in candidate.parts:
             return False
         for base in (self.project_root, self.data_root):
-            if (base / ref).exists():
-                return True
+            try:
+                if (base / ref).exists():
+                    return True
+            except OSError:
+                # Fail-closed: `Path.exists()` swallows only ENOENT/ENOTDIR/
+                # EBADF/ELOOP (pathlib._ignore_error), so a ref that overruns
+                # NAME_MAX/PATH_MAX -- e.g. a provenance field holding a path
+                # followed by narrative prose -- raises ENAMETOOLONG straight
+                # through and aborts the whole lint. Treat any probe failure as
+                # "does not resolve under this root" and try the next.
+                continue
         return False
 
 
