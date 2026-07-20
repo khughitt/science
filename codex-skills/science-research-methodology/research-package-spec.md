@@ -1,6 +1,7 @@
 ---
 name: research-package-spec
 description: Use when defining or reviewing research-package provenance, manifests, evidence tables, and reproducibility metadata.
+archetype: normative-reference
 provenance: internal
 ---
 

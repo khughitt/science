@@ -1,6 +1,7 @@
 ---
 name: statistics-survival-and-hierarchical-models
 description: Use when designing or reviewing Cox, Weibull, AFT, frailty, mixed-effects, Bayesian hierarchical, or multi-dataset causal models.
+archetype: method-guide
 sources: [baygent-skills]
 ---
 

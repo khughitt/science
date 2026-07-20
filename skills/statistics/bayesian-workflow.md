@@ -1,6 +1,7 @@
 ---
 name: statistics-bayesian-workflow
 description: Use when building, fitting, or reviewing a Bayesian/probabilistic model — prior choice, MCMC sampling, convergence diagnostics, posterior-predictive and calibration checks, prior sensitivity, and Bayesian model comparison.
+archetype: method-guide
 sources: [baygent-skills, gelman-bayesian-workflow, vehtari-loo]
 ---
 

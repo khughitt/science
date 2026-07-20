@@ -1,6 +1,7 @@
 ---
 name: statistics-prereg-amendment-vs-fresh
 description: Use when a follow-up analysis changes data, operationalisation, model, thresholds, or scope after an earlier pre-registration exists.
+archetype: analysis-discipline
 provenance: internal
 ---
 

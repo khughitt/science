@@ -1,6 +1,7 @@
 ---
 name: statistics-compositional-data
 description: Use when analyzing proportions, fractions, cell-type composition, microbiome relative abundance, clone fractions, topic mixtures, deconvolution outputs, or any features constrained to sum to one.
+archetype: method-guide
 provenance: internal
 ---
 

@@ -1,6 +1,7 @@
 ---
 name: data-embeddings-manifold-qa
 description: Use when analyzing high-dimensional embeddings, UMAP/t-SNE/PCA projections, HDBSCAN clusters, Mapper graphs, CKA, kNN purity, Moran's I, archetypes, or multi-lens comparisons.
+archetype: measurement-qa
 sources: [umap, hdbscan]
 ---
 

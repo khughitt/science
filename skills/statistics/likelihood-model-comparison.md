@@ -1,6 +1,7 @@
 ---
 name: statistics-likelihood-model-comparison
 description: Use when comparing parametric models by likelihood — AIC, BIC, likelihood-ratio tests, nested vs non-nested comparison, identifiability and rare-event numerical-precision audits, bootstrap CIs, and Bayesian out-of-sample comparison (PSIS-LOO / ELPD / stacking weights).
+archetype: method-guide
 sources: [baygent-skills, vehtari-loo]
 ---
 

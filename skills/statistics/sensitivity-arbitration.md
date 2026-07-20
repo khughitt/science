@@ -1,6 +1,7 @@
 ---
 name: statistics-sensitivity-arbitration
 description: Use when an analysis includes multiple robustness checks, alternate operationalisations, filters, covariate sets, priors, models, or negative controls whose results could change interpretation.
+archetype: analysis-discipline
 sources: [baygent-skills]
 ---
 

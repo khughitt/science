@@ -1,6 +1,7 @@
 ---
 name: research-proposition-schema
 description: Use when authoring or updating proposition entities, hypothesis frontmatter, or knowledge-graph claim metadata. Defines the strict enums and field semantics for the Science project model.
+archetype: normative-reference
 provenance: internal
 ---
 

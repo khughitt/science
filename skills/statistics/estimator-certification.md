@@ -1,6 +1,7 @@
 ---
 name: statistics-estimator-certification
 description: Use when an analysis fits parameters numerically — an optimiser, a profile likelihood, nuisance parameters, an ODE or any other discretisation in the inferential path — and especially before a pre-registered threshold, compute budget, or gate is allowed to depend on the fit.
+archetype: analysis-discipline
 provenance: internal
 ---
 
