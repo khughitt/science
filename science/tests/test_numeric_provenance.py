@@ -83,6 +83,19 @@ def test_resolution_index_rejects_absolute_and_traversal_paths(tmp_path):
     assert idx.resolve("../../etc/passwd") is False
 
 
+def test_resolution_index_over_length_ref_is_false_not_oserror(tmp_path):
+    """An over-length ref must resolve to False, not raise OSError.
+
+    A provenance field that is a path followed by narrative prose reaches
+    `resolve()` whole. `Path.exists()` swallows only ENOENT/ENOTDIR/EBADF/
+    ELOOP (pathlib._ignore_error), so ENAMETOOLONG propagates and aborts the
+    entire prose-lint check rather than degrading to "unresolved".
+    """
+    idx = build_resolution_index(_project(tmp_path))
+    # NAME_MAX is 255 on Linux; a single 400-char segment overruns it.
+    assert idx.resolve("report.json " + "x" * 400) is False
+
+
 def test_resolution_index_resolves_directory_artifacts(tmp_path):
     proj = _project(tmp_path)
     (proj / "outputs").mkdir()               # a directory artifact

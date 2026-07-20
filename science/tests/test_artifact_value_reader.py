@@ -116,6 +116,27 @@ def test_over_cap_json_is_rejected(tmp_path):
     assert isinstance(resolved, ArtifactError)
 
 
+def test_over_length_ref_is_error_not_oserror(tmp_path):
+    """A ref longer than NAME_MAX must degrade to ArtifactError, not raise.
+
+    `Path.exists()` does NOT swallow ENAMETOOLONG -- `pathlib._ignore_error`
+    covers only ENOENT/ENOTDIR/EBADF/ELOOP -- so an unguarded probe raises
+    OSError(errno 36) and takes down the whole calling check. Real prose
+    fields (a path followed by provenance narrative) hit this.
+    """
+    project_root = tmp_path / "project"
+    data_root = tmp_path / "data"
+    project_root.mkdir()
+    data_root.mkdir()
+    # NAME_MAX is 255 on Linux; a single 400-char segment overruns it.
+    ref = "report.json " + "x" * 400
+
+    resolved = resolve_artifact(ref, project_root, data_root,
+                                 max_json_bytes=1_000_000, max_feather_bytes=1_000_000)
+
+    assert isinstance(resolved, ArtifactError)
+
+
 def test_missing_png_content_false_is_error_not_pass(tmp_path):
     project_root = tmp_path / "project"
     data_root = tmp_path / "data"
