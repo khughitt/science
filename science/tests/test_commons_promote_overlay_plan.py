@@ -197,6 +197,54 @@ def test_divergent_keep_existing_records_resolution(tmp_path, monkeypatch) -> No
     assert r.source_project is None
 
 
+def test_conflict_carries_the_body_content_keep_existing_would_discard(tmp_path, monkeypatch) -> None:
+    """fb-2026-07-16-004: [k] dropped 347 real lines with no diff, warning, or count.
+
+    The source carries a Methods section commons entirely lacks, and a richer
+    Key Findings. Keep-existing preserves neither, so the conflict must say so
+    before the operator chooses.
+    """
+    from science_tool.commons.promote import KEEP_EXISTING, ExistingCanonicalConflict
+
+    commons = tmp_path / "commons"
+    _init_commons(commons)
+    _commit_canonical(commons, case_slug="Foo", version="1.0.0", content=_CANONICAL_FOO)
+
+    rich_findings = "\n".join(f"finding {n}" for n in range(20))
+    methods = "\n".join(f"step {n}" for n in range(15))
+    proj = _build_project(
+        tmp_path,
+        "proj-b",
+        {
+            "Foo.md": (
+                "---\nid: paper:Foo\ntitle: A study of foo\nyear: 2025\n---\n\n"
+                f"## Key Findings\n\n{rich_findings}\n\n## Methods\n\n{methods}\n"
+            )
+        },
+    )
+
+    seen: list = []
+
+    def resolve(conflict):
+        seen.append(conflict)
+        return KEEP_EXISTING
+
+    _plan_for(monkeypatch, commons, {"proj-b": proj}, ["proj-b"], resolve_conflict=resolve)
+
+    assert seen, "expected an ExistingCanonicalConflict"
+    conflict = seen[0]
+    assert isinstance(conflict, ExistingCanonicalConflict)
+    loss = conflict.body_loss
+    assert loss is not None and loss.has_loss
+
+    by_section = {entry.section: entry for entry in loss.entries}
+    assert by_section["Methods"].disposition == "dropped"
+    assert by_section["Methods"].source_lines == 15
+    assert by_section["Methods"].existing_lines == 0
+    assert by_section["Key Findings"].disposition == "downgraded"
+    assert by_section["Key Findings"].source_lines == 20
+
+
 def test_divergent_abort_propagates(tmp_path, monkeypatch) -> None:
     from science_tool.commons.errors import PromoteConflictAbort
 
@@ -236,6 +284,59 @@ def test_prompt_resolve_keep_existing(monkeypatch) -> None:
     )
     monkeypatch.setattr(click, "prompt", lambda *_a, **_k: "k")
     assert prompt_resolve(conflict) is KEEP_EXISTING
+
+
+def test_prompt_resolve_shows_the_body_content_it_would_discard(monkeypatch, capsys) -> None:
+    """The operator must see the count before answering, not discover it later."""
+    import click
+
+    from science_tool.commons.cli import prompt_resolve
+    from science_tool.commons.promote import KEEP_EXISTING, ExistingCanonicalConflict
+    from science_tool.commons.promote_body_loss import canonical_body_loss
+
+    conflict = ExistingCanonicalConflict(
+        slug="Haigis2019",
+        kind="paper",
+        field="Key Findings",
+        source_value="x" * 40,
+        existing_value="y" * 20,
+        existing_version="1.0.0",
+        body_loss=canonical_body_loss(
+            source_body={"Key Findings": "line\n" * 112, "Methods": "line\n" * 81},
+            existing_body={"Key Findings": "line\n" * 39},
+        ),
+    )
+    monkeypatch.setattr(click, "prompt", lambda *_a, **_k: "k")
+
+    assert prompt_resolve(conflict) is KEEP_EXISTING
+
+    out = capsys.readouterr().out
+    assert "DISCARD" in out
+    assert "Methods" in out and "PURE LOSS" in out
+    assert "112" in out and "81" in out
+    assert "193 source lines discarded" in out
+    # The huge raw body values must not be dumped in place of the count.
+    assert "line\\nline\\n" not in out
+
+
+def test_prompt_resolve_omits_the_loss_block_when_nothing_is_discarded(monkeypatch, capsys) -> None:
+    import click
+
+    from science_tool.commons.cli import prompt_resolve
+    from science_tool.commons.promote import ExistingCanonicalConflict
+
+    conflict = ExistingCanonicalConflict(
+        slug="Foo",
+        kind="paper",
+        field="doi",
+        source_value="10.1/xyz",
+        existing_value=None,
+        existing_version="1.0.0",
+    )
+    monkeypatch.setattr(click, "prompt", lambda *_a, **_k: "k")
+    prompt_resolve(conflict)
+
+    assert "DISCARD" not in capsys.readouterr().out
 
 
 def test_prompt_resolve_abort(monkeypatch) -> None:

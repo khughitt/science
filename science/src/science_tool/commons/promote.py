@@ -37,6 +37,7 @@ from science_model.entity_schema.profile import ProfileComponent
 
 from science_tool.commons.config import check_override_conflict, registry_root_for_id
 from science_tool.commons.datapackage import render_canonical_datapackage_yaml
+from science_tool.commons.promote_body_loss import canonical_body_loss
 from science_tool.commons.errors import (
     CommonsError,
     PromoteCandidateError,
@@ -542,6 +543,10 @@ def plan_promote(
                     # look each diverging key up wherever it lives.
                     merged_src = {**src_fields_wo_identity, **src_body}
                     merged_ex = {**ex_fields_wo_identity, **ex_body}
+                    # Count what keep-existing would destroy BEFORE offering it. The
+                    # count is per-entity, not per-field: [k] discards the whole
+                    # source canonical body, not just the field being adjudicated.
+                    body_loss = canonical_body_loss(src_body, ex_body)
                     for diverging_field in diverging:
                         source_value = merged_src.get(diverging_field)
                         existing_value = merged_ex.get(diverging_field)
@@ -552,6 +557,7 @@ def plan_promote(
                             source_value=source_value,
                             existing_value=existing_value,
                             existing_version=existing_version,
+                            body_loss=body_loss,
                         )
                         resolution = resolve_conflict(conflict)
                         if resolution is not KEEP_EXISTING:

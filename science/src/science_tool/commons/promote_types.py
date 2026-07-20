@@ -16,6 +16,8 @@ from enum import Enum
 from pathlib import Path
 from typing import Any, Callable, Literal, Mapping
 
+from science_tool.commons.promote_body_loss import CanonicalBodyLoss
+
 from science_model.entity_schema import ProfileString
 from science_model.entity_schema.profile import ProfileComponent
 
@@ -124,6 +126,10 @@ class ExistingCanonicalConflict:
     source_value: Any
     existing_value: Any
     existing_version: str
+    # What keep-existing would discard from the source's canonical body, counted
+    # for the WHOLE entity (not just `field`) because that is the unit the
+    # operator's [k]/[a] answer actually decides. fb-2026-07-16-004.
+    body_loss: CanonicalBodyLoss | None = None
 
 
 class _KeepExisting:
