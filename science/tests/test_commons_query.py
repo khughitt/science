@@ -117,6 +117,37 @@ def test_show_warns_on_stale(tmp_path: Path, capsys: pytest.CaptureFixture[str])
     assert "science commons index rebuild" in err
 
 
+def test_stale_warning_fires_at_most_once_per_instance(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """A closure walk issues dozens of `show` calls against one query instance.
+    Warning on every call spams stderr, which is why the graph-load path
+    disabled the warning wholesale (fb-2026-07-16-005). Warn once so the signal
+    survives without the spam."""
+    root = _make_store(tmp_path)
+    (root / "topics" / "new-topic.md").write_text(
+        "---\n"
+        'schema_profile: "science-entity-base/1.0+topic/1.0"\n'
+        'id: "topic:new-topic"\n'
+        'kind: "topic"\n'
+        'title: "New"\n'
+        'version: "1.0.0"\n'
+        'status: "active"\n'
+        'created: "2026-05-13"\n'
+        'updated: "2026-05-13"\n'
+        "ontology_terms: []\n"
+        "tags: []\n"
+        "---\nbody\n",
+        encoding="utf-8",
+    )
+    q = CommonsQuery(root)
+    q.show("paper:Adams2025")
+    q.show("paper:Adams2025")
+    q.find("dataset")
+    err = capsys.readouterr().err
+    assert err.count("stale") == 1
+
+
 def test_show_without_registry_raises_registry_error(tmp_path: Path) -> None:
     """Querying before `index rebuild` must raise CommonsRegistryError,
     not a bare sqlite3.OperationalError from a phantom auto-created DB."""

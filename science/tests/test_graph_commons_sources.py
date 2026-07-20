@@ -473,6 +473,44 @@ def test_orchestrator_loads_referenced_topic_from_commons_fixture(
     assert ref.path == "commons://topics/single-cell-foundation-models.md"
 
 
+def test_orchestrator_warns_when_commons_registry_is_stale(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """A project graph built against a stale commons registry composes an
+    out-of-date snapshot yet reports itself fresh. The graph-load path must
+    surface the staleness (fb-2026-07-16-005), not silence it."""
+    commons_root = _build_commons(tmp_path)
+    # Add a file post-rebuild so the registry is genuinely stale.
+    (commons_root / "topics" / "post-rebuild.md").write_text(
+        "---\n"
+        'schema_profile: "science-entity-base/1.0+topic/1.0"\n'
+        'id: "topic:post-rebuild"\n'
+        'kind: "topic"\n'
+        'title: "Post"\n'
+        'version: "1.0.0"\n'
+        'status: "active"\n'
+        'created: "2026-05-13"\n'
+        'updated: "2026-05-13"\n'
+        "ontology_terms: []\n"
+        "tags: []\n"
+        "---\nbody\n",
+        encoding="utf-8",
+    )
+    monkeypatch.setenv("SCIENCE_COMMONS_ROOT", str(commons_root))
+    # Note: SCIENCE_COMMONS_QUIET_STALE is deliberately NOT set here.
+    project_root = tmp_path / "project"
+    project_root.mkdir()
+
+    _load_commons(
+        project_root,
+        project_entities=[_entity("topic:local", related=["topic:single-cell-foundation-models"])],
+    )
+
+    err = capsys.readouterr().err
+    assert "stale" in err
+    assert "science commons index rebuild" in err
+
+
 def test_orchestrator_skips_referenced_missing_canonical(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     commons_root = _build_commons(tmp_path)
     monkeypatch.setenv("SCIENCE_COMMONS_ROOT", str(commons_root))
