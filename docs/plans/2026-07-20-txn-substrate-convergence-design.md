@@ -1,22 +1,25 @@
 # Transaction substrate convergence — design
 
-**Date:** 2026-07-20 (rev 3)
+**Date:** 2026-07-20 (rev 4)
 **Status:** Approved for implementation planning
 **Scope:** convergence **and** durability foundation — this PR is the durable-batch prerequisite
 **Package:** `science` (`src/science_tool/plan_common.py`, `entity_import.py`, `entity_reservation.py`, `reference_rewrite.py`, tests)
 
-> **Rev 3 (2026-07-20).** A second review found four Critical + three High issues in rev 2. All
-> verified against shipped code. Fixes: the `MAY_HAVE_WRITTEN + neither` row halts again — restartable
-> staging makes the *`post`* row re-runnable, not the *neither* row auto-recoverable (F1); rollback
-> takes the tracker itself, so totality cannot be sliced away (F2); `CREATE_OR_VERIFY` publishes
-> no-clobber and errors on a content mismatch (F3); the `link + unlink` move fallback marks its two
-> occurrences at two seams (F4); durable, callback-bearing creation/mkdir/unlink/replace APIs with
-> exact mode are named (F5); restore is restartable for file **and** dir **and** symlink preimages
-> (F6); the write-surface fixture captures mutation syscalls, not just opens (F7).
+> **Rev 4 (2026-07-20).** A third review found four Critical + two High protocol issues in rev 3. All
+> verified. Fixes: forward-create callbacks fire at the **existence-changing** linearization point —
+> the `O_EXCL` open / the publish rename — not after later fallible work (F1); absent-preimage restore
+> dispatches `rmdir` vs `unlink` by type, so `created-dir` rollback works (F2); the `link + unlink`
+> move fallback makes the destination durable *before* unlinking the source (F3); restore defines
+> entry-time staging-survivor reconciliation, making "second pass converges" implementable (F4);
+> `CREATE_OR_VERIFY`'s existing-blob fast path is separated from its staging precondition (F5); the
+> impossible "unmarked-but-mutated" test is replaced with per-primitive fault injection, and `mark`
+> is monotonic (F6).
 >
-> **Rev 2 (2026-07-20).** First review (7 findings) — added the import transition schema, ownership
-> tracker, no-follow capture + drift gate, restartable restore, `atomic_write_bytes`, and the
-> true-write-surface harness. Scope decision: **full** (fix restore durability here).
+> **Rev 3** — restored the `neither`-halts row, tracker-as-rollback-input, no-clobber
+> `CREATE_OR_VERIFY`, two-seam move fallback, durable named seam APIs, all-type restartable restore,
+> syscall-based write-surface audit. **Rev 2** — import transition schema, ownership tracker,
+> no-follow capture, restartable restore, `atomic_write_bytes`, write-surface harness; scope
+> decision **full**.
 
 ## Why
 
@@ -104,10 +107,17 @@ new `PreconditionRefused` in `plan_common.py`.
 
 ```python
 class MutationOwnership(str, Enum):
-    NOT_WRITTEN = "not-written"            # this transaction never wrote this occurrence
+    NOT_WRITTEN = "not-written"            # this transaction never changed this occurrence
     MAY_HAVE_WRITTEN = "may-have-written"  # completion unknown (crash / conservative default)
-    WRITTEN = "written"                    # landed in the live filesystem
+    WRITTEN = "written"                    # this transaction performed its identity-changing mutation
 ```
+
+**`WRITTEN` means "this transaction performed its existence/identity-changing mutation on this
+occurrence" — not "the occurrence reached `post`."** The action table separates ownership (did we
+touch it) from live state (`pre` / `post` / `neither`). A created file whose content write then
+failed is `WRITTEN` + `neither` → halt, which is correct: we *did* bring the path into existence and
+must own it. This is why the mark fires at the existence-changing point (Piece 4), not after later
+byte writes.
 
 **Totality is over transition occurrences, not paths** — a later batch may touch the same `rel_path`
 in two sequential transitions. The mutable authority is a **tracker built from the authoritative
@@ -117,7 +127,9 @@ transition sequence**:
 class OwnershipTracker:
     def __init__(self, transitions: Sequence[PathTransition]) -> None:
         # every occurrence starts NOT_WRITTEN; the tracker owns the canonical order
-    def mark(self, index: int, ownership: MutationOwnership) -> None: ...  # from on_commit seams
+    def mark(self, index: int, ownership: MutationOwnership) -> None:
+        # MONOTONIC: NOT_WRITTEN -> {MAY_HAVE_WRITTEN, WRITTEN} and MAY_HAVE_WRITTEN -> WRITTEN only.
+        # A downgrade (e.g. WRITTEN -> NOT_WRITTEN) is a programming error and raises.
     def as_executions(self) -> tuple[TransitionExecution, ...]: ...  # frozen readout, inspection only
 
 @dataclass(frozen=True)
@@ -126,15 +138,11 @@ class TransitionExecution:      # a frozen SNAPSHOT of tracker state; a readout,
     ownership: MutationOwnership
 ```
 
-**`rollback_transitions` takes the `OwnershipTracker` itself, never a tuple (F2).** A tuple readout
-can be sliced, duplicated, or reconstructed, so a caller could hand rollback a short list and the
-promised missing/extra check would be impossible. The tracker *is* the authoritative sequence; it
-alone guarantees rollback sees every occurrence exactly once. `as_executions()` remains a frozen
-readout for tests and inspection, but is not accepted as a rollback input. The frozen/"mutate"
-contradiction of rev 1 is resolved: the tracker mutates via `mark(index, …)`; `TransitionExecution`
-is immutable. **The bare-list compatibility branch is removed**; the three in-repo callers
-(`apply_archive_plan`, `apply_supersede_plan`, `apply_import`) migrate explicitly to build and pass a
-tracker.
+**`rollback_transitions` takes the `OwnershipTracker` itself, never a tuple (rev-3 F2).** A tuple
+readout can be sliced or reconstructed, so the tracker is the only object that guarantees rollback
+sees every occurrence exactly once. `as_executions()` is a frozen readout for tests/inspection, not
+an accepted rollback input. `mark` is monotonic (F6): ownership only escalates, so a double-fire or
+an out-of-order mark cannot silently disown a mutated path.
 
 **Rollback action table (the spec):**
 
@@ -148,14 +156,12 @@ tracker.
 | `WRITTEN` | matches `post` | Restore (re-drivable; see Piece 5) |
 | `WRITTEN` | neither | `RollbackHalt` |
 
-**Why `neither` always halts (F1).** Restartable restore (Piece 5) publishes by atomic rename, so an
-interrupted restore leaves the live target matching **either `post`** (before the rename) **or `pre`**
-(after it) — never `neither`. Therefore a live `neither` is not our half-finished restore; it is a
-concurrent modification, corruption, or an unattributed partial write, and re-driving would clobber
-another writer. What restartability buys is that the **`matches post → restore`** rows are safe to run
-again: re-driving repeats an idempotent staged rename. This is consistent with the `import-dst`
-hard-halt rule (Piece 4): a create left in `neither` is likewise a refused third state, not an
-auto-restore.
+**Why `neither` always halts (rev-3 F1).** Restartable restore (Piece 5) publishes by atomic rename,
+so an interrupted restore leaves the live target matching **`post`** (before the rename) or **`pre`**
+(after it) — never `neither`. A live `neither` is therefore not our half-finished restore; it is a
+concurrent modification, corruption, or an unattributed partial, and re-driving would clobber another
+writer. Restartability makes the **`matches post → restore`** rows safe to run again (an idempotent
+staged rename), nothing more. Consistent with the `import-dst` hard-halt rule (Piece 4).
 
 **Who supplies what.** Import: a referrer rejected by its pre-write recheck stays `NOT_WRITTEN`
 (preserving another writer's edit — the `restrict=written` guarantee, now typed); a landed write
@@ -180,8 +186,8 @@ role: Literal["entity-rewrite", "archive-src", "archive-dst", "archive-index",
 
 - `import-dst`: `pre` absent, `post` an existing file whose `content_sha256` == sha256(rendered_text)
   **and whose `mode` is the exact creation mode `0o644`** (a `StateFingerprint` file post requires an
-  exact mode — F5 — so the create must force that mode via `fchmod`, matching its
-  `claim_number_in_dir` peers, not leave it umask-dependent); `postimage` = rendered_text.
+  exact mode — rev-3 F5 — so the create forces that mode via `fchmod`, not umask-dependent);
+  `postimage` = rendered_text.
 - `import-src`: `pre` an existing file (the source), `post` absent; no postimage.
 - `created-dir`: `pre` absent, `post` a dir with exact mode — one transition per missing ancestor of
   the destination, innermost last (mirrors `_missing_ancestor_dirs`).
@@ -197,72 +203,86 @@ unchanged.
 
 ## Piece 4 — mutation seams and durable, callback-bearing APIs
 
-Import performs **no rename**. Each seam is a *durable* operation (F5) that fires `on_commit` at its
-linearization point. Today's sites are not durable: `claim_number_in_dir` uses a plain `open(path,
-"x")` (umask mode, no fsync), `mkdir(parents=True)` cannot report each ancestor, and
-`apply_reference_rewrite` records `written` only *after* `_atomic_replace_text` returns, with no
-parent fsync. Rev 3 names the replacements:
+Import performs **no rename**. Each seam is a *durable* operation that fires `on_commit` at its
+**existence/identity-changing linearization point — before any later fallible work** (F1). Today's
+sites are not durable: `claim_number_in_dir` uses a plain `open(path, "x")` (umask mode, no fsync),
+`mkdir(parents=True)` cannot report each ancestor, and `apply_reference_rewrite` records `written`
+only *after* `_atomic_replace_text` returns, with no parent fsync. Rev 4 names the replacements and
+fixes each callback point:
 
 | Seam | New durable API | Linearization / `on_commit` | Marks |
 | --- | --- | --- | --- |
-| exclusive dest create | `create_exclusive(path, text, mode, *, on_commit)` — `O_EXCL` create → write → `fchmod` exact → `fsync` file → `on_commit` → `fsync` parent | after file is complete on disk, before parent fsync | `import-dst` |
-| each ancestor mkdir | `mkdir_durable(path, mode, *, on_commit)` — one call per ancestor (no `parents=True`) → `chmod` exact → `on_commit` → `fsync` parent | after `mkdir` returns | that `created-dir` |
-| source unlink | `unlink_durable(path, *, on_commit)` — `unlink` → `on_commit` → `fsync` parent | after `unlink` returns | `import-src` |
-| each referrer replace | `apply_reference_rewrite` uses a durable replace (`fsync` file → `os.replace` → `on_commit` → `fsync` parent) firing per edit | after each `os.replace` returns | that `entity-rewrite` |
+| exclusive dest create | `create_exclusive(path, text, mode, *, on_commit)` — `O_EXCL` open → **`on_commit`** → write → `fchmod` exact → `fsync` file → `fsync` parent | **immediately after the `O_EXCL` open**, before write/chmod/fsync (F1) | `import-dst` |
+| each ancestor mkdir | `mkdir_durable(path, mode, *, on_commit)` — mkdir *staging* dir → `chmod` exact → `os.replace(staging, path)` → **`on_commit`** → `fsync` parent | after the publish rename (F1) | that `created-dir` |
+| source unlink | `unlink_durable(path, *, on_commit)` — `unlink` → **`on_commit`** → `fsync` parent | after `unlink` returns | `import-src` |
+| each referrer replace | `apply_reference_rewrite` uses a durable replace (`fsync` file → `os.replace` → **`on_commit`** → `fsync` parent) firing per edit | after each `os.replace` | that `entity-rewrite` |
 
-**`on_commit` contract** (parameter on every durable primitive above, plus `staged_write`,
-`atomic_write_bytes`, and the move primitive):
+**Why the create marks at the open (F1).** The live file exists the instant `O_EXCL` open succeeds.
+If the callback waited until after write/chmod/fsync, a failure there would leave a file on disk
+recorded `NOT_WRITTEN` → rollback "leaves it untouched" → an orphaned partial we created but disown.
+Marking at the open makes a mid-write failure `WRITTEN` + `neither` → the accepted `import-dst`
+hard-halt (owner-approved scope): a create left in the third state is refused, not auto-restored.
 
-- Fires **exactly once**, immediately after the mutation's linearization point and **before any
-  fallible durability work** (the parent-dir fsync).
-- **Performs no I/O and must not raise.** It calls `tracker.mark(index, WRITTEN)` and nothing else.
-- `WRITTEN` means *landed in the live filesystem*, **not** *parent-dir fsync completed*. This is
-  load-bearing: a parent-dir fsync that fails after the linearization point unwinds and re-raises
-  with the mutation already on disk; marking on *return* would record `NOT_WRITTEN` for a mutated
-  path. Firing in the gap keeps ownership correct on that error path.
+**Why the mkdir stages (F1).** A direct `mkdir` then `chmod` on the live path has a window where the
+dir exists with the wrong mode — `WRITTEN` + `neither` → an unacknowledged forward hard-halt. Staging
+the dir, setting its mode, then publishing by atomic rename removes that window: a `chmod` failure is
+on the staging dir (not yet live, not marked), so it is simply re-driven, matching Piece 5's restore.
 
-**The no-clobber move primitive (archive/supersede only) has two commit seams (F4).** `os.rename`
-overwrites a destination that appears after a precheck, so:
+**`on_commit` contract** (every durable primitive above, plus `staged_write`, `atomic_write_bytes`,
+the move primitive): fires **exactly once**, at the existence/identity-changing linearization point,
+**before any fallible durability work**; **performs no I/O and must not raise**; calls
+`tracker.mark(index, WRITTEN)` and nothing else.
+
+**The no-clobber move primitive (archive/supersede only) — two seams, ordered for durability (F3).**
 
 ```python
 def move_no_clobber(src, dst, *, on_commit_dst=None, on_commit_src=None) -> None:
-    """renameat2(RENAME_NOREPLACE): atomic; on success fire BOTH callbacks.
-    Fallback: O_EXCL link(src, dst) -> fire on_commit_dst -> unlink(src) ->
-    fire on_commit_src. Two linearization points, two seams: if link lands but
-    unlink fails, dst is WRITTEN and src is not, and the tracker reflects exactly
-    that. Never overwrites an existing dst. fsync both parents."""
+    """renameat2(RENAME_NOREPLACE): atomic. On success: mark dst, mark src,
+       fsync(dst parent), fsync(src parent).
+    Fallback (no renameat2): the destination link must be durable BEFORE the
+    source is removed, or power loss can keep the deletion without the link:
+        O_EXCL link(src, dst) -> on_commit_dst -> fsync(dst parent)
+        -> unlink(src)        -> on_commit_src -> fsync(src parent)
+    Never overwrites an existing dst."""
 ```
-
-A single callback cannot record the fallback's split truth; `renameat2` fires both because its rename
-is atomic.
-
-**Import dest-create remains a hard-halt seam, not restartable** (owner-approved scope call). A
-SIGKILL mid-`create_exclusive`-write leaves a file that is neither `pre` (absent) nor `post` (full);
-`claim_number_in_dir` already refuses this third state on recovery. The durable-batch layer routes an
-`import-dst` in the neither state to operator discharge, not auto-restore. Restartability applies to
-*restore* (Piece 5), where we own both the preimage bytes and the staging.
 
 ---
 
 ## Piece 5 — restartable, durable restore (all preimage types)
 
 Replace in-place `_materialize` with staged publication so restore is interruptible anywhere and
-re-runnable, for **every** `StateFingerprint` type the substrate can represent — files, dirs, **and
-symlinks** (`_capture` at `entity_import.py:532` preserves symlinks, so restore must too — F6). Every
-type builds the object at a same-directory staging path, then publishes with one atomic rename:
+re-runnable, for **every** `StateFingerprint` type — files, dirs, **and symlinks** (`_capture` at
+`entity_import.py:532` preserves symlinks, so restore must too — rev-3 F6). Each present type builds
+the object at a same-directory staging path, then publishes with one atomic rename:
 
 - **File preimage:** `atomic_write_bytes(target, content, mode=RESTORE, file_mode=pre.mode, …)` —
   staging write → fsync → `os.replace` → parent fsync.
 - **Dir preimage:** `mkdir(staging)` → `chmod(staging, pre.mode)` → `os.replace(staging, target)` →
-  parent fsync. The mode is set on the *staging* dir before the rename, so there is no
-  `mkdir → chmod` window on the live target (rev 2's split bug — F6).
+  parent fsync (mode set on the staging dir before the rename — no live `mkdir → chmod` window).
 - **Symlink preimage:** `os.symlink(pre.symlink_target, staging)` → `os.replace(staging, target)` →
   parent fsync.
-- **Absent preimage (delete):** `unlink` → parent fsync; idempotent under re-drive.
+- **Absent preimage (delete) — dispatch by type (F2):** the live/`post` object may be a directory
+  (a `created-dir` transition is `pre=absent`, `post=dir`, and `unlink` raises on a directory). Use
+  the `_remove_live` dispatch: `rmdir` for a directory, `unlink` for a file/symlink, then parent
+  fsync. Idempotent under re-drive.
 
-A kill before the rename leaves a staging object plus a live target still matching `post`; re-drive
-repeats the rename. A kill after the rename leaves the target matching `pre`; re-drive is a no-op.
-Neither leaves the target in `neither` — which is why Piece 2's `neither` row can safely halt.
+A kill before the rename leaves a staging object and a live target still matching `post`; a kill
+after leaves the target matching `pre`. Neither leaves `neither` — which is why Piece 2's `neither`
+row halts.
+
+**Entry-time staging-survivor reconciliation (F4).** The staging path is stable
+(`staging_path_for(target, token)`), and an `O_EXCL` re-create fails on a survivor exactly as
+`staged_write` does today (`plan_common.py:200`). So restore begins by reconciling any survivor,
+classified with `classify_staging` and the target/preimage fingerprints:
+
+- **complete, attributable** file/dir/symlink staging → publish it (finish the rename), then mark;
+- **attributable file prefix** → remove and recreate the staging (safe: it is our own `O_EXCL` prefix
+  and the target still matches `target_pre`);
+- **staging directory with wrong mode** → finish staging (chmod to `pre.mode`) before publication;
+- **foreign / unattributable** survivor (not our prefix, or target changed under us) → `RollbackHalt`
+  and preserve it as evidence.
+
+This is what makes "a second rollback pass converges" implementable rather than aspirational.
 Directory-entry mutations gain the parent-dir fsync they lack today.
 
 ---
@@ -278,27 +298,29 @@ def atomic_write_bytes(
     mode: WriteMode,                       # REPLACE | CREATE_OR_VERIFY | RESTORE
     file_mode: int | None = None,
     token: str,                            # stable staging token (attribution)
-    target_pre: StateFingerprint,          # expected live state (attribution / no-clobber)
+    target_pre: StateFingerprint,          # expected live state before the staged publish
     on_commit: Callable[[], None] | None = None,
 ) -> None: ...
 ```
 
 - **`REPLACE`** (journal): stage → fsync → `os.replace` (overwrites the prior journal). `file_mode`
-  preserves an existing regular file's mode; required on first create.
-- **`CREATE_OR_VERIFY`** (content-addressed blob): **no-clobber publish (F3).** Stage the bytes, then
-  publish with `renameat2(RENAME_NOREPLACE)` (or `O_EXCL link`); never `os.replace`. On the
-  destination-exists case, read the existing blob and compare: **equal bytes → idempotent success
-  (no write); different bytes → `BlobMismatch`** (a content-addressed path holding different content
-  is a hash collision or corruption, a real error — "errors never" was wrong). `target_pre` must be
-  absent for this mode.
+  preserves an existing regular file's mode; required on first create. `target_pre` is the current
+  journal fingerprint (or absent on first write).
+- **`CREATE_OR_VERIFY`** (content-addressed blob), no-clobber (rev-3 F3), with `target_pre` semantics
+  made truthful (F5):
+  1. **Existing-blob fast path, before any staging or precondition:** if `path` already exists, read
+     it and compare — **equal → idempotent success (no write); different → `BlobMismatch`.**
+  2. Otherwise stage the bytes under `token` with the precondition `target_pre == absent`, then
+     publish with `renameat2(RENAME_NOREPLACE)` (or `O_EXCL link`); never `os.replace`.
+  3. **Racing-creator cleanup:** if publication fails because the destination appeared meanwhile,
+     re-read it and compare (equal → success, different → `BlobMismatch`), then remove our staging.
+     So `target_pre == absent` describes the *staging-publish path only*; the fast path handles the
+     already-present case ahead of it.
 - **`RESTORE`** (Piece 5): atomic replace setting the **preimage's exact mode even when it differs
-  from the live postimage's mode** — rev 1's "preserve existing mode" would block restoring a file
-  whose mode changed.
+  from the live postimage's mode**. `target_pre` is the transition's `post` fingerprint.
 - **Common:** fsync file → publish → parent-dir fsync; `on_commit` per contract; the `token` names a
-  stable `staging_path_for` target and `target_pre` gates survivor attribution exactly as
-  `staged_write` does — a mid-write death leaves an `O_EXCL`-created attributable prefix, cleaned only
-  when it is our prefix *and* the target still matches `target_pre`; reject a dir or symlink at
-  `path`.
+  stable `staging_path_for` target and (outside the fast path) `target_pre` gates survivor
+  attribution exactly as `staged_write` does; reject a dir or symlink at `path`.
 
 ---
 
@@ -330,30 +352,35 @@ only one event class:
 
 ## Load-bearing tests
 
-1. **Post-linearization failure (F4/rev1).** Inject failure into the parent-dir `fsync` after the
+1. **Post-linearization failure (rev-1 F4).** Inject failure into the parent-dir `fsync` after the
    linearization point; assert ownership is already `WRITTEN`, restore succeeds, no path is wrongly
    skipped.
-2. **Restartable restore, all types (F6).** Kill restore mid-publish for a file, a dir, and a symlink
-   preimage; assert the target still matches `post` (staging left behind, target intact) and a second
-   rollback pass converges. Assert an injected `neither` live state **halts**, never re-drives (F1).
+2. **Restartable restore + survivor reconciliation, all types (F4/rev-3 F6).** Kill restore
+   mid-publish for a file, a dir, and a symlink preimage; on re-drive assert the staging survivor is
+   reconciled (complete→published, prefix→recreated, wrong-mode-dir→finished, foreign→halt) and the
+   pass converges. Assert an injected `neither` live state **halts**, never re-drives (rev-3 F1).
 3. **Contended-unwritten (import port).** A referrer changed by another writer and rejected by the
    pre-write recheck stays `NOT_WRITTEN`; rollback leaves it untouched.
-4. **Coherent-capture race (rev1 F5).** Single-fd capture; `O_NOFOLLOW` rejects a swapped-in symlink;
-   non-regular target takes no bytes.
-5. **Ownership totality (F2).** `rollback_transitions` accepts only an `OwnershipTracker`; a tracker
-   with an unmarked-but-mutated occurrence, or an out-of-range `mark`, fails early. A sliced
-   `as_executions()` tuple is not an accepted input (type-level).
-6. **Move fallback split (F4).** With `renameat2` unavailable, kill between `link` and `unlink`;
-   assert `import`/archive dst is `WRITTEN`, src is `NOT_WRITTEN`, and the tracker reflects both.
-7. **Import wire schema (F1/F3/rev1).** A v1 `CohortImportPlan` is rejected with a re-preview error;
+4. **Coherent-capture race (rev-1 F5).** Single-fd capture; `O_NOFOLLOW` rejects a swapped-in
+   symlink; non-regular target takes no bytes.
+5. **Mark-at-linearization + monotonicity (F6).** Per primitive (`create_exclusive`, `mkdir_durable`,
+   `unlink_durable`, durable replace, `move_no_clobber`), inject a fault at the parent-dir fsync
+   (after the linearization point) and assert the occurrence is already `WRITTEN`; assert `mark`
+   rejects a downgrade (`WRITTEN → NOT_WRITTEN`). (The impossible rev-3 "unmarked-but-mutated"
+   assertion is retired — a tracker cannot infer an unreported mutation.)
+6. **Move fallback split + ordering (F3/rev-3 F4).** With `renameat2` unavailable, kill between the
+   `link` and the `unlink`; assert dst is `WRITTEN`, src is `NOT_WRITTEN`, dst-parent was fsync'd
+   before the unlink, and the tracker reflects both.
+7. **Import wire schema (rev-1/rev-3).** A v1 `CohortImportPlan` is rejected with a re-preview error;
    a round-tripped v2 plan carries the exact `import-dst`/`import-src`/`created-dir`/`entity-rewrite`
    set with exact modes; `move_no_clobber` refuses an existing dst.
-8. **`atomic_write_bytes` modes (F3/F6).** `REPLACE` preserves/first-sets mode; `CREATE_OR_VERIFY`
-   no-ops on identical bytes, **raises `BlobMismatch` on differing bytes**, and never `os.replace`s;
-   `RESTORE` sets a differing preimage mode; unsupported target type rejected.
-9. **True-write-surface (F7).** Syscall-audit persistent equivalence for all four families; every
-   mutating syscall is attributable; transient sentinel/staging gone on clean run; kill-boundary
-   survivors classified.
+8. **`atomic_write_bytes` modes (F5/rev-3 F3/F6).** `REPLACE` preserves/first-sets mode;
+   `CREATE_OR_VERIFY` takes the existing-blob fast path (equal→ok, differ→`BlobMismatch`), never
+   `os.replace`s, and on a lost publication race verifies then cleans up its staging; `RESTORE` sets
+   a differing preimage mode; unsupported target type rejected.
+9. **True-write-surface (rev-2 F7).** Syscall-audit persistent equivalence for all four families;
+   every mutating syscall is attributable; transient sentinel/staging gone on clean run;
+   kill-boundary survivors classified.
 
 ## Deliverable boundary
 
