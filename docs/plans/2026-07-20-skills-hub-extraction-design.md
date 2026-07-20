@@ -19,16 +19,22 @@ doctrine they currently share.
 
 `docs/plans/2026-07-19-skills-taxonomy-corpus-matrix.md` records six hubs. This
 phase takes two, because they cannot be separated: `research/SKILL.md` and
-`writing/SKILL.md` state the same doctrine in three places.
+`writing/SKILL.md` state the same doctrine in two places.
 
-| Overlap | `research/SKILL.md` | `writing/SKILL.md` |
+| Research ↔ writing overlap | `research/SKILL.md` | `writing/SKILL.md` |
 |---|---|---|
 | Citation format and source pointers | "Citation Discipline", L161–168 | "Citation Format", L64–73 |
 | Project awareness before writing | "Project Awareness", L170–180 | "Connecting to the Project", L75–87 |
-| Annotation-token vocabulary | — | "Annotation Tokens", L51–62, restating `docs/conventions/annotation-tokens.md` |
 
-Extracting either hub alone would carry these forward as duplicated leaves.
-This phase is therefore a deduplication as much as an extraction.
+Separately, `writing/SKILL.md` duplicates a canonical document rather than a
+sibling hub: "Annotation Tokens", L51–62, restates the four-token vocabulary
+already owned normatively by `docs/conventions/annotation-tokens.md`. That is a
+skill↔canonical-doc duplication, not a hub↔hub one, and it resolves by pointer
+rather than by extraction.
+
+Extracting either hub alone would carry the two shared sections forward as
+duplicated leaves. This phase is therefore a deduplication as much as an
+extraction.
 
 The remaining four hubs (`data/`, `data/expression/`, `pipelines/`, and the
 `statistics/` tighten-don't-extract pass) are deferred. They form a separate
@@ -72,6 +78,18 @@ collapsing it now would make the path decision that phase 3 owns.
 | Evidence Classification | extends existing **`skills/research/proposition-schema.md`** | `normative-reference` |
 | Annotation and Curation (L121–128) | becomes an ordinary router-table row | — |
 
+Public names (frontmatter `name:`), following the existing
+`research-<leaf>` convention set by `research-proposition-schema` and
+`research-annotation-curation-qa`:
+
+| File | `name:` |
+|---|---|
+| `research/literature-evaluation.md` | `research-literature-evaluation` |
+| `research/citation-discipline.md` | `research-citation-discipline` |
+| `research/proposition-graph-reasoning.md` | `research-proposition-graph-reasoning` |
+| `writing/scientific-writing.md` | `scientific-writing` (transferred from the router) |
+| `writing/SKILL.md` | `writing` |
+
 "Annotation and Curation" is routing content, but it is currently a prose
 section. It converts to a row in the router's leaf table rather than being
 retained as prose — a router that keeps prose sections re-acquires the hub
@@ -103,16 +121,19 @@ Template-slot fit is direct rather than forced:
 
 `research/SKILL.md` L106–119 lists the evidence categories in the `_evidence`
 suffixed form. That is the **authoring alias** form, not the canonical
-vocabulary. `science/model/src/science_model/reasoning.py:125–131` defines the
+vocabulary. `science/model/src/science_model/reasoning.py:134–139` defines the
 canonical normalized tokens without the suffix:
 
 `empirical_data` · `benchmark` · `simulation` · `literature` ·
 `expert_judgment` · `negative_result`
 
 The suffixed variants are accepted and stripped by
-`canonical_evidence_type_token`. `negative_result` is a valid-but-unranked
-compatibility member with documented semantic caveats
-(`reasoning.py:120–124`; `docs/user-guide/evidence-lines.md:35–43`).
+`canonical_evidence_type_token`; the canonical/alias relationship is explained
+in `docs/user-guide/evidence-lines.md:57–62`. `negative_result` is a
+valid-but-unranked compatibility member (`reasoning.py:129`) whose semantic
+caveat — it is usually better understood as a result pattern, with the line's
+stance, role, and scope carrying the meaning — is at
+`docs/user-guide/evidence-lines.md:53–55`.
 
 The extension to `proposition-schema.md` must preserve that
 canonical-vs-alias distinction and the `negative_result` caveat. Copying the
@@ -141,13 +162,24 @@ named methodology:
 - `skills/research/research-package-rendering.md:82` — points at
   `../writing/SKILL.md` for "narrative and citation conventions"
 
-Three of these name **two** methodologies that now live in **different**
-leaves, so they split into two links each rather than being repointed at one:
+**All five** name two methodologies that now live in **different** leaves, so
+each splits into two links rather than being repointed at one. Destinations are
+fixed here so the implementation plan cannot guess:
 
-| Reference | "citation discipline" → | "project awareness" / "narrative" → |
+| Reference | Link A | Link B |
 |---|---|---|
-| `openalex.md:145`, `pubmed.md:126` | `../../research/citation-discipline.md` | `../../writing/scientific-writing.md` |
-| `research-package-rendering.md:82` | `./citation-discipline.md` | `../writing/scientific-writing.md` |
+| `proposition-schema.md:9–11` ("source hierarchy, evaluating sources" + "citation discipline") | `./literature-evaluation.md` | `./citation-discipline.md` |
+| `annotation-curation-qa.md:111` ("research-methodology" + "citation-discipline") | `./literature-evaluation.md` | `./citation-discipline.md` |
+| `openalex.md:145` ("citation discipline" + "project-awareness") | `../../research/citation-discipline.md` | `../../writing/scientific-writing.md` |
+| `pubmed.md:126` (same wording) | `../../research/citation-discipline.md` | `../../writing/scientific-writing.md` |
+| `research-package-rendering.md:82` ("narrative" + "citation conventions") | `../writing/scientific-writing.md` | `./citation-discipline.md` |
+
+`annotation-curation-qa.md`'s "research-methodology" resolves to
+**`literature-evaluation.md`**, not the research router. It is a
+`measurement-qa` leaf about extracted claims, literature-derived tables, and
+LLM-assisted curation; what it draws on is source hierarchy and source
+evaluation, which is that leaf's content. Pointing it at the router would
+reproduce the indirection this phase removes.
 
 Links that reference a router *as a router* are correct as-is and must not be
 churned — verified for `skills/data/SKILL.md:187–188` and
@@ -170,29 +202,59 @@ required in `science/src/science_tool/codex_skills.py`, and none is optional:
    by globbing `source_path.parent/*.md` and skipping the literal filename
    `SKILL.md`. With the source at `writing/scientific-writing.md`, the source
    file matches its own glob and is copied as a duplicate resource beside
-   itself. The skip condition must become "skip the source file itself."
+   itself. Add `resource_path == source_path` as a second exclusion —
+   **retain** the existing `SKILL.md` exclusion rather than replacing it. The
+   research companion still sources `SKILL.md` and needs that skip; the two
+   exclusions cover different companions.
 
 3. **Cross-directory leaf links** (`_rewrite_companion_body_links`,
    `codex_skills.py:200–212`). The rewriter matches only
-   `\.\./([a-z0-9-]+)/SKILL\.md`. It has no arm for cross-directory *leaf*
-   links, so `scientific-writing.md`'s link to
-   `../research/citation-discipline.md` would pass through unrewritten and
-   dangle in the generated tree. Leaf links into a companion directory must
-   resolve to that bundled companion — here
-   `../science-research-methodology/citation-discipline.md`, since
-   `citation-discipline.md` is copied as a resource of the research companion.
-   Leaf links into a non-companion directory follow the existing
-   `../../skills/<dir>/<leaf>.md` convention.
+   `\.\./([a-z0-9-]+)/SKILL\.md` — no arm for cross-directory *leaf* links.
+   Two distinct destinations are needed, because a leaf can be either another
+   companion's *source* or a resource *bundled inside* another companion:
+
+   | Link target | Rewrites to | Why |
+   |---|---|---|
+   | Another companion's source leaf, e.g. `../writing/scientific-writing.md` | `../science-scientific-writing/SKILL.md` | that leaf *is* the companion; it is emitted as the companion's `SKILL.md`, not as a resource |
+   | A resource bundled in another companion, e.g. `../research/citation-discipline.md` | `../science-research-methodology/citation-discipline.md` | copied verbatim as a resource beside that companion's `SKILL.md` |
+   | A leaf in a non-companion directory | `../../skills/<dir>/<leaf>.md` | existing convention, unchanged |
+
+   Distinguishing them requires consulting `COMPANION_SKILLS`: a leaf path
+   equal to some companion's `source_path` takes the first form; a leaf merely
+   *inside* a companion's parent directory takes the second.
+
+4. **Rewriting must reach copied resources.** `_rewrite_companion_body_links`
+   is applied only to the companion's root body (`codex_skills.py:183`);
+   resources are transferred by `shutil.copy2` (`codex_skills.py:176`) with no
+   rewriting at all. This is a live defect that this phase's links expose:
+   `research-package-rendering.md` is bundled as a resource of the research
+   companion and links to `../writing/SKILL.md` today — after extraction it
+   links to `../writing/scientific-writing.md`, which would dangle inside the
+   generated tree. Copied Markdown resources must go through the same
+   rewriting as the root body.
 
 `science/tests/test_codex_skills.py:82–99` asserts the current source paths and
 link forms and must be updated in step.
 
 ### Index and doctrine
 
-- `skills/INDEX.md` gains four leaf entries; the `scientific-writing` entry
-  remaps from `skills/writing/SKILL.md` to `skills/writing/scientific-writing.md`.
+- `skills/INDEX.md` — four operations, not one:
+  1. remap the existing `scientific-writing` row from
+     `skills/writing/SKILL.md` to `skills/writing/scientific-writing.md`;
+  2. add a `writing` row for the router at `skills/writing/SKILL.md`;
+  3. add `research-literature-evaluation`, `research-citation-discipline`,
+     and `research-proposition-graph-reasoning`;
+  4. place the three research leaves in the section matching their subject —
+     `Curation and Evidence` already holds `research-annotation-curation-qa`.
 - `skills/meta/skill-taxonomy.md` — record that the router invariant is now
   satisfied for `research/` and `writing/`, and that four hubs remain.
+- `skills/meta/skill-authoring.md:41` — live doctrine, currently false after
+  this phase. It states "6 of 7 current `SKILL.md` files are **hubs**" and
+  names `writing/SKILL.md` as "the most acute — 108 lines of doctrine routing
+  to zero leaves." Both clauses change: four hubs remain, and `writing/` is no
+  longer the acute case. The `Placement (pre-migration)` guidance above it
+  (L36–40) still holds — this phase adds no directory. Regeneration then
+  propagates the change to the Codex copy.
 - `docs/plans/2026-07-19-skills-taxonomy-corpus-matrix.md` — update the
   router-state column for both hubs, the archetype tally, and the
   extraction-candidate list.
@@ -204,12 +266,36 @@ link forms and must be updated in step.
    role stays derived).
 2. Both routers conform to the router profile: no methodology, no prose
    sections beyond the profile's own headings, and a `## Success test`.
-3. `cd science && uv run --frozen pytest` green, including
+3. **Leaf-template conformance, checked itemwise.** `science skills lint`
+   validates metadata and links; it does **not** prove a leaf implements its
+   archetype's slots. A prose move can pass lint while failing the typed-leaf
+   goal, so each new leaf is checked by hand against
+   `skills/meta/templates/<archetype>.md` — every slot present, and each
+   filled with content of the kind the slot names rather than restated prose.
+
+   The binding case is `proposition-graph-reasoning.md`, whose four hardest
+   slots have no direct source text and must be authored from the material:
+
+   | Slot | Must contain |
+   |---|---|
+   | Decision rule or reasoning criteria | the criteria that decide whether a proposition's support is adequate — not a restatement of the triggering condition |
+   | Outcomes | the branches actually reachable (adequate / fragile / contested / unsupported), each with what it licenses |
+   | Required evidence & artifacts | what gets recorded when the discipline fires, naming the entity or field |
+   | Permitted reporting language | the support / dispute / unresolved vocabulary, stated as permitted-vs-forbidden wording |
+
+   The other three: `literature-evaluation.md` and `scientific-writing.md`
+   each need a genuine **Common pitfalls** (pitfall → correction) and
+   **Outputs**, neither of which exists in the hub text;
+   `citation-discipline.md` needs **Invariants**, **Examples**, and
+   **Invalid cases**, which the hub's bullet list does not supply.
+4. `cd science && uv run --frozen pytest` green, including
    `test_committed_codex_skills_match_fresh_generation` against a freshly
    regenerated mirror.
-4. No dangling links: every retargeted reference resolves, in both `skills/`
-   and the generated `codex-skills/` tree.
-5. Corpus count moves 34 → 38 classified leaves; `practice-guide` moves from
+5. No dangling links: every retargeted reference resolves, in both `skills/`
+   and the generated `codex-skills/` tree — including links inside copied
+   resources, which item 4 of the generator changes makes reachable for the
+   first time.
+6. Corpus count moves 34 → 38 classified leaves; `practice-guide` moves from
    1 (a force-fit) to 3, with `literature-evaluation` and `scientific-writing`
    as the two exemplars the eligibility rule named.
 
