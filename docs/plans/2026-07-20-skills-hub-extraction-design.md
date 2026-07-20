@@ -230,8 +230,10 @@ churned — verified for `skills/data/SKILL.md:187–188` and
 ### Codex companion surface
 
 `codex-skills/` is a git-tracked generated mirror guarded by
-`test_committed_codex_skills_match_fresh_generation`. Four changes are
-required in `science/src/science_tool/codex_skills.py`, and none is optional:
+`test_committed_codex_skills_match_fresh_generation`. Five changes are
+required in `science/src/science_tool/codex_skills.py`, and none is optional
+(the fifth — command-body link rebasing — is described under the dangling-link
+defect below):
 
 1. **Companion source mapping** (`codex_skills.py:17–21`). The entry
    `CompanionSkill("scientific-writing", Path("skills/writing/SKILL.md"))`
@@ -385,7 +387,7 @@ link forms and must be updated in step.
    pyright errors in `prose_lint.py` at base `1feb088c`, in files this phase
    does not touch; the requirement is no *new* findings.
 6. No dangling links **anywhere in the generated tree**, not only in files
-   this phase touches: the six pre-existing danglers listed above must be
+   this phase touches: the nine pre-existing danglers listed above must be
    gone. Verified by resolving every relative link in `codex-skills/` against
    the filesystem.
 7. A link from the research router to `../writing/SKILL.md` resolves, in the

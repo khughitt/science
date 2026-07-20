@@ -4,7 +4,7 @@
 
 **Goal:** Restore the router invariant for `skills/research/` and `skills/writing/` by extracting their embedded doctrine into four typed leaves, deduplicating the doctrine they share, and fixing the Codex generator so the resulting cross-directory links resolve correctly.
 
-**Architecture:** Five sequential tasks. Task 1 is a pure toolkit fix that makes correct link rewriting possible (and closes six pre-existing danglers). Tasks 2 and 3 extract the two hubs — research first, because `writing/scientific-writing.md` links to a research leaf. Task 4 lands the cross-subject retargets and doctrine updates that need both hubs done. Task 5 is the acceptance sweep.
+**Architecture:** Five sequential tasks. Task 1 is a pure toolkit fix that makes correct link rewriting possible (and closes nine pre-existing danglers). Tasks 2 and 3 extract the two hubs — research first, because `writing/scientific-writing.md` links to a research leaf. Task 4 lands the cross-subject retargets and doctrine updates that need both hubs done. Task 5 is the acceptance sweep.
 
 **Tech Stack:** Python 3.13, pytest, uv, ruff, pyright. Markdown skill corpus under `skills/`, generated mirror under `codex-skills/`.
 
@@ -43,10 +43,10 @@ git show 1feb088c:skills/writing/SKILL.md  | sed -n '24,40p'     # Voice/Tone + 
 
 ### Task 1: Generator — classify links by emitted artifacts, rewrite copied resources
 
-Pure toolkit change. No `skills/` edits. Closes six pre-existing dangling links, then adds a guard so they cannot return. Sweep-then-ratchet: fix first, ratchet second.
+Pure toolkit change. No `skills/` edits. Closes nine pre-existing dangling links — six in copied companion resources, three in command bodies — then adds a guard so they cannot return. Sweep-then-ratchet: fix first, ratchet second.
 
 **Files:**
-- Modify: `science/src/science_tool/codex_skills.py:160-212`
+- Modify: `science/src/science_tool/codex_skills.py` — the companion path (`160-212`) and `_build_skill_text` (the command-body path)
 - Test: `science/tests/test_codex_skills.py`
 - Regenerate: `codex-skills/`
 
@@ -54,6 +54,7 @@ Pure toolkit change. No `skills/` edits. Closes six pre-existing dangling links,
 - Produces: `_resource_paths(source_path: Path) -> list[Path]` — the single predicate for the emitted resource set, used by both the copy loop and the rewriter.
 - Produces: `_companion_link_targets(repo_root: Path) -> dict[Path, str]` — repo-relative `skills/...` path → emitted location fragment.
 - Produces: `_rewrite_companion_body_links(body: str, repo_root: Path) -> str` — **signature change**, gains `repo_root`.
+- Produces: `_rebase_command_body_links(body: str) -> str` — re-depths a command body's relative links; called from `_build_skill_text`, which is modified to invoke it.
 
 - [ ] **Step 1: Write the failing tests**
 
@@ -69,11 +70,13 @@ def _generate(tmp_path: Path) -> Path:
 def _resolve_generated_link(source: Path, target: str, generated_root: Path) -> Path:
     """Resolve a link as it would resolve in the committed layout.
 
-    `codex-skills/` sits at the repo root, so a `../../skills/...` fallback
-    points into the real corpus. Under a tmp_path generated tree that fallback
-    would escape into the temporary directory, so re-root it at ROOT.
+    `codex-skills/` sits at the repo root, so any `../../...` fallback — into
+    `skills/`, `docs/`, or elsewhere — points into the real repo. Under a
+    tmp_path generated tree that fallback would escape into the temporary
+    directory, so re-root every `../../` link at ROOT. Links that stay inside
+    the generated tree (`../science-*/...`) resolve against the source's parent.
     """
-    if target.startswith("../../skills/"):
+    if target.startswith("../../"):
         return ROOT / target[len("../../") :]
     return source.parent / target
 
@@ -221,15 +224,9 @@ Call it in `_build_skill_text` alongside the existing rewrites, after
     rewritten_body = _rebase_command_body_links(rewritten_body)
 ```
 
-Verify the three command links afterwards:
-
-```bash
-(cd "$WT" && grep -rn '](\.\./\.\./' codex-skills/science-health/SKILL.md \
-  codex-skills/science-plan-analysis/SKILL.md codex-skills/science-pre-register/SKILL.md)
-```
-
-Expected: `../../docs/user-guide/evidence-lines.md` once and
-`../../skills/statistics/estimator-certification.md` twice.
+The three command links are verified against the regenerated mirror in Step 4,
+after `generate_codex_skills.py` runs — grepping `codex-skills/` here would read
+the stale committed files, which still carry the pre-fix depth.
 
 - [ ] **Step 4: Verify green, regenerate, verify suite**
 
@@ -237,11 +234,13 @@ Expected: `../../docs/user-guide/evidence-lines.md` once and
 (cd "$WT/science" && uv run --frozen pytest tests/test_codex_skills.py -v)
 (cd "$WT/science" && uv run python ../scripts/generate_codex_skills.py)
 (cd "$WT" && git diff --stat codex-skills/)
+(cd "$WT" && grep -rn '](\.\./\.\./' codex-skills/science-health/SKILL.md \
+  codex-skills/science-plan-analysis/SKILL.md codex-skills/science-pre-register/SKILL.md)
 (cd "$WT/science" && uv run --frozen pytest -q >/dev/null 2>&1; echo "PYTEST_EXIT=$?")
 (cd "$WT/science" && uv run ruff check; uv run pyright)
 ```
 
-Expected: all codex tests PASS; six files change under `codex-skills/` — three under `science-research-methodology/` (companion resources) and `science-health/`, `science-plan-analysis/`, `science-pre-register/` (command bodies); `PYTEST_EXIT=0`; only the 4 known ruff and 7 known pyright errors.
+Expected: all codex tests PASS; six files change under `codex-skills/` — three under `science-research-methodology/` (companion resources) and `science-health/`, `science-plan-analysis/`, `science-pre-register/` (command bodies); the grep shows `../../docs/user-guide/evidence-lines.md` once and `../../skills/statistics/estimator-certification.md` twice, against the freshly regenerated mirror; `PYTEST_EXIT=0`; only the 4 known ruff and 7 known pyright errors.
 
 - [ ] **Step 5: Commit**
 
