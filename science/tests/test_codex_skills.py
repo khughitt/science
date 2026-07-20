@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 from pathlib import Path
 
 from science_tool.codex_skills import (
@@ -797,3 +798,55 @@ def test_committed_codex_skills_match_fresh_generation(tmp_path: Path) -> None:
     }
 
     assert actual == expected
+
+
+def _generate(tmp_path: Path) -> Path:
+    generated_root = tmp_path / "codex-skills"
+    generate_codex_skills(ROOT, generated_root)
+    return generated_root
+
+
+def _resolve_generated_link(source: Path, target: str, generated_root: Path) -> Path:
+    """Resolve a link as it would resolve in the committed layout.
+
+    `codex-skills/` sits at the repo root, so any `../../...` fallback — into
+    `skills/`, `docs/`, or elsewhere — points into the real repo. Under a
+    tmp_path generated tree that fallback would escape into the temporary
+    directory, so re-root every `../../` link at ROOT. Links that stay inside
+    the generated tree (`../science-*/...`) resolve against the source's parent.
+    """
+    if target.startswith("../../"):
+        return ROOT / target[len("../../") :]
+    return source.parent / target
+
+
+def _dangling_links(generated_root: Path) -> list[str]:
+    dangling: list[str] = []
+    for path in sorted(generated_root.rglob("*.md")):
+        for raw in re.findall(r"]\((\.\.?/[^)]+)\)", path.read_text(encoding="utf-8")):
+            target = raw.split("#", 1)[0]
+            if not target:
+                continue
+            if not _resolve_generated_link(path, target, generated_root).exists():
+                dangling.append(f"{path.relative_to(generated_root)} -> {raw}")
+    return dangling
+
+
+def test_rewrites_link_to_companion_source_leaf(tmp_path: Path) -> None:
+    rendering = (_generate(tmp_path) / "science-research-methodology" / "research-package-rendering.md").read_text(
+        encoding="utf-8"
+    )
+    assert "../science-scientific-writing/SKILL.md" in rendering
+    assert "](../writing/SKILL.md)" not in rendering
+
+
+def test_rewrites_link_to_non_companion_leaf(tmp_path: Path) -> None:
+    curation = (_generate(tmp_path) / "science-research-methodology" / "annotation-curation-qa.md").read_text(
+        encoding="utf-8"
+    )
+    assert "../../skills/statistics/sensitivity-arbitration.md" in curation
+    assert "](../statistics/sensitivity-arbitration.md)" not in curation
+
+
+def test_no_dangling_relative_links_in_generated_tree(tmp_path: Path) -> None:
+    assert _dangling_links(_generate(tmp_path)) == []

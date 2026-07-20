@@ -287,7 +287,7 @@ the profile's smoothness structure.
 For **every validation probe** you plan, write the answer to: *what result would make this probe
 fail?* A probe with no such answer is evidence-shaped ceremony — it will discharge the obligation
 without ever having tested it. See
-[`statistics-estimator-certification`](../skills/statistics/estimator-certification.md).
+[`statistics-estimator-certification`](../../skills/statistics/estimator-certification.md).
 
 In `Per-Input Data Profile`, use one row per input artifact or dataset and include:
 
