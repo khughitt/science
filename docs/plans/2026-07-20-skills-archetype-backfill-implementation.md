@@ -322,6 +322,20 @@ cd science && uv run science skills lint --root ../skills; echo "exit=$?"
 ```
 Expected: `exit=0`. A nonzero exit means a value is misspelled or an insertion landed outside the frontmatter block — fix the file, never the check.
 
+- [ ] **Step 3b: Remove the red-window scaffolding (REQUIRED — the window is now closed)**
+
+Task 2 left two temporary constructs in `science/tests/skills_lint/test_provenance_coverage_repo.py`. Both must go, or the repo permanently loses ERROR-detection for `missing-archetype` in its only automated gate.
+
+1. Delete the `@pytest.mark.xfail(strict=True, reason="Task 2->3 red window: ...")` decorator on `test_corpus_has_no_error_severity_findings`. Leave the function body untouched — it is already the original unfiltered assertion. Because the marker is `strict`, leaving it in place after the backfill makes the suite FAIL with XPASS, so this step is mechanically forced rather than trusted to memory.
+2. Delete `test_corpus_missing_archetype_count_is_known` in full (it asserts `len(missing) == 34`, which is now 0).
+3. Drop the `import pytest` if nothing else in the file uses it.
+
+Verify:
+```bash
+cd science && uv run --frozen pytest tests/skills_lint/test_provenance_coverage_repo.py -v
+```
+Expected: **2 passed, 0 xfailed, 0 xpassed**. Seeing `xpassed` means the marker is still there; seeing `xfailed` means the backfill did not actually close the corpus.
+
 - [ ] **Step 4: Regenerate the Codex mirror**
 
 The `research-methodology` companion bundle copies its sibling `research/*.md` files, so backfilling those leaves stales the mirror:
