@@ -148,7 +148,10 @@ class _CommonsClosureCollector:
         commons_root = resolve_commons_root()
         if not commons_root.is_dir():
             raise CommonsRootNotFoundError(commons_root)
-        query = CommonsQuery(commons_root, warn_stale=False)
+        # A stale commons registry silently composes an out-of-date snapshot into the
+        # project graph while `validate` reports green. Warn (once, via the query's
+        # own warn-once guard) rather than silence it (fb-2026-07-16-005).
+        query = CommonsQuery(commons_root)
 
         contributions: list[SourceContribution] = []
         field_policies: dict[tuple[str, str], dict[str, MergePolicy]] = {}

@@ -36,6 +36,7 @@ class CommonsQuery:
         self._adapter = CommonsEntityAdapter(root)
         self._builder = RegistryBuilder(root, self._adapter)
         self._warn_stale = warn_stale
+        self._stale_checked = False
 
     def show(self, canonical_id: str) -> CommonsEntityRecord:
         self._require_registry()
@@ -194,8 +195,14 @@ class CommonsQuery:
         )
 
     def _warn_if_stale(self) -> None:
-        if not self._warn_stale:
+        # Check staleness at most once per instance. A closure walk issues many queries
+        # against one instance; repeating the (glob+stat) staleness scan and warning per
+        # call is what drove the graph-load path to suppress the signal entirely
+        # (fb-2026-07-16-005). Mark checked before the scan so a fresh commons pays the
+        # cost once, not per query.
+        if not self._warn_stale or self._stale_checked:
             return
+        self._stale_checked = True
         if os.environ.get("SCIENCE_COMMONS_QUIET_STALE"):
             return
         if self._builder.is_stale():
