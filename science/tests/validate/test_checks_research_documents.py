@@ -174,7 +174,7 @@ def test_prereg_warns_for_missing_sections_and_required_frontmatter_fields(tmp_p
     prereg_dir = tmp_path / "entities" / "pre-registrations"
     prereg_dir.mkdir(parents=True)
     prereg_dir.joinpath("0001-a.md").write_text(
-        "---\ntype: 'pre-registration'\n---\n## Hypotheses Under Test\n",
+        "---\nkind: 'pre-registration'\n---\n## Hypotheses Under Test\n",
         encoding="utf-8",
     )
     prereg_dir.joinpath("0002-b.md").write_text(
@@ -200,14 +200,47 @@ def test_prereg_warns_for_missing_sections_and_required_frontmatter_fields(tmp_p
     assert "Pre-registration entities/pre-registrations/0001-a.md missing section: Decision Criteria" in messages
     assert "Pre-registration entities/pre-registrations/0001-a.md missing section: Null Result Plan" in messages
     assert (
-        "entities/pre-registrations/0001-a.md type 'pre-registration' should declare a 'committed:' date in frontmatter"
+        "entities/pre-registrations/0001-a.md kind 'pre-registration' should declare a 'committed:' date in frontmatter"
         in messages
     )
     assert (
-        "entities/pre-registrations/0001-a.md type 'pre-registration' should declare a 'spec:' field (empty string is OK if no paired design doc)"
+        "entities/pre-registrations/0001-a.md kind 'pre-registration' should declare a 'spec:' field (empty string is OK if no paired design doc)"
         in messages
     )
     assert not any(message.startswith("Pre-registration entities/pre-registrations/0002-b.md") for message in messages)
+
+
+def test_prereg_frontmatter_checks_fire_on_the_kind_the_template_writes(tmp_path: Path) -> None:
+    """The template writes `kind:`; the check keyed on `type:`, so it never fired.
+
+    All 27 pre-registrations in the corpus declare `kind: pre-registration` and
+    none declare `type:`, so the committed/spec checks below had never run on a
+    single real document.
+    """
+    from science_tool.validate.checks.prereg import check_prereg
+
+    ctx = _ctx(tmp_path)
+    prereg_dir = tmp_path / "entities" / "pre-registrations"
+    prereg_dir.mkdir(parents=True)
+    prereg_dir.joinpath("0001-a.md").write_text(
+        "\n".join(
+            [
+                "---",
+                "kind: pre-registration",
+                "---",
+                "## Hypotheses Under Test",
+                "## Expected Outcomes",
+                "## Decision Criteria",
+                "## Null Result Plan",
+            ]
+        ),
+        encoding="utf-8",
+    )
+
+    messages = _messages(check_prereg(ctx))
+
+    assert any("should declare a 'committed:' date" in message for message in messages)
+    assert any("should declare a 'spec:' field" in message for message in messages)
 
 
 def test_hypothesis_comparisons_warn_for_missing_sections(tmp_path: Path) -> None:

@@ -67,6 +67,24 @@ _TIER_RULES: dict[str, frozenset[str]] = {
             "hypothesis.status-vocabulary",
             "hypothesis.dangling-lineage",
             "hypothesis.unbacked-inverse",
+            #
+            # A pre-registration whose vehicle is not durable is not frozen (fb-2026-07-11-024).
+            # These four gate from the start, which is safe because the instrument was certified
+            # against the corpus before being gated: the only projects holding pre-registrations
+            # produce ZERO findings on all four rules today, so gating them fails no existing
+            # build. They are ungated only by a project that acquires the defect.
+            "prereg.vehicle-gitignored",
+            "prereg.vehicle-untracked",
+            "prereg.vehicle-hash-drift",
+            "prereg.vehicle-missing",
+            "prereg.vehicle-uncontent-addressed",
+            #
+            # `prereg.vehicle-undeclared` is deliberately UNGATED: 14 of the corpus's committed
+            # pre-registrations predate the `vehicles:` field, and an ERROR would be an
+            # uncertified instrument failing real builds for a contract they could not have met.
+            # It is a WARN with its own ratchet, to advance once the corpus is migrated.
+            # `prereg.vehicle-unverifiable` is likewise ungated: it reports that durability could
+            # not be checked, which is not itself a defect in the document.
         }
     ),
 }

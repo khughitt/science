@@ -6,6 +6,12 @@ status: "committed"
 committed: "{{YYYY-MM-DD}}"
 spec: ""  # optional path to design/spec doc, e.g. entities/design/<NNNN>-<slug>-design.md
 related: []  # hypothesis IDs, inquiry slugs, or task IDs this pre-reg covers
+vehicles: []  # the data this pre-reg freezes; each entry needs BOTH a path and a sha256:
+              #   - path: "inputs/graph-export.json"
+              #     sha256: "<64-hex>"
+              # A path alone freezes nothing. `science validate` fails closed on a vehicle
+              # that is gitignored, untracked, or whose content has drifted from its hash.
+              # Leave empty ONLY in data-gated mode (see the Vehicle-Admissibility Gate).
 created: "{{YYYY-MM-DD}}"
 updated: "{{YYYY-MM-DD}}"
 _template:
@@ -17,6 +23,7 @@ _template:
     committed: { from: created }
     spec: { default: "" }
     related: { from: related }
+    vehicles: { default: [] }
     created: { from: created }
     updated: { from: updated }
   sections:
@@ -57,6 +64,10 @@ one top-level mode when rows differ. Instead, link to that analysis's Execution-
 |---|---|---|---|---|---|
 | A1 | hypothesis:H01 or inquiry:<slug> | runnable-now | confirmatory | Execution-Readiness Gate / G1 | result carries confirmatory weight only if gate passes |
 | A2 | hypothesis:H02 or inquiry:<slug> | data-gated | confirmatory | Vehicle-Admissibility Gate / G2 | `[?]` inconclusive-for-coverage until admissible vehicle exists |
+
+Name each row's vehicle by the `vehicles:` frontmatter entry that freezes it, not by a
+bare path. A path is a location, not a record: if the file is a build product, running
+the registered analysis can regenerate it and destroy what was registered.
 -->
 
 ## Expected Outcomes
@@ -189,6 +200,8 @@ all readiness checks are already covered by the main Decision Criteria.
 execution is deferred until a suitable data vehicle is admissible. Omit otherwise.
 
 - State the standing verdict while gated, e.g. `[?] inconclusive-for-coverage`.
+- While gated, `vehicles:` is legitimately empty -- this section is what declares that.
+  Once a vehicle IS admitted, record it in `vehicles:` with its sha256 before executing.
 - Enumerate the substrate-verification preconditions (G1, G2, … ) that a candidate
   dataset/vehicle MUST satisfy before this pre-reg's confirmatory analysis may run.
 - These G-gates ARE the "Blocking Checks Before Execution" that /science:plan-analysis
