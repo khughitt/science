@@ -433,10 +433,6 @@ def test_depth_list_is_invalid_not_crash(tmp_path: Path) -> None:
     assert any(i.kind == "invalid-field" and i.field == "depth" for i in check_frontmatter(_write_leaf(tmp_path, "depth: [standard]\n")))
 
 
-def test_archetype_absent_is_ok(tmp_path: Path) -> None:
-    assert [i for i in check_frontmatter(_write_leaf(tmp_path, "")) if i.field == "archetype"] == []
-
-
 def test_archetype_valid_is_ok(tmp_path: Path) -> None:
     assert [i for i in check_frontmatter(_write_leaf(tmp_path, "archetype: measurement-qa\n")) if i.field == "archetype"] == []
 
@@ -472,3 +468,40 @@ def test_archetype_on_router_is_invalid(tmp_path: Path) -> None:
 def test_archetype_on_index_is_invalid(tmp_path: Path) -> None:
     p = _write_named(tmp_path, "INDEX.md", "archetype: normative-reference\n")
     assert any(i.kind == "invalid-field" and i.field == "archetype" for i in check_frontmatter(p))
+
+
+def test_leaf_without_archetype_is_error(tmp_path: Path) -> None:
+    issues = [i for i in check_frontmatter(_write_leaf(tmp_path, "")) if i.kind == "missing-archetype"]
+    assert len(issues) == 1
+    assert issues[0].severity == "error"
+    assert issues[0].field == "archetype"
+
+
+def test_leaf_with_archetype_has_no_missing_archetype(tmp_path: Path) -> None:
+    path = _write_leaf(tmp_path, "archetype: measurement-qa\n")
+    assert [i for i in check_frontmatter(path) if i.kind == "missing-archetype"] == []
+
+
+def test_router_without_archetype_is_exempt(tmp_path: Path) -> None:
+    path = tmp_path / "SKILL.md"
+    path.write_text(
+        "---\nname: x\ndescription: y\nprovenance: internal\n---\n\n## Companion Skills\n",
+        encoding="utf-8",
+    )
+    assert [i for i in check_frontmatter(path) if i.kind == "missing-archetype"] == []
+
+
+def test_index_without_archetype_is_exempt(tmp_path: Path) -> None:
+    path = tmp_path / "INDEX.md"
+    path.write_text(
+        "---\nname: x\ndescription: y\n---\n\n## Companion Skills\n",
+        encoding="utf-8",
+    )
+    assert [i for i in check_frontmatter(path) if i.kind == "missing-archetype"] == []
+
+
+def test_broken_yaml_does_not_cascade_to_missing_archetype(tmp_path: Path) -> None:
+    path = tmp_path / "leaf.md"
+    path.write_text("---\nname: [unclosed\n---\n\n## Companion Skills\n", encoding="utf-8")
+    kinds = {i.kind for i in check_frontmatter(path)}
+    assert kinds == {"invalid-yaml"}
