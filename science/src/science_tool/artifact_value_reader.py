@@ -69,13 +69,17 @@ def resolve_artifact(
     resolved_candidates: dict[Path, Path] = {}
     for base in (project_root, data_root):
         raw = base / ref
-        if not raw.exists():
-            continue
         try:
+            if not raw.exists():
+                continue
             real = raw.resolve(strict=True)
         except OSError:
-            # Intentional fail-closed swallow: resolution can raise for a
-            # broken symlink, a permission error, or a same-instant removal.
+            # Intentional fail-closed swallow: probing or resolving can raise
+            # for a broken symlink, a permission error, a same-instant removal,
+            # or a ref that overruns NAME_MAX/PATH_MAX. `Path.exists()` swallows
+            # only ENOENT/ENOTDIR/EBADF/ELOOP (pathlib._ignore_error), so it
+            # must be inside this guard too -- an over-length ref otherwise
+            # raises ENAMETOOLONG straight through the caller.
             # Treat it as "missing/inaccessible under this root" and try the
             # next root, rather than surfacing the exception.
             continue
