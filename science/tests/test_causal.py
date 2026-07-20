@@ -32,6 +32,31 @@ def _build_compiled_inquiry_graph(graph_path: Path, slug: str, **inquiry: object
     build_inquiry_graph(graph_path, slug=slug, normalize_slug=True, **inquiry)  # type: ignore[arg-type]
 
 
+def _build_production_inquiry_graph(graph_path: Path, slug: str, **inquiry: object) -> None:
+    """Compile one inquiry the way production does — no slug normalization.
+
+    ``inquiry_compile.inquiry_uri`` derives the named graph from the raw local part
+    of the patch-definition id, so a hyphenated slug stays hyphenated. Tests that
+    assert reader/writer agreement must use this, not the ``normalize_slug=True``
+    wrapper above (which encodes the reader's convention and so cannot detect a
+    mismatch).
+    """
+    build_inquiry_graph(graph_path, slug=slug, normalize_slug=False, **inquiry)  # type: ignore[arg-type]
+
+
+def _model_edges(script: str) -> str:
+    """The edge list inside ``DiscreteBayesianNetwork([...])``.
+
+    Assertions must target this rather than the whole script: the generated
+    trailing ``get_all_backdoor_adjustment_sets("x", "y")`` call contains the same
+    ``("x", "y")`` substring an edge does, so a whole-script containment check
+    passes even on an empty model.
+    """
+    _, _, rest = script.partition("DiscreteBayesianNetwork([")
+    body, _, _ = rest.partition("])")
+    return body
+
+
 @pytest.fixture
 def graph_path(tmp_path: Path) -> Path:
     """Fresh graph file for testing."""
@@ -422,7 +447,62 @@ class TestExportPgmpy:
 
         script = export_pgmpy_script(graph_path, "patch-dag")
 
-        assert '("x", "y")' in script
+        assert '("x", "y")' in _model_edges(script)
+
+    def test_export_pgmpy_resolves_a_hyphenated_inquiry_slug(self, graph_path: Path) -> None:
+        """A hyphenated slug must resolve: the writer preserves hyphens, so must the reader.
+
+        Regression for fb-2026-07-19-001 — the exporter normalized hyphens to
+        underscores, resolved an empty named graph, and emitted an empty model.
+        """
+        _build_production_inquiry_graph(
+            graph_path,
+            slug="patch-dag",
+            profile="causal",
+            boundary_roles=[
+                {"ref": "concept:x", "role": "BoundaryIn"},
+                {"ref": "concept:y", "role": "BoundaryOut"},
+            ],
+            treatment="concept:x",
+            outcome="concept:y",
+            flow_edges=[
+                {"subject": "concept:x", "predicate": "causes", "object": "concept:y"},
+            ],
+        )
+
+        script = export_pgmpy_script(graph_path, "patch-dag")
+
+        assert '("x", "y")' in _model_edges(script)
+
+
+    def test_identifiability_never_passes_without_causal_edges(self, graph_path: Path) -> None:
+        """A causal inquiry with zero causal edges must never report identifiability as `pass`.
+
+        Regression guard for the doctrine in `validate_inquiry_dataset`'s docstring:
+        an empty subgraph is not evidence of validity, it is evidence the check could
+        not run. Asserted as an invariant over both pgmpy configurations — without
+        pgmpy the checks skip as "not installed", with it they skip as "No causal
+        edges found" — so the guard holds whether or not the optional dep is present.
+        Verified against pgmpy 2026-07-20; see fb-2026-07-19-003.
+        """
+        _build_production_inquiry_graph(
+            graph_path,
+            slug="empty-dag",
+            profile="causal",
+            boundary_roles=[
+                {"ref": "concept:x", "role": "BoundaryIn"},
+                {"ref": "concept:y", "role": "BoundaryOut"},
+            ],
+            treatment="concept:x",
+            outcome="concept:y",
+        )
+
+        result = validate_inquiry(graph_path, "empty-dag")
+
+        checks = {row["check"]: row for row in result.rows if row["check"] in {"identifiability", "adjustment_sets"}}
+        assert checks, "identifiability/adjustment_sets checks did not run at all"
+        for name, row in checks.items():
+            assert row["status"] != "pass", f"{name} reported pass over an edgeless model: {row['message']!r}"
 
 
 class TestExportChirho:

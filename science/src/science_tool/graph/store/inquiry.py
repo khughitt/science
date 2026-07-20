@@ -89,9 +89,18 @@ def list_inquiries_dataset(dataset: Dataset) -> InstrumentResult[dict[str, str]]
     return InstrumentResult.from_rows(results)
 
 
-def get_inquiry(graph_path: Path, slug: str) -> InquiryInfo:
-    """Get detailed information about a specific inquiry, including boundaries and edges."""
-    dataset = _load_dataset(graph_path)
+def resolve_inquiry(dataset: Dataset, slug: str) -> tuple[URIRef, Graph]:
+    """Resolve a slug to its (inquiry_uri, home_graph) by discovery.
+
+    The inquiry URI must never be reconstructed from the slug: the compiler
+    (`inquiry_compile.inquiry_uri`) preserves hyphens while `_slug` rewrites them
+    to underscores, so a reconstructing reader silently resolves an empty graph
+    for every hyphenated slug. Discovery is the single supported resolution path
+    — see fb-2026-07-19-001.
+
+    Raises:
+        ValueError: If no inquiry with that slug exists.
+    """
     inquiries = _discover_inquiries(dataset)
 
     requested = slug
@@ -107,8 +116,14 @@ def get_inquiry(graph_path: Path, slug: str) -> InquiryInfo:
         match = next((value for cand, value in inquiries.items() if _slug(cand) == normalized), None)
     if match is None:
         raise ValueError(f"Inquiry 'inquiry/{requested}' does not exist")
+    return match
 
-    inquiry_uri, home_graph = match
+
+def get_inquiry(graph_path: Path, slug: str) -> InquiryInfo:
+    """Get detailed information about a specific inquiry, including boundaries and edges."""
+    dataset = _load_dataset(graph_path)
+
+    inquiry_uri, home_graph = resolve_inquiry(dataset, slug)
     actual_slug = str(inquiry_uri)[len(str(PROJECT_NS) + "inquiry/") :]
 
     label = _inquiry_property(dataset, inquiry_uri, SKOS.prefLabel)
