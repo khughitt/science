@@ -14,7 +14,8 @@ Do not load every leaf "just in case"; that defeats progressive disclosure.
 - `data-management`: `skills/data/SKILL.md`
 - `statistics`: `skills/statistics/SKILL.md`
 - `research-methodology`: `skills/research/SKILL.md`
-- `scientific-writing`: `skills/writing/SKILL.md`
+- `scientific-writing`: `skills/writing/scientific-writing.md`
+- `writing`: `skills/writing/SKILL.md`
 
 ## Meta / Skill Authoring
 
@@ -66,6 +67,9 @@ Do not load every leaf "just in case"; that defeats progressive disclosure.
 ## Curation and Evidence
 
 - `research-annotation-curation-qa`: `skills/research/annotation-curation-qa.md`
+- `research-literature-evaluation`: `skills/research/literature-evaluation.md`
+- `research-citation-discipline`: `skills/research/citation-discipline.md`
+- `research-proposition-graph-reasoning`: `skills/research/proposition-graph-reasoning.md`
 
 ## Execution / Orchestration
 

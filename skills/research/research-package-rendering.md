@@ -79,5 +79,6 @@ The natural-systems project (`src/research/`) provides a working TypeScript/Reac
 ## Companion Skills
 
 - [`research-package-spec.md`](research-package-spec.md) - package schema, cell types, and workflow metadata.
-- [`../writing/scientific-writing.md`](../writing/scientific-writing.md) - narrative and citation conventions for rendered prose.
+- [`../writing/scientific-writing.md`](../writing/scientific-writing.md) - narrative conventions for rendered prose.
+- [`citation-discipline.md`](citation-discipline.md) - citation conventions for rendered prose.
 - [`../pipelines/snakemake.md`](../pipelines/snakemake.md) - workflow rule patterns that build research packages.

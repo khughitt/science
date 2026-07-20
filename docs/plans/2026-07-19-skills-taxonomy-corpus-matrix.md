@@ -7,7 +7,7 @@
 > backfill + hub extraction). Classification is by each skill's **promised operation**,
 > not its directory or name.
 
-Corpus as of 2026-07-19: **42 files** — 1 index, 7 routers (6 hubs, 1 pure), 34 leaves.
+Corpus as of 2026-07-19: **46 files** — 1 index, 7 routers (4 hubs, 3 pure), 38 leaves.
 
 ## Matrix
 
@@ -35,10 +35,13 @@ Corpus as of 2026-07-19: **42 files** — 1 index, 7 routers (6 hubs, 1 pure), 3
 | pipelines/SKILL.md | router | hub | — | pipelines | standard | internal | which execution substrate to load | — | y — "cross-cutting principles" (reproducibility triad) is doctrine |
 | pipelines/snakemake.md | leaf | — | tool-guide | pipelines | standard | external-tool (snakemake; +cite molder-snakemake) | a Snakefile/rule set + datapackage.json manifest | — | — |
 | research/annotation-curation-qa.md | leaf | — | measurement-qa | curation | standard | internal | curated-label QA package with agreement metrics + adjudication log | analysis-discipline (halt gates), normative-reference (schema versioning) | — |
+| research/citation-discipline.md | leaf | — | normative-reference | research-methodology | standard | internal | a citation/source-pointer that conforms to the project's citation contract (BibTeX key resolves; annotation token present when unsourced) | — | — |
+| research/literature-evaluation.md | leaf | — | practice-guide | research-methodology | standard | internal | a source set with provenance/publication-status recorded per item, claims traced to sources, and `[UNVERIFIED]` marks on anything not cross-checked | — | — |
+| research/proposition-graph-reasoning.md | leaf | — | analysis-discipline | research-methodology | standard | internal | an interpretation correctly flagged against the proposition-graph outcome conditions (migration-limited, contested, single-source-fragile, lacks-empirical-support, high-uncertainty) rather than a certified verdict | — | — |
 | research/proposition-schema.md | leaf | — | normative-reference | epistemics | standard | internal | correctly enum-valued proposition/evidence frontmatter | — | — |
 | research/research-package-rendering.md | leaf | — | practice-guide | research-infra | standard | internal | a working `/src` provenance route wired to a research package | resolved 2026-07-20 (acknowledged force-fit); NOT the basis for practice-guide eligibility; phase-3 relocation candidate — a web-app implementation guide living under research/ | y — revisit if a second build-a-component leaf appears |
 | research/research-package-spec.md | leaf | — | normative-reference | research-infra | standard | internal | a valid research-package datapackage.json + cells.json bundle | — | — |
-| research/SKILL.md | router | hub | — | research-methodology | standard | internal | source-hierarchy-compliant research approach + which research leaf to load | — | y — Source Hierarchy, Confidence Calibration, Evaluating Sources, Evidence Classification, Citation Discipline are a full practice-guide's worth of doctrine |
+| research/SKILL.md | router | pure-router | — | research-methodology | standard | internal | source-hierarchy-compliant research approach + which research leaf to load | — | — (extracted 2026-07-20) |
 | statistics/bayesian-workflow.md | leaf | — | method-guide | statistics | standard | external-methodology (baygent-skills; +cite gelman, vehtari-loo) | a fitted, convergence-gated, calibration-checked Bayesian model + reported interval | — | — |
 | statistics/bias-vs-variance-decomposition.md | leaf | — | analysis-discipline | statistics | standard | internal | an error-term decomposition gating which fix (more replicates vs bias correction) is legitimate | method-guide (surface reads like estimator selection) | — |
 | statistics/causal-identification.md | leaf | — | analysis-discipline | statistics | standard | external-methodology (baygent-skills; +cite hernan-robins, pearl, vanderweele-ding, rosenbaum) | a certified adjustment set or a fail-closed non-identification verdict | — | — |
@@ -54,7 +57,8 @@ Corpus as of 2026-07-19: **42 files** — 1 index, 7 routers (6 hubs, 1 pure), 3
 | statistics/SKILL.md | router | hub | — | statistics | standard | internal | which statistics leaf(s) govern the analysis at hand | — | y — 14 numbered Principles restate each leaf (trim to pointers, don't extract) |
 | statistics/survival-and-hierarchical-models.md | leaf | — | method-guide | statistics | standard | external-methodology (baygent-skills) | a fitted Cox/Weibull/hierarchical model with PH/shrinkage diagnostics | — | — |
 | statistics/time-series-and-longitudinal-models.md | leaf | — | method-guide | statistics | standard | internal | a time-origin/cadence/lag-specified longitudinal model + pre-specified lag sensitivity grid | — | — |
-| writing/SKILL.md | router | hub | — | writing | standard | internal | correctly hedged, cited, formatted project prose | — | y — Hedging/Annotation/Citation/Length are pure doctrine with ZERO leaves to route to |
+| writing/scientific-writing.md | leaf | — | practice-guide | writing | standard | internal | a document conforming to its framework template, with every claim cited or annotated, hedging matched to evidence strength, and links to the hypotheses/questions/propositions it bears on | — | — |
+| writing/SKILL.md | router | pure-router | — | writing | standard | internal | correctly hedged, cited, formatted project prose | — | — (extracted 2026-07-20) |
 
 ## Boundary cases (adjudicated)
 
@@ -71,11 +75,11 @@ Corpus as of 2026-07-19: **42 files** — 1 index, 7 routers (6 hubs, 1 pure), 3
 | Archetype | Count | Members |
 |---|---|---|
 | measurement-qa | 11 | embeddings-manifold-qa, bulk-rnaseq-qa, microarray-qa, scrna-qa, functional-genomics-qa, copy-number-sv-qa, mutational-signatures-and-selection, somatic-mutation-qa, protein-sequence-structure-qa, proteomics-qa, annotation-curation-qa |
-| analysis-discipline | 8 | bias-vs-variance, causal-identification, estimator-certification, power-floor, prereg-amendment-vs-fresh, prereg-defensive-instrumentation, replicate-count-justification, sensitivity-arbitration |
+| analysis-discipline | 9 | bias-vs-variance, causal-identification, estimator-certification, power-floor, prereg-amendment-vs-fresh, prereg-defensive-instrumentation, replicate-count-justification, sensitivity-arbitration, proposition-graph-reasoning |
 | method-guide | 6 | bayesian-workflow, compositional-data, likelihood-model-comparison, population-genetics-likelihood, survival-and-hierarchical-models, time-series-and-longitudinal-models |
 | tool-guide | 5 | openalex, pubmed, marimo, runpod, snakemake |
-| normative-reference | 3 | frictionless, proposition-schema, research-package-spec |
-| practice-guide | 1 | research-package-rendering (resolved 2026-07-20, acknowledged force-fit — see boundary cases; further population is trapped in hubs, see extraction candidates) |
+| normative-reference | 4 | frictionless, proposition-schema, research-package-spec, citation-discipline |
+| practice-guide | 3 | research-package-rendering (resolved 2026-07-20, acknowledged force-fit — see boundary cases), literature-evaluation (extracted 2026-07-20), scientific-writing (extracted 2026-07-20) |
 | unresolved | 0 | — |
 
 ## Earns-a-template check (this phase)
@@ -87,7 +91,7 @@ Eligibility rule (recorded doctrine): **template eligibility considers both exis
 - **method-guide (6)** — PASSES. Slots: applicability/non-applicability, estimand & assumptions, model/procedure choices, fitting, diagnostics, failure modes, reporting. Success test: are applicability and assumptions stated, is the model/procedure selection justified, and are model-specific diagnostics present with a verdict downgrade when they fail?
 - **tool-guide (5)** — PASSES. Slots: setup/version pin, command/API surface, failure handling (+ rate limits), verification/smoke-test. Success test: does the skill complete and verify a *representative operation* end-to-end, including recovery from a common failure?
 - **normative-reference (3)** — PASSES (thin but coherent). Slots: scope, vocabulary/schema/enums, invariants, conformance rules, examples, versioning/migration, invalid cases. Success test: is there an explicit conformance check against the vocabulary/invariants — mechanical (lint/validate) where available, an itemized checklist otherwise?
-- **practice-guide (0 clean leaves, 2+ trapped — this count deliberately excludes the force-fitted `research-package-rendering`; see Boundary cases)** — PASSES **under the eligibility rule**: two concrete extraction targets share the contract — (1) scientific writing (`writing/SKILL.md`, 108 lines, zero leaves) and (2) literature evaluation (`research/SKILL.md`'s Source Hierarchy / Confidence Calibration / Evaluating Sources / Synthesis). Slots: when-to-apply, workflow steps, judgment rules, quality criteria, common pitfalls, outputs. Success test: did the agent carry out the cross-cutting practice according to its workflow, judgment rules, and quality criteria?
+- **practice-guide (2 clean leaves, extracted 2026-07-20 — this count deliberately excludes the force-fitted `research-package-rendering`; see Boundary cases)** — PASSES **under the eligibility rule**: two concrete extraction targets share the contract — (1) scientific writing (`writing/SKILL.md`, 108 lines, zero leaves) and (2) literature evaluation (`research/SKILL.md`'s Source Hierarchy / Confidence Calibration / Evaluating Sources / Synthesis). Slots: when-to-apply, workflow steps, judgment rules, quality criteria, common pitfalls, outputs. Success test: did the agent carry out the cross-cutting practice according to its workflow, judgment rules, and quality criteria?
 
 **Final catalog (6 templates):** measurement-qa · method-guide · analysis-discipline · normative-reference · tool-guide · practice-guide. Plus a minimal **router profile** template (structural, not a leaf archetype).
 
@@ -96,6 +100,6 @@ Eligibility rule (recorded doctrine): **template eligibility considers both exis
 - **`data/SKILL.md`** → extract Principles + Output-Path Convention + "When Adding a New Data Source" into a `data-management-conventions` practice-guide; leave a pure routing table.
 - **`data/expression/SKILL.md`** → extract the universal pre-flight checklist + 3 idioms + cross-platform aggregation into a shared `transcriptomics-preflight` measurement-qa (or practice-guide); leave routing + failure-mode summary.
 - **`pipelines/SKILL.md`** → extract "cross-cutting principles" (reproducibility triad, side-effects-outside-tree) into a `pipeline-reproducibility` practice-guide; leave a pure decision table.
-- **`research/SKILL.md`** (largest doctrine load) → ~three extractions: (1) Source Hierarchy + Confidence Calibration + Evaluating Sources + Synthesis → a `literature-evaluation` **practice-guide** (a primary practice-guide exemplar); (2) Working with Hypotheses + Evidence Classification → folds into `proposition-schema` or a new analysis-discipline leaf; (3) Citation Discipline + Template Usage → a `citation-discipline` normative-reference leaf.
+- **`research/SKILL.md`** (largest doctrine load) — **DONE 2026-07-20**: extracted into (1) Source Hierarchy + Confidence Calibration + Evaluating Sources + Synthesis → `literature-evaluation` **practice-guide**; (2) Working with Hypotheses + Evidence Classification → `proposition-graph-reasoning` **analysis-discipline**; (3) Citation Discipline + Template Usage → `citation-discipline` **normative-reference**.
 - **`statistics/SKILL.md`** (borderline) → **tighten, don't extract**: trim each of the 14 Principles to a one-line pointer (match `data/genomics/SKILL.md`'s discipline).
-- **`writing/SKILL.md`** (most acute — zero leaves) → (1) Hedging + Annotation Tokens + Citation Format → a normative-reference leaf that converges with `research/`'s citation-discipline material; (2) Document Structure + Length Guidelines → a `document-structure` **practice-guide** (the second primary practice-guide exemplar).
+- **`writing/SKILL.md`** (most acute — zero leaves) — **DONE 2026-07-20**: extracted into `scientific-writing` **practice-guide** (Hedging, Annotation Tokens, Citation Format, Document Structure, Length Guidelines).
