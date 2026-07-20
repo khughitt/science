@@ -1,6 +1,7 @@
 ---
 name: statistics-causal-identification
 description: Use when estimating a causal effect from observational data — choosing an adjustment set, checking the backdoor criterion, distinguishing confounders from mediators/colliders, avoiding over-adjustment and M-bias, or deciding what to do when the effect is not identified.
+archetype: analysis-discipline
 sources: [baygent-skills, hernan-robins-whatif, pearl-primer, vanderweele-ding-evalue, rosenbaum-sensitivity]
 ---
 

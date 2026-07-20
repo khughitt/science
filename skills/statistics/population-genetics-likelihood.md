@@ -1,6 +1,7 @@
 ---
 name: statistics-population-genetics-likelihood
 description: Use when constructing or fitting population-genetics likelihoods — Wright-Fisher, Moran, or binomial-segregation+selection models (e.g. ecDNA copy number) — and comparing selection against a neutral null.
+archetype: method-guide
 provenance: internal
 ---
 

@@ -1,6 +1,7 @@
 ---
 name: data-proteomics-qa
 description: Use when ingesting or QA-reviewing proteomics, phosphoproteomics, mass-spectrometry, peptide-intensity, TMT, LFQ, DIA, DDA, or protein-abundance datasets.
+archetype: measurement-qa
 provenance: internal
 ---
 

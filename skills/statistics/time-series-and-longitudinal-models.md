@@ -1,6 +1,7 @@
 ---
 name: statistics-time-series-and-longitudinal-models
 description: Use when designing or reviewing repeated-measure, wearable, sensor, EMA, actigraphy, symptom-diary, time-series, cross-lag, mixed-effects, or longitudinal analyses.
+archetype: method-guide
 provenance: internal
 ---
 

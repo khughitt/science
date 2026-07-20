@@ -1,6 +1,7 @@
 ---
 name: data-source-openalex
 description: OpenAlex source guidance for literature search and metadata normalization. Use when running `/science:search-literature`, collecting paper metadata, or reconciling identifiers across sources.
+archetype: tool-guide
 sources: [openalex]
 ---
 

@@ -1,6 +1,7 @@
 ---
 name: pipeline-snakemake
 description: Snakemake workflow construction and best practices. Use when creating computational pipelines, writing Snakefiles, connecting data acquisition to analysis, or the user mentions Snakemake, pipelines, workflows, or reproducible analysis.
+archetype: tool-guide
 sources: [snakemake, molder-snakemake]
 ---
 

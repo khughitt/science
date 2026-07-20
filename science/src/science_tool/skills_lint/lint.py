@@ -30,9 +30,11 @@ IssueKind = Literal[
     "invalid-source-record",
     "missing-provenance",
     "invalid-provenance",
+    "missing-archetype",
 ]
 
 MISSING_PROVENANCE_SEVERITY: Severity = "error"
+MISSING_ARCHETYPE_SEVERITY: Severity = "error"
 
 ProvenanceState = Literal[
     "attributed", "internal", "undeclared", "contradiction", "bad-marker", "malformed-sources"
@@ -110,6 +112,16 @@ def check_frontmatter(path: Path) -> list[SkillIssue]:
             issues.append(SkillIssue(path, "invalid-field", field="archetype", detail="leaf-only field; routers and INDEX derive structural role"))
         elif not isinstance(archetype, str) or archetype not in VALID_ARCHETYPES:
             issues.append(SkillIssue(path, "invalid-field", field="archetype", detail=str(archetype)))
+    elif path.name not in STRUCTURAL_FILENAMES:
+        issues.append(
+            SkillIssue(
+                path,
+                "missing-archetype",
+                field="archetype",
+                detail="every leaf must declare exactly one recognized archetype",
+                severity=MISSING_ARCHETYPE_SEVERITY,
+            )
+        )
     return issues
 
 

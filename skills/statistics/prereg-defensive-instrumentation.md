@@ -1,6 +1,7 @@
 ---
 name: statistics-prereg-defensive-instrumentation
 description: Use when pre-registering a test that selects a winner among multiple candidates, depends on frozen inputs, or could produce a result that "looks too good" — covers universe-locking, candidate-snapshot freezing, familywise nulls, leakage hedges, suspicious-result tripwires, and locked decision tables.
+archetype: analysis-discipline
 provenance: internal
 ---
 

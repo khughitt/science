@@ -1,6 +1,7 @@
 ---
 name: test-good-with-companion
 description: Use when testing the linter accepts companion skills.
+archetype: measurement-qa
 provenance: internal
 ---
 
