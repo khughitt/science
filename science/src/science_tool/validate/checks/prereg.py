@@ -7,7 +7,6 @@ done
 
 from __future__ import annotations
 
-import re
 from collections.abc import Iterator
 from pathlib import Path
 
@@ -17,9 +16,6 @@ from science_tool.validate.context import ValidateContext
 from science_tool.validate.result import Result, Severity
 
 _SECTIONS = ("Hypotheses Under Test", "Expected Outcomes", "Decision Criteria", "Null Result Plan")
-_TYPE_RE = re.compile(r"^type:\s*['\"]?([^'\"\n]*)['\"]?\s*$", re.MULTILINE)
-_COMMITTED_RE = re.compile(r"^committed:\s", re.MULTILINE)
-_SPEC_RE = re.compile(r"^spec:\s", re.MULTILINE)
 
 
 def _result(severity: Severity, path: str | None, message: str) -> Result:
@@ -39,20 +35,22 @@ def check_prereg(ctx: ValidateContext) -> Iterator[Result]:
             if f"## {section}" not in text:
                 yield _result(Severity.WARN, relative, f"Pre-registration {relative} missing section: {section}")
 
-        type_match = _TYPE_RE.search(text)
-        pre_type = "" if type_match is None else type_match.group(1)
-        if pre_type != "pre-registration":
+        # Keyed on `kind`, which is what the template writes. This read `type:`
+        # until 2026-07-20, so the two checks below had never fired: all 27
+        # pre-registrations in the corpus declare `kind:` and none declare `type:`.
+        frontmatter = ctx.frontmatter(path)
+        if str(frontmatter.get("kind", "")) != "pre-registration":
             continue
 
-        if _COMMITTED_RE.search(text) is None:
+        if "committed" not in frontmatter:
             yield _result(
                 Severity.WARN,
                 relative,
-                f"{relative} type 'pre-registration' should declare a 'committed:' date in frontmatter",
+                f"{relative} kind 'pre-registration' should declare a 'committed:' date in frontmatter",
             )
-        if _SPEC_RE.search(text) is None:
+        if "spec" not in frontmatter:
             yield _result(
                 Severity.WARN,
                 relative,
-                f"{relative} type 'pre-registration' should declare a 'spec:' field (empty string is OK if no paired design doc)",
+                f"{relative} kind 'pre-registration' should declare a 'spec:' field (empty string is OK if no paired design doc)",
             )
