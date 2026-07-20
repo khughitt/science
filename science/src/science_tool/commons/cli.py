@@ -12,7 +12,7 @@ import yaml
 
 from science_tool.commons.adapter import CommonsEntityAdapter, CommonsEntityRecord
 from science_tool.commons.bootstrap import init_commons
-from science_tool.commons.config import resolve_commons_root
+from science_tool.commons.config import registry_root_for_id, resolve_commons_root
 from science_tool.commons.dataset_lifecycle import (
     DatasetLifecycleError,
     DatasetPackageValidationReport,
@@ -27,6 +27,12 @@ from science_tool.commons.errors import (
     PromoteConflictAbort,
     PromoteInputError,
     PromoteWriteError,
+)
+from science_tool.commons.federation_guard import (
+    ForeignOwner,
+    format_foreign_owners,
+    read_owned_paper_frontmatter,
+    scan_foreign_owners,
 )
 from science_tool.commons.inventory import build_commons_inventory
 from science_tool.commons.promote_body_loss import format_body_loss
@@ -1231,6 +1237,50 @@ def promote_dataset_cmd(
     )
 
 
+def _federation_conflicts(
+    kind: PromoteKindConfig, plan: PromotePlan, from_: tuple[str, ...]
+) -> list[ForeignOwner]:
+    """Registered projects a mint in this plan would break (fb-2026-07-11-018 /
+    fb-2026-07-16-004).
+
+    Paper-scoped: the same-vs-distinct decision rests on DOI/title, which is a
+    paper concept. Only `mint` decisions can newly shadow an id — an
+    `overlay_existing` means commons already owns it, so any bystander collision
+    predates this operation.
+    """
+    if kind.kind != "paper":
+        return []
+    # Lazy: registry.config → commons.config is a load-time cycle (mirrors the
+    # lazy import commons.config already uses for the same reason).
+    from science_tool.registry.config import load_global_config
+
+    registered = load_global_config().projects
+    if not registered:
+        return []
+    source_roots = {registry_root_for_id(slug).resolve() for slug in from_}
+    others = [
+        (project.name, Path(project.path))
+        for project in registered
+        if Path(project.path).resolve() not in source_roots
+    ]
+    if not others:
+        return []
+    promoted: dict[str, dict] = {}
+    for decision in plan.decisions:
+        if decision.mode != "mint":
+            continue
+        canonical_id = f"{kind.id_prefix}{decision.slug}"
+        frontmatter: dict | None = None
+        for slug in from_:
+            frontmatter = read_owned_paper_frontmatter(registry_root_for_id(slug), canonical_id)
+            if frontmatter:
+                break
+        promoted[canonical_id] = frontmatter or {}
+    if not promoted:
+        return []
+    return scan_foreign_owners(promoted=promoted, other_projects=others)
+
+
 def _promote_kind_cmd(
     *,
     kind: PromoteKindConfig,
@@ -1369,6 +1419,21 @@ def _promote_kind_cmd(
             click.echo(f"    rename in {slug}: {rename_from.name} → {ov.path.name}")
         if kind.kind == "dataset":
             _echo_dataset_plan_details(plan, d)
+
+    # Federation guard: a mint claims a global id, and could shadow a distinct
+    # paper or orphan a bystander's local owner in a project not named in --from.
+    # Both used to surface only later, as errors in a repo nobody touched.
+    foreign_owners = _federation_conflicts(kind, plan, from_)
+    if foreign_owners:
+        for line in format_foreign_owners(foreign_owners):
+            click.echo(line, err=True)
+        if apply_:
+            raise click.ClickException(
+                "refusing to promote: it would break other registered projects (see above). "
+                "No writes made."
+            )
+        click.echo("Refusing (dry-run): resolve the above before --apply. No writes made.", err=True)
+        return
 
     if not apply_:
         click.echo("Re-run with --apply to execute.")

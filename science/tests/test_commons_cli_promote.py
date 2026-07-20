@@ -29,6 +29,106 @@ def runner():
     return CliRunner()
 
 
+@pytest.fixture(autouse=True)
+def _isolate_registered_projects(monkeypatch):
+    """No promote test may read the developer's real ~/.config global config.
+
+    The federation guard enumerates registered projects; default it to empty so
+    each test declares its own federation explicitly.
+    """
+    from science_tool.registry.config import GlobalConfig
+
+    monkeypatch.setattr(
+        "science_tool.registry.config.load_global_config",
+        lambda *a, **k: GlobalConfig(projects=[]),
+    )
+
+
+def _register_bystander(monkeypatch, name: str, root: Path) -> None:
+    from datetime import date
+
+    from science_tool.registry.config import GlobalConfig, RegisteredProject
+
+    config = GlobalConfig(
+        projects=[RegisteredProject(path=str(root), name=name, registered=date(2026, 1, 1), id=name)]
+    )
+    monkeypatch.setattr("science_tool.registry.config.load_global_config", lambda *a, **k: config)
+
+
+def _bystander_owning(tmp_path: Path, name: str, slug: str, *, doi: str, title: str) -> Path:
+    root = tmp_path / name
+    papers = root / "entities" / "papers"
+    papers.mkdir(parents=True)
+    papers.joinpath(f"{slug}.md").write_text(
+        f"---\nid: paper:{slug}\nkind: paper\ntitle: {title}\ndoi: {doi}\n---\n\n## Key Findings\n\nx\n",
+        encoding="utf-8",
+    )
+    return root
+
+
+def test_promote_refuses_when_it_would_shadow_a_distinct_paper(tmp_path, monkeypatch, runner) -> None:
+    """fb-2026-07-11-018: minting paper:Adams2025 must not shadow a different Adams2025."""
+    from science_tool.commons.cli import commons_group
+
+    commons = tmp_path / "commons"
+    _init_commons(commons)
+    alpha = _bare_project_from_fixture(tmp_path, "proj-alpha", "proj-alpha")
+    bystander = _bystander_owning(
+        tmp_path, "natural-systems", "Adams2025", doi="10.9/different", title="A different paper"
+    )
+
+    monkeypatch.setattr(
+        "science_tool.commons.promote.registry_root_for_id",
+        lambda slug: {"proj-alpha": alpha}[slug],
+    )
+    monkeypatch.setattr("science_tool.commons.cli.registry_root_for_id", lambda slug: alpha)
+    monkeypatch.setattr("science_tool.commons.cli.resolve_commons_root", lambda: commons)
+    _register_bystander(monkeypatch, "natural-systems", bystander)
+
+    result = runner.invoke(
+        commons_group,
+        ["promote", "paper", "paper:Adams2025", "--from", "proj-alpha", "--apply"],
+    )
+
+    assert result.exit_code != 0, result.output
+    assert "shadow" in result.output.lower()
+    assert "natural-systems" in result.output
+    assert "No writes" in result.output
+    # Fail-closed: nothing was written to commons.
+    assert not (commons / "papers" / "Adams2025.md").exists()
+
+
+def test_promote_refuses_when_it_would_orphan_a_local_owner(tmp_path, monkeypatch, runner) -> None:
+    """fb-2026-07-16-004 (main): a bystander owning the SAME paper is told to join --from."""
+    from science_tool.commons.cli import commons_group
+
+    commons = tmp_path / "commons"
+    _init_commons(commons)
+    alpha = _bare_project_from_fixture(tmp_path, "proj-alpha", "proj-alpha")
+    bystander = _bystander_owning(
+        tmp_path, "cbioportal", "Adams2025", doi="10.1/adams", title="Adams Alpha Paper"
+    )
+
+    monkeypatch.setattr(
+        "science_tool.commons.promote.registry_root_for_id",
+        lambda slug: {"proj-alpha": alpha}[slug],
+    )
+    monkeypatch.setattr("science_tool.commons.cli.registry_root_for_id", lambda slug: alpha)
+    monkeypatch.setattr("science_tool.commons.cli.resolve_commons_root", lambda: commons)
+    _register_bystander(monkeypatch, "cbioportal", bystander)
+
+    result = runner.invoke(
+        commons_group,
+        ["promote", "paper", "paper:Adams2025", "--from", "proj-alpha", "--apply"],
+    )
+
+    assert result.exit_code != 0, result.output
+    assert "orphan" in result.output.lower()
+    assert "--from" in result.output
+    assert "cbioportal" in result.output
+    assert not (commons / "papers" / "Adams2025.md").exists()
+
+
 def test_promote_paper_bulk_dry_run_summary(tmp_path, monkeypatch, runner) -> None:
     from science_tool.commons.cli import commons_group
 
