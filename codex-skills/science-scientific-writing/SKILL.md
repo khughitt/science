@@ -24,25 +24,25 @@ The default epistemic posture is skeptical:
 ## Workflow steps
 
 1. **Check the project first.** Before writing any document, check:
-1. `specs/research-question.md` — What is this project about?
-2. `entities/hypotheses/` — What hypotheses are we tracking?
-3. `entities/questions/` — What questions are we trying to answer?
-4. `doc/background/papers/` — What have we already reviewed?
-5. `doc/background/topics/` — What topics have we already covered?
+    1. `specs/research-question.md` — What is this project about?
+    2. `entities/hypotheses/` — What hypotheses are we tracking?
+    3. `entities/questions/` — What questions are we trying to answer?
+    4. `doc/background/papers/` — What have we already reviewed?
+    5. `doc/background/topics/` — What topics have we already covered?
 
-This prevents duplication and ensures new work connects to the existing knowledge base.
+    This prevents duplication and ensures new work connects to the existing knowledge base.
 2. **Read the template.**
-All research documents must follow their corresponding framework template unless the project defines a specific override in `.ai/templates/`. Read the relevant template before writing. The template sections are not optional — fill every section, even if briefly.
+    All research documents must follow their corresponding framework template unless the project defines a specific override in `.ai/templates/`. Read the relevant template before writing. The template sections are not optional — fill every section, even if briefly.
 3. **Draft, hedging to the evidence.** Apply the judgment rules below.
 4. **Mark what you could not source.** When a claim cannot carry an in-line citation, mark it with one of the four annotation tokens defined in `docs/conventions/annotation-tokens.md`: `[UNVERIFIED]`, `[MISSING_CITATION]`, `[SPECULATION]`, `[INACCESSIBLE]`. That document is the normative owner of the vocabulary and the validator behavior; do not restate the definitions here.
 5. **Connect the document to the framework.**
-- Reference relevant **hypotheses** by ID: `(see Hypothesis H01)`
-- Reference important **propositions** when they are the real unit being updated
-- Note implications for **open questions** in `entities/questions/`
-- Suggest updates to **next steps** when findings change priorities
-- Flag any findings that affect the **causal model** in `models/`
+    - Reference relevant **hypotheses** by ID: `(see Hypothesis H01)`
+    - Reference important **propositions** when they are the real unit being updated
+    - Note implications for **open questions** in `entities/questions/`
+    - Suggest updates to **next steps** when findings change priorities
+    - Flag any findings that affect the **causal model** in `models/`
 
-Avoid writing as if one result has proved a hypothesis or validated an edge unless that standard is genuinely met.
+    Avoid writing as if one result has proved a hypothesis or validated an edge unless that standard is genuinely met.
 
 ## Judgment rules
 
@@ -52,7 +52,7 @@ Avoid writing as if one result has proved a hypothesis or validated an edge unle
 - **Active voice preferred.** "Smith et al. demonstrated" over "It was demonstrated by Smith et al."
 - **Concise.** Cut unnecessary words. Avoid throat-clearing introductions.
 
-## Hedging Guide
+### Hedging Guide
 
 | Confidence Level | Language |
 |---|---|
@@ -64,7 +64,7 @@ Avoid writing as if one result has proved a hypothesis or validated an edge unle
 
 ## Quality criteria
 
-All documents follow framework templates unless the project defines an override in `.ai/templates/`. General structural principles:
+General structural principles:
 
 - **Lead with the point.** First paragraph should state the main takeaway.
 - **Sections are self-contained.** A reader should be able to read any section in isolation and get value.
