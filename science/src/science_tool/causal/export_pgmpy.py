@@ -27,9 +27,9 @@ from science_tool.graph.store import (
     _load_proposition_interaction_terms,
     _load_proposition_phase1_metadata,
     _load_proposition_pre_registrations,
-    _slug,
     _source_strings,
     get_inquiry,
+    resolve_inquiry,
     shorten_uri,
 )
 
@@ -100,11 +100,10 @@ def _get_causal_edges_for_inquiry(graph_path: Path, slug: str) -> list[CausalEdg
     Returns a list of dicts with keys: subject, predicate, object, pred_type,
     claims, subject_observability, object_observability.
     """
-    safe_slug = _slug(slug)
-    inquiry_uri = URIRef(f"http://example.org/project/inquiry/{safe_slug}")
-
     dataset = _load_dataset(graph_path)
-    inquiry_graph = dataset.graph(inquiry_uri)
+    # Resolve by discovery, never by reconstructing the URI from the slug: the
+    # compiler preserves hyphens and `_slug` does not (fb-2026-07-19-001).
+    _, inquiry_graph = resolve_inquiry(dataset, slug)
 
     # Collect boundary nodes
     members: set[URIRef] = set()

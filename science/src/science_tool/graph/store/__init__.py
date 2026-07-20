@@ -61,6 +61,7 @@ from .identity import (
 )
 from .inquiry import (
     get_inquiry,
+    resolve_inquiry,
     list_inquiries,
     list_inquiries_dataset,
     render_inquiry_doc,
@@ -181,6 +182,7 @@ __all__ = [
     "diff_graph_inputs_dataset",
     "export_graph_payload",
     "get_inquiry",
+    "resolve_inquiry",
     "init_graph_file",
     "list_inquiries",
     "list_inquiries_dataset",
