@@ -38,6 +38,7 @@ CANONICAL_CHECK_MODULES = (
     "project_readme",
     "discussions",
     "prereg",
+    "prereg_vehicles",
     "hypothesis_comparisons",
     "bias_audits",
     "notes",
