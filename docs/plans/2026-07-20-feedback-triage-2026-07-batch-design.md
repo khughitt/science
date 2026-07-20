@@ -290,6 +290,27 @@ state.** Nothing else in the backlog is in this class.
 bug makes pins enforceable *for the first time*, turning cancer/meta red (it pins
 1.0.0 against canonicals now at 1.1.0). Land the pin refresh in the same change.
 
+> **Retracted 2026-07-20 — the anticipated breakage does not reproduce; no pin
+> refresh was needed.** Audited all **292** pinned overlays across the sibling
+> repos (cancer/*, health/*, meta) against the current `~/d/science-commons`
+> canonicals: **0 mismatches** — 285 pin `1.0.0` against canonical `1.0.0`, and
+> the 7 canonicals that *did* advance to `1.1.0` already carry refreshed `1.1.0`
+> pins (the bump and the overlay refresh landed in lockstep, exactly as intended).
+> Ground-truthed with the current local-main toolkit (which runs the fixed
+> overlay-closing code, so bib-owned-id overlays are now actually validated):
+> `science validate` on health/meta, cancer/mechanisms/evolution, and
+> health/comparisons/pan-disease surfaced **zero** pin-version errors. The pin
+> instrument is not vacuous — `test_graph_commons_sources.py` writes a `9.9.9`
+> overlay against a `1.0.0` canonical and asserts `OverlayValidationError`, so a
+> genuinely stale pin *would* fail; the corpus is green because the pins are
+> genuinely current. This is the `fb-2026-07-19-003` pattern: a plausible report
+> whose premise no longer holds against the live state. **The one real error the
+> sweep surfaced is unrelated to pins:** commons canonical `papers/Cheek2025.md`
+> carries a `dataset_usage` ref to `dataset:uk-biobank`, which has no commons
+> canonical — a dangling reference *in the shared store* that fails
+> cancer/mechanisms/evolution's graph audit. Tracked separately; it is a commons
+> data-integrity defect, not a pin-refresh obligation.
+
 ---
 
 ## Batches
@@ -691,8 +712,11 @@ gate; nothing before step 7 depends on either.
   unpushed, and a consumer project pinned to the public Git source cannot see it —
   verify which toolkit a reporting project actually ran before trusting or
   re-implementing any finding.
-- **`fb-2026-07-16-005(d)`**: fixing the overlay-pin bug is a breaking change for
-  existing pins; refresh cancer/meta's in the same change.
+- **`fb-2026-07-16-005(d)`**: ~~fixing the overlay-pin bug is a breaking change for
+  existing pins; refresh cancer/meta's in the same change.~~ **Retracted
+  2026-07-20 — no refresh needed.** All 292 pinned overlays already match their
+  commons canonical; the current toolkit validates them green. See the retraction
+  under the Tier 0 sequencing constraint for the audit.
 - **Finding 1 is a cautionary tale about this document too.** A prior triage
   marked that item fixed on the strength of a test that could not fail. Where this
   document asserts a defect is real, it was verified by execution; where it
