@@ -240,7 +240,7 @@ A budget priced on an uncertified estimator is a consequence of an untested assu
 constraint — it can be wrong by orders of magnitude. If the budget must be committed first, mark it
 **CONDITIONAL** and name what invalidates it.
 
-See [`skills/statistics/estimator-certification.md`](../skills/statistics/estimator-certification.md).
+See [`skills/statistics/estimator-certification.md`](../../skills/statistics/estimator-certification.md).
 
 #### Sub-axis: multi-analysis coverage
 

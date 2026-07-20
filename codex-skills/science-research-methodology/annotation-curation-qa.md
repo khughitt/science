@@ -78,7 +78,7 @@ when one class dominates; report both and inspect the confusion matrix.
 
 ## Minimum Artifacts
 
-Generate a `datapackage.json` for this directory; see [`../data/frictionless.md`](../data/frictionless.md).
+Generate a `datapackage.json` for this directory; see [`../../skills/data/frictionless.md`](../../skills/data/frictionless.md).
 
 ```
 data/processed/<curation_task>/
@@ -108,5 +108,6 @@ Report:
 
 ## Companion Skills
 
-- [`SKILL.md`](SKILL.md) - research-methodology and citation-discipline conventions.
-- [`../statistics/sensitivity-arbitration.md`](../statistics/sensitivity-arbitration.md) - verdict handling when curated labels or adjudication choices change results.
+- [`literature-evaluation.md`](literature-evaluation.md) - source hierarchy and source-quality assessment for literature-derived claims.
+- [`citation-discipline.md`](citation-discipline.md) - citation and source-pointer conformance.
+- [`../../skills/statistics/sensitivity-arbitration.md`](../../skills/statistics/sensitivity-arbitration.md) - verdict handling when curated labels or adjudication choices change results.

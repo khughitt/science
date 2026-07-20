@@ -40,7 +40,7 @@ Before creating, naming, placing, splitting, or extending a skill.
 
 ### Router invariant and the hub anti-pattern
 
-This is stated as a **target invariant**, not a description of today's corpus: 6 of 7 current `SKILL.md` files are **hubs** (route + teach). `writing/SKILL.md` is the most acute — 108 lines of doctrine routing to zero leaves. Every hub is a migration extraction candidate (see the matrix). A document that routes *and* teaches is a hub; its teaching content is extracted into typed leaves before it is a true router.
+This is stated as a **target invariant** the corpus is converging on: 4 of 7 current `SKILL.md` files are still **hubs** (route + teach). `research/SKILL.md` and `writing/SKILL.md` were extracted on 2026-07-20 and are now true routers; `data/genomics/SKILL.md` was already one. Every remaining hub is a migration extraction candidate (see the matrix). A document that routes *and* teaches is a hub; its teaching content is extracted into typed leaves before it is a true router.
 
 ### Template-eligibility rule
 

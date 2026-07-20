@@ -16,7 +16,7 @@ class CompanionSkill(NamedTuple):
 
 COMPANION_SKILLS: tuple[CompanionSkill, ...] = (
     CompanionSkill("research-methodology", Path("skills/research/SKILL.md")),
-    CompanionSkill("scientific-writing", Path("skills/writing/SKILL.md")),
+    CompanionSkill("scientific-writing", Path("skills/writing/scientific-writing.md")),
     CompanionSkill("skill-development", Path("skills/meta/SKILL.md")),
 )
 
@@ -130,6 +130,7 @@ def _build_skill_text(
 ) -> str:
     rewritten_body = _replace_command_preamble_instructions(body)
     rewritten_body = _rewrite_claude_specific_text(rewritten_body)
+    rewritten_body = _rebase_command_body_links(rewritten_body)
     rewritten_body = _replace_command_preamble_instructions(rewritten_body)
     rewritten_body = re.sub(r"^#\s+.+\n\n", "", rewritten_body)
 
@@ -170,17 +171,18 @@ def _generate_companion_skill(repo_root: Path, output_root: Path, companion: Com
         shutil.rmtree(skill_dir)
     skill_dir.mkdir(parents=True, exist_ok=True)
 
-    for resource_path in sorted(source_path.parent.glob("*.md")):
-        if resource_path.name == "SKILL.md":
-            continue
-        shutil.copy2(resource_path, skill_dir / resource_path.name)
+    for resource_path in _resource_paths(source_path):
+        text = resource_path.read_text(encoding="utf-8")
+        (skill_dir / resource_path.name).write_text(
+            _rewrite_companion_body_links(text, repo_root), encoding="utf-8"
+        )
 
     templates_dir = source_path.parent / "templates"
     if templates_dir.is_dir():
         shutil.copytree(templates_dir, skill_dir / "templates")
 
     escaped_description = description.replace('"', '\\"')
-    body = _rewrite_companion_body_links(body)
+    body = _rewrite_companion_body_links(body, repo_root)
     skill_text = "\n".join(
         [
             "---",
@@ -197,19 +199,55 @@ def _generate_companion_skill(repo_root: Path, output_root: Path, companion: Com
     return skill_path
 
 
-def _rewrite_companion_body_links(body: str) -> str:
-    companion_parent_to_skill_name = {
-        companion.source_path.parent.name: companion_to_skill_name(companion.canonical_name)
-        for companion in COMPANION_SKILLS
-    }
+def _resource_paths(source_path: Path) -> list[Path]:
+    """Markdown files bundled as resources beside a companion's SKILL.md.
 
-    def replace_skill_link(match: re.Match[str]) -> str:
-        source_parent = match.group(1)
-        if source_parent in companion_parent_to_skill_name:
-            return f"../{companion_parent_to_skill_name[source_parent]}/SKILL.md"
-        return f"../../skills/{source_parent}/SKILL.md"
+    Excludes the directory's router (SKILL.md) and the companion's own source
+    file, which is emitted as the companion's SKILL.md rather than as a
+    resource. This is the single definition of the emitted resource set: the
+    copy loop and the link rewriter must agree, or links resolve to files that
+    were never copied.
+    """
+    return [
+        path
+        for path in sorted(source_path.parent.glob("*.md"))
+        if path.name != "SKILL.md" and path != source_path
+    ]
 
-    return re.sub(r"\.\./([a-z0-9-]+)/SKILL\.md", replace_skill_link, body)
+
+def _companion_link_targets(repo_root: Path) -> dict[Path, str]:
+    """Map a repo-relative skills/ path to where generation actually emits it."""
+    targets: dict[Path, str] = {}
+    for companion in COMPANION_SKILLS:
+        skill_name = companion_to_skill_name(companion.canonical_name)
+        targets[companion.source_path] = f"../{skill_name}/SKILL.md"
+        for resource_path in _resource_paths(repo_root / companion.source_path):
+            relative = companion.source_path.parent / resource_path.name
+            targets[relative] = f"../{skill_name}/{resource_path.name}"
+    return targets
+
+
+def _rewrite_companion_body_links(body: str, repo_root: Path) -> str:
+    targets = _companion_link_targets(repo_root)
+
+    def replace_link(match: re.Match[str]) -> str:
+        directory, filename = match.group(1), match.group(2)
+        emitted = targets.get(Path("skills") / directory / filename)
+        if emitted is not None:
+            return emitted
+        return f"../../skills/{directory}/{filename}"
+
+    return re.sub(r"\.\./([a-z0-9-]+)/([A-Za-z0-9._-]+\.md)", replace_link, body)
+
+
+def _rebase_command_body_links(body: str) -> str:
+    """Re-depth relative links for a command body's generated location.
+
+    Command sources sit at `commands/<name>.md` (depth 1) and are emitted to
+    `codex-skills/science-<name>/SKILL.md` (depth 2), so each relative link
+    needs one more `../` to reach the same target.
+    """
+    return re.sub(r"]\(\.\./", "](../../", body)
 
 
 def _insert_adapted_note(body: str, source_path: Path) -> str:
