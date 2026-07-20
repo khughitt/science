@@ -46,6 +46,8 @@ This is stated as a **target invariant**, not a description of today's corpus: 6
 
 > Template eligibility considers both existing leaves and independently identifiable practices embedded in hubs, provided at least two concrete target extractions demonstrate the same content contract and success test.
 
+**Open trip-wire (recorded 2026-07-20).** `research/research-package-rendering.md` is classified `practice-guide` as an acknowledged force-fit: it is a software *implementation* guide (build-a-component), which none of the six archetypes model well, and its population of one is below the two-target threshold above. If a second build-a-component leaf appears, the pair becomes eligible and a seventh `implementation-guide` archetype must be reconsidered rather than force-fitted again.
+
 ## Quality criteria
 
 - The guidance has one primary archetype and uses that archetype's content slots and success test.
