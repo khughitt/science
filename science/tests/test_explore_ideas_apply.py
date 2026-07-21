@@ -85,6 +85,27 @@ def test_parse_report_malformed_yaml_raises_validation_error() -> None:
         parse_report(text)
 
 
+def test_parse_report_malformed_yaml_names_candidate_and_file_line() -> None:
+    # fb-2026-07-17-005: an unquoted colon deep in a 28-block report failed the
+    # whole file with only a block-relative line/column and no candidate_id, so
+    # the offending block could not be located. The error must name the
+    # candidate_id and the file-relative line.
+    text = (
+        "# Exploration report\n\n"
+        "intro paragraph\n\n"
+        "```yaml\n"
+        "candidate_id: cand-gradient\n"
+        "decision: keep\n"
+        "note: Foundational gradient evidence: Hadza sleep 5.7-7\n"
+        "```\n"
+    )
+    with pytest.raises(ApplyValidationError) as excinfo:
+        parse_report(text)
+    message = str(excinfo.value)
+    assert "cand-gradient" in message
+    assert "line 6" in message  # the block's candidate_id line, file-relative
+
+
 def test_resolve_report_path_direct_file(tmp_path: Path) -> None:
     report = tmp_path / "explore-2026-07-04.md"
     report.write_text("x", encoding="utf-8")
@@ -737,6 +758,69 @@ def test_apply_report_creates_kept_entities(tmp_path: Path) -> None:
     assert len(h_files) == 1
 
 
+def test_apply_report_seeds_body_from_candidate_material(tmp_path: Path) -> None:
+    # fb-2026-07-11-022 / -17-011: apply must not discard the researched prose
+    # the block already carries. The created entity starts non-hollow.
+    from science_tool.explore_ideas import _body_has_substantive_text
+
+    seed_project(tmp_path)
+    _write_fixture(tmp_path)
+
+    apply_report(tmp_path, "explore-2026-07-04", "test-model", date(2026, 7, 4))
+
+    q_path = next((tmp_path / "entities" / "questions").glob("*.md"))
+    _, _, body = q_path.read_text(encoding="utf-8")[4:].partition("\n---")
+    assert "Does reduced vagal tone sustain systemic inflammation?" in body
+    assert "chronic feedback failure" in body  # the lens rationale survives
+    assert _body_has_substantive_text(body) is True
+
+
+def test_gaps_flags_unseeded_scaffold_but_not_seeded_body(tmp_path: Path) -> None:
+    # A keep block with no question_or_claim / rationale has nothing to seed, so
+    # its body stays the untouched template -- which mixes HTML comments with
+    # placeholder bullets. `gaps` must flag it (fb-2026-07-17-011), while the
+    # seeded sibling (with real prose) must NOT be flagged.
+    seed_project(tmp_path)
+    report = tmp_path / "doc" / "explorations" / "explore-2026-07-04.md"
+    report.parent.mkdir(parents=True)
+    report.write_text(
+        "```yaml\n"
+        "candidate_id: cand-bare\n"
+        "proposed_kind: question\n"
+        "title: A bare candidate\n"
+        "decision: keep\n"
+        "origin_plan:\n"
+        "  origins:\n"
+        "    - type: assistant\n"
+        "      ref: explore-ideas-mechanism\n"
+        "```\n\n"
+        "```yaml\n"
+        "candidate_id: cand-seeded\n"
+        "proposed_kind: question\n"
+        "title: A seeded candidate\n"
+        "question_or_claim: Does X drive Y in this system?\n"
+        "lens: mechanism\n"
+        "rationale: A concrete mechanistic framing worth recording.\n"
+        "decision: keep\n"
+        "origin_plan:\n"
+        "  origins:\n"
+        "    - type: assistant\n"
+        "      ref: explore-ideas-mechanism\n"
+        "```\n",
+        encoding="utf-8",
+    )
+
+    apply_report(tmp_path, "explore-2026-07-04", "test-model", date(2026, 7, 4))
+    result = inspect_gaps_report(tmp_path, "explore-2026-07-04")
+
+    by_candidate = {
+        row["candidate_id"]: [gap["code"] for gap in cast(list[dict[str, object]], row["gaps"])]
+        for row in cast(list[dict[str, object]], result.to_dict()["entities"])
+    }
+    assert "empty_body" in by_candidate["cand-bare"]
+    assert "empty_body" not in by_candidate["cand-seeded"]
+
+
 def test_apply_report_routes_origins_and_source_refs(tmp_path: Path) -> None:
     seed_project(tmp_path)
     _write_fixture(tmp_path)
@@ -799,8 +883,65 @@ def test_apply_report_to_dict_shape(tmp_path: Path) -> None:
         "skipped_applied": [],
         "skipped_other": ["cand-contrarian-null-effect"],
         "manual": [],
+        "folds": [],
         "failures": [],
     }
+
+
+def test_plan_report_records_fold_candidates() -> None:
+    # fb-2026-07-17-004: a sharpens-existing candidate gets an honest disposition
+    # -- recorded as a fold worklist entry, writing no entity.
+    blocks = parse_report(
+        "```yaml\n"
+        "candidate_id: cand-sharpen\n"
+        "proposed_kind: question\n"
+        "title: Sharper framing of X\n"
+        "decision: fold\n"
+        "related_existing:\n"
+        "  - question:0032-existing\n"
+        "```\n"
+    )
+    plan = plan_report(blocks, "test-model", ref_index=None)
+
+    assert plan.to_create == []
+    assert plan.skipped_other == []
+    assert [f.candidate_id for f in plan.folds] == ["cand-sharpen"]
+    assert plan.folds[0].targets == ["question:0032-existing"]
+    assert plan.folds[0].title == "Sharper framing of X"
+
+
+def test_plan_report_fold_requires_related_existing() -> None:
+    blocks = parse_report(
+        "```yaml\ncandidate_id: cand-x\ndecision: fold\ntitle: T\n```\n"
+    )
+    with pytest.raises(ApplyValidationError, match="fold block.*related_existing"):
+        plan_report(blocks, "test-model", ref_index=None)
+
+
+def test_apply_report_surfaces_folds_without_writing(tmp_path: Path) -> None:
+    seed_project(tmp_path)
+    report = tmp_path / "doc" / "explorations" / "explore-2026-07-04.md"
+    report.parent.mkdir(parents=True)
+    report.write_text(
+        "```yaml\n"
+        "candidate_id: cand-sharpen\n"
+        "proposed_kind: question\n"
+        "title: Sharper framing of X\n"
+        "decision: fold\n"
+        "related_existing:\n"
+        "  - question:0032-existing\n"
+        "```\n",
+        encoding="utf-8",
+    )
+
+    result = apply_report(tmp_path, "explore-2026-07-04", "test-model", date(2026, 7, 4))
+
+    assert result.created == []
+    assert [f.candidate_id for f in result.folds] == ["cand-sharpen"]
+    assert result.folds[0].targets == ["question:0032-existing"]
+    # The fold block is not written back to `applied`; it stays a fold worklist item.
+    assert "decision: fold" in report.read_text(encoding="utf-8")
+    assert list((tmp_path / "entities" / "questions").glob("*.md")) == []
 
 
 def test_inspect_gaps_report_clean_applied_entity(tmp_path: Path) -> None:
@@ -824,6 +965,41 @@ def test_inspect_gaps_report_clean_applied_entity(tmp_path: Path) -> None:
         "cand-methodology-retest-drift-threshold",
     ]
     assert all(row["gaps"] == [] for row in entities)
+
+
+def test_body_has_substantive_text_ignores_multiline_comment_scaffold() -> None:
+    # fb-2026-07-17-009 / -11-022: a rendered entity scaffold is all headings +
+    # HTML comments, but the guidance comments are MULTI-LINE. The check must
+    # treat the whole comment span as non-content, not just its first line.
+    from science_tool.explore_ideas import _body_has_substantive_text
+
+    scaffold = (
+        "# Vagal tone as a cytokine feedback regulator\n\n"
+        "## Summary\n\n"
+        "<!-- What is being asked and why it is important. -->\n\n"
+        "## Why It Matters\n\n"
+        "<!-- Bulleted list. Cover at least:\n"
+        "- the decision this question affects\n"
+        "- the risk if the question is left unanswered\n"
+        "-->\n\n"
+        "## Current Evidence\n\n"
+        "<!-- Bulleted list. Cover at least:\n"
+        "- supporting evidence\n"
+        "- conflicting evidence\n"
+        "-->\n"
+    )
+    assert _body_has_substantive_text(scaffold) is False
+
+
+def test_body_has_substantive_text_detects_prose_outside_comments() -> None:
+    from science_tool.explore_ideas import _body_has_substantive_text
+
+    body = (
+        "# Title\n\n## Summary\n\n"
+        "<!-- What is being asked and why it is important. -->\n\n"
+        "Reduced vagal tone sustains systemic inflammation in post-acute syndromes.\n"
+    )
+    assert _body_has_substantive_text(body) is True
 
 
 def _gap_codes(result: GapReportResult) -> list[str]:
@@ -926,6 +1102,7 @@ def test_check_report_to_dict_shape(tmp_path: Path) -> None:
         "skipped_applied": [],
         "skipped_other": ["cand-contrarian-null-effect"],
         "manual": [],
+        "folds": [],
     }
 
 
@@ -1087,6 +1264,34 @@ def test_cli_apply_round_trip_text() -> None:
         assert "already applied: cand-mechanism-vagal-cytokine-loop" in result2.output
         assert "already applied: cand-methodology-retest-drift-threshold" in result2.output
         assert "skipped drop/defer: cand-contrarian-null-effect" in result2.output
+
+
+def test_cli_apply_reports_fold_worklist() -> None:
+    runner = CliRunner()
+    with runner.isolated_filesystem(temp_dir="/tmp"):
+        root = Path.cwd()
+        seed_project(root)
+        report = root / "doc" / "explorations" / "explore-2026-07-04.md"
+        report.parent.mkdir(parents=True)
+        report.write_text(
+            "```yaml\n"
+            "candidate_id: cand-sharpen\n"
+            "proposed_kind: question\n"
+            "title: Sharper framing of X\n"
+            "decision: fold\n"
+            "related_existing:\n"
+            "  - question:0032-existing\n"
+            "```\n",
+            encoding="utf-8",
+        )
+        result = runner.invoke(
+            main,
+            ["explore-ideas", "apply", "--from", "explore-2026-07-04", "--model-id", "test-model"],
+        )
+        assert result.exit_code == 0, result.output
+        assert "1 to fold manually" in result.output
+        assert "fold manually: cand-sharpen -> question:0032-existing" in result.output
+        assert not list((root / "entities" / "questions").glob("*.md"))
 
 
 def test_cli_apply_json_format() -> None:

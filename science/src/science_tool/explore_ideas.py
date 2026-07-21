@@ -18,13 +18,14 @@ from science_tool.entities import (
     _atomic_replace_text,
     _parse_markdown_file_preserving_body,
     _render_markdown,
+    build_entity_markdown,
     create_entity,
 )
 from science_tool.entity_scan import iter_entity_markdown
 from science_tool.resolve_refs import RefIndex, build_ref_index, load_index_rows
 
 _YAML_BLOCK_RE = re.compile(r"```yaml\r?\n(.*?)```", re.DOTALL)
-_VALID_DECISIONS = {"keep", "drop", "defer", "applied"}
+_VALID_DECISIONS = {"keep", "drop", "defer", "applied", "fold"}
 _ROUTABLE_KINDS = {"question", "hypothesis", "topic", "theme"}
 _MANUAL_KINDS: set[str] = set()
 _VALID_KINDS = _ROUTABLE_KINDS | _MANUAL_KINDS
@@ -54,6 +55,23 @@ class CreatePlan:
     lens_views: list[dict]
     added_by: str
     related: list[str] = field(default_factory=list)
+    #: Prose recovered from the candidate block (question_or_claim + per-lens
+    #: rationale) that apply seeds into the created entity's lead section, so it
+    #: starts non-hollow instead of discarding the researched framing.
+    body_seed: str = ""
+
+
+@dataclass(frozen=True)
+class FoldPlan:
+    """A ``sharpens-existing`` candidate the human will hand-fold into an
+    existing entity. Recorded as a worklist item; apply writes no entity."""
+
+    candidate_id: str
+    title: str
+    targets: list[str]
+
+    def to_dict(self) -> dict[str, object]:
+        return {"candidate_id": self.candidate_id, "title": self.title, "targets": list(self.targets)}
 
 
 @dataclass(frozen=True)
@@ -62,6 +80,7 @@ class ReportPlan:
     skipped_applied: list[str]
     skipped_other: list[str]
     manual: list[tuple[str, str]]
+    folds: list[FoldPlan] = field(default_factory=list)
 
 
 @dataclass(frozen=True)
@@ -81,6 +100,7 @@ class ApplyResult:
     skipped_other: list[str]
     manual: list[tuple[str, str]]
     failures: list[tuple[str, str]]
+    folds: list[FoldPlan] = field(default_factory=list)
 
     def to_dict(self) -> dict[str, object]:
         return {
@@ -98,6 +118,7 @@ class ApplyResult:
             "skipped_applied": list(self.skipped_applied),
             "skipped_other": list(self.skipped_other),
             "manual": [{"candidate_id": candidate_id, "proposed_kind": kind} for candidate_id, kind in self.manual],
+            "folds": [fold.to_dict() for fold in self.folds],
             "failures": [{"candidate_id": candidate_id, "error": error} for candidate_id, error in self.failures],
         }
 
@@ -109,6 +130,7 @@ class ApplyCheckResult:
     skipped_applied: list[str]
     skipped_other: list[str]
     manual: list[tuple[str, str]]
+    folds: list[FoldPlan] = field(default_factory=list)
 
     def to_dict(self) -> dict[str, object]:
         return {
@@ -124,6 +146,7 @@ class ApplyCheckResult:
             "skipped_applied": list(self.skipped_applied),
             "skipped_other": list(self.skipped_other),
             "manual": [{"candidate_id": candidate_id, "proposed_kind": kind} for candidate_id, kind in self.manual],
+            "folds": [fold.to_dict() for fold in self.folds],
         }
 
 
@@ -225,6 +248,9 @@ class AnchorResolution:
     query: str
     candidates: tuple[str, ...]
     anchor: dict
+    #: For ``status == "mismatch"``, why the anchor's stated metadata disagrees
+    #: with the record its identifier resolved to. ``None`` otherwise.
+    detail: str | None = None
 
     def to_dict(self) -> dict[str, object]:
         return {
@@ -235,6 +261,7 @@ class AnchorResolution:
             "match_kind": self.match_kind,
             "query": self.query,
             "candidates": list(self.candidates),
+            "detail": self.detail,
             "anchor": _json_safe(self.anchor),
         }
 
@@ -246,7 +273,7 @@ class AnchorResolveResult:
 
     @property
     def counts(self) -> dict[str, int]:
-        counts = {"resolved": 0, "already_resolved": 0, "ambiguous": 0, "unresolved": 0}
+        counts = {"resolved": 0, "already_resolved": 0, "ambiguous": 0, "unresolved": 0, "mismatch": 0}
         for anchor in self.anchors:
             key = "already_resolved" if anchor.status == "already-resolved" else anchor.status
             if key in counts:
@@ -280,13 +307,29 @@ def resolve_report_path(project_root: Path, from_value: str) -> Path:
     )
 
 
+_RAW_CANDIDATE_ID_RE = re.compile(r"(?m)^\s*candidate_id:\s*(\S.*?)\s*$")
+
+
+def _raw_candidate_id(raw: str) -> str | None:
+    """Extract candidate_id from a fenced block by text scan, so it is available
+    for error messages even when the block's YAML fails to parse."""
+    match = _RAW_CANDIDATE_ID_RE.search(raw)
+    return match.group(1) if match else None
+
+
 def parse_report(text: str) -> list[CandidateBlock]:
     blocks: list[CandidateBlock] = []
-    for raw in _YAML_BLOCK_RE.findall(text):
+    for match in _YAML_BLOCK_RE.finditer(text):
+        raw = match.group(1)
         try:
             data = yaml.safe_load(raw)
         except yaml.YAMLError as exc:
-            raise ApplyValidationError(f"invalid yaml candidate block: {exc}") from exc
+            candidate_id = _raw_candidate_id(raw)
+            file_line = text.count("\n", 0, match.start(1)) + 1
+            label = f" {candidate_id}" if candidate_id else ""
+            raise ApplyValidationError(
+                f"invalid yaml candidate block{label} (report line {file_line}): {exc}"
+            ) from exc
 
         if isinstance(data, dict) and "candidate_id" in data:
             blocks.append(CandidateBlock(candidate_id=str(data["candidate_id"]), data=data))
@@ -393,28 +436,33 @@ def _resolve_anchor(anchor: dict, candidate_id: str, anchor_index: int, refs: li
 
     doi = _normalize_doi(anchor.get("doi"))
     if doi is not None:
+        matched = [ref for ref in refs if _normalize_doi(ref.doi) == doi]
         return _resolution_from_hits(
             candidate_id=candidate_id,
             anchor_index=anchor_index,
             anchor=anchor,
             match_kind="doi",
             query=doi,
-            hits=_ordered_refs(ref for ref in refs if _normalize_doi(ref.doi) == doi),
+            hits=_ordered_refs(matched),
+            matched=matched,
         )
 
     key = _anchor_key(anchor)
     if key is not None:
+        matched = [ref for ref in refs if ref.key == key]
         return _resolution_from_hits(
             candidate_id=candidate_id,
             anchor_index=anchor_index,
             anchor=anchor,
             match_kind="key",
             query=key,
-            hits=_ordered_refs(ref for ref in refs if ref.key == key),
+            hits=_ordered_refs(matched),
+            matched=matched,
         )
 
     title = _normalize_title(anchor.get("title"))
     if title is not None:
+        # Resolution BY title cannot disagree with its own title, so no cross-check.
         return _resolution_from_hits(
             candidate_id=candidate_id,
             anchor_index=anchor_index,
@@ -444,6 +492,35 @@ def _ordered_refs(refs: Iterable[PaperReference]) -> tuple[str, ...]:
     return tuple(sorted(preferred, key=lambda ref: (0 if ref.startswith("paper:") else 1, ref)))
 
 
+def _title_tokens(value: object) -> set[str]:
+    normalized = _normalize_title(value)
+    if normalized is None:
+        return set()
+    return {token for token in normalized.split() if len(token) >= 3}
+
+
+def _anchor_metadata_mismatch(anchor: dict, ref: PaperReference) -> str | None:
+    """Why the anchor's stated metadata disagrees with the record it resolved to.
+
+    An anchor resolved by DOI/citekey carries an *independently stated* title and
+    year (the lens agent's own claim about the paper). When those disagree with
+    the resolved record, the identifier points at a different work than the
+    anchor names -- the ``fb-2026-07-17-009`` shape, where a valid DOI resolved
+    cleanly to a real but unrelated paper. Reported so the human never copies the
+    ref. The check is deliberately conservative: it fires only on titles that
+    share no substantive tokens (clearly different works), tolerating wording
+    variation between an anchor's paraphrase and the record's exact title.
+    """
+    anchor_tokens = _title_tokens(anchor.get("title"))
+    ref_tokens = _title_tokens(ref.title)
+    if anchor_tokens and ref_tokens and not (anchor_tokens & ref_tokens):
+        return f"title mismatch: anchor {anchor.get('title')!r} vs resolved {ref.title!r}"
+    anchor_year = _int_year(anchor.get("year"))
+    if anchor_year is not None and ref.year is not None and abs(anchor_year - ref.year) > 1:
+        return f"year mismatch: anchor {anchor_year} vs resolved {ref.year}"
+    return None
+
+
 def _resolution_from_hits(
     *,
     candidate_id: str,
@@ -452,17 +529,24 @@ def _resolution_from_hits(
     match_kind: str,
     query: str,
     hits: tuple[str, ...],
+    matched: list[PaperReference] | None = None,
 ) -> AnchorResolution:
     if len(hits) == 1:
+        detail = None
+        if matched is not None:
+            resolved_ref = next((ref for ref in matched if ref.ref == hits[0]), None)
+            if resolved_ref is not None:
+                detail = _anchor_metadata_mismatch(anchor, resolved_ref)
         return AnchorResolution(
             candidate_id=candidate_id,
             anchor_index=anchor_index,
-            status="resolved",
+            status="mismatch" if detail else "resolved",
             resolved=hits[0],
             match_kind=match_kind,
             query=query,
             candidates=hits,
             anchor=anchor,
+            detail=detail,
         )
     if hits:
         return AnchorResolution(
@@ -656,7 +740,66 @@ def build_create_plan(candidate_id: str, data: dict, model_id: str, *, ref_index
         lens_views=lens_views,
         added_by=f"explore-ideas:{model_id}:{candidate_id}",
         related=related,
+        body_seed=_build_body_seed(data, lens_views),
     )
+
+
+def _build_body_seed(data: dict, lens_views: list[dict]) -> str:
+    """Recover the researched prose the candidate block already carries.
+
+    The claim becomes the lead paragraph; the per-lens rationale (or the
+    single-lens top-level rationale, when no lens_views are present) becomes a
+    framing list. Returns "" when the block carries neither, so apply leaves a
+    bare scaffold that `gaps` can still flag rather than fabricating prose.
+    """
+    parts: list[str] = []
+    claim = data.get("question_or_claim")
+    if isinstance(claim, str) and claim.strip():
+        parts.append(claim.strip())
+
+    framings = [
+        (view["lens"], view["rationale"])
+        for view in lens_views
+        if isinstance(view.get("rationale"), str) and view["rationale"].strip()
+    ]
+    if framings:
+        lines = ["**Exploration rationale (one line per contributing lens):**", ""]
+        lines.extend(f"- _{lens}_: {rationale.strip()}" for lens, rationale in framings)
+        parts.append("\n".join(lines))
+    else:
+        rationale = data.get("rationale")
+        if isinstance(rationale, str) and rationale.strip():
+            parts.append(rationale.strip())
+
+    return "\n\n".join(parts)
+
+
+def _seed_first_section(body: str, seed: str) -> str:
+    """Replace the first ``##`` section's placeholder with ``seed`` prose.
+
+    Leaves every other section's guidance untouched. Returns ``body`` unchanged
+    when there is no section to seed into.
+    """
+    lines = body.splitlines()
+    start = next((i for i, line in enumerate(lines) if line.startswith("## ")), None)
+    if start is None:
+        return body
+    end = next((j for j in range(start + 1, len(lines)) if lines[j].startswith("## ")), len(lines))
+    seeded = lines[: start + 1] + ["", seed, ""] + lines[end:]
+    text = "\n".join(seeded)
+    return text + "\n" if body.endswith("\n") else text
+
+
+def _reseed_entity_body(path: Path, seed: str) -> None:
+    text = path.read_text(encoding="utf-8")
+    if not text.startswith("---\n"):
+        return
+    frontmatter_text, separator, body = text[len("---\n") :].partition("---\n")
+    if not separator:
+        return
+    new_body = _seed_first_section(body, seed)
+    if new_body != body:
+        path.write_text("---\n" + frontmatter_text + "---\n" + new_body, encoding="utf-8")
 
 
 def plan_report(blocks: list[CandidateBlock], model_id: str, *, ref_index: RefIndex | None = None) -> ReportPlan:
@@ -674,6 +817,7 @@ def plan_report(blocks: list[CandidateBlock], model_id: str, *, ref_index: RefIn
     skipped_applied: list[str] = []
     skipped_other: list[str] = []
     manual: list[tuple[str, str]] = []
+    folds: list[FoldPlan] = []
     errors: list[str] = []
 
     for block in blocks:
@@ -686,6 +830,23 @@ def plan_report(blocks: list[CandidateBlock], model_id: str, *, ref_index: RefIn
             continue
         if decision in {"drop", "defer"}:
             skipped_other.append(block.candidate_id)
+            continue
+        if decision == "fold":
+            targets = block.data.get("related_existing")
+            if not isinstance(targets, list) or not targets:
+                errors.append(
+                    f"{block.candidate_id}: fold block must carry related_existing "
+                    "(the existing entity it sharpens)"
+                )
+                continue
+            title = block.data.get("title")
+            folds.append(
+                FoldPlan(
+                    candidate_id=block.candidate_id,
+                    title=title.strip() if isinstance(title, str) and title.strip() else block.candidate_id,
+                    targets=[str(target) for target in targets],
+                )
+            )
             continue
 
         kind = block.data.get("proposed_kind")
@@ -709,6 +870,7 @@ def plan_report(blocks: list[CandidateBlock], model_id: str, *, ref_index: RefIn
         skipped_applied=skipped_applied,
         skipped_other=skipped_other,
         manual=manual,
+        folds=folds,
     )
 
 
@@ -806,6 +968,9 @@ def apply_report(project_root: Path, from_value: str, model_id: str, today: date
             failures.append((create_plan.candidate_id, str(exc)))
             continue
 
+        if create_plan.body_seed:
+            _reseed_entity_body(result.path, create_plan.body_seed)
+
         try:
             text = write_back(text, create_plan.candidate_id, result.entity_id, today.isoformat())
             report_path.write_text(text, encoding="utf-8")
@@ -832,6 +997,7 @@ def apply_report(project_root: Path, from_value: str, model_id: str, today: date
         skipped_applied=plan.skipped_applied,
         skipped_other=plan.skipped_other,
         manual=plan.manual,
+        folds=plan.folds,
         failures=failures,
     )
 
@@ -847,6 +1013,7 @@ def check_report(project_root: Path, from_value: str, model_id: str) -> ApplyChe
         skipped_applied=plan.skipped_applied,
         skipped_other=plan.skipped_other,
         manual=plan.manual,
+        folds=plan.folds,
     )
 
 
@@ -860,15 +1027,60 @@ def _entity_index(project_root: Path) -> dict[str, tuple[Path, dict, str]]:
     return index
 
 
-def _body_has_substantive_text(body: str) -> bool:
-    for raw_line in body.splitlines():
+_HTML_COMMENT_RE = re.compile(r"<!--.*?-->", re.DOTALL)
+
+
+def _content_lines(body: str) -> Iterable[str]:
+    """Stripped body lines that are neither blank, a heading, nor inside an HTML
+    comment span. Comments are stripped as whole (possibly multi-line) spans."""
+    for raw_line in _HTML_COMMENT_RE.sub("", body).splitlines():
         line = raw_line.strip()
-        if not line or line.startswith("#") or line.startswith("<!--"):
-            continue
-        if line.endswith("-->"):
-            continue
-        return True
-    return False
+        if line and not line.startswith("#"):
+            yield line
+
+
+def _body_has_substantive_text(body: str) -> bool:
+    # Strip whole HTML comment spans first -- template guidance comments are
+    # multi-line, so a line-by-line skip (leaving interior bullet lines) let a
+    # pure scaffold read as filled (fb-2026-07-17-009 / -11-022).
+    return next(iter(_content_lines(body)), None) is not None
+
+
+def _rendered_scaffold_content(kind: str) -> frozenset[str] | None:
+    """The content lines of a freshly-rendered scaffold for ``kind``.
+
+    A real scaffold body mixes HTML comments with bare placeholder bullets
+    (``- Related hypotheses:``, hint bullets) that no heuristic reliably tells
+    from authored prose. Comparing against the rendered template is exact: a
+    body is scaffold-only iff it introduces no content line the template lacks.
+    Body content is title-independent (the title is an H1, stripped as a
+    heading), so a synthetic id/title renders the canonical scaffold.
+    """
+    try:
+        markdown = build_entity_markdown(
+            kind=kind,
+            entity_id=f"{kind}:0001-scaffold",
+            title="Scaffold",
+            status="active",
+            related=[],
+            source_refs=[],
+            today=date(2000, 1, 1),
+        )
+    except (EntityCommandError, ValueError):
+        return None
+    _frontmatter, separator, body = markdown[len("---\n") :].partition("---\n")
+    if not separator:
+        return None
+    return frozenset(_content_lines(body))
+
+
+def _body_is_scaffold_only(body: str, kind: str | None) -> bool:
+    """Whether ``body`` is still the untouched template scaffold for its kind."""
+    scaffold = _rendered_scaffold_content(kind) if kind is not None else None
+    if scaffold is None:
+        # Unknown/unrenderable kind: fall back to the comment-aware prose check.
+        return not _body_has_substantive_text(body)
+    return all(line in scaffold for line in _content_lines(body))
 
 
 def _supporting_anchor_refs(data: dict) -> list[str]:
@@ -911,7 +1123,8 @@ def _candidate_has_lens_views(data: dict) -> bool:
 
 def _entity_gap_items(block: CandidateBlock, frontmatter: dict, body: str, report_path: Path) -> list[GapItem]:
     gaps: list[GapItem] = []
-    if not _body_has_substantive_text(body):
+    kind = frontmatter.get("kind") if isinstance(frontmatter.get("kind"), str) else None
+    if _body_is_scaffold_only(body, kind):
         gaps.append(
             GapItem(
                 code="empty_body",

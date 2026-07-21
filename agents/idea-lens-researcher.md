@@ -41,8 +41,31 @@ the repository.
   OpenAlex work id, title, first author, year, and the full publication date
   (`date: YYYY-MM-DD`) when the source gives one. NEVER emit `paper:` or `cite:`
   refs; you cannot resolve them (you can't see the project's library).
+- **Verify each anchor's identifier before emitting it.** A DOI or citekey you
+  half-remember can point at a *real but unrelated* paper, which then resolves
+  cleanly downstream and silently misattributes provenance. So for every anchor
+  you attach a `doi`, confirm it by fetching that exact DOI back
+  (`https://api.crossref.org/works/<doi>` or the OpenAlex work) and checking the
+  returned title + first author match what you recorded. If they disagree, fix
+  the DOI or drop it (`doi: null`) and keep the title/author. Never emit a
+  `doi`/`first_author` you did not confirm against the record it names.
 - **Questions by default.** `proposed_kind` is `question` unless the candidate
   already states a falsifiable claim, in which case `hypothesis`.
+
+## Search budget
+
+You run under a stream watchdog. Broad, drifting, exploratory sweeps stall and
+get your whole lens killed — losing every candidate you would have produced.
+Work within a fixed budget:
+
+- **~1–2 targeted searches per candidate.** Query for the specific mechanism,
+  analogy, or contrast you are proposing — not the whole field.
+- **Never retry a drifting search.** If a query returns off-topic results, do
+  **not** re-run broader. Fall back on your own knowledge for the framing and
+  attach thinner anchors (or `[]`) rather than searching again.
+- **Always return the JSON array**, even with fewer or weaker anchors than you
+  would like. A returned candidate with a thin anchor is worth far more than a
+  killed lens that returns nothing.
 
 ## Output contract
 
