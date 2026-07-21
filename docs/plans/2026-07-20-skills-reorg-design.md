@@ -45,7 +45,7 @@ principle-trimming, no `frictionless`/`mutational-signatures` content splits (al
 | `embeddings-manifold-qa` | New top-level **`ml/`**. |
 | `annotation-curation-qa` | **`epistemics/`**. |
 | `openalex`/`pubmed` | **`literature/sources/`**. |
-| Rename prefix source | **Innermost subject** — `bio/` and `ml/` are navigational parents, not name parts (`name = <subject>-<operation>`). |
+| Rename prefix source | **Innermost subject** (`name = <subject>-<operation>`). `bio/` is a navigational parent (no `bio-` prefix); **`ml` is itself a subject** (its leaf is `ml-embeddings-manifold-qa`). |
 | Codex `research-methodology` companion | **Dropped; all callers rewritten** to load `scientific-writing` + consult `skills/INDEX.md` for the relevant `literature/`/`epistemics/`/`research-package/` leaves. `research/` fully dissolves — **no portal router**. |
 
 `data/` and `research/` **dissolve** entirely; `.claude-plugin/skills/` (causal-dag,
@@ -109,7 +109,8 @@ pipelines 3, writing 1. **28 move (26 also renamed), 10 stay.**
 ## Skill rename (name migration)
 
 Rule: `name = <subject>-<operation>` where `<subject>` is the leaf's **innermost subject folder**
-(`bio/` and `ml/` are navigational parents; `bio/genomics/` → subject `genomics`). Leaves that
+(`bio/` is navigational — `bio/genomics/` → subject `genomics`; **`ml` is itself a subject** →
+`ml-embeddings-manifold-qa`). Leaves that
 don't change subject keep their name. `research-package-{spec,rendering}` already match their new
 folder and are **unchanged**.
 
@@ -179,7 +180,8 @@ routers stay. `research/SKILL.md` (`research-methodology`) is **deleted**. Route
    are generated and follow on regen — do not hand-edit them):
    - `science/src/science_tool/codex_skills.py`: remove the `COMPANION_SKILLS` research entry (`:18`);
      rework `_rewrite_companion_skill_references` (`:295-310`) so the new source instruction maps to
-     its Codex form (`science-scientific-writing` + "consult `codex-skills/INDEX.md`").
+     its Codex form (`science-scientific-writing`; the research half reads `../../skills/INDEX.md`,
+     **not** `codex-skills/INDEX.md`, which lists only commands + companions, not canonical leaves).
    - `references/command-preamble.md:10`; `references/role-prompts/{research-assistant.md:17,
      discussant.md:18}`.
    - `commands/{review.md:25, plan-pipeline.md:9, review-pipeline.md:9}`; `commands/plan-analysis.md`
@@ -187,8 +189,8 @@ routers stay. `research/SKILL.md` (`research-methodology`) is **deleted**. Route
      leaves (e.g. `literature-evaluation`, `epistemics-annotation-curation-qa`).
    - `skills/INDEX.md:16` (drop row); `skills/data/SKILL.md:188` (internal link to `../research/SKILL.md`
      → retarget to `literature/` or drop).
-   - `docs/user-guide/codex.md:113`; `codex-skills/INSTALL.codex.md` (confirm generated-vs-static;
-     if static, edit; if generated, follows on regen).
+   - `docs/user-guide/codex.md:113`; `codex-skills/INSTALL.codex.md` is **static** (hand-edited, not
+     generated): drop `science-research-methodology`, keep `science-scientific-writing`.
    - Replacement instruction (canonical): keep "Load the `scientific-writing` skill"; replace the
      research half with "consult `skills/INDEX.md` and load the relevant `literature/`, `epistemics/`,
      and `research-package/` leaves (e.g. `literature-evaluation`, `literature-citation-discipline`,

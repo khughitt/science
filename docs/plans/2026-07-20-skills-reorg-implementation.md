@@ -31,6 +31,11 @@ Markdown corpus under `skills/`; generated mirror under `codex-skills/` via
 - **Generated** `codex-skills/` outputs — `INDEX.md` and the `science-*/` skill dirs — are written
   only by `scripts/generate_codex_skills.py`; never hand-edit them. `codex-skills/INSTALL.codex.md`
   is **static** (not generated) and **is** hand-edited in this plan.
+- The generator **regenerates in place** but does **not** prune orphaned `science-*/` dirs, so
+  dropping the `research-methodology` companion would leave a stale `codex-skills/science-research-methodology/`
+  that fails `test_committed_codex_skills_match_fresh_generation` (which generates into a *fresh temp
+  dir* and byte-compares to the committed tree). Task 4 adds stale-dir pruning to the generator (the
+  durable fix — every future command/companion removal needs it), not a one-off `git rm`.
 - `git mv` does **not** create destination directories and does **not** remove emptied source
   directories — `mkdir -p` before, `rmdir` after. Use `git mv` (preserve history), never delete+add.
 - Name rule: `name = <subject>-<operation>`; subject = innermost subject folder. **`bio/` is a
@@ -141,10 +146,42 @@ mkdir -p skills/bio/genomics skills/bio/transcriptomics skills/bio/proteomics \
 - [ ] **Step 2: Apply MAP-A moves**, then remove the dissolved router and emptied dirs:
 
 ```bash
-# run each MAP-A row as: git mv skills/<old> skills/<new>   (28 leaves + 3 routers)
+set -e
+git mv skills/data/genomics/somatic-mutation-qa.md                 skills/bio/genomics/somatic-mutation-qa.md
+git mv skills/data/genomics/copy-number-sv-qa.md                   skills/bio/genomics/copy-number-sv-qa.md
+git mv skills/data/genomics/mutational-signatures-and-selection.md skills/bio/genomics/mutational-signatures-and-selection.md
+git mv skills/data/genomics/SKILL.md                               skills/bio/genomics/SKILL.md
+git mv skills/data/expression/bulk-rnaseq-qa.md                    skills/bio/transcriptomics/bulk-rnaseq-qa.md
+git mv skills/data/expression/microarray-qa.md                     skills/bio/transcriptomics/microarray-qa.md
+git mv skills/data/expression/scrna-qa.md                          skills/bio/transcriptomics/scrna-qa.md
+git mv skills/data/expression/SKILL.md                             skills/bio/transcriptomics/SKILL.md
+git mv skills/data/proteomics-qa.md                                skills/bio/proteomics/proteomics-qa.md
+git mv skills/data/protein-sequence-structure-qa.md               skills/bio/proteomics/protein-sequence-structure-qa.md
+git mv skills/data/functional-genomics-qa.md                       skills/bio/functional-genomics-qa.md
+git mv skills/data/embeddings-manifold-qa.md                       skills/ml/embeddings-manifold-qa.md
+git mv skills/data/frictionless.md                                 skills/data-management/frictionless.md
+git mv skills/data/SKILL.md                                        skills/data-management/SKILL.md
+git mv skills/data/sources/openalex.md                             skills/literature/sources/openalex.md
+git mv skills/data/sources/pubmed.md                               skills/literature/sources/pubmed.md
+git mv skills/research/literature-evaluation.md                    skills/literature/literature-evaluation.md
+git mv skills/research/citation-discipline.md                      skills/literature/citation-discipline.md
+git mv skills/research/proposition-schema.md                       skills/epistemics/proposition-schema.md
+git mv skills/research/proposition-graph-reasoning.md              skills/epistemics/proposition-graph-reasoning.md
+git mv skills/research/annotation-curation-qa.md                   skills/epistemics/annotation-curation-qa.md
+git mv skills/research/research-package-spec.md                    skills/research-package/research-package-spec.md
+git mv skills/research/research-package-rendering.md               skills/research-package/research-package-rendering.md
+git mv skills/statistics/bias-vs-variance-decomposition.md         skills/study-design/bias-vs-variance-decomposition.md
+git mv skills/statistics/causal-identification.md                  skills/study-design/causal-identification.md
+git mv skills/statistics/estimator-certification.md                skills/study-design/estimator-certification.md
+git mv skills/statistics/power-floor-acknowledgement.md            skills/study-design/power-floor-acknowledgement.md
+git mv skills/statistics/prereg-amendment-vs-fresh.md              skills/study-design/prereg-amendment-vs-fresh.md
+git mv skills/statistics/prereg-defensive-instrumentation.md       skills/study-design/prereg-defensive-instrumentation.md
+git mv skills/statistics/replicate-count-justification.md          skills/study-design/replicate-count-justification.md
+git mv skills/statistics/sensitivity-arbitration.md                skills/study-design/sensitivity-arbitration.md
 git rm skills/research/SKILL.md
 rmdir skills/data/genomics skills/data/expression skills/data/sources skills/data skills/research
 ```
+(31 `git mv` + 1 `git rm`. `set -e` aborts on the first failure — e.g. a missing `mkdir -p` dest.)
 
 - [ ] **Step 3: Verify the tree (fail-hard).**
 
@@ -179,7 +216,42 @@ for old in data-genomics-somatic-mutation-qa data-genomics-copy-number-sv-qa \
   statistics-sensitivity-arbitration data-genomics data-expression; do
     if grep -rqn "^name: $old\$" skills/; then echo "LEFTOVER name: $old"; fail=1; fi
   done
-[ "$fail" -eq 0 ] && echo "names ok" || { echo "FAIL leftover names"; exit 1; }
+[ "$fail" -eq 0 ] && echo "no leftover old names" || { echo "FAIL leftover names"; exit 1; }
+# positive: each NEW name (MAP-B) is present at exactly the expected new path (name lands, not just old gone)
+while IFS='|' read -r newname newpath; do
+    got=$(grep -l "^name: $newname\$" "skills/$newpath" 2>/dev/null) || true
+    [ -n "$got" ] || { echo "MISSING name: $newname at skills/$newpath"; fail=1; }
+  done <<'MAPB'
+genomics-somatic-mutation-qa|bio/genomics/somatic-mutation-qa.md
+genomics-copy-number-sv-qa|bio/genomics/copy-number-sv-qa.md
+genomics-mutational-signatures-and-selection|bio/genomics/mutational-signatures-and-selection.md
+transcriptomics-bulk-rnaseq-qa|bio/transcriptomics/bulk-rnaseq-qa.md
+transcriptomics-microarray-qa|bio/transcriptomics/microarray-qa.md
+transcriptomics-scrna-qa|bio/transcriptomics/scrna-qa.md
+proteomics-qa|bio/proteomics/proteomics-qa.md
+proteomics-protein-sequence-structure-qa|bio/proteomics/protein-sequence-structure-qa.md
+functional-genomics-qa|bio/functional-genomics-qa.md
+ml-embeddings-manifold-qa|ml/embeddings-manifold-qa.md
+data-management-frictionless|data-management/frictionless.md
+literature-source-openalex|literature/sources/openalex.md
+literature-source-pubmed|literature/sources/pubmed.md
+literature-evaluation|literature/literature-evaluation.md
+literature-citation-discipline|literature/citation-discipline.md
+epistemics-proposition-schema|epistemics/proposition-schema.md
+epistemics-proposition-graph-reasoning|epistemics/proposition-graph-reasoning.md
+epistemics-annotation-curation-qa|epistemics/annotation-curation-qa.md
+study-design-bias-vs-variance-decomposition|study-design/bias-vs-variance-decomposition.md
+study-design-causal-identification|study-design/causal-identification.md
+study-design-estimator-certification|study-design/estimator-certification.md
+study-design-power-floor-acknowledgement|study-design/power-floor-acknowledgement.md
+study-design-prereg-amendment-vs-fresh|study-design/prereg-amendment-vs-fresh.md
+study-design-prereg-defensive-instrumentation|study-design/prereg-defensive-instrumentation.md
+study-design-replicate-count-justification|study-design/replicate-count-justification.md
+study-design-sensitivity-arbitration|study-design/sensitivity-arbitration.md
+genomics|bio/genomics/SKILL.md
+transcriptomics|bio/transcriptomics/SKILL.md
+MAPB
+[ "$fail" -eq 0 ] && echo "names ok (old gone, new present)" || { echo "FAIL names"; exit 1; }
 ```
 (Full suite/lint are RED here by construction — do NOT run them as a gate.)
 
@@ -213,16 +285,31 @@ grep -rnoE '`(\.\.?/)?[a-z0-9./_-]+\.md`' skills/ | grep -v 'skills/meta/templat
   `../` from the source file's new location). Depth reminders: `data/genomics/`→`bio/genomics/` and
   `data/expression/`→`bio/transcriptomics/` keep depth-2; `data/*.md` (depth-1) →
   `bio/proteomics/…`, `ml/…`, `data-management/…`, `literature/…`, `epistemics/…`,
-  `research-package/…`, `study-design/…` change depth. Any link into the deleted `research/SKILL.md`
-  is retargeted to the specific new leaf/router or dropped (see Task 4 Step 5 for
-  `data-management/SKILL.md`).
+  `research-package/…`, `study-design/…` change depth.
+
+- [ ] **Step 2b: Retarget every link to the deleted `research/SKILL.md` (pinned destinations).** The
+  router is gone, so each of these must point at a concrete successor; the Task-1 tree makes them all
+  dangling until fixed. Apply exactly (paths are the leaves' NEW locations; recompute `../` from each
+  source's new location):
+
+  | Source (new location) | Old link | New target |
+  |---|---|---|
+  | `writing/SKILL.md:23` (prose "see …") | `../research/SKILL.md` | `../literature/SKILL.md` |
+  | `writing/SKILL.md:40` (neighboring routers) | `../research/SKILL.md` | `../literature/SKILL.md`, `../epistemics/SKILL.md` |
+  | `statistics/SKILL.md:155` (neighbor "high-level research methodology") | `../research/SKILL.md` | `../literature/SKILL.md`, `../epistemics/SKILL.md` |
+  | `bio/transcriptomics/SKILL.md` (was `data/expression/SKILL.md:171`, "literature" context) | `../../research/SKILL.md` | `../../literature/SKILL.md` |
+  | `data-management/SKILL.md` (was `data/SKILL.md:188`) | `../research/SKILL.md` | **split into two** direct leaf links: `../literature/literature-evaluation.md` (source-choice evaluation) + `../literature/citation-discipline.md` (citation conformance) |
+  | `meta/SKILL.md:33` (neighboring subject routers list, also has `../data/SKILL.md`) | `../data/SKILL.md`, `../research/SKILL.md` | replace the whole list with the new top-level routers: `../bio/SKILL.md`, `../ml/SKILL.md`, `../data-management/SKILL.md`, `../statistics/SKILL.md`, `../study-design/SKILL.md`, `../epistemics/SKILL.md`, `../literature/SKILL.md`, `../research-package/SKILL.md`, `../pipelines/SKILL.md`, `../writing/SKILL.md` |
+  | `literature/citation-discipline.md:57` (was `research/citation-discipline.md`, prose inline-code mention) | `` `research/SKILL.md` `` | `` `literature/SKILL.md` `` (prose; not a markdown link but must not name a deleted file) |
+
+  `skills/INDEX.md` rows `:16`/`:88` are handled by the wholesale INDEX rewrite (Step 5).
 
 - [ ] **Step 3: Retarget the moved/surviving routers.**
   - `bio/genomics/SKILL.md`, `bio/transcriptomics/SKILL.md`: same-folder leaf references usually
     unchanged — verify each still resolves.
   - `data-management/SKILL.md`: repoint routing rows that pointed at the migrated data-QA leaves to
     `../bio/…`; leave its teaching body (extraction is phase 4). (Its `../research/SKILL.md` link is
-    handled in Task 4 Step 5.)
+    split in Step 2b above.)
   - `statistics/SKILL.md`: **remove** routing rows for the 8 leaves now in `study-design/`; keep the
     6 modeling leaves. Do not trim the Principles prose (phase 4).
 
@@ -604,7 +691,9 @@ git add -A && git commit -m "refactor(skills): rewrite links, INDEX, and routers
 
 ### Task 3: Non-Codex path/name-coupled consumers
 
-**Files:** `science/src/science_tool/skills_lint/lint.py` (`HALT_ON_REQUIRED`); external
+**Files:** `science/src/science_tool/skills_lint/lint.py` (`HALT_ON_REQUIRED`); HALT test fixtures
+`science/tests/skills_lint/fixtures/data/{embeddings-manifold-qa,functional-genomics-qa}.md` +
+`fixtures/INDEX.md` and `science/tests/skills_lint/test_lint.py`; external
 `estimator-certification` links in `commands/pre-register.md:124`,
 `aspects/computational-analysis/computational-analysis.md:72`, `templates/pre-registration.md:170`,
 `science/model/src/science_model/templates/pre-registration.md:170`; `research-proposition-schema`
@@ -630,6 +719,33 @@ HALT_ON_REQUIRED = {
     "epistemics/annotation-curation-qa.md",
 }
 ```
+
+- [ ] **Step 1b: Relocate the HALT test fixtures to match the new constant.** `check_halt_on_conditions`
+  keys on a fixture's path being in `HALT_ON_REQUIRED`; the two fixtures currently sit at
+  `fixtures/data/…`, which just left the set, so `test_required_halt_on_leaf_without_section_returns_issue`
+  and `test_lint_cli_against_fixtures` would break. Move both fixtures to two of the NEW required paths
+  (preserving each fixture's identity and body — the embeddings fixture keeps its `## Halt-On Conditions`
+  section, the functional-genomics fixture keeps *no* section):
+
+  ```bash
+  set -e
+  mkdir -p science/tests/skills_lint/fixtures/ml science/tests/skills_lint/fixtures/bio
+  git mv science/tests/skills_lint/fixtures/data/embeddings-manifold-qa.md   science/tests/skills_lint/fixtures/ml/embeddings-manifold-qa.md
+  git mv science/tests/skills_lint/fixtures/data/functional-genomics-qa.md   science/tests/skills_lint/fixtures/bio/functional-genomics-qa.md
+  rmdir science/tests/skills_lint/fixtures/data
+  ```
+
+  Then update the references that name the old fixture paths:
+  - `test_lint.py:71` `FIXTURES / "data" / "embeddings-manifold-qa.md"` → `FIXTURES / "ml" / "embeddings-manifold-qa.md"`
+  - `test_lint.py:79` `FIXTURES / "data" / "functional-genomics-qa.md"` → `FIXTURES / "bio" / "functional-genomics-qa.md"`
+  - `test_lint.py:138` `assert "data/functional-genomics-qa.md" in result.output` → `assert "bio/functional-genomics-qa.md" in result.output`
+  - `test_lint.py:142` `assert "data/embeddings-manifold-qa.md" not in result.output` → `assert "ml/embeddings-manifold-qa.md" not in result.output`
+  - `fixtures/INDEX.md:14,15` `skills/data/embeddings-manifold-qa.md` → `skills/ml/embeddings-manifold-qa.md`,
+    `skills/data/functional-genomics-qa.md` → `skills/bio/functional-genomics-qa.md`
+
+  (Both new fixture paths are members of the Step-1 `HALT_ON_REQUIRED`, so the positive/negative
+  assertions keep testing a genuinely required path. These fixtures are test doubles — do **not** add
+  their paths to the production constant to keep tests green.)
 
 - [ ] **Step 2: Retarget the 4 external `estimator-certification` links.** In `pre-register.md`,
   `computational-analysis.md`, and BOTH pre-reg templates: path
@@ -658,12 +774,15 @@ HALT_ON_REQUIRED = {
 - [ ] **Step 6: Verify (fail-hard).**
 
 ```bash
+set -e
 if grep -rqn "skills/statistics/estimator-certification\|statistics-estimator-certification" \
   commands/pre-register.md aspects/ templates/ science/model/src/science_model/templates/; then
   echo "FAIL leftover estimator link"; exit 1; fi
-diff templates/pre-registration.md science/model/src/science_model/templates/pre-registration.md
-diff templates/proposition.md science/model/src/science_model/templates/proposition.md
-( cd science && uv run --frozen python -c "from science_tool.skills_lint.lint import HALT_ON_REQUIRED as H; assert len(H)==9 and 'epistemics/annotation-curation-qa.md' in H and not any(p.split('/')[0] in {'data','research','statistics'} for p in H); print('HALT ok')" )
+diff templates/pre-registration.md science/model/src/science_model/templates/pre-registration.md || { echo "FAIL pre-registration templates diverge"; exit 1; }
+diff templates/proposition.md science/model/src/science_model/templates/proposition.md || { echo "FAIL proposition templates diverge"; exit 1; }
+[ ! -e science/tests/skills_lint/fixtures/data ] || { echo "FAIL fixtures/data still present"; exit 1; }
+( cd science && uv run --frozen python -c "from science_tool.skills_lint.lint import HALT_ON_REQUIRED as H; assert len(H)==9 and 'epistemics/annotation-curation-qa.md' in H and 'ml/embeddings-manifold-qa.md' in H and 'bio/functional-genomics-qa.md' in H and not any(p.split('/')[0] in {'data','research','statistics'} for p in H); print('HALT ok')" )
+echo "task 3 verify ok"
 ```
 
 - [ ] **Step 7: Commit.**
@@ -676,54 +795,130 @@ git add -A && git commit -m "refactor(skills): update linter, external links, te
 
 ### Task 4: Drop the Codex companion + rewrite plan-analysis + all callers
 
-**Files:** `science/src/science_tool/codex_skills.py`; `references/command-preamble.md:10`;
+**Files:** `science/src/science_tool/codex_skills.py` (drop companion, add stale-dir **pruning**,
+rework rewrite); `references/command-preamble.md:10`;
 `references/role-prompts/{research-assistant.md:17, discussant.md:18}`;
 `commands/{review.md:25, plan-pipeline.md:9, review-pipeline.md:9}`; **all of**
-`commands/plan-analysis.md`; `skills/data-management/SKILL.md` (the `../research/SKILL.md` link);
-`docs/user-guide/codex.md:113`; `codex-skills/INSTALL.codex.md` (static); tests
-`science/tests/test_codex_skills.py`, `science/tests/test_command_docs.py`.
+`commands/plan-analysis.md`; the **path-only** consumer commands that reference moved skill files —
+`commands/catalog-benchmarks.md:28`, `commands/catalog-datasets.md:17`, `commands/find-datasets.md:16-17`,
+`commands/search-literature.md:16-17`; `docs/user-guide/codex.md:113`;
+`codex-skills/INSTALL.codex.md` (static); tests `science/tests/test_codex_skills.py`,
+`science/tests/test_command_docs.py`. (The `data-management/SKILL.md` `../research/SKILL.md` split is
+done in **Task 2 Step 2b**, not here.)
 
 **Interfaces:** Consumes the dissolved `research/` + new leaves. Produces a Codex surface and command
-corpus with zero reference to the removed companion or any old name.
+corpus with zero reference to the removed companion or any old name/path.
 
 - [ ] **Step 1: Remove the companion.** In `codex_skills.py`, delete
   `CompanionSkill("research-methodology", Path("skills/research/SKILL.md"))` from `COMPANION_SKILLS`
   (keep `scientific-writing`, `skill-development`).
 
-- [ ] **Step 2: Define the canonical instruction (native ↔ generated).**
-  - **Native (source)** — used in `command-preamble.md:10`, `commands/review.md:25`:
+- [ ] **Step 1b: Prune orphaned `science-*` dirs in the generator.** Without this the in-place regen
+  (Task 5) leaves a stale `codex-skills/science-research-methodology/` that fails the committed-mirror
+  test. At the end of `generate_codex_skills`, after `_write_index(...)`, before `return generated`:
+
+  ```python
+      generated_dirs = {output_root / name for name in generated}
+      for child in output_root.iterdir():
+          if child.is_dir() and child.name.startswith("science-") and child not in generated_dirs:
+              shutil.rmtree(child)
+
+      return generated
+  ```
+
+  This only removes stale `science-*` **directories**; `INDEX.md` (regenerated) and the static
+  `INSTALL.codex.md` are files and are skipped. Add a test in `test_codex_skills.py`:
+
+  ```python
+  def test_generate_prunes_orphaned_skill_dirs(tmp_path: Path) -> None:
+      stale = tmp_path / "science-obsolete"
+      stale.mkdir(parents=True)
+      (stale / "SKILL.md").write_text("stale", encoding="utf-8")
+      keep = tmp_path / "INSTALL.codex.md"
+      keep.write_text("static", encoding="utf-8")
+
+      generate_codex_skills(ROOT, tmp_path)
+
+      assert not stale.exists()               # orphaned science-* dir removed
+      assert keep.read_text(encoding="utf-8") == "static"  # static file untouched
+  ```
+
+- [ ] **Step 2: Author the canonical native instruction.** The `research-methodology` skill is gone,
+  so callers load `scientific-writing` and consult the canonical index for methodology leaves. Write
+  these **native** (source) strings verbatim:
+  - **Full form** — `command-preamble.md:10` and `commands/review.md:25`:
 
     > Load the `scientific-writing` skill. For research methodology, read
     > `${CLAUDE_PLUGIN_ROOT}/skills/INDEX.md` and load the leaves relevant to the task (e.g.
     > `literature-evaluation`, `literature-citation-discipline`, `epistemics-proposition-graph-reasoning`).
 
-  - **Native short form** — used in `commands/plan-pipeline.md:9`, `commands/review-pipeline.md:9`
-    (drop "for evidence standards" tail or keep it after "methodology,"):
+  - **Short form** — `commands/plan-pipeline.md:9`, `commands/review-pipeline.md:9` (blockquote list
+    items — replace the `research-methodology` line, no companion name):
 
     > For research methodology, read `${CLAUDE_PLUGIN_ROOT}/skills/INDEX.md` and load the relevant
     > `literature/`/`epistemics/` leaves.
 
-  - **Generated (Codex)** — produced by `_rewrite_companion_skill_references`; `${CLAUDE_PLUGIN_ROOT}/skills/INDEX.md`
-    becomes `../../skills/INDEX.md`, and `scientific-writing` → `science-scientific-writing`:
+  Do **not** direct Codex to `codex-skills/INDEX.md` for these leaves — it lists only commands +
+  companions, not canonical leaves. The canonical index `${CLAUDE_PLUGIN_ROOT}/skills/INDEX.md` is
+  correct for the native surface; the generator rewrites the depth (Step 3).
 
-    > Load the `science-scientific-writing` Codex skill. For research methodology, read
+- [ ] **Step 3: Rework the generator's rewrite so the native strings map to their generated forms.**
+  This is ordering-sensitive: `_load_command_preamble` and `_build_skill_text` call
+  `_rewrite_claude_specific_text` (which itself ends by calling `_rewrite_companion_skill_references`),
+  and its generic `("${CLAUDE_PLUGIN_ROOT}/", "")` rule strips the plugin-root prefix. If the INDEX
+  depth-fix waited for `_rewrite_companion_skill_references`, the string would already read
+  `skills/INDEX.md` and any replacement written against `${CLAUDE_PLUGIN_ROOT}/skills/INDEX.md` would
+  never match. So split the two concerns:
+
+  1. In `_rewrite_claude_specific_text`, **prepend** a specific INDEX rule to the `replacements`
+     tuple, *before* the generic `("${CLAUDE_PLUGIN_ROOT}/", "")` strip (generated command/companion
+     surfaces all emit at depth 2, so `../../skills/` is the correct depth):
+
+     ```python
+         ("${CLAUDE_PLUGIN_ROOT}/skills/INDEX.md", "../../skills/INDEX.md"),
+     ```
+
+  2. In `_rewrite_companion_skill_references`, **delete all three** `research-methodology` replacement
+     pairs and replace them with the single companion-name pair (this is the only companion still
+     mirrored that appears by name in these instructions):
+
+     ```python
+     def _rewrite_companion_skill_references(text: str) -> str:
+         return text.replace(
+             "Load the `scientific-writing` skill.",
+             "Load the `science-scientific-writing` Codex skill.",
+         )
+     ```
+
+  The two transforms compose to the **generated** result (verify in Step 8's tests, full **and**
+  short form):
+
+    > **Full:** Load the `science-scientific-writing` Codex skill. For research methodology, read
     > `../../skills/INDEX.md` and load the leaves relevant to the task (e.g. `literature-evaluation`,
     > `literature-citation-discipline`, `epistemics-proposition-graph-reasoning`).
+    >
+    > **Short:** For research methodology, read `../../skills/INDEX.md` and load the relevant
+    > `literature/`/`epistemics/` leaves.
 
-  Do **not** direct Codex to `codex-skills/INDEX.md` for these leaves — it lists only commands +
-  companions, not canonical leaves.
+- [ ] **Step 4: Fix role prompts.** In `research-assistant.md:17` and `discussant.md:18`, change
+  `Skills: research-methodology, scientific-writing` → `Skills: scientific-writing` and append
+  "; for research methodology, read `${CLAUDE_PLUGIN_ROOT}/skills/INDEX.md` and load the relevant
+  `literature/`/`epistemics/` leaves".
 
-- [ ] **Step 3: Rework `_rewrite_companion_skill_references`** so its replacement pairs map the new
-  native strings (Step 2) to their generated forms; delete the three old `research-methodology`
-  pairs. Keep the `scientific-writing` companion mapping.
+- [ ] **Step 5: Rewrite the path-only consumer commands (moved skill files).** These reference moved
+  skill **paths** (not the companion) via `${CLAUDE_PLUGIN_ROOT}/skills/…`; they flow into the mirror,
+  so they must be fixed before Task 5 regen. Apply MAP-A:
 
-- [ ] **Step 4: Fix role prompts.** In both, change `Skills: research-methodology, scientific-writing`
-  → `Skills: scientific-writing` (add "; see `skills/INDEX.md` for research-methodology leaves").
+  | File:line | Old path | New path |
+  |---|---|---|
+  | `commands/catalog-benchmarks.md:28` | `skills/data/SKILL.md` | `skills/data-management/SKILL.md` |
+  | `commands/catalog-datasets.md:17` | `skills/data/SKILL.md` | `skills/data-management/SKILL.md` |
+  | `commands/find-datasets.md:16` | `skills/data/SKILL.md` | `skills/data-management/SKILL.md` |
+  | `commands/find-datasets.md:17` | `skills/data/frictionless.md` | `skills/data-management/frictionless.md` |
+  | `commands/search-literature.md:16` | `skills/data/sources/openalex.md` | `skills/literature/sources/openalex.md` |
+  | `commands/search-literature.md:17` | `skills/data/sources/pubmed.md` | `skills/literature/sources/pubmed.md` |
 
-- [ ] **Step 5: Fix `data-management/SKILL.md` link (split into two).** Replace the single
-  `[`../research/SKILL.md`](../research/SKILL.md)` bullet with two direct links:
-  `../literature/literature-evaluation.md` (source-choice evaluation) and
-  `../literature/citation-discipline.md` (citation conformance).
+  (Line numbers are the pre-edit anchors; the Task-5 fail-hard path grep is the net if any site drifts.)
 
 - [ ] **Step 6: Full MAP-B rewrite of `commands/plan-analysis.md`.** Rewrite every skill identifier
   on lines 34, 63–80, 130, 171, 195–202 using MAP-B **literally** (leave the 6 modeling `statistics-*`
@@ -737,23 +932,47 @@ corpus with zero reference to the removed companion or any old name.
   `science-research-methodology` (keep `science-scientific-writing`). Edit `docs/user-guide/codex.md:113`
   to remove `science-research-methodology` from the companion list.
 
-- [ ] **Step 8: Update `test_codex_skills.py`.**
-  - `test_generate_codex_skills_emits_companion_methodology_skills`: delete the `research_skill`
-    lines (read + 4 asserts). Change the writing-skill link assert to
-    `assert "../../skills/literature/citation-discipline.md" in writing_skill`; keep
-    `assert "../science-research-methodology/" not in writing_skill`; keep the `../../skills/statistics/SKILL.md`
-    assert. Rename the test to drop "companion_methodology".
-  - `test_generated_command_preamble_references_codex_companion_skills`: replace the line-127 assert
-    with the Step-2 generated text; keep the "old text absent" assert (line 129) updated to the old
-    native string.
-  - `test_generate_codex_skills_writes_index`: delete the `research-methodology` companion-row assert;
-    keep the `scientific-writing` row.
-  - The resource block (~830–865) reading `science-research-methodology/{research-package-rendering,
-    annotation-curation-qa,SKILL}.md`: delete those reads/asserts (that companion + its bundled
-    resources are no longer generated); if a test's remaining purpose is the writing-skill link,
-    repoint it to `../../skills/literature/citation-discipline.md`.
-  - Leave `test_generate_codex_skills_emits_expected_number_of_skills` (line 80) — it uses
-    `len(COMPANION_SKILLS)` and self-adjusts.
+- [ ] **Step 8: Update `test_codex_skills.py`.** (The Task-5 fail-hard grep scans `science/tests/`,
+  so any missed old name/path is caught at the gate — but fix them here.) Concretely:
+  - **`:36`** (`test_generate_codex_skills_rewrites_link_to_datapackage_skill` or sibling reading
+    `ROOT / "skills/data/frictionless.md"`): → `ROOT / "skills/data-management/frictionless.md"`.
+  - **`test_generate_codex_skills_emits_companion_methodology_skills` (`:83-99`)**: delete the
+    `research_skill` read + its 4 asserts (`:86,89-92`). Change `:96`
+    `"../science-research-methodology/citation-discipline.md" in writing_skill` →
+    `"../../skills/literature/citation-discipline.md" in writing_skill`; drop `:97`
+    (`"../research/SKILL.md" not in writing_skill`) or keep as harmless; keep `:98`
+    `"../../skills/statistics/SKILL.md" in writing_skill` and `:99`. Rename the test to drop
+    "companion_methodology" (e.g. `_emits_scientific_writing_companion`).
+  - **`test_generated_command_preamble_references_codex_companion_skills` (`:123-129`)**: replace `:127`
+    with the Step-3 **generated full form**; **delete** `:128` (the `codex-skills/INDEX.md` fallback
+    text no longer exists); keep `:129` old-native-absent (`Load the \`research-methodology\` and
+    \`scientific-writing\` skills.` — still true). Add a second assert against a **short-form** command
+    (e.g. `generated["science-plan-pipeline"]`) for the Step-3 generated short form.
+  - **`test_generate_codex_skills_writes_index` (`:132-145`)**: delete the `research-methodology`
+    companion-row assert (`:137-140`); keep the `scientific-writing` row (`:141-144`) and status row.
+  - **plan-analysis expectation strings (`:167-370` cluster)**: every assert reading
+    `generated["science-plan-analysis"]` (`:182,186,198,327,337,351,367` etc.) carries MAP-B old
+    names — e.g. `:186` `` `data-proteomics-qa`, `statistics-bias-vs-variance-decomposition`,
+    `statistics-sensitivity-arbitration` `` → `` `proteomics-qa`,
+    `study-design-bias-vs-variance-decomposition`, `study-design-sensitivity-arbitration` ``. Rewrite
+    each with MAP-B **literally** (the 6 modeling `statistics-*` stay); replace `research-methodology`
+    tokens with `literature-evaluation`/`literature-citation-discipline` and
+    `research-annotation-curation-qa` → `epistemics-annotation-curation-qa`, matching the Step-6
+    plan-analysis.md edits verbatim.
+  - **resource-block tests (`:835-870`)**: `test_rewrites_link_to_companion_source_leaf` (`:835`,
+    reads `science-research-methodology/research-package-rendering.md`) and
+    `test_rewrites_link_to_non_companion_leaf` (`:844`, reads
+    `science-research-methodology/annotation-curation-qa.md`) and
+    `test_rewrites_excluded_router_to_canonical_source` (`:862`, reads
+    `science-research-methodology/SKILL.md`) all read the dropped companion — **delete** all three.
+    `test_rewrites_link_to_bundled_resource` (`:855-859`, reads `science-scientific-writing/SKILL.md`):
+    change `:857` `"../science-research-methodology/citation-discipline.md"` →
+    `"../../skills/literature/citation-discipline.md"`; the negative `:858`
+    `"](../research/citation-discipline.md)"` → `"](../literature/citation-discipline.md)"`. Keep
+    `test_companion_source_leaf_is_not_also_a_resource` (writing companion is kept) and
+    `test_no_dangling_relative_links_in_generated_tree`.
+  - Leave `test_generate_codex_skills_emits_all_commands` (`:75-80`) — it uses `len(COMPANION_SKILLS)`
+    and self-adjusts. Keep the new `test_generate_prunes_orphaned_skill_dirs` from Step 1b.
 
 - [ ] **Step 9: Update `test_command_docs.py`.** Rewrite every skills path/name assertion to the new
   tree/names (558-559, 608-611, 632, 657, 778-779, 1010-1011, 1035-1036) and sweep the whole file for
@@ -792,8 +1011,14 @@ Expected: exit 0, no findings.
 ```bash
 EXCL='\.venv|/codex-skills/|/docs/plans/|\.claude/worktrees'
 fail=0
-# every OLD MAP-B name + research-methodology must have zero LIVE hits
-for tok in research-methodology data-genomics-somatic-mutation-qa data-genomics-copy-number-sv-qa \
+# capture-then-test avoids pipeline-exit masking; `|| true` swallows grep's no-match (exit 1),
+# so a genuine hit is the ONLY thing that sets `hits`.
+check() {  # $1 = pattern, $2 = label
+    hits=$(grep -rnE "$1" . --include="*.md" --include="*.py" 2>/dev/null | grep -vE "$EXCL" || true)
+    if [ -n "$hits" ]; then echo "LEFTOVER $2:"; echo "$hits"; fail=1; fi
+}
+# OLD MAP-B leaf/router names (word-anchored) — zero LIVE hits
+for tok in data-genomics-somatic-mutation-qa data-genomics-copy-number-sv-qa \
   data-genomics-mutational-signatures-and-selection data-expression-bulk-rnaseq-qa \
   data-expression-microarray-qa data-expression-scrna-qa data-proteomics-qa \
   data-protein-sequence-structure-qa data-functional-genomics-qa data-embeddings-manifold-qa \
@@ -803,27 +1028,48 @@ for tok in research-methodology data-genomics-somatic-mutation-qa data-genomics-
   statistics-causal-identification statistics-estimator-certification \
   statistics-power-floor-acknowledgement statistics-prereg-amendment-vs-fresh \
   statistics-prereg-defensive-instrumentation statistics-replicate-count-justification \
-  statistics-sensitivity-arbitration; do
-    if grep -rn "$tok" . --include="*.md" --include="*.py" | grep -vE "$EXCL" >/dev/null; then
-      echo "LEFTOVER name: $tok"; fail=1; fi
+  statistics-sensitivity-arbitration data-genomics data-expression; do
+    check "(^|[^a-z-])$tok([^a-z-]|\$)" "name: $tok"
   done
-# old PATH forms (lint misses inline-code path mentions)
-for p in "skills/data/" "skills/research/" "skills/data/expression" "skills/data/genomics" "skills/data/sources"; do
-    if grep -rn "$p" . --include="*.md" --include="*.py" | grep -vE "$EXCL" >/dev/null; then
-      echo "LEFTOVER path: $p"; fail=1; fi
+# research-methodology: ANCHOR to skill-reference forms only — bare token appears as prose
+# ("research-methodology entities" in meta/entities/questions/0038) and must NOT be flagged.
+check '`research-methodology`' "skill-ref: \`research-methodology\`"
+check 'skills/research/' "path: skills/research/"
+# old PATH forms (lint misses inline-code path mentions). The 6 modeling statistics leaves STAY, so
+# grep the 8 MOVED statistics leaf paths EXACTLY, never bare skills/statistics/.
+for p in "skills/data/" "skills/data/expression" "skills/data/genomics" "skills/data/sources" \
+  "skills/statistics/bias-vs-variance-decomposition.md" "skills/statistics/causal-identification.md" \
+  "skills/statistics/estimator-certification.md" "skills/statistics/power-floor-acknowledgement.md" \
+  "skills/statistics/prereg-amendment-vs-fresh.md" "skills/statistics/prereg-defensive-instrumentation.md" \
+  "skills/statistics/replicate-count-justification.md" "skills/statistics/sensitivity-arbitration.md"; do
+    check "$(printf '%s' "$p" | sed 's/[.]/[.]/g')" "path: $p"
   done
 [ "$fail" -eq 0 ] && echo "no leftovers" || exit 1
 ```
 
 - [ ] **Step 4: Full suite + committed-mirror + baselines** (each in its own subshell):
 
+`pytest` and the committed-mirror test are **hard gates** (must exit 0). `ruff`/`pyright` have a
+**known nonzero baseline** in this repo, so they are NOT `set -e` gates — run them and compare the
+finding set to `main`, failing only on *new* findings this branch introduces:
+
 ```bash
-( cd science && uv run --frozen pytest -q )
-( cd science && uv run --frozen pytest -q tests/test_codex_skills.py::test_committed_codex_skills_match_fresh_generation )
-( cd science && uv run --frozen ruff check . )
-( cd science && uv run --frozen pyright )
+# HARD GATE: pytest (includes the committed-mirror test) must be fully green.
+( cd science && uv run --frozen pytest -q ) || { echo "FAIL pytest"; exit 1; }
+# Spotlight the committed-mirror test explicitly (redundant with the full run, but unambiguous).
+( cd science && uv run --frozen pytest -q tests/test_codex_skills.py::test_committed_codex_skills_match_fresh_generation ) \
+  || { echo "FAIL committed-mirror"; exit 1; }
 ```
-Expected: pytest green; committed-mirror green; ruff/pyright at pre-existing baseline.
+
+```bash
+# BASELINE COMPARE: ruff/pyright — capture this branch, diff against the same commands on the merge
+# base. Zero NEW findings is the pass condition; the pre-existing baseline is expected nonzero.
+( cd science && uv run --frozen ruff check . )   ; echo "ruff exit=$?  (compare finding set to baseline on main)"
+( cd science && uv run --frozen pyright )        ; echo "pyright exit=$? (compare finding set to baseline on main)"
+```
+Expected: pytest green; committed-mirror green; ruff/pyright show **only** the pre-existing baseline
+findings (no new ones attributable to this branch). Do not suppress or edit a baseline finding to
+silence it.
 
 - [ ] **Step 5: Commit the regenerated mirror + any gate fixes.**
 
@@ -835,22 +1081,31 @@ git add -A && git commit -m "refactor(skills): regenerate codex mirror; phase-3 
 
 ## Self-Review
 
-**Spec coverage:** subject/domain tree + statistics split → T1/T2; name rename (MAP-B) → T1S4;
-links + INDEX (leaves **and routers**) + 7 full routers → T2; `HALT_ON_REQUIRED` (7/1/1) → T3S1;
-external estimator links incl. both pre-reg templates → T3S2; both proposition templates → T3S3;
-doctrine + matrix → T3S4-5; drop companion + generator + native/generated instruction + role prompts
-+ commands + INSTALL(static) + user guide → T4; full `plan-analysis.md` MAP-B sweep → T4S6;
-`data-management` link split → T4S5; both codex/command test files → T4S8-9; regen + green gate +
-fail-hard leftover grep → T5.
+**Spec coverage:** subject/domain tree + statistics split → T1/T2; name rename (MAP-B) → T1S4 (+
+positive-presence check T1S5); links + INDEX (leaves **and routers**) + 7 full routers → T2; **every
+deleted-`research/SKILL.md` link pinned + data-management split** → T2S2b; `HALT_ON_REQUIRED` (7/1/1) →
+T3S1 **+ HALT fixture relocation + `test_lint.py` edits → T3S1b**; external estimator links incl. both
+pre-reg templates → T3S2; both proposition templates → T3S3; doctrine + matrix → T3S4-5; drop companion
+→ T4S1; **generator stale-dir pruning + test → T4S1b**; native instruction (full/short) → T4S2;
+**ordering-correct rewrite (INDEX depth rule + single scientific-writing pair) → T4S3**; role prompts →
+T4S4; **path-only consumer commands (catalog-benchmarks/-datasets/find-datasets/search-literature) →
+T4S5**; full `plan-analysis.md` MAP-B sweep → T4S6; INSTALL(static) + user guide → T4S7; both
+codex/command test files incl. plan-analysis expectation cluster + resource-block deletions → T4S8-9;
+regen + green gate + anchored/complete fail-hard grep → T5.
 
-**No placeholders:** all 7 router bodies written verbatim; the one branch (INSTALL static) is
-resolved (it is static — edit it). Every verification is fail-hard (`exit 1`), never print-only.
+**No placeholders:** all 7 router bodies + all 31 `git mv` lines written verbatim; every branch
+resolved (INSTALL static; companion drop uses generator pruning, not `git rm`). Every verification is
+fail-hard: T1/T3 use `set -e`; T2 dangling-link + T5 grep capture-then-test (no pipeline masking); T5
+pytest/committed-mirror are hard `|| exit 1` gates; ruff/pyright are baseline-compare (known nonzero),
+never silenced.
 
-**Type/name consistency:** MAP-A/MAP-B are the single source across T1–T4; T5's grep derives its
-token list from MAP-B's old values + old path forms. `HALT_ON_REQUIRED` paths equal MAP-A
-destinations. `git mv` preceded by `mkdir -p` and followed by `rmdir`. All `uv run` in `science/`
-subshells. Leaf count excludes `skills/meta/` (38, not 40). `ml` is a subject (`ml-…`), `bio/` is
-navigational.
+**Type/name consistency:** MAP-A/MAP-B are the single source across T1–T4; T5's grep derives its token
+list from MAP-B's old values + word-anchored, with `research-methodology` anchored to skill-ref forms
+(bare-token prose in `meta/entities/` is not flagged) and the 8 **moved** statistics leaf paths listed
+exactly (the 6 modeling `statistics-*` stay). `HALT_ON_REQUIRED` paths equal MAP-A destinations and the
+two HALT fixtures move onto two of them. `git mv` preceded by `mkdir -p`, followed by `rmdir`. All
+`uv run` in `science/` subshells. Leaf count excludes `skills/meta/` (38). **`ml` is a subject
+(`ml-…`); `bio/` is navigational (no `bio-`).**
 
 **Green gate:** Task 5 only; Tasks 1–4 RED-by-construction, verified by inspection + embedded
 structural checks.
