@@ -1,5 +1,5 @@
 ---
-name: data-embeddings-manifold-qa
+name: ml-embeddings-manifold-qa
 description: Use when testing a required QA leaf that has all required sections.
 archetype: measurement-qa
 provenance: internal

@@ -108,8 +108,8 @@ A router is high-leverage — it governs progressive disclosure. Its minimal con
 
 - A skill `name` is a stable identifier; renaming is a breaking, migration-scoped change.
 - `depth:` replaces `type:` immediately, with no compatibility alias.
-- Declaring `archetype:` is required on every leaf, and the corpus was backfilled in full on 2026-07-20. Reorganizing the corpus and extracting methodology from hubs remain deferred to the migration driven by the corpus matrix.
-- The router invariant now holds for `research/` and `writing/`, extracted 2026-07-20 into `literature-evaluation`, `citation-discipline`, `proposition-graph-reasoning`, and `scientific-writing`. Four hubs remain (`data/`, `data/expression/`, `pipelines/`, `statistics/`). Reorganizing and renaming the corpus stays deferred to phase 3, because subject is derived from path.
+- Declaring `archetype:` is required on every leaf, and the corpus was backfilled in full on 2026-07-20. Reorg + rename completed in phase 3; hub **extraction** + principle-trimming + `frictionless`/`mutational-signatures` splits remain (phase 4).
+- The router invariant now holds for `research/` (dissolved in phase 3 into `literature/`, `epistemics/`, and `research-package/`) and `writing/`, extracted 2026-07-20 into `literature-evaluation`, `citation-discipline`, `proposition-graph-reasoning`, and `scientific-writing`. Four hubs remain (`data-management/`, `bio/transcriptomics/`, `pipelines/`, `statistics/`), pending phase-4 extraction.
 
 ## Invalid cases
 

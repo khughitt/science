@@ -11,8 +11,8 @@ description: Source of truth for test fixture skill coverage.
 - `skills/bad-missing-name.md`
 - `skills/bad-no-companion-skills.md`
 - `skills/bad-no-frontmatter.md`
-- `skills/data/embeddings-manifold-qa.md`
-- `skills/data/functional-genomics-qa.md`
+- `skills/ml/embeddings-manifold-qa.md`
+- `skills/bio/functional-genomics-qa.md`
 - `skills/good-deep-reference.md`
 - `skills/good-with-companion.md`
 - `skills/good.md`

@@ -9,7 +9,7 @@ proxy_directness: "direct"
 supports_scope: "local_proposition"
 # Bundle membership. Bare string = core member (enters the bundle's belief
 # conjunction). Use {frame: <hyp/mech>, role: rival|background} to exclude a
-# non-load-bearing member. See research-proposition-schema for role semantics.
+# non-load-bearing member. See epistemics-proposition-schema for role semantics.
 discusses: []
 related: []
 source_refs: []

@@ -1,5 +1,5 @@
 ---
-name: data-functional-genomics-qa
+name: functional-genomics-qa
 description: Use when testing a required QA leaf that is missing halt-on conditions.
 ---
 
