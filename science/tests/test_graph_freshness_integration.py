@@ -331,6 +331,64 @@ def test_pre_registration_empty_commits_to_suppresses_related_fallback(tmp_path:
     assert (str(URIRef(PROJECT_NS["pre-registration/p1"])), str(URIRef(PROJECT_NS["hypothesis/h1"]))) not in pairs
 
 
+def test_pre_registration_active_status_suppresses_bears_on(tmp_path: Path):
+    """An un-frozen (`active`, the default) pre-registration commits to nothing.
+
+    fb-2026-07-12-009: `committed` is the freeze point. Emitting the same
+    commitment/bears_on edges for a still-`active` draft as for a committed
+    pre-registration makes the freeze a graph no-op. A draft must derive no edges.
+    """
+    root = _build_min_project(tmp_path)
+    _write(root / "entities" / "pre-registrations" / "p1.md", """
+        ---
+        id: "pre-registration:p1"
+        kind: "pre-registration"
+        title: "Draft pre-reg"
+        status: "active"
+        related: ["hypothesis:h1"]
+        created: "2026-04-15"
+        updated: "2026-04-15"
+        ---
+        Body.
+    """)
+
+    trig = materialize_graph(root)
+    pairs = _bears_on_pairs(_load_dataset(trig))
+
+    pre_reg_uri = str(URIRef(PROJECT_NS["pre-registration/p1"]))
+    h_uri = str(URIRef(PROJECT_NS["hypothesis/h1"]))
+    assert (pre_reg_uri, h_uri) not in pairs
+
+
+def test_pre_registration_amended_status_still_derives_bears_on(tmp_path: Path):
+    """`amended` is post-commitment (still frozen), so its bears_on edges persist.
+
+    Guards against over-gating the freeze set to `committed` alone: an amended
+    pre-registration was committed and remains binding.
+    """
+    root = _build_min_project(tmp_path)
+    _write(root / "entities" / "pre-registrations" / "p1.md", """
+        ---
+        id: "pre-registration:p1"
+        kind: "pre-registration"
+        title: "Amended pre-reg"
+        status: "amended"
+        committed: "2026-04-15"
+        related: ["hypothesis:h1"]
+        created: "2026-04-15"
+        updated: "2026-04-15"
+        ---
+        Body.
+    """)
+
+    trig = materialize_graph(root)
+    pairs = _bears_on_pairs(_load_dataset(trig))
+
+    pre_reg_uri = str(URIRef(PROJECT_NS["pre-registration/p1"]))
+    h_uri = str(URIRef(PROJECT_NS["hypothesis/h1"]))
+    assert (pre_reg_uri, h_uri) in pairs
+
+
 def test_pre_registration_commits_to_unresolved_ref_blocks_materialization(tmp_path: Path):
     root = _build_min_project(tmp_path)
     _write(root / "entities" / "pre-registrations" / "p1.md", """
