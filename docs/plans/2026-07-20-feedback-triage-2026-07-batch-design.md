@@ -643,26 +643,39 @@ prefer `pdftotext`), `-10-026` (`kind:` not `type:`; never emit retired
    YAML including every recorded occurrence. (`--full` on `list` not added — `show`
    covers the triage need this item was filed for.)
 
-3. **Widen post-mortem's entry framing** (`-18-011`). Its three triggers are
-   "analysis failed / gate fired / assumption violated", but the largest
-   methodology cluster in this batch (Batch K, 11 items) is *overstated
-   qualitative verdicts in literature synthesis, caught in review* — no
-   computation, no gate, no statistical assumption. The reflection steps worked
-   once mapped; only the "When to use" section needs a fourth trigger class.
+> **Step 9 (Batch M remainder) SHIPPED 2026-07-21, branch `feedback-batch-m`.**
+> Points 3–5 below are done: post-mortem gained the fourth trigger class; both
+> `next-steps` and `status` gained a mandatory self-improvement-loop scan
+> (unreflected failures → `/science:post-mortem`; unconsumed positives →
+> `feedback regression-candidates`/`scaffold-test`); and the positives
+> consumption path is a new `science feedback regression-candidates` command
+> reusing the existing `scaffold-test` machinery. Closes M[`-18-011`, `-11-029`].
 
-4. **Nothing prompts post-mortem** (`-11-029`). All five t830 entries — including
-   `-11-024`, a Tier 0 item — exist only because a human said *"let's consider
-   using /science:post-mortem"*. The entire self-improvement loop currently hangs
-   on operator memory at exactly the moment the pull is to fix and move on.
-   Cheapest useful version: surface **unreflected failures** (pre-registration
-   deviations, gate failures, discarded runs with no linked feedback entry) in
-   `/science:next-steps` and `/science:status`, the way stale entities already are.
+3. **Widen post-mortem's entry framing** (`-18-011`) — **DONE.** `commands/post-mortem.md`
+   "When to use" gained a fourth trigger: *a synthesized claim/verdict overstated
+   relative to what its cited evidence supports (scope/estimand/population/strength
+   mismatch), caught in review* — the Batch K failure class. The reflection steps
+   are mapped in place (step 1 = claim-vs-evidence-at-scope gap; step 3 = the
+   estimand-match/scope check that would have caught it).
 
-5. **Positives have no consumption path.** All three `positive` entries
-   (`-17-008`, `-11-009`, `-11-027`) contain actionable content, and `-11-027`
-   argues that an *undocumented* property of the pre-register 1b step is what made
-   an incident recoverable. Positives are the natural source of regression tests
-   and currently go nowhere.
+4. **Nothing prompts post-mortem** (`-11-029`) — **DONE (cheapest useful version).**
+   `next-steps` (new mandatory §3f) and `status` (§6) now surface **unreflected
+   failures** — a pre-registration deviation amendment, a gate failure /
+   `inconclusive-for-protocol` verdict, or a discarded/superseded/`draft` run —
+   defined as *reflected once a feedback entry references it*, cross-checked via
+   `science feedback list --project <p> --format json`, and prompt
+   `/science:post-mortem` for each. The report's costlier options (1) interpret-results/validate
+   nudges and (2) pre-reg-template amendment note remain unimplemented by design —
+   step 9 took the cheapest surface-in-next-steps/status option the design mandated.
+
+5. **Positives have no consumption path** — **DONE (mechanism).** New
+   `science feedback regression-candidates` command lists open `positive` entries
+   with the existing-test file each should scaffold into
+   (`_suggested_next_test_target`, now target-normalized so `cli:`/`science:`
+   spellings route like `command:`), reusing the already-present `feedback
+   scaffold-test`. Wired into `next-steps` §3f and `status` §6. The three specific
+   positives (`-17-008`, `-11-009`, `-11-027`) live in Batches H/I, N, J — step 9
+   builds the consumption path; those batches close the entries.
 
 ---
 
@@ -711,7 +724,7 @@ closes when it does not close a whole batch.
 | 6 | **Batches K and L** — two skill leaves. No code risk; parallelisable with 1–5. | K, L | — |
 | 7 | **Batch A remainder** — overlay schema + promote builder derived from D1; federation-awareness pass; close `-11-021`. | A (rest) | D1 |
 | 8 | **Batch F** — implement the chosen home; `doc_kind`-keyed excludes; migration if the feedback store moves. | F | D2 |
-| 9 | **Batch M remainder** — post-mortem fourth trigger class; unreflected-failure surfacing in `next-steps`/`status`; positives → regression tests. | M[`-18-011`, `-11-029`] | 2 |
+| 9 | **Batch M remainder** — post-mortem fourth trigger class; unreflected-failure surfacing in `next-steps`/`status`; positives → regression tests. **DONE** (branch `feedback-batch-m`). | M[`-18-011` ✅, `-11-029` ✅] | 2 |
 | 10 | **Batch E** — `resolve-anchors` metadata cross-check first (`-17-009` is provenance corruption), then the apply/gaps defects, then the two design questions. | E | — |
 | 11 | **Batch C** — inquiry-subsystem design pass, including any `InquiryProfile` tightening deferred from step 1. | C | 1 |
 | 12 | **Batch D** — after auditing `status-vocab-certification`. | D | branch audit |

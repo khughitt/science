@@ -429,6 +429,34 @@ def feedback_targets(status: str | None, output_format: str) -> None:
     emit_query_rows(output_format=output_format, title="Feedback Targets", columns=columns, rows=rows)
 
 
+@feedback_group.command("regression-candidates")
+@click.option("--format", "output_format", default="table", type=click.Choice(OUTPUT_FORMATS))
+def feedback_regression_candidates(output_format: str) -> None:
+    """List open 'positive' entries as regression-test candidates.
+
+    A positive records a validated property but has no consumption path of its
+    own. Each row names the existing test file most likely to host the
+    regression; hand an id to `science feedback scaffold-test <id>` to seed one.
+    """
+    from science_tool.feedback import list_regression_candidates
+
+    fb_dir = _get_feedback_dir()
+    rows = list_regression_candidates(fb_dir)
+    if not rows and output_format != "json":
+        click.echo("No open positive feedback to convert into regression tests.")
+        return
+    columns = [
+        ("id", "ID"),
+        ("created", "Date"),
+        ("project", "Project"),
+        ("target", "Target"),
+        ("recurrence", "Recur"),
+        ("suggested_next_test_target", "Scaffold into"),
+        ("summary", "Summary"),
+    ]
+    emit_query_rows(output_format=output_format, title="Feedback Regression Candidates", columns=columns, rows=rows)
+
+
 @feedback_group.command("show")
 @click.argument("entry_id")
 def feedback_show(entry_id: str) -> None:

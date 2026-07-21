@@ -358,6 +358,32 @@ def find_similar_open(
     return neighbors
 
 
+def list_regression_candidates(feedback_dir: Path) -> list[dict[str, object]]:
+    """List open ``positive`` entries as regression-test candidates.
+
+    A positive is a validated property worth locking in with a test, but the
+    category has no consumption path on its own — these entries otherwise go
+    nowhere. Each row carries the entry's identity plus the
+    ``suggested_next_test_target`` (the existing test file most likely to host
+    the regression), so a filer can hand it to ``feedback scaffold-test`` or the
+    named surface. Most-validated (highest ``recurrence``) first, then oldest.
+    """
+    entries = list_entries(feedback_dir, status="open", category="positive")
+    entries.sort(key=lambda entry: (-entry.recurrence, entry.created, entry.id))
+    return [
+        {
+            "id": entry.id,
+            "created": entry.created,
+            "project": entry.project,
+            "target": entry.target,
+            "summary": entry.summary,
+            "recurrence": entry.recurrence,
+            "suggested_next_test_target": _suggested_next_test_target(entry.target),
+        }
+        for entry in entries
+    ]
+
+
 def list_targets(feedback_dir: Path, *, status: str | None = "open") -> list[dict[str, object]]:
     """List distinct feedback targets with their entry counts.
 
@@ -643,6 +669,9 @@ def _suggested_status(*, target: str, category: str, count: int) -> str:
 
 
 def _suggested_next_test_target(target: str) -> str:
+    # Normalize first so cli:/commands:/science: spellings route like command: —
+    # the same surface equivalence normalize_target establishes for dedup.
+    target = normalize_target(target)
     if target == "command:feedback":
         return "science/tests/test_feedback_cli.py"
     if target.startswith("command:"):

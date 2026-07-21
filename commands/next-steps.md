@@ -195,6 +195,46 @@ unchanged review (`science entity review <target-ref>`), amendment
 (`sci:supersedes` plus `status: superseded` on the old conclusion). Propose one
 as a candidate next step and add a corresponding task if accepted.
 
+### 3f. Self-Improvement Loop (mandatory)
+
+The reflection→improvement loop only compounds if the system prompts it, rather
+than relying on the operator to remember. Surface two classes here, the way stale
+entities are already surfaced above.
+
+**Unreflected failures.** Scan for failure signatures that have no linked
+reflection, and recommend `/science:post-mortem` for each:
+
+- a pre-registration amendment recording a **protocol deviation**, or observed
+  values that leaked before the freeze point;
+- a **gate failure** or an `inconclusive-for-protocol` verdict (a check that
+  stopped an analysis);
+- a **discarded / superseded / `draft` workflow run** (already surfaced under
+  Workflow Runs above) with no interpretation and no post-mortem.
+
+A failure is *reflected* when a feedback entry references it. Cross-check the
+project's feedback with `science feedback list --project <project-id> --format json`
+(post-mortem writes there). List every failure signature with **no** corresponding
+feedback entry as an "unreflected failure" and add a Recommended Next Action:
+
+> Reflect on `<failure>` with `/science:post-mortem <failure>` — no lesson has been
+> filed for it, so the fix-and-move-on pull will lose it.
+
+If every failure signature already has a linked entry, say so; do not pad. If the
+scan cannot run (no pre-registrations, no `results/` runs), state that explicitly.
+
+**Unconsumed positives.** A `positive` feedback entry records a validated property
+worth locking in, but the category has no consumption path on its own. Run:
+
+```bash
+science feedback regression-candidates --format json
+```
+
+For each row, recommend either seeding a regression test
+(`science feedback scaffold-test <id>`, then replace the scaffold with a real
+failing test) or, when the positive praises an *undocumented* property of a
+command or template, routing it into that surface's guidance. Skip silently only
+when there are no open positives.
+
 ### 4. Suggested Next Steps
 
 Recommend 3-5 actions based on:

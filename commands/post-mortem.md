@@ -18,6 +18,8 @@ Use this after the fact, when something did not go as planned: a QA issue surfac
 
 Also use it when **a gate fired and nothing was lost** — a pre-registered check stopped the analysis before any observed data was read. Nothing surfaced late, and no result exists: that is the system working. **A post-mortem on a gate that fired is the cheapest kind, and its lessons are the most transferable, because nothing is entangled with a finding anyone wants to defend.** In this mode, read step 1's "gap between expectation and outcome" as *the gap between what the plan assumed about its own instruments and what was true*.
 
+Also use it when **a synthesized claim or verdict was overstated relative to what its cited evidence supports** — a hypothesis's literature-grounding, a question's framing, or a report's conclusion asserted more than the sources establish (a scope, estimand, population, or strength mismatch), and a review caught it. This is not a failed computation, a fired gate, or a violated statistical assumption; it is a *synthesis* failure, and it is the most common failure class in literature-synthesis and research-package work. The reflection steps apply directly: read step 1's "gap between expectation and outcome" as *the gap between what the claim asserted and what the evidence at its actual scope supports*, and step 3's "earlier signal" as the estimand-match or scope check that would have caught it before the claim propagated.
+
 ## Reflection
 
 Work through these steps with the user. Keep the project-specific incident in the project (as an interpretation, note, or task); only a cross-project lesson goes to the global feedback store.

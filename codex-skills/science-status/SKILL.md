@@ -265,6 +265,16 @@ Flag:
   > to move them to `tasks/done/YYYY-MM.md`.
   If `archive_lag.missing_completed` is non-zero, call out that those entries need a
   `completed:` date backfilled before archiving so they route to the correct month.
+- **unreflected failures**: scan for failure signatures with no linked reflection —
+  a pre-registration deviation amendment, a gate failure or `inconclusive-for-protocol`
+  verdict, or a discarded/superseded/`draft` run with no interpretation. A failure
+  is reflected once a feedback entry references it; cross-check with
+  `science feedback list --project <project-id> --format json`. For each unreflected
+  failure, prompt:
+  > No lesson filed for `<failure>`. Run `science-post-mortem <failure>` before the fix-and-move-on pull loses it.
+- **unconsumed positives**: run `science feedback regression-candidates --format json`.
+  Each open `positive` is a validated property with no consumption path; surface it as
+  a regression-test seed (`science feedback scaffold-test <id>`) or a guidance-doc update.
 
 ### Managed artifacts
 
