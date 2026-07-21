@@ -61,7 +61,7 @@ Confirmed with the user:
 |---|---|
 | `# Expression Data — Preprocessing & QA` + intro prose | Router intro (trimmed to navigation) |
 | `## Three modalities, three QA mindsets` (modality table) | Router `## Leaves` table (kept + expanded to 5 rows) |
-| `## Universal pre-flight checklist` items 1–4 + 6 (single-cohort: `.X` scale, gene ID, sample ID, cohort def, single-cohort batch PCA) | **Leaf A** (cohort-qa) |
+| `## Universal pre-flight checklist` items 1–4 + 6 (single-cohort: expression-matrix scale/content, gene ID, sample ID, cohort def, single-cohort batch PCA) | **Leaf A** (cohort-qa) |
 | `## Universal pre-flight checklist` item 5 (normalization *compatibility with the aggregation strategy* — effect-size vs p-value pooling) | **split**: factual "record & verify normalization state" → **Leaf A**; the aggregation-dependent compatibility *decision* → **Leaf B** |
 | `## Idiom: validate by inspection, not by trust` | **Leaf A** |
 | `## Idiom: log every decision in a sidecar` | **Leaf A** |
@@ -82,7 +82,7 @@ runs through two checklist items, not one:
   metafor; p-value pooling tolerates scale but not distributional violations) is
   an **aggregation-dependent decision** → the *decision* goes to **Leaf B**;
   Leaf A keeps only the factual "record and verify what normalization was
-  applied" (which is also part of item 1's `.X`-scale check).
+  applied" (which is also part of item 1's expression-matrix-scale check).
 
 The two leaves compose (a multi-cohort meta-analysis loads both), same as
 slice-1's composable axes.
@@ -102,11 +102,12 @@ contract** (`skill-taxonomy.md:28`, `templates/measurement-qa.md`), not pasted
 as free prose. Target section outline:
 
 - `## Sources & ingestion/construction` — public deposits (GEO, ArrayExpress,
-  MMRF, HCA, recount, ARCHS4) and the AnnData/`.X`/`.raw`/`.layers` ingest
-  surface.
+  MMRF, HCA, recount, ARCHS4) and the primary expression matrix at ingest
+  (AnnData `.X`/`.raw`/`.layers`, or a tabular genes×samples deposit).
 - `## Pre-flight checklist` — the hub's items **1–4 and 6** as `- [ ]` checks
-  (`.X` scale via the inspection code block; gene-ID axis; sample-ID; cohort
-  definition; single-cohort batch PCA). Plus the item-5 *factual* half: "record
+  (expression-matrix scale/content — the inspection code block runs on AnnData
+  `.X`/`.raw`/`.layers`, conditional on AnnData input; gene-ID axis; sample-ID;
+  cohort definition; single-cohort batch PCA). Plus the item-5 *factual* half: "record
   and verify what normalization the depositor applied" (the aggregation-
   compatibility *decision* is Leaf B's, cross-referenced).
 - `## QA metrics` — a table making the idioms' inspection checks concrete:
