@@ -30,12 +30,22 @@ Every task's requirements implicitly include these (verbatim from the design):
 - **`rollback_transitions` takes the `OwnershipTracker`**, never a bare list or a sliced tuple.
 - **`MAY_HAVE_WRITTEN`/`WRITTEN` + live `neither` → `RollbackHalt`.** Restartable restore makes only
   the `matches post → restore` rows re-drivable.
-- **No-clobber publication everywhere:** moves, blobs, and staged directories publish with
-  `renameat2(RENAME_NOREPLACE)` (files/blobs may fall back to `O_EXCL link`; directories may not).
-  Never `os.replace` where another writer's object could be silently removed.
+- **Restore authority is the transition's frozen `post`, never a fresh `fingerprint(path)`.** The
+  expected-live fingerprint (`transition.post`) is threaded from `rollback_transitions` through
+  `_materialize` and `reconcile_restore_staging` and passed **unchanged** as `atomic_write_bytes`'s
+  `target_pre`. Restore must never re-read the live file and adopt it as its own precondition — that
+  would re-authorize a concurrent writer's content.
+- **No-clobber publication everywhere:** moves, blobs, and staged directories publish through the one
+  `_publish_no_clobber` primitive — `renameat2(RENAME_NOREPLACE)` when the kernel has it, else an
+  ordered `O_EXCL link → fsync(dst parent) → unlink(src) → fsync(src parent)` fallback (files/blobs
+  only; directories have no link fallback and require `renameat2`). Never `os.replace` where another
+  writer's object could be silently removed. Restore *publish-over-post* is the sole exception: it may
+  `os.replace` only after confirming the live target still matches `expected_live`.
 - **Unique `rel_path`s per transition set** in this PR; chained occurrences are deferred.
-- **Durability order:** file fsync → publish → parent-dir fsync; for `link+unlink`, the destination
-  is made durable before the source is unlinked.
+- **Restore staging tokens are transaction-unique:** rollback derives each path's token as
+  `f"{op_token}-restore-{index}"` from a per-operation token, never a bare `restore-{index}`.
+- **Durability order:** file fsync → publish → parent-dir fsync; the ordered link fallback makes the
+  destination durable (fsync dst parent) **before** the source is unlinked.
 - **`import-dst` is a hard-halt seam** (mid-create third state is refused, never auto-restored);
   restartability applies to *restore*, not forward creates.
 - **Fail early; no legacy/compat layers** (project rule). The bare-list `rollback_transitions` path
@@ -77,17 +87,47 @@ archive/supersede wiring → P3 import migration → P7 acceptance harness.
 
 - [ ] **Step 1: Write the failing test**
 
+The load-bearing red is a coherence test with an **injected writer between the two reads** — it must
+fail on today's `snapshot_paths` (`fingerprint(p)` reads+hashes, then `p.read_bytes()` reads again)
+and pass once capture binds hash and bytes to one fd.
+
 ```python
 # tests/test_txn_capture.py
-import os, stat
+import hashlib, os, stat
 from pathlib import Path
 import pytest
+from science_tool import plan_common
 from science_tool.plan_common import snapshot_paths, fingerprint, UnsupportedPathType
+
+def test_capture_is_coherent_under_interleaved_writer(tmp_path, monkeypatch):
+    """A writer that changes the file BETWEEN the fingerprint read and the bytes read must not
+    produce a snapshot whose recorded hash disagrees with its retained bytes. On the shipped
+    two-read implementation the hash describes the old bytes and `content` holds the new bytes;
+    single-fd capture closes the gap."""
+    p = tmp_path / "f.md"; p.write_text("original")
+    real_read_bytes = Path.read_bytes
+    calls = {"n": 0}
+
+    def racing_read_bytes(self):
+        data = real_read_bytes(self)
+        if self == p and calls["n"] == 0:      # right after the FIRST read (fingerprint's)
+            calls["n"] = 1
+            fd = os.open(p, os.O_WRONLY | os.O_TRUNC)
+            try:
+                os.write(fd, b"tampered-longer-content")
+            finally:
+                os.close(fd)
+        return data
+
+    # If capture still does two Path.read_bytes calls, the second returns the tampered bytes while
+    # the hash came from the first -> incoherent. One fd + one os.read cannot be split this way.
+    monkeypatch.setattr(Path, "read_bytes", racing_read_bytes)
+    snap = snapshot_paths([p])[p]
+    assert snap.fp.content_sha256 == hashlib.sha256(snap.content).hexdigest()
 
 def test_snapshot_hash_matches_retained_bytes(tmp_path):
     p = tmp_path / "f.md"; p.write_text("hello")
     snap = snapshot_paths([p])[p]
-    import hashlib
     assert snap.fp.content_sha256 == hashlib.sha256(snap.content).hexdigest()
 
 def test_capture_does_not_follow_symlink(tmp_path):
@@ -106,8 +146,9 @@ def test_non_regular_rejected(tmp_path):
 - [ ] **Step 2: Run to verify it fails**
 
 Run: `uv run --frozen pytest tests/test_txn_capture.py -v`
-Expected: FAIL (coherence test may pass incidentally today; symlink/non-regular already work — the
-value is the regression pin once internals change in Step 3).
+Expected: FAIL on `test_capture_is_coherent_under_interleaved_writer` (shipped two-read capture is
+incoherent under the injected writer). The symlink/non-regular tests already pass and serve as
+regression pins across the Step 3 refactor.
 
 - [ ] **Step 3: Refactor capture to one fd**
 
@@ -176,19 +217,26 @@ git commit -m "feat(txn): single-fd coherent snapshot capture"
 
 - [ ] **Step 1: Write the failing test**
 
+These tests use only roles that already exist on today's `PathTransition` (`entity-rewrite`,
+`created-dir`) so Task 2 does not depend on Task 13's new roles. `import hashlib` at module top.
+
 ```python
 def test_capture_and_verify_refuses_on_pre_mismatch(tmp_path):
-    from science_tool.plan_common import capture_and_verify, PreconditionRefused, PathTransition, StateFingerprint
-    f = tmp_path / "a.md"; f.write_text("current")
+    from science_tool.plan_common import (capture_and_verify, PreconditionRefused,
+                                          PathTransition, StateFingerprint)
+    body = "# Title\n"
+    f = tmp_path / "a.md"; f.write_text("current")     # live bytes != stale_pre
     stale_pre = StateFingerprint(existed=True, type="file",
         content_sha256=hashlib.sha256(b"stale").hexdigest(), mode=0o644, symlink_target=None)
-    post = StateFingerprint(existed=False, type=None, content_sha256=None, mode=None, symlink_target=None)
-    t = PathTransition(role="import-src", rel_path="a.md", pre=stale_pre, post=post)
+    post = StateFingerprint(existed=True, type="file",
+        content_sha256=hashlib.sha256(body.encode()).hexdigest(), mode=0o644, symlink_target=None)
+    t = PathTransition(role="entity-rewrite", rel_path="a.md", pre=stale_pre, post=post, postimage=body)
     with pytest.raises(PreconditionRefused):
         capture_and_verify([t], tmp_path)
 
 def test_capture_and_verify_rejects_repeated_rel_path(tmp_path):
-    from science_tool.plan_common import capture_and_verify, PathTransition, StateFingerprint, BoundaryError
+    from science_tool.plan_common import (capture_and_verify, PathTransition,
+                                          StateFingerprint, BoundaryError)
     absent = StateFingerprint(existed=False, type=None, content_sha256=None, mode=None, symlink_target=None)
     dirpost = StateFingerprint(existed=True, type="dir", content_sha256=None, mode=0o755, symlink_target=None)
     t1 = PathTransition(role="created-dir", rel_path="d", pre=absent, post=dirpost)
@@ -200,11 +248,18 @@ def test_capture_and_verify_rejects_repeated_rel_path(tmp_path):
 - [ ] **Step 2: Run to verify it fails**
 
 Run: `uv run --frozen pytest tests/test_txn_capture.py -k capture_and_verify -v`
-Expected: FAIL (`capture_and_verify` undefined).
+Expected: FAIL (`capture_and_verify` and `BoundaryError` undefined — `ImportError`).
 
 - [ ] **Step 3: Implement**
 
+`BoundaryError` does **not** exist in `plan_common.py` today (grep-confirmed). Add it as a new
+module-level exception beside `PathEscape`/`StagingError`, then `capture_and_verify`:
+
 ```python
+class BoundaryError(RuntimeError):
+    """A transition set violates a structural precondition of the substrate (e.g. a repeated
+    rel_path this PR does not support). Raised at capture time, before any mutation."""
+
 class PreconditionRefused(RuntimeError):
     """Live state diverged from a transition's expected `pre` at capture time. Clean refusal —
     nothing mutated yet, so NOT a RollbackHalt."""
@@ -220,8 +275,6 @@ def capture_and_verify(transitions, project_root):
             raise PreconditionRefused(f"{t.rel_path}: live state != expected pre; re-run the preview")
     return snap
 ```
-
-Use the module's existing `BoundaryError` (or add one if absent, matching the project's error style).
 
 - [ ] **Step 4: Run to verify pass**
 
@@ -293,10 +346,9 @@ class WriteMode(str, Enum):
 def atomic_write_bytes(path, data, *, mode, file_mode=None, token, target_pre, on_commit=None):
     if path.is_symlink() or (path.exists() and path.is_dir()):
         raise StagingError(f"atomic_write_bytes target is not a regular file: {path}")
-    if mode is WriteMode.CREATE_OR_VERIFY:
-        raise NotImplementedError  # Task 4
-    if mode is WriteMode.RESTORE and file_mode is None:
-        raise StagingError("RESTORE requires file_mode")
+    if mode is not WriteMode.REPLACE:
+        raise NotImplementedError(f"{mode} added in a later task")   # CREATE_OR_VERIFY=T4, RESTORE=T5
+    # REPLACE: preserve the live file's mode on overwrite; require file_mode only on first create.
     resolved_mode = file_mode if file_mode is not None else (
         stat.S_IMODE(path.stat().st_mode) if path.exists() else None)
     if resolved_mode is None:
@@ -307,15 +359,24 @@ def atomic_write_bytes(path, data, *, mode, file_mode=None, token, target_pre, o
         with os.fdopen(fd, "wb") as fh:
             fh.write(data); fh.flush()
             os.fchmod(fh.fileno(), resolved_mode); os.fsync(fh.fileno())
-        os.replace(staging, path)          # REPLACE/RESTORE linearization point
+        os.replace(staging, path)          # REPLACE linearization point
         if on_commit is not None: on_commit()
-        dfd = os.open(path.parent, os.O_RDONLY)
-        try: os.fsync(dfd)
-        finally: os.close(dfd)
+        _fsync_parent(path)
     except Exception:
         if staging.exists() and data.startswith(staging.read_bytes()) and matches(target_pre, path):
             staging.unlink()
         raise
+```
+
+Define the shared `_fsync_parent` helper here (Task 3 is its first user); Tasks 4–15 reuse it:
+
+```python
+def _fsync_parent(path):
+    dfd = os.open(path.parent, os.O_RDONLY)
+    try:
+        os.fsync(dfd)
+    finally:
+        os.close(dfd)
 ```
 
 - [ ] **Step 4: Run to verify pass**
@@ -339,34 +400,57 @@ git commit -m "feat(txn): atomic_write_bytes REPLACE mode"
 - Test: `tests/test_atomic_write_bytes.py`
 
 **Interfaces:**
-- Produces: `class BlobMismatch(RuntimeError)`; `_rename_noreplace(src: Path, dst: Path) -> None`
-  (raises `FileExistsError` if dst exists — `renameat2(RENAME_NOREPLACE)` via `ctypes`, `O_EXCL link`
-  fallback for files).
-- Consumes: Task 3 scaffolding.
+- Produces:
+  - `_renameat2_available: bool` — module-level probe (does libc expose `renameat2` and does it not
+    return `ENOSYS`).
+  - `_rename_noreplace(src: Path, dst: Path) -> None` — **atomic no-clobber rename only.** Raises
+    `FileExistsError` if dst exists; raises `NoAtomicRename` (a private sentinel) if the kernel lacks
+    `renameat2`. It performs **no** link fallback — capability detection is separated from the ordered
+    fallback (fixes the unfsynced `link→unlink` durability gap).
+  - `_publish_no_clobber(src: Path, dst: Path, *, on_commit=None) -> None` — publishes a regular file
+    with no-clobber semantics and correct durability, for the **blob** shape where `src` is a staging
+    file in `dst`'s own directory (one seam, one parent to fsync): atomic `_rename_noreplace` when
+    available (fire `on_commit`, fsync dst parent); else ordered fallback `O_EXCL link(src,dst)` →
+    `on_commit()` → `fsync(dst parent)` → `unlink(src)` → `fsync(src parent)`. `move_no_clobber`
+    (Task 10) shares the `_rename_noreplace`/`NoAtomicRename` probe but has its own ordered fallback
+    because a move crosses two directories and carries two seams.
+  - `class BlobMismatch(RuntimeError)`.
+- Consumes: Task 3 scaffolding, `_fsync_parent` (Task 3).
 
 - [ ] **Step 1: Write the failing test**
+
+CREATE_OR_VERIFY must create with an explicit `file_mode` (a fresh blob has no live mode to inherit —
+this is why Task 3 rejects first-create without one).
 
 ```python
 def test_create_or_verify_idempotent_equal(tmp_path):
     from science_tool.plan_common import atomic_write_bytes, WriteMode, fingerprint
     p = tmp_path / "ab"; p.write_bytes(b"blob")
-    atomic_write_bytes(p, b"blob", mode=WriteMode.CREATE_OR_VERIFY, token="t",
-                       target_pre=fingerprint(tmp_path / "nonexist"))  # ignored on fast path
+    atomic_write_bytes(p, b"blob", mode=WriteMode.CREATE_OR_VERIFY, file_mode=0o444, token="t",
+                       target_pre=fingerprint(p))              # equal -> idempotent success
     assert p.read_bytes() == b"blob"
 
 def test_create_or_verify_mismatch_raises(tmp_path):
     from science_tool.plan_common import atomic_write_bytes, WriteMode, BlobMismatch, fingerprint
     p = tmp_path / "ab"; p.write_bytes(b"other")
     with pytest.raises(BlobMismatch):
-        atomic_write_bytes(p, b"blob", mode=WriteMode.CREATE_OR_VERIFY, token="t",
+        atomic_write_bytes(p, b"blob", mode=WriteMode.CREATE_OR_VERIFY, file_mode=0o444, token="t",
                            target_pre=fingerprint(p))
 
 def test_create_or_verify_creates_when_absent(tmp_path):
+    import stat
     from science_tool.plan_common import atomic_write_bytes, WriteMode, fingerprint
     p = tmp_path / "ab"
-    atomic_write_bytes(p, b"blob", mode=WriteMode.CREATE_OR_VERIFY, token="t",
+    atomic_write_bytes(p, b"blob", mode=WriteMode.CREATE_OR_VERIFY, file_mode=0o444, token="t",
                        target_pre=fingerprint(p))
-    assert p.read_bytes() == b"blob"
+    assert p.read_bytes() == b"blob" and stat.S_IMODE(p.stat().st_mode) == 0o444
+
+def test_create_or_verify_requires_file_mode(tmp_path):
+    from science_tool.plan_common import atomic_write_bytes, WriteMode, StagingError, fingerprint
+    p = tmp_path / "ab"
+    with pytest.raises(StagingError):
+        atomic_write_bytes(p, b"blob", mode=WriteMode.CREATE_OR_VERIFY, token="t",
+                           target_pre=fingerprint(p))
 ```
 
 - [ ] **Step 2: Run to verify it fails**
@@ -374,30 +458,79 @@ def test_create_or_verify_creates_when_absent(tmp_path):
 Run: `uv run --frozen pytest tests/test_atomic_write_bytes.py -k create_or_verify -v`
 Expected: FAIL (`NotImplementedError`).
 
-- [ ] **Step 3: Implement `_rename_noreplace` + CREATE_OR_VERIFY**
+- [ ] **Step 3: Implement `_rename_noreplace`, `_publish_no_clobber`, and CREATE_OR_VERIFY**
 
 ```python
-import ctypes
+import ctypes, errno
+
+class NoAtomicRename(RuntimeError):
+    """renameat2(RENAME_NOREPLACE) is unavailable on this kernel; callers use the ordered fallback."""
+
 _AT_FDCWD = -100
 _RENAME_NOREPLACE = 1 << 0
+
 def _rename_noreplace(src: Path, dst: Path) -> None:
+    """ATOMIC no-clobber rename. No fallback here — capability detection only."""
     libc = ctypes.CDLL("libc.so.6", use_errno=True)
     res = libc.renameat2(_AT_FDCWD, os.fsencode(src), _AT_FDCWD, os.fsencode(dst), _RENAME_NOREPLACE)
     if res != 0:
         err = ctypes.get_errno()
-        if err == errno.EEXIST: raise FileExistsError(dst)
-        if err == errno.ENOSYS:      # kernel without renameat2: O_EXCL link fallback (files only)
-            os.link(src, dst); os.unlink(src); return
+        if err == errno.EEXIST:
+            raise FileExistsError(dst)
+        if err == errno.ENOSYS:
+            raise NoAtomicRename(str(dst))
         raise OSError(err, os.strerror(err), str(dst))
+
+def _publish_no_clobber(src: Path, dst: Path, *, on_commit=None) -> None:
+    """No-clobber publish of a regular file with correct durability ordering. Used by blobs and moves.
+    Directories have no link fallback and must go through _rename_noreplace directly (Task 11)."""
+    try:
+        _rename_noreplace(src, dst)              # atomic path: single linearization point
+        if on_commit is not None:
+            on_commit()
+        _fsync_parent(dst)
+        return
+    except NoAtomicRename:
+        pass
+    # Ordered fallback: make dst durable BEFORE unlinking src (Global Constraint).
+    try:
+        os.link(src, dst)                        # fails EEXIST if dst present -> no-clobber preserved
+    except FileExistsError:
+        raise
+    if on_commit is not None:                    # linearization point = the link that creates dst
+        on_commit()
+    _fsync_parent(dst)
+    os.unlink(src)
+    _fsync_parent(src)
 
 class BlobMismatch(RuntimeError): ...
 ```
 
-In `atomic_write_bytes`, replace the CREATE_OR_VERIFY `NotImplementedError` with: (1) fast path —
-if `path.exists()`, compare bytes → return on equal, `BlobMismatch` on differ; (2) else stage under
-`token`, fsync, `_rename_noreplace(staging, path)`; on `FileExistsError`, re-read and compare (equal
-→ success, differ → `BlobMismatch`) and unlink the staging; fire `on_commit` after a successful
-publish; fsync parent.
+In `atomic_write_bytes`, replace the CREATE_OR_VERIFY `NotImplementedError` branch with:
+
+```python
+    if mode is WriteMode.CREATE_OR_VERIFY:
+        if file_mode is None:
+            raise StagingError("CREATE_OR_VERIFY requires file_mode (a fresh blob has no live mode)")
+        if path.exists():                                    # fast path
+            if path.read_bytes() == data:
+                return                                       # idempotent
+            raise BlobMismatch(f"blob at {path} differs from intended content")
+        staging = staging_path_for(path, token)
+        fd = os.open(staging, os.O_WRONLY | os.O_CREAT | os.O_EXCL, file_mode)
+        with os.fdopen(fd, "wb") as fh:
+            fh.write(data); fh.flush()
+            os.fchmod(fh.fileno(), file_mode); os.fsync(fh.fileno())
+        try:
+            _publish_no_clobber(staging, path, on_commit=on_commit)
+        except FileExistsError:                              # lost the race; verify equality
+            survivor = path.read_bytes(); staging.unlink()
+            if survivor != data:
+                raise BlobMismatch(f"blob at {path} differs (concurrent create)")
+        return
+```
+
+(The REPLACE branch from Task 3 is unchanged; add this branch above it, after the symlink/dir guard.)
 
 - [ ] **Step 4: Run to verify pass**
 
@@ -421,30 +554,59 @@ git commit -m "feat(txn): atomic_write_bytes CREATE_OR_VERIFY + renameat2 no-clo
 
 **Interfaces:**
 - Produces: RESTORE branch of `atomic_write_bytes` — atomic replace that sets the preimage's exact
-  mode even when it differs from the live file's mode.
+  mode **unconditionally**, even when it differs from the live file's mode (REPLACE preserves the live
+  mode; RESTORE forces `file_mode`). `file_mode` is required.
 
 - [ ] **Step 1: Write the failing test**
 
 ```python
-def test_restore_sets_differing_mode(tmp_path):
+def test_restore_forces_preimage_mode_where_replace_would_preserve(tmp_path):
     import stat
-    from science_tool.plan_common import atomic_write_bytes, WriteMode, fingerprint
-    p = tmp_path / "f"; p.write_bytes(b"new"); os.chmod(p, 0o600)
+    from science_tool.plan_common import atomic_write_bytes, WriteMode, StagingError, fingerprint
+    p = tmp_path / "f"; p.write_bytes(b"new"); os.chmod(p, 0o600)   # live mode 0o600
+    # REPLACE without file_mode preserves the live 0o600 ...
+    atomic_write_bytes(p, b"mid", mode=WriteMode.REPLACE, token="t0", target_pre=fingerprint(p))
+    assert stat.S_IMODE(p.stat().st_mode) == 0o600
+    # ... RESTORE forces the preimage's 0o644 even though the live file is 0o600.
     atomic_write_bytes(p, b"old", mode=WriteMode.RESTORE, file_mode=0o644,
-                       token="t", target_pre=fingerprint(p))
+                       token="t1", target_pre=fingerprint(p))
     assert p.read_bytes() == b"old" and stat.S_IMODE(p.stat().st_mode) == 0o644
+
+def test_restore_requires_file_mode(tmp_path):
+    from science_tool.plan_common import atomic_write_bytes, WriteMode, StagingError, fingerprint
+    p = tmp_path / "f"; p.write_bytes(b"new")
+    with pytest.raises(StagingError):
+        atomic_write_bytes(p, b"old", mode=WriteMode.RESTORE, token="t", target_pre=fingerprint(p))
 ```
 
 - [ ] **Step 2: Run to verify it fails**
 
 Run: `uv run --frozen pytest tests/test_atomic_write_bytes.py -k restore -v`
-Expected: FAIL if the Task 3 `resolved_mode` logic preferred the live mode. (RESTORE must use
-`file_mode` unconditionally.)
+Expected: FAIL — after Task 3, RESTORE raises `NotImplementedError`.
 
-- [ ] **Step 3: Ensure RESTORE uses `file_mode` exactly**
+- [ ] **Step 3: Implement the RESTORE branch**
 
-In the mode-resolution block, when `mode is WriteMode.RESTORE`, `resolved_mode = file_mode` always
-(never the live file's mode). The REPLACE branch keeps its preserve-existing rule.
+Add above the REPLACE branch (and remove RESTORE from the `mode is not WriteMode.REPLACE` guard):
+
+```python
+    if mode is WriteMode.RESTORE:
+        if file_mode is None:
+            raise StagingError("RESTORE requires file_mode (the preimage's exact mode)")
+        staging = staging_path_for(path, token)
+        fd = os.open(staging, os.O_WRONLY | os.O_CREAT | os.O_EXCL, file_mode)
+        try:
+            with os.fdopen(fd, "wb") as fh:
+                fh.write(data); fh.flush()
+                os.fchmod(fh.fileno(), file_mode); os.fsync(fh.fileno())  # force exact preimage mode
+            os.replace(staging, path)          # restore publish-over-post (target legitimately exists)
+            if on_commit is not None: on_commit()
+            _fsync_parent(path)
+        except Exception:
+            if staging.exists() and data.startswith(staging.read_bytes()) and matches(target_pre, path):
+                staging.unlink()
+            raise
+        return
+```
 
 - [ ] **Step 4: Run to verify pass**
 
@@ -467,71 +629,91 @@ git commit -m "feat(txn): atomic_write_bytes RESTORE (exact preimage mode)"
 - Test: `tests/test_txn_restore.py` (new)
 
 **Interfaces:**
-- Produces: `_materialize(path, snap, *, token)` — staged publication per type; absent preimage
-  dispatches `rmdir` (dir) vs `unlink` (file/symlink) then parent fsync.
-- Consumes: `atomic_write_bytes` (RESTORE), `_rename_noreplace`, `staging_path_for`.
+- Produces: `_materialize(path, snap, *, token, expected_live: StateFingerprint)` — staged publication
+  per type. `expected_live` is the state rollback already verified the live path holds (the
+  transition's `post`); `_materialize` guards on it and **never re-reads** the live file to derive its
+  own precondition. Absent preimage dispatches `rmdir` (dir) vs `unlink` (file/symlink) then parent
+  fsync.
+- Consumes: `atomic_write_bytes` (RESTORE), `_rename_noreplace`, `staging_path_for`, `_fsync_parent`
+  (Task 3), `matches`, `RollbackHalt`.
 
 - [ ] **Step 1: Write the failing test**
+
+The caller (rollback, or these tests) passes the verified post state as `expected_live`; a live path
+that diverges from it halts instead of being clobbered.
 
 ```python
 # tests/test_txn_restore.py
 import os, stat, pytest
-from science_tool.plan_common import _materialize, snapshot_paths, PathSnapshot, StateFingerprint
+from science_tool.plan_common import (_materialize, snapshot_paths, fingerprint, PathSnapshot,
+                                      StateFingerprint, RollbackHalt)
 
 def _snap_of(path): return snapshot_paths([path])[path]
 
 def test_restore_file(tmp_path):
     p = tmp_path / "f"; p.write_text("old"); os.chmod(p, 0o644)
     snap = _snap_of(p); p.write_text("new")
-    _materialize(p, snap, token="t")
+    _materialize(p, snap, token="t", expected_live=fingerprint(p))   # expected_live = the "new" post
     assert p.read_text() == "old"
 
 def test_restore_symlink(tmp_path):
     real = tmp_path / "r"; real.write_text("x")
     link = tmp_path / "l"; link.symlink_to(real)
     snap = _snap_of(link); link.unlink(); link.write_text("clobbered-into-file")
-    _materialize(link, snap, token="t")
+    _materialize(link, snap, token="t", expected_live=fingerprint(link))
     assert link.is_symlink() and os.readlink(link) == str(real)
 
 def test_restore_absent_over_created_dir(tmp_path):
-    d = tmp_path / "made"; 
+    d = tmp_path / "made"
     absent = StateFingerprint(existed=False, type=None, content_sha256=None, mode=None, symlink_target=None)
     d.mkdir()
-    _materialize(d, PathSnapshot(fp=absent, content=None), token="t")
+    _materialize(d, PathSnapshot(fp=absent, content=None), token="t", expected_live=fingerprint(d))
     assert not d.exists()   # rmdir, not unlink (which would raise)
+
+def test_restore_halts_when_live_diverged_from_expected(tmp_path):
+    p = tmp_path / "f"; p.write_text("old")
+    snap = _snap_of(p)
+    diverged = fingerprint(p)          # captures the "old" state as the (wrong) expectation
+    p.write_text("someone-else-wrote-this")
+    with pytest.raises(RollbackHalt):
+        _materialize(p, snap, token="t", expected_live=diverged)   # live != expected -> refuse
 ```
 
 - [ ] **Step 2: Run to verify it fails**
 
 Run: `uv run --frozen pytest tests/test_txn_restore.py -v`
-Expected: FAIL (`_materialize` signature has no `token`; absent path uses `unlink` and raises on dir).
+Expected: FAIL (`_materialize` has no `token`/`expected_live`; absent path uses `unlink` and raises on
+a dir; no divergence guard).
 
-- [ ] **Step 3: Reimplement `_materialize` with staged publication**
+- [ ] **Step 3: Reimplement `_materialize` with staged publication + expected-live guard**
 
 ```python
-def _materialize(path, snap, *, token):
+def _materialize(path, snap, *, token, expected_live):   # _fsync_parent defined in Task 3
+    # Guard on the state rollback verified, NOT on a fresh read of the live file.
+    if not matches(expected_live, path):
+        raise RollbackHalt(f"{path}: live state diverged from expected post before restore")
     fp = snap.fp
     if not fp.existed:
-        _remove_live(path)                 # already dispatches rmdir vs unlink by lstat
+        _remove_live(path)                 # dispatches rmdir vs unlink by lstat
         _fsync_parent(path); return
     if fp.type == "file":
         atomic_write_bytes(path, snap.content or b"", mode=WriteMode.RESTORE,
-                           file_mode=fp.mode, token=token, target_pre=fingerprint(path))
+                           file_mode=fp.mode, token=token, target_pre=expected_live)
         return                              # atomic_write_bytes fsyncs parent
+    # dir / symlink: build staging, then remove the verified post object and rename staging in.
     staging = staging_path_for(path, token)
     if fp.type == "dir":
         staging.mkdir(); os.chmod(staging, fp.mode)
     else:                                   # symlink
         os.symlink(fp.symlink_target, staging)
-    _rename_noreplace_or_replace_for_restore(staging, path)   # restore may publish over an existing target
+    _remove_live(path)                      # post object was just verified above
+    _rename_noreplace(staging, path)        # dst now absent -> atomic no-clobber (dirs have no link fallback)
     _fsync_parent(path)
 ```
 
-For restore specifically the target may legitimately exist (matches `post`); restore *replaces* it,
-so directory/symlink publication here uses `os.replace(staging, path)` **after** confirming the live
-target still matches `post` (the reconciliation entry — Task 7 — owns the survivor/no-clobber
-concerns). Add `_fsync_parent(path)` helper (open parent `O_RDONLY`, fsync, close). Keep
-`_remove_live`'s existing `rmdir`/`unlink` dispatch.
+The remove→rename window for dir/symlink is covered on restart by Task 7's reconciliation (a surviving
+staging object + an absent/post live target is republished, not O_EXCL-failed). Keep `_remove_live`'s
+existing `rmdir`/`unlink` dispatch.
 
 - [ ] **Step 4: Run to verify pass**
 
@@ -554,44 +736,95 @@ git commit -m "feat(txn): staged restartable _materialize for all preimage types
 - Test: `tests/test_txn_restore.py`
 
 **Interfaces:**
-- Produces: `reconcile_restore_staging(path, snap, *, token) -> None` — consumes a survivor per the
-  design table (complete→publish, file-prefix→recreate, wrong-mode-dir→finish, foreign→halt).
-- Consumes: `classify_staging`, `matches`.
+- Produces: `reconcile_restore_staging(path, snap, *, token, expected_live: StateFingerprint) -> bool`
+  — consumes a survivor per the design table (complete→publish, file-prefix→recreate,
+  wrong-mode-dir→finish, foreign→halt). Returns `True` when it published a complete survivor (restore
+  is done — caller returns early), `False` when it only discarded a partial (caller proceeds to build
+  fresh staging). Needs `expected_live` to decide publish-vs-halt: a complete survivor is only
+  published when the live target still matches `expected_live`.
+- Consumes: `classify_staging` (extended to accept bytes), `matches`, `RollbackHalt`.
+
+Extend `classify_staging` to accept the restore preimage as **bytes** (its current signature is
+`postimage: str` and it `.encode()`s internally; restore compares against `snap.content: bytes`).
+Change the signature to `postimage: str | bytes` and normalize once:
+`want = postimage.encode("utf-8") if isinstance(postimage, str) else postimage`. Existing str callers
+are unaffected.
 
 - [ ] **Step 1: Write the failing test**
 
 ```python
 def test_reconcile_completes_survivor_then_converges(tmp_path):
-    from science_tool.plan_common import _materialize, snapshot_paths, staging_path_for
+    from science_tool.plan_common import _materialize, snapshot_paths, fingerprint, staging_path_for
     p = tmp_path / "f"; p.write_text("old")
-    snap = snapshot_paths([p])[p]; p.write_text("new")
+    snap = snapshot_paths([p])[p]; p.write_text("new"); live = fingerprint(p)
     # simulate a kill AFTER staging written but BEFORE publish:
     staging = staging_path_for(p, "t"); staging.write_bytes(b"old")
-    _materialize(p, snap, token="t")   # must consume the complete survivor, not O_EXCL-fail
+    _materialize(p, snap, token="t", expected_live=live)   # consume the complete survivor, not O_EXCL-fail
     assert p.read_text() == "old" and not staging.exists()
 
 def test_reconcile_halts_on_foreign_survivor(tmp_path):
-    from science_tool.plan_common import _materialize, snapshot_paths, staging_path_for, RollbackHalt
+    from science_tool.plan_common import (_materialize, snapshot_paths, fingerprint,
+                                          staging_path_for, RollbackHalt)
     p = tmp_path / "f"; p.write_text("old")
-    snap = snapshot_paths([p])[p]; p.write_text("new")
+    snap = snapshot_paths([p])[p]; p.write_text("new"); live = fingerprint(p)
     staging_path_for(p, "t").write_bytes(b"unrelated-not-a-prefix")
     with pytest.raises(RollbackHalt):
-        _materialize(p, snap, token="t")
+        _materialize(p, snap, token="t", expected_live=live)
+
+def test_classify_staging_accepts_bytes(tmp_path):
+    from science_tool.plan_common import classify_staging, staging_path_for
+    p = tmp_path / "f"; s = staging_path_for(p, "t"); s.write_bytes(b"abc")
+    assert classify_staging(s, b"abc") == "complete"
+    assert classify_staging(s, b"abcdef") == "prefix"
 ```
 
 - [ ] **Step 2: Run to verify it fails**
 
-Run: `uv run --frozen pytest tests/test_txn_restore.py -k reconcile -v`
-Expected: FAIL (staging survivor makes `atomic_write_bytes`' `O_EXCL` raise `StagingError`).
+Run: `uv run --frozen pytest tests/test_txn_restore.py -k "reconcile or classify" -v`
+Expected: FAIL (staging survivor makes the fresh `os.symlink`/`mkdir`/`O_EXCL` raise `FileExistsError`;
+`classify_staging` rejects bytes).
 
 - [ ] **Step 3: Implement reconciliation and call it first in `_materialize`**
 
-`reconcile_restore_staging` inspects `staging_path_for(path, token)`: if absent → return; for a file
-preimage use `classify_staging(staging, snap.content)` → `complete` → publish (`os.replace`) + parent
-fsync; `prefix` and our own → unlink (recreate downstream); non-prefix/foreign → `RollbackHalt`. For
-dir/symlink survivors: a complete, attributable staging object → publish; wrong-mode staging dir →
-`chmod` to `fp.mode` then publish; unattributable → `RollbackHalt`. `_materialize` calls it before
-building fresh staging.
+```python
+def reconcile_restore_staging(path, snap, *, token, expected_live) -> bool:
+    staging = staging_path_for(path, token)
+    if not staging.exists():
+        return False
+    fp = snap.fp
+    if fp.existed and fp.type == "file":
+        kind = classify_staging(staging, snap.content or b"")   # raises StagingError on foreign bytes
+        if kind == "complete":
+            if not matches(expected_live, path):
+                raise RollbackHalt(f"{path}: live diverged; refusing to publish restore survivor")
+            os.replace(staging, path); _fsync_parent(path)
+            return True
+        staging.unlink()                         # "prefix"/"absent": our own partial -> discard, recreate
+        return False
+    # dir / symlink survivor
+    if fp.existed and fp.type == "dir" and staging.is_dir() and not staging.is_symlink():
+        os.chmod(staging, fp.mode)               # finish a wrong-mode staging dir
+    elif fp.existed and fp.type == "symlink" and staging.is_symlink() \
+            and os.readlink(staging) == fp.symlink_target:
+        pass                                     # attributable complete symlink
+    else:
+        raise RollbackHalt(f"{path}: unattributable restore staging survivor: {staging}")
+    if not matches(expected_live, path):
+        raise RollbackHalt(f"{path}: live diverged; refusing to publish restore survivor")
+    _remove_live(path); _rename_noreplace(staging, path); _fsync_parent(path)
+    return True
+```
+
+Then make it the first statement of `_materialize`, returning early when it converged:
+
+```python
+def _materialize(path, snap, *, token, expected_live):
+    if reconcile_restore_staging(path, snap, token=token, expected_live=expected_live):
+        return                                   # a complete survivor was published
+    if not matches(expected_live, path):
+        raise RollbackHalt(f"{path}: live state diverged from expected post before restore")
+    ...                                          # (rest of Task 6 body unchanged)
+```
 
 - [ ] **Step 4: Run to verify pass**
 
@@ -700,8 +933,10 @@ git commit -m "feat(txn): OwnershipTracker with monotonic mark"
 - Test: `tests/test_ownership_tracker.py`, `tests/test_plan_common.py`
 
 **Interfaces:**
-- Produces: `rollback_transitions(tracker: OwnershipTracker, project_root: Path, snapshot) -> None`
-  implementing the seven-row action table.
+- Produces: `rollback_transitions(tracker: OwnershipTracker, project_root: Path, snapshot, *,
+  token: str) -> None` implementing the seven-row action table. `token` is the per-operation token;
+  each path's restore staging token is `f"{token}-restore-{index}"` (transaction-unique — Global
+  Constraint). Passes `expected_live=t.post` into `_materialize`.
 - Consumes: `OwnershipTracker`, `_materialize`, `matches`, `RollbackHalt`.
 
 - [ ] **Step 1: Write the failing test** (action-table rows: NOT_WRITTEN skip; WRITTEN+post restore;
@@ -709,22 +944,38 @@ git commit -m "feat(txn): OwnershipTracker with monotonic mark"
 
 ```python
 def test_rollback_neither_halts(tmp_path):
+    import hashlib
     from science_tool.plan_common import (OwnershipTracker, MutationOwnership as O, rollback_transitions,
-        snapshot_paths, RollbackHalt, PathTransition, StateFingerprint, resolve_within)
+        snapshot_paths, RollbackHalt, PathTransition, StateFingerprint)
     f = tmp_path / "x.md"; f.write_text("pre")
     pre = snapshot_paths([f])[f].fp
     post = StateFingerprint(existed=True, type="file",
-        content_sha256=__import__("hashlib").sha256(b"post").hexdigest(), mode=0o644, symlink_target=None)
+        content_sha256=hashlib.sha256(b"post").hexdigest(), mode=0o644, symlink_target=None)
     t = PathTransition(role="entity-rewrite", rel_path="x.md", pre=pre, post=post, postimage="post")
     tr = OwnershipTracker([t]); tr.mark(0, O.WRITTEN)
     f.write_text("SOMETHING ELSE")  # neither pre nor post
     with pytest.raises(RollbackHalt):
-        rollback_transitions(tr, tmp_path, snapshot_paths([f]))
+        rollback_transitions(tr, tmp_path, snapshot_paths([f]), token="op")
+
+def test_rollback_written_post_restores(tmp_path):
+    import hashlib
+    from science_tool.plan_common import (OwnershipTracker, MutationOwnership as O, rollback_transitions,
+        snapshot_paths, PathTransition, StateFingerprint)
+    f = tmp_path / "x.md"; f.write_text("pre")
+    snap = snapshot_paths([f]); pre = snap[f].fp
+    post_text = "post"
+    post = StateFingerprint(existed=True, type="file",
+        content_sha256=hashlib.sha256(post_text.encode()).hexdigest(), mode=0o644, symlink_target=None)
+    t = PathTransition(role="entity-rewrite", rel_path="x.md", pre=pre, post=post, postimage=post_text)
+    tr = OwnershipTracker([t]); tr.mark(0, O.WRITTEN)
+    f.write_text(post_text)                       # live == post: reversible
+    rollback_transitions(tr, tmp_path, snap, token="op")
+    assert f.read_text() == "pre"
 
 def test_rollback_rejects_bare_list(tmp_path):
     from science_tool.plan_common import rollback_transitions
     with pytest.raises(TypeError):
-        rollback_transitions([], tmp_path, {})
+        rollback_transitions([], tmp_path, {}, token="op")
 ```
 
 - [ ] **Step 2: Run to verify it fails**
@@ -734,10 +985,30 @@ Expected: FAIL.
 
 - [ ] **Step 3: Implement the action table over the tracker**
 
-Iterate `reversed(tracker.as_executions())` with original indices; per the seven rows: `NOT_WRITTEN`
-→ continue; live `matches(pre)` → continue; live `matches(post)` → `_materialize(path, snap, token=…)`;
-else `RollbackHalt`. Reject a non-`OwnershipTracker` first arg with `TypeError`. Derive a per-path
-restore token deterministically (e.g. `f"restore-{index}"`).
+```python
+def rollback_transitions(tracker, project_root, snapshot, *, token):
+    if not isinstance(tracker, OwnershipTracker):
+        raise TypeError("rollback_transitions requires an OwnershipTracker, not a bare list")
+    execs = list(tracker.as_executions())
+    for index in range(len(execs) - 1, -1, -1):        # reverse: dirs after their moved-in contents
+        ex = execs[index]; t = ex.transition
+        if ex.ownership is MutationOwnership.NOT_WRITTEN:
+            continue
+        path = resolve_within(project_root, t.rel_path)
+        if matches(t.pre, path):
+            continue                                   # already at pre (never written / already reverted)
+        if not matches(t.post, path):
+            raise RollbackHalt(
+                f"{t.rel_path}: live matches neither pre nor post; concurrent change — refusing")
+        snap = snapshot.get(path)
+        if snap is None:
+            raise RollbackHalt(f"no snapshot captured for {t.rel_path}; refusing to reconstruct")
+        _materialize(path, snap, token=f"{token}-restore-{index}", expected_live=t.post)
+```
+
+The bare-list rejection is the first line; the seven rows are the `NOT_WRITTEN`/`pre`/`post`/`neither`
+branches. `_materialize`'s own `expected_live` guard is the second line of defense against a live
+change racing between the `matches(t.post, path)` check here and the restore.
 
 - [ ] **Step 4: Run to verify pass**
 
@@ -760,10 +1031,13 @@ git commit -m "feat(txn): tracker-based rollback_transitions with action table"
 - Test: `tests/test_move_no_clobber.py` (new)
 
 **Interfaces:**
-- Produces: `move_no_clobber(src, dst, *, on_commit_dst=None, on_commit_src=None) -> None`.
-- Consumes: `_rename_noreplace`, `_fsync_parent`.
+- Produces: `move_no_clobber(src, dst, *, on_commit_dst=None, on_commit_src=None,
+  _force_fallback: bool = False) -> None`. `_force_fallback` is a TEST-ONLY seam forcing the ordered
+  link path even where `renameat2` exists, so the fallback's ordering is exercised on any kernel.
+- Consumes: `_rename_noreplace`, `NoAtomicRename`, `_fsync_parent`.
 
-- [ ] **Step 1: Write the failing test**
+- [ ] **Step 1: Write the failing test** — refusal; both seams on the atomic path; **and the ordered
+  fallback path with its ordering** (dst durable before src unlinked).
 
 ```python
 # tests/test_move_no_clobber.py
@@ -780,7 +1054,23 @@ def test_moves_and_fires_both_seams(tmp_path):
     s = tmp_path / "s"; s.write_text("x"); d = tmp_path / "d"
     seen = []
     move_no_clobber(s, d, on_commit_dst=lambda: seen.append("dst"), on_commit_src=lambda: seen.append("src"))
-    assert d.read_text() == "x" and not s.exists() and "dst" in seen and "src" in seen
+    assert d.read_text() == "x" and not s.exists() and seen == ["dst", "src"]
+
+def test_fallback_orders_dst_commit_before_src_unlink(tmp_path):
+    s = tmp_path / "s"; s.write_text("x"); d = tmp_path / "d"
+    order = []
+    def dst(): order.append(("dst-commit", d.exists(), s.exists()))
+    def src(): order.append(("src-commit", d.exists(), s.exists()))
+    move_no_clobber(s, d, on_commit_dst=dst, on_commit_src=src, _force_fallback=True)
+    # dst exists at dst-commit; src still present at dst-commit, gone by src-commit
+    assert order == [("dst-commit", True, True), ("src-commit", True, False)]
+    assert d.read_text() == "x" and not s.exists()
+
+def test_fallback_refuses_existing_dst(tmp_path):
+    s = tmp_path / "s"; s.write_text("x"); d = tmp_path / "d"; d.write_text("keep")
+    with pytest.raises(FileExistsError):
+        move_no_clobber(s, d, _force_fallback=True)
+    assert d.read_text() == "keep" and s.exists()
 ```
 
 - [ ] **Step 2: Run to verify it fails**
@@ -790,12 +1080,25 @@ Expected: FAIL (undefined).
 
 - [ ] **Step 3: Implement**
 
-renameat2 path: `_rename_noreplace(src, dst)`; on success fire both callbacks, fsync both parents.
-When `_rename_noreplace` falls back to `link`+`unlink` internally, that ordering is wrong for two
-seams — so implement `move_no_clobber` to do the fallback itself when needed:
-`O_EXCL link(src,dst)` → `on_commit_dst` → `_fsync_parent(dst)` → `unlink(src)` → `on_commit_src` →
-`_fsync_parent(src)`. Detect `renameat2` availability once (module-level probe) to choose the path;
-the atomic path fires both callbacks after the single rename.
+```python
+def move_no_clobber(src, dst, *, on_commit_dst=None, on_commit_src=None, _force_fallback=False):
+    if not _force_fallback:
+        try:
+            _rename_noreplace(src, dst)              # atomic: dst created and src removed in one step
+            if on_commit_dst is not None: on_commit_dst()
+            if on_commit_src is not None: on_commit_src()
+            _fsync_parent(dst); _fsync_parent(src)
+            return
+        except NoAtomicRename:
+            pass
+    # Ordered fallback: dst made durable BEFORE src is unlinked.
+    os.link(src, dst)                                # FileExistsError if dst present -> no-clobber
+    if on_commit_dst is not None: on_commit_dst()
+    _fsync_parent(dst)
+    os.unlink(src)
+    if on_commit_src is not None: on_commit_src()
+    _fsync_parent(src)
+```
 
 - [ ] **Step 4: Run to verify pass**
 
@@ -811,20 +1114,30 @@ git commit -m "feat(txn): move_no_clobber with ordered two-seam durability"
 
 ---
 
-## Task 11: Durable seam primitives (`create_exclusive`, `mkdir_durable`, `unlink_durable`, durable replace)
+## Task 11: `staged_write` gains `on_commit`; durable seam primitives
 
 **Files:**
 - Modify: `src/science_tool/plan_common.py`
-- Test: `tests/test_durable_seams.py` (new)
+- Test: `tests/test_durable_seams.py` (new), `tests/test_plan_common.py` (staged_write on_commit)
 
 **Interfaces:**
-- Produces: `create_exclusive(path, text, mode, *, on_commit=None)`;
-  `mkdir_durable(path, mode, *, token, on_commit=None)`;
-  `unlink_durable(path, *, on_commit=None)`;
-  `durable_replace_text(path, postimage, mode, token, *, target_pre, on_commit=None)`.
-- Consumes: `_rename_noreplace`, `atomic_write_bytes`, `_fsync_parent`, `PreconditionRefused`.
+- Produces:
+  - `staged_write(..., on_commit=None)` — the existing signature gains an `on_commit` callback fired
+    at the `os.replace` linearization point, **before** the fallible parent-dir fsync. (Archive and
+    supersede call `staged_write` directly, so ownership marking must live here — not only in the new
+    primitives.)
+  - `create_exclusive(path, text, mode, *, on_commit=None, _fault=None)`;
+    `mkdir_durable(path, mode, *, token, on_commit=None, _fault=None)`;
+    `unlink_durable(path, *, on_commit=None, _fault=None)`;
+    `durable_replace_text(path, postimage, mode, token, *, target_pre, on_commit=None)`.
+  - `_fault` is the same TEST-ONLY `Callable[[str], None]` seam pattern as `staged_write`'s: a test
+    raises from it to simulate a kill at a labeled boundary.
+- Consumes: `_rename_noreplace`, `NoAtomicRename`, `atomic_write_bytes`, `_fsync_parent`,
+  `PreconditionRefused`.
 
-- [ ] **Step 1: Write the failing test** — mark-at-linearization for each primitive, no-clobber dir.
+- [ ] **Step 1: Write the failing test** — mark-at-linearization for each primitive, no-clobber dir,
+  and the load-bearing case: **on_commit fires (ownership recorded) even when durability fails right
+  after the linearization point.**
 
 ```python
 # tests/test_durable_seams.py
@@ -838,6 +1151,19 @@ def test_create_exclusive_marks_at_open(tmp_path):
     with pytest.raises(FileExistsError):
         create_exclusive(p, "again", 0o644)
 
+def test_create_exclusive_marks_before_a_failing_fsync(tmp_path):
+    """The linearization point is the O_EXCL open; a failure in the LATER durability work must still
+    leave ownership marked WRITTEN (the file exists) — proving on_commit fired before fallible I/O."""
+    p = tmp_path / "e.md"; fired = []
+    class _Kill(BaseException): ...
+    def fault(label):
+        if label == "post-linearization":
+            raise _Kill()
+    with pytest.raises(_Kill):
+        create_exclusive(p, "body", 0o644, on_commit=lambda: fired.append(1), _fault=fault)
+    assert fired == [1]          # marked despite the kill
+    assert p.exists()            # the identity change happened
+
 def test_mkdir_durable_no_clobber(tmp_path):
     d = tmp_path / "anc"; d.mkdir()   # concurrent creator got here first
     with pytest.raises(PreconditionRefused):
@@ -849,33 +1175,48 @@ def test_unlink_durable_marks(tmp_path):
     assert not p.exists() and fired == [1]
 ```
 
+And in `tests/test_plan_common.py`, that `staged_write` fires `on_commit`:
+
+```python
+def test_staged_write_fires_on_commit_at_replace(tmp_path):
+    from science_tool.plan_common import staged_write, fingerprint
+    p = tmp_path / "idx.jsonl"; fired = []
+    staged_write(p, "line\n", 0o644, "tok", target_pre=fingerprint(p),
+                 on_commit=lambda: fired.append(1))
+    assert p.read_text() == "line\n" and fired == [1]
+```
+
 - [ ] **Step 2: Run to verify it fails**
 
-Run: `uv run --frozen pytest tests/test_durable_seams.py -v`
-Expected: FAIL (undefined).
+Run: `uv run --frozen pytest tests/test_durable_seams.py tests/test_plan_common.py -k "durable or staged_write" -v`
+Expected: FAIL (undefined; `staged_write` has no `on_commit`).
 
 - [ ] **Step 3: Implement**
 
-- `create_exclusive`: `fd = os.open(path, O_WRONLY|O_CREAT|O_EXCL, mode)` → **`on_commit()`** → write
-  → `fchmod` exact → fsync file → fsync parent. (Callback right after the exclusive open — Global
-  Constraints.)
+- `staged_write`: add `on_commit=None`; after `os.replace(staging, target)` and before the parent-dir
+  fsync, `if on_commit is not None: on_commit()`. (The `os.replace` is the linearization point; the
+  dir fsync is the fallible durability work that must follow the mark.)
+- `create_exclusive`: `fd = os.open(path, O_WRONLY|O_CREAT|O_EXCL, mode)` → **`on_commit()`** →
+  `_fault("post-linearization")` → write → `fchmod` exact → fsync file → fsync parent. (Callback right
+  after the exclusive open — Global Constraints.)
 - `mkdir_durable`: mkdir staging (`staging_path_for(path, token)` dir) → `chmod` exact →
   `_rename_noreplace(staging, path)`; on `FileExistsError` → remove staging, `raise PreconditionRefused`;
-  else `on_commit()` → fsync parent.
-- `unlink_durable`: `os.unlink(path)` → `on_commit()` → fsync parent.
-- `durable_replace_text`: thin wrapper over `atomic_write_bytes(..., mode=REPLACE, ...)` recheck of
-  `target_pre` at the boundary, firing `on_commit` at the replace.
+  else `on_commit()` → `_fault("post-linearization")` → fsync parent. (Dirs have no link fallback; a
+  `NoAtomicRename` here is a hard environment error, not a fallback.)
+- `unlink_durable`: `os.unlink(path)` → `on_commit()` → `_fault("post-linearization")` → fsync parent.
+- `durable_replace_text`: thin wrapper over `atomic_write_bytes(..., mode=REPLACE, on_commit=...)`
+  passing `target_pre` through; `on_commit` fires at the replace.
 
 - [ ] **Step 4: Run to verify pass**
 
-Run: `uv run --frozen pytest tests/test_durable_seams.py -v`
+Run: `uv run --frozen pytest tests/test_durable_seams.py tests/test_plan_common.py -v`
 Expected: PASS.
 
 - [ ] **Step 5: Commit**
 
 ```bash
-git add src/science_tool/plan_common.py tests/test_durable_seams.py
-git commit -m "feat(txn): durable callback-bearing seam primitives"
+git add src/science_tool/plan_common.py tests/test_durable_seams.py tests/test_plan_common.py
+git commit -m "feat(txn): staged_write on_commit + durable callback-bearing seam primitives"
 ```
 
 ---
@@ -888,25 +1229,67 @@ git commit -m "feat(txn): durable callback-bearing seam primitives"
 - Test: `tests/test_archive_plan.py`, `tests/test_supersede_plan.py` (extend)
 
 **Interfaces:**
-- Consumes: `OwnershipTracker`, tracker-based `rollback_transitions`, `capture_and_verify`.
-- Produces: unchanged public `apply_*` signatures; internal rollback now tracker-driven.
+- Consumes: `OwnershipTracker`, `MutationOwnership`, tracker-based `rollback_transitions`,
+  `capture_and_verify`, `move_no_clobber`, `mkdir_durable`, `staged_write(..., on_commit=...)`.
+- Produces: unchanged public `apply_*` signatures; internal rollback now tracker-driven; `created-dir`
+  transitions are made through `mkdir_durable` and marked, so rollback reverts created ancestors.
 
 - [ ] **Step 1: Write/extend the failing test** — an injected apply failure rolls back via the tracker
-  and leaves the tree at pre-state; a `neither` referrer halts. (Reuse each module's existing
-  rollback test harness, swapping the assertion to go through the tracker path.)
+  and leaves the tree at pre-state, **including any created ancestor directory** (the finding-4 case).
+  This mirrors the existing `test_kill_after_index_replacement_...` harness but raises a catchable
+  `RuntimeError` (so the `except Exception` rollback path runs) instead of the `_Kill` BaseException.
+
+```python
+def test_apply_archive_rolls_back_to_pre_state_including_created_dirs(tmp_path: Path) -> None:
+    _superseded(tmp_path)
+    # Force a fresh ancestor: archive into a kind whose _archive/<kind>/ dir does not exist yet,
+    # so the plan carries a created-dir transition. _superseded seeds a 'superseded' interpretation;
+    # its archive dst is entities/_archive/interpretations/ -> a created-dir.
+    plan = plan_archive(tmp_path, selection=ArchiveStatusSweep(kind="all_by_status",
+                        statuses=["superseded"]), now="2026-07-18T00:00:00Z")
+    created = [t for t in plan.transitions if t.role == "created-dir"]
+    assert created, "test fixture must exercise at least one created-dir"
+    before = _tree(tmp_path)                                   # _tree helper already in this test module
+
+    def fault(label: str) -> None:
+        if label == "index-written":
+            raise RuntimeError("boom after index")             # catchable -> triggers rollback
+
+    with pytest.raises(ArchiveApplyError):
+        apply_archive_plan(tmp_path, plan, staging_token="tok", _fault=fault)
+
+    assert _tree(tmp_path) == before                            # every move, index, AND created dir reverted
+    for t in created:
+        assert not (tmp_path / t.rel_path).exists()             # created ancestor removed on rollback
+```
+
+(If `test_archive_plan.py` has no `_tree` helper, add the same walk used in `test_entity_import.py`'s
+`_tree`: per-path `(type, mode, sha256|symlink target|dir)`, excluding `.git` and `*.tmp`.)
 
 - [ ] **Step 2: Run to verify it fails**
 
 Run: `uv run --frozen pytest tests/test_archive_plan.py tests/test_supersede_plan.py -v`
-Expected: FAIL (apply still calls the removed bare-list `rollback_transitions`).
+Expected: FAIL (apply still calls the removed bare-list `rollback_transitions`; created dirs are bare
+`mkdir` and never marked, so a created ancestor is left behind).
 
 - [ ] **Step 3: Migrate both apply functions**
 
-Build an `OwnershipTracker` from the plan's transition list; pass `on_commit=lambda i=i:
-tracker.mark(i, WRITTEN)` into each staged write / `move_no_clobber` seam; on failure call
-`rollback_transitions(tracker, project_root, snapshot)`. Replace `snapshot_paths` at the apply
-entry with `capture_and_verify(transitions, project_root)` so pre-drift is a clean
-`PreconditionRefused`.
+In `apply_archive_plan` (and the parallel structure in `apply_supersede_plan`):
+
+1. Replace the `snapshot_paths(...)` + separate `matches(t.pre, ...)` pre-check loop with
+   `snap = capture_and_verify(all_t, project_root)` (unique-guard + pre-drift → `PreconditionRefused`).
+   Keep the abs-path map for the seams.
+2. `tracker = OwnershipTracker(all_t)`; build `idx = {id(t): i for i, t in enumerate(all_t)}`.
+3. `created-dir`: replace bare `mkdir`+`chmod` with
+   `mkdir_durable(d, t.post.mode, token=staging_token, on_commit=lambda i=idx[id(t)]: tracker.mark(i, WRITTEN))`.
+4. moves: replace `os.rename(src, dst)` + `_fsync_dir` with
+   `move_no_clobber(src, dst, on_commit_dst=lambda i=idx[id(dst_t)]: tracker.mark(i, WRITTEN),
+   on_commit_src=lambda i=idx[id(src_t)]: tracker.mark(i, WRITTEN))` (map each move to its
+   `archive-dst`/`archive-src` transitions). Keep the `EXDEV` guard by catching it around the call.
+5. index: `staged_write(..., on_commit=lambda i=idx[id(plan.index)]: tracker.mark(i, WRITTEN))`.
+6. on failure: `rollback_transitions(tracker, project_root, snap, token=staging_token)`.
+
+`WRITTEN` is `MutationOwnership.WRITTEN`.
 
 - [ ] **Step 4: Run to verify pass**
 
@@ -1073,13 +1456,42 @@ git commit -m "feat(import): persist transitions + version the saved-plan wire s
 - Produces: unchanged public `apply_import`/`apply_cohort_import` signatures; ownership-driven rollback
   preserving `restrict=written` (rejected referrers stay `NOT_WRITTEN`).
 
-- [ ] **Step 1: Write the failing test** — port the contended-unwritten guarantee: a referrer changed
-  by another writer and rejected by the per-write recheck stays untouched after rollback; the
-  `import-dst` mid-create third state hard-halts. Use the existing pre-migration import rollback test
-  in `tests/test_entity_import.py` as the behavioral oracle — the port must preserve its assertions,
-  now driven through the tracker. Reuse `_project`/`_loose`. (Second of the three fixture-dependent
-  fill-ins: the exact monkeypatch that makes one referrer's per-write recheck reject depends on the
-  existing test's mechanism — mirror it.)
+- [ ] **Step 1: Write the failing test** — the behavioral oracles already in `tests/test_entity_import.py`
+  are the contract the migration must preserve; they exercise partial-rewrite rollback (a referrer
+  written before the failure is restored, one never reached stays untouched — `_tree == before` proves
+  both), created-dir removal, mode restoration, and the sentinel/third-state guarantee. The migration
+  keeps every one green **through the tracker path**. These exist verbatim (do not rewrite them —
+  running them green after Step 3 is the gate):
+  - `test_rollback_restores_whole_tree_after_partial_rewrite` — the contended/untouched-referrer oracle.
+  - `test_rollback_removes_a_kind_directory_it_created`
+  - `test_rollback_restores_a_non_default_mode`
+  - `test_rollback_leaves_no_sentinel_either` — the `import-dst` mid-create third state hard-halt.
+  - `test_import_rolls_back_when_the_audit_fails`
+
+  Add one new test asserting the migration routes through `OwnershipTracker` (the bare-list path is
+  gone) and that a partial failure still converges to pre-state:
+
+```python
+def test_apply_import_rolls_back_via_tracker_after_partial_rewrite(tmp_path: Path,
+                                                                   monkeypatch: pytest.MonkeyPatch) -> None:
+    from science_tool import entity_import as mod
+    from science_tool.entity_import import apply_import
+    root = _project(tmp_path)
+    source = _loose(root, "doc/plans/x.md")
+    for n in (1, 2, 3):
+        (root / "entities" / "plans" / f"000{n}-ref.md").write_text(
+            f"---\nid: plan:000{n}-ref\nkind: plan\ntitle: R{n}\nstatus: active\n"
+            "related:\n- doc/plans/x.md\n---\n\nbody\n", encoding="utf-8")
+    plan = plan_import(root, source, kind="plan", title="T1")
+    before = _tree(root)
+    real = mod.apply_reference_rewrite
+    def _partial(*a: object, **k: object) -> object:
+        real(*a, **k); raise RuntimeError("exploded after writing some referrers")
+    monkeypatch.setattr(mod, "apply_reference_rewrite", _partial)
+    with pytest.raises(RuntimeError, match="exploded"):
+        apply_import(root, plan)
+    assert _tree(root) == before
+```
 
 - [ ] **Step 2: Run to verify it fails**
 
@@ -1089,10 +1501,11 @@ Expected: FAIL.
 - [ ] **Step 3: Migrate apply**
 
 Replace `_snapshot`/`_restore`/`mutated`-set bookkeeping with: `capture_and_verify(plan.transitions,
-project_root)`; an `OwnershipTracker(plan.transitions)`; seams wired to `tracker.mark`
-(`create_exclusive` for `import-dst`, `mkdir_durable` per `created-dir`, `unlink_durable` for
-`import-src`, durable per-edit replace for `entity-rewrite`); on failure
-`rollback_transitions(tracker, project_root, snapshot)`. `claim_number_in_dir` calls
+project_root)`; an `OwnershipTracker(plan.transitions)`; seams wired to `tracker.mark` (via each
+primitive's `on_commit`: `create_exclusive` for `import-dst`, `mkdir_durable` per `created-dir`,
+`unlink_durable` for `import-src`, `durable_replace_text` for `entity-rewrite`); on failure
+`rollback_transitions(tracker, project_root, snapshot, token=staging_token)` (choose one per-apply
+`staging_token`). `claim_number_in_dir` calls
 `create_exclusive` (marking `import-dst` at the exclusive open — the hard-halt seam). A referrer whose
 per-write recheck rejects it is never marked, so it stays `NOT_WRITTEN` and rollback leaves it. Retire
 `_FileState`/`_TreeSnapshot`/`_snapshot`/`_restore` once no caller remains.
@@ -1111,65 +1524,91 @@ git commit -m "refactor(import): apply on shared tracker substrate; retire priva
 
 ---
 
-## Task 16: Acceptance harness — true-write-surface across all four families
+## Task 16: Acceptance harness — observed persistent surface across all four families
 
 **Files:**
-- Create: `tests/test_write_surface_acceptance.py`; a syscall-audit fixture helper (e.g.
-  `tests/_fs_audit.py`)
-- Test: the harness itself (marked to run in default suite; the syscall audit must degrade to a
-  skip if the environment lacks `strace`/ptrace permission, never a false pass).
+- Create: `tests/test_write_surface_acceptance.py`; a shared tree-map helper (`tests/_fs_map.py`)
+- Modify: `tests/conftest.py` (promote `_project`/`_loose` to shared fixtures, or import from the
+  helper) — the four families' fixtures already live in `test_cohort_import.py`/`test_archive_plan.py`.
 
 **Interfaces:**
 - Consumes: `apply_archive_plan`, `apply_supersede_plan`, `apply_import`, `apply_cohort_import`;
   each plan's `transitions`.
 
+**Design decision (revised):** the settled contract (audit §5) is a **before/after filesystem-map
+comparison**, not syscall tracing. A tree map needs no `strace`/ptrace and therefore always runs in
+CI — there is no skip path that could let the invariant silently no-op. Transient/scratch behavior is
+characterized by the existing in-process `_fault` seams (also always runs), not by tracing syscalls of
+an in-process callable (which is not possible without a subprocess). Syscall auditing is explicitly
+out of scope for this PR.
+
 - [ ] **Step 1: Write the harness + tests**
 
-A fixture runs a callable under a filesystem-mutation audit (strace `-e trace=%file` or a ptrace
-shim), returning the set of mutating syscalls with their target paths. Three assertions per family:
-(a) `observed_persistent_changes == {t.rel_path for t in transitions if t.pre != t.post}` over a full
-before/after tree map (bytes, type, mode, symlink, dir existence); (b) every mutating syscall targets
-a declared transition path or a declared scratch shape (`.NNNN.reserving` sentinel, `*.tmp` token),
-and no scratch survives a clean run; (c) with `_fault` injection at each seam and the parent-dir
-fsync, each survivor is attributable and classifiable.
+Two assertions per family, both always-on:
+(a) **persistent surface** — `_diff(before, after) == {t.rel_path for t in transitions if t.pre != t.post}`
+over a full tree map (type, mode, sha256 | symlink target | dir existence);
+(b) **no scratch survives a clean run** — after a successful apply, no `*.tmp` token file and no
+`.NNNN.reserving` sentinel remain anywhere under the project.
 
 ```python
+# tests/test_write_surface_acceptance.py
+from tests._fs_map import tree_map, diff_map, no_scratch_survivors
+
 def test_import_persistent_surface_equals_transitions(tmp_path):
     from science_tool.entity_import import plan_import, apply_import
-    root = _project(tmp_path)                       # existing fixture pattern from test_cohort_import.py
-    src = _loose(root, "loose.md", "# Title\n\nbody\n")
-    plan = plan_import(root, src.relative_to(root).as_posix(), kind="paper")
-    before = _tree_map(root)
+    root = _project(tmp_path)                        # shared fixture (see Files)
+    src = _loose(root, "doc/plans/x.md", "# Title\n\nbody\n")
+    plan = plan_import(root, src, kind="plan", title="Title")   # real plan_import signature
+    before = tree_map(root)
     apply_import(root, plan)
-    observed = _diff(before, _tree_map(root))
+    observed = diff_map(before, tree_map(root))
     assert observed == {t.rel_path for t in plan.transitions if t.pre != t.post}
+    assert no_scratch_survivors(root)
 ```
 
-(Third fixture-dependent fill-in: `_tree_map`/`_diff` are new helpers this task defines; `_project`/
-`_loose` are copied from `test_cohort_import.py` or promoted to a shared conftest.)
+Repeat the same two assertions for `apply_archive_plan`, `apply_supersede_plan`, and
+`apply_cohort_import`, each built with that family's existing fixture (`_superseded`/`plan_archive`,
+the supersede fixture, `_valid_plan`/`apply_cohort_import`). A fault-boundary characterization test
+per family reuses each apply's `_fault` seam and asserts every survivor is a declared scratch shape:
+
+```python
+def test_archive_fault_survivors_are_declared_scratch(tmp_path):
+    from science_tool.archive_plan import plan_archive, apply_archive_plan, ArchiveApplyError
+    _superseded(tmp_path)
+    plan = plan_archive(tmp_path, selection=ArchiveStatusSweep(kind="all_by_status",
+                        statuses=["superseded"]), now="2026-07-18T00:00:00Z")
+    class _Kill(BaseException): ...
+    def fault(label):
+        if label == "index-written": raise _Kill()
+    with pytest.raises(_Kill):
+        apply_archive_plan(tmp_path, plan, staging_token="tok", _fault=fault)
+    # any surviving scratch is an attributable *.tmp for a declared staged target — never foreign debris
+    for p in tmp_path.rglob("*.tmp"):
+        assert any(p.name.startswith(Path(t.rel_path).name) for t in plan.transitions)
+```
 
 - [ ] **Step 2: Run to verify it fails**
 
 Run: `uv run --frozen pytest tests/test_write_surface_acceptance.py -v`
-Expected: FAIL until the fixture + `_tree_map`/`_diff` helpers exist.
+Expected: FAIL until `tests/_fs_map.py` (`tree_map`/`diff_map`/`no_scratch_survivors`) exists.
 
-- [ ] **Step 3: Implement the fixture and helpers**
+- [ ] **Step 3: Implement the helper**
 
-`_tree_map` walks the project (excluding `.git`) recording per-path (type, mode, sha256|symlink
-target|dir). The audit fixture wraps the mutator call; if syscall tracing is unavailable it `skip`s
-the transient/kill-boundary assertions but still runs the persistent-surface assertion (which needs
-no tracing) — a missing tracer must never read as a pass of the stronger claims.
+`tree_map(root)` walks the project excluding `.git`, returning `{rel_path: signature}` where signature
+is `("file", mode, sha256)`, `("symlink", target)`, or `("dir", mode)`. `diff_map(before, after)`
+returns the set of `rel_path`s whose signature changed, was added, or was removed. `no_scratch_survivors`
+returns `True` iff no `*.tmp` and no `.*.reserving` path exists under root. All pure-Python; no tracing.
 
 - [ ] **Step 4: Run to verify pass**
 
 Run: `uv run --frozen pytest tests/test_write_surface_acceptance.py -v`
-Expected: PASS (persistent-surface always; transient/kill assertions PASS or SKIP by environment).
+Expected: PASS — every assertion runs unconditionally (no environment-gated skips).
 
 - [ ] **Step 5: Commit**
 
 ```bash
-git add tests/test_write_surface_acceptance.py tests/_fs_audit.py
-git commit -m "test(txn): acceptance-time true-write-surface harness (all four families)"
+git add tests/test_write_surface_acceptance.py tests/_fs_map.py tests/conftest.py
+git commit -m "test(txn): acceptance-time observed-surface harness (all four families)"
 ```
 
 ---
@@ -1201,12 +1640,24 @@ in a serialized fixture), never by loosening an assertion.
   P3→T13-15, P7→T16. Every design load-bearing test (1–9) has a home (T1-2, T3-5, T6-7, T9, T10-11,
   T14-15, T16).
 - **Type consistency:** `OwnershipTracker`, `TransitionExecution`, `MutationOwnership`, `WriteMode`,
-  `PreconditionRefused`, `BlobMismatch`, `move_no_clobber`, `create_exclusive`, `mkdir_durable`,
-  `unlink_durable`, `atomic_write_bytes`, `capture_and_verify` are spelled identically across tasks.
-- **No placeholders:** every code step carries real code; three tasks (T14 plan-derive, T15
-  contended-referrer, T16 scaffold) leave `...` in *test scaffolding* that depends on the project
-  fixture — the implementer fills these against the real `_scaffold` helpers, and the surrounding
-  assertions are concrete. Flag these three to the executor as the only fill-in points.
+  `PreconditionRefused`, `BlobMismatch`, `BoundaryError`, `NoAtomicRename`, `move_no_clobber`,
+  `_publish_no_clobber`, `create_exclusive`, `mkdir_durable`, `unlink_durable`, `durable_replace_text`,
+  `atomic_write_bytes`, `capture_and_verify`, `reconcile_restore_staging`, `_materialize` (now
+  `*, token, expected_live`), `rollback_transitions` (now `*, token`) are spelled identically across
+  tasks and carry a single signature each.
+- **No placeholders:** every code step carries real, runnable code and every test is concrete.
+  The three formerly-prose steps (T12/T15 rollback tests, T16 harness) now contain full test bodies
+  built on the repo's real fixtures (`_project`, `_loose`, `_valid_plan`, `_superseded`, `plan_import`,
+  `plan_archive`) and real oracle test names verified present in `test_entity_import.py` /
+  `test_archive_plan.py`. The only implementer-supplied code is the `tree_map`/`diff_map` helper body
+  in T16, which is fully specified in prose (T16 Step 3). No `_scaffold`, no `...` in production code.
+- **Every review finding closed:** F1 restore-authority (expected_live threaded T6/T7/T9 + Global
+  Constraint); F2 red/green (T1 injected race, T2 existing roles + `import hashlib` + `BoundaryError`,
+  T3 REPLACE-only, T4 `file_mode`, T5 real RESTORE red); F3 link durability (`_publish_no_clobber` /
+  move fallback, dst durable before src unlink); F4 created-dir ownership + `staged_write.on_commit`
+  (T11/T12); F5 restore interfaces (concrete `reconcile_restore_staging`/`_materialize`, `classify_staging`
+  bytes, per-op token); F6 load-bearing tests (T10 fallback-ordering, T11 post-linearization fault,
+  T12/T15 concrete, T16 always-on tree-map, strace dropped).
 
 ## Execution handoff
 
