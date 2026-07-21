@@ -20,7 +20,7 @@ The classification contract every skill is described by.
 | **1. Structural role** | `index`, `router`, `leaf` | **Derived**: `INDEX.md` → index; `SKILL.md` → router; else → leaf. No field. |
 | **2. Leaf archetype** | `measurement-qa`, `method-guide`, `analysis-discipline`, `normative-reference`, `tool-guide`, `practice-guide` | **New `archetype:` field** (leaves only, exactly one). |
 | **3. Depth** | `standard`, `deep-reference` | Existing `type:` field, **renamed `depth:`**. Absent ⇒ `standard`. |
-| **4. Subject** | genomics, transcriptomics, statistics, writing, pipelines, … | **Derived** from path (until migration reshapes the tree). No field. |
+| **4. Subject** | genomics, transcriptomics, statistics, writing, pipelines, … | **Derived** from the subject path. No field. |
 | **5. Source-basis** | internal, external-spec, external-tool, external-methodology, mixed | **Derived** from `provenance:`/`sources:` + registry `kind`. Records the *source basis*, **not** governing authority. `spec` ⇒ external-spec; `software`/`package-docs` ⇒ external-tool; `skill-repo` ⇒ external-methodology (ideas/practices basis, e.g. `baygent-skills`); `book`/`paper`/`course` ⇒ supporting citation; multiple substantive source kinds ⇒ mixed. A single cited source never *by itself* sets a skill's source basis to external. No field. |
 
 ### Leaf archetypes
@@ -90,7 +90,7 @@ A router is high-leverage — it governs progressive disclosure. Its minimal con
 - **Rename `type:` → `depth:`** — values `standard | deep-reference`; absent ⇒ `standard`. The old `type:` key becomes **invalid immediately**. **No compatibility alias** (matches the project's no-legacy-layer rule).
 - Every skill Markdown file (router and leaf) must carry `provenance: internal` or valid `sources:` — `missing-provenance` is ERROR.
 - **Structural role** — **Derived**: `INDEX.md` → index; `SKILL.md` → router; else → leaf. No field.
-- **Subject** — **Derived** from path (until migration reshapes the tree). No field.
+- **Subject** — **Derived** from the subject path. No field.
 - Check conformance mechanically with `science skills lint` where the linter covers the rule; otherwise use the archetype's itemized slot and success-test checklist.
 
 ## Examples
@@ -108,8 +108,8 @@ A router is high-leverage — it governs progressive disclosure. Its minimal con
 
 - A skill `name` is a stable identifier; renaming is a breaking, migration-scoped change.
 - `depth:` replaces `type:` immediately, with no compatibility alias.
-- Declaring `archetype:` is required on every leaf, and the corpus was backfilled in full on 2026-07-20. Reorganizing the corpus and extracting methodology from hubs remain deferred to the migration driven by the corpus matrix.
-- The router invariant now holds for `research/` and `writing/`, extracted 2026-07-20 into `literature-evaluation`, `citation-discipline`, `proposition-graph-reasoning`, and `scientific-writing`. Four hubs remain (`data/`, `data/expression/`, `pipelines/`, `statistics/`). Reorganizing and renaming the corpus stays deferred to phase 3, because subject is derived from path.
+- Declaring `archetype:` is required on every leaf, and the corpus was backfilled in full on 2026-07-20. Reorg + rename completed in phase 3; hub **extraction** + principle-trimming + `frictionless`/`mutational-signatures` splits remain (phase 4).
+- The router invariant now holds for `research/` (dissolved in phase 3 into `literature/`, `epistemics/`, and `research-package/`) and `writing/`, extracted 2026-07-20 into `literature-evaluation`, `citation-discipline`, `proposition-graph-reasoning`, and `scientific-writing`. Four hubs remain (`data-management/`, `bio/transcriptomics/`, `pipelines/`, `statistics/`), pending phase-4 extraction.
 
 ## Invalid cases
 

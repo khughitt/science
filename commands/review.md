@@ -22,7 +22,7 @@ manifest context for the epistemic claim under review.
 ## Setup
 
 Follow `${CLAUDE_PLUGIN_ROOT}/references/command-preamble.md` (role: `research-assistant`).
-Load the `research-methodology` and `scientific-writing` skills.
+Load the `scientific-writing` skill. For research methodology, read `${CLAUDE_PLUGIN_ROOT}/skills/INDEX.md` and load the leaves relevant to the task (e.g. `literature-evaluation`, `literature-citation-discipline`, `epistemics-proposition-graph-reasoning`).
 
 ## Selecting targets
 

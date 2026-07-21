@@ -68,7 +68,7 @@ def test_missing_companion_skills_section_returns_issue() -> None:
 
 
 def test_required_halt_on_leaf_with_section_returns_no_issues() -> None:
-    path = FIXTURES / "data" / "embeddings-manifold-qa.md"
+    path = FIXTURES / "ml" / "embeddings-manifold-qa.md"
 
     issues = check_halt_on_conditions(path, FIXTURES)
 
@@ -76,7 +76,7 @@ def test_required_halt_on_leaf_with_section_returns_no_issues() -> None:
 
 
 def test_required_halt_on_leaf_without_section_returns_issue() -> None:
-    path = FIXTURES / "data" / "functional-genomics-qa.md"
+    path = FIXTURES / "bio" / "functional-genomics-qa.md"
 
     issues = check_halt_on_conditions(path, FIXTURES)
 
@@ -135,11 +135,11 @@ def test_lint_cli_against_fixtures(tmp_path: Path) -> None:
     assert "bad-legacy-type-key.md" in result.output
     assert "bad-no-companion-skills.md" in result.output
     assert "bad-broken-relative-link.md" in result.output
-    assert "data/functional-genomics-qa.md" in result.output
+    assert "bio/functional-genomics-qa.md" in result.output
     assert "good.md" not in result.output
     assert "good-with-companion.md" not in result.output
     assert "good-deep-reference.md" not in result.output
-    assert "data/embeddings-manifold-qa.md" not in result.output
+    assert "ml/embeddings-manifold-qa.md" not in result.output
 
 
 def test_skill_issue_json_uses_posix_path() -> None:

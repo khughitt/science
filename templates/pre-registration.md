@@ -167,7 +167,7 @@ If the count is high (>10), specify the correction method
      A budget priced on an uncertified estimator is a consequence of an untested assumption,
      not a constraint on the analysis.
 
-     See skills/statistics/estimator-certification.md. -->
+     See skills/study-design/estimator-certification.md. -->
 
 | Axis / commitment | Value | Reference / domain |
 |---|---|---|

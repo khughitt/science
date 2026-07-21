@@ -40,8 +40,8 @@ ls -la "${CODEX_HOME:-$HOME/.codex}/skills/science"
 You should see a symlink or junction pointing at the repo's `codex-skills/` directory.
 
 `codex-skills/INDEX.md` lists the installed Science command skills and companion
-methodology skills. Command skills reference the Codex-facing companion skills
-`science-research-methodology` and `science-scientific-writing`.
+methodology skills. Command skills reference the Codex-facing companion skill
+`science-scientific-writing`.
 
 ## Update Generated Skills
 

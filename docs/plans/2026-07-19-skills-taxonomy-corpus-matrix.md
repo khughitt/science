@@ -1,5 +1,7 @@
 # Science Skills Corpus Classification Matrix
 
+> **Post-reorg note:** the `path`/`name`/`subject` columns below are **pre-reorg** — this matrix was phase 3's input, not its output; rows are left unrewritten.
+
 > Companion artifact to `2026-07-19-skills-taxonomy-and-templates-design.md`. This is
 > the ratifying classification of the whole skills corpus against the taxonomy. It
 > validates which archetypes earn a template (this phase) **and** it is the primary

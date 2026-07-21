@@ -16,7 +16,7 @@ Before executing any research command:
    - `research` → `doc/`, `specs/`, `tasks/`, `knowledge/`, `papers/`, `models/`, `data/`, `code/`
    - `software` → `doc/`, `specs/`, `tasks/`, `knowledge/`, plus native implementation roots such as `src/` and `tests/`
 2. Load role prompt: `.ai/prompts/<role>.md` if present, else `references/role-prompts/<role>.md`.
-3. Load the `science-research-methodology` and `science-scientific-writing` Codex skills. If native skill loading is unavailable, use `codex-skills/INDEX.md` to map canonical Science skill names to generated skill files and source paths.
+3. Load the `science-scientific-writing` Codex skill. For research methodology, read `../../skills/INDEX.md` and load the leaves relevant to the task (e.g. `literature-evaluation`, `literature-citation-discipline`, `epistemics-proposition-graph-reasoning`).
 4. Read project context from current entity roots:
    - `entities/questions/` for active research questions.
    - `entities/hypotheses/` for hypotheses.
@@ -144,7 +144,7 @@ Follow `references/command-preamble.md` with role `research-assistant`.
 
 Read:
 
-1. `skills/data/SKILL.md`
+1. `skills/data-management/SKILL.md`
 2. `~/d/science/docs/user-guide/benchmarking.md`
 3. `entities/datasets/`, if present
 4. `entities/questions/`, `entities/hypotheses/`, and `entities/propositions/`, if present

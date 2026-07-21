@@ -69,15 +69,15 @@ STRUCTURAL_FILENAMES = {"SKILL.md", "INDEX.md"}
 MARKDOWN_LINK_RE = re.compile(r"\]\(([^)]+)\)")
 INLINE_CODE_RE = re.compile(r"`([^`]+\.md)`")
 HALT_ON_REQUIRED = {
-    "data/embeddings-manifold-qa.md",
-    "data/functional-genomics-qa.md",
-    "data/protein-sequence-structure-qa.md",
-    "data/expression/bulk-rnaseq-qa.md",
-    "data/expression/microarray-qa.md",
-    "data/expression/scrna-qa.md",
-    "data/genomics/somatic-mutation-qa.md",
-    "data/genomics/mutational-signatures-and-selection.md",
-    "research/annotation-curation-qa.md",
+    "bio/genomics/somatic-mutation-qa.md",
+    "bio/genomics/mutational-signatures-and-selection.md",
+    "bio/transcriptomics/bulk-rnaseq-qa.md",
+    "bio/transcriptomics/microarray-qa.md",
+    "bio/transcriptomics/scrna-qa.md",
+    "bio/proteomics/protein-sequence-structure-qa.md",
+    "bio/functional-genomics-qa.md",
+    "ml/embeddings-manifold-qa.md",
+    "epistemics/annotation-curation-qa.md",
 }
 
 

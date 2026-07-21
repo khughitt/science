@@ -30,7 +30,7 @@ When both leaves apply, load `skill-taxonomy.md` first to establish the archetyp
 ## Parent & neighbors
 
 - Parent index: [`../INDEX.md`](../INDEX.md)
-- Neighboring subject routers: [`../data/SKILL.md`](../data/SKILL.md), [`../pipelines/SKILL.md`](../pipelines/SKILL.md), [`../research/SKILL.md`](../research/SKILL.md), [`../statistics/SKILL.md`](../statistics/SKILL.md), and [`../writing/SKILL.md`](../writing/SKILL.md)
+- Neighboring subject routers: [`../bio/SKILL.md`](../bio/SKILL.md), [`../ml/SKILL.md`](../ml/SKILL.md), [`../data-management/SKILL.md`](../data-management/SKILL.md), [`../statistics/SKILL.md`](../statistics/SKILL.md), [`../study-design/SKILL.md`](../study-design/SKILL.md), [`../epistemics/SKILL.md`](../epistemics/SKILL.md), [`../literature/SKILL.md`](../literature/SKILL.md), [`../research-package/SKILL.md`](../research-package/SKILL.md), [`../pipelines/SKILL.md`](../pipelines/SKILL.md), and [`../writing/SKILL.md`](../writing/SKILL.md)
 
 ## Templates
 

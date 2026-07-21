@@ -15,7 +15,6 @@ class CompanionSkill(NamedTuple):
 
 
 COMPANION_SKILLS: tuple[CompanionSkill, ...] = (
-    CompanionSkill("research-methodology", Path("skills/research/SKILL.md")),
     CompanionSkill("scientific-writing", Path("skills/writing/scientific-writing.md")),
     CompanionSkill("skill-development", Path("skills/meta/SKILL.md")),
 )
@@ -58,6 +57,11 @@ def generate_codex_skills(repo_root: Path, output_root: Path) -> dict[str, Path]
         generated[skill_name] = skill_path
 
     _write_index(output_root, command_paths, COMPANION_SKILLS)
+
+    generated_dirs = {output_root / name for name in generated}
+    for child in output_root.iterdir():
+        if child.is_dir() and child.name.startswith("science-") and child not in generated_dirs:
+            shutil.rmtree(child)
 
     return generated
 
@@ -293,21 +297,10 @@ def _write_index(output_root: Path, command_paths: list[Path], companion_skills:
 
 
 def _rewrite_companion_skill_references(text: str) -> str:
-    text = text.replace(
-        "Load the `research-methodology` and `scientific-writing` skills.",
-        "Load the `science-research-methodology` and `science-scientific-writing` Codex skills. "
-        "If native skill loading is unavailable, use `codex-skills/INDEX.md` to map canonical "
-        "Science skill names to generated skill files and source paths.",
+    return text.replace(
+        "Load the `scientific-writing` skill.",
+        "Load the `science-scientific-writing` Codex skill.",
     )
-    text = text.replace(
-        "Load the `research-methodology` skill for evidence standards",
-        "Load the `science-research-methodology` Codex skill for evidence standards",
-    )
-    text = text.replace(
-        "Load the `research-methodology` skill",
-        "Load the `science-research-methodology` Codex skill",
-    )
-    return text
 
 
 def _replace_command_preamble_instructions(text: str) -> str:
@@ -344,6 +337,7 @@ def _replace_command_preamble_instructions(text: str) -> str:
 
 def _rewrite_claude_specific_text(text: str) -> str:
     replacements: Iterable[tuple[str, str]] = (
+        ("${CLAUDE_PLUGIN_ROOT}/skills/INDEX.md", "../../skills/INDEX.md"),
         ("${CLAUDE_PLUGIN_ROOT}/science", "<science-plugin-root>/science"),
         ("${CLAUDE_PLUGIN_ROOT}/", ""),
         ("${CLAUDE_PLUGIN_ROOT}", "<science-plugin-root>"),

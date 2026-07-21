@@ -82,7 +82,7 @@ details rather than estimand-defining assumptions.
 
 ## Output Package
 
-Generate a `datapackage.json` for this directory; see [`../data/frictionless.md`](../data/frictionless.md).
+Generate a `datapackage.json` for this directory; see [`../data-management/frictionless.md`](../data-management/frictionless.md).
 
 ```
 results/<analysis>/time_series_qa/
@@ -104,6 +104,6 @@ lag sensitivity, or influential units.
 ## Companion Skills
 
 - [`survival-and-hierarchical-models.md`](survival-and-hierarchical-models.md) - mixed-effects, hierarchical, censoring, and grouped-outcome models.
-- [`sensitivity-arbitration.md`](sensitivity-arbitration.md) - pre-committed rules for lag/window and missingness sensitivity.
-- [`power-floor-acknowledgement.md`](power-floor-acknowledgement.md) - independent-unit and transition-count power floors.
-- [`bias-vs-variance-decomposition.md`](bias-vs-variance-decomposition.md) - separating sampling/process bias from estimator variance.
+- [`sensitivity-arbitration.md`](../study-design/sensitivity-arbitration.md) - pre-committed rules for lag/window and missingness sensitivity.
+- [`power-floor-acknowledgement.md`](../study-design/power-floor-acknowledgement.md) - independent-unit and transition-count power floors.
+- [`bias-vs-variance-decomposition.md`](../study-design/bias-vs-variance-decomposition.md) - separating sampling/process bias from estimator variance.

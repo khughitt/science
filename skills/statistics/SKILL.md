@@ -18,20 +18,12 @@ For analysis-readiness planning, start at [`../INDEX.md`](../INDEX.md) or run
 
 | Leaf | Use when |
 |---|---|
-| [`replicate-count-justification.md`](./replicate-count-justification.md) | Choosing R for bootstrap, permutation, Monte Carlo, downsampling, or MCMC |
-| [`bias-vs-variance-decomposition.md`](./bias-vs-variance-decomposition.md) | Naming which error term shrinks with more data vs more replicates vs better estimator |
-| [`power-floor-acknowledgement.md`](./power-floor-acknowledgement.md) | Before interpreting a null, weak, or boundary result |
-| [`sensitivity-arbitration.md`](./sensitivity-arbitration.md) | Pre-committing the rule for resolving disagreement among robustness checks |
-| [`prereg-amendment-vs-fresh.md`](./prereg-amendment-vs-fresh.md) | Deciding whether a follow-up needs a fresh pre-reg or an amendment |
-| [`prereg-defensive-instrumentation.md`](./prereg-defensive-instrumentation.md) | Pre-registering a multi-candidate test that needs universe locks, snapshot freezes, familywise nulls, leakage hedges, suspicious-result tripwires, or locked decision tables |
 | [`survival-and-hierarchical-models.md`](./survival-and-hierarchical-models.md) | Cox / Weibull / mixed-effects / Bayesian hierarchical models |
 | [`compositional-data.md`](./compositional-data.md) | Proportions, fractions, deconvolution outputs, microbiome relative abundance |
 | [`time-series-and-longitudinal-models.md`](./time-series-and-longitudinal-models.md) | Repeated-measure, wearable, sensor, EMA, actigraphy, symptom-diary, cross-lag, or longitudinal models |
 | [`likelihood-model-comparison.md`](./likelihood-model-comparison.md) | Comparing parametric models by likelihood — AIC/BIC/LRT, nested vs non-nested, numerical precision, bootstrap stability, and Bayesian LOO/ELPD/stacking |
 | [`population-genetics-likelihood.md`](./population-genetics-likelihood.md) | Wright-Fisher / Moran / binomial-segregation likelihoods; selection vs neutral null |
-| [`estimator-certification.md`](./estimator-certification.md) | An analysis fits parameters numerically — an optimiser, a profile likelihood, an ODE — and a threshold, budget, or gate is about to depend on the fit |
 | [`bayesian-workflow.md`](./bayesian-workflow.md) | Building/fitting/reviewing a Bayesian model — priors, MCMC, convergence, calibration, comparison |
-| [`causal-identification.md`](./causal-identification.md) | Choosing an adjustment set, backdoor/confounder/collider/M-bias checks, over-adjustment, or a non-identified estimand |
 
 ## Principles
 
@@ -43,32 +35,32 @@ For analysis-readiness planning, start at [`../INDEX.md`](../INDEX.md) or run
    Monte Carlo SE / minimum-attainable-p check. If the answer is
    unknown, run a small pilot and lock the value with a pre-committed
    decision rule. See
-   [`replicate-count-justification`](./replicate-count-justification.md).
+   [`replicate-count-justification`](../study-design/replicate-count-justification.md).
 
 2. **Distinguish bias from variance before you reach for an estimator.**
    Averaging cancels variance, not bias. Naming your estimator's bias
    structure prevents wasting compute and leads to better corrections.
-   See [`bias-vs-variance-decomposition`](./bias-vs-variance-decomposition.md).
+   See [`bias-vs-variance-decomposition`](../study-design/bias-vs-variance-decomposition.md).
 
 3. **Pre-commit sensitivity-arbitration rules.** A pre-registered analysis
    with N sensitivity passes can produce up to 2^N possible "interpretation
    stories" post hoc. State up front which flags caveat the verdict and
    which can override it, and what the override condition is. See
-   [`sensitivity-arbitration`](./sensitivity-arbitration.md).
+   [`sensitivity-arbitration`](../study-design/sensitivity-arbitration.md).
 
 4. **Acknowledge the power floor explicitly.** Before running any
    verdict-bearing test, compute and state the minimum effect detectable
    at your planned n + α + estimator. This prevents post-hoc relabelling
    of nulls as "evidence of absence" and forces explicit choice between
    underpowered exploratory and adequately-powered confirmatory framings. See
-   [`power-floor-acknowledgement`](./power-floor-acknowledgement.md).
+   [`power-floor-acknowledgement`](../study-design/power-floor-acknowledgement.md).
 
 5. **A pre-registration amendment is not a new pre-registration.** When a
    follow-up task tests the same hypothesis with the same contrasts but a
    different operationalisation, structure the new pre-reg as an
    amendment that inherits §-by-§ from the parent. Don't re-state what
    didn't change. See
-   [`prereg-amendment-vs-fresh`](./prereg-amendment-vs-fresh.md).
+   [`prereg-amendment-vs-fresh`](../study-design/prereg-amendment-vs-fresh.md).
 
 6. **Instrument the pre-reg defensively when the test selects among candidates
    or depends on frozen inputs.** Universe locks, candidate-snapshot
@@ -78,7 +70,7 @@ For analysis-readiness planning, start at [`../INDEX.md`](../INDEX.md) or run
    pre-reg commits to in advance. The full set is appropriate for
    confirmatory tests that update a hypothesis verdict; pick the subset
    whose failure modes apply otherwise. See
-   [`prereg-defensive-instrumentation`](./prereg-defensive-instrumentation.md).
+   [`prereg-defensive-instrumentation`](../study-design/prereg-defensive-instrumentation.md).
 
 7. **Model the independent unit.** Repeated cells, genes, mutations, or samples
    inside a donor/study are not independent observations. For survival,
@@ -113,7 +105,7 @@ For analysis-readiness planning, start at [`../INDEX.md`](../INDEX.md) or run
     can be reproducibly wrong. Before a threshold, budget, or gate depends on a
     numeric fit, certify well-posedness, forward-map accuracy, reproducibility, and
     threshold calibration — in that order, cheapest first. See
-    [`estimator-certification`](./estimator-certification.md).
+    [`estimator-certification`](../study-design/estimator-certification.md).
 
 13. **A Bayesian fit is a gated sequence, not a menu.** Prior-predictive check
     before fitting; a convergence gate before reading the posterior; calibration
@@ -126,7 +118,7 @@ For analysis-readiness planning, start at [`../INDEX.md`](../INDEX.md) or run
     (M-bias); over-adjusting a mediator or collider is a bias, not caution. When the
     effect is not identified, separate alternative identification (re-stating the
     estimand), partial-identification bounds, hidden-bias sensitivity, and a
-    fail-closed verdict. See [`causal-identification`](./causal-identification.md).
+    fail-closed verdict. See [`causal-identification`](../study-design/causal-identification.md).
 
 ## When to invoke
 
@@ -152,10 +144,10 @@ Use this skill any time you are:
 
 ## Companion Skills
 
-- [`research`](../research/SKILL.md) — high-level research methodology;
-  this skill is the quantitative-design layer beneath it.
+- [`literature`](../literature/SKILL.md) and [`epistemics`](../epistemics/SKILL.md) — high-level
+  research methodology; this skill is the quantitative-design layer beneath them.
 - [`writing`](../writing/SKILL.md) — how to report statistical
   decisions in pre-regs and interpretations.
-- [`data`](../data/SKILL.md) — input-data conventions; some statistical
+- [`data`](../data-management/SKILL.md) — input-data conventions; some statistical
   decisions depend on data characteristics (e.g., zero-inflation,
   count vs continuous).

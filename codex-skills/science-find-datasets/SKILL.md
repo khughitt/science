@@ -16,7 +16,7 @@ Before executing any research command:
    - `research` → `doc/`, `specs/`, `tasks/`, `knowledge/`, `papers/`, `models/`, `data/`, `code/`
    - `software` → `doc/`, `specs/`, `tasks/`, `knowledge/`, plus native implementation roots such as `src/` and `tests/`
 2. Load role prompt: `.ai/prompts/<role>.md` if present, else `references/role-prompts/<role>.md`.
-3. Load the `science-research-methodology` and `science-scientific-writing` Codex skills. If native skill loading is unavailable, use `codex-skills/INDEX.md` to map canonical Science skill names to generated skill files and source paths.
+3. Load the `science-scientific-writing` Codex skill. For research methodology, read `../../skills/INDEX.md` and load the leaves relevant to the task (e.g. `literature-evaluation`, `literature-citation-discipline`, `epistemics-proposition-graph-reasoning`).
 4. Read project context from current entity roots:
    - `entities/questions/` for active research questions.
    - `entities/hypotheses/` for hypotheses.
@@ -132,8 +132,8 @@ hypotheses, and inquiry variables; then ask the user to confirm the focus.
 Follow the Science Codex Command Preamble before executing this skill. Use the `research-assistant` role prompt.
 
 Additionally:
-1. Read `skills/data/SKILL.md` for data management conventions.
-2. If present, read `skills/data/frictionless.md` for runtime Data Package guidance.
+1. Read `skills/data-management/SKILL.md` for data management conventions.
+2. If present, read `skills/data-management/frictionless.md` for runtime Data Package guidance.
 3. Read project context:
    - `entities/questions/`
    - `entities/hypotheses/`

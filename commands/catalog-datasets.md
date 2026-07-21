@@ -14,7 +14,7 @@ If no argument is provided, run the full gap-driven loop against the project's a
 Follow `${CLAUDE_PLUGIN_ROOT}/references/command-preamble.md` (role: `research-assistant`).
 
 Additionally:
-1. Read `${CLAUDE_PLUGIN_ROOT}/skills/data/SKILL.md` for data management conventions.
+1. Read `${CLAUDE_PLUGIN_ROOT}/skills/data-management/SKILL.md` for data management conventions.
 2. Read `.ai/templates/dataset.md` first; if not found, read `${CLAUDE_PLUGIN_ROOT}/templates/dataset.md`.
 3. Read project context from current entity roots:
    - `entities/questions/` (all question files, if present)

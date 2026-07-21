@@ -555,8 +555,8 @@ def test_pipeline_audit_process_documents_derived_artifact_freshness_checks() ->
             "commands/find-datasets.md",
             (
                 "${CLAUDE_PLUGIN_ROOT}/references/command-preamble.md",
-                "${CLAUDE_PLUGIN_ROOT}/skills/data/SKILL.md",
-                "${CLAUDE_PLUGIN_ROOT}/skills/data/frictionless.md",
+                "${CLAUDE_PLUGIN_ROOT}/skills/data-management/SKILL.md",
+                "${CLAUDE_PLUGIN_ROOT}/skills/data-management/frictionless.md",
                 ".ai/templates/dataset.md",
                 "${CLAUDE_PLUGIN_ROOT}/templates/dataset.md",
             ),
@@ -607,8 +607,8 @@ def test_pipeline_audit_process_documents_derived_artifact_freshness_checks() ->
             "commands/search-literature.md",
             (
                 "${CLAUDE_PLUGIN_ROOT}/references/command-preamble.md",
-                "${CLAUDE_PLUGIN_ROOT}/skills/data/sources/openalex.md",
-                "${CLAUDE_PLUGIN_ROOT}/skills/data/sources/pubmed.md",
+                "${CLAUDE_PLUGIN_ROOT}/skills/literature/sources/openalex.md",
+                "${CLAUDE_PLUGIN_ROOT}/skills/literature/sources/pubmed.md",
                 ".ai/templates/paper.md",
                 "${CLAUDE_PLUGIN_ROOT}/templates/paper.md",
             ),
@@ -629,7 +629,7 @@ def test_command_docs_use_explicit_framework_resolution(
 
 
 def test_data_skill_routes_new_sources_through_dataset_entity_lifecycle() -> None:
-    text = _read("skills/data/SKILL.md")
+    text = _read("skills/data-management/SKILL.md")
 
     assert "science dataset add <slug>" in text
     assert "--level <public|registration|controlled|commercial|mixed>" in text
@@ -654,7 +654,7 @@ def test_data_skill_routes_new_sources_through_dataset_entity_lifecycle() -> Non
 
 
 def test_frictionless_skill_distinguishes_datapackages_from_dataset_entities() -> None:
-    text = _read("skills/data/frictionless.md")
+    text = _read("skills/data-management/frictionless.md")
 
     boundary = _slice_between(
         text,
@@ -761,10 +761,10 @@ def test_plan_analysis_command_covers_pressure_scenarios() -> None:
         "cBioPortal targeted-panel mutation frequency or dN/dS analysis",
         "Natural-systems annotation/curation agreement analysis",
         "Protein-landscape heldout benchmark or embedding-manifold analysis",
-        "data-expression-scrna-qa",
-        "data-genomics-somatic-mutation-qa",
-        "research-annotation-curation-qa",
-        "data-protein-sequence-structure-qa",
+        "transcriptomics-scrna-qa",
+        "genomics-somatic-mutation-qa",
+        "epistemics-annotation-curation-qa",
+        "proteomics-protein-sequence-structure-qa",
     )
     for expected in expected_strings:
         assert expected in text
@@ -775,12 +775,12 @@ def test_plan_analysis_command_routes_proteomics_and_sensor_time_series() -> Non
     index = _read("skills/INDEX.md")
 
     expected_strings = (
-        "`data-proteomics-qa`: `skills/data/proteomics-qa.md`",
+        "`proteomics-qa`: `skills/bio/proteomics/proteomics-qa.md`",
         "`statistics-time-series-and-longitudinal-models`: `skills/statistics/time-series-and-longitudinal-models.md`",
         "Proteomics, phosphoproteomics, mass spectrometry, peptide intensity, TMT, LFQ",
-        "`data-proteomics-qa`, `statistics-bias-vs-variance-decomposition`, `statistics-sensitivity-arbitration`",
+        "`proteomics-qa`, `study-design-bias-vs-variance-decomposition`, `study-design-sensitivity-arbitration`",
         "Wearable, behavioral, actigraphy, EMA, symptom diary, sensor time series, sleep/activity rhythms, or cross-lag coupling",
-        "`statistics-time-series-and-longitudinal-models`, `statistics-bias-vs-variance-decomposition`, `statistics-power-floor-acknowledgement`, and `statistics-sensitivity-arbitration`",
+        "`statistics-time-series-and-longitudinal-models`, `study-design-bias-vs-variance-decomposition`, `study-design-power-floor-acknowledgement`, and `study-design-sensitivity-arbitration`",
     )
     for expected in expected_strings[:2]:
         assert expected in index
@@ -793,7 +793,7 @@ def test_plan_analysis_command_routes_network_dyadic_permutation_designs() -> No
 
     expected_strings = (
         "Network/graph edges, dyadic data, edge prediction, node-label permutation, QAP/MRQAP",
-        "`statistics-power-floor-acknowledgement`, `statistics-replicate-count-justification`, `statistics-sensitivity-arbitration`",
+        "`study-design-power-floor-acknowledgement`, `study-design-replicate-count-justification`, `study-design-sensitivity-arbitration`",
         "treat dyads as dependent observations",
     )
     for expected in expected_strings:
@@ -1007,8 +1007,8 @@ def test_validate_cli_reference_documents_shim_contract() -> None:
             "commands/find-datasets.md",
             (
                 "Follow `references/command-preamble.md`",
-                "Read `skills/data/SKILL.md` for data management conventions.",
-                "If present, read `skills/data/frictionless.md` for Data Package guidance.",
+                "Read `skills/data-management/SKILL.md` for data management conventions.",
+                "If present, read `skills/data-management/frictionless.md` for Data Package guidance.",
             ),
         ),
         (
@@ -1032,8 +1032,8 @@ def test_validate_cli_reference_documents_shim_contract() -> None:
             "commands/search-literature.md",
             (
                 "Follow `references/command-preamble.md`",
-                "Read `skills/data/sources/openalex.md`.",
-                "Read `skills/data/sources/pubmed.md`.",
+                "Read `skills/literature/sources/openalex.md`.",
+                "Read `skills/literature/sources/pubmed.md`.",
             ),
         ),
         ("commands/status.md", (f"If present, read `{CLAIM_MODEL_DOC}`.",)),

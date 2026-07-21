@@ -7,7 +7,7 @@ Before executing any research command:
    - `research` → `doc/`, `specs/`, `tasks/`, `knowledge/`, `papers/`, `models/`, `data/`, `code/`
    - `software` → `doc/`, `specs/`, `tasks/`, `knowledge/`, plus native implementation roots such as `src/` and `tests/`
 2. Load role prompt: `.ai/prompts/<role>.md` if present, else `${CLAUDE_PLUGIN_ROOT}/references/role-prompts/<role>.md`.
-3. Load the `research-methodology` and `scientific-writing` skills.
+3. Load the `scientific-writing` skill. For research methodology, read `${CLAUDE_PLUGIN_ROOT}/skills/INDEX.md` and load the leaves relevant to the task (e.g. `literature-evaluation`, `literature-citation-discipline`, `epistemics-proposition-graph-reasoning`).
 4. Read project context from current entity roots:
    - `entities/questions/` for active research questions.
    - `entities/hypotheses/` for hypotheses.

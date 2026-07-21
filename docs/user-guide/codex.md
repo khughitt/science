@@ -110,7 +110,6 @@ Examples:
 - `science-research-topic`
 - `science-search-literature`
 - `science-add-hypothesis`
-- `science-research-methodology`
 - `science-scientific-writing`
 
 ## Regenerating Skills

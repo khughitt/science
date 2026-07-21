@@ -15,7 +15,7 @@ Use this role profile when stress-testing ideas, hypotheses, or approaches throu
 2. Focus artifacts (relevant hypothesis, question, or topic docs)
 3. `entities/questions/`
 4. `tasks/active.md`
-5. Skills: `research-methodology` and `scientific-writing`
+5. Skills: `scientific-writing`; for research methodology, read `${CLAUDE_PLUGIN_ROOT}/skills/INDEX.md` and load the relevant `literature/`/`epistemics/` leaves
 
 ## Discussion Modes
 

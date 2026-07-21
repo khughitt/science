@@ -13,8 +13,8 @@ hypotheses, and inquiry variables; then ask the user to confirm the focus.
 Follow `${CLAUDE_PLUGIN_ROOT}/references/command-preamble.md` (role: `research-assistant`).
 
 Additionally:
-1. Read `${CLAUDE_PLUGIN_ROOT}/skills/data/SKILL.md` for data management conventions.
-2. If present, read `${CLAUDE_PLUGIN_ROOT}/skills/data/frictionless.md` for runtime Data Package guidance.
+1. Read `${CLAUDE_PLUGIN_ROOT}/skills/data-management/SKILL.md` for data management conventions.
+2. If present, read `${CLAUDE_PLUGIN_ROOT}/skills/data-management/frictionless.md` for runtime Data Package guidance.
 3. Read project context:
    - `entities/questions/`
    - `entities/hypotheses/`
