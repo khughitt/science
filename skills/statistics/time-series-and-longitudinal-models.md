@@ -82,7 +82,7 @@ details rather than estimand-defining assumptions.
 
 ## Output Package
 
-Generate a `datapackage.json` for this directory; see [`../data/frictionless.md`](../data-management/frictionless.md).
+Generate a `datapackage.json` for this directory; see [`../data-management/frictionless.md`](../data-management/frictionless.md).
 
 ```
 results/<analysis>/time_series_qa/

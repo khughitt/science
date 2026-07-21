@@ -99,7 +99,7 @@ Report:
 
 ## Minimum Artifacts
 
-Generate a `datapackage.json` for this directory; see [`../data/frictionless.md`](../data-management/frictionless.md).
+Generate a `datapackage.json` for this directory; see [`../data-management/frictionless.md`](../data-management/frictionless.md).
 
 ```
 results/<analysis>/model_qa/

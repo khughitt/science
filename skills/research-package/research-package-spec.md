@@ -112,6 +112,6 @@ The `.vl.json` files are copied into the package's `figures/` directory and refe
 
 ## Companion Skills
 
-- [`../data/frictionless.md`](../data-management/frictionless.md) - Frictionless descriptor conventions reused by research packages.
+- [`../data-management/frictionless.md`](../data-management/frictionless.md) - Frictionless descriptor conventions reused by research packages.
 - [`../pipelines/snakemake.md`](../pipelines/snakemake.md) - terminal workflow rules that build and validate packages.
 - [`proposition-schema.md`](../epistemics/proposition-schema.md) - proposition and evidence entity semantics used by package provenance.

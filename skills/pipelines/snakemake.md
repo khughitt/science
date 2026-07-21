@@ -488,5 +488,5 @@ the `science-research-package` datapackage profile — see the
 ## Companion Skills
 
 - [`SKILL.md`](SKILL.md) - shared pipeline conventions and workflow artifact expectations.
-- [`../data/frictionless.md`](../data-management/frictionless.md) - data-package descriptors for workflow inputs and outputs.
-- [`../research/research-package-spec.md`](../research-package/research-package-spec.md) - research-package schema and validation commands.
+- [`../data-management/frictionless.md`](../data-management/frictionless.md) - data-package descriptors for workflow inputs and outputs.
+- [`../research-package/research-package-spec.md`](../research-package/research-package-spec.md) - research-package schema and validation commands.
