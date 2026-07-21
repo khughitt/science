@@ -10,7 +10,8 @@
 > no-clobber, durability, restoration, authentication, and test findings are incorporated here. What
 > changes is the ownership boundary. Family mutators no longer orchestrate shared primitives with
 > callbacks and an in-memory tracker; they compile authenticated intent into one effect protocol
-> executed and recovered by one durable engine.
+> executed and recovered by one durable engine. Prior revisions of the earlier architecture at this
+> path remain in this file's git history.
 
 ## 1. Decision
 
@@ -68,7 +69,9 @@ For a valid, authenticated transaction:
 4. **Optimistic concurrency without destructive check/use gaps.** Capture verifies the frozen
    precondition. Replacement, deletion, and movement then transfer the actual live directory entry
    atomically into an engine-owned destination before validating it, so a last-instant writer is
-   preserved rather than overwritten or unlinked.
+   preserved rather than overwritten or unlinked. Symmetrically, staging-to-live publication is
+   validated *after* the transfer — by identity against the retained staging descriptor — so a swap of
+   the engine's staging entry between check and publication is detected, not marked complete.
 5. **No-clobber creation.** File, directory, and move destinations are never silently replaced.
 6. **Write-ahead ownership.** Durable effect state makes every interrupted effect conservatively
    classifiable without relying on a process-local callback.
@@ -85,14 +88,35 @@ For a valid, authenticated transaction:
 ### 3.2 Non-guarantees
 
 - Noncooperating writers are not locked out. They can cause clean refusal or a recovery halt.
+- A noncooperating writer that renames a held ancestor *directory* during a transaction can redirect a
+  leaf mutation to wherever it moved the directory, including outside the declared surface. A
+  pre-opened parent descriptor pins the directory object, not its location, and POSIX provides no
+  atomic path-containment for an open descriptor. The engine's cooperating-process model — project
+  lock plus sync-ignored metadata — prevents this among Science processes; an actively-relocating
+  external adversary is out of scope.
 - Multiple persistent paths are not instantaneously visible as one atomic update.
 - Fingerprint-equivalent delete-and-recreate activity by an external writer is not distinguishable
   from the declared state; authority is defined by the frozen state contract, not inode provenance.
-- A writer holding an open descriptor to an entry after atomic displacement can continue changing
-  the quarantined inode. The engine preserves a diverged quarantine object instead of deleting it,
-  but cannot make that writer participate in the transaction.
+- A writer holding an open descriptor to an entry after atomic displacement can continue changing the
+  quarantined inode. Divergence observed at the final pre-removal check preserves the quarantine
+  object instead of deleting it, but there is no atomic compare-and-unlink for a regular file: a
+  modification made through such a descriptor strictly between that check and the `unlink` is not
+  detected. (Directory quarantines are exempt — `rmdir` atomically refuses a non-empty directory.)
+  The engine cannot make that writer participate in the transaction.
 - Arbitrary corruption or deletion of `.science/transactions/` is not automatically repaired.
 - Git history publication is not part of this design.
+- A `ReplaceFile` that refuses on concurrent drift briefly publishes its own postimage to the single
+  live path during the atomic exchange, before exchanging the concurrent writer's entry back. A
+  reader or sync client observing that path between the two exchanges can see content from a
+  transaction that ultimately refused. No multi-path or committed visibility is implied.
+- The engine runs only where the active platform backend supplies every capability a transaction
+  requires (§5.5). On a platform lacking a required capability, the affected family operation refuses
+  at preparation rather than degrading to a weaker executor. The supported-platform set, and which
+  backends ship, is a delivery decision recorded per plan — not a property of the transaction model.
+- Concurrent application from two hosts over a synced project tree (Dropbox and similar) is not
+  supported. The advisory lock serializes cooperating processes on a single host only, and
+  transaction metadata is marked sync-ignored (§7) precisely because a cross-machine sync client
+  supplies none of the ordering or exclusion the engine relies on.
 
 ## 4. Architecture boundary
 
@@ -121,6 +145,11 @@ surface authentication as archive and supersede, including the rewrite-to-edit b
 An adapter deterministically compiles an authenticated family plan into `TransactionSpec`. It does
 not mutate the filesystem, create scratch objects, or make recovery decisions. Compiling the same
 authenticated plan twice produces byte-identical canonical output.
+
+Every fingerprint in the spec, including each path's expected initial state, comes from the
+authenticated plan's frozen transition surface, not from a live filesystem read at compile time. That
+is what keeps recompilation byte-identical under external drift. Detecting divergence between the
+frozen initial state and the live entry is capture's job (§6), not compilation's.
 
 ### 4.3 Coordinator, executor, and recovery engine
 
@@ -164,7 +193,8 @@ The internal specification contains:
 - an ordered sequence of typed effects with stable effect IDs;
 - effect dependencies where sequence alone is insufficient;
 - referenced content hashes and exact modes;
-- the required filesystem capability set.
+- the required filesystem capability set, computed as the always-required capabilities (§5.5) plus
+  the union of the semantic capabilities named by the spec's effect variants.
 
 The compiled specification is deterministic and contains no runtime transaction ID. Preparation
 binds it to a fresh transaction ID in the journal record; scratch paths derive from that ID plus the
@@ -219,26 +249,100 @@ Before any journal or blob write, validation proves:
 - no persistent path is omitted or undeclared;
 - ancestor-resolved, leaf-retaining paths stay inside the project root;
 - engine scratch names are disjoint from persistent paths;
-- required platform capabilities are available, including `renameat2(RENAME_NOREPLACE)` and
-  `renameat2(RENAME_EXCHANGE)` plus regular-file hard links on one filesystem.
+- every semantic capability (§5.5) named by the spec's effects, plus the always-required
+  `anchored_traversal`, `durable_publish`, and `advisory_project_lock`, is supplied by the active
+  backend for the project-root volume; a missing capability refuses before any journal or blob write.
 
 After this boundary, internal execution code trusts the specification.
 
+### 5.5 Filesystem capability vocabulary
+
+The transaction model is defined over **semantic filesystem capabilities**, not platform syscalls. A
+`TransactionSpec` requires a set of these capabilities; each supported backend satisfies them. A
+backend is conformant if and only if it upholds the recovery tables in §8–§10 — the reference
+syscalls below are informative, not the contract.
+
+Capabilities are probed **per mount**, not per operating system: atomic exchange, no-clobber
+transfer, and hard-link identity are filesystem-specific (`RENAME_EXCHANGE` is unavailable on some
+Linux filesystems; macOS swap/exclusive rename is gated by `volumeSupportsSwapRenaming` /
+`volumeSupportsExclusiveRenaming`). Because `anchored_traversal` refuses to cross a mount boundary,
+every effect path resolves on the project-root volume, so preparation validates every required
+capability against that one volume and refuses if any is missing. A path or move that would cross
+into a nested or bind mount refuses at preparation rather than escaping the probed capability set.
+
+| Capability | Required guarantee | Reference backends |
+| --- | --- | --- |
+| `atomic_exchange` | Atomically swap two existing directory entries in one parent with no observable interval in which either name is absent or duplicated; survives process death. | Linux `renameat2(RENAME_EXCHANGE)`; macOS `renamex_np(RENAME_SWAP)` |
+| `noclobber_transfer` | Atomically move a source entry onto a destination name, failing without effect if the destination exists; never replaces. | Linux `renameat2(RENAME_NOREPLACE)`; macOS `renamex_np(RENAME_EXCL)` |
+| `identity_anchor` | Give a regular file a second durable name sharing the same underlying object identity, so a moved entry is distinguishable from a byte-equivalent foreign entry across process death. | POSIX `link`/`linkat`, one filesystem |
+| `anchored_traversal` | Resolve and open each effect path's **parent** through guarded traversal from a durably-held project-root descriptor — refusing any ancestor symlink or mount crossing — retain those parent descriptors, and issue every capture, staging, and publication as a single-component leaf operation relative to them. Containment is thereby enforced at mutation time, not merely at validation time, and no ancestor is re-resolved by the mutating syscall — within the cooperating-process model; a held ancestor directory actively relocated by a noncooperating writer is the documented exception (§3.2). | Linux `openat2(RESOLVE_BENEATH \| RESOLVE_NO_SYMLINKS \| RESOLVE_NO_XDEV)` to open parents, then `*at` operations with single-component names; macOS `openat` + `O_NOFOLLOW_ANY` with per-component `st_dev` checks, then `renameatx_np` relative to the parent descriptors |
+| `durable_publish` | Flush an entry's data to true stable storage before publication, and flush the parent directory entry after a create/rename, so both survive power loss. | Linux `fsync` on file and parent-directory descriptors; macOS `fcntl(F_FULLFSYNC)` — plain `fsync` does **not** guarantee power-loss durability on macOS |
+| `nofollow_coherent_read` | Open a **regular file** without following a final symlink, then stat and read type, mode, and bytes from that one descriptor. | POSIX `O_RDONLY \| O_NOFOLLOW` + `fstat` (fails by design on a symlink leaf) |
+| `symlink_fingerprint` | Capture a symlink's type, mode, and target without following it. This is `lstat`-coherent, not descriptor-coherent: the fingerprint and the subsequent atomic transfer are separate syscalls, so a symlink's identity contract is the atomically transferred entry validated against the frozen fingerprint (§6), never an open descriptor. | POSIX `lstat` + `readlink` |
+| `advisory_project_lock` | A durable lock file with OS advisory locking that serializes cooperating processes on one host (never claimed as exclusion of arbitrary writers, §7.1). | POSIX `flock`/`fcntl` |
+
+`anchored_traversal`, `durable_publish`, and `advisory_project_lock` are required by every
+transaction. Each effect variant then declares the additional capabilities it consumes:
+
+| Effect | Additional required capabilities |
+| --- | --- |
+| `ReplaceFile` | `atomic_exchange`, `nofollow_coherent_read` |
+| `CreateFileNoClobber` | `noclobber_transfer` |
+| `DeletePath` | `noclobber_transfer`; `nofollow_coherent_read` for a regular-file precondition or `symlink_fingerprint` for a symlink precondition |
+| `MoveNoClobber` | `identity_anchor`, `noclobber_transfer`, `nofollow_coherent_read` |
+| `CreateDirectory` | `noclobber_transfer` |
+
+A spec's required capability set is the always-required trio plus the union over its effects. A spec
+containing only `ReplaceFile` therefore does not require `identity_anchor` or `noclobber_transfer`. If
+the active backend cannot supply a required capability against the project-root volume, preparation
+raises `CapabilityUnavailable` before any project mutation (§11); there is no weaker fallback
+executor.
+
 ## 6. Path resolution and coherent capture
 
-Containment validation resolves the project root and the candidate’s ancestor chain but retains the
-leaf pathname. Following the final symlink would turn a transition *of the symlink* into a transition
-of its target and could escape the declared surface.
+Containment is enforced by `anchored_traversal` (§5.5), not by validation-time resolution alone. The
+engine holds a descriptor to the project root for the transaction’s lifetime and, for each effect
+path, opens the path’s **parent** through guarded traversal from that root — refusing any ancestor
+symlink or mount crossing — and retains the parent descriptor. Every capture, staging, and
+publication is then a single-component leaf operation issued relative to a held parent descriptor,
+never a multi-component path. Passing a multi-component name to `renameat2` / `renameatx_np` would
+reopen the check/use race: the kernel re-resolves intermediate components at the syscall, so a
+noncooperating writer could swap one to a symlink between validation and the syscall and redirect the
+mutation outside the root. Leaf names against pre-opened, guarded parent descriptors close that race,
+because no ancestor is resolved at mutation time. This closes the ancestor *symlink-swap* race but not
+directory *relocation*: a held descriptor pins the directory object, not its namespace location, so a
+noncooperating writer that renames a held ancestor directory — even outside the root — redirects the
+leaf mutation with it. POSIX offers no atomic path-containment for an open descriptor, so this is a
+non-guarantee (§3.2); it does not arise among cooperating processes, which the project lock
+serializes. The leaf pathname itself is retained rather than resolved, because following the final
+symlink would turn a transition *of the symlink* into a transition of its target and could escape the
+declared surface.
+
+When an effect path lies beneath an ancestor that an earlier `CreateDirectory` effect will create, its
+parent does not exist at capture time and cannot be opened. Absence is then captured at the **first
+missing component**: the engine opens the deepest existing ancestor through guarded traversal and
+confirms, with a no-follow lookup relative to that descriptor, that the first missing component is
+absent. The compiler orders ancestor creation outer-to-inner (§5.4, §9.5), so by the time such an
+effect executes, each `CreateDirectory` that produced one of its ancestors has already retained a
+descriptor to the directory it published and handed it down as the descendant's parent descriptor.
+Descendant effects therefore mutate relative to a descriptor the engine itself created, never by
+re-resolving the ancestor chain from the root.
 
 For a regular file:
 
 1. open with `O_RDONLY | O_NOFOLLOW`;
 2. obtain type and mode with `fstat`;
-3. read bytes from that same descriptor;
-4. derive both the content hash and retained rollback bytes from that buffer.
+3. stream bytes from that same descriptor into the blob store, computing the content hash over the
+   stream so the retained bytes and fingerprint still derive from one descriptor (Guarantee 3);
+4. the resulting immutable blob is the retained rollback material; capture never holds an entire file
+   body in memory.
 
-Directories, symlinks, and absence retain `lstat`-based fingerprints and no file content. Capture
-refuses if the coherent observed state does not match the effect timeline’s initial precondition.
+Directories and absence retain `lstat`-based fingerprints and no file content. A symlink precondition
+uses `symlink_fingerprint` (§5.5) — `lstat` plus `readlink` — which is not descriptor-coherent: its
+identity contract is the atomically transferred entry validated against the frozen fingerprint (the
+destructive-operation rule below), never an open descriptor, since `O_NOFOLLOW` fails by design on a
+symlink leaf. Capture refuses if the observed state does not match the effect timeline’s initial
+precondition.
 
 Capture-time verification is not treated as compare-and-swap authority. For replacement, deletion,
 and movement, the effect atomically transfers the actual live entry into an engine-owned staging,
@@ -246,6 +350,15 @@ tombstone, or destination path and then validates that transferred object agains
 occurrence-local precondition. If it differs, the engine restores it when the declared live path is
 still safe or halts while preserving both entries. This closes the destructive check/use gap that an
 adjacent fingerprint recheck alone cannot close.
+
+The constructive direction is validated symmetrically: a pre-publication check of the staging object
+is not trusted alone, because a noncooperating writer could swap the engine's staging entry between
+that check and the publishing rename or exchange. The engine opens and retains a descriptor to the
+staging object before publishing, and after the transfer verifies the live entry carries that
+descriptor's identity (equal `st_dev`/`st_ino`), or its exact state where no descriptor applies,
+before marking the effect `DONE`. A staging-name swap therefore surfaces as a mismatch — refused or
+halted — never published as success. Rollback publication is validated the same way before `UNDONE`
+(§10), and the complete declared initial surface is verified before `ROLLED_BACK` (§7.4).
 
 ## 7. Project-local durable metadata
 
@@ -264,11 +377,32 @@ adjacent fingerprint recheck alone cannot close.
     └── sha256/<digest>
 ```
 
-### 7.1 Lock
+This metadata is single-host by construction. On creation of `.science/transactions/`, the engine
+best-effort **requests** that cross-machine sync clients ignore the directory — for Dropbox, the
+extended attribute `user.com.dropbox.ignored=1` — so that the journal, blobs, and pointers are not
+propagated off the local host. The durability model is defined against one local POSIX filesystem; a
+synced copy of this directory is neither required nor trusted, and a failure to set the ignore marker
+does not weaken any single-host guarantee — the single-host contract does not depend on the marker's
+success.
+
+### 7.1 Lock and the universal recovery lease
 
 `lock` is a persistent file held with an OS advisory lock. It serializes cooperating Science
-processes and is never used as evidence that Dropbox or another arbitrary process is excluded.
-Every mutating Science command resolves an existing transaction before planning a new one.
+processes on one host and is never used as evidence that Dropbox or another arbitrary process is
+excluded.
+
+Every mutating Science command — not only the transaction-adopted families — runs inside a
+**recovery-resolve lease**: a context that acquires the project lock at entry, resolves and completes
+or rolls back any active transaction, and *holds the lock across the command's entire write phase*,
+releasing it when that write phase completes. The lock spans resolution and mutation as one critical
+section, so no other cooperating process can begin a transaction between a command's recovery step
+and its writes. The lease provides serialization and recovery-resolve to *every* mutator; **durability
+is an engine-transaction guarantee, not something the lease imposes on non-adopted mutators.** For an
+adopted family (§12) the write phase ends only when the last mutation is durable, per the engine's
+durability contract (§7); a non-adopted mutator's write phase ends by its own semantics, and
+converting legacy mutators to durable writes is out of scope. An architecture test asserts every
+mutator entry point enters the lease, and a concurrency test asserts the lock is held for the whole
+write phase, not merely acquired at entry (§13.5, §16).
 
 Only one transaction may be active per project. Unsupported locking or publication capabilities
 cause an early refusal rather than weaker behavior.
@@ -304,16 +438,21 @@ The preparation order is:
 A crash before step 6 leaves only mutation-free orphan metadata. A crash after step 6 has a
 discoverable recovery record.
 
-Startup scans records as well as `active`. A missing pointer plus exactly one nonterminal record is
-treated as interrupted preparation. Multiple nonterminal records, a conflicting pointer, or invalid
-metadata halt without project mutation.
+Startup scans records as well as `active`. Because effects begin only after `active` is published
+(step 6), a nonterminal record is a mutation-free preparation orphan whenever `active` does not point
+at it. **When `active` is absent, every nonterminal record is such an orphan**, and recovery reclaims
+all of them under the lock regardless of count. When `active` is present it resolves exactly its
+referenced record — a terminal record resumes cleanup (§7.4), a nonterminal record resumes recovery —
+and any other nonterminal record is an orphan and is likewise reclaimed. A present pointer to a
+missing record, or invalid metadata, halts without project mutation.
 
 ### 7.4 Terminal cleanup
 
 After `COMMITTED` is durable, the engine verifies and removes effect-owned displaced preimages and
 tombstones, fsyncing their parents. `ROLLED_BACK` is persisted only after every transaction-owned
-mutation is undone and all rollback scratch has been removed and fsynced. Its outcome records either
-restored initial surface or preserved external drift. The engine removes and fsyncs `active` only
+mutation is undone, the complete declared initial surface is verified present (except where a proved
+external blocker is preserved as drift), and all rollback scratch has been removed and fsynced. Its
+outcome records either restored initial surface or preserved external drift. The engine removes and fsyncs `active` only
 after the applicable cleanup rule completes. A crash during committed cleanup leaves the terminal
 record active, so fresh-process recovery finishes cleanup without reconsidering the commit decision.
 
@@ -378,18 +517,61 @@ idempotently accepted; an unattributable path halts.
 
 ### 8.4 Recovery classification
 
-For each nonterminal effect, recovery evaluates its complete persistent-and-scratch path tuple:
+Recovery is a two-level operation. First it reconstructs, **per path**, where that path’s timeline
+stands; then it classifies the single in-flight effect **jointly over all of its paths**. Comparing
+each occurrence independently against the single live entry would misread a repeated-path timeline
+(§5.3), and classifying a multi-path effect (e.g. `MoveNoClobber` over source, destination, and
+anchor, §9.4) per path could yield contradictory verdicts. Journal state gates attribution: an effect
+can only have mutated a path once it is durably `STARTED`.
 
-- exact pre-state → the effect did not land;
-- exact post-state → the effect landed;
+**Per-path frontier.** For each path the engine gathers that path’s ordered occurrences with their
+durable journal states; the direction depends on the transaction state (§8.1):
+
+- Not yet `ROLLING_BACK` (`APPLYING`/`APPLIED`): occurrence states are monotonic forward — an
+  occurrence reaches `DONE` before the next `STARTED` — so the **forward frontier** F is the last
+  `DONE` occurrence. Everything after F is `PENDING` except at most one in-flight `STARTED`. The
+  expected live state is F’s post-state when the occurrence after F is `PENDING` (equivalently that
+  occurrence’s pre-state, and the timeline’s initial state when no occurrence is `DONE`), or, when
+  that occurrence is `STARTED`, any of {F’s post-state, the variant’s declared intermediate, the
+  occurrence’s post-state}.
+- Already `ROLLING_BACK`: occurrences carry forward `STARTED`/`DONE` not yet undone and reverse
+  `UNDO_STARTED`/`UNDONE` (§8.3). Rollback runs in reverse order, so the **reverse frontier** R is the
+  *latest* occurrence still applied or in flight — the last one in {`DONE`, `STARTED`,
+  `UNDO_STARTED`}; `UNDONE` occurrences are already reversed, and never-executed `PENDING` occurrences
+  are ignored. The expected live state is R’s post-state when R is `DONE` (not yet undone); the
+  forward variant tuple {pre-state, intermediate, post-state} when R is a forward `STARTED` effect the
+  failure interrupted; and {post-state, the variant’s declared reverse intermediate, pre-state} when R
+  is `UNDO_STARTED`. A path whose occurrences are all `UNDONE` or `PENDING` is at its initial state and
+  is idempotently accepted.
+
+**Joint effect classification.** The frontiers identify the transaction’s single in-flight effect — a
+forward `STARTED` (whether `APPLYING`, or a failure-interrupted `STARTED` under `ROLLING_BACK`), or a
+reverse `UNDO_STARTED`. That effect is classified once over the union of its persistent and scratch
+paths, using the variant’s tuple rule, and the one decision applies to every path it owns:
+
+- exact pre-state (forward) or restored pre-state (reverse), no engine scratch survivor → it did not
+  land / was fully undone;
+- exact post-state → it landed (subject to the fingerprint-equivalent-recreation non-guarantee);
 - a variant-declared intermediate, including an unvalidated displaced entry → apply that variant’s
   settlement rule;
-- a no-clobber blocker whose variant-specific persistent-and-scratch tuple proves the effect did not
-  land → preserve it and record a refused outcome;
+- a no-clobber blocker whose variant-specific joint tuple proves it did not land → preserve it and
+  record a refused outcome;
 - anything else → halt.
 
-Recovery classifies the whole transaction before performing any mutation. This prevents an early
-repair from destroying evidence needed to recognize a later conflict.
+Two frontier cases need no in-flight effect: a `PENDING` frontier whose live state is *not* F’s
+post-state is a concurrent external write — never transaction-owned, never deleted on rollback —
+preserved as drift with a refused outcome; a fully `DONE` (or fully `UNDONE`) path whose live entry
+deviates from the expected frontier state halts.
+
+A `PREPARED` transaction — every effect `PENDING`, `active` published but nothing `STARTED` — mutates
+no project path, so rollback has nothing to undo. But because `active` references it, recovery does
+*not* reclaim it as a preparation orphan (§7.3 covers only records with no `active` pointer): it
+durably records `ROLLED_BACK`, then detaches `active` and reclaims per §7.4, so no crash can leave a
+dangling pointer.
+
+Recovery classifies every path’s whole timeline and every in-flight effect’s joint tuple before
+performing any mutation, so an early repair cannot destroy evidence needed to recognize a later
+conflict.
 
 No durable `COMMITTED` record means undo transaction-owned effects even when all forward effects
 appear complete. This normally restores the initial surface; a proved no-clobber blocker is preserved
@@ -397,17 +579,27 @@ as external drift. A durable `COMMITTED` record means preserve the final surface
 
 ## 9. Effect contracts
 
+Effect contracts below are written in terms of the semantic capabilities of §5.5. Where a step names
+a syscall (`renameat2(RENAME_EXCHANGE)`, hard link, `fsync`), that names the Linux reference backend;
+a conformant backend on another platform substitutes its own primitive for the same capability and
+must satisfy the identical recovery table. Every operation runs against the effect's held parent
+descriptors under `anchored_traversal` (§5.5); "same-directory" below means same-parent relative to a
+held parent descriptor with single-component leaf names, not a re-resolved absolute path.
+
 ### 9.1 `ReplaceFile`
 
 Requires an existing regular-file precondition and exact file postcondition. Persist `STARTED`, then
-build a same-directory staging file, write bytes, set the exact mode, and fsync it. Use
-`renameat2(RENAME_EXCHANGE)` to atomically swap the staging and live entries. The live path now holds
-the complete postimage and the staging path preserves the exact entry that was displaced.
+build a same-directory staging file, write bytes, set the exact mode, fsync it, and open and retain a
+descriptor to it. Use `renameat2(RENAME_EXCHANGE)` to atomically swap the staging and live entries.
+The live path now holds the complete postimage and the staging path preserves the exact entry that
+was displaced.
 
-Validate the displaced entry against the expected precondition. On a match, fsync the parent and
-mark the effect `DONE`; retain the displaced preimage until the terminal decision. On a mismatch,
-exchange it back if the live path still matches our postimage, fsync, and refuse. If the live path
-also changed, halt with both entries preserved.
+Verify the live entry carries the retained staging descriptor's identity — proving the exchange
+published our postimage, not a foreign object swapped onto the staging name between fsync and the
+exchange — and validate the displaced entry against the expected precondition. On both matching, fsync
+the parent and mark the effect `DONE`; retain the displaced preimage until the terminal decision. On a
+mismatch, exchange it back if the live path still matches our postimage, fsync, and refuse. If the
+live path also changed, halt with both entries preserved.
 
 A crash at any point leaves a classifiable tuple of live path plus stable staging path. Rollback
 exchanges the retained preimage back when the live postimage is still authoritative. Committed
@@ -417,8 +609,11 @@ preserved and reported rather than deleted.
 ### 9.2 `CreateFileNoClobber`
 
 Requires absence before and an exact regular-file postcondition. Persist `STARTED`, build and fsync
-the complete staging file, then publish using `renameat2(RENAME_NOREPLACE)`. Never stream bytes into
-the live destination and never fall back to overwriting rename.
+the complete staging file, open and retain a descriptor to it, then publish using
+`renameat2(RENAME_NOREPLACE)`. After the rename, verify the live destination carries the retained
+descriptor's identity before marking `DONE`, so a staging-name swap between build and publish is
+detected rather than published as success. Never stream bytes into the live destination and never fall
+back to overwriting rename.
 
 If another writer creates the destination first, clean up only the attributable staging object and
 raise `PreconditionRefused`. An existing byte-equivalent file is not silently adopted as success for
@@ -478,8 +673,17 @@ the anchor preserved.
 ### 9.5 `CreateDirectory`
 
 Requires absence before and an exact directory mode after. Persist `STARTED`, create a same-parent
-staging directory, set its exact mode, publish with `renameat2(RENAME_NOREPLACE)`, and fsync the
-parent. Platforms without the required directory publication primitive refuse early.
+staging directory, set its exact mode, **open and retain a descriptor to that staging directory before
+publishing**, then publish with `renameat2(RENAME_NOREPLACE)` and fsync the parent. Platforms without
+the required directory publication primitive refuse early. Opening after publication would leave a
+rename/replace window, so the descriptor is retained beforehand; the descriptor alone proves only
+which inode the engine *created*, so after the rename the engine verifies the published live directory
+carries that descriptor's identity (equal `st_dev`/`st_ino`) before marking `DONE` — proving the
+published entry is our directory, not a foreign one swapped onto the staging name before the rename.
+The verified descriptor is then handed to any descendant effect as that descendant's parent descriptor
+(§6), threading engine-verified descriptors inward without re-resolving ancestors. Because descriptors
+cannot span a crash, fresh-process recovery reacquires each parent descriptor by guarded traversal
+from the root before resuming (subject to the ancestor-relocation non-guarantee, §3.2).
 
 Recovery applies the same blocker rule as file creation: a surviving attributable staging directory
 plus an existing live directory proves publication did not land, so the live directory is preserved
@@ -500,7 +704,9 @@ Rollback materializes through stable, effect-derived staging paths:
 - present preimage over an absent live path: publish the staged object no-clobber (normally the
   effect’s retained delete tombstone already provides this object);
 - absent file/symlink preimage: atomically quarantine the live entry, validate it against the
-  effect’s postcondition, then delete and fsync the quarantine before marking the undo complete;
+  effect’s postcondition, then delete and fsync the quarantine before marking the undo complete; a
+  write through a pre-existing descriptor strictly between validation and delete is undetectable
+  (§3.2);
 - absent directory preimage: atomically quarantine the live directory, validate its expected mode
   and emptiness, then use `rmdir` on the quarantine; atomic nonempty refusal preserves any
   concurrently added child.
@@ -518,6 +724,12 @@ At entry, restoration classifies a surviving staging or tombstone object:
 The authority check precedes every staging-object mutation, including prefix removal. Atomic live
 publication means a crash during restoration leaves the target at the effect state or restored state,
 never at an in-place partial state.
+
+Reverse publication is validated symmetrically to the forward direction (§6): after restoring an
+object to a live path, the engine verifies that path holds the expected restored state — by identity
+against the retained preimage or staging descriptor, or exact fingerprint — before marking the effect
+`UNDONE`. A foreign object published onto a restored name is refused or halted, never marked `UNDONE`,
+so a staging swap during rollback cannot be laundered into a false restoration.
 
 ## 11. Refusal and failure semantics
 
@@ -570,17 +782,27 @@ the hard cut.
 
 ### 13.1 Executable reference model
 
-Each effect defines a pure classifier:
+Recovery is specified as a **top-level transaction classifier** with a subordinate variant classifier:
 
 ```text
-(variant, journal state, observed persistent-and-scratch tuple)
-    → recovery decision
+transaction: (TransactionSpec, transaction state, per-effect journal states, observed path tuples)
+                 → per-effect recovery decisions
+variant:     (variant, effect journal state, effect's joint persistent-and-scratch tuple)
+                 → effect decision
 ```
 
-Table and property tests cover every variant, forward/reverse state, named intermediate,
-and unattributable state. Generated valid effect sequences prove:
+The transaction state (§8.1) is a required input: `APPLIED` and `COMMITTED` can present identical
+`DONE` effects and the same final surface yet demand opposite decisions — rollback versus committed
+cleanup — so the classifier cannot be a pure function of effect states and observed tuples alone. The
+transaction classifier reconstructs each path's frontier (forward or reverse per that state) and
+invokes the variant classifier once per in-flight effect over its joint tuple (§8.4). Table and property tests
+cover every variant, forward/reverse state, named intermediate, and unattributable state. Generated
+valid effect sequences prove:
 
 - path timelines are continuous;
+- recovery reconstructs each path's timeline frontier, forward and reverse, and never misreads a
+  mid-timeline live state as external drift;
+- a multi-path effect is decided once over its joint tuple, never contradictorily per path;
 - uncommitted recovery removes every attributable mutation and preserves proved external blockers;
 - committed recovery retains the final surface;
 - recovery never mutates an unattributable state;
@@ -622,20 +844,44 @@ It wraps `rename`, `replace`, `unlink`, `mkdir`, `rmdir`, `symlink`, `chmod`, `l
 and private syscall bindings such as `renameat2`. An optional external trace detects future fresh
 `ctypes` or extension bypasses where supported.
 
-An architectural test rejects direct mutation calls and private effect imports from family modules.
+Targets are evaluated by the path the engine issued each operation against; the interposer cannot
+observe a held descriptor's current namespace location after an external relocation, so this
+surface check holds within the cooperating-process model — an ancestor directory relocated by a
+noncooperating writer (§3.2) can carry a leaf mutation off-surface undetected by the interposer.
+
+An architectural test rejects direct mutation calls and private effect imports from family modules. A
+second architectural test asserts every mutating command entry point enters the recovery-resolve
+lease, and a concurrency test asserts the project lock is held across the entire write phase, not
+merely acquired at entry (§7.1).
 
 ## 14. Delivery decomposition
 
 One design governs two implementation plans.
 
+**Supported backends at the hard cut: Linux and macOS.** Both satisfy the §5.5 capability
+vocabulary with identical recovery tables — Linux via `openat2`/`renameat2`/`link`/`fsync`, macOS via
+`openat`+`O_NOFOLLOW_ANY`/`renamex_np`/`renameatx_np`/`link`/`fcntl(F_FULLFSYNC)`. Capabilities are
+probed **per project-root volume**, not per OS, because atomic exchange, no-clobber transfer, and
+hard-link identity are filesystem-specific on both platforms, and plain `fsync` is not power-loss
+durable on macOS. Windows is out of scope: it has no `atomic_exchange`
+primitive with the same crash-recovery table and no explicit directory-entry durability barrier, so
+a Windows `ReplaceFile` backend would need a divergent recovery classification. On Windows the
+affected family operation refuses at preparation with `CapabilityUnavailable` (§5.5); a Windows
+backend may be added later without changing the transaction model.
+
 ### Plan A — engine core and supersede vertical slice
 
 1. Pure transaction/effect model and validators.
-2. Project lock, records, active pointer, blobs, and journal updates.
-3. Coherent capture and restartable atomic materialization.
-4. Five effects and recovery executor.
-5. Model, real-filesystem, and subprocess recovery suites.
-6. Supersede adapter and hard cut.
+2. A platform capability backend layer resolving the §5.5 vocabulary behind one interface: a Linux
+   backend (`openat2` anchored traversal, `renameat2`, `fsync`) and a macOS backend (`openat` +
+   `O_NOFOLLOW_ANY`, `renamex_np`/`renameatx_np`, `fcntl(F_FULLFSYNC)`), plus a per-volume capability
+   probe that refuses an unsupported platform or filesystem before any mutation.
+3. Project lock, the universal recovery-resolve lease, records, active pointer, blobs, and journal
+   updates.
+4. Coherent capture and restartable atomic materialization.
+5. Five effects and recovery executor.
+6. Model, real-filesystem, and subprocess recovery suites, run on both backends.
+7. Supersede adapter and hard cut.
 
 Independently valid capture and restoration fixes replace the shipped implementations early and are
 then reused by the engine. No temporary callback/tracker bridge is introduced.
@@ -669,12 +915,15 @@ command onto the engine is a separate hard-cut design decision.
 The architecture is complete when:
 
 - all four family entry points compile through adapters and mutate only through the executor;
+- every mutating command runs inside the recovery-resolve lease, holding the project lock across its
+  whole write phase, enforced by architecture and concurrency tests;
 - an active journal is durable before the first project mutation;
 - every effect and recovery decision conforms to the executable model;
 - caught failure undoes every transaction-owned mutation, preserving external drift as an explicit
   refusal or leaving an explained halt;
 - fresh-process recovery rolls back every uncommitted transaction and preserves every committed one;
 - import never exposes a partially written destination;
-- actual persistent, scratch, and metadata mutations stay within their declared surfaces;
+- actual persistent, scratch, and metadata mutations stay within their declared surfaces, absent a
+  §3.2 ancestor relocation by a noncooperating writer;
 - old execution dialects and temporary bridging APIs are deleted;
 - the full Science test suite, lint, and type checks pass.

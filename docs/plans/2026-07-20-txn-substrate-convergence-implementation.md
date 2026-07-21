@@ -1,7 +1,7 @@
 # Recoverable filesystem effect engine — delivery roadmap
 
 **Date:** 2026-07-21
-**Status:** Superseded before execution; do not implement this document
+**Status:** Deferred roadmap — gated on design approval; intentionally task-free (do not resurrect the former task sequence)
 **Design:** [`2026-07-20-txn-substrate-convergence-design.md`](2026-07-20-txn-substrate-convergence-design.md)
 
 ## Why this document changed
@@ -62,10 +62,14 @@ Plan B covers archive, import, and cohort-import adapters; import’s saved tran
 surface authentication; staged no-clobber import publication; cross-family recovery and mutation
 surface acceptance; and deletion of every superseded execution dialect.
 
+The README platform-support statement (Linux and macOS supported; unsupported platforms refuse at
+preparation) lands with this hard cut — once the engine actually gates the mutating commands — not
+before, so the README never documents behavior that has not shipped.
+
 No feature flag, compatibility executor, or runtime fallback between transaction dialects is
 permitted.
 
-## Execution gate
+## Approval gate
 
 Do not write either implementation plan, change production code, or execute tasks from the former
 plan until the owner approves the replacement design. After approval, write and review Plan A before
