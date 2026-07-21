@@ -19,7 +19,7 @@
 - **Keyword map is authoritative — no discovery term is silently dropped.** `MCMC` → statistics; `bootstrap` → **both** descriptions; `permutation` / `Monte Carlo` / `downsampling` → study-design; `power` / `bias-vs-variance` / `sensitivity arbitration` / `defensive instrumentation` / `pre-registering` → study-design. Verbatim `description` drafts are in the design doc's *Description reconciliation* section.
 - **Certify mapping vs data:** for each of the 8 deleted principles, confirm the target `study-design/` leaf carries the thesis **before** deleting the digest (honesty discipline — reorganize, don't drop).
 - **Edit `skills/INDEX.md`** (the hand-maintained source index). **Do NOT** edit `codex-skills/INDEX.md` or any `codex-skills/science-*/` file by hand — those are generated (Task 4).
-- **Regenerate the codex mirror after all `skills/` edits.** The committed-mirror test is the green gate; intermediate task commits may be RED on `test_committed_codex_skills_match_fresh_generation` and that is expected (green gate is Task 4).
+- **Regenerate the codex mirror after the `skills/meta/` edit.** Verified against the generator: only Task 3's `skills/meta/skill-authoring.md` edit reaches the mirror (copied verbatim to `codex-skills/science-skill-development/skill-authoring.md`). The statistics/study-design **routers** and `skills/INDEX.md` are **not** generator inputs — their content is not bundled into any `codex-skills/` file — so Tasks 1–2 leave `test_committed_codex_skills_match_fresh_generation` GREEN. The test goes RED only after Task 3 and returns GREEN after Task 4 regenerates. Green gate = Task 4.
 - **Run all `uv run` from `science/`.** Skills lint: `uv run --frozen science skills lint --root ../skills`.
 - **Only four source files change** (plus the regenerated `codex-skills/` tree): `skills/statistics/SKILL.md` (full rewrite), `skills/study-design/SKILL.md` (`description` frontmatter only — body untouched), `skills/meta/skill-authoring.md` (invariant line only), `skills/INDEX.md` (statistics descriptive line only).
 
@@ -45,17 +45,24 @@ current leaves.
 
 ```bash
 cd ~/d/science/.worktrees/skills-phase4/skills/study-design
-echo "1 replicate-count (justify count by precision, not convention):"; rg -c -i 'monte carlo se|minimum.attainable|precision you need|pre-committed decision rule' replicate-count-justification.md
-echo "2 bias-vs-variance (replicates shrink variance, not bias):";      rg -c -i 'more replicates reduce variance|which error term the compute|do not remove estimator bias' bias-vs-variance-decomposition.md
-echo "3 sensitivity (which flags caveat vs override the verdict):";     rg -c -i 'caveat the verdict|which flags|override' sensitivity-arbitration.md
-echo "4 power-floor (state the minimum detectable effect):";            rg -c -i 'minimum (effect|detectable)|detectable effect|evidence of absence' power-floor-acknowledgement.md
-echo "5 amendment (an amendment inherits, is not a fresh pre-reg):";    rg -c -i 'amendment.*inherit|inherit.*(parent|amendment)|not a new pre-reg' prereg-amendment-vs-fresh.md
-echo "6 defensive (universe/candidate/tripwire/decision-table locks):"; rg -c -i 'universe lock|candidate-snapshot|tripwire|decision table' prereg-defensive-instrumentation.md
-echo "7 estimator-cert (a converged fit is a claim, not evidence):";    rg -c -i 'claim the optim|about itself|well-posed|forward-map' estimator-certification.md
-echo "8 causal-id (missing edges / M-bias / collider / not identified):"; rg -c -i 'missing edge|m-bias|collider|not identified' causal-identification.md
+fail=0
+gate() {  # $1 regex, $2 leaf, $3 label — fail-closed: any 0 count sets fail
+  local n; n=$(rg -c -i "$1" "$2" 2>/dev/null || true)
+  printf '  %-52s %s\n' "$3" "${n:-0}"
+  [ "${n:-0}" -ge 1 ] || { echo "    ^ DEFECT: thesis absent from $2 — do not delete this principle"; fail=1; }
+}
+gate 'monte carlo se|minimum.attainable|precision you need|pre-committed decision rule' replicate-count-justification.md '1 replicate-count (precision, not convention)'
+gate 'more replicates reduce variance|which error term the compute|do not remove estimator bias' bias-vs-variance-decomposition.md '2 bias-vs-variance (replicates shrink variance, not bias)'
+gate 'caveat the verdict|which flags|override' sensitivity-arbitration.md '3 sensitivity (which flags caveat vs override)'
+gate 'minimum (effect|detectable)|detectable effect|evidence of absence' power-floor-acknowledgement.md '4 power-floor (minimum detectable effect)'
+gate 'amendment.*inherit|inherit.*(parent|amendment)|not a new pre-reg' prereg-amendment-vs-fresh.md '5 amendment (inherits, not a fresh pre-reg)'
+gate 'universe lock|candidate-snapshot|tripwire|decision table' prereg-defensive-instrumentation.md '6 defensive (universe/candidate/tripwire/table)'
+gate 'claim the optim|about itself|well-posed|forward-map' estimator-certification.md '7 estimator-cert (converged is a claim, not evidence)'
+gate 'missing edge|m-bias|collider|not identified' causal-identification.md '8 causal-id (missing edges / M-bias / collider)'
+[ "$fail" -eq 0 ] && echo "thesis gate PASS" || { echo "thesis gate FAIL"; exit 1; }
 ```
 
-Expected: every count ≥ 1 (baseline: 4, 2, 2, 3, 3, 12, 5, 7). If any is 0, STOP and report — the thesis is not in the leaf and the principle must not be deleted.
+Expected: baseline counts 4, 2, 2, 3, 3, 12, 5, 7 and `thesis gate PASS`. Any `DEFECT` line aborts with `exit 1`.
 
 - [ ] **Step 2: Confirm no anchor deep-links into the sections being removed.**
 
@@ -65,10 +72,12 @@ be a `skills/` file.
 
 ```bash
 cd ~/d/science/.worktrees/skills-phase4
-rg -n --no-heading -g '!docs/plans/**' -g '!**/codex-skills/**' 'statistics/SKILL\.md#' . ; echo "rc=$? (rc=1 = no matches = good)"
+out=$(rg -n --no-heading -g '!docs/plans/**' -g '!**/codex-skills/**' 'statistics/SKILL\.md#' . || true)
+if [ -n "$out" ]; then echo "DEFECT: anchor deep-link(s) into removed sections:"; echo "$out"; exit 1; fi
+echo "anchor check PASS (no deep-links outside docs/plans and the mirror)"
 ```
 
-Expected: no output, `rc=1`.
+Expected: `anchor check PASS`.
 
 - [ ] **Step 3: Overwrite `skills/statistics/SKILL.md` with the router below.**
 
@@ -140,13 +149,14 @@ router.
 
 ```bash
 cd ~/d/science/.worktrees/skills-phase4
-# no numbered Principles list and no When-to-invoke block:
-rg -n '^## Principles|^## When to invoke|^[0-9]+\. ' skills/statistics/SKILL.md ; echo "rc=$? (rc=1 = clean = good)"
-# lint passes:
-cd science && uv run --frozen science skills lint --root ../skills ; echo "lint rc=$?"
+bad=$(rg -n '^## Principles|^## When to invoke|^[0-9]+\. ' skills/statistics/SKILL.md || true)
+if [ -n "$bad" ]; then echo "DEFECT: methodology remains in the router:"; echo "$bad"; exit 1; fi
+echo "structure PASS (no Principles list / When-to-invoke block / numbered items)"
+cd science && uv run --frozen science skills lint --root ../skills || { echo "DEFECT: skills lint failed"; exit 1; }
+echo "lint PASS"
 ```
 
-Expected: first grep prints nothing (`rc=1`); lint `rc=0`.
+Expected: `structure PASS` then `lint PASS`.
 
 - [ ] **Step 5: Commit.**
 
@@ -161,7 +171,7 @@ verified present in those leaves). Mirrors study-design/SKILL.md's skeleton.
 Codex mirror regenerated in a later task."
 ```
 
-Note: `test_committed_codex_skills_match_fresh_generation` is now RED (mirror not yet regenerated) — expected; the green gate is Task 4.
+Note: the committed-mirror test stays GREEN after this task — `statistics/SKILL.md` is not a generator input, so rewriting it does not change the mirror. It goes RED only at Task 3.
 
 ---
 
@@ -210,25 +220,25 @@ term exists).
 
 ```bash
 cd ~/d/science/.worktrees/skills-phase4
+fail=0
 stats_desc=$(rg -m1 '^description:' skills/statistics/SKILL.md)
 sd_desc=$(rg -m1 '^description:' skills/study-design/SKILL.md)
-
+keep() { printf '  keep %-26s ' "$1:"; printf '%s' "$stats_desc" | rg -qi -- "$1" && echo PRESENT || { echo "MISSING (defect)"; fail=1; }; }
+drop() { printf '  drop %-26s ' "$1:"; printf '%s' "$stats_desc" | rg -qi -- "$1" && { echo "LEAKED (defect)"; fail=1; } || echo absent; }
+gain() { printf '  gain %-28s ' "$1:"; printf '%s' "$sd_desc"   | rg -qi -- "$1" && echo PRESENT || { echo "MISSING (defect)"; fail=1; }; }
 echo "--- statistics description KEEPS the shared terms ---"
-for t in 'MCMC' 'bootstrap'; do
-  printf '  %-24s ' "$t:"; printf '%s' "$stats_desc" | rg -qi -- "$t" && echo PRESENT || echo "MISSING (defect)"
-done
+for t in 'MCMC' 'bootstrap'; do keep "$t"; done
 echo "--- statistics description DROPS the study-design-only terms ---"
-for t in 'permutation' 'downsampling' 'monte' 'power' 'sensitivity' 'defensive' 'pre-regist' 'estimator' 'causal' 'bias'; do
-  printf '  %-24s ' "$t:"; printf '%s' "$stats_desc" | rg -qi -- "$t" && echo "LEAKED (defect)" || echo absent
-done
+for t in 'permutation' 'downsampling' 'monte' 'power' 'sensitivity' 'defensive' 'pre-regist' 'estimator' 'causal' 'bias'; do drop "$t"; done
 echo "--- study-design description GAINS every migrated term ---"
-for t in 'permutation' 'bootstrap' 'monte-carlo' 'downsampling' 'power-floor' 'bias-vs-variance' 'sensitivity arbitration' 'defensive instrumentation' 'estimator certification' 'causal identification' 'round-number default'; do
-  printf '  %-28s ' "$t:"; printf '%s' "$sd_desc" | rg -qi -- "$t" && echo PRESENT || echo "MISSING (defect)"
-done
-cd science && uv run --frozen science skills lint --root ../skills ; echo "lint rc=$?"
+for t in 'pre-regist' 'permutation' 'bootstrap' 'monte-carlo' 'downsampling' 'power-floor' 'bias-vs-variance' 'sensitivity arbitration' 'defensive instrumentation' 'estimator certification' 'causal identification' 'round-number default'; do gain "$t"; done
+[ "$fail" -eq 0 ] || { echo "keyword map FAIL"; exit 1; }
+echo "keyword map PASS"
+cd science && uv run --frozen science skills lint --root ../skills || { echo "DEFECT: skills lint failed"; exit 1; }
+echo "lint PASS"
 ```
 
-Expected: every statistics-KEEP term `PRESENT`; every statistics-DROP term `absent`; every study-design term `PRESENT`; no `(defect)` line; lint `rc=0`.
+Expected: every KEEP `PRESENT`, every DROP `absent`, every GAIN `PRESENT`, then `keyword map PASS` and `lint PASS`. Any `(defect)` aborts with `exit 1`.
 
 - [ ] **Step 4: Commit.**
 
@@ -269,15 +279,23 @@ Leave the rest of the paragraph (and the file) unchanged.
 
 - [ ] **Step 2: Sanity-check the count and lint.**
 
+The historical note also names `statistics/SKILL.md` on the same physical line, so
+a substring regex like `still **hubs**.*statistics/SKILL.md` would false-match.
+Assert the **exact** hub-list sentence (fixed-string), which passes only when the
+list is exactly the three remaining hubs:
+
 ```bash
 cd ~/d/science/.worktrees/skills-phase4
-rg -n '3 of 14|statistics/SKILL.md. was reconciled' skills/meta/skill-authoring.md
-# the hub-list sentence (the one containing "still **hubs**") must no longer name statistics:
-rg -n 'still \*\*hubs\*\*.*statistics/SKILL\.md' skills/meta/skill-authoring.md ; echo "stale-list rc=$? (rc=1 = statistics no longer in the hub list = good)"
-cd science && uv run --frozen science skills lint --root ../skills ; echo "lint rc=$?"
+rg -F 'still **hubs** (route + teach) — `data-management/SKILL.md`, `bio/transcriptomics/SKILL.md`, and `pipelines/SKILL.md`.' skills/meta/skill-authoring.md >/dev/null \
+  || { echo "DEFECT: hub-list sentence is not exactly the three remaining hubs"; exit 1; }
+rg -F '3 of 14 current' skills/meta/skill-authoring.md >/dev/null || { echo "DEFECT: count not updated to 3 of 14"; exit 1; }
+rg -F '`statistics/SKILL.md` was reconciled to a router' skills/meta/skill-authoring.md >/dev/null || { echo "DEFECT: historical note missing"; exit 1; }
+echo "invariant PASS (3 of 14; hub list correct; statistics reconciled)"
+cd science && uv run --frozen science skills lint --root ../skills || { echo "DEFECT: skills lint failed"; exit 1; }
+echo "lint PASS"
 ```
 
-Expected: the two new strings are found; statistics is no longer in the hub list; lint `rc=0`.
+Expected: `invariant PASS` then `lint PASS`. The em-dash (—) in the fixed string must match the file byte-for-byte.
 
 - [ ] **Step 3: Commit.**
 
@@ -310,21 +328,22 @@ Expected: prints `Generated Codex skills in …/codex-skills`.
 
 ```bash
 cd ~/d/science/.worktrees/skills-phase4/science
-uv run --frozen pytest tests/test_codex_skills.py -q
-echo "codex tests rc=$?"
+uv run --frozen pytest tests/test_codex_skills.py -q || { echo "DEFECT: codex mirror tests failed"; exit 1; }
+echo "codex mirror tests PASS"
 ```
 
-Expected: all pass, `rc=0` (in particular `test_committed_codex_skills_match_fresh_generation`).
+Expected: `codex mirror tests PASS` (in particular `test_committed_codex_skills_match_fresh_generation`).
 
 - [ ] **Step 3: Full validation.**
 
 ```bash
 cd ~/d/science/.worktrees/skills-phase4/science
-uv run --frozen science skills lint --root ../skills ; echo "lint rc=$?"
-uv run --frozen pytest -q ; echo "pytest rc=$?"
+uv run --frozen science skills lint --root ../skills || { echo "DEFECT: skills lint failed"; exit 1; }
+uv run --frozen pytest -q || { echo "DEFECT: full suite failed"; exit 1; }
+echo "full validation PASS"
 ```
 
-Expected: lint `rc=0`; full suite `rc=0`.
+Expected: `full validation PASS`.
 
 - [ ] **Step 4: Commit the regenerated mirror.**
 
@@ -336,11 +355,10 @@ defect, not an acceptable outcome.
 
 ```bash
 cd ~/d/science/.worktrees/skills-phase4
-echo "--- skill-authoring.md copy MUST show as modified ---"
-git status --porcelain codex-skills/science-skill-development/skill-authoring.md \
-  | rg . && echo "OK: mirror changed" \
-  || { echo "DEFECT: skill-authoring.md not regenerated — stop and investigate"; }
-git status --porcelain codex-skills/   # a non-empty list is REQUIRED here
+git status --porcelain codex-skills/science-skill-development/skill-authoring.md | rg . >/dev/null \
+  || { echo "DEFECT: skill-authoring.md not regenerated — stop and investigate"; exit 1; }
+echo "OK: mirror changed (skill-authoring.md regenerated)"
+git status --porcelain codex-skills/   # informational: the full set of regenerated files
 git add codex-skills/
 git commit -m "chore(codex): regenerate mirror after statistics router reconciliation"
 ```
@@ -354,4 +372,4 @@ Record in the ledger which mirror files changed.
 - **Spec coverage:** design doc's four elements are all covered — router rewrite + fold/delete (Task 1), keyword migration incl. INDEX (Task 2), invariant count (Task 3), mirror regen (Task 4). The honesty gate (thesis-survival) and the no-anchor-deeplink check are Task 1 Steps 1–2.
 - **Placeholder scan:** every step carries the exact file content or exact command; no "TBD"/"handle appropriately".
 - **Consistency:** the routing table, the two `description` drafts, and the invariant text are identical to the accepted design doc. Only four source files change; leaf files are untouched.
-- **RED-by-construction note:** Tasks 1–3 leave `test_committed_codex_skills_match_fresh_generation` RED until Task 4 regenerates the mirror. The green gate is Task 4 Step 2/3. This is the same pattern as phases 2–3.
+- **RED-by-construction note:** verified against the generator — only Task 3's `skills/meta/skill-authoring.md` edit reaches the mirror, so Tasks 1–2 stay GREEN on `test_committed_codex_skills_match_fresh_generation`; Task 3 turns it RED and Task 4 restores GREEN (the green gate). The statistics/study-design routers and `skills/INDEX.md` are not generator inputs.
