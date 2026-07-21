@@ -13,8 +13,8 @@ Follow `${CLAUDE_PLUGIN_ROOT}/references/command-preamble.md` (role: `research-a
 
 Additionally:
 1. If present, read source-specific skills from `${CLAUDE_PLUGIN_ROOT}`:
-   - `${CLAUDE_PLUGIN_ROOT}/skills/data/sources/openalex.md`
-   - `${CLAUDE_PLUGIN_ROOT}/skills/data/sources/pubmed.md`
+   - `${CLAUDE_PLUGIN_ROOT}/skills/literature/sources/openalex.md`
+   - `${CLAUDE_PLUGIN_ROOT}/skills/literature/sources/pubmed.md`
 2. Read `.ai/templates/paper.md` first; if not found, read `${CLAUDE_PLUGIN_ROOT}/templates/paper.md`.
 3. Read project context:
    - `specs/research-question.md`

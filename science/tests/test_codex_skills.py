@@ -33,7 +33,7 @@ def test_command_to_skill_name_uses_science_namespace() -> None:
 
 
 def test_data_skills_document_configured_data_root() -> None:
-    frictionless = (ROOT / "skills/data/frictionless.md").read_text(encoding="utf-8")
+    frictionless = (ROOT / "skills/data-management/frictionless.md").read_text(encoding="utf-8")
     snakemake = (ROOT / "skills/pipelines/snakemake.md").read_text(encoding="utf-8")
     for text in (frictionless, snakemake):
         assert "SCIENCE_DATA_ROOT" in text
@@ -80,21 +80,28 @@ def test_generate_codex_skills_emits_all_commands(tmp_path: Path) -> None:
     assert len(list(tmp_path.glob("science-*/SKILL.md"))) == command_count + len(COMPANION_SKILLS)
 
 
-def test_generate_codex_skills_emits_companion_methodology_skills(tmp_path: Path) -> None:
+def test_generate_prunes_orphaned_skill_dirs(tmp_path: Path) -> None:
+    stale = tmp_path / "science-obsolete"
+    stale.mkdir(parents=True)
+    (stale / "SKILL.md").write_text("stale", encoding="utf-8")
+    keep = tmp_path / "INSTALL.codex.md"
+    keep.write_text("static", encoding="utf-8")
+
+    generate_codex_skills(ROOT, tmp_path)
+
+    assert not stale.exists()               # orphaned science-* dir removed
+    assert keep.read_text(encoding="utf-8") == "static"  # static file untouched
+
+
+def test_generate_codex_skills_emits_scientific_writing_companion(tmp_path: Path) -> None:
     generated = generate_codex_skills(ROOT, tmp_path)
 
-    research_skill = generated["science-research-methodology"].read_text(encoding="utf-8")
     writing_skill = generated["science-scientific-writing"].read_text(encoding="utf-8")
 
-    assert "name: science-research-methodology" in research_skill
-    assert "Adapted from canonical Science skill `skills/research/SKILL.md`." in research_skill
-    assert "Core research methodology for scientific investigation." in research_skill
-    assert '\\"research methodology.\\"' in research_skill
     assert "name: science-scientific-writing" in writing_skill
     assert "Adapted from canonical Science skill `skills/writing/scientific-writing.md`." in writing_skill
     assert "scientific-writing" in writing_skill
-    assert "../science-research-methodology/citation-discipline.md" in writing_skill
-    assert "../research/SKILL.md" not in writing_skill
+    assert "../../skills/literature/citation-discipline.md" in writing_skill
     assert "../../skills/statistics/SKILL.md" in writing_skill
     assert "../statistics/SKILL.md" not in writing_skill
 
@@ -124,9 +131,20 @@ def test_generated_command_preamble_references_codex_companion_skills(tmp_path: 
     generated = generate_codex_skills(ROOT, tmp_path)
     text = generated["science-research-papers"].read_text(encoding="utf-8")
 
-    assert "Load the `science-research-methodology` and `science-scientific-writing` Codex skills." in text
-    assert "If native skill loading is unavailable, use `codex-skills/INDEX.md`" in text
+    assert (
+        "Load the `science-scientific-writing` Codex skill. For research methodology, read "
+        "`../../skills/INDEX.md` and load the leaves relevant to the task (e.g. `literature-evaluation`, "
+        "`literature-citation-discipline`, `epistemics-proposition-graph-reasoning`)."
+        in text
+    )
     assert "Load the `research-methodology` and `scientific-writing` skills." not in text
+
+    short_form = generated["science-plan-pipeline"].read_text(encoding="utf-8")
+    assert (
+        "For research methodology, read `../../skills/INDEX.md` and load the relevant "
+        "`literature/`/`epistemics/` leaves."
+        in short_form
+    )
 
 
 def test_generate_codex_skills_writes_index(tmp_path: Path) -> None:
@@ -134,10 +152,6 @@ def test_generate_codex_skills_writes_index(tmp_path: Path) -> None:
     text = (tmp_path / "INDEX.md").read_text(encoding="utf-8")
 
     assert "# Science Codex Skills" in text
-    assert (
-        "| `research-methodology` | `science-research-methodology` | `science-research-methodology/SKILL.md` | `skills/research/SKILL.md` |"
-        in text
-    )
     assert (
         "| `scientific-writing` | `science-scientific-writing` | `science-scientific-writing/SKILL.md` | `skills/writing/scientific-writing.md` |"
         in text
@@ -183,9 +197,9 @@ def test_generated_plan_analysis_skill_routes_proteomics_and_sensor_time_series(
 
     expected_strings = (
         "Proteomics, phosphoproteomics, mass spectrometry, peptide intensity, TMT, LFQ",
-        "`data-proteomics-qa`, `statistics-bias-vs-variance-decomposition`, `statistics-sensitivity-arbitration`",
+        "`proteomics-qa`, `study-design-bias-vs-variance-decomposition`, `study-design-sensitivity-arbitration`",
         "Wearable, behavioral, actigraphy, EMA, symptom diary, sensor time series, sleep/activity rhythms, or cross-lag coupling",
-        "`statistics-time-series-and-longitudinal-models`, `statistics-bias-vs-variance-decomposition`, `statistics-power-floor-acknowledgement`, and `statistics-sensitivity-arbitration`",
+        "`statistics-time-series-and-longitudinal-models`, `study-design-bias-vs-variance-decomposition`, `study-design-power-floor-acknowledgement`, and `study-design-sensitivity-arbitration`",
     )
     for expected in expected_strings:
         assert expected in text
@@ -199,7 +213,7 @@ def test_generated_plan_analysis_skill_routes_network_dyadic_permutation_designs
 
     expected_strings = (
         "Network/graph edges, dyadic data, edge prediction, node-label permutation, QAP/MRQAP",
-        "`statistics-power-floor-acknowledgement`, `statistics-replicate-count-justification`, `statistics-sensitivity-arbitration`",
+        "`study-design-power-floor-acknowledgement`, `study-design-replicate-count-justification`, `study-design-sensitivity-arbitration`",
         "treat dyads as dependent observations",
     )
     for expected in expected_strings:
@@ -832,36 +846,14 @@ def _dangling_links(generated_root: Path) -> list[str]:
     return dangling
 
 
-def test_rewrites_link_to_companion_source_leaf(tmp_path: Path) -> None:
-    rendering = (_generate(tmp_path) / "science-research-methodology" / "research-package-rendering.md").read_text(
-        encoding="utf-8"
-    )
-    assert "../science-scientific-writing/SKILL.md" in rendering
-    assert "](../writing/SKILL.md)" not in rendering
-
-
-def test_rewrites_link_to_non_companion_leaf(tmp_path: Path) -> None:
-    curation = (_generate(tmp_path) / "science-research-methodology" / "annotation-curation-qa.md").read_text(
-        encoding="utf-8"
-    )
-    assert "../../skills/statistics/sensitivity-arbitration.md" in curation
-    assert "](../statistics/sensitivity-arbitration.md)" not in curation
-
-
 def test_no_dangling_relative_links_in_generated_tree(tmp_path: Path) -> None:
     assert _dangling_links(_generate(tmp_path)) == []
 
 
 def test_rewrites_link_to_bundled_resource(tmp_path: Path) -> None:
     writing_skill = (_generate(tmp_path) / "science-scientific-writing" / "SKILL.md").read_text(encoding="utf-8")
-    assert "../science-research-methodology/citation-discipline.md" in writing_skill
-    assert "](../research/citation-discipline.md)" not in writing_skill
-
-
-def test_rewrites_excluded_router_to_canonical_source(tmp_path: Path) -> None:
-    research_skill = (_generate(tmp_path) / "science-research-methodology" / "SKILL.md").read_text(encoding="utf-8")
-    assert "../../skills/writing/SKILL.md" in research_skill
-    assert "../science-scientific-writing/SKILL.md" not in research_skill
+    assert "../../skills/literature/citation-discipline.md" in writing_skill
+    assert "](../literature/citation-discipline.md)" not in writing_skill
 
 
 def test_companion_source_leaf_is_not_also_a_resource(tmp_path: Path) -> None:
