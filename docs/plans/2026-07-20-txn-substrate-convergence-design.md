@@ -352,6 +352,13 @@ def atomic_write_bytes(
 
 ## Piece 7 — acceptance-time true-write-surface tests
 
+> **Revision (rev-6, pending re-review).** This section replaces the earlier `strace`/`ptrace`-centric
+> mechanism with an **in-process os-mutation-interposition shim** as the primary, always-on instrument,
+> demoting external syscall tracing to an opt-in bypass guard. Rationale below. The *intent* is
+> unchanged from the settled Task-12 contract — observe actual mutations, not a before/after map alone
+> — and the shim is the "equivalent syscall-audit shim" the prior text already admitted. Flagged for
+> re-review before implementation.
+
 Settled Task-12 contract: actual-write observation is an **acceptance-time invariant**, not a
 mutator-reported receipt. A mutator returns an `ApplyOutcome` (applied/skipped/repairs), never
 evidence of its own scope.
@@ -359,20 +366,42 @@ evidence of its own scope.
 A before/after map is insufficient (rev-1 F7): it cannot see a path created **and removed** during a
 successful run — e.g. `claim_number_in_dir`'s `.NNNN.reserving` sentinel, or a staging `.tmp`. And
 "paths opened for write" is also insufficient (rev-2 F7): it misses `rename`, `unlink`, `mkdir`,
-`rmdir`, `chmod`, and `symlink`. The fixture therefore captures **filesystem mutation syscalls**
-(via an `strace`/`ptrace`-based audit or an equivalent syscall-audit shim), with open-for-write as
-only one event class:
+`rmdir`, `chmod`, and `symlink`. Ground truth is the set of **filesystem-mutating operations**, not
+the persistent delta.
+
+**Why not strace every run (rev-6).** `strace`/`ptrace` is Linux-only, needs `CAP_SYS_PTRACE`
+(absent in most CI sandboxes and nested containers), and depends on parsing trace output — brittle
+exactly where a durable invariant is wanted. This convergence makes the substrate the **single
+choke point** for filesystem effects, which enables a portable, deterministic instrument instead.
+
+**Primary instrument — in-process mutation interposition (always-on, portable).** A fixture wraps the
+mutating `os` calls the substrate uses (`rename`, `replace`, `unlink`, `mkdir`, `rmdir`, `symlink`,
+`chmod`, `link`, and `open` with `O_CREAT`/`O_TRUNC`) **and** the module's own `_rename_noreplace`
+(which reaches `renameat2` via `ctypes`, bypassing `os`), recording `(op, path)` for each. Because the
+wrap is at the `os`-module / helper level, it captures every mutation whether it flows through a
+substrate primitive **or** a raw call that bypasses one — so it is both the surface invariant and the
+bypass detector, with no ptrace dependency.
 
 - **Persistent post-state equivalence** — run each pinned mutator (`apply_archive_plan`,
   `apply_supersede_plan`, `apply_import`, `apply_cohort_import`) in a temp project; assert
   `observed_persistent_changes == {t.rel_path for t in transitions if t.pre != t.post}` over full
   before/after maps (bytes, type, mode, symlink target, dir existence).
-- **Transient mutation surface** — from the syscall audit, assert every mutating syscall targets
-  either a declared transition path or a declared scratch shape (a reserving sentinel or a
+- **Transient mutation surface** — from the interposition log, assert every recorded mutating op
+  targets either a declared transition path or a declared scratch shape (a reserving sentinel or a
   `staging_path_for` token), and that no scratch path survives a clean run.
 - **Kill-boundary scratch-survivor characterization** — with `_fault`-style injection at each seam
   and at the parent-dir fsync, assert each survivor is an attributable prefix/sentinel and classify
   it (`absent` / `prefix` / `complete`), never an unattributable file.
+
+**Bypass guard — external syscall audit (opt-in, best-effort).** The one failure the in-process shim
+cannot see is a mutation issued through a *fresh* `ctypes`/C-extension syscall a future change adds
+without routing it through `os` or `_rename_noreplace`. An optional `strace`/`ptrace` job asserts no
+mutating syscall occurred outside the interposition-recorded set; it runs where ptrace is available
+and **skips** elsewhere — degrading only this secondary guard, never the primary invariant.
+
+**Forward payoff.** The interposition log is the same shape the v6 durable-batch layer needs: its
+write-ahead journal records *intended* effects, the substrate records *actual* effects, and `recover()`
+reconciles them. The effect seam is substrate the batch layer builds on, not test-only scaffolding.
 
 ---
 
@@ -409,9 +438,10 @@ only one event class:
    `CREATE_OR_VERIFY` takes the existing-blob fast path (equal→ok, differ→`BlobMismatch`), never
    `os.replace`s, and on a lost publication race verifies then cleans up its staging; `RESTORE` sets
    a differing preimage mode; unsupported target type rejected.
-9. **True-write-surface (rev-2 F7).** Syscall-audit persistent equivalence for all four families;
-   every mutating syscall is attributable; transient sentinel/staging gone on clean run;
-   kill-boundary survivors classified.
+9. **True-write-surface (rev-2 F7, rev-6).** In-process interposition-shim persistent equivalence for
+   all four families; every recorded mutating op is attributable to a declared transition or scratch
+   shape; transient sentinel/staging gone on clean run; kill-boundary survivors classified. The
+   external syscall-audit bypass guard is opt-in and skips where ptrace is unavailable.
 
 ## Deliverable boundary
 

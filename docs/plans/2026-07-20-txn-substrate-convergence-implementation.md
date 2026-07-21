@@ -27,11 +27,14 @@ Every task's requirements implicitly include these (verbatim from the design):
   not raise**; it calls `tracker.mark(index, WRITTEN)` and nothing else.
 - **`mark` is monotonic:** `NOT_WRITTEN → {MAY_HAVE_WRITTEN, WRITTEN}` and `MAY_HAVE_WRITTEN →
   WRITTEN` only. A downgrade raises.
-- **`rollback_transitions` takes the `OwnershipTracker`**, never a bare list or a sliced tuple.
+- **The tracker rollback (`rollback_with_tracker`) takes the `OwnershipTracker`**, never a bare list.
+  It is added additively in Task 9; the bare-list `rollback_transitions` (whose only callers are
+  archive + supersede) is removed in Task 12 once both are migrated — the hard cut, with no red
+  interval. After Task 12 the tracker rollback is the sole rollback.
 - **`MAY_HAVE_WRITTEN`/`WRITTEN` + live `neither` → `RollbackHalt`.** Restartable restore makes only
   the `matches post → restore` rows re-drivable.
 - **Restore authority is the transition's frozen `post`, never a fresh `fingerprint(path)`.** The
-  expected-live fingerprint (`transition.post`) is threaded from `rollback_transitions` through
+  expected-live fingerprint (`transition.post`) is threaded from `rollback_with_tracker` through
   `_materialize` and `reconcile_restore_staging` and passed **unchanged** as `atomic_write_bytes`'s
   `target_pre`. Restore must never re-read the live file and adopt it as its own precondition — that
   would re-authorize a concurrent writer's content.
@@ -141,6 +144,18 @@ def test_non_regular_rejected(tmp_path):
     fifo = tmp_path / "fifo"; os.mkfifo(fifo)
     with pytest.raises(UnsupportedPathType):
         fingerprint(fifo)
+
+def test_snapshot_reads_each_regular_file_once(tmp_path, monkeypatch):
+    """The 'read each file's bytes exactly once' contract: snapshot_paths must NOT fingerprint (which
+    reads, to hash) and then re-capture. It dispatches by lstat and captures once."""
+    p = tmp_path / "f.md"; p.write_text("data")
+    real = plan_common._capture_regular_fd
+    seen = []
+    def spy(path):
+        seen.append(path); return real(path)
+    monkeypatch.setattr(plan_common, "_capture_regular_fd", spy)
+    plan_common.snapshot_paths([p])
+    assert seen == [p]      # exactly one capture; a fingerprint-then-recapture would record two
 ```
 
 - [ ] **Step 2: Run to verify it fails**
@@ -155,7 +170,9 @@ regression pins across the Step 3 refactor.
 Introduce a helper that opens a regular file once (`O_RDONLY | O_NOFOLLOW`), `fstat`s it, reads bytes,
 and returns `(StateFingerprint, bytes)` from that single buffer. `fingerprint` keeps using `lstat`
 for type dispatch (symlink/dir/absent unchanged); for a regular file it delegates to the helper.
-`snapshot_paths` calls the helper for regular files instead of `fingerprint(p)` + `p.read_bytes()`:
+`snapshot_paths` dispatches on its **own** `lstat` (which reads nothing) and calls the helper **once**
+for regular files — it must NOT call `fingerprint(p)` first (that reads to hash) and then re-capture,
+which would read the file twice:
 
 ```python
 def _capture_regular_fd(path: Path) -> tuple[StateFingerprint, bytes]:
@@ -177,18 +194,23 @@ def _capture_regular_fd(path: Path) -> tuple[StateFingerprint, bytes]:
 def snapshot_paths(paths: list[Path]) -> dict[Path, PathSnapshot]:
     snap: dict[Path, PathSnapshot] = {}
     for p in paths:
-        base = fingerprint(p)
-        if base.existed and base.type == "file":
-            fp, content = _capture_regular_fd(p)
+        try:
+            st = os.lstat(p)                       # type dispatch WITHOUT reading bytes
+        except FileNotFoundError:
+            snap[p] = PathSnapshot(fp=StateFingerprint(existed=False, type=None,
+                content_sha256=None, mode=None, symlink_target=None), content=None)
+            continue
+        if stat.S_ISREG(st.st_mode):
+            fp, content = _capture_regular_fd(p)   # THE single bytes read for this file
             snap[p] = PathSnapshot(fp=fp, content=content)
         else:
-            snap[p] = PathSnapshot(fp=base, content=None)
+            snap[p] = PathSnapshot(fp=fingerprint(p), content=None)  # dir/symlink: fingerprint reads no bytes
     return snap
 ```
 
 (There is still a lstat-then-open gap; the write-boundary recheck and `capture_and_verify` — Task 2 —
-close the plan-to-apply window. The fd binds the *bytes* to the *mode+hash* of one opened object,
-which is the coherence guarantee.)
+close the plan-to-apply window. The fd binds the *bytes* to the *mode+hash* of one opened object, and
+each regular file's bytes are read exactly once — the coherence + single-read guarantee.)
 
 - [ ] **Step 4: Run to verify pass**
 
@@ -348,9 +370,9 @@ def atomic_write_bytes(path, data, *, mode, file_mode=None, token, target_pre, o
         raise StagingError(f"atomic_write_bytes target is not a regular file: {path}")
     if mode is not WriteMode.REPLACE:
         raise NotImplementedError(f"{mode} added in a later task")   # CREATE_OR_VERIFY=T4, RESTORE=T5
-    # REPLACE: preserve the live file's mode on overwrite; require file_mode only on first create.
-    resolved_mode = file_mode if file_mode is not None else (
-        stat.S_IMODE(path.stat().st_mode) if path.exists() else None)
+    # REPLACE: an EXISTING regular file keeps its own mode (file_mode is ignored); file_mode is
+    # required, and used, only when first creating the file (design Piece 6).
+    resolved_mode = stat.S_IMODE(path.stat().st_mode) if path.exists() else file_mode
     if resolved_mode is None:
         raise StagingError("REPLACE first-create requires file_mode")
     staging = staging_path_for(path, token)
@@ -359,6 +381,8 @@ def atomic_write_bytes(path, data, *, mode, file_mode=None, token, target_pre, o
         with os.fdopen(fd, "wb") as fh:
             fh.write(data); fh.flush()
             os.fchmod(fh.fileno(), resolved_mode); os.fsync(fh.fileno())
+        if not matches(target_pre, path):   # prepublish guard: refuse if a writer landed during staging
+            raise PreconditionRefused(f"{path}: live state diverged from target_pre before publish")
         os.replace(staging, path)          # REPLACE linearization point
         if on_commit is not None: on_commit()
         _fsync_parent(path)
@@ -367,6 +391,11 @@ def atomic_write_bytes(path, data, *, mode, file_mode=None, token, target_pre, o
             staging.unlink()
         raise
 ```
+
+The prepublish `matches(target_pre, path)` guard narrows the overwrite window to the microseconds
+between the check and `os.replace` (a residual, unavoidable TOCTOU); without it, a concurrent edit
+landing while staging is written is silently overwritten (F2). The same guard is added to RESTORE
+(Task 5) and, as the enclosing `_materialize`/rollback guard, to restore (Tasks 6/9).
 
 Define the shared `_fsync_parent` helper here (Task 3 is its first user); Tasks 4–15 reuse it:
 
@@ -598,6 +627,8 @@ Add above the REPLACE branch (and remove RESTORE from the `mode is not WriteMode
             with os.fdopen(fd, "wb") as fh:
                 fh.write(data); fh.flush()
                 os.fchmod(fh.fileno(), file_mode); os.fsync(fh.fileno())  # force exact preimage mode
+            if not matches(target_pre, path):   # prepublish guard (target_pre == expected post)
+                raise PreconditionRefused(f"{path}: live state diverged from target_pre before restore")
             os.replace(staging, path)          # restore publish-over-post (target legitimately exists)
             if on_commit is not None: on_commit()
             _fsync_parent(path)
@@ -700,20 +731,25 @@ def _materialize(path, snap, *, token, expected_live):   # _fsync_parent defined
         atomic_write_bytes(path, snap.content or b"", mode=WriteMode.RESTORE,
                            file_mode=fp.mode, token=token, target_pre=expected_live)
         return                              # atomic_write_bytes fsyncs parent
-    # dir / symlink: build staging, then remove the verified post object and rename staging in.
+    # dir / symlink: build staging at fp.mode / fp.symlink_target, then publish with ONE atomic
+    # os.replace (design §5). NOT remove-then-rename: os.replace is atomic, so a kill leaves the
+    # target matching either post (before) or pre (after) — never 'neither'. `expected_live` was
+    # verified above, so replacing over the post object is the intended, guarded operation.
     staging = staging_path_for(path, token)
     if fp.type == "dir":
-        staging.mkdir(); os.chmod(staging, fp.mode)
+        staging.mkdir(); os.chmod(staging, fp.mode)   # mode on staging before publish (no live mkdir→chmod window)
     else:                                   # symlink
         os.symlink(fp.symlink_target, staging)
-    _remove_live(path)                      # post object was just verified above
-    _rename_noreplace(staging, path)        # dst now absent -> atomic no-clobber (dirs have no link fallback)
+    os.replace(staging, path)               # atomic publish-over-post
     _fsync_parent(path)
 ```
 
-The remove→rename window for dir/symlink is covered on restart by Task 7's reconciliation (a surviving
-staging object + an absent/post live target is republished, not O_EXCL-failed). Keep `_remove_live`'s
-existing `rmdir`/`unlink` dispatch.
+`os.replace` atomically replaces a file/symlink target and an *empty* directory target; the transition
+vocabulary never restores a dir preimage over a non-dir (no transition has `pre.type == "dir"` — a
+`created-dir` is `pre=absent`), so the type-mismatch case does not arise. Keep `_remove_live`'s existing
+`rmdir`/`unlink` dispatch for the absent-preimage branch. The atomicity is what makes the design's
+"a kill leaves post or pre, never neither" invariant hold (design §5) and what Task 7's reconciliation
+relies on: a survivor means the kill was *before* the rename, with the live target still at post.
 
 - [ ] **Step 4: Run to verify pass**
 
@@ -776,33 +812,82 @@ def test_classify_staging_accepts_bytes(tmp_path):
     p = tmp_path / "f"; s = staging_path_for(p, "t"); s.write_bytes(b"abc")
     assert classify_staging(s, b"abc") == "complete"
     assert classify_staging(s, b"abcdef") == "prefix"
+
+def test_reconcile_fixes_mode_on_complete_file_survivor(tmp_path):
+    # kill after bytes written but BEFORE fchmod -> survivor has umask-masked mode; reconcile must set fp.mode
+    from science_tool.plan_common import _materialize, snapshot_paths, fingerprint, staging_path_for
+    import stat as _stat
+    p = tmp_path / "f"; p.write_text("old"); os.chmod(p, 0o640)
+    snap = snapshot_paths([p])[p]; p.write_text("new"); live = fingerprint(p)
+    staging = staging_path_for(p, "t"); staging.write_bytes(b"old"); os.chmod(staging, 0o600)  # wrong mode
+    _materialize(p, snap, token="t", expected_live=live)
+    assert p.read_text() == "old" and _stat.S_IMODE(p.stat().st_mode) == 0o640
+
+def test_reconcile_publishes_complete_symlink_survivor(tmp_path):
+    from science_tool.plan_common import _materialize, snapshot_paths, fingerprint, staging_path_for
+    real = tmp_path / "r"; real.write_text("x")
+    link = tmp_path / "l"; link.symlink_to(real)
+    snap = snapshot_paths([link])[link]; link.unlink(); link.write_text("post-file"); live = fingerprint(link)
+    staging_path_for(link, "t").symlink_to(real)                  # complete symlink survivor
+    _materialize(link, snap, token="t", expected_live=live)
+    assert link.is_symlink() and os.readlink(link) == str(real)
+
+def test_reconcile_finishes_wrong_mode_dir_survivor(tmp_path):
+    from science_tool.plan_common import _materialize, PathSnapshot, StateFingerprint, fingerprint, staging_path_for
+    import stat as _stat
+    d = tmp_path / "d"; d.mkdir(); os.chmod(d, 0o755)             # dir preimage
+    dirfp = StateFingerprint(existed=True, type="dir", content_sha256=None, mode=0o755, symlink_target=None)
+    snap = PathSnapshot(fp=dirfp, content=None)
+    import shutil; shutil.rmtree(d); (tmp_path / "d").write_text("post-file"); live = fingerprint(tmp_path / "d")
+    staging = staging_path_for(tmp_path / "d", "t"); staging.mkdir(); os.chmod(staging, 0o700)  # wrong mode
+    _materialize(tmp_path / "d", snap, token="t", expected_live=live)
+    assert (tmp_path / "d").is_dir() and _stat.S_IMODE((tmp_path / "d").stat().st_mode) == 0o755
+
+def test_reconcile_halts_on_dangling_symlink_survivor(tmp_path):
+    # a dangling symlink survivor: Path.exists() is False but the path IS occupied -> must not be missed
+    from science_tool.plan_common import _materialize, snapshot_paths, fingerprint, staging_path_for, RollbackHalt
+    p = tmp_path / "f"; p.write_text("old")
+    snap = snapshot_paths([p])[p]; p.write_text("new"); live = fingerprint(p)
+    staging_path_for(p, "t").symlink_to(tmp_path / "does-not-exist")   # dangling symlink, foreign shape
+    with pytest.raises(RollbackHalt):
+        _materialize(p, snap, token="t", expected_live=live)
 ```
 
 - [ ] **Step 2: Run to verify it fails**
 
 Run: `uv run --frozen pytest tests/test_txn_restore.py -k "reconcile or classify" -v`
 Expected: FAIL (staging survivor makes the fresh `os.symlink`/`mkdir`/`O_EXCL` raise `FileExistsError`;
-`classify_staging` rejects bytes).
+`classify_staging` rejects bytes; `Path.exists()` misses the dangling-symlink survivor; a complete
+file survivor keeps its wrong mode; a foreign file raises `StagingError`, not `RollbackHalt`).
 
 - [ ] **Step 3: Implement reconciliation and call it first in `_materialize`**
 
 ```python
 def reconcile_restore_staging(path, snap, *, token, expected_live) -> bool:
     staging = staging_path_for(path, token)
-    if not staging.exists():
+    if not os.path.lexists(staging):             # lexists, not exists: a dangling symlink survivor counts
         return False
     fp = snap.fp
     if fp.existed and fp.type == "file":
-        kind = classify_staging(staging, snap.content or b"")   # raises StagingError on foreign bytes
+        # a foreign (non-prefix) survivor must halt, not surface StagingError
+        if staging.is_symlink() or not staging.is_file():
+            raise RollbackHalt(f"{path}: unattributable restore staging survivor: {staging}")
+        try:
+            kind = classify_staging(staging, snap.content or b"")
+        except StagingError as exc:
+            raise RollbackHalt(f"{path}: foreign restore staging survivor: {staging}") from exc
         if kind == "complete":
             if not matches(expected_live, path):
                 raise RollbackHalt(f"{path}: live diverged; refusing to publish restore survivor")
+            assert fp.mode is not None
+            os.chmod(staging, fp.mode)           # kill after write, before fchmod, left umask-masked mode
             os.replace(staging, path); _fsync_parent(path)
             return True
-        staging.unlink()                         # "prefix"/"absent": our own partial -> discard, recreate
+        staging.unlink()                         # "prefix": our own partial -> discard, recreate downstream
         return False
     # dir / symlink survivor
     if fp.existed and fp.type == "dir" and staging.is_dir() and not staging.is_symlink():
+        assert fp.mode is not None
         os.chmod(staging, fp.mode)               # finish a wrong-mode staging dir
     elif fp.existed and fp.type == "symlink" and staging.is_symlink() \
             and os.readlink(staging) == fp.symlink_target:
@@ -811,9 +896,12 @@ def reconcile_restore_staging(path, snap, *, token, expected_live) -> bool:
         raise RollbackHalt(f"{path}: unattributable restore staging survivor: {staging}")
     if not matches(expected_live, path):
         raise RollbackHalt(f"{path}: live diverged; refusing to publish restore survivor")
-    _remove_live(path); _rename_noreplace(staging, path); _fsync_parent(path)
+    os.replace(staging, path); _fsync_parent(path)   # atomic publish (matches Task 6's os.replace)
     return True
 ```
+
+Note the dir/symlink publish uses `os.replace` (not remove-then-rename), matching Task 6 — the
+`expected_live` check immediately precedes it, and `os.replace` atomically supplants the post object.
 
 Then make it the first statement of `_materialize`, returning early when it converged:
 
@@ -926,26 +1014,35 @@ git commit -m "feat(txn): OwnershipTracker with monotonic mark"
 
 ---
 
-## Task 9: Tracker-based `rollback_transitions` + action table
+## Task 9: Tracker-based rollback (`rollback_with_tracker`) — additive
+
+**Sequencing (F4):** the only callers of the shipped bare-list `rollback_transitions` are
+`apply_archive_plan` (`archive_plan.py:317`) and `apply_supersede_plan` (`supersede_plan.py:269`);
+import uses its own `_restore`. Changing `rollback_transitions`' signature here would break both until
+Task 12. So this task **adds** the tracker rollback under a new name and leaves the bare-list
+`rollback_transitions` untouched and working. **Task 12** migrates both callers to the tracker rollback
+and then **deletes** the bare-list function — that is where the hard cut lands, with no red interval.
 
 **Files:**
-- Modify: `src/science_tool/plan_common.py` (`rollback_transitions` takes `OwnershipTracker`)
-- Test: `tests/test_ownership_tracker.py`, `tests/test_plan_common.py`
+- Modify: `src/science_tool/plan_common.py` (add `rollback_with_tracker`; do NOT touch
+  `rollback_transitions` yet)
+- Test: `tests/test_ownership_tracker.py`
 
 **Interfaces:**
-- Produces: `rollback_transitions(tracker: OwnershipTracker, project_root: Path, snapshot, *,
+- Produces: `rollback_with_tracker(tracker: OwnershipTracker, project_root: Path, snapshot, *,
   token: str) -> None` implementing the seven-row action table. `token` is the per-operation token;
   each path's restore staging token is `f"{token}-restore-{index}"` (transaction-unique — Global
-  Constraint). Passes `expected_live=t.post` into `_materialize`.
+  Constraint). Passes `expected_live=t.post` into `_materialize`. This becomes the sole rollback after
+  Task 12 removes the bare-list `rollback_transitions`.
 - Consumes: `OwnershipTracker`, `_materialize`, `matches`, `RollbackHalt`.
 
 - [ ] **Step 1: Write the failing test** (action-table rows: NOT_WRITTEN skip; WRITTEN+post restore;
-  MAY_HAVE_WRITTEN+neither halt; WRITTEN+pre skip). Assert `rollback_transitions` rejects a bare list.
+  MAY_HAVE_WRITTEN+neither halt; WRITTEN+pre skip). Assert it rejects a bare list.
 
 ```python
 def test_rollback_neither_halts(tmp_path):
     import hashlib
-    from science_tool.plan_common import (OwnershipTracker, MutationOwnership as O, rollback_transitions,
+    from science_tool.plan_common import (OwnershipTracker, MutationOwnership as O, rollback_with_tracker,
         snapshot_paths, RollbackHalt, PathTransition, StateFingerprint)
     f = tmp_path / "x.md"; f.write_text("pre")
     pre = snapshot_paths([f])[f].fp
@@ -955,11 +1052,11 @@ def test_rollback_neither_halts(tmp_path):
     tr = OwnershipTracker([t]); tr.mark(0, O.WRITTEN)
     f.write_text("SOMETHING ELSE")  # neither pre nor post
     with pytest.raises(RollbackHalt):
-        rollback_transitions(tr, tmp_path, snapshot_paths([f]), token="op")
+        rollback_with_tracker(tr, tmp_path, snapshot_paths([f]), token="op")
 
 def test_rollback_written_post_restores(tmp_path):
     import hashlib
-    from science_tool.plan_common import (OwnershipTracker, MutationOwnership as O, rollback_transitions,
+    from science_tool.plan_common import (OwnershipTracker, MutationOwnership as O, rollback_with_tracker,
         snapshot_paths, PathTransition, StateFingerprint)
     f = tmp_path / "x.md"; f.write_text("pre")
     snap = snapshot_paths([f]); pre = snap[f].fp
@@ -969,26 +1066,26 @@ def test_rollback_written_post_restores(tmp_path):
     t = PathTransition(role="entity-rewrite", rel_path="x.md", pre=pre, post=post, postimage=post_text)
     tr = OwnershipTracker([t]); tr.mark(0, O.WRITTEN)
     f.write_text(post_text)                       # live == post: reversible
-    rollback_transitions(tr, tmp_path, snap, token="op")
+    rollback_with_tracker(tr, tmp_path, snap, token="op")
     assert f.read_text() == "pre"
 
 def test_rollback_rejects_bare_list(tmp_path):
-    from science_tool.plan_common import rollback_transitions
+    from science_tool.plan_common import rollback_with_tracker
     with pytest.raises(TypeError):
-        rollback_transitions([], tmp_path, {}, token="op")
+        rollback_with_tracker([], tmp_path, {}, token="op")
 ```
 
 - [ ] **Step 2: Run to verify it fails**
 
 Run: `uv run --frozen pytest tests/test_ownership_tracker.py -k rollback -v`
-Expected: FAIL.
+Expected: FAIL (`rollback_with_tracker` undefined).
 
-- [ ] **Step 3: Implement the action table over the tracker**
+- [ ] **Step 3: Implement the action table over the tracker (new function, additive)**
 
 ```python
-def rollback_transitions(tracker, project_root, snapshot, *, token):
+def rollback_with_tracker(tracker, project_root, snapshot, *, token):
     if not isinstance(tracker, OwnershipTracker):
-        raise TypeError("rollback_transitions requires an OwnershipTracker, not a bare list")
+        raise TypeError("rollback_with_tracker requires an OwnershipTracker, not a bare list")
     execs = list(tracker.as_executions())
     for index in range(len(execs) - 1, -1, -1):        # reverse: dirs after their moved-in contents
         ex = execs[index]; t = ex.transition
@@ -1006,20 +1103,20 @@ def rollback_transitions(tracker, project_root, snapshot, *, token):
         _materialize(path, snap, token=f"{token}-restore-{index}", expected_live=t.post)
 ```
 
-The bare-list rejection is the first line; the seven rows are the `NOT_WRITTEN`/`pre`/`post`/`neither`
-branches. `_materialize`'s own `expected_live` guard is the second line of defense against a live
-change racing between the `matches(t.post, path)` check here and the restore.
+Leave `rollback_transitions` (bare list) exactly as it is; its archive/supersede callers still use it
+and stay green. Do not migrate the existing `test_plan_common.py` rollback tests here — they still
+exercise the bare-list path, which is valid until Task 12.
 
 - [ ] **Step 4: Run to verify pass**
 
 Run: `uv run --frozen pytest tests/test_ownership_tracker.py tests/test_plan_common.py -v`
-Expected: PASS (existing plan_common rollback tests may need migration to build a tracker — do so).
+Expected: PASS (both the new tracker tests and the untouched bare-list tests).
 
 - [ ] **Step 5: Commit**
 
 ```bash
-git add src/science_tool/plan_common.py tests/test_ownership_tracker.py tests/test_plan_common.py
-git commit -m "feat(txn): tracker-based rollback_transitions with action table"
+git add src/science_tool/plan_common.py tests/test_ownership_tracker.py
+git commit -m "feat(txn): additive tracker-based rollback_with_tracker (bare-list cut deferred to T12)"
 ```
 
 ---
@@ -1221,18 +1318,23 @@ git commit -m "feat(txn): staged_write on_commit + durable callback-bearing seam
 
 ---
 
-## Task 12: Wire archive + supersede rollback to the tracker
+## Task 12: Migrate archive + supersede to the tracker; remove the bare-list rollback (hard cut)
 
 **Files:**
 - Modify: `src/science_tool/archive_plan.py` (`apply_archive_plan`), `supersede_plan.py`
-  (`apply_supersede_plan`)
-- Test: `tests/test_archive_plan.py`, `tests/test_supersede_plan.py` (extend)
+  (`apply_supersede_plan`), `src/science_tool/plan_common.py` (delete bare-list `rollback_transitions`)
+- Test: `tests/test_archive_plan.py`, `tests/test_supersede_plan.py`, `tests/test_plan_common.py`
+  (migrate the bare-list rollback tests to the tracker)
 
 **Interfaces:**
-- Consumes: `OwnershipTracker`, `MutationOwnership`, tracker-based `rollback_transitions`,
+- Consumes: `OwnershipTracker`, `MutationOwnership`, `rollback_with_tracker` (Task 9),
   `capture_and_verify`, `move_no_clobber`, `mkdir_durable`, `staged_write(..., on_commit=...)`.
 - Produces: unchanged public `apply_*` signatures; internal rollback now tracker-driven; `created-dir`
   transitions are made through `mkdir_durable` and marked, so rollback reverts created ancestors.
+  **The bare-list `rollback_transitions` is deleted here** — its only two callers (archive, supersede)
+  are migrated in this same task, so the hard cut lands with no red interval. `rollback_with_tracker`
+  is now the sole rollback (rename it to `rollback_transitions` if you want the canonical name — a
+  mechanical, optional final touch; keep whichever name across Tasks 12–15 consistently).
 
 - [ ] **Step 1: Write/extend the failing test** — an injected apply failure rolls back via the tracker
   and leaves the tree at pre-state, **including any created ancestor directory** (the finding-4 case).
@@ -1269,10 +1371,10 @@ def test_apply_archive_rolls_back_to_pre_state_including_created_dirs(tmp_path: 
 - [ ] **Step 2: Run to verify it fails**
 
 Run: `uv run --frozen pytest tests/test_archive_plan.py tests/test_supersede_plan.py -v`
-Expected: FAIL (apply still calls the removed bare-list `rollback_transitions`; created dirs are bare
-`mkdir` and never marked, so a created ancestor is left behind).
+Expected: FAIL (created dirs are bare `mkdir` and never marked, so a created ancestor is left behind
+on rollback).
 
-- [ ] **Step 3: Migrate both apply functions**
+- [ ] **Step 3: Migrate both apply functions, then delete the bare-list rollback**
 
 In `apply_archive_plan` (and the parallel structure in `apply_supersede_plan`):
 
@@ -1287,20 +1389,26 @@ In `apply_archive_plan` (and the parallel structure in `apply_supersede_plan`):
    on_commit_src=lambda i=idx[id(src_t)]: tracker.mark(i, WRITTEN))` (map each move to its
    `archive-dst`/`archive-src` transitions). Keep the `EXDEV` guard by catching it around the call.
 5. index: `staged_write(..., on_commit=lambda i=idx[id(plan.index)]: tracker.mark(i, WRITTEN))`.
-6. on failure: `rollback_transitions(tracker, project_root, snap, token=staging_token)`.
+6. on failure: `rollback_with_tracker(tracker, project_root, snap, token=staging_token)`.
+7. **Hard cut:** now that neither archive nor supersede calls it, delete the bare-list
+   `rollback_transitions` from `plan_common.py`, and migrate the bare-list rollback tests in
+   `tests/test_plan_common.py` to build an `OwnershipTracker` and call `rollback_with_tracker` (keep
+   their assertions — they are still valid; only the call shape changes). No caller of the bare-list
+   function remains after steps 1–6, so this leaves the branch green.
 
 `WRITTEN` is `MutationOwnership.WRITTEN`.
 
 - [ ] **Step 4: Run to verify pass**
 
-Run: `uv run --frozen pytest tests/test_archive_plan.py tests/test_supersede_plan.py -v`
-Expected: PASS.
+Run: `uv run --frozen pytest tests/test_archive_plan.py tests/test_supersede_plan.py tests/test_plan_common.py -v`
+Expected: PASS. Grep confirms no remaining reference to a bare-list `rollback_transitions`:
+`! grep -rn "rollback_transitions(" src/ tests/` (only `rollback_with_tracker` remains).
 
 - [ ] **Step 5: Commit**
 
 ```bash
-git add src/science_tool/archive_plan.py src/science_tool/supersede_plan.py tests/test_archive_plan.py tests/test_supersede_plan.py
-git commit -m "refactor(txn): archive+supersede rollback via OwnershipTracker"
+git add src/science_tool/archive_plan.py src/science_tool/supersede_plan.py src/science_tool/plan_common.py tests/test_archive_plan.py tests/test_supersede_plan.py tests/test_plan_common.py
+git commit -m "refactor(txn): archive+supersede on tracker rollback; remove bare-list rollback_transitions"
 ```
 
 ---
@@ -1372,61 +1480,74 @@ git commit -m "feat(import): import-dst/import-src PathTransition roles"
 - Test: `tests/test_entity_import.py`, `tests/test_cohort_import.py`
 
 **Interfaces:**
-- Produces: `ImportPlan.transitions: list[PathTransition]`, `ImportPlan.schema_version: int = 1`;
-  `CohortImportPlan.transitions`, `schema_version` bumped `1 → 2`; `parse_cohort_import_plan` rejects
-  v1.
+- Produces: `ImportPlan.transitions: list[PathTransition]`, `ImportPlan.schema_version: int = 1`
+  (first versioning of the single-import wire schema); `CohortImportPlan.transitions`,
+  `schema_version` bumped `1 → 2`; `parse_cohort_import_plan` rejects any `schema_version != 2`;
+  `apply_cohort_import` gate changed from `!= 1` to `!= 2` (`entity_import.py:901`); `apply_import`
+  asserts `plan.schema_version == 1`.
 - Consumes: `PathTransition`, `_missing_ancestor_dirs`, roles from Task 13.
 
 Existing tests this version bump will break (update them in this task, don't loosen them):
 `test_cohort_plan_defaults_and_discriminator` and `test_parse_cohort_round_trips` in
 `tests/test_cohort_import.py` assert `schema_version == 1` — bump their expectations to `2`.
 Reuse the module's real fixtures: `_project(tmp_path)`, `_loose(root, rel, text)`, `_valid_plan(root)`.
+`plan_import`'s shipped signature is `plan_import(project_root: Path, source: Path, *, kind, title=...)`
+— pass a **`Path`**, not a string.
 
 - [ ] **Step 1: Write the failing test**
 
 ```python
 def test_cohort_v1_plan_rejected(tmp_path):
-    from science_tool.entity_import import parse_cohort_import_plan
+    # Build a WELL-FORMED v2 plan, then downgrade only its version, so the parse fails on the
+    # version guard alone — not on a missing required field (F6).
     import json
-    v1 = json.dumps({"plan_type": "cohort-import", "schema_version": 1, "project_root": str(tmp_path),
-                     "kind": "paper", "members": [], "ref_report": {}, "warnings": []}).encode()
-    with pytest.raises(Exception):
-        parse_cohort_import_plan(v1)
+    from science_tool.entity_import import parse_cohort_import_plan, EntityImportError
+    root = _project(tmp_path)
+    valid = _valid_plan(root)                        # complete, current-schema CohortImportPlan
+    raw = json.loads(valid.model_dump_json())
+    raw["schema_version"] = 1                        # the ONLY thing wrong
+    with pytest.raises(EntityImportError):
+        parse_cohort_import_plan(json.dumps(raw).encode())
 
 def test_plan_import_derives_transitions(tmp_path):
-    from science_tool.entity_import import plan_import
     import hashlib
-    root = _project(tmp_path)                       # existing fixture in test_cohort_import.py
-    src = _loose(root, "loose.md", "# Title\n\nbody\n")
-    plan = plan_import(root, src.relative_to(root).as_posix(), kind="paper")
+    from science_tool.entity_import import plan_import
+    root = _project(tmp_path)                        # existing fixture in test_cohort_import.py
+    src = _loose(root, "doc/plans/x.md", "# Title\n\nbody\n")
+    plan = plan_import(root, src, kind="plan", title="Title")   # Path, real signature
     by_role = {t.role: t for t in plan.transitions}
     dst = by_role["import-dst"]
     assert dst.post.mode == 0o644
     assert dst.post.content_sha256 == hashlib.sha256(plan.rendered_text.encode()).hexdigest()
     assert by_role["import-src"].post.existed is False
-    # a created-dir transition appears only if the destination needs a missing ancestor;
-    # assert its post.type == "dir" when present.
-    for t in plan.transitions:
+    assert plan.schema_version == 1
+    for t in plan.transitions:                       # created-dir only when an ancestor is missing
         if t.role == "created-dir":
             assert t.post.type == "dir"
 ```
 
-(`plan_import`'s exact keyword args — `kind`, `number`, `title` — match the shipped signature; adjust
-the call to the real one. This is one of the three fixture-dependent fill-ins flagged in self-review.)
+(If `plan.rendered_text` is not the attribute name on the shipped `ImportPlan`, use the real one —
+grep `class ImportPlan` in `entity_import.py`; the shape is otherwise exact.)
 
 - [ ] **Step 2: Run to verify it fails**
 
-Run: `uv run --frozen pytest tests/test_cohort_import.py -k v1 tests/test_entity_import.py -k transitions -v`
-Expected: FAIL.
+Run: `uv run --frozen pytest tests/test_cohort_import.py -k v1_plan_rejected tests/test_entity_import.py -k derives_transitions -v`
+Expected: FAIL (current `parse_cohort_import_plan` accepts v1; `ImportPlan` has no `transitions`).
 
 - [ ] **Step 3: Implement**
 
-Add `transitions` + `schema_version` fields. In `plan_import`/`plan_cohort_import`, derive the
-transition set at preview time: `import-dst` (`pre` absent, `post` file with `mode=0o644` and
-`content_sha256 == sha256(rendered_text)`, `postimage=rendered_text`), `import-src` (`pre` = source
-fingerprint, `post` absent), `created-dir` per `_missing_ancestor_dirs`, and `entity-rewrite` per
-`ref_report` edit. Bump `CohortImportPlan.schema_version` default to `2`; in `parse_cohort_import_plan`
-raise a clear "re-run the preview" error unless `schema_version == 2`.
+Add `transitions` + `schema_version` fields to both plans. In `plan_import`/`plan_cohort_import`,
+derive the transition set at preview time: `import-dst` (`pre` absent, `post` file with `mode=0o644`
+and `content_sha256 == sha256(rendered_text)`, `postimage=rendered_text`), `import-src`
+(`pre` = source fingerprint, `post` absent), `created-dir` per `_missing_ancestor_dirs`, and
+`entity-rewrite` per `ref_report` edit. Then, all four guards:
+
+1. `CohortImportPlan.schema_version` default → `2`.
+2. `parse_cohort_import_plan`: raise `EntityImportError("… re-run the preview")` unless
+   `schema_version == 2`.
+3. `apply_cohort_import` (`entity_import.py:901`): change `plan.schema_version != 1` → `!= 2`.
+4. `ImportPlan.schema_version: int = 1`; `apply_import` raises `EntityImportError` unless
+   `plan.schema_version == 1` (mirror the cohort gate for the single-import path).
 
 - [ ] **Step 4: Run to verify pass**
 
@@ -1451,10 +1572,26 @@ git commit -m "feat(import): persist transitions + version the saved-plan wire s
 - Test: `tests/test_entity_import.py`, `tests/test_cohort_import.py`
 
 **Interfaces:**
-- Consumes: `OwnershipTracker`, durable seam primitives (Task 11), `capture_and_verify`, tracker-based
-  `rollback_transitions`.
-- Produces: unchanged public `apply_import`/`apply_cohort_import` signatures; ownership-driven rollback
-  preserving `restrict=written` (rejected referrers stay `NOT_WRITTEN`).
+- Consumes: `OwnershipTracker`, durable seam primitives (Task 11), `capture_and_verify`,
+  `rollback_with_tracker` (Task 9).
+- Produces:
+  - unchanged public `apply_import`/`apply_cohort_import` signatures; ownership-driven rollback
+    preserving `restrict=written` (rejected referrers stay `NOT_WRITTEN`).
+  - **`claim_number_in_dir` gains `on_commit: Callable[[], None] | None = None`** and **stops creating
+    ancestor directories** — its `directory.mkdir(parents=True, exist_ok=True)` (`entity_reservation.py:183`)
+    is removed; the ancestor is now a declared `created-dir` transition made via `mkdir_durable` by the
+    caller. It calls `create_exclusive(path, text, mode, on_commit=on_commit)` so `import-dst` is marked
+    `WRITTEN` at the exclusive open (the hard-halt seam). New signature:
+    `claim_number_in_dir(project_root, kind, number, local_part, text, *, on_commit=None) -> Path`.
+  - **`apply_reference_rewrite` gains a per-edit commit callback** so each `entity-rewrite` occurrence
+    is marked at its own replace boundary, replacing the post-return `written` list:
+    `apply_reference_rewrite(project_root, plan, *, exclude=frozenset(), on_commit=None) -> RewriteReport`
+    where `on_commit: Callable[[str], None] | None` is invoked with each edited `rel_path` at its
+    `durable_replace_text` linearization point (a referrer whose per-write recheck rejects it is never
+    passed to `on_commit`, so it stays `NOT_WRITTEN`). The `written: list[str]` parameter is removed.
+  - **`apply_import`/`apply_cohort_import` gain a test-only `_fault: Callable[[str], None] | None = None`
+    seam** (same pattern as `apply_archive_plan`), fired at labeled seams (`"import-dst-created"`,
+    `"import-src-unlinked"`, `"rewrite:<rel>"`), so Task 16's kill-boundary class covers these families.
 
 - [ ] **Step 1: Write the failing test** — the behavioral oracles already in `tests/test_entity_import.py`
   are the contract the migration must preserve; they exercise partial-rewrite rollback (a referrer
@@ -1500,15 +1637,26 @@ Expected: FAIL.
 
 - [ ] **Step 3: Migrate apply**
 
-Replace `_snapshot`/`_restore`/`mutated`-set bookkeeping with: `capture_and_verify(plan.transitions,
-project_root)`; an `OwnershipTracker(plan.transitions)`; seams wired to `tracker.mark` (via each
-primitive's `on_commit`: `create_exclusive` for `import-dst`, `mkdir_durable` per `created-dir`,
-`unlink_durable` for `import-src`, `durable_replace_text` for `entity-rewrite`); on failure
-`rollback_transitions(tracker, project_root, snapshot, token=staging_token)` (choose one per-apply
-`staging_token`). `claim_number_in_dir` calls
-`create_exclusive` (marking `import-dst` at the exclusive open — the hard-halt seam). A referrer whose
-per-write recheck rejects it is never marked, so it stays `NOT_WRITTEN` and rollback leaves it. Retire
-`_FileState`/`_TreeSnapshot`/`_snapshot`/`_restore` once no caller remains.
+Replace `_snapshot`/`_restore`/`mutated`-set bookkeeping with:
+
+1. `snap = capture_and_verify(plan.transitions, project_root)`; `tracker = OwnershipTracker(plan.transitions)`;
+   `idx = {id(t): i for i, t in enumerate(plan.transitions)}`; one per-apply `staging_token`.
+2. `created-dir` ancestors: `mkdir_durable(dir, t.post.mode, token=staging_token,
+   on_commit=lambda i=idx[id(t)]: tracker.mark(i, WRITTEN))` — done by `apply_import`, not by
+   `claim_number_in_dir` (which no longer creates parents).
+3. `import-dst`: `claim_number_in_dir(project_root, kind, number, local_part, text,
+   on_commit=lambda i=idx[id(dst_t)]: tracker.mark(i, WRITTEN))` — marks at the `create_exclusive`
+   O_EXCL open (the hard-halt seam).
+4. `import-src`: `unlink_durable(src, on_commit=lambda i=idx[id(src_t)]: tracker.mark(i, WRITTEN))`.
+5. `entity-rewrite`: `apply_reference_rewrite(project_root, plan.ref_report,
+   on_commit=lambda rel: tracker.mark(idx[_transition_id_for_rel[rel]], WRITTEN))` — build
+   `_transition_id_for_rel` mapping each `entity-rewrite` `rel_path` to its transition's `id()` so the
+   per-edit callback marks the right occurrence. A referrer whose per-write recheck rejects it is never
+   passed to `on_commit`, so it stays `NOT_WRITTEN` and rollback leaves it (`restrict=written` preserved).
+6. on failure: `rollback_with_tracker(tracker, project_root, snap, token=staging_token)`.
+
+Retire `_FileState`/`_TreeSnapshot`/`_snapshot`/`_restore` and the `written: list[str]` plumbing once
+no caller remains.
 
 - [ ] **Step 4: Run to verify pass**
 
@@ -1532,48 +1680,109 @@ git commit -m "refactor(import): apply on shared tracker substrate; retire priva
   helper) — the four families' fixtures already live in `test_cohort_import.py`/`test_archive_plan.py`.
 
 **Interfaces:**
-- Consumes: `apply_archive_plan`, `apply_supersede_plan`, `apply_import`, `apply_cohort_import`;
-  each plan's `transitions`.
+- Consumes: `apply_archive_plan`, `apply_supersede_plan`, `apply_import`, `apply_cohort_import`
+  (each with a `_fault` seam); each plan's `transitions`.
+- Produces: `tests/_fs_map.py` (`tree_map`, `diff_map`, `no_scratch_survivors`);
+  `tests/_fs_interpose.py` (`record_mutations` context manager).
 
-**Design decision (revised):** the settled contract (audit §5) is a **before/after filesystem-map
-comparison**, not syscall tracing. A tree map needs no `strace`/ptrace and therefore always runs in
-CI — there is no skip path that could let the invariant silently no-op. Transient/scratch behavior is
-characterized by the existing in-process `_fault` seams (also always runs), not by tracing syscalls of
-an in-process callable (which is not possible without a subprocess). Syscall auditing is explicitly
-out of scope for this PR.
+**Design (per revised design §7, rev-6).** Three assertion classes:
+1. **Persistent surface — before/after map (always-on).** `diff_map(before, after) ==
+   {t.rel_path for t in transitions if t.pre != t.post}`.
+2. **Transient surface — in-process interposition shim (always-on, portable).** A context manager
+   wraps the mutating `os` calls the substrate uses (`rename`, `replace`, `unlink`, `mkdir`, `rmdir`,
+   `symlink`, `chmod`, `link`, `open` with `O_CREAT`/`O_TRUNC`) **and** the module's `_rename_noreplace`
+   (which reaches `renameat2` via `ctypes`, bypassing `os`), recording `(op, path)`. Assert every
+   recorded mutating op targets a declared transition path or a declared scratch shape
+   (`.NNNN.reserving` sentinel or a `staging_path_for` token), and no scratch survives a clean run.
+   This catches paths created-and-removed within the run — needs no `strace`/ptrace, runs in any CI.
+3. **Kill-boundary — `_fault` (always-on).** Inject at each seam; assert each survivor is an
+   attributable prefix/sentinel, classified.
+4. **Bypass guard — external syscall audit (opt-in, `@pytest.mark.skipif` no ptrace).** Runs each
+   mutator in a subprocess under `strace -e trace=%file` and asserts no mutating syscall occurred
+   outside the interposition-recorded set; skips (never fails) where ptrace is unavailable. This is
+   the *only* class that may skip, and it guards only the fresh-ctypes-bypass regression.
 
-- [ ] **Step 1: Write the harness + tests**
+- [ ] **Step 1: Write the interposition shim + tests**
 
-Two assertions per family, both always-on:
-(a) **persistent surface** — `_diff(before, after) == {t.rel_path for t in transitions if t.pre != t.post}`
-over a full tree map (type, mode, sha256 | symlink target | dir existence);
-(b) **no scratch survives a clean run** — after a successful apply, no `*.tmp` token file and no
-`.NNNN.reserving` sentinel remain anywhere under the project.
+```python
+# tests/_fs_interpose.py
+import contextlib, os
+from pathlib import Path
+from science_tool import plan_common
+
+_MUT_OPS = ("rename", "replace", "unlink", "mkdir", "rmdir", "symlink", "chmod", "link")
+
+@contextlib.contextmanager
+def record_mutations():
+    """Record (op, abspath) for every filesystem-mutating call the substrate makes, in-process.
+    Wraps os.* and plan_common._rename_noreplace (ctypes renameat2 bypasses os)."""
+    log: list[tuple[str, str]] = []
+    saved = {name: getattr(os, name) for name in _MUT_OPS}
+    saved_open = os.open
+    saved_rnr = plan_common._rename_noreplace
+
+    def wrap(name, fn):
+        def w(*a, **k):
+            log.append((name, os.fspath(a[0])))
+            return fn(*a, **k)
+        return w
+    def wrap_open(path, flags, *a, **k):
+        if flags & (os.O_CREAT | os.O_TRUNC):
+            log.append(("open-write", os.fspath(path)))
+        return saved_open(path, flags, *a, **k)
+    def wrap_rnr(src, dst):
+        log.append(("rename", os.fspath(dst))); return saved_rnr(src, dst)
+    try:
+        for name in _MUT_OPS:
+            setattr(os, name, wrap(name, saved[name]))
+        os.open = wrap_open
+        plan_common._rename_noreplace = wrap_rnr
+        yield log
+    finally:
+        for name in _MUT_OPS:
+            setattr(os, name, saved[name])
+        os.open = saved_open
+        plan_common._rename_noreplace = saved_rnr
+```
 
 ```python
 # tests/test_write_surface_acceptance.py
+import os
+from pathlib import Path
+import pytest
 from tests._fs_map import tree_map, diff_map, no_scratch_survivors
+from tests._fs_interpose import record_mutations
 
-def test_import_persistent_surface_equals_transitions(tmp_path):
+def _declared_or_scratch(abspath, root, transitions):
+    rel = os.path.relpath(abspath, root)
+    if any(rel == t.rel_path for t in transitions):
+        return True
+    name = Path(abspath).name
+    return name.endswith(".tmp") or (name.startswith(".") and name.endswith(".reserving"))
+
+def test_import_surface_equals_transitions(tmp_path):
     from science_tool.entity_import import plan_import, apply_import
     root = _project(tmp_path)                        # shared fixture (see Files)
     src = _loose(root, "doc/plans/x.md", "# Title\n\nbody\n")
-    plan = plan_import(root, src, kind="plan", title="Title")   # real plan_import signature
+    plan = plan_import(root, src, kind="plan", title="Title")
     before = tree_map(root)
-    apply_import(root, plan)
-    observed = diff_map(before, tree_map(root))
-    assert observed == {t.rel_path for t in plan.transitions if t.pre != t.post}
+    with record_mutations() as log:
+        apply_import(root, plan)
+    # (1) persistent surface
+    assert diff_map(before, tree_map(root)) == {t.rel_path for t in plan.transitions if t.pre != t.post}
+    # (2) transient surface: every recorded mutation is declared or declared-scratch
+    for op, path in log:
+        assert _declared_or_scratch(path, root, plan.transitions), f"undeclared {op} {path}"
     assert no_scratch_survivors(root)
 ```
 
-Repeat the same two assertions for `apply_archive_plan`, `apply_supersede_plan`, and
-`apply_cohort_import`, each built with that family's existing fixture (`_superseded`/`plan_archive`,
-the supersede fixture, `_valid_plan`/`apply_cohort_import`). A fault-boundary characterization test
-per family reuses each apply's `_fault` seam and asserts every survivor is a declared scratch shape:
+Repeat classes (1)+(2) for `apply_archive_plan`, `apply_supersede_plan`, `apply_cohort_import` with
+each family's existing fixture (`_superseded`/`plan_archive`, the supersede fixture,
+`_valid_plan`/`apply_cohort_import`). Kill-boundary (class 3), one per family via its `_fault` seam:
 
 ```python
 def test_archive_fault_survivors_are_declared_scratch(tmp_path):
-    from science_tool.archive_plan import plan_archive, apply_archive_plan, ArchiveApplyError
+    from science_tool.archive_plan import plan_archive, apply_archive_plan
     _superseded(tmp_path)
     plan = plan_archive(tmp_path, selection=ArchiveStatusSweep(kind="all_by_status",
                         statuses=["superseded"]), now="2026-07-18T00:00:00Z")
@@ -1582,33 +1791,38 @@ def test_archive_fault_survivors_are_declared_scratch(tmp_path):
         if label == "index-written": raise _Kill()
     with pytest.raises(_Kill):
         apply_archive_plan(tmp_path, plan, staging_token="tok", _fault=fault)
-    # any surviving scratch is an attributable *.tmp for a declared staged target — never foreign debris
     for p in tmp_path.rglob("*.tmp"):
         assert any(p.name.startswith(Path(t.rel_path).name) for t in plan.transitions)
 ```
 
+The opt-in bypass guard (class 4) is a separate `@pytest.mark.skipif(not _has_ptrace(), ...)` test that
+subprocesses one mutator under `strace -fe trace=%file` and diffs the traced mutating syscalls against
+what `record_mutations` recorded for the same input; it skips where ptrace is unavailable.
+
 - [ ] **Step 2: Run to verify it fails**
 
 Run: `uv run --frozen pytest tests/test_write_surface_acceptance.py -v`
-Expected: FAIL until `tests/_fs_map.py` (`tree_map`/`diff_map`/`no_scratch_survivors`) exists.
+Expected: FAIL until `tests/_fs_map.py` + `tests/_fs_interpose.py` exist.
 
-- [ ] **Step 3: Implement the helper**
+- [ ] **Step 3: Implement the helpers**
 
 `tree_map(root)` walks the project excluding `.git`, returning `{rel_path: signature}` where signature
 is `("file", mode, sha256)`, `("symlink", target)`, or `("dir", mode)`. `diff_map(before, after)`
 returns the set of `rel_path`s whose signature changed, was added, or was removed. `no_scratch_survivors`
-returns `True` iff no `*.tmp` and no `.*.reserving` path exists under root. All pure-Python; no tracing.
+returns `True` iff no `*.tmp` and no `.*.reserving` path exists under root. `record_mutations` is above.
+Class (2)'s wrapping is at the `os`-module / helper level, so it captures a raw `os.rename` bypass as
+well as substrate calls — the primary invariant runs everywhere; only class (4) needs ptrace.
 
 - [ ] **Step 4: Run to verify pass**
 
 Run: `uv run --frozen pytest tests/test_write_surface_acceptance.py -v`
-Expected: PASS — every assertion runs unconditionally (no environment-gated skips).
+Expected: PASS — classes (1)(2)(3) always run; class (4) PASS or SKIP by environment.
 
 - [ ] **Step 5: Commit**
 
 ```bash
-git add tests/test_write_surface_acceptance.py tests/_fs_map.py tests/conftest.py
-git commit -m "test(txn): acceptance-time observed-surface harness (all four families)"
+git add tests/test_write_surface_acceptance.py tests/_fs_map.py tests/_fs_interpose.py tests/conftest.py
+git commit -m "test(txn): acceptance-time true-write-surface harness (interposition + before/after + fault)"
 ```
 
 ---
@@ -1643,21 +1857,27 @@ in a serialized fixture), never by loosening an assertion.
   `PreconditionRefused`, `BlobMismatch`, `BoundaryError`, `NoAtomicRename`, `move_no_clobber`,
   `_publish_no_clobber`, `create_exclusive`, `mkdir_durable`, `unlink_durable`, `durable_replace_text`,
   `atomic_write_bytes`, `capture_and_verify`, `reconcile_restore_staging`, `_materialize` (now
-  `*, token, expected_live`), `rollback_transitions` (now `*, token`) are spelled identically across
-  tasks and carry a single signature each.
-- **No placeholders:** every code step carries real, runnable code and every test is concrete.
-  The three formerly-prose steps (T12/T15 rollback tests, T16 harness) now contain full test bodies
-  built on the repo's real fixtures (`_project`, `_loose`, `_valid_plan`, `_superseded`, `plan_import`,
-  `plan_archive`) and real oracle test names verified present in `test_entity_import.py` /
-  `test_archive_plan.py`. The only implementer-supplied code is the `tree_map`/`diff_map` helper body
-  in T16, which is fully specified in prose (T16 Step 3). No `_scaffold`, no `...` in production code.
-- **Every review finding closed:** F1 restore-authority (expected_live threaded T6/T7/T9 + Global
-  Constraint); F2 red/green (T1 injected race, T2 existing roles + `import hashlib` + `BoundaryError`,
-  T3 REPLACE-only, T4 `file_mode`, T5 real RESTORE red); F3 link durability (`_publish_no_clobber` /
-  move fallback, dst durable before src unlink); F4 created-dir ownership + `staged_write.on_commit`
-  (T11/T12); F5 restore interfaces (concrete `reconcile_restore_staging`/`_materialize`, `classify_staging`
-  bytes, per-op token); F6 load-bearing tests (T10 fallback-ordering, T11 post-linearization fault,
-  T12/T15 concrete, T16 always-on tree-map, strace dropped).
+  `*, token, expected_live`), `rollback_with_tracker` (`*, token`; the sole rollback after T12 removes
+  the bare-list `rollback_transitions`) are spelled identically across tasks and carry a single
+  signature each.
+- **No placeholders:** every code step carries real, runnable code and every test is concrete, built on
+  the repo's real fixtures (`_project`, `_loose`, `_valid_plan`, `_superseded`, `plan_import`,
+  `plan_archive`) and oracle test names verified present in `test_entity_import.py`/`test_archive_plan.py`.
+  Implementer-supplied bodies are only the `tree_map`/`diff_map` helpers and the `strace` bypass-guard
+  test (T16), both fully specified in prose. No `_scaffold`, no `...` in production code.
+- **Review round 1 closed (F1–F6):** restore-authority `expected_live` threading; per-task red/green;
+  link durability; created-dir ownership + `staged_write.on_commit`; concrete restore interfaces;
+  load-bearing tests concrete.
+- **Review round 2 closed (F1–F9):** F1 restore reverted to design's atomic `os.replace` (not
+  remove-then-rename → never `neither`, T6/T7); F2 prepublish `target_pre` guard in REPLACE+RESTORE
+  (T3/T5); F3 exact import callback signatures + `claim_number_in_dir` drops `mkdir(parents=True)`
+  + `apply_reference_rewrite` per-edit `on_commit` (T15); F4 hard cut deferred to T12 (additive
+  `rollback_with_tracker` in T9, no red interval); F5 reconciliation holes (lexists dangling symlink,
+  mode-fix on complete file survivor, foreign→`RollbackHalt`, dir/symlink/wrong-mode tests, T7);
+  F6 wire schema (valid-except-version fixture, `Path` arg, cohort gate 1→2 at `entity_import.py:901`,
+  `ImportPlan` guard, T14); F7 design §7 revised to interposition-shim-primary + opt-in strace bypass
+  guard (design rev-6, pending re-review; T16 rewritten to match); F8 REPLACE preserves existing file
+  mode (T3); F9 single-read `snapshot_paths` via lstat dispatch + read-count test (T1).
 
 ## Execution handoff
 
