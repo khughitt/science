@@ -13,9 +13,9 @@ canonical") even though both exist.
 The fix is to convert the local owner into an overlay (`overlay_of: <id>`,
 carrying any project-specific content) or give it a distinct id.
 
-WARN, not ERROR: the collisions are latent across many adopter projects and must
-be reconciled before the severity ratchets. The genuine graph break, where a
-reference actually fails to resolve, still fails via the graph audit.
+ERROR: the corpus was reconciled to zero collisions before the severity
+ratcheted from WARN, so any new occurrence is a fresh defect to reject at the
+gate rather than a latent backlog to tolerate.
 """
 
 from __future__ import annotations
@@ -64,7 +64,7 @@ def check_commons_owner_collision(ctx: ValidateContext) -> Iterator[Result]:
         version = record.frontmatter.get("version")
         version_note = f" (v{version})" if isinstance(version, str) and version else ""
         yield Result(
-            Severity.WARN,
+            Severity.ERROR,
             Path(path),
             None,
             (

@@ -112,7 +112,7 @@ def _commons_root(tmp_path: Path, *, papers: tuple[str, ...] = (), datasets: tup
     return commons
 
 
-def test_local_owner_shadowing_commons_canonical_warns(
+def test_local_owner_shadowing_commons_canonical_errors(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     monkeypatch.setenv("SCIENCE_COMMONS_ROOT", str(_commons_root(tmp_path, papers=("Adams2025",))))
@@ -122,7 +122,7 @@ def test_local_owner_shadowing_commons_canonical_warns(
 
     assert len(results) == 1
     r = results[0]
-    assert r.severity is Severity.WARN
+    assert r.severity is Severity.ERROR
     assert r.path == Path("entities/papers/Adams2025.md")
     assert "paper:Adams2025" in r.message
     assert "overlay" in r.message.lower()
@@ -155,7 +155,7 @@ def test_missing_commons_root_does_not_warn(
     assert list(check_commons_owner_collision(_ctx(tmp_path))) == []
 
 
-def test_dataset_owner_collision_warns(
+def test_dataset_owner_collision_errors(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     monkeypatch.setenv("SCIENCE_COMMONS_ROOT", str(_commons_root(tmp_path, datasets=("uk-biobank",))))
@@ -163,5 +163,5 @@ def test_dataset_owner_collision_warns(
 
     results = list(check_commons_owner_collision(_ctx(tmp_path)))
 
-    assert [r.severity for r in results] == [Severity.WARN]
+    assert [r.severity for r in results] == [Severity.ERROR]
     assert "dataset:uk-biobank" in results[0].message
