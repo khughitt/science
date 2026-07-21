@@ -31,7 +31,7 @@ Before creating, naming, placing, splitting, or extending a skill.
 
 - A skill `name` is a **stable identifier**. Renaming is a breaking change (INDEX.md, the codex mirror, and every cross-reference) and is a migration-scoped operation, never casual.
 - `name` is kebab-case and encodes the **promised operation on its subject**, not the tool and not the archetype: `bulk-rnaseq-qa`, not `deseq2-guide`; `survival-and-hierarchical-models`, not `method-guide-survival`. The archetype lives in metadata, never in the name.
-- Pre-migration, a leaf name carries the **subject prefix of its placement directory** (`data-`, `data-source-`, `data-expression-`, `statistics-`, `pipeline-`, `research-`). This is a *transitional* convention: the migration reshapes subjects, so prefixes are expected to change then, not now.
+- A leaf name carries the **subject prefix of its placement directory**: `genomics-`, `transcriptomics-`, `proteomics-`, `functional-genomics-`, `ml-`, `data-management-`, `study-design-`, `epistemics-`, `literature-`, `literature-source-` (unchanged: `statistics-`, `pipeline-`). `bio/` and `research-package/` are navigational and do not themselves prefix names.
 
 ### Placement (pre-migration)
 
@@ -40,13 +40,13 @@ Before creating, naming, placing, splitting, or extending a skill.
 
 ### Router invariant and the hub anti-pattern
 
-This is stated as a **target invariant** the corpus is converging on: 4 of 7 current `SKILL.md` files are still **hubs** (route + teach). `research/SKILL.md` and `writing/SKILL.md` were extracted on 2026-07-20 and are now true routers; `data/genomics/SKILL.md` was already one. Every remaining hub is a migration extraction candidate (see the matrix). A document that routes *and* teaches is a hub; its teaching content is extracted into typed leaves before it is a true router.
+This is stated as a **target invariant** the corpus is converging on: 4 of 14 current `SKILL.md` files are still **hubs** (route + teach) — `data-management/SKILL.md`, `bio/transcriptomics/SKILL.md`, `pipelines/SKILL.md`, and `statistics/SKILL.md`. `writing/SKILL.md` was extracted on 2026-07-20 and is a true router; `bio/genomics/SKILL.md` was already one; `research/SKILL.md` dissolved in phase 3, its leaves moving into `literature/`, `epistemics/`, and `research-package/`, each with its own true router. Every remaining hub is a migration extraction candidate (see the matrix). A document that routes *and* teaches is a hub; its teaching content is extracted into typed leaves before it is a true router.
 
 ### Template-eligibility rule
 
 > Template eligibility considers both existing leaves and independently identifiable practices embedded in hubs, provided at least two concrete target extractions demonstrate the same content contract and success test.
 
-**Open trip-wire (recorded 2026-07-20).** `research/research-package-rendering.md` is classified `practice-guide` as an acknowledged force-fit: it is a software *implementation* guide (build-a-component), which none of the six archetypes model well, and its population of one is below the two-target threshold above. If a second build-a-component leaf appears, the pair becomes eligible and a seventh `implementation-guide` archetype must be reconsidered rather than force-fitted again.
+**Open trip-wire (recorded 2026-07-20).** `research-package/research-package-rendering.md` is classified `practice-guide` as an acknowledged force-fit: it is a software *implementation* guide (build-a-component), which none of the six archetypes model well, and its population of one is below the two-target threshold above. If a second build-a-component leaf appears, the pair becomes eligible and a seventh `implementation-guide` archetype must be reconsidered rather than force-fitted again.
 
 ## Quality criteria
 

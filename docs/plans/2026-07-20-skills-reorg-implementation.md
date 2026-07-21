@@ -1045,7 +1045,7 @@ Expected: exit 0, no findings.
 # here exit 2 fails the gate on its own. Historical records (docs/plans, docs/audits) are
 # point-in-time snapshots that we annotate rather than rewrite, so they are excluded, not leftovers.
 fail=0
-check() {  # $1 = regex, $2 = label
+check() {  # $1 = regex, $2 = label, $3 = optional literal substring; matching lines are dropped
     local out rc
     out=$(rg -n --no-heading -t md -t py \
         -g '!**/codex-skills/**' -g '!docs/plans/**' -g '!docs/audits/**' \
@@ -1053,7 +1053,9 @@ check() {  # $1 = regex, $2 = label
         "$1" .)
     rc=$?
     if [ "$rc" -eq 2 ]; then echo "ERROR rg failed on [$2]"; fail=1; return; fi
-    if [ "$rc" -eq 0 ]; then echo "LEFTOVER $2:"; echo "$out"; fail=1; fi
+    if [ "$rc" -ne 0 ]; then return; fi   # rc==1: clean no-match
+    if [ -n "${3:-}" ]; then out=$(printf '%s\n' "$out" | grep -vF "$3"); fi
+    if [ -n "$out" ]; then echo "LEFTOVER $2:"; echo "$out"; fail=1; fi
 }
 # OLD MAP-B leaf/router names (word-anchored) — zero LIVE hits
 for tok in data-genomics-somatic-mutation-qa data-genomics-copy-number-sv-qa \
@@ -1069,9 +1071,13 @@ for tok in data-genomics-somatic-mutation-qa data-genomics-copy-number-sv-qa \
   statistics-sensitivity-arbitration data-genomics data-expression; do
     check "(^|[^a-z-])$tok([^a-z-]|\$)" "name: $tok"
   done
-# research-methodology: ANCHOR to skill-reference forms only — bare token appears as prose
-# ("research-methodology entities" in meta/entities/questions/0038) and must NOT be flagged.
-check '`research-methodology`' "skill-ref: \`research-methodology\`"
+# research-methodology: flag POSITIVE companion references only. The bare token appears as prose
+# ("research-methodology entities" in meta/entities/questions/0038) — so anchor to the backticked
+# skill-reference form. A NEGATIVE "must-be-absent" assertion (`… not in text`) is a legitimate
+# regression guard verifying the old companion phrasing does NOT reappear in generated output — it is
+# not a leftover, so drop `not in` lines. A real positive "load `research-methodology`" reference (an
+# `in text` assert, a role-prompt Skills: list, a preamble instruction) has no `not in` and still fails.
+check '`research-methodology`' "skill-ref: \`research-methodology\` (positive)" 'not in'
 check 'skills/research/' "path: skills/research/"
 # old PATH forms (lint misses inline-code path mentions). The 6 modeling statistics leaves STAY, so
 # grep the 8 MOVED statistics leaf paths EXACTLY, never bare skills/statistics/.

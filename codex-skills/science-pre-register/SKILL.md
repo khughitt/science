@@ -16,7 +16,7 @@ Before executing any research command:
    - `research` → `doc/`, `specs/`, `tasks/`, `knowledge/`, `papers/`, `models/`, `data/`, `code/`
    - `software` → `doc/`, `specs/`, `tasks/`, `knowledge/`, plus native implementation roots such as `src/` and `tests/`
 2. Load role prompt: `.ai/prompts/<role>.md` if present, else `references/role-prompts/<role>.md`.
-3. Load the `science-research-methodology` and `science-scientific-writing` Codex skills. If native skill loading is unavailable, use `codex-skills/INDEX.md` to map canonical Science skill names to generated skill files and source paths.
+3. Load the `science-scientific-writing` Codex skill. For research methodology, read `../../skills/INDEX.md` and load the leaves relevant to the task (e.g. `literature-evaluation`, `literature-citation-discipline`, `epistemics-proposition-graph-reasoning`).
 4. Read project context from current entity roots:
    - `entities/questions/` for active research questions.
    - `entities/hypotheses/` for hypotheses.
@@ -240,7 +240,7 @@ A budget priced on an uncertified estimator is a consequence of an untested assu
 constraint — it can be wrong by orders of magnitude. If the budget must be committed first, mark it
 **CONDITIONAL** and name what invalidates it.
 
-See [`skills/statistics/estimator-certification.md`](../../skills/statistics/estimator-certification.md).
+See [`skills/study-design/estimator-certification.md`](../../skills/study-design/estimator-certification.md).
 
 #### Sub-axis: multi-analysis coverage
 
