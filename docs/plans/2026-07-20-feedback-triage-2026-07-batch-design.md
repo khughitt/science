@@ -3,7 +3,7 @@ title: Feedback Triage — 2026-07 batch (106 open items) — Design
 status: proposed
 created: '2026-07-20'
 updated: '2026-07-21'
-revision: v5 (step 5 Batch B remainder — freeze-status gate + evidence-line docs; generic lint already existed / general form rejected)
+revision: v6 (step 10 Batch E — anchor mismatch cross-check + body seeding + scaffold-aware empty_body + decision:fold + candidate-named YAML errors + agent search budget; 3 owner design decisions taken)
 ---
 
 # Feedback Triage — 2026-07 batch
@@ -457,6 +457,34 @@ manufactured a false "metadata routing failure" diagnosis and a wasted task
 (MM30 t877). `-17-003` and `-17-004` are explicitly filed as **design decisions,
 not patch requests** — treat them as such.
 
+> **Step 10 SHIPPED 2026-07-21, merged `--no-ff` local main `abb03608`.** All 7
+> entries closed. Grounded against current main (several reports predated code
+> that had evolved). Three owner design decisions were taken up front:
+> `-17-004` → new `decision: fold` value (option b); `-11-022`/`-17-011` → apply
+> **seeds** bodies from block material; `-17-003` → topics/themes stay
+> **non-citable** (doc-only). Fixes:
+>
+> - **`-17-009`** (priority, provenance corruption): `resolve-anchors` now
+>   cross-checks the anchor's stated title/year against the DOI/citekey-resolved
+>   record and reports a new **`mismatch`** status (never `resolved`) when they
+>   disagree — the valid-DOI-to-unrelated-paper shape no longer resolves
+>   silently. Conservative (fires only on zero-shared-token titles). Plus agent
+>   DOI/author self-verification (mit.1) and a command-doc "metadata is
+>   model-generated" note (mit.3).
+> - **`-11-022`/`-17-011`**: apply seeds the created entity's lead section with
+>   `question_or_claim` + per-lens rationale (non-hollow); the `gaps` empty_body
+>   check now compares the body against the **freshly-rendered scaffold for its
+>   kind** (the real scaffold mixes multi-line HTML comments with placeholder
+>   bullets, which the old line-scan let read as prose).
+> - **`-17-004`**: `decision: fold` — apply writes no entity, emits a hand-fold
+>   worklist item; `related_existing` names the target.
+> - **`-17-005`**: malformed-YAML errors name the `candidate_id` (scanned from
+>   the raw block even on parse failure) and the file-relative line.
+> - **`-17-002`**: `idea-lens-researcher` gains an explicit search budget.
+>
+> Closes E in full (`-11-022`, `-17-011`, `-17-009`, `-17-002`, `-17-003`,
+> `-17-004`, `-17-005`).
+
 ### F. Transient-artifact layer — 5 items
 `fb-2026-07-17-001`, `-10-022`, `-10-021`, `-16-006`, `-10-020`
 
@@ -830,7 +858,7 @@ closes when it does not close a whole batch.
 | 7 | **Batch A remainder** — overlay schema + promote builder derived from D1; federation-awareness pass; close `-11-021`. | A (rest) | D1 |
 | 8 | **Batch F** — implement the chosen home; `doc_kind`-keyed excludes; migration if the feedback store moves. | F | D2 |
 | 9 | **Batch M remainder** — post-mortem fourth trigger class; unreflected-failure surfacing in `next-steps`/`status`; positives → regression tests. **DONE** (branch `feedback-batch-m`). | M[`-18-011` ✅, `-11-029` ✅] | 2 |
-| 10 | **Batch E** — `resolve-anchors` metadata cross-check first (`-17-009` is provenance corruption), then the apply/gaps defects, then the two design questions. | E | — |
+| 10 | **Batch E** — `resolve-anchors` metadata cross-check first (`-17-009` is provenance corruption), then the apply/gaps defects, then the two design questions. **DONE 2026-07-21** (`abb03608`): `mismatch` status + agent verify; body seeding + scaffold-aware empty_body; `decision: fold`; candidate-named YAML errors; agent search budget; topics/themes stay non-citable (doc). | E ✅ | — |
 | 11 | **Batch C** — inquiry-subsystem design pass, including any `InquiryProfile` tightening deferred from step 1. | C | 1 |
 | 12 | **Batch D** — after auditing `status-vocab-certification`. | D | branch audit |
 | 13 | **Batch J remainder**, **G**, **H**, **I**. | J (rest), G, H, I | — |
