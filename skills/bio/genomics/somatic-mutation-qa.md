@@ -95,7 +95,7 @@ half the panels has half the maximum callable sample count.
 
 ## Output Package
 
-Generate a `datapackage.json` for this directory; see [`../frictionless.md`](../../data-management/frictionless.md).
+Generate a `datapackage.json` for this directory; see [`../../data-management/frictionless.md`](../../data-management/frictionless.md).
 
 ```
 data/processed/<cohort_id>/somatic_mutation_qa/
@@ -115,5 +115,5 @@ negative mutation frequencies.
 ## Companion Skills
 
 - [`mutational-signatures-and-selection.md`](mutational-signatures-and-selection.md) - downstream SBS signatures, TMB, dN/dS, dNdScv, and driver-ranking analyses.
-- [`../../statistics/power-floor-acknowledgement.md`](../../study-design/power-floor-acknowledgement.md) - low-power mutation-frequency contrasts.
-- [`../../statistics/sensitivity-arbitration.md`](../../study-design/sensitivity-arbitration.md) - hypermutator-included versus hypermutator-excluded arbitration.
+- [`../../study-design/power-floor-acknowledgement.md`](../../study-design/power-floor-acknowledgement.md) - low-power mutation-frequency contrasts.
+- [`../../study-design/sensitivity-arbitration.md`](../../study-design/sensitivity-arbitration.md) - hypermutator-included versus hypermutator-excluded arbitration.

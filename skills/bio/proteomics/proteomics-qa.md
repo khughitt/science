@@ -106,5 +106,5 @@ verdict downgrade caused by missingness or ambiguous rollup.
 
 - [`protein-sequence-structure-qa.md`](protein-sequence-structure-qa.md) - protein identity, UniProt/isoform mapping, homology, and sequence-derived labels.
 - [`frictionless.md`](../../data-management/frictionless.md) - data-package descriptors and validation conventions.
-- [`../statistics/bias-vs-variance-decomposition.md`](../../study-design/bias-vs-variance-decomposition.md) - separating preprocessing bias from estimator variance.
-- [`../statistics/sensitivity-arbitration.md`](../../study-design/sensitivity-arbitration.md) - pre-committed rules for imputation, rollup, and batch sensitivity disagreement.
+- [`../../study-design/bias-vs-variance-decomposition.md`](../../study-design/bias-vs-variance-decomposition.md) - separating preprocessing bias from estimator variance.
+- [`../../study-design/sensitivity-arbitration.md`](../../study-design/sensitivity-arbitration.md) - pre-committed rules for imputation, rollup, and batch sensitivity disagreement.

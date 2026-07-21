@@ -33,10 +33,11 @@ Before creating, naming, placing, splitting, or extending a skill.
 - `name` is kebab-case and encodes the **promised operation on its subject**, not the tool and not the archetype: `bulk-rnaseq-qa`, not `deseq2-guide`; `survival-and-hierarchical-models`, not `method-guide-survival`. The archetype lives in metadata, never in the name.
 - A leaf name carries the **subject prefix of its placement directory**: `genomics-`, `transcriptomics-`, `proteomics-`, `functional-genomics-`, `ml-`, `data-management-`, `study-design-`, `epistemics-`, `literature-`, `literature-source-` (unchanged: `statistics-`, `pipeline-`). `bio/` and `research-package/` are navigational and do not themselves prefix names.
 
-### Placement (pre-migration)
+### Placement
 
-- Place a new skill in the **existing directory whose subject matches**, even though several of those directories are known-incoherent — do **not** begin the reorg early or spin up a new top-level directory. `meta/` is the sole new directory this phase.
-- If no existing directory fits, that is a signal to record the placement question for the migration, not to invent structure now.
+- Place a new skill in the **existing subject directory whose subject matches** its primary artifact or decision. The phase-3 reorg reshaped the tree so subject directories are coherent; a new leaf inherits its directory's subject prefix (see *Naming* above).
+- Do **not** begin phase-4 corpus work (hub extraction, principle-trimming, or the `frictionless`/`mutational-signatures` splits) while authoring a single skill — that is migration work driven by the matrix, not per-skill work.
+- If no existing directory fits the subject, record a placement question for phase-4 curation rather than spinning up a new top-level directory ad hoc.
 
 ### Router invariant and the hub anti-pattern
 

@@ -93,7 +93,7 @@ Every preprocessing decision (filter threshold, transformation choice,
 batch handling, sample exclusion) should produce a row in a
 provenance sidecar that travels with the processed data. The format
 doesn't matter; that the trail exists matters. Frictionless Data
-Packages (see [`../SKILL.md`](../../data-management/SKILL.md)) are a clean substrate;
+Packages (see [`../../data-management/SKILL.md`](../../data-management/SKILL.md)) are a clean substrate;
 plain text logs work too.
 
 A single `cohort_audit.json` per cohort with:
@@ -161,8 +161,8 @@ preprocessing. The choice cascades.
 
 ## Companion Skills
 
-- [`../SKILL.md`](../../data-management/SKILL.md) — generic data-management conventions.
-- [`../frictionless.md`](../../data-management/frictionless.md) — Frictionless Data Package
+- [`../../data-management/SKILL.md`](../../data-management/SKILL.md) — generic data-management conventions.
+- [`../../data-management/frictionless.md`](../../data-management/frictionless.md) — Frictionless Data Package
   format for the cohort_audit / preprocessing-provenance sidecars.
 - [`../genomics/SKILL.md`](../genomics/SKILL.md) — mutation cohorts often paired with expression cohorts.
 - [`../../statistics/SKILL.md`](../../statistics/SKILL.md) — statistical

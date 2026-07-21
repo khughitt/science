@@ -124,4 +124,4 @@ State:
 
 - [`embeddings-manifold-qa.md`](../ml/embeddings-manifold-qa.md) - manifold and representation checks for CRISPR, LINCS, and dependency embeddings.
 - [`transcriptomics/scrna-qa.md`](transcriptomics/scrna-qa.md) - single-cell perturbation and pseudobulk QA.
-- [`../statistics/sensitivity-arbitration.md`](../study-design/sensitivity-arbitration.md) - verdict rules when toxicity, batch, or copy-number sensitivities disagree.
+- [`../study-design/sensitivity-arbitration.md`](../study-design/sensitivity-arbitration.md) - verdict rules when toxicity, batch, or copy-number sensitivities disagree.
