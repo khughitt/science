@@ -512,6 +512,11 @@ def validate_cmd(
             click.echo(f"checked {overlay_report.checked} overlays")
             for err in overlay_report.errors:
                 click.echo(f"  error: {err}", err=True)
+            for warning in overlay_report.warnings:
+                click.echo(
+                    f"  warning: {warning.canonical_id} ({warning.field}): {warning.message}",
+                    err=True,
+                )
 
         emit(
             output_format=effective_format,
@@ -524,6 +529,16 @@ def validate_cmd(
                         "message": str(e.cause),
                     }
                     for e in overlay_report.errors
+                ],
+                "warnings": [
+                    {
+                        "overlay_path": str(w.overlay_path),
+                        "canonical_id": w.canonical_id,
+                        "field": w.field,
+                        "reason": w.reason,
+                        "message": w.message,
+                    }
+                    for w in overlay_report.warnings
                 ],
             },
             render_text=_render_overlay,

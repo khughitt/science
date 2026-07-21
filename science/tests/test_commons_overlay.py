@@ -350,6 +350,102 @@ def _seed_commons_and_config(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, *,
     return commons_root
 
 
+def _dataset_merge_policy():
+    from science_model.entity_schema import parse_profile, read_merge_policy
+
+    return read_merge_policy(parse_profile("science-entity-base/2.0+dataset/2.0"))
+
+
+def test_compose_frontmatter_overlay_tier_overrides_canonical() -> None:
+    """fb-2026-07-18-005: a consuming project's overlay tier shadows the canonical
+    tier for its own view, even though the dataset mixin declares tier as REPLACE."""
+    from science_model.entity_schema import MergePolicy
+
+    from science_tool.commons.overlay import compose_frontmatter
+
+    policy = _dataset_merge_policy()
+    assert policy["tier"] == MergePolicy.REPLACE  # canonical declares it replace
+    composition = compose_frontmatter(
+        {"id": "dataset:x", "tier": "track"},
+        {"id": "dataset:x", "overlay_of": "dataset:x", "tier": "use-now", "tier_rationale": "in active use here"},
+        policy,
+        canonical_id="dataset:x",
+    )
+    assert composition.conflicts == ()
+    assert composition.frontmatter["tier"] == "use-now"
+    assert composition.frontmatter["tier_rationale"] == "in active use here"
+    assert composition.field_sources["tier"] == "overlay"
+
+
+def test_resolve_field_override_overlay_wins_over_owner() -> None:
+    from science_model.entity_schema import MergePolicy
+
+    from science_tool.commons.overlay import FieldProposal, resolve_field
+
+    outcome = resolve_field(
+        MergePolicy.OVERRIDE,
+        "track",
+        (FieldProposal(value="use-now", contests=True),),
+    )
+    assert outcome.value == "use-now"
+    assert outcome.changed is True
+    assert outcome.contributed == (0,)
+    assert outcome.conflicting == ()
+
+
+def test_resolve_field_override_absent_overlay_keeps_canonical() -> None:
+    from science_model.entity_schema import MergePolicy
+
+    from science_tool.commons.overlay import resolve_field
+
+    outcome = resolve_field(MergePolicy.OVERRIDE, "track", ())
+    assert outcome.value == "track"
+    assert outcome.changed is False
+
+
+def test_override_warnings_flags_divergence_without_rationale() -> None:
+    from science_tool.commons.overlay import override_divergence_warnings
+
+    warnings = override_divergence_warnings(
+        {"tier": "track"},
+        {"tier": "use-now"},
+    )
+    assert len(warnings) == 1
+    assert warnings[0].field == "tier"
+    assert warnings[0].reason == "divergent-without-rationale"
+
+
+def test_override_warnings_quiet_when_rationale_present() -> None:
+    from science_tool.commons.overlay import override_divergence_warnings
+
+    warnings = override_divergence_warnings(
+        {"tier": "track"},
+        {"tier": "use-now", "tier_rationale": "in active use here"},
+    )
+    assert warnings == []
+
+
+def test_override_warnings_flags_redundant_match() -> None:
+    from science_tool.commons.overlay import override_divergence_warnings
+
+    warnings = override_divergence_warnings(
+        {"tier": "track"},
+        {"tier": "track"},
+    )
+    assert len(warnings) == 1
+    assert warnings[0].reason == "redundant"
+
+
+def test_override_warnings_silent_when_overlay_omits_field() -> None:
+    from science_tool.commons.overlay import override_divergence_warnings
+
+    warnings = override_divergence_warnings(
+        {"tier": "track"},
+        {"relevance": "high"},
+    )
+    assert warnings == []
+
+
 def test_resolve_entity_no_project_is_canonical_only(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     from science_tool.commons.overlay import resolve_entity
 
@@ -427,6 +523,34 @@ def test_validate_project_overlays_reports_schema_and_dangling_errors(
     assert len(report.errors) == 2
     failed_ids = sorted(e.canonical_id or "" for e in report.errors)
     assert failed_ids == ["paper:Adams2025", "topic:nonexistent-topic"]
+
+
+def test_validate_project_overlays_warns_on_divergent_tier_without_rationale(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A dataset overlay whose tier diverges from the canonical without a tier_rationale
+    is a silent divergence (fb-2026-07-18-005): validate surfaces it as a WARNING, not an
+    error (the merge still succeeds)."""
+    from science_tool.commons.overlay import validate_project_overlays
+
+    project_root = tmp_path / "proj-tier"
+    overlay_dir = project_root / "overlays" / "datasets"
+    overlay_dir.mkdir(parents=True)
+    (overlay_dir / "rnaseq-example.md").write_text(
+        "---\n"
+        'id: "dataset:rnaseq-example"\n'
+        'overlay_of: "dataset:rnaseq-example"\n'
+        'tier: "track"\n'  # canonical is use-now
+        "---\n\nlocal note\n",
+        encoding="utf-8",
+    )
+    _seed_commons_and_config(tmp_path, monkeypatch, projects={"proj-tier": project_root})
+    report = validate_project_overlays("proj-tier")
+    assert report.errors == []
+    assert len(report.warnings) == 1
+    assert report.warnings[0].canonical_id == "dataset:rnaseq-example"
+    assert report.warnings[0].field == "tier"
+    assert report.warnings[0].reason == "divergent-without-rationale"
 
 
 def test_validate_project_overlays_missing_dir_raises(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:

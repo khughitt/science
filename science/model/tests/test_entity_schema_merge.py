@@ -28,12 +28,41 @@ def test_a_mixin_that_removes_a_field_reads_as_forbidden() -> None:
     assert policy["title"] == MergePolicy.REPLACE
 
 
+def test_paper_kind_is_project_only() -> None:
+    # paper_kind is project bookkeeping (research-papers / review-books set it),
+    # meaningless commons-side (fb-2026-07-11-001). Like status/created/updated it
+    # is modeled on the paper mixin but classified project_only so promote never
+    # writes it to the canonical.
+    policy = read_merge_policy(parse_profile("science-entity-base/2.0+paper/2.0"))
+    assert policy["paper_kind"] == MergePolicy.PROJECT_ONLY
+
+
 def test_canonical_only_dataset_fields_are_forbidden() -> None:
     # Required-from-canonical fields (derivation, access, datapackage,
     # accessions) carry merge: forbidden so overlays cannot override them.
     policy = read_merge_policy(parse_profile("science-entity-base/1.0+dataset/1.0"))
     assert policy["derivation"] == MergePolicy.FORBIDDEN
     assert policy["datapackage"] == MergePolicy.FORBIDDEN
+
+
+def test_overlay_tier_is_override() -> None:
+    # tier is canonical-with-override (fb-2026-07-18-005, D1): a consuming project may
+    # record its own tier assessment on the overlay, shadowing the canonical value for
+    # its own graph. tier + tier_rationale carry the new `override` policy.
+    from science_model.entity_schema.merge import read_overlay_merge_policy
+
+    policy = read_overlay_merge_policy()
+    assert policy["tier"] == MergePolicy.OVERRIDE
+    assert policy["tier_rationale"] == MergePolicy.OVERRIDE
+
+
+def test_overlay_permits_project_only_paper_kind() -> None:
+    # A consuming project may carry its own paper_kind on the overlay (fb-2026-07-11-001);
+    # the overlay schema no longer forbids it, and it stays project_only (never promoted).
+    from science_model.entity_schema.merge import read_overlay_merge_policy
+
+    policy = read_overlay_merge_policy()
+    assert policy["paper_kind"] == MergePolicy.PROJECT_ONLY
 
 
 def test_overlay_specific_fields_are_project_only() -> None:

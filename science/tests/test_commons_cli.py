@@ -929,6 +929,51 @@ def test_validate_project_broken_exits_1(
     assert "error" in result.output
 
 
+def test_validate_project_surfaces_override_warning(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A divergent-tier overlay without a rationale is a WARNING, not an error:
+    `commons validate --project` prints it and still exits 0 (fb-2026-07-18-005)."""
+    import shutil
+
+    import yaml
+
+    from science_tool.commons.adapter import CommonsEntityAdapter
+    from science_tool.commons.registry import RegistryBuilder
+
+    src = Path(__file__).parent / "fixtures" / "commons" / "valid"
+    root = tmp_path / "commons"
+    shutil.copytree(src, root)
+    RegistryBuilder(root, CommonsEntityAdapter(root)).rebuild()
+
+    project_root = tmp_path / "proj-tier"
+    overlay_dir = project_root / "overlays" / "datasets"
+    overlay_dir.mkdir(parents=True)
+    (overlay_dir / "rnaseq-example.md").write_text(
+        "---\n"
+        'id: "dataset:rnaseq-example"\n'
+        'overlay_of: "dataset:rnaseq-example"\n'
+        'tier: "track"\n'
+        "---\n\nlocal note\n",
+        encoding="utf-8",
+    )
+    cfg_dir = tmp_path / "cfg"
+    cfg_dir.mkdir()
+    (cfg_dir / "config.yaml").write_text(
+        yaml.dump({"projects": [{"path": str(project_root), "name": "proj-tier", "registered": "2026-05-14"}]}),
+        encoding="utf-8",
+    )
+    monkeypatch.setenv("SCIENCE_COMMONS_ROOT", str(root))
+    monkeypatch.setenv("SCIENCE_CONFIG_DIR", str(cfg_dir))
+    monkeypatch.setenv("SCIENCE_COMMONS_QUIET_STALE", "1")
+
+    runner = CliRunner()
+    result = runner.invoke(commons_group, ["validate", "--project", "proj-tier"])
+    assert result.exit_code == 0, result.output
+    assert "warning" in result.output.lower()
+    assert "tier" in result.output
+
+
 def test_validate_project_with_type_is_usage_error(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:

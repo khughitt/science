@@ -113,6 +113,15 @@ def test_classify_entity_splits_canonical_vs_project_only() -> None:
     assert "Project Use" in proj_b
 
 
+def test_classify_entity_routes_paper_kind_to_project_only() -> None:
+    """paper_kind is project bookkeeping (fb-2026-07-11-001): promote must route it
+    to the overlay/project-only bucket, never the canonical."""
+    fm = {"id": "paper:X", "kind": "paper", "title": "T", "paper_kind": "review"}
+    can_f, proj_f, _, _ = _classify_entity(fm, "", _PAPER_POLICY, _PAPER_SECTIONS)
+    assert "paper_kind" not in can_f
+    assert proj_f["paper_kind"] == "review"
+
+
 def test_classify_entity_drops_id_even_on_case_divergent_input() -> None:
     fm_upper = {"id": "paper:Adams2025", "kind": "paper", "title": "T"}
     fm_lower = {"id": "paper:adams2025", "kind": "paper", "title": "T"}

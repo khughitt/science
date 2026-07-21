@@ -116,13 +116,13 @@ def test_paper_template_fields_are_all_routable():
     assert emitted <= routable, f"paper template emits unroutable fields: {sorted(emitted - routable)}"
 
 
-def test_mixin_paper_2_0_declares_paper_kind_canonical():
-    """paper_kind (review / survey / synthesis / ...) describes the document itself,
-    so it is canonical -- the same in every project that cites the paper -- rather
-    than a per-project overlay field."""
+def test_mixin_paper_2_0_declares_paper_kind_project_only():
+    """paper_kind (review / survey / synthesis / ...) is project bookkeeping set by
+    research-papers / review-books, not shared metadata: fb-2026-07-11-001 ruling
+    (D1). Like status/created/updated it is modeled on the paper mixin but classified
+    project_only so promote never writes it to the canonical."""
     profile = parse_profile("science-entity-base/1.0+paper/2.0")
-    assert read_merge_policy(profile)["paper_kind"] is MergePolicy.REPLACE
-    assert "paper_kind" not in read_overlay_merge_policy()
+    assert read_merge_policy(profile)["paper_kind"] is MergePolicy.PROJECT_ONLY
 
 
 def test_mixin_paper_2_0_bibkey_regex_permits_hyphens():
