@@ -78,17 +78,40 @@ Mirror `study-design/SKILL.md`:
 2. Title + a one-sentence router doctrine line
    (*"A router carries no methodology; teaching content belongs in a typed
    leaf."*), consistent with `study-design/SKILL.md:9`.
-3. **Routing trigger** — load when a finite-sample model is being *fit,
-   compared, or reviewed* (as distinct from a rigor commitment / verdict
-   certification, which routes to `study-design`).
-4. **Scope boundary** — covers model fitting/comparison across the six modeling
-   families; **excludes** pre-registration, replicate/power justification,
-   estimator certification, sensitivity arbitration, causal identification, and
-   bias/variance reasoning (see `../study-design/SKILL.md`). This is the exact
-   mirror of `study-design/SKILL.md:16–20`.
+3. **Routing trigger** — load when a finite-sample statistical model is being
+   *designed, built, constructed, fit, compared, analyzed, or reviewed*. The
+   verb set is taken from the six leaf descriptions (which say "designing",
+   "building", "constructing or fitting", "analyzing", "comparing",
+   "reviewing") — it must not be narrower than what the leaves promise.
+4. **Scope boundary — composable axes, not mutually exclusive.** `statistics`
+   owns the *model's structure, fit, and comparison*; `study-design` owns the
+   *rigor wrapper* (pre-registration, replicate/power justification, estimator
+   certification, sensitivity arbitration, causal identification,
+   bias/variance reasoning). The two routers are composable axes: many tasks
+   load **both** — e.g. pre-registering a Cox model loads `statistics`
+   (`survival-and-hierarchical-models`) for the model family *and*
+   `study-design` (`prereg-*`, `power-floor-acknowledgement`) for the
+   commitment. The boundary states which router carries the *methodology* for
+   each concern, not that a task may touch only one. This is the exact mirror
+   of `study-design/SKILL.md:16–20` ("Excludes model fitting (see
+   `../statistics/SKILL.md`)"), read as an ownership boundary, not an exclusion
+   of composition.
 5. **Leaves** — a table with `Leaf | Load when | Do not load when` for the six
    modeling leaves, matching `study-design/SKILL.md`'s three-column form. The
-   six folded principles supply the `Load when` / `Do not load when` content.
+   `Load when` cells are drawn from the leaf **descriptions** (the public
+   trigger), enriched by the folded principle; the `Do not load when` cells are
+   authored as genuine negative applicability criteria (a principle carries
+   methodology, not a negative criterion, so these are written, not copied).
+   The accepted rows are:
+
+   | Leaf | Load when | Do not load when |
+   |---|---|---|
+   | `survival-and-hierarchical-models.md` | designing or reviewing Cox / Weibull / AFT / frailty / mixed-effects / Bayesian-hierarchical / multi-dataset models, or when repeated cells / genes / samples inside a donor or study are not independent observations | no grouping, censoring, or repeated-measure structure — a single-level i.i.d. model suffices |
+   | `compositional-data.md` | analyzing proportions, fractions, cell-type composition, microbiome relative abundance, clone fractions, topic mixtures, or deconvolution outputs — anything constrained to sum to one | features are unconstrained counts or continuous measurements |
+   | `time-series-and-longitudinal-models.md` | designing or reviewing repeated-measure, wearable, sensor, EMA, actigraphy, symptom-diary, cross-lag, or longitudinal analyses needing explicit time origin, cadence, lag, and within-unit dependence | measurements are cross-sectional (one row per unit, no time axis) |
+   | `likelihood-model-comparison.md` | comparing parametric models by likelihood — AIC / BIC / LRT, nested vs non-nested, identifiability and rare-event precision audits, bootstrap CIs, or Bayesian out-of-sample comparison (PSIS-LOO / ELPD / stacking) | fitting a single model with no competing model to rank |
+   | `population-genetics-likelihood.md` | constructing or fitting Wright-Fisher / Moran / binomial-segregation+selection likelihoods and testing selection against a neutral null | no allele-frequency, segregation, or selection-vs-drift question |
+   | `bayesian-workflow.md` | building, fitting, or reviewing a Bayesian / probabilistic model — priors, MCMC, convergence, posterior-predictive / calibration, prior sensitivity, Bayesian model comparison | a frequentist point estimate or test suffices and no posterior is needed |
 6. **Decision / compose order** — leaves are independent; several may apply.
 7. **Parent & neighbors** — parent `../INDEX.md`; neighboring router
    `../study-design/SKILL.md` (currently statistics does **not** list
@@ -107,21 +130,40 @@ already covered by `study-design/SKILL.md`.
 ### Description reconciliation
 
 The current `statistics` `description` is a keyword list dominated by
-study-design terms (bootstrap, permutation, Monte Carlo, downsampling, MCMC,
-power, bias-vs-variance, sensitivity arbitration, defensive instrumentation,
-pre-registered). For a router those keywords misroute discovery **to**
-statistics.
+study-design terms. For a router those keywords misroute discovery **to**
+statistics. Every keyword gets an explicit destination — no term is silently
+dropped, and terms genuinely shared by both axes stay in **both** descriptions:
 
-- Trim `statistics` `description` to the six modeling leaves (survival /
-  hierarchical / mixed-effects, compositional, time-series/longitudinal,
-  likelihood-model comparison, population-genetics likelihood, Bayesian
-  workflow).
-- **Migrate** the pre-registration / power / sensitivity / bias-variance /
-  estimator-certification / causal-identification keywords into
-  `study-design/SKILL.md`'s `description`, so routing coverage for those terms
-  moves to the hub that owns them rather than being dropped. This is a
-  one-line edit to a single frontmatter field; the study-design router body is
-  untouched.
+| Old keyword | Destination | Rationale |
+|---|---|---|
+| `bootstrap` | **both** | statistics (`likelihood-model-comparison`: bootstrap CIs) *and* study-design (`replicate-count-justification`: bootstrap replicate counts) |
+| `MCMC` | **statistics** | belongs to `bayesian-workflow` (MCMC sampling / convergence) |
+| `permutation` | **study-design** | `replicate-count-justification` (permutation-count justification) |
+| `Monte Carlo` | **study-design** | `replicate-count-justification` (Monte Carlo SE / minimum-attainable-p) |
+| `downsampling` | **study-design** | `replicate-count-justification` (resampling-count choice) |
+| `power` | **study-design** | `power-floor-acknowledgement` |
+| `bias-vs-variance` | **study-design** | `bias-vs-variance-decomposition` |
+| `sensitivity arbitration` | **study-design** | `sensitivity-arbitration` |
+| `defensive instrumentation` | **study-design** | `prereg-defensive-instrumentation` |
+| `pre-registering` / `pre-registered` / `round-number default` | **study-design** | `prereg-*`, `replicate-count-justification` |
+
+Resulting frontmatter edits (both are single-field `description` edits; neither
+router **body** is touched beyond statistics' own rewrite):
+
+- **`statistics` `description`** → the six modeling leaves plus the two retained
+  shared terms (`MCMC`, `bootstrap`). Draft: *"Use when designing, building,
+  fitting, comparing, or reviewing a finite-sample statistical model —
+  survival / hierarchical / mixed-effects, compositional, time-series /
+  longitudinal, likelihood model comparison (AIC/BIC/LRT, bootstrap CIs),
+  population-genetics likelihood, or Bayesian workflow (priors, MCMC,
+  convergence, calibration)."*
+- **`study-design` `description`** → gains the migrated terms. Draft: *"Use when
+  analysis rigor must be pre-committed or a numeric verdict certified /
+  arbitrated — pre-registration, replicate / permutation / bootstrap /
+  Monte-Carlo / downsampling count justification, power-floor acknowledgement,
+  bias-vs-variance decomposition, sensitivity arbitration, defensive
+  instrumentation, estimator certification, or causal identification. Routes to
+  the discipline leaves."*
 
 ## Safety / honesty checks (built into the plan)
 
@@ -146,7 +188,16 @@ statistics.
    the hub list (leaving `data-management/SKILL.md`, `bio/transcriptomics/SKILL.md`,
    `pipelines/SKILL.md`). Note: `pipelines/SKILL.md` remains listed there and is
    a separate phase-4 slice — this design does not touch it.
-2. **Regenerate the codex mirror.** Any `skills/` edit (including `skills/meta/`)
+2. **`skills/INDEX.md:107`** — the statistics descriptive line still reads
+   "load when finite-sample quantitative interpretation is in scope", which
+   keeps routing power / estimator-certification / sensitivity work to
+   statistics. Narrow it to the modeling scope (e.g. "load when designing,
+   fitting, or comparing a finite-sample statistical model"). Line 108
+   (study-design: "load when rigor must be pre-committed or a numeric verdict
+   certified/arbitrated") already matches the boundary and is left as-is. The
+   machine name→path entries (INDEX.md:46, :56, and the per-leaf lines) are
+   unaffected — no leaf is renamed or moved.
+3. **Regenerate the codex mirror.** Any `skills/` edit (including `skills/meta/`)
    requires regenerating `codex-skills/` or
    `test_committed_codex_skills_match_fresh_generation` fails.
 
