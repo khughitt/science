@@ -106,7 +106,7 @@ Mirror `study-design/SKILL.md`:
 
    | Leaf | Load when | Do not load when |
    |---|---|---|
-   | `survival-and-hierarchical-models.md` | designing or reviewing Cox / Weibull / AFT / frailty / mixed-effects / Bayesian-hierarchical / multi-dataset models, or when repeated cells / genes / samples inside a donor or study are not independent observations | no grouping, censoring, or repeated-measure structure — a single-level i.i.d. model suffices |
+   | `survival-and-hierarchical-models.md` | designing or reviewing Cox / Weibull / AFT / frailty / mixed-effects / Bayesian-hierarchical / multi-dataset models, or when repeated cells / genes / samples inside a donor or study are not independent observations | the outcome is not time-to-event and there is no grouping, censoring, hierarchical, or repeated-measure structure — a single-level i.i.d. model suffices |
    | `compositional-data.md` | analyzing proportions, fractions, cell-type composition, microbiome relative abundance, clone fractions, topic mixtures, or deconvolution outputs — anything constrained to sum to one | features are unconstrained counts or continuous measurements |
    | `time-series-and-longitudinal-models.md` | designing or reviewing repeated-measure, wearable, sensor, EMA, actigraphy, symptom-diary, cross-lag, or longitudinal analyses needing explicit time origin, cadence, lag, and within-unit dependence | measurements are cross-sectional (one row per unit, no time axis) |
    | `likelihood-model-comparison.md` | comparing parametric models by likelihood — AIC / BIC / LRT, nested vs non-nested, identifiability and rare-event precision audits, bootstrap CIs, or Bayesian out-of-sample comparison (PSIS-LOO / ELPD / stacking) | fitting a single model with no competing model to rank |
@@ -160,10 +160,10 @@ router **body** is touched beyond statistics' own rewrite):
 - **`study-design` `description`** → gains the migrated terms. Draft: *"Use when
   analysis rigor must be pre-committed or a numeric verdict certified /
   arbitrated — pre-registration, replicate / permutation / bootstrap /
-  Monte-Carlo / downsampling count justification, power-floor acknowledgement,
-  bias-vs-variance decomposition, sensitivity arbitration, defensive
-  instrumentation, estimator certification, or causal identification. Routes to
-  the discipline leaves."*
+  Monte-Carlo / downsampling count justification (over a round-number default),
+  power-floor acknowledgement, bias-vs-variance decomposition, sensitivity
+  arbitration, defensive instrumentation, estimator certification, or causal
+  identification. Routes to the discipline leaves."*
 
 ## Safety / honesty checks (built into the plan)
 

@@ -38,25 +38,34 @@
 
 Run this and confirm every line prints a non-empty match (each foreign principle's thesis is present in its target leaf). If any is empty, STOP and report — do not delete that principle.
 
+Each grep targets the principle's **thesis** (its relationship or decision
+rule), not a generic topic word — a leaf that merely mentioned "bias" must not
+pass the bias-vs-variance check. Phrases below were confirmed ≥1 against the
+current leaves.
+
 ```bash
-cd /mnt/ssd/Dropbox/science/.worktrees/skills-phase4/skills/study-design
-echo "1 replicate-count:";        rg -c -i 'precision|monte carlo|pilot|replicate'        replicate-count-justification.md
-echo "2 bias-vs-variance:";       rg -c -i 'bias|variance'                                 bias-vs-variance-decomposition.md
-echo "3 sensitivity:";            rg -c -i 'sensitivity|veto|caveat|override'              sensitivity-arbitration.md
-echo "4 power-floor:";            rg -c -i 'power|detectable|floor'                         power-floor-acknowledgement.md
-echo "5 prereg-amendment:";       rg -c -i 'amendment|inherit'                             prereg-amendment-vs-fresh.md
-echo "6 defensive-instr:";        rg -c -i 'universe lock|tripwire|candidate|familywise'   prereg-defensive-instrumentation.md
-echo "7 estimator-cert:";         rg -c -i 'converged|well-posed|forward-map|calibrat'     estimator-certification.md
-echo "8 causal-id:";              rg -c -i 'dag|identification|m-bias|collider'             causal-identification.md
+cd ~/d/science/.worktrees/skills-phase4/skills/study-design
+echo "1 replicate-count (justify count by precision, not convention):"; rg -c -i 'monte carlo se|minimum.attainable|precision you need|pre-committed decision rule' replicate-count-justification.md
+echo "2 bias-vs-variance (replicates shrink variance, not bias):";      rg -c -i 'more replicates reduce variance|which error term the compute|do not remove estimator bias' bias-vs-variance-decomposition.md
+echo "3 sensitivity (which flags caveat vs override the verdict):";     rg -c -i 'caveat the verdict|which flags|override' sensitivity-arbitration.md
+echo "4 power-floor (state the minimum detectable effect):";            rg -c -i 'minimum (effect|detectable)|detectable effect|evidence of absence' power-floor-acknowledgement.md
+echo "5 amendment (an amendment inherits, is not a fresh pre-reg):";    rg -c -i 'amendment.*inherit|inherit.*(parent|amendment)|not a new pre-reg' prereg-amendment-vs-fresh.md
+echo "6 defensive (universe/candidate/tripwire/decision-table locks):"; rg -c -i 'universe lock|candidate-snapshot|tripwire|decision table' prereg-defensive-instrumentation.md
+echo "7 estimator-cert (a converged fit is a claim, not evidence):";    rg -c -i 'claim the optim|about itself|well-posed|forward-map' estimator-certification.md
+echo "8 causal-id (missing edges / M-bias / collider / not identified):"; rg -c -i 'missing edge|m-bias|collider|not identified' causal-identification.md
 ```
 
-Expected: every count ≥ 1.
+Expected: every count ≥ 1 (baseline: 4, 2, 2, 3, 3, 12, 5, 7). If any is 0, STOP and report — the thesis is not in the leaf and the principle must not be deleted.
 
 - [ ] **Step 2: Confirm no anchor deep-links into the sections being removed.**
 
+The design doc intentionally names `statistics/SKILL.md#principles` in prose, so
+exclude `docs/plans/` (and the generated mirror); a real inbound deep-link would
+be a `skills/` file.
+
 ```bash
-cd /mnt/ssd/Dropbox/science/.worktrees/skills-phase4
-rg -n --no-heading -g '!**/codex-skills/**' 'statistics/SKILL\.md#' . ; echo "rc=$? (rc=1 = no matches = good)"
+cd ~/d/science/.worktrees/skills-phase4
+rg -n --no-heading -g '!docs/plans/**' -g '!**/codex-skills/**' 'statistics/SKILL\.md#' . ; echo "rc=$? (rc=1 = no matches = good)"
 ```
 
 Expected: no output, `rc=1`.
@@ -97,7 +106,7 @@ commitment.
 
 | Leaf | Load when | Do not load when |
 |---|---|---|
-| `survival-and-hierarchical-models.md` | designing or reviewing Cox / Weibull / AFT / frailty / mixed-effects / Bayesian-hierarchical / multi-dataset models, or when repeated cells / genes / samples inside a donor or study are not independent observations | no grouping, censoring, or repeated-measure structure — a single-level i.i.d. model suffices |
+| `survival-and-hierarchical-models.md` | designing or reviewing Cox / Weibull / AFT / frailty / mixed-effects / Bayesian-hierarchical / multi-dataset models, or when repeated cells / genes / samples inside a donor or study are not independent observations | the outcome is not time-to-event and there is no grouping, censoring, hierarchical, or repeated-measure structure — a single-level i.i.d. model suffices |
 | `compositional-data.md` | analyzing proportions, fractions, cell-type composition, microbiome relative abundance, clone fractions, topic mixtures, or deconvolution outputs — anything constrained to sum to one | features are unconstrained counts or continuous measurements |
 | `time-series-and-longitudinal-models.md` | designing or reviewing repeated-measure, wearable, sensor, EMA, actigraphy, symptom-diary, cross-lag, or longitudinal analyses needing explicit time origin, cadence, lag, and within-unit dependence | measurements are cross-sectional (one row per unit, no time axis) |
 | `likelihood-model-comparison.md` | comparing parametric models by likelihood — AIC / BIC / LRT, nested vs non-nested, identifiability and rare-event precision audits, bootstrap CIs, or Bayesian out-of-sample comparison (PSIS-LOO / ELPD / stacking) | fitting a single model with no competing model to rank |
@@ -130,7 +139,7 @@ router.
 - [ ] **Step 4: Structural assertions — no methodology remains, links resolve.**
 
 ```bash
-cd /mnt/ssd/Dropbox/science/.worktrees/skills-phase4
+cd ~/d/science/.worktrees/skills-phase4
 # no numbered Principles list and no When-to-invoke block:
 rg -n '^## Principles|^## When to invoke|^[0-9]+\. ' skills/statistics/SKILL.md ; echo "rc=$? (rc=1 = clean = good)"
 # lint passes:
@@ -142,7 +151,7 @@ Expected: first grep prints nothing (`rc=1`); lint `rc=0`.
 - [ ] **Step 5: Commit.**
 
 ```bash
-cd /mnt/ssd/Dropbox/science/.worktrees/skills-phase4
+cd ~/d/science/.worktrees/skills-phase4
 git add skills/statistics/SKILL.md
 git commit -m "refactor(skills): statistics SKILL.md is now a pure router
 
@@ -170,7 +179,7 @@ Note: `test_committed_codex_skills_match_fresh_generation` is now RED (mirror no
 Replace the `description:` line in the frontmatter with exactly:
 
 ```
-description: Use when analysis rigor must be pre-committed or a numeric verdict certified / arbitrated — pre-registration, replicate / permutation / bootstrap / Monte-Carlo / downsampling count justification, power-floor acknowledgement, bias-vs-variance decomposition, sensitivity arbitration, defensive instrumentation, estimator certification, or causal identification. Routes to the discipline leaves.
+description: Use when analysis rigor must be pre-committed or a numeric verdict certified / arbitrated — pre-registration, replicate / permutation / bootstrap / Monte-Carlo / downsampling count justification (over a round-number default), power-floor acknowledgement, bias-vs-variance decomposition, sensitivity arbitration, defensive instrumentation, estimator certification, or causal identification. Routes to the discipline leaves.
 ```
 
 Leave every other line of `study-design/SKILL.md` unchanged.
@@ -193,22 +202,38 @@ Leave the study-design descriptive line (currently line 108) and every machine `
 
 - [ ] **Step 3: Verify the keyword map holds (no term dropped, shared terms in both).**
 
+The presence/absence assertions target the **`description` frontmatter line
+only** (the router *body* legitimately names "pre-registration" and "sensitivity
+arbitration" in its scope boundary — a whole-file grep would false-positive), and
+each term is checked **separately** (alternation + `head -1` would prove only one
+term exists).
+
 ```bash
-cd /mnt/ssd/Dropbox/science/.worktrees/skills-phase4
-echo "--- statistics keeps MCMC + bootstrap, drops study-design-only terms ---"
-rg -i 'mcmc|bootstrap' skills/statistics/SKILL.md | head -1
-rg -i 'permutation|downsampling|sensitivity arbitration|defensive instrumentation|pre-regist' skills/statistics/SKILL.md ; echo "rc=$? (rc=1 = correctly absent)"
-echo "--- study-design gains the migrated terms ---"
-rg -i 'permutation|monte-carlo|downsampling|power-floor|bias-vs-variance|sensitivity arbitration|defensive instrumentation|estimator certification|causal identification' skills/study-design/SKILL.md | head -1
+cd ~/d/science/.worktrees/skills-phase4
+stats_desc=$(rg -m1 '^description:' skills/statistics/SKILL.md)
+sd_desc=$(rg -m1 '^description:' skills/study-design/SKILL.md)
+
+echo "--- statistics description KEEPS the shared terms ---"
+for t in 'MCMC' 'bootstrap'; do
+  printf '  %-24s ' "$t:"; printf '%s' "$stats_desc" | rg -qi -- "$t" && echo PRESENT || echo "MISSING (defect)"
+done
+echo "--- statistics description DROPS the study-design-only terms ---"
+for t in 'permutation' 'downsampling' 'monte' 'power' 'sensitivity' 'defensive' 'pre-regist' 'estimator' 'causal' 'bias'; do
+  printf '  %-24s ' "$t:"; printf '%s' "$stats_desc" | rg -qi -- "$t" && echo "LEAKED (defect)" || echo absent
+done
+echo "--- study-design description GAINS every migrated term ---"
+for t in 'permutation' 'bootstrap' 'monte-carlo' 'downsampling' 'power-floor' 'bias-vs-variance' 'sensitivity arbitration' 'defensive instrumentation' 'estimator certification' 'causal identification' 'round-number default'; do
+  printf '  %-28s ' "$t:"; printf '%s' "$sd_desc" | rg -qi -- "$t" && echo PRESENT || echo "MISSING (defect)"
+done
 cd science && uv run --frozen science skills lint --root ../skills ; echo "lint rc=$?"
 ```
 
-Expected: statistics matches `mcmc|bootstrap`; the study-design-only grep on statistics is empty (`rc=1`); study-design matches the migrated terms; lint `rc=0`.
+Expected: every statistics-KEEP term `PRESENT`; every statistics-DROP term `absent`; every study-design term `PRESENT`; no `(defect)` line; lint `rc=0`.
 
 - [ ] **Step 4: Commit.**
 
 ```bash
-cd /mnt/ssd/Dropbox/science/.worktrees/skills-phase4
+cd ~/d/science/.worktrees/skills-phase4
 git add skills/study-design/SKILL.md skills/INDEX.md
 git commit -m "refactor(skills): move statistics discovery keywords to the owning routers
 
@@ -245,7 +270,7 @@ Leave the rest of the paragraph (and the file) unchanged.
 - [ ] **Step 2: Sanity-check the count and lint.**
 
 ```bash
-cd /mnt/ssd/Dropbox/science/.worktrees/skills-phase4
+cd ~/d/science/.worktrees/skills-phase4
 rg -n '3 of 14|statistics/SKILL.md. was reconciled' skills/meta/skill-authoring.md
 # the hub-list sentence (the one containing "still **hubs**") must no longer name statistics:
 rg -n 'still \*\*hubs\*\*.*statistics/SKILL\.md' skills/meta/skill-authoring.md ; echo "stale-list rc=$? (rc=1 = statistics no longer in the hub list = good)"
@@ -257,7 +282,7 @@ Expected: the two new strings are found; statistics is no longer in the hub list
 - [ ] **Step 3: Commit.**
 
 ```bash
-cd /mnt/ssd/Dropbox/science/.worktrees/skills-phase4
+cd ~/d/science/.worktrees/skills-phase4
 git add skills/meta/skill-authoring.md
 git commit -m "docs(skills): router invariant now 3 of 14 hubs (statistics reconciled)"
 ```
@@ -275,7 +300,7 @@ git commit -m "docs(skills): router invariant now 3 of 14 hubs (statistics recon
 - [ ] **Step 1: Regenerate the mirror.**
 
 ```bash
-cd /mnt/ssd/Dropbox/science/.worktrees/skills-phase4/science
+cd ~/d/science/.worktrees/skills-phase4/science
 uv run --frozen python ../scripts/generate_codex_skills.py
 ```
 
@@ -284,7 +309,7 @@ Expected: prints `Generated Codex skills in …/codex-skills`.
 - [ ] **Step 2: Confirm the committed mirror matches fresh generation (the green gate).**
 
 ```bash
-cd /mnt/ssd/Dropbox/science/.worktrees/skills-phase4/science
+cd ~/d/science/.worktrees/skills-phase4/science
 uv run --frozen pytest tests/test_codex_skills.py -q
 echo "codex tests rc=$?"
 ```
@@ -294,7 +319,7 @@ Expected: all pass, `rc=0` (in particular `test_committed_codex_skills_match_fre
 - [ ] **Step 3: Full validation.**
 
 ```bash
-cd /mnt/ssd/Dropbox/science/.worktrees/skills-phase4/science
+cd ~/d/science/.worktrees/skills-phase4/science
 uv run --frozen science skills lint --root ../skills ; echo "lint rc=$?"
 uv run --frozen pytest -q ; echo "pytest rc=$?"
 ```
@@ -303,13 +328,24 @@ Expected: lint `rc=0`; full suite `rc=0`.
 
 - [ ] **Step 4: Commit the regenerated mirror.**
 
+The mirror **must** have changed: Task 3 edited `skills/meta/skill-authoring.md`,
+which the generator copies verbatim to
+`codex-skills/science-skill-development/skill-authoring.md`. An empty
+`codex-skills/` diff means the generator did not run or an edit was missed — a
+defect, not an acceptable outcome.
+
 ```bash
-cd /mnt/ssd/Dropbox/science/.worktrees/skills-phase4
+cd ~/d/science/.worktrees/skills-phase4
+echo "--- skill-authoring.md copy MUST show as modified ---"
+git status --porcelain codex-skills/science-skill-development/skill-authoring.md \
+  | rg . && echo "OK: mirror changed" \
+  || { echo "DEFECT: skill-authoring.md not regenerated — stop and investigate"; }
+git status --porcelain codex-skills/   # a non-empty list is REQUIRED here
 git add codex-skills/
 git commit -m "chore(codex): regenerate mirror after statistics router reconciliation"
 ```
 
-If `git add codex-skills/` stages nothing (the statistics SKILL.md body already produced an identical mirror because it carried no rewritable markdown links), that is acceptable — the green gate is Step 2 passing, not a non-empty diff. Record in the ledger whether the mirror changed.
+Record in the ledger which mirror files changed.
 
 ---
 
