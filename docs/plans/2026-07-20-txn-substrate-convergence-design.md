@@ -666,12 +666,15 @@ staging and live entries.
 The live path now holds the complete postimage and the staging path preserves the exact entry that
 was displaced.
 
-Verify the live entry carries the retained staging descriptor's identity — proving the exchange
-published our postimage, not a foreign object swapped onto the staging name between fsync and the
-exchange — and validate the displaced entry against the expected precondition. On both matching, fsync
-the parent and mark the effect `DONE`; retain the displaced preimage until the terminal decision. On a
-mismatch, exchange it back if the live path still matches our postimage, fsync, and refuse. If the
-live path also changed, halt with both entries preserved.
+Verify the live entry carries the retained staging descriptor's identity **and matches the exact
+regular-file postcondition (declared bytes and mode) read through that descriptor** — proving the
+exchange published our postimage, not a foreign object swapped onto the staging name between fsync and
+the exchange. Identity alone is insufficient: a noncooperating writer could open the engine-created
+staging inode by name and mutate its bytes or mode without changing its identity, so an identity-only
+check would mark `DONE` for the wrong postimage. Also validate the displaced entry against the expected
+precondition. On all matching, fsync the parent and mark the effect `DONE`; retain the displaced
+preimage until the terminal decision. On a mismatch, exchange it back if the live path still matches our
+postimage, fsync, and refuse. If the live path also changed, halt with both entries preserved.
 
 A crash at any point leaves a classifiable tuple of live path plus stable staging path. Rollback
 exchanges the retained preimage back when the live postimage is still authoritative. Committed
@@ -756,14 +759,17 @@ two attributable power-loss intermediates above. When source, destination, and a
 original inode (the dual-name tuple — destination-parent flush persisted, source-parent flush not), the
 effect is repaired to its pre-state by removing the destination, restoring `(source present,
 destination absent)`. When both persistent paths are absent but the anchor is present (the anchor-only
-tuple — neither directory update reached disk), the anchor is the last surviving name of the original
-inode, and recovery restores the source from it (no-clobber rename or link of the anchor to the source
-name), likewise reaching `(source present, destination absent)`. Otherwise, with the source absent and
+tuple — the source-removal update persisted while the destination-insertion update did not), the anchor
+is the last surviving name of the original inode, and recovery restores the source from it (no-clobber
+rename or link of the anchor to the source name), likewise reaching `(source present, destination
+absent)`. Otherwise, with the source absent and
 the destination naming the anchor's inode, recovery renames the anchor-owned destination back to an
 absent source no-clobber. The reverse move is ordered symmetrically to the forward move — fsync the
 restored-source parent before the old-destination parent — so its `UNDO_STARTED` power loss yields the
-same two tuples (dual-name, or anchor-only when neither reverse directory update persisted), each
-repaired to the pre-state the same way: remove the destination, or restore the source from the anchor.
+same two tuples: the dual-name tuple (the restored-source insertion persisted, the old-destination
+removal not), and the anchor-only tuple (the old-destination removal persisted while the restored-source
+insertion did not). Each is repaired to the pre-state the same way: remove the destination, or restore
+the source from the anchor.
 If the source path has reappeared under a foreign entry, the move cannot be undone without clobbering
 it, and removing the anchor-owned destination would destroy the last durable names of the original
 inode (the destination and anchor are its only two names); recovery therefore halts with the
@@ -790,22 +796,33 @@ check would merely prove that foreign inode was published. Durably flush the ret
 `fchmod`: a parent-entry flush persists the name but not the child inode's own mode metadata, so the
 staging directory needs its own durability barrier (`durable_publish`, §5.5) before publication. Then
 publish by **cross-directory** no-clobber rename (`renameat2(RENAME_NOREPLACE)`, `olddirfd` = the
-`work/` descriptor, `newdirfd` = the live parent descriptor, single-component leaf names on both ends)
-and fsync the live parent. Platforms without the required directory publication primitive refuse early.
-After the rename the engine verifies the published live directory carries the retained descriptor's
-identity (equal `st_dev`/`st_ino`) **and matches the exact directory postcondition — mode and emptiness
-read through that descriptor** — before marking `DONE`. Because the descriptor is provably the
-engine-created directory, this confirms the published entry is exactly that directory in its declared
-state, and `RENAME_NOREPLACE` refuses if the live name is occupied, so publication never overwrites a
-concurrent entry.
+`work/` descriptor, `newdirfd` = the live parent descriptor, single-component leaf names on both ends).
+Platforms without the required directory publication primitive refuse early. This is a cross-directory
+rename, so its two directory updates — the live parent gaining the entry and `work/` losing it — are
+separately durable and must be ordered like the move (§9.4): **fsync the live parent first**, publishing
+the directory durably, then verify identity and postcondition, then **fsync `work/`** so the
+staging-name removal is durable, and only then mark `DONE`. After the rename the engine verifies the
+published live directory carries the retained descriptor's identity (equal `st_dev`/`st_ino`) **and
+matches the exact directory postcondition — mode and emptiness read through that descriptor** — before
+proceeding to the `work/` flush and `DONE`. Because the descriptor is provably the engine-created
+directory, this confirms the published entry is exactly that directory in its declared state, and
+`RENAME_NOREPLACE` refuses if the live name is occupied, so publication never overwrites a concurrent
+entry.
 The verified descriptor is then handed to any descendant effect as that descendant's parent descriptor
 (§6), threading engine-verified descriptors inward without re-resolving ancestors. Because descriptors
 cannot span a crash, fresh-process recovery reacquires each parent descriptor by guarded traversal
 from the root before resuming (subject to the ancestor-relocation non-guarantee, §3.2).
 
-Recovery applies the same blocker rule as file creation: a surviving attributable staging directory
-plus an existing live directory proves publication did not land, so the live directory is preserved
-and the transaction finishes rollback with a refused outcome.
+Recovery distinguishes publication from a blocker by inode identity, because the ordered cross-directory
+flush has an intermediate where the live directory is durable while the `work/` staging name is not yet
+durably removed. A surviving `work/` staging directory whose inode is the **same** as the live
+directory's means the rename published our inode but its `work/` old-name removal was not yet durable
+(the intermediate between the live-parent and `work/` flushes); recovery removes the stale `work/`
+entry and treats the effect as landed, subject to the transaction's forward/rollback decision. A
+surviving `work/` staging directory together with a live directory that is a **different** (foreign)
+inode proves publication did not land: the engine preserves the live blocker, removes its own `work/`
+staging, and finishes rollback with a refused outcome. The persistence-cut model generates the
+same-inode intermediate and asserts recovery does not misread it as a blocker.
 
 Missing ancestors compile as explicit outer-to-inner effects. Rollback removes them inner-to-outer
 by atomically quarantining each directory, validating its exact mode and emptiness, and then using
@@ -946,13 +963,15 @@ journal-generation publication, moved-destination-before-source-parent fsync, bl
 `staging/` directories flushed and `staging/` removed before any generation or `active` is durable,
 §7.3 step 3), the per-entry-parent preparation flushes (`states/`, the record directory, and `records/`
 each made durable before `active`, so a cut cannot leave `active` resolving to a missing record or a
-record missing generation zero, §7.3 step 6), and the `COMMITTED` decision. For moves it must generate,
+record missing generation zero, §7.3 step 6), the `CreateDirectory` cross-directory publication
+(live-parent flush before the `work/` flush, with the same-inode `work/` survivor classified as landed
+rather than a blocker, §9.5), and the `COMMITTED` decision. For moves it must generate,
 in both the forward and the reverse (`UNDO_STARTED`) directions, the two attributable power-loss tuples
-of §9.4: the **dual-name** tuple (one directory update persisted, the other not — source, destination,
-and anchor all naming the original inode) and the **anchor-only** tuple (neither directory update
-persisted — both persistent paths absent, only the durable anchor surviving). It asserts recovery
-repairs the dual-name tuple by removing the destination and the anchor-only tuple by restoring the
-source from the anchor, each reaching the pre-state. Where feasible it is complemented by VM or
+of §9.4: the **dual-name** tuple (the insertion update persisted but the removal update did not —
+source, destination, and anchor all naming the original inode) and the **anchor-only** tuple (the
+removal update persisted but the insertion update did not — both persistent paths absent, only the
+durable anchor surviving). It asserts recovery repairs the dual-name tuple by removing the destination
+and the anchor-only tuple by restoring the source from the anchor, each reaching the pre-state. Where feasible it is complemented by VM or
 block-device crash testing.
 
 ### 13.3 Compiler conformance
@@ -976,9 +995,15 @@ succeeds. Every target must be:
 - an engine-derived staging path; or
 - an exact transaction metadata path.
 
-It wraps `rename`, `replace`, `unlink`, `mkdir`, `rmdir`, `symlink`, `chmod`, `link`, mutating `open`,
-and private syscall bindings such as `renameat2`. An optional external trace detects future fresh
-`ctypes` or extension bypasses where supported.
+It wraps `rename`, `replace`, `unlink`, `mkdir`, `rmdir`, `symlink`, `chmod`, **`fchmod`**, `link`,
+mutating `open`, the `*at` and descriptor-relative variants (`renameat2`, `openat`, `linkat`,
+`fchmodat`), and the ignore-marker `setxattr`/`fsetxattr` applied to the metadata root (§7), so no
+metadata mutation escapes the audit. Because the effects set modes with `fchmod` through retained
+descriptors, the interposer resolves descriptor-relative mutations through **descriptor provenance**: it
+tracks the engine-issued path each retained descriptor was opened against, attributes a mode change
+through that descriptor to its declared or engine-derived target exactly as a path-based mutation, and
+fails the surface assertion on an `fchmod` against a descriptor of unknown provenance. An optional
+external trace detects future fresh `ctypes` or extension bypasses where supported.
 
 Targets are evaluated by the path the engine issued each operation against; the interposer cannot
 observe a held descriptor's current namespace location after an external relocation, so this
