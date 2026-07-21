@@ -43,20 +43,26 @@ def build_project_graph(project_root: Path, *, include_commons: bool = True) -> 
     about composite-graph refresh, not authority participation).
     """
     from science_tool.project_config import load_project_config
-    from science_tool.registry.config import ensure_registered
+    from science_tool.registry.config import ensure_registered, resolve_registration_root
 
     _project_root = Path.cwd() if str(project_root) == "." else project_root
     _science_yaml = project_config_path(_project_root)
     _cfg: ProjectConfig | None = None
     if _science_yaml.is_file():
         _cfg = load_project_config(_project_root)
-        ensure_registered(
-            _project_root,
-            _cfg.name,
-            project_id=_cfg.id,
-            role=str(_cfg.role),
-            parent=None,
-        )
+        # A build run from a linked worktree registers the main checkout, never the
+        # transient worktree path (fb-2026-07-16-006). Skip if the resolved root has
+        # no science.yaml (e.g. the worktree's branch added the project and main has
+        # not) rather than register a path we cannot vouch for.
+        registration_root = resolve_registration_root(_project_root)
+        if project_config_path(registration_root).is_file():
+            ensure_registered(
+                registration_root,
+                _cfg.name,
+                project_id=_cfg.id,
+                role=str(_cfg.role),
+                parent=None,
+            )
 
     local_path = materialize_graph(_project_root, include_commons=include_commons)
     return LocalGraphBuild(local_path=local_path, config=_cfg)

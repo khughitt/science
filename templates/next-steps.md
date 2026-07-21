@@ -1,11 +1,11 @@
 ---
-id: "meta:[NNNN-]next-steps-YYYY-MM-DD"  # under layout_version 3 include the entities/meta NNNN- prefix
-kind: "meta"
+doc_kind: "meta"
+id: "meta:next-steps-YYYY-MM-DD"
 title: "Next Steps — YYYY-MM-DD"
 status: "active"
 created: "YYYY-MM-DD"
 updated: "YYYY-MM-DD"
-prior: "meta:[NNNN-]next-steps-YYYY-MM-DD"  # canonical id of immediate predecessor; omit for first-ever file
+prior: "meta:next-steps-YYYY-MM-DD"  # canonical id of immediate predecessor; omit for first-ever file
 related: []
 ---
 
