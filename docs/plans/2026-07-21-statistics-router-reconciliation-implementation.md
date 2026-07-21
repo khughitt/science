@@ -218,11 +218,18 @@ arbitration" in its scope boundary — a whole-file grep would false-positive), 
 each term is checked **separately** (alternation + `head -1` would prove only one
 term exists).
 
+The two `description:` captures pass `--max-columns=0` explicitly: a global
+`RIPGREP_CONFIG_PATH` (e.g. `--max-columns=150 --max-columns-preview`) otherwise
+truncates these long single-line descriptions at capture time and appends
+`[... omitted end of long line]`, making every downstream keep/drop/gain check
+run against partial text and report false negatives. `--max-columns=0` disables
+the limit for these two lines regardless of the ambient config.
+
 ```bash
 cd ~/d/science/.worktrees/skills-phase4
 fail=0
-stats_desc=$(rg -m1 '^description:' skills/statistics/SKILL.md)
-sd_desc=$(rg -m1 '^description:' skills/study-design/SKILL.md)
+stats_desc=$(rg --max-columns=0 -m1 '^description:' skills/statistics/SKILL.md)
+sd_desc=$(rg --max-columns=0 -m1 '^description:' skills/study-design/SKILL.md)
 keep() { printf '  keep %-26s ' "$1:"; printf '%s' "$stats_desc" | rg -qi -- "$1" && echo PRESENT || { echo "MISSING (defect)"; fail=1; }; }
 drop() { printf '  drop %-26s ' "$1:"; printf '%s' "$stats_desc" | rg -qi -- "$1" && { echo "LEAKED (defect)"; fail=1; } || echo absent; }
 gain() { printf '  gain %-28s ' "$1:"; printf '%s' "$sd_desc"   | rg -qi -- "$1" && echo PRESENT || { echo "MISSING (defect)"; fail=1; }; }
