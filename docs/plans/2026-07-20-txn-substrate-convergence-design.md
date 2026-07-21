@@ -1,476 +1,680 @@
-# Transaction substrate convergence — design
+# Recoverable filesystem effect engine — design
 
-**Date:** 2026-07-20 (rev 5)
-**Status:** Approved for implementation planning
-**Scope:** convergence **and** durability foundation — this PR is the durable-batch prerequisite
-**Package:** `science` (`src/science_tool/plan_common.py`, `entity_import.py`, `entity_reservation.py`, `reference_rewrite.py`, tests)
+**Date:** 2026-07-21
+**Status:** Draft for owner review
+**Scope:** durable filesystem transaction engine plus archive/import/supersede adoption
+**Package:** `science` (`src/science_tool/`, tests, saved-plan schemas)
 
-> **Rev 5 (2026-07-20).** A fourth review found one Critical + one High architecture contradiction in
-> rev 4. Fixes: staged directory publication uses **no-clobber** `renameat2(RENAME_NOREPLACE)` (a bare
-> `os.replace` removes and thus clobbers a concurrent empty directory — F1); the substrate PR
-> **requires unique `rel_path`s** per transition set, so one capture-time snapshot maps to exactly one
-> occurrence — chained occurrences (`A→B`, `B→C`), which would need `previous.post == next.pre`
-> validation and an occurrence-vs-snapshot split, are deferred to the durable-batch design (F2). With
-> these, all remaining findings are implementation-level (TDD, not prose audit).
->
-> **Rev 4 (2026-07-20).** A third review found four Critical + two High protocol issues in rev 3. All
-> verified. Fixes: forward-create callbacks fire at the **existence-changing** linearization point —
-> the `O_EXCL` open / the publish rename — not after later fallible work (F1); absent-preimage restore
-> dispatches `rmdir` vs `unlink` by type, so `created-dir` rollback works (F2); the `link + unlink`
-> move fallback makes the destination durable *before* unlinking the source (F3); restore defines
-> entry-time staging-survivor reconciliation, making "second pass converges" implementable (F4);
-> `CREATE_OR_VERIFY`'s existing-blob fast path is separated from its staging precondition (F5); the
-> impossible "unmarked-but-mutated" test is replaced with per-primitive fault injection, and `mark`
-> is monotonic (F6).
->
-> **Rev 3** — restored the `neither`-halts row, tracker-as-rollback-input, no-clobber
-> `CREATE_OR_VERIFY`, two-seam move fallback, durable named seam APIs, all-type restartable restore,
-> syscall-based write-surface audit. **Rev 2** — import transition schema, ownership tracker,
-> no-follow capture, restartable restore, `atomic_write_bytes`, write-surface harness; scope
-> decision **full**.
+> This design supersedes the earlier “transaction substrate convergence” architecture at this path
+> before implementation began. The earlier reviews remain useful: their capture, containment,
+> no-clobber, durability, restoration, authentication, and test findings are incorporated here. What
+> changes is the ownership boundary. Family mutators no longer orchestrate shared primitives with
+> callbacks and an in-memory tracker; they compile authenticated intent into one effect protocol
+> executed and recovered by one durable engine.
 
-## Why
+## 1. Decision
 
-`plan_common.py` is already a filesystem-level two-phase transaction — `StateFingerprint` /
-`PathTransition` / `snapshot_paths` / `rollback_transitions` / `staged_write` /
-`assert_same_surface` — and `archive_plan.py` and `supersede_plan.py` are wired to it end to end.
-Four gaps block a durable, cross-process batch layer on top of it:
+Build a **recoverable filesystem effect engine** over Science’s existing file-backed project model.
 
-1. **Snapshot capture is not coherent.** `snapshot_paths` calls `fingerprint(p)` then `p.read_bytes()`
-   as two separate reads. A concurrent writer between them yields a snapshot whose recorded hash does
-   not describe its retained bytes. Adopter corpora live in Dropbox-synced trees whose sync daemon is
-   a live writer no advisory lock excludes, so this is not theoretical.
-2. **Import is on a private substrate.** `entity_import.py` carries its own `_FileState` /
-   `_TreeSnapshot` / `_snapshot` / `_restore` with `restrict=written` ownership, rather than
-   `PathTransition` / `snapshot_paths` / `rollback_transitions`. Archive and supersede were migrated;
-   import was not. A batch layer spanning all three families inherits the split unless it is closed.
-3. **There is no durable arbitrary-bytes primitive.** `staged_write` takes a text postimage and a
-   staging token; a journal and a content-addressed blob store need a general `atomic_write_bytes`.
-4. **Restore is not restartable.** `_materialize` (`plan_common.py:304`) does `_remove_live(path)`
-   then `os.open(..., O_TRUNC)` and writes in place, with **no parent-directory fsync**. A kill
-   mid-restore leaves the path matching neither `pre` nor `post`; the action table then sends the
-   *next* recovery straight to `RollbackHalt` — on exactly the recovery path the ownership model
-   exists to serve. This is a durability bug in shipped code, independent of the batch layer.
+Archive, import, cohort import, and supersede keep their domain-specific planners and saved plans.
+After saved-plan authentication, a thin family adapter compiles the plan into an internal,
+validated `TransactionSpec`. A single executor exclusively owns filesystem mutation, write-ahead
+journaling, durability, rollback, recovery, and scratch paths.
 
-This design converges the substrate onto one coherent, ownership-aware, restartable foundation. It
-changes **no family mutator's public function signature**, but it **does change the saved-plan wire
-schema** for import (saved plans are public API — see Piece 3).
+The filesystem does not provide atomic visibility across multiple paths. The engine therefore does
+not claim ACID transactions. Its contract is:
 
-## Scope
+> Every interruption leaves a state that can be classified from durable evidence, safely completed
+> or rolled back when attributable, and otherwise halted without overwriting unknown data.
 
-In scope: coherent capture, ownership-typed rollback, import migration (incl. wire schema),
-restartable durable restore, `atomic_write_bytes`, and acceptance-time true-write-surface tests.
+The default recovery policy is conventional write-ahead-log policy, qualified by external drift:
 
-Out of scope (own later plans): the git-commit layer (temp index, `commit-tree`, CAS ref update,
-lineage); the durable-batch layer (write-ahead journal, blob store, batch lock, state machine,
-`recover()`, halt/discharge); natural-systems integration. The write-ahead intent and runtime
-post-state/partition verification of the settled Task-12 contract belong to the durable-batch layer;
-this PR provides the observation primitives and the acceptance harness that layer reuses, plus the
-restartable restore that makes `MAY_HAVE_WRITTEN` recovery viable.
+- no durable `COMMITTED` decision → undo every transaction-owned mutation; preserve a safely
+  classified no-clobber blocker and finish with a refused outcome;
+- durable `COMMITTED` decision → preserve the final state and finish cleanup;
+- any unattributable state → halt without mutation and preserve evidence.
 
----
+## 2. Problem
 
-## Piece 1 — coherent snapshot capture
+Science mutators perform coordinated changes across multiple files and directories. A saved plan
+freezes what the user authorized, but several independent events can intervene during application:
 
-**Goal.** Bind a regular file's type, mode, hash, and retained bytes to one opened file descriptor,
-so no concurrent writer can wedge an inconsistent snapshot; and do it without silently changing the
-current `lstat`-based, symlink-aware semantics.
+- Dropbox or another process can modify a path after planning or capture;
+- a Python exception can occur after some effects have landed;
+- the process can be killed between a mutating syscall and its durability step;
+- power loss can retain either side of a publication boundary;
+- a later invocation must distinguish the transaction’s work from an unrelated writer’s work.
 
-**Algorithm (per path).**
+The shipped code has two execution dialects. Archive and supersede use `PathTransition` and shared
+helpers in `plan_common.py`; import has a private snapshot, restore, and written-path restriction.
+The earlier convergence design would have unified their primitives but left each family responsible
+for ordering effects and marking an in-memory ownership tracker. A later durable-batch layer would
+then have introduced a second execution authority: the write-ahead journal.
 
-- `fd = os.open(path, os.O_RDONLY | os.O_NOFOLLOW)`. `O_NOFOLLOW` fails on a symlink at `path`, so a
-  regular-file capture never silently follows a link a concurrent writer swapped in. A symlink target
-  is fingerprinted from `os.lstat`, exactly as today — no fd, no bytes.
-- `st = os.fstat(fd)`; confirm `stat.S_ISREG(st.st_mode)` before reading. Derive type and mode from
-  `st`; `read()` the bytes once from that same fd; derive both `content_sha256` and retained
-  `PathSnapshot.content` from that single buffer. "One `read_bytes()`" is insufficient — it does not
-  bind the metadata to the same opened object. The fd is the unit of coherence.
-- Absent / dir / symlink targets keep today's behavior (no retained bytes).
+That split is the architectural defect addressed here. The journal and executor must own execution
+from the start. Shared primitives alone are not the transaction boundary.
 
-**Containment must not follow the leaf (F3).** Every transition path is resolved through
-`resolve_within`, which today does `(root / rel_path).resolve()` — and `.resolve()` follows the *final*
-symlink, returning its target. A transition whose declared path *is* a symlink (a symlink referrer,
-`entities/plans/0001-link.md`) would then be captured, matched, and restored against the target's
-fingerprint, not the link's — the symlink identity that Piece 5 promises to preserve is lost before
-capture even runs. `resolve_within` must resolve and validate the **ancestor chain** (the real
-symlink-escape guard) while retaining the leaf pathname: resolve `root / rel_path.parent`, confirm
-containment, and rejoin `rel_path.name` unresolved. Then `snapshot_paths`/`fingerprint` (`lstat`,
-no-follow) see the symlink as itself. This is strictly safer — operating on a symlink *entry* inside
-the root never follows it out of the corpus.
+## 3. Guarantees and non-guarantees
 
-**Drift gate (named API, not `snapshot_paths` alone).**
+### 3.1 Guarantees
+
+For a valid, authenticated transaction:
+
+1. **Declared persistent surface.** Every persistent path mutation is represented by an effect and
+   agrees with the family plan’s declared initial/final transition surface.
+2. **Boundary authentication.** Saved external plans are re-derived and checked before compilation.
+3. **Coherent rollback material.** A regular file’s retained bytes and fingerprint come from one
+   no-follow file descriptor.
+4. **Optimistic concurrency without destructive check/use gaps.** Capture verifies the frozen
+   precondition. Replacement, deletion, and movement then transfer the actual live directory entry
+   atomically into an engine-owned destination before validating it, so a last-instant writer is
+   preserved rather than overwritten or unlinked.
+5. **No-clobber creation.** File, directory, and move destinations are never silently replaced.
+6. **Write-ahead ownership.** Durable effect state makes every interrupted effect conservatively
+   classifiable without relying on a process-local callback.
+7. **Durability ordering.** Data is durable before publication; moved destinations are fsynced
+   before source parents; journal intent is durable before mutation.
+8. **Restartable rollback.** Restoration uses staged publication or exchange for files and
+   symlinks, quarantines created directories before exact-empty removal, and reconciles attributable
+   scratch survivors.
+9. **Evidence-preserving halt.** An observed state outside an effect’s declared state machine is not
+   overwritten or deleted automatically.
+10. **Mechanically enforced choke point.** Family modules cannot directly invoke filesystem
+    mutation APIs or private effect primitives.
+
+### 3.2 Non-guarantees
+
+- Noncooperating writers are not locked out. They can cause clean refusal or a recovery halt.
+- Multiple persistent paths are not instantaneously visible as one atomic update.
+- Fingerprint-equivalent delete-and-recreate activity by an external writer is not distinguishable
+  from the declared state; authority is defined by the frozen state contract, not inode provenance.
+- A writer holding an open descriptor to an entry after atomic displacement can continue changing
+  the quarantined inode. The engine preserves a diverged quarantine object instead of deleting it,
+  but cannot make that writer participate in the transaction.
+- Arbitrary corruption or deletion of `.science/transactions/` is not automatically repaired.
+- Git history publication is not part of this design.
+
+## 4. Architecture boundary
+
+```text
+family apply entry point
+    ↓
+engine coordinator acquires project lock and resolves any active transaction
+    ↓
+family authenticator → family adapter → validated TransactionSpec
+    ↓
+engine prepares journal → executes effects → commits or rolls back
+```
+
+### 4.1 Family planners and authenticators
+
+Family code owns domain decisions: entity numbering, rendering, reference selection, archive
+destinations, cohort structure, and user-facing diagnostics. Saved plans remain family-specific
+public wire formats.
+
+On `--apply-plan`, the family authenticator re-derives the plan from persisted decision inputs and
+requires the saved and fresh authoritative surfaces to match. Import must have the same Gate-B
+surface authentication as archive and supersede, including the rewrite-to-edit bijection.
+
+### 4.2 Family adapters
+
+An adapter deterministically compiles an authenticated family plan into `TransactionSpec`. It does
+not mutate the filesystem, create scratch objects, or make recovery decisions. Compiling the same
+authenticated plan twice produces byte-identical canonical output.
+
+### 4.3 Coordinator, executor, and recovery engine
+
+The family apply entry point supplies pure authentication/compilation work to the engine coordinator.
+The coordinator acquires the project lock first, resolves any active transaction, and only then runs
+authentication and compilation against the settled project state. A successful recovery may be
+followed by the requested operation, but its saved plan is always re-authenticated after recovery;
+a recovery halt prevents compilation and execution.
+
+Only the engine may:
+
+- create or mutate transaction metadata;
+- capture rollback contents;
+- derive staging paths;
+- call effect implementations;
+- update execution state;
+- roll back or recover an interrupted transaction.
+
+Family code receives a domain-level outcome after the transaction reaches a durable terminal
+decision. It never receives mutable ownership state and never supplies commit callbacks.
+
+### 4.4 Public versus internal contracts
+
+`PathTransition` remains the saved-plan declaration of a persistent path’s initial and final state.
+It is not the execution language. Effect ordering, intermediate states, scratch paths, journal
+generations, and recovery strategies remain internal and are frozen in the journal only when an
+application begins.
+
+This keeps engine mechanics out of public plan schemas and prevents observable internal ordering
+from becoming an accidental saved-plan compatibility contract.
+
+## 5. Transaction model
+
+### 5.1 `TransactionSpec`
+
+The internal specification contains:
+
+- a schema version;
+- family and authenticated-plan digest;
+- project-relative declared initial/final transitions;
+- an ordered sequence of typed effects with stable effect IDs;
+- effect dependencies where sequence alone is insufficient;
+- referenced content hashes and exact modes;
+- the required filesystem capability set.
+
+The compiled specification is deterministic and contains no runtime transaction ID. Preparation
+binds it to a fresh transaction ID in the journal record; scratch paths derive from that ID plus the
+stable effect ID. No absolute path is serialized. Resolution happens against the locked project
+root.
+
+### 5.2 Effect variants
+
+The closed initial effect set is:
 
 ```python
-def capture_and_verify(
-    transitions: Sequence[PathTransition], project_root: Path,
-) -> dict[Path, PathSnapshot]:
-    """Capture a coherent snapshot of every transition's path AND verify each
-    derived fingerprint equals that transition's expected `pre`. A mismatch
-    raises PreconditionRefused (the world changed between planning and capture).
-    Requires unique rel_paths (see Piece 2): one snapshot maps to one occurrence,
-    so this single-snapshot comparison is well defined."""
+Effect = (
+    ReplaceFile
+    | CreateFileNoClobber
+    | DeletePath
+    | MoveNoClobber
+    | CreateDirectory
+)
 ```
 
-**Unique `rel_path`s are a precondition (F2).** One snapshot per path is what makes this comparison
-coherent; a chained pair (`A→B` then `B→C`) would fail the second check against the initial `A`
-snapshot. `capture_and_verify` first asserts the transition set has no repeated `rel_path` and raises
-`BoundaryError` otherwise.
+Each effect names all persistent paths it can mutate, exact before/after fingerprints, any content
+payload, and every recognized multi-path intermediate state. A move is one effect over a source and
+destination, not two transitions connected through callbacks.
 
-`PreconditionRefused` is a **clean refusal**, not `RollbackHalt`: nothing has mutated yet, so there
-is nothing to roll back. This does **not** replace the per-write recheck. Each mutator must still
-recheck `pre` immediately before its own write boundary, because a Dropbox write can land after
-capture (`apply_reference_rewrite` already does this per referrer). Capture-time verification and
-write-boundary recheck are two guards at two instants.
+The initial variants do not recursively snapshot directory trees. `CreateDirectory` is
+absent-to-empty-directory, `MoveNoClobber` accepts regular files, and `DeletePath` accepts file or
+symlink entries. Arbitrary directory-tree movement, replacement, or deletion requires a later effect
+variant with an explicit recursive content model.
 
-**Touches.** `fingerprint`, `snapshot_paths`, `PathSnapshot`, new `capture_and_verify`,
-new `PreconditionRefused` in `plan_common.py`.
+Restoration is an engine operation, not a forward family effect. It consumes journaled state and
+the same atomic publication kernel.
 
----
+### 5.3 Repeated paths
 
-## Piece 2 — ownership as typed execution state
+The model permits a path to appear in multiple ordered effects. Validation requires a continuous
+timeline: an earlier occurrence’s post-state equals the next occurrence’s pre-state. The journal
+retains the content needed to materialize every state in that timeline.
 
-`PathTransition` stays pure *planned* state. What execution established is recorded separately.
+The initial rollback surface is separate from occurrence-local preconditions. This removes the
+earlier single-snapshot ambiguity that forced globally unique `rel_path` values.
 
-```python
-class MutationOwnership(str, Enum):
-    NOT_WRITTEN = "not-written"            # this transaction never changed this occurrence
-    MAY_HAVE_WRITTEN = "may-have-written"  # completion unknown (crash / conservative default)
-    WRITTEN = "written"                    # this transaction performed its identity-changing mutation
+### 5.4 Compilation validation
+
+Before any journal or blob write, validation proves:
+
+- effect IDs are unique and ordering is complete;
+- each effect’s shapes are legal for its variant;
+- payload hashes and modes match the declared postconditions;
+- repeated-path timelines are continuous;
+- each path’s first and last states match the saved plan’s declared initial/final states;
+- the effect surface equals the family transition surface exactly;
+- no persistent path is omitted or undeclared;
+- ancestor-resolved, leaf-retaining paths stay inside the project root;
+- engine scratch names are disjoint from persistent paths;
+- required platform capabilities are available, including `renameat2(RENAME_NOREPLACE)` and
+  `renameat2(RENAME_EXCHANGE)` plus regular-file hard links on one filesystem.
+
+After this boundary, internal execution code trusts the specification.
+
+## 6. Path resolution and coherent capture
+
+Containment validation resolves the project root and the candidate’s ancestor chain but retains the
+leaf pathname. Following the final symlink would turn a transition *of the symlink* into a transition
+of its target and could escape the declared surface.
+
+For a regular file:
+
+1. open with `O_RDONLY | O_NOFOLLOW`;
+2. obtain type and mode with `fstat`;
+3. read bytes from that same descriptor;
+4. derive both the content hash and retained rollback bytes from that buffer.
+
+Directories, symlinks, and absence retain `lstat`-based fingerprints and no file content. Capture
+refuses if the coherent observed state does not match the effect timeline’s initial precondition.
+
+Capture-time verification is not treated as compare-and-swap authority. For replacement, deletion,
+and movement, the effect atomically transfers the actual live entry into an engine-owned staging,
+tombstone, or destination path and then validates that transferred object against the frozen
+occurrence-local precondition. If it differs, the engine restores it when the declared live path is
+still safe or halts while preserving both entries. This closes the destructive check/use gap that an
+adjacent fingerprint recheck alone cannot close.
+
+## 7. Project-local durable metadata
+
+```text
+.science/transactions/
+├── lock
+├── active
+├── records/
+│   └── <transaction-id>/
+│       ├── spec.json
+│       └── states/
+│           ├── 000000.json
+│           ├── 000001.json
+│           └── ...
+└── blobs/
+    └── sha256/<digest>
 ```
 
-**`WRITTEN` means "this transaction performed its existence/identity-changing mutation on this
-occurrence" — not "the occurrence reached `post`."** The action table separates ownership (did we
-touch it) from live state (`pre` / `post` / `neither`). A created file whose content write then
-failed is `WRITTEN` + `neither` → halt, which is correct: we *did* bring the path into existence and
-must own it. This is why the mark fires at the existence-changing point (Piece 4), not after later
-byte writes.
+### 7.1 Lock
 
-**Totality is over transition occurrences, keyed by index.** In *this* substrate PR each `rel_path`
-appears at most once (validated — F2), so an occurrence is a path here; the index keying is what keeps
-the model forward-compatible with the durable-batch layer, where a batch may touch one `rel_path` in
-two sequential transitions (`A→B`, `B→C`). Supporting those chains is **deferred**: it additionally
-requires validating `previous.post == next.pre` and separating the initial rollback snapshot from
-per-occurrence preconditions — neither of which this PR's single-snapshot `capture_and_verify` does.
-The mutable authority is a **tracker built from the authoritative transition sequence**:
+`lock` is a persistent file held with an OS advisory lock. It serializes cooperating Science
+processes and is never used as evidence that Dropbox or another arbitrary process is excluded.
+Every mutating Science command resolves an existing transaction before planning a new one.
 
-```python
-class OwnershipTracker:
-    def __init__(self, transitions: Sequence[PathTransition]) -> None:
-        # every occurrence starts NOT_WRITTEN; the tracker owns the canonical order
-    def mark(self, index: int, ownership: MutationOwnership) -> None:
-        # MONOTONIC: NOT_WRITTEN -> {MAY_HAVE_WRITTEN, WRITTEN} and MAY_HAVE_WRITTEN -> WRITTEN only.
-        # A downgrade (e.g. WRITTEN -> NOT_WRITTEN) is a programming error and raises.
-    def as_executions(self) -> tuple[TransitionExecution, ...]: ...  # frozen readout, inspection only
+Only one transaction may be active per project. Unsupported locking or publication capabilities
+cause an early refusal rather than weaker behavior.
 
-@dataclass(frozen=True)
-class TransitionExecution:      # a frozen SNAPSHOT of tracker state; a readout, NOT a rollback input
-    transition: PathTransition
-    ownership: MutationOwnership
+### 7.2 Immutable blobs
+
+Initial file contents and planned postimages are stored by SHA-256. Blob creation is no-clobber,
+durable, and idempotent only after byte-for-byte verification. Effects and snapshots reference
+hashes; JSON does not duplicate file bodies.
+
+### 7.3 Record and active pointer
+
+`spec.json` is immutable canonical `TransactionSpec`. Execution state is an append-only sequence of
+immutable generation files. Each generation contains its number, transaction state, per-effect
+state, prior-generation hash, and its own checksum. A new generation is staged completely and
+published no-clobber; state is never updated with destructive replacement.
+
+Recovery accepts only the longest contiguous, valid hash chain beginning at generation zero. A
+conflicting generation, a gap followed by later generations, or an invalid checksum halts. An
+attributable unpublished generation staging file is mutation-free scratch and can be reconciled.
+
+`active` is an atomically published, fsynced pointer to the active record. It is created no-clobber.
+The preparation order is:
+
+1. coherently capture and verify the complete initial surface;
+2. write or verify all captured and planned blobs;
+3. write immutable `spec.json`;
+4. write generation zero as `PREPARED`;
+5. fsync the record and transaction directories;
+6. publish and fsync `active`;
+7. begin effects.
+
+A crash before step 6 leaves only mutation-free orphan metadata. A crash after step 6 has a
+discoverable recovery record.
+
+Startup scans records as well as `active`. A missing pointer plus exactly one nonterminal record is
+treated as interrupted preparation. Multiple nonterminal records, a conflicting pointer, or invalid
+metadata halt without project mutation.
+
+### 7.4 Terminal cleanup
+
+After `COMMITTED` is durable, the engine verifies and removes effect-owned displaced preimages and
+tombstones, fsyncing their parents. `ROLLED_BACK` is persisted only after every transaction-owned
+mutation is undone and all rollback scratch has been removed and fsynced. Its outcome records either
+restored initial surface or preserved external drift. The engine removes and fsyncs `active` only
+after the applicable cleanup rule completes. A crash during committed cleanup leaves the terminal
+record active, so fresh-process recovery finishes cleanup without reconsidering the commit decision.
+
+Detached terminal records and unreferenced blobs may be garbage-collected later under the lock.
+Metadata garbage collection is not part of transaction correctness; interruption can only leave
+terminal records or immutable blobs.
+
+Transaction metadata is an engine-owned audited surface, distinct from family persistent effects.
+
+## 8. Durable state machine
+
+### 8.1 Transaction states
+
+```text
+PREPARED → APPLYING → APPLIED → COMMITTED
+    └──────────────→ ROLLING_BACK → ROLLED_BACK
+
+recovery classification ───────→ HALTED
 ```
 
-**`rollback_transitions` takes the `OwnershipTracker` itself, never a tuple (rev-3 F2).** A tuple
-readout can be sliced or reconstructed, so the tracker is the only object that guarantees rollback
-sees every occurrence exactly once. `as_executions()` is a frozen readout for tests/inspection, not
-an accepted rollback input. `mark` is monotonic (F6): ownership only escalates, so a double-fire or
-an out-of-order mark cannot silently disown a mutated path.
+`COMMITTED` is the only logical commit decision. It is persisted only after every effect is durable,
+the persistent final surface matches, and every retained scratch object matches its exact committed
+cleanup contract. The command returns success only after committed scratch cleanup, active-pointer
+detachment, and their directory fsyncs complete.
 
-**Rollback action table (the spec):**
+A transaction may enter `ROLLING_BACK` because of a caught application failure or because recovery
+finds any noncommitted active transaction. `HALTED` preserves the record, scratch objects, the last
+durable commit decision (if any), and diagnostic classification. A halt after `COMMITTED` never
+licenses rollback; it preserves the final state and reports incomplete cleanup.
 
-| Ownership | Live state | Action |
-| --- | --- | --- |
-| `NOT_WRITTEN` | anything | Leave untouched |
-| `MAY_HAVE_WRITTEN` | matches `pre` | Skip (already restored / never written) |
-| `MAY_HAVE_WRITTEN` | matches `post` | Restore (re-drivable; see Piece 5) |
-| `MAY_HAVE_WRITTEN` | neither | `RollbackHalt` |
-| `WRITTEN` | matches `pre` | Skip (already restored) |
-| `WRITTEN` | matches `post` | Restore (re-drivable; see Piece 5) |
-| `WRITTEN` | neither | `RollbackHalt` |
+### 8.2 Forward effect states
 
-**Why `neither` always halts (rev-3 F1).** Restartable restore (Piece 5) publishes by atomic rename,
-so an interrupted restore leaves the live target matching **`post`** (before the rename) or **`pre`**
-(after it) — never `neither`. A live `neither` is therefore not our half-finished restore; it is a
-concurrent modification, corruption, or an unattributed partial, and re-driving would clobber another
-writer. Restartability makes the **`matches post → restore`** rows safe to run again (an idempotent
-staged rename), nothing more. Consistent with the `import-dst` hard-halt rule (Piece 4).
-
-**Who supplies what.** Import: a referrer rejected by its pre-write recheck stays `NOT_WRITTEN`
-(preserving another writer's edit — the `restrict=written` guarantee, now typed); a landed write
-becomes `WRITTEN` at its seam. Cross-process recovery (later layer): every WAL-covered path is
-`MAY_HAVE_WRITTEN`.
-
----
-
-## Piece 3 — import transition schema (wire change)
-
-Import currently carries **no transitions**; the acceptance expression (Piece 7) has no authoritative
-import surface without them. Add two roles and persist a transition set on both import plans.
-
-**New `PathTransition.role` members:** `import-dst` (exclusive create of the rendered destination),
-`import-src` (delete of the source). Referrer rewrites reuse `entity-rewrite`; created ancestor
-directories reuse `created-dir`.
-
-```
-role: Literal["entity-rewrite", "archive-src", "archive-dst", "archive-index",
-              "created-dir", "import-dst", "import-src"]
+```text
+PENDING → STARTED → DONE
 ```
 
-- `import-dst`: `pre` absent, `post` an existing file whose `content_sha256` == sha256(rendered_text)
-  **and whose `mode` is the exact creation mode `0o644`** (a `StateFingerprint` file post requires an
-  exact mode — rev-3 F5 — so the create forces that mode via `fchmod`, not umask-dependent);
-  `postimage` = rendered_text.
-- `import-src`: `pre` an existing file (the source), `post` absent; no postimage.
-- `created-dir`: `pre` absent, `post` a dir with exact mode — one transition per missing ancestor of
-  the destination, innermost last (mirrors `_missing_ancestor_dirs`).
+The executor must durably persist `STARTED` before invoking the effect. It persists `DONE` only after
+the effect’s data and directory-entry durability obligations complete.
 
-**Wire-schema change (public API).** `ImportPlan` and `CohortImportPlan` gain a
-`transitions: list[PathTransition]` field, derived at preview time. `CohortImportPlan.schema_version`
-bumps `1 → 2`; `parse_cohort_import_plan` rejects a v1 plan with a clear "re-run the preview" error
-(no silent upgrade). `ImportPlan` has no version field today; it gains `schema_version: int = 1` so
-the same guard applies going forward. Function signatures (`plan_import`, `apply_import`, etc.) are
-unchanged.
+These states derive execution ownership:
 
----
+| Effect state | Meaning |
+| --- | --- |
+| `PENDING` | `NOT_WRITTEN` |
+| `STARTED` | `MAY_HAVE_WRITTEN` |
+| `DONE` | `WRITTEN` |
 
-## Piece 4 — mutation seams and durable, callback-bearing APIs
+An in-memory view may expose these meanings for diagnostics, but it is not independent mutable
+authority.
 
-Import performs **no rename**. Each seam is a *durable* operation that fires `on_commit` at its
-**existence/identity-changing linearization point — before any later fallible work** (F1). Today's
-sites are not durable: `claim_number_in_dir` uses a plain `open(path, "x")` (umask mode, no fsync),
-`mkdir(parents=True)` cannot report each ancestor, and `apply_reference_rewrite` records `written`
-only *after* `_atomic_replace_text` returns, with no parent fsync. Rev 4 names the replacements and
-fixes each callback point:
+### 8.3 Reverse effect states
 
-| Seam | New durable API | Linearization / `on_commit` | Marks |
-| --- | --- | --- | --- |
-| exclusive dest create | `create_exclusive(path, text, mode, *, on_commit)` — `O_EXCL` open → **`on_commit`** → write → `fchmod` exact → `fsync` file → `fsync` parent | **immediately after the `O_EXCL` open**, before write/chmod/fsync (F1) | `import-dst` |
-| each ancestor mkdir | `mkdir_durable(path, mode, *, on_commit)` — mkdir *staging* dir → `chmod` exact → **`renameat2(staging, path, RENAME_NOREPLACE)`** → **`on_commit`** → `fsync` parent | after the no-clobber publish rename (rev-4 F1) | that `created-dir` |
-| source unlink | `unlink_durable(path, *, target_pre, on_commit)` — **recheck `matches(target_pre, path)`** → `unlink` → **`on_commit`** → `fsync` parent | after `unlink` returns | `import-src` |
-| each referrer replace | `apply_reference_rewrite` uses a durable replace (`fsync` file → **recheck `matches(target_pre, path)`** → `os.replace` → **`on_commit`** → `fsync` parent) firing per edit | after each `os.replace` | that `entity-rewrite` |
+Rollback visits effects in reverse order and durably records:
 
-**Write-boundary recheck on the destructive seams (design §"two guards at two instants").** `unlink`
-and the move's source-removal are as destructive as a replace: a concurrent edit landing between
-`capture_and_verify` and the seam is otherwise deleted, after which rollback restores the *stale*
-captured snapshot and the concurrent write is lost. So `unlink_durable` and `move_no_clobber` take the
-transition's frozen `pre` (`target_pre` / `src_pre`) and recheck `matches` immediately before the
-irreversible step, raising `PreconditionRefused` (clean refusal, nothing mutated) on divergence —
-exactly the guard `atomic_write_bytes` already applies before its publish.
-
-**Why the create marks at the open (F1).** The live file exists the instant `O_EXCL` open succeeds.
-If the callback waited until after write/chmod/fsync, a failure there would leave a file on disk
-recorded `NOT_WRITTEN` → rollback "leaves it untouched" → an orphaned partial we created but disown.
-Marking at the open makes a mid-write failure `WRITTEN` + `neither` → the accepted `import-dst`
-hard-halt (owner-approved scope): a create left in the third state is refused, not auto-restored.
-
-**Why the mkdir stages, and publishes no-clobber (rev-4 F1, rev-5 F1).** A direct `mkdir` then
-`chmod` on the live path has a window where the dir exists with the wrong mode — `WRITTEN` + `neither`
-→ an unacknowledged forward hard-halt. Staging the dir, setting its mode, then publishing by rename
-removes that window. But the publish must be `renameat2(RENAME_NOREPLACE)`, **not** `os.replace`:
-`rename(2)` removes an empty destination directory, so a bare `os.replace` would clobber an empty
-ancestor a concurrent writer created after the precheck — the same no-clobber invariant already held
-for moves and blobs. On `EEXIST` the occurrence stays `NOT_WRITTEN`, the attributable staging dir is
-removed, and the operation raises `PreconditionRefused` (re-preview) — consistent with the drift-gate
-philosophy. Directory publication therefore requires `renameat2` (Linux); there is no `link`-based
-fallback for directories, so a platform without it cannot create ancestors transactionally and the
-substrate refuses early rather than degrade the invariant.
-
-**`on_commit` contract** (every durable primitive above, plus `staged_write`, `atomic_write_bytes`,
-the move primitive): fires **exactly once**, at the existence/identity-changing linearization point,
-**before any fallible durability work**; **performs no I/O and must not raise**; calls
-`tracker.mark(index, WRITTEN)` and nothing else.
-
-**The no-clobber move primitive (archive/supersede only) — two seams, ordered for durability (F3).**
-
-```python
-def move_no_clobber(src, dst, *, src_pre=None, on_commit_dst=None, on_commit_src=None) -> None:
-    """If src_pre is given, recheck matches(src_pre, src) first and raise
-       PreconditionRefused on divergence (write-boundary guard).
-    renameat2(RENAME_NOREPLACE): atomic. On success: mark dst, mark src,
-       fsync(dst parent), fsync(src parent).
-    Fallback (no renameat2): the destination link must be durable BEFORE the
-    source is removed, or power loss can keep the deletion without the link.
-    The source recheck must be ADJACENT to the unlink, not only at entry —
-    link+fsync is a wide window a writer can land in:
-        O_EXCL link(src, dst) -> on_commit_dst -> fsync(dst parent)
-        -> recheck matches(src_pre, src); on divergence unlink(dst),
-           fsync(dst parent), raise PreconditionRefused (leave changed src)
-        -> unlink(src)        -> on_commit_src -> fsync(src parent)
-    Never overwrites an existing dst."""
+```text
+DONE or attributable STARTED → UNDO_STARTED → UNDONE
 ```
 
----
+`UNDO_STARTED` is persisted before restoration or removal begins. A crash during undo is classified
+from the same exact path-state contract and restartable restore survivors. An already-initial path is
+idempotently accepted; an unattributable path halts.
 
-## Piece 5 — restartable, durable restore (all preimage types)
+### 8.4 Recovery classification
 
-Replace in-place `_materialize` with staged publication so restore is interruptible anywhere and
-re-runnable, for **every** `StateFingerprint` type — files, dirs, **and symlinks** (`_capture` at
-`entity_import.py:532` preserves symlinks, so restore must too — rev-3 F6). Each present type builds
-the object at a same-directory staging path, then publishes with one atomic rename:
+For each nonterminal effect, recovery evaluates its complete persistent-and-scratch path tuple:
 
-- **File preimage:** `atomic_write_bytes(target, content, mode=RESTORE, file_mode=pre.mode, …)` —
-  staging write → fsync → `os.replace` → parent fsync.
-- **Dir preimage:** `mkdir(staging)` → `chmod(staging, pre.mode)` → `os.replace(staging, target)` →
-  parent fsync (mode set on the staging dir before the rename — no live `mkdir → chmod` window).
-- **Symlink preimage:** `os.symlink(pre.symlink_target, staging)` → `os.replace(staging, target)` →
-  parent fsync.
-- **Absent preimage (delete) — dispatch by type (F2):** the live/`post` object may be a directory
-  (a `created-dir` transition is `pre=absent`, `post=dir`, and `unlink` raises on a directory). Use
-  the `_remove_live` dispatch: `rmdir` for a directory, `unlink` for a file/symlink, then parent
-  fsync. Idempotent under re-drive.
+- exact pre-state → the effect did not land;
+- exact post-state → the effect landed;
+- a variant-declared intermediate, including an unvalidated displaced entry → apply that variant’s
+  settlement rule;
+- a no-clobber blocker whose variant-specific persistent-and-scratch tuple proves the effect did not
+  land → preserve it and record a refused outcome;
+- anything else → halt.
 
-A kill before the rename leaves a staging object and a live target still matching `post`; a kill
-after leaves the target matching `pre`. Neither leaves `neither` — which is why Piece 2's `neither`
-row halts.
+Recovery classifies the whole transaction before performing any mutation. This prevents an early
+repair from destroying evidence needed to recognize a later conflict.
 
-**Entry-time staging-survivor reconciliation (F4).** The staging path is stable
-(`staging_path_for(target, token)`), and an `O_EXCL` re-create fails on a survivor exactly as
-`staged_write` does today (`plan_common.py:200`). So restore begins by reconciling any survivor,
-classified with `classify_staging` and the target/preimage fingerprints:
+No durable `COMMITTED` record means undo transaction-owned effects even when all forward effects
+appear complete. This normally restores the initial surface; a proved no-clobber blocker is preserved
+as external drift. A durable `COMMITTED` record means preserve the final surface and finish cleanup.
 
-- **complete, attributable** file/dir/symlink staging → publish it (finish the rename), then mark;
-- **attributable file prefix** → remove and recreate the staging (safe: it is our own `O_EXCL` prefix
-  and the target still matches `target_pre`);
-- **staging directory with wrong mode** → finish staging (chmod to `pre.mode`) before publication;
-- **foreign / unattributable** survivor (not our prefix, or target changed under us) → `RollbackHalt`
-  and preserve it as evidence.
+## 9. Effect contracts
 
-This is what makes "a second rollback pass converges" implementable rather than aspirational.
-Directory-entry mutations gain the parent-dir fsync they lack today.
+### 9.1 `ReplaceFile`
 
----
+Requires an existing regular-file precondition and exact file postcondition. Persist `STARTED`, then
+build a same-directory staging file, write bytes, set the exact mode, and fsync it. Use
+`renameat2(RENAME_EXCHANGE)` to atomically swap the staging and live entries. The live path now holds
+the complete postimage and the staging path preserves the exact entry that was displaced.
 
-## Piece 6 — `atomic_write_bytes`
+Validate the displaced entry against the expected precondition. On a match, fsync the parent and
+mark the effect `DONE`; retain the displaced preimage until the terminal decision. On a mismatch,
+exchange it back if the live path still matches our postimage, fsync, and refuse. If the live path
+also changed, halt with both entries preserved.
 
-Sibling to `staged_write` (which stays text-postimage + attribution-aware). Serves three consumers
-with **distinct publication semantics**:
+A crash at any point leaves a classifiable tuple of live path plus stable staging path. Rollback
+exchanges the retained preimage back when the live postimage is still authoritative. Committed
+cleanup removes the displaced entry only if it still matches the validated preimage; divergence is
+preserved and reported rather than deleted.
 
-```python
-def atomic_write_bytes(
-    path: Path, data: bytes, *,
-    mode: WriteMode,                       # REPLACE | CREATE_OR_VERIFY | RESTORE
-    file_mode: int | None = None,
-    token: str,                            # stable staging token (attribution)
-    target_pre: StateFingerprint,          # expected live state before the staged publish
-    on_commit: Callable[[], None] | None = None,
-) -> None: ...
+### 9.2 `CreateFileNoClobber`
+
+Requires absence before and an exact regular-file postcondition. Persist `STARTED`, build and fsync
+the complete staging file, then publish using `renameat2(RENAME_NOREPLACE)`. Never stream bytes into
+the live destination and never fall back to overwriting rename.
+
+If another writer creates the destination first, clean up only the attributable staging object and
+raise `PreconditionRefused`. An existing byte-equivalent file is not silently adopted as success for
+a family create effect.
+
+For recovery from `STARTED`, a surviving attributable staging object plus any existing destination
+proves our no-clobber publish did not land; so does a destination that differs from the postimage.
+The engine preserves that blocker, removes only its own staging object, and rolls back earlier
+effects with a refused outcome. An exact postimage with no staging survivor is classified as landed,
+subject to the fingerprint-equivalent recreation non-guarantee.
+
+Import destination publication itself claims the planned number. The compiler rejects duplicate
+destinations within the transaction; a concurrent importer loses at no-clobber publication and the
+transaction rolls back. The former live reservation sentinel and partial-destination hard-halt are
+not part of the new protocol.
+
+### 9.3 `DeletePath`
+
+Requires an exact present file or symlink precondition and absence after. Persist `STARTED`, then
+atomically transfer the live entry with `renameat2(RENAME_NOREPLACE)` to an effect-derived tombstone
+in the same parent. The declared path becomes absent while the removed object remains recoverable.
+
+Validate the tombstone against the expected precondition. On mismatch, rename it back no-clobber and
+refuse; if the declared path has independently reappeared, halt and preserve both. On match, fsync
+the parent and mark `DONE`. Rollback renames the tombstone back no-clobber. Committed cleanup deletes
+it only after the durable commit decision and only while it still matches the validated preimage.
+
+Removal of an engine-created directory during rollback remains a separate exact-empty-directory
+operation; it is not compiled as a general forward `DeletePath`.
+
+### 9.4 `MoveNoClobber`
+
+One effect owns both source and destination. Its pre-state is `(source=present, destination=absent)`;
+its post-state is `(source=absent, destination=source state)`.
+
+Persist `STARTED`, then create and fsync an effect-derived hard-link ownership anchor to the regular
+file source. Coherently validate the anchor against the expected source precondition. Use
+`renameat2(RENAME_NOREPLACE)` to atomically transfer the actual source entry to the absent
+destination, then require the destination and anchor to name the same inode and still match the
+expected source fingerprint. The identity relation survives process death and distinguishes the
+engine’s moved entry from a byte-equivalent external entry.
+
+When the syscall returns success in-process but the destination is not the anchor’s entry, rename it
+back no-clobber and refuse, or halt if the source independently reappeared. On an identity match,
+fsync the destination parent before the source parent, then mark `DONE`. Retain the anchor until the
+terminal decision.
+
+There is no link/unlink fallback. Cross-filesystem movement or a platform without no-clobber rename
+raises `CapabilityUnavailable` before preparation. Recovery of an uncommitted move renames the
+anchor-owned destination back to an absent source no-clobber. If the source has reappeared, recovery
+removes only an unchanged, anchor-proven destination entry and preserves the source as external
+drift; a diverged anchor or destination halts. If the source still names the unchanged anchor and the
+destination is foreign, the move did not land; preserve the destination and return a refused outcome.
+A tuple in which neither persistent path has the anchor’s identity is unattributable and halts with
+the anchor preserved.
+
+### 9.5 `CreateDirectory`
+
+Requires absence before and an exact directory mode after. Persist `STARTED`, create a same-parent
+staging directory, set its exact mode, publish with `renameat2(RENAME_NOREPLACE)`, and fsync the
+parent. Platforms without the required directory publication primitive refuse early.
+
+Recovery applies the same blocker rule as file creation: a surviving attributable staging directory
+plus an existing live directory proves publication did not land, so the live directory is preserved
+and the transaction finishes rollback with a refused outcome.
+
+Missing ancestors compile as explicit outer-to-inner effects. Rollback removes them inner-to-outer
+by atomically quarantining each directory, validating its exact mode and emptiness, and then using
+`rmdir` on the quarantine. A concurrent child makes `rmdir` refuse; the engine restores the
+quarantined directory when the live name remains absent or halts while preserving both.
+
+## 10. Restartable materialization
+
+Rollback materializes through stable, effect-derived staging paths:
+
+- present file or symlink preimage over an expected live postimage: stage the exact object; exchange
+  it with the live entry; validate and retain the displaced postimage until the rollback decision is
+  durable;
+- present preimage over an absent live path: publish the staged object no-clobber (normally the
+  effect’s retained delete tombstone already provides this object);
+- absent file/symlink preimage: atomically quarantine the live entry, validate it against the
+  effect’s postcondition, then delete and fsync the quarantine before marking the undo complete;
+- absent directory preimage: atomically quarantine the live directory, validate its expected mode
+  and emptiness, then use `rmdir` on the quarantine; atomic nonempty refusal preserves any
+  concurrently added child.
+
+At entry, restoration classifies a surviving staging or tombstone object:
+
+- complete and attributable → publish it;
+- attributable file prefix → remove, recreate, and publish;
+- attributable wrong-mode staging directory → finish its mode and publish;
+- validated displaced preimage or delete tombstone → restore by no-clobber rename or exchange;
+- unvalidated displaced entry → restore it if the live path is still the engine’s exact postimage;
+- undo quarantine for an absent preimage → validate, delete, and fsync it before `UNDONE`;
+- foreign object or changed live target → halt and preserve evidence.
+
+The authority check precedes every staging-object mutation, including prefix removal. Atomic live
+publication means a crash during restoration leaves the target at the effect state or restored state,
+never at an in-place partial state.
+
+## 11. Refusal and failure semantics
+
+- **`PreconditionRefused`** — concurrent drift was detected either at capture or by validating an
+  atomically displaced entry. The executor returns this refusal only after the current effect and
+  every earlier effect have been restored; inability to prove that restoration becomes
+  `TransactionHalted`.
+- **`CapabilityUnavailable`** — required semantics cannot be supplied. Raised during preparation
+  before project mutation.
+- **`TransactionHalted`** — the journal, live state, or rollback survivor is unattributable. The
+  engine preserves the active record and evidence.
+- **`ProtocolError`** — an internal contract was violated. Attempt rollback if mutation may have
+  begun; retain the journal if a complete rollback cannot be proved.
+
+Caught process-local failures, including cancellation, `KeyboardInterrupt`, and `SystemExit`, enter
+rollback before being re-raised. `SIGKILL`, power loss, and machine failure do not unwind Python and
+are exercised only through fresh-process recovery tests.
+
+Recovery and rollback diagnostics identify the transaction, effect, paths, journal state, expected
+states, observed states, and the non-mutating operator action required next. There is no silent
+fallback or automatic discharge of a halt.
+
+## 12. Family compilation
+
+### 12.1 Supersede
+
+Each frozen entity rewrite compiles to `ReplaceFile`. Supersede is the first production vertical
+slice because it exercises the complete transaction lifecycle without allocation or two-path moves.
+
+### 12.2 Archive
+
+Missing archive ancestors compile to `CreateDirectory`; each entity move compiles to one
+`MoveNoClobber`; archive index creation or replacement compiles to the corresponding explicit file
+effect. Its saved `PathTransition` surface remains the authentication boundary, not execution input.
+
+### 12.3 Import and cohort import
+
+Import saved plans persist a versioned transition surface containing destination creation, source
+deletion, created ancestors, and entity rewrites. Apply re-derives the plan from persisted decision
+inputs and checks exact surface and rewrite/edit correspondence before compilation.
+
+Destinations compile to `CreateFileNoClobber`, sources to `DeletePath`, ancestors to
+`CreateDirectory`, and referrers to `ReplaceFile`. Cohort import compiles one transaction across the
+whole cohort; it does not invoke nested per-entity transactions.
+
+The private import snapshot/restore implementation and number-reservation mutation are deleted at
+the hard cut.
+
+## 13. Verification strategy
+
+### 13.1 Executable reference model
+
+Each effect defines a pure classifier:
+
+```text
+(variant, journal state, observed persistent-and-scratch tuple)
+    → recovery decision
 ```
 
-- **`REPLACE`** (journal): stage → fsync → `os.replace` (overwrites the prior journal). `file_mode`
-  preserves an existing regular file's mode; required on first create. `target_pre` is the current
-  journal fingerprint (or absent on first write).
-- **`CREATE_OR_VERIFY`** (content-addressed blob), no-clobber (rev-3 F3), with `target_pre` semantics
-  made truthful (F5):
-  1. **Existing-blob fast path, before any staging or precondition:** if `path` already exists, read
-     it and compare — **equal → idempotent success (no write); different → `BlobMismatch`.**
-  2. Otherwise stage the bytes under `token` with the precondition `target_pre == absent`, then
-     publish with `renameat2(RENAME_NOREPLACE)` (or `O_EXCL link`); never `os.replace`.
-  3. **Racing-creator cleanup:** if publication fails because the destination appeared meanwhile,
-     re-read it and compare (equal → success, different → `BlobMismatch`), then remove our staging.
-     So `target_pre == absent` describes the *staging-publish path only*; the fast path handles the
-     already-present case ahead of it.
-- **`RESTORE`** (Piece 5): atomic replace setting the **preimage's exact mode even when it differs
-  from the live postimage's mode**. `target_pre` is the transition's `post` fingerprint.
-- **Common:** fsync file → publish → parent-dir fsync; `on_commit` per contract; the `token` names a
-  stable `staging_path_for` target and (outside the fast path) `target_pre` gates survivor
-  attribution exactly as `staged_write` does; reject a dir or symlink at `path`.
+Table and property tests cover every variant, forward/reverse state, named intermediate,
+and unattributable state. Generated valid effect sequences prove:
 
----
+- path timelines are continuous;
+- uncommitted recovery removes every attributable mutation and preserves proved external blockers;
+- committed recovery retains the final surface;
+- recovery never mutates an unattributable state;
+- a second recovery pass is idempotent.
 
-## Piece 7 — acceptance-time true-write-surface tests
+This model is the normative recovery specification.
 
-> **Revision (rev-6, pending re-review).** This section replaces the earlier `strace`/`ptrace`-centric
-> mechanism with an **in-process os-mutation-interposition shim** as the primary, always-on instrument,
-> demoting external syscall tracing to an opt-in bypass guard. Rationale below. The *intent* is
-> unchanged from the settled Task-12 contract — observe actual mutations, not a before/after map alone
-> — and the shim is the "equivalent syscall-audit shim" the prior text already admitted. Flagged for
-> re-review before implementation.
+### 13.2 Real-filesystem effect tests
 
-Settled Task-12 contract: actual-write observation is an **acceptance-time invariant**, not a
-mutator-reported receipt. A mutator returns an `ApplyOutcome` (applied/skipped/repairs), never
-evidence of its own scope.
+Run each implementation with faults before and after journal generations, atomic transfer,
+displaced-entry validation, settlement, file fsync, parent fsync, and terminal scratch cleanup. Verify
+bytes, modes, types, symlink targets, directory entries, and ordering.
 
-A before/after map is insufficient (rev-1 F7): it cannot see a path created **and removed** during a
-successful run — e.g. `claim_number_in_dir`'s `.NNNN.reserving` sentinel, or a staging `.tmp`. And
-"paths opened for write" is also insufficient (rev-2 F7): it misses `rename`, `unlink`, `mkdir`,
-`rmdir`, `chmod`, and `symlink`. Ground truth is the set of **filesystem-mutating operations**, not
-the persistent delta.
+Python exception tests exercise caught rollback. Subprocess `SIGKILL` tests exercise true hard halt
+and fresh-process recovery. They do not share assertions that depend on Python unwinding.
 
-**Why not strace every run (rev-6).** `strace`/`ptrace` is Linux-only, needs `CAP_SYS_PTRACE`
-(absent in most CI sandboxes and nested containers), and depends on parsing trace output — brittle
-exactly where a durable invariant is wanted. This convergence makes the substrate the **single
-choke point** for filesystem effects, which enables a portable, deterministic instrument instead.
+### 13.3 Compiler conformance
 
-**Primary instrument — in-process mutation interposition (always-on, portable).** A fixture wraps the
-mutating `os` calls the substrate uses (`rename`, `replace`, `unlink`, `mkdir`, `rmdir`, `symlink`,
-`chmod`, `link`, and `open` with `O_CREAT`/`O_TRUNC`) **and** the module's own `_rename_noreplace`
-(which reaches `renameat2` via `ctypes`, bypassing `os`), recording `(op, path)` for each. Because the
-wrap is at the `os`-module / helper level, it captures every mutation whether it flows through a
-substrate primitive **or** a raw call that bypasses one — so it is both the surface invariant and the
-bypass detector, with no ptrace dependency.
+For each family, authenticate a round-tripped plan, compile twice, and require identical canonical
+output. Reject missing effects, extra effects, invalid ordering, malformed timelines, payload/mode
+mismatches, path escapes, and saved/fresh surface divergence.
 
-- **Persistent post-state equivalence** — run each pinned mutator (`apply_archive_plan`,
-  `apply_supersede_plan`, `apply_import`, `apply_cohort_import`) in a temp project; assert
-  `observed_persistent_changes == {t.rel_path for t in transitions if t.pre != t.post}` over full
-  before/after maps (bytes, type, mode, symlink target, dir existence).
-- **Transient mutation surface** — from the interposition log, assert every recorded mutating op
-  targets either a declared transition path or a declared scratch shape (a reserving sentinel or a
-  `staging_path_for` token), and that no scratch path survives a clean run.
-- **Kill-boundary scratch-survivor characterization** — with `_fault`-style injection at each seam
-  and at the parent-dir fsync, assert each survivor is an attributable prefix/sentinel and classify
-  it (`absent` / `prefix` / `complete`), never an unattributable file.
+### 13.4 End-to-end recovery
 
-**Bypass guard — external syscall audit (opt-in, best-effort).** The one failure the in-process shim
-cannot see is a mutation issued through a *fresh* `ctypes`/C-extension syscall a future change adds
-without routing it through `os` or `_rename_noreplace`. An optional `strace`/`ptrace` job asserts no
-mutating syscall occurred outside the interposition-recorded set; it runs where ptrace is available
-and **skips** elsewhere — degrading only this secondary guard, never the primary invariant.
+Every family covers clean commit, caught rollback, kill during each effect, kill during rollback,
+kill during journal update, kill after commit before cleanup, and external drift at destructive
+boundaries. Restart happens in a fresh process and must converge or preserve an explained halt.
 
-**Forward payoff.** The interposition log is the same shape the v6 durable-batch layer needs: its
-write-ahead journal records *intended* effects, the substrate records *actual* effects, and `recover()`
-reconciles them. The effect seam is substrate the batch layer builds on, not test-only scaffolding.
+### 13.5 Actual mutation surface
 
----
+An always-on in-process interposer records successful mutating operations only after the syscall
+succeeds. Every target must be:
 
-## Load-bearing tests
+- a declared effect path;
+- an engine-derived staging path; or
+- an exact transaction metadata path.
 
-1. **Post-linearization failure (rev-1 F4).** Inject failure into the parent-dir `fsync` after the
-   linearization point; assert ownership is already `WRITTEN`, restore succeeds, no path is wrongly
-   skipped.
-2. **Restartable restore + survivor reconciliation, all types (F4/rev-3 F6).** Kill restore
-   mid-publish for a file, a dir, and a symlink preimage; on re-drive assert the staging survivor is
-   reconciled (complete→published, prefix→recreated, wrong-mode-dir→finished, foreign→halt) and the
-   pass converges. Assert an injected `neither` live state **halts**, never re-drives (rev-3 F1).
-3. **Contended-unwritten (import port).** A referrer changed by another writer and rejected by the
-   pre-write recheck stays `NOT_WRITTEN`; rollback leaves it untouched.
-4. **Coherent-capture race (rev-1 F5).** Single-fd capture; `O_NOFOLLOW` rejects a swapped-in
-   symlink; non-regular target takes no bytes. A transition set with a repeated `rel_path` raises
-   `BoundaryError` at `capture_and_verify` (F2).
-4a. **Concurrent-dir no-clobber (rev-5 F1).** With an empty ancestor dir created by another writer
-   after the precheck, `mkdir_durable`'s `renameat2(RENAME_NOREPLACE)` publish leaves the occurrence
-   `NOT_WRITTEN`, removes the staging dir, and raises `PreconditionRefused` — the concurrent dir is
-   not clobbered.
-5. **Mark-at-linearization + monotonicity (F6).** Per primitive (`create_exclusive`, `mkdir_durable`,
-   `unlink_durable`, durable replace, `move_no_clobber`), inject a fault at the parent-dir fsync
-   (after the linearization point) and assert the occurrence is already `WRITTEN`; assert `mark`
-   rejects a downgrade (`WRITTEN → NOT_WRITTEN`). (The impossible rev-3 "unmarked-but-mutated"
-   assertion is retired — a tracker cannot infer an unreported mutation.)
-6. **Move fallback split + ordering (F3/rev-3 F4).** With `renameat2` unavailable, kill between the
-   `link` and the `unlink`; assert dst is `WRITTEN`, src is `NOT_WRITTEN`, dst-parent was fsync'd
-   before the unlink, and the tracker reflects both.
-7. **Import wire schema (rev-1/rev-3).** A v1 `CohortImportPlan` is rejected with a re-preview error;
-   a round-tripped v2 plan carries the exact `import-dst`/`import-src`/`created-dir`/`entity-rewrite`
-   set with exact modes; `move_no_clobber` refuses an existing dst.
-8. **`atomic_write_bytes` modes (F5/rev-3 F3/F6).** `REPLACE` preserves/first-sets mode;
-   `CREATE_OR_VERIFY` takes the existing-blob fast path (equal→ok, differ→`BlobMismatch`), never
-   `os.replace`s, and on a lost publication race verifies then cleans up its staging; `RESTORE` sets
-   a differing preimage mode; unsupported target type rejected.
-9. **True-write-surface (rev-2 F7, rev-6).** In-process interposition-shim persistent equivalence for
-   all four families; every recorded mutating op is attributable to a declared transition or scratch
-   shape; transient sentinel/staging gone on clean run; kill-boundary survivors classified. The
-   external syscall-audit bypass guard is opt-in and skips where ptrace is unavailable.
+It wraps `rename`, `replace`, `unlink`, `mkdir`, `rmdir`, `symlink`, `chmod`, `link`, mutating `open`,
+and private syscall bindings such as `renameat2`. An optional external trace detects future fresh
+`ctypes` or extension bypasses where supported.
 
-## Deliverable boundary
+An architectural test rejects direct mutation calls and private effect imports from family modules.
 
-This PR lands Pieces 1–7 with tests. No family mutator's public function signature changes; the
-import saved-plan wire schema does change (versioned, no silent upgrade). No git dependency is added
-to any filesystem-only command. It leaves import, archive, and supersede on one coherent, ownership-
-aware, restartable substrate — the genuine precondition for the durable-batch layer.
+## 14. Delivery decomposition
+
+One design governs two implementation plans.
+
+### Plan A — engine core and supersede vertical slice
+
+1. Pure transaction/effect model and validators.
+2. Project lock, records, active pointer, blobs, and journal updates.
+3. Coherent capture and restartable atomic materialization.
+4. Five effects and recovery executor.
+5. Model, real-filesystem, and subprocess recovery suites.
+6. Supersede adapter and hard cut.
+
+Independently valid capture and restoration fixes replace the shipped implementations early and are
+then reused by the engine. No temporary callback/tracker bridge is introduced.
+
+### Plan B — remaining families and hard cut
+
+1. Archive adapter, atomic no-clobber moves, ancestors, and index publication.
+2. Import/cohort saved transition schema and Gate-B authentication.
+3. Import/cohort adapters with staged destination publication.
+4. Cross-family surface and recovery acceptance suite.
+5. Delete old family execution loops, private import rollback, callback-bearing orchestration,
+   bare rollback, reservation mutation, and obsolete tests.
+
+Each family switches directly to the engine. There is no feature flag, compatibility executor, or
+runtime transaction-dialect choice.
+
+## 15. Out of scope and future extension
+
+This design does not add Git temporary-index construction, `commit-tree`, CAS ref publication,
+lineage, natural-systems integration, or a general user-facing transaction API.
+
+A later Git design may add a commit participant between filesystem `APPLIED` and transaction
+`COMMITTED`. That participant must have its own durable decision and recovery table. It must not
+change family adapters or reintroduce a second filesystem executor.
+
+The existing one-off migration journals are not silently interpreted by this engine. Migrating a
+command onto the engine is a separate hard-cut design decision.
+
+## 16. Acceptance criteria
+
+The architecture is complete when:
+
+- all four family entry points compile through adapters and mutate only through the executor;
+- an active journal is durable before the first project mutation;
+- every effect and recovery decision conforms to the executable model;
+- caught failure undoes every transaction-owned mutation, preserving external drift as an explicit
+  refusal or leaving an explained halt;
+- fresh-process recovery rolls back every uncommitted transaction and preserves every committed one;
+- import never exposes a partially written destination;
+- actual persistent, scratch, and metadata mutations stay within their declared surfaces;
+- old execution dialects and temporary bridging APIs are deleted;
+- the full Science test suite, lint, and type checks pass.
