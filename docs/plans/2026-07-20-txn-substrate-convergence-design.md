@@ -287,8 +287,12 @@ def move_no_clobber(src, dst, *, src_pre=None, on_commit_dst=None, on_commit_src
     renameat2(RENAME_NOREPLACE): atomic. On success: mark dst, mark src,
        fsync(dst parent), fsync(src parent).
     Fallback (no renameat2): the destination link must be durable BEFORE the
-    source is removed, or power loss can keep the deletion without the link:
+    source is removed, or power loss can keep the deletion without the link.
+    The source recheck must be ADJACENT to the unlink, not only at entry —
+    link+fsync is a wide window a writer can land in:
         O_EXCL link(src, dst) -> on_commit_dst -> fsync(dst parent)
+        -> recheck matches(src_pre, src); on divergence unlink(dst),
+           fsync(dst parent), raise PreconditionRefused (leave changed src)
         -> unlink(src)        -> on_commit_src -> fsync(src parent)
     Never overwrites an existing dst."""
 ```

@@ -701,8 +701,10 @@ git commit -m "feat(txn): atomic_write_bytes RESTORE (exact preimage mode)"
 ## Task 6: Staged restartable `_materialize` (file/dir/symlink + absent dispatch)
 
 **Files:**
-- Modify: `src/science_tool/plan_common.py` (`_materialize`, `_remove_live`)
-- Test: `tests/test_txn_restore.py` (new)
+- Modify: `src/science_tool/plan_common.py` (`_materialize`, `_remove_live`, bare-list bridge),
+  `src/science_tool/archive_plan.py` + `src/science_tool/supersede_plan.py` (pass `token=` to the
+  bridged `rollback_transitions`)
+- Test: `tests/test_txn_restore.py` (new), `tests/test_plan_common.py` (bare-list rollback calls gain `token=`)
 
 **Interfaces:**
 - Produces: `_materialize(path, snap, *, token, expected_live: StateFingerprint)` — staged publication
@@ -799,14 +801,15 @@ relies on: a survivor means the kill was *before* the rename, with the live targ
 **Bridge the bare-list `rollback_transitions` call site (F1 — avoid a red interval).** Changing
 `_materialize`'s signature to require `token` and `expected_live` breaks the shipped bare-list
 `rollback_transitions` (`plan_common.py:343`), whose archive/supersede callers — and their
-`test_plan_common.py` rollback tests — must stay green until Task 12 removes the function. Update that
-one call site to the new signature (a temporary bridge, deleted with the whole function in Task 12).
-The bare list already verifies `matches(t.post, path)` immediately above, so `expected_live=t.post` is
-exactly the state it confirmed, and a per-index token keeps restore staging paths unique:
+`test_plan_common.py` rollback tests — must stay green until Task 12 removes the function. Give the
+bare list a temporary keyword `token` (deleted with the whole function in Task 12) and thread it into
+`_materialize`, so restore staging tokens stay **per-operation** (Global Constraint — not the reused
+`barelist-restore-{index}`, R4-6). The bare list already verifies `matches(t.post, path)` immediately
+above, so `expected_live=t.post` is exactly the state it confirmed:
 
 ```python
-def rollback_transitions(transitions, project_root, snapshot):
-    for index, t in enumerate(reversed(transitions)):   # add enumerate for a per-path restore token
+def rollback_transitions(transitions, project_root, snapshot, *, token):   # temporary token param
+    for index, t in enumerate(reversed(transitions)):
         path = resolve_within(project_root, t.rel_path)
         if matches(t.pre, path):
             continue
@@ -817,12 +820,19 @@ def rollback_transitions(transitions, project_root, snapshot):
         snap = snapshot.get(path)
         if snap is None:
             raise RollbackHalt(f"no snapshot captured for {t.rel_path}; refusing to reconstruct")
-        _materialize(path, snap, token=f"barelist-restore-{index}", expected_live=t.post)  # bridged
+        _materialize(path, snap, token=f"{token}-restore-{index}", expected_live=t.post)  # bridged
 ```
+
+Update the two callers to pass their existing operation token: `apply_archive_plan`
+(`archive_plan.py:317`) → `rollback_transitions(all_t, project_root, snap, token=staging_token)`, and
+`apply_supersede_plan` (`supersede_plan.py:269`) → `rollback_transitions(plan.writes, project_root,
+snap, token=staging_token)`. Both already have `staging_token` in scope. (Task 12 replaces both calls
+with `rollback_with_tracker` and deletes this function.)
 
 (The new `_materialize` first runs `reconcile_restore_staging` (Task 7, added next) and then the
 staged restore; for an ordinary bare-list rollback with no staging survivor it converges to the same
-tree the old in-place `_materialize` produced, so the untouched `test_plan_common.py` assertions hold.)
+tree the old in-place `_materialize` produced, so the untouched `test_plan_common.py` assertions hold.
+Any `test_plan_common.py` test that calls `rollback_transitions` directly gains a `token="..."` kwarg.)
 
 - [ ] **Step 4: Run to verify pass**
 
@@ -833,8 +843,8 @@ which now reach `_materialize` through the bridge).
 - [ ] **Step 5: Commit**
 
 ```bash
-git add src/science_tool/plan_common.py tests/test_txn_restore.py
-git commit -m "feat(txn): staged restartable _materialize for all preimage types"
+git add src/science_tool/plan_common.py src/science_tool/archive_plan.py src/science_tool/supersede_plan.py tests/test_txn_restore.py tests/test_plan_common.py
+git commit -m "feat(txn): staged restartable _materialize for all preimage types; bridge bare-list rollback token"
 ```
 
 ---
@@ -886,6 +896,17 @@ def test_classify_staging_accepts_bytes(tmp_path):
     p = tmp_path / "f"; s = staging_path_for(p, "t"); s.write_bytes(b"abc")
     assert classify_staging(s, b"abc") == "complete"
     assert classify_staging(s, b"abcdef") == "prefix"
+
+def test_reconcile_halts_and_preserves_prefix_when_live_diverged(tmp_path):
+    # R4-2: a diverged live target must halt WITHOUT destroying our own prefix survivor (evidence).
+    from science_tool.plan_common import _materialize, snapshot_paths, fingerprint, staging_path_for, RollbackHalt
+    p = tmp_path / "f"; p.write_text("old")
+    snap = snapshot_paths([p])[p]; p.write_text("new"); live = fingerprint(p)
+    staging = staging_path_for(p, "t"); staging.write_bytes(b"ol")   # strict prefix of "old" -> our partial
+    p.write_text("someone-else-wrote-this")                          # live diverges from expected `live`
+    with pytest.raises(RollbackHalt):
+        _materialize(p, snap, token="t", expected_live=live)
+    assert staging.read_bytes() == b"ol"                             # prefix survivor preserved, not discarded
 
 def test_reconcile_fixes_mode_on_complete_file_survivor(tmp_path):
     # kill after bytes written but BEFORE fchmod -> survivor has umask-masked mode; reconcile must set fp.mode
@@ -953,9 +974,11 @@ def reconcile_restore_staging(path, snap, *, token, expected_live) -> bool:
             kind = classify_staging(staging, snap.content or b"")
         except StagingError as exc:
             raise RollbackHalt(f"{path}: foreign restore staging survivor: {staging}") from exc
+        # Verify authority BEFORE mutating OR discarding the survivor (R4-2): a diverged live target
+        # must halt with the survivor preserved as evidence, for both the complete and prefix cases.
+        if not matches(expected_live, path):
+            raise RollbackHalt(f"{path}: live diverged; preserving restore staging survivor")
         if kind == "complete":
-            if not matches(expected_live, path):
-                raise RollbackHalt(f"{path}: live diverged; refusing to publish restore survivor")
             assert fp.mode is not None
             os.chmod(staging, fp.mode)           # kill after write, before fchmod, left umask-masked mode
             os.replace(staging, path); _fsync_parent(path)
@@ -1279,6 +1302,20 @@ def test_refuses_when_source_diverged_from_src_pre(tmp_path):
     with pytest.raises(PreconditionRefused):
         move_no_clobber(s, d, src_pre=src_pre)
     assert not d.exists() and s.read_text() == "a concurrent writer changed this"  # nothing moved
+
+def test_fallback_rechecks_source_before_unlink(tmp_path):
+    # R4-1: in the ordered fallback the unlink is later than the top recheck; a writer landing during
+    # link+fsync must not lose the source. Abuse on_commit_dst to land the write at that exact instant
+    # (after the link, before the pre-unlink recheck).
+    from science_tool.plan_common import fingerprint, PreconditionRefused
+    s = tmp_path / "s"; s.write_text("captured"); d = tmp_path / "d"
+    src_pre = fingerprint(s)
+    def concurrent_writer():
+        s.write_text("changed AFTER the link, BEFORE the unlink")
+    with pytest.raises(PreconditionRefused):
+        move_no_clobber(s, d, src_pre=src_pre, on_commit_dst=concurrent_writer, _force_fallback=True)
+    assert not d.exists()                                              # owned dst link removed
+    assert s.read_text() == "changed AFTER the link, BEFORE the unlink"  # changed source preserved
 ```
 
 - [ ] **Step 2: Run to verify it fails**
@@ -1303,8 +1340,14 @@ def move_no_clobber(src, dst, *, src_pre=None, on_commit_dst=None, on_commit_src
             pass
     # Ordered fallback: dst made durable BEFORE src is unlinked.
     os.link(src, dst)                                # FileExistsError if dst present -> no-clobber
-    if on_commit_dst is not None: on_commit_dst()
+    if on_commit_dst is not None: on_commit_dst()    # dst exists now: mark at its creation (linearization)
     _fsync_parent(dst)
+    if src_pre is not None and not matches(src_pre, src):   # RECHECK adjacent to the irreversible unlink (R4-1)
+        # A writer changed src during link+fsync. Leave the changed source; remove OUR owned dst link.
+        # dst was marked WRITTEN, but rollback then finds it absent (== pre) and skips it, and src stays
+        # NOT_WRITTEN, so the concurrent write survives and nothing is half-moved.
+        os.unlink(dst); _fsync_parent(dst)
+        raise PreconditionRefused(f"{src}: source diverged before unlink; removed owned dst link")
     os.unlink(src)
     if on_commit_src is not None: on_commit_src()
     _fsync_parent(src)
@@ -1739,7 +1782,12 @@ git commit -m "feat(import): persist transitions + version the saved-plan wire s
     ancestor directories** — its `directory.mkdir(parents=True, exist_ok=True)` (`entity_reservation.py:183`)
     is removed; the ancestor is now a declared `created-dir` transition made via `mkdir_durable` by the
     caller. It calls `create_exclusive(path, text, mode, on_commit=on_commit)` so `import-dst` is marked
-    `WRITTEN` at the exclusive open (the hard-halt seam). New signature:
+    `WRITTEN` at the exclusive open (the hard-halt seam). It also **drops the shipped
+    `except BaseException: owned_path.unlink()` cleanup** (`entity_reservation.py:221`): that cleanup
+    erases a mid-create partial, which would defeat the `import-dst` hard-halt (a `WRITTEN`+`neither`
+    create must be *refused*, not silently removed). Mid-create semantics now belong to `create_exclusive`
+    (mark-at-open, leave the partial). The reservation `.reserving` sentinel's `finally` cleanup is
+    unchanged. New signature:
     `claim_number_in_dir(project_root, kind, number, local_part, text, *, on_commit=None) -> Path`.
   - **`apply_reference_rewrite` writes through `durable_replace_text` under frozen transition authority**
     (F8) so each `entity-rewrite` occurrence is durable and marked at its own replace boundary. The
@@ -1809,6 +1857,22 @@ def test_apply_import_rolls_back_via_tracker_after_partial_rewrite(tmp_path: Pat
         apply_import(root, plan)
     assert called, "import rollback did not route through the tracker"
     assert _tree(root) == before
+
+def test_apply_import_refuses_tampered_transition_surface(tmp_path: Path) -> None:
+    # R4-3: the persisted transition surface is re-derived and authenticated (Gate B) before any
+    # mutation, so a saved plan whose transitions disagree with the live re-derivation is refused clean.
+    from science_tool.entity_import import plan_import, apply_import, EntityImportError
+    from science_tool.plan_common import PathTransition, StateFingerprint
+    root = _project(tmp_path); src = _loose(root, "doc/plans/x.md")
+    plan = plan_import(root, src, kind="plan", title="T1")
+    before = _tree(root)
+    absent = StateFingerprint(existed=False, type=None, content_sha256=None, mode=None, symlink_target=None)
+    dirpost = StateFingerprint(existed=True, type="dir", content_sha256=None, mode=0o755, symlink_target=None)
+    plan.transitions.append(                                   # a member the re-derivation will not produce
+        PathTransition(role="created-dir", rel_path="entities/plans/_bogus", pre=absent, post=dirpost))
+    with pytest.raises(EntityImportError):
+        apply_import(root, plan)
+    assert _tree(root) == before                               # refused before any mutation
 ```
 
 - [ ] **Step 2: Run to verify it fails**
@@ -1820,6 +1884,20 @@ Expected: FAIL.
 
 Replace `_snapshot`/`_restore`/`mutated`-set bookkeeping with:
 
+0. **Authenticate the persisted transition surface (Gate B, R4-3).** Task 14 makes `transitions` part
+   of the saved, re-loadable wire schema, so — exactly as archive (`archive_plan.py:244`) and supersede
+   do — apply must re-derive the plan from live sources and compare the WHOLE surface before mutating.
+   Re-run the planner from the plan's own persisted inputs — `ImportPlan` already stores `source_rel`,
+   `kind`, and `title` — as `expected = plan_import(project_root, project_root / plan.source_rel,
+   kind=plan.kind, title=plan.title)` (the cohort path re-runs `plan_cohort_import` from the cohort
+   plan's stored members), then `assert_same_surface(plan.transitions, expected.transitions)` (translate
+   `SurfaceMismatch` → `EntityImportError`). Additionally assert the `entity-rewrite` transitions form a bijection with
+   `plan.ref_report.edits` keyed by `rel_path`, and that each such transition's `postimage` equals the
+   edit's rendered postimage. `PathTransition._coherent` already binds each staged transition's
+   `post.content_sha256` to its own `postimage`; Gate B binds the transition SET to the re-derived
+   surface, so a tampered or stale saved plan is refused cleanly here rather than surfacing as a lying
+   post-verify success or a `WRITTEN + neither` halt mid-rollback. Add
+   `from science_tool.plan_common import assert_same_surface, SurfaceMismatch` to `entity_import.py`.
 1. `snap = capture_and_verify(plan.transitions, project_root)`; `tracker = OwnershipTracker(plan.transitions)`;
    `idx = {id(t): i for i, t in enumerate(plan.transitions)}`; one per-apply `staging_token`.
 2. `created-dir` ancestors: `mkdir_durable(dir, t.post.mode, token=staging_token,
@@ -1866,8 +1944,14 @@ git commit -m "refactor(import): apply on shared tracker substrate; retire priva
 **Interfaces:**
 - Consumes: `apply_archive_plan`, `apply_supersede_plan`, `apply_import`, `apply_cohort_import`
   (each with a `_fault` seam); each plan's `transitions`.
-- Produces: `tests/_fs_map.py` (`tree_map`, `diff_map`, `no_scratch_survivors`);
+- Produces: `tests/_fs_map.py` (`tree_map`, `diff_map`, `no_scratch_survivors`, `transitions_of`);
   `tests/_fs_interpose.py` (`record_mutations` context manager).
+- `transitions_of(plan)` returns each family's **complete ordered** transition surface (R4-4), because
+  `plan.transitions` is not it for every family: archive stores its index write separately in
+  `plan.index` (`archive_plan.py`), supersede's surface is `plan.writes` (no `transitions` attribute at
+  all), while import/cohort do use `plan.transitions`. The helper dispatches:
+  `[*plan.transitions, plan.index]` (archive, when `plan.index` is not None) / `plan.writes` (supersede)
+  / `plan.transitions` (import, cohort) — by attribute presence, so all four families share one accessor.
 
 **Design (per revised design §7, rev-6).** Three assertion classes:
 1. **Persistent surface — before/after map (always-on).** `diff_map(before, after) ==
@@ -1895,57 +1979,65 @@ from science_tool import plan_common
 
 # Single-operand mutators: os.<name>(path, ...) — a[0] IS the affected entry.
 _ONE_PATH_OPS = ("unlink", "mkdir", "rmdir", "chmod")
-# Two-operand mutators: os.<name>(src, dst) — BOTH entries are affected (dst created, src removed).
-_TWO_PATH_OPS = ("rename", "replace", "link")
+# rename/replace: dst created AND src removed. link is NOT here — it creates dst but leaves src.
+_MOVE_OPS = ("rename", "replace")
 
 @contextlib.contextmanager
 def record_mutations():
-    """Record (op, abspath) for every filesystem-mutating call the substrate makes, in-process.
-    Wraps os.* and plan_common._rename_noreplace (ctypes renameat2 bypasses os). F6: the operand
-    recorded is the ENTRY the op mutates, per operation — not a blind a[0]. rename/replace/link record
-    both the created dst and the removed src; symlink records the LINK path (a[1]), never its target."""
+    """Record (op, abspath) for every filesystem-mutating call the substrate ACTUALLY makes, in-process.
+    Wraps os.* and plan_common._rename_noreplace (ctypes renameat2 bypasses os). The operand recorded is
+    the ENTRY the op mutates, per op (F6): rename/replace record dst AND the removed src; link records
+    only dst (src is unchanged, R4-7); symlink records the LINK path, never its target. Every wrapper
+    records AFTER the syscall returns (R4-7), so a failed O_EXCL/no-clobber/unlink/rename never appears
+    as a completed mutation."""
     log: list[tuple[str, str]] = []
     saved_one = {name: getattr(os, name) for name in _ONE_PATH_OPS}
-    saved_two = {name: getattr(os, name) for name in _TWO_PATH_OPS}
-    saved_symlink = os.symlink
+    saved_move = {name: getattr(os, name) for name in _MOVE_OPS}
+    saved_link, saved_symlink = os.link, os.symlink
     saved_open = os.open
     saved_rnr = plan_common._rename_noreplace
 
     def wrap_one(name, fn):
         def w(path, *a, **k):
-            log.append((name, os.fspath(path))); return fn(path, *a, **k)
+            r = fn(path, *a, **k)                            # succeed first
+            log.append((name, os.fspath(path))); return r
         return w
-    def wrap_two(name, fn):
+    def wrap_move(name, fn):
         def w(src, dst, *a, **k):
-            log.append((name, os.fspath(dst)))              # the created/overwritten entry
-            log.append((f"{name}-src", os.fspath(src)))     # the removed source entry
-            return fn(src, dst, *a, **k)
+            r = fn(src, dst, *a, **k)
+            log.append((name, os.fspath(dst)))              # created/overwritten entry
+            log.append((f"{name}-src", os.fspath(src)))     # removed source entry
+            return r
         return w
+    def wrap_link(src, dst, *a, **k):                        # link: only dst is created; src stays
+        r = saved_link(src, dst, *a, **k)
+        log.append(("link", os.fspath(dst))); return r
     def wrap_symlink(target, linkpath, *a, **k):
-        log.append(("symlink", os.fspath(linkpath)))        # the created entry, NOT the target
-        return saved_symlink(target, linkpath, *a, **k)
+        r = saved_symlink(target, linkpath, *a, **k)
+        log.append(("symlink", os.fspath(linkpath))); return r   # created entry, NOT the target
     def wrap_open(path, flags, *a, **k):
+        fd = saved_open(path, flags, *a, **k)               # a failed O_EXCL raises here -> not recorded
         if flags & (os.O_CREAT | os.O_TRUNC):
             log.append(("open-write", os.fspath(path)))
-        return saved_open(path, flags, *a, **k)
+        return fd
     def wrap_rnr(src, dst):
-        log.append(("rename", os.fspath(dst)))
-        log.append(("rename-src", os.fspath(src))); return saved_rnr(src, dst)
+        saved_rnr(src, dst)                                 # FileExistsError/NoAtomicRename -> not recorded
+        log.append(("rename", os.fspath(dst))); log.append(("rename-src", os.fspath(src)))
     try:
         for name in _ONE_PATH_OPS:
             setattr(os, name, wrap_one(name, saved_one[name]))
-        for name in _TWO_PATH_OPS:
-            setattr(os, name, wrap_two(name, saved_two[name]))
-        os.symlink = wrap_symlink
+        for name in _MOVE_OPS:
+            setattr(os, name, wrap_move(name, saved_move[name]))
+        os.link, os.symlink = wrap_link, wrap_symlink
         os.open = wrap_open
         plan_common._rename_noreplace = wrap_rnr
         yield log
     finally:
         for name in _ONE_PATH_OPS:
             setattr(os, name, saved_one[name])
-        for name in _TWO_PATH_OPS:
-            setattr(os, name, saved_two[name])
-        os.symlink = saved_symlink
+        for name in _MOVE_OPS:
+            setattr(os, name, saved_move[name])
+        os.link, os.symlink = saved_link, saved_symlink
         os.open = saved_open
         plan_common._rename_noreplace = saved_rnr
 ```
@@ -1955,7 +2047,7 @@ def record_mutations():
 import os
 from pathlib import Path
 import pytest
-from tests._fs_map import tree_map, diff_map, no_scratch_survivors
+from tests._fs_map import tree_map, diff_map, no_scratch_survivors, transitions_of
 from tests._fs_interpose import record_mutations
 
 def _declared_or_scratch(abspath, root, transitions):
@@ -1970,18 +2062,21 @@ def test_import_surface_equals_transitions(tmp_path):
     root = _project(tmp_path)                        # shared fixture (see Files)
     src = _loose(root, "doc/plans/x.md", "# Title\n\nbody\n")
     plan = plan_import(root, src, kind="plan", title="Title")
+    surface = transitions_of(plan)                   # per-family authoritative surface (R4-4)
     before = tree_map(root)
     with record_mutations() as log:
         apply_import(root, plan)
     # (1) persistent surface
-    assert diff_map(before, tree_map(root)) == {t.rel_path for t in plan.transitions if t.pre != t.post}
+    assert diff_map(before, tree_map(root)) == {t.rel_path for t in surface if t.pre != t.post}
     # (2) transient surface: every recorded mutation is declared or declared-scratch
     for op, path in log:
-        assert _declared_or_scratch(path, root, plan.transitions), f"undeclared {op} {path}"
+        assert _declared_or_scratch(path, root, surface), f"undeclared {op} {path}"
     assert no_scratch_survivors(root)
 ```
 
-Repeat classes (1)+(2) for `apply_archive_plan`, `apply_supersede_plan`, `apply_cohort_import` with
+Repeat classes (1)+(2) for `apply_archive_plan`, `apply_supersede_plan`, `apply_cohort_import` using
+`transitions_of(plan)` as the surface each time (never `plan.transitions` directly — it misses archive's
+index and does not exist on supersede, R4-4), with
 each family's existing fixture (`_superseded`/`plan_archive`, the supersede fixture,
 `_valid_plan`/`apply_cohort_import`).
 
@@ -1993,9 +2088,22 @@ postimage — this is what makes the state re-drivable. Assert that (not a filen
 over each seam the family injects (archive: `renamed:<id>`, `index-written`; import: `import-dst-created`,
 `import-src-unlinked`, `rewrite:<rel>`). Example for archive:
 
+A family `_fault` fires **between** completed operations (archive's `renamed:<id>` is after a rename
+returns, `index-written` after the index `os.replace`), so it characterizes *between-op* states, and a
+`BaseException` there does run `finally`/`with __exit__` (unlike SIGKILL — R4-5). That is exactly the
+right tool for the achievable family-level invariant — **never `neither`**: after a kill at any seam,
+every path in the authoritative surface is at `pre` or `post`, and each scratch survivor is an
+attributable prefix/complete. Mid-write partials and parent-fsync failures are NOT family-level here;
+they are covered where the fault threads *into* the primitive and the test inspects state at the labeled
+point: `staged_write`'s mid-write `_fault` and the reconciliation survivors (Task 7), and
+`create_exclusive`'s `test_create_exclusive_marks_before_a_failing_fsync` (Task 11, design test 4b),
+plus `test_fallback_fsyncs_dst_parent_before_unlinking_src` (Task 10). Faithful mid-write survivor
+characterization under a true kill is the opt-in subprocess guard (class 4).
+
 ```python
 import pytest
 from science_tool.plan_common import classify_staging, matches, resolve_within, staging_path_for
+from tests._fs_map import transitions_of
 
 class _Kill(BaseException): ...
 
@@ -2005,29 +2113,34 @@ def test_archive_kill_at_seam_leaves_pre_or_post_never_neither(tmp_path, seam):
     _superseded(tmp_path)
     plan = plan_archive(tmp_path, selection=ArchiveStatusSweep(kind="all_by_status",
                         statuses=["superseded"]), now="2026-07-18T00:00:00Z")
+    surface = transitions_of(plan)                   # includes plan.index (R4-4)
     def fault(label):
         if label == seam: raise _Kill()
     with pytest.raises(_Kill):
         apply_archive_plan(tmp_path, plan, staging_token="tok", _fault=fault)
-    # (a) never neither: every declared path is at pre or post
-    for t in plan.transitions:
+    # (a) never neither: every path in the authoritative surface is at pre or post
+    for t in surface:
         p = resolve_within(tmp_path, t.rel_path)
         assert matches(t.pre, p) or matches(t.post, p), f"{t.rel_path} in a third state after kill at {seam}"
     # (b) every scratch survivor is an attributable prefix/complete of a declared postimage
     for s in tmp_path.rglob("*.tmp"):
-        owner = next((t for t in plan.transitions
+        owner = next((t for t in surface
                       if staging_path_for(resolve_within(tmp_path, t.rel_path), "tok") == s), None)
         assert owner is not None and owner.postimage is not None, f"unattributable scratch {s}"
         assert classify_staging(s, owner.postimage) in ("prefix", "complete")
 ```
 
-Write the parallel `test_import_kill_at_seam_...` over `apply_import`'s seams (`import-dst-created`,
-`import-src-unlinked`, `rewrite:<rel>`) asserting the same two properties; the `import-dst` mid-create
-third state is the accepted hard-halt (a `WRITTEN`+`neither` create is refused, not auto-restored), so
-that seam asserts the sentinel survives rather than pre/post — the `test_rollback_leaves_no_sentinel_either`
-oracle already pins the clean case. Design load-bearing test 4b (durability: `on_commit` fired before a
-failing parent-dir fsync) is covered per-primitive in Task 11 and by
-`test_fallback_fsyncs_dst_parent_before_unlinking_src` in Task 10.
+Write the parallel `test_import_kill_at_seam_...` over `apply_import`'s between-op seams
+(`import-src-unlinked`, `rewrite:<rel>`) asserting the same never-`neither` + scratch-classification
+properties over `transitions_of(plan)`. Do **not** assert a surviving `.reserving` sentinel at
+`import-dst-created`: `claim_number_in_dir` removes the sentinel in a `finally` and unlinks the created
+file in `except BaseException` (`entity_reservation.py:211`), so a `BaseException` fault there leaves
+neither — a `BaseException` is not a SIGKILL. The `import-dst` mid-create hard-halt (a `WRITTEN`+`neither`
+create refused, not auto-restored) is instead pinned at the primitive level by `create_exclusive`'s
+threaded `_fault` (Task 11), whose kill leaves the O_EXCL-created partial; the clean case stays pinned by
+the `test_rollback_leaves_no_sentinel_either` oracle. Accordingly, Task 15's migrated `claim_number_in_dir`
+must **drop the `except BaseException: owned_path.unlink()` cleanup** and delegate mid-create semantics to
+`create_exclusive` (mark-at-open, leave the partial), or the hard-halt cannot hold.
 
 The opt-in bypass guard (class 4) is a separate `@pytest.mark.skipif(not _has_ptrace(), ...)` test that
 subprocesses one mutator under `strace -fe trace=%file` and diffs the traced mutating syscalls against
@@ -2132,6 +2245,23 @@ in a serialized fixture), never by loosening an assertion.
   explicit outer→inner transition ordering (T14); F10 Tasks 12/15 reds spy on `rollback_with_tracker`
   (the bare-list already rmdir's created dirs / private `_restore` already restores, so tree-only
   assertions were not genuine reds), and the tracker keeps that name across T12–15.
+- **Review round 4 closed (10 findings, 2 incomplete-fix follow-ups):** R4-1 move fallback rechecks
+  `src_pre` **adjacent to `unlink(src)`** (not just at entry) and removes the owned dst link on
+  divergence (T10 + design move pseudocode); R4-2 `reconcile_restore_staging` verifies `expected_live`
+  before discarding the file-**prefix** survivor too, not only the complete/dir/symlink cases (T7 +
+  preserve-prefix test); R4-3 import apply gains Gate-B surface authentication — re-derive +
+  `assert_same_surface` + entity-rewrite/edit bijection before mutating, matching archive
+  (`archive_plan.py:244`)/supersede (T15 + tamper-refusal test); R4-4 `transitions_of(plan)` per-family
+  accessor (archive's index is `plan.index`, supersede's surface is `plan.writes`), used everywhere the
+  harness needs a surface (T16); R4-5 family `_fault` tests assert only the achievable between-op
+  never-`neither` invariant (a `BaseException` runs `finally`/`__exit__`, so it is not a SIGKILL and
+  cannot leave a `.reserving` sentinel — `entity_reservation.py:211/221`); mid-write/fsync/hard-halt are
+  primitive-level (T7/T11) or the opt-in subprocess (class 4); T15's `claim_number_in_dir` drops the
+  `except BaseException: owned_path.unlink()` cleanup so the `import-dst` hard-halt holds; R4-6 the Task 6
+  bare-list bridge takes a temporary `token=` param fed the operation's `staging_token`, so restore
+  tokens are per-operation (not the reused `barelist-restore-{index}`); R4-7 the interposition shim gives
+  `link` a dst-only wrapper and records every op only AFTER the syscall succeeds (no phantom
+  failed-attempt mutations).
 
 ## Execution handoff
 
