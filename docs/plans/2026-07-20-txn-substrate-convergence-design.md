@@ -332,10 +332,12 @@ For a regular file:
 
 1. open with `O_RDONLY | O_NOFOLLOW`;
 2. obtain type and mode with `fstat`;
-3. stream bytes from that same descriptor into the blob store, computing the content hash over the
-   stream so the retained bytes and fingerprint still derive from one descriptor (Guarantee 3);
-4. the resulting immutable blob is the retained rollback material; capture never holds an entire file
-   body in memory.
+3. stream bytes from that same descriptor into a per-transaction preparation-staging file, computing
+   the content hash over the stream so the retained bytes and fingerprint still derive from one
+   descriptor (Guarantee 3);
+4. on completion, promote the staging file to its content-addressed blob by no-clobber rename; the
+   immutable blob is the retained rollback material, and capture never holds an entire file body in
+   memory.
 
 Directories and absence retain `lstat`-based fingerprints and no file content. A symlink precondition
 uses `symlink_fingerprint` (§5.5) — `lstat` plus `readlink` — which is not descriptor-coherent: its
@@ -378,9 +380,10 @@ halted — never published as success. Rollback publication is validated the sam
 ```
 
 This metadata is single-host by construction. On creation of `.science/transactions/`, the engine
-best-effort **requests** that cross-machine sync clients ignore the directory — for Dropbox, the
-extended attribute `user.com.dropbox.ignored=1` — so that the journal, blobs, and pointers are not
-propagated off the local host. The durability model is defined against one local POSIX filesystem; a
+best-effort **requests** that cross-machine sync clients ignore the directory — via the platform's
+Dropbox ignore marker (Linux extended attribute `user.com.dropbox.ignored=1`; macOS
+`com.dropbox.ignored`, or the File Provider `com.apple.fileprovider.ignore#P`) — so that the journal,
+blobs, and pointers are not propagated off the local host. The durability model is defined against one local POSIX filesystem; a
 synced copy of this directory is neither required nor trusted, and a failure to set the ignore marker
 does not weaken any single-host guarantee — the single-host contract does not depend on the marker's
 success.
@@ -413,6 +416,12 @@ Initial file contents and planned postimages are stored by SHA-256. Blob creatio
 durable, and idempotent only after byte-for-byte verification. Effects and snapshots reference
 hashes; JSON does not duplicate file bodies.
 
+Because a blob's content-addressed name is unknown until its stream completes, capture writes to a
+per-transaction preparation-staging namespace and promotes each completed file to its
+`sha256/<digest>` blob by no-clobber rename (§6). A partial capture-staging file left by a crash
+before `active` publication is attributable, mutation-free scratch, reclaimed with its preparation
+orphan (§7.3).
+
 ### 7.3 Record and active pointer
 
 `spec.json` is immutable canonical `TransactionSpec`. Execution state is an append-only sequence of
@@ -427,8 +436,10 @@ attributable unpublished generation staging file is mutation-free scratch and ca
 `active` is an atomically published, fsynced pointer to the active record. It is created no-clobber.
 The preparation order is:
 
-1. coherently capture and verify the complete initial surface;
-2. write or verify all captured and planned blobs;
+1. coherently capture and verify the complete initial surface, streaming each captured file into a
+   per-transaction preparation-staging file;
+2. promote captured staging files to their content-addressed blobs and write or verify all planned
+   postimage blobs;
 3. write immutable `spec.json`;
 4. write generation zero as `PREPARED`;
 5. fsync the record and transaction directories;
@@ -663,9 +674,12 @@ terminal decision.
 
 There is no link/unlink fallback. Cross-filesystem movement or a platform without no-clobber rename
 raises `CapabilityUnavailable` before preparation. Recovery of an uncommitted move renames the
-anchor-owned destination back to an absent source no-clobber. If the source has reappeared, recovery
-removes only an unchanged, anchor-proven destination entry and preserves the source as external
-drift; a diverged anchor or destination halts. If the source still names the unchanged anchor and the
+anchor-owned destination back to an absent source no-clobber. If the source path has reappeared under
+a foreign entry, the move cannot be undone without clobbering it, and removing the anchor-owned
+destination would destroy the last durable names of the original inode (the destination and anchor are
+its only two names); recovery therefore halts with the destination and anchor preserved, so the
+original contents survive as evidence rather than being discarded by terminal scratch cleanup (§7.4).
+A diverged anchor or destination also halts. If the source still names the unchanged anchor and the
 destination is foreign, the move did not land; preserve the destination and return a refused outcome.
 A tuple in which neither persistent path has the anchor’s identity is unattributable and halts with
 the anchor preserved.
@@ -673,9 +687,12 @@ the anchor preserved.
 ### 9.5 `CreateDirectory`
 
 Requires absence before and an exact directory mode after. Persist `STARTED`, create a same-parent
-staging directory, set its exact mode, **open and retain a descriptor to that staging directory before
-publishing**, then publish with `renameat2(RENAME_NOREPLACE)` and fsync the parent. Platforms without
-the required directory publication primitive refuse early. Opening after publication would leave a
+staging directory, set its exact mode, and **open and retain a descriptor to that staging directory
+before publishing**. Durably flush that descriptor after setting the mode: a parent-entry flush
+persists the name but not the child inode's own mode metadata, so the staging directory's descriptor
+needs its own durability barrier (`durable_publish`, §5.5) before publication. Then publish with
+`renameat2(RENAME_NOREPLACE)` and fsync the parent. Platforms without the required directory
+publication primitive refuse early. Opening after publication would leave a
 rename/replace window, so the descriptor is retained beforehand; the descriptor alone proves only
 which inode the engine *created*, so after the rename the engine verifies the published live directory
 carries that descriptor's identity (equal `st_dev`/`st_ino`) before marking `DONE` — proving the
@@ -818,6 +835,14 @@ bytes, modes, types, symlink targets, directory entries, and ordering.
 
 Python exception tests exercise caught rollback. Subprocess `SIGKILL` tests exercise true hard halt
 and fresh-process recovery. They do not share assertions that depend on Python unwinding.
+
+`SIGKILL` exercises process death but leaves the kernel page cache intact, so it does not test
+power-loss durability: a real power loss can discard or reorder writes not covered by a modeled
+barrier. A deterministic **persistence-cut model** therefore drives durability testing — a backend
+that, at each modeled barrier, drops or reorders writes not yet made durable and replays recovery from
+the surviving state. It targets the ordering the design depends on: `active` publication,
+journal-generation publication, moved-destination-before-source-parent fsync, and the `COMMITTED`
+decision. Where feasible it is complemented by VM or block-device crash testing.
 
 ### 13.3 Compiler conformance
 
