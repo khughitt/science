@@ -104,7 +104,7 @@ user's explicit request:
 - [`bio/SKILL.md`](bio/SKILL.md) - load when a biological-assay dataset needs measurement QA.
 - [`ml/SKILL.md`](ml/SKILL.md) - load when embedding/manifold/unsupervised-structure QA is in scope.
 - [`data-management/SKILL.md`](data-management/SKILL.md) - load when data acquisition, preprocessing, or QA is in scope.
-- [`statistics/SKILL.md`](statistics/SKILL.md) - load when finite-sample quantitative interpretation is in scope.
+- [`statistics/SKILL.md`](statistics/SKILL.md) - load when designing, fitting, or comparing a finite-sample statistical model.
 - [`study-design/SKILL.md`](study-design/SKILL.md) - load when rigor must be pre-committed or a numeric verdict certified/arbitrated.
 - [`epistemics/SKILL.md`](epistemics/SKILL.md) - load when proposition/evidence schema or graph reasoning is in scope.
 - [`literature/SKILL.md`](literature/SKILL.md) - load when evidence evaluation, curation, or literature sourcing is in scope.
