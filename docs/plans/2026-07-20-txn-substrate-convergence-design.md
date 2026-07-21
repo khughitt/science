@@ -248,6 +248,8 @@ Before any journal or blob write, validation proves:
 - the effect surface equals the family transition surface exactly;
 - no persistent path is omitted or undeclared;
 - ancestor-resolved, leaf-retaining paths stay inside the project root;
+- no persistent effect path lies at or below the reserved `.science/transactions/` namespace, so no
+  family effect can target the journal, blobs, lock, or record storage;
 - engine scratch names are disjoint from persistent paths;
 - every semantic capability (§5.5) named by the spec's effects, plus the always-required
   `anchored_traversal`, `durable_publish`, and `advisory_project_lock`, is supplied by the active
@@ -269,6 +271,15 @@ Linux filesystems; macOS swap/exclusive rename is gated by `volumeSupportsSwapRe
 every effect path resolves on the project-root volume, so preparation validates every required
 capability against that one volume and refuses if any is missing. A path or move that would cross
 into a nested or bind mount refuses at preparation rather than escaping the probed capability set.
+
+Probing `atomic_exchange`, `noclobber_transfer`, and `identity_anchor` is empirical — it creates and
+mutates test entries on the project-root volume — so it cannot be purely read-only, and a kill mid-probe
+happens before any transaction record exists. The probe therefore runs inside an engine-owned, anchored
+namespace `.science/transactions/probe/` (opened from the held project-root descriptor under
+`anchored_traversal`, never a persistent or effect path), and **every probe survivor is unconditionally
+reclaimed under the project lock at lease entry, before transaction preparation begins**. A kill during
+probing thus leaves only attributable, mutation-free debris in that reserved namespace, discarded before
+any record is written; it can never be mistaken for transaction state.
 
 | Capability | Required guarantee | Reference backends |
 | --- | --- | --- |
@@ -370,6 +381,7 @@ halted — never published as success. Rollback publication is validated the sam
 .science/transactions/
 ├── lock
 ├── active
+├── probe/                      # engine-owned capability-probe scratch (reclaimed at lease entry)
 ├── records/
 │   └── <transaction-id>/
 │       ├── spec.json
@@ -390,6 +402,19 @@ blobs, and pointers are not propagated off the local host. The durability model 
 synced copy of this directory is neither required nor trusted, and a failure to set the ignore marker
 does not weaken any single-host guarantee — the single-host contract does not depend on the marker's
 success.
+
+The metadata namespace is anchored exactly like effect paths (§6). The engine opens `.science/` and
+`.science/transactions/` from the held project-root descriptor through guarded traversal — refusing any
+symlink or mount crossing — retains descriptors for `transactions/`, `records/`, `blobs/`, and each
+active record directory, and issues every `lock`, `active`, generation, blob, and staging operation as
+a single-component leaf relative to a held descriptor, never a re-resolved absolute path. Without this,
+a pre-existing `.science` symlink or an ancestor swap could place the journal on another path or volume
+while effects still mutate the intended project, and fresh-process recovery could then open a different
+`.science/transactions/` than the one the interrupted run wrote — missing the WAL entirely. Recovery
+reacquires these metadata descriptors by the same guarded traversal before scanning `active` or any
+record (subject to the ancestor-relocation non-guarantee, §3.2). Compilation additionally rejects any
+persistent effect path at or below the reserved `.science/transactions/` namespace, so no family
+effect can target the journal's own storage.
 
 ### 7.1 Lock and the universal recovery lease
 
@@ -442,24 +467,29 @@ The preparation order is:
 
 1. coherently capture and verify the complete initial surface, streaming each captured file into a
    per-transaction preparation-staging file;
-2. promote captured staging files to their content-addressed blobs and write or verify all planned
-   postimage blobs;
-3. write immutable `spec.json`;
-4. write generation zero as `PREPARED`;
-5. fsync the record and transaction directories;
-6. publish and fsync `active`;
-7. begin effects.
+2. promote captured staging files to their content-addressed blobs (no-clobber rename from `staging/`
+   into `blobs/sha256/`) and write or verify all planned postimage blobs;
+3. flush `blobs/sha256/` **and** `staging/`, then remove the emptied `staging/` directory and flush
+   the record directory. Promotion is a cross-directory move: flushing only the blob directory could
+   leave both the blob and its `staging/` source name durable after power loss, resurrecting
+   "preparation-only" staging inside a later-active record. This cut makes staging durably gone before
+   any generation or `active` becomes durable;
+4. write immutable `spec.json`;
+5. write generation zero as `PREPARED`;
+6. fsync the record and transaction directories;
+7. publish and fsync `active`;
+8. begin effects.
 
-A crash before step 6 leaves only mutation-free orphan metadata. A crash after step 6 has a
+A crash before step 7 leaves only mutation-free orphan metadata. A crash after step 7 has a
 discoverable recovery record.
 
 Startup scans records as well as `active`. Because effects begin only after `active` is published
-(step 6), a nonterminal record is a mutation-free preparation orphan whenever `active` does not point
+(step 7), a nonterminal record is a mutation-free preparation orphan whenever `active` does not point
 at it. **When `active` is absent, every nonterminal record is such an orphan**, and recovery reclaims
 all of them under the lock regardless of count. A record directory that has not yet reached a valid
 generation zero — holding only `spec.json` and/or incomplete `staging/` scratch, with no `000000.json`
-— is a preparation orphan **by construction**: `active` is published only at step 6, after generation
-zero is written at step 4, so such a directory can never be `active`'s referent. It is therefore
+— is a preparation orphan **by construction**: `active` is published only at step 7, after generation
+zero is written at step 5, so such a directory can never be `active`'s referent. It is therefore
 neither a resumable "record" nor "invalid metadata" that halts; it is reclaimed whenever unreferenced,
 and its `staging/` contents are the mutation-free scratch of §7.2. When `active` is present it resolves
 exactly its referenced record — a terminal record resumes cleanup (§7.4), a nonterminal record resumes recovery —
@@ -718,14 +748,16 @@ unattributable and halts with the anchor preserved.
 ### 9.5 `CreateDirectory`
 
 Requires absence before and an exact directory mode after. Persist `STARTED`, create a same-parent
-staging directory, set its exact mode, and **open and retain a descriptor to that staging directory
-before publishing**. Because `mkdir` returns no descriptor, the staging directory must be opened by
-name after creation, which reintroduces a swap window; to close it, the engine validates the opened
-descriptor's exact mode and emptiness (`fstat` plus a descriptor-relative directory read) before
-publication, rejecting any object swapped onto the staging name after `mkdir`. Durably flush that
-descriptor after setting the mode: a parent-entry flush persists the name but not the child inode's own
-mode metadata, so the staging directory's descriptor needs its own durability barrier
-(`durable_publish`, §5.5) before publication. Then publish with
+staging directory with `mkdir` (which fails if the name exists), then **open and retain a descriptor
+to it before mutating it**. Because `mkdir` returns no descriptor the directory must be opened by name,
+leaving an unavoidable mkdir→open swap window; the engine closes what it can by validating, through the
+opened descriptor, that the object is a directory and empty (`fstat` plus a descriptor-relative
+directory read) **before any mutation** — authority precedes staging-object mutation (§10). Only then
+set the exact mode by `fchmod` **through the retained descriptor**, never by re-resolving the name, so
+a foreign directory swapped onto the staging name is never chmod'd before detection. Durably flush that
+descriptor after `fchmod`: a parent-entry flush persists the name but not the child inode's own mode
+metadata, so the staging directory's descriptor needs its own durability barrier (`durable_publish`,
+§5.5) before publication. Then publish with
 `renameat2(RENAME_NOREPLACE)` and fsync the parent. Platforms without the required directory
 publication primitive refuse early. Opening after publication would leave a
 rename/replace window, so the descriptor is retained beforehand; the descriptor alone proves only
@@ -878,8 +910,9 @@ power-loss durability: a real power loss can discard or reorder writes not cover
 barrier. A deterministic **persistence-cut model** therefore drives durability testing — a backend
 that, at each modeled barrier, drops or reorders writes not yet made durable and replays recovery from
 the surviving state. It targets the ordering the design depends on: `active` publication,
-journal-generation publication, moved-destination-before-source-parent fsync, and the `COMMITTED`
-decision. For moves it must generate both the forward dual-name intermediate (destination-parent flush
+journal-generation publication, moved-destination-before-source-parent fsync, blob promotion (blob and
+`staging/` directories flushed and `staging/` removed before any generation or `active` is durable,
+§7.3 step 3), and the `COMMITTED` decision. For moves it must generate both the forward dual-name intermediate (destination-parent flush
 persisted, source-parent flush not — source, destination, and anchor all naming the original inode,
 §9.4) and its reverse `UNDO_STARTED` analog (restored-source-parent flush persisted, old-destination
 flush not), and assert recovery repairs each by removing the destination. Where feasible it is
