@@ -17,7 +17,7 @@ source_refs:
 - cite:Jiralerspong2024
 - cite:Liu2024HiddenWorld
 - cite:Wan2025
-- cite:Wang2025
+- cite:Wang2025Causal
 - cite:Ding2025
 - cite:Si2025
 - cite:Zhang2025ScientificMethod
@@ -41,7 +41,7 @@ related:
 ## Summary
 
 Han et al. introduce LLM-assisted prior and constraint generation as upstream evidence, with explicit validation requirements [@Han2026].
-Batch 3 adds a stronger causal-graph case: LLMs can propose variables, priors, constraints, graph structures, and post-refinements, but those outputs are weak prior or pipeline evidence rather than causal truth [@Ban2023; @Jiralerspong2024; @Liu2024HiddenWorld; @Wan2025; @Wang2025].
+Batch 3 adds a stronger causal-graph case: LLMs can propose variables, priors, constraints, graph structures, and post-refinements, but those outputs are weak prior or pipeline evidence rather than causal truth [@Ban2023; @Jiralerspong2024; @Liu2024HiddenWorld; @Wan2025; @Wang2025Causal].
 Batch 5 adds an operational case: LLM agents can plan tool chains, execute tools, summarize results, generate hypotheses, and update knowledge graphs, so they are operators as well as sources [@Ding2025; @Zhang2025ScientificMethod].
 The Science project itself uses LLM agents for paper summarization, claim extraction, batch synthesis, attention sampling, and many curation tasks.
 Each agent is a Zhao2012-style fallible source with its own sensitivity, specificity, prompt-version dependence, and shared-pipeline correlations.
@@ -59,7 +59,7 @@ This question asks how the project should represent LLM agents as evidence sourc
 ## Current Evidence
 
 - Han et al. demonstrate that LLM-generated priors and constraints require validation diagnostics and provenance to function as evidence inputs [@Han2026].
-- Ban, Jiralerspong, Liu, Wan, and Wang show several causal-graph roles for LLMs: direct graph elicitation, soft-prior construction, weak-prior decomposition, variable proposal, and post-refinement [@Ban2023; @Jiralerspong2024; @Liu2024HiddenWorld; @Wan2025; @Wang2025].
+- Ban, Jiralerspong, Liu, Wan, and Wang show several causal-graph roles for LLMs: direct graph elicitation, soft-prior construction, weak-prior decomposition, variable proposal, and post-refinement [@Ban2023; @Jiralerspong2024; @Liu2024HiddenWorld; @Wan2025; @Wang2025Causal].
 - Ding et al. show that scientific tool agents need tool dependency graphs, I/O contracts, planning/execution/summarization roles, and safety checks [@Ding2025].
 - Si et al. show that LLM bias can be evaluated with Bayesian hypothesis testing and Bayes factors, distinguishing no evidence from evidence of no bias [@Si2025].
 - Yu et al. define scientific context-understanding competencies that map to agent evaluation: relevant information identification, information-absence detection, multi-source integration, and context-aware inference [@Yu2026].

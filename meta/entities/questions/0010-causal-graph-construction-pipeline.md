@@ -22,7 +22,7 @@ source_refs:
 - cite:Liu2024HiddenWorld
 - cite:Zheng2024
 - cite:Wan2025
-- cite:Wang2025
+- cite:Wang2025Causal
 - cite:Yang2025
 - cite:Zuber2025
 related:
@@ -57,7 +57,7 @@ This question asks which of those stages should become explicit Science graph ar
 - Shi and Bhagwat show that data integration for causal inference depends on selection, confounding, missing variables, variable overlap, and external-source validity [@Shi2022; @Bhagwat2023].
 - Dong shows that hidden-variable assumptions change what can be learned from observed data; causal sufficiency cannot remain implicit [@Dong2023].
 - Faller et al. show that self-compatibility can provide a ground-truth-free diagnostic, but this is a falsification or warning signal rather than proof [@Faller2024].
-- Ban, Jiralerspong, Liu, Wan, and Wang show that LLMs can propose variables, priors, constraints, or graph structures, but their outputs should be represented as fallible prior or pipeline evidence rather than causal truth [@Ban2023; @Jiralerspong2024; @Liu2024HiddenWorld; @Wan2025; @Wang2025].
+- Ban, Jiralerspong, Liu, Wan, and Wang show that LLMs can propose variables, priors, constraints, or graph structures, but their outputs should be represented as fallible prior or pipeline evidence rather than causal truth [@Ban2023; @Jiralerspong2024; @Liu2024HiddenWorld; @Wan2025; @Wang2025Causal].
 - Yang and Zuber show that mediation and Mendelian-randomization graph outputs require estimand-specific fields, instruments, direction assumptions, and graph uncertainty [@Yang2025; @Zuber2025].
 
 ## Thoughts

@@ -22,7 +22,7 @@ source_refs:
 - paper:Liu2024HiddenWorld
 - paper:Zheng2024
 - paper:Wan2025
-- science-meta:paper:Wang2025
+- science-meta:paper:Wang2025Causal
 - paper:Yang2025
 - paper:Zuber2025
 related:
@@ -42,7 +42,7 @@ related:
 
 Batch 3 makes H04 sharper: causal graph construction needs layered provenance.
 A credible causal update should distinguish causal model, observed-data link, target estimand, identification assumptions, discovery algorithm, prior knowledge, graph object type, diagnostic checks, and validation role [@Petersen2014; @Shi2022; @Faller2024; @Zheng2024].
-LLMs can help with variable proposal, weak prior construction, and graph elicitation, but the batch repeatedly argues against treating LLM outputs as causal truth [@Ban2023; @Jiralerspong2024; @Liu2024HiddenWorld; @Wan2025; @Wang2025].
+LLMs can help with variable proposal, weak prior construction, and graph elicitation, but the batch repeatedly argues against treating LLM outputs as causal truth [@Ban2023; @Jiralerspong2024; @Liu2024HiddenWorld; @Wan2025; @Wang2025Causal].
 
 ## Key Contribution
 
@@ -96,7 +96,7 @@ Faller et al. show that self-compatibility can falsify some causal discovery out
 This is a diagnostic signal, not proof.
 
 **LLMs are weak-prior and representation tools.**
-Ban et al., Jiralerspong et al., Liu et al., Wan et al., and Wang et al. show several useful LLM roles: direct graph elicitation, soft prior generation, weak-prior decomposition, variable proposal, and post-refinement [@Ban2023; @Jiralerspong2024; @Liu2024HiddenWorld; @Wan2025; @Wang2025].
+Ban et al., Jiralerspong et al., Liu et al., Wan et al., and Wang et al. show several useful LLM roles: direct graph elicitation, soft prior generation, weak-prior decomposition, variable proposal, and post-refinement [@Ban2023; @Jiralerspong2024; @Liu2024HiddenWorld; @Wan2025; @Wang2025Causal].
 Across the batch, the safe design is to record LLM outputs as fallible, typed, provenance-rich evidence.
 
 **Causal mechanisms require estimand-specific payloads.**
