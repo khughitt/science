@@ -3,7 +3,7 @@ title: Feedback Triage — 2026-07 batch (106 open items) — Design
 status: proposed
 created: '2026-07-20'
 updated: '2026-07-21'
-revision: v4 (owner decisions D1 + D2 resolved — sequence steps 3 and 4)
+revision: v5 (step 5 Batch B remainder — freeze-status gate + evidence-line docs; generic lint already existed / general form rejected)
 ---
 
 # Feedback Triage — 2026-07 batch
@@ -366,6 +366,50 @@ entities *lose* the exemption and stale invented paths *keep* it.
 **Proposed high-leverage addition:** a generic lint for *"declared frontmatter key
 that materialises zero triples"*. It would have caught `-12-003`, `-11-017`, and
 the known `phase` defect in one rule.
+
+> **Step 5 SHIPPED 2026-07-21, branch `batch-b-remainder`.** The grounding pass
+> falsified most of this batch's premises — most items were already fixed, and the
+> "generic lint" already exists in its *correct* form and its general form was
+> deliberately rejected:
+>
+> - **The generic lint is NOT to be built.** `check_non_materializing_fields`
+>   (`validate/checks/materialization.py`, merged 2026-07-15) already implements it
+>   in the only sound form — a small kind-aware denylist of keys that name a graph
+>   relation predicate AND have a `relations:` equivalent (`supersedes`, `amends`).
+>   Its own design doc (`docs/plans/2026-07-15-non-materializing-fields-design.md`
+>   §8) **explicitly rejected** the fully-general "any declared key → zero triples"
+>   rule as speculative (YAGNI). It is not merely unbuilt — it is *wrong*: under
+>   `extra="allow"` (D3.3) most frontmatter keys legitimately materialise no triples
+>   (ad-hoc-read display fields), so a general rule would cry wolf on exactly the
+>   `phase` field the proposal named — `phase` is an *intended* decoration, not a
+>   defect. The preserve-and-surface story is already covered by `extra="allow"` +
+>   the graph-audit `undeclared_key` diagnostic (reference-named keys on non-strict
+>   kinds). This closes `-12-003` (its `extra="ignore"` premise is stale) and
+>   `-11-017` pt3 (already caught).
+> - **`-12-002` prereg dead code** — already fixed 2026-07-20 (gates on `kind`, not
+>   `^type:`; the two WARNs are live).
+> - **`-18-004`** (singular `artifact`) — already fixed; `entity_source_candidates`
+>   reads both `artifact` and `artifacts`. **`-18-003`** (coarse/unverified) — the
+>   two asks are already in: an existence check (`index.resolve`) and a
+>   paragraph-scoped candidate layer; the residual entity-level exemption is now
+>   resolution-gated (invented/stale paths no longer pass), which is acceptable.
+> - **`-12-009`** (inert freeze point) — **the one real code fix.** Owner ruling:
+>   gate the pre-registration commitment/`bearsOn` edges on the freeze status set
+>   `{committed, amended}` (`materialize.py::_FROZEN_PRE_REGISTRATION_STATUSES`);
+>   an `active`/draft pre-reg now derives no edges, so committing is load-bearing.
+>   Fleet-certified before shipping: of 141 pre-regs, 123 are `committed` (keep
+>   edges) and 18 un-frozen (`active`/`complete`/`draft`/`proposed`, across NS/mm30/
+>   cycles) lose derived `bearsOn` — the intended correction; `bearsOn` is derived
+>   so nothing dangles and no `validate` turns red, and consumers pick it up on pin
+>   bump.
+> - **`-11-017` pt1** — documented `dataset_usage` (with the DEPENDENCE-role
+>   distinction: `analyzed | set_definition_source | training | upstream` count;
+>   `cited | validation_source | reference` do not) and `run_refs` (Path B) in
+>   `templates/evidence-line.md` (+ packaged shadow). pt2 (interp `relations:` form)
+>   was already in the canonical template.
+>
+> Closes B[`-12-002`, `-12-003`, `-12-009`, `-18-003`, `-18-004`, `-11-017`]
+> (`-19-001`/`-19-003` closed in step 1). No new lint shipped — by design.
 
 ### C. Inquiry subsystem — 6 items
 `fb-2026-07-19-006`, `-19-007`, `-11-030`, `-11-031`, `-11-032`, `-19-002`
@@ -781,7 +825,7 @@ closes when it does not close a whole batch.
 | 2 | **Feedback store non-lossy** — `occurrences[]`, then normalised-exact target matching, advisory fuzzy, `feedback targets`, `feedback show`. **DONE** (branch `feedback-nonlossy`). | M[`-16-001`] ✅ | — |
 | 3 | **Decision D1** — per-field ownership & merge-policy table (Batch A). **RESOLVED 2026-07-21**: `provided_capabilities`→canonical, `tier`→canonical-with-override (new `override` policy value), `paper_kind`→project-only; the table already exists as `science:merge` annotations, so D1 = add one policy value + reclassify 3 fields. | — | owner ✅ |
 | 4 | **Decision D2** — transient-state home (Batch F options A/B/C). **RESOLVED 2026-07-21**: Option C (ratify status quo) — no relocation, feedback store stays put, ship a default exclude set, defer `doc_kind`, fix `curate.md` Phase 1 path drift. | — | owner ✅ |
-| 5 | **Batch B remainder** + the generic "declared-key-materialises-zero-triples" lint. | B (rest) | — |
+| 5 | **Batch B remainder** + the generic "declared-key-materialises-zero-triples" lint. **DONE 2026-07-21** (branch `batch-b-remainder`): the generic lint already existed (narrow, kind-aware) and its general form was deliberately rejected — nothing built; `-12-002`/`-18-004`/`-11-017` pt2-3 already fixed; `-12-003` premise stale; real fixes = `-12-009` freeze-status gate + `-11-017` pt1 evidence-line template docs + `-18-003` confirmed already-addressed. | B (rest) ✅ | — |
 | 6 | **Batches K and L** — two skill leaves. No code risk; parallelisable with 1–5. | K, L | — |
 | 7 | **Batch A remainder** — overlay schema + promote builder derived from D1; federation-awareness pass; close `-11-021`. | A (rest) | D1 |
 | 8 | **Batch F** — implement the chosen home; `doc_kind`-keyed excludes; migration if the feedback store moves. | F | D2 |

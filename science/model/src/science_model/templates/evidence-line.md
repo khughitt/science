@@ -12,6 +12,8 @@ independence_group: ""
 evidence_role: "direct_test"
 related: []
 source_refs: []
+dataset_usage: []
+run_refs: []
 created: "{{created}}"
 updated: "{{updated}}"
 _template:
@@ -30,6 +32,8 @@ _template:
     dispute_scope: { omit: true }
     related: { from: related }
     source_refs: { from: source_refs }
+    dataset_usage: { default: [] }
+    run_refs: { default: [] }
     created: { from: created }
     updated: { from: updated }
   sections:
@@ -40,6 +44,27 @@ _template:
 ---
 
 # Evidence Line: {{title}}
+
+<!--
+Run resolution (belief-eligible empirical lines). A belief-eligible empirical line
+enters belief aggregation only once it resolves to a fingerprinted workflow-run,
+via a union of TWO paths -- both authored here in frontmatter:
+
+- dataset_usage: [{dataset: "dataset:<id>", role: "<role>"}]
+    Only a DEPENDENCE role reaches a run: analyzed | set_definition_source |
+    training | upstream. The roles cited | validation_source | reference do NOT
+    count for run resolution, and the named dataset's derivation must itself name a
+    workflow_run. `dataset_usage` is MANDATORY for a belief-eligible empirical line
+    (validate check evidence.empirical.requires_dataset_usage) and run_refs never
+    substitutes for it.
+
+- run_refs: ["workflow-run:<slug>"]
+    Names a workflow-run directly. This is the ONLY resolution path for a line that
+    rests on raw external data (no workflow-run-derived dataset). It WIDENS the
+    resolved-run set; each entry is still filtered by the same fingerprint predicate.
+
+Leave both empty for a non-empirical (theoretical / definitional) line.
+-->
 
 ## What this line shows
 

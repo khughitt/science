@@ -1307,6 +1307,15 @@ def _add_falsification_relations(
         knowledge.add((uri, SCI_NS.supersedesClaim, _resolve_term(entity.supersedes_claim)))
 
 
+#: Pre-registration statuses at or past the freeze point. Only these derive
+#: commitment/bears_on edges. An `active` (the default) or draft plan has
+#: committed to nothing; `amended` is post-commitment and remains binding.
+#: Gating here is what makes committing load-bearing in the graph -- without it
+#: an un-frozen draft produces byte-identical edges to a committed pre-registration
+#: and the freeze point is inert (fb-2026-07-12-009).
+_FROZEN_PRE_REGISTRATION_STATUSES: frozenset[str] = frozenset({"committed", "amended"})
+
+
 def _pre_registration_commitment_targets(
     sources: ProjectSources,
     *,
@@ -1315,13 +1324,17 @@ def _pre_registration_commitment_targets(
 ) -> dict[URIRef, list[URIRef]]:
     """Resolve pre-registration commitment targets for bears_on derivation.
 
-    When `commits_to:` is present, it overrides `related:`. An explicit empty
-    list means "derive no pre-reg bears_on edges".
+    Only pre-registrations at or past the freeze point
+    (`_FROZEN_PRE_REGISTRATION_STATUSES`) contribute: an un-frozen draft has
+    committed to nothing. When `commits_to:` is present, it overrides `related:`.
+    An explicit empty list means "derive no pre-reg bears_on edges".
     """
     targets_by_pre_registration: dict[URIRef, list[URIRef]] = {}
     ext_prefixes = external_prefixes(sources.ontology_catalogs)
     for entity in sources.entities:
         if entity.kind != "pre-registration":
+            continue
+        if entity.status not in _FROZEN_PRE_REGISTRATION_STATUSES:
             continue
         raw_targets = entity.commits_to if entity.commits_to is not None else entity.related
         resolved_targets: list[URIRef] = []
