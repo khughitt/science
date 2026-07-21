@@ -304,6 +304,20 @@ grep -rnoE '`(\.\.?/)?[a-z0-9./_-]+\.md`' skills/ | grep -v 'skills/meta/templat
 
   `skills/INDEX.md` rows `:16`/`:88` are handled by the wholesale INDEX rewrite (Step 5).
 
+- [ ] **Step 2c: Retarget bare inline-code path references to *moved* leaves.** These are prose
+  `` `path` `` mentions, not markdown links, so Step 2's link rewrite and the linter's
+  markdown-link check both miss them. `pipelines/` does not move, so recompute nothing for the
+  link — only the target moved (`research/` → `research-package/`):
+
+  | Source:line | Old inline path | New inline path |
+  |---|---|---|
+  | `pipelines/snakemake.md:486` (prose, repo-root path) | `` `skills/research/research-package-spec.md` `` | `` `skills/research-package/research-package-spec.md` `` |
+  | `pipelines/snakemake.md:492` (markdown link; also swept by Step 2 — pinned here so both edits to this file land together) | `../research/research-package-spec.md` | `../research-package/research-package-spec.md` |
+
+  (`snakemake.md:485`'s `science-research-package` is a datapackage *profile* name, not a path —
+  leave it. The matching `skill-authoring.md:49` inline path is fixed in Task 3 Step 4, which
+  already edits that file.)
+
 - [ ] **Step 3: Retarget the moved/surviving routers.**
   - `bio/genomics/SKILL.md`, `bio/transcriptomics/SKILL.md`: same-folder leaf references usually
     unchanged — verify each still resolves.
@@ -735,6 +749,13 @@ HALT_ON_REQUIRED = {
   rmdir science/tests/skills_lint/fixtures/data
   ```
 
+  Then rewrite each moved fixture's frontmatter `name:` to its MAP-B new name. The OLD names
+  `data-embeddings-manifold-qa` / `data-functional-genomics-qa` are members of Task 5's
+  leftover-name grep (Step 3), so a fixture left carrying its old `name:` would false-red the
+  final gate — the move must carry the rename:
+  - `fixtures/ml/embeddings-manifold-qa.md:2` `name: data-embeddings-manifold-qa` → `name: ml-embeddings-manifold-qa`
+  - `fixtures/bio/functional-genomics-qa.md:2` `name: data-functional-genomics-qa` → `name: functional-genomics-qa` (`bio/` is navigational — no `bio-` prefix)
+
   Then update the references that name the old fixture paths:
   - `test_lint.py:71` `FIXTURES / "data" / "embeddings-manifold-qa.md"` → `FIXTURES / "ml" / "embeddings-manifold-qa.md"`
   - `test_lint.py:79` `FIXTURES / "data" / "functional-genomics-qa.md"` → `FIXTURES / "bio" / "functional-genomics-qa.md"`
@@ -765,7 +786,11 @@ HALT_ON_REQUIRED = {
   bullet (`skill-authoring.md:34`) replace the pre-migration prefix list with the new subjects
   (`genomics-`, `transcriptomics-`, `proteomics-`, `functional-genomics-`, `ml-`,
   `data-management-`, `study-design-`, `epistemics-`, `literature-`, `literature-source-`; unchanged
-  `statistics-`, `pipeline-`).
+  `statistics-`, `pipeline-`). Also in `skill-authoring.md:49` (the implementation-guide trip-wire
+  paragraph), rewrite the bare inline-code path `` `research/research-package-rendering.md` `` →
+  `` `research-package/research-package-rendering.md` ``. This one escapes every automatic net: it
+  has no `skills/` prefix (so Task 5's `skills/research/` path grep misses it) and it is not a
+  markdown link (so the linter misses it) — it must be fixed by hand here.
 
 - [ ] **Step 5: Annotate the corpus matrix.** Add one line at the top of
   `2026-07-19-skills-taxonomy-corpus-matrix.md`: its `path`/`name`/`subject` columns are **pre-reorg**
@@ -900,10 +925,15 @@ corpus with zero reference to the removed companion or any old name/path.
     > **Short:** For research methodology, read `../../skills/INDEX.md` and load the relevant
     > `literature/`/`epistemics/` leaves.
 
-- [ ] **Step 4: Fix role prompts.** In `research-assistant.md:17` and `discussant.md:18`, change
-  `Skills: research-methodology, scientific-writing` → `Skills: scientific-writing` and append
-  "; for research methodology, read `${CLAUDE_PLUGIN_ROOT}/skills/INDEX.md` and load the relevant
-  `literature/`/`epistemics/` leaves".
+- [ ] **Step 4: Fix role prompts.** The two files list the skills with **different separators** —
+  `research-assistant.md` uses a comma, `discussant.md` uses "and" — and each name is back-ticked,
+  so pin the two source strings separately (a single find-string cannot match both):
+  - `references/role-prompts/research-assistant.md:17`
+    `` 5. Skills: `research-methodology`, `scientific-writing` `` →
+    `` 5. Skills: `scientific-writing`; for research methodology, read `${CLAUDE_PLUGIN_ROOT}/skills/INDEX.md` and load the relevant `literature/`/`epistemics/` leaves ``
+  - `references/role-prompts/discussant.md:18`
+    `` 5. Skills: `research-methodology` and `scientific-writing` `` →
+    `` 5. Skills: `scientific-writing`; for research methodology, read `${CLAUDE_PLUGIN_ROOT}/skills/INDEX.md` and load the relevant `literature/`/`epistemics/` leaves ``
 
 - [ ] **Step 5: Rewrite the path-only consumer commands (moved skill files).** These reference moved
   skill **paths** (not the companion) via `${CLAUDE_PLUGIN_ROOT}/skills/…`; they flow into the mirror,
@@ -1006,16 +1036,24 @@ git add -A && git commit -m "refactor(skills): drop research-methodology Codex c
 ```
 Expected: exit 0, no findings.
 
-- [ ] **Step 3: No-dangling-name / -path grep (fail-hard; excludes generated + historical).**
+- [ ] **Step 3: No-dangling-name / -path sweep (fail-hard; excludes generated + historical).**
 
 ```bash
-EXCL='\.venv|/codex-skills/|/docs/plans/|\.claude/worktrees'
+# One rg call per pattern with glob exclusions and explicit exit-code handling.
+# rg exit codes: 0 = match found, 1 = clean no-match, 2 = real error (bad regex, unreadable file).
+# The old `grep ... || true` collapsed 1 and 2 together, so a genuine tool error read as "clean" —
+# here exit 2 fails the gate on its own. Historical records (docs/plans, docs/audits) are
+# point-in-time snapshots that we annotate rather than rewrite, so they are excluded, not leftovers.
 fail=0
-# capture-then-test avoids pipeline-exit masking; `|| true` swallows grep's no-match (exit 1),
-# so a genuine hit is the ONLY thing that sets `hits`.
-check() {  # $1 = pattern, $2 = label
-    hits=$(grep -rnE "$1" . --include="*.md" --include="*.py" 2>/dev/null | grep -vE "$EXCL" || true)
-    if [ -n "$hits" ]; then echo "LEFTOVER $2:"; echo "$hits"; fail=1; fi
+check() {  # $1 = regex, $2 = label
+    local out rc
+    out=$(rg -n --no-heading -t md -t py \
+        -g '!**/codex-skills/**' -g '!docs/plans/**' -g '!docs/audits/**' \
+        -g '!**/.venv/**' -g '!**/.claude/**' \
+        "$1" .)
+    rc=$?
+    if [ "$rc" -eq 2 ]; then echo "ERROR rg failed on [$2]"; fail=1; return; fi
+    if [ "$rc" -eq 0 ]; then echo "LEFTOVER $2:"; echo "$out"; fail=1; fi
 }
 # OLD MAP-B leaf/router names (word-anchored) — zero LIVE hits
 for tok in data-genomics-somatic-mutation-qa data-genomics-copy-number-sv-qa \
@@ -1062,14 +1100,28 @@ finding set to `main`, failing only on *new* findings this branch introduces:
 ```
 
 ```bash
-# BASELINE COMPARE: ruff/pyright — capture this branch, diff against the same commands on the merge
-# base. Zero NEW findings is the pass condition; the pre-existing baseline is expected nonzero.
-( cd science && uv run --frozen ruff check . )   ; echo "ruff exit=$?  (compare finding set to baseline on main)"
-( cd science && uv run --frozen pyright )        ; echo "pyright exit=$? (compare finding set to baseline on main)"
+# HARD GATE: ruff/pyright on THIS branch's changed Python files. These four files are clean at the
+# branch point, so any finding here is one this branch introduced — a genuine, gateable regression.
+# (Test dirs are not pyright-checked per pyrightconfig.json, so pyright targets only the two src files.)
+( cd science && uv run --frozen ruff check \
+    src/science_tool/codex_skills.py \
+    src/science_tool/skills_lint/lint.py \
+    tests/test_codex_skills.py \
+    tests/skills_lint/test_lint.py ) || { echo "FAIL ruff (changed files)"; exit 1; }
+( cd science && uv run --frozen pyright \
+    src/science_tool/codex_skills.py \
+    src/science_tool/skills_lint/lint.py ) || { echo "FAIL pyright (changed files)"; exit 1; }
 ```
-Expected: pytest green; committed-mirror green; ruff/pyright show **only** the pre-existing baseline
-findings (no new ones attributable to this branch). Do not suppress or edit a baseline finding to
-silence it.
+
+```bash
+# INFORMATIONAL ONLY (NOT a gate): the full-repo runs carry a known nonzero baseline (Ruff 4 /
+# Pyright 7 at the branch point). `; echo` deliberately keeps the block at exit 0 — read the counts
+# by eye and confirm they match the baseline. Never edit or suppress a baseline finding to silence it.
+( cd science && uv run --frozen ruff check . )   ; echo "ruff full exit=$?  (informational; expect Ruff-4 baseline)"
+( cd science && uv run --frozen pyright )         ; echo "pyright full exit=$? (informational; expect Pyright-7 baseline)"
+```
+Expected: pytest green; committed-mirror green; changed-file ruff/pyright clean (exit 0); the full-repo
+runs show **only** the pre-existing baseline (no new findings attributable to this branch).
 
 - [ ] **Step 5: Commit the regenerated mirror + any gate fixes.**
 

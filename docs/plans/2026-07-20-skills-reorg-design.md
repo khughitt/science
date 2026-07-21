@@ -28,9 +28,11 @@ principle-trimming, no `frictionless`/`mutational-signatures` content splits (al
 - No "legacy"/"compatibility" layers; no "Unified" prefix. Composition > inheritance; explicit >
   defensive; fail early / no silent fallbacks.
 - All `uv run` from `science/` (no root `pyproject.toml`); test dirs are not type-checked.
-- `codex-skills/` is a **generated** mirror — never hand-edit; regenerate via
-  `scripts/generate_codex_skills.py` after any `skills/`/generator/source-doc change, or
-  `test_committed_codex_skills_match_fresh_generation` fails.
+- `codex-skills/` is a **generated** mirror — never hand-edit, the sole exception being the static
+  `INSTALL.codex.md`, which is hand-maintained and excluded from generation (the committed-mirror
+  test skips it). Regenerate the rest via `scripts/generate_codex_skills.py` after any
+  `skills/`/generator/source-doc change, or `test_committed_codex_skills_match_fresh_generation`
+  fails.
 - Use `git mv` (preserve history), never delete + re-add.
 - Nothing pushed to origin unless the owner asks.
 
