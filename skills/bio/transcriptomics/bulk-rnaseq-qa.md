@@ -148,7 +148,7 @@ doubt, check the original publication's methods section.
 
 ## Output: a per-cohort QA package
 
-Generate a `datapackage.json` for this directory; see [`../frictionless.md`](../frictionless.md).
+Generate a `datapackage.json` for this directory; see [`../frictionless.md`](../../data-management/frictionless.md).
 
 ```
 data/processed/<cohort_id>/
@@ -163,5 +163,5 @@ data/processed/<cohort_id>/
 ## Companion Skills
 
 - [`SKILL.md`](SKILL.md) - expression-data hub conventions for cross-platform cohort QA.
-- [`../../statistics/power-floor-acknowledgement.md`](../../statistics/power-floor-acknowledgement.md) - independent-unit and interval-resolution checks for cohort-level contrasts.
-- [`../../statistics/bias-vs-variance-decomposition.md`](../../statistics/bias-vs-variance-decomposition.md) - separating preprocessing bias from estimator variance.
+- [`../../statistics/power-floor-acknowledgement.md`](../../study-design/power-floor-acknowledgement.md) - independent-unit and interval-resolution checks for cohort-level contrasts.
+- [`../../statistics/bias-vs-variance-decomposition.md`](../../study-design/bias-vs-variance-decomposition.md) - separating preprocessing bias from estimator variance.

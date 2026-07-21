@@ -96,7 +96,7 @@ not independent confirmation of them.
 
 ## Output Package
 
-Generate a `datapackage.json` for this directory; see [`../frictionless.md`](../frictionless.md).
+Generate a `datapackage.json` for this directory; see [`../frictionless.md`](../../data-management/frictionless.md).
 
 ```
 data/processed/<cohort_id>/cn_sv_amplicon_qa/
@@ -117,5 +117,5 @@ independent).
 - [`SKILL.md`](./SKILL.md) — genomics data-ingestion hub.
 - [`somatic-mutation-qa.md`](./somatic-mutation-qa.md) — callable-territory and missing-vs-zero rules that also govern CN/SV denominators.
 - [`../../statistics/population-genetics-likelihood.md`](../../statistics/population-genetics-likelihood.md) — downstream selection/segregation modelling that consumes per-cell CN.
-- [`../../statistics/power-floor-acknowledgement.md`](../../statistics/power-floor-acknowledgement.md) — focal-event and per-cell contrasts are typically low-power.
-- [`../../statistics/sensitivity-arbitration.md`](../../statistics/sensitivity-arbitration.md) — ploidy-model and AA/AC-version variants are the canonical sensitivity pair.
+- [`../../statistics/power-floor-acknowledgement.md`](../../study-design/power-floor-acknowledgement.md) — focal-event and per-cell contrasts are typically low-power.
+- [`../../statistics/sensitivity-arbitration.md`](../../study-design/sensitivity-arbitration.md) — ploidy-model and AA/AC-version variants are the canonical sensitivity pair.

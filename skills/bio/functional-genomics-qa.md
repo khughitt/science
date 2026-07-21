@@ -92,7 +92,7 @@ discordant guides behind a gene-level score.
 
 ## Minimum Artifacts
 
-Generate a `datapackage.json` for this directory; see [`frictionless.md`](./frictionless.md).
+Generate a `datapackage.json` for this directory; see [`frictionless.md`](../data-management/frictionless.md).
 
 ```
 results/<analysis>/functional_genomics_qa/
@@ -122,6 +122,6 @@ State:
 
 ## Companion Skills
 
-- [`embeddings-manifold-qa.md`](embeddings-manifold-qa.md) - manifold and representation checks for CRISPR, LINCS, and dependency embeddings.
-- [`expression/scrna-qa.md`](expression/scrna-qa.md) - single-cell perturbation and pseudobulk QA.
-- [`../statistics/sensitivity-arbitration.md`](../statistics/sensitivity-arbitration.md) - verdict rules when toxicity, batch, or copy-number sensitivities disagree.
+- [`embeddings-manifold-qa.md`](../ml/embeddings-manifold-qa.md) - manifold and representation checks for CRISPR, LINCS, and dependency embeddings.
+- [`transcriptomics/scrna-qa.md`](transcriptomics/scrna-qa.md) - single-cell perturbation and pseudobulk QA.
+- [`../statistics/sensitivity-arbitration.md`](../study-design/sensitivity-arbitration.md) - verdict rules when toxicity, batch, or copy-number sensitivities disagree.

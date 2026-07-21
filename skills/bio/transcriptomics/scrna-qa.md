@@ -232,7 +232,7 @@ manuscript.
 
 A reasonable QA artifact for each ingested cohort:
 
-Generate a `datapackage.json` for this directory; see [`../frictionless.md`](../frictionless.md).
+Generate a `datapackage.json` for this directory; see [`../frictionless.md`](../../data-management/frictionless.md).
 
 ```
 data/processed/<cohort_id>/
@@ -254,4 +254,4 @@ preprocessing without rerunning anything.
 
 - [`SKILL.md`](SKILL.md) - expression-data hub conventions for cross-platform cohort QA.
 - [`../../statistics/compositional-data.md`](../../statistics/compositional-data.md) - cell fractions, donor-level composition, and denominator choices.
-- [`../../statistics/power-floor-acknowledgement.md`](../../statistics/power-floor-acknowledgement.md) - donor-level power floors and cell-n inflation checks.
+- [`../../statistics/power-floor-acknowledgement.md`](../../study-design/power-floor-acknowledgement.md) - donor-level power floors and cell-n inflation checks.

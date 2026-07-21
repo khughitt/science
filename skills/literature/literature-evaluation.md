@@ -92,5 +92,5 @@ Did the agent carry out the cross-cutting practice according to its workflow, ju
 ## Companion Skills
 
 - [`citation-discipline.md`](citation-discipline.md) - citation and source-pointer conformance for what this practice produces.
-- [`proposition-graph-reasoning.md`](proposition-graph-reasoning.md) - reasoning over the project's own proposition graph, as opposed to external sources.
+- [`proposition-graph-reasoning.md`](../epistemics/proposition-graph-reasoning.md) - reasoning over the project's own proposition graph, as opposed to external sources.
 - [`../INDEX.md`](../INDEX.md) — the skill index.

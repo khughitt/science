@@ -9,8 +9,8 @@ provenance: internal
 
 Project-specific schema for the Science proposition/evidence model. For the
 generic methodology layer, see
-[`literature-evaluation.md`](literature-evaluation.md) (source hierarchy,
-evaluating sources) and [`citation-discipline.md`](citation-discipline.md)
+[`literature-evaluation.md`](../literature/literature-evaluation.md) (source hierarchy,
+evaluating sources) and [`citation-discipline.md`](../literature/citation-discipline.md)
 (citation discipline). For the prose explanation of the model, see
 `docs/user-guide/epistemic-model.md` and `docs/user-guide/evidence-lines.md`.
 
@@ -106,7 +106,7 @@ Do not collapse these into a generic "computational evidence" label.
 
 ## Companion Skills
 
-- [`literature-evaluation.md`](./literature-evaluation.md) - evaluating the external sources that populate proposition entities.
-- [`citation-discipline.md`](./citation-discipline.md) - citation and source-pointer conformance for `source_refs`.
+- [`literature-evaluation.md`](../literature/literature-evaluation.md) - evaluating the external sources that populate proposition entities.
+- [`citation-discipline.md`](../literature/citation-discipline.md) - citation and source-pointer conformance for `source_refs`.
 - [`proposition-graph-reasoning.md`](./proposition-graph-reasoning.md) - reasoning over the graph these field values build.
 - [`annotation-curation-qa.md`](./annotation-curation-qa.md) - curated claims that will populate proposition entities.

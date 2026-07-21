@@ -8,17 +8,17 @@ sources: [edam]
 
 > **Status:** Core data management guidance is active.
 > Source-specific guidance is available in:
-> - `skills/data/sources/openalex.md`
-> - `skills/data/sources/pubmed.md`
+> - `skills/literature/sources/openalex.md`
+> - `skills/literature/sources/pubmed.md`
 >
 > Modality-specific QA guidance is available in:
-> - `skills/data/expression/SKILL.md` for transcriptomic data
-> - `skills/data/genomics/somatic-mutation-qa.md` for MAF/cBioPortal/TCGA/GENIE mutation cohorts
-> - `skills/data/genomics/mutational-signatures-and-selection.md` for SBS signatures, TMB, dN/dS, and driver-selection analyses
-> - `skills/data/functional-genomics-qa.md` for CRISPR/RNAi screens, DepMap, LINCS/L1000, drug response, and perturbation assays
-> - `skills/data/embeddings-manifold-qa.md` for embeddings, UMAP/HDBSCAN/Mapper, CKA, and manifold comparisons
-> - `skills/data/proteomics-qa.md` for proteomics, phosphoproteomics, mass spectrometry, peptide intensity, TMT, LFQ, DIA, and DDA datasets
-> - `skills/data/protein-sequence-structure-qa.md` for protein sequence, structure, label, and homology-split datasets
+> - `skills/bio/transcriptomics/SKILL.md` for transcriptomic data
+> - `skills/bio/genomics/somatic-mutation-qa.md` for MAF/cBioPortal/TCGA/GENIE mutation cohorts
+> - `skills/bio/genomics/mutational-signatures-and-selection.md` for SBS signatures, TMB, dN/dS, and driver-selection analyses
+> - `skills/bio/functional-genomics-qa.md` for CRISPR/RNAi screens, DepMap, LINCS/L1000, drug response, and perturbation assays
+> - `skills/ml/embeddings-manifold-qa.md` for embeddings, UMAP/HDBSCAN/Mapper, CKA, and manifold comparisons
+> - `skills/bio/proteomics/proteomics-qa.md` for proteomics, phosphoproteomics, mass spectrometry, peptide intensity, TMT, LFQ, DIA, and DDA datasets
+> - `skills/bio/proteomics/protein-sequence-structure-qa.md` for protein sequence, structure, label, and homology-split datasets
 >
 > Additional source skills and automation tooling are still phased in over time.
 
@@ -148,21 +148,21 @@ verification reason.
 Load the relevant leaf before designing preprocessing or QA:
 
 - Expression matrices, public h5ad deposits, bulk RNA-seq, microarray, or scRNA-seq:
-  `skills/data/expression/SKILL.md`.
+  `../bio/transcriptomics/SKILL.md`.
 - Somatic mutation tables, targeted panels, callable denominators, or MAF harmonisation:
-  `skills/data/genomics/somatic-mutation-qa.md`.
+  `../bio/genomics/somatic-mutation-qa.md`.
 - Mutational signatures, TMB, replication-timing bias, or dN/dS / dNdScv:
-  `skills/data/genomics/mutational-signatures-and-selection.md`.
+  `../bio/genomics/mutational-signatures-and-selection.md`.
 - CRISPR/RNAi screens, DepMap dependencies, LINCS/L1000 signatures, drug
   response, or perturbation replication:
-  `skills/data/functional-genomics-qa.md`.
+  `../bio/functional-genomics-qa.md`.
 - Proteomics, phosphoproteomics, mass spectrometry, peptide intensity, TMT,
   LFQ, DIA, DDA, or protein-abundance matrices:
-  `skills/data/proteomics-qa.md`.
+  `../bio/proteomics/proteomics-qa.md`.
 - Protein embeddings, PLM manifolds, UMAP/HDBSCAN/Mapper, CKA, or Moran's I:
-  `skills/data/embeddings-manifold-qa.md`.
+  `../ml/embeddings-manifold-qa.md`.
 - UniProt/Pfam/CATH/Foldseek/MMseqs/DeepLoc/Meltome workflows:
-  `skills/data/protein-sequence-structure-qa.md`.
+  `../bio/proteomics/protein-sequence-structure-qa.md`.
 
 ## While Tooling Is Still Maturing
 
@@ -182,7 +182,8 @@ When automation is unavailable:
 
 ## Companion Skills
 
-- [`expression/SKILL.md`](expression/SKILL.md) - expression-matrix preprocessing and QA.
+- [`../bio/transcriptomics/SKILL.md`](../bio/transcriptomics/SKILL.md) - expression-matrix preprocessing and QA.
 - [`frictionless.md`](frictionless.md) - data-package descriptors and validation conventions.
 - [`../statistics/SKILL.md`](../statistics/SKILL.md) - quantitative checks that depend on data shape and independent units.
-- [`../research/SKILL.md`](../research/SKILL.md) - research-methodology context for data-source choices and citation discipline.
+- [`../literature/literature-evaluation.md`](../literature/literature-evaluation.md) - source-choice evaluation for data-source provenance.
+- [`../literature/citation-discipline.md`](../literature/citation-discipline.md) - citation conformance for data-source references.

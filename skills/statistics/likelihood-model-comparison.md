@@ -76,7 +76,7 @@ Likelihoods that sum over rare events or large state spaces underflow silently.
   comparison is read, certify the estimator: reproducibility under perturbation of every
   inferentially irrelevant choice, *and* accuracy against a reference with a different
   error-generating mechanism. See
-  [`estimator-certification`](./estimator-certification.md).
+  [`estimator-certification`](../study-design/estimator-certification.md).
 - In a likelihood **ratio**, optimizer error does **not** cancel. Both terms carry
   one-sided upward error, and the larger model is systematically the harder one to fit —
   so the error has a sign. Match the inner tolerance between the compared models.
@@ -145,11 +145,11 @@ non-identifiability, or selection instability.
 
 ## Companion Skills
 
-- [`estimator-certification.md`](./estimator-certification.md) — certify the estimator
+- [`estimator-certification.md`](../study-design/estimator-certification.md) — certify the estimator
   before the comparison is read; this leaf's numerical-precision audit assumes what that
   one establishes.
 - [`bayesian-workflow.md`](./bayesian-workflow.md) — the convergence gate the Bayesian LOO/ELPD arm assumes.
 
-- [`sensitivity-arbitration.md`](./sensitivity-arbitration.md) — pre-commit which comparison metric is verdict-bearing and which are reported alongside.
-- [`power-floor-acknowledgement.md`](./power-floor-acknowledgement.md) — the minimum effect a likelihood comparison can resolve at the available n.
+- [`sensitivity-arbitration.md`](../study-design/sensitivity-arbitration.md) — pre-commit which comparison metric is verdict-bearing and which are reported alongside.
+- [`power-floor-acknowledgement.md`](../study-design/power-floor-acknowledgement.md) — the minimum effect a likelihood comparison can resolve at the available n.
 - [`population-genetics-likelihood.md`](./population-genetics-likelihood.md) — a domain consumer: constructing the pop-gen likelihoods this leaf then compares.

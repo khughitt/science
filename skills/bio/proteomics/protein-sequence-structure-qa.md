@@ -92,7 +92,7 @@ leakage, label hierarchy mismatch, and length or taxonomy confounding.
 
 ## Output Package
 
-Generate a `datapackage.json` for this directory; see [`frictionless.md`](./frictionless.md).
+Generate a `datapackage.json` for this directory; see [`frictionless.md`](../../data-management/frictionless.md).
 
 ```
 data/processed/<protein_dataset>/
@@ -111,5 +111,5 @@ sequence version, label source, and split rule each result used.
 
 ## Companion Skills
 
-- [`embeddings-manifold-qa.md`](embeddings-manifold-qa.md) - PLM embeddings, UMAP/HDBSCAN/Mapper, CKA, Moran's I, archetypes, and multi-lens comparisons.
-- [`SKILL.md`](SKILL.md) - generic data-management conventions for processed protein datasets.
+- [`embeddings-manifold-qa.md`](../../ml/embeddings-manifold-qa.md) - PLM embeddings, UMAP/HDBSCAN/Mapper, CKA, Moran's I, archetypes, and multi-lens comparisons.
+- [`SKILL.md`](../../data-management/SKILL.md) - generic data-management conventions for processed protein datasets.

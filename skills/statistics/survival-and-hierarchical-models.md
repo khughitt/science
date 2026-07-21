@@ -99,7 +99,7 @@ Report:
 
 ## Minimum Artifacts
 
-Generate a `datapackage.json` for this directory; see [`../data/frictionless.md`](../data/frictionless.md).
+Generate a `datapackage.json` for this directory; see [`../data/frictionless.md`](../data-management/frictionless.md).
 
 ```
 results/<analysis>/model_qa/
@@ -121,6 +121,6 @@ non-identifiability, divergences, or sensitivity disagreement.
 ## Companion Skills
 
 - [`bayesian-workflow.md`](bayesian-workflow.md) - the general convergence/calibration/sensitivity gate this leaf specializes.
-- [`sensitivity-arbitration.md`](sensitivity-arbitration.md) - pre-committed verdict rules for model diagnostics and sensitivity runs.
-- [`power-floor-acknowledgement.md`](power-floor-acknowledgement.md) - independent-unit power floors for survival and hierarchical models.
+- [`sensitivity-arbitration.md`](../study-design/sensitivity-arbitration.md) - pre-committed verdict rules for model diagnostics and sensitivity runs.
+- [`power-floor-acknowledgement.md`](../study-design/power-floor-acknowledgement.md) - independent-unit power floors for survival and hierarchical models.
 - [`compositional-data.md`](compositional-data.md) - denominator and zero-handling rules for fraction-valued model inputs.

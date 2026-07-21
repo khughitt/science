@@ -100,8 +100,8 @@ Did the agent carry out the cross-cutting practice according to its workflow, ju
 
 ## Companion Skills
 
-- [`../research/citation-discipline.md`](../research/citation-discipline.md) - citation format, bibliography keys, and source-pointer conformance.
-- [`../research/literature-evaluation.md`](../research/literature-evaluation.md) - selecting and assessing the sources this prose cites.
+- [`../research/citation-discipline.md`](../literature/citation-discipline.md) - citation format, bibliography keys, and source-pointer conformance.
+- [`../research/literature-evaluation.md`](../literature/literature-evaluation.md) - selecting and assessing the sources this prose cites.
 - [`../statistics/SKILL.md`](../statistics/SKILL.md) - statistical reporting language for pre-registrations, analyses, and verdicts.
 - [`../INDEX.md`](../INDEX.md) — the skill index.
 

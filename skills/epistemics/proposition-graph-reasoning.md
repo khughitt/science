@@ -106,5 +106,5 @@ Was the required reasoning/precommitment carried out before interpretation, and 
 ## Companion Skills
 
 - [`proposition-schema.md`](proposition-schema.md) - the strict enums and field semantics this reasoning writes against.
-- [`literature-evaluation.md`](literature-evaluation.md) - evaluating external sources, as opposed to the project's own graph.
+- [`literature-evaluation.md`](../literature/literature-evaluation.md) - evaluating external sources, as opposed to the project's own graph.
 - [`../INDEX.md`](../INDEX.md) — the skill index.

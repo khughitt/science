@@ -413,9 +413,9 @@ state the **scaling law** carrying it to full scale (per-unit does not carry to 
 
 ## Companion Skills
 
-- [`likelihood-model-comparison.md`](./likelihood-model-comparison.md) — AIC/BIC/LRT once the
+- [`likelihood-model-comparison.md`](../statistics/likelihood-model-comparison.md) — AIC/BIC/LRT once the
   estimator is certified; its numerical-precision audit assumes what this leaf establishes.
-- [`population-genetics-likelihood.md`](./population-genetics-likelihood.md) — nuisance parameters
+- [`population-genetics-likelihood.md`](../statistics/population-genetics-likelihood.md) — nuisance parameters
   must be estimated jointly, profiled, or pre-registered as such.
 - [`sensitivity-arbitration.md`](./sensitivity-arbitration.md) — pre-commit which comparison is
   verdict-bearing before the arms disagree.

@@ -150,7 +150,7 @@ historical results.
 
 ## Output: a per-cohort QA package
 
-Generate a `datapackage.json` for this directory; see [`../frictionless.md`](../frictionless.md).
+Generate a `datapackage.json` for this directory; see [`../frictionless.md`](../../data-management/frictionless.md).
 
 ```
 data/processed/<cohort_id>/
@@ -174,4 +174,4 @@ be an n ≈ 700 (MMRF) instead of n ≈ 5,400 meta-analysis.
 
 - [`SKILL.md`](SKILL.md) - expression-data hub conventions for cross-platform cohort QA.
 - [`bulk-rnaseq-qa.md`](bulk-rnaseq-qa.md) - companion checks when aggregating microarray with RNA-seq cohorts.
-- [`../../statistics/bias-vs-variance-decomposition.md`](../../statistics/bias-vs-variance-decomposition.md) - separating platform bias from estimator variance.
+- [`../../statistics/bias-vs-variance-decomposition.md`](../../study-design/bias-vs-variance-decomposition.md) - separating platform bias from estimator variance.

@@ -96,7 +96,7 @@ State:
 
 ## Minimum Artifacts
 
-Generate a `datapackage.json` for this directory; see [`../data/frictionless.md`](../data/frictionless.md).
+Generate a `datapackage.json` for this directory; see [`../data/frictionless.md`](../data-management/frictionless.md).
 
 ```
 results/<analysis>/compositional_qa/
@@ -116,6 +116,6 @@ ambiguous.
 
 ## Companion Skills
 
-- [`../data/expression/scrna-qa.md`](../data/expression/scrna-qa.md) - donor-level single-cell composition and pseudobulk QA.
+- [`../data/expression/scrna-qa.md`](../bio/transcriptomics/scrna-qa.md) - donor-level single-cell composition and pseudobulk QA.
 - [`survival-and-hierarchical-models.md`](survival-and-hierarchical-models.md) - hierarchical models for repeated fractions or grouped denominators.
-- [`bias-vs-variance-decomposition.md`](bias-vs-variance-decomposition.md) - distinguishing compositional bias from sampling variance.
+- [`bias-vs-variance-decomposition.md`](../study-design/bias-vs-variance-decomposition.md) - distinguishing compositional bias from sampling variance.

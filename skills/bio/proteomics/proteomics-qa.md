@@ -83,7 +83,7 @@ shared peptides, and post-translational-modification localization ambiguity.
 
 ## Output Package
 
-Generate a `datapackage.json` for this directory; see [`frictionless.md`](./frictionless.md).
+Generate a `datapackage.json` for this directory; see [`frictionless.md`](../../data-management/frictionless.md).
 
 ```
 data/processed/<proteomics_dataset>/
@@ -105,6 +105,6 @@ verdict downgrade caused by missingness or ambiguous rollup.
 ## Companion Skills
 
 - [`protein-sequence-structure-qa.md`](protein-sequence-structure-qa.md) - protein identity, UniProt/isoform mapping, homology, and sequence-derived labels.
-- [`frictionless.md`](frictionless.md) - data-package descriptors and validation conventions.
-- [`../statistics/bias-vs-variance-decomposition.md`](../statistics/bias-vs-variance-decomposition.md) - separating preprocessing bias from estimator variance.
-- [`../statistics/sensitivity-arbitration.md`](../statistics/sensitivity-arbitration.md) - pre-committed rules for imputation, rollup, and batch sensitivity disagreement.
+- [`frictionless.md`](../../data-management/frictionless.md) - data-package descriptors and validation conventions.
+- [`../statistics/bias-vs-variance-decomposition.md`](../../study-design/bias-vs-variance-decomposition.md) - separating preprocessing bias from estimator variance.
+- [`../statistics/sensitivity-arbitration.md`](../../study-design/sensitivity-arbitration.md) - pre-committed rules for imputation, rollup, and batch sensitivity disagreement.

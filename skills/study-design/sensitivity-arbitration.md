@@ -134,5 +134,5 @@ Include:
 ## Companion Skills
 
 - [`power-floor-acknowledgement.md`](power-floor-acknowledgement.md) - determining whether a null sensitivity can arbitrate.
-- [`survival-and-hierarchical-models.md`](survival-and-hierarchical-models.md) - diagnostics for model adequacy and grouped data.
-- [`compositional-data.md`](compositional-data.md) - sensitivity rules for denominator, zero-handling, and basis choices.
+- [`survival-and-hierarchical-models.md`](../statistics/survival-and-hierarchical-models.md) - diagnostics for model adequacy and grouped data.
+- [`compositional-data.md`](../statistics/compositional-data.md) - sensitivity rules for denominator, zero-handling, and basis choices.

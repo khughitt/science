@@ -54,7 +54,7 @@ every `[@Key]` against `papers/references.bib` and report unresolved keys.
 ## Versioning / migration
 
 This leaf supersedes the citation rules formerly duplicated in
-`research/SKILL.md` ("Citation Discipline") and `writing/SKILL.md` ("Citation
+`literature/SKILL.md` ("Citation Discipline") and `writing/SKILL.md` ("Citation
 Format"), extracted and merged 2026-07-20. Neither router states citation rules
 any longer; both link here.
 

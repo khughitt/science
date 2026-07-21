@@ -89,6 +89,6 @@ Alexandre Andorra
 
 ## Companion Skills
 
-- [`survival-and-hierarchical-models.md`](survival-and-hierarchical-models.md) — confounder timing and collider adjustment inside survival/hierarchical models.
+- [`survival-and-hierarchical-models.md`](../statistics/survival-and-hierarchical-models.md) — confounder timing and collider adjustment inside survival/hierarchical models.
 - [`bias-vs-variance-decomposition.md`](bias-vs-variance-decomposition.md) — confounding as a bias term that averaging does not remove.
-- [`bayesian-workflow.md`](bayesian-workflow.md) — once identification licenses the estimand, the fitting/diagnostic discipline for estimating it.
+- [`bayesian-workflow.md`](../statistics/bayesian-workflow.md) — once identification licenses the estimand, the fitting/diagnostic discipline for estimating it.

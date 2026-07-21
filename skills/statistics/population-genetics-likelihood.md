@@ -84,6 +84,6 @@ selection claim.
 ## Companion Skills
 
 - [`likelihood-model-comparison.md`](./likelihood-model-comparison.md) — the AIC/BIC/LRT, numerical-precision, and bootstrap machinery for comparing these models.
-- [`../data/genomics/copy-number-sv-qa.md`](../data/genomics/copy-number-sv-qa.md) — QA for the per-cell CN calls these likelihoods are fit to.
-- [`power-floor-acknowledgement.md`](./power-floor-acknowledgement.md) — the minimum selection coefficient resolvable at the available cell/generation count.
-- [`sensitivity-arbitration.md`](./sensitivity-arbitration.md) — pre-committing how drift-vs-selection sensitivity passes resolve the verdict.
+- [`../data/genomics/copy-number-sv-qa.md`](../bio/genomics/copy-number-sv-qa.md) — QA for the per-cell CN calls these likelihoods are fit to.
+- [`power-floor-acknowledgement.md`](../study-design/power-floor-acknowledgement.md) — the minimum selection coefficient resolvable at the available cell/generation count.
+- [`sensitivity-arbitration.md`](../study-design/sensitivity-arbitration.md) — pre-committing how drift-vs-selection sensitivity passes resolve the verdict.

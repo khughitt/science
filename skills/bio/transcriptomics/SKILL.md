@@ -93,7 +93,7 @@ Every preprocessing decision (filter threshold, transformation choice,
 batch handling, sample exclusion) should produce a row in a
 provenance sidecar that travels with the processed data. The format
 doesn't matter; that the trail exists matters. Frictionless Data
-Packages (see [`../SKILL.md`](../SKILL.md)) are a clean substrate;
+Packages (see [`../SKILL.md`](../../data-management/SKILL.md)) are a clean substrate;
 plain text logs work too.
 
 A single `cohort_audit.json` per cohort with:
@@ -161,13 +161,13 @@ preprocessing. The choice cascades.
 
 ## Companion Skills
 
-- [`../SKILL.md`](../SKILL.md) — generic data-management conventions.
-- [`../frictionless.md`](../frictionless.md) — Frictionless Data Package
+- [`../SKILL.md`](../../data-management/SKILL.md) — generic data-management conventions.
+- [`../frictionless.md`](../../data-management/frictionless.md) — Frictionless Data Package
   format for the cohort_audit / preprocessing-provenance sidecars.
 - [`../genomics/SKILL.md`](../genomics/SKILL.md) — mutation cohorts often paired with expression cohorts.
 - [`../../statistics/SKILL.md`](../../statistics/SKILL.md) — statistical
   decisions that depend on data characteristics (count vs continuous,
   zero-inflation, etc.).
-- [`../../research/SKILL.md`](../../research/SKILL.md) — literature
+- [`../../literature/SKILL.md`](../../literature/SKILL.md) — literature
   context for QA decisions that depend on the field consensus
   (e.g., what counts as a doublet rate).

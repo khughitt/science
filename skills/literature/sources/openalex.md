@@ -141,6 +141,6 @@ Each included OpenAlex-derived item must carry:
 ## Companion Skills
 
 - [`pubmed.md`](pubmed.md) - biomedical metadata reconciliation and PMID/PMCID authority.
-- [`../../research/annotation-curation-qa.md`](../../research/annotation-curation-qa.md) - label, claim, and source-curation QA for ranked literature sets.
-- [`../../research/citation-discipline.md`](../../research/citation-discipline.md) - citation and source-pointer conformance.
+- [`../../research/annotation-curation-qa.md`](../../epistemics/annotation-curation-qa.md) - label, claim, and source-curation QA for ranked literature sets.
+- [`../../research/citation-discipline.md`](../citation-discipline.md) - citation and source-pointer conformance.
 - [`../../writing/scientific-writing.md`](../../writing/scientific-writing.md) - project-awareness checks before writing.

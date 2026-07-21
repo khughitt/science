@@ -97,7 +97,7 @@ For CKA, Procrustes, nearest-neighbor overlap, or cross-manifold alignment:
 
 ## Output Package
 
-Generate a `datapackage.json` for this directory; see [`frictionless.md`](./frictionless.md).
+Generate a `datapackage.json` for this directory; see [`frictionless.md`](../data-management/frictionless.md).
 
 ```
 results/<analysis>/embedding_qa/
@@ -116,5 +116,5 @@ seed/hyperparameter, and negative-control checks.
 
 ## Companion Skills
 
-- [`protein-sequence-structure-qa.md`](protein-sequence-structure-qa.md) - identity mapping, homology leakage, label hierarchy, and split construction for PLM or structure-derived embeddings.
-- [`../statistics/bias-vs-variance-decomposition.md`](../statistics/bias-vs-variance-decomposition.md) - distinguishing projection variance from estimator bias.
+- [`protein-sequence-structure-qa.md`](../bio/proteomics/protein-sequence-structure-qa.md) - identity mapping, homology leakage, label hierarchy, and split construction for PLM or structure-derived embeddings.
+- [`../statistics/bias-vs-variance-decomposition.md`](../study-design/bias-vs-variance-decomposition.md) - distinguishing projection variance from estimator bias.
