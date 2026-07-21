@@ -302,6 +302,57 @@ class TestFeedbackTargets:
         assert any(r["target"] == "command:discuss" for r in rows)
 
 
+class TestFeedbackRegressionCandidates:
+    def test_table_lists_positives_and_excludes_others(self, runner: CliRunner, tmp_path):
+        env = {"SCIENCE_FEEDBACK_DIR": str(tmp_path)}
+        runner.invoke(
+            main,
+            ["feedback", "add", "--target", "cli:feedback", "--category", "positive", "--summary", "verify-access is mechanical"],
+            env=env,
+        )
+        runner.invoke(
+            main,
+            ["feedback", "add", "--target", "command:discuss", "--category", "gap", "--summary", "a gap not a positive"],
+            env=env,
+        )
+        result = runner.invoke(main, ["feedback", "regression-candidates"], env=env)
+        assert result.exit_code == 0, result.output
+        # a data table renders (not the empty-state message); content is asserted via json below
+        assert "Feedback Regression Candidates" in result.output
+        assert "No open positive" not in result.output
+
+    def test_json_routes_cli_spelling_to_feedback_test(self, runner: CliRunner, tmp_path):
+        env = {"SCIENCE_FEEDBACK_DIR": str(tmp_path)}
+        # a cli:-spelled positive still routes to the feedback CLI test, like command:feedback.
+        runner.invoke(
+            main,
+            ["feedback", "add", "--target", "cli:feedback", "--category", "positive", "--summary", "verify-access is mechanical"],
+            env=env,
+        )
+        runner.invoke(
+            main,
+            ["feedback", "add", "--target", "command:discuss", "--category", "gap", "--summary", "a gap not a positive"],
+            env=env,
+        )
+        result = runner.invoke(main, ["feedback", "regression-candidates", "--format", "json"], env=env)
+        assert result.exit_code == 0, result.output
+        rows = json.loads(result.output)["rows"]
+        assert len(rows) == 1
+        assert rows[0]["target"] == "cli:feedback"
+        assert rows[0]["suggested_next_test_target"] == "science/tests/test_feedback_cli.py"
+
+    def test_empty_when_no_positives(self, runner: CliRunner, tmp_path):
+        env = {"SCIENCE_FEEDBACK_DIR": str(tmp_path)}
+        runner.invoke(
+            main,
+            ["feedback", "add", "--target", "command:x", "--category", "friction", "--summary", "friction"],
+            env=env,
+        )
+        result = runner.invoke(main, ["feedback", "regression-candidates"], env=env)
+        assert result.exit_code == 0, result.output
+        assert "No open positive" in result.output
+
+
 class TestFeedbackShow:
     def test_show_dumps_full_entry_including_occurrences(self, runner: CliRunner, tmp_path):
         env = {"SCIENCE_FEEDBACK_DIR": str(tmp_path)}

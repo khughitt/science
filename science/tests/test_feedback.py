@@ -20,6 +20,7 @@ from science_tool.feedback import (
     find_similar_open,
     group_for_triage,
     list_entries,
+    list_regression_candidates,
     list_targets,
     load_all_entries,
     load_entry,
@@ -716,6 +717,42 @@ class TestOccurrenceProjectReach:
         save_entry(tmp_path, entry)
         groups = group_for_triage(tmp_path)
         assert groups[("tooling", "command:x")]["projects"] == {"proj-a", "proj-b"}
+
+
+class TestListRegressionCandidates:
+    def test_returns_only_open_positives(self, tmp_path: Path):
+        _make_entry(tmp_path, "fb-2026-07-21-001", category="positive", summary="worked well")
+        _make_entry(tmp_path, "fb-2026-07-21-002", category="gap", summary="a gap")
+        _make_entry(tmp_path, "fb-2026-07-21-003", category="positive", status="addressed", summary="already consumed")
+        rows = list_regression_candidates(tmp_path)
+        assert [row["id"] for row in rows] == ["fb-2026-07-21-001"]
+
+    def test_row_carries_suggested_test_target(self, tmp_path: Path):
+        _make_entry(
+            tmp_path,
+            "fb-2026-07-21-001",
+            category="positive",
+            target="cli:feedback",
+            summary="verify-access exception modes are mechanical",
+        )
+        rows = list_regression_candidates(tmp_path)
+        assert rows[0]["target"] == "cli:feedback"
+        # a positive naming a concrete surface gets a concrete scaffold hint, not the fallback.
+        assert rows[0]["suggested_next_test_target"]
+        assert "feedback" in rows[0]["suggested_next_test_target"]
+
+    def test_sorted_by_recurrence_then_date(self, tmp_path: Path):
+        # oldest, single filing
+        _make_entry(tmp_path, "fb-2026-07-20-001", category="positive", created="2026-07-20", summary="older win")
+        # most-validated (highest recurrence) must lead regardless of date
+        recurring = _make_entry(
+            tmp_path, "fb-2026-07-21-002", category="positive", created="2026-07-21", summary="recurring win"
+        )
+        record_occurrence(recurring, date="2026-07-22", project="proj-b")
+        save_entry(tmp_path, recurring)
+        rows = list_regression_candidates(tmp_path)
+        assert [row["id"] for row in rows] == ["fb-2026-07-21-002", "fb-2026-07-20-001"]
+        assert rows[0]["recurrence"] == 2
 
 
 def test_render_report_groups_by_concern_then_target(tmp_path):
