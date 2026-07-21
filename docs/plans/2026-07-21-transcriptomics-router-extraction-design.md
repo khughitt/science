@@ -27,10 +27,12 @@ The teaching content is not merely trapped — it is **cited by name** from the
 modality leaves (`bulk-rnaseq-qa.md:97` references the hub's *"filter steps must
 commute with the question"* idiom; all three leaves' Companion Skills point to
 `SKILL.md` for *"expression-data hub conventions for cross-platform cohort
-QA"*). And the cross-platform aggregation topic is **duplicated at three
-levels**: the hub's generic taxonomy, `microarray-qa.md:91` (limma→metafor /
-rank-norm / SVA), and `scrna-qa.md:183` (pseudobulk). The extraction gives that
-topic one authoritative home for the *decision*, while the platform-specific
+QA"*). And the cross-platform aggregation topic is **duplicated across the hub
+and all three modality leaves**: the hub's generic taxonomy, plus a
+platform-specific realization in each modality leaf — `microarray-qa.md:91`
+(limma→metafor / rank-norm / SVA), `scrna-qa.md:183` (pseudobulk), and
+`bulk-rnaseq-qa.md:106` (per-cohort-vs-pooled). The extraction gives that topic
+one authoritative home for the *decision*, while the platform-specific
 *realizations* stay in their modality leaves.
 
 ## Decision summary (from brainstorming)
@@ -108,18 +110,23 @@ as free prose. Target section outline:
   and verify what normalization the depositor applied" (the aggregation-
   compatibility *decision* is Leaf B's, cross-referenced).
 - `## QA metrics` — a table making the idioms' inspection checks concrete:
-  metric (e.g. `n_unique(sample_id) == n_rows`; integer-like fraction of `.X`;
-  fraction of rows dropped by a filter per group) · passing range · meaning of
-  failure. This operationalizes "validate by inspection, not by trust."
+  metric (e.g. `n_unique(sample_id)` equals the length of the **detected
+  sample/cell axis** — rows for obs-as-rows AnnData, columns for a
+  genes×samples matrix; integer-like fraction of the primary expression matrix;
+  fraction of samples dropped by a filter per group) · passing range · meaning
+  of failure. This operationalizes "validate by inspection, not by trust." The
+  leaf must first **detect matrix orientation** (samples vs genes on which axis)
+  before any per-axis metric — it does not assume AnnData obs-as-rows.
 - `## Common failure modes` — the failure content of the three idioms:
   README-says-vs-matrix-is mismatch; unlogged preprocessing decisions
   (no sidecar); detection-rate / `mean ± 3 SD` / aggregated-doublet filters that
   don't commute with the stratifying question.
-- `## Halt-On Conditions` — e.g. `.X` contents cannot be determined from data +
-  metadata; sample identifiers non-unique with no collapse rule; a filter drops
-  a stratification group asymmetrically with no logged mask. (**Required by the
-  archetype and, once `lint.py` is updated — see *Linter enforcement edit* —
-  enforced.**)
+- `## Halt-On Conditions` — e.g. the contents of the primary expression matrix
+  (or the applicable AnnData layer) cannot be determined from data + metadata;
+  sample identifiers non-unique with no collapse rule; a filter drops a
+  stratification group asymmetrically with no logged mask. (**Required by the
+  archetype and enforced by the archetype-derived `check_halt_on_conditions` —
+  see *Linter enforcement edit*.**)
 - `## Minimum output package` — the `cohort_audit.json` sidecar promoted from
   the "log every decision in a sidecar" idiom into the fixed output tree
   (raw/after-each-filter counts, dropped patients + reasons, gene-universe size,
@@ -127,6 +134,11 @@ as free prose. Target section outline:
 - `## Success test` — the canonical measurement-qa test: *does the produced QA
   package contain the named files, and does the summary state which Halt-On
   Conditions were evaluated?*
+- `## Companion Skills` (required by the linter, lint.py:128) — `./SKILL.md` (the
+  router), `./data-integration.md` (the multi-cohort decision that consumes this
+  QA), the three modality leaves for platform specifics, and
+  `../../data-management/frictionless.md` (Data-Package substrate for the
+  `cohort_audit` sidecar).
 
 ## Leaf B — file `data-integration.md`, `name: transcriptomics-data-integration`
 
@@ -149,8 +161,10 @@ Target section outline:
   adjustment and its assumptions.
 - `## Decision rule or reasoning criteria` — the **strategy taxonomy** and the
   **branch-specific artifact rules** (these methods are *not* interchangeable):
-  1. within-platform association testing → aggregate test statistics
-     (Stouffer/Fisher/metafor; z-score effects before pooling);
+  1. within-cohort association testing → aggregate test statistics
+     (run per dataset/cohort — cohorts sharing a platform still carry
+     cohort-specific artifacts; Stouffer/Fisher/metafor; z-score effects before
+     pooling);
   2. common-reference normalization (rank/percentile/z-score) — loses magnitude;
   3. hierarchical models with platform random effects — compute/assumption-heavy.
   Batch adjustment branches: **ComBat** (needs known batch labels, assumes
@@ -174,6 +188,11 @@ Target section outline:
 - `## Success test` — the canonical analysis-discipline test: was the strategy
   precommitted before per-cohort preprocessing, and does the pooled conclusion
   follow from it (mechanically where the identifiability gate applies)?
+- `## Companion Skills` (required by the linter, lint.py:128) — `./SKILL.md` (the
+  router), `./cohort-qa.md` (the per-cohort QA this decision consumes), the three
+  modality leaves as platform realizations of the chosen strategy,
+  `../../statistics/SKILL.md` (the actual aggregation/hierarchical modeling), and
+  `../../study-design/SKILL.md` (pre-registering the committed strategy).
 
 **Boundary (what Leaf B does NOT absorb):** the modality-specific *realizations*
 stay in their leaves — `microarray-qa.md`'s SVA/rank-norm section,
@@ -240,8 +259,11 @@ that is moving*):
 - `skills/bio/transcriptomics/scrna-qa.md:255` — Companion line → `cohort-qa.md` (+ `data-integration.md`).
 
 Additionally, **all three** modality leaves' cross-platform sections gain a
-one-line reference to `data-integration.md` as the strategy they realize (light
-touch; bodies otherwise unchanged):
+one-line reference to `data-integration.md` as the strategy they realize. This
+is a light touch — a one-line cross-reference in microarray and scRNA, and for
+bulk one cross-reference **plus** a light rephrase of its meta-analysis
+paragraph to defer authority to Leaf B (the single content edit to any modality
+body):
 
 - `microarray-qa.md:91` — "Cross-platform meta-analysis (the hard problem)" (SVA / rank-norm).
 - `scrna-qa.md:183` — "Pseudobulk for cross-platform aggregation".
@@ -271,16 +293,31 @@ router intentionally.)
 
 ## Linter enforcement edit (`science/src/science_tool/skills_lint/lint.py`)
 
-`HALT_ON_REQUIRED` (lint.py:71) is a hard-coded set of `measurement-qa` leaves
-that must carry a `## Halt-On Conditions` section. It currently lists the three
-existing transcriptomics modality leaves but **not** the new `cohort-qa.md`. Add
-`"bio/transcriptomics/cohort-qa.md"` to the set so Leaf A's Halt-On contract is
-actually enforced (a check that cannot fail is not a check —
-[[feedback_never_tune_metadata_to_silence_a_check]]). `data-integration.md` is
-`analysis-discipline`, not `measurement-qa`, so it is **not** added to this set;
-its `## Halt / escalation` slot is an archetype-template convention, not a
-lint-enforced section. Update the covering test (`tests/` for `skills_lint`) if
-it asserts the membership of `HALT_ON_REQUIRED`.
+`check_halt_on_conditions` (lint.py:135) currently gates on membership in a
+hard-coded `HALT_ON_REQUIRED` path set (lint.py:71). That set **has already
+drifted**: `bio/genomics/copy-number-sv-qa.md` and
+`bio/proteomics/proteomics-qa.md` are both `measurement-qa` and both already
+carry a `## Halt-On Conditions` section, yet neither is in the set — so their
+Halt-On contract is silently unenforced. Adding `cohort-qa.md` to the list would
+extend the same drift-prone pattern (a guard that *lists* its scope has a hole
+by construction).
+
+**Fix: derive the requirement from the archetype, not a path allowlist.** Change
+`check_halt_on_conditions` to read the leaf's parsed `archetype:` frontmatter
+(already available via the `leaf_frontmatter` helper the module imports) and
+require `## Halt-On Conditions` whenever `archetype == "measurement-qa"`. Delete
+`HALT_ON_REQUIRED`. This enforces the new `cohort-qa.md` **and** closes the two
+pre-existing gaps in one change, and never drifts again. `data-integration.md`
+is `analysis-discipline`, so it is correctly *not* required to carry the section
+(its `## Halt / escalation` slot is an archetype-template convention, not a
+lint-enforced heading).
+
+Update the covering test in `science/tests/skills_lint/test_lint.py`: instead of
+asserting membership in `HALT_ON_REQUIRED`, test a `measurement-qa` fixture
+**with** the section (no issue) and **without** it (missing-section issue), and a
+non-`measurement-qa` fixture without the section (no issue). The check must be
+able to fail — verify it flags a `measurement-qa` leaf whose Halt-On section is
+stripped.
 
 ## INDEX edits (`skills/INDEX.md`)
 
@@ -353,10 +390,13 @@ resources). It does **not** walk `skills/bio/` leaves. Therefore:
   precommitment · decision rule/criteria · outcomes · **halt/escalation
   identifiability gate** · required evidence & artifacts · permitted reporting
   language · canonical success test). Routers carry no `archetype:`.
-- **Halt-On enforcement is live:** `HALT_ON_REQUIRED` includes
-  `bio/transcriptomics/cohort-qa.md`, and the leaf actually contains the
-  `## Halt-On Conditions` section — verified by a fail-closed check that the
-  lint flags a stripped section (the check can fail).
+- **Halt-On enforcement is archetype-derived and live:** `check_halt_on_conditions`
+  requires `## Halt-On Conditions` for every `measurement-qa` leaf (not a path
+  allowlist), so `cohort-qa.md` and the two previously-drifted leaves
+  (`copy-number-sv-qa.md`, `proteomics-qa.md`) are all enforced. Verified by a
+  fail-closed test: the lint flags a `measurement-qa` leaf whose section is
+  stripped, and does not flag a non-`measurement-qa` leaf without it (the check
+  can fail).
 - **Green gate:** codex mirror regenerated; exactly two mirror files change
   (`science-skill-development/skill-authoring.md` + `skill-taxonomy.md`); the new
   bio/ leaves do **not** appear in `codex-skills/`;
@@ -365,7 +405,9 @@ resources). It does **not** walk `skills/bio/` leaves. Therefore:
 
 ## Out of scope (explicitly unchanged)
 
-- The three modality leaves' bodies (only their reference links + one-line
-  cross-refs change).
+- The three modality leaves' bodies stay intact — only their reference links +
+  one-line cross-refs change, with the **single exception** of a light rephrase
+  of `bulk-rnaseq-qa.md`'s meta-analysis paragraph to defer aggregation-strategy
+  authority to Leaf B.
 - The `frictionless` / `mutational-signatures` splits, the `data-management` and
   `pipelines` extractions, the genomics "two leaves" fix — separate slices.
