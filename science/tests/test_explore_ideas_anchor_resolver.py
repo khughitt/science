@@ -72,7 +72,7 @@ proposed_kind: question
 title: Candidate
 literature_anchors:
   - doi: https://doi.org/10.1000/abc
-    title: Different title
+    title: Targeted therapy in myeloma
   - title: Immune remodeling after therapy
   - ref: cite:Already2020
     title: Already routed
@@ -101,7 +101,73 @@ literature_anchors:
         "already_resolved": 1,
         "ambiguous": 0,
         "unresolved": 1,
+        "mismatch": 0,
     }
+
+
+def test_resolve_anchors_flags_doi_match_whose_title_disagrees(tmp_path: Path) -> None:
+    # fb-2026-07-17-009: a syntactically valid DOI pointing at a real but
+    # UNRELATED paper (the anchor's stated title names a different work) must
+    # NOT resolve silently -- it is the shape that misattributes provenance.
+    _seed_references(tmp_path)
+    _write_report(
+        tmp_path,
+        """```yaml
+candidate_id: cand-zhu
+decision: keep
+proposed_kind: question
+title: Candidate
+literature_anchors:
+  - doi: 10.1000/abc
+    title: A twelve-hour ultradian clock governs metabolic rhythms
+    first_author: Zhu
+    year: 2017
+```
+""",
+    )
+
+    result = resolve_anchors_report(tmp_path, "explore-2026-07-06")
+
+    row = result.anchors[0]
+    assert row.status == "mismatch"
+    assert row.resolved == "paper:Smith2024"
+    assert row.match_kind == "doi"
+    assert row.detail is not None and "title" in row.detail.lower()
+    assert result.counts == {
+        "resolved": 0,
+        "already_resolved": 0,
+        "ambiguous": 0,
+        "unresolved": 0,
+        "mismatch": 1,
+    }
+
+
+def test_resolve_anchors_doi_match_with_consistent_title_still_resolves(tmp_path: Path) -> None:
+    # The cross-check must not fire on a legitimate anchor: same DOI, a title
+    # that agrees with the resolved record (minor wording variation tolerated).
+    _seed_references(tmp_path)
+    _write_report(
+        tmp_path,
+        """```yaml
+candidate_id: cand-ok
+decision: keep
+proposed_kind: question
+title: Candidate
+literature_anchors:
+  - doi: 10.1000/abc
+    title: Targeted therapy in myeloma patients
+    first_author: Smith
+    year: 2024
+```
+""",
+    )
+
+    result = resolve_anchors_report(tmp_path, "explore-2026-07-06")
+
+    row = result.anchors[0]
+    assert row.status == "resolved"
+    assert row.resolved == "paper:Smith2024"
+    assert row.detail is None
 
 
 def test_resolve_anchors_report_skips_empty_placeholder_anchors(tmp_path: Path) -> None:
@@ -138,6 +204,7 @@ literature_anchors:
         "already_resolved": 0,
         "ambiguous": 0,
         "unresolved": 0,
+        "mismatch": 0,
     }
 
 
@@ -268,6 +335,7 @@ literature_anchors:
             "match_kind": "doi",
             "query": "10.2000/jones",
             "candidates": ["cite:Jones2021"],
+            "detail": None,
             "anchor": {"doi": "10.2000/jones"},
         }
     ]
@@ -294,6 +362,28 @@ literature_anchors:
     assert "1 resolved, 0 already resolved, 0 ambiguous, 1 unresolved" in result.output
     assert "cand-a[0] -> cite:Jones2021 (doi)" in result.output
     assert "cand-a[1] unresolved: Missing" in result.output
+
+
+def test_cli_resolve_anchors_flags_mismatch(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    _seed_references(tmp_path)
+    _write_report(
+        tmp_path,
+        """```yaml
+candidate_id: cand-a
+decision: keep
+literature_anchors:
+  - doi: 10.1000/abc
+    title: An unrelated twelve-hour clock study
+```
+""",
+    )
+
+    monkeypatch.chdir(tmp_path)
+    result = CliRunner().invoke(main, ["explore-ideas", "resolve-anchors", "--from", "explore-2026-07-06"])
+
+    assert result.exit_code == 0
+    assert "1 mismatch" in result.output
+    assert "cand-a[0] MISMATCH paper:Smith2024 (doi):" in result.output
 
 
 def test_cli_resolve_anchors_json_output(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:

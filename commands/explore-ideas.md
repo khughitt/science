@@ -168,6 +168,21 @@ already has.
    resolves. Apply hard-validates these ids and fails on any that are
    ambiguous or unresolved, so fix them here. (The slug pre-pass above is a
    separate step — it stays as the title-level duplicate detector.)
+
+   **`related_existing` targets question and hypothesis ids only.** The project
+   index and `resolve-refs` expose exactly those two kinds, and apply validates
+   against them. Comparing a candidate against a `topic:` or `theme:` (which the
+   brief's `entities/topics/` pass surfaces) is legitimate and **informs your
+   novelty judgment**, but a topic/theme is not a citable relation target — do
+   not put `topic:`/`theme:`/bare-slug values in `related_existing` (they will
+   fail resolution). If a topic comparison matters, record it in the candidate's
+   prose, not as a relation.
+
+   **A `sharpens-existing` candidate you want to keep gets `decision: fold`**
+   (see the decision vocabulary below), with the entity it sharpens in
+   `related_existing`. `fold` records the intent as a worklist item; apply
+   writes no new entity, so you fold the framing into the existing entity by
+   hand rather than minting a near-duplicate.
 3. **Anchor resolution.** Before finalizing `origin_plan`, run the resolver
    from the project root:
 
@@ -183,6 +198,16 @@ already has.
    - `cite:<key>` if the DOI/key is present in `papers/references.bib`.
    - otherwise leave `ref` null — ambiguous and unresolved anchors stay raw
      citations and contribute no literature origin.
+
+   **Anchor metadata is model-generated — treat it as unverified.** The lens
+   agents emit DOIs/authors/titles from search, and a valid-looking DOI can
+   point at a real but unrelated paper. The resolver guards against the worst
+   case: when an anchor resolves by DOI or citekey but its stated title/year
+   disagree with the resolved record, it reports **`mismatch`** (not `resolved`)
+   with the discrepancy. **Never copy a `mismatch` row's ref** — the DOI names a
+   different work than the anchor claims. Fix the identifier (or drop it) and
+   re-run; a `predates:` mismatch would otherwise misattribute a literature
+   origin in the graph.
    Omit unknown identifier fields rather than writing empty placeholders such
    as `doi: ""` or `doi: null`; anchors with no usable `ref`, `doi`, citekey,
    title, or `openalex_id` are ignored by the resolver.
@@ -298,9 +323,18 @@ origin_plan:
       independent: true
 ```
 
-`decision` defaults to `defer`; the human edits it to `keep` or `drop` in
-place before running `--apply`. Never set `decision: applied` yourself — it
-is written only by Apply mode (below), as write-back.
+`decision` defaults to `defer`; the human edits it in place before running
+`--apply`. The vocabulary is:
+
+- `keep` — apply creates a new entity from the block.
+- `drop` / `defer` — apply skips the block.
+- `fold` — for a `sharpens-existing` candidate: apply creates **no** entity and
+  instead records a fold worklist item (`related_existing` names the entity to
+  fold into). Use this instead of `keep` when the candidate sharpens an existing
+  entity rather than adding a new one, so apply never mints a near-duplicate.
+
+Never set `decision: applied` yourself — it is written only by Apply mode
+(below), as write-back.
 
 **Origin-plan finalization rules** (apply these while assembling each
 block in Phase 3→4):
@@ -364,16 +398,22 @@ The CLI parses every fenced `yaml` block that has a `candidate_id`, and for each
 — routing `origin_plan.origins` to `origins`, supporting (non-`predates:`)
 resolved anchors to `source_refs`, and stamping
 `--added-by explore-ideas:<model-id>:<candidate_id>` — then writes `decision:
-applied` + `applied_as` + `applied_at` back into that block. It is idempotent: a
-re-run skips blocks already `applied`; `drop`/`defer` are skipped. Bad input
-(duplicate ids, unknown `decision`/`proposed_kind`, a `keep` block missing
-`title`/`origin_plan.origins`, malformed origins, malformed `lens_views`,
-unresolved or ambiguous `related_existing`, or malformed routed anchors) is
-rejected before anything is written.
+applied` + `applied_as` + `applied_at` back into that block. The created entity
+starts **non-hollow**: apply seeds its lead section with the block's
+`question_or_claim` and per-lens `rationale`, so the researched framing is not
+discarded (a block carrying neither leaves a bare scaffold that `gaps` flags). A
+`decision: fold` block creates no entity — it is reported in the summary as a
+fold worklist item for you to hand-fold into the entity named in its
+`related_existing`. It is idempotent: a re-run skips blocks already `applied`;
+`drop`/`defer`/`fold` are skipped. Bad input (duplicate ids, unknown
+`decision`/`proposed_kind`, a `keep` block missing `title`/`origin_plan.origins`,
+a `fold` block missing `related_existing`, malformed origins, malformed
+`lens_views`, unresolved or ambiguous `related_existing`, or malformed routed
+anchors) is rejected before anything is written.
 
-Relay the CLI's created / skipped / manual / failure summary to the user. If
-`--commit` was passed, commit the created entities plus the updated report with
-`feat(explore-ideas): apply kept candidates YYYY-MM-DD`.
+Relay the CLI's created / skipped / manual / fold / failure summary to the user.
+If `--commit` was passed, commit the created entities plus the updated report
+with `feat(explore-ideas): apply kept candidates YYYY-MM-DD`.
 
 Add `--format json` if you need the machine-readable result instead of the text
 summary.

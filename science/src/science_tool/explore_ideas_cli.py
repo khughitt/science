@@ -46,7 +46,8 @@ def explore_ideas_apply(from_value: str, model_id: str, check_only: bool, output
                     f"{len(check_result.to_create)} would create, "
                     f"{len(check_result.skipped_applied)} already applied, "
                     f"{len(check_result.skipped_other)} deferred/dropped, "
-                    f"{len(check_result.manual)} to apply manually"
+                    f"{len(check_result.manual)} to apply manually, "
+                    f"{len(check_result.folds)} to fold manually"
                 )
                 for plan in check_result.to_create:
                     click.echo(f"  would create {plan.candidate_id} ({plan.kind})")
@@ -56,6 +57,8 @@ def explore_ideas_apply(from_value: str, model_id: str, check_only: bool, output
                     click.echo(f"  skipped drop/defer: {candidate_id}")
                 for candidate_id, kind in check_result.manual:
                     click.echo(f"  apply manually ({kind}): {candidate_id}")
+                for fold in check_result.folds:
+                    click.echo(f"  fold manually: {fold.candidate_id} -> {', '.join(fold.targets)}")
 
             emit(output_format=output_format, payload=check_result.to_dict(), render_text=_render_check)
             return
@@ -69,6 +72,7 @@ def explore_ideas_apply(from_value: str, model_id: str, check_only: bool, output
             f"{len(result.skipped_applied)} already applied, "
             f"{len(result.skipped_other)} deferred/dropped, "
             f"{len(result.manual)} to apply manually, "
+            f"{len(result.folds)} to fold manually, "
             f"{len(result.failures)} failed"
         )
         for created in result.created:
@@ -79,6 +83,8 @@ def explore_ideas_apply(from_value: str, model_id: str, check_only: bool, output
             click.echo(f"  skipped drop/defer: {candidate_id}")
         for candidate_id, kind in result.manual:
             click.echo(f"  apply manually ({kind}): {candidate_id}")
+        for fold in result.folds:
+            click.echo(f"  fold manually: {fold.candidate_id} -> {', '.join(fold.targets)}")
         for candidate_id, error in result.failures:
             click.echo(f"  FAILED {candidate_id}: {error}")
         for created in result.created:
@@ -149,7 +155,8 @@ def explore_ideas_resolve_anchors(from_value: str, output_format: str) -> None:
             f"{counts['resolved']} resolved, "
             f"{counts['already_resolved']} already resolved, "
             f"{counts['ambiguous']} ambiguous, "
-            f"{counts['unresolved']} unresolved"
+            f"{counts['unresolved']} unresolved, "
+            f"{counts['mismatch']} mismatch"
         )
         for row in result.anchors:
             label = f"{row.candidate_id}[{row.anchor_index}]"
@@ -159,6 +166,8 @@ def explore_ideas_resolve_anchors(from_value: str, output_format: str) -> None:
                 click.echo(f"  {label} already resolved: {row.resolved}")
             elif row.status == "ambiguous":
                 click.echo(f"  {label} ambiguous {row.match_kind}: {', '.join(row.candidates)}")
+            elif row.status == "mismatch":
+                click.echo(f"  {label} MISMATCH {row.resolved} ({row.match_kind}): {row.detail}")
             else:
                 click.echo(f"  {label} unresolved: {row.query}")
 
