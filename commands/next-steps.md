@@ -11,16 +11,15 @@ Use `$ARGUMENTS` as optional filters, for example: `dev only`, `this week`, `rel
 
 Follow `${CLAUDE_PLUGIN_ROOT}/references/command-preamble.md` (role: `research-assistant`).
 
-**Next-steps home.** Next-steps files are `kind: meta` entities and live under
-`entities/meta/`, named with a zero-padded numeric prefix:
-`entities/meta/<NNNN>-next-steps-<YYYY-MM-DD>.md`. Pick `<NNNN>` as the next free
-index in `entities/meta/`. The validator rejects `kind: meta` entities placed
-outside `entities/meta/`.
+**Next-steps home.** Next-steps files are transient project-state records, **not**
+knowledge-graph entities: they live under `doc/meta/` (not `entities/`), carry
+`doc_kind: meta` rather than an entity `kind:`, and are named
+`doc/meta/next-steps-<YYYY-MM-DD>.md`. They contribute no triples and are excluded
+from the graph revision manifest by default, so writing one never stales the graph.
 
-Throughout this command, **`<meta-home>`** means `entities/meta/` and
-**`<meta-home>/*next-steps-*.md`** matches prior analyses (the glob tolerates the
-optional `<NNNN>-` prefix). Resolve this once, up front, and use it for every
-read, scan, and write below.
+Throughout this command, **`<meta-home>`** means `doc/meta/` and
+**`<meta-home>/*next-steps-*.md`** matches prior analyses. Resolve this once, up
+front, and use it for every read, scan, and write below.
 
 **Boundary with tasks.** A next-steps run produces recommendations, not task
 records. Do not treat `<meta-home>` files as the durable task queue. Convert
@@ -254,23 +253,22 @@ For each suggestion, include:
 
 ## Writing
 
-Save output to `<meta-home>/<NNNN>-next-steps-<YYYY-MM-DD>.md` (use the resolved
-`<meta-home>` and the `<NNNN>-` numeric prefix). If a file for today already
-exists (delta mode), append an `## Update — HH:MM` section instead of creating a
-new file.
+Save output to `<meta-home>/next-steps-<YYYY-MM-DD>.md`. If a file for today
+already exists (delta mode), append an `## Update — HH:MM` section instead of
+creating a new file.
 
 Set the frontmatter `id` to match the filename-derived canonical id:
-`meta:<NNNN>-next-steps-<YYYY-MM-DD>`.
+`meta:next-steps-<YYYY-MM-DD>`.
 
 ```markdown
 ---
-id: "meta:<NNNN>-next-steps-YYYY-MM-DD"
-kind: "meta"
+doc_kind: "meta"
+id: "meta:next-steps-YYYY-MM-DD"
 title: "Next Steps — YYYY-MM-DD"
 status: "active"
 created: "YYYY-MM-DD"
 updated: "YYYY-MM-DD"
-prior: "meta:<NNNN>-next-steps-<predecessor-date>"  # canonical id of predecessor; see "Resolve prior link" below; omit if no predecessor
+prior: "meta:next-steps-<predecessor-date>"  # canonical id of predecessor; see "Resolve prior link" below; omit if no predecessor
 related: []
 ---
 
@@ -333,7 +331,7 @@ If sync is stale, include a note in the Recommended Next Actions table:
 
 ### Resolve prior link
 
-Before writing the file, list `<meta-home>/*next-steps-*.md`. **Exclude any file dated today** (delta-mode appends to that file rather than creating a new one, so the predecessor must be the most recent file *strictly before* today). From the remaining files, select the one with the lexically-greatest `YYYY-MM-DD` in its filename. Set `prior:` to that file's canonical id — `meta:<NNNN>-next-steps-<that-date>` (read the predecessor's frontmatter `id` rather than reconstructing it). If no predecessor exists (this is the first next-steps file in the project), omit the `prior:` field entirely.
+Before writing the file, list `<meta-home>/*next-steps-*.md`. **Exclude any file dated today** (delta-mode appends to that file rather than creating a new one, so the predecessor must be the most recent file *strictly before* today). From the remaining files, select the one with the lexically-greatest `YYYY-MM-DD` in its filename. Set `prior:` to that file's canonical id — `meta:next-steps-<that-date>` (read the predecessor's frontmatter `id` rather than reconstructing it). If no predecessor exists (this is the first next-steps file in the project), omit the `prior:` field entirely.
 
 Delta mode (append `## Update — HH:MM` to today's existing file) does **not** change the file's `prior:` — the chain link is per-file, not per-update.
 
@@ -341,7 +339,7 @@ Projects that historically use `prior_analyses: [...]` (e.g. protein-landscape) 
 
 ### Steps
 
-1. Save to `<meta-home>/[<NNNN>-]next-steps-<YYYY-MM-DD>.md`. In delta mode, append to the existing file rather than creating a new one — git tracks history, so overwriting the date-stamped file is acceptable.
+1. Save to `<meta-home>/next-steps-<YYYY-MM-DD>.md`. In delta mode, append to the existing file rather than creating a new one — git tracks history, so overwriting the date-stamped file is acceptable.
 2. Offer to create tasks from recommended items: "Create tasks from these suggestions?"
    - If accepted, run `science tasks add` for each recommended task with appropriate priority, type, and related entities
 3. Cross-link relevant items in `entities/questions/`.

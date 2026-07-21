@@ -219,8 +219,9 @@ def test_task_command_docs_allow_task_scoped_aspects_without_project_declaration
 def test_create_project_gitignore_excludes_transient_agent_artifacts() -> None:
     text = _read("commands/create-project.md")
 
-    assert "entities/meta/*next-steps*.md" in text
+    # Next-steps ledgers live under doc/meta/ (fb-2026-07-10-021), not entities/meta/.
     assert "doc/meta/next-steps-*.md" in text
+    assert "entities/meta/*next-steps*.md" not in text
     assert "doc/plans/*-plan-review.md" in text
     assert "docs/plans/*-plan-review.md" in text
     assert "unless explicitly promoted" in text
@@ -1311,6 +1312,30 @@ def test_sketch_model_documents_existing_inquiry_upgrade() -> None:
     )
     for expected in expected_strings:
         assert expected in text
+
+
+def test_next_steps_writes_transient_ledgers_under_doc_meta() -> None:
+    """Next-steps files are transient project-state prose, not KG entities: they
+    live under doc/meta/ with doc_kind (not an entity kind:meta under entities/meta/),
+    matching the doc/meta/next-steps-*.md location the validate gap-analysis check
+    already reads (fb-2026-07-10-021)."""
+    text = _read("commands/next-steps.md")
+
+    assert "doc/meta/next-steps-<YYYY-MM-DD>.md" in text
+    assert 'doc_kind: "meta"' in text
+    # No entity kind:meta, no entities/meta/ home.
+    assert '\nkind: "meta"' not in text
+    assert "entities/meta" not in text
+    # The false "validator rejects kind: meta outside entities/meta/" claim is gone.
+    assert "validator rejects" not in text
+
+
+def test_next_steps_template_uses_doc_kind_not_entity_kind() -> None:
+    text = _read("templates/next-steps.md")
+
+    assert 'doc_kind: "meta"' in text
+    assert '\nkind: "meta"' not in text
+    assert "entities/meta" not in text
 
 
 def test_next_steps_declares_recommendation_not_task_queue_boundary() -> None:

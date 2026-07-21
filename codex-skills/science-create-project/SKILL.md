@@ -345,7 +345,6 @@ __pycache__/
 *.pre-update*.bak
 
 # Transient agent outputs
-entities/meta/*next-steps*.md
 doc/meta/next-steps-*.md
 docs/meta/next-steps-*.md
 doc/plans/*-plan-review.md
