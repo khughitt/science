@@ -725,6 +725,48 @@ def test_render_dataset_recipe_stub_handles_missing_source_hint():
     assert "unspecified" in text.lower()
 
 
+def test_classify_routes_provided_capabilities_to_canonical():
+    """provided_capabilities is intrinsic to the dataset (fb-2026-07-09-001):
+    it must land in the canonical bucket at promote, not be dropped."""
+    from science_model.entity_schema import parse_profile, read_merge_policy
+
+    from science_tool.commons.promote import _classify_entity
+
+    merge_policy = read_merge_policy(parse_profile("science-entity-base/2.0+dataset/2.0"))
+    canonical, project_only, _, _ = _classify_entity(
+        {
+            "origin": "external",
+            "tier": "use-now",
+            "provided_capabilities": ["drug-response", "expression"],
+        },
+        "",
+        merge_policy,
+        [],
+    )
+    assert canonical.get("provided_capabilities") == ["drug-response", "expression"]
+    assert "provided_capabilities" not in project_only
+
+
+def test_provided_capabilities_not_dropped_for_datasets():
+    """With provided_capabilities modeled canonical, it is no longer an unrouted
+    (dropped) key at promote (fb-2026-07-09-001)."""
+    from science_tool.commons.promote_dataset import _dataset_dropped_fields
+
+    raw_fm = {
+        "id": "dataset:x",
+        "kind": "dataset",
+        "origin": "external",
+        "tier": "track",
+        "provided_capabilities": ["drug-response"],
+    }
+    dropped = _dataset_dropped_fields(
+        raw_fm,
+        canonical_fields={"origin": "external", "tier": "track", "provided_capabilities": ["drug-response"]},
+        project_only_fields={},
+    )
+    assert "provided_capabilities" not in dropped
+
+
 def test_dataset_dropped_fields_records_unrouted_keys():
     """Project keys not in canonical or overlay buckets are recorded as dropped."""
     from science_tool.commons.promote_dataset import _dataset_dropped_fields

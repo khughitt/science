@@ -13,7 +13,7 @@ tree into the dedicated overlays/ root.
 from __future__ import annotations
 
 from collections.abc import Iterator, Mapping, Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, field as dataclass_field
 from pathlib import Path
 from typing import Any
 
@@ -290,9 +290,14 @@ def lookup_merge_policy(
     shape: `or` would read a policy's TRUTHINESS to decide whose policy applies, and which map
     declares a field is a fact about the maps, not about the value found in one.
     """
+    overlay_policy = read_overlay_merge_policy()
+    # OVERRIDE is declared only on the overlay schema and names the overlay↔canonical
+    # relationship, so it must win over whatever the entity schema says for the same field
+    # (e.g. `tier` is REPLACE on the dataset mixin but the overlay may shadow it).
+    if overlay_policy.get(field) is MergePolicy.OVERRIDE:
+        return MergePolicy.OVERRIDE
     if field in merge_policy:
         return merge_policy[field]
-    overlay_policy = read_overlay_merge_policy()
     if field in overlay_policy:
         return overlay_policy[field]
     return None
@@ -359,6 +364,24 @@ def resolve_field(
             )
         return FieldOutcome(owner_value, False, (), tuple(i for i, _ in offers))
 
+    if policy is MergePolicy.OVERRIDE:
+        # The canonical owns a legitimate value; a borrower (overlay) may shadow it for its own
+        # view. Unlike REPLACE, the owner having spoken is NOT a conflict — that is the whole
+        # point of override. Unlike PROJECT_ONLY, the canonical DOES carry a counterpart. An
+        # external reference has no standing to shadow, so only borrowers are considered.
+        offers = [(i, p) for i, p in enumerate(proposals) if p.contests and not is_unset(p.value)]
+        if not offers:
+            return FieldOutcome(owner_value, False, (), ())
+        distinct = distinct_values([p.value for _, p in offers])
+        if len(distinct) == 1:
+            return FieldOutcome(
+                value=distinct[0],
+                changed=distinct[0] != owner_value,
+                contributed=tuple(i for i, _ in offers),
+                conflicting=(),
+            )
+        return FieldOutcome(owner_value, False, (), tuple(i for i, _ in offers))
+
     if policy is MergePolicy.REPLACE:
         if not is_unset(owner_value):
             # The owner has spoken. A borrower contesting that is an attributed conflict; an
@@ -396,6 +419,64 @@ def resolve_field(
             i for i, p in enumerate(proposals) if p.contests and not is_unset(p.value)
         ),
     )
+
+
+@dataclass(frozen=True, slots=True)
+class OverrideWarning:
+    """A quality signal on an overlay `override` field (never blocks a merge).
+
+    `divergent-without-rationale` — the overlay shadows a different canonical value but
+    carries no companion `<field>_rationale`, so the divergence is silent. `redundant` — the
+    overlay value equals the canonical, so the shadow accomplishes nothing and should be removed.
+    """
+
+    field: str
+    reason: str  # "divergent-without-rationale" | "redundant"
+    message: str
+
+
+def override_divergence_warnings(
+    canonical_frontmatter: Mapping[str, Any],
+    overlay_frontmatter: Mapping[str, Any],
+) -> list[OverrideWarning]:
+    """Quality warnings for an overlay's `override` fields against the canonical.
+
+    Applies only to fields the overlay schema declares `override` (e.g. `tier`), and only
+    when the overlay actually carries the field and the canonical carries a counterpart.
+    The companion `<field>_rationale` fields are the justification, not independent values,
+    so they are not themselves checked.
+    """
+    overlay_policy = read_overlay_merge_policy()
+    warnings: list[OverrideWarning] = []
+    for field, policy in overlay_policy.items():
+        if policy is not MergePolicy.OVERRIDE or field.endswith("_rationale"):
+            continue
+        if field not in overlay_frontmatter or field not in canonical_frontmatter:
+            continue
+        overlay_value = overlay_frontmatter[field]
+        canonical_value = canonical_frontmatter[field]
+        if overlay_value == canonical_value:
+            warnings.append(
+                OverrideWarning(
+                    field=field,
+                    reason="redundant",
+                    message=f"overlay {field} {overlay_value!r} matches the canonical; remove it",
+                )
+            )
+            continue
+        rationale = overlay_frontmatter.get(f"{field}_rationale")
+        if not (isinstance(rationale, str) and rationale.strip()):
+            warnings.append(
+                OverrideWarning(
+                    field=field,
+                    reason="divergent-without-rationale",
+                    message=(
+                        f"overlay {field} {overlay_value!r} diverges from canonical "
+                        f"{canonical_value!r} without a {field}_rationale"
+                    ),
+                )
+            )
+    return warnings
 
 
 def compose_frontmatter(
@@ -519,12 +600,24 @@ def resolve_entity(canonical_id: str, project: str | None = None) -> MergedEntit
     return merge_entity(record, overlay, policy)
 
 
+@dataclass(frozen=True, slots=True)
+class OverlayOverrideWarning:
+    """A non-blocking `override`-field quality signal, located to an overlay file."""
+
+    overlay_path: Path
+    canonical_id: str
+    field: str
+    reason: str
+    message: str
+
+
 @dataclass(frozen=True)
 class OverlayValidationReport:
     """Result of validating every overlay file in one project."""
 
     checked: int
     errors: list[OverlayValidationError]
+    warnings: list[OverlayOverrideWarning] = dataclass_field(default_factory=list)
 
 
 def validate_project_overlays(project: str) -> OverlayValidationReport:
@@ -546,13 +639,14 @@ def validate_project_overlays(project: str) -> OverlayValidationReport:
     commons_adapter = CommonsEntityAdapter(root)
     checked = 0
     errors: list[OverlayValidationError] = []
+    warnings: list[OverlayOverrideWarning] = []
     for item in OverlayAdapter(project_root, project).scan():
         checked += 1
         if isinstance(item, OverlayValidationError):
             errors.append(item)
             continue
         try:
-            commons_adapter.load(item.canonical_id)
+            canonical = commons_adapter.load(item.canonical_id)
         except CommonsEntityError as exc:
             errors.append(
                 OverlayValidationError(
@@ -561,4 +655,15 @@ def validate_project_overlays(project: str) -> OverlayValidationReport:
                     cause=exc,
                 )
             )
-    return OverlayValidationReport(checked=checked, errors=errors)
+            continue
+        for warning in override_divergence_warnings(canonical.frontmatter, item.frontmatter):
+            warnings.append(
+                OverlayOverrideWarning(
+                    overlay_path=item.overlay_path,
+                    canonical_id=item.canonical_id,
+                    field=warning.field,
+                    reason=warning.reason,
+                    message=warning.message,
+                )
+            )
+    return OverlayValidationReport(checked=checked, errors=errors, warnings=warnings)

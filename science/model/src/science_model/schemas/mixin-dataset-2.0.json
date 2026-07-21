@@ -22,6 +22,7 @@
     "parent_dataset": {"type": "string", "pattern": "^dataset:"},
     "siblings": {"type": "array", "items": {"type": "string"}},
     "consumed_by": {"type": "array", "items": {"type": "string"}},
+    "provided_capabilities": {"type": "array", "items": {"type": "string"}},
     "source_class": {"enum": ["observational", "derived", "reference"]},
     "dataset_class": {"enum": ["deposit", "reference", "pointer"]},
     "runtime_state": {

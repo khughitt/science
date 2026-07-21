@@ -797,15 +797,47 @@ Rulings (owner-confirmed):
    write path but like a shadowing scalar on the read/merge path.
 
 **Migration.** `provided_capabilities` populates by re-promote (or a backfill
-copying the live project-local value onto the canonical). `paper_kind` requires
-backfilling each canonical paper's current value into a per-project overlay
-**before** the field is removed from the mixin — otherwise the project-side
-`document_structure` rubric (`validate/checks/document_structure.py:54,77-78`)
-loses its exemption input. `-11-020`/`-11-021` (canonicalization lossiness) fold
-in here: `-11-021` already fixed (`29ffdea4`); `-11-020` is the residual
-constraint and is satisfied by the same "derive overlay + promote from one
-annotated schema" mechanism this ruling standardizes. Implementation lands in
-**step 7 (Batch A remainder)**, not at decision time.
+copying the live project-local value onto the canonical). `-11-020`/`-11-021`
+(canonicalization lossiness) fold in here: `-11-021` already fixed (`29ffdea4`);
+`-11-020` is the residual constraint and is satisfied by the same "derive overlay
++ promote from one annotated schema" mechanism this ruling standardizes.
+
+**Step 7 SHIPPED — implementation notes (correction from further grounding).** The
+D1 core landed on branch `batch-a-d1`. Two of the three "Overlay schema change" /
+"Promote builder change" cells above were **refined once the code was read
+line-by-line**, both in the direction of *less* churn:
+
+- `paper_kind` is **not** removed from `mixin-paper` and needs **no commons
+  migration**. The mixin already classifies `created`/`updated`/`status` as
+  `science:merge: project_only` (fields modeled on the mixin but never promoted);
+  `paper_kind` simply **joins them** — one annotation added in place, no 2.0→2.1
+  bump. Removing it would have *broken* project papers (the composed **project**
+  profile is closed, and `paper_kind` lives on project `entities/papers/*.md`),
+  and the "backfill before removal" migration the row anticipated is moot because
+  the field is never removed. Commons is `extra="allow"` (only `hypothesis` is in
+  `PROJECT_MIXIN_NAMES`), so the 23 canonicals that still carry `paper_kind` keep
+  it harmlessly and future promotes stop writing it. `paper_kind` is **also**
+  added to the overlay allow-list (overlay-1.2, `project_only`) so a consumer may
+  carry its own.
+- `provided_capabilities` is added to `mixin-dataset-2.0` in place (default
+  `replace` → canonical bucket); no version bump needed (the field was previously
+  *dropped*, so admitting it is purely additive).
+- `tier`/`tier_rationale` land on **overlay-1.2** with the new `override` policy,
+  as specified. Precedence subtlety made explicit in code: `tier` is `replace` on
+  the dataset **mixin**, so `lookup_merge_policy` had to be taught that an
+  overlay-declared `override` **wins over** the entity schema's policy for the
+  same field name (override is inherently an overlay↔canonical relationship).
+- The **rationale WARN** (rule 2) is emitted by `override_divergence_warnings`
+  (pure) and surfaced by `validate_project_overlays` → `science commons validate
+  --project` (the only surface that has both canonical and overlay in hand).
+
+Closes `-09-001`, `-18-005`, `-11-001`; confirms already-shipped `-11-021`
+(schema now declares `Methods`), `-11-018`/`-16-004` (federation_guard +
+promote_body_loss wired into promote). **Still open in Batch A** (separate
+follow-on unit — not "overlay schema + promote builder"): `-16-005` (overlay
+inert when `bib` owns the id, a `graph/commons_sources.py` path), `-11-019`
+(dup entity+overlay validate), `-11-020` (lossy summary at promote), `-19-005`,
+`-12-006`, `-12-007`.
 
 ### D2 — The transient-state home — RESOLVED 2026-07-21: Option C (ratify status quo)
 
@@ -855,7 +887,7 @@ closes when it does not close a whole batch.
 | 4 | **Decision D2** — transient-state home (Batch F options A/B/C). **RESOLVED 2026-07-21**: Option C (ratify status quo) — no relocation, feedback store stays put, ship a default exclude set, defer `doc_kind`, fix `curate.md` Phase 1 path drift. | — | owner ✅ |
 | 5 | **Batch B remainder** + the generic "declared-key-materialises-zero-triples" lint. **DONE 2026-07-21** (branch `batch-b-remainder`): the generic lint already existed (narrow, kind-aware) and its general form was deliberately rejected — nothing built; `-12-002`/`-18-004`/`-11-017` pt2-3 already fixed; `-12-003` premise stale; real fixes = `-12-009` freeze-status gate + `-11-017` pt1 evidence-line template docs + `-18-003` confirmed already-addressed. | B (rest) ✅ | — |
 | 6 | **Batches K and L** — two skill leaves. No code risk; parallelisable with 1–5. | K, L | — |
-| 7 | **Batch A remainder** — overlay schema + promote builder derived from D1; federation-awareness pass; close `-11-021`. | A (rest) | D1 |
+| 7 | **Batch A remainder** — overlay schema + promote builder derived from D1; federation-awareness pass; close `-11-021`. **D1 CORE SHIPPED** (branch `batch-a-d1`): `provided_capabilities`→canonical, `tier`→override (new policy value, overlay-1.2, rationale WARN), `paper_kind`→project-only (annotate-in-place, no commons migration); federation-awareness (`-11-018`/`-16-004`) + `-11-021` confirmed already shipped. **Remaining:** `-16-005`, `-11-019`, `-11-020`, `-19-005`, `-12-006`, `-12-007`. | A (rest) | D1 |
 | 8 | **Batch F** — implement the chosen home; `doc_kind`-keyed excludes; migration if the feedback store moves. | F | D2 |
 | 9 | **Batch M remainder** — post-mortem fourth trigger class; unreflected-failure surfacing in `next-steps`/`status`; positives → regression tests. **DONE** (branch `feedback-batch-m`). | M[`-18-011` ✅, `-11-029` ✅] | 2 |
 | 10 | **Batch E** — `resolve-anchors` metadata cross-check first (`-17-009` is provenance corruption), then the apply/gaps defects, then the two design questions. **DONE 2026-07-21** (`abb03608`): `mismatch` status + agent verify; body seeding + scaffold-aware empty_body; `decision: fold`; candidate-named YAML errors; agent search budget; topics/themes stay non-citable (doc). | E ✅ | — |

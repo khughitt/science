@@ -13,6 +13,11 @@ class MergePolicy(StrEnum):
     APPEND = "append"
     FORBIDDEN = "forbidden"
     PROJECT_ONLY = "project_only"
+    # A field the canonical legitimately owns AND a consuming project may shadow on its
+    # overlay for its own view. The overlay value wins on read/merge, is never written back
+    # to the canonical at promote, and (when it diverges) is expected to carry a companion
+    # `<field>_rationale`. Declared only on the overlay schema.
+    OVERRIDE = "override"
 
 
 _ANNOTATION_KEY = "science:merge"
@@ -47,7 +52,7 @@ def _policy_for(spec: object) -> MergePolicy:
 def read_overlay_merge_policy(loader: SchemaLoader | None = None) -> dict[str, MergePolicy]:
     """Project-only / append fields declared on the overlay schema."""
     loader = loader or SchemaLoader()
-    schema = loader.load(ProfileComponent(name="overlay", version="1.1"))
+    schema = loader.load(ProfileComponent(name="overlay", version="1.2"))
     policy: dict[str, MergePolicy] = {}
     for field, spec in (schema.get("properties") or {}).items():
         if field in {"id", "overlay_of", "pin_version", "pin_effective_version"}:

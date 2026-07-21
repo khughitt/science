@@ -55,6 +55,37 @@ def test_overlay_rejects_canonical_field() -> None:
         EntityValidator().validate_overlay(overlay)
 
 
+def test_overlay_permits_override_tier_and_rationale() -> None:
+    # fb-2026-07-18-005: a dataset overlay may carry its own tier assessment (+rationale).
+    overlay = {
+        "id": "dataset:cath-domains",
+        "overlay_of": "dataset:cath-domains",
+        "tier": "use-now",
+        "tier_rationale": "actively used by two open questions here",
+    }
+    EntityValidator().validate_overlay(overlay)
+
+
+def test_overlay_rejects_invalid_tier_enum() -> None:
+    overlay = {
+        "id": "dataset:cath-domains",
+        "overlay_of": "dataset:cath-domains",
+        "tier": "not-a-tier",
+    }
+    with pytest.raises(EntityValidationError, match="tier"):
+        EntityValidator().validate_overlay(overlay)
+
+
+def test_overlay_permits_project_only_paper_kind() -> None:
+    # fb-2026-07-11-001: a consuming project may record paper_kind on its overlay.
+    overlay = {
+        "id": "paper:Adams2025",
+        "overlay_of": "paper:Adams2025",
+        "paper_kind": "review",
+    }
+    EntityValidator().validate_overlay(overlay)
+
+
 def test_overlay_rejects_mismatched_overlay_of() -> None:
     overlay = {
         "id": "paper:Adams2025",
