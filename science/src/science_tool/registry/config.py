@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+import subprocess
 from datetime import date
 from pathlib import Path
 from typing import cast
@@ -120,6 +121,60 @@ def prune_missing_projects(config_path: Path | None = None) -> list[str]:
         cfg.projects = kept
         save_global_config(cfg, config_path)
     return pruned
+
+
+def _git_output(args: list[str], cwd: Path) -> str | None:
+    """Run `git <args>` in `cwd`; return stripped stdout, or None on any failure.
+
+    Failure (not a repo, git missing, non-zero exit) means "no git answer" — the
+    caller treats the path as an ordinary directory.
+    """
+    try:
+        result = subprocess.run(
+            ["git", *args],
+            cwd=str(cwd),
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+    except OSError:
+        return None
+    if result.returncode != 0:
+        return None
+    return result.stdout.strip()
+
+
+def resolve_registration_root(project_root: Path) -> Path:
+    """Map a linked-worktree project root to its main-checkout equivalent.
+
+    A git worktree (`.worktrees/<name>/`) is a transient, branch-specific checkout
+    of an already-registered project. Registering the worktree's own path adds a
+    duplicate `projects[]` entry sharing the project's `science.yaml` id, which then
+    makes `registry_root_for_id` raise "ambiguous" and breaks `commons promote` /
+    overlay resolution (fb-2026-07-16-006). So a build run from a worktree registers
+    the *main checkout* instead. Outside a linked worktree — the main checkout, or a
+    non-git directory — the resolved path is returned unchanged.
+    """
+    resolved = project_root.resolve()
+    current_top = _git_output(["rev-parse", "--show-toplevel"], resolved)
+    if current_top is None:
+        return resolved
+    worktrees = _git_output(["worktree", "list", "--porcelain"], resolved)
+    if worktrees is None:
+        return resolved
+    main_top: Path | None = None
+    for line in worktrees.splitlines():
+        if line.startswith("worktree "):
+            main_top = Path(line[len("worktree ") :]).resolve()
+            break
+    current_top_path = Path(current_top).resolve()
+    if main_top is None or main_top == current_top_path:
+        return resolved  # main checkout (or a repo with a single worktree)
+    try:
+        relative = resolved.relative_to(current_top_path)
+    except ValueError:
+        return resolved
+    return main_top / relative
 
 
 def ensure_registered(
