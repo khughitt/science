@@ -77,6 +77,62 @@ def test_build_input_manifest_keeps_report_without_configured_exclude(tmp_path: 
     assert "doc/reports/health-report.json" in manifest
 
 
+def test_build_input_manifest_excludes_curation_ledgers_by_default(tmp_path: Path) -> None:
+    """Curation ledgers under `doc/curations/` are transient tidying logs that
+    contribute no triples; every project must inherit the exclude without setting
+    the knob (fb-2026-07-17-001, D2 Option C). No `graph.revision_manifest_excludes`
+    is configured here."""
+    _seed_project(tmp_path, "name: fixture\nprofile: research\n")
+    (tmp_path / "doc" / "curations").mkdir(parents=True)
+    (tmp_path / "doc" / "curations" / "curation-sweep-2026-07-16.md").write_text(
+        "---\ndoc_kind: curation-sweep\n---\n", encoding="utf-8"
+    )
+
+    manifest = build_input_manifest(tmp_path / "knowledge" / "graph.trig")["files"]
+
+    assert "doc/curations/curation-sweep-2026-07-16.md" not in manifest
+
+
+def test_build_input_manifest_excludes_next_steps_ledgers_but_keeps_durable_meta(tmp_path: Path) -> None:
+    """The transient/durable split is NOT directory-aligned: `doc/meta/` mixes
+    transient `*-next-steps.md` ledgers with durable crosswalks/memos, so the default
+    glob is `doc/meta/*-next-steps.md`, not `doc/meta/*` (fb-2026-07-17-001 ASK b)."""
+    _seed_project(tmp_path, "name: fixture\nprofile: research\n")
+    (tmp_path / "doc" / "meta").mkdir(parents=True)
+    (tmp_path / "doc" / "meta" / "2026-07-16-next-steps.md").write_text("# Next steps\n", encoding="utf-8")
+    (tmp_path / "doc" / "meta" / "2026-06-19-case-definition-crosswalk.md").write_text("# Crosswalk\n", encoding="utf-8")
+
+    manifest = build_input_manifest(tmp_path / "knowledge" / "graph.trig")["files"]
+
+    assert "doc/meta/2026-07-16-next-steps.md" not in manifest
+    assert "doc/meta/2026-06-19-case-definition-crosswalk.md" in manifest
+
+
+def test_build_input_manifest_unions_configured_excludes_with_defaults(tmp_path: Path) -> None:
+    """A project that adds its own exclude still inherits the ledger defaults, and a
+    project that re-declares the default set (as post-acute-infection does) is idempotent
+    — no duplication error."""
+    _seed_project(
+        tmp_path,
+        "name: fixture\n"
+        "profile: research\n"
+        "graph:\n"
+        "  revision_manifest_excludes:\n"
+        "    - doc/reports/*.json\n",
+    )
+    (tmp_path / "doc" / "curations").mkdir(parents=True)
+    (tmp_path / "doc" / "curations" / "curation-sweep-2026-07-16.md").write_text("# Sweep\n", encoding="utf-8")
+
+    manifest = build_input_manifest(tmp_path / "knowledge" / "graph.trig")["files"]
+
+    # configured custom exclude honored
+    assert "doc/reports/health-report.json" not in manifest
+    # default ledger exclude still applies alongside the project's own list
+    assert "doc/curations/curation-sweep-2026-07-16.md" not in manifest
+    # durable prose untouched
+    assert "doc/notes.md" in manifest
+
+
 def test_build_input_manifest_includes_project_readme(tmp_path: Path) -> None:
     _seed_project(tmp_path, "name: fixture\nprofile: research\n")
     (tmp_path / "README.md").write_text("# Fixture\n", encoding="utf-8")
