@@ -872,6 +872,33 @@ Consequences for **step 8 (Batch F)**:
   required prior-ledger read at the pre-relocation `entities/meta/curation/`
   path while real projects have moved to `doc/curations/`. Correct it in step 8.
 
+**Step 8 SHIPPED 2026-07-21 (branch `batch-f-transient`, merge `395b5296`, local
+main, unpushed).** Two deliverables, both grounded on the real post-acute-infection
+ledger before coding:
+
+- **Default exclude set** — `graph/io.py::DEFAULT_REVISION_MANIFEST_EXCLUDES =
+  ("doc/curations/*.md", "doc/meta/*-next-steps.md")`, unioned (dedup,
+  defaults-first) into `_revision_manifest_excludes`; a project's own list adds to
+  the defaults, and post-acute-infection's explicit copy is now idempotent. The
+  next-steps glob is `*-next-steps.md` (suffix) because the adopted convention is
+  `<date>-next-steps.md`, **not** the toolkit `next-steps.md` command's documented
+  `<NNNN>-next-steps-<date>.md` — a live drift folded into `-10-021`, left open.
+  3 TDD tests; snapshot + real_projects both exit 0 (no real project's manifest
+  shifted — the one that has ledgers already set the knob).
+- **curate.md** — the 4 `entities/meta/curation/` path references → `doc/curations/`,
+  and the Phase-4 frontmatter → the verified project form (`doc_kind`/`title`/
+  `sweep_scope` + a "not a KG entity" body marker, no `kind:`/`id:`). This dissolves
+  `-10-020` (graph audit no longer schema-validates the ledger — it is not an entity)
+  and `-10-022` (placement). Codex mirror `science-curate/SKILL.md` regenerated.
+
+**Deliberately NOT closed by step 8 (not D2 consequences — need their own
+decisions):** `-10-021` (register `meta` kind vs. stop writing it, entangled with
+`next-steps.md`'s `entities/meta/` + `kind: meta` convention that post-acute-infection
+has already left for `doc/meta/`) and `-16-006` (`~/.config/science/config.yaml`
+pollution by worktree/transient project entries — a CLI/config-registration UX
+change). The design doc's "-10-021 is a symptom of -10-022" claim does not hold on
+grounding: the curation-ledger placement fix does not touch next-steps files.
+
 ---
 
 ## Proposed sequence
@@ -888,7 +915,7 @@ closes when it does not close a whole batch.
 | 5 | **Batch B remainder** + the generic "declared-key-materialises-zero-triples" lint. **DONE 2026-07-21** (branch `batch-b-remainder`): the generic lint already existed (narrow, kind-aware) and its general form was deliberately rejected — nothing built; `-12-002`/`-18-004`/`-11-017` pt2-3 already fixed; `-12-003` premise stale; real fixes = `-12-009` freeze-status gate + `-11-017` pt1 evidence-line template docs + `-18-003` confirmed already-addressed. | B (rest) ✅ | — |
 | 6 | **Batches K and L** — two skill leaves. No code risk; parallelisable with 1–5. | K, L | — |
 | 7 | **Batch A remainder** — overlay schema + promote builder derived from D1; federation-awareness pass; close `-11-021`. **D1 CORE SHIPPED** (branch `batch-a-d1`): `provided_capabilities`→canonical, `tier`→override (new policy value, overlay-1.2, rationale WARN), `paper_kind`→project-only (annotate-in-place, no commons migration); federation-awareness (`-11-018`/`-16-004`) + `-11-021` confirmed already shipped. **Remaining:** `-16-005`, `-11-019`, `-11-020`, `-19-005`, `-12-006`, `-12-007`. | A (rest) | D1 |
-| 8 | **Batch F** — implement the chosen home; `doc_kind`-keyed excludes; migration if the feedback store moves. | F | D2 |
+| 8 | **Batch F** — implement the chosen home; `doc_kind`-keyed excludes; migration if the feedback store moves. **D2 CORE SHIPPED 2026-07-21** (branch `batch-f-transient`, merge `395b5296`): default revision-manifest exclude set (`doc/curations/*.md`, `doc/meta/*-next-steps.md`) unioned into `_revision_manifest_excludes`; curate.md ledgers moved to `doc/curations/` with `doc_kind`/`sweep_scope` (not the entity `kind`/`scope` that failed the curation-sweep schema). `doc_kind`-keyed excludes deferred (path globs remain); no feedback-store move. **Closed `-17-001`, `-10-022`, `-10-020`. Remaining (separate decisions, NOT D2 consequences): `-10-021`** (next-steps `kind: meta` convention — spans `next-steps.md` + the `meta` kind registration, and post-acute-infection has diverged to `doc/meta/`), **`-16-006`** (config.yaml worktree-registration pollution — a CLI/config UX design). | F (core) | D2 |
 | 9 | **Batch M remainder** — post-mortem fourth trigger class; unreflected-failure surfacing in `next-steps`/`status`; positives → regression tests. **DONE** (branch `feedback-batch-m`). | M[`-18-011` ✅, `-11-029` ✅] | 2 |
 | 10 | **Batch E** — `resolve-anchors` metadata cross-check first (`-17-009` is provenance corruption), then the apply/gaps defects, then the two design questions. **DONE 2026-07-21** (`abb03608`): `mismatch` status + agent verify; body seeding + scaffold-aware empty_body; `decision: fold`; candidate-named YAML errors; agent search budget; topics/themes stay non-citable (doc). | E ✅ | — |
 | 11 | **Batch C** — inquiry-subsystem design pass, including any `InquiryProfile` tightening deferred from step 1. | C | 1 |
