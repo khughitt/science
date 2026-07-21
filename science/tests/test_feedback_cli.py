@@ -200,6 +200,132 @@ class TestFeedbackAdd:
         assert list(feedback_dir.glob("fb-*.yaml")) == []
 
 
+class TestFeedbackNonLossyMerge:
+    def test_duplicate_appends_occurrence_without_discarding_filing(self, runner: CliRunner, tmp_path):
+        env = {"SCIENCE_FEEDBACK_DIR": str(tmp_path)}
+        runner.invoke(
+            main,
+            ["feedback", "add", "--target", "command:discuss", "--summary", "hollow entities appear",
+             "--project", "proj-a", "--detail", "first filing detail"],
+            env=env,
+        )
+        # Same surface, spelled with the cli: prefix, filed from a different project.
+        result = runner.invoke(
+            main,
+            ["feedback", "add", "--target", "cli:discuss", "--summary", "hollow entities appear",
+             "--project", "proj-b", "--detail", "second filing detail"],
+            env=env,
+        )
+        assert result.exit_code == 0, result.output
+        assert "Incremented recurrence" not in result.output  # old destructive wording is gone
+
+        files = list(tmp_path.glob("fb-*.yaml"))
+        assert len(files) == 1  # merged, not a second entry
+        entry = yaml.safe_load(files[0].read_text(encoding="utf-8"))
+        occ = entry["occurrences"]
+        assert len(occ) == 2
+        # The second filing's distinct project and detail are retained, not discarded.
+        assert occ[1]["project"] == "proj-b"
+        assert occ[1]["detail"] == "second filing detail"
+        assert occ[0]["project"] == "proj-a"
+
+    def test_merge_into_targets_a_specific_entry(self, runner: CliRunner, tmp_path):
+        env = {"SCIENCE_FEEDBACK_DIR": str(tmp_path)}
+        runner.invoke(
+            main,
+            ["feedback", "add", "--target", "command:discuss", "--summary", "one thing", "--project", "proj-a"],
+            env=env,
+        )
+        entry_id = next(tmp_path.glob("fb-*.yaml")).stem
+        result = runner.invoke(
+            main,
+            ["feedback", "add", "--target", "command:discuss", "--summary", "an unrelated wording",
+             "--project", "proj-b", "--merge-into", entry_id],
+            env=env,
+        )
+        assert result.exit_code == 0, result.output
+        assert entry_id in result.output
+        assert len(list(tmp_path.glob("fb-*.yaml"))) == 1
+        entry = yaml.safe_load((tmp_path / f"{entry_id}.yaml").read_text(encoding="utf-8"))
+        assert len(entry["occurrences"]) == 2
+
+    def test_merge_into_unknown_id_errors(self, runner: CliRunner, tmp_path):
+        env = {"SCIENCE_FEEDBACK_DIR": str(tmp_path)}
+        result = runner.invoke(
+            main,
+            ["feedback", "add", "--target", "command:discuss", "--summary", "s", "--merge-into", "fb-2026-07-21-999"],
+            env=env,
+        )
+        assert result.exit_code != 0
+        assert "fb-2026-07-21-999" in result.output
+
+    def test_new_entry_prints_advisory_for_fuzzy_neighbor(self, runner: CliRunner, tmp_path):
+        env = {"SCIENCE_FEEDBACK_DIR": str(tmp_path)}
+        runner.invoke(
+            main,
+            ["feedback", "add", "--target", "command:next-steps",
+             "--summary", "Stale window completion hides in the prior month done file"],
+            env=env,
+        )
+        result = runner.invoke(
+            main,
+            ["feedback", "add", "--target", "command:next-steps",
+             "--summary", "Stale-window completions hide in prior-month done-files silently"],
+            env=env,
+        )
+        assert result.exit_code == 0, result.output
+        # A distinct entry is filed (never a destructive fuzzy merge)...
+        assert len(list(tmp_path.glob("fb-*.yaml"))) == 2
+        # ...but the near-duplicate is surfaced as advisory.
+        first_id = "fb-" in result.output
+        assert first_id
+        assert "similar" in result.output.lower() or "possible" in result.output.lower()
+
+
+class TestFeedbackTargets:
+    def test_targets_lists_existing_spellings(self, runner: CliRunner, tmp_path):
+        env = {"SCIENCE_FEEDBACK_DIR": str(tmp_path)}
+        runner.invoke(main, ["feedback", "add", "--target", "command:discuss", "--summary", "a"], env=env)
+        runner.invoke(main, ["feedback", "add", "--target", "command:discuss", "--summary", "b different"], env=env)
+        runner.invoke(main, ["feedback", "add", "--target", "skill:statistics", "--summary", "c"], env=env)
+        result = runner.invoke(main, ["feedback", "targets"], env=env)
+        assert result.exit_code == 0, result.output
+        assert "command:discuss" in result.output
+        assert "skill:statistics" in result.output
+
+    def test_targets_json(self, runner: CliRunner, tmp_path):
+        env = {"SCIENCE_FEEDBACK_DIR": str(tmp_path)}
+        runner.invoke(main, ["feedback", "add", "--target", "command:discuss", "--summary", "a"], env=env)
+        result = runner.invoke(main, ["feedback", "targets", "--format", "json"], env=env)
+        assert result.exit_code == 0, result.output
+        rows = json.loads(result.output)["rows"]
+        assert any(r["target"] == "command:discuss" for r in rows)
+
+
+class TestFeedbackShow:
+    def test_show_dumps_full_entry_including_occurrences(self, runner: CliRunner, tmp_path):
+        env = {"SCIENCE_FEEDBACK_DIR": str(tmp_path)}
+        runner.invoke(
+            main,
+            ["feedback", "add", "--target", "command:discuss", "--summary", "a detailed thing",
+             "--detail", "the detail body"],
+            env=env,
+        )
+        entry_id = next(tmp_path.glob("fb-*.yaml")).stem
+        result = runner.invoke(main, ["feedback", "show", entry_id], env=env)
+        assert result.exit_code == 0, result.output
+        assert entry_id in result.output
+        assert "a detailed thing" in result.output
+        assert "the detail body" in result.output
+        assert "occurrences" in result.output
+
+    def test_show_unknown_id_errors(self, runner: CliRunner, tmp_path):
+        env = {"SCIENCE_FEEDBACK_DIR": str(tmp_path)}
+        result = runner.invoke(main, ["feedback", "show", "fb-2026-07-21-999"], env=env)
+        assert result.exit_code != 0
+        assert "fb-2026-07-21-999" in result.output
+
+
 class TestFeedbackList:
     def test_list_empty(self, runner: CliRunner, tmp_path):
         env = {"SCIENCE_FEEDBACK_DIR": str(tmp_path)}

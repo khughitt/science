@@ -616,16 +616,32 @@ prefer `pdftotext`), `-10-026` (`kind:` not `type:`; never emit retired
 
 ## The feedback / post-mortem system itself
 
-1. **Fix `find_duplicate`** — highest leverage in the backlog (Finding 0). Match
-   on a *normalised* target (fold `command:`/`commands:`/`cli:`/`science:` prefix
-   variance, collapse whitespace), demote `concern` equality to a soft signal, and
-   replace substring containment with something tolerant. Because `--target` is
-   free text by design, also add **`science feedback targets`** to list existing
-   targets so a filer picks an existing spelling rather than minting the 58th.
+> **Step 2 (feedback store non-lossy) SHIPPED 2026-07-21, branch
+> `feedback-nonlossy`.** Points 1 and 2 below are done in the order Finding 0
+> mandates: non-lossy `occurrences[]` first, then normalised-exact matching, then
+> advisory-only fuzzy, then `feedback targets`, plus `feedback show`. Points 3–5
+> (post-mortem framing, unreflected-failure surfacing, positives→tests) are Batch
+> M remainder (sequence step 9), not part of this step.
 
-2. **`science feedback show ID`** (`-16-001`) — this triage was not possible
-   without dumping raw YAML from `~/.config/science/feedback/`. Also worth a
-   `--full` flag on `list`.
+1. **Fix `find_duplicate`** — highest leverage in the backlog (Finding 0). **DONE.**
+   `recurrence` is now derived (`len(occurrences)`); a re-filing appends a
+   `FeedbackOccurrence{date,project,category,detail}` instead of incrementing an
+   integer and discarding the filing (the old destructive `dup.recurrence += 1` is
+   gone). `find_duplicate` compares a *normalised* target (`normalize_target` folds
+   `command:`/`commands:`/`cli:`/`science:` and collapses whitespace); the summary
+   substring check stays as the conservative exact-ish signal. Fuzzy matching is
+   **advisory only** — `find_similar_open` surfaces near-neighbours after the entry
+   is filed and `--merge-into <id>` performs an explicit non-lossy merge; nothing
+   is ever auto-merged on a fuzzy match. **`science feedback targets`** lists
+   existing target spellings (raw + normalised key + counts) so a filer reuses one.
+   Legacy entries migrate on load (backfill one occurrence, count preserved); all
+   429 live entries are `recurrence:1` so migration is exact. `concern` equality is
+   kept as a hard partition (distinct concern = distinct entry) — the corpus relies
+   on it (`test_find_duplicate_distinguishes_concern`), so it was *not* demoted.
+
+2. **`science feedback show ID`** (`-16-001`) — **DONE.** Dumps the full entry as
+   YAML including every recorded occurrence. (`--full` on `list` not added — `show`
+   covers the triage need this item was filed for.)
 
 3. **Widen post-mortem's entry framing** (`-18-011`). Its three triggers are
    "analysis failed / gate fired / assumption violated", but the largest
@@ -688,7 +704,7 @@ closes when it does not close a whole batch.
 | # | Work | Closes | Gated on |
 |---|---|---|---|
 | 1 | **Tier 0** — silent corruption. Three independent branches (commons, inquiry-export, pre-registration-vehicle); they share no code. **inquiry-export DONE** (`fix/inquiry-export-uri`); commons and pre-reg-vehicle outstanding. | A[`-16-004`, `-16-005`, `-11-018`], B[`-19-001` ✅, `-19-003` ✅ demoted], J[`-11-024`] | — |
-| 2 | **Feedback store non-lossy** — `occurrences[]`, then normalised-exact target matching, advisory fuzzy, `feedback targets`, `feedback show`. | M[`-16-001`] | — |
+| 2 | **Feedback store non-lossy** — `occurrences[]`, then normalised-exact target matching, advisory fuzzy, `feedback targets`, `feedback show`. **DONE** (branch `feedback-nonlossy`). | M[`-16-001`] ✅ | — |
 | 3 | **Decision D1** — per-field ownership & merge-policy table (Batch A). | — | owner |
 | 4 | **Decision D2** — transient-state home (Batch F options A/B/C). | — | owner |
 | 5 | **Batch B remainder** + the generic "declared-key-materialises-zero-triples" lint. | B (rest) | — |

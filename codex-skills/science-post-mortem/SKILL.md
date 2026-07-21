@@ -171,7 +171,8 @@ Work through these steps with the user. Keep the project-specific incident in th
 
    - The `summary` is the improvement to shared guidance, not the incident.
    - The `detail` carries the incident as evidence and a pointer (path or id) to the project entity where the failure lives.
-   - One entry per distinct lesson, not one big dump. The tool detects recurrence automatically.
+   - One entry per distinct lesson, not one big dump. The tool detects recurrence automatically: a re-filed lesson is **recorded as another occurrence** (its project/detail are kept, never discarded), and target spellings that name one surface — `command:`/`cli:`/`science:` — are matched as equivalent.
+   - `--target` is free text, so **reuse an existing spelling** rather than minting a new variant: run `science feedback targets` to see the targets already on file. Near-duplicates that are not an exact match are surfaced as an advisory after your entry is filed — nothing is ever merged automatically.
 
 ## Process Reflection
 

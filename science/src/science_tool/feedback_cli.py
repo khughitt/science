@@ -36,6 +36,7 @@ def _get_feedback_dir() -> Path:
 @click.option("--detail", default=None, help="Optional prose detail")
 @click.option("--project", default=None, help="Project name (auto-detected if omitted)")
 @click.option("--related", multiple=True, help="Related feedback entry IDs")
+@click.option("--merge-into", "merge_into", default=None, help="Record this filing as an occurrence of an existing entry ID")
 @click.pass_context
 def feedback_add(
     ctx: click.Context,
@@ -47,6 +48,7 @@ def feedback_add(
     detail: str | None,
     project: str | None,
     related: tuple[str, ...],
+    merge_into: str | None,
 ) -> None:
     """Add a feedback entry."""
     from datetime import date as _date
@@ -55,7 +57,10 @@ def feedback_add(
         FeedbackEntry,
         detect_project,
         find_duplicate,
+        find_similar_open,
+        load_entry,
         next_feedback_id,
+        record_occurrence,
         save_entry,
     )
 
@@ -80,14 +85,25 @@ def feedback_add(
     if project is None:
         project = detect_project(Path.cwd())
 
-    dup = find_duplicate(fb_dir, target=target, summary=summary, concern=concern)
+    today = _date.today().isoformat()
+
+    # Explicit merge onto a chosen entry, or an automatic non-lossy merge onto a
+    # normalized-exact duplicate. Either way the filing is *recorded* as an
+    # occurrence — its project/category/detail are kept, never discarded.
+    if merge_into is not None:
+        merge_path = fb_dir / f"{merge_into}.yaml"
+        if not merge_path.exists():
+            raise click.ClickException(f"Feedback entry not found: {merge_into}")
+        dup = load_entry(merge_path)
+    else:
+        dup = find_duplicate(fb_dir, target=target, summary=summary, concern=concern)
+
     if dup is not None:
-        dup.recurrence += 1
+        record_occurrence(dup, date=today, project=project, category=category, detail=detail)
         save_entry(fb_dir, dup)
-        click.echo(f"Incremented recurrence on {dup.id} (now {dup.recurrence})")
+        click.echo(f"Recorded occurrence on {dup.id} (now filed {dup.recurrence}x)")
         return
 
-    today = _date.today().isoformat()
     entry_id = next_feedback_id(fb_dir, today)
 
     entry = FeedbackEntry(
@@ -103,6 +119,18 @@ def feedback_add(
     )
     save_entry(fb_dir, entry)
     click.echo(f"Created {entry.id}: {entry.summary}")
+
+    # Advisory only: surface fuzzy near-duplicates so the filer can relate or
+    # merge them. Never an automatic merge — a duplicate entry is recoverable,
+    # a discarded filing is not.
+    neighbors = find_similar_open(
+        fb_dir, target=target, summary=summary, concern=concern, exclude_id=entry.id
+    )
+    if neighbors:
+        click.echo("Possible similar open entries (not merged):")
+        for neighbor in neighbors:
+            click.echo(f"  - {neighbor.id} [{neighbor.target}] {neighbor.summary}")
+        click.echo("Merge with: science feedback add ... --merge-into <id>  (or link via feedback update --related)")
 
 
 def _parse_from_recent_index(extra_args: list[str], *, from_recent: bool) -> int | None:
@@ -378,3 +406,40 @@ def feedback_report(status: str | None, project: str | None, concern: str | None
     fb_dir = _get_feedback_dir()
     report = render_report(fb_dir, status=status, project=project, concern=concern)
     click.echo(report)
+
+
+@feedback_group.command("targets")
+@click.option("--status", default="open", help="Filter by status (omit for 'open'; use 'all' for all statuses)")
+@click.option("--format", "output_format", default="table", type=click.Choice(OUTPUT_FORMATS))
+def feedback_targets(status: str | None, output_format: str) -> None:
+    """List existing feedback targets so filers reuse a spelling instead of minting a new one."""
+    from science_tool.feedback import list_targets
+
+    if status == "all":
+        status = None
+
+    fb_dir = _get_feedback_dir()
+    rows = list_targets(fb_dir, status=status)
+    columns = [
+        ("target", "Target"),
+        ("normalized", "Normalized"),
+        ("count", "Entries"),
+        ("total_recurrence", "Recur"),
+    ]
+    emit_query_rows(output_format=output_format, title="Feedback Targets", columns=columns, rows=rows)
+
+
+@feedback_group.command("show")
+@click.argument("entry_id")
+def feedback_show(entry_id: str) -> None:
+    """Show one feedback entry in full, including every recorded occurrence."""
+    from science_tool.feedback import load_entry
+
+    fb_dir = _get_feedback_dir()
+    path = fb_dir / f"{entry_id}.yaml"
+    if not path.exists():
+        raise click.ClickException(f"Feedback entry not found: {entry_id}")
+    entry = load_entry(path)
+    import yaml
+
+    click.echo(yaml.dump(entry.model_dump(mode="json"), default_flow_style=False, sort_keys=False))
