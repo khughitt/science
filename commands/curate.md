@@ -15,7 +15,7 @@ Historical design context lives at `docs/plans/historical/2026-04-21-project-cur
 Parse `$ARGUMENTS` for:
 
 - `--dry-run` - do not write source edits; write the curation ledger unless `--no-write` is also set.
-- `--no-write` - print the ledger preview only. Do not create or update `entities/meta/curation/`.
+- `--no-write` - print the ledger preview only. Do not create or update `doc/curations/`.
 - `--scope <scope>` - restrict the sweep to a narrow curation slice.
 - `--since <date>` - bias the sweep toward activity after `<date>` while still allowing older linked artifacts to be read.
 - `--apply-obvious` - allow only high-confidence, small, local, evidence-backed metadata edits.
@@ -46,7 +46,7 @@ uv run science graph attention-sample --limit 8 --format json
 ### Carry-over from prior sweeps
 
 Before running new analysis, read the most recent prior ledger at
-`entities/meta/curation/curation-sweep-*.md` (sorted descending by filename).
+`doc/curations/curation-sweep-*.md` (sorted descending by filename).
 Extract its **Pending Decisions** section. Items the user has not acted on
 since must surface in the new ledger as carry-overs rather than being
 re-derived as fresh medium-confidence findings (fb-2026-05-01-003). Mark
@@ -181,21 +181,39 @@ Keep fixes narrow. Do not introduce compatibility layers, placeholders, or broad
 
 ## Phase 4: Ledger write
 
-Write or update `entities/meta/curation/curation-sweep-YYYY-MM-DD.md`.
+Write or update `doc/curations/curation-sweep-YYYY-MM-DD.md`.
+
+Curation ledgers are transient project-state records, **not** knowledge-graph
+entities: they live under `doc/` (not `entities/`), carry `doc_kind:` rather than
+an entity `kind:`/`id:`, and are excluded from the graph revision manifest by
+default (`doc/curations/*.md`), so editing one never stales the graph. Do not give
+them `kind:`/`id:` frontmatter or place them under `entities/` — that reintroduces
+the `unknown_entity_kind` / schema-validation friction (fb-2026-07-10-020,
+-10-022, -17-001).
 
 Suggested frontmatter:
 
 ```yaml
 ---
-kind: "curation-sweep"
+doc_kind: "curation-sweep"
+title: "Curation sweep — YYYY-MM-DD"
 generated_at: "<ISO-8601>"
 source_commit: "<SHA>"
-scope: "all"
+sweep_scope: "all"
 since: null
 mode: "dry-run" | "propose" | "apply-obvious"
 applied_changes: <int>
 pending_decisions: <int>
 ---
+```
+
+Open the body with a one-line marker recording that this is deliberately not a KG
+entity, e.g.:
+
+```markdown
+<!-- Project-state record, not a KG entity. Lives under doc/ (not entities/) by
+design — see fb-2026-07-10-022. Transient tidying log; carries no `kind:`/`id:`
+and is not materialized into the knowledge graph. -->
 ```
 
 Suggested body:
@@ -236,7 +254,7 @@ Be concrete. Name the friction, where it appeared, and the smallest improvement 
 
 ## After Writing
 
-1. Save the ledger to `entities/meta/curation/curation-sweep-YYYY-MM-DD.md` unless `--no-write` is set.
+1. Save the ledger to `doc/curations/curation-sweep-YYYY-MM-DD.md` unless `--no-write` is set.
 2. If `--dry-run` is set, do not mutate source artifacts; the ledger may still be written or updated unless `--no-write` is also set.
 3. If the sweep produced safe obvious fixes, ask before applying them unless `--apply-obvious` was explicitly given.
 4. If `--commit` is set, commit the written files after verification.

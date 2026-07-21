@@ -416,22 +416,36 @@ def _is_generated_python_cache(rel_path: str) -> bool:
     return "__pycache__" in parts or rel_path.endswith((".pyc", ".pyo"))
 
 
+# Transient tidying ledgers contribute NO triples but were still hashed into the
+# revision manifest, so editing one flipped the graph to stale and made `science
+# validate` warn about a file the graph does not contain. Ledgers are necessarily
+# written *after* the entity edits they record, so the natural workflow guaranteed a
+# dirty graph every sweep. Every project inherits these excludes instead of
+# rediscovering the knob (fb-2026-07-17-001, D2 Option C). The split is deliberately
+# NOT directory-aligned: `doc/meta/` mixes transient `*-next-steps.md` with durable
+# crosswalks/memos, so the glob is `doc/meta/*-next-steps.md`, not `doc/meta/*`.
+DEFAULT_REVISION_MANIFEST_EXCLUDES: tuple[str, ...] = (
+    "doc/curations/*.md",
+    "doc/meta/*-next-steps.md",
+)
+
+
 def _revision_manifest_excludes(project_root: Path) -> tuple[str, ...]:
+    patterns: list[str] = list(DEFAULT_REVISION_MANIFEST_EXCLUDES)
     config_path = project_config_path(project_root)
     if not config_path.is_file():
-        return ()
+        return tuple(patterns)
     loaded = yaml.safe_load(config_path.read_text(encoding="utf-8")) or {}
     if not isinstance(loaded, dict):
-        return ()
+        return tuple(patterns)
     graph = loaded.get("graph") or {}
     if not isinstance(graph, dict):
-        return ()
+        return tuple(patterns)
     if "revision_manifest_excludes" not in graph:
-        return ()
+        return tuple(patterns)
     raw = graph["revision_manifest_excludes"]
     if not isinstance(raw, list) or not all(isinstance(item, str) for item in raw):
         raise ValueError("science.yaml graph.revision_manifest_excludes must be a list of strings")
-    patterns: list[str] = []
     for item in raw:
         pattern = item.strip()
         if not pattern:
@@ -441,7 +455,9 @@ def _revision_manifest_excludes(project_root: Path) -> tuple[str, ...]:
             raise ValueError(
                 "science.yaml graph.revision_manifest_excludes entries must be relative project paths"
             )
-        patterns.append(path.as_posix())
+        normalized = path.as_posix()
+        if normalized not in patterns:
+            patterns.append(normalized)
     return tuple(patterns)
 
 
