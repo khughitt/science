@@ -1,6 +1,6 @@
 ---
 name: study-design
-description: Use when analysis rigor must be pre-committed or a numeric verdict certified/arbitrated. Routes to the discipline leaves.
+description: Use when analysis rigor must be pre-committed or a numeric verdict certified / arbitrated — pre-registration, replicate / permutation / bootstrap / Monte-Carlo / downsampling count justification (over a round-number default), power-floor acknowledgement, bias-vs-variance decomposition, sensitivity arbitration, defensive instrumentation, estimator certification, or causal identification. Routes to the discipline leaves.
 provenance: internal
 ---
 
