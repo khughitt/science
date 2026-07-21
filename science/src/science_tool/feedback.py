@@ -12,7 +12,7 @@ from fnmatch import fnmatch
 from pathlib import Path
 
 import yaml
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 
 VALID_CATEGORIES = ("friction", "gap", "guidance", "suggestion", "positive")
 VALID_STATUSES = ("open", "addressed", "deferred", "wontfix")
@@ -33,6 +33,12 @@ def _validate_concern_value(value: str) -> str:
         raise ValueError(msg)
     return value
 
+# Target prefixes that denote the same surface. A slash command (`command:`), its
+# plural typo (`commands:`), the CLI form (`cli:`), and the `science:` namespace
+# all refer to one tool surface, so they fold to a single normalized prefix.
+_TARGET_PREFIX_ALIASES = {"command", "commands", "cli", "science"}
+_TARGET_CANONICAL_PREFIX = "command"
+
 _ID_RE = re.compile(r"^fb-(\d{4}-\d{2}-\d{2})-(\d{3})$")
 _TOKEN_RE = re.compile(r"[a-z0-9]+")
 _SUMMARY_STOPWORDS = {
@@ -48,8 +54,28 @@ _SUMMARY_STOPWORDS = {
 }
 
 
+class FeedbackOccurrence(BaseModel):
+    """One filing of a feedback lesson.
+
+    Every time the same lesson is reported, a record lands here instead of an
+    integer being incremented. Per-filing project/category/detail are preserved
+    so recurrence never destroys the cross-project reach it is meant to surface.
+    """
+
+    date: str
+    project: str = ""
+    category: str = "suggestion"
+    detail: str | None = None
+
+
 class FeedbackEntry(BaseModel):
-    """A single feedback entry."""
+    """A single feedback entry.
+
+    `recurrence` is *derived* — it is `len(occurrences)`, never a stored integer.
+    Legacy entries (a bare `recurrence:` and no `occurrences:`) are migrated on
+    load by synthesizing that many occurrences from the entry's own fields, so a
+    count is never silently dropped.
+    """
 
     id: str
     created: str = Field(default_factory=lambda: date.today().isoformat())
@@ -60,14 +86,46 @@ class FeedbackEntry(BaseModel):
     summary: str
     detail: str | None = None
     resolution: str | None = None
-    recurrence: int = 1
     related: list[str] = Field(default_factory=list)
     concern: str = "tooling"
+    occurrences: list[FeedbackOccurrence] = Field(default_factory=list)
 
     @field_validator("concern")
     @classmethod
     def _check_concern(cls, value: str) -> str:
         return _validate_concern_value(value)
+
+    @model_validator(mode="before")
+    @classmethod
+    def _backfill_occurrences(cls, data: object) -> object:
+        """Ensure every entry has at least one occurrence.
+
+        Honors a legacy or explicit `recurrence:` by synthesizing that many
+        occurrences from the entry's own fields, so migrating an old file never
+        reduces its recurrence count.
+        """
+        if not isinstance(data, dict):
+            return data
+        if data.get("occurrences"):
+            return data
+        try:
+            count = max(int(data.get("recurrence", 1)), 1)
+        except (TypeError, ValueError):
+            count = 1
+        base = {
+            "date": data.get("created") or date.today().isoformat(),
+            "project": data.get("project") or "",
+            "category": data.get("category") or "suggestion",
+            "detail": data.get("detail"),
+        }
+        data = dict(data)
+        data["occurrences"] = [dict(base) for _ in range(count)]
+        return data
+
+    @property
+    def recurrence(self) -> int:
+        """Number of times this lesson has been filed (derived, never stored)."""
+        return len(self.occurrences)
 
 
 @dataclass
@@ -91,6 +149,45 @@ class FeedbackTestScaffold:
     path: Path
     suggested_test_target: str
     wrote: bool
+
+
+def normalize_target(target: str) -> str:
+    """Fold prefix and whitespace variance so equivalent spellings match.
+
+    `command:`/`commands:`/`cli:`/`science:` all denote one tool surface and fold
+    to a single canonical prefix; internal whitespace is collapsed. This is a
+    conservative *exact-match widening* — it merges spellings that genuinely name
+    the same surface and nothing more. Deeper spelling divergence (e.g.
+    `commons-promote` vs `commons promote`) is left to advisory fuzzy matching.
+    """
+    collapsed = " ".join(target.split())
+    if ":" not in collapsed:
+        return collapsed
+    prefix, rest = collapsed.split(":", 1)
+    prefix = prefix.strip().lower()
+    rest = rest.strip()
+    if prefix in _TARGET_PREFIX_ALIASES:
+        prefix = _TARGET_CANONICAL_PREFIX
+    return f"{prefix}:{rest}"
+
+
+def record_occurrence(
+    entry: FeedbackEntry,
+    *,
+    date: str,
+    project: str = "",
+    category: str = "suggestion",
+    detail: str | None = None,
+) -> FeedbackEntry:
+    """Append a filing to an entry without discarding any of its fields.
+
+    This replaces the old destructive `recurrence += 1`: the new filing's
+    project, category, and detail are retained instead of thrown away.
+    """
+    entry.occurrences.append(
+        FeedbackOccurrence(date=date, project=project, category=category, detail=detail)
+    )
+    return entry
 
 
 def save_entry(feedback_dir: Path, entry: FeedbackEntry) -> Path:
@@ -210,20 +307,82 @@ def find_duplicate(
     summary: str,
     concern: str = "tooling",
 ) -> FeedbackEntry | None:
-    """Find an existing open entry with the same target, concern, and similar summary.
+    """Find an existing open entry with an equivalent target, concern, and summary.
 
-    Uses bidirectional substring matching on summary. Entries differing in
-    concern are distinct even when target and summary match.
+    Targets are compared *normalized* (see `normalize_target`), so prefix and
+    whitespace spellings of one surface merge. Summary matching stays a
+    bidirectional substring check — the conservative signal for a genuine
+    duplicate. Entries differing in concern are distinct even when the rest matches.
     """
-    entries = list_entries(feedback_dir, status="open", target=target)
+    normalized = normalize_target(target)
     summary_lower = summary.lower()
-    for entry in entries:
-        if entry.concern != concern:
+    for entry in list_entries(feedback_dir, status="open"):
+        if entry.concern != concern or normalize_target(entry.target) != normalized:
             continue
         entry_summary_lower = entry.summary.lower()
         if summary_lower in entry_summary_lower or entry_summary_lower in summary_lower:
             return entry
     return None
+
+
+def find_similar_open(
+    feedback_dir: Path,
+    *,
+    target: str,
+    summary: str,
+    concern: str = "tooling",
+    threshold: float = 0.5,
+    exclude_id: str | None = None,
+) -> list[FeedbackEntry]:
+    """Return open entries that are *fuzzy* neighbors, never exact duplicates.
+
+    Same normalized target and concern, summary token similarity at or above
+    `threshold`, but NOT a bidirectional substring match (those are handled by
+    `find_duplicate`). This is advisory only — it surfaces candidates a filer may
+    want to relate or merge, and never merges anything automatically.
+    """
+    normalized = normalize_target(target)
+    summary_lower = summary.lower()
+    tokens = set(_summary_tokens(summary))
+    neighbors: list[FeedbackEntry] = []
+    for entry in list_entries(feedback_dir, status="open"):
+        if entry.id == exclude_id:
+            continue
+        if entry.concern != concern or normalize_target(entry.target) != normalized:
+            continue
+        entry_summary_lower = entry.summary.lower()
+        if summary_lower in entry_summary_lower or entry_summary_lower in summary_lower:
+            continue
+        if _token_similarity(tokens, set(_summary_tokens(entry.summary))) >= threshold:
+            neighbors.append(entry)
+    return neighbors
+
+
+def list_targets(feedback_dir: Path, *, status: str | None = "open") -> list[dict[str, object]]:
+    """List distinct feedback targets with their entry counts.
+
+    Lets a filer pick an existing spelling instead of minting a new variant.
+    Each row carries the raw `target`, its `normalized` key (so spelling variants
+    are visibly grouped), the `count` of entries, and `total_recurrence`.
+    """
+    entries = list_entries(feedback_dir, status=status)
+    rows: dict[str, dict[str, object]] = {}
+    for entry in entries:
+        row = rows.get(entry.target)
+        if row is None:
+            row = {
+                "target": entry.target,
+                "normalized": normalize_target(entry.target),
+                "count": 0,
+                "total_recurrence": 0,
+            }
+            rows[entry.target] = row
+        row["count"] = int(row["count"]) + 1  # type: ignore[arg-type]
+        row["total_recurrence"] = int(row["total_recurrence"]) + entry.recurrence  # type: ignore[arg-type]
+    return sorted(
+        rows.values(),
+        key=lambda r: (-int(r["count"]), str(r["target"])),  # type: ignore[arg-type]
+    )
 
 
 def group_for_triage(
@@ -253,8 +412,7 @@ def group_for_triage(
                 "total_recurrence": 0,
             }
         groups[key]["entries"].append(entry)
-        if entry.project:
-            groups[key]["projects"].add(entry.project)
+        groups[key]["projects"].update(_entry_projects(entry))
         groups[key]["total_recurrence"] += entry.recurrence
 
     return dict(sorted(groups.items(), key=lambda item: -item[1]["total_recurrence"]))
@@ -290,8 +448,7 @@ def cluster_for_triage(
             clusters.append(cluster)
 
         cluster.entries.append(entry)
-        if entry.project:
-            cluster.projects.add(entry.project)
+        cluster.projects.update(_entry_projects(entry))
         cluster.total_recurrence += entry.recurrence
         cluster.newest_created = max(cluster.newest_created, entry.created)
         cluster.tokens |= tokens
@@ -433,6 +590,11 @@ def _cluster_row(cluster: _FeedbackCluster) -> dict[str, object]:
         "suggested_status": _suggested_status(target=cluster.target, category=cluster.category, count=len(entries)),
         "suggested_next_test_target": _suggested_next_test_target(cluster.target),
     }
+
+
+def _entry_projects(entry: FeedbackEntry) -> set[str]:
+    """Every distinct project that filed this lesson, across all occurrences."""
+    return {occ.project for occ in entry.occurrences if occ.project}
 
 
 def _summary_tokens(summary: str) -> list[str]:

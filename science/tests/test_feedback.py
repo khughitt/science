@@ -13,14 +13,19 @@ from science_tool.feedback import (
     VALID_CONCERNS,
     VALID_STATUSES,
     FeedbackEntry,
+    FeedbackOccurrence,
     cluster_for_triage,
     detect_project,
     find_duplicate,
+    find_similar_open,
     group_for_triage,
     list_entries,
+    list_targets,
     load_all_entries,
     load_entry,
     next_feedback_id,
+    normalize_target,
+    record_occurrence,
     render_report,
     scaffold_test_for_feedback,
     save_entry,
@@ -116,6 +121,7 @@ def _make_entry(
     resolution: str | None = None,
     recurrence: int = 1,
     related: list[str] | None = None,
+    concern: str = "tooling",
 ) -> FeedbackEntry:
     """Helper to create and save an entry with defaults."""
     entry = FeedbackEntry(
@@ -130,6 +136,7 @@ def _make_entry(
         resolution=resolution,
         recurrence=recurrence,
         related=related or [],
+        concern=concern,
     )
     save_entry(feedback_dir, entry)
     return entry
@@ -566,6 +573,149 @@ def test_cluster_for_triage_includes_concern(tmp_path):
     assert concerns == {"methodology:statistics", "tooling"}
     # Same target + similar summary but different concern must not merge.
     assert all(row["count"] == 1 for row in rows)
+
+
+class TestNonLossyOccurrences:
+    def test_recurrence_is_derived_from_occurrences(self):
+        entry = FeedbackEntry(
+            id="fb-2026-07-21-001",
+            target="command:x",
+            summary="s",
+            occurrences=[
+                FeedbackOccurrence(date="2026-07-21", project="a"),
+                FeedbackOccurrence(date="2026-07-22", project="b"),
+            ],
+        )
+        assert entry.recurrence == 2
+
+    def test_fresh_entry_backfills_one_occurrence(self):
+        entry = FeedbackEntry(
+            id="fb-2026-07-21-001",
+            created="2026-07-21",
+            project="proj-a",
+            target="command:x",
+            category="friction",
+            summary="s",
+            detail="d",
+        )
+        assert entry.recurrence == 1
+        assert len(entry.occurrences) == 1
+        occ = entry.occurrences[0]
+        assert occ.date == "2026-07-21"
+        assert occ.project == "proj-a"
+        assert occ.category == "friction"
+        assert occ.detail == "d"
+
+    def test_legacy_yaml_without_occurrences_backfills_and_preserves_count(self, tmp_path: Path):
+        # A legacy file carries `recurrence: 3` and no `occurrences:`. Migration
+        # must preserve the count (never silently drop it) by synthesizing 3.
+        path = tmp_path / "fb-2026-01-01-001.yaml"
+        path.write_text(
+            "id: fb-2026-01-01-001\ncreated: '2026-01-01'\n"
+            "project: legacy-proj\ntarget: command:x\ncategory: gap\n"
+            "summary: s\nrecurrence: 3\n",
+            encoding="utf-8",
+        )
+        entry = load_entry(path)
+        assert entry.recurrence == 3
+        assert len(entry.occurrences) == 3
+        assert entry.occurrences[0].project == "legacy-proj"
+        assert entry.occurrences[0].category == "gap"
+
+    def test_recurrence_not_persisted_occurrences_are(self, tmp_path: Path):
+        entry = FeedbackEntry(id="fb-2026-07-21-001", target="command:x", summary="s")
+        save_entry(tmp_path, entry)
+        raw = (tmp_path / "fb-2026-07-21-001.yaml").read_text(encoding="utf-8")
+        assert "occurrences:" in raw
+        assert "recurrence:" not in raw
+
+    def test_record_occurrence_is_non_lossy(self, tmp_path: Path):
+        entry = _make_entry(tmp_path, "fb-2026-07-21-001", project="proj-a", detail="first")
+        record_occurrence(entry, date="2026-07-22", project="proj-b", category="gap", detail="second")
+        assert entry.recurrence == 2
+        # The second filing's distinct project and detail survive.
+        assert entry.occurrences[1].project == "proj-b"
+        assert entry.occurrences[1].detail == "second"
+        # The first filing is untouched.
+        assert entry.occurrences[0].project == "proj-a"
+        assert entry.occurrences[0].detail == "first"
+
+
+class TestNormalizeTarget:
+    def test_folds_command_cli_science_prefix_variance(self):
+        canonical = normalize_target("command:explore-ideas")
+        assert normalize_target("cli:explore-ideas") == canonical
+        assert normalize_target("science:explore-ideas") == canonical
+        assert normalize_target("commands:explore-ideas") == canonical
+
+    def test_collapses_whitespace(self):
+        assert normalize_target("command:  discuss ") == normalize_target("command:discuss")
+
+    def test_does_not_fold_unrelated_prefixes(self):
+        assert normalize_target("skill:statistics") != normalize_target("command:statistics")
+        assert normalize_target("template:x") != normalize_target("command:x")
+
+    def test_find_duplicate_matches_across_prefix_variance(self, tmp_path: Path):
+        _make_entry(tmp_path, "fb-2026-07-21-001", target="command:explore-ideas", summary="hollow entities")
+        dup = find_duplicate(tmp_path, target="cli:explore-ideas", summary="hollow entities")
+        assert dup is not None
+        assert dup.id == "fb-2026-07-21-001"
+
+
+class TestFindSimilarOpen:
+    def test_returns_fuzzy_neighbor_not_substring_dup(self, tmp_path: Path):
+        _make_entry(
+            tmp_path,
+            "fb-2026-07-21-001",
+            target="command:next-steps",
+            summary="Stale window completion hides in the prior month done file",
+        )
+        neighbors = find_similar_open(
+            tmp_path,
+            target="cli:next-steps",
+            summary="Stale-window completions hide in prior month done-file",
+            concern="tooling",
+        )
+        assert [n.id for n in neighbors] == ["fb-2026-07-21-001"]
+
+    def test_excludes_different_concern_and_unrelated(self, tmp_path: Path):
+        _make_entry(tmp_path, "fb-2026-07-21-001", target="command:next-steps", summary="totally unrelated topic")
+        _make_entry(
+            tmp_path,
+            "fb-2026-07-21-002",
+            target="command:next-steps",
+            summary="stale window done file",
+            concern="methodology:qa",
+        )
+        neighbors = find_similar_open(
+            tmp_path,
+            target="command:next-steps",
+            summary="stale window done file hides",
+            concern="tooling",
+        )
+        assert neighbors == []
+
+
+class TestListTargets:
+    def test_lists_distinct_targets_with_counts(self, tmp_path: Path):
+        _make_entry(tmp_path, "fb-2026-07-21-001", target="command:discuss")
+        _make_entry(tmp_path, "fb-2026-07-21-002", target="command:discuss")
+        _make_entry(tmp_path, "fb-2026-07-21-003", target="cli:discuss")
+        rows = list_targets(tmp_path)
+        by_target = {row["target"]: row for row in rows}
+        assert by_target["command:discuss"]["count"] == 2
+        assert by_target["cli:discuss"]["count"] == 1
+        # command:discuss and cli:discuss share a normalized key.
+        assert by_target["command:discuss"]["normalized"] == by_target["cli:discuss"]["normalized"]
+
+
+class TestOccurrenceProjectReach:
+    def test_group_for_triage_unions_occurrence_projects(self, tmp_path: Path):
+        entry = _make_entry(tmp_path, "fb-2026-07-21-001", target="command:x", project="proj-a")
+        record_occurrence(entry, date="2026-07-22", project="proj-b")
+        save_entry(tmp_path, entry)
+        groups = group_for_triage(tmp_path)
+        assert groups[("tooling", "command:x")]["projects"] == {"proj-a", "proj-b"}
 
 
 def test_render_report_groups_by_concern_then_target(tmp_path):
