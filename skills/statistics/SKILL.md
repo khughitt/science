@@ -1,153 +1,59 @@
 ---
 name: statistics
-description: Use when designing, pre-registering, or reviewing finite-sample quantitative analyses, especially bootstrap, permutation, Monte Carlo, downsampling, MCMC, power, bias-vs-variance, sensitivity arbitration, defensive instrumentation for multi-candidate pre-registered tests, or any analysis that would otherwise choose a round-number default.
+description: Use when designing, building, fitting, comparing, or reviewing a finite-sample statistical model — survival / hierarchical / mixed-effects, compositional, time-series / longitudinal, likelihood model comparison (AIC/BIC/LRT, bootstrap CIs), population-genetics likelihood, or Bayesian workflow (priors, MCMC, convergence, calibration).
 provenance: internal
 ---
 
-# Statistics
+# Statistics — Model-Fitting Router
 
-Practical guidance for designing and pre-registering quantitative analyses
-in Science projects. The principles here apply across disciplines wherever
-a quantitative claim is being made; the examples are drawn from
-bioinformatics + meta-analysis but generalize.
+A router carries no methodology; teaching content belongs in a typed leaf.
 
-For analysis-readiness planning, start at [`../INDEX.md`](../INDEX.md) or run
-`science-plan-analysis`.
+## Routing trigger
+
+Load this router when a finite-sample statistical model is being designed,
+built, constructed, fit, compared, analyzed, or reviewed — distinct from the
+rigor commitments and verdict certifications that route to
+`../study-design/SKILL.md`.
+
+## Scope boundary
+
+Covers the model's structure, fit, and comparison across the six modeling
+families below. Excludes the rigor wrapper — pre-registration, replicate/power
+justification, estimator certification, sensitivity arbitration, causal
+identification, and bias/variance reasoning (see `../study-design/SKILL.md`).
+The two routers are composable axes: a task may load both — pre-registering a
+Cox model loads this router for the model family and `study-design` for the
+commitment.
 
 ## Leaves
 
-| Leaf | Use when |
-|---|---|
-| [`survival-and-hierarchical-models.md`](./survival-and-hierarchical-models.md) | Cox / Weibull / mixed-effects / Bayesian hierarchical models |
-| [`compositional-data.md`](./compositional-data.md) | Proportions, fractions, deconvolution outputs, microbiome relative abundance |
-| [`time-series-and-longitudinal-models.md`](./time-series-and-longitudinal-models.md) | Repeated-measure, wearable, sensor, EMA, actigraphy, symptom-diary, cross-lag, or longitudinal models |
-| [`likelihood-model-comparison.md`](./likelihood-model-comparison.md) | Comparing parametric models by likelihood — AIC/BIC/LRT, nested vs non-nested, numerical precision, bootstrap stability, and Bayesian LOO/ELPD/stacking |
-| [`population-genetics-likelihood.md`](./population-genetics-likelihood.md) | Wright-Fisher / Moran / binomial-segregation likelihoods; selection vs neutral null |
-| [`bayesian-workflow.md`](./bayesian-workflow.md) | Building/fitting/reviewing a Bayesian model — priors, MCMC, convergence, calibration, comparison |
+| Leaf | Load when | Do not load when |
+|---|---|---|
+| `survival-and-hierarchical-models.md` | designing or reviewing Cox / Weibull / AFT / frailty / mixed-effects / Bayesian-hierarchical / multi-dataset models, or when repeated cells / genes / samples inside a donor or study are not independent observations | the outcome is not time-to-event and there is no grouping, censoring, hierarchical, or repeated-measure structure — a single-level i.i.d. model suffices |
+| `compositional-data.md` | analyzing proportions, fractions, cell-type composition, microbiome relative abundance, clone fractions, topic mixtures, or deconvolution outputs — anything constrained to sum to one | features are unconstrained counts or continuous measurements |
+| `time-series-and-longitudinal-models.md` | designing or reviewing repeated-measure, wearable, sensor, EMA, actigraphy, symptom-diary, cross-lag, or longitudinal analyses needing explicit time origin, cadence, lag, and within-unit dependence | measurements are cross-sectional (one row per unit, no time axis) |
+| `likelihood-model-comparison.md` | comparing parametric models by likelihood — AIC / BIC / LRT, nested vs non-nested, identifiability and rare-event precision audits, bootstrap CIs, or Bayesian out-of-sample comparison (PSIS-LOO / ELPD / stacking) | fitting a single model with no competing model to rank |
+| `population-genetics-likelihood.md` | constructing or fitting Wright-Fisher / Moran / binomial-segregation+selection likelihoods and testing selection against a neutral null | no allele-frequency, segregation, or selection-vs-drift question |
+| `bayesian-workflow.md` | building, fitting, or reviewing a Bayesian / probabilistic model — priors, MCMC, convergence, posterior-predictive / calibration, prior sensitivity, Bayesian model comparison | a frequentist point estimate or test suffices and no posterior is needed |
 
-## Principles
+## Decision / compose order
 
-1. **Lock parameters by measurement, not convention.** Anywhere you would
-   reach for a default like "1000 bootstrap replicates" or "10000
-   permutations", first ask what precision you need. For point
-   estimators, require replicate-induced SE to be small relative to the
-   signal. For p-values or tail probabilities, require an explicit
-   Monte Carlo SE / minimum-attainable-p check. If the answer is
-   unknown, run a small pilot and lock the value with a pre-committed
-   decision rule. See
-   [`replicate-count-justification`](../study-design/replicate-count-justification.md).
+Leaves are independent; several may apply to one analysis. Choose by model
+family and data structure, not by discipline.
 
-2. **Distinguish bias from variance before you reach for an estimator.**
-   Averaging cancels variance, not bias. Naming your estimator's bias
-   structure prevents wasting compute and leads to better corrections.
-   See [`bias-vs-variance-decomposition`](../study-design/bias-vs-variance-decomposition.md).
+## Parent & neighbors
 
-3. **Pre-commit sensitivity-arbitration rules.** A pre-registered analysis
-   with N sensitivity passes can produce up to 2^N possible "interpretation
-   stories" post hoc. State up front which flags caveat the verdict and
-   which can override it, and what the override condition is. See
-   [`sensitivity-arbitration`](../study-design/sensitivity-arbitration.md).
+- Parent index: `../INDEX.md`
+- Neighboring router: `../study-design/SKILL.md`
 
-4. **Acknowledge the power floor explicitly.** Before running any
-   verdict-bearing test, compute and state the minimum effect detectable
-   at your planned n + α + estimator. This prevents post-hoc relabelling
-   of nulls as "evidence of absence" and forces explicit choice between
-   underpowered exploratory and adequately-powered confirmatory framings. See
-   [`power-floor-acknowledgement`](../study-design/power-floor-acknowledgement.md).
+## Success test
 
-5. **A pre-registration amendment is not a new pre-registration.** When a
-   follow-up task tests the same hypothesis with the same contrasts but a
-   different operationalisation, structure the new pre-reg as an
-   amendment that inherits §-by-§ from the parent. Don't re-state what
-   didn't change. See
-   [`prereg-amendment-vs-fresh`](../study-design/prereg-amendment-vs-fresh.md).
-
-6. **Instrument the pre-reg defensively when the test selects among candidates
-   or depends on frozen inputs.** Universe locks, candidate-snapshot
-   freezes, familywise nulls, leakage hedges, suspicious-result
-   tripwires, and locked decision tables convert "the run was honest"
-   from a narrative claim made afterwards into runtime checks the
-   pre-reg commits to in advance. The full set is appropriate for
-   confirmatory tests that update a hypothesis verdict; pick the subset
-   whose failure modes apply otherwise. See
-   [`prereg-defensive-instrumentation`](../study-design/prereg-defensive-instrumentation.md).
-
-7. **Model the independent unit.** Repeated cells, genes, mutations, or samples
-   inside a donor/study are not independent observations. For survival,
-   multi-cohort, mixed-effect, or Bayesian hierarchical analyses, see
-   [`survival-and-hierarchical-models`](./survival-and-hierarchical-models.md).
-
-8. **Respect compositional constraints.** Fractions, proportions, and mixture
-   outputs require denominator, zero-handling, and log-ratio decisions before
-   ordinary regression or correlation. See
-   [`compositional-data`](./compositional-data.md).
-
-9. **Make likelihood comparisons well-posed before reading them.** Same data,
-   same response scale, identified parameters, and a converged optimizer come
-   before AIC/BIC/LRT; non-nested models need a common scale or a Jacobian
-   correction. See
-   [`likelihood-model-comparison`](./likelihood-model-comparison.md).
-
-10. **Give drift a fair chance before crediting selection.** Population-genetics
-    likelihoods (Wright-Fisher, Moran, binomial-segregation) must estimate their
-    variance/noise scale and confirm drift and selection are separable on the
-    data; a single-cohort selection signal is cohort-scoped. See
-    [`population-genetics-likelihood`](./population-genetics-likelihood.md).
-
-11. **Treat repeated time rows as dependent.** Wearable, sensor, EMA,
-    actigraphy, symptom-diary, and longitudinal omics analyses need explicit
-    time origin, cadence, lag/window, missingness, and within-unit dependence
-    rules before interpretation. See
-    [`time-series-and-longitudinal-models`](./time-series-and-longitudinal-models.md).
-
-12. **An estimator's self-report is not evidence about the estimator.** "Converged"
-    is a claim the optimiser makes about itself, and a converged, multi-start optimum
-    can be reproducibly wrong. Before a threshold, budget, or gate depends on a
-    numeric fit, certify well-posedness, forward-map accuracy, reproducibility, and
-    threshold calibration — in that order, cheapest first. See
-    [`estimator-certification`](../study-design/estimator-certification.md).
-
-13. **A Bayesian fit is a gated sequence, not a menu.** Prior-predictive check
-    before fitting; a convergence gate before reading the posterior; calibration
-    (LOO-PIT / coverage / SBC) is out-of-sample and distinct from posterior-
-    predictive fit; power-scale the prior before trusting the verdict. See
-    [`bayesian-workflow`](./bayesian-workflow.md).
-
-14. **Identification is a DAG question, decided before fitting.** Missing edges are
-    the strongest assumptions; pre-treatment timing does not license adjustment
-    (M-bias); over-adjusting a mediator or collider is a bias, not caution. When the
-    effect is not identified, separate alternative identification (re-stating the
-    estimand), partial-identification bounds, hidden-bias sensitivity, and a
-    fail-closed verdict. See [`causal-identification`](../study-design/causal-identification.md).
-
-## When to invoke
-
-Use this skill any time you are:
-
-- Pre-registering a quantitative analysis (especially under a Science
-  project's `entities/pre-registrations/` flow).
-- Reviewing or critiquing someone else's pre-registered analysis.
-- Choosing values for resampling counts (bootstrap, permutation, MC),
-  random seeds, or stopping rules.
-- Deciding whether to apply a bias correction (Miller-Madow, jackknife,
-  bootstrap-bias-correction, Hodges-Lehmann, etc.).
-- Resolving conflicting sensitivity passes after a run.
-- Pre-registering a test that selects a winner among multiple
-  candidate operationalisations, depends on frozen input data, or
-  could produce a "too good to be true" headline that needs a
-  runtime tripwire.
-- Designing survival, mixed-effect, or hierarchical Bayesian models.
-- Analyzing proportions, cell fractions, deconvolution outputs, or other
-  compositional measurements.
-- Designing wearable, sensor, EMA, actigraphy, symptom-diary, cross-lag, or
-  longitudinal repeated-measure analyses.
+A modeling task routes to the correct leaf with no methodology read from this
+router.
 
 ## Companion Skills
 
-- [`literature`](../literature/SKILL.md) and [`epistemics`](../epistemics/SKILL.md) — high-level
-  research methodology; this skill is the quantitative-design layer beneath them.
-- [`writing`](../writing/SKILL.md) — how to report statistical
-  decisions in pre-regs and interpretations.
-- [`data`](../data-management/SKILL.md) — input-data conventions; some statistical
-  decisions depend on data characteristics (e.g., zero-inflation,
-  count vs continuous).
+- `../study-design/SKILL.md` — the rigor-commitment and verdict-certification axis; compose with this router.
+- `../literature/SKILL.md`, `../epistemics/SKILL.md` — high-level research methodology; this router is the quantitative-modeling layer beneath them.
+- `../writing/SKILL.md` — reporting statistical decisions in pre-regs and interpretations.
+- `../data-management/SKILL.md` — input-data conventions; some modeling decisions depend on data shape (count vs continuous, zero-inflation).
