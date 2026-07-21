@@ -87,6 +87,17 @@ current `lstat`-based, symlink-aware semantics.
   bind the metadata to the same opened object. The fd is the unit of coherence.
 - Absent / dir / symlink targets keep today's behavior (no retained bytes).
 
+**Containment must not follow the leaf (F3).** Every transition path is resolved through
+`resolve_within`, which today does `(root / rel_path).resolve()` — and `.resolve()` follows the *final*
+symlink, returning its target. A transition whose declared path *is* a symlink (a symlink referrer,
+`entities/plans/0001-link.md`) would then be captured, matched, and restored against the target's
+fingerprint, not the link's — the symlink identity that Piece 5 promises to preserve is lost before
+capture even runs. `resolve_within` must resolve and validate the **ancestor chain** (the real
+symlink-escape guard) while retaining the leaf pathname: resolve `root / rel_path.parent`, confirm
+containment, and rejoin `rel_path.name` unresolved. Then `snapshot_paths`/`fingerprint` (`lstat`,
+no-follow) see the symlink as itself. This is strictly safer — operating on a symlink *entry* inside
+the root never follows it out of the corpus.
+
 **Drift gate (named API, not `snapshot_paths` alone).**
 
 ```python
@@ -233,8 +244,16 @@ fixes each callback point:
 | --- | --- | --- | --- |
 | exclusive dest create | `create_exclusive(path, text, mode, *, on_commit)` — `O_EXCL` open → **`on_commit`** → write → `fchmod` exact → `fsync` file → `fsync` parent | **immediately after the `O_EXCL` open**, before write/chmod/fsync (F1) | `import-dst` |
 | each ancestor mkdir | `mkdir_durable(path, mode, *, on_commit)` — mkdir *staging* dir → `chmod` exact → **`renameat2(staging, path, RENAME_NOREPLACE)`** → **`on_commit`** → `fsync` parent | after the no-clobber publish rename (rev-4 F1) | that `created-dir` |
-| source unlink | `unlink_durable(path, *, on_commit)` — `unlink` → **`on_commit`** → `fsync` parent | after `unlink` returns | `import-src` |
-| each referrer replace | `apply_reference_rewrite` uses a durable replace (`fsync` file → `os.replace` → **`on_commit`** → `fsync` parent) firing per edit | after each `os.replace` | that `entity-rewrite` |
+| source unlink | `unlink_durable(path, *, target_pre, on_commit)` — **recheck `matches(target_pre, path)`** → `unlink` → **`on_commit`** → `fsync` parent | after `unlink` returns | `import-src` |
+| each referrer replace | `apply_reference_rewrite` uses a durable replace (`fsync` file → **recheck `matches(target_pre, path)`** → `os.replace` → **`on_commit`** → `fsync` parent) firing per edit | after each `os.replace` | that `entity-rewrite` |
+
+**Write-boundary recheck on the destructive seams (design §"two guards at two instants").** `unlink`
+and the move's source-removal are as destructive as a replace: a concurrent edit landing between
+`capture_and_verify` and the seam is otherwise deleted, after which rollback restores the *stale*
+captured snapshot and the concurrent write is lost. So `unlink_durable` and `move_no_clobber` take the
+transition's frozen `pre` (`target_pre` / `src_pre`) and recheck `matches` immediately before the
+irreversible step, raising `PreconditionRefused` (clean refusal, nothing mutated) on divergence —
+exactly the guard `atomic_write_bytes` already applies before its publish.
 
 **Why the create marks at the open (F1).** The live file exists the instant `O_EXCL` open succeeds.
 If the callback waited until after write/chmod/fsync, a failure there would leave a file on disk
@@ -262,8 +281,10 @@ the move primitive): fires **exactly once**, at the existence/identity-changing 
 **The no-clobber move primitive (archive/supersede only) — two seams, ordered for durability (F3).**
 
 ```python
-def move_no_clobber(src, dst, *, on_commit_dst=None, on_commit_src=None) -> None:
-    """renameat2(RENAME_NOREPLACE): atomic. On success: mark dst, mark src,
+def move_no_clobber(src, dst, *, src_pre=None, on_commit_dst=None, on_commit_src=None) -> None:
+    """If src_pre is given, recheck matches(src_pre, src) first and raise
+       PreconditionRefused on divergence (write-boundary guard).
+    renameat2(RENAME_NOREPLACE): atomic. On success: mark dst, mark src,
        fsync(dst parent), fsync(src parent).
     Fallback (no renameat2): the destination link must be durable BEFORE the
     source is removed, or power loss can keep the deletion without the link:
