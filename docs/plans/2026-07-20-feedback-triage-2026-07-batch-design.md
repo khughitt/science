@@ -2,8 +2,8 @@
 title: Feedback Triage — 2026-07 batch (106 open items) — Design
 status: proposed
 created: '2026-07-20'
-updated: '2026-07-20'
-revision: v3 (Tier-0 inquiry-export URI fix implemented + verified; -19-003 shown non-reproducible and demoted; reconciliation table dropped as unnecessary)
+updated: '2026-07-21'
+revision: v4 (owner decisions D1 + D2 resolved — sequence steps 3 and 4)
 ---
 
 # Feedback Triage — 2026-07 batch
@@ -339,6 +339,11 @@ merge-policy table** — `project-only` / `canonical` / `canonical-with-override
 with the overlay schema and the promote-time builder both derived from it. That
 table is the thing to design; the three reports are its first three rows, and
 `-11-021` and `-11-020` (canonicalization lossiness) constrain it further.
+**Resolved by D1 (2026-07-21) — see [Blocking design decisions](#d1--per-field-ownership-and-merge-policy--resolved-2026-07-21).**
+The grounding pass established that the table already exists as `science:merge`
+schema annotations, so the ruling adds one policy value (`override`, for `tier`)
+and reclassifies these three fields; the "Likely resolution" column above is the
+confirmed resolution.
 
 Separately, the commons id namespace is global with zero cross-project awareness
 (`-11-018`, `-16-004`, `-11-019`); one federation-awareness pass at promote time
@@ -681,31 +686,87 @@ prefer `pdftotext`), `-10-026` (`kind:` not `type:`; never emit retired
 
 ## Blocking design decisions
 
-Two decisions gate multiple batches and should be made before implementation
-starts:
+Two decisions gated multiple batches. **Both resolved by the owner 2026-07-21**
+(sequence steps 3 and 4); the rulings below are what steps 7 and 8 implement.
 
-**D1 — Per-field ownership and merge policy** (gates Batch A remainder; sequence
-step 7). Not an open-vs-closed ruling: each commons field needs a classification
-as `project-only`, `canonical`, or `canonical-with-override`, from which the
-overlay schema *and* the promote-time builder are both derived. `paper_kind`,
-`tier`, and `provided_capabilities` are the first three rows and resolve
-differently — see the table in Batch A. Deliverable: the table, plus override
-precedence rules for the `canonical-with-override` class.
+### D1 — Per-field ownership and merge policy — RESOLVED 2026-07-21
 
-**D2 — The transient-state home** (gates Batch F; sequence step 8). Three
-options with different reachability trade-offs (table in Batch F). The decision
-turns on one question: **must ledgers stay peer-visible and reviewable?**
+**Scoping correction from the grounding pass: the ownership table is not a
+greenfield deliverable.** Every commons field already carries a `science:merge`
+policy annotation in the base + kind-mixin JSON Schemas (`replace` / `append` /
+`forbidden` / `project_only`), and both the overlay allow-list and the
+promote-time classifier already derive from those annotations
+(`science/model/src/science_model/entity_schema/merge.py:21-57`,
+`science/src/science_tool/commons/promote.py:1928`). So D1 is **not** "author a
+table for ~40 fields" — it is exactly two moves: **(i) add one missing policy
+value, `override`, and (ii) reclassify the three contested fields.** Every other
+field keeps its existing annotation.
 
-- If **yes** → option A (in-tree, untracked, `git rev-parse --git-common-dir`
-  indirection) or option C (tracked, manifest-excluded).
-- If they are per-operator scratch → option B (`XDG_STATE_HOME`).
+Rulings (owner-confirmed):
 
-Note that option C is already achieved and verified on post-acute-infection via
-`graph.revision_manifest_excludes`, so **"do nothing further" is a legitimate
-outcome** and Batch F is not blocked on relocating anything. Two riders: prefer
-`doc_kind`-keyed rules over path globs, and if the decision extends to moving the
-`science feedback` store, it requires an explicit migration/export plan and a
-fallback read path — the 106 ids this document references live there.
+| Field | Class (ruling) | Current code | Overlay schema change | Promote builder change |
+|---|---|---|---|---|
+| `provided_capabilities` | **canonical** | in no schema → dropped at promote (`promote_dataset.py:269-286`) | none — overlay carries nothing | add the field to `mixin-dataset` with `science:merge: replace`; it then routes to the canonical bucket instead of `_dataset_dropped_fields` |
+| `tier` | **canonical-with-override** | canonical + required (`mixin-dataset-2.0.json:13`), no override path | add optional `tier` + `tier_rationale`, both annotated `science:merge: override` (overlay-1.1 → 1.2) | canonical `tier` still promoted (unchanged); an overlay `tier` never flows back |
+| `paper_kind` | **project-only** | canonical (`mixin-paper-2.0.json:19`), promoted | add `paper_kind` to the overlay allow-list, annotated `project_only` | remove from `mixin-paper` canonical (2.0 → 2.1); the classifier's existing default then routes it to the overlay bucket |
+
+**The new `override` class — precedence rules** (the only net-new mechanism):
+
+1. **Resolution.** When both the canonical and the overlay carry the field, the
+   **overlay value wins**; when the overlay omits it, the canonical value is
+   used. (Contrast `project_only`, which has no canonical counterpart, and
+   `replace`/`append`, which never appear on an overlay.)
+2. **Rationale requirement.** An overlay `override` field whose value **differs**
+   from the canonical and carries no companion `*_rationale` = **WARN** (silent
+   divergence). An overlay `override` field **equal** to the canonical value =
+   WARN "redundant; matches canonical, remove."
+3. **One-way.** An `override` value is local-only and is **never** written back to
+   the canonical at promote — `promote.py` treats it like `project_only` on the
+   write path but like a shadowing scalar on the read/merge path.
+
+**Migration.** `provided_capabilities` populates by re-promote (or a backfill
+copying the live project-local value onto the canonical). `paper_kind` requires
+backfilling each canonical paper's current value into a per-project overlay
+**before** the field is removed from the mixin — otherwise the project-side
+`document_structure` rubric (`validate/checks/document_structure.py:54,77-78`)
+loses its exemption input. `-11-020`/`-11-021` (canonicalization lossiness) fold
+in here: `-11-021` already fixed (`29ffdea4`); `-11-020` is the residual
+constraint and is satisfied by the same "derive overlay + promote from one
+annotated schema" mechanism this ruling standardizes. Implementation lands in
+**step 7 (Batch A remainder)**, not at decision time.
+
+### D2 — The transient-state home — RESOLVED 2026-07-21: Option C (ratify status quo)
+
+Ledgers must stay **peer-visible and reviewable** — they are reviewed, they carry
+forward carry-over history, and `/science:curate` Phase 1 requires the prior
+ledger — so the per-operator `XDG_STATE_HOME` option B is out. Between the two
+peer-visible options, **C is already built, shipped, and verified**:
+`graph.revision_manifest_excludes` (default `()`, applied by `fnmatch` at
+`graph/io.py:398-410`) filters tracked files out of the revision manifest, and
+post-acute-infection sets `doc/curations/*.md` + `doc/meta/*-next-steps.md`
+(manifest 880 → 876, `graph diff` empty, `validate` unchanged). Option A (in-tree
+untracked + `git rev-parse --git-common-dir`) is net-new plumbing with no
+precedent in the codebase and **loses fresh-clone reachability** for no gain over
+C. Ruling: **do nothing to relocate.**
+
+Consequences for **step 8 (Batch F)**:
+
+- **No relocation, and the `science feedback` store does NOT move.** It is a
+  durable global queue at config-home (`~/.config/science/feedback`, already
+  XDG-aware via `get_science_config_dir`, `registry/config.py:31-42`), not
+  transient scratch; moving it would force migrating the 106+ ids this document
+  references for zero reachability gain.
+- **Ship a default exclude set in the toolkit** so every project inherits the
+  ledger excludes instead of rediscovering the knob (post-acute-infection is
+  currently the *only* project that sets it). Candidate default:
+  `doc/curations/*.md`, `doc/meta/*-next-steps.md`.
+- **`doc_kind` is deferred, not adopted.** It does not exist in the model (only
+  the unrelated entity-kind `CurationScope` does); the "prefer `doc_kind`-keyed
+  rules over path globs" rider is a separate modeling change and is **not** a
+  prerequisite for C. Path globs remain the mechanism.
+- **Fix the curate-doc drift.** `commands/curate.md` Phase 1 still points its
+  required prior-ledger read at the pre-relocation `entities/meta/curation/`
+  path while real projects have moved to `doc/curations/`. Correct it in step 8.
 
 ---
 
@@ -718,8 +779,8 @@ closes when it does not close a whole batch.
 |---|---|---|---|
 | 1 | **Tier 0** — silent corruption. Three independent branches (commons, inquiry-export, pre-registration-vehicle); they share no code. **inquiry-export DONE** (`fix/inquiry-export-uri`); commons and pre-reg-vehicle outstanding. | A[`-16-004`, `-16-005`, `-11-018`], B[`-19-001` ✅, `-19-003` ✅ demoted], J[`-11-024`] | — |
 | 2 | **Feedback store non-lossy** — `occurrences[]`, then normalised-exact target matching, advisory fuzzy, `feedback targets`, `feedback show`. **DONE** (branch `feedback-nonlossy`). | M[`-16-001`] ✅ | — |
-| 3 | **Decision D1** — per-field ownership & merge-policy table (Batch A). | — | owner |
-| 4 | **Decision D2** — transient-state home (Batch F options A/B/C). | — | owner |
+| 3 | **Decision D1** — per-field ownership & merge-policy table (Batch A). **RESOLVED 2026-07-21**: `provided_capabilities`→canonical, `tier`→canonical-with-override (new `override` policy value), `paper_kind`→project-only; the table already exists as `science:merge` annotations, so D1 = add one policy value + reclassify 3 fields. | — | owner ✅ |
+| 4 | **Decision D2** — transient-state home (Batch F options A/B/C). **RESOLVED 2026-07-21**: Option C (ratify status quo) — no relocation, feedback store stays put, ship a default exclude set, defer `doc_kind`, fix `curate.md` Phase 1 path drift. | — | owner ✅ |
 | 5 | **Batch B remainder** + the generic "declared-key-materialises-zero-triples" lint. | B (rest) | — |
 | 6 | **Batches K and L** — two skill leaves. No code risk; parallelisable with 1–5. | K, L | — |
 | 7 | **Batch A remainder** — overlay schema + promote builder derived from D1; federation-awareness pass; close `-11-021`. | A (rest) | D1 |
