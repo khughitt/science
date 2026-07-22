@@ -135,6 +135,28 @@ def test_parse_digest_ids_extracts_ids_between_markers(tmp_path: Path) -> None:
     assert parse_digest_ids(agents_md) == ["D-001", "D-004"]
 
 
+def test_parse_digest_ids_accepts_topic_first_bullets(tmp_path: Path) -> None:
+    """A natural bold bullet that leads with a topic label -- '- **Scope (D-001):**' --
+    must still parse; the D-NNN is what matters, not its position in the bold token
+    (fb-2026-07-10-018)."""
+    agents_md = tmp_path / "AGENTS.md"
+    _write(
+        agents_md,
+        f"""
+        # P — Agent Guide
+
+        {BEGIN_MARKER}
+        ## Load-bearing constraints
+
+        - **Scope (D-001):** First rule.
+        - **Reproducibility — D-004:** Fourth rule.
+        - **D-007:** ID-first still works.
+        {END_MARKER}
+        """,
+    )
+    assert parse_digest_ids(agents_md) == ["D-001", "D-004", "D-007"]
+
+
 def test_parse_digest_ids_returns_empty_when_markers_missing(tmp_path: Path) -> None:
     agents_md = tmp_path / "AGENTS.md"
     _write(agents_md, "# P\n\n- **D-001:** ignored, no markers\n")

@@ -355,3 +355,32 @@ def test_legacy_specs_and_doc_are_no_longer_scanned(tmp_path: Path) -> None:
     inventory = collect_inventory(tmp_path, today=date(2026, 4, 21))
     assert [a.path for a in inventory.artifacts] == []
     assert "spec" not in inventory.artifact_counts
+
+
+def test_missing_source_refs_is_provenance_aware(tmp_path: Path) -> None:
+    """An interpretation that records provenance via related->paper or an input:
+    (results/evidence) artifact is NOT missing source refs, even with an empty
+    source_refs: list. Only a truly provenance-less interpretation is flagged
+    (fb-2026-07-10-019)."""
+    _write(tmp_path / "science.yaml", "name: p\nprofile: research\n")
+    # related -> paper is provenance
+    _write(
+        tmp_path / "entities/interpretations/i-related-paper.md",
+        "---\nid: interpretation:i-related-paper\ntitle: A\nrelated:\n  - paper:Oaklander2022\n---\nBody.\n",
+    )
+    # input -> results artifact is provenance
+    _write(
+        tmp_path / "entities/interpretations/i-input.md",
+        "---\nid: interpretation:i-input\ntitle: B\ninput: results/x/a032\n---\nBody.\n",
+    )
+    # related only to a question (not a source) and no source_refs -> still flagged
+    _write(
+        tmp_path / "entities/interpretations/i-bare.md",
+        "---\nid: interpretation:i-bare\ntitle: C\nrelated:\n  - question:q1\n---\nBody.\n",
+    )
+
+    inv = collect_inventory(tmp_path, today=date(2026, 4, 21))
+    missing = inv.candidate_signals.missing_source_refs
+    assert "entities/interpretations/i-related-paper.md" not in missing
+    assert "entities/interpretations/i-input.md" not in missing
+    assert "entities/interpretations/i-bare.md" in missing
