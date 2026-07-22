@@ -376,3 +376,57 @@ peers:
     assert result.exit_code != 0
     assert "reserved_field" in result.output
     assert not (host / "knowledge" / "composite.trig").exists()
+
+
+def test_composite_skips_version_skewed_peer_with_named_warning(
+    tmp_path: Path, caplog: pytest.LogCaptureFixture
+) -> None:
+    """A peer whose science.yaml no longer parses under the local schema (a
+    science-version skew) is skipped with a loud warning naming the peer, and the
+    composite still builds for the host and every parseable peer, rather than
+    aborting the whole build (fb-2026-07-19-004)."""
+    import logging
+
+    host = tmp_path / "host"
+    good_peer = tmp_path / "good-peer"
+    skew_peer = tmp_path / "skew-peer"
+    _write_project(host, "host", [("good-peer", good_peer), ("skew-peer", skew_peer)])
+    _write_project(good_peer, "good-peer")
+    _write_local_graph(host, "host")
+    _write_local_graph(good_peer, "good-peer")
+
+    # skew-peer declares a nested prose_lint key the local (older) schema forbids,
+    # exactly as a newer-pinned sibling would after adopting a new config key.
+    skew_peer.mkdir(parents=True, exist_ok=True)
+    (skew_peer / "science.yaml").write_text(
+        "name: skew-peer\n"
+        "id: skew-peer\n"
+        "profile: research\n"
+        'research_question: "..."\n'
+        "prose_lint:\n"
+        "  some_future_key: [alpha, beta]\n",
+        encoding="utf-8",
+    )
+    _write_local_graph(skew_peer, "skew-peer")
+
+    with caplog.at_level(logging.WARNING):
+        out_path = assemble_composite_graph(host)
+
+    assert out_path.exists()
+    dataset = _load_dataset(out_path)
+    graph_names = {
+        str(graph.identifier)
+        for graph in dataset.graphs()
+        if graph.identifier != dataset.default_graph.identifier
+    }
+    # host and the good peer are present; the skewed peer is excluded.
+    assert "cancer://host" in graph_names
+    assert "cancer://good-peer" in graph_names
+    assert "cancer://skew-peer" not in graph_names
+
+    warning_text = "\n".join(
+        record.getMessage() for record in caplog.records if record.levelno >= logging.WARNING
+    )
+    assert "skew-peer" in warning_text
+    assert str(skew_peer) in warning_text
+    assert "some_future_key" in warning_text
