@@ -228,5 +228,6 @@ Keep the transport layer simple. The point of this skill is to make rented GPU p
 
 ## Companion Skills
 
-- [`SKILL.md`](SKILL.md) - shared pipeline conventions and artifact contracts.
+- [`reproducibility.md`](reproducibility.md) - shared, substrate-agnostic reproducibility practice (tool-agnostic planning, provenance capture, sandbox-fetch guards).
+- [`SKILL.md`](SKILL.md) - pipelines router: choosing and combining execution substrates.
 - [`snakemake.md`](snakemake.md) - production workflow rules for remote workloads that have stabilized.

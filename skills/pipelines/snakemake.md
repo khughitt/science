@@ -487,6 +487,7 @@ the `science-research-package` datapackage profile — see the
 
 ## Companion Skills
 
-- [`SKILL.md`](SKILL.md) - shared pipeline conventions and workflow artifact expectations.
+- [`reproducibility.md`](reproducibility.md) - shared, substrate-agnostic reproducibility practice (tool-agnostic planning, provenance capture, sandbox-fetch guards).
+- [`SKILL.md`](SKILL.md) - pipelines router: choosing and combining execution substrates.
 - [`../data-management/frictionless.md`](../data-management/frictionless.md) - data-package descriptors for workflow inputs and outputs.
 - [`../research-package/research-package-spec.md`](../research-package/research-package-spec.md) - research-package schema and validation commands.

@@ -162,5 +162,6 @@ output_dir.mkdir(parents=True, exist_ok=True)
 
 ## Companion Skills
 
-- [`SKILL.md`](SKILL.md) - shared pipeline conventions and workflow artifact expectations.
+- [`reproducibility.md`](reproducibility.md) - shared, substrate-agnostic reproducibility practice (tool-agnostic planning, provenance capture, sandbox-fetch guards).
+- [`SKILL.md`](SKILL.md) - pipelines router: choosing and combining execution substrates.
 - [`snakemake.md`](snakemake.md) - production workflow patterns once notebook exploration stabilizes.
