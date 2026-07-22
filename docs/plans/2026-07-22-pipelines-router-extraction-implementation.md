@@ -209,9 +209,11 @@ git commit -m "feat(skills): add pipeline-reproducibility practice-guide leaf + 
 
 Run (from the worktree root):
 ```bash
-rg --no-config -n 'Cross-cutting|stamps its own provenance|marker-file pattern|wall-clock watchdog|pipeline is decorative|Tool-agnostic plans first' science/tests/
+rg --no-config -n 'Cross-cutting principles|stamps its own provenance|marker-file pattern|wall-clock watchdog|pipeline is decorative|Tool-agnostic plans first' science/tests/
 ```
 Expected: no matches (empty output). If any match appears, STOP and escalate — a content-guard depends on the phrase and it must be re-homed (slice-3 re-home-preserve-strength procedure), not silently deleted.
+
+(Probe scope note: the distinctive token is the heading `Cross-cutting principles`, not the bare word `Cross-cutting`, which collides with unrelated fixtures — a big-picture question fixture and an explore-ideas "Cross-cutting theme" title. Verified separately that no test references `pipelines/SKILL.md` and that none of the specific principle phrases appear in `science/tests/`.)
 
 - [ ] **Step 2: Replace the entire contents of `skills/pipelines/SKILL.md`** with exactly this router:
 
