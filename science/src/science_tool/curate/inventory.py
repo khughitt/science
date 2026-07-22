@@ -32,6 +32,10 @@ class InventoryArtifact(BaseModel):
     title: str | None = None
     related_count: int = 0
     source_refs_count: int = 0
+    # True when the artifact records provenance through ANY edge -- source_refs,
+    # a related-> paper ref, or an input:/evidence-line artifact -- not only through
+    # the source_refs list (fb-2026-07-10-019).
+    has_provenance_edge: bool = False
     modified_days_ago: int | None = None
 
 
@@ -201,8 +205,26 @@ def _record_entity(project_root: Path, path: Path, today: date) -> InventoryArti
         title=str(fm["title"]) if fm.get("title") else None,
         related_count=_count_entries(fm.get("related")),
         source_refs_count=_count_entries(fm.get("source_refs")),
+        has_provenance_edge=_has_provenance_edge(fm),
         modified_days_ago=_modified_days_ago(path, today),
     )
+
+
+def _has_provenance_edge(fm: dict) -> bool:
+    """Whether the entity records provenance through any supported edge.
+
+    Provenance is not only the `source_refs` list: an interpretation legitimately
+    cites through a `related:` ref to a paper, or through an `input:` reference to a
+    results / evidence-line artifact (fb-2026-07-10-019).
+    """
+    if _count_entries(fm.get("source_refs")):
+        return True
+    related = fm.get("related")
+    if isinstance(related, list) and any(isinstance(ref, str) and ref.startswith("paper:") for ref in related):
+        return True
+    if fm.get("input"):
+        return True
+    return False
 
 
 def _record_tasks(project_root: Path, path: Path, today: date) -> list[InventoryArtifact]:
@@ -249,7 +271,7 @@ def _record_knowledge_source(project_root: Path, path: Path, today: date) -> Inv
 def _accumulate_markdown_signals(record: InventoryArtifact, signals: CandidateSignals) -> None:
     if record.artifact_class in _RELATED_CLASSES and record.related_count == 0:
         signals.missing_related.append(record.path)
-    if record.artifact_class in _SOURCE_REF_CLASSES and record.source_refs_count == 0:
+    if record.artifact_class in _SOURCE_REF_CLASSES and not record.has_provenance_edge:
         signals.missing_source_refs.append(record.path)
     if record.related_count == 0 and record.source_refs_count == 0:
         signals.no_outbound_links.append(record.path)

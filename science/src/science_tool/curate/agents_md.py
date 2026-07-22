@@ -50,7 +50,11 @@ def _split_decision_sections(text: str) -> list[tuple[str, str]]:
 BEGIN_MARKER = "<!-- BEGIN: load-bearing-constraints (managed by /science:curate; edit core/decisions.md instead) -->"
 END_MARKER = "<!-- END: load-bearing-constraints -->"
 
-_DIGEST_ENTRY = re.compile(r"^-\s+\*\*(D-\d+):\*\*", re.MULTILINE)
+# Match a D-NNN id anywhere inside a bullet's LEADING bold token, so a natural
+# topic-first bullet ("- **Scope (D-001):**") parses like an id-first one
+# ("- **D-001:**") -- fb-2026-07-10-018. `[^*\n]` keeps the match inside the first
+# bold span.
+_DIGEST_ENTRY = re.compile(r"^-\s+\*\*[^*\n]*?(D-\d+)[^*\n]*?\*\*", re.MULTILINE)
 
 
 def parse_marker_state(agents_md: Path) -> bool:
