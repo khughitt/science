@@ -917,11 +917,16 @@ def create_entity(
         full_slug = normalize_to_slug(title)
         used_slug = truncate_slug_on_word_boundary(full_slug, DERIVED_SLUG_MAX_LENGTH)
         if used_slug != full_slug:
-            warnings.insert(
-                0,
-                f"Title truncated to derive id slug '{used_slug}' "
-                f"(dropped '{full_slug[len(used_slug) :].lstrip('-')}'). "
-                f"The id is {entity_id_value}; pass --slug to choose a different one.",
+            # Fail early rather than write a file whose auto-derived id silently
+            # drops the discriminating tail of the title. The remediation (pass
+            # --slug) is actionable only before the write, not after (the caller
+            # would otherwise have to rm + recreate). (fb-2026-07-19-015, superseding
+            # the warn-after-write of fb-2026-05-30-012.)
+            dropped = full_slug[len(used_slug) :].lstrip("-")
+            raise EntityCommandError(
+                f"Title is too long to derive a safe id slug: truncation would drop "
+                f"'{dropped}' from the id, losing the discriminating tail. Pass --slug "
+                f"to choose an explicit id (e.g. --slug '{used_slug}')."
             )
 
     tmp_path = destination.with_suffix(destination.suffix + ".tmp")

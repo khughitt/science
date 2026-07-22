@@ -409,10 +409,35 @@ def test_template_driven_create_entity_passes_prospective_audit_for_all_migrated
         assert result.path.exists()
 
 
-def test_create_entity_warns_when_title_slug_is_truncated(tmp_path: Path) -> None:
-    # A long title silently truncates the derived id slug, which surprised a
-    # downstream user and left an orphan stub (fb-2026-05-30-012). Surface a
-    # warning naming the dropped tail and pointing at --slug.
+def test_create_entity_fails_when_title_slug_would_truncate(tmp_path: Path) -> None:
+    # A long title truncates the auto-derived id slug, dropping the discriminating
+    # tail. The older warn-after-write (fb-2026-05-30-012) left the file on disk and
+    # the warning arrived too late to act on (fb-2026-07-19-015). Fail early instead:
+    # require an explicit --slug and write nothing.
+    seed_project(tmp_path)
+    long_title = (
+        "Disentangling tumor mutational burden from immune infiltration "
+        "as competing causes and confounding"
+    )
+    with pytest.raises(EntityCommandError) as excinfo:
+        create_entity(
+            project_root=tmp_path,
+            kind="discussion",
+            title=long_title,
+            today=date(2026, 5, 30),
+        )
+
+    message = str(excinfo.value)
+    assert "--slug" in message
+    # The error names the dropped tail so the user knows what was being lost.
+    assert "confounding" in message
+    # Nothing was written — no orphan stub with the truncated id.
+    assert not list((tmp_path / "entities").rglob("*disentangling*"))
+
+
+def test_create_entity_truncating_title_succeeds_with_explicit_slug(tmp_path: Path) -> None:
+    # The fail-early check fires only for auto-derived slugs; an explicit --slug
+    # is honored regardless of title length.
     seed_project(tmp_path)
     long_title = (
         "Disentangling tumor mutational burden from immune infiltration "
@@ -422,15 +447,11 @@ def test_create_entity_warns_when_title_slug_is_truncated(tmp_path: Path) -> Non
         project_root=tmp_path,
         kind="discussion",
         title=long_title,
+        slug="tmb-vs-infiltration-confounding",
         today=date(2026, 5, 30),
     )
-
-    assert len(result.warnings) == 1
-    warning = result.warnings[0]
-    assert "truncat" in warning.lower()
-    assert "--slug" in warning
-    # The id carries only the truncated slug (the dropped tail is absent).
-    assert "confounding" not in result.entity_id
+    assert result.warnings == []
+    assert result.entity_id.endswith("tmb-vs-infiltration-confounding")
 
 
 def test_create_entity_no_truncation_warning_for_short_title(tmp_path: Path) -> None:
