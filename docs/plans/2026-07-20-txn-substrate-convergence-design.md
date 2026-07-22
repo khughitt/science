@@ -201,6 +201,18 @@ binds it to a fresh transaction ID in the journal record; scratch paths derive f
 stable effect ID. No absolute path is serialized. Resolution happens against the locked project
 root.
 
+Because the transaction ID is not known at compilation, disjointness between scratch names and
+persistent paths cannot be established by comparing concrete names then. It is instead a **structural**
+guarantee: every same-parent scratch name (file staging, delete tombstone, move anchor) occupies a
+**reserved scratch grammar** — a single-component leaf name carrying a reserved sigil that a persistent
+project path may never bear (for example a fixed prefix such as `.sci-txn.<txid>.<effect-id>.<role>`);
+`CreateDirectory` staging instead lives in the protected `work/` namespace (§9.5). Compilation rejects
+any persistent effect path that matches the reserved grammar, so scratch and persistent paths are
+disjoint regardless of which transaction ID is later bound. As defense-in-depth, preparation — after
+binding the concrete ID — still asserts that each instantiated scratch path is absent in the captured
+initial surface before any journal or blob write; a violation is an internal `ProtocolError`, not a
+recoverable state, because the reserved grammar makes it unreachable by construction.
+
 ### 5.2 Effect variants
 
 The closed initial effect set is:
@@ -248,9 +260,15 @@ Before any journal or blob write, validation proves:
 - the effect surface equals the family transition surface exactly;
 - no persistent path is omitted or undeclared;
 - ancestor-resolved, leaf-retaining paths stay inside the project root;
-- no persistent effect path lies at or below the reserved `.science/transactions/` namespace, so no
-  family effect can target the journal, blobs, lock, or record storage;
-- engine scratch names are disjoint from persistent paths;
+- no persistent effect path resolves at or below the reserved transaction namespace — checked by
+  **filesystem identity, not spelling**: each effect path's resolved leaf and ancestors are compared
+  against the held `.science/transactions/` root descriptor's `st_dev`/`st_ino`, so a case- or
+  Unicode-normalization alias (`.SCIENCE/TRANSACTIONS/…` on a case-insensitive volume — the macOS
+  default — or an NFC/NFD variant) cannot slip a family effect into the journal, blobs, lock, or record
+  storage that a lexical prefix check would miss;
+- every engine scratch name occupies the reserved scratch grammar (§5.1), and no persistent path
+  matches that grammar, so scratch and persistent paths are provably disjoint independently of the
+  runtime transaction ID;
 - every semantic capability (§5.5) named by the spec's effects, plus the always-required
   `anchored_traversal`, `durable_publish`, and `advisory_project_lock`, is supplied by the active
   backend for the project-root volume; a missing capability refuses before any journal or blob write.
@@ -809,9 +827,14 @@ directory, this confirms the published entry is exactly that directory in its de
 `RENAME_NOREPLACE` refuses if the live name is occupied, so publication never overwrites a concurrent
 entry.
 The verified descriptor is then handed to any descendant effect as that descendant's parent descriptor
-(§6), threading engine-verified descriptors inward without re-resolving ancestors. Because descriptors
-cannot span a crash, fresh-process recovery reacquires each parent descriptor by guarded traversal
-from the root before resuming (subject to the ancestor-relocation non-guarantee, §3.2).
+(§6), threading engine-verified descriptors inward without re-resolving ancestors. On publication the
+engine **rebinds the descriptor's audit provenance** (§13.5) from its `work/` scratch path to the
+verified live path: the same descriptor now designates a live directory, so descendant `openat` /
+`mkdirat` operations issued relative to it must be audited against live declared paths, not attributed
+to engine scratch — otherwise an undeclared live descendant mutation could pass as a scratch write.
+Because descriptors cannot span a crash, fresh-process recovery reacquires each parent descriptor by
+guarded traversal from the root before resuming (subject to the ancestor-relocation non-guarantee,
+§3.2).
 
 Recovery distinguishes publication from a blocker by inode identity, because the ordered cross-directory
 flush has an intermediate where the live directory is durable while the `work/` staging name is not yet
@@ -978,7 +1001,10 @@ block-device crash testing.
 
 For each family, authenticate a round-tripped plan, compile twice, and require identical canonical
 output. Reject missing effects, extra effects, invalid ordering, malformed timelines, payload/mode
-mismatches, path escapes, and saved/fresh surface divergence.
+mismatches, path escapes, saved/fresh surface divergence, persistent paths matching the reserved
+scratch grammar, and reserved-namespace aliases — case variants (`.SCIENCE/TRANSACTIONS/…`) and
+Unicode NFC/NFD variants of `.science/transactions/` on case- and normalization-insensitive volumes,
+which the identity-based check (§5.4) must reject where a lexical prefix check would not.
 
 ### 13.4 End-to-end recovery
 
@@ -1000,10 +1026,16 @@ mutating `open`, the `*at` and descriptor-relative variants (`renameat2`, `opena
 `fchmodat`), and the ignore-marker `setxattr`/`fsetxattr` applied to the metadata root (§7), so no
 metadata mutation escapes the audit. Because the effects set modes with `fchmod` through retained
 descriptors, the interposer resolves descriptor-relative mutations through **descriptor provenance**: it
-tracks the engine-issued path each retained descriptor was opened against, attributes a mode change
-through that descriptor to its declared or engine-derived target exactly as a path-based mutation, and
-fails the surface assertion on an `fchmod` against a descriptor of unknown provenance. An optional
-external trace detects future fresh `ctypes` or extension bypasses where supported.
+tracks the engine-issued path each retained descriptor was opened against, attributes a mutation through
+that descriptor to its declared or engine-derived target exactly as a path-based mutation, and fails the
+surface assertion on an operation against a descriptor of unknown provenance. Provenance is **the
+descriptor's current authorized logical alias, not merely the path it was first opened against**: when
+an effect republishes a descriptor's object to a new path — `CreateDirectory` renaming its `work/`
+staging directory to the live parent (§9.5) — the engine rebinds that descriptor's provenance to the
+verified live path, so descendant `openat` / `mkdirat` operations issued relative to it are audited
+against live declared paths rather than stale scratch, closing the gap where an undeclared live
+descendant mutation would pass as a scratch write. An optional external trace detects future fresh
+`ctypes` or extension bypasses where supported.
 
 Targets are evaluated by the path the engine issued each operation against; the interposer cannot
 observe a held descriptor's current namespace location after an external relocation, so this
