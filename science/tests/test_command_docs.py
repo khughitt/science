@@ -630,7 +630,7 @@ def test_command_docs_use_explicit_framework_resolution(
 
 
 def test_data_skill_routes_new_sources_through_dataset_entity_lifecycle() -> None:
-    text = _read("skills/data-management/SKILL.md")
+    text = _read("skills/data-management/acquisition.md")
 
     assert "science dataset add <slug>" in text
     assert "--level <public|registration|controlled|commercial|mixed>" in text
@@ -655,19 +655,18 @@ def test_data_skill_routes_new_sources_through_dataset_entity_lifecycle() -> Non
 
 
 def test_frictionless_skill_distinguishes_datapackages_from_dataset_entities() -> None:
-    text = _read("skills/data-management/frictionless.md")
+    # After the router/leaf reshape, the datapackage-vs-entity distinction lives in
+    # frictionless.md's Invariants; the operational dataset-entity lifecycle CLI
+    # moved to acquisition.md. Both guards are preserved, re-homed to where the
+    # content now lives.
+    frictionless = _read("skills/data-management/frictionless.md")
+    assert "runtime/package descriptor" in frictionless
+    assert "the durable `dataset:<slug>` entity lifecycle" in frictionless
+    assert "science datasets validate --path data/raw/" in frictionless
 
-    boundary = _slice_between(
-        text,
-        "## Boundary With Dataset Entities",
-        "## Creating a Data Package",
-    )
-
-    assert "runtime/package descriptor" in boundary
-    assert "not the local dataset entity lifecycle" in boundary
-    assert "Use `science dataset add <slug>`" in boundary
-    assert "science dataset verify-access <slug>" in boundary
-    assert "science datasets validate --path data/raw/" in boundary
+    acquisition = _read("skills/data-management/acquisition.md")
+    assert "science dataset add <slug>" in acquisition
+    assert "science dataset verify-access <slug>" in acquisition
 
 
 def test_command_docs_do_not_reference_retired_user_docs() -> None:

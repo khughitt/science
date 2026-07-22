@@ -15,7 +15,7 @@ Load this router when producing or validating a research-package artifact, befor
 ## Scope boundary
 
 Covers the research-package descriptor contract and the component that renders its provenance route.
-Excludes general dataset-directory conventions (see `../data-management/SKILL.md`).
+Excludes general dataset-directory conventions (see `../data-management/conventions.md`).
 
 ## Leaves
 

@@ -35,7 +35,7 @@ the existing two leaves.
 
 ## Companion Skills
 
-- [`../../data-management/SKILL.md`](../../data-management/SKILL.md) — generic data-management conventions.
+- [`../../data-management/conventions.md`](../../data-management/conventions.md) — generic data-management conventions.
 - [`../transcriptomics/SKILL.md`](../transcriptomics/SKILL.md) — expression cohorts often paired with mutation cohorts.
 - [`../../study-design/power-floor-acknowledgement.md`](../../study-design/power-floor-acknowledgement.md) — mutation-frequency contrasts are typically low-power for rare genes.
 - [`../../study-design/sensitivity-arbitration.md`](../../study-design/sensitivity-arbitration.md) — hypermutator-included vs -excluded analyses are the canonical sensitivity pair.

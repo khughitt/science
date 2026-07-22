@@ -16,7 +16,7 @@ Load this router when the data under analysis is a biological assay, before load
 
 Covers assay-level measurement QA for genomics, transcriptomics, proteomics, and functional-genomics
 data. Excludes general dimensionality-reduction QA (see `../ml/SKILL.md`) and dataset-directory
-conventions (see `../data-management/SKILL.md`).
+conventions (see `../data-management/conventions.md`).
 
 ## Leaves
 

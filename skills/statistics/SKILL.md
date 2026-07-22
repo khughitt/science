@@ -56,4 +56,4 @@ router.
 - `../study-design/SKILL.md` — the rigor-commitment and verdict-certification axis; compose with this router.
 - `../literature/SKILL.md`, `../epistemics/SKILL.md` — high-level research methodology; this router is the quantitative-modeling layer beneath them.
 - `../writing/SKILL.md` — reporting statistical decisions in pre-regs and interpretations.
-- `../data-management/SKILL.md` — input-data conventions; some modeling decisions depend on data shape (count vs continuous, zero-inflation).
+- `../data-management/conventions.md` — input-data conventions; some modeling decisions depend on data shape (count vs continuous, zero-inflation).
