@@ -2,8 +2,8 @@
 title: Feedback Triage — 2026-07 batch (106 open items) — Design
 status: proposed
 created: '2026-07-20'
-updated: '2026-07-21'
-revision: v7 (step 7 Batch A remainder — -16-005/-12-006 already-fixed; new commons.overlay-local-duplicate ERROR check; commons status WARN; promote-paper dangling-dataset_usage guard; promote-time Methods/Limitations completeness warning with semantic asks declined; Batch A fully closed)
+updated: '2026-07-22'
+revision: v8 (step 11 Batch C — inquiry subsystem: estimand_type on InquiryProfile + exporter gating; inquiry import clean-fail on thin doc-authored inquiries; validate no_inquiry_block INFO vs no_inquiry_subgraph WARN split; critique-approach report path → interpretations + two-axis science-dag port doc; Batch C fully closed)
 ---
 
 # Feedback Triage — 2026-07 batch
@@ -422,6 +422,45 @@ every one** (status `Literal` mismatch, raw traceback) and is chicken-and-egg
 anyway: it reads structure from the subgraph it is meant to bootstrap. There is
 no user-guide documentation for inquiries at all. **Needs a design pass, not
 patches.**
+
+> **Step 11 SHIPPED 2026-07-22, merged `--no-ff` local main `4525887a`
+> (branch `batch-c-inquiry`), NOT pushed.** All 6 entries closed. Grounding
+> confirmed every claim was live (the two-kind gap is exactly as reported:
+> thin `InquiryEntity` kind:inquiry vs. structured `PatchDefinitionEntity`
+> patch_type:inquiry — only the latter compiles a subgraph). Four owner design
+> forks answered via AskUserQuestion (all recommendation-first):
+>
+> - **`-11-030` — validate splits the no-subgraph case.** `validate_inquiry_dataset`
+>   now distinguishes a thin doc-authored inquiry with no patch-definition backing
+>   (`no_inquiry_block`, surfaced **INFO** in `graph.py` — expected, not a defect)
+>   from a patch-definition inquiry whose subgraph is genuinely missing
+>   (`no_inquiry_subgraph`, stays **WARN**). Discriminator: presence of a
+>   `patch-definition:<slug>` entity in the dataset. Ends MM30's 23 forever-WARNs.
+>   The unwired doctrine is preserved (structural checks still never pass over an
+>   empty graph).
+> - **`-11-031` / `-11-032` — `inquiry import` fails cleanly.** `get_inquiry` now
+>   reports `has_compiled_subgraph`; import refuses a thin doc-authored inquiry up
+>   front with actionable guidance, and wraps both the not-found `ValueError` and
+>   the final model build in `click.ClickException` (no raw pydantic tracebacks).
+>   The chicken-and-egg bridge no longer emits an empty profile.
+> - **`-19-007` — `estimand_type` on `InquiryProfile`** (`interventional` default |
+>   `descriptive` | `associational`). A non-interventional causal estimand no longer
+>   needs a fake treatment placeholder (treatment/outcome optional), and
+>   `export_pgmpy_script` omits `get_all_backdoor_adjustment_sets` for it — the
+>   silent-wrong-output (adjustment sets for an interventionist effect the author
+>   rejected) is prevented at its source. Wired emit → `get_inquiry` → exporter.
+> - **`-19-002` — critique reports write to `entities/interpretations/`** (a critique
+>   is an interpretation), never `entities/inquiries/` (which collides with numbered
+>   `kind:inquiry` entities).
+> - **`-19-006` — critique-approach documents the `science dag` port path** for
+>   two-axis `edge_status`/`identification` labels (consumed by the `science dag`
+>   subsystem, not inquiry `FlowEdge` which is `extra="forbid"`). No FlowEdge model
+>   change — declined adding fields only a separate subsystem reads.
+>
+> Full suite (9625 passed) + model + snapshot + real_projects all exit 0;
+> ruff/pyright at the pre-existing baseline (4 ruff in untouched
+> `test_numeric_binding.py`; 7 pyright in untouched files). Codex mirror
+> regenerated for critique-approach. **Batch C fully closed.**
 
 ### D. Status vocabulary — 4 items
 `fb-2026-07-11-034`, `-12-004`, `-12-005`, `-12-008`
@@ -978,7 +1017,7 @@ closes when it does not close a whole batch.
 | 8 | **Batch F** — implement the chosen home; `doc_kind`-keyed excludes; migration if the feedback store moves. **D2 CORE SHIPPED 2026-07-21** (branch `batch-f-transient`, merge `395b5296`): default revision-manifest exclude set (`doc/curations/*.md`, `doc/meta/*-next-steps.md`) unioned into `_revision_manifest_excludes`; curate.md ledgers moved to `doc/curations/` with `doc_kind`/`sweep_scope` (not the entity `kind`/`scope` that failed the curation-sweep schema). `doc_kind`-keyed excludes deferred (path globs remain); no feedback-store move. **Closed `-17-001`, `-10-022`, `-10-020`. Remainder SHIPPED 2026-07-21 (branch `batch-f-remainder`, merge `bce0dbe4`): `-10-021` next-steps → `doc/meta/` with `doc_kind` (matches the gap-analysis reader); `-16-006` `resolve_registration_root` registers the main checkout not the linked worktree. **Batch F fully closed (5/5).** | F ✅ | D2 |
 | 9 | **Batch M remainder** — post-mortem fourth trigger class; unreflected-failure surfacing in `next-steps`/`status`; positives → regression tests. **DONE** (branch `feedback-batch-m`). | M[`-18-011` ✅, `-11-029` ✅] | 2 |
 | 10 | **Batch E** — `resolve-anchors` metadata cross-check first (`-17-009` is provenance corruption), then the apply/gaps defects, then the two design questions. **DONE 2026-07-21** (`abb03608`): `mismatch` status + agent verify; body seeding + scaffold-aware empty_body; `decision: fold`; candidate-named YAML errors; agent search budget; topics/themes stay non-citable (doc). | E ✅ | — |
-| 11 | **Batch C** — inquiry-subsystem design pass, including any `InquiryProfile` tightening deferred from step 1. | C | 1 |
+| 11 | **Batch C** — inquiry-subsystem design pass. **DONE 2026-07-22** (branch `batch-c-inquiry`, merge `4525887a`): `estimand_type` on InquiryProfile + exporter gating (`-19-007`); `inquiry import` clean-fail via `has_compiled_subgraph` (`-11-031`/`-11-032`); validate `no_inquiry_block` INFO vs `no_inquiry_subgraph` WARN split (`-11-030`); critique-approach report → `entities/interpretations/` (`-19-002`) + `science dag` port doc (`-19-006`). | C ✅ | 1 |
 | 12 | **Batch D** — after auditing `status-vocab-certification`. | D | branch audit |
 | 13 | **Batch J remainder**, **G**, **H**, **I**. | J (rest), G, H, I | — |
 | 14 | **Batch N** — ship-today tier first; then the design-call items; then docs/lore and agent-prompt fixes. | N | — |
