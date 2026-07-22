@@ -3,7 +3,7 @@ title: Feedback Triage — 2026-07 batch (106 open items) — Design
 status: proposed
 created: '2026-07-20'
 updated: '2026-07-22'
-revision: v9 (step 12 Batch D — status vocabulary: -11-034 already addressed by merged D4/D5 per-kind certification; readiness() accepts all successfully-concluded statuses not just 'done'; plan-analysis + critique-approach stop prescribing statuses outside the kind vocabulary; Batch D fully closed. [v8: step 11 Batch C inquiry subsystem])
+revision: v10 (step 13 Batches H/I/G/J-rest — on-request-only dataset availability (analysis-ineligible) + no-required-capabilities coverage class + catalog authorization gate; provenance-aware missing_source_refs + tolerant decision-digest parser; pre-registration & design-integrity guidance (frozen-vehicle regen, output provenance, full-resolution count ledger, blind-erosion, before/after discipline, training-side confound gate, technical cross-tab). G-024 deferred. [v9: step 12 Batch D; v8: step 11 Batch C])
 ---
 
 # Feedback Triage — 2026-07 batch
@@ -1055,7 +1055,7 @@ closes when it does not close a whole batch.
 | 10 | **Batch E** — `resolve-anchors` metadata cross-check first (`-17-009` is provenance corruption), then the apply/gaps defects, then the two design questions. **DONE 2026-07-21** (`abb03608`): `mismatch` status + agent verify; body seeding + scaffold-aware empty_body; `decision: fold`; candidate-named YAML errors; agent search budget; topics/themes stay non-citable (doc). | E ✅ | — |
 | 11 | **Batch C** — inquiry-subsystem design pass. **DONE 2026-07-22** (branch `batch-c-inquiry`, merge `4525887a`): `estimand_type` on InquiryProfile + exporter gating (`-19-007`); `inquiry import` clean-fail via `has_compiled_subgraph` (`-11-031`/`-11-032`); validate `no_inquiry_block` INFO vs `no_inquiry_subgraph` WARN split (`-11-030`); critique-approach report → `entities/interpretations/` (`-19-002`) + `science dag` port doc (`-19-006`). | C ✅ | 1 |
 | 12 | **Batch D** — after auditing `status-vocab-certification`. **DONE 2026-07-22** (branch `batch-d-status`, merge `5ce079ec`): audit found the branch's work already merged via D5 `537f52c1`, so `-11-034` is addressed (per-kind `severity_for_kind`, only hypothesis ERROR; layout_version axis deleted; vocabularies widened) — closed with note; `-12-008` readiness() accepts {done,complete,answered,committed,amended}; `-12-004`/`-12-005` command docs stop prescribing out-of-vocabulary statuses. | D ✅ | branch audit |
-| 13 | **Batch J remainder**, **G**, **H**, **I**. | J (rest), G, H, I | — |
+| 13 | **Batch J remainder**, **G**, **H**, **I**. **DONE 2026-07-22**: **H+I** (merge `e8c99927`) — on-request-only availability is analysis-ineligible (readiness not-ready, weight 0, plan_gate refuses; `verify-access --on-request-only`; `_coerce_access` availability-drop bug fixed) + `no-required-capabilities` unscoreable-target coverage (reuses `missing-required-capabilities`) + Step-6 authorization gate; **G** (merge `3f4e961e`) — provenance-aware `missing_source_refs` + tolerant decision-digest parser (`-10-017` already-accurate, `-10-023` doesn't-reproduce, **`-10-024` structured-ledger DEFERRED, still open**); **J-rest** (merge `2239011a`) — 7 pre-registration/design-integrity guidance additions. | J (rest) ✅, G ✅ (−024 deferred), H ✅, I ✅ | — |
 | 14 | **Batch N** — ship-today tier first; then the design-call items; then docs/lore and agent-prompt fixes. | N | — |
 
 Steps 3 and 4 are decisions, not implementation, and can be taken now or at the
