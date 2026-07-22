@@ -271,8 +271,12 @@ def check_graph(ctx: ValidateContext) -> Iterator[Result]:
         if inquiry_validation.status == "unwired":
             # The inquiry has no compiled boundary/flow subgraph. Its structural checks
             # did NOT run -- and they used to report four passes over an empty Graph().
+            # A thin doc-authored inquiry that never carried an inquiry block is expected,
+            # not a defect (`no_inquiry_block` -> INFO); a patch-definition whose subgraph
+            # is genuinely missing stays a WARN (fb-2026-07-11-030).
+            severity = Severity.INFO if inquiry_validation.code == "no_inquiry_block" else Severity.WARN
             yield _result(
-                Severity.WARN,
+                severity,
                 f"inquiry '{slug}': structural checks did not run ({inquiry_validation.code})",
             )
             continue

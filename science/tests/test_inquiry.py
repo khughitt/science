@@ -279,20 +279,43 @@ class TestMaterializedInquiryQueries:
         result = get_inquiry(graph_path, "h-3d-genome-substrate")
         assert result["edges"] == []
 
-    def test_validate_inquiry_materialized_without_subgraph_is_unwired(self, graph_path: Path) -> None:
-        """A materialized-only inquiry has NO boundary/flow subgraph -- so its structural
-        checks cannot run, and must not report passes.
+    def test_validate_inquiry_thin_doc_authored_is_no_inquiry_block(self, graph_path: Path) -> None:
+        """A thin doc-authored ``kind: inquiry`` has NO boundary/flow subgraph and no
+        patch-definition backing -- so its structural checks cannot run, but this is
+        not a defect: the author never wrote an inquiry block. It is reported as the
+        quiet ``no_inquiry_block`` code (surfaced INFO), distinct from a
+        patch-definition whose subgraph is genuinely missing (fb-2026-07-11-030).
 
-        This test previously asserted ``boundary_reachability == "pass"`` here. That pass
-        was computed over a brand-new empty ``Graph()``: no BoundaryOut nodes existed, so
-        none could be unreachable. Every structural check "passed" for the same reason --
-        there was nothing to check. A structurally broken inquiry validated green because
-        the validator was looking at nothing. An empty subgraph is not evidence of
-        validity; it is evidence the check did not run.
+        (Structural checks still must not report passes over an empty graph -- an empty
+        subgraph is not evidence of validity, it is evidence the check did not run.)
         """
         _add_materialized_inquiry(graph_path, "h-3d-genome-substrate", "3D genome substrate")
 
         result = validate_inquiry(graph_path, "h-3d-genome-substrate")
+
+        assert result.status == "unwired"
+        assert result.code == "no_inquiry_block"
+        assert result.rows == []
+
+    def test_validate_inquiry_patch_backed_without_subgraph_warns(self, graph_path: Path) -> None:
+        """A patch-definition inquiry whose subgraph is absent IS a defect (expected but
+        missing) and keeps the ``no_inquiry_subgraph`` code (surfaced WARN)."""
+        from rdflib import Literal, URIRef
+        from rdflib.namespace import DCTERMS
+
+        from science_tool.graph.store import PROJECT_NS, SCI_NS, _graph_uri, _load_dataset, _save_dataset
+
+        slug = "compound-boundary-dag"
+        _add_materialized_inquiry(graph_path, slug, "Compound boundary DAG")
+        # Emit a patch-definition entity for the same slug but NO dedicated subgraph.
+        dataset = _load_dataset(graph_path)
+        knowledge = dataset.graph(_graph_uri("graph/knowledge"))
+        patch_uri = URIRef(PROJECT_NS[f"patch-definition/{slug}"])
+        knowledge.add((patch_uri, DCTERMS.title, Literal("Compound boundary DAG")))
+        knowledge.add((patch_uri, SCI_NS.patchType, Literal("inquiry")))
+        _save_dataset(dataset, graph_path)
+
+        result = validate_inquiry(graph_path, slug)
 
         assert result.status == "unwired"
         assert result.code == "no_inquiry_subgraph"

@@ -281,6 +281,7 @@ def export_pgmpy_script(graph_path: Path, slug: str) -> str:
     outcome = info["outcome"]
     treatment_name = _variable_name(treatment) if treatment else None
     outcome_name = _variable_name(outcome) if outcome else None
+    estimand_type = info.get("estimand_type", "interventional")
 
     # Separate causes vs confounds
     cause_edges = [e for e in edges if e["pred_type"] == "causes"]
@@ -380,6 +381,7 @@ def export_pgmpy_script(graph_path: Path, slug: str) -> str:
     lines.append(f"# Label: {info['label']}")
     lines.append(f"# Target: {shorten_uri(info['target']) if info.get('target') else 'N/A'}")
     lines.append(f"# Revision: {revision_hash}")
+    lines.append(f"# Estimand: {estimand_type}")
     if treatment_name:
         lines.append(f"# Treatment: {treatment_name}")
     if outcome_name:
@@ -411,7 +413,14 @@ def export_pgmpy_script(graph_path: Path, slug: str) -> str:
 
     # Inference
     lines.append("ci = CausalInference(model)")
-    if treatment_name and outcome_name:
+    if estimand_type != "interventional":
+        # A descriptive/associational estimand makes no interventionist claim, so
+        # back-door adjustment sets answer a question the author did NOT pose.
+        # Emitting them would be a silent-wrong-output -- fb-2026-07-19-007.
+        lines.append(f"# Estimand is {estimand_type}, not interventional: back-door adjustment sets are")
+        lines.append("# intentionally NOT computed (they would answer an interventionist question the")
+        lines.append("# author did not pose). See fb-2026-07-19-007.")
+    elif treatment_name and outcome_name:
         lines.append(f'adj_sets = ci.get_all_backdoor_adjustment_sets("{treatment_name}", "{outcome_name}")')
         lines.append('print("Backdoor adjustment sets:", adj_sets)')
     lines.append("")

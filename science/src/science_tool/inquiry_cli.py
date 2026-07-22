@@ -145,6 +145,7 @@ def inquiry_init(slug, label, target, profile, status, treatment, outcome, proje
 def inquiry_import(slug, project_root, graph_path, force):
     """Bridge: write a patch-definition source from an existing graph inquiry."""
     import yaml
+    from pydantic import ValidationError
     from science_model.patch_definition import PatchDefinitionEntity
 
     from science_tool.graph.store.inquiry import get_inquiry
@@ -153,7 +154,24 @@ def inquiry_import(slug, project_root, graph_path, force):
     if dest.exists() and not force:
         raise click.ClickException(f"{dest} exists; pass --force to overwrite")
 
-    info = get_inquiry(graph_path, slug)
+    try:
+        info = get_inquiry(graph_path, slug)
+    except ValueError as exc:
+        raise click.ClickException(str(exc)) from exc
+
+    # A thin doc-authored `kind: inquiry` materializes only a `sci:Inquiry` triple
+    # in graph/knowledge -- there is no compiled boundary/flow subgraph to read, so
+    # this command has nothing to bridge. Reading structure from the subgraph it is
+    # meant to bootstrap is chicken-and-egg (fb-2026-07-11-032), and the free-form
+    # entity status would otherwise crash the model builder with a raw pydantic
+    # traceback (fb-2026-07-11-031). Refuse with actionable guidance instead.
+    if not info["has_compiled_subgraph"]:
+        raise click.ClickException(
+            f"inquiry/{slug} has no compiled boundary/flow subgraph -- it is a thin "
+            "doc-authored inquiry, so there is no structure to import. Author an "
+            "inquiry: block on a patch-definition (`science inquiry init <slug> "
+            "--profile ...`) or convert this inquiry to a patch-definition."
+        )
     profile = "causal" if info.get("inquiry_type") == "causal" else "investigation"
     boundary = [(_ref_from_uri(u), "BoundaryIn") for u in info.get("boundary_in", [])]
     boundary += [(_ref_from_uri(u), "BoundaryOut") for u in info.get("boundary_out", [])]
@@ -180,7 +198,12 @@ def inquiry_import(slug, project_root, graph_path, force):
         treatment_ref=_ref_from_uri(treatment) if isinstance(treatment, str) and treatment else None,
         outcome_ref=_ref_from_uri(outcome) if isinstance(outcome, str) and outcome else None,
     )
-    PatchDefinitionEntity(**yaml.safe_load(text.split("---")[1]))  # fail loudly on invalid bridge output
+    try:
+        # Fail loudly on invalid bridge output -- but as a clean click error, never
+        # a raw pydantic traceback (fb-2026-07-11-031).
+        PatchDefinitionEntity(**yaml.safe_load(text.split("---")[1]))
+    except ValidationError as exc:
+        raise click.ClickException(f"bridged source for inquiry/{slug} is invalid: {exc}") from exc
     dest.parent.mkdir(parents=True, exist_ok=True)
     dest.write_text(text, encoding="utf-8")
     click.echo(f"Imported inquiry/{slug} -> {dest}")

@@ -1488,3 +1488,25 @@ def test_agents_template_and_guide_document_import_interception_in_sequence() ->
     assert "staging file" in template
     assert "not committed" in template
     assert "existing adopters" in _read("docs/user-guide/entities.md").lower()
+
+
+def test_critique_approach_writes_report_to_interpretations_not_inquiries() -> None:
+    """A critique is an interpretation. Writing it under entities/inquiries/ collides
+    with projects that reserve that dir for numbered kind:inquiry entities, producing
+    entity-conformance errors (fb-2026-07-19-002)."""
+    text = _read("commands/critique-approach.md")
+
+    assert "entities/interpretations/<slug>-critique.md" in text
+    assert "entities/inquiries/<slug>-critique.md" not in text
+
+
+def test_critique_approach_documents_two_axis_labels_require_dag_port() -> None:
+    """Two-axis edge_status/identification labels are consumed by the `science dag`
+    subsystem, not inquiry FlowEdges (which are extra='forbid'). The command must say
+    so, rather than recommend an un-appliable annotation (fb-2026-07-19-006)."""
+    text = _read("commands/critique-approach.md")
+    norm = _norm(text)
+
+    assert "science dag" in text
+    assert "edge_status" in text and "identification" in text
+    assert "port" in norm.lower()

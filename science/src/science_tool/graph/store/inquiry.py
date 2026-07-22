@@ -129,6 +129,7 @@ def get_inquiry(graph_path: Path, slug: str) -> InquiryInfo:
     label = _inquiry_property(dataset, inquiry_uri, SKOS.prefLabel)
     status = _inquiry_property(dataset, inquiry_uri, SCI_NS.inquiryStatus, SCI_NS.projectStatus)
     inquiry_type = _inquiry_property(dataset, inquiry_uri, SCI_NS.inquiryType) or "general"
+    estimand_type = _inquiry_property(dataset, inquiry_uri, SCI_NS.estimandType) or "interventional"
     target = _inquiry_property(dataset, inquiry_uri, SCI_NS.target)
     created = _inquiry_property(dataset, inquiry_uri, DCTERMS_NS.created)
     description = _inquiry_property(dataset, inquiry_uri, SKOS.note)
@@ -144,7 +145,8 @@ def get_inquiry(graph_path: Path, slug: str) -> InquiryInfo:
     boundary_in: list[str] = []
     boundary_out: list[str] = []
     edges: list[InquiryEdge] = []
-    if str(home_graph.identifier) == str(inquiry_uri):
+    has_compiled_subgraph = str(home_graph.identifier) == str(inquiry_uri)
+    if has_compiled_subgraph:
         for s, _p, o in home_graph.triples((None, SCI_NS.boundaryRole, None)):
             if o == SCI_NS.BoundaryIn:
                 boundary_in.append(str(s))
@@ -161,6 +163,7 @@ def get_inquiry(graph_path: Path, slug: str) -> InquiryInfo:
             SKOS.related,
             SCI_NS.inquiryStatus,
             SCI_NS.inquiryType,
+            SCI_NS.estimandType,
             SCI_NS.projectStatus,
             SCI_NS.target,
             SCI_NS.focalEntity,
@@ -190,6 +193,7 @@ def get_inquiry(graph_path: Path, slug: str) -> InquiryInfo:
         "label": label,
         "status": status,
         "inquiry_type": inquiry_type,
+        "estimand_type": estimand_type,
         "target": target,
         "created": created,
         "description": description,
@@ -199,6 +203,7 @@ def get_inquiry(graph_path: Path, slug: str) -> InquiryInfo:
         "boundary_in": boundary_in,
         "boundary_out": boundary_out,
         "edges": edges,
+        "has_compiled_subgraph": has_compiled_subgraph,
     }
 
 
@@ -483,12 +488,33 @@ def validate_inquiry_dataset(dataset: Dataset, slug: str) -> InstrumentResult[di
     # empty result here means the subgraph was never compiled.
     inquiry_graph = dataset.graph(inquiry_uri)
     if len(inquiry_graph) == 0:
+        # No compiled boundary/flow subgraph. Distinguish two source-level causes
+        # (fb-2026-07-11-030): a thin doc-authored `kind: inquiry` that never carried
+        # an inquiry block (expected: nothing to compile) vs. a patch-definition inquiry
+        # whose subgraph is genuinely missing (a defect). The former is quiet
+        # (`no_inquiry_block`, surfaced INFO); the latter warns.
+        slug_local = str(inquiry_uri)[len(str(PROJECT_NS) + "inquiry/") :]
+        patch_uri = URIRef(PROJECT_NS[f"patch-definition/{slug_local.lower()}"])
+        authored_as_patch = any(
+            True for graph in dataset.graphs() for _ in graph.triples((patch_uri, None, None))
+        )
+        if authored_as_patch:
+            return InstrumentResult.unwired(
+                code="no_inquiry_subgraph",
+                reason=(
+                    f"Inquiry 'inquiry/{requested}' is authored as a patch-definition but has no "
+                    f"compiled boundary/flow subgraph (no named graph {inquiry_uri}). Its structural "
+                    "checks cannot run; reporting them as passing would validate an inquiry nobody "
+                    "inspected. Rebuild the graph, or check the inquiry block for errors."
+                ),
+            )
         return InstrumentResult.unwired(
-            code="no_inquiry_subgraph",
+            code="no_inquiry_block",
             reason=(
-                f"Inquiry 'inquiry/{requested}' has no compiled boundary/flow subgraph "
-                f"(no named graph {inquiry_uri}). Its structural checks cannot run; "
-                "reporting them as passing would validate an inquiry nobody inspected."
+                f"Inquiry 'inquiry/{requested}' is a thin doc-authored inquiry with no authored "
+                "boundary/flow block, so its structural checks are not applicable. Author an "
+                "inquiry: block on a patch-definition (or convert this inquiry to one) if you "
+                "want structural validation."
             ),
         )
 
