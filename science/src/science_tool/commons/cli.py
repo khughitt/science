@@ -555,6 +555,8 @@ def validate_cmd(
         click.echo(f"checked {report.checked} entities")
         for err in report.errors:
             click.echo(f"  error: {err}", err=True)
+        for warning in report.warnings:
+            click.echo(f"  warning: {warning.canonical_id}: {warning.message}", err=True)
 
     emit(
         output_format=effective_format,
@@ -567,6 +569,14 @@ def validate_cmd(
                     "message": str(e.cause),
                 }
                 for e in report.errors
+            ],
+            "warnings": [
+                {
+                    "path": str(w.path),
+                    "canonical_id": w.canonical_id,
+                    "message": w.message,
+                }
+                for w in report.warnings
             ],
         },
         render_text=_render,
@@ -1432,6 +1442,13 @@ def _promote_kind_cmd(
             if rename_from is None:
                 continue
             click.echo(f"    rename in {slug}: {rename_from.name} → {ov.path.name}")
+        if d.completeness_gaps:
+            click.echo(
+                f"    warning: canonical is missing {', '.join(d.completeness_gaps)} — "
+                f"consumers cannot assess evidential strength (fb-2026-07-11-020); "
+                f"add the section(s) from the source before --apply if the paper has them",
+                err=True,
+            )
         if kind.kind == "dataset":
             _echo_dataset_plan_details(plan, d)
 

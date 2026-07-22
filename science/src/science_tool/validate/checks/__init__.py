@@ -61,6 +61,7 @@ CANONICAL_CHECK_MODULES = (
     "orphan_datapackage_owner",
     "identity_collision",
     "commons_owner_collision",
+    "overlay_local_duplicate",
     "variant_identity",
     "genesets",
     "reference_graphs",

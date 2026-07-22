@@ -155,6 +155,20 @@ def test_missing_commons_root_does_not_warn(
     assert list(check_commons_owner_collision(_ctx(tmp_path))) == []
 
 
+def test_defers_to_overlay_local_duplicate_when_overlay_present(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # A local owner AND an overlay for the same id: this is the overlay/local
+    # duplicate class (fb-2026-07-11-019), whose remedy is "delete the local
+    # copy", not owner-collision's "convert to an overlay" (one already exists).
+    # owner-collision defers so the two checks never give conflicting advice.
+    monkeypatch.setenv("SCIENCE_COMMONS_ROOT", str(_commons_root(tmp_path, papers=("Adams2025",))))
+    _local_paper(tmp_path, "Adams2025")
+    _overlay_paper(tmp_path, "Adams2025")
+
+    assert list(check_commons_owner_collision(_ctx(tmp_path))) == []
+
+
 def test_dataset_owner_collision_errors(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:

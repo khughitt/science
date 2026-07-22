@@ -98,6 +98,74 @@ def test_promote_refuses_when_it_would_shadow_a_distinct_paper(tmp_path, monkeyp
     assert not (commons / "papers" / "Adams2025.md").exists()
 
 
+def test_promote_refuses_paper_with_uncopromotable_dataset_usage(tmp_path, monkeypatch, runner) -> None:
+    """fb-2026-07-19-005: a paper whose dataset_usage points at a dataset with no
+    commons canonical must be refused — promoting it would mint a dangling ref in
+    the shared store that every consumer of the paper then hard-errors on."""
+    from science_tool.commons.cli import commons_group
+
+    commons = tmp_path / "commons"
+    _init_commons(commons)
+    alpha = _bare_project_from_fixture(tmp_path, "proj-alpha", "proj-alpha")
+    # A paper referencing a reference-only cohort that is not (and cannot be) a
+    # commons canonical.
+    alpha.joinpath("entities", "papers", "Kotliarov2020.md").write_text(
+        "---\nid: paper:Kotliarov2020\nkind: paper\ntitle: Kotliarov 2020\n"
+        "authors:\n  - Kotliarov, Y.\nyear: 2020\nvenue: Nat Med\ndoi: 10.1/kotliarov\n"
+        'created: "2026-01-01"\nupdated: "2026-02-01"\n'
+        "dataset_usage:\n  - ref: dataset:websle-paediatric-sle\n    role: analyzed\n"
+        "---\n\n## Key Findings\n\nx\n",
+        encoding="utf-8",
+    )
+
+    monkeypatch.setattr(
+        "science_tool.commons.promote.registry_root_for_id",
+        lambda slug: {"proj-alpha": alpha}[slug],
+    )
+    monkeypatch.setattr("science_tool.commons.cli.registry_root_for_id", lambda slug: alpha)
+    monkeypatch.setattr("science_tool.commons.cli.resolve_commons_root", lambda: commons)
+
+    result = runner.invoke(
+        commons_group,
+        ["promote", "paper", "paper:Kotliarov2020", "--from", "proj-alpha", "--apply"],
+    )
+
+    assert result.exit_code != 0, result.output
+    assert "dataset:websle-paediatric-sle" in result.output
+    assert "dataset_usage" in result.output
+    assert not (commons / "papers" / "Kotliarov2020.md").exists()
+
+
+def test_promote_paper_warns_on_missing_evidential_sections(tmp_path, monkeypatch, runner) -> None:
+    """fb-2026-07-11-020: a paper canonical with no Methods/Limitations is warned
+    about at promote time (dry run) — consumers cannot assess evidential strength.
+    The warning does not block: exit stays 0 on a clean dry run."""
+    from science_tool.commons.cli import commons_group
+
+    commons = tmp_path / "commons"
+    _init_commons(commons)
+    alpha = _bare_project_from_fixture(tmp_path, "proj-alpha", "proj-alpha")
+    # proj-alpha's Adams2025 carries "Key Findings" + "Project Use" but no
+    # Methods or Limitations section.
+
+    monkeypatch.setattr(
+        "science_tool.commons.promote.registry_root_for_id",
+        lambda slug: {"proj-alpha": alpha}[slug],
+    )
+    monkeypatch.setattr("science_tool.commons.cli.registry_root_for_id", lambda slug: alpha)
+    monkeypatch.setattr("science_tool.commons.cli.resolve_commons_root", lambda: commons)
+
+    result = runner.invoke(
+        commons_group,
+        ["promote", "paper", "paper:Adams2025", "--from", "proj-alpha"],
+    )
+
+    assert result.exit_code == 0, result.output
+    assert "Methods" in result.output
+    assert "Limitations" in result.output
+    assert "evidential strength" in result.output
+
+
 def test_promote_refuses_when_it_would_orphan_a_local_owner(tmp_path, monkeypatch, runner) -> None:
     """fb-2026-07-16-004 (main): a bystander owning the SAME paper is told to join --from."""
     from science_tool.commons.cli import commons_group
