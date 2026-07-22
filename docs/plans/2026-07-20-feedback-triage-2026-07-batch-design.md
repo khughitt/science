@@ -3,7 +3,7 @@ title: Feedback Triage — 2026-07 batch (106 open items) — Design
 status: proposed
 created: '2026-07-20'
 updated: '2026-07-22'
-revision: v8 (step 11 Batch C — inquiry subsystem: estimand_type on InquiryProfile + exporter gating; inquiry import clean-fail on thin doc-authored inquiries; validate no_inquiry_block INFO vs no_inquiry_subgraph WARN split; critique-approach report path → interpretations + two-axis science-dag port doc; Batch C fully closed)
+revision: v9 (step 12 Batch D — status vocabulary: -11-034 already addressed by merged D4/D5 per-kind certification; readiness() accepts all successfully-concluded statuses not just 'done'; plan-analysis + critique-approach stop prescribing statuses outside the kind vocabulary; Batch D fully closed. [v8: step 11 Batch C inquiry subsystem])
 ---
 
 # Feedback Triage — 2026-07 batch
@@ -476,6 +476,42 @@ largest legacy corpus — v3 status is an inverse proxy for "safe to hard-fail".
 vocabulary (trivial). `-12-008`: `ProjectEntity.readiness()` is "ready iff status
 == done", but `done` is in no kind's vocabulary, so a task blocked by a
 plan/method/pre-registration/workflow/search can **never** become ready.
+
+> **Step 12 SHIPPED 2026-07-22, merged `--no-ff` local main `5ce079ec`
+> (branch `batch-d-status`), NOT pushed.** All 4 entries closed. **Grounding
+> overturned the batch's premise: the `status-vocab-certification` branch is NOT
+> half-done — its work merged to main via the D5 authoritative-entity-schema merge
+> `537f52c1`** (`86ca2264 fix(validate): certify the status vocabularies before
+> enforcing them`, `2c84898a refactor(kinds): derive ... status-vocab maps from
+> CORE_PROFILE`). The old Phase-1 commit `e462b5f7` is NOT in main; a more complete
+> version superseded it.
+>
+> - **`-11-034` — already addressed by the merged D4/D5, closed with note.** The
+>   check is now `severity_for_kind(kind)` with `_CERTIFIED_KINDS = {"hypothesis"}`,
+>   so every non-hypothesis status finding is **WARN** — MM30's 184 "errors" are WARN,
+>   the build no longer fails. The `layout_version >= 3` axis (which -11-034's second
+>   observation called inverted) is **deleted**. Per-kind vocabularies were widened
+>   (plan has `draft`; pre-registration has `committed`/`amended`; question has
+>   `answered`/`partially-answered`/`deferred`). Residual project-side synonym drift
+>   is greenlight-gated project migration, out of toolkit scope.
+> - **`-12-008` — the one real code fix.** `ProjectEntity.readiness()` now returns
+>   ready for any successfully-concluded status:
+>   `READY_STATUSES = {done, complete, answered, committed, amended}` (ClassVar).
+>   Owner ruling: the concluded-success set (not the minimal `+complete`, not per-kind
+>   overrides). Abandoned-terminal states (retired/superseded/archived/deprecated) stay
+>   NOT ready — an abandoned blocker does not satisfy its dependents. `done` kept for the
+>   task open-set convention.
+> - **`-12-004` / `-12-005` — command-doc fixes.** `plan-analysis.md` prescribed
+>   `status: ready|ready-with-caveats|not-ready` (none in the plan vocabulary; nothing
+>   read it — `plan_gate` computes readiness from inputs) → now `status: draft`, with the
+>   ready/not-ready verdict documented as belonging in the existing **Readiness Decision**
+>   body section. `critique-approach.md` instructed `Update the inquiry status to
+>   critiqued` (not in the inquiry vocabulary; review-state is not lifecycle) → removed;
+>   the critique interpretation entity is the record of review, inquiry status unchanged.
+>
+> Full suite (9627 passed) + model + snapshot + real_projects all exit 0;
+> ruff/pyright at baseline. Codex mirrors regenerated (plan-analysis, critique-approach).
+> **Batch D fully closed.**
 
 ### E. explore-ideas — 7 items
 `fb-2026-07-11-022` + `-17-011` *(merge — same defect)*, `-17-003`, `-17-004`,
@@ -1018,7 +1054,7 @@ closes when it does not close a whole batch.
 | 9 | **Batch M remainder** — post-mortem fourth trigger class; unreflected-failure surfacing in `next-steps`/`status`; positives → regression tests. **DONE** (branch `feedback-batch-m`). | M[`-18-011` ✅, `-11-029` ✅] | 2 |
 | 10 | **Batch E** — `resolve-anchors` metadata cross-check first (`-17-009` is provenance corruption), then the apply/gaps defects, then the two design questions. **DONE 2026-07-21** (`abb03608`): `mismatch` status + agent verify; body seeding + scaffold-aware empty_body; `decision: fold`; candidate-named YAML errors; agent search budget; topics/themes stay non-citable (doc). | E ✅ | — |
 | 11 | **Batch C** — inquiry-subsystem design pass. **DONE 2026-07-22** (branch `batch-c-inquiry`, merge `4525887a`): `estimand_type` on InquiryProfile + exporter gating (`-19-007`); `inquiry import` clean-fail via `has_compiled_subgraph` (`-11-031`/`-11-032`); validate `no_inquiry_block` INFO vs `no_inquiry_subgraph` WARN split (`-11-030`); critique-approach report → `entities/interpretations/` (`-19-002`) + `science dag` port doc (`-19-006`). | C ✅ | 1 |
-| 12 | **Batch D** — after auditing `status-vocab-certification`. | D | branch audit |
+| 12 | **Batch D** — after auditing `status-vocab-certification`. **DONE 2026-07-22** (branch `batch-d-status`, merge `5ce079ec`): audit found the branch's work already merged via D5 `537f52c1`, so `-11-034` is addressed (per-kind `severity_for_kind`, only hypothesis ERROR; layout_version axis deleted; vocabularies widened) — closed with note; `-12-008` readiness() accepts {done,complete,answered,committed,amended}; `-12-004`/`-12-005` command docs stop prescribing out-of-vocabulary statuses. | D ✅ | branch audit |
 | 13 | **Batch J remainder**, **G**, **H**, **I**. | J (rest), G, H, I | — |
 | 14 | **Batch N** — ship-today tier first; then the design-call items; then docs/lore and agent-prompt fixes. | N | — |
 
