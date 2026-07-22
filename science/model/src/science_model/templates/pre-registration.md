@@ -118,6 +118,28 @@ and does not defer the analysis.
 This section prevents post-hoc rationalization of inflated signals.
 Omit if the analysis type doesn't have a meaningful "too good" threshold. -->
 
+## Training-Side Confound Gate (signature / model-transfer feasibility)
+
+<!-- Required when the analysis freezes a signature, score, or model to be projected
+onto a NEW target cohort. Target-side gates (feature compatibility, target-local
+technical correlations, label-permutation / matched-random-set nulls at projection)
+do NOT test whether the signature is a batch artifact of its OWN training cohort — a
+signature confounded with training-batch structure passes every downstream target-side
+check by construction (fb-2026-07-18-007).
+
+Before freezing, add a training-side gate:
+- Cross-tab the training contrast (e.g. frail vs. old) against every technical axis of
+  the training data — GEO submission / batch / platform, library depth, cell/sample
+  count. Any strong contingency is a confound, not a nuisance.
+- Refit the signature with the confounder as a covariate (e.g. `~ submission + <contrast>`),
+  repeat LODO / cross-validation on the adjusted model, and compare the adjusted signed
+  signature to the frozen primary at the SAME Jaccard / gene-count thresholds; restrict
+  null permutations to within-batch.
+- Pre-commit the pass/fail: e.g. adjusted reproducibility above bar AND primary-gene
+  retention above bar AND signed Jaccard above bar. A borderline result (adjusted
+  reproducible but low retention / low signed Jaccard) is INCONCLUSIVE — halt before any
+  target label is read, do not project. -->
+
 ## Known Limitations
 
 <!-- What can this analysis NOT tell you, even if it works perfectly? -->

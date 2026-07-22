@@ -8,9 +8,11 @@ the host project and its declared peers. It never reads another project's
 
 from __future__ import annotations
 
+import logging
 from datetime import datetime, timezone
 from pathlib import Path
 
+from pydantic import ValidationError
 from rdflib import Dataset, Literal, URIRef
 from rdflib.graph import Graph
 from rdflib.namespace import PROV, RDF, XSD
@@ -18,6 +20,8 @@ from rdflib.namespace import PROV, RDF, XSD
 from science_tool.graph.io import save_canonical_graph_dataset
 from science_tool.peers import ResolvedPeer, make_local_resolver
 from science_tool.project_config import load_project_config
+
+logger = logging.getLogger(__name__)
 
 _URI_SCHEME = "cancer"
 
@@ -42,7 +46,8 @@ def assemble_composite_graph(project_root: Path) -> Path:
     resolver = make_local_resolver(project_root)
     for peer_id in sorted(resolver.known_ids()):
         peer = resolver.resolve(peer_id)
-        _validate_peer_id(peer)
+        if not _validate_peer_id(peer):
+            continue
         peer_uri = _project_uri(peer.id)
         included = _include_peer_graph(dataset, peer, peer_uri)
         if included:
@@ -60,10 +65,41 @@ def _local_graph_path(project_root: Path) -> Path:
     return project_root / "knowledge" / "graph.trig"
 
 
-def _validate_peer_id(peer: ResolvedPeer) -> None:
-    peer_cfg = load_project_config(peer.path)
+def _validate_peer_id(peer: ResolvedPeer) -> bool:
+    """Return True if the peer should be included, False to skip it.
+
+    A peer whose ``science.yaml`` no longer parses under the local
+    ``ProjectConfig`` schema — typically because the sibling is pinned to a newer
+    ``science`` that added a config key this project's schema does not know — is
+    skipped with a loud, named warning rather than aborting the whole composite.
+    The composite's content comes from each peer's ``knowledge/graph.trig``; the
+    peer's ``science.yaml`` is consulted here only to reconfirm the declared id,
+    so one sibling's version skew must not break every other project's build.
+    """
+    try:
+        peer_cfg = load_project_config(peer.path)
+    except ValidationError as exc:
+        logger.warning(
+            "composite: skipping peer %r at %s — its science.yaml did not parse "
+            "under this project's science schema (likely a science-version skew "
+            "in the sibling); realign the pins to include it. Details: %s",
+            peer.id,
+            peer.path,
+            _summarize_validation_error(exc),
+        )
+        return False
     if peer_cfg.id != peer.id:
         raise ValueError(f"declared peer id {peer.id!r} does not match peer project id {peer_cfg.id!r} at {peer.path}")
+    return True
+
+
+def _summarize_validation_error(exc: ValidationError) -> str:
+    parts: list[str] = []
+    for err in exc.errors():
+        loc = ".".join(str(p) for p in err.get("loc", ()))
+        msg = err.get("msg", "")
+        parts.append(f"{loc}: {msg}" if loc else msg)
+    return "; ".join(p for p in parts if p) or str(exc)
 
 
 def _include_local_graph(project_root: Path, dest_graph: Graph) -> bool:

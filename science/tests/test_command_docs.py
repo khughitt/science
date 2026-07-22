@@ -1592,3 +1592,75 @@ def test_review_pipeline_checks_frozen_vehicle_regeneration() -> None:
     assert "Frozen-vehicle regeneration check" in norm
     assert "downstream rules" in norm
     assert "content-addressed" in norm
+
+
+def test_research_papers_frontmatter_uses_kind_not_type() -> None:
+    """paper-researcher must be told to write `kind: paper`, never `type: paper`,
+    and never a retired `datasets:` field (fb-2026-07-10-026)."""
+    norm = _norm(_read("commands/research-papers.md"))
+    assert "must use `kind: paper`, not `type: paper`" in norm
+    assert "Never add a `datasets:` field" in norm
+    assert "dataset_usage" in norm
+
+
+def test_research_papers_pdf_first_precedes_paper_fetch() -> None:
+    """A user-supplied local PDF short-circuits Source Strategy before the
+    paper-fetch block, so `paywalled`/`not_found` isn't treated as a stop
+    condition when a PDF is in hand (fb-2026-07-18-001)."""
+    text = _read("commands/research-papers.md")
+    norm = _norm(text)
+    pdf_first = text.index("this branch short-circuits the rest of Source Strategy")
+    fetch_block = text.index("retrieval is centralized through `science paper-fetch`")
+    assert pdf_first < fetch_block, "PDF-first branch must precede the paper-fetch block"
+    assert "Prefer `pdftotext" in norm
+    assert "never treat a `paywalled` / `not_found` status as a stop condition" in norm
+
+
+def test_research_papers_caps_concurrent_pdf_subagents() -> None:
+    """Dispatch must cap each wave at ~5 concurrent subagents to avoid PDF-render
+    stalls (fb-2026-07-10-025)."""
+    norm = _norm(_read("commands/research-papers.md"))
+    assert "Cap each wave at ~5 concurrent subagents" in norm
+    assert "no progress for 600s" in norm
+    assert "dispatch in waves of ~5" in norm
+
+
+def test_add_theme_commit_prescription_is_commitlint_safe() -> None:
+    """add-theme must prescribe a commitlint-conventional commit type; a bare
+    `theme:` type fails husky+commitlint in software-profile projects
+    (fb-2026-07-11-007)."""
+    text = _read("commands/add-theme.md")
+    norm = _norm(text)
+    assert 'git commit -m "docs(theme): add <short title>"' in text
+    assert 'git commit -m "theme: add <short title>"' not in text
+    assert "not** in the standard commitlint enum" in norm
+
+
+def test_add_theme_disambiguates_methodological_from_evidence_quality() -> None:
+    """theme_kind guidance must distinguish methodological (how we work) from
+    evidence-quality (trustworthiness of a claim's substrate) and prefer the more
+    specific value (fb-2026-07-11-008)."""
+    norm = _norm(_read("commands/add-theme.md"))
+    assert "the **more specific** value wins" in norm
+    assert "how *trustworthy the substrate of a claim*" in norm
+    assert "is `evidence-quality`, not `methodological`" in norm
+
+
+def test_review_pipeline_adapts_rubric_to_target_shape() -> None:
+    """The 9-dimension rubric is graph-inquiry-shaped; for a prose kind:plan or a
+    completed simulation, dims 4/8/9 must be reinterpreted or marked N/A with a
+    rationale, prereq toolkit docs are skipped when a consumer project lacks them,
+    and self-authored targets get an independent-reviewer recommendation
+    (fb-2026-07-07-002, fb-2026-07-08-001)."""
+    text = _read("commands/review-pipeline.md")
+    norm = _norm(text)
+    assert "Target shape (read before applying the rubric)" in text
+    assert "mark them N/A with a rationale" in norm
+    assert "Dim 4 (Identifiability)" in text
+    assert "Dim 8 (Integration Boundary)" in text
+    assert "Dim 9 (Manifest Completeness)" in text
+    assert "Independent reviewer." in text
+    assert "recommend an independent reviewer" in norm
+    assert "a consumer project usually does not vendor them" in norm
+    # The MUST rule allows an explicit N/A rather than forcing every dimension.
+    assert "N/A with an explicit rationale" in norm
