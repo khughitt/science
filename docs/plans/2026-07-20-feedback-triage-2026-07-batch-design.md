@@ -3,7 +3,7 @@ title: Feedback Triage — 2026-07 batch (106 open items) — Design
 status: proposed
 created: '2026-07-20'
 updated: '2026-07-21'
-revision: v6 (step 10 Batch E — anchor mismatch cross-check + body seeding + scaffold-aware empty_body + decision:fold + candidate-named YAML errors + agent search budget; 3 owner design decisions taken)
+revision: v7 (step 7 Batch A remainder — -16-005/-12-006 already-fixed; new commons.overlay-local-duplicate ERROR check; commons status WARN; promote-paper dangling-dataset_usage guard; promote-time Methods/Limitations completeness warning with semantic asks declined; Batch A fully closed)
 ---
 
 # Feedback Triage — 2026-07 batch
@@ -833,11 +833,50 @@ line-by-line**, both in the direction of *less* churn:
 
 Closes `-09-001`, `-18-005`, `-11-001`; confirms already-shipped `-11-021`
 (schema now declares `Methods`), `-11-018`/`-16-004` (federation_guard +
-promote_body_loss wired into promote). **Still open in Batch A** (separate
-follow-on unit — not "overlay schema + promote builder"): `-16-005` (overlay
-inert when `bib` owns the id, a `graph/commons_sources.py` path), `-11-019`
-(dup entity+overlay validate), `-11-020` (lossy summary at promote), `-19-005`,
-`-12-006`, `-12-007`.
+promote_body_loss wired into promote).
+
+**Batch A REMAINDER SHIPPED 2026-07-21 (branch `batch-a-remainder`, merge
+`b2e71b56`, local main, unpushed).** Grounding overturned the design doc twice:
+two of the six were already fixed, and one no longer reproduces in data. Owner
+decisions taken via AskUserQuestion (recommendation-first) for the three
+genuine forks.
+
+- **`-16-005` — already fixed, closed with note.** Both silent failures landed
+  in the Tier-0 commons work: part 1 (overlay inert when a deferring adapter
+  like `bib` owns the id) at `5d1a25fc` ("close commons overlays before identity
+  arbitration" — `validate_overlay_pin` now runs for every resolved overlay);
+  part 2 (suppressed registry-staleness warning on the graph load path) at
+  `198c2c37`/merge `2fddebb9` (warn-once). Report predates both.
+- **`-12-006` — already fixed, closed with note.** The D1 migration to `2.0`
+  mixins annotates `status` as `project_only`, and `read_overlay_merge_policy`
+  defaults un-annotated overlay fields to `project_only`, so overlaying `status`
+  now resolves cleanly through `resolve_field`'s PROJECT_ONLY branch. All 274
+  commons papers + all datasets are `2.0`; the "unreachable" comment is gone.
+  Only a hypothetical `1.0`-mixin canonical (zero exist) would still raise.
+- **`-11-019` — new `commons.overlay-local-duplicate` check (ERROR).** Flags an
+  id held as BOTH a local `entities/` owner and an `overlays/` overlay — always
+  a duplicate; commons-independent (a purely local fact). Fires 0 across the
+  23-project fleet, so ships at ERROR. `commons_owner_collision` defers to it
+  when a project overlay exists, so the two never give conflicting advice (its
+  "convert to an overlay" is wrong when one already exists).
+- **`-12-007` — commons status check (WARN).** `CommonsValidator` now checks
+  each record's status against its kind vocabulary (`valid_statuses`) and warns
+  — never errors, since the vocabulary is uncertified for commons. Certified on
+  `~/d/science-commons`: fires on exactly the one `exploratory` dataset.
+- **`-19-005` — promote-paper guard (owner: refuse).** `plan_promote` fails
+  closed when a promoted paper's `dataset_usage` references a dataset with no
+  commons canonical (the toolkit half of the hand-fix to commons Kotliarov2020).
+  Chosen over allowing datapackage-less datasets in commons or a silent audit
+  WARN.
+- **`-11-020` — promote-time completeness gate (owner: gate + decline
+  semantic).** Warns when a promoted paper canonical lacks Methods/Limitations
+  (a measure, never a block). The two semantic asks (claim-in-body,
+  overlay-contradicts-canonical) are deliberately NOT built — no check can fire
+  on them honestly.
+
+Full suite + snapshot + real_projects + model all exit 0; ruff/pyright at the
+pre-existing baseline (4 ruff in untouched `test_numeric_binding.py`; 7 pyright
+in untouched files). **Batch A fully closed.**
 
 ### D2 — The transient-state home — RESOLVED 2026-07-21: Option C (ratify status quo)
 
@@ -935,7 +974,7 @@ closes when it does not close a whole batch.
 | 4 | **Decision D2** — transient-state home (Batch F options A/B/C). **RESOLVED 2026-07-21**: Option C (ratify status quo) — no relocation, feedback store stays put, ship a default exclude set, defer `doc_kind`, fix `curate.md` Phase 1 path drift. | — | owner ✅ |
 | 5 | **Batch B remainder** + the generic "declared-key-materialises-zero-triples" lint. **DONE 2026-07-21** (branch `batch-b-remainder`): the generic lint already existed (narrow, kind-aware) and its general form was deliberately rejected — nothing built; `-12-002`/`-18-004`/`-11-017` pt2-3 already fixed; `-12-003` premise stale; real fixes = `-12-009` freeze-status gate + `-11-017` pt1 evidence-line template docs + `-18-003` confirmed already-addressed. | B (rest) ✅ | — |
 | 6 | **Batches K and L** — two skill leaves. No code risk; parallelisable with 1–5. | K, L | — |
-| 7 | **Batch A remainder** — overlay schema + promote builder derived from D1; federation-awareness pass; close `-11-021`. **D1 CORE SHIPPED** (branch `batch-a-d1`): `provided_capabilities`→canonical, `tier`→override (new policy value, overlay-1.2, rationale WARN), `paper_kind`→project-only (annotate-in-place, no commons migration); federation-awareness (`-11-018`/`-16-004`) + `-11-021` confirmed already shipped. **Remaining:** `-16-005`, `-11-019`, `-11-020`, `-19-005`, `-12-006`, `-12-007`. | A (rest) | D1 |
+| 7 | **Batch A remainder** — overlay schema + promote builder derived from D1; federation-awareness pass; close `-11-021`. **D1 CORE SHIPPED** (branch `batch-a-d1`): `provided_capabilities`→canonical, `tier`→override (new policy value, overlay-1.2, rationale WARN), `paper_kind`→project-only (annotate-in-place, no commons migration); federation-awareness (`-11-018`/`-16-004`) + `-11-021` confirmed already shipped. **REMAINDER SHIPPED 2026-07-21** (merge `b2e71b56`): `-16-005`/`-12-006` already-fixed (closed with notes); `-11-019` new `commons.overlay-local-duplicate` ERROR check; `-12-007` commons status WARN; `-19-005` promote-paper guard (refuse dangling dataset_usage); `-11-020` promote-time Methods/Limitations completeness warning (semantic asks declined). **Batch A fully closed.** | A ✅ | D1 |
 | 8 | **Batch F** — implement the chosen home; `doc_kind`-keyed excludes; migration if the feedback store moves. **D2 CORE SHIPPED 2026-07-21** (branch `batch-f-transient`, merge `395b5296`): default revision-manifest exclude set (`doc/curations/*.md`, `doc/meta/*-next-steps.md`) unioned into `_revision_manifest_excludes`; curate.md ledgers moved to `doc/curations/` with `doc_kind`/`sweep_scope` (not the entity `kind`/`scope` that failed the curation-sweep schema). `doc_kind`-keyed excludes deferred (path globs remain); no feedback-store move. **Closed `-17-001`, `-10-022`, `-10-020`. Remainder SHIPPED 2026-07-21 (branch `batch-f-remainder`, merge `bce0dbe4`): `-10-021` next-steps → `doc/meta/` with `doc_kind` (matches the gap-analysis reader); `-16-006` `resolve_registration_root` registers the main checkout not the linked worktree. **Batch F fully closed (5/5).** | F ✅ | D2 |
 | 9 | **Batch M remainder** — post-mortem fourth trigger class; unreflected-failure surfacing in `next-steps`/`status`; positives → regression tests. **DONE** (branch `feedback-batch-m`). | M[`-18-011` ✅, `-11-029` ✅] | 2 |
 | 10 | **Batch E** — `resolve-anchors` metadata cross-check first (`-17-009` is provenance corruption), then the apply/gaps defects, then the two design questions. **DONE 2026-07-21** (`abb03608`): `mismatch` status + agent verify; body seeding + scaffold-aware empty_body; `decision: fold`; candidate-named YAML errors; agent search budget; topics/themes stay non-citable (doc). | E ✅ | — |
