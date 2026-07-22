@@ -5,7 +5,7 @@ description: Critically review a pipeline plan against an evidence rubric — co
 # Review Pipeline
 
 > **Prerequisites:**
-> - Read `docs/user-guide/science-model.md`, `docs/user-guide/entities.md`, `docs/user-guide/graph-and-derived-state.md`, and `docs/plans/historical/2026-03-01-knowledge-graph-design.md` for model, entity, and graph semantics
+> - Read `docs/user-guide/science-model.md`, `docs/user-guide/entities.md`, `docs/user-guide/graph-and-derived-state.md`, and `docs/plans/historical/2026-03-01-knowledge-graph-design.md` for model, entity, and graph semantics. These live in the **toolkit** repo; a consumer project usually does not vendor them — read whichever are reachable and skip any that are missing rather than blocking the review on them.
 > - For research methodology, read `${CLAUDE_PLUGIN_ROOT}/skills/INDEX.md` and load the relevant `literature/`/`epistemics/` leaves.
 > - Read the `discussant` role prompt from `prompts/roles/discussant.md` (if available)
 
@@ -26,7 +26,7 @@ uv run science <command>
 ## Rules
 
 - **MUST** run structural validation first (`inquiry validate`)
-- **MUST** evaluate all 9 rubric dimensions
+- **MUST** address all 9 rubric dimensions — evaluate each, or mark it **N/A with an explicit rationale**. Several dimensions are graph-inquiry-shaped and do not map onto every target; see *Target shape* in Step 2 before forcing them.
 - **MUST** be critical — surface weaknesses, don't just confirm the plan is good
 - **MUST** provide specific, actionable recommendations for each issue
 - **MUST** save review report under `doc/reviews/<stem>-pipeline-review.md` with a frontmatter backlink to the reviewed inquiry or plan (see *Resolve the target* below)
@@ -67,6 +67,27 @@ Also read (whichever exist):
 - Focus review effort on dimensions specific to the sub-plan: validation criteria (Dim 6), assumption audit (Dim 2), integration boundaries (Dim 8).
 
 ### Step 2: Evaluate each rubric dimension
+
+**Target shape (read before applying the rubric).** The rubric was written for a
+graph-backed computational pipeline: several dimensions assume `BoundaryIn`/`BoundaryOut`
+nodes, a directed workflow DAG, module tensor/schema boundaries, and a workflow output
+directory. When the target is a **prose `kind: plan`**, a **prose-first inquiry**, or an
+**already-completed simulation/analysis**, do not force the graph-shaped dimensions — reinterpret
+or mark them N/A with a rationale:
+
+- **Dim 4 (Identifiability)** — with no `BoundaryIn`/`BoundaryOut` graph, restate it as: is every
+  claimed output traceable to declared inputs through the plan's stated steps? Mark N/A only if the
+  plan makes no input→output claims.
+- **Dim 8 (Integration Boundary)** — with no module tensor/schema boundaries, restate it as: are the
+  interfaces between the plan's stages (data handoffs, file formats, assumptions each stage makes of
+  the previous) stated and consistent? For a completed run, check the boundaries that were actually used.
+- **Dim 9 (Manifest Completeness)** — with no workflow output dir, restate it as: does the plan name the
+  concrete artifacts it will produce (or, for a completed run, did produce) and where they live? Mark N/A
+  if the target is a pure analysis plan with no durable artifacts.
+
+**Independent reviewer.** If the review target was authored by the same agent/person now reviewing it,
+say so in the report and recommend an independent reviewer for the dimensions that turn on judgment
+(assumptions, scope, validation) — self-review systematically under-surfaces the author's own blind spots.
 
 #### Dimension 1: Evidence Coverage
 

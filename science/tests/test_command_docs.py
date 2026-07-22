@@ -1644,3 +1644,23 @@ def test_add_theme_disambiguates_methodological_from_evidence_quality() -> None:
     assert "the **more specific** value wins" in norm
     assert "how *trustworthy the substrate of a claim*" in norm
     assert "is `evidence-quality`, not `methodological`" in norm
+
+
+def test_review_pipeline_adapts_rubric_to_target_shape() -> None:
+    """The 9-dimension rubric is graph-inquiry-shaped; for a prose kind:plan or a
+    completed simulation, dims 4/8/9 must be reinterpreted or marked N/A with a
+    rationale, prereq toolkit docs are skipped when a consumer project lacks them,
+    and self-authored targets get an independent-reviewer recommendation
+    (fb-2026-07-07-002, fb-2026-07-08-001)."""
+    text = _read("commands/review-pipeline.md")
+    norm = _norm(text)
+    assert "Target shape (read before applying the rubric)" in text
+    assert "mark them N/A with a rationale" in norm
+    assert "Dim 4 (Identifiability)" in text
+    assert "Dim 8 (Integration Boundary)" in text
+    assert "Dim 9 (Manifest Completeness)" in text
+    assert "Independent reviewer." in text
+    assert "recommend an independent reviewer" in norm
+    assert "a consumer project usually does not vendor them" in norm
+    # The MUST rule allows an explicit N/A rather than forcing every dimension.
+    assert "N/A with an explicit rationale" in norm
