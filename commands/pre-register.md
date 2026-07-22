@@ -164,6 +164,16 @@ you *look*. For each arm of the planned comparison:
 - **Count ledger.** Re-derive every numeric count referenced anywhere in the pre-registration from
   the loaded artifacts, not just the headline arm. This includes denominators, subgroup counts, exclusion counts, missingness counts, arm sizes, post-filter counts, and supporting counts in prose, tables, or caveats. Do not only verify the headline arm; if a count will appear in the
   locked criteria or rationale, record where it was re-derived from the loaded artifact.
+  Freeze the ledger at **full resolution**, not just the headline totals: for a matrix
+  substrate that means the shape, the total nonzero count, the row-sum distribution, and
+  the **complete column-sum vector** — not "244 models" but `244 × 24, 481 ones, row-sums
+  {1:80,2:106,3:45,4:11,5:2}, column-sums (98,75,50,38,...,1,1)`. This is not only a design
+  aid. The frozen ledger is a **runtime integrity check on the substrate**: if the vehicle
+  is later silently regenerated from a drifted input, a mismatch (e.g. `248 nodes` where 244
+  were registered) is immediately legible as a tripwire rather than a curiosity, and it is
+  the only thing that makes a reconstruction **provably faithful** — a coarser
+  totals-only check cannot certify the column-sum vector. (natural-systems
+  pre-registration:0026, fb-2026-07-11-027.)
 - **Derivation-cohort circularity.** If the proposed validation vehicle is also a training or
   validation cohort for the same scored signature, model, or threshold, that makes the in-cohort
   predictive-vs-prognostic test circular. It can still be useful for calibration or debugging, but do
@@ -228,6 +238,30 @@ If the primary metric has changed from prior analyses, or if the metric choice i
 - What metric are you using and why?
 - What motivated the change from the prior metric (if applicable)?
 - What are the known limitations of this metric?
+
+### 4d. Blind Erosion — when observed values leak early
+
+An accidental or exploratory run can expose confirmatory-relevant values (an observed
+effect, a group contrast, a metric under the very config sweep the design leaves open)
+**before** the null has been drawn. Blindness is then eroded even though no comparison was
+possible. Distinguish two states and never conflate them:
+
+- **Not conditioned on the null** (weaker) — the value was seen, but no null distribution
+  or comparison exists yet.
+- **Blind** (stronger) — no confirmatory-relevant value has been seen at all.
+
+When values leak early:
+
+1. **Escalate the next design choice to the human.** The agent who saw the values must not
+   silently take the decision they now bear on (e.g. "run the registered cohort or amend to
+   the current one", or fixing an under-specified statistic — a Louvain resolution — whose
+   candidate values were just made visible by the leaked sweep).
+2. **Record the exposure as a protocol deviation in the pre-registration** (`amendments:`),
+   writing down the seen values explicitly and assigning them **no confirmatory weight**.
+
+Treat this as the same failure class as a silently-regenerated frozen vehicle: a leak that is
+not recorded quietly launders exploratory knowledge into a confirmatory decision.
+(natural-systems pre-registration:0026, fb-2026-07-11-028.)
 
 ### 5. Separate Confirmatory from Exploratory
 

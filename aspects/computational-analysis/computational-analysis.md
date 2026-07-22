@@ -48,6 +48,19 @@ When researching computational methods or tools:
 
 ## plan-analysis
 
+### Additional guidance: Cross-tab the contrast against technical structure BEFORE freezing
+
+For any case/control differential-expression or signature design on multi-submission /
+multi-batch / multi-platform data, cross-tab the **intended biological contrast** against
+**every available technical axis** (GEO submission / batch, platform, library depth,
+cell/sample count) at design time. Treat any strong contingency — e.g. all cases plus part
+of the controls coming from one submission and the rest of the controls from a deeper, later
+submission — as a **covariate to adjust for or a stratum to hold out, chosen BEFORE freezing
+the design**, not as something the downstream negative-control gates will catch. Coherence,
+face validity, and learnability (a high LODO Jaccard) do **not** rule out a batch confound:
+adjusting for submission can drop the headline genes and retain only a fraction of the top
+signature while a composition artifact (e.g. erythroid/ambient-RNA) rises. (fb-2026-07-18-008.)
+
 ### Additional section: Numerical Accuracy
 
 (insert after: Model / Test Assumptions)

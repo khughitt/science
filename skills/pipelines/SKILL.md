@@ -38,6 +38,15 @@ order; the leaves cover the mechanics.
 3. **Reproducibility = environment + seeds + inputs.** Pin tool versions, lock
    random seeds, hash inputs (`datapackage.json`). Without all three the
    pipeline is decorative.
+4. **Every output stamps its own provenance.** Each pipeline output artifact must
+   carry, in the artifact itself (JSON sidecar, header, or manifest), the
+   `git_revision` of the tree that produced it, a `created` timestamp, and the
+   `sha256` of every input it consumed. Make this a convention, not a per-script
+   habit. It is the difference between a recoverable incident and an unrecoverable
+   one: when a frozen vehicle is destroyed, the only thing that can identify the tree
+   state that produced it — and let it be rebuilt and verified against a frozen ledger
+   in an isolated worktree — is a stamped revision. An unrelated pipeline's stamp
+   saving your run is luck; your own stamp is design. (fb-2026-07-11-026.)
 
 ## Companion Skills
 
