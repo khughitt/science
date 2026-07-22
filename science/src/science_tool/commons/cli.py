@@ -555,6 +555,8 @@ def validate_cmd(
         click.echo(f"checked {report.checked} entities")
         for err in report.errors:
             click.echo(f"  error: {err}", err=True)
+        for warning in report.warnings:
+            click.echo(f"  warning: {warning.canonical_id}: {warning.message}", err=True)
 
     emit(
         output_format=effective_format,
@@ -567,6 +569,14 @@ def validate_cmd(
                     "message": str(e.cause),
                 }
                 for e in report.errors
+            ],
+            "warnings": [
+                {
+                    "path": str(w.path),
+                    "canonical_id": w.canonical_id,
+                    "message": w.message,
+                }
+                for w in report.warnings
             ],
         },
         render_text=_render,
