@@ -12,7 +12,7 @@ Illumina BeadArray, custom platforms). Most public microarray data
 is now legacy (most cohorts pre-date 2015 RNA-Seq adoption), but it
 remains relevant for meta-analysis of disease cohorts where the
 microarray data is the only large-n option (MM30 includes 28 microarray
-GEO cohorts). For platform-general conventions see [`SKILL.md`](./SKILL.md).
+GEO cohorts). For platform-general conventions see [`cohort-qa.md`](./cohort-qa.md).
 
 ## The probe-to-gene problem
 
@@ -89,6 +89,10 @@ For Affymetrix data with raw CEL files, `arrayQualityMetrics`
 (Bioconductor) automates a thorough QA report.
 
 ## Cross-platform meta-analysis (the hard problem)
+
+The cross-cohort strategy decision (and its identifiability gate) lives in
+[`data-integration.md`](./data-integration.md); this section is the
+microarray-specific realization.
 
 The fundamental difficulty: probe-set vs probe-set vs gene-symbol
 expression scales are not comparable. Three strategies:
@@ -172,6 +176,7 @@ be an n ≈ 700 (MMRF) instead of n ≈ 5,400 meta-analysis.
 
 ## Companion Skills
 
-- [`SKILL.md`](SKILL.md) - expression-data hub conventions for cross-platform cohort QA.
+- [`cohort-qa.md`](cohort-qa.md) - platform-general cohort QA (checklist + inspection idioms).
+- [`data-integration.md`](data-integration.md) - cross-cohort aggregation strategy and batch adjustment.
 - [`bulk-rnaseq-qa.md`](bulk-rnaseq-qa.md) - companion checks when aggregating microarray with RNA-seq cohorts.
 - [`../../study-design/bias-vs-variance-decomposition.md`](../../study-design/bias-vs-variance-decomposition.md) - separating platform bias from estimator variance.

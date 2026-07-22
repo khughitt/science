@@ -9,7 +9,7 @@ sources: [scanpy, tirosh-2016]
 
 Practical QA pipeline for scRNA-seq data, with emphasis on what goes
 wrong silently. For platform-general QA conventions see
-[`SKILL.md`](./SKILL.md).
+[`cohort-qa.md`](./cohort-qa.md).
 
 ## Cohort acquisition checklist
 
@@ -182,6 +182,10 @@ checking that the marker-set output looks sane on your cohort.
 
 ## Pseudobulk for cross-platform aggregation
 
+The cross-cohort strategy decision (and its identifiability gate) lives in
+[`data-integration.md`](./data-integration.md); pseudobulk here is the
+single-cell realization of that strategy.
+
 When mixing scRNA-seq with bulk RNA-seq cohorts in a meta-analysis,
 pseudobulk by patient-and-cell-type before testing. Keep aggregation on
 raw counts; normalise after aggregation with the bulk method:
@@ -252,6 +256,7 @@ preprocessing without rerunning anything.
 
 ## Companion Skills
 
-- [`SKILL.md`](SKILL.md) - expression-data hub conventions for cross-platform cohort QA.
+- [`cohort-qa.md`](cohort-qa.md) - platform-general cohort QA (checklist + inspection idioms).
+- [`data-integration.md`](data-integration.md) - cross-cohort aggregation strategy and batch adjustment.
 - [`../../statistics/compositional-data.md`](../../statistics/compositional-data.md) - cell fractions, donor-level composition, and denominator choices.
 - [`../../study-design/power-floor-acknowledgement.md`](../../study-design/power-floor-acknowledgement.md) - donor-level power floors and cell-n inflation checks.
