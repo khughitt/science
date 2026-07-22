@@ -1537,3 +1537,28 @@ def test_critique_approach_does_not_set_an_illegal_inquiry_status() -> None:
     assert "status: critiqued" not in text
     assert "status to critiqued" not in text
     assert "Leave the inquiry's lifecycle `status` unchanged." in _norm(text)
+
+
+def test_catalog_datasets_documents_on_request_only_as_analysis_ineligible() -> None:
+    """'available on reasonable request' is never a valid access option; catalog-datasets
+    must document recording it as on-request-only (analysis-ineligible), not ranking it
+    as obtainable (fb-2026-07-17-010)."""
+    text = _read("commands/catalog-datasets.md")
+    norm = _norm(text)
+
+    assert "--on-request-only" in text
+    assert "on-request-only" in text
+    assert "analysis-ineligible" in norm
+    assert "corresponding author on reasonable request" in norm
+
+
+def test_catalog_datasets_gates_handoff_on_authorization_not_just_access() -> None:
+    """Step 6 must distinguish access-verified from authorized-to-analyze and stop at a
+    ready-but-unauthorized terminal state when a scope gate excludes the dataset
+    (fb-2026-07-17-007)."""
+    text = _read("commands/catalog-datasets.md")
+    norm = _norm(text)
+
+    assert "ready-but-unauthorized" in text
+    assert "core/decisions.md" in text
+    assert "access-verified is NOT authorized-to-analyze" in norm or "not authorized-to-analyze" in norm.lower()

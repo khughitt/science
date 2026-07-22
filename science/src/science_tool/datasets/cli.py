@@ -369,6 +369,14 @@ def dataset_add(
 @click.option("--superseded-by", "superseded_by", default=None)
 @click.option("--followup-task", "followup_task", default=None)
 @click.option(
+    "--on-request-only",
+    "on_request_only",
+    is_flag=True,
+    default=False,
+    help="Record availability=on-request-only (analysis-ineligible: 'available on author "
+    "request' has no followable access procedure). Mutually exclusive with --method/--exception.",
+)
+@click.option(
     "--show-preexisting",
     "show_preexisting",
     is_flag=True,
@@ -395,6 +403,7 @@ def dataset_verify_access(
     rationale: str,
     superseded_by: str | None,
     followup_task: str | None,
+    on_request_only: bool,
     show_preexisting: bool,
     project_root: Path | None,
 ) -> None:
@@ -423,6 +432,7 @@ def dataset_verify_access(
             rationale=rationale,
             superseded_by=superseded_by,
             followup_task=followup_task,
+            on_request_only=on_request_only,
         )
     except EntityCommandError as exc:
         click.echo(str(exc), err=True)
