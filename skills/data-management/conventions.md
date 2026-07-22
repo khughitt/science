@@ -91,8 +91,8 @@ result package, annotated with EDAM terms.
 - `science qa-audit` reads the workflow-result manifest (`resources`, YAML or
   JSON).
 - Each data / result / QA directory carries its descriptor.
-- Respect `SCIENCE_DATA_ROOT` and `science.yaml` `data.root`; never commit files
-  under the resolved data root.
+- Respect `SCIENCE_DATA_ROOT` and `science.yaml` `data.root`.
+- Never commit files under the resolved data root.
 
 ## Examples
 

@@ -38,13 +38,13 @@ analysis-ready files.
    ```
 4. **Add acquisition scripts** to `code/scripts/` or workflow rules under
    `code/workflows/`.
-5. **Create or update runtime `datapackage` descriptors** in the appropriate data
+5. **Create or update runtime datapackage descriptors** in the appropriate data
    directory — the descriptor *format* is [`frictionless.md`](frictionless.md);
    *where* the files live is [`conventions.md`](conventions.md).
 
 ## Judgment rules
 
-- **CLI first, manual template as fallback.** Use `science dataset add` /
+- **Prefer the CLI.** Manual template authoring is a fallback. Use `science dataset add` /
   `verify-access` whenever the current CLI fields can express the record. Write
   `entities/datasets/<slug>.md` by hand only when the CLI cannot represent a
   needed field, for a deliberate legacy backfill, or a project-specific review
@@ -86,7 +86,7 @@ analysis-ready files.
   the question or hypothesis it supports.
 - Acquisition/preprocessing scripts under version control in `code/scripts/` or
   `code/workflows/`.
-- Current runtime `datapackage` descriptors for the raw and processed data
+- Current runtime datapackage descriptors for the raw and processed data
   directories.
 
 ## Success test

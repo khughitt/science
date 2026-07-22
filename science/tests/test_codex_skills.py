@@ -33,9 +33,9 @@ def test_command_to_skill_name_uses_science_namespace() -> None:
 
 
 def test_data_skills_document_configured_data_root() -> None:
-    frictionless = (ROOT / "skills/data-management/frictionless.md").read_text(encoding="utf-8")
+    conventions = (ROOT / "skills/data-management/conventions.md").read_text(encoding="utf-8")
     snakemake = (ROOT / "skills/pipelines/snakemake.md").read_text(encoding="utf-8")
-    for text in (frictionless, snakemake):
+    for text in (conventions, snakemake):
         assert "SCIENCE_DATA_ROOT" in text
         assert "data.root" in text
         assert "Never commit files under the resolved data root" in text
