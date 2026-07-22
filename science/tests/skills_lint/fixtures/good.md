@@ -10,3 +10,7 @@ provenance: internal
 ## Companion Skills
 
 - [`good-with-companion.md`](good-with-companion.md) — load when testing valid relative links.
+
+## Halt-On Conditions
+
+- The measurement cannot be shown trustworthy for inference.

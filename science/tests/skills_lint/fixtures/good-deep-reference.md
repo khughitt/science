@@ -11,3 +11,7 @@ provenance: internal
 ## Companion Skills
 
 - [`good.md`](good.md) - shared fixture.
+
+## Halt-On Conditions
+
+- The measurement cannot be shown trustworthy for inference.

@@ -9,7 +9,7 @@ sources: [deseq2, edger]
 
 Practical QA for bulk RNA-Seq cohorts (TCGA, GTEx, recount3, ARCHS4,
 GEO deposits, MMRF CoMMpass). For platform-general conventions see
-[`SKILL.md`](./SKILL.md).
+[`cohort-qa.md`](./cohort-qa.md).
 
 ## Cohort acquisition checklist
 
@@ -94,8 +94,8 @@ batch and is not informative for biology.
 Standard filter: keep genes with ≥ 10 counts in ≥ N samples (where N
 ≈ smallest group size). This drops technical-zero / very-low-expression
 genes without removing biology. Don't filter on detection rate alone
-in cohorts with mixed cell-type composition (see SKILL.md "filter
-steps must commute with the question").
+in cohorts with mixed cell-type composition (see
+[`cohort-qa.md`](./cohort-qa.md), "filter steps must commute with the question").
 
 ## Counts-based testing
 
@@ -103,7 +103,7 @@ For raw count input, the default tools are DESeq2 (R) and limma-voom
 (R). Choose one and stick with it across the analysis — both are
 defensible; mixing produces incomparable effect-size scales.
 
-For meta-analysis across cohorts:
+For meta-analysis across cohorts, the integration-strategy decision (and its identifiability gate) lives in [`data-integration.md`](./data-integration.md); the bulk-specific realizations of those strategies are:
 
 - **Per-cohort DE → aggregate test statistics** is the MM30 default.
   Each cohort's per-gene effect size is z-scored within cohort before
@@ -162,6 +162,7 @@ data/processed/<cohort_id>/
 
 ## Companion Skills
 
-- [`SKILL.md`](SKILL.md) - expression-data hub conventions for cross-platform cohort QA.
+- [`cohort-qa.md`](cohort-qa.md) - platform-general cohort QA (checklist + inspection idioms).
+- [`data-integration.md`](data-integration.md) - cross-cohort aggregation strategy and batch adjustment.
 - [`../../study-design/power-floor-acknowledgement.md`](../../study-design/power-floor-acknowledgement.md) - independent-unit and interval-resolution checks for cohort-level contrasts.
 - [`../../study-design/bias-vs-variance-decomposition.md`](../../study-design/bias-vs-variance-decomposition.md) - separating preprocessing bias from estimator variance.

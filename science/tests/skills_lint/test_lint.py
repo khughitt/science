@@ -67,22 +67,34 @@ def test_missing_companion_skills_section_returns_issue() -> None:
     assert any(issue.kind == "missing-section" and issue.detail == "Companion Skills" for issue in issues)
 
 
-def test_required_halt_on_leaf_with_section_returns_no_issues() -> None:
+def test_measurement_qa_leaf_with_halt_on_returns_no_issues() -> None:
+    # embeddings-manifold-qa.md is archetype: measurement-qa and carries the section.
     path = FIXTURES / "ml" / "embeddings-manifold-qa.md"
-
-    issues = check_halt_on_conditions(path, FIXTURES)
-
-    assert issues == []
+    assert check_halt_on_conditions(path) == []
 
 
-def test_required_halt_on_leaf_without_section_returns_issue() -> None:
-    path = FIXTURES / "bio" / "functional-genomics-qa.md"
-
-    issues = check_halt_on_conditions(path, FIXTURES)
-
+def test_measurement_qa_leaf_without_halt_on_returns_issue(tmp_path: Path) -> None:
+    leaf = tmp_path / "leaf.md"
+    leaf.write_text(
+        "---\nname: x\ndescription: d\narchetype: measurement-qa\nprovenance: internal\n---\n"
+        "# X\n## Companion Skills\n- none\n",
+        encoding="utf-8",
+    )
+    issues = check_halt_on_conditions(leaf)
     assert len(issues) == 1
     assert issues[0].kind == "missing-section"
     assert issues[0].detail == "Halt-On Conditions"
+
+
+def test_non_measurement_qa_leaf_without_halt_on_is_exempt(tmp_path: Path) -> None:
+    # The check must NOT over-fire: a non-measurement-qa leaf needs no Halt-On section.
+    leaf = tmp_path / "leaf.md"
+    leaf.write_text(
+        "---\nname: x\ndescription: d\narchetype: analysis-discipline\nprovenance: internal\n---\n"
+        "# X\n## Companion Skills\n- none\n",
+        encoding="utf-8",
+    )
+    assert check_halt_on_conditions(leaf) == []
 
 
 def test_valid_relative_link_returns_no_issues() -> None:
