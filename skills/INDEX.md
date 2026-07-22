@@ -41,6 +41,7 @@ Do not load every leaf "just in case"; that defeats progressive disclosure.
 ## Data Management
 
 - `data-management`: `skills/data-management/SKILL.md`
+- `data-management-acquisition`: `skills/data-management/acquisition.md`
 - `data-management-conventions`: `skills/data-management/conventions.md`
 - `data-management-frictionless`: `skills/data-management/frictionless.md`
 
