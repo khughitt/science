@@ -764,6 +764,34 @@ prefer `pdftotext`), `-10-026` (`kind:` not `type:`; never emit retired
 > discriminating tail (`…formula-catalogs-are` lost `near-disjoint`). Not a
 > regression; a second-order gap. Wants token-selection or a pre-write prompt.
 
+> **Batch N disposition (2026-07-22).** 16 addressed, 5 deferred, 2 wontfix.
+> Two deferrals need implementer detail:
+>
+> - **`-18-006` (cross-ref indentation).** Grounded to two compounding defects in
+>   `validate/checks/cross_references.py`: `_extract_frontmatter` (:263-274) is a
+>   raw-line parser that only matches `  - ` (2-space) block items, AND the check's
+>   `all_ids` (:337-348) is built from local entities + tasks + archive only — it
+>   has no commons-awareness, so a commons `topic:X` is classified `local` and
+>   flagged broken. The reported symptom is the intersection. Critically, the *other*
+>   ref checker (`refs.py check_refs`, which IS commons-aware via the built graph's
+>   `schema:identifier`) is invoked in `validate` **without `include_body`**
+>   (`validate/checks/references.py:66`), so its graph-based existence check is inert
+>   — `cross_references.py` is the *only* existence check in `validate`. Therefore
+>   YAML-parsing the extractor *alone regresses* (all commons refs, any indent, would
+>   flag), and skipping commons-typed refs regresses local-topic validation (can't
+>   tell a broken local `topic:X` from a valid commons one by shape). The correct fix
+>   is YAML-parse + make `all_ids` commons-aware — either reuse
+>   `refs._load_entity_index_from_graph` (fragile: depends on a freshly-built
+>   `graph.trig`, which `validate` may run without) or integrate a commons-store query
+>   (`graph/commons_sources.collect_referenced_commons_ids`). Own slice; consider
+>   folding the two overlapping ref checkers while there.
+> - **`-08-002` residual gap.** The general Snakefile-reference scanner already ships
+>   (`code/workflow_refs.find_workflow_references`, db31d336/7363b032, tested). If the
+>   false positive recurs on a current pin, the one remaining hole is a Snakefile that
+>   lives *outside* the declared `code_roots` (e.g. repo-root `Snakefile` or a
+>   `workflow/` dir), which `CodeAdapter.discover` never scans. Narrow follow-up: let
+>   workflow-file discovery find Snakefiles regardless of code-root membership.
+
 ---
 
 ## The feedback / post-mortem system itself
@@ -1056,7 +1084,7 @@ closes when it does not close a whole batch.
 | 11 | **Batch C** — inquiry-subsystem design pass. **DONE 2026-07-22** (branch `batch-c-inquiry`, merge `4525887a`): `estimand_type` on InquiryProfile + exporter gating (`-19-007`); `inquiry import` clean-fail via `has_compiled_subgraph` (`-11-031`/`-11-032`); validate `no_inquiry_block` INFO vs `no_inquiry_subgraph` WARN split (`-11-030`); critique-approach report → `entities/interpretations/` (`-19-002`) + `science dag` port doc (`-19-006`). | C ✅ | 1 |
 | 12 | **Batch D** — after auditing `status-vocab-certification`. **DONE 2026-07-22** (branch `batch-d-status`, merge `5ce079ec`): audit found the branch's work already merged via D5 `537f52c1`, so `-11-034` is addressed (per-kind `severity_for_kind`, only hypothesis ERROR; layout_version axis deleted; vocabularies widened) — closed with note; `-12-008` readiness() accepts {done,complete,answered,committed,amended}; `-12-004`/`-12-005` command docs stop prescribing out-of-vocabulary statuses. | D ✅ | branch audit |
 | 13 | **Batch J remainder**, **G**, **H**, **I**. **DONE 2026-07-22**: **H+I** (merge `e8c99927`) — on-request-only availability is analysis-ineligible (readiness not-ready, weight 0, plan_gate refuses; `verify-access --on-request-only`; `_coerce_access` availability-drop bug fixed) + `no-required-capabilities` unscoreable-target coverage (reuses `missing-required-capabilities`) + Step-6 authorization gate; **G** (merge `3f4e961e`) — provenance-aware `missing_source_refs` + tolerant decision-digest parser (`-10-017` already-accurate, `-10-023` doesn't-reproduce, **`-10-024` structured-ledger DEFERRED, still open**); **J-rest** (merge `2239011a`) — 7 pre-registration/design-integrity guidance additions. | J (rest) ✅, G ✅ (−024 deferred), H ✅, I ✅ | — |
-| 14 | **Batch N** — ship-today tier first; then the design-call items; then docs/lore and agent-prompt fixes. **IN PROGRESS**: `-07-001` (tasks edit --related replace + canonical guard) SHIPPED, merge `463f15b5`. 22 singletons remain (code fixes -18-006/-16-003/-08-002/-19-004/-19-015/-12-001; config -11-007; features -16-002/-08-003/-10-004; design -07-002+-08-001 rubric; env-lore -10-001/-002/-003/-005; agent-prompt -10-025/-026/-18-001/-11-008; positive -11-009; project-local decline -18-002; -16-002/-07-002 need grounding). | N (partial) | — |
+| 14 | **Batch N** — 23 singletons. **DONE 2026-07-22** (16 addressed, 5 deferred, 2 wontfix). `-07-001` SHIPPED last turn (merge `463f15b5`). Remaining 22 SHIPPED via merge `dc4c79b8` + prior commits: **shipped this batch** — research-papers PDF-first/subagent-cap/kind:-not-type: (`-18-001`,`-10-025`,`-10-026`), add-theme commitlint-safe commit + evidence-quality disambiguation (`-11-007`,`-11-008`), pipelines-skill sandbox-fetch lore (`-10-001`,`-002`,`-003`), composite version-skew tolerance (`-19-004`), review-pipeline non-graph-target rubric (`-07-002`,`-08-001`), packaged pre-reg template sync (repairs b8667272 drift); **already-fixed** — `-16-003` (fd8c25f3), `-12-001` (bd6b8850), `-08-002` (db31d336/7363b032); **positive** `-11-009` (existing coverage confirmed). **Deferred (5):** `-18-006` cross-ref commons-awareness (validate's only existence check is commons-blind → needs its own slice), `-19-015` slug fail-early (design fork — conflicts with fb-2026-05-30-012's accepted warn-and-proceed; surfaced to user), features `-16-002`/`-08-003`/`-10-004`. **Wontfix (2):** `-18-002` MM30 template drift (project-local), `-10-005` affy pthread EINVAL (environment-specific). | N ✅ | `dc4c79b8` |
 
 Steps 3 and 4 are decisions, not implementation, and can be taken now or at the
 gate; nothing before step 7 depends on either.
