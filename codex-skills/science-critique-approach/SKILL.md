@@ -335,9 +335,12 @@ Save to `entities/interpretations/<slug>-critique.md`:
 <specific actionable items>
 ```
 
-Update the inquiry status to `critiqued`.
-
-Note: this status indicates the inquiry has been through critical review, NOT that it passed. The review report documents what was found.
+Do **not** change the inquiry's `status` to record that it was reviewed —
+`critiqued` is not in the inquiry status vocabulary (it fails status-vocabulary
+validation), and review-state is not a lifecycle state. The critique interpretation
+entity written above **is** the record of review; a critique having been done is
+established by that entity's existence, not by an inquiry status mutation. Leave the
+inquiry's lifecycle `status` unchanged.
 
 ### Step 8: Present findings
 
