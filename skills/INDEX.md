@@ -26,6 +26,7 @@ Do not load every leaf "just in case"; that defeats progressive disclosure.
 - `transcriptomics`: `skills/bio/transcriptomics/SKILL.md`
 - `transcriptomics-bulk-rnaseq-qa`: `skills/bio/transcriptomics/bulk-rnaseq-qa.md`
 - `transcriptomics-cohort-qa`: `skills/bio/transcriptomics/cohort-qa.md`
+- `transcriptomics-data-integration`: `skills/bio/transcriptomics/data-integration.md`
 - `transcriptomics-microarray-qa`: `skills/bio/transcriptomics/microarray-qa.md`
 - `transcriptomics-scrna-qa`: `skills/bio/transcriptomics/scrna-qa.md`
 - `proteomics`: `skills/bio/proteomics/SKILL.md`
