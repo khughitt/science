@@ -699,11 +699,20 @@ class TestEditTask:
         t = edit_task(tmp_path, tasks_dir, "t001", related=["hypothesis:h01"])
         assert t.related == ["hypothesis:h01"]
 
-    def test_edit_related_appends_without_duplicates(self, tmp_path: Path) -> None:
+    def test_edit_related_replaces_not_appends(self, tmp_path: Path) -> None:
+        # --related sets the list to exactly what was passed; it does not accumulate
+        # across edits (there was no way to REMOVE a related ref before) -- fb-2026-07-07-001.
         tasks_dir = _make_tasks_dir(tmp_path)
         edit_task(tmp_path, tasks_dir, "t001", related=["hypothesis:h01", "topic:dnabert2"])
         t = edit_task(tmp_path, tasks_dir, "t001", related=["topic:dnabert2", "task:t010"])
-        assert t.related == ["hypothesis:h01", "topic:dnabert2", "task:t010"]
+        assert t.related == ["topic:dnabert2", "task:t010"]
+
+    def test_edit_related_rejects_non_canonical_ref(self, tmp_path: Path) -> None:
+        # A bare short id (no <kind>: prefix) later fails graph validation; reject it
+        # at edit time (fb-2026-07-07-001).
+        tasks_dir = _make_tasks_dir(tmp_path)
+        with pytest.raises(ValueError, match="canonical"):
+            edit_task(tmp_path, tasks_dir, "t001", related=["h01"])
 
     def test_edit_not_found_raises(self, tmp_path: Path) -> None:
         tasks_dir = _make_tasks_dir(tmp_path)
