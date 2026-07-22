@@ -27,12 +27,26 @@ from science_tool.commons.config import resolve_commons_root
 from science_tool.commons.errors import CommonsEntityError, CommonsError
 from science_tool.commons.query import CommonsQuery
 from science_tool.commons.registry import REGISTRY_FILENAME
+from science_tool.entity_scan import iter_entity_markdown
 from science_tool.validate._helpers import entity_frontmatters
 from science_tool.validate.checks import Check
 from science_tool.validate.context import ValidateContext
 from science_tool.validate.result import Result, Severity
 
 RULE = "commons.owner-collision"
+
+
+def _project_overlay_ids(ctx: ValidateContext) -> set[str]:
+    """Canonical ids the project carries as overlays under ``overlays/``."""
+    overlays_root = ctx.project_root / "overlays"
+    if not overlays_root.is_dir():
+        return set()
+    ids: set[str] = set()
+    for path in iter_entity_markdown(overlays_root):
+        canonical_id = ctx.frontmatter(path).get("id")
+        if isinstance(canonical_id, str) and ":" in canonical_id:
+            ids.add(canonical_id)
+    return ids
 
 
 @Check(section="commons owner collision (local owner shadows a commons canonical)", order=1)
@@ -47,6 +61,7 @@ def check_commons_owner_collision(ctx: ValidateContext) -> Iterator[Result]:
         ("commons-owner-collision-query", commons_root),
         lambda: CommonsQuery(commons_root, warn_stale=False),
     )
+    overlay_ids = _project_overlay_ids(ctx)
 
     for fm in entity_frontmatters(ctx):
         path = fm.get("_path")
@@ -54,6 +69,12 @@ def check_commons_owner_collision(ctx: ValidateContext) -> Iterator[Result]:
             continue  # overlays (overlays/) are the correct form; skip them
         canonical_id = fm.get("id")
         if not isinstance(canonical_id, str) or ":" not in canonical_id:
+            continue
+        if canonical_id in overlay_ids:
+            # The project ALSO holds an overlay for this id: that is the
+            # overlay/local-duplicate class (`commons.overlay-local-duplicate`),
+            # whose remedy is "delete the local copy", not this check's "convert
+            # to an overlay" (one already exists). Defer so the two never conflict.
             continue
         try:
             record = query.show(canonical_id)
