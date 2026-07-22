@@ -47,6 +47,17 @@ def test_readiness_weight_ordering_and_flagged_default() -> None:
     assert "readiness-unresolved" in f_unk
 
 
+def test_readiness_weight_on_request_only_is_analysis_ineligible() -> None:
+    """An on-request-only dataset scores 0 -- never a viable source, and below even
+    withdrawn/embargoed (fb-2026-07-17-010). It must NOT fall through to the 0.1
+    unresolved default, which would rank it above withdrawn."""
+    w_req, flags = readiness_weight(_ext("controlled", True, availability="on-request-only"))
+    w_withdrawn, _ = readiness_weight(_ext("controlled", True, availability="withdrawn"))
+    assert w_req == 0.0
+    assert w_req < w_withdrawn
+    assert flags == []
+
+
 def _write(p: Path, text: str) -> None:
     p.parent.mkdir(parents=True, exist_ok=True)
     p.write_text(text, encoding="utf-8")

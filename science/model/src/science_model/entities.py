@@ -939,6 +939,14 @@ class DatasetEntity(ProjectEntity):
             return Readiness(ready=False, state="missing-access-block")
         if access.availability == "withdrawn":
             return Readiness(ready=False, state="withdrawn")
+        if access.availability == "on-request-only":
+            # No followable access procedure -> analysis-ineligible regardless of the
+            # verified flag or any exception mode (fb-2026-07-17-010).
+            return Readiness(
+                ready=False,
+                state="on-request-only",
+                detail="analysis-ineligible: available only by author request, no followable procedure",
+            )
         if access.availability == "embargoed":
             detail = f"available_after: {access.available_after}" if access.available_after else ""
             return Readiness(ready=False, state="embargoed", detail=detail)

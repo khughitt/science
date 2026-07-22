@@ -155,6 +155,16 @@ def test_dataset_external_withdrawn_is_not_ready():
     assert r.state == "withdrawn"
 
 
+def test_dataset_external_on_request_only_is_not_ready_even_if_verified():
+    """'available on reasonable request' has no followable access procedure -- it is
+    analysis-ineligible regardless of the verified flag (fb-2026-07-17-010 /
+    fb-2026-07-07-003). It never reads as ready, so ranking/coverage exclude it."""
+    ds = _external_dataset(AccessBlock(level="controlled", verified=True, availability="on-request-only"))
+    r = ds.readiness()
+    assert r.ready is False
+    assert r.state == "on-request-only"
+
+
 def test_dataset_external_exception_scope_reduced_is_ready():
     ds = _external_dataset(
         AccessBlock(

@@ -67,6 +67,10 @@ _STATE_WEIGHT: dict[str, float] = {
     "acquiring": 0.4,
     "embargoed": 0.05,
     "withdrawn": 0.05,
+    # Analysis-ineligible: no followable access procedure, so never a viable source
+    # (below withdrawn/embargoed). Weight 0 zeros the whole priority score
+    # (fb-2026-07-17-010 / fb-2026-07-07-003).
+    "on-request-only": 0.0,
 }
 _UNVERIFIED_LEVEL_WEIGHT: dict[str, float] = {
     "public": 0.7,

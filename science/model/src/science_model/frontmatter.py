@@ -392,6 +392,8 @@ def _coerce_access(fm: dict) -> AccessBlock | None:
         repro_raw = raw.get("reproducibility") or {}
         return AccessBlock(
             level=cast(_AccessLevel, raw.get("level", "public")),
+            availability=raw.get("availability", "available"),
+            available_after=raw.get("available_after", ""),
             verified=bool(raw.get("verified", False)),
             verification_method=raw.get("verification_method", ""),
             last_reviewed=raw.get("last_reviewed", ""),

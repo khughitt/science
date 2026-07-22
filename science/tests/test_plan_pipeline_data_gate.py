@@ -56,6 +56,21 @@ def test_step2b_halts_on_unverified_external(tmp_path: Path) -> None:
     assert any("ext_bad" in h for h in halts)
 
 
+def test_step2b_halts_on_on_request_only_even_when_verified(tmp_path: Path) -> None:
+    """An on-request-only dataset can never satisfy a data-availability requirement,
+    even if someone marked it verified -- it has no followable access procedure
+    (fb-2026-07-07-003)."""
+    (tmp_path / "entities" / "datasets").mkdir(parents=True, exist_ok=True)
+    (tmp_path / "entities" / "datasets" / "req_only.md").write_text(
+        '---\nid: "dataset:req_only"\nkind: "dataset"\ntitle: "ReqOnly"\norigin: "external"\n'
+        'access: {level: "controlled", availability: "on-request-only", verified: true}\n---\n',
+        encoding="utf-8",
+    )
+    pass_, halts = check_inputs(tmp_path, ["dataset:req_only"])
+    assert pass_ is False
+    assert any("req_only" in h and "on-request-only" in h for h in halts)
+
+
 def test_step2b_allows_planned_public_retrieval_work_package(tmp_path: Path) -> None:
     _seed_mixed_inputs(tmp_path)
     (tmp_path / "entities" / "datasets" / "ext_public.md").write_text(
