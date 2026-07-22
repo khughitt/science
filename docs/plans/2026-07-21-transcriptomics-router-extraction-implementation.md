@@ -122,8 +122,8 @@ Expected: PASS (3 passed).
 
 - [ ] **Step 6: Run the full lint test module, ruff, pyright, and the whole-tree skills lint**
 
-Run: `cd science && uv run --frozen pytest tests/skills_lint/test_lint.py -q && uv run ruff check src/science_tool/skills_lint/lint.py && uv run pyright && uv run --frozen science skills lint --root ../skills`
-Expected: all pass; `skills lint` exits 0. (Confirmed precondition: every current `archetype: measurement-qa` leaf in `../skills` already carries `## Halt-On Conditions`, so no shipped leaf is newly flagged.)
+Run: `cd science && uv run --frozen pytest tests/skills_lint/test_lint.py -q && uv run ruff check && uv run pyright && uv run --frozen science skills lint --root ../skills`
+Expected: all pass; `skills lint` exits 0. (`uv run ruff check` — no path — lints the whole configured `science` package, covering both the modified `lint.py` and `test_lint.py`. Confirmed precondition: every current `archetype: measurement-qa` leaf in `../skills` already carries `## Halt-On Conditions`, so no shipped leaf is newly flagged.)
 
 - [ ] **Step 7: Commit**
 
@@ -155,9 +155,9 @@ Create the single-cohort ingest/QA leaf from the hub's universal pre-flight chec
 - Produces: file `cohort-qa.md`, `name: transcriptomics-cohort-qa`, `archetype: measurement-qa`. Referenced later by the router (Task 4, backticked), the modality leaves (Task 5, markdown links), and Leaf B (Task 3, backticked companion).
 - Consumes: hub content from `skills/bio/transcriptomics/SKILL.md` (checklist items 1–4/5-factual/6 at lines 31–73; idioms at lines 75–129).
 
-- [ ] **Step 1: Write the leaf**
+- [ ] **Step 1: Write the leaf (transcribe the complete file below verbatim)**
 
-Create `skills/bio/transcriptomics/cohort-qa.md`. Use exactly this frontmatter and heading skeleton (measurement-qa template order); author each section from the mapped hub content, honoring every Global Constraint (axis-safe metric, primary-expression-matrix phrasing, backticked Companion paths):
+Create `skills/bio/transcriptomics/cohort-qa.md` with **exactly** this content — it is final, not a skeleton. Transcribe it as-is (the fenced block is the file body; do not include the outer ` ```markdown ` fence):
 
 ```markdown
 ---
@@ -173,53 +173,100 @@ Answers: is this single expression cohort trustworthy for downstream inference b
 
 ## Sources & ingestion/construction
 
-<Public deposits: GEO, ArrayExpress, MMRF, HCA, recount, ARCHS4. The primary
-expression matrix at ingest — AnnData `.X`/`.raw`/`.layers`, or a tabular
-genes×samples deposit.>
+Public deposits — GEO, ArrayExpress, MMRF CoMMpass, HCA, recount3, ARCHS4 —
+each carry idiosyncrasies: undocumented normalisation, mislabelled samples,
+silent-failure modes that look plausible until they invalidate inference. The
+primary expression matrix arrives either as an AnnData object (inspect `.X`,
+and check `.raw` and `.layers["counts"]`) or as a tabular genes×samples deposit
+(CSV/TSV, which has no `.X`). Every deposit's README describes what *should* be
+there; this leaf is about verifying what *is* there before the cohort enters
+analysis.
 
 ## Pre-flight checklist
 
-<Hub items 1–4 and 6 as `- [ ]` checks, plus the factual half of item 5:
-- [ ] primary expression matrix scale/content (raw counts / log-normalised /
-      z-scored / TPM-like). Detect matrix orientation FIRST. Include the
-      inspection code block CONDITIONAL on AnnData input (`.X`/`.raw`/`.layers`);
-      a tabular genes×samples deposit has no `.X`.
-- [ ] gene-identifier axis resolved to a canonical ID layer (symbol churn, Excel
-      corruption).
-- [ ] sample identifier defined; duplicates collapsed/excluded.
-- [ ] cohort definition columns populated for every sample used.
-- [ ] normalization state recorded and verified (the factual half of hub item 5;
-      the aggregation-compatibility DECISION belongs to data-integration.md).
-- [ ] single-cohort batch PCA (batch vs biology separation).>
+Answer all of these in writing before running any downstream analysis:
+
+- [ ] **Primary expression matrix — what is it actually?** Raw counts,
+      log-normalised, batch-corrected, z-scored, or residualised? **Detect
+      matrix orientation first** (which axis is samples vs genes — `obs` rows
+      vs `var` rows for AnnData); a surprising fraction of deposits silently
+      change the matrix contents between revisions. For AnnData input, inspect
+      the matrix directly (a tabular genes×samples deposit has no `.X` — inspect
+      the loaded array instead):
+      ```python
+      # AnnData only.
+      sub = a[:200].X.toarray() if sparse.issparse(a.X) else a.X[:200]
+      print(f"min={sub.min():.3f}, max={sub.max():.3f}, integer-like={(sub == sub.astype(int)).all()}")
+      ```
+      Integer + max in thousands → raw counts; float + max ≤ ~15 →
+      log-normalised; float symmetric around 0 → z-scored/residualised; float +
+      max in thousands → linear normalised (TPM-like). Many AnnData deposits
+      keep transformed values in `.X` and raw counts in `.layers["counts"]` or
+      `.raw` — check both.
+- [ ] **Gene-identifier axis.** Symbols (HGNC for human), Ensembl IDs, RefSeq,
+      probe IDs, or "gene names" Excel has corrupted (`SEPT1` → `1-Sep`)?
+      Resolve to a canonical ID layer at ingest. Symbol churn is real —
+      `MARCH1` is now `MARCHF1`.
+- [ ] **Sample identifier.** Patient, cell, library, technical replicate, or
+      run? Collapse or exclude duplicates. GEO `geo_accession` is
+      unique-per-sample; `Sample_title` is not. MMRF samples can have multiple
+      time points per patient.
+- [ ] **Cohort definition.** Diseased vs healthy, treated vs untreated, primary
+      vs metastasis? Confirm the stage / treatment / disease columns are
+      populated for every sample you intend to use.
+- [ ] **Normalization state recorded.** Record and verify what normalisation the
+      depositor applied. Whether that normalisation is *compatible* with a
+      particular meta-analysis is a cross-cohort decision — see
+      `./data-integration.md`.
+- [ ] **Single-cohort batch PCA.** Quick PCA coloured by batch, run, and
+      biological group. If batch separates more strongly than biology, you have
+      a confound; the cross-experiment remedy is a `./data-integration.md`
+      decision, not a single-cohort one.
 
 ## QA metrics
 
-<Table making the inspection checks concrete. Metric examples:
-`n_unique(sample_id)` equals the length of the DETECTED sample/cell axis (rows
-for obs-as-rows AnnData, columns for a genes×samples matrix); integer-like
-fraction of the primary expression matrix; fraction of samples dropped by a
-filter per stratification group. Columns: Metric | Passing range | Meaning of
-failure. Detect orientation before any per-axis metric.>
+Detect matrix orientation before computing any per-axis metric — never assume
+`.X.shape[0]` is samples.
+
+| Metric | Passing range | Meaning of failure |
+|---|---|---|
+| `n_unique(sample_id)` vs length of the detected sample/cell axis | equal | non-unique sample IDs → hidden replicates/duplicates that bias per-sample statistics |
+| Integer-like fraction of the primary expression matrix (200-row sample) | ≈1.0 for claimed raw counts; ≈0 for claimed transformed | matrix scale contradicts the README → wrong transformation assumed downstream |
+| Per-group fraction of samples dropped by a QC filter | comparable across stratification groups | a group over-represented in the dropped fraction → filter is confounded with the question |
 
 ## Common failure modes
 
-<From the three idioms' failure content: README-says-vs-matrix-is mismatch;
-unlogged preprocessing decisions (no sidecar); detection-rate / `mean ± 3 SD` /
-aggregated-doublet filters that do not commute with the stratifying question.>
+- **README says vs matrix is.** Documentation describes "what should be there,"
+  not "what is there." Treat it as a hypothesis: if the README says counts are
+  integer, sample 200 rows and check; if it says samples are unique, check
+  `n_unique` against the detected sample axis; if it says cells are QC-filtered,
+  check the per-cell metric distributions yourself.
+- **Unlogged preprocessing decisions.** Filter thresholds, transformation
+  choices, batch handling, and sample exclusions left without a provenance
+  sidecar cannot be reconstructed or audited later.
+- **Filters that don't commute with the question.** Detection-rate-per-gene
+  filters drop genes low in some groups but high in others (removing biology,
+  e.g. immune markers in a non-immune-enriched cohort); `mean ± 3 SD` sample QC
+  drops more samples from groups whose mean is shifted (treatment-confounded
+  filtering); doublet calling on aggregated batches masks batch-specific rates.
+  When in doubt, filter once on the full cohort, log the mask, and check that no
+  group is over-represented in the dropped fraction.
 
 ## Halt-On Conditions
 
-<e.g. the contents of the primary expression matrix (or the applicable AnnData
-layer) cannot be determined from data + metadata; sample identifiers non-unique
-with no collapse rule; a filter drops a stratification group asymmetrically with
-no logged mask.>
+- The contents of the primary expression matrix (or the applicable AnnData
+  layer) cannot be determined from the data plus metadata.
+- Sample identifiers are non-unique and no collapse/exclusion rule is defined.
+- A QC filter drops a stratification group asymmetrically and no filter mask was
+  logged.
 
 ## Minimum output package
 
-    <cohort-qa-output-dir>/
-      summary.md
-      cohort_audit.json    # raw + after-each-filter counts, dropped patients + reasons,
-                           # gene-universe size, normalization status, batch schema
+    cohort-qa/
+      summary.md          # what was checked, which Halt-On Conditions were evaluated, verdict
+      cohort_audit.json   # raw + after-each-filter sample/cell/patient counts; patients
+                          # dropped with reasons; gene-universe size at QC pass;
+                          # normalisation status; batch-metadata schema
 
 ## Success test
 
@@ -232,8 +279,6 @@ Does the produced QA package contain the named files, and does the summary state
 - `./bulk-rnaseq-qa.md`, `./microarray-qa.md`, `./scrna-qa.md` — platform-specific QA.
 - `../../data-management/frictionless.md` — Data-Package substrate for the cohort_audit sidecar.
 ```
-
-Replace every `<…>` placeholder with authored content. Do NOT leave angle-bracket placeholders in the committed file.
 
 - [ ] **Step 2: Add the INDEX machine entry**
 
@@ -248,13 +293,15 @@ In `skills/INDEX.md`, insert this line immediately after the `transcriptomics-bu
 Run: `cd science && uv run --frozen science skills lint --root ../skills`
 Expected: exit 0 (no `missing-section`, `missing-archetype`, `missing-provenance`, `broken-relative-link`, or `missing-index-entry` for `cohort-qa.md`).
 
-Then confirm all eight `measurement-qa` headings are present and there are no leftover placeholders:
+Then run these **fail-closed** guards (each `exit 1`s on violation) — confirm all eight `measurement-qa` headings are present and no angle-bracket placeholder survived transcription:
 
 ```bash
-rg -n '^## (Sources & ingestion/construction|Pre-flight checklist|QA metrics|Common failure modes|Halt-On Conditions|Minimum output package|Success test|Companion Skills)$' skills/bio/transcriptomics/cohort-qa.md
-rg -n '<[a-z]' skills/bio/transcriptomics/cohort-qa.md && echo "PLACEHOLDER LEFT" || echo "no placeholders"
+n=$(rg -c '^## (Sources & ingestion/construction|Pre-flight checklist|QA metrics|Common failure modes|Halt-On Conditions|Minimum output package|Success test|Companion Skills)$' skills/bio/transcriptomics/cohort-qa.md)
+[ "$n" = "8" ] || { echo "EXPECTED 8 measurement-qa headings, got ${n:-0}"; exit 1; }
+if rg -n '<[^>]+>' skills/bio/transcriptomics/cohort-qa.md; then echo "ANGLE-BRACKET PLACEHOLDER LEFT"; exit 1; fi
+echo "slots complete, no placeholders"
 ```
-Expected: 8 heading matches; "no placeholders".
+Expected: `slots complete, no placeholders` (and a zero exit). The `<[^>]+>` pattern catches any `<…>` regardless of first character; the guard `exit 1`s if one is found. (`rg -c` prints the count of matching lines; the authored body contains no `<…>` sequences, so the placeholder guard finds nothing.)
 
 - [ ] **Step 4: Commit**
 
@@ -282,9 +329,9 @@ Create the multi-cohort integration-decision leaf from the hub's "Cross-platform
 - Produces: file `data-integration.md`, `name: transcriptomics-data-integration`, `archetype: analysis-discipline`. Referenced by the router (Task 4), Leaf A (Task 2, backticked), and the modality leaves (Task 5).
 - Consumes: hub content at `skills/bio/transcriptomics/SKILL.md` lines 131–151 (3 strategies) and item 5 at lines 65–69 / boundary note in the design.
 
-- [ ] **Step 1: Write the leaf**
+- [ ] **Step 1: Write the leaf (transcribe the complete file below verbatim)**
 
-Create `skills/bio/transcriptomics/data-integration.md`. Use exactly this frontmatter and the `analysis-discipline` template headings (verbatim, in order):
+Create `skills/bio/transcriptomics/data-integration.md` with **exactly** this content — it is final, not a skeleton. Transcribe it as-is (do not include the outer ` ```markdown ` fence):
 
 ```markdown
 ---
@@ -300,51 +347,83 @@ Answers: regardless of the pooling method, what strategy and identifiability che
 
 ## Triggering condition
 
-<Before designing per-cohort preprocessing for any analysis that pools ≥2
-cohorts/platforms.>
+Before designing per-cohort preprocessing for any analysis that pools ≥2
+cohorts or platforms — microarray + RNA-seq, multiple GEO series, or bulk +
+single-cell. The strategy choice cascades into preprocessing, so it must be
+committed first, not reverse-engineered afterward.
 
 ## Required reasoning / check / precommitment
 
-<(a) name the aggregation strategy; (b) run the identifiability check — is the
-biological contrast fully aliased with cohort/platform/batch?; (c) name the
-technical-artifact adjustment and its assumptions.>
+Before any per-cohort preprocessing, commit in writing:
+
+- **(a) the aggregation strategy** — one of the three in the decision rule below.
+- **(b) the identifiability check** — is the biological contrast fully aliased
+  with cohort, platform, or batch? For the contrast of interest, list which
+  cohorts/platforms contribute each level.
+- **(c) the technical-artifact adjustment and its assumptions** — which of
+  ComBat / RUV / SVA / mixed-effects / exclusion, and whether the data actually
+  satisfy that method's prerequisites.
 
 ## Decision rule or reasoning criteria
 
-<The strategy taxonomy (these are NOT interchangeable):
-1. within-cohort association testing → aggregate test statistics (run per
-   dataset/cohort — cohorts sharing a platform still carry cohort-specific
-   artifacts; Stouffer/Fisher/metafor; z-score effects before pooling);
-2. common-reference normalization (rank/percentile/z-score) — loses magnitude;
-3. hierarchical models with platform random effects — compute/assumption-heavy.
-Batch-adjustment branches and their assumptions: ComBat (needs known batch
-labels, assumes batch-vs-biology not confounded); RUV (needs suitable
-negative-control genes or replicate samples); SVA (estimates latent factors,
-assumes separable from the contrast); mixed-effects (platform as random effect);
-exclusion. The chosen strategy dictates which is admissible.>
+**Aggregation strategies (not interchangeable):**
+
+1. **Within-cohort association testing → aggregate test statistics.** Run
+   DESeq2 / limma / logistic / Cox **per dataset/cohort** — cohorts sharing a
+   platform still carry cohort-specific technical artifacts, so pool at the
+   statistic level, not the sample level. Aggregate p-values (Stouffer's,
+   Fisher's) or z-scored effects (random-effects metafor). Z-score per-cohort
+   effects before pooling when scales differ.
+2. **Common-reference normalisation** (gene-set rank, percentile, z-score)
+   before pooling. Enables direct pooling but loses platform-specific magnitude.
+3. **Hierarchical models with platform random effects.** The most principled;
+   compute- and assumption-heavy. Often worth it for high-stakes confirmatory
+   inference.
+
+**Batch-adjustment branches (each with its prerequisite — the chosen strategy
+dictates which is admissible):**
+
+- **ComBat** — needs known batch labels; assumes batch is not confounded with
+  biology.
+- **RUV** — needs suitable negative-control genes or replicate samples.
+- **SVA** — estimates latent factors; assumes they are separable from the
+  biological contrast.
+- **Mixed-effects** — platform/cohort as a random effect.
+- **Exclusion** — drop the confounded cohort when no adjustment is admissible.
 
 ## Outcomes (pass / fail / indeterminate, or branch/threshold)
 
-<Strategy committed (proceed) / non-identifiable (halt) /
-admissible-but-assumption-fragile (proceed with stated limitation).>
+- **Strategy committed** → proceed to per-cohort preprocessing under it.
+- **Non-identifiable** → halt (see below); no adjustment recovers an
+  unconfounded effect.
+- **Admissible but assumption-fragile** → proceed, reporting the limitation
+  explicitly.
 
 ## Halt / escalation
 
-<Halt when cohort/platform/batch is completely aliased with the biological
-contrast (no adjustment recovers an unconfounded effect — non-identifiable, not
-fixable by ComBat/RUV/SVA). Escalate when the only admissible strategy rests on
-assumptions the data cannot support (e.g. no valid control genes for RUV).>
+- **Halt** when cohort/platform/batch is completely aliased with the biological
+  contrast — the design is non-identifiable, and no ComBat/RUV/SVA adjustment
+  can recover an unconfounded effect (adjustment removes the confound *and* the
+  signal together).
+- **Escalate** when the only admissible strategy rests on assumptions the data
+  cannot support — no valid negative-control genes for RUV, no replicates, or
+  latent factors not separable from the contrast.
 
 ## Required evidence & artifacts
 
-<The committed strategy recorded in the pre-registration; the identifiability
-assessment; the adjustment method + its assumption check.>
+- The committed aggregation strategy, recorded in the pre-registration before
+  preprocessing.
+- The identifiability assessment (which cohorts/platforms contribute each
+  contrast level).
+- The chosen adjustment method and its explicit assumption check.
 
 ## Permitted reporting language
 
-<An effect pooled under a fragile-assumption or non-recoverable-confound path
-must be reported with that limitation, not as a clean cross-cohort effect;
-"harmonized" is not "confound-free".>
+- An effect pooled under a fragile-assumption or non-recoverable-confound path
+  must be reported **with that limitation**, not as a clean cross-cohort effect.
+- "Harmonised" describes a normalisation step; it is **not** a synonym for
+  "confound-free." Do not imply the confound was removed unless the
+  identifiability check supports it.
 
 ## Success test
 
@@ -359,8 +438,6 @@ Was the required reasoning/precommitment carried out before interpretation, and 
 - `../../study-design/SKILL.md` — pre-registering the committed strategy.
 ```
 
-Replace every `<…>` placeholder with authored content; leave no angle-bracket placeholders.
-
 - [ ] **Step 2: Add the INDEX machine entry**
 
 In `skills/INDEX.md`, insert immediately after the `transcriptomics-cohort-qa` entry (added in Task 2) and before `transcriptomics-microarray-qa`:
@@ -374,14 +451,16 @@ In `skills/INDEX.md`, insert immediately after the `transcriptomics-cohort-qa` e
 Run: `cd science && uv run --frozen science skills lint --root ../skills`
 Expected: exit 0. `data-integration.md` is `analysis-discipline`, so the archetype-derived Halt-On check correctly does **not** require a `## Halt-On Conditions` heading (its `## Halt / escalation` slot is a template convention, not a lint-enforced heading).
 
-Then confirm the nine `analysis-discipline` headings and no placeholders:
+Then run these **fail-closed** guards (each `exit 1`s on violation) — confirm the nine `analysis-discipline` headings, the within-cohort phrasing, and no surviving placeholder:
 
 ```bash
-rg -n '^## (Triggering condition|Required reasoning / check / precommitment|Decision rule or reasoning criteria|Outcomes \(pass / fail / indeterminate, or branch/threshold\)|Halt / escalation|Required evidence & artifacts|Permitted reporting language|Success test|Companion Skills)$' skills/bio/transcriptomics/data-integration.md
-rg -n 'within-platform' skills/bio/transcriptomics/data-integration.md && echo "WRONG: within-platform" || echo "within-cohort OK"
-rg -n '<[a-z]' skills/bio/transcriptomics/data-integration.md && echo "PLACEHOLDER LEFT" || echo "no placeholders"
+n=$(rg -c '^## (Triggering condition|Required reasoning / check / precommitment|Decision rule or reasoning criteria|Outcomes \(pass / fail / indeterminate, or branch/threshold\)|Halt / escalation|Required evidence & artifacts|Permitted reporting language|Success test|Companion Skills)$' skills/bio/transcriptomics/data-integration.md)
+[ "$n" = "9" ] || { echo "EXPECTED 9 analysis-discipline headings, got ${n:-0}"; exit 1; }
+if rg -n 'within-platform' skills/bio/transcriptomics/data-integration.md; then echo "WRONG: within-platform (strategy 1 must be within-cohort)"; exit 1; fi
+if rg -n '<[^>]+>' skills/bio/transcriptomics/data-integration.md; then echo "ANGLE-BRACKET PLACEHOLDER LEFT"; exit 1; fi
+echo "slots complete, within-cohort, no placeholders"
 ```
-Expected: 9 heading matches; "within-cohort OK"; "no placeholders".
+Expected: `slots complete, within-cohort, no placeholders` (zero exit).
 
 - [ ] **Step 4: Commit**
 
@@ -643,18 +722,22 @@ Expected: FAIL — the committed `codex-skills/science-skill-development/{skill-
 
 Run: `cd science && uv run --frozen python ../scripts/generate_codex_skills.py`
 
-Then confirm **exactly two** mirror files changed and no `bio/` leaf appeared in the mirror:
+Then assert (**fail-closed**) that the changed-file set under `codex-skills/` is **exactly** the two doctrine resources — no more, no fewer. This is what proves no additional mirrored leaf was created (a mirrored `bio/transcriptomics/*.md` would show up here as an extra path; a content-grep for the leaf *names* cannot prove this, because Task 6 deliberately writes those names into the two doctrine resources). Run from the worktree root (you are already in it — no absolute path):
 
 ```bash
-git -C /mnt/ssd/Dropbox/science/.worktrees/skills-phase4-transcriptomics status --porcelain codex-skills/
-rg -l 'transcriptomics-cohort-qa|transcriptomics-data-integration' codex-skills/ || echo "no bio leaf mirrored (expected)"
+changed=$(git status --porcelain codex-skills/ | sed 's/^...//' | sort)
+expected=$(printf '%s\n' \
+  codex-skills/science-skill-development/skill-authoring.md \
+  codex-skills/science-skill-development/skill-taxonomy.md | sort)
+[ "$changed" = "$expected" ] || { echo "UNEXPECTED codex-skills change set:"; echo "$changed"; exit 1; }
+echo "exactly the two doctrine mirror files changed — no extra mirrored leaf"
 ```
-Expected: only `codex-skills/science-skill-development/skill-authoring.md` and `.../skill-taxonomy.md` are modified. (The two doctrine mentions of the new leaf *names* may appear in those two mirror files as regenerated text — that is expected; what must NOT appear is a mirrored `bio/transcriptomics/*.md` leaf file.)
+Expected: `exactly the two doctrine mirror files changed — no extra mirrored leaf` (zero exit). If the set differs (e.g. a `bio/` leaf was unexpectedly mirrored, or only one doctrine file regenerated), the guard `exit 1`s.
 
 - [ ] **Step 5: Verify the whole tree is green**
 
-Run: `cd science && uv run --frozen pytest -q && uv run --frozen science skills lint --root ../skills`
-Expected: full pytest passes (including `test_committed_codex_skills_match_fresh_generation`); `skills lint` exit 0.
+Run: `cd science && uv run --frozen pytest -q && uv run ruff check && uv run pyright && uv run --frozen science skills lint --root ../skills`
+Expected: full pytest passes (including `test_committed_codex_skills_match_fresh_generation`); ruff and pyright clean (Task 1 changed Python, so the final gate re-runs them); `skills lint` exit 0.
 
 - [ ] **Step 6: Commit**
 
@@ -685,7 +768,7 @@ two skill-development codex mirror files."
 - Codex mirror (exactly two files, bio/ not mirrored, green gate) → Task 6. ✅
 - Safety invariants (no dropped knowledge, no stale labels, router carries no methodology, archetype-slot completeness, archetype-derived Halt-On live, green gate) → verification steps in Tasks 1–6. ✅
 
-**Placeholder scan:** Leaf tasks intentionally contain `<…>` in the *skeletons* the implementer fills; each such task has an explicit "replace every `<…>`; leave no angle-bracket placeholders" instruction and a `rg '<[a-z]'` guard step. No plan-level TODO/TBD remain.
+**Placeholder scan:** The two leaf tasks now ship **complete final Markdown** to transcribe verbatim — no `<…>` skeletons, no design invention deferred to implementation time. Each leaf task additionally carries a fail-closed guard (`rg '<[^>]+>'` → `exit 1`) that catches any angle-bracket placeholder regardless of first character, as a transcription-drift net. No plan-level TODO/TBD remain.
 
 **Type/name consistency:** `check_halt_on_conditions(path)` single-arg signature is defined in Task 1 and every caller (call site + tests) is updated in the same task. Leaf `name:` values (`transcriptomics-cohort-qa`, `transcriptomics-data-integration`) and file paths are used identically across INDEX entries (Tasks 2–3), router table (Task 4), retargeting links (Task 5), and doctrine text (Task 6).
 
