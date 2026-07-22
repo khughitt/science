@@ -60,6 +60,6 @@ order; the leaves cover the mechanics.
 
 ## Companion Skills
 
-- [`../data-management/SKILL.md`](../data-management/SKILL.md) — input-data conventions; pipelines should read from `data/raw/` and write to `data/processed/` or `results/`.
+- [`../data-management/conventions.md`](../data-management/conventions.md) — input-data conventions; pipelines should read from `data/raw/` and write to `data/processed/` or `results/`.
 - [`../research-package/research-package-spec.md`](../research-package/research-package-spec.md) — terminal rule should produce a research package.
 - [`../statistics/SKILL.md`](../statistics/SKILL.md) — statistical decisions that should be made before pipeline construction.

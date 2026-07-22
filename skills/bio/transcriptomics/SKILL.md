@@ -52,7 +52,7 @@ compose order when leaves combine) with no methodology read from this router.
 ## Companion Skills
 
 - `../../statistics/SKILL.md` — statistical modeling that consumes QA'd cohorts.
-- `../../data-management/SKILL.md` — generic data conventions.
+- `../../data-management/conventions.md` — generic data conventions.
 - `../../data-management/frictionless.md` — Data-Package substrate for the cohort_audit sidecar.
 - `../genomics/SKILL.md` — mutation cohorts often paired with expression cohorts.
 - `../../literature/SKILL.md` — field-consensus context for QA thresholds.
