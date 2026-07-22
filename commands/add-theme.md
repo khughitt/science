@@ -56,10 +56,21 @@ options.
 - Choose `theme_kind` from the effective `theme_kind` enum.
 - Choose `theme_scope` from the effective `theme_scope` enum.
 
+When more than one enum value fits, the **more specific** value wins. In
+particular, disambiguate the two that overlap most:
+
+- `theme_kind: methodological` — how *we* work: research process, tooling,
+  review practice, the mechanics of evidence *handling*.
+- `theme_kind: evidence-quality` — how *trustworthy the substrate of a claim*
+  is: whether claims rest on verifiable vs curatorial evidence. A theme about
+  the reliability of what a claim stands on is `evidence-quality`, not
+  `methodological`, even though both touch "evidence".
+
 Default to:
 
 - `theme_kind: methodological` only when the theme concerns research process,
-  evidence handling, tooling, or review practice.
+  tooling, or review practice — and no more specific value (e.g.
+  `evidence-quality`, `biological`, `translational`) fits better.
 - `theme_scope: project` unless the theme is intentionally shared across a
   federation or should be promoted to commons later.
 
@@ -152,7 +163,7 @@ does not itself support or dispute a proposition.
 2. If the theme is `cross-project`, note candidate commons promotion or
    federation reconciliation work, but do not promote it automatically.
 3. Run `uv run science validate --strict`.
-4. Commit: `git add -A && git commit -m "theme: add <short title>"`
+4. Commit: `git add -A && git commit -m "docs(theme): add <short title>"`. The `docs(theme):` prefix is commitlint-conventional compliant out of the box; a bare `theme:` type is **not** in the standard commitlint enum and fails hard in software-profile projects (husky + commitlint). Use `theme:` only if your project's commitlint config explicitly allows it as a custom type.
 
 ## Process Reflection
 

@@ -143,7 +143,7 @@ This command runs in two roles. Determine which you are before proceeding.
 
 1. **Parse** the user input into a list of paper references. Let `N` be the count.
 2. **Pre-dispatch check:** For each paper, look at `entities/papers/` for an existing summary (fuzzy match on title/author/DOI). If any may exist, ask the user whether to overwrite, skip, or supplement — resolve per-paper, then carry each decision into that paper's subagent prompt.
-3. **Dispatch** the `paper-researcher` subagent *once per paper*. When `N > 1`, issue all Agent calls **in parallel** (multiple tool uses in a single message) so they overlap — the shared rate limiter in `science paper-fetch` keeps per-host traffic polite automatically.
+3. **Dispatch** the `paper-researcher` subagent *once per paper*. When `N > 1`, issue Agent calls **in parallel** (multiple tool uses in a single message) so they overlap — the shared rate limiter in `science paper-fetch` keeps per-host traffic polite automatically. **Cap each wave at ~5 concurrent subagents.** Larger waves stall on PDF-heavy work: a subagent that renders a big PDF through the Read tool can hang with "no progress for 600s". For `N > 5`, dispatch in waves of ~5 and steer each subagent to extract text with `pdftotext` (Read only for specific figures), per Source Strategy.
    - `subagent_type: paper-researcher`
    - `description`: a short identifier for that paper
    - `prompt`: the single paper's reference + its overwrite decision + any project-specific context the subagent would not otherwise discover
@@ -164,7 +164,13 @@ Additionally:
 
 ## Source Strategy
 
-Retrieval is centralized through `science paper-fetch`, which handles tiered source probing (Crossref → Unpaywall → arXiv → bioRxiv/medRxiv → Europe PMC → direct OA PDF) with cross-process rate limiting. This avoids open-ended scavenging and keeps parallel subagents polite to the same servers.
+**If the user supplied a local PDF path, start here — this branch short-circuits the rest of Source Strategy.** Do not run `science paper-fetch` for retrieval, and never treat a `paywalled` / `not_found` status as a stop condition when a PDF is already in hand: the full text is the PDF.
+
+1. Prefer `pdftotext <path> -` (or `pdftotext <path> out.txt`) to extract the body text; use the Read tool only for specific figures/tables you actually need. Reading a large PDF through the Read tool renders every page as an image and can stall a subagent (see the concurrency cap in Dispatch Strategy).
+2. Read: Abstract, Introduction, Methods, Results, Discussion/Conclusion. Skip References, supplemental materials, and acknowledgments unless a template field needs them.
+3. Extract the required template fields. Only then, if the PDF surfaces a DOI, run `paper-fetch --doi <doi>` **for metadata cross-check only** (fast and safe) — a `paywalled` result there is irrelevant; you already have the text.
+
+Otherwise (no local PDF), retrieval is centralized through `science paper-fetch`, which handles tiered source probing (Crossref → Unpaywall → arXiv → bioRxiv/medRxiv → Europe PMC → direct OA PDF) with cross-process rate limiting. This avoids open-ended scavenging and keeps parallel subagents polite to the same servers.
 
 ### Picking the right identifier flag
 
@@ -206,13 +212,6 @@ Run `paper-fetch` once with the chosen flag(s) and branch on `status`:
 
 - **`error`** — caller-supplied identifiers conflict (`metadata.reason` names the class, e.g. `identifier_mismatch`). Surface the conflict in `access_hint` to the orchestrator and stop — re-checking is the user's call.
 
-### If given a PDF file path:
-
-1. Skip `paper-fetch`; read the PDF directly.
-2. Read: Abstract, Introduction, Methods, Results, Discussion/Conclusion.
-3. Skip: References, supplemental materials, acknowledgments unless needed for a template field.
-4. Extract required template fields and cross-check metadata via `paper-fetch --doi <doi>` if the PDF surfaces a DOI (metadata resolution is fast and safe).
-
 ### If the paper cannot be found:
 
 1. State that the paper could not be identified reliably.
@@ -225,6 +224,7 @@ Run `paper-fetch` once with the chosen flag(s) and branch on `status`:
 Follow `.ai/templates/paper.md` first, then `templates/paper.md`, and fill every section.
 
 - Include frontmatter `Source:` describing provenance (`LLM knowledge`, `web search`, `PDF`, or combination).
+- **Frontmatter must use `kind: paper`, not `type: paper`** — `type:` is dropped and the entity then fails `science validate` with missing `kind`/`status`/`updated`. **Never add a `datasets:` field** (retired); record dataset provenance under `dataset_usage`. When in doubt, scaffold with `science entity create paper --slug <citekey>` and edit the pre-filled frontmatter rather than hand-writing it.
 - Generate BibTeX key as `FirstAuthorLastNameYear` (with suffix if needed).
 - Save to `entities/papers/<citekey>.md`.
 - Use `paper:<citekey>` for the paper note entity and `cite:<citekey>` for the backing BibTeX entry in `source_refs`.

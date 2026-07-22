@@ -47,6 +47,16 @@ order; the leaves cover the mechanics.
    state that produced it — and let it be rebuilt and verified against a frozen ledger
    in an isolated worktree — is a stamped revision. An unrelated pipeline's stamp
    saving your run is luck; your own stamp is design. (fb-2026-07-11-026.)
+5. **In constrained/sandboxed environments, network fetches can hang, not fail.**
+   A sandbox that denies egress may *stall* an in-rule download indefinitely
+   rather than return an error, wedging the whole run. Two guards: (a) give every
+   fetch a **total wall-clock watchdog**, not just a per-read timeout — a
+   per-read `timeout=` does nothing against a slow-trickle or half-open socket, so
+   a partial download can sit for hours; (b) **pre-stage inputs outside the
+   sandboxed run** (fetch to `data/raw/` in a separate, network-allowed step) so
+   the reproducible pipeline reads local files and never depends on egress. When
+   an orchestrator's own `--retries` can deadlock under high `-c`, prefer fewer
+   concurrent fetch jobs over retry loops. (fb-2026-07-10-001, -002, -003.)
 
 ## Companion Skills
 
