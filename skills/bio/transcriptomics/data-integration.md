@@ -37,7 +37,9 @@ Before any per-cohort preprocessing, commit in writing:
    platform still carry cohort-specific technical artifacts, so pool at the
    statistic level, not the sample level. Aggregate p-values (Stouffer's,
    Fisher's) or z-scored effects (random-effects metafor). Z-score per-cohort
-   effects before pooling when scales differ.
+   effects before pooling when scales differ — effect-size aggregation needs
+   that scale harmonisation, whereas p-value pooling tolerates scale
+   differences but not violated distributional assumptions.
 2. **Common-reference normalisation** (gene-set rank, percentile, z-score)
    before pooling. Enables direct pooling but loses platform-specific magnitude.
 3. **Hierarchical models with platform random effects.** The most principled;
