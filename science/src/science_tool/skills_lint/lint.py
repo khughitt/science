@@ -68,17 +68,6 @@ VALID_ARCHETYPES = {
 STRUCTURAL_FILENAMES = {"SKILL.md", "INDEX.md"}
 MARKDOWN_LINK_RE = re.compile(r"\]\(([^)]+)\)")
 INLINE_CODE_RE = re.compile(r"`([^`]+\.md)`")
-HALT_ON_REQUIRED = {
-    "bio/genomics/somatic-mutation-qa.md",
-    "bio/genomics/mutational-signatures-and-selection.md",
-    "bio/transcriptomics/bulk-rnaseq-qa.md",
-    "bio/transcriptomics/microarray-qa.md",
-    "bio/transcriptomics/scrna-qa.md",
-    "bio/proteomics/protein-sequence-structure-qa.md",
-    "bio/functional-genomics-qa.md",
-    "ml/embeddings-manifold-qa.md",
-    "epistemics/annotation-curation-qa.md",
-}
 
 
 def check_frontmatter(path: Path) -> list[SkillIssue]:
@@ -132,11 +121,10 @@ def check_companion_skills(path: Path) -> list[SkillIssue]:
     return []
 
 
-def check_halt_on_conditions(path: Path, root: Path) -> list[SkillIssue]:
-    relative_path = path.relative_to(root).as_posix()
-    if relative_path not in HALT_ON_REQUIRED:
+def check_halt_on_conditions(path: Path) -> list[SkillIssue]:
+    frontmatter = leaf_frontmatter(path)
+    if frontmatter is None or frontmatter.get("archetype") != "measurement-qa":
         return []
-
     text = path.read_text(encoding="utf-8")
     if not re.search(r"^## Halt-On Conditions$", text, re.MULTILINE):
         return [SkillIssue(path, "missing-section", detail="Halt-On Conditions")]
@@ -231,7 +219,7 @@ def check_skills(root: Path) -> list[SkillIssue]:
     for path in iter_skill_files(root):
         issues.extend(_relative_issues(check_frontmatter(path), root))
         issues.extend(_relative_issues(check_companion_skills(path), root))
-        issues.extend(_relative_issues(check_halt_on_conditions(path, root), root))
+        issues.extend(_relative_issues(check_halt_on_conditions(path), root))
         issues.extend(_relative_issues(check_relative_links(path), root))
         issues.extend(_relative_issues(check_source_refs(path, registry), root))
         if path != root / "INDEX.md":
