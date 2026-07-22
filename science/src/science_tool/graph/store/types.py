@@ -27,6 +27,10 @@ class InquiryInfo(TypedDict):
     boundary_in: list[str]
     boundary_out: list[str]
     edges: list[InquiryEdge]
+    # True iff a dedicated per-inquiry named graph (the compiled boundary/flow
+    # subgraph) exists. False for a thin doc-authored inquiry materialized only as
+    # a `sci:Inquiry` triple in graph/knowledge.
+    has_compiled_subgraph: bool
 
 
 class ClaimSummaryData(TypedDict):

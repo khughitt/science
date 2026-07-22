@@ -99,3 +99,49 @@ def test_import_writes_source_and_refuses_overwrite(tmp_path: Path):
 
     again = runner.invoke(main, ["inquiry", "import", "i09", "--project-root", str(tmp_path), "--path", str(trig)])
     assert again.exit_code != 0 and "force" in again.output.lower()
+
+
+def _write_thin_materialized_inquiry(tmp_path: Path, slug: str, status: str = "active") -> Path:
+    """Emit a thin doc-authored ``kind: inquiry`` the way materialization does.
+
+    The ``sci:Inquiry`` type triple lands in the shared ``graph/knowledge`` layer
+    with the entity's free-form project status; there is NO dedicated boundary/flow
+    subgraph (that is only emitted from a patch-definition).
+    """
+    from rdflib import Dataset, Literal, URIRef
+    from rdflib.namespace import RDF, SKOS
+
+    from science_tool.graph.io import PROJECT_NS, SCI_NS
+
+    ds = Dataset()
+    iu = URIRef(PROJECT_NS[f"inquiry/{slug}"])
+    knowledge = ds.graph(URIRef(PROJECT_NS["graph/knowledge"]))
+    knowledge.add((iu, RDF.type, SCI_NS.Inquiry))
+    knowledge.add((iu, SKOS.prefLabel, Literal("Thin doc-authored inquiry")))
+    knowledge.add((iu, SCI_NS.projectStatus, Literal(status)))
+    knowledge.add((iu, SCI_NS.target, URIRef(PROJECT_NS["hypothesis/h01"])))
+
+    graph_dir = tmp_path / "knowledge"
+    graph_dir.mkdir(parents=True, exist_ok=True)
+    trig = graph_dir / "graph.trig"
+    ds.serialize(destination=str(trig), format="trig")
+    return trig
+
+
+def test_import_fails_cleanly_on_thin_doc_authored_inquiry(tmp_path: Path):
+    """A thin ``kind: inquiry`` with a free-form status ('active') has no compiled
+    subgraph. import must refuse with a ClickException, NOT crash with a raw
+    pydantic ValidationError (fb-2026-07-11-031 / fb-2026-07-11-032)."""
+    trig = _write_thin_materialized_inquiry(tmp_path, "0001-prognosis", status="active")
+
+    result = CliRunner().invoke(
+        main,
+        ["inquiry", "import", "0001-prognosis", "--project-root", str(tmp_path), "--path", str(trig)],
+    )
+    assert result.exit_code != 0
+    # A clean click error, never an uncaught traceback.
+    assert result.exception is None or isinstance(result.exception, SystemExit), result.output
+    assert "ValidationError" not in result.output
+    assert "no compiled" in result.output.lower() or "patch-definition" in result.output.lower()
+    # And it did not write a broken source file.
+    assert not (tmp_path / "entities" / "patches" / "0001-prognosis.md").exists()

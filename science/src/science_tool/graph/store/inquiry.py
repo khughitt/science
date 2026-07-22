@@ -145,7 +145,8 @@ def get_inquiry(graph_path: Path, slug: str) -> InquiryInfo:
     boundary_in: list[str] = []
     boundary_out: list[str] = []
     edges: list[InquiryEdge] = []
-    if str(home_graph.identifier) == str(inquiry_uri):
+    has_compiled_subgraph = str(home_graph.identifier) == str(inquiry_uri)
+    if has_compiled_subgraph:
         for s, _p, o in home_graph.triples((None, SCI_NS.boundaryRole, None)):
             if o == SCI_NS.BoundaryIn:
                 boundary_in.append(str(s))
@@ -162,6 +163,7 @@ def get_inquiry(graph_path: Path, slug: str) -> InquiryInfo:
             SKOS.related,
             SCI_NS.inquiryStatus,
             SCI_NS.inquiryType,
+            SCI_NS.estimandType,
             SCI_NS.projectStatus,
             SCI_NS.target,
             SCI_NS.focalEntity,
@@ -201,6 +203,7 @@ def get_inquiry(graph_path: Path, slug: str) -> InquiryInfo:
         "boundary_in": boundary_in,
         "boundary_out": boundary_out,
         "edges": edges,
+        "has_compiled_subgraph": has_compiled_subgraph,
     }
 
 
