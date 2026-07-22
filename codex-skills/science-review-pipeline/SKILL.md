@@ -216,6 +216,18 @@ in the plan):
   traceable upstream sources. Treat any undeclared locked-model requirement as
   a data-availability **FAIL**, because the plan is not stageable for the model
   it claims to run.
+- **Frozen-vehicle regeneration check.** If the analysis is pre-registered and its
+  data flows through a pipeline (Snakemake, Nextflow, make, a script DAG), inspect
+  the rule graph: does any rule **regenerate** an artifact the pre-registration
+  treats as frozen (the committed vehicle, a locked count ledger, a frozen input
+  matrix)? A first rule that re-exports the exact file the pre-registration named as
+  its locked vehicle is in direct tension with the freeze — any `--forceall` / refresh
+  / clean re-run silently rebuilds the frozen input from the current working tree.
+  This is a **FAIL** unless the analysis invokes **only the downstream rules**, or
+  reads the vehicle from a committed, content-addressed copy **outside** the pipeline's
+  output tree. The tension is usually visible in a handful of lines of the workflow
+  file; read it, don't assume the freeze holds. (natural-systems pre-registration:0026,
+  fb-2026-07-11-025.)
 - Does it resolve to a `dataset:<slug>` entity?
 - Per origin (verification gate):
   - `external`: `access.verified: true` OR `access.exception.mode != ""`.

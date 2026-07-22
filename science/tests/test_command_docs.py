@@ -1562,3 +1562,33 @@ def test_catalog_datasets_gates_handoff_on_authorization_not_just_access() -> No
     assert "ready-but-unauthorized" in text
     assert "core/decisions.md" in text
     assert "access-verified is NOT authorized-to-analyze" in norm or "not authorized-to-analyze" in norm.lower()
+
+
+def test_pre_register_documents_full_resolution_count_ledger() -> None:
+    """The count ledger must be frozen at full resolution (row/column sums), doubling
+    as a runtime substrate-integrity check that makes reconstruction provably faithful
+    (positive fb-2026-07-11-027)."""
+    norm = _norm(_read("commands/pre-register.md"))
+    assert "column-sum vector" in norm
+    assert "runtime integrity check" in norm
+    assert "provably faithful" in norm
+
+
+def test_pre_register_documents_blind_erosion_protocol() -> None:
+    """When observed values leak early, escalate to the human and record a protocol
+    deviation with no confirmatory weight; distinguish not-conditioned-on-null from
+    blind (fb-2026-07-11-028)."""
+    text = _read("commands/pre-register.md")
+    norm = _norm(text)
+    assert "Blind Erosion" in text
+    assert "not conditioned on the null" in norm.lower() or "Not conditioned on the null" in text
+    assert "no confirmatory weight" in norm
+
+
+def test_review_pipeline_checks_frozen_vehicle_regeneration() -> None:
+    """review-pipeline must ask whether a pipeline's rule graph regenerates an artifact
+    the pre-registration treats as frozen (fb-2026-07-11-025)."""
+    norm = _norm(_read("commands/review-pipeline.md"))
+    assert "Frozen-vehicle regeneration check" in norm
+    assert "downstream rules" in norm
+    assert "content-addressed" in norm
