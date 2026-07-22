@@ -189,6 +189,9 @@ class PromoteDecision:
     resolved_conflicts: tuple[ConflictResolution, ...]
     mode: Literal["mint", "overlay_existing"] = "mint"
     existing_version: str | None = None  # set when mode == "overlay_existing"
+    # Evidential-strength sections (Methods/Limitations) the paper canonical is
+    # missing (fb-2026-07-11-020). A promote-time warning, never a block.
+    completeness_gaps: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True, slots=True)

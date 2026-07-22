@@ -1442,6 +1442,13 @@ def _promote_kind_cmd(
             if rename_from is None:
                 continue
             click.echo(f"    rename in {slug}: {rename_from.name} → {ov.path.name}")
+        if d.completeness_gaps:
+            click.echo(
+                f"    warning: canonical is missing {', '.join(d.completeness_gaps)} — "
+                f"consumers cannot assess evidential strength (fb-2026-07-11-020); "
+                f"add the section(s) from the source before --apply if the paper has them",
+                err=True,
+            )
         if kind.kind == "dataset":
             _echo_dataset_plan_details(plan, d)
 

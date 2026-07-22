@@ -38,6 +38,7 @@ from science_model.entity_schema.profile import ProfileComponent
 from science_tool.commons.config import check_override_conflict, registry_root_for_id
 from science_tool.commons.datapackage import render_canonical_datapackage_yaml
 from science_tool.commons.promote_body_loss import canonical_body_loss
+from science_tool.commons.promote_completeness import paper_completeness_gaps
 from science_tool.commons.errors import (
     CommonsError,
     PromoteCandidateError,
@@ -289,6 +290,35 @@ def discover_candidates(
     return DiscoveryResult(candidates_by_slug=grouped, failed_candidates=failures)
 
 
+def _uncopromotable_dataset_usage_refs(
+    canonical_fields: Mapping[str, Any], commons_root: Path
+) -> list[str]:
+    """`dataset:` refs in a paper's `dataset_usage` that are not commons canonicals.
+
+    A commons entity may reference only other commons canonicals, so every
+    `dataset_usage` ref on a promoted paper must resolve to a commons dataset
+    canonical (`datasets/<slug>/entity.md`). A ref to a project-local or
+    reference-only dataset (no datapackage, never promotable) would mint a
+    dangling ref in the shared store that every consumer of the paper then
+    hard-errors on (fb-2026-07-19-005). Returns the offending refs, deduped and
+    sorted; empty when every ref resolves.
+    """
+    usages = canonical_fields.get("dataset_usage")
+    if not isinstance(usages, list):
+        return []
+    offending: set[str] = set()
+    for usage in usages:
+        if not isinstance(usage, dict):
+            continue
+        ref = usage.get("ref")
+        if not isinstance(ref, str) or not ref.startswith("dataset:"):
+            continue
+        slug = ref.split(":", 1)[1]
+        if not (commons_root / "datasets" / slug / "entity.md").is_file():
+            offending.add(ref)
+    return sorted(offending)
+
+
 def abort_on_conflict(conflict: FieldConflict | ExistingCanonicalConflict) -> Any:
     """Default conflict resolver: refuse to guess.
 
@@ -520,6 +550,18 @@ def plan_promote(
                 )
                 merged[conflict.field] = resolved_value
 
+            if kind.kind == "paper":
+                bad_refs = _uncopromotable_dataset_usage_refs(merged, commons_root)
+                if bad_refs:
+                    raise PromoteCandidateError(
+                        f"paper {canonical_case} references dataset_usage "
+                        f"{', '.join(bad_refs)} that are not commons canonicals and cannot "
+                        f"be co-promoted. A commons paper may reference only datasets that "
+                        f"exist in the commons store: promote the dataset(s) first, or "
+                        f"remove these dataset_usage entries before promoting the paper.",
+                        slug=canonical_case,
+                    )
+
             # Divergence gate (paper, overlay_existing): compare the merged
             # source-derived canonical against the committed canonical. Equal/subset
             # → safe to overlay; divergent → route each diverging field through the
@@ -675,6 +717,9 @@ def plan_promote(
             canonical_body = primary.canonical_body
             if kind.kind == "dataset":
                 canonical_body = {**primary.project_only_body, **primary.canonical_body}
+            completeness_gaps = (
+                tuple(paper_completeness_gaps(canonical_body)) if kind.kind == "paper" else ()
+            )
             canonical_content = _render_canonical(
                 canonical_decision,
                 canonical_fields=merged,
@@ -766,6 +811,7 @@ def plan_promote(
                     resolved_conflicts=tuple(resolved_conflicts),
                     mode=overlay_mode,
                     existing_version=existing_version if existing else None,
+                    completeness_gaps=completeness_gaps,
                 )
             )
 
