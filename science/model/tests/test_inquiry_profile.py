@@ -35,7 +35,8 @@ def test_investigation_profile_minimal_valid():
 
 
 def test_causal_requires_treatment_and_outcome():
-    with pytest.raises(ValidationError, match="causal profile requires"):
+    # Default estimand_type is interventional, which requires the pair.
+    with pytest.raises(ValidationError, match="interventional estimand requires"):
         PatchDefinitionEntity(**_base(profile="causal", status="specified"))
 
 
@@ -50,6 +51,50 @@ def test_causal_valid_with_estimand():
 def test_investigation_forbids_estimand():
     with pytest.raises(ValidationError, match="investigation profile must not"):
         PatchDefinitionEntity(**_base(profile="investigation", status="sketch", treatment="concept:drug"))
+
+
+def test_estimand_type_defaults_interventional():
+    ent = PatchDefinitionEntity(
+        **_base(profile="causal", status="specified", treatment="concept:drug", outcome="concept:recovery")
+    )
+    assert ent.inquiry.estimand_type == "interventional"
+
+
+def test_causal_interventional_still_requires_treatment_outcome():
+    with pytest.raises(ValidationError, match="interventional estimand requires"):
+        PatchDefinitionEntity(**_base(profile="causal", status="specified", estimand_type="interventional"))
+
+
+def test_causal_descriptive_estimand_omits_treatment_outcome():
+    ent = PatchDefinitionEntity(**_base(profile="causal", status="specified", estimand_type="descriptive"))
+    assert ent.inquiry.estimand_type == "descriptive"
+    assert ent.inquiry.treatment is None
+    assert ent.inquiry.outcome is None
+
+
+def test_causal_associational_estimand_omits_treatment_outcome():
+    ent = PatchDefinitionEntity(**_base(profile="causal", status="specified", estimand_type="associational"))
+    assert ent.inquiry.estimand_type == "associational"
+
+
+def test_causal_descriptive_may_still_carry_treatment_outcome():
+    # A descriptive estimand MAY name variables (they just aren't an interventional
+    # treatment/outcome pair); the exporter must not compute adjustment sets for it.
+    ent = PatchDefinitionEntity(
+        **_base(
+            profile="causal",
+            status="specified",
+            estimand_type="descriptive",
+            treatment="concept:frailty",
+            outcome="concept:recovery",
+        )
+    )
+    assert ent.inquiry.estimand_type == "descriptive"
+
+
+def test_investigation_forbids_non_default_estimand_type():
+    with pytest.raises(ValidationError, match="estimand_type is causal-only"):
+        PatchDefinitionEntity(**_base(profile="investigation", status="sketch", estimand_type="descriptive"))
 
 
 def test_inquiry_block_required_when_patch_type_inquiry():

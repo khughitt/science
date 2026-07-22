@@ -89,6 +89,7 @@ def _emit_one(dataset: Dataset, definition: PatchDefinitionEntity, prof: Inquiry
     g.add((iu, SKOS.prefLabel, RDFLiteral(definition.title or inquiry_slug(definition))))
     g.add((iu, SCI_NS.inquiryStatus, RDFLiteral(prof.status)))
     g.add((iu, SCI_NS.inquiryType, RDFLiteral(_PROFILE_TO_INQUIRY_TYPE[prof.profile])))
+    g.add((iu, SCI_NS.estimandType, RDFLiteral(prof.estimand_type)))
     g.add((iu, SCI_NS.target, focal))
     g.add((iu, SCI_NS.focalEntity, focal))
     if definition.created:

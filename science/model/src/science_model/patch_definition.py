@@ -56,6 +56,7 @@ BoundaryRoleName = Literal["BoundaryIn", "BoundaryOut"]
 FlowPredicate = Literal["feedsInto", "produces", "causes"]
 InquiryProfileName = Literal["investigation", "causal"]
 InquiryStatus = Literal["sketch", "specified", "planned", "in-progress", "complete"]
+EstimandType = Literal["interventional", "descriptive", "associational"]
 
 
 class BoundaryRole(BaseModel):
@@ -102,6 +103,7 @@ class InquiryProfile(BaseModel):
 
     profile: InquiryProfileName
     status: InquiryStatus = "sketch"
+    estimand_type: EstimandType = "interventional"
     boundary_roles: list[BoundaryRole] = Field(default_factory=list)
     flow_edges: list[FlowEdge] = Field(default_factory=list)
     assumptions: list[Assumption] = Field(default_factory=list)
@@ -112,10 +114,21 @@ class InquiryProfile(BaseModel):
 
     @model_validator(mode="after")
     def _estimand_rules(self) -> "InquiryProfile":
-        if self.profile == "causal" and (not (self.treatment or "").strip() or not (self.outcome or "").strip()):
-            raise ValueError("causal profile requires both treatment and outcome")
-        if self.profile == "investigation" and (self.treatment or self.outcome):
-            raise ValueError("investigation profile must not set treatment/outcome (estimand is causal-only)")
+        if self.profile == "investigation":
+            if self.treatment or self.outcome:
+                raise ValueError("investigation profile must not set treatment/outcome (estimand is causal-only)")
+            if self.estimand_type != "interventional":
+                raise ValueError("estimand_type is causal-only; investigation profiles must leave it unset")
+            return self
+        # Causal profile. An interventional estimand names a treatment/outcome pair
+        # the exporter turns into back-door adjustment sets, so both are required.
+        # A descriptive or associational estimand makes no interventionist claim, so
+        # treatment/outcome are optional and adjustment sets must NOT be computed
+        # (see causal/export_pgmpy.py) -- fb-2026-07-19-007.
+        if self.estimand_type == "interventional" and (
+            not (self.treatment or "").strip() or not (self.outcome or "").strip()
+        ):
+            raise ValueError("interventional estimand requires both treatment and outcome")
         return self
 
 

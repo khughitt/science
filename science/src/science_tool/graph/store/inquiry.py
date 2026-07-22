@@ -129,6 +129,7 @@ def get_inquiry(graph_path: Path, slug: str) -> InquiryInfo:
     label = _inquiry_property(dataset, inquiry_uri, SKOS.prefLabel)
     status = _inquiry_property(dataset, inquiry_uri, SCI_NS.inquiryStatus, SCI_NS.projectStatus)
     inquiry_type = _inquiry_property(dataset, inquiry_uri, SCI_NS.inquiryType) or "general"
+    estimand_type = _inquiry_property(dataset, inquiry_uri, SCI_NS.estimandType) or "interventional"
     target = _inquiry_property(dataset, inquiry_uri, SCI_NS.target)
     created = _inquiry_property(dataset, inquiry_uri, DCTERMS_NS.created)
     description = _inquiry_property(dataset, inquiry_uri, SKOS.note)
@@ -190,6 +191,7 @@ def get_inquiry(graph_path: Path, slug: str) -> InquiryInfo:
         "label": label,
         "status": status,
         "inquiry_type": inquiry_type,
+        "estimand_type": estimand_type,
         "target": target,
         "created": created,
         "description": description,

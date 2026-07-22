@@ -17,6 +17,7 @@ class InquiryInfo(TypedDict):
     label: str
     status: str
     inquiry_type: str
+    estimand_type: str
     target: str
     created: str
     description: str

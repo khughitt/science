@@ -310,6 +310,48 @@ class TestExportPgmpy:
         )
         return "xy-dag"
 
+    def _build_descriptive_dag(self, graph_path: Path) -> str:
+        """A causal-profile inquiry with a DESCRIPTIVE (non-interventionist) estimand."""
+        _author_entities(
+            graph_path,
+            [_concept("x", "X"), _concept("y", "Y"), _hypothesis("h1")],
+            relations=[_causal_relation("concept:x", "scic:causes", "concept:y")],
+        )
+        _build_compiled_inquiry_graph(
+            graph_path,
+            slug="descr-dag",
+            profile="causal",
+            estimand_type="descriptive",
+            boundary_roles=[
+                {"ref": "concept:x", "role": "BoundaryIn"},
+                {"ref": "concept:y", "role": "BoundaryOut"},
+            ],
+            treatment="concept:x",
+            outcome="concept:y",
+        )
+        return "descr-dag"
+
+    def test_export_pgmpy_descriptive_estimand_omits_adjustment_sets(self, graph_path: Path) -> None:
+        """A descriptive estimand must NOT emit back-door adjustment sets (fb-2026-07-19-007).
+
+        Interventional adjustment sets answer a question the author explicitly rejected;
+        emitting them is the silent-wrong-output this field prevents.
+        """
+        slug = self._build_descriptive_dag(graph_path)
+        script = export_pgmpy_script(graph_path, slug)
+        # Model still exported.
+        assert "DiscreteBayesianNetwork(" in script
+        # But NO interventional adjustment-set computation.
+        assert "get_all_backdoor_adjustment_sets" not in script
+        # And the reason is legible in the script.
+        assert "descriptive" in script.lower()
+
+    def test_export_pgmpy_interventional_still_emits_adjustment_sets(self, graph_path: Path) -> None:
+        """The default interventional estimand keeps computing adjustment sets."""
+        slug = self._build_simple_dag(graph_path)
+        script = export_pgmpy_script(graph_path, slug)
+        assert "get_all_backdoor_adjustment_sets" in script
+
     def test_export_pgmpy_generates_valid_script(self, graph_path: Path) -> None:
         slug = self._build_simple_dag(graph_path)
         script = export_pgmpy_script(graph_path, slug)
