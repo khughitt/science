@@ -94,6 +94,7 @@ Load these only after methodology is clear or when execution planning is the
 user's explicit request:
 
 - `pipelines`: `skills/pipelines/SKILL.md`
+- `pipeline-reproducibility`: `skills/pipelines/reproducibility.md`
 - `pipeline-snakemake`: `skills/pipelines/snakemake.md`
 - `pipeline-marimo`: `skills/pipelines/marimo.md`
 - `pipeline-runpod`: `skills/pipelines/runpod.md`
