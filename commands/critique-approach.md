@@ -32,9 +32,23 @@ For brevity, examples write just `science <command>` — **always expand to `uv 
 - **MUST** challenge every causal edge for reverse causation and alternative explanations
 - **MUST** check for missing confounders systematically
 - **MUST** assess identifiability (can the target effect be estimated from observables?)
-- **MUST** write review report to `entities/inquiries/<slug>-critique.md`
+- **MUST** write review report to `entities/interpretations/<slug>-critique.md`
+  as an **interpretation** entity — never under `entities/inquiries/`, which
+  projects reserve for numbered `kind: inquiry` entities (a critique written
+  there fails entity-conformance with wrong-kind / non-numeric-filename errors).
 - **MUST NOT** dismiss concerns as "minor" or "unlikely" — surface all issues
 - **SHOULD** reference `references/dag-two-axis-evidence-model.md` for pitfall patterns
+
+> **Two-axis edge labels require the `science dag` subsystem.** The two-axis
+> `edge_status` / `identification` evidence labels in
+> `references/dag-two-axis-evidence-model.md` are consumed by the `science dag`
+> subcommand group (`science dag render / audit / staleness`), **not** by inquiry
+> DAGs: an inquiry `FlowEdge` is `extra="forbid"` and carries only
+> subject/predicate/object/claim_refs, so those labels cannot be attached to it.
+> If a critique recommends adding them, note that the DAG must first be **ported**
+> to `science dag` (`science dag init …`) — record the two-axis mapping in the
+> critique prose meanwhile, but do not imply it can be applied to the inquiry
+> FlowEdge in place.
 
 ## Workflow
 
@@ -66,7 +80,7 @@ that is not yet registered as a graph-backed causal inquiry.
   threats that should shape the future DAG.
 - Do not claim formal adjustment-set review, back-door validation, or pgmpy
   identifiability analysis.
-- Save the report to `entities/inquiries/<slug>-critique.md` and label it
+- Save the report to `entities/interpretations/<slug>-critique.md` and label it
   "pre-DAG critique" in the title or reviewed-status line.
 
 Skip Step 2 for pre-DAG mode; resume at Step 3 using the candidate relationships
@@ -167,7 +181,7 @@ Include a sensitivity summary table in the review report:
 
 ### Step 7: Write review report
 
-Save to `entities/inquiries/<slug>-critique.md`:
+Save to `entities/interpretations/<slug>-critique.md`:
 
 ```markdown
 # Causal DAG Critique: <label>
