@@ -15,7 +15,7 @@
 Every task's requirements implicitly include this section.
 
 - **No AI-attribution trailers/footers** on commits (no `Co-Authored-By`, no "Generated with Claude Code").
-- **Run all tooling from `science/`** (there is no root `pyproject.toml`): tests `uv run --frozen pytest`; **skills lint `uv run --frozen science skills lint --root ../skills`**. A task is not green until `skills lint` exits 0 over the whole `../skills` tree. (This slice touches **no** Python; ruff/pyright are unaffected. Base `main` carries pre-existing ruff/pyright failures in unrelated files — do **not** `&&`-chain them into a gate; if you run them, prove any failing file is unchanged from merge-base.)
+- **Run all tooling from `science/`** (there is no root `pyproject.toml`): tests `uv run --frozen pytest`; **skills lint `uv run --frozen science skills lint --root ../skills`**. A task is not green until `skills lint` exits 0 over the whole `../skills` tree. (Tasks 1–6 touch **no** Python; **Task 7** edits two `science/tests/` files — test directories are **not** pyright-checked, and ruff is per-package. Base `main` carries pre-existing ruff/pyright failures in unrelated files — do **not** `&&`-chain them into a gate; if you run them, prove any failing file is unchanged from merge-base. The full `pytest` suite is the binding gate for Task 7.)
 - **`data-management/` is a SUBJECT directory** — the two new leaves carry the `data-management-` prefix in `name:` (like the existing `data-management-frictionless`), but **NOT** in the filename (`conventions.md`, `acquisition.md` — the `frictionless.md`/`data-management-frictionless` split sets the precedent).
 - **Every leaf declares exactly one recognized `archetype:`; routers and `INDEX.md` carry none** (the linter enforces both directions).
 - **Slot fidelity:** each new leaf carries its archetype template's sections **in template order and with the template's exact `##` headings** (`skills/meta/templates/normative-reference.md`, `.../practice-guide.md`, `.../router.md`). No required section may be dropped or renamed. Note the normative-reference heading is exactly `## Vocabulary / schema / enums`.
@@ -869,6 +869,138 @@ git commit -m "docs(skills): reconcile doctrine to one remaining hub; regenerate
 
 ---
 
+### Task 7: Re-home three stale content-guard tests to the extracted leaves
+
+**Discovered during Task 6's green gate** (the plan's "touches no Python, stays green" assumption was wrong): three pre-existing content-guard tests assert that guidance lives in the *old* files. The slice moved that guidance to its new correct homes, so the guards now fail on base-slice. Base `main` is green on all three; the failures are slice-caused. Fix (user-approved approach: **re-home, preserve strength**): point each guard at the content's new home, keep every assertion, and restore the exact guarded literal into the leaf where a reword made it a non-match — never weaken or delete an assertion.
+
+The three tests (unchanged on disk by Tasks 1–6):
+- `science/tests/test_codex_skills.py::test_data_skills_document_configured_data_root` — asserts the data-root policy tokens in `frictionless.md` (moved → `conventions.md`) and `snakemake.md` (unchanged).
+- `science/tests/test_command_docs.py::test_data_skill_routes_new_sources_through_dataset_entity_lifecycle` — asserts the dataset-entity lifecycle CLI in `SKILL.md` (moved → `acquisition.md`).
+- `science/tests/test_command_docs.py::test_frictionless_skill_distinguishes_datapackages_from_dataset_entities` — asserts a `## Boundary With Dataset Entities` section in `frictionless.md` (section dissolved; distinction kept as an Invariant; operational CLI moved → `acquisition.md`).
+
+NOTE: `science/tests/test_user_guide_docs.py:71` also asserts `Never commit files under the resolved data root` but reads a **different** (user-guide) file — it is unaffected; do NOT touch it. No other tests reference the phrases changed below.
+
+**Files:**
+- Modify (leaf wording — restore guarded literals): `skills/data-management/conventions.md`, `skills/data-management/acquisition.md`
+- Modify (re-home guards): `science/tests/test_codex_skills.py`, `science/tests/test_command_docs.py`
+
+**Interfaces:**
+- Consumes: `conventions.md`/`acquisition.md`/`frictionless.md` as produced by Tasks 1–5.
+
+- [ ] **Step 1: Restore the capitalized, single-line data-root literal in `conventions.md`.** The guard needs `Never commit files under the resolved data root` **contiguous on one line** (currently lowercase and line-wrapped). Replace exactly:
+
+```
+- Respect `SCIENCE_DATA_ROOT` and `science.yaml` `data.root`; never commit files
+  under the resolved data root.
+```
+with:
+```
+- Respect `SCIENCE_DATA_ROOT` and `science.yaml` `data.root`.
+- Never commit files under the resolved data root.
+```
+
+- [ ] **Step 2: Restore two guarded literals in `acquisition.md`.**
+
+  (a) Make `Manual template authoring is a fallback` appear verbatim (capital M, one line). Replace exactly:
+```
+- **CLI first, manual template as fallback.** Use `science dataset add` /
+```
+with:
+```
+- **Prefer the CLI.** Manual template authoring is a fallback. Use `science dataset add` /
+```
+
+  (b) Un-backtick both `runtime `datapackage` descriptors` occurrences so the plain literal `runtime datapackage descriptors` matches. Replace exactly `Create or update runtime `datapackage` descriptors` with `Create or update runtime datapackage descriptors`, and `Current runtime `datapackage` descriptors` with `Current runtime datapackage descriptors`.
+
+- [ ] **Step 3: Re-home `test_data_skills_document_configured_data_root`** (`science/tests/test_codex_skills.py`) — change the first file read from `frictionless.md` to `conventions.md`; keep every assertion. New body:
+
+```python
+def test_data_skills_document_configured_data_root() -> None:
+    conventions = (ROOT / "skills/data-management/conventions.md").read_text(encoding="utf-8")
+    snakemake = (ROOT / "skills/pipelines/snakemake.md").read_text(encoding="utf-8")
+    for text in (conventions, snakemake):
+        assert "SCIENCE_DATA_ROOT" in text
+        assert "data.root" in text
+        assert "Never commit files under the resolved data root" in text
+```
+
+- [ ] **Step 4: Re-home `test_data_skill_routes_new_sources_through_dataset_entity_lifecycle`** (`science/tests/test_command_docs.py`) — change ONLY the read path from `SKILL.md` to `acquisition.md`; every other assertion is unchanged and holds against `acquisition.md` (verified: the `--license`-not-in-add-example slice, the `--source-url` vs `--source` negatives, and all positive tokens). Replace exactly:
+
+```python
+    text = _read("skills/data-management/SKILL.md")
+
+    assert "science dataset add <slug>" in text
+```
+with:
+```python
+    text = _read("skills/data-management/acquisition.md")
+
+    assert "science dataset add <slug>" in text
+```
+
+- [ ] **Step 5: Re-home `test_frictionless_skill_distinguishes_datapackages_from_dataset_entities`** (`science/tests/test_command_docs.py`) — the `## Boundary With Dataset Entities` section was intentionally dissolved; the semantic distinction is now an Invariant in `frictionless.md` and the operational lifecycle CLI moved to `acquisition.md`. Preserve every guard, re-homed; the distinction assertion asserts the leaf's **more precise** approved phrase (`the durable `dataset:<slug>` entity lifecycle`) — stronger than the old `not the local dataset entity lifecycle`, not weaker. Replace the whole function body:
+
+```python
+def test_frictionless_skill_distinguishes_datapackages_from_dataset_entities() -> None:
+    text = _read("skills/data-management/frictionless.md")
+
+    boundary = _slice_between(
+        text,
+        "## Boundary With Dataset Entities",
+        "## Creating a Data Package",
+    )
+
+    assert "runtime/package descriptor" in boundary
+    assert "not the local dataset entity lifecycle" in boundary
+    assert "Use `science dataset add <slug>`" in boundary
+    assert "science dataset verify-access <slug>" in boundary
+    assert "science datasets validate --path data/raw/" in boundary
+```
+with:
+```python
+def test_frictionless_skill_distinguishes_datapackages_from_dataset_entities() -> None:
+    # After the router/leaf reshape, the datapackage-vs-entity distinction lives in
+    # frictionless.md's Invariants; the operational dataset-entity lifecycle CLI
+    # moved to acquisition.md. Both guards are preserved, re-homed to where the
+    # content now lives.
+    frictionless = _read("skills/data-management/frictionless.md")
+    assert "runtime/package descriptor" in frictionless
+    assert "the durable `dataset:<slug>` entity lifecycle" in frictionless
+    assert "science datasets validate --path data/raw/" in frictionless
+
+    acquisition = _read("skills/data-management/acquisition.md")
+    assert "science dataset add <slug>" in acquisition
+    assert "science dataset verify-access <slug>" in acquisition
+```
+
+- [ ] **Step 6: Verify — the three tests pass, no leaf mirrored, and the FULL suite + lint are green.**
+
+```bash
+ROOT="$(git rev-parse --show-toplevel)"; cd "$ROOT/science"
+# the three re-homed guards pass:
+uv run --frozen pytest \
+  "tests/test_codex_skills.py::test_data_skills_document_configured_data_root" \
+  "tests/test_command_docs.py::test_data_skill_routes_new_sources_through_dataset_entity_lifecycle" \
+  "tests/test_command_docs.py::test_frictionless_skill_distinguishes_datapackages_from_dataset_entities" -q
+# leaf edits are NOT mirrored — codex-skills must be untouched (fail-closed):
+cd "$ROOT"
+[ -z "$(git status --porcelain codex-skills/)" ] && echo "OK: codex-skills unchanged" || { echo "FAIL: codex-skills changed"; git status --porcelain codex-skills/; exit 1; }
+# MANDATORY full suite + lint:
+cd "$ROOT/science"
+uv run --frozen science skills lint --root ../skills   # must exit 0
+uv run --frozen pytest                                 # must exit 0 (WHOLE suite)
+```
+Expected: the three named tests pass; `OK: codex-skills unchanged`; `skills lint` exit 0; full `pytest` exit 0 (0 failed). Run the full suite with an extended timeout (600000 ms) or in the background and wait. Do NOT commit over any remaining failure.
+
+- [ ] **Step 7: Commit.**
+
+```bash
+git add skills/data-management/conventions.md skills/data-management/acquisition.md science/tests/test_codex_skills.py science/tests/test_command_docs.py
+git commit -m "test(skills): re-home data-management content guards to the extracted leaves"
+```
+
+---
+
 ## Final whole-branch review checklist (for the reviewer)
 
 - Router carries no methodology (no Principles/conventions/manifest/runbook sections); keeps the specialized-bio routing; frontmatter `provenance: internal`, no `sources:`.
@@ -879,3 +1011,4 @@ git commit -m "docs(skills): reconcile doctrine to one remaining hub; regenerate
 - Both doctrine files agree: **one hub remains (`pipelines/`)**; no `data-management/` hub; no `frictionless` split listed.
 - Codex mirror: exactly the two doctrine files changed; new leaves absent from `codex-skills/`; `test_codex_skills.py` + full `pytest` + `skills lint` green.
 - Corpus: 42 → 44 structural leaves; both new leaves INDEX-covered; routers/`INDEX.md` carry no `archetype:`.
+- Task 7: the three content guards re-homed (not deleted/weakened) — each still asserts its tokens, against the file where the content now lives; the two restored leaf literals (`Never commit files under the resolved data root`, `Manual template authoring is a fallback`, plus un-backticked `runtime datapackage descriptors`) are present and single-line; `test_user_guide_docs.py` untouched; full `pytest` 0 failed.
