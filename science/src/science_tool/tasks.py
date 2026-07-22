@@ -709,9 +709,20 @@ def edit_task(
     if aspects is not None:
         task.aspects = aspects
     if related is not None:
+        # --related REPLACES the list (deduped, order-preserving) rather than
+        # accumulating -- appending gave no way to remove a stale ref, and a bare
+        # non-canonical short id silently entered the list and later failed graph
+        # validation (fb-2026-07-07-001).
+        deduped: list[str] = []
         for ref in related:
-            if ref not in task.related:
-                task.related.append(ref)
+            if ":" not in ref or not ref.split(":", 1)[1]:
+                raise ValueError(
+                    f"related ref {ref!r} is not canonical; use a '<kind>:<id>' ref "
+                    "(e.g. 'hypothesis:h01', 'task:t010')"
+                )
+            if ref not in deduped:
+                deduped.append(ref)
+        task.related = deduped
     if blocked_by is not None:
         task.blocked_by = validate_blocker_refs(project_root, blocked_by, force=force)
     if group is not None:
