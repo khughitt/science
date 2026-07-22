@@ -51,8 +51,20 @@ def test_default_readiness_done_is_ready():
     assert _task(status="done").readiness() == Readiness(ready=True, state="done")
 
 
-@pytest.mark.parametrize("status", ["proposed", "active", "blocked", "deferred", "retired"])
-def test_default_readiness_non_done_is_not_ready(status: str):
+@pytest.mark.parametrize("status", ["done", "complete", "answered", "committed", "amended"])
+def test_default_readiness_concluded_states_are_ready(status: str):
+    """A blocker that successfully concluded unblocks its dependents. 'done' is the
+    task convention; 'complete'/'answered'/'committed'/'amended' are the successful
+    conclusions of plan/report/question/pre-registration etc. (fb-2026-07-12-008)."""
+    r = _task(status=status).readiness()
+    assert r.ready is True
+    assert r.state == status
+
+
+@pytest.mark.parametrize("status", ["proposed", "active", "blocked", "deferred", "retired", "superseded", "archived"])
+def test_default_readiness_non_concluded_is_not_ready(status: str):
+    """In-progress (active/proposed/blocked/deferred) and abandoned-terminal
+    (retired/superseded/archived) states do NOT satisfy a dependency."""
     r = _task(status=status).readiness()
     assert r.ready is False
     assert r.state == status

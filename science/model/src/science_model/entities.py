@@ -5,7 +5,7 @@ from __future__ import annotations
 import re
 from datetime import date
 from enum import StrEnum
-from typing import Any, Literal, Protocol
+from typing import Any, ClassVar, Literal, Protocol
 
 from pydantic import BaseModel, ConfigDict, Field, PrivateAttr, field_validator, model_validator
 
@@ -572,15 +572,23 @@ class ProjectEntity(Entity):
     evidence_role: EvidenceRole | None = None
     rival_model_packet: RivalModelPacket | None = None
 
+    #: Statuses that mean a blocker successfully concluded, so it satisfies a
+    #: dependency. `done` is the task open-set convention; the others are the
+    #: successful-conclusion states of plan/report/question/pre-registration/etc.
+    #: in the unified status vocabulary. Abandoned-terminal states
+    #: (retired/superseded/archived/deprecated) are deliberately excluded -- an
+    #: abandoned blocker does not satisfy its dependents (fb-2026-07-12-008).
+    READY_STATUSES: ClassVar[frozenset[str]] = frozenset({"done", "complete", "answered", "committed", "amended"})
+
     def readiness(self, resolver: ReadinessResolverProtocol | None = None) -> Readiness:
-        """Default readiness: ready iff status == 'done'.
+        """Default readiness: ready iff status is a successfully-concluded state.
 
         `resolver` is optional context for subclasses that need to traverse
         other entities (e.g. derived datasets → producing workflow-run).
         Subclasses without cross-entity dependencies ignore it.
         """
-        if self.status == "done":
-            return Readiness(ready=True, state="done")
+        if self.status in self.READY_STATUSES:
+            return Readiness(ready=True, state=self.status)
         return Readiness(ready=False, state=self.status or "unknown")
 
 
