@@ -372,6 +372,7 @@ def verify_access(
     rationale: str = "",
     superseded_by: str | None = None,
     followup_task: str | None = None,
+    on_request_only: bool = False,
     today: date | None = None,
 ) -> tuple[str, Path, str, float, list[str]]:
     """Verify (or exception-gate) a local dataset's accessibility in one atomic edit.
@@ -426,7 +427,22 @@ def verify_access(
     if effective_class in {"reference", "pointer"} and not access.get("source_url"):
         raise EntityCommandError(f"{entity_id}: dataset_class {effective_class} requires --source-url")
 
-    if exception:
+    if on_request_only:
+        # Branch C: analysis-ineligible. "Available on reasonable request" has no
+        # followable access procedure, so it is never verified and never a viable
+        # source -- catalogued as a known gap (fb-2026-07-17-010).
+        if exception or method:
+            raise EntityCommandError(
+                f"{entity_id}: --on-request-only is mutually exclusive with --exception and --method "
+                "(it records an analysis-ineligible availability, not a verified or exception-gated one)."
+            )
+        access["availability"] = "on-request-only"
+        access["verified"] = False
+        access["verification_method"] = ""
+        if isinstance(access.get("exception"), dict) and access["exception"].get("mode"):
+            access["exception"] = {**access["exception"], "mode": ""}
+        summary = note or "on-request-only (analysis-ineligible)"
+    elif exception:
         # Branch B: exception decision. verified ⊥ exception.mode → clear verified.
         access["verified"] = False
         access["verification_method"] = ""

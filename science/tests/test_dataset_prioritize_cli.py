@@ -170,7 +170,8 @@ def test_prioritize_coverage_json_reports_per_target_gaps(tmp_path: Path) -> Non
         encoding="utf-8",
     )
     (qdir / "q-gap.md").write_text(
-        '---\nid: "question:q-gap"\nkind: "question"\ntitle: "Gap"\n---\n',
+        '---\nid: "question:q-gap"\nkind: "question"\ntitle: "Gap"\n'
+        'required_capabilities: [{assay: "gene-expression", modality: "bulk-rna"}]\n---\n',
         encoding="utf-8",
     )
 

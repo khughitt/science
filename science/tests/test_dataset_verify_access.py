@@ -74,6 +74,55 @@ def test_verify_access_backfills_all_coupled_fields(tmp_path: Path) -> None:
     assert "landing page public" in body
 
 
+def test_verify_access_on_request_only_records_analysis_ineligible(tmp_path: Path) -> None:
+    """--on-request-only records availability=on-request-only, verified=False, and a
+    not-ready readiness -- catalogued as a known gap, never a viable source
+    (fb-2026-07-17-010)."""
+    _legacy(tmp_path)
+    _, _, state, weight, _ = verify_access(
+        tmp_path, "foo", license_="unknown", on_request_only=True,
+        note="corresponding author on reasonable request", today=DATE,
+    )
+    fm, body = _read(tmp_path / "entities" / "datasets" / "foo.md")
+    access = fm["access"]
+    assert access["availability"] == "on-request-only"
+    assert access["verified"] is False
+    assert state == "on-request-only"
+    assert weight == 0.0
+    assert "## Access verification log" in body
+
+
+def test_verify_access_on_request_only_rejects_method_and_exception(tmp_path: Path) -> None:
+    _legacy(tmp_path)
+    with pytest.raises(EntityCommandError, match="mutually exclusive"):
+        verify_access(tmp_path, "foo", license_="unknown", on_request_only=True, method="retrieved", today=DATE)
+
+
+@pytest.mark.parametrize(
+    "mode,expect_state,expect_ready",
+    [
+        ("scope-reduced", "consumable-via-scope-reduced", True),
+        ("substituted", "consumable-via-substituted", True),
+        ("expanded-to-acquire", "acquiring", False),
+    ],
+)
+def test_verify_access_exception_modes_yield_expected_readiness(
+    tmp_path: Path, mode: str, expect_state: str, expect_ready: bool
+) -> None:
+    """Regression guard for the D-004 reproducibility screen (positive fb-2026-07-17-008):
+    the Branch-B exception modes must round-trip through verify-access to the readiness
+    states the screen depends on -- scope-reduced/substituted consumable, expanded-to-acquire
+    still acquiring (not yet ready)."""
+    _legacy(tmp_path)
+    kwargs = {"license_": "unknown", "exception": mode, "rationale": "why", "today": DATE}
+    if mode == "substituted":
+        kwargs["superseded_by"] = "dataset:alt"
+    _, _, state, _, _ = verify_access(tmp_path, "foo", **kwargs)
+    assert state == expect_state
+    fm, _ = _read(tmp_path / "entities" / "datasets" / "foo.md")
+    assert readiness_for(fm).ready is expect_ready
+
+
 def test_verify_access_preserves_existing_dataset_class(tmp_path: Path) -> None:
     _legacy(
         tmp_path,

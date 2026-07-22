@@ -266,6 +266,26 @@ science dataset verify-access <slug> --license <id-or-unknown> \
 
 A verification-log line is appended in all Branch B cases.
 
+**Branch C — available only by author request** (analysis-ineligible):
+
+"The data are available from the corresponding author on reasonable request" is a
+publication formality, **not** an access path. It has no followable procedure, no
+SLA, and no appeal, so it fails third-party reproducibility harder than an enclave
+(which at least publishes a decidable procedure). It is **never** a valid access
+option and must never be ranked above a gated/enclave source, counted toward
+coverage, or handed to `plan-pipeline`.
+
+```bash
+# Record it as an analysis-ineligible known gap (availability=on-request-only).
+science dataset verify-access <slug> --license <id-or-unknown> \
+  --on-request-only --note "corresponding author on reasonable request"
+```
+
+This sets `access.availability: on-request-only` and `verified: false`; the dataset
+reads not-ready (readiness state `on-request-only`, prioritizer weight 0.0) and the
+`plan-pipeline` Step-2b gate refuses it even if `verified` was set. Catalogue it for
+provenance, then treat the trigger as an unmet gap.
+
 **No new findings store.** These are the existing `access` fields and the existing body log section — do not introduce a parallel record.
 
 ---
@@ -352,14 +372,25 @@ If the graph was stale, the prioritizer will warn on stderr — run `science gra
 
 Route the top obtainable datasets to `science-plan-pipeline` for per-dataset download, QA, and preprocessing.
 
-For each top-ranked dataset where `access.verified: true` (or Branch A has just been confirmed):
+**Authorization precondition — access-verified is NOT authorized-to-analyze.** Before
+any handoff, check the project's scope gate: `core/decisions.md` (or the profile's
+`scope-boundaries` spec) for a decision that authorizes computational work. If the
+project has a scope gate and the dataset falls **outside** the authorized pilot/scope,
+do **not** hand off — this is the expected terminal state **ready-but-unauthorized**:
+the dataset is catalogued and access-verified, but analyzing it needs a new scope
+decision. File that decision (or a task to make it) instead of invoking `plan-pipeline`.
+Handing off a ready-but-unauthorized dataset silently expands scope past what the
+project authorized.
+
+For each top-ranked dataset where `access.verified: true` (or Branch A has just been
+confirmed) **and** which is within the authorized analysis scope:
 
 1. Invoke `science-plan-pipeline` for that dataset, providing:
    - The `dataset:<slug>` entity as the primary data source.
    - The target Q/H as the inquiry context.
 2. Let `plan-pipeline` handle its own data-access gate (Step 2b) — at this point the entity's `access` block should already satisfy the PASS condition.
 
-**Per-dataset QA and download are out of scope for this command.** The handoff is the front/back boundary; this command ends once `science-plan-pipeline` has been invoked for each top candidate.
+**Per-dataset QA and download are out of scope for this command.** The handoff is the front/back boundary; this command ends once `science-plan-pipeline` has been invoked for each **authorized** top candidate (and ready-but-unauthorized datasets have been recorded for a scope decision).
 
 ## Commons Promotion Follow-Up
 

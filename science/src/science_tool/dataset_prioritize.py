@@ -67,6 +67,10 @@ _STATE_WEIGHT: dict[str, float] = {
     "acquiring": 0.4,
     "embargoed": 0.05,
     "withdrawn": 0.05,
+    # Analysis-ineligible: no followable access procedure, so never a viable source
+    # (below withdrawn/embargoed). Weight 0 zeros the whole priority score
+    # (fb-2026-07-17-010 / fb-2026-07-07-003).
+    "on-request-only": 0.0,
 }
 _UNVERIFIED_LEVEL_WEIGHT: dict[str, float] = {
     "public": 0.7,
@@ -514,6 +518,19 @@ def target_coverage(rows: list[dict], project_root: Path) -> list[dict]:
             targets[target]["dataset_count"] = len(datasets)
             targets[target]["coverage_state"] = "out-of-molecular-scope"
             targets[target]["gap_reason"] = str(scope)
+            continue
+        required_caps = target_fm.get("required_capabilities") if isinstance(target_fm, dict) else None
+        if not required_caps:
+            # The target declares no required_capabilities, so it is structurally
+            # unscoreable: any dataset is incompatible by construction and it can never
+            # be covered. `missing-required-capabilities` already names this root cause
+            # (it fired only when a dataset happened to reach); emit it here too so the
+            # zero-dataset case is no longer mislabeled `no-candidate` ("no dataset
+            # exists") when the real fix is on the TARGET (fb-2026-07-17-006).
+            targets[target]["datasets"] = datasets
+            targets[target]["dataset_count"] = len(datasets)
+            targets[target]["coverage_state"] = "missing-required-capabilities"
+            targets[target]["gap_reason"] = "missing-required-capabilities"
             continue
         compatible_rows: list[dict] = []
         incompatible_datasets: list[dict[str, object]] = []

@@ -238,3 +238,46 @@ def test_dataset_frontmatter_coerces_identity_context(tmp_md) -> None:
             "dataset": "dataset:hgnc-symbol-remap",
         }
     )
+
+
+def test_parse_entity_file_preserves_access_availability(tmp_md) -> None:
+    """_coerce_access must round-trip availability (and available_after), not silently
+    default it to 'available'. A withdrawn/embargoed/on-request-only dataset read from
+    disk otherwise reads as fully available -- a silent readiness error (fb-2026-07-17-010)."""
+    p = tmp_md(
+        """
+        ---
+        id: "dataset:reqonly"
+        kind: "dataset"
+        title: "Req only"
+        origin: "external"
+        access: {level: "controlled", availability: "on-request-only", verified: true}
+        ---
+        Body.
+    """,
+        name="reqonly.md",
+    )
+    e = parse_entity_file(p, project_slug="demo")
+    assert e is not None
+    assert e.access is not None
+    assert e.access.availability == "on-request-only"
+
+
+def test_parse_entity_file_preserves_embargo_window(tmp_md) -> None:
+    p = tmp_md(
+        """
+        ---
+        id: "dataset:emb"
+        kind: "dataset"
+        title: "Embargoed"
+        origin: "external"
+        access: {level: "controlled", availability: "embargoed", available_after: "2027-01-01", verified: false}
+        ---
+        Body.
+    """,
+        name="emb.md",
+    )
+    e = parse_entity_file(p, project_slug="demo")
+    assert e is not None and e.access is not None
+    assert e.access.availability == "embargoed"
+    assert e.access.available_after == "2027-01-01"

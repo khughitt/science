@@ -46,6 +46,12 @@ def check_inputs(
             if e.access is None:
                 halts.append(f"{ds_id}: external entity missing access block")
                 continue
+            if e.access.availability == "on-request-only":
+                # No followable access procedure -> analysis-ineligible; it can never
+                # satisfy a data-availability requirement, even if marked verified
+                # (fb-2026-07-07-003).
+                halts.append(f"{ds_id}: access.availability=on-request-only is analysis-ineligible")
+                continue
             if ds_id in planned_retrieval and e.access.level in _RETRIEVABLE_LEVELS and not e.access.exception.mode:
                 continue
             if not (e.access.verified or e.access.exception.mode != ""):

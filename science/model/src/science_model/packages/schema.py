@@ -141,7 +141,12 @@ class AccessBlock(BaseModel):
     """External dataset access verification gate state."""
 
     level: Literal["public", "registration", "controlled", "commercial", "mixed"]
-    availability: Literal["available", "embargoed", "withdrawn"] = "available"
+    # `on-request-only`: obtainable only by contacting the authors ("available on
+    # reasonable request"). It has no followable access procedure, no SLA, and no
+    # appeal, so it fails third-party reproducibility and is analysis-ineligible --
+    # catalogued as a known gap, never counted as a viable source (fb-2026-07-17-010,
+    # fb-2026-07-07-003).
+    availability: Literal["available", "embargoed", "withdrawn", "on-request-only"] = "available"
     available_after: str = ""
     verified: bool
     verification_method: Literal[
