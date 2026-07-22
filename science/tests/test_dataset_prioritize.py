@@ -239,7 +239,8 @@ def test_target_coverage_reports_runtime_states_and_gap_reasons(tmp_path: Path) 
     )
     _write(
         tmp_path / "entities/questions/q-gap.md",
-        '---\nid: "question:q-gap"\nkind: "question"\ntitle: "Gap"\n---\n',
+        '---\nid: "question:q-gap"\nkind: "question"\ntitle: "Gap"\n'
+        'required_capabilities: [{assay: "gene-expression", modality: "bulk-rna"}]\n---\n',
     )
     _write(
         tmp_path / "entities/datasets/run.md",
@@ -284,6 +285,40 @@ def test_target_coverage_reports_runtime_states_and_gap_reasons(tmp_path: Path) 
     assert by_target["question:q-unverified"]["gap_reason"] == "only-unverified"
     assert by_target["question:q-gap"]["coverage_state"] == "no-candidate"
     assert by_target["question:q-gap"]["gap_reason"] == "no-candidate"
+
+
+def test_target_coverage_reports_missing_required_capabilities_even_with_no_datasets(tmp_path: Path) -> None:
+    """A target that declares no required_capabilities is structurally UNSCOREABLE --
+    no dataset can ever be scored covered against it. It reports the existing
+    'missing-required-capabilities' gap (fix the target), NOT 'no-candidate' (find a
+    dataset), even when zero datasets reach it (fb-2026-07-17-006)."""
+    # A target with no required_capabilities and no datasets reaching it.
+    _write(
+        tmp_path / "entities/questions/q-empty.md",
+        '---\nid: "question:q-empty"\nkind: "question"\ntitle: "Empty caps"\n'
+        "required_capabilities: []\n---\n",
+    )
+    # A target with no required_capabilities that DOES have a reaching dataset --
+    # still unscoreable (the dataset is incompatible by construction).
+    _write(
+        tmp_path / "entities/questions/q-absent.md",
+        '---\nid: "question:q-absent"\nkind: "question"\ntitle: "Absent caps"\n---\n',
+    )
+    _write(
+        tmp_path / "entities/datasets/reach.md",
+        '---\nid: "dataset:reach"\nkind: "dataset"\ntitle: "Reach"\norigin: "external"\n'
+        'dataset_class: "deposit"\ndatapackage: "data/reach/datapackage.json"\n'
+        'related: ["question:q-absent"]\n'
+        'provided_capabilities: [{assay: "gene-expression", modality: "bulk-rna"}]\n'
+        'access: {level: "public", verified: true}\n---\n',
+    )
+
+    rows = prioritize(tmp_path, include_gated=True, include_reference=True, include_pointer=True)
+    by_target = {r["target"]: r for r in target_coverage(rows, tmp_path)}
+
+    assert by_target["question:q-empty"]["gap_reason"] == "missing-required-capabilities"
+    assert by_target["question:q-empty"]["coverage_state"] == "missing-required-capabilities"
+    assert by_target["question:q-absent"]["gap_reason"] == "missing-required-capabilities"
 
 
 def test_target_coverage_rejects_runtime_dataset_with_wrong_capability(tmp_path: Path) -> None:
