@@ -118,7 +118,7 @@ Use this frontmatter:
 id: "plan:<NNNN>-<slug>-analysis-plan"
 kind: "plan"
 title: "<short title>"
-status: ready | ready-with-caveats | not-ready
+status: draft
 created: "YYYY-MM-DD"
 updated: "YYYY-MM-DD"
 plan_kind: "analysis-plan"
@@ -131,6 +131,13 @@ skills_loaded:
     reason: single-cell/pseudobulk expression analysis
 ---
 ```
+
+`status` is the plan's **lifecycle** state (`draft` while authoring, then
+`active`/`complete` per the plan status vocabulary) — it is **not** the readiness
+verdict. The `ready | ready-with-caveats | not-ready` judgement is the analysis
+plan's gate outcome and belongs in the **Readiness Decision** body section below,
+never in the frontmatter `status` (those values are not in the plan vocabulary and
+fail status-vocabulary validation).
 
 Reference saved analysis plans as `plan:<NNNN>-<slug>-analysis-plan`. Do not emit
 `kind: analysis-plan`, `id: analysis-plan:<slug>`, or a date-prefixed filename;

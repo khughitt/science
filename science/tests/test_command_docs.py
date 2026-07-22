@@ -1510,3 +1510,30 @@ def test_critique_approach_documents_two_axis_labels_require_dag_port() -> None:
     assert "science dag" in text
     assert "edge_status" in text and "identification" in text
     assert "port" in norm.lower()
+
+
+def test_plan_analysis_prescribes_a_valid_plan_lifecycle_status() -> None:
+    """The frontmatter status must be a real plan status. ready|ready-with-caveats|
+    not-ready are not in the plan vocabulary (they are the readiness *verdict*, which
+    lives in the 'Readiness Decision' body section, not the lifecycle status) --
+    fb-2026-07-12-004."""
+    text = _read("commands/plan-analysis.md")
+
+    assert "status: ready | ready-with-caveats | not-ready" not in text
+    assert "status: draft" in text
+    # The readiness verdict is preserved as a body section.
+    assert "Readiness Decision" in text
+
+
+def test_critique_approach_does_not_set_an_illegal_inquiry_status() -> None:
+    """'critiqued' is not in the inquiry status vocabulary; setting it fails
+    status-vocabulary validation. The review is recorded by the interpretation
+    critique entity, not an inquiry lifecycle mutation (fb-2026-07-12-005)."""
+    text = _read("commands/critique-approach.md")
+
+    # The imperative to mutate the inquiry status is gone (an explanatory mention of
+    # why `critiqued` is illegal may remain).
+    assert "Update the inquiry status to `critiqued`" not in text
+    assert "status: critiqued" not in text
+    assert "status to critiqued" not in text
+    assert "Leave the inquiry's lifecycle `status` unchanged." in _norm(text)
