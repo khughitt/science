@@ -205,13 +205,24 @@ Because the transaction ID is not known at compilation, disjointness between scr
 persistent paths cannot be established by comparing concrete names then. It is instead a **structural**
 guarantee: every same-parent scratch name (file staging, delete tombstone, move anchor) occupies a
 **reserved scratch grammar** — a single-component leaf name carrying a reserved sigil that a persistent
-project path may never bear (for example a fixed prefix such as `.sci-txn.<txid>.<effect-id>.<role>`);
-`CreateDirectory` staging instead lives in the protected `work/` namespace (§9.5). Compilation rejects
-any persistent effect path that matches the reserved grammar, so scratch and persistent paths are
-disjoint regardless of which transaction ID is later bound. As defense-in-depth, preparation — after
-binding the concrete ID — still asserts that each instantiated scratch path is absent in the captured
-initial surface before any journal or blob write; a violation is an internal `ProtocolError`, not a
-recoverable state, because the reserved grammar makes it unreachable by construction.
+project path may never bear (`CreateDirectory` staging instead lives in the protected `work/`
+namespace, §9.5). The sigil is chosen to be **invariant under the backend's name equivalence**: grammar
+matching uses the same case- and Unicode-normalization semantics as the journal-namespace identity
+check (§5.4), and the sigil itself is composed only of equivalence-invariant characters — an
+ASCII-punctuation-and-digit prefix with no letters (for example `.#txn.<txid>.<effect-id>.<role>`) — so
+a persistent path cannot alias a scratch name through a case or NFC/NFD variant on an insensitive
+volume, as a letter-bearing prefix like `.sci-txn.` would allow. Compilation rejects any persistent
+effect path matching the grammar under those semantics, so declared persistent paths and scratch are
+disjoint regardless of which transaction ID is later bound.
+
+The grammar forecloses *declared* collisions, not concrete ones: a noncooperating writer, or debris
+predating this engine, can still create a concrete scratch leaf. Preparation therefore checks each
+instantiated scratch path for absence after binding the ID; on a collision it **regenerates the
+transaction ID** (yielding fresh scratch names), or, failing that, returns an external-state refusal —
+never an internal `ProtocolError`, because an occupied scratch name is external state under the
+noncooperating-writer model, not a contract violation. This absence check is advisory against a
+post-check race: the authoritative guard is the `O_EXCL` creation or no-clobber transfer at the moment
+each scratch object is materialized, which fails closed if the name was taken between check and use.
 
 ### 5.2 Effect variants
 
@@ -1001,10 +1012,13 @@ block-device crash testing.
 
 For each family, authenticate a round-tripped plan, compile twice, and require identical canonical
 output. Reject missing effects, extra effects, invalid ordering, malformed timelines, payload/mode
-mismatches, path escapes, saved/fresh surface divergence, persistent paths matching the reserved
-scratch grammar, and reserved-namespace aliases — case variants (`.SCIENCE/TRANSACTIONS/…`) and
-Unicode NFC/NFD variants of `.science/transactions/` on case- and normalization-insensitive volumes,
-which the identity-based check (§5.4) must reject where a lexical prefix check would not.
+mismatches, path escapes, and saved/fresh surface divergence. Apply the same case- and Unicode
+(NFC/NFD) alias tests to **both** name-equivalence surfaces on case- and normalization-insensitive
+volumes: the journal namespace (a persistent path spelled `.SCIENCE/TRANSACTIONS/…` or an NFC/NFD
+variant of `.science/transactions/`, which the identity-based check of §5.4 must reject where a lexical
+prefix check would not) and the reserved scratch grammar (a persistent path aliasing the scratch sigil
+through a case or normalization variant, which the equivalence-aware grammar match of §5.1 must
+reject). A letter-free sigil and equivalence-aware matching must both pass these tests.
 
 ### 13.4 End-to-end recovery
 
