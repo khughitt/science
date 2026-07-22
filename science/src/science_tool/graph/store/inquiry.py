@@ -488,12 +488,33 @@ def validate_inquiry_dataset(dataset: Dataset, slug: str) -> InstrumentResult[di
     # empty result here means the subgraph was never compiled.
     inquiry_graph = dataset.graph(inquiry_uri)
     if len(inquiry_graph) == 0:
+        # No compiled boundary/flow subgraph. Distinguish two source-level causes
+        # (fb-2026-07-11-030): a thin doc-authored `kind: inquiry` that never carried
+        # an inquiry block (expected: nothing to compile) vs. a patch-definition inquiry
+        # whose subgraph is genuinely missing (a defect). The former is quiet
+        # (`no_inquiry_block`, surfaced INFO); the latter warns.
+        slug_local = str(inquiry_uri)[len(str(PROJECT_NS) + "inquiry/") :]
+        patch_uri = URIRef(PROJECT_NS[f"patch-definition/{slug_local.lower()}"])
+        authored_as_patch = any(
+            True for graph in dataset.graphs() for _ in graph.triples((patch_uri, None, None))
+        )
+        if authored_as_patch:
+            return InstrumentResult.unwired(
+                code="no_inquiry_subgraph",
+                reason=(
+                    f"Inquiry 'inquiry/{requested}' is authored as a patch-definition but has no "
+                    f"compiled boundary/flow subgraph (no named graph {inquiry_uri}). Its structural "
+                    "checks cannot run; reporting them as passing would validate an inquiry nobody "
+                    "inspected. Rebuild the graph, or check the inquiry block for errors."
+                ),
+            )
         return InstrumentResult.unwired(
-            code="no_inquiry_subgraph",
+            code="no_inquiry_block",
             reason=(
-                f"Inquiry 'inquiry/{requested}' has no compiled boundary/flow subgraph "
-                f"(no named graph {inquiry_uri}). Its structural checks cannot run; "
-                "reporting them as passing would validate an inquiry nobody inspected."
+                f"Inquiry 'inquiry/{requested}' is a thin doc-authored inquiry with no authored "
+                "boundary/flow block, so its structural checks are not applicable. Author an "
+                "inquiry: block on a patch-definition (or convert this inquiry to one) if you "
+                "want structural validation."
             ),
         )
 

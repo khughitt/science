@@ -481,6 +481,41 @@ def test_inquiry_validation_maps_statuses_and_verbose_passes(monkeypatch: pytest
     assert "inquiry 'demo': causal_note — informational" in _messages(verbose_results, Severity.INFO)
 
 
+def test_inquiry_no_inquiry_block_is_info_but_missing_subgraph_warns(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """A thin doc-authored inquiry (no_inquiry_block) surfaces as INFO, not WARN;
+    a patch-definition whose subgraph is missing (no_inquiry_subgraph) stays WARN
+    (fb-2026-07-11-030)."""
+    from science_tool.validate.checks import graph
+
+    graph_path = tmp_path / "knowledge" / "graph.trig"
+    graph_path.parent.mkdir()
+    graph_path.write_text("", encoding="utf-8")
+    monkeypatch.setattr(graph, "validate_peers", lambda _root: [])
+    monkeypatch.setattr(graph, "materialization_audit", lambda _root: ValidationVerdict.passed([]))
+    monkeypatch.setattr(graph, "validate_graph_dataset", lambda _dataset: ValidationVerdict.passed([]))
+    monkeypatch.setattr(graph, "diff_graph_inputs_dataset", lambda _dataset, **_kwargs: InstrumentResult[dict].empty())
+    monkeypatch.setattr(
+        graph,
+        "list_inquiries_dataset",
+        lambda _dataset: InstrumentResult.from_rows([{"slug": "thin"}, {"slug": "broken"}]),
+    )
+
+    def validate(_dataset: object, slug: str) -> InstrumentResult[dict[str, str]]:
+        if slug == "thin":
+            return InstrumentResult.unwired(code="no_inquiry_block", reason="thin doc-authored")
+        return InstrumentResult.unwired(code="no_inquiry_subgraph", reason="expected but missing")
+
+    monkeypatch.setattr(graph, "validate_inquiry_dataset", validate)
+
+    results = list(graph.check_graph(_ctx(tmp_path)))
+
+    assert "inquiry 'thin': structural checks did not run (no_inquiry_block)" in _messages(results, Severity.INFO)
+    assert "inquiry 'thin': structural checks did not run (no_inquiry_block)" not in _messages(results, Severity.WARN)
+    assert "inquiry 'broken': structural checks did not run (no_inquiry_subgraph)" in _messages(results, Severity.WARN)
+
+
 def test_inquiry_value_error_propagates(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     from science_tool.validate.checks import graph
 
