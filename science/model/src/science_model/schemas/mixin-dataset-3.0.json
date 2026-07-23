@@ -1,0 +1,212 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.science/mixin-dataset-3.0.json",
+  "title": "science entity dataset mixin",
+  "$comment": "3.0 retypes provided_capabilities from an array of strings to an array of {data_product, qualifiers} objects (capability-drift repair; docs/plans/2026-07-23-data-product-vocabulary-and-skill-coverage-design.md). mixin-dataset-2.0.json is RETAINED as rollback and for pre-3.0 consumers. Do not edit or delete it.",
+  "type": "object",
+  "required": ["id", "kind", "origin", "tier"],
+  "properties": {
+    "id": {"type": "string", "pattern": "^dataset:[a-z0-9][a-z0-9-]{1,63}$"},
+    "kind": {"const": "dataset"},
+    "datapackage": {"type": "string", "minLength": 1, "science:merge": "forbidden"},
+    "origin": {"enum": ["external", "derived"]},
+    "tier": {"enum": ["use-now", "evaluate-next", "track"]},
+    "status": {"type": "string", "science:merge": "project_only"},
+    "created": {"type": "string", "format": "date", "science:merge": "project_only"},
+    "updated": {"type": "string", "format": "date", "science:merge": "project_only"},
+    "update_cadence": {"type": "string"},
+    "license": {"type": "string"},
+    "accessions": {"type": "array", "items": {"type": "string"}, "science:merge": "forbidden"},
+    "access": {"$ref": "#/$defs/access", "science:merge": "forbidden"},
+    "derivation": {"$ref": "#/$defs/derivation", "science:merge": "forbidden"},
+    "parent_dataset": {"type": "string", "pattern": "^dataset:"},
+    "siblings": {"type": "array", "items": {"type": "string"}},
+    "consumed_by": {"type": "array", "items": {"type": "string"}},
+    "provided_capabilities": {"type": "array", "items": {"$ref": "#/$defs/data_product_capability"}},
+    "source_class": {"enum": ["observational", "derived", "reference"]},
+    "dataset_class": {"enum": ["deposit", "reference", "pointer"]},
+    "runtime_state": {
+      "enum": ["runnable", "unstaged-deposit", "blocked-access", "reference-only", "pointer-only"]
+    },
+    "derived_kind": {"enum": ["aggregate", "transform", "model_output"]},
+    "benchmark": {"$ref": "#/$defs/benchmark"}
+  },
+  "not": {"required": ["resources"]},
+  "allOf": [
+    {
+      "if": {"properties": {"origin": {"const": "external"}}, "required": ["origin"]},
+      "then": {
+        "required": ["access"],
+        "not": {"required": ["derivation"]}
+      }
+    },
+    {
+      "if": {"properties": {"origin": {"const": "derived"}}, "required": ["origin"]},
+      "then": {
+        "required": ["derivation"],
+        "not": {"anyOf": [{"required": ["access"]}, {"required": ["accessions"]}]}
+      }
+    },
+    {
+      "if": {"properties": {"source_class": {"const": "derived"}}, "required": ["source_class"]},
+      "then": {"required": ["derived_kind"]}
+    },
+    {
+      "if": {"required": ["derived_kind"]},
+      "then": {"properties": {"source_class": {"const": "derived"}}, "required": ["source_class"]}
+    },
+    {
+      "if": {
+        "anyOf": [
+          {"not": {"required": ["dataset_class"]}},
+          {
+            "properties": {"dataset_class": {"const": "deposit"}},
+            "required": ["dataset_class"]
+          }
+        ]
+      },
+      "then": {"required": ["datapackage"]}
+    }
+  ],
+  "$defs": {
+    "benchmark": {
+      "type": "object",
+      "properties": {
+        "domains": {"type": "array", "items": {"type": "string"}},
+        "modalities": {"type": "array", "items": {"type": "string"}},
+        "signal_types": {"type": "array", "items": {"type": "string"}},
+        "benchmark_kinds": {"type": "array", "items": {"type": "string"}},
+        "source_datasets": {"type": "array", "items": {"type": "string"}},
+        "related_beliefs": {"type": "array", "items": {"type": "string"}},
+        "notes": {"type": "array", "items": {"type": "string"}},
+        "limitations": {"type": "array", "items": {"type": "string"}},
+        "tasks": {"type": "array", "items": {"$ref": "#/$defs/benchmark_task"}}
+      }
+    },
+    "benchmark_task": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id"],
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 2,
+          "maxLength": 64,
+          "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$"
+        },
+        "task_type": {"type": "string"},
+        "prediction_target": {"type": "string"},
+        "held_out_unit": {"type": "string"},
+        "metric": {"type": "string"},
+        "baseline": {"type": "string"},
+        "ground_truth": {
+          "type": "object",
+          "properties": {
+            "type": {"type": "string"},
+            "description": {"type": "string"}
+          }
+        },
+        "support": {
+          "anyOf": [
+            {"type": "null"},
+            {"$ref": "#/$defs/benchmark_task_support"}
+          ]
+        },
+        "interpretation_limits": {"type": "array", "items": {"type": "string"}},
+        "intervention": {"type": "string"},
+        "timepoints": {"type": "array", "items": {"type": "string"}},
+        "contexts": {"type": "array", "items": {"type": "string"}}
+      }
+    },
+    "benchmark_task_support": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["state"],
+      "properties": {
+        "state": {"enum": ["supported", "candidate", "blocked"]},
+        "reason": {
+          "type": "string",
+          "anyOf": [
+            {"const": ""},
+            {"pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$"}
+          ]
+        },
+        "checked_at": {
+          "type": "string",
+          "anyOf": [
+            {"const": ""},
+            {"pattern": "^\\d{4}-\\d{2}-\\d{2}$"}
+          ]
+        },
+        "evidence": {"type": "array", "items": {"type": "string", "pattern": "\\S"}},
+        "notes": {"type": "array", "items": {"type": "string", "pattern": "\\S"}}
+      },
+      "allOf": [
+        {
+          "if": {"properties": {"state": {"enum": ["candidate", "blocked"]}}, "required": ["state"]},
+          "then": {
+            "required": ["reason"],
+            "properties": {
+              "reason": {"pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$"}
+            }
+          }
+        }
+      ]
+    },
+    "access": {
+      "type": "object",
+      "required": ["level", "verified"],
+      "properties": {
+        "level": {"enum": ["public", "registration", "controlled", "commercial", "mixed"]},
+        "availability": {"enum": ["available", "embargoed", "withdrawn"]},
+        "verified": {"type": "boolean"},
+        "verification_method": {
+          "enum": ["", "retrieved", "credential-confirmed", "landing-confirmed", "metadata-confirmed"]
+        },
+        "last_reviewed": {"type": "string"},
+        "verified_by": {"type": "string"},
+        "source_url": {"type": "string"},
+        "credentials_required": {"type": "string"}
+      }
+    },
+    "derivation": {
+      "type": "object",
+      "oneOf": [
+        {
+          "title": "workflow derivation",
+          "properties": {
+            "kind": {"const": "workflow"},
+            "workflow_recipe": {"type": "string"},
+            "recipe_lockfile": {"type": "string"},
+            "inputs": {"type": "array", "items": {"type": "string", "pattern": "^dataset:"}}
+          },
+          "required": ["workflow_recipe", "inputs"],
+          "not": {"anyOf": [{"required": ["parent_dataset"]}, {"required": ["member_key"]}]}
+        },
+        {
+          "title": "member_of derivation",
+          "properties": {
+            "kind": {"const": "member_of"},
+            "parent_dataset": {"type": "string", "pattern": "^dataset:"},
+            "member_key": {"type": "string", "minLength": 1}
+          },
+          "required": ["kind", "parent_dataset", "member_key"],
+          "not": {"anyOf": [{"required": ["workflow_recipe"]}, {"required": ["inputs"]}, {"required": ["recipe_lockfile"]}]}
+        }
+      ]
+    },
+    "data_product_capability": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["data_product"],
+      "properties": {
+        "data_product": {"type": "string", "pattern": "^data-product:[a-z0-9][a-z0-9-]*$"},
+        "qualifiers": {
+          "type": "object",
+          "propertyNames": {"pattern": "\\S"},
+          "additionalProperties": {"type": "string", "pattern": "\\S"}
+        }
+      }
+    }
+  }
+}
