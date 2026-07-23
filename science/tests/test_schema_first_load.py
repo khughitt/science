@@ -81,6 +81,29 @@ def _load(project_root: Path):
     return next(e for e in sources.entities if e.id == "hypothesis:0001-a")
 
 
+def _dataset(tmp_path: Path, *, generation: int, **extra: object) -> None:
+    frontmatter: dict[str, object] = {
+        "schema_profile": f"science-entity-base/1.0+dataset/{'3.0' if generation == 3 else '2.0'}",
+        "id": "dataset:demo",
+        "kind": "dataset",
+        "title": "Demo dataset",
+        "version": "1.0.0",
+        "created": "2026-07-11",
+        "updated": "2026-07-11",
+        "origin": "external",
+        "tier": "use-now",
+        "dataset_class": "pointer",
+        "access": {"level": "public", "verified": True},
+    }
+    frontmatter.update(extra)
+    write_markdown_entity(tmp_path, "entities/datasets/demo.md", frontmatter, "Body.")
+
+
+def _load_dataset(project_root: Path):
+    sources = load_project_sources(project_root)
+    return next(e for e in sources.entities if e.id == "dataset:demo")
+
+
 def test_a_project_EXTENSION_field_SURVIVES_the_projection(tmp_path: Path) -> None:
     """D3.3, and the reason the migration's renames are sound.
 
@@ -196,3 +219,30 @@ def test_the_PACKAGE_default_profile_would_reject_the_extension_field(tmp_path: 
 
     with pytest.raises(ValueError, match="does not satisfy its schema"):
         _load(project)
+
+
+def test_gen3_dataset_bad_capability_shape_fails(tmp_path: Path) -> None:
+    """Task 6: a gen-3 project runs the dataset-only hook, and dataset/3.0 retypes
+    `provided_capabilities` to `{data_product, qualifiers}` objects (Task 3). The legacy
+    string-keyed shape from mixin-dataset-2.0 must be REFUSED under gen 3 -- dataset stays out of
+    `PROJECT_MIXIN_NAMES` (it is a commons kind), so this is a SEPARATE, generation-gated hook, not
+    an addition to that frozenset.
+    """
+    project = _project(tmp_path, pinned=True, extensions=False, generation=3)
+    _dataset(project, generation=3, provided_capabilities=[{"assay": "x"}])
+
+    with pytest.raises(ValueError, match="dataset/3.0"):
+        _load_dataset(project)
+
+
+def test_gen2_dataset_capability_shape_untouched(tmp_path: Path) -> None:
+    """Regression: under gen 2 the dataset hook does not fire at all (`generation != 3`), so the
+    legacy `provided_capabilities` shape loads exactly as it did before Task 6.
+    """
+    project = _project(tmp_path, pinned=True, extensions=False, generation=2)
+    _dataset(project, generation=2, provided_capabilities=[{"assay": "x", "modality": "bulk-rna"}])
+
+    entity = _load_dataset(project)  # no error under gen 2
+
+    assert entity.model_extra is not None
+    assert entity.model_extra["provided_capabilities"] == [{"assay": "x", "modality": "bulk-rna"}]

@@ -445,6 +445,9 @@ def load_project_sources(
                 _validate_against_schema(
                     raw, kind=kind, path=str(ref.path), project_schema=project_schema
                 )
+                _validate_dataset_gen3(
+                    raw, kind=kind, path=str(ref.path), project_schema=project_schema
+                )
                 authored_aliases = _enrich_raw(
                     raw,
                     kind=kind,
@@ -1287,6 +1290,35 @@ def _validate_against_schema(
         raise ValueError(
             f"{path}: {kind} frontmatter does not satisfy its schema "
             f"(project is pinned to entity_schema_version: {project_schema._generation})\n  {exc}"
+        ) from exc
+
+
+def _validate_dataset_gen3(
+    raw: dict[str, Any],
+    *,
+    kind: str,
+    path: str,
+    project_schema: ProjectSchema | None,
+) -> None:
+    """Task 6 -- a SEPARATE, generation-gated hook for `dataset`, not an addition to
+    `PROJECT_MIXIN_NAMES`.
+
+    Dataset is a COMMONS kind (369 live records, `extra="allow"` by design) and must stay out of
+    that frozenset: joining it would flip `unevaluatedProperties: false` on for every commons
+    dataset everywhere, not just the gen-3 capability shape this hook exists to check. Gen 3 instead
+    moves `dataset` onto its 3.0 mixin (`provided_capabilities` retyped to `{data_product,
+    qualifiers}` objects, Task 3) and only THIS hook enforces it, gated on the project's declared
+    generation rather than on membership in the migration-slice list.
+    """
+    if project_schema is None or project_schema._generation != 3 or kind != "dataset":
+        return
+    authored = {key: value for key, value in raw.items() if key not in MarkdownAdapter.INJECTED_KEYS}
+    try:
+        project_schema.validator.validate_as(authored, project_schema.profile_for("dataset"))
+    except EntityValidationError as exc:
+        raise ValueError(
+            f"{path}: dataset frontmatter does not satisfy dataset/3.0 "
+            f"(project is pinned to entity_schema_version: 3)\n  {exc}"
         ) from exc
 
 
