@@ -29,6 +29,10 @@ bias, or positive/negative selection analysis on somatic mutation data.
   which can dominate rankings.
 - **Known-driver lists as priors only.** Used as validation or priors, never as
   circular evidence for discovering the same drivers.
+- **Cohort stage and study heterogeneity.** Primary-only and treated/relapse
+  cohorts are not silently pooled — therapy shifts both burden and selection —
+  and large studies are not allowed to dominate driver estimates without
+  modeling per-study effects.
 
 ## Decision rule or reasoning criteria
 
