@@ -2,6 +2,7 @@ from science_tool.datasets.capability_shape import (
     capability_shape_issue,
     gen3_shape_issue,
     legacy_map_shape_issue,
+    parse_gen3_capabilities,
 )
 
 
@@ -38,3 +39,24 @@ def test_legacy_accepts_string_map():
 def test_dispatch_by_generation():
     assert capability_shape_issue([{"assay": "x"}], generation=2) is None
     assert capability_shape_issue([{"assay": "x"}], generation=3) == "malformed"
+
+
+def test_gen3_rejects_uppercase_data_product():
+    assert gen3_shape_issue([{"data_product": "data-product:ABC"}]) == "malformed"
+
+
+def test_gen3_rejects_unicode_data_product():
+    assert gen3_shape_issue([{"data_product": "data-product:Ω"}]) == "malformed"
+
+
+def test_parse_skips_entry_with_extra_key():
+    assert parse_gen3_capabilities([{"data_product": "data-product:x", "assay": "y"}]) == []
+
+
+def test_parse_skips_entry_with_invalid_qualifiers():
+    assert parse_gen3_capabilities([{"data_product": "data-product:x", "qualifiers": {"a": ""}}]) == []
+
+
+def test_parse_keeps_valid_entry_with_qualifiers():
+    caps = parse_gen3_capabilities([{"data_product": "data-product:x", "qualifiers": {"a": "b"}}])
+    assert len(caps) == 1 and caps[0].data_product == "data-product:x" and caps[0].qualifiers == {"a": "b"}

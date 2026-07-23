@@ -2,11 +2,13 @@
 
 from __future__ import annotations
 
+import re
 from collections.abc import Mapping
 from dataclasses import dataclass, field
 
 _DP_PREFIX = "data-product:"
 _ALLOWED_GEN3_KEYS = {"data_product", "qualifiers"}
+_DP_SLUG = re.compile(r"[a-z0-9][a-z0-9-]*")
 
 
 @dataclass(frozen=True)
@@ -18,8 +20,7 @@ class Capability:
 def _valid_dp(value: object) -> bool:
     if not isinstance(value, str) or not value.startswith(_DP_PREFIX):
         return False
-    slug = value[len(_DP_PREFIX):]
-    return bool(slug) and slug[0].isalnum() and all(c.isalnum() or c == "-" for c in slug)
+    return _DP_SLUG.fullmatch(value[len(_DP_PREFIX):]) is not None
 
 
 def _valid_qualifiers(value: object) -> bool:
@@ -33,35 +34,39 @@ def _valid_qualifiers(value: object) -> bool:
     return True
 
 
+def _gen3_entry_ok(entry: object) -> bool:
+    if not isinstance(entry, Mapping) or not entry:
+        return False
+    if set(entry.keys()) - _ALLOWED_GEN3_KEYS:
+        return False
+    if not _valid_dp(entry.get("data_product")):
+        return False
+    if "qualifiers" in entry and not _valid_qualifiers(entry["qualifiers"]):
+        return False
+    return True
+
+
 def gen3_shape_issue(value: object) -> str | None:
     if value is None or value == []:
         return "missing"
     if not isinstance(value, list):
         return "malformed"
     for entry in value:
-        if not isinstance(entry, Mapping) or not entry:
-            return "malformed"
-        if set(entry.keys()) - _ALLOWED_GEN3_KEYS:
-            return "malformed"
-        if not _valid_dp(entry.get("data_product")):
-            return "malformed"
-        if "qualifiers" in entry and not _valid_qualifiers(entry["qualifiers"]):
+        if not _gen3_entry_ok(entry):
             return "malformed"
     return None
 
 
 def parse_gen3_capabilities(value: object) -> list[Capability]:
-    """Parse a validated-shape gen-3 capability list. Entries failing the shape are skipped."""
+    """Parse a gen-3 capability list. Entries failing the full gen-3 shape are skipped."""
     if not isinstance(value, list):
         return []
     out: list[Capability] = []
     for entry in value:
-        if not isinstance(entry, Mapping):
-            continue
-        if not _valid_dp(entry.get("data_product")):
+        if not _gen3_entry_ok(entry):
             continue
         quals_raw = entry.get("qualifiers", {})
-        quals = {k.strip(): v.strip() for k, v in quals_raw.items()} if _valid_qualifiers(quals_raw) else {}
+        quals = {k.strip(): v.strip() for k, v in quals_raw.items()}
         out.append(Capability(data_product=str(entry["data_product"]), qualifiers=quals))
     return out
 
