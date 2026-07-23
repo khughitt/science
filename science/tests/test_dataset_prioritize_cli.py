@@ -211,6 +211,27 @@ def test_prioritize_coverage_json_reports_capability_fit_details(tmp_path: Path)
     assert row["incompatible_datasets"][0]["reason"] == "capability-mismatch"
 
 
+def test_prioritize_coverage_credits_compatible_dataset_under_pinned_gen2(tmp_path: Path) -> None:
+    (tmp_path / "science.yaml").write_text('entity_schema_version: 2\n', encoding="utf-8")
+    _seed(tmp_path)
+    qdir = tmp_path / "entities" / "questions"
+    qdir.mkdir(parents=True, exist_ok=True)
+    (qdir / "q-covered.md").write_text(
+        '---\nid: "question:q-covered"\nkind: "question"\ntitle: "Covered"\nrelated: ["dataset:b"]\n'
+        'required_capabilities: [{assay: "gene-expression", modality: "bulk-rna"}]\n---\n',
+        encoding="utf-8",
+    )
+
+    res = _run(tmp_path, "--coverage", "--format", "json")
+
+    assert res.exit_code == 0
+    rows = _json_rows(res)
+    by_id = {row["target"]: row for row in rows}
+    assert by_id["question:q-covered"]["datasets"] == ["dataset:b"]
+    assert by_id["question:q-covered"]["coverage_state"] == "unverified"
+    assert by_id["question:q-covered"]["gap_reason"] == "only-unverified"
+
+
 def test_prioritize_coverage_uses_paper_usage_frontmatter_without_graph(tmp_path: Path) -> None:
     _seed_paper_reach(tmp_path)
 
