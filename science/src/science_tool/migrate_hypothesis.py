@@ -39,11 +39,16 @@ from science_model.frontmatter import (
     split_frontmatter,
 )
 
-from science_tool.entity_profiles import ENTITY_SCHEMA_VERSION, ProjectSchema, load_project_schema
+from science_tool.entity_profiles import ProjectSchema, load_project_schema
 from science_tool.project_config import validated_entity_schema_version
 from science_tool.status_inventory import InventoryRow, adjudication_for, inventory
 
 JOURNAL_PATH = Path(".science/hypothesis-migration.journal")
+
+# This migrator's TARGET generation (gen-1 -> gen-2 hypotheses). Local and explicit: it is a
+# migration DESTINATION, not the toolkit's armed-generation set. It stays 2 even as new generations
+# are armed -- this pass rewrites gen-1 corpora to the gen-2 hypothesis shape and nothing else.
+_TARGET_GENERATION = 2
 
 # §7 of the field adjudication. No target, nothing owed -- the mixin marks each `false`, so a
 # leftover fails LOUDLY at preflight instead of validating quietly.
@@ -242,15 +247,15 @@ def _commit(project_root: Path, planned: list[PlannedWrite]) -> list[Path]:
     for write in planned:
         atomic_write_text(write.path, write.text)
     # The pin, LAST: a project is on schema 2 only once its files actually are.
-    _set_entity_schema_version(project_root, ENTITY_SCHEMA_VERSION)
+    _set_entity_schema_version(project_root, _TARGET_GENERATION)
     # ...and CONFIRM it took before the recovery journal is cleared. The pin is the sole authority for
     # "migrated", so a silently-unwritten pin would strand a fully-rewritten corpus as unmigrated with
     # no journal to recover from. Read it back through the same authority the loader and writer use.
     raw = yaml.safe_load(project_config_path(project_root).read_text(encoding="utf-8")) or {}
-    if validated_entity_schema_version(raw) != ENTITY_SCHEMA_VERSION:
+    if validated_entity_schema_version(raw) != _TARGET_GENERATION:
         raise MigrationRefused(
             f"the files were rewritten but {project_config_path(project_root).name} did not end up "
-            f"pinned to entity_schema_version: {ENTITY_SCHEMA_VERSION}. The recovery journal is KEPT; "
+            f"pinned to entity_schema_version: {_TARGET_GENERATION}. The recovery journal is KEPT; "
             "fix the pin by hand, then this project is complete -- do NOT re-run the migration."
         )
     (project_root / JOURNAL_PATH).unlink()

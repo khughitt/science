@@ -41,8 +41,11 @@ from science_tool.project_config import (
 
 SCHEMAS_DIRNAME = "schemas"
 
-# The version a project must DECLARE before any of this is applied to its files.
-ENTITY_SCHEMA_VERSION = 2
+# The generations that ARM schema-first validation. A project DECLARES one of these as its
+# `entity_schema_version` before any of this is applied to its files; absent or 1 means unmigrated
+# and is left untouched. Each armed generation selects a whole mixin-version row via the generation
+# matrix (science_model.entity_schema.profile).
+ARMED_SCHEMA_GENERATIONS = frozenset({2, 3})
 
 
 class EntityExtensionsError(ValueError):
@@ -56,16 +59,20 @@ class ProjectSchema:
     validator: EntityValidator
     _extensions: dict[str, list[str]]
     _loader: SchemaLoader
+    _generation: int = 2
 
     def profile_for(self, kind: str) -> ProfileString:
         """The profile for `kind` in THIS project — core, plus whatever the project declares."""
         return resolve_profile(
-            kind, extensions=self._extensions.get(kind, []), loader=self._loader
+            kind,
+            extensions=self._extensions.get(kind, []),
+            loader=self._loader,
+            generation=self._generation,
         )
 
 
 def load_project_schema(
-    project_root: Path, config: ProjectConfig | None = None
+    project_root: Path, config: ProjectConfig | None = None, *, generation: int = 2
 ) -> ProjectSchema:
     """Load the schema view for `project_root`, reading `entity_extensions` from science.yaml.
 
@@ -81,13 +88,14 @@ def load_project_schema(
         validator=EntityValidator(loader),
         _extensions=config.entity_extensions,
         _loader=loader,
+        _generation=generation,
     )
     _certify_declarations(config.entity_extensions, schemas_dir, schema)
     return schema
 
 
 def load_project_schema_if_pinned(project_root: Path) -> ProjectSchema | None:
-    """The project's composed schema — or None if it has not DECLARED `entity_schema_version: 2`.
+    """The project's composed schema — or None if its declared `entity_schema_version` is not armed.
 
     ONE gate, shared by the LOAD path (`graph/sources.py`) and the WRITE path (`entities.py`). The
     pin is the authority and the file shape never is, so "does this project speak schema 2?" must
@@ -113,9 +121,12 @@ def load_project_schema_if_pinned(project_root: Path) -> ProjectSchema | None:
     if not path.is_file():
         return None  # no config at all is not a typo — it is a project that never claimed anything
     raw = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
-    if validated_entity_schema_version(raw) != ENTITY_SCHEMA_VERSION:
+    version = validated_entity_schema_version(raw)
+    if version not in ARMED_SCHEMA_GENERATIONS:
         return None
-    return load_project_schema(project_root, load_project_config(project_root))
+    return load_project_schema(
+        project_root, load_project_config(project_root), generation=version
+    )
 
 
 def _certify_declarations(

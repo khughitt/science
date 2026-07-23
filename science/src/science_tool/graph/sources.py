@@ -50,7 +50,7 @@ from science_model.entity_schema.profile import ProfileParseError, default_profi
 from science_tool.bibliography import is_bibliography_reference as _is_bibliography_reference
 from science_tool.commons.aliases import load_manual_aliases
 from science_tool.entity_profiles import (
-    ENTITY_SCHEMA_VERSION,
+    ARMED_SCHEMA_GENERATIONS,
     ProjectSchema,
     load_project_schema,
 )
@@ -356,13 +356,16 @@ def load_project_sources(
     #
     # The pin was VALIDATED in `_read_project_config` through `validated_entity_schema_version` -- the
     # one narrow authority the WRITE path (`load_project_schema_if_pinned`) also reads it through, so
-    # the two never disagree about whether a project speaks schema 2. That authority checks the value
+    # the two never disagree about which generation a project speaks. That authority checks the value
     # without full `ProjectConfig` (which requires `name`): a graph build has never demanded a `name`,
     # and tightening that under a migration would put it inside Task 11's diff. So by here the value is
-    # already 1, 2, or None -- a `"2"` or `3` was refused at read time, not silently read as unpinned.
+    # already 1, 2, 3, or None -- a `"2"` or `"3"` (stray-quote) was refused at read time, not silently
+    # read as unpinned. An ARMED generation both switches validation on AND selects the mixin row it
+    # composes against, so the declared value is forwarded straight to `load_project_schema`.
+    declared = config.get("entity_schema_version")
     project_schema = (
-        load_project_schema(project_root)
-        if config.get("entity_schema_version") == ENTITY_SCHEMA_VERSION
+        load_project_schema(project_root, generation=declared)
+        if isinstance(declared, int) and declared in ARMED_SCHEMA_GENERATIONS
         else None
     )
     profiles = KnowledgeProfiles.model_validate(config["knowledge_profiles"])
@@ -1283,7 +1286,7 @@ def _validate_against_schema(
     except EntityValidationError as exc:
         raise ValueError(
             f"{path}: {kind} frontmatter does not satisfy its schema "
-            f"(project is pinned to entity_schema_version: 2)\n  {exc}"
+            f"(project is pinned to entity_schema_version: {project_schema._generation})\n  {exc}"
         ) from exc
 
 

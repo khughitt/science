@@ -15,7 +15,7 @@ from rdflib.namespace import SKOS, XSD
 from science_model.frontmatter import project_config_path
 
 from science_tool.entities import CLOSED_LIFECYCLE_STATUSES
-from science_tool.entity_profiles import ENTITY_SCHEMA_VERSION
+from science_tool.entity_profiles import ARMED_SCHEMA_GENERATIONS
 from science_tool.graph.belief import aggregate_belief, collect_evidence_units
 from science_tool.graph.belief_scalar import belief_scalar, belief_scalar_enabled, format_belief_weight
 from science_tool.graph.io import CITO_NS, PROJECT_NS, SCI_NS, project_root_from_graph_path
@@ -528,7 +528,7 @@ def _speaks_the_lifecycle(graph_path: Path) -> bool:
     """
     project_root = project_root_from_graph_path(graph_path)
     raw = yaml.safe_load(project_config_path(project_root).read_text(encoding="utf-8")) or {}
-    return validated_entity_schema_version(raw) == ENTITY_SCHEMA_VERSION
+    return validated_entity_schema_version(raw) in ARMED_SCHEMA_GENERATIONS
 
 
 def _related_neighbors(knowledge, uri: URIRef) -> set[URIRef]:
