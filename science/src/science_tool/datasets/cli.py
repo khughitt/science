@@ -261,6 +261,62 @@ def dataset_prioritize(
     emit(output_format=output_format, payload={"rows": rows, "excluded_summary": summary}, render_text=_render_rows)
 
 
+@dataset_group.command("capability-pairs")
+@click.option(
+    "--project-root",
+    default=None,
+    type=click.Path(path_type=Path, file_okay=False, dir_okay=True),
+    help="Enumerate a project's entities under entities/",
+)
+@click.option(
+    "--commons-root",
+    default=None,
+    type=click.Path(path_type=Path, file_okay=False, dir_okay=True),
+    help="Enumerate commons dataset records (datasets/<slug>/entity.md)",
+)
+@click.option(
+    "--file",
+    "file_path",
+    default=None,
+    type=click.Path(path_type=Path, exists=True, file_okay=True, dir_okay=False),
+    help="Enumerate a single entity file",
+)
+def dataset_capability_pairs(project_root: Path | None, commons_root: Path | None, file_path: Path | None) -> None:
+    """List distinct observed capability shapes (provided/required) across a corpus.
+
+    Read-only. Seeds the value-to-term crosswalk. Exactly one of --project-root,
+    --commons-root, or --file is required.
+    """
+    from dataclasses import asdict
+
+    from science_model.frontmatter import split_frontmatter
+
+    from science_tool.datasets.capability_pairs import enumerate_pairs
+
+    inputs = [project_root, commons_root, file_path]
+    if sum(1 for i in inputs if i is not None) != 1:
+        raise click.ClickException("exactly one of --project-root, --commons-root, or --file is required")
+
+    records: list[dict] = []
+    if project_root is not None:
+        from science_tool.dataset_prioritize import _iter_entity_frontmatter
+
+        records = [fm for _, fm in _iter_entity_frontmatter(project_root.resolve())]
+    elif commons_root is not None:
+        for entity_path in sorted(commons_root.resolve().glob("datasets/*/entity.md")):
+            fm, _ = split_frontmatter(entity_path.read_text(encoding="utf-8"))
+            if fm:
+                records.append(fm)
+    else:
+        assert file_path is not None
+        fm, _ = split_frontmatter(file_path.resolve().read_text(encoding="utf-8"))
+        if fm:
+            records.append(fm)
+
+    shapes = enumerate_pairs(records)
+    emit(output_format="json", payload=[asdict(s) for s in shapes], render_text=lambda: None)
+
+
 @dataset_group.command("add")
 @click.argument("slug")
 @click.option("--title", required=True, help="Human-readable dataset title")
