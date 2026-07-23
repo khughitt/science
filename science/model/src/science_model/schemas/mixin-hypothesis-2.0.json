@@ -1,0 +1,216 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.science/mixin-hypothesis-2.0.json",
+  "title": "hypothesis type mixin",
+  "$comment": "2.0 retypes required_capabilities entries to {data_product, qualifiers}; 1.0 is RETAINED as rollback. The first PROJECT-authored kind on the shared schema system. Every disposition below traces to docs/plans/2026-07-12-hypothesis-field-adjudication.md; test_mixin_hypothesis.py is that adjudication in executable form. Composed against science-entity-base/2.0 (base 1.0 enum-locks `kind` to the four commons kinds, and an allOf can only narrow).",
+  "type": "object",
+  "required": ["id", "kind", "status"],
+  "properties": {
+    "kind": { "const": "hypothesis" },
+    "id": { "type": "string", "pattern": "^hypothesis:", "$comment": "PREFIX only — base 2.0 owns the id's shape (it is kind-agnostic by design), and the mixin owns its identity. Without this, base 2.0's generic pattern happily admits `id: dataset:foo` on a hypothesis: the `kind` const would pass and the id would name a different entity. Deliberately NOT a full slug pattern — inventing one would hard-fail whichever of the 147 real ids I did not think of." },
+
+    "status": {
+      "description": "LIFECYCLE. Not the verdict. Sourced from the old `phase` field (design rev 7).",
+      "enum": ["draft", "active", "complete", "superseded", "retired", "archived"]
+    },
+    "verdict": {
+      "description": "EPISTEMIC. What the evidence concludes. ABSENT = not yet assessed — which is why `proposed`/`under-investigation` are NOT admitted: they would be a third spelling of absence.",
+      "enum": ["partially-supported", "supported", "weakened", "refuted"]
+    },
+    "closure_basis": {
+      "description": "The AUTHORED reason a terminal entity closed, required when no structural basis exists. The state is derivable; the reason is not.",
+      "type": "string",
+      "pattern": "\\S",
+      "$comment": "`\\S`, NOT `minLength: 1` — a single space has length 1. `closure_basis: \" \"` satisfied the `retired` conditional and closed the entity with a reason that says nothing, which is the fail-open this field exists to prevent."
+    },
+
+    "superseded_by": { "type": "string", "pattern": "^hypothesis:" },
+    "resynthesized_into": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "type": "string", "pattern": "^hypothesis:" },
+      "$comment": "A LIST — see archive.py:38 and materialize.py:155. `minItems: 1` because the terminal conditionals key off PRESENCE: `resynthesized_into: []` is present, so it discharged `superseded` while naming no successor at all — and the cross-record resolver (Task 7) would then find no reference to dangle and report nothing. An empty basis is not a basis."
+    },
+
+    "related": { "type": "array", "items": { "type": "string" } },
+    "source_refs": { "type": "array", "items": { "type": "string" } },
+    "aliases": { "type": "array", "items": { "type": "string" } },
+    "datasets": { "type": "array", "items": { "type": "string" } },
+    "added_by": { "type": "string" },
+    "profile": { "type": "string", "$comment": "AUTHORED and honored — sources.py:765-772 is fill-if-missing, materialize.py:640 emits sci:profile, entities_inventory.py:195-199 derives registration_state from it. 3 files author it. An earlier draft called it derived and stripped it; that was wrong." },
+
+    "relations": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/authored_relation" },
+      "$comment": "LEG 1 of the D4 supersedable gate. The CANONICAL supersession edge is a `relations:` entry with `predicate: sci:supersedes` (consolidation.py:7-12) — NOT top-level `supersedes:`, which is silently dropped (fb-2026-07-11-017). With `unevaluatedProperties: false` and no declaration here, the ONLY carrier the toolkit reads was rejected outright, making `superseded` a terminal status this kind could not reach through any supported path."
+    },
+
+    "origins": { "type": "array", "items": { "$ref": "#/$defs/origin_record" } },
+    "lens_views": { "type": "array", "items": { "$ref": "#/$defs/lens_view" } },
+    "review_state": { "$ref": "#/$defs/review_state" },
+    "rival_model_packet": { "$ref": "#/$defs/rival_model_packet" },
+    "composition_rule": {
+      "enum": ["all_steps", "conjunctive"],
+      "$comment": "The IMPLEMENTED rules (WEAKEST_LINK_COMPOSITION_RULES), NOT all of CompositionRule. `evidence_union` and `faceted_support` are RESERVED — declared in Python so the names are stable, and rejected at load by Entity._validate_composition_rule (entities.py:494). Enumerating all four here would admit two values the model refuses: an authored `evidence_union` would pass schema validation and then crash the loader, which is the schema pointing at the wrong file."
+    },
+
+    "required_capabilities": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/data_product_capability" },
+      "$comment": "Gen-3 shape: {data_product, qualifiers}. NO minItems: `[]` is `missing` to the WARN check; the schema must not promote it to a hard failure."
+    },
+    "capability_scope": {
+      "enum": ["reference-substrate", "derived-product", "methodological", "model-system", "clinical-outcome", "epidemiological", "behavioral-instrument"],
+      "$comment": "Mirrors CAPABILITY_SCOPE_VALUES (datasets/capability_scope.py). Reconciled against it in Task 8, so a scope added in Python without regenerating this enum fails the suite."
+    },
+
+    "phase": false,
+    "disposition": false,
+    "disposition_basis": false,
+    "belief_state": false,
+    "evidence_stance": false,
+    "author_stated_evidence": false,
+    "tags": false,
+    "priority": false,
+    "role": false,
+    "domain": false,
+    "promotion_criteria": false,
+    "confidence": false,
+
+    "schema_profile": false,
+    "version": false,
+    "sources": false,
+    "licenses": false,
+    "contributors": false
+  },
+
+  "allOf": [
+    {
+      "$comment": "RULED (rev 6): you cannot conclude without concluding something. `closure_basis` does NOT discharge this — admitting `complete` + absent-verdict would give `retired + closure_basis` a second spelling that reads, to every consumer, as though the hypothesis had been resolved.",
+      "if": { "properties": { "status": { "const": "complete" } }, "required": ["status"] },
+      "then": { "required": ["verdict"] }
+    },
+    {
+      "$comment": "`retired` is the only terminal with no structural basis available to it, so it ALWAYS requires an authored one. This is the fb-005 no-hidden-debt guarantee.",
+      "if": { "properties": { "status": { "const": "retired" } }, "required": ["status"] },
+      "then": { "required": ["closure_basis"] }
+    },
+    {
+      "$comment": "PRESENCE only. Whether the lineage RESOLVES is a cross-record fact and belongs to resolution.py — the schema cannot see other files.",
+      "if": { "properties": { "status": { "const": "superseded" } }, "required": ["status"] },
+      "then": {
+        "anyOf": [
+          { "required": ["superseded_by"] },
+          { "required": ["resynthesized_into"] },
+          { "required": ["closure_basis"] }
+        ]
+      }
+    },
+    {
+      "$comment": "`archived` requires an AUTHORED basis, exactly like `retired`. An earlier draft also admitted `archive_ref` as a structural discharge — a field with no reader anywhere in the toolkit, no author in the corpus, and NO RESOLVABLE NAMESPACE: the archive index (archive.py) is keyed by the archived entity's OWN id and mints no record identifier, so `archive_ref` could only ever have restated a fact derivable from `id`. A second, unversioned spelling of a derivable fact is the exact collapse this arc exists to undo, so it is gone.",
+      "if": { "properties": { "status": { "const": "archived" } }, "required": ["status"] },
+      "then": { "required": ["closure_basis"] }
+    },
+    {
+      "$comment": "THE REVERSE IMPLICATION, and it is not symmetry for its own sake. The rules above say a superseded record must name SOMETHING; alone, they leave `status: active` beside `superseded_by: hypothesis:0002` perfectly valid — a record that is being actively worked AND has already been replaced. Every consumer reads exactly one of those two fields and none of them agree on the answer. A successor is what a record has INSTEAD of a future, so naming one and staying open is not an edge case, it is a contradiction; the schema now refuses it rather than leaving it to a checker that only looked at terminals.",
+      "if": {
+        "anyOf": [
+          { "required": ["superseded_by"] },
+          { "required": ["resynthesized_into"] }
+        ]
+      },
+      "then": { "properties": { "status": { "const": "superseded" } }, "required": ["status"] }
+    }
+  ],
+
+  "$defs": {
+    "authored_relation": {
+      "$comment": "AuthoredTargetedRelation (source_contracts.py) — predicate/target/graph_layer, and nothing else. `additionalProperties: false` because a typo'd key INSIDE a relation is silently dropped today, which is the class of defect this arc exists to end. `graph_layer` defaults to `graph/knowledge` in the model; it is optional here, and never required.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["predicate", "target"],
+      "properties": {
+        "predicate": { "type": "string", "pattern": "\\S" },
+        "target": { "type": "string", "pattern": "\\S" },
+        "graph_layer": { "type": "string" }
+      }
+    },
+    "origin_record": {
+      "$comment": "OriginRecord (entities.py:241) — extra=forbid, so `additionalProperties: false` is the FAITHFUL translation, not added strictness.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type"],
+      "properties": {
+        "type": { "enum": ["user", "assistant", "literature"] },
+        "ref": { "type": "string" },
+        "date": { "type": "string", "format": "date", "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$" },
+        "independent": { "type": "boolean" },
+        "note": { "type": "string" }
+      },
+      "allOf": [
+        {
+          "$comment": "OriginRecord._validate: a literature origin without a resolvable ref is an unfalsifiable provenance claim. The schema CAN express this one, so it does.",
+          "if": { "properties": { "type": { "const": "literature" } }, "required": ["type"] },
+          "then": { "required": ["ref"], "properties": { "ref": { "pattern": "^(paper|cite):" } } }
+        }
+      ]
+    },
+    "lens_view": {
+      "$comment": "LensView (entities.py:273) — extra=forbid. The `lens` enum MIRRORS science_model.lenses.LENS_SLUGS; test_the_lens_vocabulary_is_not_a_SECOND_authority (Task 8) fails the moment a lens is added without regenerating it.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["lens", "rationale"],
+      "properties": {
+        "lens": { "enum": ["analogy", "contrarian", "mechanism", "methodology", "population", "temporal"] },
+        "rationale": { "type": "string", "pattern": "\\S" },
+        "origin_ref": { "type": "string" }
+      }
+    },
+    "review_state": {
+      "$comment": "ReviewState (entities.py:138). `review_horizon_days` must be POSITIVE. `additionalProperties: false` is STRICTER than the model (extra=ignore) — deliberately: a typo'd key inside `review_state` is silently dropped today, which is the exact class of defect this arc exists to end.",
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "last_reviewed": { "type": "string", "format": "date" },
+        "last_review_note": { "type": "string" },
+        "review_horizon_days": { "type": "integer", "exclusiveMinimum": 0 }
+      }
+    },
+    "rival_model_packet": {
+      "$comment": "RivalModelPacket (reasoning.py:189) — CLOSED, and extended with the SINGLE-RIVAL form the corpus actually authors. The same four fields land on the MODEL in this task's Step 3c, with `exclude_if` so existing packets do not churn. Schema and model move together, in one commit, or protein-landscape/0001 fails validation in the gap.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["packet_id"],
+      "properties": {
+        "packet_id": {
+          "type": "string", "pattern": "\\S",
+          "$comment": "`\\S`, NOT `minLength: 1` — a single space has length 1, so `packet_id: \" \"` would satisfy the packet's one required field while naming nothing. Same correction as `closure_basis`; this instance was missed when that one was fixed."
+        },
+        "target_hypothesis": { "type": "string" },
+        "target_inquiry": { "type": "string" },
+        "current_working_model": { "type": "string" },
+        "alternative_models": { "type": "array", "items": { "type": "string" }, "$comment": "The LIST form. Declared by the model; authored by ZERO files." },
+        "rival_id": { "type": "string" },
+        "rival_name": { "type": "string" },
+        "rival_claim": { "type": "string" },
+        "discriminator_status": { "type": "string" },
+        "shared_observables": { "type": "array", "items": { "type": "string" } },
+        "discriminating_predictions": { "type": "array", "items": { "type": "string" } },
+        "adjudication_rule": { "type": "string" }
+      }
+    },
+    "data_product_capability": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["data_product"],
+      "properties": {
+        "data_product": { "type": "string", "pattern": "^data-product:[a-z0-9][a-z0-9-]*$" },
+        "qualifiers": {
+          "type": "object",
+          "propertyNames": { "pattern": "\\S" },
+          "additionalProperties": { "type": "string", "pattern": "\\S" }
+        }
+      }
+    }
+  }
+}
