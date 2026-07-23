@@ -22,6 +22,7 @@ Do not load every leaf "just in case"; that defeats progressive disclosure.
 - `genomics`: `skills/bio/genomics/SKILL.md`
 - `genomics-somatic-mutation-qa`: `skills/bio/genomics/somatic-mutation-qa.md`
 - `genomics-mutational-signatures-and-selection`: `skills/bio/genomics/mutational-signatures-and-selection.md`
+- `genomics-mutational-signatures-qa`: `skills/bio/genomics/mutational-signatures-qa.md`
 - `genomics-copy-number-sv-qa`: `skills/bio/genomics/copy-number-sv-qa.md`
 - `transcriptomics`: `skills/bio/transcriptomics/SKILL.md`
 - `transcriptomics-bulk-rnaseq-qa`: `skills/bio/transcriptomics/bulk-rnaseq-qa.md`

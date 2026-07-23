@@ -183,6 +183,13 @@ dndscv:
   kind: software
   last_checked: "2026-07-19"
 
+focr-tmb-harmonization:
+  title: "Establishing guidelines to harmonize tumor mutational burden (TMB): in silico assessment of variation in TMB quantification across diagnostic platforms"
+  authors: ["Friends of Cancer Research TMB Harmonization Project"]
+  url: "https://jitc.bmj.com/content/8/1/e000147"
+  kind: paper
+  last_checked: "2026-07-22"
+
 frictionless-spec:
   title: "Data Package"
   authors: ["Open Knowledge Foundation"]
