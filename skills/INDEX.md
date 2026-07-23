@@ -21,7 +21,6 @@ Do not load every leaf "just in case"; that defeats progressive disclosure.
 - `functional-genomics-qa`: `skills/bio/functional-genomics-qa.md`
 - `genomics`: `skills/bio/genomics/SKILL.md`
 - `genomics-somatic-mutation-qa`: `skills/bio/genomics/somatic-mutation-qa.md`
-- `genomics-mutational-signatures-and-selection`: `skills/bio/genomics/mutational-signatures-and-selection.md`
 - `genomics-mutational-signatures-qa`: `skills/bio/genomics/mutational-signatures-qa.md`
 - `genomics-driver-selection`: `skills/bio/genomics/driver-selection.md`
 - `genomics-copy-number-sv-qa`: `skills/bio/genomics/copy-number-sv-qa.md`
