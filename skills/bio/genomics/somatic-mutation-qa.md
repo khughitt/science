@@ -114,6 +114,7 @@ negative mutation frequencies.
 
 ## Companion Skills
 
-- [`mutational-signatures-and-selection.md`](mutational-signatures-and-selection.md) - downstream SBS signatures, TMB, dN/dS, dNdScv, and driver-ranking analyses.
+- [`mutational-signatures-qa.md`](mutational-signatures-qa.md) - downstream SBS/DBS/ID signatures and tumor mutational burden.
+- [`driver-selection.md`](driver-selection.md) - downstream dN/dS, dNdScv, and driver-ranking selection inference.
 - [`../../study-design/power-floor-acknowledgement.md`](../../study-design/power-floor-acknowledgement.md) - low-power mutation-frequency contrasts.
 - [`../../study-design/sensitivity-arbitration.md`](../../study-design/sensitivity-arbitration.md) - hypermutator-included versus hypermutator-excluded arbitration.

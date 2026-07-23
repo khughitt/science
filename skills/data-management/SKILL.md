@@ -33,7 +33,8 @@ Route to the owning leaf before designing preprocessing or QA:
 
 - Expression matrices, bulk RNA-seq, microarray, scRNA-seq → `../bio/transcriptomics/SKILL.md`.
 - Somatic mutation tables, MAF/cBioPortal/TCGA/GENIE cohorts → `../bio/genomics/somatic-mutation-qa.md`.
-- Mutational signatures, TMB, dN/dS, driver selection → `../bio/genomics/mutational-signatures-and-selection.md`.
+- Mutational signatures, TMB → `../bio/genomics/mutational-signatures-qa.md`.
+- dN/dS, dNdScv, driver selection → `../bio/genomics/driver-selection.md`.
 - CRISPR/RNAi screens, DepMap, LINCS/L1000, drug response, perturbation assays → `../bio/functional-genomics-qa.md`.
 - Proteomics, phosphoproteomics, mass spec, TMT/LFQ/DIA/DDA → `../bio/proteomics/proteomics-qa.md`.
 - Protein sequence/structure, homology-split datasets → `../bio/proteomics/protein-sequence-structure-qa.md`.
