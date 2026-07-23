@@ -225,6 +225,29 @@ def test_resume_refuses_when_file_neither_pre_nor_post(tmp_path: Path) -> None:
     assert journal.exists()  # kept for a real recovery
 
 
+def test_question_with_no_composed_profile_migrates_without_crashing(tmp_path: Path) -> None:
+    # `question` carries `required_capabilities` (the q/h side of the capability system) but has
+    # no entry in the gen-3 generation matrix, so `profile_for` raises `ProfileParseError` -- the
+    # migrator must validate the rewritten capability fields directly instead of full-entity.
+    root = tmp_path / "proj"
+    (root / "entities" / "questions").mkdir(parents=True)
+    (root / "science.yaml").write_text("name: p\nentity_schema_version: 2\n")
+    question_fm = {
+        "id": "question:0001",
+        "kind": "question",
+        "required_capabilities": [{"assay": "gene-expression", "modality": "microarray"}],
+    }
+    (root / "entities/questions/q.md").write_text(render_frontmatter(question_fm, "body\n"))
+
+    migrate(root, crosswalk_path=_crosswalk(tmp_path), apply=True)
+
+    fm, _ = _read(root / "entities/questions/q.md")
+    assert fm["required_capabilities"] == [
+        {"data_product": "data-product:gene-expression-microarray", "qualifiers": {}}
+    ]
+    assert "entity_schema_version: 3" in (root / "science.yaml").read_text()
+
+
 def _read(path: Path) -> tuple[dict, str]:
     from science_model.frontmatter import split_frontmatter
 

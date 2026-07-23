@@ -30,7 +30,7 @@ from pathlib import Path
 
 import yaml
 from science_model.data_products import load_catalog
-from science_model.entity_schema import EntityValidationError
+from science_model.entity_schema import EntityValidationError, ProfileParseError
 from science_model.frontmatter import (
     atomic_write_text,
     project_config_path,
@@ -45,6 +45,7 @@ from science_tool.datasets.capability_crosswalk import (
     Mapped,
     Refused,
 )
+from science_tool.datasets.capability_shape import gen3_shape_issue
 from science_tool.entity_scan import iter_entity_markdown
 from science_tool.entity_profiles import ProjectSchema, load_project_schema
 from science_tool.migrate_hypothesis import (
@@ -145,10 +146,27 @@ def _plan(
             result.refusals.append(f"{md}: entity has no `kind`; cannot select a validation profile")
             continue
         try:
-            project_schema.validator.validate_as(migrated, project_schema.profile_for(kind))
-        except EntityValidationError as exc:
-            result.refusals.append(f"{md}: the migrated form fails its own gen-3 schema: {exc}")
-            continue
+            profile = project_schema.profile_for(kind)
+        except ProfileParseError:
+            profile = None  # a kind with no composed gen-3 profile (e.g. question)
+        if profile is not None:
+            try:
+                project_schema.validator.validate_as(migrated, profile)
+            except EntityValidationError as exc:
+                result.refusals.append(f"{md}: the migrated form fails its own gen-3 schema: {exc}")
+                continue
+        else:
+            # No composed profile for this kind; validate the rewritten capability fields directly
+            # via the canonical shape parser. Empty/absent is valid; only a malformed shape refuses.
+            malformed = False
+            for field_name in _CAPABILITY_FIELDS:
+                if field_name in migrated and gen3_shape_issue(migrated[field_name]) == "malformed":
+                    result.refusals.append(
+                        f"{md}: {field_name} post-image is not a valid gen-3 capability shape"
+                    )
+                    malformed = True
+            if malformed:
+                continue
         result.planned.append(PlannedWrite(md, render_frontmatter(migrated, body)))
 
     return result
