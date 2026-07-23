@@ -1,0 +1,14 @@
+# Canonical data-product term catalog. SEED ONLY — full population in Task 12
+# (the value->term crosswalk authoring, human review checkpoint).
+schema_version: "1"
+terms:
+  - id: data-product:gene-expression
+    label: Gene-expression measurement
+    assay: gene-expression
+    technology: ""
+    broader: []
+  - id: data-product:gene-expression-bulk-rna
+    label: Bulk RNA gene-expression matrix
+    assay: gene-expression
+    technology: bulk-rna
+    broader: [data-product:gene-expression]
