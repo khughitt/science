@@ -114,6 +114,6 @@ Conditions were evaluated and whether inputs were audited upstream.
 ## Companion Skills
 
 - [`somatic-mutation-qa.md`](somatic-mutation-qa.md) - input-call and denominator QA required before signature or burden verdicts.
-- `driver-selection.md` - gene-level selection and dN/dS inference on the same cohort.
+- [`driver-selection.md`](driver-selection.md) - gene-level selection and dN/dS inference on the same cohort.
 - [`../../study-design/power-floor-acknowledgement.md`](../../study-design/power-floor-acknowledgement.md) - low-count signature and burden tests.
 - [`../../study-design/sensitivity-arbitration.md`](../../study-design/sensitivity-arbitration.md) - pre-committed arbitration for hypermutator, panel, and low-count sensitivities.
