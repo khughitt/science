@@ -84,3 +84,51 @@ def test_rejects_bad_disposition(tmp_path):
     body = "  - match: {a: b}\n    out_of_scope: {disposition: nuke, rationale: x}\n"
     with pytest.raises(CrosswalkError):
         Crosswalk.load(_write(tmp_path, body), catalog_ids=CAT)
+
+
+def test_rejects_bad_schema_version(tmp_path):
+    p = tmp_path / "cw.yaml"
+    p.write_text("schema_version: \"2\"\nmappings:\n  - match: {a: b}\n"
+                 "    out_of_scope: {disposition: drop, rationale: x}\n")
+    with pytest.raises(CrosswalkError):
+        Crosswalk.load(p, catalog_ids=CAT)
+
+
+def test_rejects_empty_match(tmp_path):
+    body = "  - match: {}\n    out_of_scope: {disposition: drop, rationale: x}\n"
+    with pytest.raises(CrosswalkError):
+        Crosswalk.load(_write(tmp_path, body), catalog_ids=CAT)
+
+
+def test_rejects_neither_data_product_nor_out_of_scope(tmp_path):
+    body = "  - match: {a: b}\n"
+    with pytest.raises(CrosswalkError):
+        Crosswalk.load(_write(tmp_path, body), catalog_ids=CAT)
+
+
+def test_rejects_invalid_qualifiers(tmp_path):
+    body = ("  - match: {a: b}\n"
+            "    data_product: data-product:gene-expression-microarray\n"
+            "    qualifiers: {k: \"\"}\n")
+    with pytest.raises(CrosswalkError):
+        Crosswalk.load(_write(tmp_path, body), catalog_ids=CAT)
+
+
+def test_rejects_out_of_scope_as_bool(tmp_path):
+    body = "  - match: {a: b}\n    out_of_scope: true\n"
+    with pytest.raises(CrosswalkError):
+        Crosswalk.load(_write(tmp_path, body), catalog_ids=CAT)
+
+
+def test_rejects_empty_rationale(tmp_path):
+    body = "  - match: {a: b}\n    out_of_scope: {disposition: drop, rationale: \"\"}\n"
+    with pytest.raises(CrosswalkError):
+        Crosswalk.load(_write(tmp_path, body), catalog_ids=CAT)
+
+
+def test_rejects_qualifiers_alongside_out_of_scope(tmp_path):
+    body = ("  - match: {a: b}\n"
+            "    qualifiers: {k: v}\n"
+            "    out_of_scope: {disposition: drop, rationale: x}\n")
+    with pytest.raises(CrosswalkError):
+        Crosswalk.load(_write(tmp_path, body), catalog_ids=CAT)

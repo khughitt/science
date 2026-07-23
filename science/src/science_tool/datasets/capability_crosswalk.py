@@ -81,6 +81,10 @@ class Crosswalk:
                     raise CrosswalkError(f"mapping {dict(match)!r} qualifiers must be non-empty str->str")
                 by_match[key] = _Entry(dp, dict(quals), None, "")
             else:
+                if "qualifiers" in m:
+                    raise CrosswalkError(
+                        f"mapping {dict(match)!r} out_of_scope entries must not carry qualifiers"
+                    )
                 oos = m["out_of_scope"]
                 if not isinstance(oos, Mapping) or set(oos) - {"disposition", "rationale"}:
                     raise CrosswalkError(f"mapping {dict(match)!r} out_of_scope must be {{disposition, rationale}}")
