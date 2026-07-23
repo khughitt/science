@@ -239,14 +239,14 @@ class ProjectConfig(BaseModel):
     # an inference from its files. Nothing guesses; a project says.
     #
     # DECLARED, not merely tolerated, so the VALUE is checked: the vocabulary is closed to the
-    # versions that EXIST, and an unconstrained `int` would make `3` a silent no-op the day someone
+    # versions that EXIST, and an unconstrained `int` would make `4` a silent no-op the day someone
     # types it.
     #
     # Declaring the field does NOT, on its own, catch a MISSPELLED one -- `extra="allow"` carries
     # `entity_schema_verison: 2` into `model_extra`, preserved and ignored, leaving the project
     # silently unmigrated while its author believes otherwise. That is what `_reject_near_miss_keys`
     # below is for. A pin nobody can typo is the whole value of "a project says".
-    entity_schema_version: Literal[1, 2] | None = None
+    entity_schema_version: Literal[1, 2, 3] | None = None
 
     @model_validator(mode="before")
     @classmethod
@@ -301,7 +301,7 @@ def reject_near_miss_keys(raw: Any) -> None:
             )
 
 
-_LEGAL_ENTITY_SCHEMA_VERSIONS: frozenset[int] = frozenset({1, 2})
+_LEGAL_ENTITY_SCHEMA_VERSIONS: frozenset[int] = frozenset({1, 2, 3})
 
 
 def validated_entity_schema_version(raw: Any) -> int | None:
@@ -314,7 +314,7 @@ def validated_entity_schema_version(raw: Any) -> int | None:
     that is not this arc's), so BOTH call this, on the raw dict.
 
     It validates the KEY (near-miss, via ``reject_near_miss_keys``) and the VALUE. A present pin must
-    be a version that EXISTS: `"2"` (a quoted string), `3`, `1.0`, `True`, or an explicit `null` is
+    be a version that EXISTS: `"2"` (a quoted string), `4`, `1.0`, `True`, or an explicit `null` is
     REFUSED, not silently read as "unpinned". That degrade-to-unpinned was the fail-open -- the load
     path enforced nothing while the write path raised on the very same file.
 
@@ -322,10 +322,10 @@ def validated_entity_schema_version(raw: Any) -> int | None:
     ``raw.get()``, which cannot tell a missing key from an authored `entity_schema_version: null`.
     And the value must be a strict ``int``: `type(value) is int` rejects `bool` (`type(True) is int` is
     ``False``) AND `float`, which plain membership would wave through because `1.0 == 1` and
-    `1.0 in {1, 2}` is ``True``. A present-but-wrong value is a project to FIX, never one silently read
-    as unmigrated.
+    `1.0 in {1, 2, 3}` is ``True``. A present-but-wrong value is a project to FIX, never one silently
+    read as unmigrated.
 
-    Returns the version (1 or 2) for a legal pin, or ``None`` when the pin is ABSENT.
+    Returns the version (1, 2, or 3) for a legal pin, or ``None`` when the pin is ABSENT.
     """
     reject_near_miss_keys(raw)
     if not isinstance(raw, dict):
@@ -335,7 +335,7 @@ def validated_entity_schema_version(raw: Any) -> int | None:
     value = raw["entity_schema_version"]
     if type(value) is not int or value not in _LEGAL_ENTITY_SCHEMA_VERSIONS:
         raise ValueError(
-            f"science.yaml: entity_schema_version must be 1 or 2 (an integer), not {value!r}. "
+            f"science.yaml: entity_schema_version must be 1, 2, or 3 (an integer), not {value!r}. "
             "A present pin with an illegal value is refused rather than read as 'unpinned' -- that "
             "silent degrade let the loader skip schema validation while the writer rejected the file."
         )

@@ -452,7 +452,7 @@ def test_an_UNMIGRATED_project_is_refused_the_NEW_VOCABULARY(tmp_path: Path) -> 
         1.0,    # a float: `1.0 in {1, 2}` is True by numeric equality
         2.0,
         "2",    # a stray-quoted version
-        3,      # an integer that names no version that exists
+        4,      # an integer that names no version that exists
         0,
     ],
 )
@@ -465,7 +465,7 @@ def test_an_INVALID_pin_VALUE_fails_the_SAME_way_on_BOTH_paths(
     # same file. Two answers to one question, split across the two readers.
     #
     # The one narrow authority now validates the VALUE on both paths: only KEY ABSENCE is "unpinned",
-    # and the value must be a strict `int` in {1, 2} -- so `null`, `True`, `1.0`, `"2"`, and `3` all
+    # and the value must be a strict `int` in {1, 2, 3} -- so `null`, `True`, `1.0`, `"2"`, and `4` all
     # FAIL identically, a project to fix rather than one silently read as unmigrated. (`null` matters
     # specially: `raw.get()` cannot tell it from a missing key; `bool`/`float` matter because numeric
     # membership treats `True`/`1.0` as `1`.)

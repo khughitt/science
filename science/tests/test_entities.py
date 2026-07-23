@@ -204,7 +204,7 @@ def test_find_entity_wraps_invalid_policy_config_as_entity_command_error(tmp_pat
 
     message = str(exc_info.value)
     assert message.startswith("Entity policy configuration is not valid")
-    assert "entity_schema_version must be 1 or 2 (an integer), not '2'" in message
+    assert "entity_schema_version must be 1, 2, or 3 (an integer), not '2'" in message
 
 
 @pytest.mark.parametrize(
