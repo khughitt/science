@@ -43,7 +43,7 @@ def test_project_dataset_authoring_emits_the_default_profile(tmp_path: Path) -> 
     assert f"schema_profile: {EXPECTED}" in path.read_text(encoding="utf-8")
 
 
-def test_register_run_renderer_emits_the_default_profile() -> None:
+def test_register_run_renderer_emits_the_given_profile() -> None:
     block = _entity_yaml_block(
         slug="mock-derived",
         title="Mock derived",
@@ -56,6 +56,7 @@ def test_register_run_renderer_emits_the_default_profile() -> None:
         transformations=None,
         dp_path_rel="data/mock-derived/datapackage.yaml",
         ontology_terms=[],
+        schema_profile=EXPECTED,
     )
 
     assert f'schema_profile: "{EXPECTED}"' in block

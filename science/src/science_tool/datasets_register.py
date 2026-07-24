@@ -28,7 +28,7 @@ from science_model.run_fingerprint import (
 from science_tool.commons.identity_stamp import derive_stamp
 from science_tool.graph.reference_resolution import ReferenceResolver
 from science_tool.graph.sources import ProjectSources, load_project_sources
-from science_tool.identity_authoring import ASSEMBLY_REGISTRY_ID, BASE_DATASET_SCHEMA_PROFILE, require_profile_identity
+from science_tool.identity_authoring import ASSEMBLY_REGISTRY_ID, project_dataset_schema_profile, require_profile_identity
 from science_tool.seed_policy_derivation import SeedPolicyDerivationError, derive_seed_policy
 from science_tool.workflow_steps_index import steps_and_methods_for_workflow
 
@@ -227,7 +227,7 @@ def _entity_yaml_block(
     transformations: list[dict[str, Any]] | None,
     dp_path_rel: str,
     ontology_terms: list[str],
-    schema_profile: str = BASE_DATASET_SCHEMA_PROFILE,
+    schema_profile: str,
     identity_context: dict | None = None,
 ) -> str:
     entity_id = f"dataset:{slug}"
@@ -278,9 +278,9 @@ def _entity_yaml_block(
     )
 
 
-def _output_schema_profile(out: dict) -> str:
+def _output_schema_profile(out: dict, default_profile: str) -> str:
     if "schema_profile" not in out:
-        return BASE_DATASET_SCHEMA_PROFILE
+        return default_profile
     value = out["schema_profile"]
     if not isinstance(value, str) or not value.strip():
         raise ValueError(f"output {out.get('slug')!r} has blank schema_profile")
@@ -755,8 +755,9 @@ def preflight_register_run_identity(project_root: Path, workflow_run_id: str) ->
     workflow_id = str(run_fm.get("workflow", ""))
     run_inputs = list(run_fm.get("inputs") or [])
     outputs = _read_workflow_outputs(project_root, workflow_id)
+    default_profile = project_dataset_schema_profile(project_root)
     for out in outputs:
-        _output_schema_profile(out)
+        _output_schema_profile(out, default_profile)
         _validate_output_identity(out)
         _validate_transform_sources(out, run_inputs)
     resolutions = _resolve_output_identities(project_root, run_fm, outputs)
@@ -770,7 +771,9 @@ def preflight_register_run_identity(project_root: Path, workflow_run_id: str) ->
             resolved_identity=resolved_identity,
         )
         identity_context = resolved_identity.identity_context if resolved_identity is not None else None
-        schema_profile = _schema_profile_with_identity_extension(_output_schema_profile(out), identity_context)
+        schema_profile = _schema_profile_with_identity_extension(
+            _output_schema_profile(out, default_profile), identity_context
+        )
         require_profile_identity(schema_profile, identity_context)
 
 
@@ -787,6 +790,7 @@ def write_derived_dataset_entities(project_root: Path, workflow_run_id: str) -> 
     config_snapshot = str(run_fm.get("config_snapshot", ""))
     produced_at = str(run_fm.get("last_run") or datetime.now(timezone.utc).isoformat())
     inputs = list(run_fm.get("inputs") or [])
+    default_profile = project_dataset_schema_profile(project_root)
     written: list[tuple[Path, str]] = []
     for out in outputs:
         # Entity slug = run entity slug + output slug. run_entity_slug already begins
@@ -804,7 +808,9 @@ def write_derived_dataset_entities(project_root: Path, workflow_run_id: str) -> 
         identity_context = resolved_identity.identity_context if resolved_identity is not None else None
         data_inputs = resolved_identity.data_inputs if resolved_identity is not None else inputs
         transformations = resolved_identity.transformations if resolved_identity is not None else []
-        schema_profile = _schema_profile_with_identity_extension(_output_schema_profile(out), identity_context)
+        schema_profile = _schema_profile_with_identity_extension(
+            _output_schema_profile(out, default_profile), identity_context
+        )
         body = _entity_yaml_block(
             slug=slug,
             title=str(out.get("title", slug)),

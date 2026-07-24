@@ -598,6 +598,41 @@ def test_register_run_writes_dataset_entities(tmp_path: Path) -> None:
     assert 'datapackage: "results/wf/r1/kappa/datapackage.yaml"' in body
 
 
+def test_register_run_writes_gen3_profile_when_pinned(tmp_path: Path) -> None:
+    _seed_workflow_and_run(
+        tmp_path,
+        run_resources=[
+            {"name": "kappa", "path": "kappa.csv", "format": "csv", "bytes": 100, "hash": "sha256:a"},
+        ],
+    )
+    _seed_resource_files(tmp_path, ["kappa"])
+    # The seed writes an unpinned science.yaml; pin it to generation 3.
+    sci = tmp_path / "science.yaml"
+    sci.write_text(sci.read_text(encoding="utf-8") + "entity_schema_version: 3\n", encoding="utf-8")
+
+    res = _run_register(tmp_path)
+    assert res.exit_code == 0, res.output
+
+    fm = _frontmatter(tmp_path / "entities" / "datasets" / "wf-r1-kappa.md")
+    assert fm["schema_profile"] == "science-entity-base/1.0+dataset/3.0"
+
+
+def test_register_run_writes_gen2_profile_when_unpinned(tmp_path: Path) -> None:
+    _seed_workflow_and_run(
+        tmp_path,
+        run_resources=[
+            {"name": "kappa", "path": "kappa.csv", "format": "csv", "bytes": 100, "hash": "sha256:a"},
+        ],
+    )
+    _seed_resource_files(tmp_path, ["kappa"])
+    # _seed_workflow_and_run leaves science.yaml unpinned.
+    res = _run_register(tmp_path)
+    assert res.exit_code == 0, res.output
+
+    fm = _frontmatter(tmp_path / "entities" / "datasets" / "wf-r1-kappa.md")
+    assert fm["schema_profile"] == "science-entity-base/1.0+dataset/2.0"
+
+
 def test_register_run_copies_literal_output_identity_to_derived_entity(tmp_path: Path) -> None:
     identity = {
         "taxon": 9606,
