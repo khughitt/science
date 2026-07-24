@@ -15,6 +15,14 @@
 > truncation cannot happen post-render in the sink (split into projection + sink); the `health`
 > severity default was underdetermined across 17 heterogeneous sections; and pinning width alone
 > does not make character counts environment-independent because color adds ANSI.
+>
+> **Rev 4 (2026-07-24)** — third review round. The rev-3 `health` section classification was
+> factually wrong (`entity_identity` and `cross_paper_evidence` carry `severity`;
+> `cross_paper_evidence` has no `counts_as_issue`; `prose_epistemics` carries both), and the
+> premise that a severity default shrinks `health` was refuted by the data: all 361 of
+> natural-systems' `validation` findings are warnings. Reclassified from the TypedDicts,
+> `--severity` defined as a threshold defaulting to `warn`, and budget enforcement moved to
+> per-section row caps.
 
 ## Motivation
 
@@ -291,32 +299,56 @@ it. This follows the project's fail-early / explicit-over-defensive rule.
 **Default filters shift to the working set.** `tasks list` defaults to active+blocked (~3.4k
 vs ~41k tokens).
 
-**The `health` projection, specified.** "Defaults to error severity" was underdetermined —
-`health` has 17 sections of three different shapes, and only some carry a `severity` field.
-The projection is:
+**The `health` projection, specified.** The rev-3 classification was wrong on three sections
+and rested on a false premise. Corrected from the TypedDicts:
 
-- **Flag:** `--severity {error,warn,all}`, default `error`. Applies identically to `table` and
-  `json`, so the JSON path actually shrinks (today it is 163,343 chars).
-- **Severity-bearing sections** (`validation`, `schema_invalid`, `dataset_anomalies`) are
-  filtered by row severity. `validation` alone is 361 rows and 99.5% of current output.
-- **`counts_as_issue` sections** (`managed_artifacts`, `prose_epistemics`, `cross_paper_evidence`)
-  keep the rows where that flag is true; the flag *is* their severity signal.
-- **Sections with neither** (`archive_lag`, `unregistered_ref_kinds`, `tooling_scaffold`,
-  `agent_context`, `entity_identity`, `identity_policy`, `unresolved_refs`, `layered_claims`)
-  are small and always shown in full. They are not the cost problem.
-- **`unwired_checks` is never filtered, at any severity.** `health.py:60` deliberately keeps
-  unwired checks out of `total_issues` so a report containing one cannot claim the project is
-  clean. Hiding them behind a severity default would defeat that.
+| Signal | Sections |
+|---|---|
+| `severity` | `validation` (`validate.py`), `schema_invalid` (`health.py:43`, always `"error"`), `dataset_anomalies`, `entity_identity` (`entity_identity.py:13`), `cross_paper_evidence.findings` (`cross_paper_evidence.py:15`) |
+| `severity` **and** `counts_as_issue` | `prose_epistemics.findings` (`prose_epistemics.py:41`) |
+| `counts_as_issue` only | `managed_artifacts` (`project_artifacts/health_integration.py:20`) |
+| neither | `agent_context`, `archive_lag`, `identity_policy`, `invalid_entity_aspects`, `layered_claims`, `legacy_task_type`, `lingering_tags_lines`, `tooling_scaffold`, `unregistered_ref_kinds`, `unresolved_refs` |
+
+**`counts_as_issue` is issue-count membership, not severity.** The two are orthogonal:
+`prose_epistemics` emits `severity: "warning"` with `counts_as_issue: True`
+(`prose_epistemics.py:~62`). It determines whether a row feeds `total_issues`
+(`health.py:370`) and is **never** used as a display filter. Rev 3 treated it as "their
+severity signal," which would have hidden `cross_paper_evidence` errors (that section has no
+`counts_as_issue` at all) and shown `prose_epistemics` warnings under an error-only default.
+
+**`--severity` is a threshold, not an equality filter.** `error` = errors only; `warn` =
+warnings **and** errors; `all` = everything including info. Threshold semantics are what make
+`warn` safe — an equality filter would hide errors while displaying warnings.
+
+**Severity does not solve the size problem, and the default reflects that.** All 361 of
+natural-systems' `validation` findings are `severity: "warning"`, with `total_issues` = 366.
+So `--severity error` would display essentially nothing while the report announced 366 issues —
+the exact "claims issues exist without showing them" failure. Rev 3's claim that a severity
+default shrinks the JSON path was therefore wrong for the project that motivated this program.
+
+Consequently:
+
+- **Default is `warn`** (warnings and errors), not `error`. An error-only default blanks the
+  report on a project whose findings are all warnings.
+- **Budget enforcement comes from per-section row caps in the projection**, applied after the
+  severity threshold and independent of it. Severity is a user-facing lens; row caps are the
+  mechanism that actually bounds output. This is what shrinks both the table and the JSON path
+  (163,343 chars today).
+- **Sections with neither signal are always shown in full.** They are small and are not the
+  cost problem.
+- **`unwired_checks` is never filtered, at any severity or row cap.** `health.py:60`
+  deliberately keeps unwired checks out of `total_issues` so a report containing one cannot
+  claim the project is clean. Hiding them would defeat that.
 
 **`total_issues` keeps meaning *total*, not *displayed*.** It is the clean-report gate
-(`health_cli.py:158`) and is summed across all 17 sections (`health.py:357`). Redefining it as
-a displayed count would let `health` announce "Project is clean" while findings were merely
-filtered out — the same class of defect as a silent read truncation. The projection instead
-adds a sibling `displayed_issues` plus per-section `omitted` counts, and the text footer reads:
+(`health_cli.py:158`) and is summed across all sections (`health.py:357`). Redefining it as a
+displayed count would let `health` announce "Project is clean" while findings were merely
+filtered out — the same class of defect as a silent read truncation. The projection adds a
+sibling `displayed_issues` plus per-section `omitted` counts, and the text footer reads:
 
 ```
-showing 3 of 361 validation findings (severity: error)
-  358 warning(s) hidden — rerun with --severity all
+showing 40 of 361 validation findings (severity: warn, cap: 40/section)
+  321 hidden — science health --severity all --output health.json
 ```
 
 So the invariant is: `total_issues` answers "is this project clean?", `displayed_issues`
@@ -447,10 +479,16 @@ files directly would change where the bytes live without changing what agents do
 - Sink backstop: a projected payload that still exceeds the ceiling raises rather than being
   blindly trimmed.
 - `--output` completeness: the file sink is never truncated, for every budgeted command.
-- `health` projection: `--severity` filters severity-bearing and `counts_as_issue` sections in
-  both formats; sections with neither signal are shown in full; `unwired_checks` survives every
-  severity level; `total_issues` stays the unfiltered clean-report gate while `displayed_issues`
-  tracks what was shown; a filtered report never prints "Project is clean".
+- `health` projection: `--severity` is a threshold (`warn` retains errors as well as warnings,
+  never errors-only-hidden); `counts_as_issue` never filters display, so a
+  `severity: warning, counts_as_issue: True` prose finding is hidden at `--severity error` and a
+  `cross_paper_evidence` error is retained despite having no `counts_as_issue` field; sections
+  with neither signal are shown in full; `unwired_checks` survives every severity level and row
+  cap; per-section row caps bound output independently of severity; `total_issues` stays the
+  unfiltered clean-report gate while `displayed_issues` tracks what was shown; a filtered report
+  never prints "Project is clean".
+- Regression fixture reproducing natural-systems' shape (all-warning `validation`,
+  `total_issues` > 0): the default view must not be empty, and must not claim clean.
 - Width determinism: identical data costs identical budget across `COLUMNS` values.
 - Color independence: row selection is identical under `NO_COLOR`, default, and
   `FORCE_COLOR=1`; the non-TTY default color policy is `NEVER`.
