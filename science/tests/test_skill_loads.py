@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from pathlib import Path
+
 import pytest
 from rdflib import Graph
 from rdflib import Literal as RDFLiteral
@@ -20,6 +22,9 @@ from science_tool.graph.skill_loads import (
     validate_skill_aliases_yaml,
 )
 from science_tool.graph.store import SCI_NS
+from science_tool.graph.sources import load_project_sources
+
+from _fixtures.entity_helpers import seed_project, write_markdown_entity
 
 
 def test_add_record_emits_reified_triples() -> None:
@@ -274,3 +279,62 @@ def test_collect_ignores_non_plan_and_plans_without_field() -> None:
         skills_loaded=[{"id": "driver-selection", "reason": "r"}],
     )
     assert collect_skill_loads([plan_without, dataset], generation=3, aliases={}) == []
+
+
+def _source_project(tmp_path: Path, *, generation: int | None, skills_loaded: object) -> Path:
+    seed_project(tmp_path)
+    if generation is not None:
+        science_yaml = tmp_path / "science.yaml"
+        science_yaml.write_text(
+            science_yaml.read_text(encoding="utf-8")
+            + f"entity_schema_version: {generation}\n",
+            encoding="utf-8",
+        )
+    write_markdown_entity(
+        tmp_path,
+        "entities/plans/0001-skills.md",
+        {
+            "id": "plan:0001-skills",
+            "kind": "plan",
+            "title": "Skill plan",
+            "status": "draft",
+            "skills_loaded": skills_loaded,
+        },
+        "Body.",
+    )
+    return tmp_path
+
+
+def test_load_project_sources_collects_gen3_plan_skills_loaded(tmp_path: Path) -> None:
+    project = _source_project(
+        tmp_path,
+        generation=3,
+        skills_loaded=[{"id": "driver-selection", "reason": "model selection"}],
+    )
+
+    sources = load_project_sources(project, include_commons=False)
+
+    assert [(record.plan_id, record.canonical_skill_id, record.reason) for record in sources.skill_loads] == [
+        ("plan:0001-skills", "driver-selection", "model selection")
+    ]
+
+
+@pytest.mark.parametrize("generation", [2, None])
+def test_load_project_sources_ignores_raw_malformed_skills_loaded_before_gen3(
+    tmp_path: Path, generation: int | None
+) -> None:
+    project = _source_project(tmp_path, generation=generation, skills_loaded=None)
+
+    sources = load_project_sources(project, include_commons=False)
+
+    plan = next(entity for entity in sources.entities if entity.canonical_id == "plan:0001-skills")
+    assert plan.model_extra is not None
+    assert plan.model_extra["skills_loaded"] is None
+    assert sources.skill_loads == []
+
+
+def test_load_project_sources_rejects_gen3_null_skills_loaded(tmp_path: Path) -> None:
+    project = _source_project(tmp_path, generation=3, skills_loaded=None)
+
+    with pytest.raises(SkillLoadValidationError, match="skills_loaded must be a list"):
+        load_project_sources(project, include_commons=False)
