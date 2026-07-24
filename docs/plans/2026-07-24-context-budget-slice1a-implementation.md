@@ -2693,10 +2693,14 @@ def _project(root: Path, entities: int) -> None:
         )
 
 
+# Do not rely on chdir for this command. Its Click option currently uses
+# `default=Path.cwd()`, which is evaluated when entities_inventory_cli is imported,
+# before these tests change directory. Pass the fixture root explicitly in every
+# inventory invocation so the test cannot inspect the developer's checkout by accident.
 def test_small_inventory_prints_to_stdout(tmp_path: Path, monkeypatch) -> None:
     _project(tmp_path, entities=1)
     monkeypatch.chdir(tmp_path)
-    result = _invoke(["entities", "inventory"])
+    result = _invoke(["entities", "inventory", "--project-root", str(tmp_path)])
     assert result.exit_code == 0, result.output
     json.loads(result.output)
 
@@ -2704,7 +2708,7 @@ def test_small_inventory_prints_to_stdout(tmp_path: Path, monkeypatch) -> None:
 def test_oversized_inventory_is_refused_not_truncated(tmp_path: Path, monkeypatch) -> None:
     _project(tmp_path, entities=400)
     monkeypatch.chdir(tmp_path)
-    result = _invoke(["entities", "inventory"])
+    result = _invoke(["entities", "inventory", "--project-root", str(tmp_path)])
     assert result.exit_code != 0
     assert "--output" in result.output
     assert "schema_version" not in result.output  # no partial document leaked
@@ -2714,7 +2718,9 @@ def test_inventory_output_file_is_complete(tmp_path: Path, monkeypatch) -> None:
     _project(tmp_path, entities=400)
     monkeypatch.chdir(tmp_path)
     target = tmp_path / "inv.json"
-    result = _invoke(["entities", "inventory", "--output", str(target)])
+    result = _invoke(
+        ["entities", "inventory", "--project-root", str(tmp_path), "--output", str(target)]
+    )
     assert result.exit_code == 0, result.output
     payload = json.loads(target.read_text())
     assert payload["schema_version"] == "2"
@@ -2767,8 +2773,8 @@ def test_fix_without_output_refuses_before_moving_any_file(tmp_path: Path, monke
     assert not (tmp_path / "results").exists(), "files were moved despite the command failing"
 
 
-def test_fix_refuses_an_unwritable_output_before_moving(tmp_path: Path, monkeypatch) -> None:
-    """A bad --output path must fail while the tree is intact, not after mutating."""
+def test_fix_refuses_a_missing_parent_output_before_moving(tmp_path: Path, monkeypatch) -> None:
+    """A missing output parent must fail while the tree is intact."""
     _stranded_project(tmp_path)
     monkeypatch.chdir(tmp_path)
 
@@ -2778,8 +2784,40 @@ def test_fix_refuses_an_unwritable_output_before_moving(tmp_path: Path, monkeypa
     assert not (tmp_path / "results").exists(), "files were moved despite an unwritable --output"
 
 
+def test_fix_refuses_a_directory_output_before_moving(tmp_path: Path, monkeypatch) -> None:
+    """Path.touch() accepts a directory; the command must reject it before moving."""
+    _stranded_project(tmp_path)
+    monkeypatch.chdir(tmp_path)
+    target = tmp_path / "report-dir"
+    target.mkdir()
+
+    result = _invoke(["data", "audit", "--fix", "--output", str(target)])
+
+    assert result.exit_code != 0
+    assert not (tmp_path / "results").exists(), "files were moved despite a directory --output"
+
+
+def test_fix_refuses_a_read_only_output_before_moving(tmp_path: Path, monkeypatch) -> None:
+    """Opening the destination, not touching it, proves the report can be written."""
+    _stranded_project(tmp_path)
+    monkeypatch.chdir(tmp_path)
+    target = tmp_path / "audit.json"
+    real_open = Path.open
+
+    def deny_report_open(self: Path, *args: object, **kwargs: object):
+        if self == target:
+            raise PermissionError("read-only destination")
+        return real_open(self, *args, **kwargs)
+
+    monkeypatch.setattr(Path, "open", deny_report_open)
+    result = _invoke(["data", "audit", "--fix", "--output", str(target)])
+
+    assert result.exit_code != 0
+    assert not (tmp_path / "results").exists(), "files were moved despite a read-only --output"
+
+
 def test_fix_with_output_mutates_and_writes_the_complete_report(tmp_path: Path, monkeypatch) -> None:
-    """With a file sink the flush cannot fail on size, so mutating is safe."""
+    """A pre-opened file sink removes the known size and destination failures."""
     _stranded_project(tmp_path)
     monkeypatch.chdir(tmp_path)
     target = tmp_path / "audit.json"
@@ -2833,7 +2871,8 @@ def _stranded_project(root: Path) -> None:
 - [ ] **Step 2: Run test to verify it fails**
 
 Run: `cd science && uv run --frozen pytest tests/test_bulk_dump_refusal.py -v`
-Expected: FAIL — `no such option: --output` on both commands.
+Expected: FAIL — `data audit` has no `--output`; entity inventory still floods stdout; and the
+pre-mutation directory/read-only destination checks are absent.
 
 - [ ] **Step 3: Wire `entities inventory`**
 
@@ -2881,7 +2920,12 @@ First amend the existing `--fix` option's help so the new requirement is discove
 Then add the `--output` option and the gate:
 
 ```python
-@click.option("--output", "output_path", type=click.Path(path_type=Path), default=None)
+@click.option(
+    "--output",
+    "output_path",
+    type=click.Path(path_type=Path, file_okay=True, dir_okay=False),
+    default=None,
+)
 def data_audit_command(
     project_path: Path | None,
     fix: bool,
@@ -2903,9 +2947,9 @@ def data_audit_command(
     )
 
     if fix and violations:
-        # apply_fixes MOVES FILES. Everything that could make the post-mutation report
-        # fail must be ruled out BEFORE the moves, or the caller is left with a changed
-        # tree, no report, and a reason to retry. Two such failure modes exist:
+        # apply_fixes MOVES FILES. Rule out the two deterministic report failures this
+        # command controls BEFORE the moves, or the caller can be left with a changed
+        # tree, no report, and a reason to retry:
         #
         # 1. SIZE. There is no honest preflight for it: the post-fix JSON adds `basepath`
         #    and an unbounded `rewritten_resources` array per datapackage row
@@ -2921,12 +2965,14 @@ def data_audit_command(
                 f"failure after mutating would leave the tree changed with no report. "
                 f"Re-run with --output PATH."
             )
-        # 2. AN UNWRITABLE DESTINATION. The sink writes the file only at flush(), after
-        #    apply_fixes. Validate it here instead, so a bad path (missing parent, no
-        #    permission) fails while the tree is still intact. `touch()` both proves
-        #    writability and reserves the file; BoundedSink.flush() overwrites it.
+        # 2. A DESTINATION THAT CANNOT BE OPENED. The sink writes the file only at
+        #    flush(), after apply_fixes. Open it for append here, so a directory,
+        #    missing parent, or permission error fails while the tree is intact.
+        #    Append mode creates/reserves a new file without truncating an existing
+        #    report; BoundedSink.flush() overwrites it after the moves.
         try:
-            output_path.touch()
+            with output_path.open("a", encoding="utf-8"):
+                pass
         except OSError as exc:
             raise click.UsageError(
                 f"data audit --fix cannot write its report to {output_path}: {exc}. "
@@ -2935,8 +2981,10 @@ def data_audit_command(
 
     if fix:
         # Reachable only when there is nothing to act on, or when --output named a
-        # writable file. Both are safe: the first mutates nothing, the second has a
-        # ceiling-free, confirmed-writable destination.
+        # file the command successfully opened. The first mutates nothing; the second
+        # has a ceiling-free destination with known path/type/permission errors ruled
+        # out. This is not a transaction: disk exhaustion or an external filesystem
+        # change can still make the later flush fail.
         outcomes = apply_fixes(project_path, violations)
         if emit_json:
             sink.write(render_json(violations, outcomes, notes))
@@ -3020,7 +3068,7 @@ The new negative test lives beside the updated one; both use the file's existing
 - [ ] **Step 6: Run tests to verify they pass**
 
 Run: `cd science && uv run --frozen pytest tests/test_bulk_dump_refusal.py -v`
-Expected: PASS (11 tests)
+Expected: PASS (13 tests)
 
 - [ ] **Step 7: Run the affected suites**
 
@@ -3252,6 +3300,13 @@ def _invoke(args: list[str]):
     return CliRunner().invoke(main, args, prog_name="science")
 
 
+def _scope_project(args: list[str], project: Path) -> list[str]:
+    """Make inventory tests independent of its import-time Path.cwd() default."""
+    if args[:2] == ["entities", "inventory"]:
+        return [*args, "--project-root", str(project)]
+    return args
+
+
 @pytest.mark.parametrize(
     ("command_path", "args"),
     [
@@ -3280,7 +3335,7 @@ def test_command_stays_within_its_ceiling(project: Path, command_path: str, args
 )
 def test_bulk_dump_refuses_rather_than_flooding(project: Path, command_path: str, args: list[str]) -> None:
     """DOCUMENT-shaped commands refuse; they never emit a partial payload."""
-    result = _invoke(args)
+    result = _invoke(_scope_project(args, project))
     assert result.exit_code != 0
     assert "--output" in result.output
     assert visible_len(result.output) <= BUDGETS[command_path].max_chars
@@ -3300,7 +3355,7 @@ def test_bulk_dump_refuses_rather_than_flooding(project: Path, command_path: str
 )
 def test_output_file_is_written_and_non_empty(project: Path, args: list[str], target_name: str) -> None:
     target = project / target_name
-    result = _invoke([*args, "--output", str(target)])
+    result = _invoke([*_scope_project(args, project), "--output", str(target)])
     assert result.exit_code in (0, 1), result.output
     assert target.is_file(), f"{args} --output wrote no file"
     assert target.stat().st_size > 0, f"{args} --output wrote an empty file"
@@ -3432,10 +3487,22 @@ type test, so a new boolean or integer section is refused rather than waved thro
 against the projected rows and `tasks list` reports `only_status` instead of the now-incomplete
 `exclude_status` (Tasks 6 and 7, `test_returned_count_is_reconciled_with_the_projected_rows`).
 
+**Fourth-review corrections.** `Path.touch()` is not a writability check: it succeeds for an
+existing directory and can succeed for a read-only file. Before `apply_fixes`, `data audit`
+now rejects directory-valued `--output` arguments and actually opens the destination for append,
+creating it without truncating an existing report; missing-parent, directory, and permission
+regressions prove the tree remains intact (Task 12). Entity-inventory regressions pass
+`--project-root` explicitly in both Task 12 and Task 13: its current Click default is
+`Path.cwd()` evaluated when the command module is imported, so changing directory later does not
+retarget the invocation.
+
 **Known limits, stated.** Guard 2 proves sink *construction*, not that every branch routes
 through it — Task 11 Step 5's grep and the regression suite cover the rest. The `DEFERRED` table
 is a bookkeeping ratchet: it prevents silence, not oversized output, and those commands stay
 unbounded until 1b. The `--fix` gate is coarser than strictly necessary — it fires on any
 violation, including `leaked_payload` rows the fixer only flags — because the precise version
 would depend on `data_audit._planned_action` staying in lockstep with `apply_fixes`, which
-nothing enforces. It is a deliberate behaviour change to an existing command.
+nothing enforces. It is a deliberate behaviour change to an existing command. Opening the
+destination before mutation removes known path/type/permission failures; it does not make
+`apply_fixes` transactional or prevent a later flush failure caused by disk exhaustion or an
+external filesystem change.
