@@ -49,6 +49,7 @@ from science_model.entity_schema.profile import ProfileParseError, default_profi
 
 from science_tool.bibliography import is_bibliography_reference as _is_bibliography_reference
 from science_tool.commons.aliases import load_manual_aliases
+from science_tool.datasets.capability_shape import gen3_shape_issue
 from science_tool.entity_profiles import (
     ARMED_SCHEMA_GENERATIONS,
     ProjectSchema,
@@ -1300,26 +1301,21 @@ def _validate_dataset_gen3(
     path: str,
     project_schema: ProjectSchema | None,
 ) -> None:
-    """Task 6 -- a SEPARATE, generation-gated hook for `dataset`, not an addition to
-    `PROJECT_MIXIN_NAMES`.
+    """Task 6 -- a SEPARATE, generation-gated hook for `dataset`'s capability SHAPE.
 
-    Dataset is a COMMONS kind (369 live records, `extra="allow"` by design) and must stay out of
-    that frozenset: joining it would flip `unevaluatedProperties: false` on for every commons
-    dataset everywhere, not just the gen-3 capability shape this hook exists to check. Gen 3 instead
-    moves `dataset` onto its 3.0 mixin (`provided_capabilities` retyped to `{data_product,
-    qualifiers}` objects, Task 3) and only THIS hook enforces it, gated on the project's declared
-    generation rather than on membership in the migration-slice list.
+    Dataset is a COMMONS kind and stays out of `PROJECT_MIXIN_NAMES`, so project datasets are loose
+    records the load path never validates as full dataset/3.0 documents (they carry no
+    `origin`/`tier`/`version`/`datapackage`). The ONLY gen-3 obligation on a project dataset is a
+    well-formed `provided_capabilities` shape; validate exactly that via the canonical parser, not
+    the full commons profile.
     """
     if project_schema is None or project_schema._generation != 3 or kind != "dataset":
         return
-    authored = {key: value for key, value in raw.items() if key not in MarkdownAdapter.INJECTED_KEYS}
-    try:
-        project_schema.validator.validate_as(authored, project_schema.profile_for("dataset"))
-    except EntityValidationError as exc:
+    if gen3_shape_issue(raw.get("provided_capabilities")) == "malformed":
         raise ValueError(
-            f"{path}: dataset frontmatter does not satisfy dataset/3.0 "
-            f"(project is pinned to entity_schema_version: 3)\n  {exc}"
-        ) from exc
+            f"{path}: dataset provided_capabilities is not a valid gen-3 "
+            f"{{data_product, qualifiers}} shape (project is pinned to entity_schema_version: 3)"
+        )
 
 
 def _read_project_config(project_root: Path) -> dict[str, object]:

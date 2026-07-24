@@ -231,8 +231,38 @@ def test_gen3_dataset_bad_capability_shape_fails(tmp_path: Path) -> None:
     project = _project(tmp_path, pinned=True, extensions=False, generation=3)
     _dataset(project, generation=3, provided_capabilities=[{"assay": "x"}])
 
-    with pytest.raises(ValueError, match="dataset/3.0"):
+    with pytest.raises(ValueError, match="provided_capabilities"):
         _load_dataset(project)
+
+
+def test_gen3_loose_dataset_with_valid_capability_loads(tmp_path: Path) -> None:
+    """The regression the Task-12 dry-run surfaced: project datasets are LOOSE records (id, kind,
+    title, `provided_capabilities`, `dataset_class`, `source_class` -- no `origin`/`tier`/`version`/
+    `datapackage`/`schema_profile`), and `dataset` stays out of `PROJECT_MIXIN_NAMES` on purpose: the
+    load path never validates them as full commons dataset/3.0 documents. The ONLY gen-3 obligation
+    is a well-formed capability SHAPE, so a loose dataset with a valid one must load with no error.
+    """
+    project = _project(tmp_path, pinned=True, extensions=False, generation=3)
+    write_markdown_entity(
+        project,
+        "entities/datasets/demo.md",
+        {
+            "id": "dataset:demo",
+            "kind": "dataset",
+            "title": "Demo dataset",
+            "provided_capabilities": [
+                {"data_product": "data-product:gene-expression", "qualifiers": {}}
+            ],
+        },
+        "Body.",
+    )
+
+    entity = _load_dataset(project)  # no error
+
+    assert entity.model_extra is not None
+    assert entity.model_extra["provided_capabilities"] == [
+        {"data_product": "data-product:gene-expression", "qualifiers": {}}
+    ]
 
 
 def test_gen2_dataset_capability_shape_untouched(tmp_path: Path) -> None:

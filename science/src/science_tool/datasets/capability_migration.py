@@ -30,7 +30,7 @@ from pathlib import Path
 
 import yaml
 from science_model.data_products import load_catalog
-from science_model.entity_schema import EntityValidationError, ProfileParseError
+from science_model.entity_schema import PROJECT_MIXIN_NAMES, EntityValidationError
 from science_model.frontmatter import (
     atomic_write_text,
     project_config_path,
@@ -145,19 +145,16 @@ def _plan(
         if not isinstance(kind, str) or not kind:
             result.refusals.append(f"{md}: entity has no `kind`; cannot select a validation profile")
             continue
-        try:
-            profile = project_schema.profile_for(kind)
-        except ProfileParseError:
-            profile = None  # a kind with no composed gen-3 profile (e.g. question)
-        if profile is not None:
+        if kind in PROJECT_MIXIN_NAMES:
+            # A project-governed FULL record (hypothesis): validate the whole post-image.
             try:
-                project_schema.validator.validate_as(migrated, profile)
+                project_schema.validator.validate_as(migrated, project_schema.profile_for(kind))
             except EntityValidationError as exc:
                 result.refusals.append(f"{md}: the migrated form fails its own gen-3 schema: {exc}")
                 continue
         else:
-            # No composed profile for this kind; validate the rewritten capability fields directly
-            # via the canonical shape parser. Empty/absent is valid; only a malformed shape refuses.
+            # Loose records (dataset, question, ...) are not validated as full documents on the load
+            # path; their only gen-3 obligation is a well-formed capability shape.
             malformed = False
             for field_name in _CAPABILITY_FIELDS:
                 if field_name in migrated and gen3_shape_issue(migrated[field_name]) == "malformed":
