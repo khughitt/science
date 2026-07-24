@@ -45,6 +45,10 @@ exactly one of `BUDGETS`, `EXEMPTIONS`, or `DEFERRED`.
 - Run everything from `science/` — `cd science && uv run --frozen pytest`. There is no root
   `pyproject.toml`; running `uv run` from the repo root is the most common orientation mistake.
 - Lint and types from `science/`: `uv run ruff check`, `uv run pyright`.
+- **Python floor is 3.11** — `science/pyproject.toml:5` (`requires-python = ">=3.11"`, matched by
+  `model/` and `qa/`) and `pyrightconfig.json:3` (`"pythonVersion": "3.11"`). PEP 695 syntax
+  (`class Foo[T]`, `def f[T]()`) is a **3.12** feature and Pyright reports it as an error at this
+  floor. Use `TypeVar` + `Generic`, as `instruments.py:27-31` and `output.py:15` already do.
 - **stdout is always budgeted; `--output PATH` is always complete.** No flag makes stdout
   unbounded, and no projection ever runs against a file sink.
 - **Semantic truncation never happens in the sink.** The sink routes, measures, raises.
@@ -362,7 +366,7 @@ equal emitted characters, and row selection stays identical across color modes.
 from __future__ import annotations
 
 from science_tool.budget.measure import BUDGET_CONSOLE_WIDTH, visible_len
-from science_tool.styles import ColorPolicy, get_console
+from science_tool.styles import get_console
 
 
 def test_visible_len_ignores_ansi_escapes() -> None:
@@ -610,33 +614,13 @@ def test_flush_is_idempotent(capsys) -> None:
     assert capsys.readouterr().out == "once\n"
 
 
-def test_flush_check_raises_without_emitting_or_consuming(capsys) -> None:
-    """Preflight for mutating commands: refuse before any side effect."""
-    sink = BoundedSink(CommandBudget(max_chars=10, shape=PayloadShape.ROWS, max_rows=5), command_path="data audit")
-    sink.echo("x" * 50)
-    with pytest.raises(BudgetExceeded):
-        sink.flush_check()
-    assert capsys.readouterr().out == ""
-
-
-def test_flush_check_is_silent_when_under_budget(capsys) -> None:
-    sink = BoundedSink(ROWS_BUDGET, command_path="data audit")
-    sink.echo("ok")
-    sink.flush_check()
-    assert capsys.readouterr().out == ""
-    sink.flush()
-    assert capsys.readouterr().out == "ok\n"
-
-
-def test_flush_check_never_raises_for_a_file_sink(tmp_path: Path) -> None:
-    sink = BoundedSink(
-        CommandBudget(max_chars=10, shape=PayloadShape.ROWS, max_rows=5),
-        output_path=tmp_path / "o.txt",
-        command_path="data audit",
-    )
-    sink.echo("x" * 5_000)
-    sink.flush_check()
 ```
+
+The sink has **no preflight method**. An earlier draft added `flush_check()` so that
+`data audit --fix` could measure before mutating. That was unsound: the post-fix report is not
+bounded by anything measurable pre-fix (see Task 12), so a passing preflight promised nothing.
+The gate in Task 12 replaces it, and an unused "just in case" primitive would be exactly the
+speculative API this plan's own rules reject.
 
 - [ ] **Step 2: Run test to verify it fails**
 
@@ -732,20 +716,6 @@ class BoundedSink:
         """Append raw text with no trailing newline added."""
         self._buffer.write(text)
 
-    def flush_check(self) -> None:
-        """Raise if the buffered content would exceed the ceiling, emitting nothing.
-
-        For commands that MUTATE before reporting: ``data audit --fix`` moves files, so a
-        ceiling breach discovered after the move would leave the caller with a failed
-        command, no report, and changed files. Preflighting with this method refuses while
-        nothing has changed yet.
-        """
-        if self._output_path is not None or self._budget is None:
-            return
-        size = visible_len(self._buffer.getvalue())
-        if size > self._budget.max_chars:
-            raise self._exceeded(size)
-
     def flush(self) -> None:
         if self._flushed:
             return
@@ -776,6 +746,7 @@ class BoundedSink:
 
 Run: `cd science && uv run --frozen pytest tests/test_budget_sink.py -v`
 Expected: PASS (11 tests)
+
 
 - [ ] **Step 5: Commit**
 
@@ -862,17 +833,25 @@ from __future__ import annotations
 
 from collections.abc import Sequence
 from dataclasses import dataclass
+from typing import Generic, TypeVar
+
+RowT = TypeVar("RowT")
 
 
 @dataclass(frozen=True)
-class ProjectedRows[T]:
+class ProjectedRows(Generic[RowT]):
     """Generic over the row type.
 
     ``tasks list`` projects ``Task`` models for its table branch and dicts for its JSON
     branch; a ``Mapping``-only signature would be a type error at the first call site.
+
+    ``TypeVar`` + ``Generic`` rather than PEP 695 ``class ProjectedRows[T]``: the packages
+    declare ``requires-python = ">=3.11"`` and Pyright is pinned to 3.11, where the PEP 695
+    form is a syntax-level error. ``output.py:15`` and ``instruments.py:31`` use the same
+    construction.
     """
 
-    rows: list[T]
+    rows: list[RowT]
     omitted: int
     total: int
 
@@ -881,7 +860,7 @@ class ProjectedRows[T]:
         return self.omitted > 0
 
 
-def project_rows[T](rows: Sequence[T], max_rows: int | None) -> ProjectedRows[T]:
+def project_rows(rows: Sequence[RowT], max_rows: int | None) -> ProjectedRows[RowT]:
     """Keep the first ``max_rows`` in caller order, reporting how many were dropped.
 
     Caller order is preserved rather than re-sorted: the command already sorted for a
@@ -926,6 +905,8 @@ escape must reproduce **their** selection plus `--output`.
 ```python
 # science/tests/test_budget_invocation.py
 from __future__ import annotations
+
+import shlex
 
 import click
 from click.testing import CliRunner
@@ -993,8 +974,6 @@ def test_shell_metacharacters_are_quoted() -> None:
     out = _run(["list", "--status", "a;rm -rf b"])
     assert shlex.split(out)[3] == "a;rm -rf b"
 ```
-
-Add `import shlex` to the test module's imports.
 
 - [ ] **Step 2: Run test to verify it fails**
 
@@ -1134,6 +1113,38 @@ def test_untruncated_json_has_no_truncation_key(capsys) -> None:
     assert "truncation" not in json.loads(capsys.readouterr().out)
 
 
+def test_returned_count_is_reconciled_with_the_projected_rows(capsys) -> None:
+    """The caller computes it pre-projection; the emitter owns the final row count."""
+    sink = BoundedSink(BIG, command_path="tasks list")
+    emit_query_rows(
+        output_format="json",
+        title="Tasks",
+        columns=COLUMNS,
+        rows=ROWS,
+        meta={"returned_count": len(ROWS), "active_total": 100},
+        sink=sink,
+    )
+    sink.flush()
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["meta"]["returned_count"] == 40 == len(payload["rows"])
+    assert payload["meta"]["active_total"] == 100  # unrelated meta is untouched
+    assert payload["truncation"]["total"] == 100  # the pre-projection count still travels
+
+
+def test_meta_without_returned_count_is_passed_through(capsys) -> None:
+    sink = BoundedSink(BIG, command_path="tasks list")
+    emit_query_rows(
+        output_format="json",
+        title="Tasks",
+        columns=COLUMNS,
+        rows=ROWS,
+        meta={"sort_order": "status_rank,id"},
+        sink=sink,
+    )
+    sink.flush()
+    assert json.loads(capsys.readouterr().out)["meta"] == {"sort_order": "status_rank,id"}
+
+
 def test_table_branch_reaches_the_sink_not_stdout(capsys) -> None:
     """The text branch must be captured by the sink, not printed directly."""
     sink = BoundedSink(BIG, command_path="tasks list")
@@ -1256,7 +1267,14 @@ def emit_query_rows(
 
     payload: dict[str, Any] = {"format": "json", "rows": rows_list}
     if meta is not None:
-        payload["meta"] = dict(meta)
+        meta_out = dict(meta)
+        # This function owns the projection, so it owns the row count. `returned_count`
+        # means "rows in THIS payload"; a caller computing it before projection would
+        # report 366 next to 40 rows. Reconciling here is the only way the two cannot
+        # disagree.
+        if "returned_count" in meta_out:
+            meta_out["returned_count"] = len(rows_list)
+        payload["meta"] = meta_out
     if projected.truncated:
         payload["truncation"] = {
             "omitted": projected.omitted,
@@ -1295,7 +1313,7 @@ def emit_query_rows(
 - [ ] **Step 4: Run tests to verify they pass**
 
 Run: `cd science && uv run --frozen pytest tests/test_output_budgeting.py -v`
-Expected: PASS (9 tests)
+Expected: PASS (11 tests)
 
 - [ ] **Step 5: Verify every existing call site is unchanged**
 
@@ -1518,6 +1536,20 @@ Add `output_path: Path | None` to the signature, then replace the body's tail:
     )
     if output_format == "json":
         # ... existing column/row construction, then:
+        #
+        # The default is no longer "everything except done/retired" -- it is the working
+        # set -- so `applied_filters` must say what was actually applied. Replace the
+        # `exclude_status` line at tasks_cli.py:595:
+        #
+        #     if not show_all and status is None:
+        #         applied_filters["only_status"] = list(WORKING_SET)
+        #
+        # `exclude_status` is dropped rather than kept alongside: retaining a key that
+        # names two of the four excluded statuses would be a more precise-looking lie
+        # than omitting it. Its one consumer is test_tasks_cli.py:398, updated in Step 6.
+        #
+        # `returned_count` stays as the caller computes it; `emit_query_rows` reconciles
+        # it against the projected rows (Task 6).
         emit_query_rows(
             output_format=output_format,
             title="Tasks",
@@ -1557,7 +1589,15 @@ Expected: PASS (6 tests)
 - [ ] **Step 6: Run the task suite for regressions**
 
 Run: `cd science && uv run --frozen pytest tests/test_tasks_cli.py tests/test_tasks.py tests/test_tasks_archive.py -v`
-Expected: PASS. Tests asserting the old unfiltered default must pass an explicit `--status`.
+Expected: PASS. Two known updates, both consequences of the narrowed default:
+
+- `test_tasks_cli.py:398` asserts `meta["applied_filters"]["exclude_status"] == ["done", "retired"]`.
+  Change to `meta["applied_filters"]["only_status"] == ["active", "blocked"]`.
+- `test_tasks_cli.py:394` asserts `meta["returned_count"] == 1`. That fixture is well under 40
+  rows, so projection is a no-op and the assertion holds unchanged — but confirm it, because a
+  silent change here would mean the reconciliation is firing when it should not.
+
+Any other test asserting the old unfiltered default must pass an explicit `--status` or `--all`.
 
 - [ ] **Step 7: Commit**
 
@@ -1571,13 +1611,15 @@ git commit -m "feat(tasks): budget both list formats, default to the working set
 ### Task 8: Extract `count_issues` so displayed and total are comparable
 
 **Files:**
-- Modify: `science/src/science_tool/graph/health.py:355-374`
+- Modify: `science/src/science_tool/graph/health.py` — the typing import (`:12`), the
+  `layered_claim_issue_count` / `coverage_gaps` locals and their loop (`:342-351`), the inline
+  `total_issues` sum (`:353-374`), and the `layered_claims` entry of the report literal (`:365-370`)
 - Test: `science/tests/test_health_count_issues.py`
 
 **Interfaces:**
 - Produces: `count_issues(report: Mapping[str, Any]) -> int` in `graph/health.py`.
-  `build_health_report` computes `total_issues = count_issues(report_body)` instead of an inline
-  sum.
+  `build_health_report` assembles a real `HealthReport` with a placeholder total and then sets
+  `report["total_issues"] = count_issues(report)`, replacing the inline sum.
 
 **Why this task exists.** The previous plan computed `displayed_issues` as `len(kept)` summed
 over sections — not the same quantity as `total_issues`, which counts `managed_artifacts` only
@@ -1704,7 +1746,16 @@ Expected: FAIL — `ImportError: cannot import name 'count_issues'`
 
 - [ ] **Step 3: Extract the function**
 
-In `science/src/science_tool/graph/health.py`, add above `build_health_report`:
+In `science/src/science_tool/graph/health.py`, widen the typing import — the module currently has
+`from typing import NotRequired, TypedDict, cast` (`health.py:12`) and no `collections.abc`
+import:
+
+```python
+from collections.abc import Mapping
+from typing import Any, NotRequired, TypedDict, cast
+```
+
+Then add above `build_health_report`:
 
 ```python
 def count_issues(report: Mapping[str, Any]) -> int:
@@ -1767,13 +1818,31 @@ def count_issues(report: Mapping[str, Any]) -> int:
     )
 ```
 
-Then restructure the tail of `build_health_report`: **assemble the real report body first**, call
-`count_issues` on it, and attach the total. Delete the inline sum at line 357 and the now-unused
-`layered_claim_issue_count` / `coverage_gaps` locals along with the `for metric in (...)` loop
-that computed them (`health.py:342-351`).
+Then restructure the tail of `build_health_report`. Two constraints shape how:
+
+1. There is **no `layered_claims` local** today — the dict is built inline inside the
+   `report: HealthReport = {...}` literal at `health.py:365-370`. Referring to a
+   `layered_claims` name would not resolve.
+2. `HealthReport` is a `TypedDict`. Spreading a `dict[str, Any]` into it
+   (`{**report_body, "total_issues": ...}`) is a Pyright assignment error, because a
+   `dict[str, Any]` cannot prove it supplies the required keys.
+
+So: hoist `layered_claims` into a typed local, build a **real** `HealthReport` with a placeholder
+total, then overwrite that one field. Delete the inline `total_issues` sum (`health.py:357-374`)
+and the now-unused `layered_claim_issue_count` / `coverage_gaps` locals together with the
+`for metric in (proposition_coverage, causal_coverage):` loop that computed them
+(`health.py:342-351`). Keep `proposition_coverage` and `causal_coverage` — they feed the local
+below.
 
 ```python
-    report_body: dict[str, Any] = {
+    layered_claims: LayeredClaimHealthReport = {
+        "proposition_claim_layer_coverage": proposition_coverage,
+        "causal_leaning_identification_coverage": causal_coverage,
+        "rival_model_packets_missing_discriminating_predictions": rival_model_gaps,
+        "migration_issues": migration_issues,
+    }
+
+    report: HealthReport = {
         "unresolved_refs": unresolved_refs,
         "unregistered_ref_kinds": unregistered_ref_kinds,
         "lingering_tags_lines": lingering_tags_lines,
@@ -1781,24 +1850,27 @@ that computed them (`health.py:342-351`).
         "identity_policy": identity_policy_findings,
         "entity_identity": entity_identity,
         "layered_claims": layered_claims,
-        "dataset_anomalies": dataset_anomalies,
-        "schema_invalid": schema_invalid,
-        "archive_lag": archive_lag,
-        "managed_artifacts": managed_artifacts,
-        "tooling_scaffold": tooling_scaffold,
-        "validation": validation,
-        "accepted_validation": accepted_validation,
-        "prose_epistemics": prose_epistemics,
         "cross_paper_evidence": cross_paper_evidence,
         "legacy_task_type": legacy_task_type,
         "invalid_entity_aspects": invalid_entity_aspects,
-        "unwired_checks": unwired_checks,
+        "dataset_anomalies": dataset_anomalies,
+        "schema_invalid": schema_invalid,
+        "archive_lag": cast("TaskArchiveLag", archive_lag),
+        # ... every remaining key of the existing literal, unchanged and in place ...
+        "total_issues": 0,  # placeholder: count_issues reads the assembled report below
     }
-    report: HealthReport = {**report_body, "total_issues": count_issues(report_body)}
+    report["total_issues"] = count_issues(report)
 ```
 
-`count_issues` is now called on the same shape in both places — the full body here, the projected
-body in Task 10 — so no normalization step can drift between them.
+Everything between `archive_lag` and `total_issues` in the existing literal stays exactly as it
+is; only `layered_claims` changes (inline dict → the typed local) and `total_issues` changes
+(inline sum → placeholder plus the assignment). `_meta` is `NotRequired` and is attached later by
+the caller, unaffected.
+
+`count_issues` is now called on the same shape in both places — the assembled `HealthReport` here,
+the projected report in Task 10 — so no normalization step can drift between them. Its parameter
+type is `Mapping[str, Any]`, which both a `HealthReport` and the projected `dict[str, Any]`
+satisfy.
 
 - [ ] **Step 4: Run tests to verify they pass**
 
@@ -1994,8 +2066,10 @@ UNFILTERED_SECTIONS = frozenset(
 # Sections whose rows live under a "findings" key rather than at the top level.
 NESTED_FINDING_SECTIONS = frozenset({"cross_paper_evidence", "prose_epistemics"})
 
-# Non-list sections that pass through untouched.
-SCALAR_SECTIONS = frozenset({"total_issues", "coverage_gaps", "_meta"})
+# Non-list sections that pass through untouched. This is an ALLOW-LIST, not a type test:
+# any other non-list key is refused. `coverage_gaps` is deliberately absent -- it is a local
+# inside `build_health_report`, never a report key (`health.py:341-351`).
+SCALAR_SECTIONS = frozenset({"total_issues", "_meta"})
 
 SEVERITY_ORDER: dict[str, int] = {"info": 0, "warning": 1, "warn": 1, "error": 2}
 
@@ -2144,7 +2218,32 @@ def test_unknown_list_section_refuses_rather_than_capping() -> None:
     report["brand_new_check"] = [{"severity": "error"}] * 500
     with pytest.raises(UnknownSection, match="brand_new_check"):
         project_health_report(report, threshold="warn")
+
+
+@pytest.mark.parametrize("value", [True, 7, "clean", 1.5, None])
+def test_unknown_scalar_section_refuses(value: object) -> None:
+    """A new scalar section must be classified too.
+
+    A type test (`not isinstance(value, (list, dict))`) would wave every one of these
+    through unexamined -- a new `"degraded": True` or `"entity_count": 41000` would join
+    the report with nobody having decided what it means for the budget.
+    """
+    report = _natural_systems_shaped_report()
+    report["brand_new_scalar"] = value
+    with pytest.raises(UnknownSection, match="brand_new_scalar"):
+        project_health_report(report, threshold="warn")
+
+
+def test_registered_scalars_still_pass_through() -> None:
+    report = _natural_systems_shaped_report()
+    report["_meta"] = {"timings": [], "total_duration_seconds": 0.5}
+    projected = project_health_report(report, threshold="warn")
+    assert projected["_meta"] == {"timings": [], "total_duration_seconds": 0.5}
+    assert projected["total_issues"] == report["total_issues"]
 ```
+
+`_meta` is a dict, and it is in `SCALAR_SECTIONS` rather than `UNFILTERED_SECTIONS` because it is
+not a findings section at all — it carries timings, and reaching `_classified` would be wrong.
 
 - [ ] **Step 2: Run test to verify it fails**
 
@@ -2216,7 +2315,11 @@ def project_health_report(
     projected: dict[str, Any] = {}
 
     for key, value in report.items():
-        if key in SCALAR_SECTIONS or not isinstance(value, (list, dict)):
+        # SCALAR_SECTIONS is the ONLY way a non-list section skips classification. Testing
+        # `not isinstance(value, (list, dict))` here instead would let a newly added
+        # boolean/int/string section pass through unexamined purely because of its Python
+        # type -- the silent escape this projector exists to prevent.
+        if key in SCALAR_SECTIONS:
             projected[key] = value
             continue
 
@@ -2233,7 +2336,9 @@ def project_health_report(
             projected[key] = _project_section(value, key, threshold, effective_cap, omitted)
             continue
 
-        _classified(key)  # dict sections must still be classified
+        # Everything that reaches here -- dicts AND unregistered scalars -- must be
+        # classified or refused. `_classified` raises UnknownSection.
+        _classified(key)
         projected[key] = value
 
     projected["displayed_issues"] = count_issues(projected)
@@ -2244,7 +2349,7 @@ def project_health_report(
 - [ ] **Step 4: Run test to verify it passes**
 
 Run: `cd science && uv run --frozen pytest tests/test_health_projection_caps.py -v`
-Expected: PASS (10 tests)
+Expected: PASS (16 collected — 12 test functions, one parametrized over 5 scalar values)
 
 - [ ] **Step 5: Commit**
 
@@ -2549,7 +2654,6 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-import pytest
 from click.testing import CliRunner
 
 from science_tool.budget.registry import BUDGETS
@@ -2632,8 +2736,8 @@ def test_data_audit_output_file_is_complete_in_json_format(tmp_path: Path, monke
     assert len(target.read_text()) > BUDGETS["data audit"].max_chars
 
 
-def test_oversized_fix_refuses_before_moving_any_file(tmp_path: Path, monkeypatch) -> None:
-    """apply_fixes mutates the tree; a ceiling breach must be caught BEFORE it runs."""
+def test_fix_without_output_refuses_before_moving_any_file(tmp_path: Path, monkeypatch) -> None:
+    """apply_fixes mutates the tree, so --fix must not depend on a later budget check."""
     _stranded_project(tmp_path)
     monkeypatch.chdir(tmp_path)
     before = sorted(p.name for p in (tmp_path / "data").iterdir())
@@ -2645,6 +2749,31 @@ def test_oversized_fix_refuses_before_moving_any_file(tmp_path: Path, monkeypatc
     assert sorted(p.name for p in (tmp_path / "data").iterdir()) == before, (
         "files were moved despite the command failing"
     )
+
+
+def test_fix_with_output_mutates_and_writes_the_complete_report(tmp_path: Path, monkeypatch) -> None:
+    """With a file sink the flush cannot fail on size, so mutating is safe."""
+    _stranded_project(tmp_path)
+    monkeypatch.chdir(tmp_path)
+    target = tmp_path / "audit.json"
+
+    result = _invoke(["data", "audit", "--fix", "--format", "json", "--output", str(target)])
+
+    assert result.exit_code == 0, result.output
+    payload = json.loads(target.read_text())
+    assert len(payload["violations"]) == 3_000
+    assert len(target.read_text()) > BUDGETS["data audit"].max_chars
+
+
+def test_fix_on_a_clean_project_still_works_without_output(tmp_path: Path, monkeypatch) -> None:
+    """The gate keys on there being violations, not on --fix alone."""
+    (tmp_path / "science.yaml").write_text("id: demo\nname: demo\n")
+    (tmp_path / "data").mkdir()
+    monkeypatch.chdir(tmp_path)
+
+    result = _invoke(["data", "audit", "--fix"])
+
+    assert result.exit_code == 0, result.output
 ```
 
 Add this shared helper near the top of the test module:
@@ -2715,21 +2844,31 @@ def data_audit_command(
         complete_via=build_complete_via(click.get_current_context(), output_hint="audit.json"),
     )
 
-    if fix:
-        # PREFLIGHT BEFORE MUTATING. apply_fixes moves files on disk. If the resulting
-        # report were rendered afterwards and the flush then raised, the caller would see
-        # a failed command with no output while the files had already moved -- and might
-        # retry. So refuse first, while nothing has changed.
-        preflight = BoundedSink(
-            lookup("data audit"),
-            command_path="data audit",
-            complete_via=build_complete_via(click.get_current_context(), output_hint="audit.json"),
+    if fix and violations and output_path is None:
+        # apply_fixes MOVES FILES. If the report were rendered afterwards and the flush
+        # then raised, the caller would see a failed command, no output, and a changed
+        # tree -- and would plausibly retry.
+        #
+        # There is no honest preflight. The post-fix JSON adds `basepath` and an
+        # unbounded `rewritten_resources` array per datapackage row (data_audit.py:296-299),
+        # so nothing measurable before the moves is an upper bound on the final document.
+        # Measuring the pre-fix text preview is worse than useless: it is ~6.7k characters
+        # where the corresponding JSON is ~20.4k for the same 100 violations, so it passes
+        # precisely in the cases that then fail.
+        #
+        # So the rule is structural rather than numeric: under `--fix`, the report must
+        # have somewhere unbounded to go before anything moves. A file sink has no
+        # ceiling, so the post-mutation flush cannot fail on size.
+        raise click.UsageError(
+            f"data audit --fix would act on {len(violations)} violation(s), and the size of "
+            f"the resulting report cannot be known before the moves run. A budget failure "
+            f"after mutating would leave the tree changed with no report. "
+            f"Re-run with --output PATH."
         )
-        for v in violations:
-            preflight.echo(f"  [{v.quadrant.value}] {v.path} → {v.proposed_target or '-'}")
-        if output_path is None:
-            preflight.flush_check()  # raises BudgetExceeded without emitting anything
 
+    if fix:
+        # Reachable only when there is nothing to act on, or when --output was given.
+        # Both are safe: the first mutates nothing, the second cannot fail on size.
         outcomes = apply_fixes(project_path, violations)
         if emit_json:
             sink.write(render_json(violations, outcomes, notes))
@@ -2766,10 +2905,21 @@ def data_audit_command(
 
 The flush precedes `raise SystemExit(1)` so the report is emitted before the non-zero exit.
 
+**The gate is deliberately conservative, and this is a real behaviour change.** It fires on any
+violation, including `leaked_payload` rows that the fixer only ever flags. A narrower gate could
+consult `data_audit._planned_action` and demand `--output` only when something would actually
+move — but that would make correctness depend on `_planned_action` staying in lockstep with
+`apply_fixes`, a coupling nothing currently enforces. Erring toward asking for `--output` too
+often costs a re-run; erring the other way costs a mutated tree with no report. Record the change
+in `docs/plans/` when slice 1a lands, and note it in the `data audit` help text.
+
+`--fix` on a clean project still works bare, which is the only case where its output is trivially
+small anyway.
+
 - [ ] **Step 5: Run tests to verify they pass**
 
 Run: `cd science && uv run --frozen pytest tests/test_bulk_dump_refusal.py -v`
-Expected: PASS (5 tests)
+Expected: PASS (10 tests)
 
 - [ ] **Step 6: Run the affected suites**
 
@@ -2824,7 +2974,6 @@ from __future__ import annotations
 
 import ast
 import inspect
-from pathlib import Path
 
 import click
 
@@ -3156,22 +3305,36 @@ so no synthetic normalization can drift (Task 8,
 `test_rival_model_gaps_count_alongside_migration_issues`,
 `test_each_incomplete_coverage_metric_counts_as_one_gap`). `DEFERRED` is defined by growability
 rather than a size floor, giving `tasks archive` a truthful home (Task 1,
-`test_a_growable_but_small_command_can_be_deferred`). `data audit --fix` preflights via
-`flush_check()` before `apply_fixes` mutates anything (Tasks 3 and 12,
-`test_oversized_fix_refuses_before_moving_any_file`). Success messages follow a successful
-`flush()` instead of sitting in `finally` (Tasks 7 and 11,
-`test_no_success_message_when_the_command_fails`). `ProjectedRows`/`project_rows` are generic
-over `T`, so `tasks list` can project `Task` models (Task 4,
+`test_a_growable_but_small_command_can_be_deferred`). `data audit --fix` refuses to mutate at all
+unless the report has an unbounded destination (Task 12,
+`test_fix_without_output_refuses_before_moving_any_file`,
+`test_fix_with_output_mutates_and_writes_the_complete_report`). Success messages follow a
+successful `flush()` instead of sitting in `finally` (Tasks 7 and 11,
+`test_no_success_message_when_the_command_fails`). `ProjectedRows`/`project_rows` are generic, so
+`tasks list` can project `Task` models (Task 4,
 `test_projection_is_generic_over_non_mapping_rows`). The health fixture carries all four
 `layered_claims` keys the renderer reads unconditionally (Task 11). `data audit` appears in the
 regression matrix in both formats (Task 13). `build_complete_via` renders through `shlex.join`
 (Task 5, `test_values_with_spaces_are_quoted`).
 
+**Third-review corrections.** The `--fix` preflight is gone: it measured a text preview (~6.7k
+chars for 100 violations) against a JSON document it does not bound (~20.4k for the same 100), so
+it passed in exactly the cases that then failed. The structural gate replaces it, and
+`BoundedSink.flush_check()` — added for that preflight and now unused — is removed with it
+(Tasks 3 and 12). `build_health_report` hoists `layered_claims` into a typed local and overwrites
+a placeholder `total_issues` on a real `HealthReport`, because the previous draft named a local
+that does not exist and spread a `dict[str, Any]` into a `TypedDict` (Task 8). Generics use
+`TypeVar` + `Generic`: PEP 695 `class Foo[T]` is Python 3.12 syntax and both packages and Pyright
+are pinned to 3.11 (Task 4, Global Constraints). `SCALAR_SECTIONS` is an allow-list rather than a
+type test, so a new boolean or integer section is refused rather than waved through (Task 10,
+`test_unknown_scalar_section_refuses`). `emit_query_rows` reconciles `meta["returned_count"]`
+against the projected rows and `tasks list` reports `only_status` instead of the now-incomplete
+`exclude_status` (Tasks 6 and 7, `test_returned_count_is_reconciled_with_the_projected_rows`).
+
 **Known limits, stated.** Guard 2 proves sink *construction*, not that every branch routes
 through it — Task 11 Step 5's grep and the regression suite cover the rest. The `DEFERRED` table
 is a bookkeeping ratchet: it prevents silence, not oversized output, and those commands stay
-unbounded until 1b. The `--fix` preflight measures the violation list rather than the exact
-post-fix rendering; the two have one row per violation, so the proxy is sound in shape but not
-byte-exact, and a preflight that passes could in principle be followed by a flush that fails.
-That is why the post-mutation path keeps its own `--output` escape rather than relying on the
-preflight alone.
+unbounded until 1b. The `--fix` gate is coarser than strictly necessary — it fires on any
+violation, including `leaked_payload` rows the fixer only flags — because the precise version
+would depend on `data_audit._planned_action` staying in lockstep with `apply_fixes`, which
+nothing enforces. It is a deliberate behaviour change to an existing command.
