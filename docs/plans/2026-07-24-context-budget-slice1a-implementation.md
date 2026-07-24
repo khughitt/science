@@ -15,7 +15,8 @@ the whole invocation and either writes it to stdout, writes it complete to `--ou
 raises. Semantic narrowing happens earlier, in a **projection** chosen by the command's declared
 payload shape; an unregistered shape refuses rather than degrading.
 
-**Tech Stack:** Python 3.12+, Click, Rich, Pydantic, pytest. All work is in `science/`.
+**Tech Stack:** Python 3.11 (see Global Constraints), Click, Rich, Pydantic, pytest. All work is
+in `science/`.
 
 **Parent design:**
 [`2026-07-24-agent-context-budget-program-design.md`](2026-07-24-agent-context-budget-program-design.md)
@@ -91,7 +92,8 @@ imports.
 - Produces: `PayloadShape` (`StrEnum`: `ROWS`, `REPORT`, `DOCUMENT`),
   `CommandBudget(max_chars: int, shape: PayloadShape, max_rows: int | None = None)`,
   `BUDGETS: dict[str, CommandBudget]`, `EXEMPTIONS: dict[str, str]`,
-  `DEFERRED: dict[str, DeferredCommand]`, `DeferredCommand(measured_chars: int, target_slice: str)`,
+  `DEFERRED: dict[str, DeferredCommand]`,
+  `DeferredCommand(growth_reason: str, target_slice: str, measured_chars: int | None = None)`,
   `lookup(command_path) -> CommandBudget | None`, `shape_for(command_path) -> PayloadShape | None`.
 
 - [ ] **Step 1: Write the failing test**
@@ -1828,11 +1830,21 @@ Then restructure the tail of `build_health_report`. Two constraints shape how:
    `dict[str, Any]` cannot prove it supplies the required keys.
 
 So: hoist `layered_claims` into a typed local, build a **real** `HealthReport` with a placeholder
-total, then overwrite that one field. Delete the inline `total_issues` sum (`health.py:357-374`)
-and the now-unused `layered_claim_issue_count` / `coverage_gaps` locals together with the
-`for metric in (proposition_coverage, causal_coverage):` loop that computed them
-(`health.py:342-351`). Keep `proposition_coverage` and `causal_coverage` — they feed the local
-below.
+total, then overwrite that one field.
+
+Once `count_issues` owns the arithmetic, five locals that fed only the inline sum become unused
+and Ruff flags each as `F841`. Delete all of them:
+
+- the inline `total_issues` sum (`health.py:353-374`);
+- `layered_claim_issue_count` / `coverage_gaps` and the `for metric in (proposition_coverage,
+  causal_coverage):` loop that computed them (`health.py:342-351`);
+- `prose_epistemics_findings` and `prose_epistemics_issue_count` (`health.py:335-340`) —
+  `count_issues` re-derives the prose count internally via its `_findings` helper;
+- `lag_total` (`health.py:356`) — `count_issues` recomputes it with `archive_lag_total`.
+
+Keep `prose_epistemics` (the dict at `health.py:334`, still spread into the report literal),
+`proposition_coverage`, and `causal_coverage` — the last two feed the `layered_claims` local
+below. `archive_lag_total` stays imported: `count_issues` calls it.
 
 ```python
     layered_claims: LayeredClaimHealthReport = {
@@ -2630,8 +2642,10 @@ git commit -m "feat(health): route all output through the sink, add --severity a
 
 **Files:**
 - Modify: `science/src/science_tool/entities_inventory_cli.py:50-61`
-- Modify: `science/src/science_tool/data_cli.py:49-90`
+- Modify: `science/src/science_tool/data_cli.py:28-90` (the `--fix` help and the `--output` gate)
 - Test: `science/tests/test_bulk_dump_refusal.py`
+- Modify (existing regression): `science/tests/test_data_audit_cli.py:66` — bare `--fix` no longer
+  succeeds; move it to `--output` and add a refusal test
 
 **Interfaces:**
 - Consumes: `BoundedSink`, `lookup`, `build_complete_via`.
@@ -2652,12 +2666,17 @@ otherwise.
 from __future__ import annotations
 
 import json
+import subprocess
 from pathlib import Path
 
 from click.testing import CliRunner
 
 from science_tool.budget.registry import BUDGETS
 from science_tool.cli import main
+
+# Enough stranded records that both the text and JSON reports exceed the data-audit
+# budget (20_000 chars); kept modest so the positive test's per-move `git add` stays fast.
+STRANDED_RECORDS = 400
 
 
 def _invoke(args: list[str]):
@@ -2740,15 +2759,23 @@ def test_fix_without_output_refuses_before_moving_any_file(tmp_path: Path, monke
     """apply_fixes mutates the tree, so --fix must not depend on a later budget check."""
     _stranded_project(tmp_path)
     monkeypatch.chdir(tmp_path)
-    before = sorted(p.name for p in (tmp_path / "data").iterdir())
 
     result = _invoke(["data", "audit", "--fix"])
 
     assert result.exit_code != 0
     assert "--output" in result.output
-    assert sorted(p.name for p in (tmp_path / "data").iterdir()) == before, (
-        "files were moved despite the command failing"
-    )
+    assert not (tmp_path / "results").exists(), "files were moved despite the command failing"
+
+
+def test_fix_refuses_an_unwritable_output_before_moving(tmp_path: Path, monkeypatch) -> None:
+    """A bad --output path must fail while the tree is intact, not after mutating."""
+    _stranded_project(tmp_path)
+    monkeypatch.chdir(tmp_path)
+
+    result = _invoke(["data", "audit", "--fix", "--output", "does/not/exist/audit.json"])
+
+    assert result.exit_code != 0
+    assert not (tmp_path / "results").exists(), "files were moved despite an unwritable --output"
 
 
 def test_fix_with_output_mutates_and_writes_the_complete_report(tmp_path: Path, monkeypatch) -> None:
@@ -2761,7 +2788,9 @@ def test_fix_with_output_mutates_and_writes_the_complete_report(tmp_path: Path, 
 
     assert result.exit_code == 0, result.output
     payload = json.loads(target.read_text())
-    assert len(payload["violations"]) == 3_000
+    assert len(payload["violations"]) == STRANDED_RECORDS
+    assert all(row["performed"] for row in payload["violations"])
+    assert (tmp_path / "results" / "exp00000" / "RESULTS.md").exists()
     assert len(target.read_text()) > BUDGETS["data audit"].max_chars
 
 
@@ -2780,11 +2809,25 @@ Add this shared helper near the top of the test module:
 
 ```python
 def _stranded_project(root: Path) -> None:
+    """A git repo whose data/ holds many *movable* stranded records.
+
+    Uses the exact shape the existing CLI suite proves movable
+    (data/processed/exp/RESULTS.md -> results/exp/RESULTS.md; see
+    test_data_audit_cli.py::test_audit_json_contract), scaled until the report exceeds
+    the data-audit budget.
+
+    A real repository is required: for each untracked move `apply_fixes` runs
+    `git add <target>` (data_audit_fix.py:171), which errors outside a repo. Without
+    `git init` the positive --fix test would exit nonzero after partially mutating.
+    """
+    subprocess.run(["git", "init", "-q"], cwd=root, check=True)
+    subprocess.run(["git", "config", "user.email", "t@t"], cwd=root, check=True)
+    subprocess.run(["git", "config", "user.name", "t"], cwd=root, check=True)
     (root / "science.yaml").write_text("id: demo\nname: demo\n")
-    data_dir = root / "data"
-    data_dir.mkdir()
-    for i in range(3_000):
-        (data_dir / f"stranded-record-with-a-long-name-{i:05d}.md").write_text("x")
+    for i in range(STRANDED_RECORDS):
+        record = root / "data" / "processed" / f"exp{i:05d}" / "RESULTS.md"
+        record.parent.mkdir(parents=True, exist_ok=True)
+        record.write_text("# r\n")
 ```
 
 - [ ] **Step 2: Run test to verify it fails**
@@ -2822,6 +2865,21 @@ document can leak — which is why refusal, not truncation, is correct for this 
 
 - [ ] **Step 4: Wire both `data audit` branches**
 
+First amend the existing `--fix` option's help so the new requirement is discoverable
+(`data_cli.py:28`):
+
+```python
+@click.option(
+    "--fix",
+    is_flag=True,
+    default=False,
+    help="Relocate stranded records data/ → results/ (stages, never commits). "
+    "Requires --output PATH when there are violations to act on.",
+)
+```
+
+Then add the `--output` option and the gate:
+
 ```python
 @click.option("--output", "output_path", type=click.Path(path_type=Path), default=None)
 def data_audit_command(
@@ -2844,31 +2902,41 @@ def data_audit_command(
         complete_via=build_complete_via(click.get_current_context(), output_hint="audit.json"),
     )
 
-    if fix and violations and output_path is None:
-        # apply_fixes MOVES FILES. If the report were rendered afterwards and the flush
-        # then raised, the caller would see a failed command, no output, and a changed
-        # tree -- and would plausibly retry.
+    if fix and violations:
+        # apply_fixes MOVES FILES. Everything that could make the post-mutation report
+        # fail must be ruled out BEFORE the moves, or the caller is left with a changed
+        # tree, no report, and a reason to retry. Two such failure modes exist:
         #
-        # There is no honest preflight. The post-fix JSON adds `basepath` and an
-        # unbounded `rewritten_resources` array per datapackage row (data_audit.py:296-299),
-        # so nothing measurable before the moves is an upper bound on the final document.
-        # Measuring the pre-fix text preview is worse than useless: it is ~6.7k characters
-        # where the corresponding JSON is ~20.4k for the same 100 violations, so it passes
-        # precisely in the cases that then fail.
-        #
-        # So the rule is structural rather than numeric: under `--fix`, the report must
-        # have somewhere unbounded to go before anything moves. A file sink has no
-        # ceiling, so the post-mutation flush cannot fail on size.
-        raise click.UsageError(
-            f"data audit --fix would act on {len(violations)} violation(s), and the size of "
-            f"the resulting report cannot be known before the moves run. A budget failure "
-            f"after mutating would leave the tree changed with no report. "
-            f"Re-run with --output PATH."
-        )
+        # 1. SIZE. There is no honest preflight for it: the post-fix JSON adds `basepath`
+        #    and an unbounded `rewritten_resources` array per datapackage row
+        #    (data_audit.py:296-299), so nothing measurable before the moves bounds the
+        #    final document, and the pre-fix text preview (~6.7k chars for 100 violations)
+        #    is far smaller than its JSON (~20.4k), so it would pass in exactly the cases
+        #    that then fail. The only sound rule is structural: send the report somewhere
+        #    unbounded. A file sink has no ceiling, so its flush cannot fail on size.
+        if output_path is None:
+            raise click.UsageError(
+                f"data audit --fix would act on {len(violations)} violation(s), and the size "
+                f"of the resulting report cannot be bounded before the moves run. A budget "
+                f"failure after mutating would leave the tree changed with no report. "
+                f"Re-run with --output PATH."
+            )
+        # 2. AN UNWRITABLE DESTINATION. The sink writes the file only at flush(), after
+        #    apply_fixes. Validate it here instead, so a bad path (missing parent, no
+        #    permission) fails while the tree is still intact. `touch()` both proves
+        #    writability and reserves the file; BoundedSink.flush() overwrites it.
+        try:
+            output_path.touch()
+        except OSError as exc:
+            raise click.UsageError(
+                f"data audit --fix cannot write its report to {output_path}: {exc}. "
+                f"Refusing before any file is moved."
+            ) from exc
 
     if fix:
-        # Reachable only when there is nothing to act on, or when --output was given.
-        # Both are safe: the first mutates nothing, the second cannot fail on size.
+        # Reachable only when there is nothing to act on, or when --output named a
+        # writable file. Both are safe: the first mutates nothing, the second has a
+        # ceiling-free, confirmed-writable destination.
         outcomes = apply_fixes(project_path, violations)
         if emit_json:
             sink.write(render_json(violations, outcomes, notes))
@@ -2910,26 +2978,59 @@ violation, including `leaked_payload` rows that the fixer only ever flags. A nar
 consult `data_audit._planned_action` and demand `--output` only when something would actually
 move — but that would make correctness depend on `_planned_action` staying in lockstep with
 `apply_fixes`, a coupling nothing currently enforces. Erring toward asking for `--output` too
-often costs a re-run; erring the other way costs a mutated tree with no report. Record the change
-in `docs/plans/` when slice 1a lands, and note it in the `data audit` help text.
+often costs a re-run; erring the other way costs a mutated tree with no report. The `--fix` help
+text now states the requirement (Step 4); record the behaviour change in `docs/plans/` when slice
+1a lands.
 
 `--fix` on a clean project still works bare, which is the only case where its output is trivially
 small anyway.
 
-- [ ] **Step 5: Run tests to verify they pass**
+- [ ] **Step 5: Update the existing `--fix` regression**
+
+`test_data_audit_cli.py::test_fix_moves_and_reports_performed` (`test_data_audit_cli.py:66`)
+invokes bare `--fix --json` on a single violation and asserts `exit_code == 0`. The new gate makes
+that invocation refuse, so the test must move to the supported `--output` form. It is selected by
+Step 6's `-k "data_audit"` filter, so leaving it stale would fail the suite. Replace it with:
+
+```python
+def test_fix_moves_and_reports_performed(tmp_path: Path):
+    _init_repo(tmp_path)
+    _write(tmp_path, "data/processed/exp1/RESULTS.md", b"# r\n")
+    out = tmp_path / "audit.json"
+    res = _run(tmp_path, "--fix", "--json", "--output", str(out))
+    assert res.exit_code == 0
+    payload = json.loads(out.read_text())
+    assert payload["violations"][0]["performed"] is True
+    assert (tmp_path / "results/exp1/RESULTS.md").exists()
+
+
+def test_fix_without_output_refuses(tmp_path: Path):
+    """The report size cannot be bounded before the moves, so --fix demands --output."""
+    _init_repo(tmp_path)
+    _write(tmp_path, "data/processed/exp1/RESULTS.md", b"# r\n")
+    res = _run(tmp_path, "--fix", "--json")
+    assert res.exit_code != 0
+    assert "--output" in res.output
+    assert not (tmp_path / "results/exp1/RESULTS.md").exists()
+```
+
+The new negative test lives beside the updated one; both use the file's existing `_init_repo` /
+`_write` / `_run` helpers, so no new imports are needed.
+
+- [ ] **Step 6: Run tests to verify they pass**
 
 Run: `cd science && uv run --frozen pytest tests/test_bulk_dump_refusal.py -v`
-Expected: PASS (10 tests)
+Expected: PASS (11 tests)
 
-- [ ] **Step 6: Run the affected suites**
+- [ ] **Step 7: Run the affected suites**
 
 Run: `cd science && uv run --frozen pytest -k "inventory or data_audit or data_cli" -v`
-Expected: PASS
+Expected: PASS, including the updated `test_data_audit_cli.py`.
 
-- [ ] **Step 7: Commit**
+- [ ] **Step 8: Commit**
 
 ```bash
-git add science/src/science_tool/entities_inventory_cli.py science/src/science_tool/data_cli.py science/tests/test_bulk_dump_refusal.py
+git add science/src/science_tool/entities_inventory_cli.py science/src/science_tool/data_cli.py science/tests/test_bulk_dump_refusal.py science/tests/test_data_audit_cli.py
 git commit -m "feat(budget): route bulk dumps through the sink and refuse oversized stdout"
 ```
 
