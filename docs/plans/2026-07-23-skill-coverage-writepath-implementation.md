@@ -4,7 +4,7 @@
 
 **Goal:** Make the two project dataset writers persist a `schema_profile` that honors the project's declared `entity_schema_version`, so a gen-3 project writes `dataset/3.0` (not the frozen gen-2 default), and add a ratchet that keeps future writers from regressing.
 
-**Architecture:** A single path-based pin reader (`project_entity_schema_version`) routes the write path through the same authority the loader uses. A dataset-profile resolver (`project_dataset_schema_profile`) maps the pin to `dataset/3.0` only at generation 3 (unpinned/1/2 keep `dataset/2.0`). Both writers default through the resolver instead of the import-time constant `BASE_DATASET_SCHEMA_PROFILE`, which is left in place only for commons callers where a fixed gen-2 default is correct. An AST import-choke test forbids any non-commons module from importing that constant.
+**Architecture:** A single path-based pin reader (`project_entity_schema_version`) routes the write path through the same authority the loader uses. A dataset-profile resolver (`project_dataset_schema_profile`) maps the pin to `dataset/3.0` only at generation 3 (unpinned/1/2 keep `dataset/2.0`). Both writers default through the resolver instead of the import-time constant `BASE_DATASET_SCHEMA_PROFILE`, which is left in place only for commons callers where a fixed gen-2 default is correct. An AST reference-scan test forbids any non-commons module from referencing that constant (in any import, name, or attribute-access form).
 
 **Tech Stack:** Python 3, Pydantic v2, Click, `pytest`, `ruff`, `pyright`, stdlib `ast`.
 
@@ -51,6 +51,13 @@ def test_project_entity_schema_version_absent_is_none(tmp_path):
     assert project_entity_schema_version(tmp_path) is None
 
 
+def test_project_entity_schema_version_missing_config_is_none(tmp_path):
+    # A bare directory with no science.yaml is unpinned, not an error -- mirrors how the
+    # graph loader treats a missing config. Existing dataset-add tests pass bare tmp_path
+    # dirs through add_dataset, which now routes here.
+    assert project_entity_schema_version(tmp_path) is None
+
+
 def test_project_entity_schema_version_rejects_illegal_pin(tmp_path):
     # A present-but-illegal pin must raise, not degrade to unpinned.
     (tmp_path / "science.yaml").write_text(
@@ -76,11 +83,18 @@ def project_entity_schema_version(project_root: Path) -> int | None:
     Reads the raw science.yaml mapping and validates through the single authority
     (`validated_entity_schema_version`) -- no full ProjectConfig required, exactly as the
     graph loader reads the pin (`graph/sources.py`). This keeps the write path and the load
-    path reading the generation through one function, so they can never disagree.
+    path reading the generation through one function, so they can never disagree. A missing
+    science.yaml is unpinned (None), not an error, mirroring the loader -- write sites like
+    `add_dataset` are exercised against bare directories that have no config.
     """
-    raw = yaml.safe_load(project_config_path(project_root).read_text(encoding="utf-8")) or {}
+    path = project_config_path(project_root)
+    if not path.is_file():
+        return None
+    raw = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
     return validated_entity_schema_version(raw)
 ```
+
+Step 4's run must include the missing-config test (`-k project_entity_schema_version` covers all four).
 
 - [ ] **Step 4: Run test to verify it passes**
 
@@ -300,6 +314,7 @@ git commit -m "feat(dataset): add resolves schema_profile default from project g
 **Files:**
 - Modify: `science/src/science_tool/datasets_register.py` (`_entity_yaml_block` ~line 217-232; `_output_schema_profile` ~line 281-287; `preflight_register_run_identity` ~line 752-774; `write_derived_dataset_entities` ~line 777-822; import block ~line 31)
 - Test: `science/tests/test_dataset_register_run.py`
+- Test: `science/tests/test_authoring_emitted_profile.py` (its `_entity_yaml_block` renderer test must adapt to the now-required `schema_profile` argument)
 
 **Interfaces:**
 - Consumes: `project_dataset_schema_profile` (Task 2).
@@ -329,7 +344,26 @@ def test_register_run_writes_gen3_profile_when_pinned(tmp_path: Path) -> None:
     assert fm["schema_profile"] == "science-entity-base/1.0+dataset/3.0"
 ```
 
-This exercises the default path because the inferred workflow output omits `schema_profile`, so `_output_schema_profile` returns the resolved default. (An existing test — `test_register_run_writes_dataset_entities`, ~line 573 — already asserts the gen-2 default on an unpinned project, so no separate regression test for gen-2 is needed here; confirm that test still passes after the change.)
+This exercises the default path because the inferred workflow output omits `schema_profile`, so `_output_schema_profile` returns the resolved default.
+
+Also add a **persisted unpinned/gen-2 witness** in the same file — the existing `test_register_run_writes_dataset_entities` (~line 573) asserts id/origin/datapackage but **not** `schema_profile`, so nothing currently pins the persisted register-run default:
+
+```python
+def test_register_run_writes_gen2_profile_when_unpinned(tmp_path: Path) -> None:
+    _seed_workflow_and_run(
+        tmp_path,
+        run_resources=[
+            {"name": "kappa", "path": "kappa.csv", "format": "csv", "bytes": 100, "hash": "sha256:a"},
+        ],
+    )
+    _seed_resource_files(tmp_path, ["kappa"])
+    # _seed_workflow_and_run leaves science.yaml unpinned.
+    res = _run_register(tmp_path)
+    assert res.exit_code == 0, res.output
+
+    fm = _frontmatter(tmp_path / "entities" / "datasets" / "wf-r1-kappa.md")
+    assert fm["schema_profile"] == "science-entity-base/1.0+dataset/2.0"
+```
 
 - [ ] **Step 2: Run test to verify it fails**
 
@@ -352,7 +386,31 @@ def _output_schema_profile(out: dict, default_profile: str) -> str:
     return value
 ```
 
-Remove the default from `_entity_yaml_block` (~line 230): change `schema_profile: str = BASE_DATASET_SCHEMA_PROFILE,` to `schema_profile: str,`.
+Remove the default from `_entity_yaml_block` (~line 230): change `schema_profile: str = BASE_DATASET_SCHEMA_PROFILE,` to `schema_profile: str,`. The renderer is now a pure function of its argument — a project-aware default belongs to the write path (`_output_schema_profile` + the resolver), not the renderer.
+
+This breaks `test_register_run_renderer_emits_the_default_profile` in `science/tests/test_authoring_emitted_profile.py:46`, which calls `_entity_yaml_block` with no `schema_profile`. Update that test to pass the argument explicitly and assert the renderer emits exactly what it is given (it no longer has a "default" to witness):
+
+```python
+def test_register_run_renderer_emits_the_given_profile() -> None:
+    block = _entity_yaml_block(
+        slug="mock-derived",
+        title="Mock derived",
+        workflow_id="workflow:mock",
+        workflow_run_id="run-1",
+        git_commit="abc1234",
+        config_snapshot="{}",
+        produced_at="2026-07-16T00:00:00Z",
+        inputs=["dataset:mock-cohort"],
+        transformations=None,
+        dp_path_rel="data/mock-derived/datapackage.yaml",
+        ontology_terms=[],
+        schema_profile=EXPECTED,
+    )
+
+    assert f'schema_profile: "{EXPECTED}"' in block
+```
+
+Leave the other two tests in that file unchanged: `test_expected_profile_tracks_the_shared_default` (the gen-2 anchor) and `test_project_dataset_authoring_emits_the_default_profile` (which calls `add_dataset` on a bare `tmp_path`; with the Task 1 `is_file` guard, missing config → unpinned → gen-2 = `EXPECTED`, so it still passes and remains the add-path default witness for fb-2026-07-12-006).
 
 In `write_derived_dataset_entities` (~line 777), compute the resolved default once after `inputs = ...` (~line 789) and pass it into `_output_schema_profile`:
 
@@ -380,13 +438,13 @@ Confirm `BASE_DATASET_SCHEMA_PROFILE` is referenced nowhere else in `datasets_re
 
 - [ ] **Step 4: Run tests to verify they pass**
 
-Run: `cd science && uv run --frozen pytest tests/test_dataset_register_run.py -v`
-Expected: PASS — new test plus all pre-existing register-run tests (regression check for the `_output_schema_profile`/`_entity_yaml_block` signature changes and the preflight path).
+Run: `cd science && uv run --frozen pytest tests/test_dataset_register_run.py tests/test_authoring_emitted_profile.py -v`
+Expected: PASS — the new gen-3 and gen-2 register-run tests, the adapted renderer test, all pre-existing register-run tests (regression check for the `_output_schema_profile`/`_entity_yaml_block` signature changes and the preflight path), and the two unchanged `test_authoring_emitted_profile.py` witnesses.
 
 - [ ] **Step 5: Commit**
 
 ```bash
-git add science/src/science_tool/datasets_register.py science/tests/test_dataset_register_run.py
+git add science/src/science_tool/datasets_register.py science/tests/test_dataset_register_run.py science/tests/test_authoring_emitted_profile.py
 git commit -m "feat(dataset): register-run resolves schema_profile default from project generation"
 ```
 
@@ -406,18 +464,24 @@ git commit -m "feat(dataset): register-run resolves schema_profile default from 
 Create `science/tests/test_dataset_profile_boundary.py`:
 
 ```python
-"""Dataset-profile import boundary guard.
+"""Dataset-profile reference boundary guard.
 
 `BASE_DATASET_SCHEMA_PROFILE` is the FIXED generation-2 dataset profile. It is correct only
 for commons dataset callers, whose `dataset` mixin stays `dataset/2.0` across generations.
 Every PROJECT dataset writer must instead default through `project_dataset_schema_profile`,
 which honors the project's `entity_schema_version` pin.
 
-This is an import-choke ratchet: a module constant cannot be referenced without importing it,
-so gating the import edge (regardless of alias) closes the aliased-re-import / attribute-access
-evasions a usage-site scan would miss. Deny-by-default: the whole `science_tool` tree is
-scanned and only the commons package is allowlisted, so a future project-side writer that
-reaches for the raw gen-2 constant fails here and is forced through the resolver.
+This scans EVERY reference to the constant, not just `from ... import` edges: a from-import
+plus its `Name` uses, an aliased module attribute
+(`import ... as ia; ia.BASE_DATASET_SCHEMA_PROFILE`), and a star import from the defining
+module. Detecting only `ImportFrom` would miss the attribute-access and star-import spellings.
+Deny-by-default: the whole `science_tool` tree is scanned and only the commons package is
+allowlisted, so a future project-side writer that reaches for the raw gen-2 constant fails
+here and is forced through the resolver.
+
+Known limit, stated rather than hidden: matching the bare name as an attribute would also flag
+an unrelated symbol that happened to share the exact name `BASE_DATASET_SCHEMA_PROFILE`. No such
+collision exists in this tree, and the name is specific enough that one is implausible.
 """
 
 from __future__ import annotations
@@ -429,30 +493,39 @@ _SCIENCE_SRC = Path(__file__).resolve().parents[1] / "src" / "science_tool"
 _CONSTANT = "BASE_DATASET_SCHEMA_PROFILE"
 _DEFINING_MODULE = _SCIENCE_SRC / "identity_authoring.py"  # definition, not consumption
 
-# Only commons callers may import the fixed gen-2 constant (gen-2 is correct for commons).
+# Only commons callers may reference the fixed gen-2 constant (gen-2 is correct for commons).
 _ALLOWED_DIR = _SCIENCE_SRC / "commons"
 
 
-def _imports_constant(path: Path) -> bool:
+def _references_constant(path: Path) -> bool:
+    """True if the module names the constant in any binding or access form."""
     tree = ast.parse(path.read_text(encoding="utf-8"))
     for node in ast.walk(tree):
         if isinstance(node, ast.ImportFrom):
-            if any(alias.name == _CONSTANT for alias in node.names):
-                return True
+            module = node.module or ""
+            for alias in node.names:
+                if alias.name == _CONSTANT:
+                    return True
+                if alias.name == "*" and module.endswith("identity_authoring"):
+                    return True
+        elif isinstance(node, ast.Name) and node.id == _CONSTANT:
+            return True
+        elif isinstance(node, ast.Attribute) and node.attr == _CONSTANT:
+            return True
     return False
 
 
-def test_base_dataset_schema_profile_import_is_commons_only():
+def test_base_dataset_schema_profile_reference_is_commons_only():
     offenders = []
     for path in _SCIENCE_SRC.rglob("*.py"):
         if path == _DEFINING_MODULE:
             continue
         if _ALLOWED_DIR in path.parents:
             continue
-        if _imports_constant(path):
+        if _references_constant(path):
             offenders.append(str(path.relative_to(_SCIENCE_SRC)))
     assert offenders == [], (
-        f"{_CONSTANT} is the fixed gen-2 dataset profile; these non-commons modules import it "
+        f"{_CONSTANT} is the fixed gen-2 dataset profile; these non-commons modules reference it "
         f"instead of defaulting through project_dataset_schema_profile: {offenders}"
     )
 ```
@@ -460,14 +533,24 @@ def test_base_dataset_schema_profile_import_is_commons_only():
 - [ ] **Step 2: Run test to verify current state**
 
 Run: `cd science && uv run --frozen pytest tests/test_dataset_profile_boundary.py -v`
-Expected: PASS — Tasks 3 and 4 already removed the `datasets_catalog.py`, `datasets/cli.py`, and `datasets_register.py` imports, so only `commons/**` imports remain. If it FAILS, the offenders list names a module whose import was missed in Task 3/4 — fix that import, then re-run.
+Expected: PASS — Tasks 3 and 4 already removed the `datasets_catalog.py`, `datasets/cli.py`, and `datasets_register.py` references, so only `commons/**` references remain. If it FAILS, the offenders list names a module whose reference was missed in Task 3/4 — fix that module, then re-run.
 
-- [ ] **Step 3: Prove the guard bites (temporary sanity check)**
+- [ ] **Step 3: Prove the guard bites — including the attribute-access form**
 
-Temporarily add `from science_tool.identity_authoring import BASE_DATASET_SCHEMA_PROFILE` to a non-commons module (e.g. the top of `science/src/science_tool/datasets_catalog.py`).
-Run: `cd science && uv run --frozen pytest tests/test_dataset_profile_boundary.py -v`
-Expected: FAIL — offenders lists `datasets_catalog.py`.
-Then revert the temporary import.
+The point of this guard is to catch the spelling a from-import-only check misses. Prove both:
+
+First, the from-import form — temporarily add to the top of `science/src/science_tool/datasets_catalog.py`:
+```python
+from science_tool.identity_authoring import BASE_DATASET_SCHEMA_PROFILE  # temp
+```
+Run: `cd science && uv run --frozen pytest tests/test_dataset_profile_boundary.py -v` → FAIL, offenders lists `datasets_catalog.py`. Revert.
+
+Then the attribute-access form — the spelling the old `ImportFrom`-only guard let through. Temporarily add to the top of `science/src/science_tool/datasets_catalog.py`:
+```python
+import science_tool.identity_authoring as _ia  # temp
+_ = _ia.BASE_DATASET_SCHEMA_PROFILE  # temp
+```
+Run: `cd science && uv run --frozen pytest tests/test_dataset_profile_boundary.py -v` → FAIL, offenders lists `datasets_catalog.py` (proving the `Attribute` branch fires). Revert both lines.
 
 - [ ] **Step 4: Re-run to confirm green after revert**
 
@@ -478,7 +561,7 @@ Expected: PASS.
 
 ```bash
 git add science/tests/test_dataset_profile_boundary.py
-git commit -m "test(dataset): guard BASE_DATASET_SCHEMA_PROFILE imports to commons only"
+git commit -m "test(dataset): guard BASE_DATASET_SCHEMA_PROFILE references to commons only"
 ```
 
 ---

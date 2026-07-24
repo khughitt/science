@@ -70,9 +70,14 @@ def project_entity_schema_version(project_root: Path) -> int | None:
     Reads the raw science.yaml mapping and validates through the single authority
     (`validated_entity_schema_version`) -- no full ProjectConfig required, exactly as the
     graph loader reads the pin. This keeps the write path and the load path reading the
-    generation through one function, so they can never disagree.
+    generation through one function, so they can never disagree. A missing science.yaml is
+    unpinned (None), not an error, mirroring the loader -- write sites like `add_dataset` are
+    exercised against bare directories that have no config.
     """
-    raw = yaml.safe_load(project_config_path(project_root).read_text(encoding="utf-8")) or {}
+    path = project_config_path(project_root)
+    if not path.is_file():
+        return None
+    raw = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
     return validated_entity_schema_version(raw)
 ```
 
@@ -113,22 +118,26 @@ to win in both writers; only the *default* becomes generation-aware.
 Commons consumers of `BASE_DATASET_SCHEMA_PROFILE` (`commons/dataset_lifecycle.py:286`,
 `commons/cli.py:670`) are unchanged.
 
-### 4. Regression guard (import-choke, deny-by-default)
+### 4. Regression guard (reference scan, deny-by-default)
 
 A test walks the whole `science_tool` source tree with the `ast` module and collects every
-module that **imports** `BASE_DATASET_SCHEMA_PROFILE` (matching `ImportFrom` of the name
-regardless of alias). It asserts that set is a subset of the sanctioned allowlist — the
+module that **references** `BASE_DATASET_SCHEMA_PROFILE` in any form: a `from ... import` of
+the name (and the `ast.Name` uses it binds), an aliased module attribute
+(`import ... as ia; ia.BASE_DATASET_SCHEMA_PROFILE`, an `ast.Attribute`), and a star import
+from the defining module. It asserts that set is a subset of the sanctioned allowlist — the
 commons package (`science_tool/commons/**`), where the fixed gen-2 default is correct.
 
-Guarding the **import edge**, not usage sites, closes the "five spellings" evasion (aliased
-re-imports, attribute access): a module constant cannot be referenced without importing it.
+Scanning **all reference forms**, not just the `ImportFrom` edge, is required: an
+`ImportFrom`-only check would miss the aliased-module attribute access and the star import.
 The polarity is deny-by-default — the guard scans the entire tree and the allowlist names
 only what is *permitted*, so a future project-side writer that reaches for the raw gen-2
 constant fails the build and is forced through `project_dataset_schema_profile`. New modules
 are caught, not silently exempted.
 
 The module that *defines* the constant (`identity_authoring.py`) is excluded (definition is
-not consumption).
+not consumption). Stated limit: matching the bare attribute name would also flag an unrelated
+symbol sharing the exact name `BASE_DATASET_SCHEMA_PROFILE`; none exists in this tree and the
+name is specific enough that a collision is implausible.
 
 ### 5. Testing
 
