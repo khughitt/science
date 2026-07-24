@@ -1,6 +1,6 @@
 # Autonomy Envelope (Autonomous Research, slice S1) — Design
 
-> **Status:** design / spec, approved for planning. Slice S1 of the autonomous-research
+> **Status:** design / spec, revised after review. Slice S1 of the autonomous-research
 > program. S1 ships **no autonomous agent**: it is the contract, verified by tests, that
 > the first one will run inside. Downstream slices (S2 recurrence, S3 task eligibility,
 > S4 telemetry→estimates, S5 harness, S6 multi-agent design→plan, S7 context management)
@@ -23,124 +23,153 @@ same thing, with nobody watching, on a schedule.
 
 S1 therefore establishes three things before any agent runs unattended:
 
-1. **Who acted** — a durable, queryable run identity attached to every autonomous write.
-2. **What they were permitted to touch** — an explicit write surface, per tier.
-3. **A guard that cannot be satisfied by manufacturing belief** — and, critically, a guard
-   whose scope is *derived* rather than hand-maintained, so it cannot silently drift.
+1. **Who acted** — a durable, supervisor-attested run identity bound to an exact commit range.
+2. **What they were permitted to touch** — an explicit, default-deny write surface, per tier.
+3. **A guard that cannot be satisfied by manufacturing belief**, and whose authority lives
+   outside the actor it constrains.
 
 ## Grounding findings that shape the design
 
-Much of the substrate already exists. These findings are what make S1 a *certification*
-slice rather than a greenfield one.
+Much of the substrate already exists. These findings are what make S1 a *hardening* slice
+rather than a greenfield one.
 
-- **"Who wrote this" already exists, uncertified.** `Entity.added_by` (`science/model/src/science_model/entities.py:362`)
-  is a free-text `str | None` documented as "Discovery stamp: who/what surfaced this entity
-  into the project". It materializes as a plain literal onto `sci:addedBy`
-  (`science/src/science_tool/graph/materialize.py:984-985`). It has **no validation and two
-  incompatible spellings already in flight**:
-  - `commands/research-topic.md:53` instructs `added_by: "llm:<model>:research-topic"`.
-  - `science/src/science_tool/explore_ideas.py:741` writes `f"explore-ideas:{model_id}:{candidate_id}"`.
-
-  Two spellings of one fact is precisely the collapse the D5 arc exists to undo. S1
-  canonicalizes rather than invents.
+- **`added_by` records a discovery mechanism, not an execution run.** `Entity.added_by`
+  (`science/model/src/science_model/entities.py:362`) is documented "Discovery stamp: who/what
+  surfaced this entity into the project", and `docs/user-guide/entities.md:722` describes these
+  fields as recording "how an idea entered the project". A corpus survey finds `explore-ideas:…`
+  values and at least one literal `user`. **It must not be narrowed to mean "the run that wrote
+  this"** — doing so would force a choice between inventing false historical run records and
+  invalidating truthful interactive provenance. S1 adds a separate field (§3) and leaves
+  `added_by` semantics untouched.
 
 - **`added_by` already materializes to the provenance layer, not knowledge.** The write at
-  `materialize.py:984` targets the `provenance` named graph; the layer split is real and
+  `graph/materialize.py:984-985` targets the `provenance` named graph; the layer split is
   established (`graph/io.py:129`, `graph/materialize.py:342,484`). Run records inherit this
   placement rather than proposing a new convention.
 
 - **Provenance-that-must-not-affect-belief is an established contract.** `OriginRecord`
-  (`entities.py:240-253`) is documented "Provenance metadata only; MUST NOT affect
-  evidential weight." The envelope extends an existing doctrine, not a new one.
+  (`entities.py:240-253`) is documented "Provenance metadata only; MUST NOT affect evidential
+  weight." The envelope extends an existing doctrine, not a new one.
 
 - **`RunFingerprint` is the wrong reuse.** `science/model/src/science_model/run_fingerprint.py`
-  exists but is workflow-run scoped: `ExecutorKind` is `local | commons | external`
-  (`run_fingerprint.py:61-64`), and the model carries seed policy and step seeds. It models
-  *compute* executors and reproducibility of numeric runs. Folding agent sessions into it
-  would be a category error and would corrupt a well-scoped model.
+  is workflow-run scoped: `ExecutorKind` is `local | commons | external` (`:61-64`), and the
+  model carries seed policy and step seeds. It models *compute* executors and numeric
+  reproducibility. Folding agent sessions into it would be a category error.
 
-- **The belief scalar is opt-in and fails open.** `belief_scalar_enabled(project_root)`
-  (`graph/belief_scalar.py:184-188`) reads an ACTIVE decision flag from `core/decisions.md`
-  and, per its own docstring, "a missing project root or decisions file silently disables the
-  feature (returns False)". **A gate defined over the scalar would silently no-op in every
-  project that has not opted in.** The gate is therefore defined over `BeliefResult` — the
-  ordinal magnitude plus support/dispute unit multiset produced by `aggregate_belief` /
-  `collect_evidence_units` (`graph/belief.py`, as consumed by `graph/attention.py`) — which is
-  always computed.
+- **The belief basis is available in three named parts.** The gate in §5 compares them:
+  - expanded target closure — `_evidence_targets_for_uri` (`graph/store/evidence_signals.py:192-195`);
+    a hypothesis's closure includes its linked claims.
+  - raw evidence-unit multiset — `collect_evidence_units(knowledge, provenance, targets)`
+    (`graph/belief.py:123-131`), deduped by URI.
+  - policy identity — the frozen `BeliefPolicy.policy_id` (`graph/belief_policy.py:36-40`,
+    default `"core-default"` at `:99`); `bundle_belief.py:147` already treats
+    `(policy_id, policy_version)` as an identity and raises `MixedBeliefPolicyError` across it.
 
-- **Guard integrity is reachable from the write surface.** Because belief machinery reads a
-  flag from `core/decisions.md`, an autonomous run permitted to edit that file could disable
-  its own guard. The file must be denied.
+- **The belief scalar is opt-in and silently absent when unconfigured.**
+  `belief_scalar_enabled(project_root)` (`graph/belief_scalar.py:184-188`) reads an ACTIVE
+  decision flag from `core/decisions.md` and returns `False` when the file or flag is missing.
+  That is fail-closed *for the scalar feature*, but a **gate defined over the scalar would
+  fail open** — silently passing in every project that has not opted in. The gate is therefore
+  defined over the belief basis above, which is always computed. The scalar is compared
+  additionally where enabled, never as the definition.
 
-- **`graph.trig` has exactly one legitimate writer.** The kernel-closure work established
-  that source is the only durable writer of `graph.trig`. Autonomous runs never write it.
+- **Guard integrity is reachable from the write surface.** Belief machinery reads flags from
+  `core/decisions.md`, and dependency-resolution files determine which Science revision runs.
+  Both must be outside the actor's authority (§4).
 
-- **Readiness resolution already exists.** `ReadinessResolver`
-  (`science/src/science_tool/tasks_readiness.py`) resolves `blocked_by` refs through entity
-  readiness with cycle guarding. S3 will build task eligibility on this; S1 only needs to
-  not conflict with it.
+- **`graph.trig` has exactly one legitimate writer.** The kernel-closure work established that
+  source is the only durable writer of `graph.trig`.
 
-- **`Task.type` is a retired field.** `graph/health_checks/legacy_task_type.py` actively
-  reports tasks still carrying `type:`; the field migrated to `aspects:`. Any reintroduction
-  of a task-type vocabulary is an S3 question and must first establish why the original was
-  retired. S1 adds no task fields.
+- **Report-first is an established pattern at the command layer.** `commands/wander.md:17`
+  documents `--apply` as "consumed by this slash command; permits exactly one side [effect]",
+  with a dedicated `## Phase 6: --apply`; `commands/explore-ideas.md` is structured the same
+  way. Note the layer: `science wander`'s **CLI** has no `--apply` and always writes a walk
+  report (`wander/cli.py:108-110`) — which is itself a clean instance of the `report-only`
+  tier, not a counterexample to it.
+
+- **Readiness resolution already exists.** `ReadinessResolver` (`tasks_readiness.py`) resolves
+  `blocked_by` refs through entity readiness with cycle guarding. S3 builds task eligibility
+  on this; S1 only needs to not conflict with it.
+
+- **`Task.type` is a retired field.** `graph/health_checks/legacy_task_type.py` reports tasks
+  still carrying `type:`; it migrated to `aspects:`. Any reintroduction of a task-type
+  vocabulary is an S3 question. S1 adds no task fields.
 
 ## Design
 
-### 1. Tiers
+### 0. The control plane sits outside the actor
 
-Two tiers, and deliberately no third.
+The single most important structural property, from which several rules below follow: **the
+supervisor — the process that launches an autonomous run — owns everything the guard depends
+on.** The agent's write surface never includes its own audit metadata, its own commit range
+binding, or the code that evaluates it.
+
+Concretely:
+
+- The **run record** is created and finalized by the supervisor; `tier` and `disposition` are
+  supervisor-attested, never self-declared (§2).
+- The **commit range** `base_commit..head_commit` is recorded by the supervisor and is the
+  authoritative binding. Author identity and the `Science-Run:` trailer are conveniences for
+  `git blame`, not evidence — a process that can write commits can forge both (§3).
+- The **authoritative gate executes from a supervisor-owned, pinned Science installation**,
+  treating the run's worktree strictly as input. A run that edits toolkit code therefore
+  cannot alter the code that judges it (§4).
+
+### 1. Tiers
 
 | Tier | May write |
 |---|---|
-| `report-only` | Only the run's own report path, plus its own run record (§2). |
-| `belief-neutral` | Anything the path gate allows, provided no pre-existing entity's belief moves. |
+| `report-only` | Only the run's own report path. |
+| `belief-neutral` | What the path gate allows (§4), provided the belief basis does not change (§5). |
 
-`report-only` is not a speculative addition: it is the existing house pattern. Both
-`science wander` and `science explore-ideas` are report-first with a separate `--apply`,
-and the first sweeps this program will actually run (audit docs, audit skills) are
-report-shaped.
+Neither tier writes run records, commit metadata, or gate policy — those are supervisor-owned
+per §0.
 
-**There is no "full" tier.** Changing belief is human work by definition. Reserving a
-future tier for autonomous belief modification would undercut the guarantee before it
-ships, and a tier that exists "for later" is a tier something will eventually be granted.
+`report-only` is not speculative: it is the existing house pattern at the command layer
+(`wander`, `explore-ideas`), and `science wander`'s CLI already behaves exactly this way.
+
+**There is no "full" tier.** Changing belief is human work by definition. A tier reserved
+"for later" is a tier something will eventually be granted.
 
 ### 2. Run record
 
-A source-loaded record at `runs/<date>-<agent>-<short-id>.md`, materialized **exclusively
-into `graph/provenance`**. It never appears in `graph/knowledge`, and therefore never
-becomes a belief bearer, a freshness subject, an attention candidate, or a member of an
-`rdf:type` hub. This placement is load-bearing: at weekly and fortnightly cadences across
-several projects, run records would otherwise become one of the largest node populations
-in the graph and would skew exactly the attention rankings the curation program depends on
-(`graph/attention.py` — `NEEDS_REVIEW_MULTIPLIER = 3.0`, `STALE_MULTIPLIER = 2.0`).
+A supervisor-written record at `runs/<date>-<agent>-<short-id>.md`, loaded as a project source
+and materialized **exclusively into `graph/provenance`**. It never appears in `graph/knowledge`,
+and therefore never becomes a belief bearer, freshness subject, attention candidate, or
+`rdf:type` hub member. That placement is load-bearing: at weekly and fortnightly cadences
+across several projects, run records would otherwise become one of the largest node
+populations in the graph and would skew the very attention rankings the curation program
+depends on (`graph/attention.py` — `NEEDS_REVIEW_MULTIPLIER = 3.0`, `STALE_MULTIPLIER = 2.0`).
 
-The record carries:
+| Field | Meaning | Written by |
+|---|---|---|
+| `id` | Canonical run id; referent of `run_ref` and the commit trailer. | supervisor |
+| `agent` | Agent **role** (`curation-sweep`), not the model. | supervisor |
+| `model` | Model that executed the run. | supervisor |
+| `tier` | `report-only` \| `belief-neutral`. **Attested, not self-declared.** | supervisor |
+| `triggered_by` | Schedule or trigger ref. Optional until S2; omitted, not blank, when absent. | supervisor |
+| `branch` | `auto/<run-id>`. | supervisor |
+| `base_commit` | Exact commit the run started from. **The validation baseline.** | supervisor |
+| `head_commit` | Exact commit the run ended at. | supervisor |
+| `toolkit_revision` | Science revision the gate ran from. | supervisor |
+| `policy_identity` | `(policy_id, policy_version)` in force. | supervisor |
+| `basis_digest` | Digest of the belief basis at `base_commit`. | supervisor |
+| `started`, `ended` | Time window. | supervisor |
+| `budget` | Tokens / wall-clock consumed (S4 consumes this). | supervisor |
+| `disposition` | `clean` \| `quarantined` \| `unwired`. **Attested, not self-declared.** | supervisor |
 
-| Field | Meaning |
-|---|---|
-| `id` | Canonical run id; the referent of `added_by` and of the commit trailer. |
-| `agent` | Agent **role** (`curation-sweep`), not the model. |
-| `model` | Model that executed the run, as a recorded property. |
-| `tier` | `report-only` \| `belief-neutral`. |
-| `triggered_by` | Schedule or trigger ref. Optional until S2 defines the vocabulary; omitted, not blank, when absent. |
-| `branch` | `auto/<run-id>`. |
-| `started`, `ended` | Time window. |
-| `budget` | Tokens / wall-clock consumed (S4 consumes this). |
-| `disposition` | `clean` \| `quarantined` \| `unwired`. |
+`base_commit`, `toolkit_revision`, `policy_identity`, and `basis_digest` exist so validation is
+reproducible later. A merge-base is not a usable baseline: it moves under rebase and under
+integration-branch advancement, and mixed human/autonomous history cannot be reliably
+reconstructed by filtering commits.
 
-Identity is the **role** rather than the model so that queries survive model changes; the
-model is recorded, not identifying.
-
-The record deliberately does **not** index what it wrote. Both directions are already
-derivable — run→entities by querying `sci:addedBy` in the provenance graph, run→commits by
-`git log --grep`. A maintained `wrote:` list would be a second spelling of a derivable fact
-and would drift.
+The record deliberately does **not** index the entities it wrote. That is derivable by querying
+`run_ref` in the provenance graph, and a maintained list would be a second spelling that drifts.
 
 ### 3. Attribution
 
-**Commits.** Unattended commits set the git author to `<role> <agent@science.local>` and
-carry exactly one structured trailer:
+**Commits.** Unattended commits set the git author to `<role> <agent@science.local>` and carry
+one structured trailer:
 
 ```
 Author: curation-sweep <agent@science.local>
@@ -150,133 +179,174 @@ Author: curation-sweep <agent@science.local>
     Science-Run: run:2026-07-24-curation-sweep-a3f1
 ```
 
-No credit language, no model name, no emoji, no `Co-Authored-By`. The author field is the
-field git already provides for "who wrote this", so `git log --author`, `git blame`, and
-`git shortlog` segregate autonomous work with no tooling; the trailer supplies the epoch
-link that makes `git blame` on a bad line lead to the run that produced it, and makes
-epoch revert a single `git log --grep`.
+No credit language, no model name, no emoji, no `Co-Authored-By`. The author field is git's own
+field for "who wrote this", so `git log --author`, `git blame`, and `git shortlog` segregate
+autonomous work with no extra tooling.
+
+**These marks are not the security boundary.** A process that writes commits can set any author
+and any trailer, so neither is evidence of anything. The authoritative binding is the
+supervisor-recorded `base_commit..head_commit` range (§2); the supervisor verifies the marks
+against that range at run end and quarantines on mismatch. The marks exist for human legibility.
 
 **This does not weaken the standing no-AI-attribution rule; it redraws its axis.** The rule
-exists to keep vendor credit boilerplate off human-driven work, and for interactive commits
-it applies unconditionally and unchanged. An unattended commit is a different category: no
-human was in the loop, so the mark is not credit but provenance, and it is load-bearing for
-revert and audit. The distinguishing test is *was a human in the loop for this commit*, not
-*did an LLM touch it* — the latter is always true and therefore discriminates nothing.
+keeps vendor credit boilerplate off human-driven work, and for interactive commits it applies
+unconditionally and unchanged. An unattended commit is a different category: no human was in
+the loop, so the mark is provenance, not credit. The distinguishing test is *was a human in the
+loop for this commit* — not *did an LLM touch it*, which is always true and discriminates nothing.
 
-**Entities.** `added_by` becomes a validated ref into a run record, replacing free text.
-Migration must absorb the two spellings identified above, and the `research-topic` command
-doc and `explore_ideas.py` write path both move onto the canonical form. The migration's
-true scope must be **measured** at implementation: the D5 corpus survey observed 31
-`added_by` values (`docs/plans/2026-07-12-d5-implementation-plan.md:213`), but that count is
-from that survey's corpus at that time and is not a current measurement of the projects in
-scope.
+**Entities.** A new field `run_ref` carries a validated reference to a run record, materialized
+into `graph/provenance` alongside `added_by`. `added_by` **keeps its existing discovery
+semantics unchanged** — it answers "how did this idea enter the project", which is a different
+question from "which execution wrote this file", and the corpus already contains values
+(`user`) that no run record could ever explain.
 
-### 4. The path gate
+Canonicalizing `added_by`'s discovery vocabulary — it currently has two spellings in flight,
+`llm:<model>:research-topic` (`commands/research-topic.md:53`) and
+`explore-ideas:<model>:<candidate>` (`explore_ideas.py:741`) — is a real problem but a separate
+one. It is **deferred out of S1**; attempting it here is what produced the semantic narrowing
+this revision removes.
 
-Coarse, readable, per-tier, evaluated over repository paths and — for entities — over
-frontmatter field names.
+### 4. The path gate — default-deny
 
-The gate is **not project-overridable**. A project that needs a different autonomous write
-surface is a design conversation, not a config key; an override is a hole that will be
-widened under deadline pressure by the very agents the gate constrains.
+Evaluated by the supervisor over repository paths and, for entities, over per-kind field names.
+The gate is **not project-overridable**: a project needing a different autonomous write surface
+is a design conversation, not a config key, and an override is a hole that will be widened under
+pressure by the very agents it constrains.
 
-The deny list is explicit and each entry carries its reason:
+**Pre-existing entities — default-deny.** Only fields on an explicit **per-kind allowlist of
+fields known to be belief-neutral** may be written. Every unknown field, and every newly
+introduced field, is denied automatically with no action required. Overbreadth — denying a field
+that turns out to be harmless — is an accepted and visible cost.
+
+**New entity creation — its own policy.** Which kinds an autonomous run may create, and which
+fields it may set at creation, is a separate allowlist. Creation is not merely "editing a file
+with no before-value"; a created entity can change another entity's belief basis, and §5 catches
+that independently.
+
+**Non-entity paths.** Denied, with reasons:
 
 | Denied | Reason |
 |---|---|
 | `data/` | Payload boundary; autonomous runs never touch measurement payload. |
 | `graph.trig` | Source is its only durable writer (kernel closure). |
 | `science.yaml` | The schema-version pin is sole write authority. |
-| `core/decisions.md` | **Guard integrity** — belief machinery reads its flags, so a run editing it could disable its own guard. |
-| other runs' records | A run writes its own record and no other. |
-| belief-bearing entity fields | Derived, not enumerated — see §5. |
+| `core/decisions.md` | Guard integrity — belief machinery reads its flags. |
+| `runs/` | Supervisor-owned (§0). |
+| `pyproject.toml`, `uv.lock`, and other dependency-resolution files | Toolchain selection; high blast radius, and out of scope for curation sweeps. |
 
-### 5. The belief gate, and mutual certification
+The dependency-file denial is **defense in depth, not the primary control**. The primary control
+is §0: the gate runs from a supervisor-owned pinned installation, so worktree toolchain edits
+cannot reach the code that judges the run. Without that property, denying these files would be
+load-bearing and still incomplete.
 
-**The gate.** Per **pre-existing** entity, compare `BeliefResult` before the run against
-`BeliefResult` after. New entities have no before-value, so a run filing a question or a
-task passes; a run adding an evidence line that lifts an existing hypothesis does not.
-Where `belief_scalar_enabled()` is true the scalar is compared additionally — never as the
-definition, for the fail-open reason above.
+### 5. Layered enforcement
 
-If belief cannot be computed — the graph did not build, the instrument returned `unwired` —
-the gate result is `unwired`, and **`unwired` blocks the merge**. A guard that cannot see
+The earlier draft of this section claimed the path gate and a perturbation test could *mutually
+certify* each other. **That claim is withdrawn.** Perturbation cannot prove completeness:
+whether a field bears on belief depends on its value, its entity kind, sibling fields, and
+cross-entity topology, so a single mutation can observe "no movement" and misclassify a
+genuinely belief-bearing field as safe — silently, with the reconciliation test green.
+Structural derivation is not currently available either, because source→graph→belief
+dependencies are procedural and context-sensitive; attempting it now would create another
+incomplete registry and relocate the drift problem rather than solve it.
+
+Enforcement is therefore layered, with each layer sound on its own terms:
+
+**Layer 1 — default-deny path gate (§4).** Syntactic, cheap, and complete by construction:
+anything not explicitly allowed is denied. Its failure mode is over-restriction.
+
+**Layer 2 — authoritative semantic gate.** Compare the **canonical belief basis** before and
+after the run, per pre-existing entity:
+
+- the expanded target closure (`_evidence_targets_for_uri`),
+- the raw evidence-unit multiset (`collect_evidence_units`),
+- the policy identity (`policy_id`, `policy_version`).
+
+**Any difference quarantines the run** — not merely a difference in the final ordinal magnitude.
+Comparing only the magnitude would pass a run whose evidence units changed but happened to
+cancel, or one that swapped policy identity underneath an unchanged headline. This layer is
+authoritative: it does not depend on the field allowlist being correct, which is exactly why it
+catches what Layer 1 misses.
+
+Where `belief_scalar_enabled()` is true the scalar is compared additionally, never as the
+definition. If the basis cannot be computed — the graph did not build, an instrument returned
+`unwired` — the result is `unwired`, and **`unwired` blocks the merge**. A guard that cannot see
 must not report clean.
 
-**Mutual certification.** The two gates certify each other by reconciliation, in the same
-shape as the kind-descriptor three-way gate. A perturbation test walks each field of each
-kind, perturbs it, and observes whether `BeliefResult` moves:
+**Layer 3 — one-way perturbation alarm.** Perturb every **allowed** field across representative
+contexts. If a perturbation changes the belief basis, the test **fails** and the field must come
+off the allowlist. The inverse is deliberately **not** asserted: observing no change never makes
+a field writable, and an apparently neutral denied field is acceptable overbreadth. This
+asymmetry is what makes the alarm sound despite perturbation's incompleteness — false negatives
+can only ever leave a field denied.
 
-> **The set of fields whose perturbation moves `BeliefResult` must equal the set of entity
-> fields the path gate denies.**
-
-Neither list is hand-maintained against drift. A new belief-bearing field added anywhere in
-the model fails this test until the path gate accounts for it, and a path-gate entry that
-no longer bears on belief fails it as over-broad. This is what makes the guard something
-that can genuinely fail rather than something that asserts — the standing requirement for
-any instrument in this codebase.
-
-**Accepted risk.** If the perturbation test proves impractical over the real kind surface
-(combinatorics, fields with no cheap perturbation, kinds whose belief depends on cross-entity
-state), the guard degrades to a maintained deny-list plus a weaker drift alarm. This is
-accepted as a first attempt and revisited if it does not hold; the fallback is strictly
-worse but not unsafe, because the run-boundary belief comparison in §6 is independent of it.
+**Layer 4 — explicit promotion.** Adding a field to an allowlist requires human review of its
+materialization path and belief dependencies, plus targeted tests. **Mutation results alone
+cannot authorize a promotion.** This is the rule that keeps Layer 3 from quietly becoming the
+certification mechanism it cannot be.
 
 ### 6. Lifecycle and quarantine
 
 ```
-run start   →  per-entity BeliefResult snapshot
-run work    →  commits on auto/<run-id>, authored + trailered per §3
-run end     →  recompute, diff against snapshot
+run start   →  supervisor records base_commit, toolkit_revision,
+               policy_identity, basis_digest
+run work    →  commits on auto/<run-id>
+run end     →  supervisor records head_commit; recomputes basis
+               from the pinned install; verifies commit marks
 
   clean       →  eligible to merge
   moved       →  branch held intact, NOT merged;
                  `science feedback` item filed naming entity + delta
-  unwired     →  blocked; belief was not computable
+  unwired     →  blocked; basis was not computable
 ```
 
-Nothing is discarded. A quarantined run keeps its branch and its work; a human triages it
-with the exact entity and delta in hand. This matters because the first violations will
-mostly be *design* discoveries — a sweep that legitimately needs to touch something the
-gate forbids — and destroying the evidence would destroy the signal.
+Nothing is discarded. A quarantined run keeps its branch and its work, and a human triages with
+the exact entity and delta in hand. This matters because the first violations will mostly be
+*design* discoveries — a sweep that legitimately needs something the gate forbids — and
+destroying the evidence destroys the signal.
 
-The same comparison is exposed as a `science validate` check, so the violation is catchable
-by anyone, on any branch, independent of the run harness. The run boundary is where it is
-*authoritative*; validate is where it is *available*.
-
-The two differ in what they compare against, and this must be explicit. The run boundary has
-a real snapshot taken at run start. Validate has none, so it compares against the branch's
-merge-base with the integration branch, considering only commits whose author or
-`Science-Run:` trailer marks them autonomous. When no merge-base is determinable — a detached
-head, an orphan branch, a shallow clone — validate reports `unwired` rather than clean, for
-the same reason the run-boundary gate does.
+The same comparison is exposed as a `science validate` check, so violations are catchable by
+anyone, independent of the run harness. **It validates the exact recorded transition**
+`base_commit → head_commit` read from the run record — not a merge-base, which moves under
+rebase and integration-branch advancement. When there is no run record for the autonomous
+commits under inspection, or the recorded commits are unreachable, validate reports `unwired`
+rather than clean.
 
 Escalation reuses the existing `science feedback` surface rather than inventing a second
-channel — feedback already has a triage program behind it.
+channel; feedback already has a triage program behind it.
 
 ## Testing
 
-1. **Perturbation reconciliation** (§5) — the load-bearing test. Fails on any drift between
-   belief-bearing fields and the path gate's entity-field denials.
-2. **Fail-closed on unwired** — a project with no computable belief yields `unwired`, and
-   `unwired` blocks. Asserted directly, because this is the failure mode the design exists
-   to prevent.
-3. **Scalar-independence** — the gate detects a belief move in a project where
-   `belief_scalar_enabled()` is false. Guards against the fail-open regression.
-4. **Guard integrity** — a run attempting to write `core/decisions.md` is refused.
-5. **Provenance-layer isolation** — after materializing a project with run records, no run
-   triple appears in `graph/knowledge`, and run records are absent from attention candidates.
-6. **`added_by` resolution** — a canonical `added_by` ref resolves through `refs-check`; a
-   dangling one fails.
-7. **Interactive commits unaffected** — no author rewrite and no trailer on human-driven
-   commits.
+1. **Semantic gate detects a basis change with unchanged magnitude** — the Layer 2 test that
+   distinguishes this design from a magnitude comparison. Evidence units change and cancel;
+   the gate must still quarantine.
+2. **Fail-closed on unwired** — a project with no computable basis yields `unwired`, and
+   `unwired` blocks.
+3. **Scalar-independence** — the gate detects a basis change where `belief_scalar_enabled()`
+   is false. Guards the fail-open regression.
+4. **Default-deny** — a field absent from every allowlist is denied, with no registration
+   required and no test edit.
+5. **One-way alarm asymmetry** — an allowed field whose perturbation moves the basis fails the
+   suite; a denied field whose perturbation moves nothing does **not** become allowed.
+6. **Self-attestation is impossible** — a run writing its own run record, or forging an author
+   or trailer outside its recorded commit range, is quarantined.
+7. **Gate independence from the worktree** — a run that edits toolkit code or dependency files
+   does not change the judgment rendered on it.
+8. **Baseline reproducibility** — validation against a recorded `base_commit` yields the same
+   verdict after the integration branch advances and after a rebase.
+9. **Provenance-layer isolation** — no run triple appears in `graph/knowledge`, and run records
+   are absent from attention candidates.
+10. **`run_ref` resolution** — a canonical `run_ref` resolves through `refs-check`; a dangling
+    one fails. `added_by` values such as `user` remain valid and untouched.
+11. **Interactive commits unaffected** — no author rewrite and no trailer on human-driven commits.
 
 ## Open questions deferred to later slices
 
 - What triggers a run, and how schedules emit tasks (S2).
 - Whether task eligibility reintroduces a type vocabulary, and how it relates to the retired
   `Task.type` (S3).
-- Budget caps, kill switch, and loop convergence criteria — the envelope defines the tier a
-  loop runs in, not the loop (S5).
-- Whether autonomous curation measurably improves project health. This is a research
-  question about the toolkit, and `meta/` is its natural home.
+- Budget caps, kill switch, and loop convergence criteria — the envelope defines the tier a loop
+  runs in, not the loop (S5).
+- Canonicalizing the `added_by` discovery vocabulary (§3) — real, but separable from autonomy.
+- Whether autonomous curation measurably improves project health. This is a research question
+  about the toolkit, and `meta/` is its natural home.
