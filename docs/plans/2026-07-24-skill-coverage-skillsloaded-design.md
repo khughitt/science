@@ -34,20 +34,31 @@ checked against, and the real downstream data migration are all separate, later 
   generation matrix `_MIXIN_VERSION_BY_GENERATION` (`profile.py:92-95`, which covers
   dataset/paper/topic/theme/hypothesis). There is no existing gen-3 hook for plan entities.
 - **A clean reification precedent exists** — `graph/dataset_usage.py`:
-  - `DatasetUsageRecord` dataclass (`:34`) with `payload()` (`:44-53`);
+  - `DatasetUsageRecord` dataclass (`:34`) carries **both** a categorical `source: UsageSource`
+    (`:40`) and a separate `source_path: str` (`:41`); `UsageSource` is a
+    `Literal["authored", "derivation.inputs", …]` (`:19-25`) — a **projection-source category**,
+    not a file path;
   - deterministic URI `usage_node_uri(record)` (`:240-243`): JSON-canonicalize `payload()` →
-    SHA-256 → `PROJECT_NS["dataset-usage/{digest}"]`;
-  - `add_usage_record_to_graph(record, graph)` (`:254-263`) emits the reified triples;
+    SHA-256 → `PROJECT_NS["dataset-usage/{digest}"]` — the hash covers the **whole** `payload()`;
+  - `add_usage_record_to_graph(record, graph)` (`:254-263`) emits the reified triples, and
+    `sci:usageSource` carries the **categorical** `source`, never the path;
   - predicates registered in `PREDICATE_REGISTRY` (`graph/store/constants.py:202-226`) all at
     layer `graph/provenance`; the literal predicates whitelisted in
     `GRAPH_EXPORT_EDGE_METADATA_PREDICATES` (`constants.py:75-77`);
-  - materialized by a dedicated pass `_add_dataset_usage_edges` (`materialize.py:1446-1456`),
-    a sibling of the generic `_add_entity` pass (`materialize.py:652`, called at `:372`).
+  - materialized by a dedicated pass `_add_dataset_usage_edges` (`materialize.py:1446-1456`) that
+    computes records **fresh** from `sources.entities` (dataset-usage is not generation-gated).
+- **The validated generation is available at load but discarded before materialization.**
+  During load the generation is in hand as `project_schema._generation` — the gen-3 capability
+  hook gates on it (`sources.py:1304-1317`, `project_schema._generation != 3`). But
+  `ProjectSources` (`sources.py:186-234`) retains **no** `entity_schema_version`, so a later
+  materialization pass over `sources.entities` cannot tell a gen-3 plan from a gen-2 plan with a
+  stray `skills_loaded`. Generation-gated emission must therefore be decided at load time.
 - **Layer `graph/provenance` already exists** (`graph/store/constants.py:32`) and is *not* in
   `GRAPH_EXPORT_VISIBLE_LAYERS` (internal/non-exported by default) — the correct destination.
 - **No skill-id alias table / canonicalization exists** anywhere in `science_tool` or
   `science-model`. `sci:usageSource` is already a registered predicate (reusable);
-  `sci:hasSkillLoad`, `sci:skill`, `sci:loadReason` are new.
+  `sci:hasSkillLoad`, `sci:skill`, `sci:loadReason` are new. All skill leaf names in the corpus
+  are lowercase kebab-case (`^[a-z0-9]+(-[a-z0-9]+)*$`).
 
 ## Design
 
@@ -59,31 +70,41 @@ migration of the 16 downstream plans is **deferred to the release-coordinated ex
 migration**, matching the 1b / Tasks-13-14 precedent. Before any bespoke migrator is written
 later, check whether existing kind/field migration machinery already covers the flip.
 
-### 2. Typed `skills_loaded` shape + generation-aware structural validator
+### 2. Load-time validation + record production (one pass, generation in hand)
 
 `skills_loaded` stays **preserved-raw** on `Entity` (`extra="allow"`) — it is **not** a typed
 field on the base model and `plan` does **not** join `PROJECT_MIXIN_NAMES` or the mixin
 matrix. This matches the parent design's decision for the capability fields and the standing
-"no strict plan mixin in v1" invariant, and it puts the generation gating in exactly one
-place.
+"no strict plan mixin in v1" invariant, and it puts the generation gating in exactly one place.
 
-A **generation-aware structural validator**, scoped to `kind: plan`, enforces **only under
-generation 3** that `skills_loaded` (when present) is a list of `{id, reason}` objects, each
-with both keys present and string-valued. Violations are **structural errors** raised at the
-plan validation gate:
+Because the validated generation is only available during load (grounding above), validation
+and record production are the **same load-time pass**, not two passes. A shared helper
+`build_skill_load_records(plan, *, aliases)` runs during the load path — where
+`project_schema._generation` is known — for each `kind: plan` entity that both is under
+**generation 3** and carries `skills_loaded`. It validates and, on success, returns the
+`SkillLoadRecord`s (§4); the records are retained on `ProjectSources` (§4) for the
+materialization pass to emit. It raises **structural errors** (at the plan validation gate) for:
 
-- **malformed shape** — not a list, an item missing `id`/`reason`, a non-string value;
+- **malformed shape** — `skills_loaded` is not a list, an item is not a `{id, reason}` object,
+  or `id`/`reason` is missing or not a string;
+- **malformed skill id** — the **post-alias** id (raw-canonical or alias target) does not match
+  the canonical skill-name grammar `^[a-z0-9]+(-[a-z0-9]+)*$` (rejects `""`, whitespace,
+  path-like, and URI-like ids before they can be minted into `sci:skill/<value>`). Grammar is
+  applied **through the one shared canonicalization helper** (§3), so every id — from the alias
+  table or not — is checked identically;
 - **duplicate canonical load** — two entries resolving (after alias canonicalization) to the
-  same canonical skill id under one `(plan, source)`, whether a literal repeat or two distinct
-  aliases converging. Load-record identity excludes `reason`, so an un-rejected duplicate
-  would silently collapse into one node bearing multiple `sci:loadReason` literals.
+  same canonical skill id under one plan, whether a literal repeat or two distinct aliases
+  converging. Identity excludes `reason` (§4), so an un-rejected duplicate would silently
+  collapse into one node bearing multiple `sci:loadReason` literals.
 
 Under generation ≤ 2, `skills_loaded` is preserved-raw and **ignored** — no validation, no
-emission. Coverage and skill-reference findings (`unmapped-skill-reference`, the coverage
-states) are **WARN diagnostics owned by sub-plan 4**, deliberately distinct in severity from
-these structural errors, and out of scope here.
+record, no emission. Coverage and skill-reference findings (`unmapped-skill-reference`, the
+coverage states) are **WARN diagnostics owned by sub-plan 4**, deliberately distinct in severity
+from these structural errors, and out of scope here — in particular, whether a well-formed
+canonical id names a *real* corpus skill is **not** checked here (that needs the packaged
+inventory).
 
-`plan_kind` remains free-form frontmatter, untyped; emission (below) is gated on
+`plan_kind` remains free-form frontmatter, untyped; production is gated on generation 3 +
 `skills_loaded` **presence**, never on `plan_kind`.
 
 ### 3. Skill-id alias table
@@ -93,27 +114,36 @@ A new YAML resource shipped inside `science_tool` (co-located with the reificati
 `science_tool`), loaded via `importlib.resources`. It is a flat `retired-id → canonical-id`
 string map, **validated at load**:
 
-- values (and keys) are **bare skill names** (no path separators / URI syntax);
-- **no cycles** and no chains that fail to resolve to a terminal canonical id (a key may not
-  also appear as a value in a way that forms a loop);
+- every key and value matches the canonical skill-name grammar `^[a-z0-9]+(-[a-z0-9]+)*$`;
+- **no chains** — a target (value) may **not** also appear as a key. This makes canonicalization
+  exactly **one lookup** and unambiguous: for `a → b`, `a` resolves to `b`; the table can never
+  express `a → b → c`, so there is no "one lookup vs terminal resolution" ambiguity to resolve
+  and no way for duplicate-detection or record identity to depend on lookup depth. (Cycles are a
+  degenerate chain and are rejected by the same rule.)
 - duplicate keys rejected.
 
-Canonicalization is: if a raw id is a key, resolve to its target; otherwise treat the raw id
-as already canonical. The table is used **only** to canonicalize (for record identity + URI)
-and to detect convergence collisions — it **never** checks whether a canonical id names a real
-corpus skill (that requires the packaged inventory and is deferred to sub-plan 4). Seeded
-minimal; real retired→canonical entries ride along with the deferred downstream migration.
+Canonicalization (the one shared helper): if a raw id is a key, resolve to its single target;
+otherwise the raw id is treated as already canonical. **Either way the result is grammar-checked**
+(§2). The table is used **only** to canonicalize (for record identity + URI) and to detect
+convergence collisions — it **never** checks whether a canonical id names a real corpus skill
+(that requires the packaged inventory and is deferred to sub-plan 4). Seeded minimal; real
+retired→canonical entries ride along with the deferred downstream migration.
 
 ### 4. Reified RDF contract
 
-A `SkillLoadRecord` mirroring `DatasetUsageRecord`:
+A `SkillLoadRecord` (frozen dataclass) mirroring `DatasetUsageRecord`:
 
-- `payload()` carries `(plan_id, canonical_skill_id, reason, source)`, where `source` is the
-  plan's source-file path (single-source-per-plan, stable);
-- **identity hash excludes `reason`**: the digest is over `(plan_id, canonical_skill_id,
-  source)` only, JSON-canonicalized → SHA-256 → `PROJECT_NS["skill-load/{digest}"]`. Excluding
-  `reason` is what makes the duplicate-canonical collision (§2) a real collision to reject
-  rather than two distinct nodes.
+- fields `plan_id`, `canonical_skill_id`, `reason`, and `source: UsageSource` — where `source`
+  is the **categorical** projection-source constant `"authored"` (the `skills_loaded` block is
+  author-declared), **not** a file path. This corrects the dataset-usage semantics: the path is
+  never carried in `source`, and — since `(plan_id, canonical_skill_id)` already uniquely
+  identifies a load — the path is not needed in identity at all.
+- a **separate `identity_payload()`** returning `{plan_id, canonical_skill_id, source}` — it
+  **excludes `reason`**. The record's URI hashes **`identity_payload()`, never a `payload()`
+  that includes `reason`** (avoiding the dataset-usage trap where the whole payload is hashed):
+  JSON-canonicalize → SHA-256 → `PROJECT_NS["skill-load/{digest}"]`. Excluding `reason` is what
+  makes the duplicate-canonical collision (§2) a real collision to reject rather than two
+  distinct nodes, and makes changing only `reason` leave the node URI unchanged.
 
 `add_skill_load_record_to_graph(record, graph)` emits into layer `graph/provenance`:
 
@@ -122,7 +152,7 @@ A `SkillLoadRecord` mirroring `DatasetUsageRecord`:
 (node,  RDF.type,         sci:SkillLoad)
 (node,  sci:skill,        sci:skill/<canonical-name>)   # stable global skill URI
 (node,  sci:loadReason,   Literal(reason))
-(node,  sci:usageSource,  Literal(source))              # reuses the dataset-usage predicate
+(node,  sci:usageSource,  Literal("authored"))          # categorical, reuses the dataset-usage predicate
 ```
 
 The skill URI uses the stable global scheme `sci:skill/<canonical-name>` (identical across
@@ -132,35 +162,43 @@ design adopted both as the stable public graph API, so this design keeps them ra
 renaming.
 
 New predicates registered in `PREDICATE_REGISTRY` (layer `graph/provenance`): `sci:hasSkillLoad`,
-`sci:skill`, `sci:loadReason`. `sci:usageSource` is reused (already registered). The literal
-predicates are added to `GRAPH_EXPORT_EDGE_METADATA_PREDICATES` alongside the dataset-usage
-ones, matching precedent.
+`sci:skill`, `sci:loadReason`. `sci:usageSource` is reused (already registered) and keeps its
+documented categorical contract. The literal predicates are added to
+`GRAPH_EXPORT_EDGE_METADATA_PREDICATES` alongside the dataset-usage ones, matching precedent.
 
-Emission is a **dedicated materialization pass** (`_add_skill_load_edges`) mirroring
-`_add_dataset_usage_edges`: iterate `sources.entities`, select gen-3 plans carrying
-`skills_loaded`, build records, add them to the provenance graph. The §2 structural checks
-(malformed shape, duplicate-canonical) are raised **at the plan validation gate**, so
-materialization operates on already-validated plans and does not re-raise; both the validator
-and this pass canonicalize ids through the **one shared helper** (§3), keeping a single truth
-path. Deterministic record identity ⇒ **idempotent** re-materialization.
+**Retention + emission.** The load-time pass (§2) stashes the produced records on a new
+`ProjectSources` field `skill_loads: list[SkillLoadRecord]` (default empty) — the analogue of
+the other prevalidated collections `ProjectSources` already carries (`dataset_parents`,
+`identity_declarations`). Emission is then a **dedicated materialization pass**
+(`_add_skill_load_edges`) mirroring `_add_dataset_usage_edges`: iterate `sources.skill_loads`
+and `add_skill_load_record_to_graph(record, provenance)`. Materialization needs no generation
+and does **no** re-validation — the structural errors were raised at the load-time validation
+gate, and canonicalization ran once there through the one shared helper (§3), keeping a single
+truth path. Deterministic record identity ⇒ **idempotent** re-materialization.
 
 ## Testing approach
 
 - **Reification:** a synthetic gen-3 plan with `skills_loaded` materializes a reified record in
   `graph/provenance` carrying `sci:hasSkillLoad` / `RDF.type sci:SkillLoad` / `sci:skill` (URI)
-  / `sci:loadReason` / `sci:usageSource`; re-materializing identical inputs yields byte-identical
-  records (idempotence via deterministic identity).
+  / `sci:loadReason` / `sci:usageSource = "authored"`; re-materializing identical inputs yields
+  byte-identical records (idempotence via deterministic identity).
+- **`reason` excluded from identity:** two records identical except for `reason` share the same
+  node URI (`identity_payload()` excludes `reason`); the emitted `sci:usageSource` is the
+  categorical `"authored"`, never a file path.
 - **Alias canonicalization:** a plan loading a retired id materializes a record whose skill URI
   is the **canonical** `sci:skill/<canonical-name>`.
-- **Structural errors (gen 3):** malformed `skills_loaded` (non-list; item missing `id` or
-  `reason`; non-string value) is a **hard error** at the plan validation gate; a duplicate
-  canonical load — both a literal repeat **and** two distinct aliases converging on one
-  canonical id under a single `(plan, source)` — is a **hard error**, not a single record with
-  two reasons.
+- **Malformed skill id (gen 3):** a `skills_loaded` id that is `""`, whitespace, path-like
+  (`a/b`), or URI-like — whether present in the alias table or not (i.e. both a raw-canonical id
+  and an alias target) — is a **hard error** at the plan validation gate, never minted into a
+  `sci:skill/<value>` URI.
+- **Structural errors (gen 3):** malformed `skills_loaded` (non-list; item not an object;
+  missing `id`/`reason`; non-string value) is a **hard error**; a duplicate canonical load —
+  both a literal repeat **and** two distinct aliases converging on one canonical id under a
+  single plan — is a **hard error**, not a single record with two reasons.
 - **Generation gating:** a **gen-2** plan carrying `skills_loaded` loads clean, raises nothing,
-  and emits **no** skill-load record.
-- **Alias-table load:** a table with a cycle, a non-bare-name target, or a duplicate key is
-  rejected at load.
+  and emits **no** skill-load record (and stashes none on `ProjectSources.skill_loads`).
+- **Alias-table load:** a table with a **chain** (a target that is also a key), a duplicate key,
+  or a non-grammar-conforming key/value is rejected at load.
 
 Verification gate: full `science` and `science/model` suites, `ruff check`, `pyright`.
 
