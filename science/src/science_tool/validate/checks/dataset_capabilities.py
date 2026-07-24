@@ -12,7 +12,9 @@ from pathlib import Path
 from typing import Any
 
 from science_tool.datasets.capability_scope import VALID_SCOPES, is_valid_scope
+from science_tool.datasets.capability_shape import capability_shape_issue
 from science_tool.entities import CLOSED_LIFECYCLE_STATUSES
+from science_tool.project_config import validated_entity_schema_version
 from science_tool.validate._helpers import entity_frontmatters
 from science_tool.validate.checks import Check
 from science_tool.validate.context import ValidateContext
@@ -111,7 +113,9 @@ def _scope_gate(
     return True, []
 
 
-def evaluate_dataset_capabilities(entities: Iterable[dict[str, Any]]) -> Iterator[Result]:
+def evaluate_dataset_capabilities(
+    entities: Iterable[dict[str, Any]], *, generation: int = 2
+) -> Iterator[Result]:
     records = list(entities)
     dataset_to_targets, target_to_datasets = _frontmatter_reach(records)
     # Closure is decided PER RECORD, because it now takes the kind and the verdict -- not a status
@@ -133,7 +137,7 @@ def evaluate_dataset_capabilities(entities: Iterable[dict[str, Any]]) -> Iterato
         scope = fm.get("capability_scope")
 
         if kind == "dataset":
-            issue = _capability_shape_issue(fm.get(_PROVIDED_FIELD))
+            issue = capability_shape_issue(fm.get(_PROVIDED_FIELD), generation=generation)
             suppress, scope_results = _scope_gate(scope, ident, path_value, issue, _PROVIDED_FIELD)
             yield from scope_results
             if suppress:
@@ -141,7 +145,7 @@ def evaluate_dataset_capabilities(entities: Iterable[dict[str, Any]]) -> Iterato
             if issue == "malformed":
                 yield _result(
                     path_value,
-                    f"{ident}: provided_capabilities must be a non-empty list of non-empty string mappings",
+                    f"{ident}: {_malformed_message(_PROVIDED_FIELD, generation=generation)}",
                     "dataset-capabilities.provided-malformed",
                 )
             elif issue == "missing":
@@ -158,7 +162,7 @@ def evaluate_dataset_capabilities(entities: Iterable[dict[str, Any]]) -> Iterato
             continue
 
         if _is_qh(ident):
-            issue = _capability_shape_issue(fm.get(_REQUIRED_FIELD))
+            issue = capability_shape_issue(fm.get(_REQUIRED_FIELD), generation=generation)
             suppress, scope_results = _scope_gate(scope, ident, path_value, issue, _REQUIRED_FIELD)
             yield from scope_results
             if suppress:
@@ -166,7 +170,7 @@ def evaluate_dataset_capabilities(entities: Iterable[dict[str, Any]]) -> Iterato
             if issue == "malformed":
                 yield _result(
                     path_value,
-                    f"{ident}: required_capabilities must be a non-empty list of non-empty string mappings",
+                    f"{ident}: {_malformed_message(_REQUIRED_FIELD, generation=generation)}",
                     "dataset-capabilities.required-malformed",
                 )
             # Suppress a concluded target's missing-requirement WARN: it no longer
@@ -214,20 +218,10 @@ def _link(
     target_to_datasets.setdefault(target, set()).add(dataset)
 
 
-def _capability_shape_issue(value: Any) -> str | None:
-    if value is None or value == []:
-        return "missing"
-    if not isinstance(value, list):
-        return "malformed"
-    for entry in value:
-        if not isinstance(entry, Mapping) or not entry:
-            return "malformed"
-        for key, raw in entry.items():
-            if not isinstance(key, str) or not key.strip():
-                return "malformed"
-            if not isinstance(raw, str) or not raw.strip():
-                return "malformed"
-    return None
+def _malformed_message(field_name: str, *, generation: int) -> str:
+    if generation >= 3:
+        return f"{field_name} must be a list of {{data_product, qualifiers}} objects"
+    return f"{field_name} must be a non-empty list of non-empty string mappings"
 
 
 def _dataset_refs(refs: list[str]) -> list[str]:
@@ -260,4 +254,8 @@ def _is_qh(ref: str) -> bool:
 
 @Check(section="dataset capabilities", order=33)
 def check_dataset_capabilities(ctx: ValidateContext) -> Iterator[Result]:
-    yield from evaluate_dataset_capabilities(entity_frontmatters(ctx))
+    # `ctx.manifest` IS the raw science.yaml dict (see `ValidateContext.from_project_root`) --
+    # the same authority `validated_entity_schema_version` reads through everywhere else. Absence
+    # of a pin means "unpinned", not "generation 0", so it defaults to 2 here.
+    generation = validated_entity_schema_version(ctx.manifest) or 2
+    yield from evaluate_dataset_capabilities(entity_frontmatters(ctx), generation=generation)

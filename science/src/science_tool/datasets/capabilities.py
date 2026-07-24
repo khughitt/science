@@ -5,6 +5,9 @@ from __future__ import annotations
 from collections.abc import Mapping
 from dataclasses import dataclass
 
+from science_model.data_products import DataProductCatalog
+from science_tool.datasets.capability_shape import Capability, parse_gen3_capabilities
+
 
 CapabilitySet = dict[str, str]
 
@@ -13,8 +16,8 @@ CapabilitySet = dict[str, str]
 class CapabilityFit:
     compatible: bool
     reason: str
-    required: list[CapabilitySet]
-    provided: list[CapabilitySet]
+    required: list[dict]
+    provided: list[dict]
 
 
 def capability_sets_from(value: object) -> list[CapabilitySet]:
@@ -48,8 +51,26 @@ def compatible(required_sets: list[CapabilitySet], provided_sets: list[Capabilit
     return any(_satisfies(required, provided) for required in required_sets for provided in provided_sets)
 
 
-def capability_fit(required: object, provided: object) -> CapabilityFit:
-    """Evaluate whether provided dataset capabilities satisfy target requirements."""
+def capability_fit(
+    required: object,
+    provided: object,
+    *,
+    generation: int,
+    catalog: DataProductCatalog | None = None,
+) -> CapabilityFit:
+    """Evaluate whether provided dataset capabilities satisfy target requirements.
+
+    gen ≤ 2 uses the legacy string-map subset matcher; gen 3 parses both sides
+    into `Capability` (data-product + qualifiers) and matches via catalog descent.
+    """
+    if generation >= 3:
+        if catalog is None:
+            raise ValueError("gen-3 capability_fit requires a catalog")
+        return _capability_fit_gen3(required, provided, catalog)
+    return _capability_fit_legacy(required, provided)
+
+
+def _capability_fit_legacy(required: object, provided: object) -> CapabilityFit:
     required_sets = capability_sets_from(required)
     provided_sets = capability_sets_from(provided)
     if not required_sets:
@@ -63,3 +84,23 @@ def capability_fit(required: object, provided: object) -> CapabilityFit:
 
 def _satisfies(required: CapabilitySet, provided: CapabilitySet) -> bool:
     return all(provided.get(key) == value for key, value in required.items())
+
+
+def _capability_fit_gen3(required: object, provided: object, catalog: DataProductCatalog) -> CapabilityFit:
+    req = parse_gen3_capabilities(required)
+    prov = parse_gen3_capabilities(provided)
+    req_out = [{"data_product": c.data_product, "qualifiers": dict(c.qualifiers)} for c in req]
+    prov_out = [{"data_product": c.data_product, "qualifiers": dict(c.qualifiers)} for c in prov]
+    if not req:
+        return CapabilityFit(False, "missing-required-capabilities", req_out, prov_out)
+    if not prov:
+        return CapabilityFit(False, "missing-provided-capabilities", req_out, prov_out)
+    if any(_gen3_satisfies(r, p, catalog) for r in req for p in prov):
+        return CapabilityFit(True, "compatible", req_out, prov_out)
+    return CapabilityFit(False, "capability-mismatch", req_out, prov_out)
+
+
+def _gen3_satisfies(required: Capability, provided: Capability, catalog: DataProductCatalog) -> bool:
+    if not catalog.descends(provided.data_product, required.data_product):
+        return False
+    return all(provided.qualifiers.get(k) == v for k, v in required.qualifiers.items())

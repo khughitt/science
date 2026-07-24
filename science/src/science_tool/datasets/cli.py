@@ -261,6 +261,62 @@ def dataset_prioritize(
     emit(output_format=output_format, payload={"rows": rows, "excluded_summary": summary}, render_text=_render_rows)
 
 
+@dataset_group.command("capability-pairs")
+@click.option(
+    "--project-root",
+    default=None,
+    type=click.Path(path_type=Path, file_okay=False, dir_okay=True),
+    help="Enumerate a project's entities under entities/",
+)
+@click.option(
+    "--commons-root",
+    default=None,
+    type=click.Path(path_type=Path, file_okay=False, dir_okay=True),
+    help="Enumerate commons dataset records (datasets/<slug>/entity.md)",
+)
+@click.option(
+    "--file",
+    "file_path",
+    default=None,
+    type=click.Path(path_type=Path, exists=True, file_okay=True, dir_okay=False),
+    help="Enumerate a single entity file",
+)
+def dataset_capability_pairs(project_root: Path | None, commons_root: Path | None, file_path: Path | None) -> None:
+    """List distinct observed capability shapes (provided/required) across a corpus.
+
+    Read-only. Seeds the value-to-term crosswalk. Exactly one of --project-root,
+    --commons-root, or --file is required.
+    """
+    from dataclasses import asdict
+
+    from science_model.frontmatter import split_frontmatter
+
+    from science_tool.datasets.capability_pairs import enumerate_pairs
+
+    inputs = [project_root, commons_root, file_path]
+    if sum(1 for i in inputs if i is not None) != 1:
+        raise click.ClickException("exactly one of --project-root, --commons-root, or --file is required")
+
+    records: list[dict] = []
+    if project_root is not None:
+        from science_tool.dataset_prioritize import _iter_entity_frontmatter
+
+        records = [fm for _, fm in _iter_entity_frontmatter(project_root.resolve())]
+    elif commons_root is not None:
+        for entity_path in sorted(commons_root.resolve().glob("datasets/*/entity.md")):
+            fm, _ = split_frontmatter(entity_path.read_text(encoding="utf-8"))
+            if fm:
+                records.append(fm)
+    else:
+        assert file_path is not None
+        fm, _ = split_frontmatter(file_path.resolve().read_text(encoding="utf-8"))
+        if fm:
+            records.append(fm)
+
+    shapes = enumerate_pairs(records)
+    emit(output_format="json", payload=[asdict(s) for s in shapes], render_text=lambda: None)
+
+
 @dataset_group.command("add")
 @click.argument("slug")
 @click.option("--title", required=True, help="Human-readable dataset title")
@@ -648,6 +704,50 @@ def dataset_stochasticity(ref: str, project_root: Path | None, output_format: st
             click.echo(line)
 
     emit(output_format=output_format, payload=render_json(report), render_text=_render)
+
+
+@dataset_group.command("migrate-capabilities")
+@click.option(
+    "--project-root",
+    required=True,
+    type=click.Path(path_type=Path, file_okay=False, dir_okay=True),
+    help="Project root to migrate (gen-2 -> gen-3 dataset capabilities)",
+)
+@click.option(
+    "--crosswalk",
+    "crosswalk_path",
+    required=True,
+    type=click.Path(path_type=Path, exists=True, file_okay=True, dir_okay=False),
+    help="Value-to-term capability crosswalk YAML (required; there is no packaged default)",
+)
+@click.option("--apply", is_flag=True, help="Write the migration (default is a dry-run report)")
+@click.option("--resume", "resume_flag", is_flag=True, help="Finish an interrupted write pass from its journal")
+def dataset_migrate_capabilities(
+    project_root: Path, crosswalk_path: Path, apply: bool, resume_flag: bool
+) -> None:
+    """Transactionally rewrite dataset capability fields to the gen-3 shape and pin the project.
+
+    Dry-run by default: prints the per-entity rewrite report (the review artifact). `--apply`
+    journals, writes, sets the schema-3 pin LAST, confirms it, then clears the journal. `--resume`
+    finishes an interrupted pass. Any refused or unmapped capability shape aborts with nothing written.
+    """
+    from science_tool.datasets.capability_migration import MigrationRefused, migrate, resume
+
+    try:
+        if resume_flag:
+            paths = resume(project_root)
+        else:
+            paths = migrate(project_root, crosswalk_path=crosswalk_path, apply=apply)
+    except MigrationRefused as exc:
+        click.echo(str(exc), err=True)
+        raise click.exceptions.Exit(1)
+
+    if resume_flag:
+        click.echo(f"resumed: wrote {len(paths)} file(s) and pinned to entity_schema_version 3")
+    elif apply:
+        click.echo(f"migrated {len(paths)} file(s) and pinned to entity_schema_version 3")
+    else:
+        click.echo(f"dry-run: {len(paths)} file(s) would be rewritten (use --apply to write)")
 
 
 @dataset_group.command("reconcile")

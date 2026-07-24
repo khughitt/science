@@ -49,8 +49,9 @@ from science_model.entity_schema.profile import ProfileParseError, default_profi
 
 from science_tool.bibliography import is_bibliography_reference as _is_bibliography_reference
 from science_tool.commons.aliases import load_manual_aliases
+from science_tool.datasets.capability_shape import gen3_shape_issue
 from science_tool.entity_profiles import (
-    ENTITY_SCHEMA_VERSION,
+    ARMED_SCHEMA_GENERATIONS,
     ProjectSchema,
     load_project_schema,
 )
@@ -356,13 +357,16 @@ def load_project_sources(
     #
     # The pin was VALIDATED in `_read_project_config` through `validated_entity_schema_version` -- the
     # one narrow authority the WRITE path (`load_project_schema_if_pinned`) also reads it through, so
-    # the two never disagree about whether a project speaks schema 2. That authority checks the value
+    # the two never disagree about which generation a project speaks. That authority checks the value
     # without full `ProjectConfig` (which requires `name`): a graph build has never demanded a `name`,
     # and tightening that under a migration would put it inside Task 11's diff. So by here the value is
-    # already 1, 2, or None -- a `"2"` or `3` was refused at read time, not silently read as unpinned.
+    # already 1, 2, 3, or None -- a `"2"` or `"3"` (stray-quote) was refused at read time, not silently
+    # read as unpinned. An ARMED generation both switches validation on AND selects the mixin row it
+    # composes against, so the declared value is forwarded straight to `load_project_schema`.
+    declared = config.get("entity_schema_version")
     project_schema = (
-        load_project_schema(project_root)
-        if config.get("entity_schema_version") == ENTITY_SCHEMA_VERSION
+        load_project_schema(project_root, generation=declared)
+        if isinstance(declared, int) and declared in ARMED_SCHEMA_GENERATIONS
         else None
     )
     profiles = KnowledgeProfiles.model_validate(config["knowledge_profiles"])
@@ -440,6 +444,9 @@ def load_project_sources(
                 # D3.1 -- THE SCHEMA GOES FIRST, and it goes first on the AUTHORED frontmatter,
                 # before `_enrich_raw` mixes the loader's derived keys into the same dict.
                 _validate_against_schema(
+                    raw, kind=kind, path=str(ref.path), project_schema=project_schema
+                )
+                _validate_dataset_gen3(
                     raw, kind=kind, path=str(ref.path), project_schema=project_schema
                 )
                 authored_aliases = _enrich_raw(
@@ -1283,8 +1290,32 @@ def _validate_against_schema(
     except EntityValidationError as exc:
         raise ValueError(
             f"{path}: {kind} frontmatter does not satisfy its schema "
-            f"(project is pinned to entity_schema_version: 2)\n  {exc}"
+            f"(project is pinned to entity_schema_version: {project_schema._generation})\n  {exc}"
         ) from exc
+
+
+def _validate_dataset_gen3(
+    raw: dict[str, Any],
+    *,
+    kind: str,
+    path: str,
+    project_schema: ProjectSchema | None,
+) -> None:
+    """Task 6 -- a SEPARATE, generation-gated hook for `dataset`'s capability SHAPE.
+
+    Dataset is a COMMONS kind and stays out of `PROJECT_MIXIN_NAMES`, so project datasets are loose
+    records the load path never validates as full dataset/3.0 documents (they carry no
+    `origin`/`tier`/`version`/`datapackage`). The ONLY gen-3 obligation on a project dataset is a
+    well-formed `provided_capabilities` shape; validate exactly that via the canonical parser, not
+    the full commons profile.
+    """
+    if project_schema is None or project_schema._generation != 3 or kind != "dataset":
+        return
+    if gen3_shape_issue(raw.get("provided_capabilities")) == "malformed":
+        raise ValueError(
+            f"{path}: dataset provided_capabilities is not a valid gen-3 "
+            f"{{data_product, qualifiers}} shape (project is pinned to entity_schema_version: 3)"
+        )
 
 
 def _read_project_config(project_root: Path) -> dict[str, object]:

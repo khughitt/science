@@ -12,6 +12,7 @@ from science_tool.project_config import (
     effective_reproducibility_policy,
     load_plan_reproducibility_policy,
     load_project_config,
+    validated_entity_schema_version,
 )
 
 
@@ -332,10 +333,19 @@ def test_entity_schema_version_is_the_authored_pin(tmp_path: Path) -> None:
 
 
 def test_entity_schema_version_rejects_a_version_that_does_not_exist(tmp_path: Path) -> None:
-    # The vocabulary is closed to the versions that EXIST. An unconstrained `int` would make `3` a
+    # The vocabulary is closed to the versions that EXIST. An unconstrained `int` would make `4` a
     # silent no-op -- accepted, meaningless, and indistinguishable from a real pin.
     with pytest.raises(ValidationError):
-        load_project_config(_config(tmp_path, "entity_schema_version: 3\n"))
+        load_project_config(_config(tmp_path, "entity_schema_version: 4\n"))
+
+
+def test_generation_3_is_accepted() -> None:
+    assert validated_entity_schema_version({"entity_schema_version": 3}) == 3
+
+
+def test_generation_3_as_string_is_rejected() -> None:
+    with pytest.raises(Exception):
+        validated_entity_schema_version({"entity_schema_version": "3"})
 
 
 def test_a_MISSPELLED_pin_is_refused_not_preserved(tmp_path: Path) -> None:

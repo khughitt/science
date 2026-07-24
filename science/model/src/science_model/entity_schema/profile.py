@@ -83,14 +83,15 @@ def parse_component(token: str) -> ProfileComponent:
     return ProfileComponent(name=name, version=version)
 
 
-# Default mixin version per kind, used by `default_profile_for_kind`.
-# Add an entry here when a new mixin version becomes the project default.
-_DEFAULT_MIXIN_VERSION: dict[str, str] = {
-    "dataset": "2.0",
-    "paper": "2.0",
-    "topic": "2.0",
-    "theme": "2.0",
-    "hypothesis": "1.0",
+# The GENERATION MATRIX: one generation number selects a whole row of mixin versions. Generation is
+# the project's declared `entity_schema_version` -- gen 2 is the D5 baseline, gen 3 moves `dataset`
+# and `hypothesis` onto their data-product shapes and leaves every other kind exactly where gen 2
+# left it. A generation is a coherent SLICE across kinds, not a per-kind default: a project pins one
+# number and every kind resolves against the same row, so two kinds can never disagree about which
+# generation the project is on.
+_MIXIN_VERSION_BY_GENERATION: dict[int, dict[str, str]] = {
+    2: {"dataset": "2.0", "paper": "2.0", "topic": "2.0", "theme": "2.0", "hypothesis": "1.0"},
+    3: {"dataset": "3.0", "paper": "2.0", "topic": "2.0", "theme": "2.0", "hypothesis": "2.0"},
 }
 
 # The base version is PER-KIND, not global. Commons kinds pin base 1.0 -- 369 live records depend
@@ -103,19 +104,25 @@ _BASE_VERSION_FOR_MIXIN: dict[str, str] = {
 }
 
 
-def default_profile_for_kind(kind: str) -> ProfileString:
-    """Return the default parsed ProfileString for a kind.
+def default_profile_for_kind(kind: str, *, generation: int = 2) -> ProfileString:
+    """Return the default parsed ProfileString for a kind at a given schema `generation`.
 
     Project entities do NOT carry `schema_profile` in frontmatter -- it is derived here. (Commons
     records DO carry it: they travel between repos, so the profile must travel with the record. A
     project entity is versioned by the git history of the repo that contains it.)
 
-    Raises ProfileParseError for an unknown kind.
+    `generation` is the project's declared `entity_schema_version` (default 2, the D5 baseline).
+
+    Raises ProfileParseError for an unknown generation or an unknown kind.
     """
-    if kind not in _DEFAULT_MIXIN_VERSION:
+    versions = _MIXIN_VERSION_BY_GENERATION.get(generation)
+    if versions is None:
         raise ProfileParseError(
-            f"unknown kind {kind!r}; expected one of {sorted(_DEFAULT_MIXIN_VERSION)}"
+            f"unknown entity-schema generation {generation!r}; "
+            f"expected one of {sorted(_MIXIN_VERSION_BY_GENERATION)}"
         )
+    if kind not in versions:
+        raise ProfileParseError(f"unknown kind {kind!r}; expected one of {sorted(versions)}")
     return parse_profile(
-        f"{BASE_NAME}/{_BASE_VERSION_FOR_MIXIN[kind]}+{kind}/{_DEFAULT_MIXIN_VERSION[kind]}"
+        f"{BASE_NAME}/{_BASE_VERSION_FOR_MIXIN[kind]}+{kind}/{versions[kind]}"
     )

@@ -117,6 +117,34 @@ def test_capability_fields_warn_on_malformed_shape() -> None:
     assert (Severity.WARN, "dataset-capabilities.required-malformed") in rules
 
 
+def test_gen3_legacy_map_input_warns_malformed_with_new_message() -> None:
+    from science_tool.validate.checks.dataset_capabilities import evaluate_dataset_capabilities
+
+    results = list(
+        evaluate_dataset_capabilities(
+            [_dataset(), _question(required_capabilities=[{"assay": "gene-expression"}])],
+            generation=3,
+        )
+    )
+
+    malformed = [r for r in results if r.rule == "dataset-capabilities.required-malformed"]
+    assert len(malformed) == 1
+    assert "must be a list of {data_product, qualifiers} objects" in malformed[0].message
+    assert "string mappings" not in malformed[0].message
+
+
+def test_gen2_legacy_map_input_does_not_warn_malformed() -> None:
+    from science_tool.validate.checks.dataset_capabilities import evaluate_dataset_capabilities
+
+    results = list(
+        evaluate_dataset_capabilities(
+            [_dataset(), _question(required_capabilities=[{"assay": "gene-expression"}])],
+        )
+    )
+
+    assert not any(r.rule == "dataset-capabilities.required-malformed" for r in results)
+
+
 def test_unreached_dataset_without_provided_capabilities_does_not_warn() -> None:
     dataset = _dataset()
     dataset.pop("provided_capabilities")

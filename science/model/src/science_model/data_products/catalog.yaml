@@ -1,0 +1,274 @@
+# Canonical molecular data-product term catalog (authored Task 12, 2026-07-23).
+# Generated from the observed-shape inventory under the user-adjudicated framework.
+schema_version: "1"
+terms:
+  - id: data-product:chromatin-accessibility
+    label: "Chromatin accessibility"
+    assay: "chromatin-accessibility"
+    technology: ""
+    broader: []
+  - id: data-product:chromatin-accessibility-bulk
+    label: "Chromatin accessibility (bulk ATAC)"
+    assay: "chromatin-accessibility"
+    technology: "bulk-atac"
+    broader: [data-product:chromatin-accessibility]
+  - id: data-product:chromatin-accessibility-single-cell
+    label: "Chromatin accessibility (scATAC)"
+    assay: "chromatin-accessibility"
+    technology: "single-cell-atac"
+    broader: [data-product:chromatin-accessibility]
+  - id: data-product:chromatin-conformation
+    label: "Chromatin conformation"
+    assay: "chromatin-conformation"
+    technology: ""
+    broader: []
+  - id: data-product:chromatin-conformation-hi-c
+    label: "Chromatin conformation (Hi-C)"
+    assay: "chromatin-conformation"
+    technology: "hi-c"
+    broader: [data-product:chromatin-conformation]
+  - id: data-product:chromatin-conformation-imaging
+    label: "Chromatin conformation (imaging)"
+    assay: "chromatin-conformation"
+    technology: "imaging"
+    broader: [data-product:chromatin-conformation]
+  - id: data-product:chromatin-conformation-micro-c
+    label: "Chromatin conformation (Micro-C)"
+    assay: "chromatin-conformation"
+    technology: "micro-c"
+    broader: [data-product:chromatin-conformation]
+  - id: data-product:copy-number
+    label: "Copy-number measurement"
+    assay: "copy-number"
+    technology: ""
+    broader: []
+  - id: data-product:cytogenetics
+    label: "Cytogenetics"
+    assay: "cytogenetics"
+    technology: ""
+    broader: []
+  - id: data-product:cytogenetics-fish
+    label: "Cytogenetics (FISH)"
+    assay: "cytogenetics"
+    technology: "fish"
+    broader: [data-product:cytogenetics]
+  - id: data-product:dna-methylation
+    label: "DNA methylation"
+    assay: "dna-methylation"
+    technology: ""
+    broader: []
+  - id: data-product:dna-methylation-wgbs
+    label: "DNA methylation (WGBS)"
+    assay: "dna-methylation"
+    technology: "wgbs"
+    broader: [data-product:dna-methylation]
+  - id: data-product:drug-sensitivity
+    label: "Drug sensitivity"
+    assay: "drug-sensitivity"
+    technology: ""
+    broader: []
+  - id: data-product:drug-sensitivity-cell-line-viability
+    label: "Drug sensitivity (cell-line viability)"
+    assay: "drug-sensitivity"
+    technology: "cell-line-viability"
+    broader: [data-product:drug-sensitivity]
+  - id: data-product:flow-cytometry
+    label: "Flow cytometry"
+    assay: "flow-cytometry"
+    technology: ""
+    broader: []
+  - id: data-product:flow-cytometry-dna-content
+    label: "Flow cytometry (DNA content)"
+    assay: "flow-cytometry"
+    technology: "dna-content"
+    broader: [data-product:flow-cytometry]
+  - id: data-product:gene-expression
+    label: "Gene-expression measurement"
+    assay: "gene-expression"
+    technology: ""
+    broader: []
+  - id: data-product:gene-expression-bulk-rna
+    label: "Bulk RNA gene-expression"
+    assay: "gene-expression"
+    technology: "bulk-rna"
+    broader: [data-product:gene-expression]
+  - id: data-product:gene-expression-microarray
+    label: "Microarray gene-expression"
+    assay: "gene-expression"
+    technology: "microarray"
+    broader: [data-product:gene-expression]
+  - id: data-product:gene-expression-single-cell
+    label: "Single-cell gene-expression"
+    assay: "gene-expression"
+    technology: "single-cell"
+    broader: [data-product:gene-expression]
+  - id: data-product:gene-expression-spatial
+    label: "Spatial gene-expression"
+    assay: "gene-expression"
+    technology: "spatial"
+    broader: [data-product:gene-expression]
+  - id: data-product:genetic-dependency
+    label: "Genetic dependency"
+    assay: "genetic-dependency"
+    technology: ""
+    broader: []
+  - id: data-product:genetic-dependency-crispr
+    label: "Genetic dependency (CRISPR)"
+    assay: "genetic-dependency"
+    technology: "crispr"
+    broader: [data-product:genetic-dependency]
+  - id: data-product:genetic-perturbation
+    label: "Genetic perturbation"
+    assay: "genetic-perturbation"
+    technology: ""
+    broader: []
+  - id: data-product:genetic-perturbation-l1000
+    label: "Genetic perturbation (L1000)"
+    assay: "genetic-perturbation"
+    technology: "l1000"
+    broader: [data-product:genetic-perturbation]
+  - id: data-product:genetic-perturbation-perturb-seq
+    label: "Genetic perturbation (Perturb-seq)"
+    assay: "genetic-perturbation"
+    technology: "perturb-seq"
+    broader: [data-product:genetic-perturbation]
+  - id: data-product:germline-variant
+    label: "Germline variant calls"
+    assay: "germline-variant"
+    technology: ""
+    broader: []
+  - id: data-product:germline-variant-wes
+    label: "Germline variants (WES)"
+    assay: "germline-variant"
+    technology: "whole-exome"
+    broader: [data-product:germline-variant]
+  - id: data-product:gwas-summary-statistics
+    label: "GWAS summary statistics"
+    assay: "gwas-summary-statistics"
+    technology: ""
+    broader: []
+  - id: data-product:histone-modification
+    label: "Histone modification"
+    assay: "histone-modification"
+    technology: ""
+    broader: []
+  - id: data-product:histone-modification-cell-free
+    label: "Histone modification (cell-free)"
+    assay: "histone-modification"
+    technology: "cell-free"
+    broader: [data-product:histone-modification]
+  - id: data-product:histone-modification-chip-seq
+    label: "Histone modification (ChIP-seq)"
+    assay: "histone-modification"
+    technology: "chip-seq"
+    broader: [data-product:histone-modification]
+  - id: data-product:histone-modification-cut-and-run
+    label: "Histone modification (CUT&RUN)"
+    assay: "histone-modification"
+    technology: "cut-and-run"
+    broader: [data-product:histone-modification]
+  - id: data-product:immune-repertoire
+    label: "Immune repertoire"
+    assay: "immune-repertoire"
+    technology: ""
+    broader: []
+  - id: data-product:indel-signature
+    label: "Indel signature"
+    assay: "indel-signature"
+    technology: ""
+    broader: []
+  - id: data-product:metabolomics
+    label: "Metabolomics measurement"
+    assay: "metabolomics"
+    technology: ""
+    broader: []
+  - id: data-product:metabolomics-imaging
+    label: "Metabolomics (imaging)"
+    assay: "metabolomics"
+    technology: "imaging"
+    broader: [data-product:metabolomics]
+  - id: data-product:metabolomics-mass-spec
+    label: "Metabolomics (mass-spec)"
+    assay: "metabolomics"
+    technology: "mass-spec"
+    broader: [data-product:metabolomics]
+  - id: data-product:mutation-frequency
+    label: "Mutation frequency"
+    assay: "mutation-frequency"
+    technology: ""
+    broader: []
+  - id: data-product:mutational-signature
+    label: "Mutational signature"
+    assay: "mutational-signature"
+    technology: ""
+    broader: []
+  - id: data-product:proteomics
+    label: "Proteomics measurement"
+    assay: "proteomics"
+    technology: ""
+    broader: []
+  - id: data-product:proteomics-affinity
+    label: "Affinity proteomics (Olink)"
+    assay: "proteomics"
+    technology: "olink"
+    broader: [data-product:proteomics]
+  - id: data-product:proteomics-immunohistochemistry
+    label: "Protein expression (IHC)"
+    assay: "proteomics"
+    technology: "immunohistochemistry"
+    broader: [data-product:proteomics]
+  - id: data-product:proteomics-mass-spec
+    label: "Proteomics (mass-spec)"
+    assay: "proteomics"
+    technology: "mass-spec"
+    broader: [data-product:proteomics]
+  - id: data-product:proteomics-surface
+    label: "Surface proteomics (CITE-seq)"
+    assay: "proteomics"
+    technology: "cite-seq"
+    broader: [data-product:proteomics]
+  - id: data-product:proteomics-tissue-antigen
+    label: "Tissue antigen detection"
+    assay: "proteomics"
+    technology: "tissue-antigen"
+    broader: [data-product:proteomics]
+  - id: data-product:replication-timing
+    label: "Replication timing"
+    assay: "replication-timing"
+    technology: ""
+    broader: []
+  - id: data-product:somatic-variant
+    label: "Somatic variant calls"
+    assay: "somatic-variant"
+    technology: ""
+    broader: []
+  - id: data-product:somatic-variant-targeted-panel
+    label: "Somatic variants (targeted panel)"
+    assay: "somatic-variant"
+    technology: "targeted-panel"
+    broader: [data-product:somatic-variant]
+  - id: data-product:somatic-variant-wes
+    label: "Somatic variants (WES)"
+    assay: "somatic-variant"
+    technology: "whole-exome"
+    broader: [data-product:somatic-variant]
+  - id: data-product:somatic-variant-wgs
+    label: "Somatic variants (WGS)"
+    assay: "somatic-variant"
+    technology: "whole-genome"
+    broader: [data-product:somatic-variant]
+  - id: data-product:structural-variant
+    label: "Structural variant calls"
+    assay: "structural-variant"
+    technology: ""
+    broader: []
+  - id: data-product:structural-variant-targeted-panel
+    label: "Structural variants (targeted panel)"
+    assay: "structural-variant"
+    technology: "targeted-panel"
+    broader: [data-product:structural-variant]
+  - id: data-product:structural-variant-wgs
+    label: "Structural variants (WGS)"
+    assay: "structural-variant"
+    technology: "whole-genome"
+    broader: [data-product:structural-variant]

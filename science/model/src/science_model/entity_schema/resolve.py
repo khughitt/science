@@ -101,14 +101,16 @@ def resolve_profile(
     *,
     extensions: list[str],
     loader: SchemaLoader | None = None,
+    generation: int = 2,
 ) -> ProfileString:
     """Return the profile for `kind` with the project's declared `extensions` appended.
 
     `extensions` are rendered profile components (`"mm30.assessment/1.0"`), as declared under
     `entity_extensions:` in the project's `science.yaml`. With none declared, the result is exactly
-    `default_profile_for_kind(kind)` -- which is the case for 20 of the 22 projects.
+    `default_profile_for_kind(kind, generation=generation)` -- which is the case for 20 of the 22
+    projects. `generation` is the project's declared `entity_schema_version` (default 2).
     """
-    default = default_profile_for_kind(kind)
+    default = default_profile_for_kind(kind, generation=generation)
     if not extensions:
         return default
 

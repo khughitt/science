@@ -11,20 +11,23 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import yaml
 from rdflib import URIRef
 from rdflib.namespace import RDF, SKOS
 
 from science_model.entities import DatasetEntity, Readiness
+from science_model.data_products import load_catalog
 from science_tool.datasets.semantics import DatasetClass, RuntimeState, dataset_class_for, runtime_state_for
 from science_tool.graph.dataset_usage import project_entity_uri
 from science_tool.graph.store.constants import CITO_NS, SCI_NS
 from science_tool.graph.store.identity import canonical_id_from_entity_uri
 from science_tool.graph.store.summary import _claim_summary_data
-from science_model.frontmatter import parse_frontmatter
+from science_model.frontmatter import parse_frontmatter, project_config_path
 from science_tool.datasets.capabilities import capability_fit
 from science_tool.datasets.capability_scope import is_valid_scope
 from science_tool.datasets_catalog import GATED_LEVELS, _local_rows
 from science_tool.entity_scan import iter_entity_markdown
+from science_tool.project_config import validated_entity_schema_version
 
 # Base Entity fields that a normal on-disk dataset frontmatter omits but
 # DatasetEntity.model_validate requires. Backfilled so we can call the canonical
@@ -478,6 +481,11 @@ def _capability_gap_reason(incompatible_datasets: list[dict[str, object]]) -> st
 
 def target_coverage(rows: list[dict], project_root: Path) -> list[dict]:
     """Invert prioritized dataset rows into per-question/hypothesis coverage rows."""
+    cfg_path = project_config_path(project_root)
+    raw_cfg = yaml.safe_load(cfg_path.read_text(encoding="utf-8")) or {} if cfg_path.is_file() else {}
+    project_generation = validated_entity_schema_version(raw_cfg) or 2
+    catalog = load_catalog() if project_generation >= 3 else None
+
     targets: dict[str, dict[str, object]] = {}
     for ent_id, fm in _iter_entity_frontmatter(project_root):
         if not _is_qh(ent_id):
@@ -541,6 +549,8 @@ def target_coverage(rows: list[dict], project_root: Path) -> list[dict]:
             fit = capability_fit(
                 target_fm.get("required_capabilities") if isinstance(target_fm, dict) else None,
                 dataset_fm.get("provided_capabilities"),
+                generation=project_generation,
+                catalog=catalog,
             )
             if fit.compatible:
                 compatible_rows.append(row)
