@@ -1,0 +1,570 @@
+# Value->term capability crosswalk (authored Task 12, 2026-07-23).
+# One row per distinct observed raw capability shape across mm30/cbioportal/
+# post-acute-infection/commons. Dispositions per the user-adjudicated framework.
+schema_version: "1"
+mappings:
+  # [cbio,mm30]
+  - match: {assay: "gene-expression"}
+    data_product: data-product:gene-expression
+    qualifiers: {}
+  # [mm30]
+  - match: {assay: "gene-expression", modality: "single-cell"}
+    data_product: data-product:gene-expression-single-cell
+    qualifiers: {}
+  # [cbio,mm30]
+  - match: {assay: "gene-expression", modality: "bulk-rna"}
+    data_product: data-product:gene-expression-bulk-rna
+    qualifiers: {}
+  # [mm30]
+  - match: {assay: "gene-expression", modality: "microarray"}
+    data_product: data-product:gene-expression-microarray
+    qualifiers: {}
+  # [mm30]
+  - match: {assay: "somatic-mutation", modality: "wgs"}
+    data_product: data-product:somatic-variant-wgs
+    qualifiers: {}
+  # [mm30]
+  - match: {assay: "drug-sensitivity"}
+    data_product: data-product:drug-sensitivity
+    qualifiers: {}
+  # [mm30]
+  - match: {assay: "copy-number", modality: "bulk"}
+    data_product: data-product:copy-number
+    qualifiers: {}
+  # [mm30]
+  - match: {assay: "chromatin-conformation", modality: "hi-c"}
+    data_product: data-product:chromatin-conformation-hi-c
+    qualifiers: {}
+  # [mm30]
+  - match: {assay: "structural-variant", modality: "wgs"}
+    data_product: data-product:structural-variant-wgs
+    qualifiers: {}
+  # [mm30]
+  - match: {assay: "chromatin-accessibility", modality: "single-cell-atac"}
+    data_product: data-product:chromatin-accessibility-single-cell
+    qualifiers: {}
+  # [mm30]
+  - match: {assay: "chromatin-conformation"}
+    data_product: data-product:chromatin-conformation
+    qualifiers: {}
+  # [mm30]
+  - match: {assay: "histone-modification", modality: "chip-seq"}
+    data_product: data-product:histone-modification-chip-seq
+    qualifiers: {}
+  # [mm30]
+  - match: {assay: "somatic-mutation"}
+    data_product: data-product:somatic-variant
+    qualifiers: {}
+  # [mm30]
+  - match: {assay: "somatic-mutation", modality: "targeted-panel"}
+    data_product: data-product:somatic-variant-targeted-panel
+    qualifiers: {}
+  # [mm30]
+  - match: {assay: "chromatin-accessibility"}
+    data_product: data-product:chromatin-accessibility
+    qualifiers: {}
+  # [mm30]
+  - match: {assay: "chromatin-accessibility", modality: "bulk-atac"}
+    data_product: data-product:chromatin-accessibility-bulk
+    qualifiers: {}
+  # [mm30]
+  - match: {assay: "cytogenetics", modality: "fish"}
+    data_product: data-product:cytogenetics-fish
+    qualifiers: {}
+  # [commons,mm30]
+  - match: {assay: "drug-sensitivity", modality: "cell-line-viability"}
+    data_product: data-product:drug-sensitivity-cell-line-viability
+    qualifiers: {}
+  # [mm30]
+  - match: {assay: "histone-modification"}
+    data_product: data-product:histone-modification
+    qualifiers: {}
+  # [mm30]
+  - match: {assay: "genetic-perturbation", modality: "perturb-seq"}
+    data_product: data-product:genetic-perturbation-perturb-seq
+    qualifiers: {}
+  # [mm30]
+  - match: {assay: "somatic-mutation", modality: "wes"}
+    data_product: data-product:somatic-variant-wes
+    qualifiers: {}
+  # [mm30]
+  - match: {assay: "cytogenetics"}
+    data_product: data-product:cytogenetics
+    qualifiers: {}
+  # [mm30]
+  - match: {assay: "dna-methylation"}
+    data_product: data-product:dna-methylation
+    qualifiers: {}
+  # [mm30]
+  - match: {assay: "genetic-perturbation"}
+    data_product: data-product:genetic-perturbation
+    qualifiers: {}
+  # [mm30]
+  - match: {assay: "structural-variant"}
+    data_product: data-product:structural-variant
+    qualifiers: {}
+  # [mm30]
+  - match: {assay: "copy-number"}
+    data_product: data-product:copy-number
+    qualifiers: {}
+  # [mm30]
+  - match: {assay: "germline-variant"}
+    data_product: data-product:germline-variant
+    qualifiers: {}
+  # [mm30]
+  - match: {assay: "germline-variant", modality: "wes"}
+    data_product: data-product:germline-variant-wes
+    qualifiers: {}
+  # [mm30]
+  - match: {assay: "proteomics", modality: "cite-seq"}
+    data_product: data-product:proteomics-surface
+    qualifiers: {}
+  # [mm30]
+  - match: {assay: "chromatin-conformation", modality: "imaging"}
+    data_product: data-product:chromatin-conformation-imaging
+    qualifiers: {}
+  # [mm30]
+  - match: {assay: "genetic-dependency"}
+    data_product: data-product:genetic-dependency
+    qualifiers: {}
+  # [mm30]
+  - match: {assay: "histone-modification", modality: "cut-and-run"}
+    data_product: data-product:histone-modification-cut-and-run
+    qualifiers: {}
+  # [mm30]
+  - match: {assay: "proteomics", modality: "mass-spec"}
+    data_product: data-product:proteomics-mass-spec
+    qualifiers: {}
+  # [mm30]
+  - match: {assay: "structural-variant", modality: "targeted-panel"}
+    data_product: data-product:structural-variant-targeted-panel
+    qualifiers: {}
+  # [mm30]
+  - match: {assay: "chromatin-conformation", modality: "micro-c"}
+    data_product: data-product:chromatin-conformation-micro-c
+    qualifiers: {}
+  # [mm30]
+  - match: {assay: "dna-methylation", modality: "wgbs"}
+    data_product: data-product:dna-methylation-wgbs
+    qualifiers: {}
+  # [mm30]
+  - match: {assay: "flow-cytometry", modality: "dna-content"}
+    data_product: data-product:flow-cytometry-dna-content
+    qualifiers: {}
+  # [mm30]
+  - match: {assay: "genetic-dependency", modality: "crispr"}
+    data_product: data-product:genetic-dependency-crispr
+    qualifiers: {}
+  # [mm30]
+  - match: {assay: "genetic-perturbation", modality: "l1000"}
+    data_product: data-product:genetic-perturbation-l1000
+    qualifiers: {}
+  # [mm30]
+  - match: {assay: "histone-modification", modality: "cell-free"}
+    data_product: data-product:histone-modification-cell-free
+    qualifiers: {}
+  # [mm30]
+  - match: {assay: "immune-repertoire", modality: "bulk"}
+    data_product: data-product:immune-repertoire
+    qualifiers: {}
+  # [mm30]
+  - match: {assay: "metabolomics", modality: "imaging"}
+    data_product: data-product:metabolomics-imaging
+    qualifiers: {}
+  # [mm30]
+  - match: {assay: "metabolomics", modality: "mass-spec"}
+    data_product: data-product:metabolomics-mass-spec
+    qualifiers: {}
+  # [mm30]
+  - match: {assay: "proteomics"}
+    data_product: data-product:proteomics
+    qualifiers: {}
+  # [cbio]
+  - match: {assay: "somatic-variant-calling"}
+    data_product: data-product:somatic-variant
+    qualifiers: {}
+  # [cbio]
+  - match: {assay: "somatic-variant-calling", modality: "targeted-panel"}
+    data_product: data-product:somatic-variant-targeted-panel
+    qualifiers: {}
+  # [cbio]
+  - match: {assay: "mutational-signature"}
+    data_product: data-product:mutational-signature
+    qualifiers: {}
+  # [cbio]
+  - match: {assay: "replication-timing", modality: "genome-bin-annotation"}
+    data_product: data-product:replication-timing
+    qualifiers: {}
+  # [cbio]
+  - match: {assay: "somatic-variant-calling", modality: "normal-tissue-wgs"}
+    data_product: data-product:somatic-variant-wgs
+    qualifiers: {}
+  # [cbio]
+  - match: {assay: "clinical-covariates"}
+    out_of_scope: {disposition: drop, rationale: "non-molecular (clinical-covariates): clinical/phenotype or knowledge-annotation capture, outside the molecular data-product vocabulary"}
+  # [cbio]
+  - match: {assay: "clinical-covariates", modality: "ehr-curated"}
+    out_of_scope: {disposition: drop, rationale: "non-molecular (clinical-covariates): clinical/phenotype or knowledge-annotation capture, outside the molecular data-product vocabulary"}
+  # [cbio]
+  - match: {assay: "gene-expression", modality: "developmental-transcriptome"}
+    data_product: data-product:gene-expression-bulk-rna
+    qualifiers: {}
+  # [cbio]
+  - match: {assay: "mutational-signature", modality: "normal-tissue-derived-sbs96"}
+    data_product: data-product:mutational-signature
+    qualifiers: {}
+  # [cbio]
+  - match: {assay: "mutational-signature", modality: "whole-genome"}
+    data_product: data-product:mutational-signature
+    qualifiers: {}
+  # [cbio]
+  - match: {assay: "pathway-driver-annotation"}
+    out_of_scope: {disposition: drop, rationale: "non-molecular (pathway-driver-annotation): clinical/phenotype or knowledge-annotation capture, outside the molecular data-product vocabulary"}
+  # [cbio]
+  - match: {assay: "somatic-variant-calling", modality: "whole-genome"}
+    data_product: data-product:somatic-variant-wgs
+    qualifiers: {}
+  # [cbio]
+  - match: {assay: "cell-type-markers"}
+    out_of_scope: {disposition: drop, rationale: "non-molecular (cell-type-markers): clinical/phenotype or knowledge-annotation capture, outside the molecular data-product vocabulary"}
+  # [cbio]
+  - match: {assay: "cell-type-markers", modality: "curated-marker-database"}
+    out_of_scope: {disposition: drop, rationale: "non-molecular (cell-type-markers): clinical/phenotype or knowledge-annotation capture, outside the molecular data-product vocabulary"}
+  # [cbio]
+  - match: {assay: "clinical-covariates", modality: "metastasis-annotation"}
+    out_of_scope: {disposition: drop, rationale: "non-molecular (clinical-covariates): clinical/phenotype or knowledge-annotation capture, outside the molecular data-product vocabulary"}
+  # [cbio]
+  - match: {assay: "clinical-covariates", modality: "patient-followup"}
+    out_of_scope: {disposition: drop, rationale: "non-molecular (clinical-covariates): clinical/phenotype or knowledge-annotation capture, outside the molecular data-product vocabulary"}
+  # [cbio]
+  - match: {assay: "clinical-covariates", modality: "study-clinical"}
+    out_of_scope: {disposition: drop, rationale: "non-molecular (clinical-covariates): clinical/phenotype or knowledge-annotation capture, outside the molecular data-product vocabulary"}
+  # [cbio]
+  - match: {assay: "clinical-covariates", modality: "treatment-history"}
+    out_of_scope: {disposition: drop, rationale: "non-molecular (clinical-covariates): clinical/phenotype or knowledge-annotation capture, outside the molecular data-product vocabulary"}
+  # [cbio]
+  - match: {assay: "copy-number", modality: "multi-omics"}
+    data_product: data-product:copy-number
+    qualifiers: {}
+  # [cbio]
+  - match: {assay: "exposure-covariates", modality: "smoking-history"}
+    out_of_scope: {disposition: drop, rationale: "non-molecular (exposure-covariates): clinical/phenotype or knowledge-annotation capture, outside the molecular data-product vocabulary"}
+  # [cbio]
+  - match: {assay: "gene-expression", modality: "single-cell-rna"}
+    data_product: data-product:gene-expression-single-cell
+    qualifiers: {}
+  # [cbio]
+  - match: {assay: "gene-expression", modality: "tissue-atlas"}
+    data_product: data-product:gene-expression-single-cell
+    qualifiers: {}
+  # [cbio]
+  - match: {assay: "indel-signature"}
+    data_product: data-product:indel-signature
+    qualifiers: {}
+  # [cbio]
+  - match: {assay: "indel-signature", modality: "whole-exome"}
+    data_product: data-product:indel-signature
+    qualifiers: {}
+  # [cbio]
+  - match: {assay: "indel-signature", modality: "whole-genome"}
+    data_product: data-product:indel-signature
+    qualifiers: {}
+  # [cbio]
+  - match: {assay: "methylation", modality: "multi-omics"}
+    data_product: data-product:dna-methylation
+    qualifiers: {}
+  # [cbio]
+  - match: {assay: "mutation-frequency"}
+    data_product: data-product:mutation-frequency
+    qualifiers: {}
+  # [cbio]
+  - match: {assay: "mutation-frequency", modality: "derived-table"}
+    data_product: data-product:mutation-frequency
+    qualifiers: {}
+  # [cbio]
+  - match: {assay: "mutational-signature", modality: "experimental-mutagenesis"}
+    data_product: data-product:mutational-signature
+    qualifiers: {}
+  # [cbio]
+  - match: {assay: "mutational-signature", modality: "whole-exome"}
+    data_product: data-product:mutational-signature
+    qualifiers: {}
+  # [cbio]
+  - match: {assay: "pathway-driver-annotation", modality: "consensus-pan-cancer"}
+    out_of_scope: {disposition: drop, rationale: "non-molecular (pathway-driver-annotation): clinical/phenotype or knowledge-annotation capture, outside the molecular data-product vocabulary"}
+  # [cbio]
+  - match: {assay: "protein-expression"}
+    data_product: data-product:proteomics
+    qualifiers: {}
+  # [cbio]
+  - match: {assay: "protein-expression", modality: "immunohistochemistry"}
+    data_product: data-product:proteomics-immunohistochemistry
+    qualifiers: {}
+  # [cbio]
+  - match: {assay: "somatic-variant-calling", modality: "harmonized-multi-omics"}
+    data_product: data-product:somatic-variant
+    qualifiers: {}
+  # [cbio]
+  - match: {assay: "somatic-variant-calling", modality: "multi-omics"}
+    data_product: data-product:somatic-variant
+    qualifiers: {}
+  # [cbio]
+  - match: {assay: "somatic-variant-calling", modality: "multi-study-cancer-genomics"}
+    data_product: data-product:somatic-variant
+    qualifiers: {}
+  # [cbio]
+  - match: {assay: "somatic-variant-calling", modality: "normal-tissue-wes-wgs"}
+    data_product: data-product:somatic-variant-wes
+    qualifiers: {}
+  # [cbio]
+  - match: {assay: "somatic-variant-calling", modality: "whole-exome"}
+    data_product: data-product:somatic-variant-wes
+    qualifiers: {}
+  # [pai]
+  - match: {modality: "transcriptomics", assay: "bulk-rna", trigger: "sars-cov-2", cohort_design: "case-control"}
+    data_product: data-product:gene-expression-bulk-rna
+    qualifiers: {cohort_design: "case-control", trigger: "sars-cov-2"}
+  # [pai]
+  - match: {modality: "clinical-ehr", assay: "ehr-coded", trigger: "sars-cov-2", cohort_design: "prospective-longitudinal", stratification: "sex"}
+    out_of_scope: {disposition: drop, rationale: "non-molecular (ehr-coded): clinical/phenotype or knowledge-annotation capture, outside the molecular data-product vocabulary"}
+  # [pai]
+  - match: {modality: "transcriptomics", assay: "microarray", trigger: "mixed", cohort_design: "case-control"}
+    data_product: data-product:gene-expression-microarray
+    qualifiers: {cohort_design: "case-control", trigger: "mixed"}
+  # [pai]
+  - match: {modality: "gene-sets", trigger: "not-applicable"}
+    out_of_scope: {disposition: drop, rationale: "facet-only / non-molecular: no molecular assay names a data-product (descriptive facets only)"}
+  # [pai]
+  - match: {modality: "transcriptomics"}
+    data_product: data-product:gene-expression
+    qualifiers: {}
+  # [pai]
+  - match: {analysis_role: "mr_exposure", trait: "autoimmune-disease"}
+    out_of_scope: {disposition: refuse, rationale: "Mendelian-randomization requirement (analysis_role) has no molecular data-product; author must re-model it as an explicit analysis requirement"}
+  # [pai]
+  - match: {modality: "transcriptomics", assay: "bulk-rna", trigger: "q-fever", cohort_design: "case-control"}
+    data_product: data-product:gene-expression-bulk-rna
+    qualifiers: {cohort_design: "case-control", trigger: "q-fever"}
+  # [pai]
+  - match: {modality: "clinical-ehr", assay: "ehr-coded", trigger: "sars-cov-2", cohort_design: "prospective-longitudinal", case_definition: "who-lc", stratification: "sex"}
+    out_of_scope: {disposition: drop, rationale: "non-molecular (ehr-coded): clinical/phenotype or knowledge-annotation capture, outside the molecular data-product vocabulary"}
+  # [pai]
+  - match: {modality: "genetics", assay: "gwas-sumstats", trigger: "ebv", cohort_design: "summary-stats", stratification: "im-history"}
+    data_product: data-product:gwas-summary-statistics
+    qualifiers: {cohort_design: "summary-stats", stratification: "im-history", trigger: "ebv"}
+  # [pai]
+  - match: {modality: "clinical-ehr"}
+    out_of_scope: {disposition: drop, rationale: "facet-only / non-molecular: no molecular assay names a data-product (descriptive facets only)"}
+  # [pai]
+  - match: {modality: "genetics", assay: "gwas-sumstats", cohort_design: "summary-stats", analysis_role: "mr_exposure", trait: "sex-hormone-biomarker", outcome: "sex-hormone-level", stratification: "sex"}
+    out_of_scope: {disposition: refuse, rationale: "Mendelian-randomization requirement (analysis_role) has no molecular data-product; author must re-model it as an explicit analysis requirement"}
+  # [pai]
+  - match: {modality: "genetics", assay: "gwas-sumstats", cohort_design: "summary-stats", analysis_role: "mr_exposure", trait: "autoimmune-disease"}
+    out_of_scope: {disposition: refuse, rationale: "Mendelian-randomization requirement (analysis_role) has no molecular data-product; author must re-model it as an explicit analysis requirement"}
+  # [pai]
+  - match: {analysis_role: "mr_exposure", trait: "sex-hormone-biomarker"}
+    out_of_scope: {disposition: refuse, rationale: "Mendelian-randomization requirement (analysis_role) has no molecular data-product; author must re-model it as an explicit analysis requirement"}
+  # [pai]
+  - match: {modality: "genetics", assay: "gwas-sumstats", cohort_design: "summary-stats", trigger: "sars-cov-2", analysis_role: "mr_outcome", trait: "long-covid"}
+    out_of_scope: {disposition: refuse, rationale: "Mendelian-randomization requirement (analysis_role) has no molecular data-product; author must re-model it as an explicit analysis requirement"}
+  # [pai]
+  - match: {analysis_role: "mr_outcome", trait: "long-covid"}
+    out_of_scope: {disposition: refuse, rationale: "Mendelian-randomization requirement (analysis_role) has no molecular data-product; author must re-model it as an explicit analysis requirement"}
+  # [pai]
+  - match: {modality: "transcriptomics", assay: "bulk-rna", cohort_design: "case-control"}
+    data_product: data-product:gene-expression-bulk-rna
+    qualifiers: {cohort_design: "case-control"}
+  # [pai]
+  - match: {modality: "transcriptomics", assay: "bulk-rna", trigger: "non-infectious-vaccine-challenge", cohort_design: "case-control", stratification: "mast-cell-activation"}
+    data_product: data-product:gene-expression-bulk-rna
+    qualifiers: {cohort_design: "case-control", stratification: "mast-cell-activation", trigger: "non-infectious-vaccine-challenge"}
+  # [pai]
+  - match: {modality: "transcriptomics", assay: "bulk-rna", trigger: "chikungunya", cohort_design: "case-control"}
+    data_product: data-product:gene-expression-bulk-rna
+    qualifiers: {cohort_design: "case-control", trigger: "chikungunya"}
+  # [pai]
+  - match: {modality: "transcriptomics", assay: "bulk-rna", trigger: "ebola", cohort_design: "case-control"}
+    data_product: data-product:gene-expression-bulk-rna
+    qualifiers: {cohort_design: "case-control", trigger: "ebola"}
+  # [pai]
+  - match: {modality: "transcriptomics", assay: "bulk-rna", trigger: "lyme-disease", cohort_design: "case-control"}
+    data_product: data-product:gene-expression-bulk-rna
+    qualifiers: {cohort_design: "case-control", trigger: "lyme-disease"}
+  # [pai]
+  - match: {modality: "transcriptomics", assay: "bulk-rna", trigger: "mixed", cohort_design: "case-control"}
+    data_product: data-product:gene-expression-bulk-rna
+    qualifiers: {cohort_design: "case-control", trigger: "mixed"}
+  # [pai]
+  - match: {modality: "transcriptomics", assay: "bulk-rna", trigger: "non-infectious-fibromyalgia", cohort_design: "case-control"}
+    data_product: data-product:gene-expression-bulk-rna
+    qualifiers: {cohort_design: "case-control", trigger: "non-infectious-fibromyalgia"}
+  # [pai]
+  - match: {modality: "transcriptomics", assay: "bulk-rna", trigger: "non-infectious-gulf-war-illness", cohort_design: "case-control"}
+    data_product: data-product:gene-expression-bulk-rna
+    qualifiers: {cohort_design: "case-control", trigger: "non-infectious-gulf-war-illness"}
+  # [pai]
+  - match: {modality: "transcriptomics", assay: "bulk-rna", trigger: "post-infectious-mecfs", cohort_design: "case-control"}
+    data_product: data-product:gene-expression-bulk-rna
+    qualifiers: {cohort_design: "case-control", trigger: "post-infectious-mecfs"}
+  # [pai]
+  - match: {modality: "transcriptomics", assay: "bulk-rna", trigger: "sars-cov-2", cohort_design: "cross-sectional"}
+    data_product: data-product:gene-expression-bulk-rna
+    qualifiers: {cohort_design: "cross-sectional", trigger: "sars-cov-2"}
+  # [pai]
+  - match: {modality: "transcriptomics", assay: "bulk-rna", trigger: "non-infectious-vaccine-challenge", cohort_design: "prospective-longitudinal", stratification: "frailty"}
+    data_product: data-product:gene-expression-bulk-rna
+    qualifiers: {cohort_design: "prospective-longitudinal", stratification: "frailty", trigger: "non-infectious-vaccine-challenge"}
+  # [pai]
+  - match: {modality: "transcriptomics", assay: "bulk-rna", trigger: "sars-cov-2"}
+    data_product: data-product:gene-expression-bulk-rna
+    qualifiers: {trigger: "sars-cov-2"}
+  # [pai]
+  - match: {modality: "transcriptomics", assay: "cite-seq", trigger: "sepsis", cohort_design: "prospective-longitudinal"}
+    data_product: data-product:gene-expression-single-cell
+    qualifiers: {cohort_design: "prospective-longitudinal", trigger: "sepsis"}
+  # [pai]
+  - match: {modality: "genetics", assay: "gwas-sumstats", trigger: "sars-cov-2", cohort_design: "summary-stats", stratification: "ancestry"}
+    data_product: data-product:gwas-summary-statistics
+    qualifiers: {cohort_design: "summary-stats", stratification: "ancestry", trigger: "sars-cov-2"}
+  # [pai]
+  - match: {modality: "genetics", assay: "gwas-sumstats", trigger: "not-applicable", cohort_design: "summary-stats", stratification: "atopy"}
+    data_product: data-product:gwas-summary-statistics
+    qualifiers: {cohort_design: "summary-stats", stratification: "atopy", trigger: "not-applicable"}
+  # [pai]
+  - match: {modality: "genetics", assay: "gwas-sumstats", trigger: "post-infectious-mecfs", cohort_design: "summary-stats", stratification: "infectious-onset"}
+    data_product: data-product:gwas-summary-statistics
+    qualifiers: {cohort_design: "summary-stats", stratification: "infectious-onset", trigger: "post-infectious-mecfs"}
+  # [pai]
+  - match: {modality: "genetics", assay: "gwas-sumstats", trigger: "sars-cov-2", cohort_design: "summary-stats"}
+    data_product: data-product:gwas-summary-statistics
+    qualifiers: {cohort_design: "summary-stats", trigger: "sars-cov-2"}
+  # [pai]
+  - match: {modality: "transcriptomics", assay: "microarray", trigger: "influenza", cohort_design: "case-control"}
+    data_product: data-product:gene-expression-microarray
+    qualifiers: {cohort_design: "case-control", trigger: "influenza"}
+  # [pai]
+  - match: {modality: "transcriptomics", assay: "microarray", trigger: "non-infectious-environmental-intolerance", cohort_design: "case-control"}
+    data_product: data-product:gene-expression-microarray
+    qualifiers: {cohort_design: "case-control", trigger: "non-infectious-environmental-intolerance"}
+  # [pai]
+  - match: {modality: "transcriptomics", assay: "microarray", trigger: "non-infectious-fibromyalgia", cohort_design: "case-control"}
+    data_product: data-product:gene-expression-microarray
+    qualifiers: {cohort_design: "case-control", trigger: "non-infectious-fibromyalgia"}
+  # [pai]
+  - match: {modality: "transcriptomics", assay: "microarray", trigger: "non-infectious-gulf-war-illness", cohort_design: "case-control"}
+    data_product: data-product:gene-expression-microarray
+    qualifiers: {cohort_design: "case-control", trigger: "non-infectious-gulf-war-illness"}
+  # [pai]
+  - match: {modality: "transcriptomics", assay: "microarray", trigger: "ebv", cohort_design: "prospective-longitudinal"}
+    data_product: data-product:gene-expression-microarray
+    qualifiers: {cohort_design: "prospective-longitudinal", trigger: "ebv"}
+  # [pai]
+  - match: {modality: "immunophenotype", assay: "olink", trigger: "sars-cov-2", cohort_design: "case-control", outcome: "sex-hormone-level", stratification: "sex"}
+    data_product: data-product:proteomics-affinity
+    qualifiers: {cohort_design: "case-control", outcome: "sex-hormone-level", stratification: "sex", trigger: "sars-cov-2"}
+  # [pai]
+  - match: {modality: "immunophenotype", assay: "olink", trigger: "ebv", cohort_design: "prospective-longitudinal", stratification: "im-history"}
+    data_product: data-product:proteomics-affinity
+    qualifiers: {cohort_design: "prospective-longitudinal", stratification: "im-history", trigger: "ebv"}
+  # [pai]
+  - match: {modality: "immunophenotype", assay: "olink", trigger: "sars-cov-2", cohort_design: "prospective-longitudinal", stratification: "immunosuppression"}
+    data_product: data-product:proteomics-affinity
+    qualifiers: {cohort_design: "prospective-longitudinal", stratification: "immunosuppression", trigger: "sars-cov-2"}
+  # [pai]
+  - match: {modality: "transcriptomics", assay: "scrna", trigger: "not-applicable", cohort_design: "case-control", stratification: "frailty"}
+    data_product: data-product:gene-expression-single-cell
+    qualifiers: {cohort_design: "case-control", stratification: "frailty", trigger: "not-applicable"}
+  # [pai]
+  - match: {modality: "transcriptomics", assay: "scrna", trigger: "sepsis", cohort_design: "case-control"}
+    data_product: data-product:gene-expression-single-cell
+    qualifiers: {cohort_design: "case-control", trigger: "sepsis"}
+  # [pai]
+  - match: {modality: "transcriptomics", assay: "scrna", trigger: "sars-cov-2", cohort_design: "prospective-longitudinal"}
+    data_product: data-product:gene-expression-single-cell
+    qualifiers: {cohort_design: "prospective-longitudinal", trigger: "sars-cov-2"}
+  # [pai]
+  - match: {modality: "transcriptomics", assay: "spatial-rna", trigger: "sars-cov-2", cohort_design: "prospective-longitudinal"}
+    data_product: data-product:gene-expression-spatial
+    qualifiers: {cohort_design: "prospective-longitudinal", trigger: "sars-cov-2"}
+  # [pai]
+  - match: {modality: "clinical-ehr", assay: "survey-pro", trigger: "sars-cov-2", cohort_design: "prospective-longitudinal", stratification: "sex"}
+    out_of_scope: {disposition: drop, rationale: "non-molecular (survey-pro): clinical/phenotype or knowledge-annotation capture, outside the molecular data-product vocabulary"}
+  # [pai]
+  - match: {modality: "proteomics", assay: "tissue-antigen-detection", sample_type: "tissue"}
+    data_product: data-product:proteomics-tissue-antigen
+    qualifiers: {sample_type: "tissue"}
+  # [pai]
+  - match: {modality: "clinical-ehr", assay: "wearable", trigger: "sars-cov-2", cohort_design: "prospective-longitudinal"}
+    out_of_scope: {disposition: drop, rationale: "non-molecular (wearable): clinical/phenotype or knowledge-annotation capture, outside the molecular data-product vocabulary"}
+  # [pai]
+  - match: {case_definition: "ccc"}
+    out_of_scope: {disposition: drop, rationale: "facet-only / non-molecular: no molecular assay names a data-product (descriptive facets only)"}
+  # [pai]
+  - match: {case_definition: "cdc-lc"}
+    out_of_scope: {disposition: drop, rationale: "facet-only / non-molecular: no molecular assay names a data-product (descriptive facets only)"}
+  # [pai]
+  - match: {case_definition: "fukuda"}
+    out_of_scope: {disposition: drop, rationale: "facet-only / non-molecular: no molecular assay names a data-product (descriptive facets only)"}
+  # [pai]
+  - match: {case_definition: "icc"}
+    out_of_scope: {disposition: drop, rationale: "facet-only / non-molecular: no molecular assay names a data-product (descriptive facets only)"}
+  # [pai]
+  - match: {case_definition: "who-lc"}
+    out_of_scope: {disposition: drop, rationale: "facet-only / non-molecular: no molecular assay names a data-product (descriptive facets only)"}
+  # [pai]
+  - match: {modality: "epidemiology", trigger: "mixed", cohort_design: "cross-sectional", outcome: "fatigue", stratification: "sex"}
+    out_of_scope: {disposition: drop, rationale: "facet-only / non-molecular: no molecular assay names a data-product (descriptive facets only)"}
+  # [pai]
+  - match: {cohort_design: "meta-analysis", trigger: "dengue", outcome: "fatigue", stratification: "sex"}
+    out_of_scope: {disposition: drop, rationale: "facet-only / non-molecular: no molecular assay names a data-product (descriptive facets only)"}
+  # [pai]
+  - match: {cohort_design: "meta-analysis", trigger: "sars-cov-2", stratification: "sex"}
+    out_of_scope: {disposition: drop, rationale: "facet-only / non-molecular: no molecular assay names a data-product (descriptive facets only)"}
+  # [pai]
+  - match: {modality: "clinical-ehr", trigger: "sars-cov-2", cohort_design: "prospective-longitudinal", outcome: "sex-hormone-level", stratification: "sex"}
+    out_of_scope: {disposition: drop, rationale: "facet-only / non-molecular: no molecular assay names a data-product (descriptive facets only)"}
+  # [pai]
+  - match: {modality: "epidemiology", trigger: "dengue", cohort_design: "prospective-longitudinal", outcome: "fatigue", stratification: "sex"}
+    out_of_scope: {disposition: drop, rationale: "facet-only / non-molecular: no molecular assay names a data-product (descriptive facets only)"}
+  # [pai]
+  - match: {modality: "epidemiology", trigger: "lyme-disease", cohort_design: "prospective-longitudinal", outcome: "fatigue"}
+    out_of_scope: {disposition: drop, rationale: "facet-only / non-molecular: no molecular assay names a data-product (descriptive facets only)"}
+  # [pai]
+  - match: {modality: "epidemiology", trigger: "mixed", cohort_design: "prospective-longitudinal", outcome: "fatigue"}
+    out_of_scope: {disposition: drop, rationale: "facet-only / non-molecular: no molecular assay names a data-product (descriptive facets only)"}
+  # [pai]
+  - match: {modality: "epidemiology", trigger: "q-fever", cohort_design: "prospective-longitudinal", outcome: "fatigue"}
+    out_of_scope: {disposition: drop, rationale: "facet-only / non-molecular: no molecular assay names a data-product (descriptive facets only)"}
+  # [pai]
+  - match: {cohort_design: "prospective-longitudinal", stratification: "severity"}
+    out_of_scope: {disposition: drop, rationale: "facet-only / non-molecular: no molecular assay names a data-product (descriptive facets only)"}
+  # [pai]
+  - match: {modality: "epidemiology"}
+    out_of_scope: {disposition: drop, rationale: "facet-only / non-molecular: no molecular assay names a data-product (descriptive facets only)"}
+  # [pai]
+  - match: {outcome: "pem"}
+    out_of_scope: {disposition: drop, rationale: "facet-only / non-molecular: no molecular assay names a data-product (descriptive facets only)"}
+  # [pai]
+  - match: {stratification: "ancestry"}
+    out_of_scope: {disposition: drop, rationale: "facet-only / non-molecular: no molecular assay names a data-product (descriptive facets only)"}
+  # [pai]
+  - match: {stratification: "atopy"}
+    out_of_scope: {disposition: drop, rationale: "facet-only / non-molecular: no molecular assay names a data-product (descriptive facets only)"}
+  # [pai]
+  - match: {stratification: "frailty"}
+    out_of_scope: {disposition: drop, rationale: "facet-only / non-molecular: no molecular assay names a data-product (descriptive facets only)"}
+  # [pai]
+  - match: {stratification: "im-history"}
+    out_of_scope: {disposition: drop, rationale: "facet-only / non-molecular: no molecular assay names a data-product (descriptive facets only)"}
+  # [pai]
+  - match: {stratification: "immunosuppression"}
+    out_of_scope: {disposition: drop, rationale: "facet-only / non-molecular: no molecular assay names a data-product (descriptive facets only)"}
+  # [pai]
+  - match: {stratification: "pregnancy"}
+    out_of_scope: {disposition: drop, rationale: "facet-only / non-molecular: no molecular assay names a data-product (descriptive facets only)"}
+  # [pai]
+  - match: {stratification: "sex"}
+    out_of_scope: {disposition: drop, rationale: "facet-only / non-molecular: no molecular assay names a data-product (descriptive facets only)"}
+  # [pai]
+  - match: {stratification: "sex", trigger: "sars-cov-2"}
+    out_of_scope: {disposition: drop, rationale: "facet-only / non-molecular: no molecular assay names a data-product (descriptive facets only)"}
