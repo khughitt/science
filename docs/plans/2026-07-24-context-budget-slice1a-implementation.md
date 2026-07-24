@@ -4,16 +4,18 @@
 > (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use
 > checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Build the context-budget mechanism and wire it end-to-end, in **both** output formats,
-through the four commands that bypass the shared emitters — `tasks list`, `health`,
-`entities inventory`, `data audit`.
+**Goal:** Build the context-budget mechanism and wire it end-to-end, in **every supported**
+output format, through the four commands that bypass the shared emitters — `tasks list`,
+`health`, `entities inventory`, `data audit`.
 
-**Architecture:** `BoundedSink` **is the output channel**, not a wrapper around one branch of
-`emit`. Every budgeted command constructs one sink, renders everything into it (via
+**Architecture:** `BoundedSink` **is the payload channel**, not a wrapper around one branch of
+`emit`. Every budgeted command constructs one sink, renders its complete payload into it (via
 `sink.console` for Rich renderables and `sink.echo` for lines), and flushes once. Flush measures
-the whole invocation and either writes it to stdout, writes it complete to `--output PATH`, or
+the whole payload and either writes it to stdout, writes it complete to `--output PATH`, or
 raises. Semantic narrowing happens earlier, in a **projection** chosen by the command's declared
-payload shape; an unregistered shape refuses rather than degrading.
+payload shape; an unregistered shape refuses rather than degrading. After a successful
+`--output` write, a command may emit one fixed, non-payload success confirmation directly to
+stdout; those bounded confirmations are the sole sink-bypass exception.
 
 **Tech Stack:** Python 3.11 (see Global Constraints), Click, Rich, Pydantic, pytest. All work is
 in `science/`.
@@ -32,7 +34,8 @@ with `total_issues`; and guarded only modules that import an emitter.
 ## Scope
 
 **In scope (1a):** the mechanism, plus `tasks list`, `health`, `entities inventory`,
-`data audit` wired completely in table and JSON.
+`data audit` wired completely in every supported format: table and JSON for `tasks list`,
+`health`, and `data audit`; JSON only for `entities inventory`.
 
 **Deferred to 1b:** the ten other measured offenders (`entity list`, `questions list`,
 `interpretations list`, `discussions list`, `feedback list`, `entity needs-review`,
@@ -54,7 +57,8 @@ exactly one of `BUDGETS`, `EXEMPTIONS`, or `DEFERRED`.
   unbounded, and no projection ever runs against a file sink.
 - **Semantic truncation never happens in the sink.** The sink routes, measures, raises.
 - **`total_issues` never changes meaning.** It stays the unfiltered clean-report gate.
-- **Every budgeted command owns exactly one sink** and emits nothing outside it.
+- **Every budgeted command owns exactly one sink** and emits no payload outside it. A single
+  fixed success confirmation after a successful `--output` write is the sole exception.
 - Composition over inheritance; explicit over defensive; fail early, no silent fallbacks.
 - No "legacy"/"compatibility" layers. No `Unified` prefix.
 - Conventional commits. No AI-attribution trailers.
@@ -69,7 +73,7 @@ imports.
 |---|---|
 | `budget/registry.py` | `CommandBudget`, `PayloadShape`, `BUDGETS`, `EXEMPTIONS`, `DEFERRED`, `lookup`, `shape_for`. |
 | `budget/measure.py` | `visible_len`, `BUDGET_CONSOLE_WIDTH`. |
-| `budget/sink.py` | `BoundedSink` (the output channel), `BudgetExceeded`. |
+| `budget/sink.py` | `BoundedSink` (the payload output channel), `BudgetExceeded`. |
 | `budget/projection.py` | `project_rows`, `ProjectedRows`. |
 | `budget/invocation.py` | `build_complete_via` — derives the escape command from the live Click context. |
 
@@ -491,7 +495,7 @@ git commit -m "feat(budget): add ANSI-stripped measurement and an explicit conso
 
 ---
 
-### Task 3: `BoundedSink` as the output channel
+### Task 3: `BoundedSink` as the payload output channel
 
 **Files:**
 - Create: `science/src/science_tool/budget/sink.py`
@@ -504,10 +508,17 @@ git commit -m "feat(budget): add ANSI-stripped measurement and an explicit conso
   `.console: Console`, `.echo(text: str = "") -> None`, `.write(text: str) -> None`,
   `.flush() -> None`, `.is_file_sink: bool`, `.max_rows: int | None`, `.complete_via: str`.
 
-**The sink is the channel.** Commands render Rich renderables via `sink.console.print(...)` and
-lines via `sink.echo(...)`. Everything accumulates in one buffer and is measured once at
-`flush()`. This is what makes a 21-table command obey one command-total ceiling, and what makes
-`--output` capture *all* of a command's output rather than only its JSON branch.
+`complete_via` is conditionally required: constructing a **budgeted stdout** sink without it
+fails immediately. A file sink is already the complete-output route, and an unbudgeted sink has
+no ceiling to escape, so neither needs one. There is no synthesized
+`"<command> --output PATH"` fallback.
+
+**The sink is the payload channel.** Commands render Rich renderables via
+`sink.console.print(...)` and lines via `sink.echo(...)`. The entire payload accumulates in one
+buffer and is measured once at `flush()`. This is what makes a 21-table command obey one
+command-payload ceiling, and what makes `--output` capture the complete payload rather than only
+its JSON branch. A fixed success notice emitted only after a successful file write is control
+output, not payload, and is the sole permitted bypass.
 
 Buffer-then-flush also means an over-budget command prints **nothing** rather than a truncated
 prefix.
@@ -528,10 +539,12 @@ from science_tool.budget.registry import CommandBudget, PayloadShape
 from science_tool.budget.sink import BoundedSink, BudgetExceeded
 
 ROWS_BUDGET = CommandBudget(max_chars=100, shape=PayloadShape.ROWS, max_rows=5)
+TASKS_COMPLETE = "science tasks list --output tasks.json"
+HEALTH_COMPLETE = "science health --output health.json"
 
 
 def test_echo_reaches_stdout_only_after_flush(capsys) -> None:
-    sink = BoundedSink(ROWS_BUDGET, command_path="tasks list")
+    sink = BoundedSink(ROWS_BUDGET, command_path="tasks list", complete_via=TASKS_COMPLETE)
     sink.echo("hello")
     assert capsys.readouterr().out == ""
     sink.flush()
@@ -539,7 +552,7 @@ def test_echo_reaches_stdout_only_after_flush(capsys) -> None:
 
 
 def test_console_output_is_captured_by_the_sink(capsys) -> None:
-    sink = BoundedSink(ROWS_BUDGET, command_path="tasks list")
+    sink = BoundedSink(ROWS_BUDGET, command_path="tasks list", complete_via=TASKS_COMPLETE)
     table = Table(title="T")
     table.add_column("C")
     table.add_row("x")
@@ -549,12 +562,16 @@ def test_console_output_is_captured_by_the_sink(capsys) -> None:
 
 
 def test_console_uses_the_pinned_width() -> None:
-    sink = BoundedSink(ROWS_BUDGET, command_path="tasks list")
+    sink = BoundedSink(ROWS_BUDGET, command_path="tasks list", complete_via=TASKS_COMPLETE)
     assert sink.console.width == BUDGET_CONSOLE_WIDTH
 
 
 def test_over_budget_flush_prints_nothing_and_raises(capsys) -> None:
-    sink = BoundedSink(CommandBudget(max_chars=10, shape=PayloadShape.ROWS, max_rows=5), command_path="tasks list")
+    sink = BoundedSink(
+        CommandBudget(max_chars=10, shape=PayloadShape.ROWS, max_rows=5),
+        command_path="tasks list",
+        complete_via=TASKS_COMPLETE,
+    )
     sink.echo("x" * 50)
     with pytest.raises(BudgetExceeded) as excinfo:
         sink.flush()
@@ -564,7 +581,11 @@ def test_over_budget_flush_prints_nothing_and_raises(capsys) -> None:
 
 
 def test_many_sections_share_one_command_total_ceiling() -> None:
-    sink = BoundedSink(CommandBudget(max_chars=100, shape=PayloadShape.REPORT), command_path="health")
+    sink = BoundedSink(
+        CommandBudget(max_chars=100, shape=PayloadShape.REPORT),
+        command_path="health",
+        complete_via=HEALTH_COMPLETE,
+    )
     for _ in range(3):
         sink.echo("y" * 50)
     with pytest.raises(BudgetExceeded):
@@ -591,7 +612,13 @@ def test_file_sink_reports_no_row_cap(tmp_path: Path) -> None:
 
 
 def test_stdout_sink_reports_the_budget_row_cap() -> None:
-    assert BoundedSink(ROWS_BUDGET, command_path="tasks list").max_rows == 5
+    sink = BoundedSink(ROWS_BUDGET, command_path="tasks list", complete_via=TASKS_COMPLETE)
+    assert sink.max_rows == 5
+
+
+def test_budgeted_stdout_sink_requires_complete_via() -> None:
+    with pytest.raises(ValueError, match="complete_via"):
+        BoundedSink(ROWS_BUDGET, command_path="tasks list")
 
 
 def test_unbudgeted_command_is_unbounded(capsys) -> None:
@@ -602,14 +629,18 @@ def test_unbudgeted_command_is_unbounded(capsys) -> None:
 
 
 def test_ansi_does_not_count_against_the_ceiling(capsys) -> None:
-    sink = BoundedSink(CommandBudget(max_chars=12, shape=PayloadShape.ROWS, max_rows=5), command_path="tasks list")
+    sink = BoundedSink(
+        CommandBudget(max_chars=12, shape=PayloadShape.ROWS, max_rows=5),
+        command_path="tasks list",
+        complete_via=TASKS_COMPLETE,
+    )
     sink.echo("\x1b[1;31m" + "x" * 9 + "\x1b[0m")
     sink.flush()
     assert "x" * 9 in capsys.readouterr().out
 
 
 def test_flush_is_idempotent(capsys) -> None:
-    sink = BoundedSink(ROWS_BUDGET, command_path="tasks list")
+    sink = BoundedSink(ROWS_BUDGET, command_path="tasks list", complete_via=TASKS_COMPLETE)
     sink.echo("once")
     sink.flush()
     sink.flush()
@@ -633,16 +664,17 @@ Expected: FAIL — `ModuleNotFoundError: No module named 'science_tool.budget.si
 
 ```python
 # science/src/science_tool/budget/sink.py
-"""The output channel for budgeted commands.
+"""The payload output channel for budgeted commands.
 
-A budgeted command constructs ONE sink, renders everything into it, and flushes once.
-Rich renderables go through ``sink.console``; plain lines through ``sink.echo``. Nothing
-reaches stdout until ``flush()``.
+A budgeted command constructs ONE sink, renders its complete payload into it, and flushes
+once. Rich renderables go through ``sink.console``; plain lines through ``sink.echo``. No
+payload reaches stdout until ``flush()``. After a successful file flush, a command may emit
+one fixed success confirmation directly; that bounded control notice is the sole exception.
 
 Why a channel rather than a wrapper around ``emit``'s JSON branch: a command like
 ``health`` renders 21 tables and a dozen messages directly. Wrapping only the final
 serialization would leave all of that on stdout and write an empty ``--output`` file.
-Owning the channel is what makes the ceiling command-total and ``--output`` complete.
+Owning the channel is what makes the ceiling payload-total and ``--output`` complete.
 
 The sink holds characters, not rows, so it never truncates: it cannot count omitted items
 nor cut without severing a table box or an ANSI escape. Semantic narrowing belongs in
@@ -677,6 +709,8 @@ class BoundedSink:
         command_path: str = "",
         complete_via: str = "",
     ) -> None:
+        if budget is not None and output_path is None and not complete_via:
+            raise ValueError("complete_via is required for a budgeted stdout sink")
         self._budget = budget
         self._output_path = output_path
         self._command_path = command_path
@@ -736,25 +770,25 @@ class BoundedSink:
         click.echo(text, nl=False)
 
     def _exceeded(self, size: int) -> BudgetExceeded:
-        escape = self._complete_via or f"{self._command_path} --output PATH"
+        assert self._budget is not None
         return BudgetExceeded(
             f"{self._command_path or 'command'} produced {size} visible chars after "
-            f"projection, over its {self._budget.max_chars if self._budget else 0} ceiling. "
-            f"Nothing was printed. For the complete payload run:\n  {escape}"
+            f"projection, over its {self._budget.max_chars} ceiling. "
+            f"Nothing was printed. For the complete payload run:\n  {self._complete_via}"
         )
 ```
 
 - [ ] **Step 4: Run tests to verify they pass**
 
 Run: `cd science && uv run --frozen pytest tests/test_budget_sink.py -v`
-Expected: PASS (11 tests)
+Expected: PASS (12 tests)
 
 
 - [ ] **Step 5: Commit**
 
 ```bash
 git add science/src/science_tool/budget/sink.py science/tests/test_budget_sink.py
-git commit -m "feat(budget): make BoundedSink the output channel for budgeted commands"
+git commit -m "feat(budget): make BoundedSink the payload channel for budgeted commands"
 ```
 
 ---
@@ -1081,6 +1115,7 @@ from science_tool.output import emit, emit_query_rows
 COLUMNS = [("id", "ID"), ("title", "Title")]
 ROWS = [{"id": f"t{i:03d}", "title": f"task {i}"} for i in range(100)]
 BIG = CommandBudget(max_chars=500_000, shape=PayloadShape.ROWS, max_rows=40)
+COMPLETE_VIA = "science tasks list --output tasks.json"
 
 
 def _emit_rows(fmt: str, sink: BoundedSink) -> None:
@@ -1101,7 +1136,7 @@ def test_json_truncation_metadata_lives_in_the_payload(capsys) -> None:
 
 
 def test_truncated_json_is_a_single_parseable_document(capsys) -> None:
-    sink = BoundedSink(BIG, command_path="tasks list")
+    sink = BoundedSink(BIG, command_path="tasks list", complete_via=COMPLETE_VIA)
     _emit_rows("json", sink)
     sink.flush()
     json.loads(capsys.readouterr().out)
@@ -1109,7 +1144,7 @@ def test_truncated_json_is_a_single_parseable_document(capsys) -> None:
 
 def test_untruncated_json_has_no_truncation_key(capsys) -> None:
     budget = CommandBudget(max_chars=500_000, shape=PayloadShape.ROWS, max_rows=500)
-    sink = BoundedSink(budget, command_path="tasks list")
+    sink = BoundedSink(budget, command_path="tasks list", complete_via=COMPLETE_VIA)
     _emit_rows("json", sink)
     sink.flush()
     assert "truncation" not in json.loads(capsys.readouterr().out)
@@ -1117,7 +1152,7 @@ def test_untruncated_json_has_no_truncation_key(capsys) -> None:
 
 def test_returned_count_is_reconciled_with_the_projected_rows(capsys) -> None:
     """The caller computes it pre-projection; the emitter owns the final row count."""
-    sink = BoundedSink(BIG, command_path="tasks list")
+    sink = BoundedSink(BIG, command_path="tasks list", complete_via=COMPLETE_VIA)
     emit_query_rows(
         output_format="json",
         title="Tasks",
@@ -1134,7 +1169,7 @@ def test_returned_count_is_reconciled_with_the_projected_rows(capsys) -> None:
 
 
 def test_meta_without_returned_count_is_passed_through(capsys) -> None:
-    sink = BoundedSink(BIG, command_path="tasks list")
+    sink = BoundedSink(BIG, command_path="tasks list", complete_via=COMPLETE_VIA)
     emit_query_rows(
         output_format="json",
         title="Tasks",
@@ -1149,7 +1184,7 @@ def test_meta_without_returned_count_is_passed_through(capsys) -> None:
 
 def test_table_branch_reaches_the_sink_not_stdout(capsys) -> None:
     """The text branch must be captured by the sink, not printed directly."""
-    sink = BoundedSink(BIG, command_path="tasks list")
+    sink = BoundedSink(BIG, command_path="tasks list", complete_via=COMPLETE_VIA)
     _emit_rows("table", sink)
     assert capsys.readouterr().out == ""  # nothing before flush
     sink.flush()
@@ -1167,7 +1202,7 @@ def test_table_footer_names_the_omitted_count_and_the_derived_escape(capsys) -> 
 
 def test_table_output_is_never_cut_mid_box(capsys) -> None:
     budget = CommandBudget(max_chars=500_000, shape=PayloadShape.ROWS, max_rows=3)
-    sink = BoundedSink(budget, command_path="tasks list")
+    sink = BoundedSink(budget, command_path="tasks list", complete_via=COMPLETE_VIA)
     _emit_rows("table", sink)
     sink.flush()
     out = capsys.readouterr().out
@@ -1307,7 +1342,7 @@ def emit_query_rows(
         sink.console.print(table)
         if projected.truncated:
             sink.echo(f"showing {len(rows_list)} of {projected.total} rows")
-            sink.echo(f"  complete output:  {sink.complete_via or '(pass --output PATH)'}")
+            sink.echo(f"  complete output:  {sink.complete_via}")
 
     emit(output_format=output_format, payload=payload, render_text=_render, sink=sink)
 ```
@@ -1331,7 +1366,7 @@ git commit -m "feat(budget): route both emitter branches through the sink"
 
 ---
 
-### Task 7: `tasks list` — both formats projected, working-set default, `--output`
+### Task 7: `tasks list` — both supported formats projected, working-set default, `--output`
 
 **Files:**
 - Modify: `science/src/science_tool/tasks_cli.py:487-605`
@@ -1343,9 +1378,9 @@ git commit -m "feat(budget): route both emitter branches through the sink"
 - Produces: `render_tasks_table(tasks, resolver=None, sink=None, footer=None) -> None`;
   `tasks list --output PATH`.
 
-**Both formats project.** The previous plan projected only JSON, so the table branch handed the
-full list to the renderer and hit the char backstop. Here the command projects **once**, before
-choosing a format, and both branches consume the same projected rows.
+**Both supported formats project.** The previous plan projected only JSON, so the table branch
+handed the full list to the renderer and hit the char backstop. Here the command projects
+**once**, before choosing a format, and both branches consume the same projected rows.
 
 - [ ] **Step 1: Write the failing test**
 
@@ -1497,7 +1532,7 @@ def render_tasks_table(
         sink.echo(line)
 ```
 
-Blocker summaries go through the same sink so they count against the command-total ceiling
+Blocker summaries go through the same sink so they count against the command-payload ceiling
 instead of escaping it.
 
 - [ ] **Step 4: Rewire the command**
@@ -1573,7 +1608,8 @@ Add `output_path: Path | None` to the signature, then replace the body's tail:
         render_tasks_table(projected.rows, resolver=resolver, sink=sink, footer=footer)
 
     sink.flush()
-    # AFTER a successful flush, never in `finally`: a `finally` here would announce
+    # This fixed success confirmation is intentionally outside the payload sink. It is
+    # allowed only AFTER a successful file flush, never in `finally`: a `finally` here would announce
     # "wrote ..." even when rendering raised or the write failed, reporting success for
     # a file that may not exist.
     if output_path is not None:
@@ -1605,7 +1641,7 @@ Any other test asserting the old unfiltered default must pass an explicit `--sta
 
 ```bash
 git add science/src/science_tool/tasks_cli.py science/src/science_tool/tasks_display.py science/tests/test_tasks_list_budget.py
-git commit -m "feat(tasks): budget both list formats, default to the working set, add --output"
+git commit -m "feat(tasks): budget both supported list formats, default to the working set, add --output"
 ```
 
 ---
@@ -1638,13 +1674,18 @@ would have silently dropped rival-model gaps and every coverage gap, leaving the
 incomparable exactly as before.
 
 So: `count_issues` reads `layered_claims` as the real TypedDict, and `build_health_report`
-assembles the actual report body **first** and calls the same function on it.
+assembles the actual report body **first** and calls the same function on it. It accepts the
+complete `HealthReport` shape and the same shape after projection (which only narrows registered
+lists and adds metadata). Missing required sections, wrong section types, and malformed required
+nested fields raise immediately; none are normalized to empty collections or zero.
 
 - [ ] **Step 1: Write the failing test**
 
 ```python
 # science/tests/test_health_count_issues.py
 from __future__ import annotations
+
+import pytest
 
 from science_tool.graph.health import count_issues
 
@@ -1657,15 +1698,32 @@ def _report(**overrides: object) -> dict[str, object]:
         "agent_context": [],
         "identity_policy": [],
         "entity_identity": [],
+        "legacy_task_type": [],
+        "invalid_entity_aspects": [],
         "dataset_anomalies": [],
         "schema_invalid": [],
         "tooling_scaffold": [],
         "validation": [],
+        "accepted_validation": [],
+        "unwired_checks": [],
         "managed_artifacts": [],
         "archive_lag": {"done_in_active": 0, "retired_in_active": 0, "missing_completed": 0},
         "layered_claims": _layered(),
-        "cross_paper_evidence": {"findings": []},
-        "prose_epistemics": {"findings": []},
+        "cross_paper_evidence": {
+            "status": "ok",
+            "empty_state": "no_propositions",
+            "summary": {},
+            "findings": [],
+            "propositions": [],
+        },
+        "prose_epistemics": {
+            "applicable": False,
+            "summary": {},
+            "coverage": {},
+            "sources": [],
+            "findings": [],
+        },
+        "total_issues": 0,
     }
     base.update(overrides)
     return base
@@ -1737,8 +1795,73 @@ def test_unresolved_refs_count() -> None:
 
 
 def test_nested_findings_count() -> None:
-    report = _report(cross_paper_evidence={"findings": [{"severity": "error"}] * 3})
+    cross_paper = {
+        "status": "fail",
+        "empty_state": "active",
+        "summary": {},
+        "findings": [{"severity": "error"}] * 3,
+        "propositions": [],
+    }
+    report = _report(cross_paper_evidence=cross_paper)
     assert count_issues(report) == 3
+
+
+@pytest.mark.parametrize(
+    "key",
+    ["validation", "archive_lag", "layered_claims", "cross_paper_evidence", "prose_epistemics"],
+)
+def test_missing_required_section_is_rejected(key: str) -> None:
+    report = _report()
+    del report[key]
+    with pytest.raises(ValueError, match=key):
+        count_issues(report)
+
+
+@pytest.mark.parametrize(
+    ("key", "value"),
+    [("validation", {}), ("archive_lag", []), ("layered_claims", [])],
+)
+def test_wrong_section_type_is_rejected(key: str, value: object) -> None:
+    with pytest.raises(TypeError, match=key):
+        count_issues(_report(**{key: value}))
+
+
+@pytest.mark.parametrize(
+    ("section", "value"),
+    [
+        ("cross_paper_evidence", {}),
+        ("cross_paper_evidence", {"findings": {}}),
+        ("prose_epistemics", {}),
+        ("prose_epistemics", {"findings": None}),
+    ],
+)
+def test_nested_findings_must_exist_and_be_a_list(section: str, value: object) -> None:
+    with pytest.raises((TypeError, ValueError), match="findings"):
+        count_issues(_report(**{section: value}))
+
+
+@pytest.mark.parametrize(
+    "key",
+    ["migration_issues", "rival_model_packets_missing_discriminating_predictions"],
+)
+def test_layered_issue_lists_are_required(key: str) -> None:
+    layered = _layered()
+    del layered[key]
+    with pytest.raises(ValueError, match=key):
+        count_issues(_report(layered_claims=layered))
+
+
+@pytest.mark.parametrize(
+    ("metric", "value"),
+    [
+        ("proposition_claim_layer_coverage", {"numerator": 0, "fraction": 1.0}),
+        ("causal_leaning_identification_coverage", {"numerator": "zero", "denominator": 0, "fraction": 1.0}),
+    ],
+)
+def test_coverage_metrics_reject_missing_or_wrong_typed_fields(metric: str, value: object) -> None:
+    layered = _layered(**{metric: value})
+    with pytest.raises((TypeError, ValueError), match=metric):
+        count_issues(_report(layered_claims=layered))
 ```
 
 - [ ] **Step 2: Run test to verify it fails**
@@ -1769,54 +1892,141 @@ def count_issues(report: Mapping[str, Any]) -> int:
 
     Deliberately NOT a plain row count: ``managed_artifacts`` counts only where
     ``counts_as_issue``, and ``archive_lag`` is one issue however large the lag.
+
+    The input must be a real ``HealthReport`` or its projected counterpart. Projection
+    retains every required section, so treating a missing or wrongly typed section as
+    empty would hide producer/projector contract breaks.
     """
 
+    def _required(container: Mapping[str, Any], key: str, path: str) -> Any:
+        if key not in container:
+            raise ValueError(f"{path} is missing required field {key!r}")
+        return container[key]
+
+    def _mapping(container: Mapping[str, Any], key: str, path: str) -> Mapping[str, Any]:
+        value = _required(container, key, path)
+        if not isinstance(value, Mapping):
+            raise TypeError(f"{path}.{key} must be a mapping, got {type(value).__name__}")
+        return value
+
     def _rows(key: str) -> list[Any]:
-        value = report.get(key) or []
-        return value if isinstance(value, list) else []
+        value = _required(report, key, "health report")
+        if not isinstance(value, list):
+            raise TypeError(f"health report.{key} must be a list, got {type(value).__name__}")
+        return value
 
-    def _findings(key: str) -> list[Any]:
-        section = report.get(key) or {}
-        findings = section.get("findings") if isinstance(section, dict) else None
-        return findings if isinstance(findings, list) else []
+    # Validate the complete root shape, including registered sections that do not
+    # contribute to the count. A projected report retains all of these keys.
+    row_sections = (
+        "unresolved_refs",
+        "unregistered_ref_kinds",
+        "lingering_tags_lines",
+        "agent_context",
+        "identity_policy",
+        "entity_identity",
+        "legacy_task_type",
+        "invalid_entity_aspects",
+        "dataset_anomalies",
+        "schema_invalid",
+        "managed_artifacts",
+        "tooling_scaffold",
+        "validation",
+        "accepted_validation",
+        "unwired_checks",
+    )
+    rows = {key: _rows(key) for key in row_sections}
+    total_issues = _required(report, "total_issues", "health report")
+    if type(total_issues) is not int:
+        raise TypeError(
+            f"health report.total_issues must be an int, got {type(total_issues).__name__}"
+        )
 
-    archive_lag = report.get("archive_lag") or {}
-    lag_total = archive_lag_total(archive_lag) if isinstance(archive_lag, dict) else 0
+    archive_lag = _mapping(report, "archive_lag", "health report")
+    for key in ("done_in_active", "retired_in_active", "missing_completed"):
+        value = _required(archive_lag, key, "health report.archive_lag")
+        if type(value) is not int:
+            raise TypeError(
+                f"health report.archive_lag.{key} must be an int, got {type(value).__name__}"
+            )
+    lag_total = archive_lag_total(cast("TaskArchiveLag", archive_lag))
 
     # layered_claims is a LayeredClaimHealthReport (health.py:185): BOTH issue lists
     # count, and coverage gaps are derived from its two CoverageMetric fields -- there is
     # no top-level `coverage_gaps` key in a report body.
-    layered = report.get("layered_claims") or {}
-    layered_issues = 0
+    layered = _mapping(report, "layered_claims", "health report")
+    migration_issues = _required(layered, "migration_issues", "health report.layered_claims")
+    rival_model_gaps = _required(
+        layered,
+        "rival_model_packets_missing_discriminating_predictions",
+        "health report.layered_claims",
+    )
+    for key, value in (
+        ("migration_issues", migration_issues),
+        ("rival_model_packets_missing_discriminating_predictions", rival_model_gaps),
+    ):
+        if not isinstance(value, list):
+            raise TypeError(
+                f"health report.layered_claims.{key} must be a list, "
+                f"got {type(value).__name__}"
+            )
+    layered_issues = len(migration_issues) + len(rival_model_gaps)
     coverage_gaps = 0
-    if isinstance(layered, dict):
-        layered_issues = len(layered.get("migration_issues") or []) + len(
-            layered.get("rival_model_packets_missing_discriminating_predictions") or []
-        )
-        for key in ("proposition_claim_layer_coverage", "causal_leaning_identification_coverage"):
-            metric = layered.get(key) or {}
-            if not isinstance(metric, dict):
-                continue
-            if metric.get("denominator", 0) > 0 and metric.get("numerator", 0) < metric["denominator"]:
-                coverage_gaps += 1
+    for key in ("proposition_claim_layer_coverage", "causal_leaning_identification_coverage"):
+        metric = _mapping(layered, key, "health report.layered_claims")
+        for field in ("numerator", "denominator"):
+            value = _required(metric, field, f"health report.layered_claims.{key}")
+            if type(value) is not int:
+                raise TypeError(
+                    f"health report.layered_claims.{key}.{field} must be an int, "
+                    f"got {type(value).__name__}"
+                )
+        fraction = _required(metric, "fraction", f"health report.layered_claims.{key}")
+        if not isinstance(fraction, (int, float)) or isinstance(fraction, bool):
+            raise TypeError(
+                f"health report.layered_claims.{key}.fraction must be numeric, "
+                f"got {type(fraction).__name__}"
+            )
+        if metric["denominator"] > 0 and metric["numerator"] < metric["denominator"]:
+            coverage_gaps += 1
+
+    def _findings(key: str) -> list[Any]:
+        section = _mapping(report, key, "health report")
+        findings = _required(section, "findings", f"health report.{key}")
+        if not isinstance(findings, list):
+            raise TypeError(
+                f"health report.{key}.findings must be a list, "
+                f"got {type(findings).__name__}"
+            )
+        return findings
+
+    prose_findings = _findings("prose_epistemics")
+    cross_paper_findings = _findings("cross_paper_evidence")
 
     return (
-        len(_rows("unresolved_refs"))
-        + len(_rows("unregistered_ref_kinds"))
-        + len(_rows("lingering_tags_lines"))
-        + len(_rows("agent_context"))
-        + len(_rows("identity_policy"))
-        + len(_rows("entity_identity"))
+        len(rows["unresolved_refs"])
+        + len(rows["unregistered_ref_kinds"])
+        + len(rows["lingering_tags_lines"])
+        + len(rows["agent_context"])
+        + len(rows["identity_policy"])
+        + len(rows["entity_identity"])
         + layered_issues
         + coverage_gaps
-        + len(_rows("dataset_anomalies"))
-        + len(_rows("schema_invalid"))
+        + len(rows["dataset_anomalies"])
+        + len(rows["schema_invalid"])
         + (1 if lag_total else 0)
-        + sum(1 for f in _rows("managed_artifacts") if isinstance(f, dict) and f.get("counts_as_issue"))
-        + len(_rows("tooling_scaffold"))
-        + len(_rows("validation"))
-        + sum(1 for f in _findings("prose_epistemics") if not isinstance(f, dict) or f.get("counts_as_issue") is True)
-        + len(_findings("cross_paper_evidence"))
+        + sum(
+            1
+            for finding in rows["managed_artifacts"]
+            if isinstance(finding, Mapping) and finding.get("counts_as_issue") is True
+        )
+        + len(rows["tooling_scaffold"])
+        + len(rows["validation"])
+        + sum(
+            1
+            for finding in prose_findings
+            if isinstance(finding, Mapping) and finding.get("counts_as_issue") is True
+        )
+        + len(cross_paper_findings)
     )
 ```
 
@@ -1887,7 +2097,7 @@ satisfy.
 - [ ] **Step 4: Run tests to verify they pass**
 
 Run: `cd science && uv run --frozen pytest tests/test_health_count_issues.py -v`
-Expected: PASS (6 tests)
+Expected: PASS (26 collected)
 
 - [ ] **Step 5: Verify `total_issues` is numerically unchanged**
 
@@ -1919,7 +2129,7 @@ git commit -m "refactor(health): extract count_issues as the single issue-counti
 
 **Interfaces:**
 - Produces: `SEVERITY_SECTIONS`, `COUNTS_AS_ISSUE_SECTIONS`, `UNFILTERED_SECTIONS`,
-  `NESTED_FINDING_SECTIONS`, `SCALAR_SECTIONS`, `SEVERITY_ORDER`,
+  `NESTED_FINDING_SECTIONS`, `MAPPING_SECTIONS`, `SCALAR_SECTIONS`, `SEVERITY_ORDER`,
   `meets_threshold(row, threshold) -> bool`, `UnknownSection(Exception)`.
 
 **Classification, verified against the TypedDicts on 2026-07-24 — do not re-derive:**
@@ -2003,6 +2213,11 @@ def test_counts_as_issue_never_filters_display() -> None:
 
 def test_row_without_severity_survives_every_threshold() -> None:
     assert meets_threshold({"code": "x"}, "error") is True
+
+
+def test_unknown_severity_is_rejected() -> None:
+    with pytest.raises(ValueError, match="unknown health severity"):
+        meets_threshold({"severity": "critical"}, "warn")
 ```
 
 - [ ] **Step 2: Run test to verify it fails**
@@ -2078,6 +2293,9 @@ UNFILTERED_SECTIONS = frozenset(
 # Sections whose rows live under a "findings" key rather than at the top level.
 NESTED_FINDING_SECTIONS = frozenset({"cross_paper_evidence", "prose_epistemics"})
 
+# Registered non-row mappings that pass through projection after a shape check.
+MAPPING_SECTIONS = frozenset({"archive_lag", "layered_claims"})
+
 # Non-list sections that pass through untouched. This is an ALLOW-LIST, not a type test:
 # any other non-list key is refused. `coverage_gaps` is deliberately absent -- it is a local
 # inside `build_health_report`, never a report key (`health.py:341-351`).
@@ -2097,13 +2315,16 @@ def meets_threshold(row: Mapping[str, Any], threshold: str) -> bool:
     severity = row.get("severity")
     if severity is None:
         return True
-    return SEVERITY_ORDER.get(str(severity), 2) >= _THRESHOLD_FLOOR[threshold]
+    severity_name = str(severity)
+    if severity_name not in SEVERITY_ORDER:
+        raise ValueError(f"unknown health severity {severity_name!r}")
+    return SEVERITY_ORDER[severity_name] >= _THRESHOLD_FLOOR[threshold]
 ```
 
 - [ ] **Step 4: Run test to verify it passes**
 
 Run: `cd science && uv run --frozen pytest tests/test_health_projection.py -v`
-Expected: PASS (9 tests, 7 parametrized cases)
+Expected: PASS (16 collected)
 
 - [ ] **Step 5: Commit**
 
@@ -2156,8 +2377,39 @@ def _natural_systems_shaped_report() -> dict[str, object]:
         ],
         "managed_artifacts": [{"counts_as_issue": False, "name": "a"}],
         "unresolved_refs": [{"ref": "r1"}, {"ref": "r2"}],
+        "unregistered_ref_kinds": [],
+        "lingering_tags_lines": [],
+        "agent_context": [],
+        "identity_policy": [],
+        "entity_identity": [],
+        "legacy_task_type": [],
+        "invalid_entity_aspects": [],
+        "dataset_anomalies": [],
+        "schema_invalid": [],
+        "tooling_scaffold": [],
+        "accepted_validation": [],
         "archive_lag": {"done_in_active": 4, "retired_in_active": 0, "missing_completed": 1},
         "unwired_checks": [],
+        "layered_claims": {
+            "proposition_claim_layer_coverage": {"numerator": 0, "denominator": 0, "fraction": 1.0},
+            "causal_leaning_identification_coverage": {"numerator": 0, "denominator": 0, "fraction": 1.0},
+            "rival_model_packets_missing_discriminating_predictions": [],
+            "migration_issues": [],
+        },
+        "cross_paper_evidence": {
+            "status": "ok",
+            "empty_state": "no_propositions",
+            "summary": {},
+            "findings": [],
+            "propositions": [],
+        },
+        "prose_epistemics": {
+            "applicable": False,
+            "summary": {},
+            "coverage": {},
+            "sources": [],
+            "findings": [],
+        },
         "total_issues": 364,
     }
 
@@ -2223,6 +2475,41 @@ def test_nested_findings_are_projected_in_place() -> None:
     projected = project_health_report(report, threshold="error")
     assert len(projected["cross_paper_evidence"]["findings"]) == SECTION_ROW_CAP
     assert projected["cross_paper_evidence"]["status"] == "active"
+
+
+@pytest.mark.parametrize(
+    ("section", "value"),
+    [("validation", {}), ("managed_artifacts", "findings"), ("unresolved_refs", None)],
+)
+def test_registered_row_sections_reject_non_lists(section: str, value: object) -> None:
+    report = _natural_systems_shaped_report()
+    report[section] = value
+    with pytest.raises(TypeError, match=section):
+        project_health_report(report, threshold="warn")
+
+
+@pytest.mark.parametrize(
+    ("section", "value"),
+    [
+        ("cross_paper_evidence", {}),
+        ("cross_paper_evidence", {"findings": {}}),
+        ("prose_epistemics", {}),
+        ("prose_epistemics", {"findings": None}),
+    ],
+)
+def test_nested_sections_require_list_findings(section: str, value: object) -> None:
+    report = _natural_systems_shaped_report()
+    report[section] = value
+    with pytest.raises((TypeError, ValueError), match="findings"):
+        project_health_report(report, threshold="warn")
+
+
+@pytest.mark.parametrize("section", ["archive_lag", "layered_claims"])
+def test_registered_mapping_sections_reject_non_mappings(section: str) -> None:
+    report = _natural_systems_shaped_report()
+    report[section] = []
+    with pytest.raises(TypeError, match=section):
+        project_health_report(report, threshold="warn")
 
 
 def test_unknown_list_section_refuses_rather_than_capping() -> None:
@@ -2335,23 +2622,44 @@ def project_health_report(
             projected[key] = value
             continue
 
-        if key in NESTED_FINDING_SECTIONS and isinstance(value, dict):
-            findings = value.get("findings")
-            if isinstance(findings, list):
-                projected[key] = {
-                    **value,
-                    "findings": _project_section(findings, key, threshold, effective_cap, omitted),
-                }
-                continue
-
-        if isinstance(value, list):
-            projected[key] = _project_section(value, key, threshold, effective_cap, omitted)
+        if key in NESTED_FINDING_SECTIONS:
+            if not isinstance(value, Mapping):
+                raise TypeError(
+                    f"health report section {key!r} must be a mapping, "
+                    f"got {type(value).__name__}"
+                )
+            if "findings" not in value:
+                raise ValueError(f"health report section {key!r} is missing required field 'findings'")
+            findings = value["findings"]
+            if not isinstance(findings, list):
+                raise TypeError(
+                    f"health report section {key!r}.findings must be a list, "
+                    f"got {type(findings).__name__}"
+                )
+            projected[key] = {
+                **value,
+                "findings": _project_section(findings, key, threshold, effective_cap, omitted),
+            }
             continue
 
-        # Everything that reaches here -- dicts AND unregistered scalars -- must be
-        # classified or refused. `_classified` raises UnknownSection.
+        if key in MAPPING_SECTIONS:
+            if not isinstance(value, Mapping):
+                raise TypeError(
+                    f"health report section {key!r} must be a mapping, "
+                    f"got {type(value).__name__}"
+                )
+            projected[key] = value
+            continue
+
+        # Classification happens before the list check so an unknown scalar still raises
+        # UnknownSection rather than being mistaken for a malformed known section.
         _classified(key)
-        projected[key] = value
+        if not isinstance(value, list):
+            raise TypeError(
+                f"health report section {key!r} must be a list, "
+                f"got {type(value).__name__}"
+            )
+        projected[key] = _project_section(value, key, threshold, effective_cap, omitted)
 
     projected["displayed_issues"] = count_issues(projected)
     projected["section_omitted"] = omitted
@@ -2361,7 +2669,7 @@ def project_health_report(
 - [ ] **Step 4: Run test to verify it passes**
 
 Run: `cd science && uv run --frozen pytest tests/test_health_projection_caps.py -v`
-Expected: PASS (16 collected — 12 test functions, one parametrized over 5 scalar values)
+Expected: PASS (25 collected)
 
 - [ ] **Step 5: Commit**
 
@@ -2372,7 +2680,7 @@ git commit -m "feat(health): add per-section caps and count_issues-based display
 
 ---
 
-### Task 11: Wire every `health` output path through the sink
+### Task 11: Wire every `health` payload path through the sink
 
 **Files:**
 - Modify: `science/src/science_tool/graph/health_cli.py` — options, `--list-checks` branch
@@ -2614,7 +2922,8 @@ gate keys off the untouched `report["total_issues"]`:
 
     emit(output_format=output_format, payload=displayed, render_text=_render_report, sink=sink)
     sink.flush()
-    # AFTER a successful flush, never in `finally` — see the same note in Task 7.
+    # This fixed, non-payload success confirmation is the sole permitted sink bypass.
+    # Emit it only AFTER a successful flush, never in `finally` — see Task 7.
     if output_path is not None:
         click.echo(f"wrote the complete health report to {output_path}")
 ```
@@ -2633,12 +2942,12 @@ Expected: PASS. Tests asserting the old unfiltered table must pass `--severity a
 
 ```bash
 git add science/src/science_tool/graph/health_cli.py science/tests/test_health_cli_budget.py
-git commit -m "feat(health): route all output through the sink, add --severity and --output"
+git commit -m "feat(health): route all payload through the sink, add --severity and --output"
 ```
 
 ---
 
-### Task 12: Bulk dumps refuse stdout in both formats
+### Task 12: Bulk dumps refuse stdout in every supported format
 
 **Files:**
 - Modify: `science/src/science_tool/entities_inventory_cli.py:50-61`
@@ -2651,8 +2960,9 @@ git commit -m "feat(health): route all output through the sink, add --severity a
 - Consumes: `BoundedSink`, `lookup`, `build_complete_via`.
 - Produces: `--output PATH` on both commands; both refuse when the stdout payload exceeds budget.
 
-**`data audit`'s default format is text**, and the previous plan guarded only its JSON echoes.
-Both branches route through the sink here. Note the two distinct `render_json` signatures:
+**Entity inventory remains JSON-only. `data audit` supports text and JSON**, and its default
+format is text; the previous plan guarded only its JSON echoes. Both supported `data audit`
+branches route through the sink here. Note the two distinct `render_json` signatures:
 `render_json(violations, outcomes, notes)` under `--fix`, `render_json(violations, notes=notes)`
 otherwise.
 
@@ -2895,6 +3205,8 @@ def entities_inventory_command(project_path: Path, output_format: str, output: P
     )
     sink.write(rendered)
     sink.flush()
+    # The fixed confirmation is non-payload control output and may bypass the sink only
+    # after the file write succeeds.
     if output is not None:
         click.echo(f"wrote the entity inventory to {output}")
 ```
@@ -2997,6 +3309,7 @@ def data_audit_command(
                 sink.echo(f"  [{mark}] {o.violation.path} → {tgt}" + (f"  ({o.reason})" if o.reason else ""))
             sink.echo(f"\n{performed} moved (staged, not committed), {flagged} flagged.")
         sink.flush()
+        # Sole sink-bypass exception: one fixed confirmation after a successful file write.
         if output_path is not None:
             click.echo(f"wrote the data audit report to {output_path}")
         return
@@ -3013,6 +3326,7 @@ def data_audit_command(
             sink.echo(f"  [{v.quadrant.value}] {v.path} → {tgt}")
 
     sink.flush()
+    # Sole sink-bypass exception: one fixed confirmation after a successful file write.
     if output_path is not None:
         click.echo(f"wrote the data audit report to {output_path}")
     if violations:
@@ -3100,7 +3414,8 @@ Three guards, each stronger than the superseded plan's:
 2. **Sink routing is proven per command**, by locating the command's own callback function in
    the AST and requiring it to construct a `BoundedSink` — not by searching its module for a
    substring.
-3. **Regression covers all four wired commands in both formats.**
+3. **Regression covers all four wired commands in every supported format** — table and JSON
+   where both exist, and JSON only for `entities inventory`.
 
 - [ ] **Step 1: Write the guards**
 
@@ -3246,7 +3561,7 @@ Expected: PASS (4 tests)
 
 ```python
 # science/tests/test_budget_regression.py
-"""Actual emitted sizes for every wired command, in both formats.
+"""Actual emitted sizes for every wired command, in every supported format.
 
 The boundary guards prove classification and wiring; this proves size.
 """
@@ -3364,21 +3679,26 @@ def test_output_file_is_written_and_non_empty(project: Path, args: list[str], ta
 @pytest.mark.parametrize(
     ("args", "target_name"),
     [
+        (["tasks", "list", "--status", "proposed", "--format", "json"], "tasks.json"),
         (["tasks", "list", "--status", "proposed"], "tasks.txt"),
+        (["health", "--format", "json"], "health.json"),
         (["health"], "health.txt"),
+        (["entities", "inventory"], "inventory.json"),
+        (["data", "audit"], "audit.txt"),
+        (["data", "audit", "--format", "json"], "audit.json"),
     ],
 )
 def test_no_success_message_when_the_command_fails(
     project: Path, args: list[str], target_name: str, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """The 'wrote ...' line must follow a successful flush, not sit in a `finally`."""
+    """The sole payload-sink bypass must follow a successful flush, not sit in `finally`."""
     from science_tool.budget import sink as sink_module
 
     def _boom(self: object) -> None:
         raise RuntimeError("render failed")
 
     monkeypatch.setattr(sink_module.BoundedSink, "flush", _boom)
-    result = _invoke([*args, "--output", str(project / target_name)])
+    result = _invoke([*_scope_project(args, project), "--output", str(project / target_name)])
     assert result.exit_code != 0
     assert "wrote" not in result.output
 
@@ -3391,7 +3711,8 @@ def test_tasks_list_json_reports_the_full_total(project: Path) -> None:
 - [ ] **Step 6: Run the regression suite**
 
 Run: `cd science && uv run --frozen pytest tests/test_budget_regression.py -v`
-Expected: PASS (19 parametrized cases across all four wired commands in both formats)
+Expected: PASS (24 cases across all four wired commands in every supported format;
+`entities inventory` is JSON-only)
 
 - [ ] **Step 7: Full suite, lint, types**
 
@@ -3428,8 +3749,9 @@ git commit -m "test(budget): add classification, sink-construction, and size reg
 ## Self-Review
 
 **Spec coverage.** Core invariant (Tasks 3, 7, 11, 12); projection/sink split (3, 4, 10);
-registry SSOT with shapes (1); command-total ceiling (3, tested explicitly); per-shape projection
-with refusal for unregistered shapes (1, 10, 12); truncation visible in both formats (6, 11);
+registry SSOT with shapes (1); command-payload ceiling (3, tested explicitly); per-shape projection
+with refusal for unregistered shapes (1, 10, 12); truncation visible in both supported formats
+(6, 11);
 counting semantics (2); uniform `--output` (7, 11, 12, guarded in 13); working-set default (7);
 health classification correction (9); severity as a threshold defaulting to `warn` (9, 10); row
 caps as the real mechanism (10); `total_issues` invariance (8, 10, 11); comparable
@@ -3438,7 +3760,8 @@ caps as the real mechanism (10); `total_issues` invariance (8, 10, 11); comparab
 **Corrections to the superseded plan, each with a covering test.** Ten commands no longer
 claimed to inherit budgets — they are in `DEFERRED` and guarded (Task 1, Task 13). `health`'s
 text branch reaches the sink (Task 11 Steps 4–6, `test_table_output_file_is_non_empty_and_complete`).
-`tasks list` projects both formats (Task 7, `test_table_branch_is_projected_and_stays_within_budget`).
+`tasks list` projects both supported formats (Task 7,
+`test_table_branch_is_projected_and_stays_within_budget`).
 `complete_via` derived from the invocation (Task 5, `test_user_selection_is_preserved`).
 `displayed_issues` via `count_issues` (Task 8, `test_displayed_issues_uses_the_same_counting_rules_as_total`).
 `data audit`'s text branch budgeted with the correct `render_json` signatures (Task 12).
@@ -3448,7 +3771,8 @@ its source, since `health_cli` imports it inside the function body.
 
 **Type consistency.** `CommandBudget(max_chars, shape, max_rows)` used identically in Tasks 1, 3,
 6, 13. `BoundedSink(budget, *, output_path, command_path, complete_via)` constructed identically
-in Tasks 7, 11, 12. `ProjectedRows.rows/.omitted/.total/.truncated` consumed in Tasks 6, 7.
+in Tasks 7, 11, 12; Task 3 enforces that `complete_via` is non-empty exactly for budgeted stdout
+sinks. `ProjectedRows.rows/.omitted/.total/.truncated` consumed in Tasks 6, 7.
 `meets_threshold(row, threshold)` (Task 9) called by `_project_section` (Task 10).
 `count_issues(report)` (Task 8) called by `project_health_report` (Task 10) and its test.
 `build_complete_via(ctx, *, output_hint)` (Task 5) used in Tasks 7, 11, 12. `visible_len` (Task 2)
@@ -3470,7 +3794,8 @@ successful `flush()` instead of sitting in `finally` (Tasks 7 and 11,
 `tasks list` can project `Task` models (Task 4,
 `test_projection_is_generic_over_non_mapping_rows`). The health fixture carries all four
 `layered_claims` keys the renderer reads unconditionally (Task 11). `data audit` appears in the
-regression matrix in both formats (Task 13). `build_complete_via` renders through `shlex.join`
+regression matrix in both supported formats (Task 13); entity inventory remains JSON-only.
+`build_complete_via` renders through `shlex.join`
 (Task 5, `test_values_with_spaces_are_quoted`).
 
 **Third-review corrections.** The `--fix` preflight is gone: it measured a text preview (~6.7k
@@ -3495,6 +3820,19 @@ regressions prove the tree remains intact (Task 12). Entity-inventory regression
 `--project-root` explicitly in both Task 12 and Task 13: its current Click default is
 `Path.cwd()` evaluated when the command module is imported, so changing directory later does not
 retarget the invocation.
+
+**Pre-flight rulings.** The invariant covers payload output: every payload byte goes through the
+sink, while one fixed success confirmation after a successful `--output` flush is the sole
+bypass. The failure regression exercises that ordering in every supported file-output path
+(Tasks 7, 11–13). A budgeted stdout sink rejects missing `complete_via` at construction; file and
+unbudgeted sinks remain valid without it, and no synthesized escape remains (Task 3).
+`count_issues` now accepts only the complete `HealthReport` / projected-report shape and rejects
+missing or wrongly typed root and nested fields instead of converting them to empty/zero
+(Task 8). Unknown severities raise rather than rank as errors (Task 9). The projector rejects
+non-list row sections, malformed nested `findings`, and non-mapping registered object sections
+while preserving registered scalars (Task 10). Format coverage says “every supported format”
+throughout: `tasks list`, `health`, and `data audit` cover table and JSON; entity inventory stays
+JSON-only (Tasks 7, 11–13).
 
 **Known limits, stated.** Guard 2 proves sink *construction*, not that every branch routes
 through it — Task 11 Step 5's grep and the regression suite cover the rest. The `DEFERRED` table
