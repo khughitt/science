@@ -11,13 +11,13 @@ from science_model.entity_schema.profile import ProfileParseError, default_profi
 from science_model.packages.schema import IdentityContext
 from science_tool.project_config import project_entity_schema_version
 
-# Derived, never declared. This is the default profile for a NEWLY AUTHORED dataset, and
-# `default_profile_for_kind` is the single authority on that. A literal here would be a second
-# declaration of the same fact, and the two would drift the moment either moved -- which is
-# exactly what happened: this constant sat at dataset/1.0 while the default moved to 2.0, so
-# every commons-born scaffold would have re-created the `status: REPLACE` crash (fb-2026-07-12-006)
-# that the dataset/2.0 migration exists to close. Pinned semantics are requested by passing an
-# explicit `schema_profile`, not by freezing this default.
+# Derived, never declared. This is the fixed generation-2 default for commons callers;
+# project writers must use `project_dataset_schema_profile()` so their default honors the
+# project's `entity_schema_version` pin. `default_profile_for_kind` remains the single authority:
+# a literal here would be a second declaration of the same fact, and the two would drift the
+# moment either moved. That happened when this constant sat at dataset/1.0 while the default moved
+# to 2.0, so every commons-born scaffold would have re-created the `status: REPLACE` crash
+# (fb-2026-07-12-006) that the dataset/2.0 migration exists to close.
 BASE_DATASET_SCHEMA_PROFILE = default_profile_for_kind("dataset").render()
 
 

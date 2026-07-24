@@ -134,8 +134,11 @@ only what is *permitted*, so a future project-side writer that reaches for the r
 constant fails the build and is forced through `project_dataset_schema_profile`. New modules
 are caught, not silently exempted.
 
-The module that *defines* the constant (`identity_authoring.py`) is excluded (definition is
-not consumption). Stated limit: matching the bare attribute name would also flag an unrelated
+The defining module (`identity_authoring.py`) is scanned too. The guard exempts only the
+constant's exact top-level assignment target; it still rejects any `ast.Name` load there.
+The bite proof temporarily adds a real `BASE_DATASET_SCHEMA_PROFILE` load to that module and
+requires the boundary failure to name `identity_authoring.py`, then restores the file and
+requires green. Stated limit: matching the bare attribute name would also flag an unrelated
 symbol sharing the exact name `BASE_DATASET_SCHEMA_PROFILE`; none exists in this tree and the
 name is specific enough that a collision is implausible.
 
@@ -149,7 +152,8 @@ Behavioral tests exercise the real writers against constructed projects:
   `science-entity-base/1.0+dataset/2.0` (no regression).
 - An explicit caller-provided `schema_profile` survives unchanged in both writers.
 - The pin reader returns `3`/`2`/`None` for pinned-3/pinned-2/unpinned projects.
-- The import-choke guard test (§4).
+- The import-choke guard tests, including assignment-target allowance and defining-module
+  load rejection (§4).
 
 Verification gate: full `science` and `science/model` suites, `ruff check`, `pyright`.
 

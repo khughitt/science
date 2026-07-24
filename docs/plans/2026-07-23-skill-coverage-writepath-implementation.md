@@ -479,6 +479,9 @@ Deny-by-default: the whole `science_tool` tree is scanned and only the commons p
 allowlisted, so a future project-side writer that reaches for the raw gen-2 constant fails
 here and is forced through the resolver.
 
+The defining module is scanned too. Only the constant's top-level assignment target is
+exempt; any load of the constant there remains forbidden.
+
 Known limit, stated rather than hidden: matching the bare name as an attribute would also flag
 an unrelated symbol that happened to share the exact name `BASE_DATASET_SCHEMA_PROFILE`. No such
 collision exists in this tree, and the name is specific enough that one is implausible.
@@ -487,19 +490,32 @@ collision exists in this tree, and the name is specific enough that one is impla
 from __future__ import annotations
 
 import ast
+import sys
 from pathlib import Path
 
 _SCIENCE_SRC = Path(__file__).resolve().parents[1] / "src" / "science_tool"
 _CONSTANT = "BASE_DATASET_SCHEMA_PROFILE"
-_DEFINING_MODULE = _SCIENCE_SRC / "identity_authoring.py"  # definition, not consumption
+_DEFINING_MODULE = _SCIENCE_SRC / "identity_authoring.py"
 
 # Only commons callers may reference the fixed gen-2 constant (gen-2 is correct for commons).
 _ALLOWED_DIR = _SCIENCE_SRC / "commons"
 
 
 def _references_constant(path: Path) -> bool:
-    """True if the module names the constant in any binding or access form."""
+    """True if the module contains a forbidden constant binding or access."""
     tree = ast.parse(path.read_text(encoding="utf-8"))
+    defining_assignment_target = None
+    if path == _DEFINING_MODULE:
+        defining_assignment_target = next(
+            (
+                target
+                for statement in tree.body
+                if isinstance(statement, ast.Assign)
+                for target in statement.targets
+                if isinstance(target, ast.Name) and target.id == _CONSTANT
+            ),
+            None,
+        )
     for node in ast.walk(tree):
         if isinstance(node, ast.ImportFrom):
             module = node.module or ""
@@ -509,17 +525,32 @@ def _references_constant(path: Path) -> bool:
                 if alias.name == "*" and module.endswith("identity_authoring"):
                     return True
         elif isinstance(node, ast.Name) and node.id == _CONSTANT:
+            if node is defining_assignment_target:
+                continue
             return True
         elif isinstance(node, ast.Attribute) and node.attr == _CONSTANT:
             return True
     return False
 
 
+def test_defining_module_assignment_target_is_allowed():
+    assert not _references_constant(_DEFINING_MODULE)
+
+
+def test_defining_module_constant_load_is_forbidden(tmp_path: Path, monkeypatch):
+    defining_module = tmp_path / "identity_authoring.py"
+    defining_module.write_text(
+        f'{_CONSTANT} = "fixed-default"\nresolved = {_CONSTANT}\n',
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(sys.modules[__name__], "_DEFINING_MODULE", defining_module)
+
+    assert _references_constant(defining_module)
+
+
 def test_base_dataset_schema_profile_reference_is_commons_only():
     offenders = []
     for path in _SCIENCE_SRC.rglob("*.py"):
-        if path == _DEFINING_MODULE:
-            continue
         if _ALLOWED_DIR in path.parents:
             continue
         if _references_constant(path):
@@ -533,24 +564,17 @@ def test_base_dataset_schema_profile_reference_is_commons_only():
 - [ ] **Step 2: Run test to verify current state**
 
 Run: `cd science && uv run --frozen pytest tests/test_dataset_profile_boundary.py -v`
-Expected: PASS — Tasks 3 and 4 already removed the `datasets_catalog.py`, `datasets/cli.py`, and `datasets_register.py` references, so only `commons/**` references remain. If it FAILS, the offenders list names a module whose reference was missed in Task 3/4 — fix that module, then re-run.
+Expected: PASS — all three focused/boundary tests pass. Tasks 3 and 4 already removed the `datasets_catalog.py`, `datasets/cli.py`, and `datasets_register.py` references, so only `commons/**` references and the exempt top-level defining assignment remain. If it FAILS, the offenders list names a module whose reference was missed in Task 3/4 — fix that module, then re-run.
 
-- [ ] **Step 3: Prove the guard bites — including the attribute-access form**
+- [ ] **Step 3: Prove the guard bites inside the defining module**
 
-The point of this guard is to catch the spelling a from-import-only check misses. Prove both:
-
-First, the from-import form — temporarily add to the top of `science/src/science_tool/datasets_catalog.py`:
+The stronger rule scans `identity_authoring.py` rather than excluding it wholesale. Temporarily
+add a real load immediately after the constant's assignment:
 ```python
-from science_tool.identity_authoring import BASE_DATASET_SCHEMA_PROFILE  # temp
+_BOUNDARY_GUARD_MUTATION = BASE_DATASET_SCHEMA_PROFILE  # temp
 ```
-Run: `cd science && uv run --frozen pytest tests/test_dataset_profile_boundary.py -v` → FAIL, offenders lists `datasets_catalog.py`. Revert.
-
-Then the attribute-access form — the spelling the old `ImportFrom`-only guard let through. Temporarily add to the top of `science/src/science_tool/datasets_catalog.py`:
-```python
-import science_tool.identity_authoring as _ia  # temp
-_ = _ia.BASE_DATASET_SCHEMA_PROFILE  # temp
-```
-Run: `cd science && uv run --frozen pytest tests/test_dataset_profile_boundary.py -v` → FAIL, offenders lists `datasets_catalog.py` (proving the `Attribute` branch fires). Revert both lines.
+Run: `cd science && uv run --frozen pytest tests/test_dataset_profile_boundary.py -v` → FAIL,
+with `identity_authoring.py` in the offenders list. Revert the temporary load.
 
 - [ ] **Step 4: Re-run to confirm green after revert**
 
