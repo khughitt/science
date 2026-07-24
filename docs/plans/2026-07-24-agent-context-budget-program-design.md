@@ -10,6 +10,11 @@
 > narrow to carry a command-wide budget (there are two emitters and three payload shapes); the
 > proposed AST guard would have failed on two out-of-scope modules; and `--since` was specified
 > as file selection with no row-level date semantics.
+>
+> **Rev 3 (2026-07-24)** — second review round, three findings, all verified and accepted:
+> truncation cannot happen post-render in the sink (split into projection + sink); the `health`
+> severity default was underdetermined across 17 heterogeneous sections; and pinning width alone
+> does not make character counts environment-independent because color adds ANSI.
 
 ## Motivation
 
@@ -205,36 +210,66 @@ There is no flag that makes stdout unbounded. Completeness is obtained by choosi
 by defeating a ceiling. This is what makes the escape hatch honest — the previous draft promised
 a "full set" on stdout while also enforcing an unconditional ceiling, which cannot both hold.
 
-**Canonicalize — a `BoundedSink` beneath both emitters.** A command-level sink owns the
-character budget for **the whole invocation**, not per-emitter-call. Both `emit` and
-`emit_query_rows` accept it and write through it, so a command emitting 21 tables gets one
-total ceiling rather than 21 independent ones. The sink is the new abstraction; the two
-emitters keep their existing payload shapes.
+**Two phases, and the split is load-bearing.** Budgeting happens in two stages that must not be
+collapsed:
 
-Budgets are declared per command in **one registry module** — a single SSOT rather than
-per-command constants.
+1. **Projection — semantic, before serialization, format-aware.** Decides *what* to include,
+   knows how many items it dropped, and produces a payload that is still structurally valid.
+2. **Sink — routing and measurement, after rendering.** Chooses stdout or file, measures the
+   final size, and enforces the ceiling as a backstop.
 
-**Payload shapes are preserved, not flattened.** `health` keeps its heterogeneous report and
-`entities inventory` keeps its versioned `schema_version: "2"` document. The sink governs
-*whether and how much* reaches stdout, never the payload's schema.
+A post-render sink holds only characters. It cannot count omitted rows, cannot insert
+`truncation` metadata into an already-serialized document, and cannot cut without risking a
+severed table box or a split ANSI escape. **Semantic truncation therefore never happens in the
+sink.** If a projected payload still exceeds the ceiling, the sink raises — that is a budget
+misconfiguration to fix, not something to trim blindly.
 
-**Truncation semantics, per format.**
+**Both phases are scoped to the whole command invocation, not to one emitter call.** A single
+`BoundedSink` is constructed per invocation and threaded through both `emit` and
+`emit_query_rows`, so `health` — which renders 21 tables through `emit`
+(`graph/health_cli.py:75–436`) — gets **one command-total ceiling** rather than 21 independent
+per-section ones. Projection likewise runs once over the whole report, not once per section.
 
-- *Text/table:* truncated output ends with a footer naming what was withheld and the exact
-  command to obtain all of it.
-- *JSON:* truncation is recorded **inside the payload** as a `truncation` object
-  (`{omitted, total, complete_via}`), never as a side-channel `echo` — `emit`'s docstring
-  forbids diagnostics on the JSON branch, and a consumer parsing stdout must be able to detect
-  truncation from the document itself.
-- *Versioned documents* (`entities inventory`): the sink **refuses** rather than truncates.
-  Emitting a partial document under a `schema_version` contract would be a lie about the
-  contract. Past budget the command exits non-zero telling the caller to pass `--output`.
+**Budgets live in one registry module**, keyed by command path: a single SSOT rather than
+constants scattered across call sites. The registry is also what the completeness guard below
+walks.
 
-**Counting semantics.** The budget counts **characters of rendered output**, measured after
-rendering. For determinism, table rendering pins an explicit console width rather than
-inheriting Rich's non-TTY default, so the same data costs the same budget regardless of
-environment. This is for reproducible accounting, not size reduction — width was measured at
-8% on `tasks list`.
+**Projections, per payload shape.**
+
+| Shape | Projection |
+|---|---|
+| Rows (`tasks list`) | Row projection: keep the first N by the command's sort, record `omitted`/`total`. |
+| Heterogeneous report (`health`) | An explicit `health` projection — see below. Generic row-dropping cannot work across 17 differently-shaped sections. |
+| Versioned document (`entities inventory`) | **No projection exists. Refuse.** A partial document under a `schema_version: "2"` contract would be a lie about the contract; past budget the command exits non-zero telling the caller to pass `--output`. |
+
+Any future payload shape without a registered projection refuses rather than degrading — the
+fail-early rule, applied to output.
+
+**Emitters keep their payload shapes.** `health` keeps its heterogeneous report and
+`entities inventory` keeps its versioned document. Projection narrows content within a shape;
+it never flattens one shape into another.
+
+**Truncation is visible in every format.** Text output ends with a footer naming what was
+withheld and the exact command to obtain all of it. JSON carries a `truncation` object
+(`{omitted, total, complete_via}`) **inside the payload** — `emit`'s docstring forbids
+diagnostics on the JSON branch, and a consumer parsing stdout must be able to detect truncation
+from the document itself. This is only possible because projection runs *before* serialization.
+
+**Counting semantics.** The budget counts **ANSI-stripped visible characters**, at a pinned
+console width.
+
+- *Width* is pinned rather than inherited from Rich's non-TTY default so identical data costs
+  identical budget. This is for reproducible accounting, not size reduction — width was
+  measured at 8% on `tasks list`.
+- *Color* is excluded from the count deliberately. `resolve_color_policy`
+  (`styles.py:126`) returns `NEVER` unless `FORCE_COLOR` or `--color` is set, so the
+  agent-facing path emits no ANSI at all and visible characters equal emitted characters there.
+  Counting visible characters keeps **row selection identical across color modes**, which
+  counting raw output would not.
+- The stated trade-off: under `--color always` or `FORCE_COLOR`, emitted bytes exceed the
+  budget by the ANSI overhead. That is a human at a terminal, not an agent, and the design
+  accepts it rather than making budgets color-dependent. A test asserts the non-TTY default
+  policy is `NEVER`, since that assumption is what makes the trade-off safe.
 
 **The file sink is uniform.** Every budgeted command accepts `--output PATH`, writes the
 complete payload there, and prints a one-line summary plus the path. Today only
@@ -254,7 +289,38 @@ The defect being fixed is the host's *silent* truncation; the replacement must n
 it. This follows the project's fail-early / explicit-over-defensive rule.
 
 **Default filters shift to the working set.** `tasks list` defaults to active+blocked (~3.4k
-vs ~41k tokens). `health` defaults to error severity, with a flag for warnings.
+vs ~41k tokens).
+
+**The `health` projection, specified.** "Defaults to error severity" was underdetermined —
+`health` has 17 sections of three different shapes, and only some carry a `severity` field.
+The projection is:
+
+- **Flag:** `--severity {error,warn,all}`, default `error`. Applies identically to `table` and
+  `json`, so the JSON path actually shrinks (today it is 163,343 chars).
+- **Severity-bearing sections** (`validation`, `schema_invalid`, `dataset_anomalies`) are
+  filtered by row severity. `validation` alone is 361 rows and 99.5% of current output.
+- **`counts_as_issue` sections** (`managed_artifacts`, `prose_epistemics`, `cross_paper_evidence`)
+  keep the rows where that flag is true; the flag *is* their severity signal.
+- **Sections with neither** (`archive_lag`, `unregistered_ref_kinds`, `tooling_scaffold`,
+  `agent_context`, `entity_identity`, `identity_policy`, `unresolved_refs`, `layered_claims`)
+  are small and always shown in full. They are not the cost problem.
+- **`unwired_checks` is never filtered, at any severity.** `health.py:60` deliberately keeps
+  unwired checks out of `total_issues` so a report containing one cannot claim the project is
+  clean. Hiding them behind a severity default would defeat that.
+
+**`total_issues` keeps meaning *total*, not *displayed*.** It is the clean-report gate
+(`health_cli.py:158`) and is summed across all 17 sections (`health.py:357`). Redefining it as
+a displayed count would let `health` announce "Project is clean" while findings were merely
+filtered out — the same class of defect as a silent read truncation. The projection instead
+adds a sibling `displayed_issues` plus per-section `omitted` counts, and the text footer reads:
+
+```
+showing 3 of 361 validation findings (severity: error)
+  358 warning(s) hidden — rerun with --severity all
+```
+
+So the invariant is: `total_issues` answers "is this project clean?", `displayed_issues`
+answers "how much am I looking at?", and the two never silently diverge.
 
 Precedent: `curate inventory` already ships `--recently-modified-top-k` (default 20), so this
 pattern is established in the codebase rather than novel.
@@ -373,10 +439,21 @@ files directly would change where the bytes live without changing what agents do
 - Footer behaviour: truncated text output names the withheld count and the escape command.
 - JSON truncation metadata: the `truncation` object appears **in the payload**, stdout on the
   JSON branch stays a single parseable document, and no diagnostics leak into it.
+- Projection-before-serialization: a truncated table is never cut mid-box and a truncated JSON
+  document always parses.
+- Unregistered payload shapes refuse rather than degrade.
 - Versioned-document refusal: `entities inventory` past budget exits non-zero rather than
   emitting a partial `schema_version: "2"` document.
+- Sink backstop: a projected payload that still exceeds the ceiling raises rather than being
+  blindly trimmed.
 - `--output` completeness: the file sink is never truncated, for every budgeted command.
+- `health` projection: `--severity` filters severity-bearing and `counts_as_issue` sections in
+  both formats; sections with neither signal are shown in full; `unwired_checks` survives every
+  severity level; `total_issues` stays the unfiltered clean-report gate while `displayed_issues`
+  tracks what was shown; a filtered report never prints "Project is clean".
 - Width determinism: identical data costs identical budget across `COLUMNS` values.
+- Color independence: row selection is identical under `NO_COLOR`, default, and
+  `FORCE_COLOR=1`; the non-TTY default color policy is `NEVER`.
 - `tasks list --since`: exact cutoff (`completed == since` is included); a boundary month
   holding tasks on both sides of the cutoff; a task with no `completed:` date is excluded and
   counted on stderr; retired tasks included by default and excluded under `--status done`;
