@@ -273,8 +273,9 @@ class ProjectConfig(BaseModel):
     #
     # Declaring the field does NOT, on its own, catch a MISSPELLED one -- `extra="allow"` carries
     # `entity_schema_verison: 2` into `model_extra`, preserved and ignored, leaving the project
-    # silently unmigrated while its author believes otherwise. That is what `_reject_near_miss_keys`
-    # below is for. A pin nobody can typo is the whole value of "a project says".
+    # silently unmigrated while its author believes otherwise. That is what
+    # `_validate_entity_schema_version` below is for. A pin nobody can typo is the whole value of
+    # "a project says".
     entity_schema_version: Literal[1, 2, 3] | None = None
 
     @model_validator(mode="before")
@@ -302,8 +303,8 @@ class ProjectConfig(BaseModel):
 
     @model_validator(mode="before")
     @classmethod
-    def _reject_near_miss_keys(cls, raw: Any) -> Any:
-        reject_near_miss_keys(raw)
+    def _validate_entity_schema_version(cls, raw: Any) -> Any:
+        validated_entity_schema_version(raw)
         return raw
 
     @model_validator(mode="after")

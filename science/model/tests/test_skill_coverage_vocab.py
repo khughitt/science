@@ -12,9 +12,8 @@ def test_domain_keys_are_exactly_the_v1_set():
     assert DOMAIN_KEYS == frozenset({"molecular-measurement"})
 
 
-def test_enrollment_status_members():
-    assert EnrollmentStatus.ENROLLED == "enrolled"
-    assert EnrollmentStatus.OUT_OF_DOMAIN == "out-of-domain"
+def test_enrollment_status_values_are_exactly_the_v1_set():
+    assert {status.value for status in EnrollmentStatus} == {"enrolled", "out-of-domain"}
 
 
 def test_enrollment_statuses_are_derived_from_the_enum():

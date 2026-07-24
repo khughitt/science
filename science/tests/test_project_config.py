@@ -189,6 +189,23 @@ def test_yaml_enrolled_domain_loads(tmp_path: Path) -> None:
     assert domain_enrollment(config, "molecular-measurement") is EnrollmentStatus.ENROLLED
 
 
+def test_yaml_float_generation_cannot_authorize_enrolled_domain(tmp_path: Path) -> None:
+    root = tmp_path / "float-generation"
+    _write_yaml(
+        root,
+        "name: float-generation\n"
+        "entity_schema_version: 3.0\n"
+        "skill_coverage:\n"
+        "  domains:\n"
+        "    molecular-measurement: enrolled\n",
+    )
+    with pytest.raises(
+        ValidationError,
+        match=r"entity_schema_version must be 1, 2, or 3 \(an integer\)",
+    ):
+        load_project_config(root)
+
+
 def test_yaml_out_of_domain_loads(tmp_path: Path) -> None:
     root = tmp_path / "outofdomain"
     _write_yaml(
