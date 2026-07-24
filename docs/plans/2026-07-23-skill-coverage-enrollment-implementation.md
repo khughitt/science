@@ -346,7 +346,7 @@ git commit -m "feat(config): parse the closed skill_coverage block; reject malfo
 
 **Notes for the implementer:** `entity_schema_version` is `Literal[1, 2, 3] | None`; absence is `None`. The rule requires the pin to be exactly `3`. Only domains that are BOTH `EnrollmentStatus.ENROLLED` AND in `GENERATION_3_DOMAINS` trigger it — an `out-of-domain` declaration never requires a pin. Add `GENERATION_3_DOMAINS` to the existing `from science_model.skill_coverage import ...` line from Task 2.
 
-- [ ] **Step 1: Add integration/regression tests**
+- [ ] **Step 1: Write the failing test**
 
 Add to `science/tests/test_project_config.py`:
 
@@ -548,7 +548,7 @@ git commit -m "feat(config): add domain_enrollment status resolver"
 
 **Notes for the implementer:** `load_project_config(project_root)` reads `science.yaml` under `project_root` and calls `ProjectConfig.model_validate`. Mirror the existing `test_loads_minimal_existing_yaml` style: create `project_root = tmp_path / "<name>"`, `project_root.mkdir()`, write `science.yaml`, then call `load_project_config(project_root)`. `load_project_config`, `pytest`, `ValidationError`, and `Path` are already imported at the top of the test file.
 
-- [ ] **Step 1: Write the failing test**
+- [ ] **Step 1: Add integration/regression tests**
 
 Add to `science/tests/test_project_config.py`:
 
