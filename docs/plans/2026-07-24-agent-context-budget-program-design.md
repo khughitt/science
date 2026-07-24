@@ -4,6 +4,12 @@
 > three sequenced slices: (1) CLI output budgets, (2) guidance + the archive-query capability
 > it depends on, (3) task storage split. Slices 1 and 2 are independently shippable; slice 3
 > is gated on both landing.
+>
+> **Rev 2 (2026-07-24)** — revised after design review. Four findings, all verified against the
+> code and accepted: the stdout escape hatch was self-contradictory; `emit_query_rows` is too
+> narrow to carry a command-wide budget (there are two emitters and three payload shapes); the
+> proposed AST guard would have failed on two out-of-scope modules; and `--since` was specified
+> as file selection with no row-level date semantics.
 
 ## Motivation
 
@@ -107,16 +113,34 @@ long path strings are duplicated across the `Path` and `Message` columns.
 **Design consequence:** the fix is row and column selection, not terminal width. Pinning a
 console width would have produced an 8% improvement on the surface that most needed one.
 
-### The emitter already exists, and the offenders bypass it
+### There is no single choke point — there are two emitters and three shapes
 
-`emit_query_rows` (`science/src/science_tool/output.py:73`) is a shared emitter owning **both**
-the JSON and Rich-table paths, adopted by 13 modules. Three modules bypass it —
-`tasks_display.py`, `graph/health_cli.py`, `verdict/cli.py` — and the top offenders live
-exactly there (`tasks list` via `render_tasks_table`, `health` via `graph/health_cli.py`).
-`entities inventory` dumps raw JSON without passing through it.
+`science/src/science_tool/output.py` exposes **two** emitters, not one:
 
-This is the same **canonicalize → migrate → guard** shape used by the toolkit convergence
-program, with the choke point already built and mostly adopted.
+- `emit_query_rows` (line 73) — row-shaped output, owning both the JSON and Rich-table paths.
+  12 modules adopt it.
+- `emit` (line 18) — an arbitrary structured `payload` plus a `render_text` callback. 41 modules
+  import from `output`. Its docstring pins a contract that matters here: *"Diagnostics must
+  never reach stdout through this function: the JSON branch writes only `json.dumps(payload)`."*
+
+Agent-facing output comes in three shapes, and the two worst offenders are **not** row-shaped:
+
+| Shape | Example | Mechanism |
+|---|---|---|
+| Rows | `tasks list` | `emit_query_rows`, or a bypass |
+| Heterogeneous report | `health` | `emit(payload=report, render_text=…)`, rendering **21 separate tables** (`graph/health_cli.py:75–436`) |
+| Versioned document | `entities inventory` | `inventory.model_dump_json(indent=2)` + `click.echo` (`entities_inventory_cli.py:50`) — a pinned `schema_version: "2"` contract with `entities[]`, `content_hash`, `audit_hash` |
+
+**Rich tables are constructed in six production modules**, not one plus three bypasses:
+`benchmark_cli.py` (16 sites), `graph/health_cli.py` (21), `datasets/cli.py` (3), `output.py`,
+`tasks_display.py`, `verdict/cli.py`. `benchmark_cli.py` and `datasets/cli.py` carry
+agent-facing query tables that are all under 20k chars.
+
+**Design consequences.** Flattening `health` or `entities inventory` into `{"rows": …}` would
+break their consumers. Calling `emit_query_rows` once per `health` section would enforce 21
+per-section ceilings rather than one command-total ceiling. And a blanket "no `Table` outside
+`output.py`" guard would fail immediately on two modules this program has no reason to touch.
+The budget therefore has to live **beneath** both emitters, at the command level.
 
 ### Working set vs. backlog
 
@@ -173,54 +197,104 @@ make it unfollowable rather than merely expensive.
 
 ### Slice 1 — the context-budget contract
 
-**Canonicalize.** `emit_query_rows` becomes the sole emitter for row-shaped output and gains a
-budget parameter. Every agent-facing query command declares its budget (row count and a
-character ceiling) in **one registry module** — a single SSOT rather than per-command constants.
+**The core invariant.** One sentence governs everything below:
 
-**Migrate.** Route the three bypasses (`tasks_display.py`, `graph/health_cli.py`,
-`verdict/cli.py`) through the emitter. `entities inventory` gains the same treatment for its
-JSON path.
+> **stdout is always budgeted; `--output PATH` is always complete.**
 
-**Enforcement: per-command defaults plus an emitter backstop.** Sensible per-command defaults
-do the real work; the emitter also enforces an absolute ceiling so a project several times the
-size of natural-systems cannot blow context on an unfiltered command. The backstop exists
-because a CI-only regression test catches growth in the fixture, not in the field.
+There is no flag that makes stdout unbounded. Completeness is obtained by choosing a sink, not
+by defeating a ceiling. This is what makes the escape hatch honest — the previous draft promised
+a "full set" on stdout while also enforcing an unconditional ceiling, which cannot both hold.
 
-**Truncation is explicit, never silent.** Past budget, the emitter prints the budgeted rows
-and a footer naming what was withheld and exactly how to obtain it:
+**Canonicalize — a `BoundedSink` beneath both emitters.** A command-level sink owns the
+character budget for **the whole invocation**, not per-emitter-call. Both `emit` and
+`emit_query_rows` accept it and write through it, so a command emitting 21 tables gets one
+total ceiling rather than 21 independent ones. The sink is the new abstraction; the two
+emitters keep their existing payload shapes.
+
+Budgets are declared per command in **one registry module** — a single SSOT rather than
+per-command constants.
+
+**Payload shapes are preserved, not flattened.** `health` keeps its heterogeneous report and
+`entities inventory` keeps its versioned `schema_version: "2"` document. The sink governs
+*whether and how much* reaches stdout, never the payload's schema.
+
+**Truncation semantics, per format.**
+
+- *Text/table:* truncated output ends with a footer naming what was withheld and the exact
+  command to obtain all of it.
+- *JSON:* truncation is recorded **inside the payload** as a `truncation` object
+  (`{omitted, total, complete_via}`), never as a side-channel `echo` — `emit`'s docstring
+  forbids diagnostics on the JSON branch, and a consumer parsing stdout must be able to detect
+  truncation from the document itself.
+- *Versioned documents* (`entities inventory`): the sink **refuses** rather than truncates.
+  Emitting a partial document under a `schema_version` contract would be a lie about the
+  contract. Past budget the command exits non-zero telling the caller to pass `--output`.
+
+**Counting semantics.** The budget counts **characters of rendered output**, measured after
+rendering. For determinism, table rendering pins an explicit console width rather than
+inheriting Rich's non-TTY default, so the same data costs the same budget regardless of
+environment. This is for reproducible accounting, not size reduction — width was measured at
+8% on `tasks list`.
+
+**The file sink is uniform.** Every budgeted command accepts `--output PATH`, writes the
+complete payload there, and prints a one-line summary plus the path. Today only
+`entities inventory` has `--output`; `tasks list` and the rest gain it. `--all` keeps its
+existing meaning on `tasks list` — *include done and retired* (`tasks_cli.py:491`), a
+**selection** flag — and does not bypass the ceiling.
+
+The corrected footer:
 
 ```
-showing 12 of 209 rows (budget: 12 active/blocked)
-  full set:  science tasks list --all
-  machine:   science tasks list --format json --output tasks.json
+showing 12 of 209 rows (budget: 12 rows / 8,000 chars)
+  widen selection:  science tasks list --status proposed
+  complete output:  science tasks list --format json --output tasks.json
 ```
 
 The defect being fixed is the host's *silent* truncation; the replacement must not reproduce
 it. This follows the project's fail-early / explicit-over-defensive rule.
 
-**Bulk dumps get a file, not stdout.** `entities inventory` and `data audit` refuse to write
-past-budget payloads to stdout, requiring `--output PATH` and printing a one-line summary plus
-the path. For `entities inventory` this is a default change only.
-
 **Default filters shift to the working set.** `tasks list` defaults to active+blocked (~3.4k
-vs ~41k tokens). `health` defaults to error severity, with `--all` for warnings.
+vs ~41k tokens). `health` defaults to error severity, with a flag for warnings.
 
 Precedent: `curate inventory` already ships `--recently-modified-top-k` (default 20), so this
 pattern is established in the codebase rather than novel.
 
-**Guard.** Two tests:
+**Guard — scoped by derivation, not by blanket rule.** Three tests:
 
-1. An **AST guard** asserting no module outside `output.py` constructs a `rich.table.Table` or
-   prints one, with scope **derived from the import closure** rather than a hand-listed set of
-   modules — a guard that enumerates its own scope has a hole by construction.
-2. A **budget regression test** over a fixture project asserting every declared ceiling holds.
+1. **Registry completeness.** Walk the click command tree from `main` and assert every leaf
+   command is either registered with a budget or carries an explicit exemption with a reason.
+   Scope is derived from the CLI tree, so a new command cannot silently escape — a guard that
+   hand-lists its own scope has a hole by construction.
+2. **Sink routing.** For commands *in the registry*, assert output reaches stdout only through
+   a `BoundedSink`. Deliberately **not** a blanket "no `Table` outside `output.py`" rule: six
+   modules construct tables, and `benchmark_cli.py` / `datasets/cli.py` are under 20k chars and
+   out of scope by design.
+3. **Budget regression.** Per-command character ceilings asserted against a fixture project.
 
 ### Slice 2 — guidance, and the capability it depends on
 
-**Add the missing query first.** Extend `tasks list` with `--since <date>`, reading
-`done/*.md` for months intersecting the window and merging with `active.md`. This keeps one
-task-query surface and reuses the existing `--related` / `--group` / `--aspect` filters;
-`list_tasks` gains an archive-reading path.
+**Add the missing query first.** Extend `tasks list` with `--since <date>`, reusing the
+existing `--related` / `--group` / `--aspect` filters; `list_tasks` gains an archive-reading
+path. Month-file selection is **only a read optimization** — the authoritative filter is
+row-level, and the two must not be confused:
+
+- **Row filter.** A task matches when `task.completed >= since`. Selecting archive months that
+  intersect the window narrows which files are parsed; it never decides membership. A boundary
+  month legitimately holds tasks on both sides of the cutoff.
+- **`completed` is a *closed* date, not a success date.** Both `complete_task`
+  (`tasks.py:599`) and `retire_task` (`tasks.py:631`) set `task.completed = date.today()`.
+  So `--since` means "closed on or after D", and retired tasks participate by default;
+  `--status done` narrows to successful completions.
+- **Missing `completed` is excluded and reported, never guessed.** `_destination_for`
+  (`tasks_archive.py:120`) routes a task with no `completed:` date to *today's* month file and
+  flags `missing_completed`. File location is therefore not evidence of date — an undated task
+  finished in April can sit in `done/2026-07.md`. Such tasks are excluded from `--since` results
+  and their count is reported on stderr, so a caller learns the answer is incomplete instead of
+  silently receiving a wrong window. natural-systems already has one (`missing_completed: 1` in
+  its current `health` output).
+- **`--since` implies closed tasks.** Open tasks have no `completed` date, so combining
+  `--since` with a non-terminal `--status` (`active`, `proposed`, `blocked`, `deferred`) is a
+  usage error and fails early rather than returning a confusingly empty set.
 
 **Then rewrite the eight guidance sites** in the table above to use filtered CLI forms, and
 fix `commands/next-steps.md:160` to use `tasks list --status done --since` instead of scanning
@@ -266,7 +340,10 @@ files directly would change where the bytes live without changing what agents do
 - Changing `doc/plans/` document sizes or splitting plan documents. They are the dominant
   compaction-band population and worth a later look, but plan authoring is a separate concern
   from task storage and CLI budgets.
-- Pinning a Rich console width. Measured at 8% on the surface that needed it most.
+- Reducing output size by widening the console. Measured at 8% on the surface that needed it
+  most. (A width *is* pinned in slice 1, but for deterministic budget accounting, not savings.)
+- Migrating `benchmark_cli.py` (16 table sites) or `datasets/cli.py` (3) onto the sink. Both are
+  under 20k chars; they fall under the registry-completeness guard as explicit exemptions.
 - Reducing `entities/` document sizes (4 files over the cap in natural-systems).
 - Any change to the 33 CLI commands already under 20k chars.
 - Fixing the three invalid task statuses in natural-systems (`t873: closed-unbuilt`,
@@ -275,7 +352,7 @@ files directly would change where the bytes live without changing what agents do
 
 ## Risks
 
-- **Budget defaults that hide needed data.** Mitigated by the explicit footer and `--all`, but
+- **Budget defaults that hide needed data.** Mitigated by the explicit footer and `--output`, but
   the per-command defaults need review against how each command is actually invoked in
   `commands/` and `skills/`, not chosen from output size alone.
 - **The emitter refactor touches `health`**, whose output shape is asserted by tests. Expect to
@@ -287,12 +364,24 @@ files directly would change where the bytes live without changing what agents do
 
 ## Testing
 
-- AST guard: no `Table` construction or printing outside `output.py`, scope derived from the
-  import closure.
+- Registry completeness: every leaf command in the click tree is budgeted or explicitly exempt,
+  with the command set derived by walking `main`.
+- Sink routing: registered commands reach stdout only through a `BoundedSink`.
 - Budget regression: per-command character ceilings asserted against a fixture project.
-- Footer behaviour: truncated output always names the withheld count and the escape command.
-- `tasks list --since`: window arithmetic across a month boundary, including a window that
-  intersects a month with no archive file.
+- Total-vs-per-section accounting: a multi-table command (`health`, 21 tables) respects one
+  command-total ceiling, not one per table.
+- Footer behaviour: truncated text output names the withheld count and the escape command.
+- JSON truncation metadata: the `truncation` object appears **in the payload**, stdout on the
+  JSON branch stays a single parseable document, and no diagnostics leak into it.
+- Versioned-document refusal: `entities inventory` past budget exits non-zero rather than
+  emitting a partial `schema_version: "2"` document.
+- `--output` completeness: the file sink is never truncated, for every budgeted command.
+- Width determinism: identical data costs identical budget across `COLUMNS` values.
+- `tasks list --since`: exact cutoff (`completed == since` is included); a boundary month
+  holding tasks on both sides of the cutoff; a task with no `completed:` date is excluded and
+  counted on stderr; retired tasks included by default and excluded under `--status done`;
+  `--since` with a non-terminal `--status` fails early; a window intersecting a month with no
+  archive file.
 - Content guard: no agent-facing doc instructs a direct read of a CLI-owned file.
 - Migration: journal/resume correctness on an interrupted run; round-trip fidelity of task
   metadata and body prose; `graph/storage_adapters/task.py` reads the new layout.
