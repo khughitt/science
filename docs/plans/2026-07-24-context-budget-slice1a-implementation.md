@@ -140,15 +140,19 @@ def test_lookup_returns_none_for_unregistered_command() -> None:
     assert lookup("tasks add") is None
 
 
-def test_deferred_entries_record_a_measurement_over_the_audit_floor() -> None:
-    """DEFERRED is for measured offenders awaiting wiring, not a parking lot."""
+def test_every_deferred_entry_states_what_makes_it_grow() -> None:
+    """DEFERRED is defined by growability, not by current size.
+
+    The reason string is the mirror of an exemption's: it is the claim being recorded,
+    and it is what stops the table becoming a parking lot.
+    """
     for path, entry in DEFERRED.items():
-        assert entry.measured_chars > 20_000, f"{path} is not a measured offender"
-        assert entry.target_slice.strip()
+        assert entry.growth_reason.strip(), f"{path} is deferred with no growth reason"
+        assert entry.target_slice.strip(), f"{path} is deferred with no target slice"
 
 
-def test_the_ten_deferred_offenders_are_recorded() -> None:
-    assert set(DEFERRED) == {
+def test_the_ten_measured_offenders_are_deferred() -> None:
+    measured = {
         "entity list",
         "questions list",
         "interpretations list",
@@ -160,6 +164,20 @@ def test_the_ten_deferred_offenders_are_recorded() -> None:
         "prose lint",
         "validate",
     }
+    assert measured <= set(DEFERRED)
+    for path in measured:
+        assert (DEFERRED[path].measured_chars or 0) > 20_000
+
+
+def test_a_growable_but_small_command_can_be_deferred() -> None:
+    """tasks archive emits one row per archivable task but measures tiny.
+
+    It is not exempt (its output grows) and has no over-threshold measurement, so the
+    taxonomy must still have a truthful home for it.
+    """
+    entry = DEFERRED["tasks archive"]
+    assert entry.measured_chars is None
+    assert entry.growth_reason.strip()
 
 
 def test_the_three_tables_are_mutually_disjoint() -> None:
@@ -191,8 +209,15 @@ Three tables, deliberately distinct:
 
 - ``BUDGETS``   -- wired: the command owns a sink and honours a ceiling.
 - ``EXEMPTIONS``-- a claim that the command's output CANNOT grow with project size.
-- ``DEFERRED``  -- measured over budget, not yet wired. NOT an exemption: recording a
-  known-oversized command as exempt would assert something false.
+- ``DEFERRED``  -- CAN grow with project size, not yet wired.
+
+``DEFERRED`` is defined by growability, not by current size. An earlier draft required a
+measurement above 20k, which left no truthful home for a command that grows but happens
+to be small today -- ``tasks archive`` emits one row per archivable task
+(``tasks_cli.py:333``) yet measures tiny on a freshly-archived project. Calling that
+exempt would assert something false. Every non-budgeted command therefore carries a
+justification string either way: ``EXEMPTIONS`` says why it cannot grow, ``DEFERRED``
+says what makes it grow.
 """
 
 from __future__ import annotations
@@ -223,8 +248,15 @@ class CommandBudget:
 
 @dataclass(frozen=True)
 class DeferredCommand:
-    measured_chars: int
+    """A command whose output grows with project size but is not yet wired.
+
+    ``growth_reason`` states WHAT makes it grow -- the mirror of an exemption's reason.
+    ``measured_chars`` records an observation, not a threshold for admission.
+    """
+
+    growth_reason: str
     target_slice: str
+    measured_chars: int | None = None
 
 
 BUDGETS: dict[str, CommandBudget] = {
@@ -241,16 +273,20 @@ EXEMPTIONS: dict[str, str] = {
 }
 
 DEFERRED: dict[str, DeferredCommand] = {
-    "entity list": DeferredCommand(measured_chars=1_706_994, target_slice="1b"),
-    "curate inventory": DeferredCommand(measured_chars=683_657, target_slice="1b"),
-    "prose lint": DeferredCommand(measured_chars=550_226, target_slice="1b"),
-    "questions list": DeferredCommand(measured_chars=113_076, target_slice="1b"),
-    "validate": DeferredCommand(measured_chars=109_466, target_slice="1b"),
-    "interpretations list": DeferredCommand(measured_chars=97_281, target_slice="1b"),
-    "curate consolidation-candidates": DeferredCommand(measured_chars=71_553, target_slice="1b"),
-    "entity needs-review": DeferredCommand(measured_chars=59_697, target_slice="1b"),
-    "feedback list": DeferredCommand(measured_chars=44_307, target_slice="1b"),
-    "discussions list": DeferredCommand(measured_chars=30_780, target_slice="1b"),
+    # Measured over budget on 2026-07-24; wiring scheduled for slice 1b.
+    "entity list": DeferredCommand("one row per entity", "1b", 1_706_994),
+    "curate inventory": DeferredCommand("one record per entity", "1b", 683_657),
+    "prose lint": DeferredCommand("one row per prose finding", "1b", 550_226),
+    "questions list": DeferredCommand("one row per question", "1b", 113_076),
+    "validate": DeferredCommand("one row per validation finding", "1b", 109_466),
+    "interpretations list": DeferredCommand("one row per interpretation", "1b", 97_281),
+    "curate consolidation-candidates": DeferredCommand("one row per candidate cluster", "1b", 71_553),
+    "entity needs-review": DeferredCommand("one row per flagged entity", "1b", 59_697),
+    "feedback list": DeferredCommand("one row per feedback item", "1b", 44_307),
+    "discussions list": DeferredCommand("one row per discussion", "1b", 30_780),
+    # Growable but small on the audited project -- the case that has no truthful
+    # exemption. Populated further by Task 13 Step 3.
+    "tasks archive": DeferredCommand("one row per archivable task", "1b"),
 }
 
 
@@ -572,6 +608,34 @@ def test_flush_is_idempotent(capsys) -> None:
     sink.flush()
     sink.flush()
     assert capsys.readouterr().out == "once\n"
+
+
+def test_flush_check_raises_without_emitting_or_consuming(capsys) -> None:
+    """Preflight for mutating commands: refuse before any side effect."""
+    sink = BoundedSink(CommandBudget(max_chars=10, shape=PayloadShape.ROWS, max_rows=5), command_path="data audit")
+    sink.echo("x" * 50)
+    with pytest.raises(BudgetExceeded):
+        sink.flush_check()
+    assert capsys.readouterr().out == ""
+
+
+def test_flush_check_is_silent_when_under_budget(capsys) -> None:
+    sink = BoundedSink(ROWS_BUDGET, command_path="data audit")
+    sink.echo("ok")
+    sink.flush_check()
+    assert capsys.readouterr().out == ""
+    sink.flush()
+    assert capsys.readouterr().out == "ok\n"
+
+
+def test_flush_check_never_raises_for_a_file_sink(tmp_path: Path) -> None:
+    sink = BoundedSink(
+        CommandBudget(max_chars=10, shape=PayloadShape.ROWS, max_rows=5),
+        output_path=tmp_path / "o.txt",
+        command_path="data audit",
+    )
+    sink.echo("x" * 5_000)
+    sink.flush_check()
 ```
 
 - [ ] **Step 2: Run test to verify it fails**
@@ -668,6 +732,20 @@ class BoundedSink:
         """Append raw text with no trailing newline added."""
         self._buffer.write(text)
 
+    def flush_check(self) -> None:
+        """Raise if the buffered content would exceed the ceiling, emitting nothing.
+
+        For commands that MUTATE before reporting: ``data audit --fix`` moves files, so a
+        ceiling breach discovered after the move would leave the caller with a failed
+        command, no report, and changed files. Preflighting with this method refuses while
+        nothing has changed yet.
+        """
+        if self._output_path is not None or self._budget is None:
+            return
+        size = visible_len(self._buffer.getvalue())
+        if size > self._budget.max_chars:
+            raise self._exceeded(size)
+
     def flush(self) -> None:
         if self._flushed:
             return
@@ -681,14 +759,17 @@ class BoundedSink:
         if self._budget is not None:
             size = visible_len(text)
             if size > self._budget.max_chars:
-                escape = self._complete_via or f"{self._command_path} --output PATH"
-                raise BudgetExceeded(
-                    f"{self._command_path or 'command'} produced {size} visible chars after "
-                    f"projection, over its {self._budget.max_chars} ceiling. Nothing was "
-                    f"printed. For the complete payload run:\n  {escape}"
-                )
+                raise self._exceeded(size)
 
         click.echo(text, nl=False)
+
+    def _exceeded(self, size: int) -> BudgetExceeded:
+        escape = self._complete_via or f"{self._command_path} --output PATH"
+        return BudgetExceeded(
+            f"{self._command_path or 'command'} produced {size} visible chars after "
+            f"projection, over its {self._budget.max_chars if self._budget else 0} ceiling. "
+            f"Nothing was printed. For the complete payload run:\n  {escape}"
+        )
 ```
 
 - [ ] **Step 4: Run tests to verify they pass**
@@ -747,6 +828,19 @@ def test_none_cap_disables_row_projection() -> None:
 def test_empty_rows_project_cleanly() -> None:
     result = project_rows([], max_rows=40)
     assert (result.rows, result.total, result.truncated) == ([], 0, False)
+
+
+def test_projection_is_generic_over_non_mapping_rows() -> None:
+    """tasks list projects Task models, which are Pydantic BaseModels, not Mappings."""
+    from datetime import date
+
+    from science_model.tasks import Task
+
+    tasks = [Task(id=f"t{i:03d}", title=f"Task {i}", created=date(2026, 1, 1)) for i in range(10)]
+    result = project_rows(tasks, max_rows=4)
+    assert len(result.rows) == 4
+    assert all(isinstance(row, Task) for row in result.rows)
+    assert result.total == 10
 ```
 
 - [ ] **Step 2: Run test to verify it fails**
@@ -766,14 +860,19 @@ payload. After rendering there are only characters.
 
 from __future__ import annotations
 
-from collections.abc import Mapping, Sequence
+from collections.abc import Sequence
 from dataclasses import dataclass
-from typing import Any
 
 
 @dataclass(frozen=True)
-class ProjectedRows:
-    rows: list[Mapping[str, Any]]
+class ProjectedRows[T]:
+    """Generic over the row type.
+
+    ``tasks list`` projects ``Task`` models for its table branch and dicts for its JSON
+    branch; a ``Mapping``-only signature would be a type error at the first call site.
+    """
+
+    rows: list[T]
     omitted: int
     total: int
 
@@ -782,7 +881,7 @@ class ProjectedRows:
         return self.omitted > 0
 
 
-def project_rows(rows: Sequence[Mapping[str, Any]], max_rows: int | None) -> ProjectedRows:
+def project_rows[T](rows: Sequence[T], max_rows: int | None) -> ProjectedRows[T]:
     """Keep the first ``max_rows`` in caller order, reporting how many were dropped.
 
     Caller order is preserved rather than re-sorted: the command already sorted for a
@@ -882,7 +981,20 @@ def test_existing_output_option_is_replaced_not_duplicated() -> None:
 
 def test_defaults_are_omitted() -> None:
     assert "--status" not in _run(["list"])
+
+
+def test_values_with_spaces_are_quoted() -> None:
+    out = _run(["list", "--status", "needs review"])
+    assert "'needs review'" in out
+    assert out == "science list --status 'needs review' --output out.json"
+
+
+def test_shell_metacharacters_are_quoted() -> None:
+    out = _run(["list", "--status", "a;rm -rf b"])
+    assert shlex.split(out)[3] == "a;rm -rf b"
 ```
+
+Add `import shlex` to the test module's imports.
 
 - [ ] **Step 2: Run test to verify it fails**
 
@@ -902,14 +1014,24 @@ command from the live Click context so the escape returns exactly what was trunc
 
 from __future__ import annotations
 
+import shlex
+
 import click
 
 _OUTPUT_PARAMS = frozenset({"output_path", "output"})
 
 
 def build_complete_via(ctx: click.Context, *, output_hint: str) -> str:
-    """Return ``<command path> <non-default options> --output <hint>``."""
-    parts: list[str] = [ctx.command_path]
+    """Return ``<command path> <non-default options> --output <hint>``, shell-safe.
+
+    Values are quoted with ``shlex.join``: the caller's shell already protected a path or
+    filter containing spaces, and reconstructing the command by naive joining would strip
+    that protection and advertise a command that does something different.
+
+    The command path itself is not quoted -- it is a sequence of literal words, and
+    quoting it would produce ``'science tasks list'`` as one token.
+    """
+    tokens: list[str] = []
     params_by_name = {param.name: param for param in ctx.command.params}
 
     for name, value in ctx.params.items():
@@ -922,15 +1044,15 @@ def build_complete_via(ctx: click.Context, *, output_hint: str) -> str:
             continue
         flag = max(param.opts, key=len)
         if value is True:
-            parts.append(flag)
+            tokens.append(flag)
         elif isinstance(value, (list, tuple)):
             for item in value:
-                parts.extend([flag, str(item)])
+                tokens.extend([flag, str(item)])
         else:
-            parts.extend([flag, str(value)])
+            tokens.extend([flag, str(value)])
 
-    parts.extend(["--output", output_hint])
-    return " ".join(parts)
+    tokens.extend(["--output", output_hint])
+    return f"{ctx.command_path} {shlex.join(tokens)}"
 ```
 
 - [ ] **Step 4: Run test to verify it passes**
@@ -1394,32 +1516,34 @@ Add `output_path: Path | None` to the signature, then replace the body's tail:
         command_path="tasks list",
         complete_via=complete_via,
     )
-    try:
-        if output_format == "json":
-            # ... existing column/row construction, then:
-            emit_query_rows(
-                output_format=output_format,
-                title="Tasks",
-                columns=columns,
-                rows=rows,
-                meta=meta,
-                sink=sink,
-            )
-        else:
-            projected = project_rows(matched, sink.max_rows)
-            footer = (
-                [
-                    f"showing {len(projected.rows)} of {projected.total} rows",
-                    f"  complete output:  {complete_via}",
-                ]
-                if projected.truncated
-                else []
-            )
-            render_tasks_table(list(projected.rows), resolver=resolver, sink=sink, footer=footer)
-        sink.flush()
-    finally:
-        if output_path is not None:
-            click.echo(f"wrote {len(matched)} tasks to {output_path}")
+    if output_format == "json":
+        # ... existing column/row construction, then:
+        emit_query_rows(
+            output_format=output_format,
+            title="Tasks",
+            columns=columns,
+            rows=rows,
+            meta=meta,
+            sink=sink,
+        )
+    else:
+        projected = project_rows(matched, sink.max_rows)
+        footer = (
+            [
+                f"showing {len(projected.rows)} of {projected.total} rows",
+                f"  complete output:  {complete_via}",
+            ]
+            if projected.truncated
+            else []
+        )
+        render_tasks_table(projected.rows, resolver=resolver, sink=sink, footer=footer)
+
+    sink.flush()
+    # AFTER a successful flush, never in `finally`: a `finally` here would announce
+    # "wrote ..." even when rendering raised or the write failed, reporting success for
+    # a file that may not exist.
+    if output_path is not None:
+        click.echo(f"wrote {len(matched)} tasks to {output_path}")
 ```
 
 `project_rows` is generic over sequences, so it accepts the `Task` list directly for the table
@@ -1456,11 +1580,21 @@ git commit -m "feat(tasks): budget both list formats, default to the working set
   sum.
 
 **Why this task exists.** The previous plan computed `displayed_issues` as `len(kept)` summed
-over sections. That is not the same quantity as `total_issues`, which counts `managed_artifacts`
-only where `counts_as_issue`, folds `archive_lag` to `1 if lag_total`, and includes
-`coverage_gaps` and `layered_claim_issue_count`. A footer comparing the two would compare
-incompatible numbers. Extracting one counting function and running it over **both** the full and
-the projected report makes them comparable by construction.
+over sections — not the same quantity as `total_issues`, which counts `managed_artifacts` only
+where `counts_as_issue` and folds `archive_lag` to `1 if lag_total`.
+
+**`count_issues` must consume the report's real shape, not a normalized one.** An earlier draft
+of this task called it with a synthetic dict that flattened `layered_claim_issue_count` into
+`layered_claims["migration_issues"]` and passed a top-level `coverage_gaps`. Neither exists in
+the actual report: `layered_claims` is a `LayeredClaimHealthReport` (`graph/health.py:185`) with
+four keys, `layered_claim_issue_count = len(migration_issues) + len(rival_model_gaps)`
+(`health.py:342`), and `coverage_gaps` is a **local** derived from the two `CoverageMetric`
+fields — it is never a report key. Calling `count_issues(projected)` on that synthetic contract
+would have silently dropped rival-model gaps and every coverage gap, leaving the two counts
+incomparable exactly as before.
+
+So: `count_issues` reads `layered_claims` as the real TypedDict, and `build_health_report`
+assembles the actual report body **first** and calls the same function on it.
 
 - [ ] **Step 1: Write the failing test**
 
@@ -1485,7 +1619,7 @@ def _report(**overrides: object) -> dict[str, object]:
         "validation": [],
         "managed_artifacts": [],
         "archive_lag": {"done_in_active": 0, "retired_in_active": 0, "missing_completed": 0},
-        "layered_claims": {"migration_issues": []},
+        "layered_claims": _layered(),
         "cross_paper_evidence": {"findings": []},
         "prose_epistemics": {"findings": []},
     }
@@ -1493,7 +1627,50 @@ def _report(**overrides: object) -> dict[str, object]:
     return base
 
 
+def _layered(**overrides: object) -> dict[str, object]:
+    """The real LayeredClaimHealthReport shape (graph/health.py:185) -- all four keys."""
+    base: dict[str, object] = {
+        "proposition_claim_layer_coverage": {"numerator": 0, "denominator": 0, "fraction": 0.0},
+        "causal_leaning_identification_coverage": {"numerator": 0, "denominator": 0, "fraction": 0.0},
+        "rival_model_packets_missing_discriminating_predictions": [],
+        "migration_issues": [],
+    }
+    base.update(overrides)
+    return base
+
+
 def test_empty_report_counts_zero() -> None:
+    assert count_issues(_report()) == 0
+
+
+def test_rival_model_gaps_count_alongside_migration_issues() -> None:
+    """health.py:342 sums BOTH lists into layered_claim_issue_count."""
+    layered = _layered(
+        migration_issues=[{"proposition": "p"}],
+        rival_model_packets_missing_discriminating_predictions=[{"proposition": "p", "packet_id": "k"}] * 2,
+    )
+    assert count_issues(_report(layered_claims=layered)) == 3
+
+
+def test_each_incomplete_coverage_metric_counts_as_one_gap() -> None:
+    """coverage_gaps is derived from the two CoverageMetrics, not a report key."""
+    layered = _layered(
+        proposition_claim_layer_coverage={"numerator": 3, "denominator": 10, "fraction": 0.3},
+        causal_leaning_identification_coverage={"numerator": 5, "denominator": 5, "fraction": 1.0},
+    )
+    assert count_issues(_report(layered_claims=layered)) == 1
+
+
+def test_complete_coverage_contributes_no_gap() -> None:
+    layered = _layered(
+        proposition_claim_layer_coverage={"numerator": 4, "denominator": 4, "fraction": 1.0},
+        causal_leaning_identification_coverage={"numerator": 5, "denominator": 5, "fraction": 1.0},
+    )
+    assert count_issues(_report(layered_claims=layered)) == 0
+
+
+def test_zero_denominator_coverage_contributes_no_gap() -> None:
+    """An empty denominator means "nothing to cover", not "a gap"."""
     assert count_issues(_report()) == 0
 
 
@@ -1553,8 +1730,22 @@ def count_issues(report: Mapping[str, Any]) -> int:
     archive_lag = report.get("archive_lag") or {}
     lag_total = archive_lag_total(archive_lag) if isinstance(archive_lag, dict) else 0
 
+    # layered_claims is a LayeredClaimHealthReport (health.py:185): BOTH issue lists
+    # count, and coverage gaps are derived from its two CoverageMetric fields -- there is
+    # no top-level `coverage_gaps` key in a report body.
     layered = report.get("layered_claims") or {}
-    layered_issues = len(layered.get("migration_issues") or []) if isinstance(layered, dict) else 0
+    layered_issues = 0
+    coverage_gaps = 0
+    if isinstance(layered, dict):
+        layered_issues = len(layered.get("migration_issues") or []) + len(
+            layered.get("rival_model_packets_missing_discriminating_predictions") or []
+        )
+        for key in ("proposition_claim_layer_coverage", "causal_leaning_identification_coverage"):
+            metric = layered.get(key) or {}
+            if not isinstance(metric, dict):
+                continue
+            if metric.get("denominator", 0) > 0 and metric.get("numerator", 0) < metric["denominator"]:
+                coverage_gaps += 1
 
     return (
         len(_rows("unresolved_refs"))
@@ -1564,7 +1755,7 @@ def count_issues(report: Mapping[str, Any]) -> int:
         + len(_rows("identity_policy"))
         + len(_rows("entity_identity"))
         + layered_issues
-        + int(report.get("coverage_gaps") or 0)
+        + coverage_gaps
         + len(_rows("dataset_anomalies"))
         + len(_rows("schema_invalid"))
         + (1 if lag_total else 0)
@@ -1576,30 +1767,38 @@ def count_issues(report: Mapping[str, Any]) -> int:
     )
 ```
 
-Then replace the inline `total_issues = (...)` sum at line 357 with:
+Then restructure the tail of `build_health_report`: **assemble the real report body first**, call
+`count_issues` on it, and attach the total. Delete the inline sum at line 357 and the now-unused
+`layered_claim_issue_count` / `coverage_gaps` locals along with the `for metric in (...)` loop
+that computed them (`health.py:342-351`).
 
 ```python
-    total_issues = count_issues(
-        {
-            "unresolved_refs": unresolved_refs,
-            "unregistered_ref_kinds": unregistered_ref_kinds,
-            "lingering_tags_lines": lingering_tags_lines,
-            "agent_context": agent_context,
-            "identity_policy": identity_policy_findings,
-            "entity_identity": entity_identity,
-            "layered_claims": {"migration_issues": [None] * layered_claim_issue_count},
-            "coverage_gaps": coverage_gaps,
-            "dataset_anomalies": dataset_anomalies,
-            "schema_invalid": schema_invalid,
-            "archive_lag": archive_lag,
-            "managed_artifacts": managed_artifacts,
-            "tooling_scaffold": tooling_scaffold,
-            "validation": validation,
-            "prose_epistemics": {"findings": prose_epistemics_findings},
-            "cross_paper_evidence": cross_paper_evidence,
-        }
-    )
+    report_body: dict[str, Any] = {
+        "unresolved_refs": unresolved_refs,
+        "unregistered_ref_kinds": unregistered_ref_kinds,
+        "lingering_tags_lines": lingering_tags_lines,
+        "agent_context": agent_context,
+        "identity_policy": identity_policy_findings,
+        "entity_identity": entity_identity,
+        "layered_claims": layered_claims,
+        "dataset_anomalies": dataset_anomalies,
+        "schema_invalid": schema_invalid,
+        "archive_lag": archive_lag,
+        "managed_artifacts": managed_artifacts,
+        "tooling_scaffold": tooling_scaffold,
+        "validation": validation,
+        "accepted_validation": accepted_validation,
+        "prose_epistemics": prose_epistemics,
+        "cross_paper_evidence": cross_paper_evidence,
+        "legacy_task_type": legacy_task_type,
+        "invalid_entity_aspects": invalid_entity_aspects,
+        "unwired_checks": unwired_checks,
+    }
+    report: HealthReport = {**report_body, "total_issues": count_issues(report_body)}
 ```
+
+`count_issues` is now called on the same shape in both places — the full body here, the projected
+body in Task 10 — so no normalization step can drift between them.
 
 - [ ] **Step 4: Run tests to verify they pass**
 
@@ -2106,8 +2305,19 @@ REPORT = {
     "tooling_scaffold": [],
     "accepted_validation": [],
     "unwired_checks": [],
+    "legacy_task_type": [],
+    "invalid_entity_aspects": [],
     "archive_lag": {"done_in_active": 0, "retired_in_active": 0, "missing_completed": 0},
-    "layered_claims": {"migration_issues": []},
+    # All four LayeredClaimHealthReport keys. The adoption table at health_cli.py:376
+    # reads both coverage metrics UNCONDITIONALLY, and the rival-model table reads its
+    # list — a fixture carrying only `migration_issues` raises KeyError before any
+    # assertion runs.
+    "layered_claims": {
+        "proposition_claim_layer_coverage": {"numerator": 0, "denominator": 0, "fraction": 0.0},
+        "causal_leaning_identification_coverage": {"numerator": 0, "denominator": 0, "fraction": 0.0},
+        "rival_model_packets_missing_discriminating_predictions": [],
+        "migration_issues": [],
+    },
     "cross_paper_evidence": {"findings": []},
     "prose_epistemics": {"findings": []},
     "total_issues": 361,
@@ -2285,12 +2495,11 @@ gate keys off the untouched `report["total_issues"]`:
             )
             sink.echo(f"  {hidden} finding(s) hidden — {sink.complete_via}")
 
-    try:
-        emit(output_format=output_format, payload=displayed, render_text=_render_report, sink=sink)
-        sink.flush()
-    finally:
-        if output_path is not None:
-            click.echo(f"wrote the complete health report to {output_path}")
+    emit(output_format=output_format, payload=displayed, render_text=_render_report, sink=sink)
+    sink.flush()
+    # AFTER a successful flush, never in `finally` — see the same note in Task 7.
+    if output_path is not None:
+        click.echo(f"wrote the complete health report to {output_path}")
 ```
 
 - [ ] **Step 7: Run tests to verify they pass**
@@ -2391,27 +2600,62 @@ def test_inventory_output_file_is_complete(tmp_path: Path, monkeypatch) -> None:
 
 def test_data_audit_text_branch_is_budgeted(tmp_path: Path, monkeypatch) -> None:
     """The default format is text; the previous plan guarded only JSON."""
-    (tmp_path / "science.yaml").write_text("id: demo\nname: demo\n")
-    data_dir = tmp_path / "data"
-    data_dir.mkdir()
-    for i in range(3_000):
-        (data_dir / f"stranded-record-with-a-long-name-{i:05d}.md").write_text("x")
+    _stranded_project(tmp_path)
     monkeypatch.chdir(tmp_path)
     result = _invoke(["data", "audit"])
     assert "--output" in result.output
 
 
 def test_data_audit_output_file_is_complete_in_text_format(tmp_path: Path, monkeypatch) -> None:
-    (tmp_path / "science.yaml").write_text("id: demo\nname: demo\n")
-    data_dir = tmp_path / "data"
-    data_dir.mkdir()
-    for i in range(3_000):
-        (data_dir / f"stranded-record-with-a-long-name-{i:05d}.md").write_text("x")
+    _stranded_project(tmp_path)
     monkeypatch.chdir(tmp_path)
     target = tmp_path / "audit.txt"
     result = _invoke(["data", "audit", "--output", str(target)])
     assert result.exit_code in (0, 1)
     assert len(target.read_text()) > BUDGETS["data audit"].max_chars
+
+
+def test_data_audit_json_branch_is_budgeted(tmp_path: Path, monkeypatch) -> None:
+    _stranded_project(tmp_path)
+    monkeypatch.chdir(tmp_path)
+    result = _invoke(["data", "audit", "--format", "json"])
+    assert "--output" in result.output
+
+
+def test_data_audit_output_file_is_complete_in_json_format(tmp_path: Path, monkeypatch) -> None:
+    _stranded_project(tmp_path)
+    monkeypatch.chdir(tmp_path)
+    target = tmp_path / "audit.json"
+    result = _invoke(["data", "audit", "--format", "json", "--output", str(target)])
+    assert result.exit_code in (0, 1)
+    json.loads(target.read_text())
+    assert len(target.read_text()) > BUDGETS["data audit"].max_chars
+
+
+def test_oversized_fix_refuses_before_moving_any_file(tmp_path: Path, monkeypatch) -> None:
+    """apply_fixes mutates the tree; a ceiling breach must be caught BEFORE it runs."""
+    _stranded_project(tmp_path)
+    monkeypatch.chdir(tmp_path)
+    before = sorted(p.name for p in (tmp_path / "data").iterdir())
+
+    result = _invoke(["data", "audit", "--fix"])
+
+    assert result.exit_code != 0
+    assert "--output" in result.output
+    assert sorted(p.name for p in (tmp_path / "data").iterdir()) == before, (
+        "files were moved despite the command failing"
+    )
+```
+
+Add this shared helper near the top of the test module:
+
+```python
+def _stranded_project(root: Path) -> None:
+    (root / "science.yaml").write_text("id: demo\nname: demo\n")
+    data_dir = root / "data"
+    data_dir.mkdir()
+    for i in range(3_000):
+        (data_dir / f"stranded-record-with-a-long-name-{i:05d}.md").write_text("x")
 ```
 
 - [ ] **Step 2: Run test to verify it fails**
@@ -2472,6 +2716,20 @@ def data_audit_command(
     )
 
     if fix:
+        # PREFLIGHT BEFORE MUTATING. apply_fixes moves files on disk. If the resulting
+        # report were rendered afterwards and the flush then raised, the caller would see
+        # a failed command with no output while the files had already moved -- and might
+        # retry. So refuse first, while nothing has changed.
+        preflight = BoundedSink(
+            lookup("data audit"),
+            command_path="data audit",
+            complete_via=build_complete_via(click.get_current_context(), output_hint="audit.json"),
+        )
+        for v in violations:
+            preflight.echo(f"  [{v.quadrant.value}] {v.path} → {v.proposed_target or '-'}")
+        if output_path is None:
+            preflight.flush_check()  # raises BudgetExceeded without emitting anything
+
         outcomes = apply_fixes(project_path, violations)
         if emit_json:
             sink.write(render_json(violations, outcomes, notes))
@@ -2655,23 +2913,31 @@ Expected: `test_every_leaf_command_is_classified` FAILS, listing every unclassif
 
 - [ ] **Step 3: Classify everything the guard surfaced**
 
-For each command in the failure output, add an `EXEMPTIONS` entry (if its output cannot grow
-with project size) or a `DeferredCommand` (if it can). Measure before claiming an exemption:
+For each command in the failure output, classify by **growability**, not by current size:
+
+- `EXEMPTIONS` — the output shape is fixed and cannot grow with project size.
+- `DEFERRED` — the output contains a per-item element, so it grows. Record what makes it grow.
+
+Read the command's emission sites before deciding. The question is "does this emit one row per
+*something*?", not "how big is it today".
 
 ```bash
 cd ~/d/natural-systems && uv run --with-editable ~/d/science/science science <command> 2>/dev/null | wc -m
 ```
 
-Use this reason format:
+Reason formats:
 
 ```python
-    "graph stats": "measured 341 chars on 2026-07-24; fixed-shape summary",
+EXEMPTIONS["graph stats"] = "measured 341 chars on 2026-07-24; fixed-shape summary"
+DEFERRED["tasks archive"] = DeferredCommand("one row per archivable task", "1b")
 ```
 
-Do not guess. An exemption is a claim, and the reason string is where the claim is recorded.
-Mutating commands (`tasks add`, `graph build`, `entity create`, …) are exempt with the reason
-`"mutating command; emits a fixed-size confirmation"` — but spot-check a few before writing it
-across the board.
+**Do not write a blanket exemption for mutating commands.** "Mutating command; emits a fixed-size
+confirmation" is false for any command with an unbounded preview — `tasks archive` is exactly
+that: its dry-run emits one row per archivable task (`tasks_cli.py:333`) yet measures small on a
+freshly-archived project. Small today is not the same as bounded. Check each one.
+
+An exemption is a claim about the code, and the reason string is where the claim is recorded.
 
 - [ ] **Step 4: Run the guards to verify they pass**
 
@@ -2724,6 +2990,10 @@ def project(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
         (entities / f"{i:04d}-q.md").write_text(
             f"---\nid: q{i:04d}\nkind: question\ntitle: Question {i}\n---\n\n" + ("body " * 300)
         )
+    data_dir = tmp_path / "data"
+    data_dir.mkdir()
+    for i in range(3_000):
+        (data_dir / f"stranded-record-with-a-long-name-{i:05d}.md").write_text("x")
     monkeypatch.chdir(tmp_path)
     return tmp_path
 
@@ -2751,6 +3021,22 @@ def test_command_stays_within_its_ceiling(project: Path, command_path: str, args
 
 
 @pytest.mark.parametrize(
+    ("command_path", "args"),
+    [
+        ("entities inventory", ["entities", "inventory"]),
+        ("data audit", ["data", "audit"]),
+        ("data audit", ["data", "audit", "--format", "json"]),
+    ],
+)
+def test_bulk_dump_refuses_rather_than_flooding(project: Path, command_path: str, args: list[str]) -> None:
+    """DOCUMENT-shaped commands refuse; they never emit a partial payload."""
+    result = _invoke(args)
+    assert result.exit_code != 0
+    assert "--output" in result.output
+    assert visible_len(result.output) <= BUDGETS[command_path].max_chars
+
+
+@pytest.mark.parametrize(
     ("args", "target_name"),
     [
         (["tasks", "list", "--status", "proposed", "--format", "json"], "tasks.json"),
@@ -2758,6 +3044,8 @@ def test_command_stays_within_its_ceiling(project: Path, command_path: str, args
         (["health", "--format", "json"], "health.json"),
         (["health"], "health.txt"),
         (["entities", "inventory"], "inventory.json"),
+        (["data", "audit"], "audit.txt"),
+        (["data", "audit", "--format", "json"], "audit.json"),
     ],
 )
 def test_output_file_is_written_and_non_empty(project: Path, args: list[str], target_name: str) -> None:
@@ -2768,6 +3056,28 @@ def test_output_file_is_written_and_non_empty(project: Path, args: list[str], ta
     assert target.stat().st_size > 0, f"{args} --output wrote an empty file"
 
 
+@pytest.mark.parametrize(
+    ("args", "target_name"),
+    [
+        (["tasks", "list", "--status", "proposed"], "tasks.txt"),
+        (["health"], "health.txt"),
+    ],
+)
+def test_no_success_message_when_the_command_fails(
+    project: Path, args: list[str], target_name: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The 'wrote ...' line must follow a successful flush, not sit in a `finally`."""
+    from science_tool.budget import sink as sink_module
+
+    def _boom(self: object) -> None:
+        raise RuntimeError("render failed")
+
+    monkeypatch.setattr(sink_module.BoundedSink, "flush", _boom)
+    result = _invoke([*args, "--output", str(project / target_name)])
+    assert result.exit_code != 0
+    assert "wrote" not in result.output
+
+
 def test_tasks_list_json_reports_the_full_total(project: Path) -> None:
     result = _invoke(["tasks", "list", "--status", "proposed", "--format", "json"])
     assert json.loads(result.output)["truncation"]["total"] == 395
@@ -2776,7 +3086,7 @@ def test_tasks_list_json_reports_the_full_total(project: Path) -> None:
 - [ ] **Step 6: Run the regression suite**
 
 Run: `cd science && uv run --frozen pytest tests/test_budget_regression.py -v`
-Expected: PASS (10 parametrized cases)
+Expected: PASS (19 parametrized cases across all four wired commands in both formats)
 
 - [ ] **Step 7: Full suite, lint, types**
 
@@ -2839,7 +3149,29 @@ in Tasks 7, 11, 12. `ProjectedRows.rows/.omitted/.total/.truncated` consumed in 
 `build_complete_via(ctx, *, output_hint)` (Task 5) used in Tasks 7, 11, 12. `visible_len` (Task 2)
 used in Tasks 3, 7, 11, 13.
 
+**Second-review corrections, each with a covering test.** `count_issues` consumes the real
+`LayeredClaimHealthReport` — both issue lists plus coverage gaps derived from the two
+`CoverageMetric` fields — and `build_health_report` assembles the actual body before calling it,
+so no synthetic normalization can drift (Task 8,
+`test_rival_model_gaps_count_alongside_migration_issues`,
+`test_each_incomplete_coverage_metric_counts_as_one_gap`). `DEFERRED` is defined by growability
+rather than a size floor, giving `tasks archive` a truthful home (Task 1,
+`test_a_growable_but_small_command_can_be_deferred`). `data audit --fix` preflights via
+`flush_check()` before `apply_fixes` mutates anything (Tasks 3 and 12,
+`test_oversized_fix_refuses_before_moving_any_file`). Success messages follow a successful
+`flush()` instead of sitting in `finally` (Tasks 7 and 11,
+`test_no_success_message_when_the_command_fails`). `ProjectedRows`/`project_rows` are generic
+over `T`, so `tasks list` can project `Task` models (Task 4,
+`test_projection_is_generic_over_non_mapping_rows`). The health fixture carries all four
+`layered_claims` keys the renderer reads unconditionally (Task 11). `data audit` appears in the
+regression matrix in both formats (Task 13). `build_complete_via` renders through `shlex.join`
+(Task 5, `test_values_with_spaces_are_quoted`).
+
 **Known limits, stated.** Guard 2 proves sink *construction*, not that every branch routes
 through it — Task 11 Step 5's grep and the regression suite cover the rest. The `DEFERRED` table
-is a bookkeeping ratchet: it prevents silence, not oversized output, and those ten commands stay
-unbounded until 1b.
+is a bookkeeping ratchet: it prevents silence, not oversized output, and those commands stay
+unbounded until 1b. The `--fix` preflight measures the violation list rather than the exact
+post-fix rendering; the two have one row per violation, so the proxy is sound in shape but not
+byte-exact, and a preflight that passes could in principle be followed by a flush that fails.
+That is why the post-mutation path keeps its own `--output` escape rather than relying on the
+preflight alone.
