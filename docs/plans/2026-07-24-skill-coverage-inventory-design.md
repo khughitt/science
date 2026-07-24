@@ -32,12 +32,24 @@ sub-plan-4 `science skills coverage` command joins against the reified `skills_l
   `skills/meta/templates/*.md` and `INDEX.md` itself are absent). Driving enumeration off INDEX.md
   therefore applies the exclusions automatically and yields the canonical id for free — no fragile
   path-to-id derivation. `skills/sources.yaml` is a non-`.md` sources registry, not a skill.
-- **The canonical skill id is the INDEX key, not the frontmatter `name`.** `skills_loaded` authors
-  the **qualified** id (`commands/plan-analysis.md:130`: `id: transcriptomics-scrna-qa`), which is
-  the INDEX key — **not** the bare frontmatter `name` (`scrna-qa`). Sub-plan 2 canonicalizes and
-  emits that same id as `sci:skill/<id>`. So the inventory's identity and the overlay's key **must**
-  be the INDEX id; keying by frontmatter `name` would make the sub-plan-4 join silently never match.
-  Frontmatter `name` values happen to be unique corpus-wide, but they are the wrong key.
+- **The canonical skill id is the INDEX key; the overlay must key off INDEX, not depend on
+  frontmatter.** `skills_loaded` authors the qualified id (`commands/plan-analysis.md:130`:
+  `id: transcriptomics-scrna-qa`), which sub-plan 2 canonicalizes and emits as `sci:skill/<id>`.
+  **Today every skill's frontmatter `name` equals its INDEX id** — verified across all 60 (e.g.
+  `skills/bio/transcriptomics/scrna-qa.md` has `name: transcriptomics-scrna-qa`, not a bare
+  `scrna-qa`). The design does **not** rely on that coincidence: INDEX.md is the id↔path authority,
+  so the inventory's identity and the overlay's key are the **INDEX key**, and a synthetic fixture
+  where `name` ≠ INDEX id proves the builder keys off INDEX (not `name`). This keeps the sub-plan-4
+  join (`sci:skill/<id>` ↔ overlay `id`) correct even if a future skill's `name` diverges.
+- **Companion edges are part of the inventory contract (parent design).** The parent design requires
+  the packaged inventory to record, per skill, "canonical name, role, `archetype`, `covers:` term
+  ids, **and companion edges**" (line 262), where companion edges "parse from `## Companion Skills`
+  (targets may be leaf/router/INDEX)" (line 283) and are tested (line 528). The `## Companion Skills`
+  section is **universal** (present in every skill) and lists Markdown links whose targets are
+  **relative paths** to other skill files (e.g. `[`cohort-qa.md`](cohort-qa.md)`,
+  `[...](../../statistics/compositional-data.md)`). Because an installed toolkit ships no `skills/`
+  tree, companion edges are **unrecoverable after the fact** — they must be captured in the inventory
+  now, so this sub-plan includes them (parse → resolve target path → canonical id + target role).
 - **Skill/role rule.** For an INDEX entry, the skill is a **router** iff its path basename is
   `SKILL.md`, else a **leaf**. This is the sole role rule.
 - **Leaf frontmatter carries `name`, `description`, `archetype`, `sources`** (e.g.
@@ -72,9 +84,10 @@ sub-plan-4 `science skills coverage` command joins against the reified `skills_l
 ### 1. Scope and boundaries
 
 Ships: (a) catalog-validated `covers:` frontmatter on the **bio leaf subtree**; (b) a packaged,
-drift-checked machine-readable skill **inventory** resource in `science_tool`; (c) a role-typed
-in-memory **overlay builder** in `science-model`. Exercised by synthetic in-repo fixtures plus the
-real bio-leaf authoring.
+drift-checked machine-readable skill **inventory** resource in `science_tool` (canonical id, role,
+`archetype`, `covers:`, and resolved companion edges — the full parent-design inventory contract);
+(c) a role-typed in-memory **overlay builder** in `science-model`. Exercised by synthetic in-repo
+fixtures plus the real bio-leaf authoring.
 
 Deferred to **sub-plan 4**: the `science skills coverage` command, the `coverage-report` JSON, the
 `dataset_usage`-style occurrence join against `skills_loaded`, the coverage **states** and the
@@ -89,7 +102,8 @@ error (§5). It is authored on a bio leaf **only where a data-product maps hones
 no clean mapping stay **uncovered by design** (a real, later-reportable coverage state), never
 forced. Each term is **validated against the `data_products` catalog** when the inventory is
 generated and again when the overlay is built; an off-catalog term is a **hard error**, never a
-silent drop.
+silent drop. A **duplicate term** within one leaf's `covers:` is a hard error too — a repeated term
+is a repeated semantic edge, not a no-op — so `covers:` is an ordered set of distinct catalog ids.
 
 Proposed v1 mapping (finalized during implementation; each is authoring-time domain judgment):
 
@@ -117,34 +131,63 @@ A generated, machine-readable resource shipped as **`science_tool` package data*
 + trailing newline): the resource is generated and never hand-edited, so a canonical serialization
 makes the drift check a deterministic **byte-match**.
 
-**Contents.** A top-level object with a `skills` list; each entry records:
+**Contents.** A top-level object with a `skills` list, **ordered by canonical `id` (ascending)** so
+the serialization is deterministic regardless of INDEX ordering (`sort_keys=True` sorts object keys
+but **not** list elements — the list order must be fixed explicitly). Each entry records:
 
 - `id` — the **INDEX key** (the canonical id `skills_loaded` references and sub-plan 2 emits, e.g.
   `transcriptomics-scrna-qa`) — the identity field;
-- `name` — the frontmatter `name` (bare, e.g. `scrna-qa`), retained for traceability only;
+- `name` — the frontmatter `name` (equals `id` today; retained for traceability and to detect a
+  future divergence);
 - `path` — repo-relative path (e.g. `skills/bio/transcriptomics/scrna-qa.md`);
 - `role` — `"leaf"` or `"router"` (the role rule);
 - `description` — frontmatter `description`;
 - `archetype` — leaf only (always present on leaves; omitted for routers);
-- `covers` — leaf only, the validated term-id list (**omitted when empty**, so an uncovered leaf
-  and a router both simply lack the key — uniform absence, no empty-list noise);
-- `sources` — the frontmatter `sources` list when present (leaf-authored), else omitted.
+- `covers` — leaf only, the validated **distinct** term-id list in authored order (**omitted when
+  empty**, so an uncovered leaf and a router both simply lack the key — uniform absence);
+- `sources` — the frontmatter `sources` list (leaf-authored) in authored order; **omitted when
+  absent** (the overlay materializes absence as `[]`);
+- `companions` — the parsed `## Companion Skills` edges (universal; leaves and routers both), in
+  authored order, each `{ "target": "<canonical-id-or-`science-skill-index`>", "role":
+  "leaf"|"router"|"index" }`, with **distinct** targets. **Omitted when the section is empty.**
+
+**Companion resolution.** For each Markdown link target in `## Companion Skills`, the relative path
+is resolved against the skill's own directory to a repo-relative path, then mapped through the INDEX
+registry to the target's canonical `id` and `role` (a `SKILL.md` target → `router`; another leaf →
+`leaf`; `skills/INDEX.md` → `role: "index"`, `target: "science-skill-index"`). A target that
+resolves to no INDEX path (a broken or off-corpus link) is a **hard error**, and a duplicate target
+within one skill is a **hard error** — both fail generation rather than silently dropping an edge.
 
 **Generation.** An importable `build_skill_inventory(repo_root: Path, catalog) -> dict` reads
-`skills/INDEX.md` as the authoritative id↔path registry, and for each entry reads the file's
-frontmatter (parsing the fenced block with `yaml.safe_load` — never `yaml.load`/a custom
-type-constructing loader), assigns `role` by the basename rule, and validates `covers:` against the
-catalog. It **asserts INDEX↔corpus consistency** — every INDEX path exists, and every real skill
-file (a `.md` under `skills/`, excluding `INDEX.md` and `skills/meta/templates/`) appears in INDEX —
-so an unregistered new leaf or a stale INDEX path is a hard error, not a silent omission. It returns
-the canonical dict. `scripts/generate_skill_inventory.py` is the thin wrapper that serializes it to
-the committed resource path. Both mirror `generate_codex_skills` / `scripts/generate_codex_skills.py`.
+`skills/INDEX.md` as the authoritative id↔path registry and enforces a **strict bijection** between
+INDEX and the corpus:
+
+- INDEX **ids are unique** and each matches the canonical-id grammar `^[a-z0-9]+(-[a-z0-9]+)*$`
+  (reused from sub-plan 2);
+- INDEX **paths are unique**, and every INDEX path exists on disk;
+- the set of INDEX paths **equals** the real-skill set exactly — a `.md` under `skills/` (excluding
+  `INDEX.md` and `skills/meta/templates/`) missing from INDEX (an orphan) **and** an INDEX path that
+  is not a real skill (an extra) are each hard errors.
+
+For each entry it reads the file's frontmatter with a **duplicate- and merge-key-rejecting safe
+parser** (below), assigns `role` by the basename rule, validates `covers:` against the catalog,
+parses/resolves companions, and emits the canonical dict. `scripts/generate_skill_inventory.py` is
+the thin wrapper that serializes it to the committed resource path. Both mirror `generate_codex_skills`
+/ `scripts/generate_codex_skills.py`.
+
+**Frontmatter parsing.** A shared `parse_frontmatter(text) -> dict` extracts the fenced block and
+parses it with `yaml.compose` (node-level walk) to **reject duplicate keys and YAML merge keys
+(`<<`)** before constructing data via `yaml.safe_load` — never `yaml.load`/a custom type-constructing
+loader. This is the sub-plan-2 `_reject_duplicate_keys` discipline (`graph/skill_loads.py`) extended
+to merge keys: plain `yaml.safe_load` would silently collapse a duplicate `covers:` or expand a merge
+key, and the drift check would then faithfully commit the wrong interpretation. Malformed frontmatter
+(missing block, missing `name`, unparseable, `covers`/`sources` not a list of strings) is a hard error.
 
 **Drift check.** A pytest calls `build_skill_inventory` against the live corpus, serializes it with
 the same canonical dumper, and asserts **byte-identical** to the committed `skill_inventory.json`.
-Any corpus edit (a new leaf, a changed `covers:`, a renamed skill, an INDEX edit) that isn't
-regenerated fails the test — the same guarantee the Codex mirror relies on. The failure message
-names the regeneration command.
+Any corpus edit (a new leaf, a changed `covers:`, a renamed skill, an INDEX edit, a companion edit)
+that isn't regenerated fails the test — the same guarantee the Codex mirror relies on. The failure
+message names the regeneration command.
 
 ### 4. Role-typed overlay builder
 
@@ -153,13 +196,19 @@ Lives in **`science-model`** (the coverage module, beside the `data_products` ca
 **role-typed** resources, each identified by its canonical `id` (the INDEX key):
 
 - `LeafSkill` — `id`, `name`, `archetype` (**required**), `covers: list[str]` (each validated
-  against the catalog; empty when uncovered), `description`, `sources`;
-- `RouterSkill` — `id`, `name`, `description`; **no** `archetype`, **no** `covers`.
+  against the catalog; empty when uncovered), `description`, `sources: list[str]` (`[]` when the
+  inventory omits it), `companions: list[Companion]`;
+- `RouterSkill` — `id`, `name`, `description`, `companions: list[Companion]`; **no** `archetype`,
+  **no** `covers`;
+- `Companion` — `target: str` (canonical id, or `science-skill-index`), `role:
+  "leaf"|"router"|"index"`.
 
-`SkillOverlay` exposes lookup **by `id`** and iteration, and is what sub-plan 4 joins against the
-reified `sci:skill/<id>` targets (the join key is the canonical INDEX id on both sides). The builder **re-validates** the structural invariants (it does
-not trust the JSON blindly, since a resource can be edited): a `covers` term off-catalog, a router
-carrying `covers`/`archetype`, or a leaf missing `archetype` is a **structural error** (§5).
+`SkillOverlay` exposes lookup **by `id`** and iteration in **canonical-id order** (stable, matching
+the inventory list order), and is what sub-plan 4 joins against the reified `sci:skill/<id>` targets
+(the join key is the canonical INDEX id on both sides). The builder **re-validates** the structural
+invariants (it does not trust the JSON blindly, since a resource can be edited): a **duplicate `id`**
+across entries, a `covers` term off-catalog, a duplicate `covers` term, a router carrying
+`covers`/`archetype`, or a leaf missing `archetype` is a **structural error** (§5).
 
 **Package split.** `science_tool` owns only the `importlib.resources` **loader**
 (`load_skill_inventory() -> dict`, reading the packaged JSON) and the corpus-scanning generator;
@@ -170,45 +219,63 @@ carrying `covers`/`archetype`, or a leaf missing `archetype` is a **structural e
 
 All violations are **hard, fail-early errors**, never silent skips or fallbacks:
 
-- a `covers:` term not in the `data_products` catalog — at generation **and** at overlay build;
+- a `covers:` term not in the `data_products` catalog, or a **duplicate `covers:` term** — at
+  generation **and** at overlay build;
 - a router declaring `covers:` or `archetype:`;
 - a leaf missing `archetype:`;
-- malformed frontmatter (missing `name`, unparseable block, `covers:` not a list of strings);
-- **INDEX↔corpus inconsistency** at generation — an INDEX path that does not exist, or a real
-  skill file absent from INDEX (an orphan);
+- malformed frontmatter (missing `name`, unparseable block, `covers`/`sources` not a list of
+  strings), a **duplicate key**, or a **YAML merge key (`<<`)** in the frontmatter;
+- **INDEX bijection violation** at generation — a duplicate INDEX id, a duplicate INDEX path, an id
+  failing the canonical grammar, an INDEX path that does not exist, a real skill file absent from
+  INDEX (orphan), or an INDEX path that is not a real skill (extra);
+- a **duplicate `id`** across inventory entries — at overlay build;
+- a **companion target** that resolves to no INDEX path (broken/off-corpus link), or a **duplicate
+  companion target** within one skill;
 - inventory **drift** (committed resource ≠ freshly generated) — a test failure with the
   regeneration command.
 
 ### Data flow
 
 ```text
-skills/INDEX.md (id↔path) + skills/*.md frontmatter
-    ──build_skill_inventory (INDEX-driven scan + consistency + validate covers vs catalog)──▶ skill_inventory.json  (science_tool package data)
+skills/INDEX.md (id↔path) + skills/*.md frontmatter + ## Companion Skills
+    ──build_skill_inventory (INDEX bijection + dup/merge-safe parse + covers vs catalog + resolve companions)──▶ skill_inventory.json  (science_tool package data, ships in wheel)
 skill_inventory.json ──load_skill_inventory (importlib.resources)──▶ dict
-dict + data_products catalog ──build_skill_overlay (role-typed, keyed by id, re-validated)──▶ SkillOverlay  (science-model)
+dict + data_products catalog ──build_skill_overlay (role-typed, keyed by id, dedup, re-validated)──▶ SkillOverlay  (science-model)
                                                                                      └─▶ (sub-plan 4) join sci:skill/<id> vs reified skills_loaded
 ```
 
 ## Testing approach
 
 - **`covers:` catalog validation:** a leaf with an in-catalog term validates; an off-catalog term
-  is a hard error at generation and at overlay build.
+  and a **duplicate** term are each hard errors at generation and at overlay build.
 - **Inventory determinism + drift:** `build_skill_inventory` over the live corpus serializes
   byte-identical to the committed `skill_inventory.json`; a synthetic changed/added leaf changes the
-  output (drift is detectable).
-- **INDEX-driven identity + consistency:** each entry's `id` is the INDEX key (e.g.
-  `transcriptomics-scrna-qa`), not the frontmatter `name` (`scrna-qa`); an INDEX path that does not
-  exist, and a real skill file missing from INDEX, are each hard errors at generation.
+  output (drift is detectable); the `skills` list is in canonical-`id` order.
+- **INDEX identity keys off INDEX, not `name`:** a **synthetic fixture** whose frontmatter `name`
+  differs from its INDEX id yields an inventory/overlay keyed by the **INDEX id** (proves the builder
+  does not read identity from `name`, even though real corpus `name == id` today).
+- **INDEX bijection:** duplicate INDEX id, duplicate INDEX path, an id failing the grammar, a
+  non-existent INDEX path, an orphan real-skill file, and an extra non-skill INDEX path are each hard
+  errors at generation.
+- **Dup/merge-key parsing:** frontmatter with a duplicate key and frontmatter with a YAML merge key
+  (`<<`) are each rejected (regression for the `safe_load`-collapse trap).
+- **Companions:** a skill's `## Companion Skills` links resolve to canonical ids with the right role
+  for **leaf, router, and INDEX** targets; a broken/off-corpus target and a duplicate target are
+  each hard errors; companion order is the authored order.
 - **Exclusions + role rule:** `INDEX.md`, `skills/meta/templates/*`, and `sources.yaml` never appear
   in the inventory (they are not INDEX entries); `SKILL.md` paths are `role: router`, others
   `role: leaf`.
 - **Overlay role-typing + key:** a leaf yields a `LeafSkill` with `archetype` and validated
   `covers`; a router yields a `RouterSkill` with neither; an **uncovered** leaf builds cleanly with
-  empty `covers` (not an error); the overlay is looked up by canonical `id` (the sub-plan-4 join key).
-- **Overlay invariants:** a router-with-`covers`, a leaf-without-`archetype`, and an off-catalog
-  term each raise a structural error at build.
-- **Package boundary:** `build_skill_overlay` consumes a dict and never touches the `skills/` tree
-  (works with the corpus absent).
+  empty `covers`, and an entry omitting `sources` materializes `sources == []`; the overlay is
+  looked up by canonical `id` (the sub-plan-4 join key) in id order.
+- **Overlay invariants:** a duplicate `id`, a router-with-`covers`, a leaf-without-`archetype`, and
+  an off-catalog term each raise a structural error at build.
+- **Package boundary + wheel packaging:** `build_skill_overlay` consumes a dict and never touches
+  the `skills/` tree (works with the corpus absent); and a packaging test builds the wheel
+  (`uv build`) and asserts `skill_inventory.json` is present in it, so the inventory a pinned
+  installed toolkit ships is actually loadable via `importlib.resources` — byte-matching the source
+  checkout alone does not prove distribution.
 
 Verification gate: full `science` and `science/model` suites, `ruff check`, `pyright`.
 
@@ -218,6 +285,10 @@ Verification gate: full `science` and `science/model` suites, `ruff check`, `pyr
   states, and the `unmapped-skill-reference` / uncovered diagnostics** — sub-plan 4. This sub-plan
   produces the inventory + overlay; it never joins them against `skills_loaded` or emits a report.
 - **`covers:` outside the bio subtree** — later slices, riding the same catalog-validation path.
+- **Typed companion-edge relation semantics** — this sub-plan captures companion edges as *data*
+  (resolved `{target, role}`) in the inventory/overlay, as the parent contract requires; assigning
+  them richer typed relation semantics and surfacing them in any report is deferred (parent design
+  "Deferred": "typed companion-edge relation semantics") to sub-plan 4 / later.
 - **The method/operation axis and any persistent on-disk overlay artifact** — the overlay is
   in-memory, built per consumer.
 - **Changing router/leaf structure, archetypes, or the skill taxonomy** — the inventory reflects the
