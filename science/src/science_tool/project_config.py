@@ -411,6 +411,23 @@ def load_project_config(project_root: Path) -> ProjectConfig:
     return ProjectConfig.model_validate(raw)
 
 
+def project_entity_schema_version(project_root: Path) -> int | None:
+    """The project's declared entity_schema_version pin (1/2/3), or None if unpinned.
+
+    Reads the raw science.yaml mapping and validates through the single authority
+    (`validated_entity_schema_version`) -- no full ProjectConfig required, exactly as the
+    graph loader reads the pin (`graph/sources.py`). This keeps the write path and the load
+    path reading the generation through one function, so they can never disagree. A missing
+    science.yaml is unpinned (None), not an error, mirroring the loader -- write sites like
+    `add_dataset` are exercised against bare directories that have no config.
+    """
+    path = project_config_path(project_root)
+    if not path.is_file():
+        return None
+    raw = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
+    return validated_entity_schema_version(raw)
+
+
 def domain_enrollment(
     config: ProjectConfig, domain: str
 ) -> EnrollmentStatus | Literal["undeclared"]:

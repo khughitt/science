@@ -15,8 +15,39 @@ from science_tool.project_config import (
     effective_reproducibility_policy,
     load_plan_reproducibility_policy,
     load_project_config,
+    project_entity_schema_version,
     validated_entity_schema_version,
 )
+
+
+def test_project_entity_schema_version_reads_pin(tmp_path):
+    (tmp_path / "science.yaml").write_text(
+        "name: p\nentity_schema_version: 3\nknowledge_profiles: {}\n", encoding="utf-8"
+    )
+    assert project_entity_schema_version(tmp_path) == 3
+
+
+def test_project_entity_schema_version_absent_is_none(tmp_path):
+    (tmp_path / "science.yaml").write_text(
+        "name: p\nknowledge_profiles: {}\n", encoding="utf-8"
+    )
+    assert project_entity_schema_version(tmp_path) is None
+
+
+def test_project_entity_schema_version_missing_config_is_none(tmp_path):
+    # A bare directory with no science.yaml is unpinned, not an error -- mirrors how the
+    # graph loader treats a missing config. Existing dataset-add tests pass bare tmp_path
+    # dirs through add_dataset, which now routes here.
+    assert project_entity_schema_version(tmp_path) is None
+
+
+def test_project_entity_schema_version_rejects_illegal_pin(tmp_path):
+    # A present-but-illegal pin must raise, not degrade to unpinned.
+    (tmp_path / "science.yaml").write_text(
+        'name: p\nentity_schema_version: "3"\nknowledge_profiles: {}\n', encoding="utf-8"
+    )
+    with pytest.raises(ValueError):
+        project_entity_schema_version(tmp_path)
 
 
 def test_domain_enrollment_undeclared_when_block_absent():
