@@ -12,7 +12,7 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator, model_valida
 from pydantic.functional_validators import BeforeValidator
 
 from science_model.frontmatter import parse_frontmatter, project_config_path
-from science_model.skill_coverage import DOMAIN_KEYS, EnrollmentStatus
+from science_model.skill_coverage import DOMAIN_KEYS, GENERATION_3_DOMAINS, EnrollmentStatus
 from science_tool.data_policy import DataPolicy, DEFAULT_DATA_POLICY
 from science_tool.datasets.semantics import OrdinalReproClass
 
@@ -305,6 +305,25 @@ class ProjectConfig(BaseModel):
     def _reject_near_miss_keys(cls, raw: Any) -> Any:
         reject_near_miss_keys(raw)
         return raw
+
+    @model_validator(mode="after")
+    def _enrolled_requires_generation_3(self) -> ProjectConfig:
+        coverage = self.skill_coverage
+        if coverage is None:
+            return self
+        needs_generation_3 = sorted(
+            domain
+            for domain, status in coverage.domains.items()
+            if status is EnrollmentStatus.ENROLLED and domain in GENERATION_3_DOMAINS
+        )
+        if needs_generation_3 and self.entity_schema_version != 3:
+            raise ValueError(
+                f"skill_coverage: domain(s) {needs_generation_3!r} are enrolled but require "
+                f"entity_schema_version: 3 (currently {self.entity_schema_version!r}). Coverage reads "
+                "the generation-3 capability shape, so enrolling without the gen-3 pin is refused "
+                "rather than run against a shape the project does not speak."
+            )
+        return self
 
 
 def reject_near_miss_keys(raw: Any) -> None:

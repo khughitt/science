@@ -58,6 +58,52 @@ def test_skill_coverage_parses_enrolled_domain():
     }
 
 
+def test_enrolled_domain_requires_generation_3():
+    with pytest.raises(ValidationError, match="entity_schema_version: 3"):
+        ProjectConfig.model_validate(
+            {
+                "name": "demo",
+                "entity_schema_version": 2,
+                "skill_coverage": {"domains": {"molecular-measurement": "enrolled"}},
+            }
+        )
+
+
+def test_enrolled_domain_without_any_pin_is_rejected():
+    # Absent pin == generation 1; enrolling a gen-3 domain still requires the explicit 3.
+    with pytest.raises(ValidationError, match="entity_schema_version: 3"):
+        ProjectConfig.model_validate(
+            {
+                "name": "demo",
+                "skill_coverage": {"domains": {"molecular-measurement": "enrolled"}},
+            }
+        )
+
+
+def test_enrolled_domain_with_generation_3_is_accepted():
+    config = ProjectConfig.model_validate(
+        {
+            "name": "demo",
+            "entity_schema_version": 3,
+            "skill_coverage": {"domains": {"molecular-measurement": "enrolled"}},
+        }
+    )
+    assert config.entity_schema_version == 3
+
+
+def test_out_of_domain_does_not_require_generation_3():
+    # A project can declare itself out-of-domain without migrating to generation 3.
+    config = ProjectConfig.model_validate(
+        {
+            "name": "demo",
+            "skill_coverage": {"domains": {"molecular-measurement": "out-of-domain"}},
+        }
+    )
+    assert config.skill_coverage.domains == {
+        "molecular-measurement": EnrollmentStatus.OUT_OF_DOMAIN
+    }
+
+
 def test_skill_coverage_rejects_unknown_domain_key():
     with pytest.raises(ValidationError, match="unknown domain key"):
         ProjectConfig.model_validate(
