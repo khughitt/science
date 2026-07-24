@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Build the observable the autonomy envelope's semantic gate is defined over — capture a per-entity *belief basis* from a materialized graph, digest it, and compare two captures into a typed delta.
+**Goal:** Build the observable the autonomy envelope's semantic gate is defined over — capture a per-entity *belief basis* from a materialized graph, seal it in a verifiable snapshot, and compare two snapshots into a typed delta.
 
 **Architecture:** One new pure module, `graph/belief_basis.py`, plus one CLI subcommand. Capture takes two `rdflib.Graph` objects (knowledge, provenance) rather than a `Dataset`, matching how `collect_evidence_units` is already tested, so every function is unit-testable without building a project. Basis capture reuses the exact per-entity recipe already used by the attention instrument (`graph/attention.py:350-353`): expand the target closure, collect evidence units, record policy identity. It deliberately does **not** call `aggregate_belief` — the whole point is to compare inputs, not the aggregated verdict.
 
@@ -11,8 +11,9 @@
 ## Global Constraints
 
 - The basis is **target closure + raw evidence-unit multiset + policy identity**. Never merely the final ordinal magnitude — a run whose units change but cancel must be detectable.
-- An uncomputable basis yields `InstrumentResult.unwired`. **`unwired` never means clean.**
+- An uncomputable basis yields exit code 2 / `InstrumentResult.unwired`. **`unwired` never means clean.** Every input that cannot be read, parsed, or verified is uncomputable — not a belief movement.
 - `belief_scalar` / `belief_scalar_enabled` must NOT be consulted anywhere in this plan. It is opt-in and returns `False` when unconfigured, so a gate defined over it fails open. It is an *additional* comparison only, and lands in Plan D.
+- Serialization must **fail closed**: no `default=` fallback in `json.dumps`, and `extra="forbid"` on every persisted model, so an unrepresentable or unrecognized field raises rather than being silently coerced or dropped.
 - All commands run from `science/`: `cd science && uv run --frozen pytest`, `uv run ruff check`, `uv run pyright`.
 - Pyright is configured once by the repo-root `pyrightconfig.json`; do not add a `[tool.pyright]` block.
 - Conventional commits. **No AI-attribution trailer or footer on any commit.**
@@ -24,10 +25,10 @@
 
 | File | Responsibility |
 |---|---|
-| `science/src/science_tool/graph/belief_basis.py` | **Create.** Basis capture, unit keying, digest, comparison. Pure — no filesystem, no project config. |
+| `science/src/science_tool/graph/belief_basis.py` | **Create.** Unit keying, basis capture, digest, snapshot envelope, comparison. Pure — no filesystem, no project config. |
 | `science/src/science_tool/graph/cli.py` | **Modify.** Add the `belief-basis` subcommand to the existing `graph_group`. |
-| `science/tests/test_belief_basis.py` | **Create.** Unit tests for keying, capture, digest, comparison. |
-| `science/tests/test_belief_basis_cli.py` | **Create.** CLI tests: snapshot round-trip and the three exit codes. |
+| `science/tests/test_belief_basis.py` | **Create.** Unit tests for keying, capture, digest, snapshot, comparison. |
+| `science/tests/test_belief_basis_cli.py` | **Create.** CLI tests: mode exclusivity, snapshot round-trip, and the three exit codes. |
 
 `belief_basis.py` sits beside `belief.py`, `belief_policy.py`, and `belief_scalar.py` because it changes when belief changes — that is the coupling that matters.
 
@@ -40,10 +41,12 @@
 - Test: `science/tests/test_belief_basis.py`
 
 **Interfaces:**
-- Consumes: `EvidenceUnit` from `science_tool.graph.belief` (a dataclass; fields at `graph/belief.py:20-40`).
+- Consumes: `EvidenceUnit` from `science_tool.graph.belief` — a `@dataclass(frozen=True)` with **18 fields** spanning `graph/belief.py:20-48`. Do not assume you have seen them all by reading the first screenful; the last four (`target_polarity`, `quant_beta`, `quant_prob_sign`, `confidence`, `qa_failed_datasets`) are appended below a comment block.
 - Produces: `unit_key(unit: EvidenceUnit) -> str`.
 
 The key is built from `dataclasses.asdict` rather than a hand-listed field subset. This is the load-bearing property: when someone adds a new field to `EvidenceUnit`, it enters the key automatically, so an unrecognized belief input changes the basis instead of being silently omitted from it. A hand-listed subset would fail open on exactly the change most likely to matter.
+
+`json.dumps` is called **without** a `default=` fallback. A `default=str` would silently accept a future non-JSON-native field type and could collapse two distinct values into the same string. Without it, such a field raises `TypeError` at capture time — which is the correct, visible failure.
 
 - [ ] **Step 1: Write the failing tests**
 
@@ -69,6 +72,19 @@ def _u(stance: str = "supports", **kw) -> EvidenceUnit:
     return EvidenceUnit(**base)
 
 
+def _distinct(value: object) -> object:
+    """Return a value of compatible shape that differs from `value`."""
+    if isinstance(value, bool):
+        return not value
+    if isinstance(value, float):
+        return value + 1.0
+    if isinstance(value, tuple):
+        return (*value, "perturbed")
+    if isinstance(value, str):
+        return value + "-perturbed"
+    return "perturbed"  # None, and anything else
+
+
 def test_identical_units_share_a_key():
     assert unit_key(_u()) == unit_key(_u())
 
@@ -77,15 +93,18 @@ def test_differing_strength_changes_the_key():
     assert unit_key(_u(strength="strong")) != unit_key(_u(strength="weak"))
 
 
-def test_key_covers_every_evidence_unit_field():
-    """Fail-closed: the key must be derived from the dataclass, not a hand-listed subset.
+def test_every_field_value_affects_the_key():
+    """Fail-closed: every field's VALUE must reach the key, not just its name.
 
-    A new EvidenceUnit field must enter the basis automatically. This test fails
-    the moment someone rewrites unit_key against an explicit field list.
+    Checking that field names appear in the key would pass an implementation
+    serializing {name: None} for every field. Perturbing each value in turn
+    catches that, and stays valid if unit_key later returns a hash instead
+    of a JSON string.
     """
-    key = unit_key(_u())
+    base = _u()
     for field in dataclasses.fields(EvidenceUnit):
-        assert field.name in key, f"{field.name} missing from unit key"
+        mutated = dataclasses.replace(base, **{field.name: _distinct(getattr(base, field.name))})
+        assert unit_key(mutated) != unit_key(base), f"{field.name} does not affect the key"
 ```
 
 - [ ] **Step 2: Run the tests to verify they fail**
@@ -118,8 +137,11 @@ def unit_key(unit: EvidenceUnit) -> str:
     Derived from `asdict` so a NEW field on EvidenceUnit enters the key automatically.
     Never rewrite this against an explicit field list: an unrecognized belief input
     must change the basis rather than be silently dropped from it.
+
+    No `default=` fallback: a future field whose type is not JSON-native must raise
+    here rather than be coerced to a string, which could collapse distinct values.
     """
-    return json.dumps(asdict(unit), sort_keys=True, default=str)
+    return json.dumps(asdict(unit), sort_keys=True)
 ```
 
 - [ ] **Step 4: Run the tests to verify they pass**
@@ -143,8 +165,8 @@ git commit -m "feat(graph): add canonical evidence-unit key for belief basis"
 - Test: `science/tests/test_belief_basis.py`
 
 **Interfaces:**
-- Consumes: `unit_key` (Task 1); `collect_evidence_units(knowledge, provenance, targets)` (`graph/belief.py:123`); `_evidence_targets_for_uri(knowledge, target_uri)` and `canonical_id_from_entity_uri(uri)` — both imported from `science_tool.graph.store`, the same path `graph/attention.py:22` uses; `DEFAULT_BELIEF_POLICY` (`graph/belief_policy.py:99`); `InstrumentResult` (`science_tool/instruments.py:74`).
-- Produces: `class EntityBasis` (frozen pydantic model with fields `entity_id: str`, `uri: str`, `target_uris: tuple[str, ...]`, `unit_keys: tuple[str, ...]`, `policy_id: str`, `policy_version: str`); `capture_basis(knowledge, provenance, *, policy=DEFAULT_BELIEF_POLICY) -> InstrumentResult[EntityBasis]`; the constant `NO_TYPED_ENTITIES = "no_typed_entities"`.
+- Consumes: `unit_key` (Task 1); `collect_evidence_units(knowledge, provenance, targets)` (`graph/belief.py:123`); `_evidence_targets_for_uri(knowledge, target_uri)` and `canonical_id_from_entity_uri(uri)` — both imported from `science_tool.graph.store`, the same path `graph/attention.py:22` uses; `DEFAULT_BELIEF_POLICY` (`graph/belief_policy.py:98`); `InstrumentResult` (`science_tool/instruments.py:74`).
+- Produces: `class EntityBasis` (frozen, `extra="forbid"` pydantic model with fields `entity_id: str`, `uri: str`, `target_uris: tuple[str, ...]`, `unit_keys: tuple[str, ...]`, `policy_id: str`, `policy_version: str`); `capture_basis(knowledge, provenance, *, policy=DEFAULT_BELIEF_POLICY) -> InstrumentResult[EntityBasis]`; the constant `NO_TYPED_ENTITIES = "no_typed_entities"`.
 
 The `unwired` precondition matters as much as the happy path. A graph carrying no typed project entities has not been assessed for belief at all — reporting "no changes" there would present an unbuilt graph as a clean one, which is the exact failure `InstrumentResult` exists to prevent.
 
@@ -219,8 +241,14 @@ from rdflib.namespace import RDF
 
 from science_tool.graph.belief import collect_evidence_units
 from science_tool.graph.belief_policy import DEFAULT_BELIEF_POLICY, BeliefPolicy
-from science_tool.graph.store import _evidence_targets_for_uri, canonical_id_from_entity_uri
 from science_tool.instruments import InstrumentResult
+
+# `_evidence_targets_for_uri` is private to the store package but has no public
+# equivalent; the attention instrument imports it by this same path
+# (graph/attention.py:22). Do NOT "fix" this to a public path — none exists, and
+# the basis must expand targets exactly as attention does or the two disagree
+# about what an entity's evidence is.
+from science_tool.graph.store import _evidence_targets_for_uri, canonical_id_from_entity_uri
 
 #: The sole precondition of basis capture. With no typed project entity in
 #: graph/knowledge, NO entity has been assessed and the basis is not a basis.
@@ -230,7 +258,7 @@ NO_TYPED_ENTITIES = "no_typed_entities"
 class EntityBasis(BaseModel):
     """The belief inputs for one entity, in comparable canonical form."""
 
-    model_config = ConfigDict(frozen=True)
+    model_config = ConfigDict(frozen=True, extra="forbid")
 
     entity_id: str
     uri: str
@@ -353,8 +381,8 @@ from typing import Iterable
 def basis_digest(bases: Iterable[EntityBasis]) -> str:
     """Order-independent sha256 over a whole capture.
 
-    Persisted in the run record so a later validation can prove it compared
-    against the same starting state.
+    Persisted in the snapshot envelope and in the run record so a later
+    validation can prove it compared against the same starting state.
     """
     payload = json.dumps(
         [b.model_dump(mode="json") for b in sorted(bases, key=lambda b: b.uri)],
@@ -377,7 +405,130 @@ git commit -m "feat(graph): add order-independent belief-basis digest"
 
 ---
 
-### Task 4: Basis comparison
+### Task 4: Verified snapshot envelope
+
+**Files:**
+- Modify: `science/src/science_tool/graph/belief_basis.py`
+- Test: `science/tests/test_belief_basis.py`
+
+**Interfaces:**
+- Consumes: `EntityBasis` (Task 2), `basis_digest` (Task 3).
+- Produces: `BASIS_SNAPSHOT_SCHEMA_VERSION: int`; `class BasisSnapshot` (frozen, `extra="forbid"`, fields `schema_version: int`, `digest: str`, `rows: tuple[EntityBasis, ...]`); `class SnapshotIntegrityError(ValueError)`; `build_snapshot(rows: Iterable[EntityBasis]) -> BasisSnapshot`; `load_snapshot(payload: dict) -> BasisSnapshot`.
+
+A digest that is written but never checked is decoration. `load_snapshot` recomputes the digest from the rows and refuses to return a snapshot whose stored digest disagrees, so a corrupted or substituted baseline cannot yield a clean comparison — it raises, and the CLI turns that into `unwired`.
+
+`extra="forbid"` plus an explicit `schema_version` closes the other direction: a *newer* snapshot carrying basis fields this code does not know about must fail loudly rather than be silently truncated into a comparison that then reports clean. Plan D additionally compares this digest against the supervisor-attested digest in the run record; Plan A only guarantees internal consistency.
+
+- [ ] **Step 1: Write the failing tests**
+
+```python
+# append to science/tests/test_belief_basis.py
+import pytest
+
+from science_tool.graph.belief_basis import (
+    BASIS_SNAPSHOT_SCHEMA_VERSION,
+    SnapshotIntegrityError,
+    build_snapshot,
+    load_snapshot,
+)
+
+
+def test_snapshot_round_trips():
+    snapshot = build_snapshot([_basis("proposition:a", ("k1",))])
+    reloaded = load_snapshot(snapshot.model_dump(mode="json"))
+    assert reloaded.rows == snapshot.rows
+    assert reloaded.digest == snapshot.digest
+
+
+def test_tampered_rows_are_rejected():
+    """A substituted baseline must not be able to produce a clean comparison."""
+    payload = build_snapshot([_basis("proposition:a", ("k1",))]).model_dump(mode="json")
+    payload["rows"][0]["unit_keys"] = ["k2"]
+    with pytest.raises(SnapshotIntegrityError, match="digest mismatch"):
+        load_snapshot(payload)
+
+
+def test_unknown_schema_version_is_rejected():
+    payload = build_snapshot([_basis("proposition:a")]).model_dump(mode="json")
+    payload["schema_version"] = BASIS_SNAPSHOT_SCHEMA_VERSION + 1
+    with pytest.raises(SnapshotIntegrityError, match="schema_version"):
+        load_snapshot(payload)
+
+
+def test_unknown_basis_field_is_rejected_not_dropped():
+    """A newer snapshot must fail loudly rather than be truncated into a clean compare."""
+    payload = build_snapshot([_basis("proposition:a")]).model_dump(mode="json")
+    payload["rows"][0]["future_field"] = "value"
+    with pytest.raises(Exception):  # pydantic ValidationError via extra="forbid"
+        load_snapshot(payload)
+```
+
+- [ ] **Step 2: Run the tests to verify they fail**
+
+Run: `cd science && uv run --frozen pytest tests/test_belief_basis.py -k snapshot -v`
+Expected: FAIL — `ImportError: cannot import name 'BASIS_SNAPSHOT_SCHEMA_VERSION'`
+
+- [ ] **Step 3: Write the minimal implementation**
+
+```python
+# add to science/src/science_tool/graph/belief_basis.py
+
+#: Bump when the shape of EntityBasis or the snapshot envelope changes.
+BASIS_SNAPSHOT_SCHEMA_VERSION = 1
+
+
+class SnapshotIntegrityError(ValueError):
+    """A snapshot could not be trusted: bad digest, or a schema version this code cannot read."""
+
+
+class BasisSnapshot(BaseModel):
+    """A sealed capture. The digest is verified on load, never merely carried."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    schema_version: int
+    digest: str
+    rows: tuple[EntityBasis, ...]
+
+
+def build_snapshot(rows: Iterable[EntityBasis]) -> BasisSnapshot:
+    sealed = tuple(rows)
+    return BasisSnapshot(
+        schema_version=BASIS_SNAPSHOT_SCHEMA_VERSION,
+        digest=basis_digest(sealed),
+        rows=sealed,
+    )
+
+
+def load_snapshot(payload: dict) -> BasisSnapshot:
+    """Parse and VERIFY a snapshot. Raises rather than returning something untrustworthy."""
+    snapshot = BasisSnapshot(**payload)
+    if snapshot.schema_version != BASIS_SNAPSHOT_SCHEMA_VERSION:
+        raise SnapshotIntegrityError(
+            f"snapshot schema_version {snapshot.schema_version} != {BASIS_SNAPSHOT_SCHEMA_VERSION}; "
+            "this snapshot was written by a different version of the basis format"
+        )
+    recomputed = basis_digest(snapshot.rows)
+    if recomputed != snapshot.digest:
+        raise SnapshotIntegrityError(f"snapshot digest mismatch: stored {snapshot.digest}, recomputed {recomputed}")
+    return snapshot
+```
+
+- [ ] **Step 4: Run the tests to verify they pass**
+
+Run: `cd science && uv run --frozen pytest tests/test_belief_basis.py -v`
+Expected: PASS (14 tests)
+
+- [ ] **Step 5: Commit**
+
+```bash
+git add science/src/science_tool/graph/belief_basis.py science/tests/test_belief_basis.py
+git commit -m "feat(graph): seal belief-basis captures in a digest-verified snapshot"
+```
+
+---
+
+### Task 5: Basis comparison
 
 **Files:**
 - Modify: `science/src/science_tool/graph/belief_basis.py`
@@ -499,7 +650,7 @@ def compare_bases(before: Iterable[EntityBasis], after: Iterable[EntityBasis]) -
 - [ ] **Step 4: Run the tests to verify they pass**
 
 Run: `cd science && uv run --frozen pytest tests/test_belief_basis.py -v`
-Expected: PASS (15 tests)
+Expected: PASS (19 tests)
 
 - [ ] **Step 5: Commit**
 
@@ -510,14 +661,14 @@ git commit -m "feat(graph): compare belief bases into typed per-entity deltas"
 
 ---
 
-### Task 5: `science graph belief-basis` command
+### Task 6: `science graph belief-basis` command
 
 **Files:**
 - Modify: `science/src/science_tool/graph/cli.py`
 - Test: `science/tests/test_belief_basis_cli.py`
 
 **Interfaces:**
-- Consumes: `capture_basis`, `basis_digest`, `compare_bases`, `EntityBasis` (Tasks 2-4); `load_trig_dataset_preserving_literals(graph_path)` (`graph/trig.py`, used the same way at `wander/sampling.py:37`); `graph_uri(layer)` (`graph/store/identity.py:63`).
+- Consumes: `capture_basis`, `build_snapshot`, `load_snapshot`, `compare_bases`, `SnapshotIntegrityError` (Tasks 2-5); `load_trig_dataset_preserving_literals(graph_path)` (`graph/trig.py`, used the same way at `wander/sampling.py:37`); `graph_uri(layer)` (`graph/store/identity.py:63`).
 - Produces: a `belief-basis` subcommand on the existing `graph_group`.
 
 Exit codes encode the verdict so the Plan D supervisor can consume them directly, and so the fail-closed rule is enforced by the process contract rather than by prose:
@@ -527,6 +678,11 @@ Exit codes encode the verdict so the Plan D supervisor can consume them directly
 | 0 | clean — no pre-existing entity's basis moved |
 | 1 | moved — at least one delta |
 | 2 | **unwired** — the basis was not computable; explicitly *not* clean |
+
+Two rules make the table true rather than aspirational:
+
+1. **`--out` and `--compare` are mutually exclusive, and exactly one is required.** Allowing both would let a caller pass the same path for each, overwriting the baseline with the current capture and then reporting clean — a guard that erases its own evidence. The supervisor never needs both: it captures with `--out` at run start and compares with `--compare` at run end.
+2. **Every unreadable input is exit 2, not exit 1.** A missing or malformed TriG, unparseable snapshot JSON, a failed digest check, and a schema-version mismatch are all *uncomputable*, and an uncaught exception would surface as exit code 1 — which the table defines as a genuine belief movement. They are caught at the CLI boundary and reported as `unwired`.
 
 - [ ] **Step 1: Write the failing tests**
 
@@ -563,39 +719,52 @@ def _write_graph(path: Path, *, with_line: bool) -> None:
     path.write_text(dataset.serialize(format="trig"))
 
 
-def test_snapshot_writes_rows_and_digest(tmp_path: Path):
-    graph_path = tmp_path / "graph.trig"
-    _write_graph(graph_path, with_line=True)
-    out = tmp_path / "basis.json"
+def _snapshot(graph_path: Path, out: Path) -> None:
     result = CliRunner().invoke(
         graph_group, ["belief-basis", "--graph-path", str(graph_path), "--out", str(out)]
     )
     assert result.exit_code == 0, result.output
+
+
+def test_snapshot_writes_verified_rows(tmp_path: Path):
+    graph_path, out = tmp_path / "graph.trig", tmp_path / "basis.json"
+    _write_graph(graph_path, with_line=True)
+    _snapshot(graph_path, out)
     payload = json.loads(out.read_text())
-    assert payload["digest"]
+    assert payload["digest"] and payload["schema_version"] == 1
     assert any(row["entity_id"] == "proposition:p" for row in payload["rows"])
 
 
+def test_out_and_compare_are_mutually_exclusive(tmp_path: Path):
+    """Passing the same path for both would overwrite the baseline and report clean."""
+    graph_path, out = tmp_path / "graph.trig", tmp_path / "basis.json"
+    _write_graph(graph_path, with_line=True)
+    _snapshot(graph_path, out)
+    result = CliRunner().invoke(
+        graph_group,
+        ["belief-basis", "--graph-path", str(graph_path), "--out", str(out), "--compare", str(out)],
+    )
+    assert result.exit_code == 2
+    assert "mutually exclusive" in result.output
+
+
 def test_compare_detects_an_added_evidence_line(tmp_path: Path):
-    graph_path = tmp_path / "graph.trig"
-    baseline = tmp_path / "before.json"
+    graph_path, baseline = tmp_path / "graph.trig", tmp_path / "before.json"
     _write_graph(graph_path, with_line=False)
-    CliRunner().invoke(graph_group, ["belief-basis", "--graph-path", str(graph_path), "--out", str(baseline)])
+    _snapshot(graph_path, baseline)
 
     _write_graph(graph_path, with_line=True)
     result = CliRunner().invoke(
         graph_group, ["belief-basis", "--graph-path", str(graph_path), "--compare", str(baseline)]
     )
     assert result.exit_code == 1
-    assert "proposition:p" in result.output
-    assert "units" in result.output
+    assert "proposition:p" in result.output and "units" in result.output
 
 
 def test_identical_graph_compares_clean(tmp_path: Path):
-    graph_path = tmp_path / "graph.trig"
-    baseline = tmp_path / "before.json"
+    graph_path, baseline = tmp_path / "graph.trig", tmp_path / "before.json"
     _write_graph(graph_path, with_line=True)
-    CliRunner().invoke(graph_group, ["belief-basis", "--graph-path", str(graph_path), "--out", str(baseline)])
+    _snapshot(graph_path, baseline)
     result = CliRunner().invoke(
         graph_group, ["belief-basis", "--graph-path", str(graph_path), "--compare", str(baseline)]
     )
@@ -605,11 +774,42 @@ def test_identical_graph_compares_clean(tmp_path: Path):
 def test_unwired_graph_exits_two_not_zero(tmp_path: Path):
     """A graph with no typed entities must NOT report clean."""
     graph_path = tmp_path / "graph.trig"
-    graph_path.parent.mkdir(parents=True, exist_ok=True)
     graph_path.write_text(Dataset().serialize(format="trig"))
-    result = CliRunner().invoke(graph_group, ["belief-basis", "--graph-path", str(graph_path)])
+    result = CliRunner().invoke(graph_group, ["belief-basis", "--graph-path", str(graph_path), "--out", str(tmp_path / "o.json")])
     assert result.exit_code == 2
     assert "no_typed_entities" in result.output
+
+
+def test_missing_graph_is_unwired_not_moved(tmp_path: Path):
+    result = CliRunner().invoke(
+        graph_group, ["belief-basis", "--graph-path", str(tmp_path / "absent.trig"), "--out", str(tmp_path / "o.json")]
+    )
+    assert result.exit_code == 2
+
+
+def test_tampered_baseline_is_unwired_not_clean(tmp_path: Path):
+    """A corrupted baseline must never yield a clean comparison."""
+    graph_path, baseline = tmp_path / "graph.trig", tmp_path / "before.json"
+    _write_graph(graph_path, with_line=True)
+    _snapshot(graph_path, baseline)
+    payload = json.loads(baseline.read_text())
+    payload["rows"][0]["unit_keys"] = []
+    baseline.write_text(json.dumps(payload))
+    result = CliRunner().invoke(
+        graph_group, ["belief-basis", "--graph-path", str(graph_path), "--compare", str(baseline)]
+    )
+    assert result.exit_code == 2
+    assert "digest mismatch" in result.output
+
+
+def test_malformed_baseline_json_is_unwired(tmp_path: Path):
+    graph_path, baseline = tmp_path / "graph.trig", tmp_path / "before.json"
+    _write_graph(graph_path, with_line=True)
+    baseline.write_text("{not json")
+    result = CliRunner().invoke(
+        graph_group, ["belief-basis", "--graph-path", str(graph_path), "--compare", str(baseline)]
+    )
+    assert result.exit_code == 2
 ```
 
 - [ ] **Step 2: Run the tests to verify they fail**
@@ -630,45 +830,61 @@ Append to `science/src/science_tool/graph/cli.py`. No new top-level imports are 
     show_default=True,
     help="Materialized graph to read.",
 )
-@click.option("--out", "out_path", type=click.Path(path_type=Path), default=None, help="Write the capture to this path as JSON.")
+@click.option("--out", "out_path", type=click.Path(path_type=Path), default=None, help="Write a sealed capture to this path.")
 @click.option("--compare", "compare_path", type=click.Path(path_type=Path), default=None, help="Compare the current basis against a previous capture.")
 def belief_basis_command(graph_path: Path, out_path: Path | None, compare_path: Path | None) -> None:
     """Capture or compare the per-entity belief basis.
 
-    Exit codes: 0 clean, 1 a pre-existing entity's basis moved, 2 unwired
-    (not computable — explicitly NOT clean).
+    Exactly one of --out / --compare. Exit codes: 0 clean, 1 a pre-existing
+    entity's basis moved, 2 unwired (not computable — explicitly NOT clean).
     """
     import json
     import sys
 
-    from science_tool.graph.belief_basis import EntityBasis, basis_digest, capture_basis, compare_bases
+    from science_tool.graph.belief_basis import (
+        SnapshotIntegrityError,
+        build_snapshot,
+        capture_basis,
+        compare_bases,
+        load_snapshot,
+    )
     from science_tool.graph.store.identity import graph_uri
     from science_tool.graph.trig import load_trig_dataset_preserving_literals
 
-    dataset = load_trig_dataset_preserving_literals(graph_path)
+    def _unwired(message: str) -> None:
+        click.echo(f"unwired: {message}")
+        sys.exit(2)
+
+    # A caller passing the same path for both would overwrite the baseline with the
+    # current capture and then compare it against itself — always clean.
+    if (out_path is None) == (compare_path is None):
+        _unwired("--out and --compare are mutually exclusive; pass exactly one")
+
+    try:
+        dataset = load_trig_dataset_preserving_literals(graph_path)
+    except Exception as exc:  # unreadable/malformed graph is uncomputable, not a movement
+        _unwired(f"could not read {graph_path}: {exc}")
+
     result = capture_basis(
         dataset.graph(graph_uri("graph/knowledge")),
         dataset.graph(graph_uri("graph/provenance")),
     )
     if result.status == "unwired":
-        click.echo(f"unwired ({result.code}): {result.reason}")
-        sys.exit(2)
+        _unwired(f"({result.code}) {result.reason}")
 
     if out_path is not None:
         out_path.parent.mkdir(parents=True, exist_ok=True)
-        out_path.write_text(
-            json.dumps(
-                {"digest": basis_digest(result.rows), "rows": [r.model_dump(mode="json") for r in result.rows]},
-                indent=2,
-            )
-        )
+        out_path.write_text(build_snapshot(result.rows).model_dump_json(indent=2))
         click.echo(f"captured {len(result.rows)} entities -> {out_path}")
-
-    if compare_path is None:
         sys.exit(0)
 
-    previous = json.loads(compare_path.read_text())
-    deltas = compare_bases([EntityBasis(**row) for row in previous["rows"]], result.rows)
+    assert compare_path is not None  # exactly-one check above
+    try:
+        previous = load_snapshot(json.loads(compare_path.read_text()))
+    except (OSError, json.JSONDecodeError, SnapshotIntegrityError, ValueError) as exc:
+        _unwired(f"could not trust baseline {compare_path}: {exc}")
+
+    deltas = compare_bases(previous.rows, result.rows)
     if not deltas:
         click.echo("clean: no pre-existing entity's belief basis moved")
         sys.exit(0)
@@ -680,7 +896,7 @@ def belief_basis_command(graph_path: Path, out_path: Path | None, compare_path: 
 - [ ] **Step 4: Run the tests to verify they pass**
 
 Run: `cd science && uv run --frozen pytest tests/test_belief_basis_cli.py -v`
-Expected: PASS (4 tests)
+Expected: PASS (8 tests)
 
 - [ ] **Step 5: Run the full check suite**
 
@@ -705,7 +921,7 @@ git commit -m "feat(graph): add belief-basis capture/compare command with fail-c
 These are spec requirements this plan deliberately does **not** cover. They are recorded so a spec-coverage review can see they were chosen, not missed.
 
 - **Additional scalar comparison** where `belief_scalar_enabled()` is true (spec §5) — Plan D, with the supervisor, which is the first component holding a project root.
-- **Run record**, `base_commit`, `basis_digest` persistence (spec §2) — Plan B.
+- **Run record**, `base_commit`, and comparison of the snapshot digest against the supervisor-attested digest (spec §2) — Plan B/D. Plan A guarantees a snapshot is internally consistent; only the run record can say it is the *right* snapshot.
 - **`run_ref` entity field** (spec §3) — Plan B.
 - **Default-deny path gate** and the **one-way perturbation alarm** (spec §4, §5 layers 1 and 3) — Plan C.
 - **Supervisor lifecycle**, commit-mark verification, quarantine, `science feedback` filing, `science validate` wiring (spec §0, §6) — Plan D.
