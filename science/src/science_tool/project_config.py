@@ -410,6 +410,28 @@ def load_project_config(project_root: Path) -> ProjectConfig:
     return ProjectConfig.model_validate(raw)
 
 
+def domain_enrollment(
+    config: ProjectConfig, domain: str
+) -> EnrollmentStatus | Literal["undeclared"]:
+    """Resolve a project's enrollment status for one coverage domain.
+
+    Absence of the `skill_coverage` block, or of this domain key within it, is `undeclared` -- never
+    `out-of-domain`, which a project must author explicitly. A `domain` outside the closed vocabulary
+    is a programming error at the call site, not a project state, so it raises rather than returning
+    `undeclared`.
+    """
+    if domain not in DOMAIN_KEYS:
+        raise ValueError(
+            f"unknown skill-coverage domain {domain!r}; known domains: {sorted(DOMAIN_KEYS)}"
+        )
+    if config.skill_coverage is None:
+        return "undeclared"
+    status = config.skill_coverage.domains.get(domain)
+    if status is None:
+        return "undeclared"
+    return status
+
+
 def resolve_data_policy(config: ProjectConfig) -> DataPolicy:
     """Return the effective DataPolicy: the project override or the framework default."""
     if config.data_policy is not None:

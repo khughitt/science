@@ -11,11 +11,41 @@ from science_tool.project_config import (
     ReproducibilityPolicyConfig,
     ReproducibilityWaiver,
     SkillCoverageConfig,
+    domain_enrollment,
     effective_reproducibility_policy,
     load_plan_reproducibility_policy,
     load_project_config,
     validated_entity_schema_version,
 )
+
+
+def test_domain_enrollment_undeclared_when_block_absent():
+    config = ProjectConfig.model_validate({"name": "demo"})
+    assert domain_enrollment(config, "molecular-measurement") == "undeclared"
+
+
+def test_domain_enrollment_undeclared_when_key_absent():
+    config = ProjectConfig.model_validate(
+        {"name": "demo", "skill_coverage": {"domains": {}}}
+    )
+    assert domain_enrollment(config, "molecular-measurement") == "undeclared"
+
+
+def test_domain_enrollment_returns_declared_status():
+    config = ProjectConfig.model_validate(
+        {
+            "name": "demo",
+            "entity_schema_version": 3,
+            "skill_coverage": {"domains": {"molecular-measurement": "enrolled"}},
+        }
+    )
+    assert domain_enrollment(config, "molecular-measurement") is EnrollmentStatus.ENROLLED
+
+
+def test_domain_enrollment_rejects_unknown_domain_argument():
+    config = ProjectConfig.model_validate({"name": "demo"})
+    with pytest.raises(ValueError, match="unknown skill-coverage domain"):
+        domain_enrollment(config, "proteomics-measurement")
 
 
 def test_skill_coverage_absent_leaves_field_none():
