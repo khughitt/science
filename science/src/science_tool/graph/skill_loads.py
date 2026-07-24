@@ -125,3 +125,42 @@ def canonicalize_skill_id(raw_id: str, aliases: dict[str, str]) -> str:
             f"invalid skill id {raw_id!r} (post-alias {canonical!r} is not a bare skill name)"
         )
     return canonical
+
+
+def build_skill_load_records(
+    plan_id: str, skills_loaded: object, *, aliases: dict[str, str]
+) -> list[SkillLoadRecord]:
+    """Validate a plan's `skills_loaded` and produce reified records.
+
+    Raises `SkillLoadValidationError` (a structural error surfaced at the plan
+    validation gate) for a malformed shape, a malformed post-alias skill id, or a
+    duplicate canonical load. Canonicalization runs through the one shared helper.
+    """
+    if not isinstance(skills_loaded, list):
+        raise SkillLoadValidationError(f"{plan_id}: skills_loaded must be a list")
+    records: list[SkillLoadRecord] = []
+    seen: dict[str, str] = {}  # canonical id -> the raw id that first produced it
+    for item in skills_loaded:
+        if not isinstance(item, dict):
+            raise SkillLoadValidationError(f"{plan_id}: skills_loaded entry must be a mapping")
+        raw_id = item.get("id")
+        reason = item.get("reason")
+        if not isinstance(raw_id, str) or not raw_id:
+            raise SkillLoadValidationError(
+                f"{plan_id}: skills_loaded entry needs a non-empty string id"
+            )
+        if not isinstance(reason, str) or not reason.strip():
+            raise SkillLoadValidationError(
+                f"{plan_id}: skills_loaded entry {raw_id!r} needs a non-blank string reason"
+            )
+        canonical = canonicalize_skill_id(raw_id, aliases)
+        if canonical in seen:
+            raise SkillLoadValidationError(
+                f"{plan_id}: duplicate canonical skill load {canonical!r} "
+                f"(from {seen[canonical]!r} and {raw_id!r})"
+            )
+        seen[canonical] = raw_id
+        records.append(
+            SkillLoadRecord(plan_id=plan_id, canonical_skill_id=canonical, reason=reason)
+        )
+    return records

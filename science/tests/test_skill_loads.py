@@ -5,6 +5,7 @@ import pytest
 from science_tool.graph.skill_loads import (
     SkillLoadRecord,
     SkillLoadValidationError,
+    build_skill_load_records,
     canonicalize_skill_id,
     load_skill_aliases,
     skill_load_node_uri,
@@ -110,3 +111,66 @@ def test_canonicalize_rejects_malformed_post_alias_id(bad: str) -> None:
     # A raw id absent from the table is treated as canonical -> must still be grammar-checked.
     with pytest.raises(SkillLoadValidationError):
         canonicalize_skill_id(bad, {})
+
+
+def test_build_records_well_formed() -> None:
+    records = build_skill_load_records(
+        "plan:0001-x",
+        [{"id": "driver-selection", "reason": "selection modeling"}],
+        aliases={},
+    )
+    assert [(r.plan_id, r.canonical_skill_id, r.reason) for r in records] == [
+        ("plan:0001-x", "driver-selection", "selection modeling")
+    ]
+
+
+def test_build_records_canonicalizes_via_alias() -> None:
+    records = build_skill_load_records(
+        "plan:0001-x",
+        [{"id": "old-name", "reason": "r"}],
+        aliases={"old-name": "driver-selection"},
+    )
+    assert records[0].canonical_skill_id == "driver-selection"
+
+
+@pytest.mark.parametrize(
+    "value",
+    [
+        "not-a-list",
+        ["not-a-mapping"],
+        [{"reason": "missing id"}],
+        [{"id": "driver-selection"}],
+        [{"id": 5, "reason": "non-string id"}],
+        [{"id": "driver-selection", "reason": 5}],
+        [{"id": "driver-selection", "reason": ""}],
+        [{"id": "driver-selection", "reason": "   "}],
+    ],
+)
+def test_build_records_rejects_malformed_shape(value: object) -> None:
+    with pytest.raises(SkillLoadValidationError):
+        build_skill_load_records("plan:0001-x", value, aliases={})
+
+
+def test_build_records_rejects_literal_duplicate() -> None:
+    with pytest.raises(SkillLoadValidationError, match="duplicate canonical"):
+        build_skill_load_records(
+            "plan:0001-x",
+            [
+                {"id": "driver-selection", "reason": "a"},
+                {"id": "driver-selection", "reason": "b"},
+            ],
+            aliases={},
+        )
+
+
+def test_build_records_rejects_converging_aliases() -> None:
+    # Two distinct raw ids that resolve to one canonical id collide.
+    with pytest.raises(SkillLoadValidationError, match="duplicate canonical"):
+        build_skill_load_records(
+            "plan:0001-x",
+            [
+                {"id": "old-name", "reason": "a"},
+                {"id": "driver-selection", "reason": "b"},
+            ],
+            aliases={"old-name": "driver-selection"},
+        )
