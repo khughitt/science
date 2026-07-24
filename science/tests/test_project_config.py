@@ -3,17 +3,95 @@ from pathlib import Path
 import pytest
 from pydantic import ValidationError
 
+from science_model.skill_coverage import EnrollmentStatus
 from science_tool.project_config import (
     PlanReproducibilityPolicy,
     ProjectConfig,
     ProjectRole,
     ReproducibilityPolicyConfig,
     ReproducibilityWaiver,
+    SkillCoverageConfig,
     effective_reproducibility_policy,
     load_plan_reproducibility_policy,
     load_project_config,
     validated_entity_schema_version,
 )
+
+
+def test_skill_coverage_absent_leaves_field_none():
+    config = ProjectConfig.model_validate({"name": "demo"})
+    assert config.skill_coverage is None
+
+
+def test_skill_coverage_null_is_rejected():
+    # Authored null must NOT collapse to the absence state (undeclared).
+    with pytest.raises(ValidationError, match="present but null"):
+        ProjectConfig.model_validate({"name": "demo", "skill_coverage": None})
+
+
+def test_skill_coverage_block_without_domains_is_rejected():
+    # An empty block `{}` is a malformed declaration -- `domains` is required.
+    with pytest.raises(ValidationError):
+        ProjectConfig.model_validate({"name": "demo", "skill_coverage": {}})
+
+
+def test_skill_coverage_intentional_empty_domains_is_accepted():
+    # The way to declare an intentionally empty block: domains present but empty.
+    config = ProjectConfig.model_validate(
+        {"name": "demo", "skill_coverage": {"domains": {}}}
+    )
+    assert config.skill_coverage is not None
+    assert config.skill_coverage.domains == {}
+
+
+def test_skill_coverage_parses_enrolled_domain():
+    config = ProjectConfig.model_validate(
+        {
+            "name": "demo",
+            "entity_schema_version": 3,
+            "skill_coverage": {"domains": {"molecular-measurement": "enrolled"}},
+        }
+    )
+    assert isinstance(config.skill_coverage, SkillCoverageConfig)
+    assert config.skill_coverage.domains == {
+        "molecular-measurement": EnrollmentStatus.ENROLLED
+    }
+
+
+def test_skill_coverage_rejects_unknown_domain_key():
+    with pytest.raises(ValidationError, match="unknown domain key"):
+        ProjectConfig.model_validate(
+            {
+                "name": "demo",
+                "entity_schema_version": 3,
+                "skill_coverage": {"domains": {"proteomics-measurement": "enrolled"}},
+            }
+        )
+
+
+def test_skill_coverage_rejects_unknown_status_value():
+    with pytest.raises(ValidationError):
+        ProjectConfig.model_validate(
+            {
+                "name": "demo",
+                "entity_schema_version": 3,
+                "skill_coverage": {"domains": {"molecular-measurement": "maybe"}},
+            }
+        )
+
+
+def test_skill_coverage_block_is_closed():
+    with pytest.raises(ValidationError):
+        ProjectConfig.model_validate(
+            {
+                "name": "demo",
+                "entity_schema_version": 3,
+                "skill_coverage": {
+                    "domains": {"molecular-measurement": "enrolled"},
+                    "notes": "oops",
+                },
+            }
+        )
 
 
 def test_loads_minimal_existing_yaml(tmp_path: Path) -> None:

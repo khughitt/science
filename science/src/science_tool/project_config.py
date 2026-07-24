@@ -8,10 +8,11 @@ from pathlib import Path
 from typing import Annotated, Any, Literal
 
 import yaml
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 from pydantic.functional_validators import BeforeValidator
 
 from science_model.frontmatter import parse_frontmatter, project_config_path
+from science_model.skill_coverage import DOMAIN_KEYS, EnrollmentStatus
 from science_tool.data_policy import DataPolicy, DEFAULT_DATA_POLICY
 from science_tool.datasets.semantics import OrdinalReproClass
 
@@ -219,6 +220,33 @@ def load_plan_reproducibility_policy(plan_path: Path) -> PlanReproducibilityPoli
     return PlanReproducibilityPolicy.model_validate(raw)
 
 
+class SkillCoverageConfig(BaseModel):
+    """The `skill_coverage:` block of science.yaml -- a CLOSED enrollment declaration.
+
+    `domains` maps a closed domain key to its enrollment STATUS as the value. `domains` is REQUIRED:
+    a block present without it is malformed, not an empty declaration -- an intentionally empty block
+    is `{domains: {}}`. Absence of a KEY within `domains` means `undeclared` for that domain, never
+    `out-of-domain` (an explicit value a project must author). The block is closed (`extra="forbid"`):
+    the only key inside it is `domains`.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    domains: dict[str, EnrollmentStatus]
+
+    @field_validator("domains")
+    @classmethod
+    def _known_domains(cls, value: dict[str, EnrollmentStatus]) -> dict[str, EnrollmentStatus]:
+        unknown = sorted(set(value) - DOMAIN_KEYS)
+        if unknown:
+            raise ValueError(
+                f"skill_coverage.domains has unknown domain key(s) {unknown!r}; "
+                f"known domains: {sorted(DOMAIN_KEYS)}. An unknown domain is refused rather than "
+                "preserved: a misnamed domain would silently drop a project out of coverage."
+            )
+        return value
+
+
 class ProjectConfig(BaseModel):
     """Typed view of science.yaml. Non-listed fields are preserved as-is."""
 
@@ -233,6 +261,7 @@ class ProjectConfig(BaseModel):
     data: ProjectDataConfig | None = None
     data_policy: DataPolicyConfig | None = None
     reproducibility_policy: ReproducibilityPolicyConfig | None = None
+    skill_coverage: SkillCoverageConfig | None = None
     entity_extensions: dict[str, list[str]] = Field(default_factory=dict)
     # The project's ENTITY SCHEMA generation. Absent means 1 -- unmigrated -- and that is the only
     # thing absence may mean: this is an AUTHORED DECLARATION of which version a project is on, never
@@ -258,6 +287,17 @@ class ProjectConfig(BaseModel):
                     f"science.yaml uses removed field(s) {illegal!r}. "
                     "Use `peers:` instead; `parent:` and `children:` are removed project-config fields."
                 )
+        return raw
+
+    @model_validator(mode="before")
+    @classmethod
+    def _reject_null_skill_coverage(cls, raw: Any) -> Any:
+        if isinstance(raw, dict) and "skill_coverage" in raw and raw["skill_coverage"] is None:
+            raise ValueError(
+                "science.yaml: skill_coverage is present but null. An authored-but-empty declaration "
+                "is `skill_coverage: {domains: {}}`, not null -- null would collapse to the same state "
+                "as absence (undeclared), hiding a malformed declaration."
+            )
         return raw
 
     @model_validator(mode="before")
