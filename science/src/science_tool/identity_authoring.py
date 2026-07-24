@@ -2,12 +2,14 @@
 
 from __future__ import annotations
 
+from pathlib import Path
 from typing import Any
 
 from pydantic import ValidationError
 from science_model.entity_schema.loader import SchemaLoader, SchemaNotFoundError
 from science_model.entity_schema.profile import ProfileParseError, default_profile_for_kind, parse_profile
 from science_model.packages.schema import IdentityContext
+from science_tool.project_config import project_entity_schema_version
 
 # Derived, never declared. This is the default profile for a NEWLY AUTHORED dataset, and
 # `default_profile_for_kind` is the single authority on that. A literal here would be a second
@@ -17,6 +19,19 @@ from science_model.packages.schema import IdentityContext
 # that the dataset/2.0 migration exists to close. Pinned semantics are requested by passing an
 # explicit `schema_profile`, not by freezing this default.
 BASE_DATASET_SCHEMA_PROFILE = default_profile_for_kind("dataset").render()
+
+
+def project_dataset_schema_profile(project_root: Path) -> str:
+    """Default schema_profile for a PROJECT dataset record, honoring the project's pin.
+
+    Only generation 3 changes the dataset shape, so any project not pinned generation 3
+    (unpinned, 1, or 2) keeps `dataset/2.0` -- no regression for existing projects, and no
+    attempt to resolve a generation-1 mixin row (which does not exist).
+    """
+    pin = project_entity_schema_version(project_root)
+    return default_profile_for_kind("dataset", generation=3 if pin == 3 else 2).render()
+
+
 ASSEMBLY_REGISTRY_ID = "dataset:assembly-registry"
 GENE_CROSSWALK_ID = "dataset:gene-crosswalk-hgnc"
 PROTEIN_CROSSWALK_ID = "dataset:protein-crosswalk-uniprot"
