@@ -86,7 +86,9 @@ and record production are the **same load-time pass**, not two passes. A shared 
 materialization pass to emit. It raises **structural errors** (at the plan validation gate) for:
 
 - **malformed shape** — `skills_loaded` is not a list, an item is not a `{id, reason}` object,
-  or `id`/`reason` is missing or not a string;
+  `id`/`reason` is missing or not a string, or `reason` is blank (empty or whitespace-only). A
+  blank `reason` defeats the field's only purpose — recording *why* the skill was loaded — so it
+  is rejected here rather than materialized as an empty `sci:loadReason` literal;
 - **malformed skill id** — the **post-alias** id (raw-canonical or alias target) does not match
   the canonical skill-name grammar `^[a-z0-9]+(-[a-z0-9]+)*$` (rejects `""`, whitespace,
   path-like, and URI-like ids before they can be minted into `sci:skill/<value>`). Grammar is

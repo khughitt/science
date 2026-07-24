@@ -28,7 +28,7 @@
 - Test: `science/tests/test_skill_loads.py`
 
 **Interfaces:**
-- Produces: `SkillLoadRecord(plan_id: str, canonical_skill_id: str, reason: str, source: str = "authored")` with `.identity_payload() -> dict[str, str]` (excludes `reason`) and `.payload() -> dict[str, str]` (includes `reason`); `skill_load_node_uri(record) -> rdflib.URIRef`.
+- Produces: `SkillLoadRecord(plan_id: str, canonical_skill_id: str, reason: str, source: Literal["authored"] = "authored")` with `.identity_payload() -> dict[str, str]` (excludes `reason`) and `.payload() -> dict[str, str]` (includes `reason`); `skill_load_node_uri(record) -> rdflib.URIRef`.
 
 - [ ] **Step 1: Write the failing test**
 
@@ -84,6 +84,7 @@ from __future__ import annotations
 import hashlib
 import json
 from dataclasses import dataclass
+from typing import Literal
 
 from rdflib import URIRef
 
@@ -95,7 +96,9 @@ class SkillLoadRecord:
     plan_id: str
     canonical_skill_id: str
     reason: str
-    source: str = "authored"  # categorical projection source (the `UsageSource` "authored" value)
+    # Categorical projection source. Narrowed to the single `UsageSource` value this path emits,
+    # so a caller can never mint a second identity for one (plan, skill) load by varying `source`.
+    source: Literal["authored"] = "authored"
 
     def identity_payload(self) -> dict[str, str]:
         return {
@@ -171,7 +174,9 @@ def test_validate_aliases_rejects_chain() -> None:
         validate_skill_aliases({"a": "b", "b": "c"})
 
 
-@pytest.mark.parametrize("bad", ["", "Bad-Case", "has_underscore", "a/b", "sci:skill/x", "-leading"])
+@pytest.mark.parametrize(
+    "bad", ["", "Bad-Case", "has_underscore", "a/b", "sci:skill/x", "-leading", "driver-selection\n"]
+)
 def test_validate_aliases_rejects_non_grammar(bad: str) -> None:
     with pytest.raises(SkillLoadValidationError):
         validate_skill_aliases({bad: "driver-selection"})
@@ -184,6 +189,13 @@ def test_validate_aliases_rejects_duplicate_keys() -> None:
         validate_skill_aliases_yaml("old-name: driver-selection\nold-name: mutational-signatures-qa\n")
 
 
+@pytest.mark.parametrize("text", ["", "null\n", "[]\n", "false\n", "0\n"])
+def test_validate_aliases_yaml_rejects_falsey_non_mapping(text: str) -> None:
+    # An empty document, null, an empty list, false, or 0 must fail — never coerce to an empty map.
+    with pytest.raises(SkillLoadValidationError, match="mapping"):
+        validate_skill_aliases_yaml(text)
+
+
 def test_canonicalize_resolves_alias() -> None:
     assert canonicalize_skill_id("old-name", {"old-name": "driver-selection"}) == "driver-selection"
 
@@ -192,7 +204,7 @@ def test_canonicalize_passes_through_unknown() -> None:
     assert canonicalize_skill_id("driver-selection", {}) == "driver-selection"
 
 
-@pytest.mark.parametrize("bad", ["", "  ", "a/b", "sci:skill/x", "Bad"])
+@pytest.mark.parametrize("bad", ["", "  ", "a/b", "sci:skill/x", "Bad", "driver-selection\n"])
 def test_canonicalize_rejects_malformed_post_alias_id(bad: str) -> None:
     # A raw id absent from the table is treated as canonical -> must still be grammar-checked.
     with pytest.raises(SkillLoadValidationError):
@@ -257,7 +269,9 @@ def _reject_duplicate_keys(node: yaml.Node) -> None:
 
 
 def _valid_name(value: object) -> bool:
-    return isinstance(value, str) and SKILL_NAME_RE.match(value) is not None
+    # fullmatch, not match: `$` matches just before a trailing newline, so `match` would accept
+    # `"driver-selection\n"`. fullmatch requires the whole string to be consumed.
+    return isinstance(value, str) and SKILL_NAME_RE.fullmatch(value) is not None
 
 
 def validate_skill_aliases(data: object) -> dict[str, str]:
@@ -283,7 +297,11 @@ def validate_skill_aliases_yaml(text: str) -> dict[str, str]:
     node = yaml.compose(text, Loader=yaml.SafeLoader)
     if node is not None:
         _reject_duplicate_keys(node)
-    return validate_skill_aliases(yaml.safe_load(text) or {})
+    # Pass the parsed value through UNCOERCED. `... or {}` would silently turn an empty document,
+    # `null`, `[]`, `false`, or `0` into an empty map, hiding a malformed alias table; the mapping
+    # check in validate_skill_aliases must see the real value and fail early. The packaged seed is
+    # `{}`, so the shipped table always parses to a mapping.
+    return validate_skill_aliases(yaml.safe_load(text))
 
 
 def load_skill_aliases() -> dict[str, str]:
@@ -367,6 +385,7 @@ def test_build_records_canonicalizes_via_alias() -> None:
         [{"id": 5, "reason": "non-string id"}],
         [{"id": "driver-selection", "reason": 5}],
         [{"id": "driver-selection", "reason": ""}],
+        [{"id": "driver-selection", "reason": "   "}],
     ],
 )
 def test_build_records_rejects_malformed_shape(value: object) -> None:
@@ -429,9 +448,9 @@ def build_skill_load_records(
         reason = item.get("reason")
         if not isinstance(raw_id, str) or not raw_id:
             raise SkillLoadValidationError(f"{plan_id}: skills_loaded entry needs a non-empty string id")
-        if not isinstance(reason, str) or not reason:
+        if not isinstance(reason, str) or not reason.strip():
             raise SkillLoadValidationError(
-                f"{plan_id}: skills_loaded entry {raw_id!r} needs a non-empty string reason"
+                f"{plan_id}: skills_loaded entry {raw_id!r} needs a non-blank string reason"
             )
         canonical = canonicalize_skill_id(raw_id, aliases)
         if canonical in seen:
@@ -478,8 +497,9 @@ from rdflib import Graph
 from rdflib import Literal as RDFLiteral
 from rdflib.namespace import RDF
 
+from science_tool.graph.dataset_usage import project_entity_uri
 from science_tool.graph.skill_loads import add_skill_load_record_to_graph
-from science_tool.graph.store import PROJECT_NS, SCI_NS
+from science_tool.graph.store import SCI_NS
 
 
 def test_add_record_emits_reified_triples() -> None:
@@ -487,7 +507,9 @@ def test_add_record_emits_reified_triples() -> None:
     graph = Graph()
     add_skill_load_record_to_graph(rec, graph)
     node = skill_load_node_uri(rec)
-    plan = PROJECT_NS["plan:0001-x"]  # project_entity_uri form for a bare `kind:slug` id
+    # project_entity_uri("plan:0001-x") == PROJECT_NS["plan/0001-x"] (slash, slug lowercased) — the
+    # same helper the emitter uses, so this asserts the emitter's exact plan URI, not a guess.
+    plan = project_entity_uri("plan:0001-x")
     assert (plan, SCI_NS.hasSkillLoad, node) in graph
     assert (node, RDF.type, SCI_NS.SkillLoad) in graph
     assert (node, SCI_NS.skill, SCI_NS["skill/driver-selection"]) in graph
@@ -506,8 +528,6 @@ def test_registry_declares_skill_load_predicates() -> None:
         assert declared.get(pred) == "graph/provenance"
     assert SCI_NS.loadReason in GRAPH_EXPORT_EDGE_METADATA_PREDICATES
 ```
-
-Note: the `plan` URI in the assertion assumes `project_entity_uri("plan:0001-x")` resolves a `kind:slug` id under `PROJECT_NS`. Confirm against `dataset_usage.project_entity_uri` when implementing; if that helper renders the URI differently, assert against `project_entity_uri("plan:0001-x")` directly instead of `PROJECT_NS["plan:0001-x"]`.
 
 - [ ] **Step 2: Run test to verify it fails**
 
@@ -608,8 +628,12 @@ from science_model.entities import Entity, EntityType
 from science_tool.graph.skill_loads import collect_skill_loads
 
 
-def _plan(skills_loaded: object | None) -> Entity:
-    extra = {"skills_loaded": skills_loaded} if skills_loaded is not None else {}
+# Sentinel so `_plan()` (field ABSENT) is distinct from `_plan(None)` (field present, value null).
+_ABSENT = object()
+
+
+def _plan(skills_loaded: object = _ABSENT) -> Entity:
+    extra = {} if skills_loaded is _ABSENT else {"skills_loaded": skills_loaded}
     return Entity(
         id="plan:0001-x",
         canonical_id="plan:0001-x",
@@ -638,8 +662,16 @@ def test_collect_gen2_ignores_skills_loaded() -> None:
     assert collect_skill_loads([entity], generation=None, aliases={}) == []
 
 
+def test_collect_gen3_rejects_explicit_null_skills_loaded() -> None:
+    # An authored `skills_loaded: null` is PRESENT-but-malformed, not absent: it must hard-fail,
+    # not be silently skipped. (getattr cannot see this; only model_extra membership can.)
+    entity = _plan(None)
+    with pytest.raises(SkillLoadValidationError):
+        collect_skill_loads([entity], generation=3, aliases={})
+
+
 def test_collect_ignores_non_plan_and_plans_without_field() -> None:
-    plan_without = _plan(None)
+    plan_without = _plan()
     dataset = Entity(
         id="dataset:d1",
         canonical_id="dataset:d1",
@@ -688,12 +720,15 @@ def collect_skill_loads(
         return []
     records: list[SkillLoadRecord] = []
     for entity in entities:
-        if getattr(entity, "kind", None) != "plan":
+        if entity.kind != "plan":
             continue
-        raw = getattr(entity, "skills_loaded", None)
-        if raw is None:
+        # `skills_loaded` is preserved-raw in model_extra (Entity is extra="allow"). Test PRESENCE
+        # via model_extra, not getattr: an authored `skills_loaded: null` is present-with-value-None
+        # and must reach build_skill_load_records to hard-fail, whereas an absent field is skipped.
+        extra = entity.model_extra or {}
+        if "skills_loaded" not in extra:
             continue
-        records.extend(build_skill_load_records(entity.canonical_id, raw, aliases=aliases))
+        records.extend(build_skill_load_records(entity.canonical_id, extra["skills_loaded"], aliases=aliases))
     return records
 ```
 
@@ -760,7 +795,7 @@ git commit -m "feat(graph): collect gen-3 plan skill-loads at load onto ProjectS
 
 **Interfaces:**
 - Consumes: `ProjectSources.skill_loads` (Task 5); `add_skill_load_record_to_graph` (Task 4); `load_project_sources`, `build_dataset_from_sources`.
-- Produces: `_add_skill_load_edges(sources: ProjectSources, *, provenance) -> None`, invoked inside `build_dataset_from_sources`.
+- Produces: `_add_skill_load_edges(sources: ProjectSources, *, provenance) -> None`, invoked inside `_emit_phase` (the function that actually builds the graph; `build_dataset_from_sources` → `_build_dataset_from_sources` → `_emit_phase`).
 
 - [ ] **Step 1: Write the failing end-to-end test**
 
@@ -770,6 +805,7 @@ from __future__ import annotations
 
 from rdflib.namespace import RDF
 
+from science_tool.graph.dataset_usage import project_entity_uri
 from science_tool.graph.sources import load_project_sources
 from science_tool.graph.materialize import build_dataset_from_sources
 from science_tool.graph.store import PROJECT_NS, SCI_NS
@@ -806,8 +842,8 @@ def _provenance(root):
 
 def test_gen3_plan_materializes_skill_load_record(tmp_path) -> None:
     _write_gen3_project(tmp_path, skills_block=_SKILLS)
-    sources, provenance = _provenance(tmp_path)
-    plan = PROJECT_NS["plan:0001-demo"]
+    _, provenance = _provenance(tmp_path)
+    plan = project_entity_uri("plan:0001-demo")  # == PROJECT_NS["plan/0001-demo"]
     loads = list(provenance.objects(plan, SCI_NS.hasSkillLoad))
     assert len(loads) == 1
     node = loads[0]
@@ -832,8 +868,6 @@ def test_gen2_plan_emits_no_skill_load(tmp_path) -> None:
     assert not list(provenance.subjects(SCI_NS.hasSkillLoad, None))
 ```
 
-Note on the plan URI: assert against `project_entity_uri("plan:0001-demo")` if `PROJECT_NS["plan:0001-demo"]` does not match the emitter's plan URI (confirm against Task 4's finding). Adjust both assertions consistently.
-
 - [ ] **Step 2: Run test to verify it fails**
 
 Run: `cd science && uv run --frozen pytest tests/test_skill_load_materialize.py -v`
@@ -855,7 +889,7 @@ def _add_skill_load_edges(sources: ProjectSources, *, provenance) -> None:
         add_skill_load_record_to_graph(record, provenance)
 ```
 
-In `build_dataset_from_sources` (function at `materialize.py:292`), immediately after the `_add_dataset_usage_edges(sources, resolver=resolver, provenance=provenance)` call (line ~396), add:
+The graph is built in `_emit_phase` (`materialize.py:331`), which `build_dataset_from_sources` reaches via `_build_dataset_from_sources`. Inside `_emit_phase`, immediately after the `_add_dataset_usage_edges(sources, resolver=resolver, provenance=provenance)` call (line ~396), add:
 
 ```python
     _add_skill_load_edges(sources, provenance=provenance)
@@ -864,7 +898,7 @@ In `build_dataset_from_sources` (function at `materialize.py:292`), immediately 
 - [ ] **Step 4: Run test to verify it passes**
 
 Run: `cd science && uv run --frozen pytest tests/test_skill_load_materialize.py -v`
-Expected: PASS (3 tests). If the plan-URI assertion fails, fix per the Step 1 note (use `project_entity_uri`).
+Expected: PASS (3 tests).
 
 - [ ] **Step 5: Full verification gate**
 
@@ -893,4 +927,5 @@ git commit -m "feat(graph): materialize reified skill-load edges into graph/prov
 - **Spec coverage:** T1 = record + reason-excluding identity; T2 = alias table (grammar, no-chains, no-dup-keys) + canonicalization; T3 = shape validation + duplicate-canonical structural errors; T4 = reified emission (`usageSource="authored"`, `sci:skill/<name>` URI) + predicate registration; T5 = gen-3-gated load-time production onto `ProjectSources`; T6 = materialization into `graph/provenance` + idempotence + gen-2 no-op. Every design §2–§4 requirement and every "Testing approach" bullet maps to a task.
 - **Out of scope (do not implement):** `unmapped-skill-reference`, coverage states, the packaged skill inventory, real alias seeding, `plan_kind` typing, the downstream analysis-plan data migration, the `science skills coverage` command.
 - **Type consistency:** `build_skill_load_records(plan_id, skills_loaded, *, aliases)` and `collect_skill_loads(entities, *, generation, aliases)` are used with exactly these signatures in T5/T6. `add_skill_load_record_to_graph(record, graph)` matches `dataset_usage`'s emitter signature.
-- **Known verification point:** the plan-entity URI form (`PROJECT_NS["plan:..."]` vs `project_entity_uri(...)`) is confirmed empirically in T4/T6 rather than assumed — both note the fallback.
+- **Plan-entity URI form (resolved):** `project_entity_uri("plan:0001-x")` returns `PROJECT_NS["plan/0001-x"]` (slash-joined, slug lowercased — `dataset_usage.py:206`). T4/T6 assert through `project_entity_uri` directly, so the tests bind to the emitter's exact URI with no guesswork.
+- **Explicit-null handling (resolved):** `collect_skill_loads` tests `skills_loaded` PRESENCE via `entity.model_extra` (Entity is `extra="allow"`, so the field is never a declared attribute); an authored `skills_loaded: null` is present-with-None and hard-fails, an absent field is skipped — `getattr` conflates the two and must not be used here.
