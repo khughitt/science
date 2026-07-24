@@ -38,6 +38,8 @@ def build_complete_via(ctx: click.Context, *, output_hint: str) -> str:
         flag = max(param.opts, key=len)
         if value is True:
             tokens.append(flag)
+        elif value is False and param.secondary_opts:
+            tokens.append(max(param.secondary_opts, key=len))
         elif isinstance(value, (list, tuple)):
             for item in value:
                 tokens.extend([flag, str(item)])

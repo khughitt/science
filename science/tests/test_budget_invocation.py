@@ -18,9 +18,16 @@ def demo() -> None:
 @demo.command("list")
 @click.option("--status", default=None)
 @click.option("--all", "show_all", is_flag=True, default=False)
+@click.option("--include-archived/--no-include-archived", default=True)
 @click.option("--aspect", "aspects", multiple=True)
 @click.option("--output", "output_path", default=None)
-def demo_list(status: str | None, show_all: bool, aspects: tuple[str, ...], output_path: str | None) -> None:
+def demo_list(
+    status: str | None,
+    show_all: bool,
+    include_archived: bool,
+    aspects: tuple[str, ...],
+    output_path: str | None,
+) -> None:
     CAPTURED.append(build_complete_via(click.get_current_context(), output_hint="out.json"))
 
 
@@ -41,6 +48,10 @@ def test_user_selection_is_preserved() -> None:
 
 def test_boolean_flags_render_without_a_value() -> None:
     assert _run(["list", "--all"]) == "science list --all --output out.json"
+
+
+def test_paired_boolean_false_uses_negative_flag() -> None:
+    assert _run(["list", "--no-include-archived"]) == "science list --no-include-archived --output out.json"
 
 
 def test_repeatable_options_repeat() -> None:
