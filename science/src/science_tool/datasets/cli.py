@@ -367,7 +367,6 @@ def dataset_add(
     from science_tool.datasets_catalog import add_dataset
     from science_tool.entities import EntityCommandError
     from science_tool.identity_authoring import (
-        BASE_DATASET_SCHEMA_PROFILE,
         IdentityAuthoringError,
         build_identity_context,
     )
@@ -391,7 +390,7 @@ def dataset_add(
             source_url=source_url,
             ontology_terms=ontology_terms,
             related=related,
-            schema_profile=BASE_DATASET_SCHEMA_PROFILE if schema_profile is None else schema_profile,
+            schema_profile=schema_profile,
             identity_context=identity_context,
         )
     except (EntityCommandError, IdentityAuthoringError) as exc:

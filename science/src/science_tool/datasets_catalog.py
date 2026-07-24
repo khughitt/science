@@ -21,8 +21,8 @@ from science_tool.entities import (
     validate_slug,
 )
 from science_tool.identity_authoring import (
-    BASE_DATASET_SCHEMA_PROFILE,
     IdentityAuthoringError,
+    project_dataset_schema_profile,
     require_profile_identity,
 )
 from science_tool.instruments import InstrumentResult
@@ -102,7 +102,7 @@ def add_dataset(
     source_url: str = "",
     ontology_terms=(),
     related=(),
-    schema_profile: str = BASE_DATASET_SCHEMA_PROFILE,
+    schema_profile: str | None = None,
     identity_context: dict | None = None,
     today: date | None = None,
 ) -> tuple[str, Path, list[str]]:
@@ -123,6 +123,8 @@ def add_dataset(
     if dest.exists():
         raise EntityCommandError(f"Destination already exists: {rel_path}")
     identity_context = identity_context or {}
+    if schema_profile is None:
+        schema_profile = project_dataset_schema_profile(project_root)
     try:
         require_profile_identity(schema_profile, identity_context)
     except IdentityAuthoringError as exc:

@@ -41,6 +41,40 @@ def _frontmatter(path: Path) -> dict:
     return yaml.safe_load(text.split("---", 2)[1])
 
 
+def _dataset_profile(dest: Path) -> str:
+    return yaml.safe_load(dest.read_text(encoding="utf-8").split("---", 2)[1])["schema_profile"]
+
+
+def test_add_dataset_uses_gen3_profile_when_pinned(tmp_path: Path) -> None:
+    from science_tool.datasets_catalog import add_dataset
+
+    (tmp_path / "science.yaml").write_text(
+        "name: p\nentity_schema_version: 3\nknowledge_profiles: {}\n", encoding="utf-8"
+    )
+    (tmp_path / "entities" / "datasets").mkdir(parents=True)
+
+    _id, dest, _warnings = add_dataset(
+        tmp_path, "my-set", title="My Set", origin="external", dataset_class="deposit"
+    )
+
+    assert _dataset_profile(dest) == "science-entity-base/1.0+dataset/3.0"
+
+
+def test_add_dataset_defaults_gen2_when_unpinned(tmp_path: Path) -> None:
+    from science_tool.datasets_catalog import add_dataset
+
+    (tmp_path / "science.yaml").write_text(
+        "name: p\nknowledge_profiles: {}\n", encoding="utf-8"
+    )
+    (tmp_path / "entities" / "datasets").mkdir(parents=True)
+
+    _id, dest, _warnings = add_dataset(
+        tmp_path, "my-set", title="My Set", origin="external", dataset_class="deposit"
+    )
+
+    assert _dataset_profile(dest) == "science-entity-base/1.0+dataset/2.0"
+
+
 def test_add_refuses_identity_bearing_profile_without_identity(tmp_path: Path) -> None:
     res = _add(tmp_path, "copy-number", "--title", "Copy number", "--schema-profile", BIO_CNA_PROFILE)
 
