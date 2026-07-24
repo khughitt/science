@@ -28,11 +28,13 @@ def test_add_record_emits_reified_triples() -> None:
     # project_entity_uri("plan:0001-x") == PROJECT_NS["plan/0001-x"] (slash, slug lowercased) — the
     # same helper the emitter uses, so this asserts the emitter's exact plan URI, not a guess.
     plan = project_entity_uri("plan:0001-x")
-    assert (plan, SCI_NS.hasSkillLoad, node) in graph
-    assert (node, RDF.type, SCI_NS.SkillLoad) in graph
-    assert (node, SCI_NS.skill, SCI_NS["skill/driver-selection"]) in graph
-    assert (node, SCI_NS.loadReason, RDFLiteral("why")) in graph
-    assert (node, SCI_NS.usageSource, RDFLiteral("authored")) in graph
+    assert set(graph) == {
+        (plan, SCI_NS.hasSkillLoad, node),
+        (node, RDF.type, SCI_NS.SkillLoad),
+        (node, SCI_NS.skill, SCI_NS["skill/driver-selection"]),
+        (node, SCI_NS.loadReason, RDFLiteral("why")),
+        (node, SCI_NS.usageSource, RDFLiteral("authored")),
+    }
 
 
 def test_registry_declares_skill_load_predicates() -> None:
@@ -45,6 +47,8 @@ def test_registry_declares_skill_load_predicates() -> None:
     for pred in ("sci:hasSkillLoad", "sci:skill", "sci:loadReason"):
         assert declared.get(pred) == "graph/provenance"
     assert SCI_NS.loadReason in GRAPH_EXPORT_EDGE_METADATA_PREDICATES
+    assert SCI_NS.hasSkillLoad not in GRAPH_EXPORT_EDGE_METADATA_PREDICATES
+    assert SCI_NS.skill not in GRAPH_EXPORT_EDGE_METADATA_PREDICATES
 
 
 def test_identity_excludes_reason() -> None:
