@@ -51,6 +51,19 @@ def test_over_budget_flush_prints_nothing_and_raises(capsys) -> None:
     assert "--output" in str(excinfo.value)
 
 
+def test_repeated_over_budget_flushes_consistently_raise(capsys) -> None:
+    sink = BoundedSink(
+        CommandBudget(max_chars=10, shape=PayloadShape.ROWS, max_rows=5),
+        command_path="tasks list",
+        complete_via=TASKS_COMPLETE,
+    )
+    sink.echo("x" * 50)
+    for _ in range(2):
+        with pytest.raises(BudgetExceeded):
+            sink.flush()
+    assert capsys.readouterr().out == ""
+
+
 def test_many_sections_share_one_command_total_ceiling() -> None:
     sink = BoundedSink(
         CommandBudget(max_chars=100, shape=PayloadShape.REPORT),
@@ -73,6 +86,18 @@ def test_file_sink_is_never_truncated(tmp_path: Path) -> None:
     sink.echo("y" * 10_000)
     sink.flush()
     assert target.read_text() == "y" * 10_000 + "\n"
+
+
+def test_failed_file_write_leaves_sink_retryable(tmp_path: Path) -> None:
+    target = tmp_path / "missing" / "out.txt"
+    sink = BoundedSink(None, output_path=target, command_path="health")
+    sink.echo("retry me")
+    with pytest.raises(FileNotFoundError):
+        sink.flush()
+
+    target.parent.mkdir()
+    sink.flush()
+    assert target.read_text() == "retry me\n"
 
 
 def test_file_sink_reports_no_row_cap(tmp_path: Path) -> None:

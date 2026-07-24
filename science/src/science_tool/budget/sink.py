@@ -89,11 +89,11 @@ class BoundedSink:
     def flush(self) -> None:
         if self._flushed:
             return
-        self._flushed = True
         text = self._buffer.getvalue()
 
         if self._output_path is not None:
             self._output_path.write_text(text, encoding="utf-8")
+            self._flushed = True
             return
 
         if self._budget is not None:
@@ -102,6 +102,7 @@ class BoundedSink:
                 raise self._exceeded(size)
 
         click.echo(text, nl=False)
+        self._flushed = True
 
     def _exceeded(self, size: int) -> BudgetExceeded:
         assert self._budget is not None
