@@ -1,7 +1,18 @@
 # science/tests/test_numeric_binding.py
 from decimal import Decimal
+
 import pytest
-from science_tool.numeric_binding import validate_entry, ParsedEntry, BindingError, PointerLocator, ColumnLocator, OpaqueLocator
+
+from science_tool.numeric_binding import (
+    BindingError,
+    ColumnLocator,
+    OpaqueLocator,
+    ParsedEntry,
+    PointerLocator,
+    parse_claim_bindings,
+    validate_entry,
+)
+from science_tool.numeric_provenance import build_document_context
 
 def test_pointer_ok():
     e = validate_entry("b1", {"artifact": "r.json", "locator": {"pointer": "/a/0"}}, ".json")
@@ -38,12 +49,11 @@ def test_tolerance_positive_finite():
 def test_rejects(raw, ext):
     assert isinstance(validate_entry("b1", raw, ext), BindingError)
 
-from science_tool.numeric_provenance import build_document_context
-from science_tool.numeric_binding import parse_claim_bindings
-
 FM = "numeric_claims:\n  b1:\n    artifact: x.feather\n    locator: {column: c}"   # 4 lines
 def _doc(tmp_path, body, fm=FM):
-    p = tmp_path / "e.md"; p.write_text(f"---\n{fm}\n---\n{body}\n"); return build_document_context(p)
+    p = tmp_path / "e.md"
+    p.write_text(f"---\n{fm}\n---\n{body}\n")
+    return build_document_context(p)
 
 def test_attaches_and_pins_span(tmp_path):
     doc = _doc(tmp_path, "The value was **7.94×**[^b1] here.")

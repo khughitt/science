@@ -16,7 +16,7 @@ from collections.abc import Mapping
 from dataclasses import dataclass
 from decimal import Decimal, InvalidOperation
 from pathlib import Path
-from typing import Any
+from typing import Any, TypeAlias
 
 from pydantic import BaseModel, ConfigDict, Field, ValidationError, model_validator
 
@@ -63,7 +63,9 @@ _REQUIRED_EXTENSION_BY_LOCATOR: dict[type[BaseModel], str] = {
     ColumnLocator: ".feather",
 }
 
-_LOCATOR_MODELS: tuple[type[BaseModel], ...] = (PointerLocator, ColumnLocator, OpaqueLocator)
+_Locator: TypeAlias = PointerLocator | ColumnLocator | OpaqueLocator
+
+_LOCATOR_MODELS: tuple[type[_Locator], ...] = (PointerLocator, ColumnLocator, OpaqueLocator)
 
 
 class _EntryModel(BaseModel):
@@ -79,7 +81,7 @@ class _EntryModel(BaseModel):
 @dataclass(frozen=True)
 class ParsedEntry:
     artifact: str
-    locator: PointerLocator | ColumnLocator | OpaqueLocator
+    locator: _Locator
     tolerance: Decimal | None
 
 
@@ -109,7 +111,7 @@ def validate_entry(id: str, raw: Any, artifact_ext: str) -> ParsedEntry | Bindin
 
     # `_EntryModel.locator` is a required `dict[str, Any]`, so a non-mapping
     # locator already failed `model_validate` above — no guard needed here.
-    matches: list[BaseModel] = []
+    matches: list[_Locator] = []
     for model_cls in _LOCATOR_MODELS:
         try:
             matches.append(model_cls.model_validate(entry.locator))
@@ -167,7 +169,7 @@ _TOKEN_RE = re.compile(r"([-+0-9.,eE/×%–]+)\s*\**\s*$")
 class ClaimBinding:
     id: str
     artifact: str
-    locator: PointerLocator | ColumnLocator | OpaqueLocator
+    locator: _Locator
     tolerance: Decimal | None
     span: tuple[int, int, int]   # (line, col_start, col_end), 1-based, col_end exclusive
     value_text: str              # the pinned prose token; always a numeric literal
@@ -238,6 +240,7 @@ def parse_claim_bindings(document: DocumentContext) -> tuple[list[ClaimBinding],
                 BindingError(claim_id, lineno, f"pinned token {token!r} before [^{claim_id}] is not a single numeric literal")
             )
             continue
+        assert token_match is not None
 
         artifact = raw_entry.get("artifact") if isinstance(raw_entry, Mapping) else None
         artifact_ext = Path(artifact).suffix if isinstance(artifact, str) and artifact else ""

@@ -19,7 +19,7 @@ import re
 from dataclasses import dataclass
 from decimal import Decimal
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 import pandas as pd
 
@@ -246,7 +246,8 @@ def _read_feather_scalar(path: Path, locator: Any) -> Decimal | ReaderError:
             detail=f"expected exactly one matching row in {path} for where={where!r}, got {len(frame)}"
         )
 
-    cell = frame[column].iloc[0]
+    column_values = cast(pd.Series, frame[column])
+    cell = column_values.iloc[0]
     value = cell.item() if hasattr(cell, "item") else cell
 
     if isinstance(value, bool):

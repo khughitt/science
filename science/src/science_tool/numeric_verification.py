@@ -112,6 +112,7 @@ def run_numeric_verification(
             results.append(VerificationResult(id=binding.id, line=line, outcome="unverifiable", detail=""))
             continue
 
+        assert parsed_literal is not None
         value = read_scalar(resolved, binding.locator)
         if isinstance(value, ReaderError):
             results.append(VerificationResult(id=binding.id, line=line, outcome=ERROR, detail=value.detail))

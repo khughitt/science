@@ -907,6 +907,7 @@ def scan_root(
         # `resolution_index` (built above) is always available here — it
         # already carries the same project_root/data_root resolution
         # `detect_numeric_anchor` uses.
+        assert resolution_index is not None
         verification_project_root = resolution_index.project_root
         verification_data_root = resolution_index.data_root
         effective_max_json_bytes = max_json_bytes if max_json_bytes is not None else DEFAULT_MAX_JSON_BYTES
