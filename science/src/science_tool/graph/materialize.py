@@ -53,6 +53,7 @@ from science_tool.graph.dataset_usage import (
     usage_records_for_geneset_rows,
     usage_records_for_reference_graph_nodes,
 )
+from science_tool.graph.skill_loads import add_skill_load_record_to_graph
 from science_tool.graph.freshness import (
     EntityFreshnessInfo,
     close_bears_on,
@@ -394,6 +395,7 @@ def _emit_phase(sources: ProjectSources, *, archive_active: dict | None = None) 
     _add_produced_by_edges(sources, entity_index=entity_index, knowledge=knowledge)
     _add_derivation_edges(sources, resolver=resolver, knowledge=knowledge)
     _add_dataset_usage_edges(sources, resolver=resolver, provenance=provenance)
+    _add_skill_load_edges(sources, provenance=provenance)
     _add_sub_cohort_edges(sources, resolver=resolver, knowledge=knowledge)
     _add_dataset_resource_edges(sources, datasets=datasets)
 
@@ -1454,6 +1456,11 @@ def _add_dataset_usage_edges(sources: ProjectSources, *, resolver: ReferenceReso
         add_usage_record_to_graph(record, provenance)
     for record in _reference_graph_usage_records(sources, resolver=resolver):
         add_usage_record_to_graph(record, provenance)
+
+
+def _add_skill_load_edges(sources: ProjectSources, *, provenance) -> None:
+    for record in sources.skill_loads:
+        add_skill_load_record_to_graph(record, provenance)
 
 
 def _resource_uri(dataset_canonical_id: str, resource: DatasetResource) -> URIRef:
