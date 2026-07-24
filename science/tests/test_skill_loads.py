@@ -1,10 +1,15 @@
 from __future__ import annotations
 
 import pytest
+from rdflib import Graph
+from rdflib import Literal as RDFLiteral
+from rdflib.namespace import RDF
 
+from science_tool.graph.dataset_usage import project_entity_uri
 from science_tool.graph.skill_loads import (
     SkillLoadRecord,
     SkillLoadValidationError,
+    add_skill_load_record_to_graph,
     build_skill_load_records,
     canonicalize_skill_id,
     load_skill_aliases,
@@ -12,6 +17,34 @@ from science_tool.graph.skill_loads import (
     validate_skill_aliases,
     validate_skill_aliases_yaml,
 )
+from science_tool.graph.store import SCI_NS
+
+
+def test_add_record_emits_reified_triples() -> None:
+    rec = SkillLoadRecord(plan_id="plan:0001-x", canonical_skill_id="driver-selection", reason="why")
+    graph = Graph()
+    add_skill_load_record_to_graph(rec, graph)
+    node = skill_load_node_uri(rec)
+    # project_entity_uri("plan:0001-x") == PROJECT_NS["plan/0001-x"] (slash, slug lowercased) — the
+    # same helper the emitter uses, so this asserts the emitter's exact plan URI, not a guess.
+    plan = project_entity_uri("plan:0001-x")
+    assert (plan, SCI_NS.hasSkillLoad, node) in graph
+    assert (node, RDF.type, SCI_NS.SkillLoad) in graph
+    assert (node, SCI_NS.skill, SCI_NS["skill/driver-selection"]) in graph
+    assert (node, SCI_NS.loadReason, RDFLiteral("why")) in graph
+    assert (node, SCI_NS.usageSource, RDFLiteral("authored")) in graph
+
+
+def test_registry_declares_skill_load_predicates() -> None:
+    from science_tool.graph.store.constants import (
+        GRAPH_EXPORT_EDGE_METADATA_PREDICATES,
+        PREDICATE_REGISTRY,
+    )
+
+    declared = {entry["predicate"]: entry["layer"] for entry in PREDICATE_REGISTRY}
+    for pred in ("sci:hasSkillLoad", "sci:skill", "sci:loadReason"):
+        assert declared.get(pred) == "graph/provenance"
+    assert SCI_NS.loadReason in GRAPH_EXPORT_EDGE_METADATA_PREDICATES
 
 
 def test_identity_excludes_reason() -> None:

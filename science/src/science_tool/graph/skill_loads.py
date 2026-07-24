@@ -16,10 +16,13 @@ from dataclasses import dataclass
 from importlib import resources
 from typing import Literal
 
-from rdflib import URIRef
+from rdflib import Graph, URIRef
+from rdflib import Literal as RDFLiteral
+from rdflib.namespace import RDF
 import yaml
 
-from science_tool.graph.store import PROJECT_NS
+from science_tool.graph.dataset_usage import project_entity_uri
+from science_tool.graph.store import PROJECT_NS, SCI_NS
 
 
 @dataclass(frozen=True, slots=True)
@@ -50,6 +53,17 @@ def skill_load_node_uri(record: SkillLoadRecord) -> URIRef:
     payload = json.dumps(record.identity_payload(), sort_keys=True, separators=(",", ":"))
     digest = hashlib.sha256(payload.encode("utf-8")).hexdigest()
     return URIRef(PROJECT_NS[f"skill-load/{digest}"])
+
+
+def add_skill_load_record_to_graph(record: SkillLoadRecord, graph: Graph) -> None:
+    node = skill_load_node_uri(record)
+    plan = project_entity_uri(record.plan_id)
+    skill = SCI_NS[f"skill/{record.canonical_skill_id}"]
+    graph.add((plan, SCI_NS.hasSkillLoad, node))
+    graph.add((node, RDF.type, SCI_NS.SkillLoad))
+    graph.add((node, SCI_NS.skill, skill))
+    graph.add((node, SCI_NS.loadReason, RDFLiteral(record.reason)))
+    graph.add((node, SCI_NS.usageSource, RDFLiteral(record.source)))
 
 
 SKILL_NAME_RE = re.compile(r"^[a-z0-9]+(-[a-z0-9]+)*$")

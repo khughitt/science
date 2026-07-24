@@ -75,6 +75,7 @@ GRAPH_EXPORT_EDGE_METADATA_PREDICATES: frozenset[URIRef] = frozenset(
         SCI_NS.usageRole,
         SCI_NS.usageOverlap,
         SCI_NS.usageSource,
+        SCI_NS.loadReason,
         SCI_NS.confidence,
         SCI_NS.evidenceType,
         SCI_NS.evidenceStrength,
@@ -222,6 +223,21 @@ PREDICATE_REGISTRY: list[dict[str, str]] = [
     {
         "predicate": "sci:usageSource",
         "description": "Projection source for a reified dataset usage record",
+        "layer": "graph/provenance",
+    },
+    {
+        "predicate": "sci:hasSkillLoad",
+        "description": "Links a plan to a reified skill-load record",
+        "layer": "graph/provenance",
+    },
+    {
+        "predicate": "sci:skill",
+        "description": "Skill loaded by a reified skill-load record (sci:skill/<name> URI)",
+        "layer": "graph/provenance",
+    },
+    {
+        "predicate": "sci:loadReason",
+        "description": "Author-declared reason a plan loaded a skill",
         "layer": "graph/provenance",
     },
     {"predicate": "sci:confidence", "description": "Confidence score (0.0-1.0)", "layer": "graph/provenance"},
