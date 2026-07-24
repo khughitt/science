@@ -170,6 +170,70 @@ def test_skill_coverage_block_is_closed():
         )
 
 
+def _write_yaml(project_root: Path, body: str) -> None:
+    project_root.mkdir()
+    (project_root / "science.yaml").write_text(body, encoding="utf-8")
+
+
+def test_yaml_enrolled_domain_loads(tmp_path: Path) -> None:
+    root = tmp_path / "enrolled"
+    _write_yaml(
+        root,
+        "name: enrolled\n"
+        "entity_schema_version: 3\n"
+        "skill_coverage:\n"
+        "  domains:\n"
+        "    molecular-measurement: enrolled\n",
+    )
+    config = load_project_config(root)
+    assert domain_enrollment(config, "molecular-measurement") is EnrollmentStatus.ENROLLED
+
+
+def test_yaml_out_of_domain_loads(tmp_path: Path) -> None:
+    root = tmp_path / "outofdomain"
+    _write_yaml(
+        root,
+        "name: outofdomain\n"
+        "skill_coverage:\n"
+        "  domains:\n"
+        "    molecular-measurement: out-of-domain\n",
+    )
+    config = load_project_config(root)
+    assert (
+        domain_enrollment(config, "molecular-measurement")
+        is EnrollmentStatus.OUT_OF_DOMAIN
+    )
+
+
+def test_yaml_absent_block_is_undeclared(tmp_path: Path) -> None:
+    root = tmp_path / "absent"
+    _write_yaml(root, "name: absent\n")
+    config = load_project_config(root)
+    assert config.skill_coverage is None
+    assert domain_enrollment(config, "molecular-measurement") == "undeclared"
+
+
+def test_yaml_null_block_is_rejected(tmp_path: Path) -> None:
+    root = tmp_path / "nullblock"
+    _write_yaml(root, "name: nullblock\nskill_coverage:\n")
+    with pytest.raises(ValidationError, match="present but null"):
+        load_project_config(root)
+
+
+def test_yaml_unknown_domain_is_rejected(tmp_path: Path) -> None:
+    root = tmp_path / "unknowndomain"
+    _write_yaml(
+        root,
+        "name: unknowndomain\n"
+        "entity_schema_version: 3\n"
+        "skill_coverage:\n"
+        "  domains:\n"
+        "    proteomics-measurement: enrolled\n",
+    )
+    with pytest.raises(ValidationError, match="unknown domain key"):
+        load_project_config(root)
+
+
 def test_loads_minimal_existing_yaml(tmp_path: Path) -> None:
     """An existing science.yaml without new fields must still load."""
     project_root = tmp_path / "cbioportal"
