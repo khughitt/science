@@ -53,8 +53,9 @@ checked against, and the real downstream data migration are all separate, later 
   `ProjectSources` (`sources.py:186-234`) retains **no** `entity_schema_version`, so a later
   materialization pass over `sources.entities` cannot tell a gen-3 plan from a gen-2 plan with a
   stray `skills_loaded`. Generation-gated emission must therefore be decided at load time.
-- **Layer `graph/provenance` already exists** (`graph/store/constants.py:32`) and is *not* in
-  `GRAPH_EXPORT_VISIBLE_LAYERS` (internal/non-exported by default) — the correct destination.
+- **Layer `graph/provenance` already exists** (`graph/store/constants.py:32`) and is exported by
+  the graph-export path — the correct destination. `GRAPH_EXPORT_VISIBLE_LAYERS` does not govern
+  that export behavior.
 - **No skill-id alias table / canonicalization exists** anywhere in `science_tool` or
   `science-model`. `sci:usageSource` is already a registered predicate (reusable);
   `sci:hasSkillLoad`, `sci:skill`, `sci:loadReason` are new. All skill leaf names in the corpus

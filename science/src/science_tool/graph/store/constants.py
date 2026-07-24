@@ -222,7 +222,7 @@ PREDICATE_REGISTRY: list[dict[str, str]] = [
     },
     {
         "predicate": "sci:usageSource",
-        "description": "Projection source for a reified dataset usage record",
+        "description": "Categorical projection source for a reified provenance record (dataset usage or skill load)",
         "layer": "graph/provenance",
     },
     {

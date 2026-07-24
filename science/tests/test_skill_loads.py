@@ -133,6 +133,13 @@ def test_validate_aliases_rejects_duplicate_keys() -> None:
         )
 
 
+def test_validate_aliases_rejects_merge_key() -> None:
+    with pytest.raises(SkillLoadValidationError, match="merge"):
+        validate_skill_aliases_yaml(
+            "<<: &base {old-name: driver-selection}\nold-name: other-skill\n"
+        )
+
+
 @pytest.mark.parametrize("text", ["", "null\n", "[]\n", "false\n", "0\n"])
 def test_validate_aliases_yaml_rejects_falsey_non_mapping(text: str) -> None:
     # An empty document, null, an empty list, false, or 0 must fail — never coerce to an empty map.

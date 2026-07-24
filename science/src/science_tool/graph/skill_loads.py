@@ -83,6 +83,8 @@ def _reject_duplicate_keys(node: yaml.Node) -> None:
         return
     seen: set[object] = set()
     for key_node, _ in node.value:
+        if key_node.tag == "tag:yaml.org,2002:merge":
+            raise SkillLoadValidationError("YAML merge keys are not allowed in skill aliases")
         key = getattr(key_node, "value", None)
         if key in seen:
             raise SkillLoadValidationError(f"duplicate alias key {key!r}")

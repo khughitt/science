@@ -48,6 +48,22 @@ def test_gen3_plan_materializes_skill_load_record(tmp_path) -> None:
     assert (node, SCI_NS.skill, SCI_NS["skill/driver-selection"]) in provenance
 
 
+def test_gen3_plan_materializes_canonical_skill_for_alias(tmp_path, monkeypatch) -> None:
+    _write_gen3_project(
+        tmp_path,
+        skills_block="skills_loaded:\n  - id: retired-skill\n    reason: selection modeling\n",
+    )
+    monkeypatch.setattr(
+        "science_tool.graph.sources.load_skill_aliases",
+        lambda: {"retired-skill": "driver-selection"},
+    )
+
+    _, provenance = _provenance(tmp_path)
+
+    assert (None, SCI_NS.skill, SCI_NS["skill/driver-selection"]) in provenance
+    assert (None, SCI_NS.skill, SCI_NS["skill/retired-skill"]) not in provenance
+
+
 def test_materialization_is_idempotent(tmp_path) -> None:
     _write_gen3_project(tmp_path, skills_block=_SKILLS)
     sources, first = _provenance(tmp_path)
