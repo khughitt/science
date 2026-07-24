@@ -1677,7 +1677,9 @@ So: `count_issues` reads `layered_claims` as the real TypedDict, and `build_heal
 assembles the actual report body **first** and calls the same function on it. It accepts the
 complete `HealthReport` shape and the same shape after projection (which only narrows registered
 lists and adds metadata). Missing required sections, wrong section types, and malformed required
-nested fields raise immediately; none are normalized to empty collections or zero.
+nested fields raise immediately; none are normalized to empty collections or zero. Every row
+list must contain mappings, and the `counts_as_issue` fields used for managed-artifact and prose
+counting must exist and be boolean.
 
 - [ ] **Step 1: Write the failing test**
 
@@ -1862,6 +1864,80 @@ def test_coverage_metrics_reject_missing_or_wrong_typed_fields(metric: str, valu
     layered = _layered(**{metric: value})
     with pytest.raises((TypeError, ValueError), match=metric):
         count_issues(_report(layered_claims=layered))
+
+
+@pytest.mark.parametrize(
+    "section",
+    [
+        "unresolved_refs",
+        "unregistered_ref_kinds",
+        "lingering_tags_lines",
+        "agent_context",
+        "identity_policy",
+        "entity_identity",
+        "legacy_task_type",
+        "invalid_entity_aspects",
+        "dataset_anomalies",
+        "schema_invalid",
+        "managed_artifacts",
+        "tooling_scaffold",
+        "validation",
+        "accepted_validation",
+        "unwired_checks",
+    ],
+)
+def test_root_row_sections_reject_non_mapping_members(section: str) -> None:
+    with pytest.raises(TypeError, match=rf"{section}\[0\]"):
+        count_issues(_report(**{section: [None]}))
+
+
+@pytest.mark.parametrize(
+    "section",
+    ["migration_issues", "rival_model_packets_missing_discriminating_predictions"],
+)
+def test_layered_issue_lists_reject_non_mapping_members(section: str) -> None:
+    layered = _layered(**{section: [None]})
+    with pytest.raises(TypeError, match=rf"{section}\[0\]"):
+        count_issues(_report(layered_claims=layered))
+
+
+@pytest.mark.parametrize("section", ["cross_paper_evidence", "prose_epistemics"])
+def test_nested_findings_reject_non_mapping_members(section: str) -> None:
+    report_section = dict(_report()[section])
+    report_section["findings"] = [None]
+    with pytest.raises(TypeError, match=rf"{section}\.findings\[0\]"):
+        count_issues(_report(**{section: report_section}))
+
+
+@pytest.mark.parametrize(
+    ("section", "row"),
+    [
+        ("managed_artifacts", {}),
+        ("managed_artifacts", {"counts_as_issue": "yes"}),
+        ("prose_epistemics", {}),
+        ("prose_epistemics", {"counts_as_issue": 1}),
+    ],
+)
+def test_issue_membership_flag_is_required_and_boolean(
+    section: str, row: dict[str, object]
+) -> None:
+    if section == "managed_artifacts":
+        report = _report(managed_artifacts=[row])
+    else:
+        prose = dict(_report()["prose_epistemics"])
+        prose["findings"] = [row]
+        report = _report(prose_epistemics=prose)
+    with pytest.raises((TypeError, ValueError), match="counts_as_issue"):
+        count_issues(report)
+
+
+def test_prose_findings_count_only_when_flagged() -> None:
+    prose = dict(_report()["prose_epistemics"])
+    prose["findings"] = [
+        {"counts_as_issue": True},
+        {"counts_as_issue": False},
+    ]
+    assert count_issues(_report(prose_epistemics=prose)) == 1
 ```
 
 - [ ] **Step 2: Run test to verify it fails**
@@ -1909,11 +1985,19 @@ def count_issues(report: Mapping[str, Any]) -> int:
             raise TypeError(f"{path}.{key} must be a mapping, got {type(value).__name__}")
         return value
 
-    def _rows(key: str) -> list[Any]:
+    def _mapping_members(value: list[Any], path: str) -> list[Mapping[str, Any]]:
+        for index, member in enumerate(value):
+            if not isinstance(member, Mapping):
+                raise TypeError(
+                    f"{path}[{index}] must be a mapping, got {type(member).__name__}"
+                )
+        return cast("list[Mapping[str, Any]]", value)
+
+    def _rows(key: str) -> list[Mapping[str, Any]]:
         value = _required(report, key, "health report")
         if not isinstance(value, list):
             raise TypeError(f"health report.{key} must be a list, got {type(value).__name__}")
-        return value
+        return _mapping_members(value, f"health report.{key}")
 
     # Validate the complete root shape, including registered sections that do not
     # contribute to the count. A projected report retains all of these keys.
@@ -1969,6 +2053,14 @@ def count_issues(report: Mapping[str, Any]) -> int:
                 f"health report.layered_claims.{key} must be a list, "
                 f"got {type(value).__name__}"
             )
+    migration_issues = _mapping_members(
+        migration_issues,
+        "health report.layered_claims.migration_issues",
+    )
+    rival_model_gaps = _mapping_members(
+        rival_model_gaps,
+        "health report.layered_claims.rival_model_packets_missing_discriminating_predictions",
+    )
     layered_issues = len(migration_issues) + len(rival_model_gaps)
     coverage_gaps = 0
     for key in ("proposition_claim_layer_coverage", "causal_leaning_identification_coverage"):
@@ -1989,7 +2081,7 @@ def count_issues(report: Mapping[str, Any]) -> int:
         if metric["denominator"] > 0 and metric["numerator"] < metric["denominator"]:
             coverage_gaps += 1
 
-    def _findings(key: str) -> list[Any]:
+    def _findings(key: str) -> list[Mapping[str, Any]]:
         section = _mapping(report, key, "health report")
         findings = _required(section, "findings", f"health report.{key}")
         if not isinstance(findings, list):
@@ -1997,10 +2089,30 @@ def count_issues(report: Mapping[str, Any]) -> int:
                 f"health report.{key}.findings must be a list, "
                 f"got {type(findings).__name__}"
             )
-        return findings
+        return _mapping_members(findings, f"health report.{key}.findings")
+
+    def _count_issue_flags(findings: list[Mapping[str, Any]], path: str) -> int:
+        count = 0
+        for index, finding in enumerate(findings):
+            flag = _required(finding, "counts_as_issue", f"{path}[{index}]")
+            if type(flag) is not bool:
+                raise TypeError(
+                    f"{path}[{index}].counts_as_issue must be a bool, "
+                    f"got {type(flag).__name__}"
+                )
+            count += int(flag)
+        return count
 
     prose_findings = _findings("prose_epistemics")
     cross_paper_findings = _findings("cross_paper_evidence")
+    managed_artifact_issues = _count_issue_flags(
+        rows["managed_artifacts"],
+        "health report.managed_artifacts",
+    )
+    prose_issues = _count_issue_flags(
+        prose_findings,
+        "health report.prose_epistemics.findings",
+    )
 
     return (
         len(rows["unresolved_refs"])
@@ -2014,18 +2126,10 @@ def count_issues(report: Mapping[str, Any]) -> int:
         + len(rows["dataset_anomalies"])
         + len(rows["schema_invalid"])
         + (1 if lag_total else 0)
-        + sum(
-            1
-            for finding in rows["managed_artifacts"]
-            if isinstance(finding, Mapping) and finding.get("counts_as_issue") is True
-        )
+        + managed_artifact_issues
         + len(rows["tooling_scaffold"])
         + len(rows["validation"])
-        + sum(
-            1
-            for finding in prose_findings
-            if isinstance(finding, Mapping) and finding.get("counts_as_issue") is True
-        )
+        + prose_issues
         + len(cross_paper_findings)
     )
 ```
@@ -2097,7 +2201,7 @@ satisfy.
 - [ ] **Step 4: Run tests to verify they pass**
 
 Run: `cd science && uv run --frozen pytest tests/test_health_count_issues.py -v`
-Expected: PASS (26 collected)
+Expected: PASS (50 collected)
 
 - [ ] **Step 5: Verify `total_issues` is numerically unchanged**
 
@@ -2218,6 +2322,11 @@ def test_row_without_severity_survives_every_threshold() -> None:
 def test_unknown_severity_is_rejected() -> None:
     with pytest.raises(ValueError, match="unknown health severity"):
         meets_threshold({"severity": "critical"}, "warn")
+
+
+def test_explicit_none_severity_is_rejected() -> None:
+    with pytest.raises(ValueError, match="unknown health severity"):
+        meets_threshold({"severity": None}, "warn")
 ```
 
 - [ ] **Step 2: Run test to verify it fails**
@@ -2310,21 +2419,21 @@ def meets_threshold(row: Mapping[str, Any], threshold: str) -> bool:
     """True when ``row`` is at or above ``threshold``.
 
     A row with no ``severity`` key survives every threshold: absence of the signal is not
-    evidence of low severity, and dropping such rows would hide findings.
+    evidence of low severity, and dropping such rows would hide findings. A present value,
+    including explicit ``None``, must be a registered severity string.
     """
-    severity = row.get("severity")
-    if severity is None:
+    if "severity" not in row:
         return True
-    severity_name = str(severity)
-    if severity_name not in SEVERITY_ORDER:
-        raise ValueError(f"unknown health severity {severity_name!r}")
-    return SEVERITY_ORDER[severity_name] >= _THRESHOLD_FLOOR[threshold]
+    severity = row["severity"]
+    if not isinstance(severity, str) or severity not in SEVERITY_ORDER:
+        raise ValueError(f"unknown health severity {severity!r}")
+    return SEVERITY_ORDER[severity] >= _THRESHOLD_FLOOR[threshold]
 ```
 
 - [ ] **Step 4: Run test to verify it passes**
 
 Run: `cd science && uv run --frozen pytest tests/test_health_projection.py -v`
-Expected: PASS (16 collected)
+Expected: PASS (17 collected)
 
 - [ ] **Step 5: Commit**
 
@@ -2470,7 +2579,10 @@ def test_nested_findings_are_projected_in_place() -> None:
     report = _natural_systems_shaped_report()
     report["cross_paper_evidence"] = {
         "status": "active",
+        "empty_state": "active",
+        "summary": {},
         "findings": [{"severity": "error", "code": f"c{i}"} for i in range(100)],
+        "propositions": [],
     }
     projected = project_health_report(report, threshold="error")
     assert len(projected["cross_paper_evidence"]["findings"]) == SECTION_ROW_CAP
@@ -2489,18 +2601,67 @@ def test_registered_row_sections_reject_non_lists(section: str, value: object) -
 
 
 @pytest.mark.parametrize(
+    "section",
+    ["validation", "managed_artifacts", "unresolved_refs"],
+)
+def test_registered_row_sections_reject_non_mapping_members(section: str) -> None:
+    report = _natural_systems_shaped_report()
+    report[section] = [None]
+    with pytest.raises(TypeError, match=rf"{section}\[0\]"):
+        project_health_report(report, threshold="warn")
+
+
+@pytest.mark.parametrize(
     ("section", "value"),
     [
         ("cross_paper_evidence", {}),
         ("cross_paper_evidence", {"findings": {}}),
+        (
+            "cross_paper_evidence",
+            {
+                "status": "ok",
+                "empty_state": "active",
+                "summary": [],
+                "findings": [],
+                "propositions": [],
+            },
+        ),
+        (
+            "cross_paper_evidence",
+            {
+                "status": "ok",
+                "empty_state": "active",
+                "summary": {},
+                "findings": [],
+            },
+        ),
         ("prose_epistemics", {}),
         ("prose_epistemics", {"findings": None}),
+        (
+            "prose_epistemics",
+            {
+                "applicable": "no",
+                "summary": {},
+                "coverage": {},
+                "sources": [],
+                "findings": [],
+            },
+        ),
+        (
+            "prose_epistemics",
+            {
+                "applicable": False,
+                "summary": {},
+                "coverage": {},
+                "findings": [],
+            },
+        ),
     ],
 )
-def test_nested_sections_require_list_findings(section: str, value: object) -> None:
+def test_nested_sections_require_their_registered_shape(section: str, value: object) -> None:
     report = _natural_systems_shaped_report()
     report[section] = value
-    with pytest.raises((TypeError, ValueError), match="findings"):
+    with pytest.raises((TypeError, ValueError), match=section):
         project_health_report(report, threshold="warn")
 
 
@@ -2509,6 +2670,68 @@ def test_registered_mapping_sections_reject_non_mappings(section: str) -> None:
     report = _natural_systems_shaped_report()
     report[section] = []
     with pytest.raises(TypeError, match=section):
+        project_health_report(report, threshold="warn")
+
+
+@pytest.mark.parametrize(
+    ("section", "value"),
+    [
+        ("archive_lag", {"done_in_active": 0, "retired_in_active": 0}),
+        (
+            "archive_lag",
+            {"done_in_active": "zero", "retired_in_active": 0, "missing_completed": 0},
+        ),
+        (
+            "layered_claims",
+            {
+                "proposition_claim_layer_coverage": {
+                    "numerator": 0,
+                    "denominator": 0,
+                    "fraction": 1.0,
+                },
+                "causal_leaning_identification_coverage": {
+                    "numerator": 0,
+                    "denominator": 0,
+                    "fraction": 1.0,
+                },
+                "migration_issues": [],
+            },
+        ),
+        (
+            "layered_claims",
+            {
+                "proposition_claim_layer_coverage": {
+                    "numerator": 0,
+                    "denominator": 0,
+                    "fraction": 1.0,
+                },
+                "causal_leaning_identification_coverage": {
+                    "numerator": 0,
+                    "denominator": "zero",
+                    "fraction": 1.0,
+                },
+                "rival_model_packets_missing_discriminating_predictions": [],
+                "migration_issues": [],
+            },
+        ),
+    ],
+)
+def test_mapping_sections_require_their_registered_shape(
+    section: str, value: object
+) -> None:
+    report = _natural_systems_shaped_report()
+    report[section] = value
+    with pytest.raises((TypeError, ValueError), match=section):
+        project_health_report(report, threshold="warn")
+
+
+@pytest.mark.parametrize("section", ["cross_paper_evidence", "prose_epistemics"])
+def test_nested_findings_reject_non_mapping_members(section: str) -> None:
+    report = _natural_systems_shaped_report()
+    nested = dict(report[section])
+    nested["findings"] = [None]
+    report[section] = nested
+    with pytest.raises(TypeError, match=rf"{section}\.findings\[0\]"):
         project_health_report(report, threshold="warn")
 
 
@@ -2539,10 +2762,30 @@ def test_registered_scalars_still_pass_through() -> None:
     projected = project_health_report(report, threshold="warn")
     assert projected["_meta"] == {"timings": [], "total_duration_seconds": 0.5}
     assert projected["total_issues"] == report["total_issues"]
+
+
+@pytest.mark.parametrize(
+    ("section", "value"),
+    [
+        ("total_issues", "364"),
+        ("_meta", {"timings": []}),
+        ("_meta", {"timings": {}, "total_duration_seconds": 0.5}),
+    ],
+)
+def test_registered_scalars_require_their_registered_shape(
+    section: str, value: object
+) -> None:
+    report = _natural_systems_shaped_report()
+    report[section] = value
+    with pytest.raises((TypeError, ValueError), match=section):
+        project_health_report(report, threshold="warn")
 ```
 
 `_meta` is a dict, and it is in `SCALAR_SECTIONS` rather than `UNFILTERED_SECTIONS` because it is
 not a findings section at all — it carries timings, and reaching `_classified` would be wrong.
+Registered does not mean unchecked: row sections require mapping members; `archive_lag`,
+`layered_claims`, both nested finding reports, `total_issues`, and `_meta` validate their required
+fields and field types before projection.
 
 - [ ] **Step 2: Run test to verify it fails**
 
@@ -2555,6 +2798,126 @@ Append to `science/src/science_tool/graph/health_projection.py`:
 
 ```python
 SECTION_ROW_CAP = 40
+
+
+def _required_field(container: Mapping[str, Any], key: str, path: str) -> Any:
+    if key not in container:
+        raise ValueError(f"{path} is missing required field {key!r}")
+    return container[key]
+
+
+def _required_mapping(
+    container: Mapping[str, Any],
+    key: str,
+    path: str,
+) -> Mapping[str, Any]:
+    value = _required_field(container, key, path)
+    if not isinstance(value, Mapping):
+        raise TypeError(f"{path}.{key} must be a mapping, got {type(value).__name__}")
+    return value
+
+
+def _required_list(container: Mapping[str, Any], key: str, path: str) -> list[Any]:
+    value = _required_field(container, key, path)
+    if not isinstance(value, list):
+        raise TypeError(f"{path}.{key} must be a list, got {type(value).__name__}")
+    return value
+
+
+def _validate_mapping_members(rows: list[Any], path: str) -> None:
+    for index, row in enumerate(rows):
+        if not isinstance(row, Mapping):
+            raise TypeError(f"{path}[{index}] must be a mapping, got {type(row).__name__}")
+
+
+def _validate_integer_field(container: Mapping[str, Any], key: str, path: str) -> None:
+    value = _required_field(container, key, path)
+    if type(value) is not int:
+        raise TypeError(f"{path}.{key} must be an int, got {type(value).__name__}")
+
+
+def _validate_coverage_metric(
+    layered: Mapping[str, Any],
+    key: str,
+    path: str,
+) -> None:
+    metric = _required_mapping(layered, key, path)
+    metric_path = f"{path}.{key}"
+    _validate_integer_field(metric, "numerator", metric_path)
+    _validate_integer_field(metric, "denominator", metric_path)
+    fraction = _required_field(metric, "fraction", metric_path)
+    if not isinstance(fraction, (int, float)) or isinstance(fraction, bool):
+        raise TypeError(
+            f"{metric_path}.fraction must be numeric, got {type(fraction).__name__}"
+        )
+
+
+def _validate_mapping_section(section: str, value: Mapping[str, Any]) -> None:
+    path = f"health report section {section!r}"
+    if section == "archive_lag":
+        for key in ("done_in_active", "retired_in_active", "missing_completed"):
+            _validate_integer_field(value, key, path)
+        return
+
+    for key in (
+        "proposition_claim_layer_coverage",
+        "causal_leaning_identification_coverage",
+    ):
+        _validate_coverage_metric(value, key, path)
+    for key in (
+        "rival_model_packets_missing_discriminating_predictions",
+        "migration_issues",
+    ):
+        rows = _required_list(value, key, path)
+        _validate_mapping_members(rows, f"{path}.{key}")
+
+
+def _validate_nested_section(
+    section: str,
+    value: Mapping[str, Any],
+) -> list[Any]:
+    path = f"health report section {section!r}"
+    if section == "cross_paper_evidence":
+        for key in ("status", "empty_state"):
+            field = _required_field(value, key, path)
+            if not isinstance(field, str):
+                raise TypeError(f"{path}.{key} must be a str, got {type(field).__name__}")
+        _required_mapping(value, "summary", path)
+        propositions = _required_list(value, "propositions", path)
+        _validate_mapping_members(propositions, f"{path}.propositions")
+    else:
+        applicable = _required_field(value, "applicable", path)
+        if type(applicable) is not bool:
+            raise TypeError(
+                f"{path}.applicable must be a bool, got {type(applicable).__name__}"
+            )
+        _required_mapping(value, "summary", path)
+        _required_mapping(value, "coverage", path)
+        sources = _required_list(value, "sources", path)
+        _validate_mapping_members(sources, f"{path}.sources")
+
+    findings = _required_list(value, "findings", path)
+    _validate_mapping_members(findings, f"{path}.findings")
+    return findings
+
+
+def _validate_scalar_section(section: str, value: Any) -> None:
+    path = f"health report section {section!r}"
+    if section == "total_issues":
+        if type(value) is not int:
+            raise TypeError(f"{path} must be an int, got {type(value).__name__}")
+        return
+
+    if not isinstance(value, Mapping):
+        raise TypeError(f"{path} must be a mapping, got {type(value).__name__}")
+    timings = _required_list(value, "timings", path)
+    _validate_mapping_members(timings, f"{path}.timings")
+    duration = _required_field(value, "total_duration_seconds", path)
+    if not isinstance(duration, (int, float)) or isinstance(duration, bool):
+        raise TypeError(
+            f"{path}.total_duration_seconds must be numeric, "
+            f"got {type(duration).__name__}"
+        )
 
 
 def _classified(section: str) -> str:
@@ -2578,12 +2941,13 @@ def _project_section(
     cap: int,
     omitted: dict[str, int],
 ) -> list[Any]:
+    _validate_mapping_members(rows, f"health report section {section!r}")
     kind = _classified(section)
     if kind == "unfiltered":
         return rows
 
     if kind == "severity":
-        kept = [row for row in rows if not isinstance(row, dict) or meets_threshold(row, threshold)]
+        kept = [row for row in rows if meets_threshold(row, threshold)]
     else:
         kept = list(rows)
 
@@ -2619,6 +2983,7 @@ def project_health_report(
         # boolean/int/string section pass through unexamined purely because of its Python
         # type -- the silent escape this projector exists to prevent.
         if key in SCALAR_SECTIONS:
+            _validate_scalar_section(key, value)
             projected[key] = value
             continue
 
@@ -2628,14 +2993,7 @@ def project_health_report(
                     f"health report section {key!r} must be a mapping, "
                     f"got {type(value).__name__}"
                 )
-            if "findings" not in value:
-                raise ValueError(f"health report section {key!r} is missing required field 'findings'")
-            findings = value["findings"]
-            if not isinstance(findings, list):
-                raise TypeError(
-                    f"health report section {key!r}.findings must be a list, "
-                    f"got {type(findings).__name__}"
-                )
+            findings = _validate_nested_section(key, value)
             projected[key] = {
                 **value,
                 "findings": _project_section(findings, key, threshold, effective_cap, omitted),
@@ -2648,6 +3006,7 @@ def project_health_report(
                     f"health report section {key!r} must be a mapping, "
                     f"got {type(value).__name__}"
                 )
+            _validate_mapping_section(key, value)
             projected[key] = value
             continue
 
@@ -2669,7 +3028,7 @@ def project_health_report(
 - [ ] **Step 4: Run test to verify it passes**
 
 Run: `cd science && uv run --frozen pytest tests/test_health_projection_caps.py -v`
-Expected: PASS (25 collected)
+Expected: PASS (41 collected)
 
 - [ ] **Step 5: Commit**
 
@@ -3833,6 +4192,13 @@ non-list row sections, malformed nested `findings`, and non-mapping registered o
 while preserving registered scalars (Task 10). Format coverage says “every supported format”
 throughout: `tasks list`, `health`, and `data audit` cover table and JSON; entity inventory stays
 JSON-only (Tasks 7, 11–13).
+
+**Important pre-flight review fixes.** Strict health counting now validates every list member and
+the boolean issue-membership fields it reads, including managed artifacts and nested prose
+findings (Task 8). `meets_threshold` distinguishes a missing `severity` key from a present
+`None`: only the missing key survives, while any present unregistered/non-string value raises
+(Task 9). Health projection validates mapping members and the full required shapes of its
+registered mapping, nested-report, and scalar sections before filtering or capping (Task 10).
 
 **Known limits, stated.** Guard 2 proves sink *construction*, not that every branch routes
 through it — Task 11 Step 5's grep and the regression suite cover the rest. The `DEFERRED` table
