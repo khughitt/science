@@ -4,6 +4,7 @@ import pytest
 from rdflib import Graph
 from rdflib import Literal as RDFLiteral
 from rdflib.namespace import RDF
+from science_model.entities import Entity, EntityType
 
 from science_tool.graph.dataset_usage import project_entity_uri
 from science_tool.graph.skill_loads import (
@@ -12,6 +13,7 @@ from science_tool.graph.skill_loads import (
     add_skill_load_record_to_graph,
     build_skill_load_records,
     canonicalize_skill_id,
+    collect_skill_loads,
     load_skill_aliases,
     skill_load_node_uri,
     validate_skill_aliases,
@@ -211,3 +213,64 @@ def test_build_records_rejects_converging_aliases() -> None:
             ],
             aliases={"old-name": "driver-selection"},
         )
+
+
+# Sentinel so `_plan()` (field ABSENT) is distinct from `_plan(None)` (field present, value null).
+_ABSENT = object()
+
+
+def _plan(skills_loaded: object = _ABSENT) -> Entity:
+    extra = {} if skills_loaded is _ABSENT else {"skills_loaded": skills_loaded}
+    return Entity(
+        id="plan:0001-x",
+        canonical_id="plan:0001-x",
+        kind="plan",
+        type=EntityType.PLAN,
+        title="Plan",
+        project="demo",
+        ontology_terms=[],
+        related=[],
+        source_refs=[],
+        content_preview="",
+        file_path="entities/plans/0001-x.md",
+        **extra,
+    )
+
+
+def test_collect_gen3_plan_with_skills_loaded() -> None:
+    entity = _plan([{"id": "driver-selection", "reason": "r"}])
+    records = collect_skill_loads([entity], generation=3, aliases={})
+    assert [r.canonical_skill_id for r in records] == ["driver-selection"]
+
+
+def test_collect_gen2_ignores_skills_loaded() -> None:
+    entity = _plan([{"id": "driver-selection", "reason": "r"}])
+    assert collect_skill_loads([entity], generation=2, aliases={}) == []
+    assert collect_skill_loads([entity], generation=None, aliases={}) == []
+
+
+def test_collect_gen3_rejects_explicit_null_skills_loaded() -> None:
+    # An authored `skills_loaded: null` is PRESENT-but-malformed, not absent: it must hard-fail,
+    # not be silently skipped. (getattr cannot see this; only model_extra membership can.)
+    entity = _plan(None)
+    with pytest.raises(SkillLoadValidationError):
+        collect_skill_loads([entity], generation=3, aliases={})
+
+
+def test_collect_ignores_non_plan_and_plans_without_field() -> None:
+    plan_without = _plan()
+    dataset = Entity(
+        id="dataset:d1",
+        canonical_id="dataset:d1",
+        kind="dataset",
+        type=EntityType.DATASET,
+        title="D",
+        project="demo",
+        ontology_terms=[],
+        related=[],
+        source_refs=[],
+        content_preview="",
+        file_path="entities/datasets/d1.md",
+        skills_loaded=[{"id": "driver-selection", "reason": "r"}],
+    )
+    assert collect_skill_loads([plan_without, dataset], generation=3, aliases={}) == []

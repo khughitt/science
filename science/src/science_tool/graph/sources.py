@@ -72,6 +72,7 @@ from science_tool.graph.identity_table import (
     classify_owner_scope,
 )
 from science_tool.graph.source_records import MarkdownSourceDocument
+from science_tool.graph.skill_loads import SkillLoadRecord, collect_skill_loads, load_skill_aliases
 from science_tool.graph.storage_adapters.base import StorageAdapter
 from science_tool.graph.storage_adapters.bib import BibAdapter
 from science_tool.graph.storage_adapters.code import CodeAdapter
@@ -232,6 +233,10 @@ class ProjectSources(BaseModel):
     # survives load on an in-set kind is schema-blessed; an out-of-set kind's extras were
     # never vouched. Default empty is conservative (diagnostic may fire).
     strict_schema_kinds: frozenset[str] = Field(default_factory=frozenset)
+    # Reified skill-load records produced during load from gen-3 plans' `skills_loaded`
+    # (see graph/skill_loads.py). Empty for gen-<=2 / unpinned projects. Emitted into
+    # graph/provenance by materialize._add_skill_load_edges.
+    skill_loads: list[SkillLoadRecord] = Field(default_factory=list)
 
 
 SourceBinding = BindingSource
@@ -681,6 +686,13 @@ def load_project_sources(
         manual_aliases[token] = canonical
         archive_alias_tokens.add(token)
 
+    generation = project_schema._generation if project_schema is not None else None
+    skill_loads = collect_skill_loads(
+        entities,
+        generation=generation,
+        aliases=load_skill_aliases() if generation == 3 else {},
+    )
+
     return ProjectSources(
         project_name=str(config["name"]),
         project_root=str(project_root),
@@ -703,6 +715,7 @@ def load_project_sources(
         peer_ids=frozenset(config.get("peer_ids") or []),  # type: ignore[arg-type]
         dataset_parents=dataset_parents,
         strict_schema_kinds=PROJECT_MIXIN_NAMES if project_schema is not None else frozenset(),
+        skill_loads=skill_loads,
     )
 
 

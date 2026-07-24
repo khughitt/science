@@ -12,6 +12,7 @@ from __future__ import annotations
 import hashlib
 import json
 import re
+from collections.abc import Iterable
 from dataclasses import dataclass
 from importlib import resources
 from typing import Literal
@@ -20,6 +21,7 @@ from rdflib import Graph, URIRef
 from rdflib import Literal as RDFLiteral
 from rdflib.namespace import RDF
 import yaml
+from science_model.entities import Entity
 
 from science_tool.graph.dataset_usage import project_entity_uri
 from science_tool.graph.store import PROJECT_NS, SCI_NS
@@ -79,7 +81,7 @@ def _reject_duplicate_keys(node: yaml.Node) -> None:
     # catching a dup key that yaml.safe_load would silently collapse to last-wins.
     if not isinstance(node, yaml.MappingNode):
         return
-    seen: set[str] = set()
+    seen: set[object] = set()
     for key_node, _ in node.value:
         key = getattr(key_node, "value", None)
         if key in seen:
@@ -176,5 +178,32 @@ def build_skill_load_records(
         seen[canonical] = raw_id
         records.append(
             SkillLoadRecord(plan_id=plan_id, canonical_skill_id=canonical, reason=reason)
+        )
+    return records
+
+
+def collect_skill_loads(
+    entities: Iterable[Entity], *, generation: int | None, aliases: dict[str, str]
+) -> list[SkillLoadRecord]:
+    """Produce skill-load records for every gen-3 plan carrying `skills_loaded`.
+
+    Gen-≤2 (or unpinned) projects produce nothing — `skills_loaded` there is
+    preserved-raw and ignored. Raises `SkillLoadValidationError` on a malformed
+    declaration (the structural error surfaces at load, before materialization).
+    """
+    if generation != 3:
+        return []
+    records: list[SkillLoadRecord] = []
+    for entity in entities:
+        if entity.kind != "plan":
+            continue
+        # `skills_loaded` is preserved-raw in model_extra (Entity is extra="allow"). Test PRESENCE
+        # via model_extra, not getattr: an authored `skills_loaded: null` is present-with-value-None
+        # and must reach build_skill_load_records to hard-fail, whereas an absent field is skipped.
+        extra = entity.model_extra or {}
+        if "skills_loaded" not in extra:
+            continue
+        records.extend(
+            build_skill_load_records(entity.canonical_id, extra["skills_loaded"], aliases=aliases)
         )
     return records
