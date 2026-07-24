@@ -28,6 +28,10 @@ class SkillLoadRecord:
     # so a caller can never mint a second identity for one (plan, skill) load by varying `source`.
     source: Literal["authored"] = "authored"
 
+    def __post_init__(self) -> None:
+        if self.source != "authored":
+            raise ValueError("source must be 'authored'")
+
     def identity_payload(self) -> dict[str, str]:
         return {
             "plan_id": self.plan_id,
