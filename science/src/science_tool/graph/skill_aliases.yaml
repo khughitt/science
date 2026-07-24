@@ -1,0 +1,5 @@
+# Retired-skill-id -> canonical-skill-id map, honored by the skills_loaded truth path.
+# Keys and values are bare kebab-case skill names (^[a-z0-9]+(-[a-z0-9]+)*$). No chains:
+# a value may not also appear as a key. Seeded minimal; real retired->canonical entries
+# are added alongside the deferred downstream analysis-plan migration.
+{}
