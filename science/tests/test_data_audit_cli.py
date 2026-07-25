@@ -66,11 +66,22 @@ def test_audit_format_json_contract(tmp_path: Path):
 def test_fix_moves_and_reports_performed(tmp_path: Path):
     _init_repo(tmp_path)
     _write(tmp_path, "data/processed/exp1/RESULTS.md", b"# r\n")
-    res = _run(tmp_path, "--fix", "--json")
+    out = tmp_path / "audit.json"
+    res = _run(tmp_path, "--fix", "--json", "--output", str(out))
     assert res.exit_code == 0
-    payload = json.loads(res.output)
+    payload = json.loads(out.read_text())
     assert payload["violations"][0]["performed"] is True
     assert (tmp_path / "results/exp1/RESULTS.md").exists()
+
+
+def test_fix_without_output_refuses(tmp_path: Path):
+    """The report size cannot be bounded before the moves, so --fix demands --output."""
+    _init_repo(tmp_path)
+    _write(tmp_path, "data/processed/exp1/RESULTS.md", b"# r\n")
+    res = _run(tmp_path, "--fix", "--json")
+    assert res.exit_code != 0
+    assert "--output" in res.output
+    assert not (tmp_path / "results/exp1/RESULTS.md").exists()
 
 
 def test_honors_science_project_root_env(tmp_path: Path):

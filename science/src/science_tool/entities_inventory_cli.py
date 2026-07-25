@@ -53,12 +53,24 @@ def entities_inventory_command(
     output: Path | None,
 ) -> None:
     """Emit the versioned Science entity inventory for a project."""
+    from science_tool.budget.invocation import build_complete_via
+    from science_tool.budget.registry import lookup
+    from science_tool.budget.sink import BoundedSink
+
     inventory = build_inventory(project_path)
     rendered = inventory.model_dump_json(indent=2) + "\n"
-    if output is None:
-        click.echo(rendered, nl=False)
-    else:
-        output.write_text(rendered, encoding="utf-8")
+    sink = BoundedSink(
+        lookup("entities inventory"),
+        output_path=output,
+        command_path="entities inventory",
+        complete_via=build_complete_via(
+            click.get_current_context(), output_hint="inventory.json"
+        ),
+    )
+    sink.write(rendered)
+    sink.flush()
+    if output is not None:
+        click.echo(f"wrote the entity inventory to {output}")
 
 
 @entities_group.command("audit-identifiers")
