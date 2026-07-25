@@ -13,7 +13,7 @@ from pathlib import Path
 
 import yaml
 from science_model.frontmatter import split_frontmatter
-from yaml.nodes import MappingNode, Node, ScalarNode
+from yaml.nodes import MappingNode, Node, ScalarNode, SequenceNode
 
 from science_tool.autonomy.changes import (
     BODY_FIELD,
@@ -71,17 +71,39 @@ def _blob(repo_root: Path, commit: str, path: str) -> str:
 _MISSING = object()
 
 
-def _same_value(before: object, after: object) -> bool:
+def _same_value(before: object, after: object, active: set[tuple[int, int]] | None = None) -> bool:
     """Compare YAML values without Python's bool-is-an-int equivalence."""
     if type(before) is not type(after):
         return False
+    if not isinstance(before, (Mapping, list, tuple)):
+        return before == after
+
+    if active is None:
+        active = set()
+    pair = (id(before), id(after))
+    if pair in active:
+        raise ExtractError("frontmatter contains a cyclic YAML alias")
+    active.add(pair)
+    try:
+        return _same_container_value(before, after, active)
+    finally:
+        active.remove(pair)
+
+
+def _same_container_value(
+    before: Mapping[object, object] | list[object] | tuple[object, ...],
+    after: object,
+    active: set[tuple[int, int]],
+) -> bool:
     if isinstance(before, Mapping):
         if not isinstance(after, Mapping) or len(before) != len(after):
             return False
         unmatched = list(after.items())
         for before_key, before_value in before.items():
             for index, (after_key, after_value) in enumerate(unmatched):
-                if _same_value(before_key, after_key) and _same_value(before_value, after_value):
+                if _same_value(before_key, after_key, active) and _same_value(
+                    before_value, after_value, active
+                ):
                     del unmatched[index]
                     break
             else:
@@ -89,10 +111,10 @@ def _same_value(before: object, after: object) -> bool:
         return not unmatched
     if isinstance(before, (list, tuple)):
         return isinstance(after, type(before)) and len(before) == len(after) and all(
-            _same_value(before_item, after_item)
+            _same_value(before_item, after_item, active)
             for before_item, after_item in zip(before, after, strict=True)
         )
-    return before == after
+    raise AssertionError("container comparison received an unsupported type")
 
 
 def _frontmatter_block(text: str) -> str | None:
@@ -106,7 +128,15 @@ def _frontmatter_block(text: str) -> str | None:
     content = text[len("---" + newline) :]
     closing = f"{newline}---{newline}"
     closing_index = content.find(closing)
-    return None if closing_index == -1 else content[:closing_index]
+    return None if closing_index == -1 else content[:closing_index] + newline
+
+
+def _frontmatter_delimiter(text: str) -> str | None:
+    if text.startswith("---\r\n"):
+        return "\r\n"
+    if text.startswith("---\n"):
+        return "\n"
+    return None
 
 
 def _yaml_key(node: ScalarNode) -> object:
@@ -116,9 +146,38 @@ def _yaml_key(node: ScalarNode) -> object:
         raise ExtractError(f"unparseable frontmatter key: {exc}") from exc
 
 
-def _validate_mapping_keys(node: Node, *, top_level: bool) -> None:
+def _validate_mapping_keys(
+    node: Node,
+    *,
+    top_level: bool,
+    active: set[int] | None = None,
+    visited: set[int] | None = None,
+) -> None:
     """Reject key collisions that Python's mapping construction would erase."""
+    if active is None:
+        active = set()
+    if visited is None:
+        visited = set()
+    node_id = id(node)
+    if node_id in active:
+        raise ExtractError("frontmatter contains a cyclic YAML alias")
+    if node_id in visited:
+        return
+    active.add(node_id)
+    try:
+        _validate_node_mapping_keys(node, top_level=top_level, active=active, visited=visited)
+    finally:
+        active.remove(node_id)
+    visited.add(node_id)
+
+
+def _validate_node_mapping_keys(
+    node: Node, *, top_level: bool, active: set[int], visited: set[int]
+) -> None:
     if not isinstance(node, MappingNode):
+        if isinstance(node, SequenceNode):
+            for child in node.value:
+                _validate_mapping_keys(child, top_level=False, active=active, visited=visited)
         return
 
     seen: list[object] = []
@@ -138,7 +197,7 @@ def _validate_mapping_keys(node: Node, *, top_level: bool) -> None:
             if field in fields:
                 raise ExtractError("frontmatter keys collide when converted to field names")
             fields.add(field)
-        _validate_mapping_keys(value_node, top_level=False)
+        _validate_mapping_keys(value_node, top_level=False, active=active, visited=visited)
 
 
 def _field_map(frontmatter: dict, block: str | None) -> dict[str, object]:
@@ -159,25 +218,32 @@ def _field_map(frontmatter: dict, block: str | None) -> dict[str, object]:
     return fields
 
 
-def _frontmatter_template(block: str) -> tuple[tuple[tuple[str, str], ...], dict[str, str]]:
+def _frontmatter_template(
+    block: str,
+) -> tuple[tuple[tuple[str, str, str], ...], dict[str, str]]:
     """Keep source syntax, replacing only simple top-level scalar values."""
-    template: list[tuple[str, str]] = []
+    template: list[tuple[str, str, str]] = []
     values: dict[str, str] = {}
     for line in block.splitlines(keepends=True):
         raw_line = line.rstrip("\r\n")
+        ending = line[len(raw_line) :]
         if raw_line and not raw_line[0].isspace() and ":" in raw_line and "#" not in raw_line:
             raw_key, raw_value = raw_line.split(":", 1)
-            if raw_key and raw_value.startswith(" "):
+            leading = raw_value[: len(raw_value) - len(raw_value.lstrip(" \t"))]
+            scalar = raw_value[len(leading) :]
+            trailing = scalar[len(scalar.rstrip(" \t")) :]
+            scalar = scalar[: len(scalar) - len(trailing)] if trailing else scalar
+            if raw_key and leading:
                 try:
                     parsed = yaml.safe_load(f"{raw_key}: null\n")
                 except yaml.YAMLError as exc:
                     raise ExtractError(f"unparseable frontmatter key: {exc}") from exc
                 if isinstance(parsed, dict) and len(parsed) == 1:
                     key = str(next(iter(parsed)))
-                    template.append(("field", key))
-                    values[key] = raw_value
+                    template.append(("field", key, f"{raw_key}:{leading}{trailing}{ending}"))
+                    values[key] = scalar
                     continue
-        template.append(("raw", line))
+        template.append(("raw", line, ""))
     return tuple(template), values
 
 
@@ -185,14 +251,20 @@ def _has_unaccounted_syntax_change(
     before_block: str | None,
     after_block: str | None,
     changed_fields: set[str],
+    before_delimiter: str | None,
+    after_delimiter: str | None,
 ) -> bool:
-    if before_block is None or after_block is None or before_block == after_block:
+    if before_block is None or after_block is None:
+        return False
+    if before_delimiter != after_delimiter:
+        return True
+    if before_block == after_block:
         return False
 
     before_template, before_values = _frontmatter_template(before_block)
     after_template, after_values = _frontmatter_template(after_block)
-    before_fields = {value for kind, value in before_template if kind == "field"}
-    after_fields = {value for kind, value in after_template if kind == "field"}
+    before_fields = {field for kind, field, _ in before_template if kind == "field"}
+    after_fields = {field for kind, field, _ in after_template if kind == "field"}
     added_or_removed = before_fields ^ after_fields
     before_shape = tuple(
         token
@@ -235,7 +307,13 @@ def _changed_fields(before_text: str | None, after_text: str | None) -> tuple[st
     }
     if before_body != after_body:
         changed.add(BODY_FIELD)
-    if _has_unaccounted_syntax_change(before_block, after_block, changed):
+    if _has_unaccounted_syntax_change(
+        before_block,
+        after_block,
+        changed,
+        _frontmatter_delimiter(before_text) if before_text is not None else None,
+        _frontmatter_delimiter(after_text) if after_text is not None else None,
+    ):
         changed.add(UNACCOUNTED_CHANGE_FIELD)
     return tuple(sorted(changed))
 

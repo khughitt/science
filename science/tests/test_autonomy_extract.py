@@ -321,3 +321,61 @@ def test_an_option_like_revision_is_an_extract_error(repo: Path):
 
     with pytest.raises(ExtractError):
         extract_change_set(repo, base, "--show-toplevel")
+
+
+def test_quoted_key_syntax_cannot_piggyback_on_an_allowed_value_edit(repo: Path):
+    _write(repo, PAPER, _paper_text().replace("venue: Nature", "'venue': Nature"))
+    _commit(repo, "quote venue key")
+    base = _git(repo, "rev-parse", "HEAD")
+    _write(repo, PAPER, _paper_text(venue="Science"))
+    head = _commit(repo, "unquote venue key and edit value")
+
+    change_set = extract_change_set(repo, base, head)
+    assert change_set.changes[0].fields == (UNACCOUNTED_CHANGE_FIELD, "venue")
+    assert evaluate(change_set, tier=RunTier.BELIEF_NEUTRAL).allowed is False
+
+
+def test_crlf_to_lf_cannot_piggyback_on_an_allowed_value_edit(repo: Path):
+    _write(
+        repo,
+        PAPER,
+        "---\r\nid: paper:smith2020\r\nkind: paper\r\ntitle: T\r\nvenue: Nature\r\n---\r\nAbstract.\n",
+    )
+    _commit(repo, "use crlf")
+    base = _git(repo, "rev-parse", "HEAD")
+    _write(
+        repo,
+        PAPER,
+        "---\nid: paper:smith2020\nkind: paper\ntitle: T\nvenue: Science\n---\nAbstract.\n",
+    )
+    head = _commit(repo, "use lf and edit venue")
+
+    change_set = extract_change_set(repo, base, head)
+    assert change_set.changes[0].fields == (UNACCOUNTED_CHANGE_FIELD, "venue")
+    assert evaluate(change_set, tier=RunTier.BELIEF_NEUTRAL).allowed is False
+
+
+def test_a_cyclic_alias_with_an_allowed_edit_is_an_extract_error(repo: Path):
+    _write(repo, PAPER, _paper_text().replace("venue: Nature\n", "loop: &loop [*loop]\nvenue: Nature\n"))
+    _commit(repo, "add cyclic alias")
+    base = _git(repo, "rev-parse", "HEAD")
+    _write(repo, PAPER, _paper_text(venue="Science").replace("venue: Science\n", "loop: &loop [*loop]\nvenue: Science\n"))
+    head = _commit(repo, "edit venue")
+
+    with pytest.raises(ExtractError):
+        extract_change_set(repo, base, head)
+
+
+def test_a_nested_mapping_collision_beneath_a_sequence_is_an_extract_error(repo: Path):
+    base = _git(repo, "rev-parse", "HEAD")
+    _write(
+        repo,
+        PAPER,
+        _paper_text(venue="Science").replace(
+            "venue: Science\n", "items:\n  - 1: a\n    true: b\nvenue: Science\n"
+        ),
+    )
+    head = _commit(repo, "add ambiguous nested mapping")
+
+    with pytest.raises(ExtractError):
+        extract_change_set(repo, base, head)
