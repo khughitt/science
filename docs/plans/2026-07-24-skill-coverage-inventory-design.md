@@ -146,7 +146,7 @@ but **not** list elements — the list order must be fixed explicitly). Each ent
 - `covers` — leaf only, the validated **distinct** term-id list in authored order (**omitted when
   empty**, so an uncovered leaf and a router both simply lack the key — uniform absence);
 - `sources` — the frontmatter `sources` list (leaf-authored) in authored order; **omitted when
-  absent** (the overlay materializes absence as `[]`);
+  absent** (the overlay materializes absence as `()`);
 - `companions` — the parsed `## Companion Skills` edges (universal; leaves and routers both), in
   authored order, each `{ "target": "<canonical-id-or-`science-skill-index`>", "role":
   "leaf"|"router"|"index" }`, with **distinct** targets. **Omitted when the section is empty.**
@@ -208,9 +208,9 @@ The resources are **frozen, slotted dataclasses**, so the collection fields are 
 `covers`/`sources` field that is present but not a list of strings, is a structural error at build
 (§5), never silently coerced.
 
-**This overlay is a role-typed, in-memory Python index — not an RDF graph.** It supersedes the
-parent design's "constructs the RDF overlay in memory" phrasing (`2026-07-23-…-design.md` §"Skill
-overlay"): the RDF side of the coverage join already exists as sub-plan 2's reified
+**This overlay is a role-typed, in-memory Python index — not an RDF graph.** The parent design's
+§"Skill overlay (derived, role-typed, in-memory)" uses the same clarified contract: the RDF side of
+the coverage join already exists as sub-plan 2's reified
 `sci:skill/<id>` skill-load records in the project graph. Sub-plan 4 joins those graph targets
 against this overlay **by canonical id** — the overlay is the lookup/validation structure over the
 corpus, and materializing it as a second in-memory triple store would add no join capability.
@@ -218,9 +218,10 @@ corpus, and materializing it as a second in-memory triple store would add no joi
 `SkillOverlay` exposes lookup **by `id`** and iteration in **canonical-id order** (stable, matching
 the inventory list order), and is what sub-plan 4 joins against the reified `sci:skill/<id>` targets
 (the join key is the canonical INDEX id on both sides). The builder **re-validates** the structural
-invariants (it does not trust the JSON blindly, since a resource can be edited): a **duplicate `id`**
-across entries, a `covers` term off-catalog, a duplicate `covers` term, a router carrying
-`covers`/`archetype`, or a leaf missing `archetype` is a **structural error** (§5).
+invariants (it does not trust the JSON blindly, since a resource can be edited): malformed top-level
+or entry shapes, a **duplicate `id`** across entries, a `covers` term off-catalog, a duplicate
+`covers` term, a router carrying `covers`/`archetype`, a leaf missing `archetype`, or an unknown
+companion role is a **structural error** (§5).
 
 **Package split.** `science_tool` owns only the `importlib.resources` **loader**
 (`load_skill_inventory() -> dict`, reading the packaged JSON) and the corpus-scanning generator;
@@ -241,6 +242,9 @@ All violations are **hard, fail-early errors**, never silent skips or fallbacks:
   failing the canonical grammar, an INDEX path that does not exist, a real skill file absent from
   INDEX (orphan), or an INDEX path that is not a real skill (extra);
 - a **duplicate `id`** across inventory entries — at overlay build;
+- a malformed inventory top level or entry shape, including a missing/non-list `skills`, a
+  non-mapping skill entry, non-string required fields, non-list `covers`/`sources`/`companions`, or
+  an unknown companion role — at overlay build;
 - a **companion target** that resolves to no INDEX path (broken/off-corpus link), or a **duplicate
   companion target** within one skill;
 - inventory **drift** (committed resource ≠ freshly generated) — a test failure with the
@@ -279,15 +283,16 @@ dict + data_products catalog ──build_skill_overlay (role-typed, keyed by id,
   `role: leaf`.
 - **Overlay role-typing + key:** a leaf yields a `LeafSkill` with `archetype` and validated
   `covers`; a router yields a `RouterSkill` with neither; an **uncovered** leaf builds cleanly with
-  empty `covers`, and an entry omitting `sources` materializes `sources == []`; the overlay is
+  empty `covers`, and an entry omitting `sources` materializes `sources == ()`; the overlay is
   looked up by canonical `id` (the sub-plan-4 join key) in id order.
-- **Overlay invariants:** a duplicate `id`, a router-with-`covers`, a leaf-without-`archetype`, and
-  an off-catalog term each raise a structural error at build.
+- **Overlay invariants:** a duplicate `id`, a router carrying even an empty `covers`, a
+  leaf-without-`archetype`, duplicate/off-catalog covers, a malformed string-list field, a missing
+  `skills` list, and an unknown companion role each raise a structural error at build.
 - **Package boundary + wheel packaging:** `build_skill_overlay` consumes a dict and never touches
-  the `skills/` tree (works with the corpus absent); and a packaging test builds the wheel
-  (`uv build`) and asserts `skill_inventory.json` is present in it, so the inventory a pinned
-  installed toolkit ships is actually loadable via `importlib.resources` — byte-matching the source
-  checkout alone does not prove distribution.
+  the `skills/` tree (works with the corpus absent); and a packaging test builds the wheel, installs
+  it without dependencies into an isolated target, imports `science_tool` from that target, and
+  calls `load_skill_inventory()`. This proves the pinned distribution actually loads its packaged
+  resource via `importlib.resources`; byte-matching the source checkout alone does not.
 
 Verification gate: full `science` and `science/model` suites, `ruff check`, `pyright`.
 

@@ -538,6 +538,20 @@ def test_build_inventory_keys_off_index_not_name(tmp_path: Path) -> None:
     assert scrna["id"] == "scrna" and scrna["name"] == "totally-different"
 
 
+def test_serialized_inventory_changes_when_corpus_changes(tmp_path: Path) -> None:
+    _mkcorpus(tmp_path)
+    baseline = serialize_inventory(build_skill_inventory(tmp_path, _catalog()))
+    p = tmp_path / "skills/somatic.md"
+    p.write_text(
+        p.read_text(encoding="utf-8").replace(
+            "description: d for somatic", "description: changed"
+        ),
+        encoding="utf-8",
+    )
+    changed = serialize_inventory(build_skill_inventory(tmp_path, _catalog()))
+    assert changed != baseline
+
+
 def test_build_inventory_rejects_off_catalog_covers(tmp_path: Path) -> None:
     _mkcorpus(tmp_path)
     p = tmp_path / "skills/scrna.md"
@@ -787,7 +801,7 @@ if __name__ == "__main__":
 
 - [ ] **Step 4: Generate the committed resource**
 
-Run: `cd ~/d/science/.worktrees/skill-coverage-inventory && uv run --project science python scripts/generate_skill_inventory.py`
+Run: `cd ~/d/science/.worktrees/skill-coverage-inventory && uv run --frozen --project science python scripts/generate_skill_inventory.py`
 Expected: prints `Wrote .../skill_inventory.json (60 skills)`; creates the JSON.
 
 - [ ] **Step 5: Register the `packaging` marker**
@@ -801,7 +815,7 @@ addopts = "-q -m 'not snapshot and not real_projects and not git_source and not 
 and add to the `markers` list:
 
 ```toml
-  "packaging: builds the wheel to assert data files ship; slow, run explicitly with -m packaging",
+  "packaging: builds and installs the wheel to verify packaged resources; slow, run explicitly with -m packaging",
 ```
 
 - [ ] **Step 6: Write the drift + packaging + corpus-absent tests**
@@ -810,6 +824,7 @@ Append to `science/tests/test_skill_inventory.py`:
 
 ```python
 import subprocess
+import sys
 import zipfile
 from importlib import resources
 
@@ -835,6 +850,15 @@ def test_load_skill_inventory_round_trips() -> None:
     assert scrna["covers"] == ["data-product:gene-expression-single-cell"]
 
 
+def test_load_skill_inventory_rejects_missing_skills(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    (tmp_path / "skill_inventory.json").write_text("{}", encoding="utf-8")
+    monkeypatch.setattr(resources, "files", lambda _package: tmp_path)
+    with pytest.raises(SkillInventoryError, match="skills"):
+        load_skill_inventory()
+
+
 @pytest.mark.packaging
 def test_installed_wheel_loads_inventory(tmp_path: Path) -> None:
     # Build the wheel and confirm the resource is packaged...
@@ -847,24 +871,31 @@ def test_installed_wheel_loads_inventory(tmp_path: Path) -> None:
         assert any(
             n.endswith("science_tool/graph/skill_inventory.json") for n in archive.namelist()
         )
-    # ...then prove the INSTALLED loader actually resolves it. Install into a throwaway venv
-    # (with science-model from its in-repo source to satisfy the wheel's path dependency) and
-    # import from a cwd outside the source tree, so importlib.resources reads packaged data, not
-    # the repo file. This is the parent design's crux property: a pinned toolkit loads its own
-    # matching inventory.
-    venv = tmp_path / "venv"
-    subprocess.run(["uv", "venv", str(venv)], check=True)
-    py = venv / "bin" / "python"
+    # ...then prove the INSTALLED loader resolves it without a network-dependent dependency
+    # installation. Install only the wheel into an isolated target; the subprocess uses the
+    # current test interpreter for dependencies but prepends that target and asserts science_tool
+    # itself came from it. A cwd outside the source tree prevents accidental corpus-relative reads.
+    site = tmp_path / "site"
     subprocess.run(
-        ["uv", "pip", "install", "--python", str(py), str(wheel), str(_REPO_ROOT / "science" / "model")],
+        ["uv", "pip", "install", "--target", str(site), "--no-deps", str(wheel)],
         check=True,
     )
     code = (
+        "import sys\n"
+        "from pathlib import Path\n"
+        "site = Path(sys.argv[1]).resolve()\n"
+        "sys.path.insert(0, str(site))\n"
+        "import science_tool\n"
         "from science_tool.graph.skill_inventory import load_skill_inventory\n"
+        "assert Path(science_tool.__file__).resolve().is_relative_to(site)\n"
         "print(len(load_skill_inventory()['skills']))\n"
     )
     result = subprocess.run(
-        [str(py), "-c", code], cwd=tmp_path, capture_output=True, text=True, check=True
+        [sys.executable, "-c", code, str(site)],
+        cwd=tmp_path,
+        capture_output=True,
+        text=True,
+        check=True,
     )
     assert result.stdout.strip() == "60"
 ```
@@ -929,7 +960,7 @@ def test_build_overlay_role_typing() -> None:
     overlay = build_skill_overlay(_inv([
         {"id": "bio", "name": "bio", "path": "skills/bio/SKILL.md", "role": "router",
          "description": "r", "companions": [{"target": "somatic", "role": "leaf"}]},
-        {"id": "somatic", "name": "somatic", "path": "skills/somatic.md", "role": "leaf",
+        {"id": "somatic", "name": "display-somatic", "path": "skills/somatic.md", "role": "leaf",
          "description": "d", "archetype": "measurement-qa",
          "covers": ["data-product:somatic-variant"]},
     ]), _catalog())
@@ -938,6 +969,7 @@ def test_build_overlay_role_typing() -> None:
     assert router.companions[0].target == "somatic" and router.companions[0].role == "leaf"
     leaf = overlay.get("somatic")
     assert isinstance(leaf, LeafSkill)
+    assert leaf.id == "somatic" and leaf.name == "display-somatic"  # INDEX id is the key
     assert leaf.covers == ("data-product:somatic-variant",)
     assert leaf.sources == ()  # omitted -> empty
     assert [s.id for s in overlay] == ["bio", "somatic"]  # id order
@@ -962,11 +994,28 @@ def test_build_overlay_rejects_off_catalog_cover() -> None:
         ]), _catalog())
 
 
-def test_build_overlay_rejects_router_with_covers() -> None:
+def test_build_overlay_rejects_router_with_empty_covers() -> None:
     with pytest.raises(SkillOverlayError, match="router"):
         build_skill_overlay(_inv([
             {"id": "r", "name": "r", "path": "skills/SKILL.md", "role": "router",
-             "description": "d", "covers": ["data-product:somatic-variant"]},
+             "description": "d", "covers": []},
+        ]), _catalog())
+
+
+def test_build_overlay_rejects_duplicate_covers() -> None:
+    with pytest.raises(SkillOverlayError, match="duplicate"):
+        build_skill_overlay(_inv([
+            {"id": "x", "name": "x", "path": "skills/x.md", "role": "leaf",
+             "description": "d", "archetype": "a",
+             "covers": ["data-product:somatic-variant", "data-product:somatic-variant"]},
+        ]), _catalog())
+
+
+def test_build_overlay_rejects_non_list_sources() -> None:
+    with pytest.raises(SkillOverlayError, match="sources"):
+        build_skill_overlay(_inv([
+            {"id": "x", "name": "x", "path": "skills/x.md", "role": "leaf",
+             "description": "d", "archetype": "a", "sources": "scanpy"},
         ]), _catalog())
 
 
@@ -1003,16 +1052,17 @@ Expected: FAIL — `science_model.skill_coverage` exports do not exist.
 
 `science_model` never reads the corpus or the packaged resource: `science_tool`
 loads `skill_inventory.json` and passes the dict here. The builder re-validates
-the structural invariants (it does not trust an editable resource): a duplicate
-id, an off-catalog or duplicate `covers` term, a router carrying `covers`, or a
-leaf missing `archetype` is a hard error.
+the structural invariants (it does not trust an editable resource): malformed
+top-level or entry shapes, a duplicate id, an off-catalog or duplicate `covers`
+term, a router carrying `covers`, a leaf missing `archetype`, or an invalid
+companion is a hard error.
 """
 
 from __future__ import annotations
 
 from collections.abc import Iterator
 from dataclasses import dataclass
-from typing import Literal
+from typing import Literal, cast
 
 from science_model.data_products import DataProductCatalog
 
@@ -1083,53 +1133,79 @@ def _string_tuple(entry: dict, field: str) -> tuple[str, ...]:
     return tuple(raw)
 
 
+def _required_string(entry: dict, field: str) -> str:
+    raw = entry.get(field)
+    if not isinstance(raw, str) or not raw:
+        raise SkillOverlayError(f"skill entry needs a non-empty string {field}")
+    return raw
+
+
 def _companions(entry: dict) -> tuple[Companion, ...]:
+    raw = entry.get("companions", [])
+    if not isinstance(raw, list):
+        raise SkillOverlayError(
+            f"skill {entry['id']!r} companions must be a list of mappings"
+        )
     out: list[Companion] = []
-    for c in entry.get("companions", []):
-        role = c["role"]
-        if role not in _COMPANION_ROLES:
+    for companion in raw:
+        if not isinstance(companion, dict):
+            raise SkillOverlayError(
+                f"skill {entry['id']!r} companion must be a mapping"
+            )
+        target = companion.get("target")
+        role = companion.get("role")
+        if not isinstance(target, str) or not target:
+            raise SkillOverlayError(
+                f"companion of {entry['id']!r} needs a non-empty string target"
+            )
+        if not isinstance(role, str) or role not in _COMPANION_ROLES:
             raise SkillOverlayError(f"companion of {entry['id']!r} has unknown role {role!r}")
-        out.append(Companion(target=c["target"], role=role))
+        out.append(Companion(target=target, role=cast(CompanionRole, role)))
     return tuple(out)
 
 
 def build_skill_overlay(inventory: dict, catalog: DataProductCatalog) -> SkillOverlay:
     catalog_ids = catalog.by_id
+    if not isinstance(inventory, dict):
+        raise SkillOverlayError("inventory must be a mapping")
     entries = inventory.get("skills")
     if not isinstance(entries, list):
         raise SkillOverlayError("inventory must contain a 'skills' list")
     skills: list[LeafSkill | RouterSkill] = []
     for entry in entries:
-        role = entry["role"]
+        if not isinstance(entry, dict):
+            raise SkillOverlayError("each inventory skill must be a mapping")
+        skill_id = _required_string(entry, "id")
+        name = _required_string(entry, "name")
+        description = _required_string(entry, "description")
+        role = _required_string(entry, "role")
         companions = _companions(entry)
         if role == "router":
             # Key presence, not truthiness: a router carrying `covers`/`archetype` at all is an
             # error, even an empty `covers: []` — the field must be absent on a router.
             if "covers" in entry or "archetype" in entry:
-                raise SkillOverlayError(f"router {entry['id']!r} must not carry covers/archetype")
+                raise SkillOverlayError(f"router {skill_id!r} must not carry covers/archetype")
             skills.append(RouterSkill(
-                id=entry["id"], name=entry["name"], description=entry["description"],
+                id=skill_id, name=name, description=description,
                 companions=companions,
             ))
         elif role == "leaf":
-            archetype = entry.get("archetype")
-            if not archetype:
-                raise SkillOverlayError(f"leaf {entry['id']!r} is missing archetype")
+            archetype = _required_string(entry, "archetype")
             covers = _string_tuple(entry, "covers")
             seen: set[str] = set()
             for term in covers:
                 if term not in catalog_ids:
-                    raise SkillOverlayError(f"leaf {entry['id']!r} covers off-catalog term {term!r}")
+                    raise SkillOverlayError(f"leaf {skill_id!r} covers off-catalog term {term!r}")
                 if term in seen:
-                    raise SkillOverlayError(f"leaf {entry['id']!r} has duplicate covers term {term!r}")
+                    raise SkillOverlayError(f"leaf {skill_id!r} has duplicate covers term {term!r}")
                 seen.add(term)
             skills.append(LeafSkill(
-                id=entry["id"], name=entry["name"], description=entry["description"],
+                id=skill_id, name=name, description=description,
                 archetype=archetype, covers=covers,
                 sources=_string_tuple(entry, "sources"), companions=companions,
             ))
         else:
-            raise SkillOverlayError(f"skill {entry['id']!r} has unknown role {role!r}")
+            raise SkillOverlayError(f"skill {skill_id!r} has unknown role {role!r}")
     return SkillOverlay(skills)
 ```
 
@@ -1162,13 +1238,13 @@ and extend `__all__` (add these entries to the existing list):
 - [ ] **Step 5: Run tests to verify they pass**
 
 Run: `cd science/model && uv run --frozen pytest tests/test_skill_overlay.py -v`
-Expected: PASS (7 tests).
+Expected: PASS (9 tests).
 
 - [ ] **Step 6: Full verification gate**
 
 ```bash
-cd science && uv run --frozen pytest && uv run --frozen pytest tests/test_skill_inventory.py -m packaging && uv run ruff check && uv run pyright
-cd ../model && uv run --frozen pytest && uv run ruff check
+(cd science && uv run --frozen pytest && uv run --frozen pytest tests/test_skill_inventory.py -m packaging && uv run ruff check && uv run pyright)
+(cd science/model && uv run --frozen pytest && uv run ruff check)
 ```
 Expected: all green.
 
@@ -1183,8 +1259,8 @@ git commit -m "feat(skill-coverage): role-typed in-memory skill overlay keyed by
 
 ## Self-review notes (for the executor)
 
-- **Spec coverage:** T1 = dup/merge-safe frontmatter parser (design §3 "Frontmatter parsing"); T2 = INDEX bijection (§3 "Generation" + §5); T3 = companion parse/resolve (§3 "Companion resolution"); T4 = inventory assembly, covers validation, ordering, `sources` omission (§3 "Contents" + §2); T5 = bio `covers:` authoring (§2), generated committed resource + drift + wheel packaging (§3 "Drift check" + testing "wheel packaging"); T6 = role-typed overlay, dup-id, re-validation, `sources==[]`, id-order iteration (§4). Every design §2–§5 requirement and testing bullet maps to a task.
+- **Spec coverage:** T1 = dup/merge-safe frontmatter parser (design §3 "Frontmatter parsing"); T2 = INDEX bijection (§3 "Generation" + §5); T3 = companion parse/resolve (§3 "Companion resolution"); T4 = inventory assembly, covers validation, ordering, `sources` omission (§3 "Contents" + §2); T5 = bio `covers:` authoring (§2), generated committed resource + drift + wheel packaging (§3 "Drift check" + testing "wheel packaging"); T6 = role-typed overlay, dup-id, re-validation, `sources==()`, id-order iteration (§4). Every design §2–§5 requirement and testing bullet maps to a task.
 - **Out of scope (do not implement):** the `science skills coverage` command, the `coverage-report`, the `dataset_usage` occurrence join, coverage states / `unmapped-skill-reference` diagnostics, typed companion-edge relation semantics, non-bio `covers:`, any persistent overlay artifact.
 - **Package boundary:** `science_model` (T6) imports only `science_model.data_products`; it never imports `science_tool` and never reads the corpus or the JSON — `science_tool` (T5) loads the resource and hands over a dict. Verified: `science_model` has no `science_tool` imports today.
 - **Type/name consistency:** `build_skill_inventory(repo_root, catalog)` and `serialize_inventory(inv)` (T4) are consumed verbatim by the script and drift test (T5). `build_skill_overlay(inventory, catalog)` (T6) consumes the exact dict shape T4 emits (`role`/`archetype`/`covers`/`sources`/`companions` keys, omitted-when-empty). `SKILL_NAME_RE` and the dup/merge-key discipline are reused from `science_tool.graph.skill_loads`.
-- **Resource ships automatically:** hatchling packages non-`.py` files under `packages = ["src/science_tool"]` (the sub-plan-2 `skill_aliases.yaml` precedent); the T5 `@pytest.mark.packaging` test proves the crux property end-to-end — it builds the wheel, installs it into a throwaway venv (with `science-model` from source to satisfy the wheel's path dependency), and imports `load_skill_inventory()` from a cwd outside the source tree, asserting 60 skills load from packaged data rather than the repo file.
+- **Resource ships automatically:** hatchling packages non-`.py` files under `packages = ["src/science_tool"]` (the sub-plan-2 `skill_aliases.yaml` precedent); the T5 `@pytest.mark.packaging` test proves the crux property end-to-end without network access — it builds the wheel, installs it without dependencies into an isolated target, imports `science_tool` from that target using the current test interpreter for dependencies, and calls `load_skill_inventory()` from a cwd outside the source tree, asserting 60 skills load from packaged data rather than the repo file.
