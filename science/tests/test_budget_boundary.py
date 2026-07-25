@@ -1,0 +1,120 @@
+"""Context-budget boundary guards (slice 1a).
+
+Scope is DERIVED: guard 1 walks the live Click tree, so a new command fails until
+classified; guard 2 locates each budgeted command's own callback in the AST rather than
+grepping its module.
+
+Known gap, stated rather than hidden: guard 2 proves the callback CONSTRUCTS a sink, not
+that every branch inside it routes through one. ``tests/test_budget_regression.py`` is
+what checks actual emitted sizes, and Task 11 Step 5 carries a grep for stray
+``console.print`` / ``click.echo`` in the health renderer. This is a ratchet, not a
+sandbox -- the same candid limit ``test_output_boundary.py`` documents.
+"""
+
+from __future__ import annotations
+
+import ast
+import inspect
+
+import click
+
+from science_tool.budget.registry import BUDGETS, DEFERRED, EXEMPTIONS
+from science_tool.cli import main
+
+EXPECTED_CLASSIFICATION_COUNTS = {
+    "budgeted": 4,
+    "exempt": 68,
+    "deferred": 204,
+}
+
+
+def _leaf_commands(cmd: click.Command, path: list[str]) -> list[tuple[str, click.Command]]:
+    if isinstance(cmd, click.Group):
+        found: list[tuple[str, click.Command]] = []
+        for name, sub in sorted(cmd.commands.items()):
+            found.extend(_leaf_commands(sub, [*path, name]))
+        return found
+    return [(" ".join(path), cmd)]
+
+
+def test_every_leaf_command_is_classified() -> None:
+    """Every command is budgeted, exempt, or explicitly deferred -- no silent third state."""
+    live = {path for path, _ in _leaf_commands(main, [])}
+    classified = set(BUDGETS) | set(EXEMPTIONS) | set(DEFERRED)
+    unclassified = sorted(live - classified)
+    assert not unclassified, (
+        f"{len(unclassified)} command(s) carry no budget, exemption, or deferral:\n  "
+        + "\n  ".join(unclassified)
+        + "\n\nAdd a CommandBudget (wired), an EXEMPTIONS reason (cannot grow), or a "
+        "DeferredCommand (measured over budget, wiring scheduled)."
+    )
+    stale = sorted(classified - live)
+    assert not stale, "Classification tables name commands absent from the live CLI tree:\n  " + "\n  ".join(stale)
+
+
+def test_classification_partition_has_the_audited_cardinality() -> None:
+    """Lock the audited partition, not only its absence of unclassified leaves.
+
+    Task 1 supplied 4 budgeted, 3 exempt, and 11 deferred paths. Task 13's RED
+    surfaced 258 more, classified as 65 exempt and 193 deferred. The resulting
+    live partition is therefore 4/68/204 = 276.
+    """
+    actual = {
+        "budgeted": len(BUDGETS),
+        "exempt": len(EXEMPTIONS),
+        "deferred": len(DEFERRED),
+    }
+    assert actual == EXPECTED_CLASSIFICATION_COUNTS
+    assert sum(actual.values()) == len(_leaf_commands(main, []))
+
+
+def _callback_source(cmd: click.Command) -> str | None:
+    callback = cmd.callback
+    if callback is None:
+        return None
+    unwrapped = inspect.unwrap(callback)
+    try:
+        return inspect.getsource(unwrapped)
+    except (OSError, TypeError):
+        return None
+
+
+def test_every_budgeted_command_constructs_its_own_sink() -> None:
+    by_path = dict(_leaf_commands(main, []))
+    missing: list[str] = []
+    for command_path in sorted(BUDGETS):
+        cmd = by_path.get(command_path)
+        if cmd is None:
+            missing.append(f"{command_path} (absent from the CLI tree)")
+            continue
+        source = _callback_source(cmd)
+        if source is None:
+            missing.append(f"{command_path} (callback source unavailable)")
+            continue
+        tree = ast.parse(inspect.cleandoc(source))
+        constructs = any(
+            isinstance(node, ast.Call)
+            and isinstance(node.func, ast.Name)
+            and node.func.id == "BoundedSink"
+            for node in ast.walk(tree)
+        )
+        if not constructs:
+            missing.append(command_path)
+    assert not missing, "Budgeted commands whose callback never constructs a BoundedSink:\n  " + "\n  ".join(missing)
+
+
+def test_every_budgeted_command_offers_the_output_escape() -> None:
+    by_path = dict(_leaf_commands(main, []))
+    missing = [
+        path
+        for path in sorted(BUDGETS)
+        if by_path.get(path) is None
+        or not any("--output" in param.opts for param in by_path[path].params if isinstance(param, click.Option))
+    ]
+    assert not missing, "Budgeted commands with no --output escape:\n  " + "\n  ".join(missing)
+
+
+def test_deferred_commands_are_real_cli_commands() -> None:
+    known = {path for path, _ in _leaf_commands(main, [])}
+    stale = sorted(set(DEFERRED) - known)
+    assert not stale, "DEFERRED names commands that no longer exist:\n  " + "\n  ".join(stale)
