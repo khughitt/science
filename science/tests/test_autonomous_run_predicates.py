@@ -52,3 +52,28 @@ def test_run_predicates_are_registered_to_the_provenance_layer(tmp_path: Path) -
     }
     assert layers, "no run predicates found in the registry"
     assert set(layers.values()) == {"graph/provenance"}
+
+
+def test_materialized_run_predicates_are_all_registered(tmp_path: Path) -> None:
+    """Every sci: predicate this feature ADDS to a real provenance graph is registered.
+
+    Derived by differencing two full builds rather than by naming predicates: the
+    baseline absorbs everything the provenance layer already emitted, so what remains
+    is exactly this feature's vocabulary -- including `sci:autonomousRun`, which the
+    record emitter alone never produces.
+    """
+    from test_autonomous_run_materialize import RUN_ID, graphs, write_project
+
+    baseline_root = tmp_path / "baseline"
+    write_project(baseline_root, with_run=False)
+    _s, _k, baseline = graphs(baseline_root)
+    before = _sci_predicates(baseline)
+
+    with_run_root = tmp_path / "with-run"
+    write_project(with_run_root, entity_extra=f"autonomous_run: {RUN_ID}\n")
+    _s2, _k2, provenance = graphs(with_run_root)
+    added = _sci_predicates(provenance) - before
+
+    assert "sci:autonomousRun" in added
+    registered = {row["predicate"] for row in PREDICATE_REGISTRY}
+    assert sorted(added - registered) == []

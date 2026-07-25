@@ -53,7 +53,7 @@ from science_tool.graph.dataset_usage import (
     usage_records_for_geneset_rows,
     usage_records_for_reference_graph_nodes,
 )
-from science_tool.graph.autonomous_runs import add_run_record_to_graph
+from science_tool.graph.autonomous_runs import add_run_record_to_graph, run_node_uri
 from science_tool.graph.skill_loads import add_skill_load_record_to_graph
 from science_tool.graph.freshness import (
     EntityFreshnessInfo,
@@ -398,6 +398,7 @@ def _emit_phase(sources: ProjectSources, *, archive_active: dict | None = None) 
     _add_dataset_usage_edges(sources, resolver=resolver, provenance=provenance)
     _add_skill_load_edges(sources, provenance=provenance)
     _add_run_record_edges(sources, provenance=provenance)
+    _add_autonomous_run_edges(sources, provenance=provenance)
     _add_sub_cohort_edges(sources, resolver=resolver, knowledge=knowledge)
     _add_dataset_resource_edges(sources, datasets=datasets)
 
@@ -1468,6 +1469,28 @@ def _add_skill_load_edges(sources: ProjectSources, *, provenance) -> None:
 def _add_run_record_edges(sources: ProjectSources, *, provenance) -> None:
     for record in sources.run_records:
         add_run_record_to_graph(record, provenance)
+
+
+def _add_autonomous_run_edges(sources: ProjectSources, *, provenance) -> None:
+    """Link every entity carrying `autonomous_run` to its run node.
+
+    A separate pass rather than a line in `_add_relations`: the check needs the set
+    of run ids the whole bundle loaded, not anything about one entity.
+
+    An unknown id RAISES. Emitting the edge anyway would put a reference to a
+    nonexistent attestation into the graph, which is the fabrication shape the
+    `InstrumentResult` work exists to prevent.
+    """
+    known = {record.id for record in sources.run_records}
+    for entity in sources.entities:
+        ref = entity.autonomous_run
+        if not ref:
+            continue
+        if ref not in known:
+            raise ValueError(
+                f"{entity.canonical_id}: autonomous_run names unknown run record {ref!r}"
+            )
+        provenance.add((_entity_uri(entity.canonical_id), SCI_NS.autonomousRun, run_node_uri(ref)))
 
 
 def _resource_uri(dataset_canonical_id: str, resource: DatasetResource) -> URIRef:

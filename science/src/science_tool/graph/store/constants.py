@@ -550,4 +550,9 @@ PREDICATE_REGISTRY: list[dict[str, str]] = [
         "description": "Wall-clock seconds consumed by the autonomous run",
         "layer": "graph/provenance",
     },
+    {
+        "predicate": "sci:autonomousRun",
+        "description": "Entity was last written by this autonomous run",
+        "layer": "graph/provenance",
+    },
 ]

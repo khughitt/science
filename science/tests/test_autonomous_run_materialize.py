@@ -2,9 +2,11 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import pytest
 from rdflib.namespace import RDF
 
 from science_tool.graph.autonomous_runs import run_node_uri
+from science_tool.graph.dataset_usage import project_entity_uri
 from science_tool.graph.materialize import build_dataset_from_sources
 from science_tool.graph.sources import load_project_sources
 from science_tool.graph.store import PROJECT_NS, SCI_NS
@@ -107,3 +109,40 @@ def test_run_materialization_is_idempotent(tmp_path: Path) -> None:
     first = build_dataset_from_sources(sources).graph(PROJECT_NS["graph/provenance"])
     second = build_dataset_from_sources(sources).graph(PROJECT_NS["graph/provenance"])
     assert set(first) == set(second)
+
+
+def test_entity_links_to_its_run(tmp_path: Path) -> None:
+    write_project(tmp_path, entity_extra=f"autonomous_run: {RUN_ID}\n")
+    _, _knowledge, provenance = graphs(tmp_path)
+    topic = project_entity_uri("topic:demo")
+    assert (topic, SCI_NS.autonomousRun, run_node_uri(RUN_ID)) in provenance
+
+
+def test_the_entity_run_edge_stays_out_of_knowledge(tmp_path: Path) -> None:
+    write_project(tmp_path, entity_extra=f"autonomous_run: {RUN_ID}\n")
+    _, knowledge, _provenance = graphs(tmp_path)
+    assert (None, SCI_NS.autonomousRun, None) not in knowledge
+
+
+def test_unknown_run_id_raises(tmp_path: Path) -> None:
+    write_project(
+        tmp_path, entity_extra="autonomous_run: run:2026-07-24-curation-sweep-ffff\n"
+    )
+    with pytest.raises(ValueError, match="unknown run record"):
+        graphs(tmp_path)
+
+
+def test_entity_without_the_field_emits_no_edge(tmp_path: Path) -> None:
+    write_project(tmp_path)
+    _, _knowledge, provenance = graphs(tmp_path)
+    assert (None, SCI_NS.autonomousRun, None) not in provenance
+
+
+def test_added_by_still_materializes_alongside(tmp_path: Path) -> None:
+    write_project(
+        tmp_path, entity_extra=f"added_by: user\nautonomous_run: {RUN_ID}\n"
+    )
+    _, _knowledge, provenance = graphs(tmp_path)
+    topic = project_entity_uri("topic:demo")
+    assert (topic, SCI_NS.addedBy, None) in provenance
+    assert (topic, SCI_NS.autonomousRun, None) in provenance
