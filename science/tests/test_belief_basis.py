@@ -133,5 +133,6 @@ def test_digest_changes_when_a_unit_changes():
     assert before != after
 
 
-def test_digest_of_nothing_is_stable():
-    assert basis_digest([]) == basis_digest([])
+def test_empty_capture_has_its_own_digest():
+    """The empty basis must be distinguishable, not merely reproducible."""
+    assert basis_digest([]) != basis_digest([_basis("proposition:a")])

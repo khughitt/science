@@ -107,7 +107,7 @@ def basis_digest(bases: Iterable[EntityBasis]) -> str:
     validation can prove it compared against the same starting state.
     """
     payload = json.dumps(
-        [b.model_dump(mode="json") for b in sorted(bases, key=lambda b: b.uri)],
+        [b.model_dump(mode="json") for b in sorted(bases, key=lambda b: (b.uri, b.entity_id))],
         sort_keys=True,
     )
     return hashlib.sha256(payload.encode("utf-8")).hexdigest()
