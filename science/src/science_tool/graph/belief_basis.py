@@ -105,12 +105,14 @@ def basis_digest(bases: Iterable[EntityBasis]) -> str:
 
     Persisted in the snapshot envelope and in the run record so a later
     validation can prove it compared against the same starting state.
+
+    Ordered by the serialized row itself, not by (uri, entity_id): that pair is not
+    unique by construction, and two rows sharing it would otherwise fall back to
+    input order, leaving a known input-order dependence in the observable this
+    whole module exists to make reproducible.
     """
-    payload = json.dumps(
-        [b.model_dump(mode="json") for b in sorted(bases, key=lambda b: (b.uri, b.entity_id))],
-        sort_keys=True,
-    )
-    return hashlib.sha256(payload.encode("utf-8")).hexdigest()
+    rows = sorted(json.dumps(b.model_dump(mode="json"), sort_keys=True) for b in bases)
+    return hashlib.sha256(json.dumps(rows).encode("utf-8")).hexdigest()
 
 
 #: Bump when the shape of EntityBasis or the snapshot envelope changes.

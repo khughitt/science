@@ -1310,7 +1310,11 @@ def belief_basis_command(graph_path: Path, out_path: Path | None, compare_path: 
     if out_path is not None:
         try:
             out_path.parent.mkdir(parents=True, exist_ok=True)
-            out_path.write_text(build_snapshot(result.rows).model_dump_json(indent=2))
+            # Explicit utf-8 both here and on the compare read: the snapshot is a durable
+            # artifact handed between processes and machines, and model_dump_json emits
+            # utf-8. Defaulting to the ambient locale would raise under C/POSIX or decode
+            # a utf-8 baseline into mojibake that fails the digest check.
+            out_path.write_text(build_snapshot(result.rows).model_dump_json(indent=2), encoding="utf-8")
         except Exception as exc:  # unwritable output is uncomputable, not clean
             _unwired(f"could not write capture to {out_path}: {exc}")
         click.echo(f"captured {len(result.rows)} entities -> {out_path}")
@@ -1318,7 +1322,7 @@ def belief_basis_command(graph_path: Path, out_path: Path | None, compare_path: 
 
     assert compare_path is not None  # exactly-one check above
     try:
-        previous = load_snapshot(json.loads(compare_path.read_text()))
+        previous = load_snapshot(json.loads(compare_path.read_text(encoding="utf-8")))
     except Exception as exc:
         # OSError, JSONDecodeError, ValidationError, SnapshotIntegrityError — a
         # baseline we cannot read or cannot trust is unwired, never clean.

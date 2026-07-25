@@ -225,6 +225,17 @@ def test_digest_is_order_independent():
     assert basis_digest([a, b]) == basis_digest([b, a])
 
 
+def test_digest_order_is_total_for_rows_sharing_a_uri():
+    """(uri, entity_id) is not a unique key, so it cannot be the whole sort order.
+
+    Two rows agreeing on both but differing elsewhere would tie and fall back to
+    input order, making the digest depend on how the caller stacked the list.
+    """
+    a = _basis("proposition:a", ("k1",))
+    b = a.model_copy(update={"unit_keys": ("k2",)})
+    assert basis_digest([a, b]) == basis_digest([b, a])
+
+
 def test_digest_changes_when_a_unit_changes():
     before = basis_digest([_basis("proposition:a", ("k1",))])
     after = basis_digest([_basis("proposition:a", ("k2",))])
@@ -263,6 +274,18 @@ def test_unknown_basis_field_is_rejected_not_dropped():
     payload = build_snapshot([_basis("proposition:a")]).model_dump(mode="json")
     payload["rows"][0]["future_field"] = "value"
     with pytest.raises(ValidationError):  # extra="forbid"
+        load_snapshot(payload)
+
+
+def test_unknown_envelope_field_is_rejected_not_dropped():
+    """The ENVELOPE's own extra="forbid", which the per-row test above does not reach.
+
+    A newer writer adding a top-level field (a signature, a policy block) must fail
+    the load rather than have it silently dropped and the truncated snapshot trusted.
+    """
+    payload = build_snapshot([_basis("proposition:a")]).model_dump(mode="json")
+    payload["signature"] = "x"
+    with pytest.raises(ValidationError):  # extra="forbid" on BasisSnapshot
         load_snapshot(payload)
 
 

@@ -59,6 +59,20 @@ def test_out_and_compare_are_mutually_exclusive(tmp_path: Path):
     assert "mutually exclusive" in result.output
 
 
+def test_neither_out_nor_compare_is_unwired(tmp_path: Path):
+    """The other half of the exactly-one gate.
+
+    A regression narrowing the check to `if out and compare` would leave this
+    invocation falling through to the `assert compare_path is not None`, which
+    exits 1 — a belief movement — for what is really a caller error.
+    """
+    graph_path = tmp_path / "graph.trig"
+    _write_graph(graph_path, with_line=True)
+    result = CliRunner().invoke(graph_group, ["belief-basis", "--graph-path", str(graph_path)])
+    assert result.exit_code == 2
+    assert "mutually exclusive" in result.output
+
+
 def test_compare_detects_an_added_evidence_line(tmp_path: Path):
     graph_path, baseline = tmp_path / "graph.trig", tmp_path / "before.json"
     _write_graph(graph_path, with_line=False)
@@ -98,6 +112,9 @@ def test_missing_graph_is_unwired_not_moved(tmp_path: Path):
         graph_group, ["belief-basis", "--graph-path", str(tmp_path / "absent.trig"), "--out", str(tmp_path / "o.json")]
     )
     assert result.exit_code == 2
+    # Click's own usage errors also exit 2, so exit code alone would still pass
+    # if the command were removed or the option renamed. Pin the output too.
+    assert "unwired:" in result.output
 
 
 def test_tampered_baseline_is_unwired_not_clean(tmp_path: Path):
@@ -128,6 +145,7 @@ def test_malformed_baseline_json_is_unwired(tmp_path: Path):
         graph_group, ["belief-basis", "--graph-path", str(graph_path), "--compare", str(baseline)]
     )
     assert result.exit_code == 2
+    assert "unwired:" in result.output  # not a click usage error, which also exits 2
 
 
 def test_json_array_baseline_is_unwired_not_moved(tmp_path: Path):
@@ -143,6 +161,7 @@ def test_json_array_baseline_is_unwired_not_moved(tmp_path: Path):
         graph_group, ["belief-basis", "--graph-path", str(graph_path), "--compare", str(baseline)]
     )
     assert result.exit_code == 2
+    assert "unwired:" in result.output  # not a click usage error, which also exits 2
 
 
 def test_capture_serialization_failure_is_unwired(tmp_path: Path, monkeypatch):
