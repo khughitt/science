@@ -375,6 +375,9 @@ def build_input_manifest(graph_path: Path) -> RevisionManifest:
     notes_dir = project_root / "notes"
     if notes_dir.is_dir():
         include_dirs.append(notes_dir)
+    runs_dir = project_root / "runs"
+    if runs_dir.is_dir():
+        include_dirs.append(runs_dir)
 
     include_files = ("README.md", PROJECT_CONFIG_FILENAME, "CLAUDE.md", "AGENTS.md")
 

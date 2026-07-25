@@ -122,6 +122,9 @@ def test_the_entity_run_edge_stays_out_of_knowledge(tmp_path: Path) -> None:
     write_project(tmp_path, entity_extra=f"autonomous_run: {RUN_ID}\n")
     _, knowledge, _provenance = graphs(tmp_path)
     assert (None, SCI_NS.autonomousRun, None) not in knowledge
+    node = run_node_uri(RUN_ID)
+    assert (node, None, None) not in knowledge
+    assert (None, None, node) not in knowledge
 
 
 def test_unknown_run_id_raises(tmp_path: Path) -> None:
