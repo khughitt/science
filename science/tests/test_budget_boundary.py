@@ -59,8 +59,10 @@ def test_classification_partition_has_the_audited_cardinality() -> None:
     surfaced 258 more, classified as 65 exempt and 193 deferred. Review then
     corrected tasks summary from exempt to deferred because its distinct type/group
     keys are unbounded. The post-merge belief-basis command adds one deferred leaf
-    because compare mode emits one row per changed entity. The live partition is
-    therefore 4/67/206 = 277.
+    because compare mode emits one row per changed entity. Slice 1b-1 then wired six
+    ROWS offenders (entity list, feedback list, questions/interpretations/discussions
+    list, entity needs-review), moving them from deferred to budgeted. The live
+    partition is therefore 10/67/200 = 277.
     """
     actual = {
         "budgeted": len(BUDGETS),
