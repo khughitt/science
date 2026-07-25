@@ -1244,3 +1244,94 @@ def add_mechanism_cmd(
 ) -> None:
     """Add a mechanism over existing typed entities and proposition refs."""
     raise _retired_writer("graph add mechanism", "Run `science entity create mechanism <title>`")
+
+
+@graph_group.command("belief-basis")
+@click.option(
+    "--graph-path",
+    type=click.Path(path_type=Path),
+    default=DEFAULT_GRAPH_PATH,
+    show_default=True,
+    help="Materialized graph to read.",
+)
+@click.option(
+    "--out", "out_path", type=click.Path(path_type=Path), default=None,
+    help="Write a sealed capture to this path.",
+)
+@click.option(
+    "--compare", "compare_path", type=click.Path(path_type=Path), default=None,
+    help="Compare the current basis against a previous capture.",
+)
+def belief_basis_command(graph_path: Path, out_path: Path | None, compare_path: Path | None) -> None:
+    """Capture or compare the per-entity belief basis.
+
+    Exactly one of --out / --compare. Exit codes: 0 clean, 1 a pre-existing
+    entity's basis moved, 2 unwired (not computable — explicitly NOT clean).
+    """
+    import json
+    import sys
+    from typing import NoReturn
+
+    from science_tool.graph.belief_basis import (
+        build_snapshot,
+        capture_basis,
+        compare_bases,
+        load_snapshot,
+    )
+    from science_tool.graph.store.identity import graph_uri
+    from science_tool.graph.trig import load_trig_dataset_preserving_literals
+
+    def _unwired(message: str) -> NoReturn:
+        """Exit 2. Typed NoReturn so the checker knows nothing after a call is reachable."""
+        click.echo(f"unwired: {message}")
+        sys.exit(2)
+
+    # A caller passing the same path for both would overwrite the baseline with the
+    # current capture and then compare it against itself — always clean.
+    if (out_path is None) == (compare_path is None):
+        _unwired("--out and --compare are mutually exclusive; pass exactly one")
+
+    try:
+        dataset = load_trig_dataset_preserving_literals(graph_path)
+        result = capture_basis(
+            dataset.graph(graph_uri("graph/knowledge")),
+            dataset.graph(graph_uri("graph/provenance")),
+        )
+    except Exception as exc:
+        # Two distinct uncomputable cases share this handler: an unreadable or
+        # malformed graph, and a basis that cannot be serialized (a future
+        # EvidenceUnit field with a non-JSON-native type raises TypeError in
+        # unit_key by design). Neither is a belief movement.
+        _unwired(f"could not compute basis from {graph_path}: {exc}")
+
+    if result.status == "unwired":
+        _unwired(f"({result.code}) {result.reason}")
+
+    if out_path is not None:
+        try:
+            out_path.parent.mkdir(parents=True, exist_ok=True)
+            # Explicit utf-8 both here and on the compare read: the snapshot is a durable
+            # artifact handed between processes and machines, and model_dump_json emits
+            # utf-8. Defaulting to the ambient locale would raise under C/POSIX or decode
+            # a utf-8 baseline into mojibake that fails the digest check.
+            out_path.write_text(build_snapshot(result.rows).model_dump_json(indent=2), encoding="utf-8")
+        except Exception as exc:  # unwritable output is uncomputable, not clean
+            _unwired(f"could not write capture to {out_path}: {exc}")
+        click.echo(f"captured {len(result.rows)} entities -> {out_path}")
+        sys.exit(0)
+
+    assert compare_path is not None  # exactly-one check above
+    try:
+        previous = load_snapshot(json.loads(compare_path.read_text(encoding="utf-8")))
+    except Exception as exc:
+        # OSError, JSONDecodeError, ValidationError, SnapshotIntegrityError — a
+        # baseline we cannot read or cannot trust is unwired, never clean.
+        _unwired(f"could not trust baseline {compare_path}: {exc}")
+
+    deltas = compare_bases(previous.rows, result.rows)
+    if not deltas:
+        click.echo("clean: no pre-existing entity's belief basis moved")
+        sys.exit(0)
+    for delta in deltas:
+        click.echo(f"MOVED {delta.entity_id}: {','.join(delta.changed)} — {delta.detail}")
+    sys.exit(1)
