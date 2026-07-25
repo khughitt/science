@@ -7,9 +7,10 @@ is a structured dict suitable for both human display and agent consumption.
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from pathlib import Path
 from time import perf_counter
-from typing import NotRequired, TypedDict, cast
+from typing import Any, NotRequired, TypedDict, cast
 
 from science_tool.graph.health_checks import (
     HEALTH_CHECKS,
@@ -231,6 +232,168 @@ def _empty_check_results(project_root: Path) -> dict[str, object]:
     return {check.name: check.empty(project_root) for check in HEALTH_CHECKS}
 
 
+def count_issues(report: Mapping[str, Any]) -> int:
+    """The single definition of "how many issues does this report contain".
+    Used twice: once over the full report to produce ``total_issues`` (the clean-report
+    gate), and once over the projected report to produce ``displayed_issues``. Running the
+    SAME function over both is what makes "showing N of M" a comparison of like with like.
+    Deliberately NOT a plain row count: ``managed_artifacts`` counts only where
+    ``counts_as_issue``, and ``archive_lag`` is one issue however large the lag.
+
+    The input must be a real ``HealthReport`` or its projected counterpart. Projection
+    retains every required section, so treating a missing or wrongly typed section as
+    empty would hide producer/projector contract breaks.
+    """
+    def _required(container: Mapping[str, Any], key: str, path: str) -> Any:
+        if key not in container:
+            raise ValueError(f"{path} is missing required field {key!r}")
+        return container[key]
+    def _mapping(container: Mapping[str, Any], key: str, path: str) -> Mapping[str, Any]:
+        value = _required(container, key, path)
+        if not isinstance(value, Mapping):
+            raise TypeError(f"{path}.{key} must be a mapping, got {type(value).__name__}")
+        return value
+    def _mapping_members(value: list[Any], path: str) -> list[Mapping[str, Any]]:
+        for index, member in enumerate(value):
+            if not isinstance(member, Mapping):
+                raise TypeError(
+                    f"{path}[{index}] must be a mapping, got {type(member).__name__}"
+                )
+        return cast("list[Mapping[str, Any]]", value)
+    def _rows(key: str) -> list[Mapping[str, Any]]:
+        value = _required(report, key, "health report")
+        if not isinstance(value, list):
+            raise TypeError(f"health report.{key} must be a list, got {type(value).__name__}")
+        return _mapping_members(value, f"health report.{key}")
+    # Validate the complete root shape, including registered sections that do not
+    # contribute to the count. A projected report retains all of these keys.
+    row_sections = (
+        "unresolved_refs",
+        "unregistered_ref_kinds",
+        "lingering_tags_lines",
+        "agent_context",
+        "identity_policy",
+        "entity_identity",
+        "legacy_task_type",
+        "invalid_entity_aspects",
+        "dataset_anomalies",
+        "schema_invalid",
+        "managed_artifacts",
+        "tooling_scaffold",
+        "validation",
+        "accepted_validation",
+        "unwired_checks",
+    )
+    rows = {key: _rows(key) for key in row_sections}
+    total_issues = _required(report, "total_issues", "health report")
+    if type(total_issues) is not int:
+        raise TypeError(
+            f"health report.total_issues must be an int, got {type(total_issues).__name__}"
+        )
+    archive_lag = _mapping(report, "archive_lag", "health report")
+    for key in ("done_in_active", "retired_in_active", "missing_completed"):
+        value = _required(archive_lag, key, "health report.archive_lag")
+        if type(value) is not int:
+            raise TypeError(
+                f"health report.archive_lag.{key} must be an int, got {type(value).__name__}"
+            )
+    lag_total = archive_lag_total(cast("TaskArchiveLag", archive_lag))
+    # layered_claims is a LayeredClaimHealthReport (health.py:185): BOTH issue lists
+    # count, and coverage gaps are derived from its two CoverageMetric fields -- there is
+    # no top-level `coverage_gaps` key in a report body.
+    layered = _mapping(report, "layered_claims", "health report")
+    migration_issues = _required(layered, "migration_issues", "health report.layered_claims")
+    rival_model_gaps = _required(
+        layered,
+        "rival_model_packets_missing_discriminating_predictions",
+        "health report.layered_claims",
+    )
+    for key, value in (
+        ("migration_issues", migration_issues),
+        ("rival_model_packets_missing_discriminating_predictions", rival_model_gaps),
+    ):
+        if not isinstance(value, list):
+            raise TypeError(
+                f"health report.layered_claims.{key} must be a list, "
+                f"got {type(value).__name__}"
+            )
+    migration_issues = _mapping_members(
+        migration_issues,
+        "health report.layered_claims.migration_issues",
+    )
+    rival_model_gaps = _mapping_members(
+        rival_model_gaps,
+        "health report.layered_claims.rival_model_packets_missing_discriminating_predictions",
+    )
+    layered_issues = len(migration_issues) + len(rival_model_gaps)
+    coverage_gaps = 0
+    for key in ("proposition_claim_layer_coverage", "causal_leaning_identification_coverage"):
+        metric = _mapping(layered, key, "health report.layered_claims")
+        for field in ("numerator", "denominator"):
+            value = _required(metric, field, f"health report.layered_claims.{key}")
+            if type(value) is not int:
+                raise TypeError(
+                    f"health report.layered_claims.{key}.{field} must be an int, "
+                    f"got {type(value).__name__}"
+                )
+        fraction = _required(metric, "fraction", f"health report.layered_claims.{key}")
+        if not isinstance(fraction, (int, float)) or isinstance(fraction, bool):
+            raise TypeError(
+                f"health report.layered_claims.{key}.fraction must be numeric, "
+                f"got {type(fraction).__name__}"
+            )
+        if metric["denominator"] > 0 and metric["numerator"] < metric["denominator"]:
+            coverage_gaps += 1
+    def _findings(key: str) -> list[Mapping[str, Any]]:
+        section = _mapping(report, key, "health report")
+        findings = _required(section, "findings", f"health report.{key}")
+        if not isinstance(findings, list):
+            raise TypeError(
+                f"health report.{key}.findings must be a list, "
+                f"got {type(findings).__name__}"
+            )
+        return _mapping_members(findings, f"health report.{key}.findings")
+    def _count_issue_flags(findings: list[Mapping[str, Any]], path: str) -> int:
+        count = 0
+        for index, finding in enumerate(findings):
+            flag = _required(finding, "counts_as_issue", f"{path}[{index}]")
+            if type(flag) is not bool:
+                raise TypeError(
+                    f"{path}[{index}].counts_as_issue must be a bool, "
+                    f"got {type(flag).__name__}"
+                )
+            count += int(flag)
+        return count
+    prose_findings = _findings("prose_epistemics")
+    cross_paper_findings = _findings("cross_paper_evidence")
+    managed_artifact_issues = _count_issue_flags(
+        rows["managed_artifacts"],
+        "health report.managed_artifacts",
+    )
+    prose_issues = _count_issue_flags(
+        prose_findings,
+        "health report.prose_epistemics.findings",
+    )
+    return (
+        len(rows["unresolved_refs"])
+        + len(rows["unregistered_ref_kinds"])
+        + len(rows["lingering_tags_lines"])
+        + len(rows["agent_context"])
+        + len(rows["identity_policy"])
+        + len(rows["entity_identity"])
+        + layered_issues
+        + coverage_gaps
+        + len(rows["dataset_anomalies"])
+        + len(rows["schema_invalid"])
+        + (1 if lag_total else 0)
+        + managed_artifact_issues
+        + len(rows["tooling_scaffold"])
+        + len(rows["validation"])
+        + prose_issues
+        + len(cross_paper_findings)
+    )
+
+
 def build_health_report(
     project_root: Path,
     *,
@@ -332,15 +495,6 @@ def build_health_report(
         cast("list[ValidationFinding]", check_results["validate"]),
     )
     prose_epistemics = cast("dict[str, object]", check_results["prose_epistemics"])
-    prose_epistemics_findings = prose_epistemics.get("findings") if isinstance(prose_epistemics, dict) else []
-    prose_epistemics_issue_count = (
-        sum(1 for row in prose_epistemics_findings if isinstance(row, dict) and row.get("counts_as_issue") is True)
-        if isinstance(prose_epistemics_findings, list)
-        else 0
-    )
-
-    layered_claim_issue_count = len(migration_issues) + len(rival_model_gaps)
-    coverage_gaps = 0
     proposition_coverage = _coverage_metric(
         numerator=sum(1 for entity in proposition_entities if entity.claim_layer is not None),
         denominator=len(proposition_entities),
@@ -349,30 +503,12 @@ def build_health_report(
         numerator=sum(1 for row in causal_leaning_rows if row["authored_identification_strength"] is not None),
         denominator=len(causal_leaning_rows),
     )
-    for metric in (proposition_coverage, causal_coverage):
-        if metric["denominator"] > 0 and metric["numerator"] < metric["denominator"]:
-            coverage_gaps += 1
-
-    lag_total = archive_lag_total(archive_lag)
-
-    total_issues = (
-        len(unresolved_refs)
-        + len(unregistered_ref_kinds)
-        + len(lingering_tags_lines)
-        + len(agent_context)
-        + len(identity_policy_findings)
-        + len(entity_identity)
-        + layered_claim_issue_count
-        + coverage_gaps
-        + len(dataset_anomalies)
-        + len(schema_invalid)
-        + (1 if lag_total else 0)
-        + sum(1 for f in managed_artifacts if f["counts_as_issue"])
-        + len(tooling_scaffold)
-        + len(validation)
-        + prose_epistemics_issue_count
-        + len(cross_paper_evidence["findings"])
-    )
+    layered_claims: LayeredClaimHealthReport = {
+        "proposition_claim_layer_coverage": proposition_coverage,
+        "causal_leaning_identification_coverage": causal_coverage,
+        "rival_model_packets_missing_discriminating_predictions": rival_model_gaps,
+        "migration_issues": migration_issues,
+    }
 
     report: HealthReport = {
         "unresolved_refs": unresolved_refs,
@@ -381,12 +517,7 @@ def build_health_report(
         "agent_context": agent_context,
         "identity_policy": identity_policy_findings,
         "entity_identity": entity_identity,
-        "layered_claims": {
-            "proposition_claim_layer_coverage": proposition_coverage,
-            "causal_leaning_identification_coverage": causal_coverage,
-            "rival_model_packets_missing_discriminating_predictions": rival_model_gaps,
-            "migration_issues": migration_issues,
-        },
+        "layered_claims": layered_claims,
         "cross_paper_evidence": cross_paper_evidence,
         "legacy_task_type": legacy_task_type,
         "invalid_entity_aspects": invalid_entity_aspects,
@@ -399,8 +530,9 @@ def build_health_report(
         "accepted_validation": accepted_validation,
         "prose_epistemics": prose_epistemics,
         "unwired_checks": unwired_checks,
-        "total_issues": total_issues,
+        "total_issues": 0,
     }
+    report["total_issues"] = count_issues(report)
     if collect_timings:
         report["_meta"] = {
             "timings": context.timings,
