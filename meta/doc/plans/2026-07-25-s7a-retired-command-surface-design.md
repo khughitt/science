@@ -113,40 +113,109 @@ whatever subcommand was requested. `graph add concept` still points at
 `science entity create concept`; `graph add hypothesis` still at
 `science hypotheses create`. Only the empty shell is lost.
 
-**`RetiredGroup` must not raise in `parse_args`.** Doing so would answer before
-resolving which subcommand was asked for, collapsing fourteen forward paths into one
-generic message — the opposite of the goal. Instead it keeps normal group dispatch and
-carries `hidden=True`, so its fourteen children stay ordinary `RetiredCommand`
-instances and each raises its own forward path from its own `parse_args`. The group
-overrides only two behaviours:
+The group must answer three cases itself — bare `graph add`, `graph add --help`, and an
+unknown subcommand — while leaving the fourteen children to answer for themselves. Two
+click 8.3 mechanics decide the implementation, and both were verified against the
+installed version rather than reasoned about:
 
-- **an unknown subcommand** errors naming the group's retirement, rather than click's
-  "No such command", so a misremembered name still lands on the forward path;
-- **`graph add` with no subcommand, and `graph add --help`,** error the same way
-  instead of printing the empty listing.
+- **`no_args_is_help` defaults to `True` on `Group`,** so a bare invocation prints
+  usage and exits 2 *before* dispatch.
+- **`--help` is eager,** handled during parameter processing, also before dispatch.
+
+Overriding `resolve_command` therefore catches neither: measured, bare `graph add`
+exits 2 with a usage block and `graph add --help` exits 0, both without reaching the
+override. Overriding `parse_args` to raise unconditionally would catch both but also
+swallow `graph add concept`, collapsing fourteen forward paths into one generic
+message.
+
+**The resolution is to intercept in `parse_args` only for the two argument-shapes that
+name no child, then delegate:**
+
+```python
+class RetiredGroup(click.Group):
+    def parse_args(self, ctx, args):
+        if not args or args[0] in ("-h", "--help"):
+            raise self._retired(ctx)
+        return super().parse_args(ctx, args)
+
+    def resolve_command(self, ctx, args):
+        try:
+            return super().resolve_command(ctx, args)
+        except click.UsageError:
+            raise self._retired(ctx) from None
+```
+
+Intercepting ahead of `super()` subsumes both eager paths, so `no_args_is_help` never
+fires and needs no setting; and `resolve_command` converts only the unknown-child
+`UsageError`, leaving known children to dispatch normally. Verified behaviour:
+
+| Invocation | Answers with |
+|---|---|
+| `graph add` | the group's retirement |
+| `graph add --help` | the group's retirement |
+| `graph add bogus` | the group's retirement |
+| `graph add concept` | **`concept`'s own forward path** |
+| `graph add concept --help` | **`concept`'s own forward path** |
+| `graph add concept x --path /tmp` | **`concept`'s own forward path** |
 
 So `graph add` is retired at the group level *and* its fourteen leaves are retired
 individually. That is not redundancy: the leaves own the forward paths, and the group
-owns the two cases where no leaf is named.
+owns only the cases where no leaf is named.
 
 The fourteen forward paths stay written out, one per subcommand. They are not derived
 from a pattern: `concept` → `science entity create concept`, but `proposition` →
 `science propositions create`, and `edge` → author `relations.yaml`. An explicit
 table is correct here.
 
-### 3.3 The 22 declarations
+### 3.3 The manifest is the owner
 
-Each site collapses to one registration call, deleting roughly 400 lines of
-parameters that can never be read.
+A first draft had the CLI declare the retirements and a test assert that
+`budget/registry.py` agreed. That is not one owner — it is two authorities plus a
+reconciliation, which is the very shape this program exists to remove. An equality
+test makes drift *detectable*; it does not make it *impossible*.
+
+So the owner is a plain mapping in the retirement module, keyed by invocation path:
 
 ```python
-retire(inquiry_group, "add-node", forward=INQUIRY_MUTATION_FORWARD)
-retire(graph_add, "concept", forward="Run `science entity create concept <title>` "
-                                     "(or edit entities/concepts/<slug>.md)")
+RETIREMENTS: dict[str, str] = {
+    "inquiry add-node": INQUIRY_MUTATION_FORWARD,
+    ...
+    "graph add concept": "Run `science entity create concept <title>` "
+                         "(or edit entities/concepts/<slug>.md), "
+                         "then run `science graph build`.",
+}
 ```
 
-The five inquiry commands share one forward string (they already do, via
-`_retired_mutator`); the seventeen `graph` commands each keep their own, verbatim.
+Both consumers derive from it:
+
+- **The CLI** registers each entry as a `RetiredCommand` on the group its key names.
+- **`budget/registry.py`** computes its exemptions instead of listing them:
+
+  ```python
+  EXEMPTIONS = {
+      ...,
+      **{path: "fixed retired-command error" for path in RETIREMENTS},
+  }
+  ```
+
+`budget/registry.py` currently imports only stdlib, and the manifest introduces no
+cycle — nothing in the retirement module imports budget.
+
+Now the registry *cannot* disagree, and §5's claim is true rather than aspirational.
+The residual risk the guard must cover changes accordingly: not "do the two lists
+match?" but "did someone register a `RetiredCommand` that the manifest does not name?"
+
+**Each `forward` is the complete message tail, verbatim.** Today `_retired_writer`
+appends `, then run \`science graph build\`.` to all seventeen graph messages and
+`_retired_mutator` ends the five inquiry messages the same way; `test_graph_cli.py:176`
+asserts `"science graph build"` appears. A `forward` that carried only the fragment
+would silently drop that suffix and fail the unchanged graph tests. Repeating the
+suffix seventeen times is the boring choice and the correct one — it also lets a
+message that should *not* end in a build step say so, which the shared formatter could
+not express.
+
+Each of the 22 sites collapses to one manifest entry, deleting roughly 400 lines of
+parameters that can never be read.
 
 ### 3.4 One accepted loss
 
@@ -160,19 +229,22 @@ seventeen `graph` messages interpolate nothing and are preserved verbatim.
 
 ## 4. The guard
 
-`science/tests/test_cli_retirement.py`. It derives the retired set by walking `main`'s
-command tree and collecting **leaf `RetiredCommand` instances** — `RetiredGroup` is a
-container and is excluded, since `budget/registry.py` keys invocations, and
-`graph add` alone is not one. The derived set is therefore 22, not 23. It then
-asserts:
+`science/tests/test_cli_retirement.py`. It derives the live retired set by walking
+`main`'s command tree and collecting **leaf `RetiredCommand` instances** —
+`RetiredGroup` is a container and is excluded, since `RETIREMENTS` keys invocations and
+`graph add` alone is not one. The derived set is 22, not 23. It then asserts:
 
-1. **The derived set equals `budget/registry.py`'s `"fixed retired-command error"`
-   set.** The two surfaces that agree today by luck agree by construction after.
+1. **The live CLI tree matches `RETIREMENTS` exactly, in both directions.** Since
+   `budget/registry.py` now *computes* its entries (§3.3), the registry can no longer
+   disagree and needs no assertion. What remains guardable is registration: a
+   `RetiredCommand` reachable in the CLI but absent from the manifest, or a manifest
+   entry that never got registered.
 2. **No retired command declares parameters.** Belt for §3.1.
 3. **No retired command appears in its parent's `--help`.**
 4. **Every retired command errors on a *bare* invocation, with no arguments.**
-5. **`graph add` errors bare, on `--help`, and on an unknown subcommand** — the three
-   cases §3.2 gives the group to own.
+5. **`graph add` errors bare, on `--help`, and on an unknown subcommand, while
+   `graph add concept` still answers with `concept`'s own forward path** — the four
+   rows of §3.2's table that distinguish group-owned from leaf-owned cases.
 
 Assertion 4 is the regression test for the actual defect. Every existing test invokes
 these with full valid arguments — which is precisely why nobody noticed that a correct
@@ -180,27 +252,56 @@ call was a precondition for learning the call was impossible.
 
 ## 5. Effect on the fact
 
-`--help` stops being a surface. It is derived from `hidden`, so it cannot dissent.
-The budget registry is bound to the code by assertion 1. The user guide stays prose.
+`--help` stops being a surface: it is derived from `hidden` and cannot dissent. The
+budget registry stops being a surface: it is derived from `RETIREMENTS` and cannot
+dissent. The user guide stays prose.
 
 **One owner, two derived, one prose** — the S1a pattern at a scale small enough to
-prove it on.
+prove it on. Note what changed to earn that sentence: the first draft claimed it while
+leaving the registry a second hand-written list reconciled by a test. A test that
+compares two authorities detects drift; it does not remove the second authority. The
+distinction is the program's whole thesis, and the design had to be corrected to
+respect it.
 
 ## 6. Scope
 
 | In | Out |
 |---|---|
-| `RetiredCommand` / `RetiredGroup` module | Any command not already retired |
+| `RETIREMENTS` manifest + `RetiredCommand` / `RetiredGroup` | Any command not already retired |
 | The 22 declarations; deleting their parameters | Whether the 39 groups carve the space well (S7b) |
-| `test_cli_retirement.py` | The `graph add` family's Tier 2/3 deletion (kernel-closure) |
-| One line in `cli-and-workflows.md` | Generalizing the ratchet across fact classes (S0) |
+| Deriving `budget/registry.py`'s exemptions from the manifest | The `graph add` family's Tier 2/3 deletion (kernel-closure) |
+| `test_cli_retirement.py` | Generalizing the ratchet across fact classes (S0) |
+| Deleting `TestInquiryAddEdge` (§7) | Migrating "relation claim" in the causal exporters (§7) |
+| One line in `cli-and-workflows.md` | |
 
-## 7. Compatibility
+## 7. Compatibility, and the one behaviour deliberately broken
 
-Retired commands already fail. Every invocation that works today continues to work;
-every invocation that fails today continues to fail, earlier and with the same forward
-path. The user-visible changes are that retired commands leave `--help`, and that a
-*wrong* invocation of one now reports the retirement instead of a usage error.
+Every invocation that *executes work* today continues to; every invocation that fails
+today continues to fail, earlier and with the same forward path.
+
+**But one currently-succeeding invocation is deliberately broken: `--help` on a retired
+command.** Today `science inquiry add-edge --help` and `science graph add edge --help`
+both exit 0 and print a usage block. Under §3.1 they error. That is the accepted
+consequence stated in §3.1, and it is a real break, not a no-op — an earlier draft of
+this section claimed nothing working stopped working, which was false.
+
+**It has a test.** `test_inquiry_cli.py:242`,
+`TestInquiryAddEdge.test_edge_claim_help_uses_proposition_language`, asserts
+`exit_code == 0` for both of those `--help` invocations *and* that the output contains
+`"Supporting proposition reference"` — the help string on the `--claim` option.
+
+That test must be **deleted, not rewritten**, because its subject ceases to exist.
+`"Supporting proposition reference"` appears in exactly two places in the source —
+`inquiry_cli.py:229` and `graph/cli.py:1084` — both on retired commands, and §3.1
+deletes their parameters. There is no live surface to re-point it at.
+
+The test was a vocabulary guard ("proposition", not "relation claim") that happened to
+be riding on a dead command's option. Deleting it loses that guard, and the honest
+observation is that **the vocabulary it guarded was never fully migrated anyway**:
+`relation claim` is still live in `causal/export_chirho.py:131` and
+`causal/export_pgmpy.py:446`, asserted by `test_causal_cli.py:320`. Whether the causal
+exporters should adopt the same vocabulary is a real question and **out of scope for
+S7a** — recorded here so it does not disappear with the test.
 
 Per repo convention there is no compatibility layer and no deprecation window: the
 commands are already retired, and this makes the retirement legible rather than
@@ -208,12 +309,19 @@ extending it.
 
 ## 8. Verification
 
-- `test_cli_retirement.py` passes, including a demonstration that assertion 4 fails
-  before the change.
-- `test_graph_cli.py` and `test_inquiry_cli.py` pass unchanged — they assert the
-  forward path, which still holds when the error fires earlier.
+- `test_cli_retirement.py` passes, including a demonstration that assertions 4 and 5
+  fail before the change.
+- `test_graph_cli.py` passes **unchanged** — it asserts `"<command> is retired"`, the
+  forward key, and `"science graph build"`, all of which still hold once §3.3 keeps
+  each `forward` complete.
+- `test_inquiry_cli.py` passes with `TestInquiryAddEdge` **removed** per §7;
+  `TestInquiryMutatorsRetired` passes unchanged.
 - `test_user_guide_docs.py:128` still passes: retired `graph add` surfaces continue to
   "fail with forward-path guidance."
+- The full `science` suite. A scan of every `--help` invocation in `tests/` against the
+  22 retired names found `test_inquiry_cli.py:246` and nothing else, so §7's single
+  deletion is expected to be the only test casualty — but the scan matches on line
+  shape, and only the suite settles it.
 - `uv run ruff check` and `uv run pyright` clean.
 
 ## 9. Open question deferred to S7b
