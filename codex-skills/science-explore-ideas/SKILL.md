@@ -409,6 +409,25 @@ origin_plan:
       ref: explore-ideas-mechanism
 ```
 
+**Titles and the optional `slug:` field.** A block's `title` is what the entity
+is called; its **id** is derived from that title and capped at 72 characters on
+a word boundary. Apply refuses any `keep` block whose title would lose its
+discriminating tail to that cap — refuses the *whole report*, before creating
+anything, so a long title in block 11 cannot strand blocks 1–10 half-applied.
+Two ways to satisfy it, and prefer the first: keep titles short enough to
+survive the cap (a research question that needs 90 characters to state is
+usually two questions), or, when the long title is genuinely the right name, add
+an optional `slug:` naming a shorter id:
+
+```yaml
+title: Collaboration scale at which the single-owner graph model breaks down under concurrent authorship
+slug: single-owner-graph-collaboration-scale
+```
+
+The full title still lands on the entity; only the id is shortened. Omit `slug:`
+whenever the title derives cleanly — it is a recovery path, not routine. Run
+`--check` before `--apply` to see every offending block at once.
+
 When two lenses independently converge on the **same idea**, emit **one block**
 for the whole idea (not one per lens): carry every converged lens as a
 `lens_views` entry and one `origin_plan.origins` entry per lens, each marked
@@ -527,8 +546,9 @@ fold worklist item for you to hand-fold into the entity named in its
 `drop`/`defer`/`fold` are skipped. Bad input (duplicate ids, unknown
 `decision`/`proposed_kind`, a `keep` block missing `title`/`origin_plan.origins`,
 a `fold` block missing `related_existing`, malformed origins, malformed
-`lens_views`, unresolved or ambiguous `related_existing`, or malformed routed
-anchors) is rejected before anything is written.
+`lens_views`, unresolved or ambiguous `related_existing`, malformed routed
+anchors, or a `title`/`slug:` that cannot form a valid entity id) is rejected
+before anything is written.
 
 Relay the CLI's created / skipped / manual / fold / failure summary to the user.
 If `--commit` was passed, commit the created entities plus the updated report

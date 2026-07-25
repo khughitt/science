@@ -20,6 +20,7 @@ from science_tool.entities import (
     _render_markdown,
     build_entity_markdown,
     create_entity,
+    resolve_entity_slug,
 )
 from science_tool.entity_scan import iter_entity_markdown
 from science_tool.resolve_refs import RefIndex, build_ref_index, load_index_rows
@@ -59,6 +60,9 @@ class CreatePlan:
     #: rationale) that apply seeds into the created entity's lead section, so it
     #: starts non-hollow instead of discarding the researched framing.
     body_seed: str = ""
+    #: Explicit slug from the block's optional ``slug:`` field. ``None`` means
+    #: derive it from the title.
+    slug: str | None = None
 
 
 @dataclass(frozen=True)
@@ -140,6 +144,7 @@ class ApplyCheckResult:
                     "candidate_id": plan.candidate_id,
                     "kind": plan.kind,
                     "title": plan.title,
+                    "slug": plan.slug,
                 }
                 for plan in self.to_create
             ],
@@ -685,6 +690,19 @@ def build_create_plan(candidate_id: str, data: dict, model_id: str, *, ref_index
     if not isinstance(title, str) or not title.strip():
         raise ApplyValidationError(f"{candidate_id}: keep block missing a non-empty 'title'")
 
+    slug = data.get("slug")
+    if slug is not None and (not isinstance(slug, str) or not slug.strip()):
+        raise ApplyValidationError(f"{candidate_id}: 'slug' must be a non-empty string when present")
+    slug = slug.strip() if isinstance(slug, str) else None
+    # Decide the entity's slug here, not at write time. create_entity raises the
+    # same error per-entity mid-loop, which strands a multi-block report
+    # half-applied; planning it means the whole run is rejected before the first
+    # write and the human fixes every block in one pass.
+    try:
+        resolve_entity_slug(title, slug)
+    except EntityCommandError as exc:
+        raise ApplyValidationError(f"{candidate_id}: {exc}") from exc
+
     origin_plan = data.get("origin_plan")
     origins_raw = origin_plan.get("origins") if isinstance(origin_plan, dict) else None
     if not origins_raw:
@@ -741,6 +759,7 @@ def build_create_plan(candidate_id: str, data: dict, model_id: str, *, ref_index
         added_by=f"explore-ideas:{model_id}:{candidate_id}",
         related=related,
         body_seed=_build_body_seed(data, lens_views),
+        slug=slug,
     )
 
 
@@ -955,6 +974,7 @@ def apply_report(project_root: Path, from_value: str, model_id: str, today: date
                 project_root,
                 kind=create_plan.kind,
                 title=create_plan.title,
+                slug=create_plan.slug,
                 source_refs=create_plan.source_refs,
                 related=create_plan.related,
                 today=today,

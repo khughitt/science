@@ -576,6 +576,36 @@ def validate_slug(slug: str) -> str:
     return slug
 
 
+def resolve_entity_slug(title: str, slug: str | None) -> str:
+    """The slug ``create_entity`` will use for ``(title, slug)``, or raise.
+
+    Rejects an invalid explicit slug, and a title whose auto-derived slug would
+    lose its discriminating tail to the length cap. Every naming failure
+    ``create_entity`` can raise before touching the filesystem is decidable
+    here, from the title alone — so a caller creating many entities in a loop
+    calls this for each planned create up front, and a predictable naming
+    failure aborts the batch instead of stranding it half-written.
+    """
+    if slug is not None:
+        return validate_slug(slug)
+    full_slug = normalize_to_slug(title)
+    used_slug = truncate_slug_on_word_boundary(full_slug, DERIVED_SLUG_MAX_LENGTH)
+    if used_slug != full_slug:
+        # Fail early rather than write a file whose auto-derived id silently
+        # drops the discriminating tail of the title. The remediation is
+        # actionable only before the write, not after (the caller would
+        # otherwise have to rm + recreate). (fb-2026-07-19-015, superseding the
+        # warn-after-write of fb-2026-05-30-012.)
+        dropped = full_slug[len(used_slug) :].lstrip("-")
+        raise EntityCommandError(
+            f"Title is too long to derive a safe id slug: truncation would drop "
+            f"'{dropped}' from the id, losing the discriminating tail. Set an explicit "
+            f"slug (--slug on the CLI, 'slug:' in an exploration report block), "
+            f"e.g. '{used_slug}'."
+        )
+    return derive_slug(title)
+
+
 def validate_entity_id(kind: str, entity_id: str) -> str:
     prefix = f"{kind}:"
     if entity_id.startswith(prefix):
@@ -913,21 +943,11 @@ def create_entity(
         text=text,
         target_entity_id=entity_id_value,
     )
-    if slug is None and entity_id is None:
-        full_slug = normalize_to_slug(title)
-        used_slug = truncate_slug_on_word_boundary(full_slug, DERIVED_SLUG_MAX_LENGTH)
-        if used_slug != full_slug:
-            # Fail early rather than write a file whose auto-derived id silently
-            # drops the discriminating tail of the title. The remediation (pass
-            # --slug) is actionable only before the write, not after (the caller
-            # would otherwise have to rm + recreate). (fb-2026-07-19-015, superseding
-            # the warn-after-write of fb-2026-05-30-012.)
-            dropped = full_slug[len(used_slug) :].lstrip("-")
-            raise EntityCommandError(
-                f"Title is too long to derive a safe id slug: truncation would drop "
-                f"'{dropped}' from the id, losing the discriminating tail. Pass --slug "
-                f"to choose an explicit id (e.g. --slug '{used_slug}')."
-            )
+    # Pre-write guard only — generate_entity_id above owns the actual derivation.
+    # Calling the same function batch planners call is what makes their up-front
+    # check binding: anything they accept, this accepts.
+    if entity_id is None:
+        resolve_entity_slug(title, slug)
 
     tmp_path = destination.with_suffix(destination.suffix + ".tmp")
     try:

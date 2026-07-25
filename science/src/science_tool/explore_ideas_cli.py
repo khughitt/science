@@ -50,7 +50,8 @@ def explore_ideas_apply(from_value: str, model_id: str, check_only: bool, output
                     f"{len(check_result.folds)} to fold manually"
                 )
                 for plan in check_result.to_create:
-                    click.echo(f"  would create {plan.candidate_id} ({plan.kind})")
+                    slug = f" slug={plan.slug}" if plan.slug else ""
+                    click.echo(f"  would create {plan.candidate_id} ({plan.kind}){slug}")
                 for candidate_id in check_result.skipped_applied:
                     click.echo(f"  already applied: {candidate_id}")
                 for candidate_id in check_result.skipped_other:
