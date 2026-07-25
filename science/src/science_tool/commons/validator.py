@@ -14,7 +14,7 @@ from science_tool.commons.adapter import (
     CommonsEntityRecord,
 )
 from science_tool.commons.errors import CommonsEntityError
-from science_tool.entities import valid_statuses
+from science_tool.kind_descriptors import DECLARED_STATUSES
 
 
 @dataclass(frozen=True)
@@ -70,19 +70,24 @@ class CommonsValidator:
 
         `status_vocabulary` (project validate) walks only `<root>/entities`, so it
         never reaches commons records at `papers/<key>.md` / `datasets/<slug>/entity.md`.
-        This is that check's commons counterpart, over the kind vocabulary shared
-        with `edit_entity` (`valid_statuses`).
+        This is that check's commons counterpart, over the same profile-declared
+        vocabulary `entities.valid_statuses` reads. It reads `DECLARED_STATUSES`
+        rather than calling `valid_statuses`, because importing `entities` from
+        inside the commons package closes an import cycle; commons records are
+        not project-local entities, so the project-manifest fallback that
+        `valid_statuses` adds on top never applies here anyway.
         """
         status = record.frontmatter.get("status")
         kind = record.frontmatter.get("kind")
         if not isinstance(status, str) or not status or not isinstance(kind, str) or not kind:
             return None
-        try:
-            allowed = valid_statuses(kind)
-        except KeyError:
-            return None  # an unregistered kind is a schema concern, not this one
-        if allowed is None or status in allowed:
-            return None  # None = open status set (any value legal)
+        allowed = DECLARED_STATUSES.get(kind)
+        if allowed is None:
+            # An unregistered kind, or one declaring no vocabulary (an open set):
+            # either way a schema concern, not this one.
+            return None
+        if status in allowed:
+            return None
         return CommonsStatusWarning(
             canonical_id=record.canonical_id,
             path=record.body_path,

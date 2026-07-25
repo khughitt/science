@@ -23,12 +23,11 @@ from science_model.entity_schema import (
 )
 from science_model.frontmatter import atomic_write_text, split_frontmatter
 from science_model.profiles import EntityKind, ProfileManifest, load_profile_manifest
-from science_model.profiles.core import CORE_PROFILE
-from science_model.profiles.local import LOCAL_PROFILE
 from science_model.profiles.schema import EntityFilenameStrategy
 
 from science_tool.entity_profiles import load_project_schema_if_pinned
 from science_tool.entity_scan import iter_entity_markdown
+from science_tool.kind_descriptors import DECLARED_STATUSES, KIND_DESCRIPTORS
 from science_tool.graph.identity_table import build_identity_table
 from science_tool.graph.migrate import AuditRow, audit_project_sources
 from science_tool.graph.reference_resolution import ReferenceResolver
@@ -54,7 +53,7 @@ class EntityPathPolicy:
     strategy: EntityFilenameStrategy
 
 
-_KIND_DESCRIPTORS = (*CORE_PROFILE.entity_kinds, *LOCAL_PROFILE.entity_kinds)
+_KIND_DESCRIPTORS = KIND_DESCRIPTORS
 
 _BUILTIN_MARKDOWN_POLICIES: dict[str, EntityPathPolicy] = {
     ek.name: EntityPathPolicy(Path(ek.home), cast(EntityFilenameStrategy, ek.strategy))
@@ -198,7 +197,7 @@ _SHORTFORM_REF_RE = re.compile(r"^(?P<prefix>[A-Za-z])(?P<number>\d+)(?P<suffix>
 _NOTES_HEADING_RE = re.compile(r"^##\s+Notes\s*$")
 _SHORTFORM_ENTITY_KINDS: dict[str, str] = {ek.shortform: ek.name for ek in _KIND_DESCRIPTORS if ek.shortform}
 _DEFAULT_STATUS: dict[str, str] = {ek.name: ek.default_status for ek in _KIND_DESCRIPTORS if ek.default_status}
-_STATUS_VALUES: dict[str, frozenset[str]] = {ek.name: frozenset(ek.statuses) for ek in _KIND_DESCRIPTORS if ek.statuses}
+_STATUS_VALUES: dict[str, frozenset[str]] = DECLARED_STATUSES
 _EXTRA_FRONTMATTER_RESERVED_KEYS = frozenset(
     {"id", "kind", "title", "status", "related", "source_refs", "created", "updated"}
 )
