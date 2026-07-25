@@ -75,7 +75,7 @@ def entity_kind_for_path(rel_path: str) -> str | None:
         return None  # archive tier -- unclassified, therefore denied
 
     for kind, root in _CORE_HOMES:
-        if root.suffix:  # singleton home: the home IS the file
+        if root.suffix == ".md":  # Markdown singleton home: the home IS the file
             if candidate == root:
                 return kind
             continue

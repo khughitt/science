@@ -23,6 +23,10 @@ def test_a_markdown_singleton_home_classifies():
     assert entity_kind_for_path("entities/research-question.md") == "research-question"
 
 
+def test_a_non_markdown_singleton_home_is_not_an_entity():
+    assert entity_kind_for_path("entities/claim-registry.yaml") is None
+
+
 def test_a_non_entity_path_is_not_an_entity():
     assert entity_kind_for_path("core/decisions.md") is None
     assert entity_kind_for_path("data/raw/counts.tsv") is None
