@@ -74,8 +74,9 @@ way, and `--help` was never wired to it at all.
 
 ### 3.1 `RetiredCommand`
 
-A `click.Command` subclass in its own module. This is the sole declaration of the
-fact.
+A `click.Command` subclass in its own module. It is the **runtime enforcement
+mechanism**, not the declaration — §3.3's manifests own the fact, and this class is
+what makes the declaration binding at the CLI boundary.
 
 ```python
 class RetiredCommand(click.Command):
@@ -87,6 +88,8 @@ class RetiredCommand(click.Command):
         self.forward = forward
 
     def parse_args(self, ctx, args):
+        if ctx.resilient_parsing:
+            return super().parse_args(ctx, args)
         raise click.ClickException(f"{self.path} is retired. {self.forward}")
 ```
 
@@ -98,6 +101,12 @@ Each clause carries its weight:
 - **`params=[]`** leaves nothing to advertise and no unreachable declarations to
   maintain.
 - **`hidden=True`** removes it from the listing — fix (a).
+- **`ctx.resilient_parsing`** must short-circuit to `super()`. Click builds contexts
+  with `resilient_parsing=True` during shell completion, where raising is not an error
+  report but a crash: measured against the unguarded draft, completing `graph add` and
+  `graph add concept` both raised `ClickException` out of `ShellComplete`. A retired
+  command should be absent from completion — which `hidden=True` already achieves —
+  not poison it.
 - **`path`** is the manifest key, and the message uses it rather than
   `ctx.command_path`. Two reasons, both measured. Backticks around the path break
   `test_graph_cli.py:175`, which asserts the contiguous substring
@@ -148,20 +157,30 @@ class RetiredGroup(click.Group):
         self.path = path
         self.forward = forward
 
-    def _retired(self) -> click.ClickException:
-        return click.ClickException(f"{self.path} is retired. {self.forward}")
+    def _message(self) -> str:
+        return f"{self.path} is retired. {self.forward}"
 
     def parse_args(self, ctx, args):
+        if ctx.resilient_parsing:
+            return super().parse_args(ctx, args)
         if not args or args[0] in ("-h", "--help"):
-            raise self._retired()
+            raise click.ClickException(self._message())
         return super().parse_args(ctx, args)
 
     def resolve_command(self, ctx, args):
         try:
             return super().resolve_command(ctx, args)
         except click.UsageError:
-            raise self._retired() from None
+            raise click.UsageError(self._message(), ctx) from None
 ```
+
+**The unknown-child path raises `UsageError`, not `ClickException`** — naming a command
+that does not exist *is* a usage error, and `UsageError` exits 2 where `ClickException`
+exits 1. This is not a stylistic choice: `test_graph_cli.py:509`,
+`test_graph_add_paper_command_is_removed`, asserts `exit_code == 2` for
+`graph add paper`. Raising `ClickException` there would silently downgrade the exit code
+of every mistyped subcommand. Verified: with `UsageError` the exit code stays 2 and the
+message names the retirement.
 
 The group's `path` and `forward` come from `RETIRED_GROUPS` (§3.3), not from anywhere
 implicit. An earlier draft left `_retired`'s message with no stated source, which would
@@ -208,14 +227,23 @@ RETIREMENTS: dict[str, str] = {          # 22 leaf commands
 }
 
 RETIRED_GROUPS: dict[str, str] = {       # groups that are retired in their own right
-    "graph add": "Use the source-authoring commands for the kind you want, "
-                 "then run `science graph build`.",
+    "graph add": "Author the entity instead — `science entity create <kind> <title>`, "
+                 "or a typed wrapper such as `science hypotheses create <title>`; "
+                 "author edges in `relations.yaml` or `relations:` frontmatter. "
+                 "Then run `science graph build`.",
 }
 ```
 
 `RETIRED_GROUPS` exists because §3.2 gives `graph add` three behaviours of its own, and
 those need a stated source like everything else. Without it, the group would be the one
 retirement the manifest did not own.
+
+**The group's forward text must be executable, not a category.** §2's whole complaint
+is that an agent gets told what it may not do without being told what to do; "use the
+source-authoring commands" reproduces that failure at the group level. Because the
+group is now hidden, this message is the *only* thing an agent working from an old
+transcript will see for a name that no longer resolves — so it names the actual
+commands and the actual file.
 
 Consumers derive from them:
 
@@ -287,7 +315,11 @@ then asserts:
 5. **All six shapes of §3.2's table**, so the group-owned and leaf-owned cases stay
    distinguished: `graph add`, `graph add --help`, and `graph add bogus` answer with
    the group's forward path, while `graph add concept`, `graph add concept --help`, and
-   `graph add concept x --path /tmp` answer with `concept`'s.
+   `graph add concept x --path /tmp` answer with `concept`'s. `graph add bogus`
+   additionally asserts `exit_code == 2`, pinning §3.2's `UsageError` choice.
+6. **A completion context over the retired surfaces returns instead of raising** —
+   the `resilient_parsing` contract from §3.1, which is invisible to every other
+   assertion here because completion never goes through normal invocation.
 
 Assertion 4 carries two loads. Its bare-invocation half is the regression test for the
 original defect — every existing test invokes these with full valid arguments, which is
@@ -320,13 +352,30 @@ respect it.
 | Deleting one method from `TestInquiryAddEdge` and renaming the class (§7) | Migrating "relation claim" in the causal exporters (§7) |
 | One line in `cli-and-workflows.md` | |
 
-## 7. Compatibility, and the one behaviour deliberately broken
+## 7. Compatibility, and the two behaviours deliberately changed
 
-Every invocation that *executes work* today continues to; every invocation that fails
-today continues to fail, earlier and with the same forward path.
+Every invocation that *executes work* today continues to. Two observable behaviours
+change, both deliberately, and each costs a test.
 
-**But one currently-succeeding invocation is deliberately broken: `--help` on a retired
-command.** Today `science inquiry add-edge --help` and `science graph add edge --help`
+### 7.1 An unknown `graph add` subcommand now names the retirement
+
+Today `science graph add paper` answers `No such command 'paper'` and exits 2.
+Under §3.2 it answers with the group's retirement and forward path, still exiting 2 —
+`UsageError` is chosen precisely to hold that exit code.
+
+`test_graph_cli.py:509`, `test_graph_add_paper_command_is_removed`, asserts both the
+exit code and the old message. **Its exit-code assertion survives; its message
+assertion must be rewritten** to expect the retirement text. The test's intent — that
+`paper` is not a command anyone can call — is still served, and served better: the new
+message tells the caller where to go instead of only that they were wrong.
+
+An earlier draft of §8 claimed `test_graph_cli.py` passes wholly unchanged. That was
+false, and it was false because I checked the retired-command tests and did not check
+the tests about commands that were *removed rather than retired*.
+
+### 7.2 `--help` on a retired command now errors
+
+Today `science inquiry add-edge --help` and `science graph add edge --help`
 both exit 0 and print a usage block. Under §3.1 they error. That is the accepted
 consequence stated in §3.1, and it is a real break, not a no-op — an earlier draft of
 this section claimed nothing working stopped working, which was false.
@@ -365,11 +414,16 @@ extending it.
 
 - `test_cli_retirement.py` passes, including a demonstration that assertions 4 and 5
   fail before the change.
-- `test_graph_cli.py` passes **unchanged** — it asserts `"<command> is retired"`, the
-  forward key, and `"science graph build"`. All three hold once §3.3 keeps each
-  `forward` complete and §3.1 builds the message from the manifest key without
-  backticks. This was verified to fail under the earlier backticked draft, so it is a
-  checked claim, not an assumed one.
+- `test_retired_graph_writer_commands_report_forward_path` passes **unchanged** — it
+  asserts `"<command> is retired"`, the forward key, and `"science graph build"`. All
+  three hold once §3.3 keeps each `forward` complete and §3.1 builds the message from
+  the manifest key without backticks. Verified to *fail* under the earlier backticked
+  draft, so it is a checked claim.
+- `test_graph_add_paper_command_is_removed` passes with its **message assertion
+  rewritten** per §7.1; its `exit_code == 2` assertion is unchanged.
+- **Shell completion does not raise.** A test constructing a completion context for
+  `graph add` and `graph add concept` — the two shapes measured to raise without the
+  `resilient_parsing` guard — and asserting it returns rather than throwing.
 - `test_inquiry_cli.py` passes with **one method** removed per §7 and its class
   renamed; `test_compiled_edge_with_relation_claim_attaches_claim_to_edge` and
   `TestInquiryMutatorsRetired` pass unchanged.
