@@ -395,7 +395,7 @@ Expected: FAIL — `ImportError: cannot import name 'basis_digest'`
 ```python
 # add to science/src/science_tool/graph/belief_basis.py
 import hashlib
-from typing import Iterable
+from collections.abc import Iterable
 
 
 def basis_digest(bases: Iterable[EntityBasis]) -> str:
@@ -403,7 +403,7 @@ def basis_digest(bases: Iterable[EntityBasis]) -> str:
 
     Persisted in the snapshot envelope and in the run record so a later
     validation can prove it compared against the same starting state.
-    """
+
     Ordered by the serialized row itself, not by (uri, entity_id): that pair is not
     unique by construction, and two rows sharing it would otherwise fall back to
     input order, leaving a known input-order dependence in the observable this
