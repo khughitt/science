@@ -260,7 +260,7 @@ class TestTasksList:
         with runner.isolated_filesystem():
             runner.invoke(main, ["tasks", "add", "Task A", "--priority", "P1"])
             runner.invoke(main, ["tasks", "add", "Task B", "--priority", "P2"])
-            result = runner.invoke(main, ["tasks", "list"])
+            result = runner.invoke(main, ["tasks", "list", "--status", "proposed"])
             assert result.exit_code == 0
             assert "Task A" in result.output
             assert "Task B" in result.output
@@ -291,7 +291,10 @@ class TestTasksList:
                 "- aspects: [hypothesis-testing]\n"
                 "- created: 2026-03-02\n\nRes.\n"
             )
-            result = runner.invoke(main, ["tasks", "list", "--aspect", "software-development"])
+            result = runner.invoke(
+                main,
+                ["tasks", "list", "--status", "proposed", "--aspect", "software-development"],
+            )
             assert result.exit_code == 0, result.output
             assert "Dev task" in result.output
             assert "Research task" not in result.output
@@ -304,7 +307,7 @@ class TestTasksList:
             tasks_dir = Path("tasks")
             tasks_dir.mkdir()
             (tasks_dir / "active.md").write_text(
-                "## [t001] Open task\n- type: dev\n- priority: P1\n- status: proposed\n- created: 2026-03-01\n\nOpen.\n\n"
+                "## [t001] Open task\n- type: dev\n- priority: P1\n- status: active\n- created: 2026-03-01\n\nOpen.\n\n"
                 "## [t002] Done task\n- type: dev\n- priority: P2\n- status: done\n- created: 2026-03-02\n- completed: 2026-03-05\n\nDone.\n"
             )
             result = runner.invoke(main, ["tasks", "list"])
@@ -373,7 +376,7 @@ class TestTasksList:
     def test_list_json_format(self, runner: CliRunner) -> None:
         with runner.isolated_filesystem():
             runner.invoke(main, ["tasks", "add", "JSON task", "--priority", "P1"])
-            result = runner.invoke(main, ["tasks", "list", "--format", "json"])
+            result = runner.invoke(main, ["tasks", "list", "--status", "proposed", "--format", "json"])
             assert result.exit_code == 0
             data = json.loads(result.output)
             assert len(data["rows"]) == 1
@@ -385,6 +388,8 @@ class TestTasksList:
         with runner.isolated_filesystem():
             runner.invoke(main, ["tasks", "add", "Active task", "--priority", "P1"])
             runner.invoke(main, ["tasks", "add", "Other task", "--priority", "P2"])
+            runner.invoke(main, ["tasks", "edit", "t001", "--status", "active"])
+            runner.invoke(main, ["tasks", "edit", "t002", "--status", "active"])
             # Filtered view: only P1
             result = runner.invoke(main, ["tasks", "list", "--format", "json", "--priority", "P1"])
             assert result.exit_code == 0
@@ -394,8 +399,8 @@ class TestTasksList:
             assert meta["returned_count"] == 1
             assert meta["sort_order"] == "status_rank,id"
             assert meta["applied_filters"]["priority"] == "P1"
-            # Default exclusion of done/retired surfaces under applied_filters too.
-            assert meta["applied_filters"]["exclude_status"] == ["done", "retired"]
+            # Default working set surfaces under applied_filters too.
+            assert meta["applied_filters"]["only_status"] == ["active", "blocked"]
 
 
 class TestTasksShow:
@@ -490,7 +495,7 @@ class TestTasksGroups:
         with runner.isolated_filesystem():
             runner.invoke(main, ["tasks", "add", "T1", "--priority", "P1", "--related", "topic:alpha"])
             runner.invoke(main, ["tasks", "add", "T2", "--priority", "P2", "--related", "topic:beta"])
-            result = runner.invoke(main, ["tasks", "list", "--related", "alpha"])
+            result = runner.invoke(main, ["tasks", "list", "--status", "proposed", "--related", "alpha"])
             assert result.exit_code == 0
             assert "T1" in result.output
             assert "T2" not in result.output
@@ -499,7 +504,7 @@ class TestTasksGroups:
         with runner.isolated_filesystem():
             runner.invoke(main, ["tasks", "add", "T1", "--priority", "P1", "--group", "lens"])
             runner.invoke(main, ["tasks", "add", "T2", "--priority", "P2", "--group", "formula"])
-            result = runner.invoke(main, ["tasks", "list", "--group", "lens"])
+            result = runner.invoke(main, ["tasks", "list", "--status", "proposed", "--group", "lens"])
             assert result.exit_code == 0
             assert "T1" in result.output
             assert "T2" not in result.output
@@ -691,7 +696,10 @@ def test_tasks_list_filter_by_aspect(tmp_path, monkeypatch):
     monkeypatch.chdir(tmp_path)
 
     runner = CliRunner()
-    result = runner.invoke(main, ["tasks", "list", "--aspect", "hypothesis-testing"])
+    result = runner.invoke(
+        main,
+        ["tasks", "list", "--status", "proposed", "--aspect", "hypothesis-testing"],
+    )
     assert result.exit_code == 0, result.output
     assert "t001" in result.output
     assert "t002" not in result.output
