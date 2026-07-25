@@ -153,6 +153,10 @@ DEFERRED: dict[str, DeferredCommand] = {
         "one output member per distinct task type and group value",
         "1b",
     ),
+    "graph belief-basis": DeferredCommand(
+        "compare mode emits one MOVED row per changed pre-existing entity",
+        "1b",
+    ),
 }
 
 DEFERRED.update(

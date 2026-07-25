@@ -24,7 +24,7 @@ from science_tool.cli import main
 EXPECTED_CLASSIFICATION_COUNTS = {
     "budgeted": 4,
     "exempt": 67,
-    "deferred": 205,
+    "deferred": 206,
 }
 
 
@@ -58,7 +58,9 @@ def test_classification_partition_has_the_audited_cardinality() -> None:
     Task 1 supplied 4 budgeted, 3 exempt, and 11 deferred paths. Task 13's RED
     surfaced 258 more, classified as 65 exempt and 193 deferred. Review then
     corrected tasks summary from exempt to deferred because its distinct type/group
-    keys are unbounded. The live partition is therefore 4/67/205 = 276.
+    keys are unbounded. The post-merge belief-basis command adds one deferred leaf
+    because compare mode emits one row per changed entity. The live partition is
+    therefore 4/67/206 = 277.
     """
     actual = {
         "budgeted": len(BUDGETS),
@@ -67,6 +69,10 @@ def test_classification_partition_has_the_audited_cardinality() -> None:
     }
     assert actual == EXPECTED_CLASSIFICATION_COUNTS
     assert sum(actual.values()) == len(_leaf_commands(main, []))
+
+
+def test_belief_basis_is_deferred_because_compare_emits_one_row_per_delta() -> None:
+    assert "graph belief-basis" in DEFERRED
 
 
 def _callback_source(cmd: click.Command) -> str | None:
