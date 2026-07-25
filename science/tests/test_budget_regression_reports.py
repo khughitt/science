@@ -110,3 +110,31 @@ def test_curate_inventory_refuses_and_completes(tmp_path: Path, monkeypatch: pyt
         expected_items=900, count_items=lambda p: len(p["artifacts"]),
     )
     assert sum(payload["artifact_counts"].values()) == 900  # {question:300, interpretation:300, discussion:300}
+
+
+def _seed_prose_hits(root: Path, count: int) -> None:
+    """Seed markdown files each carrying a bare author-year, a reliable prose-lint hit."""
+    docs = root / "doc"
+    docs.mkdir(parents=True, exist_ok=True)
+    for i in range(count):
+        # "(Smith 2020)" with no [@cite] anchor is a bare-author-year finding.
+        (docs / f"note-{i:04d}.md").write_text(
+            f"# Note {i}\n\nThe result was significant (Smith {2000 + (i % 25)}), a bare "
+            f"author-year citation number {i} that the linter must flag.\n"
+        )
+
+
+def test_prose_lint_is_bounded_and_complete(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    (tmp_path / "science.yaml").write_text("id: demo\nname: demo\n")
+    _seed_prose_hits(tmp_path, 400)
+    monkeypatch.chdir(tmp_path)
+    _assert_report_projection(
+        "prose lint", ["prose", "lint"], tmp_path,
+        expected_exit=0,  # no --strict -> prose lint never fails the run
+        omitted_key="hits_omitted",
+        count_items=lambda p: len(p["hits"]),
+        summary_of=lambda p: p["counts"],
+    )
+    # The per-check `counts` are the summary; they must equal the full hit total.
+    complete = json.loads((tmp_path / "complete.json").read_text())
+    assert sum(complete["counts"].values()) == len(complete["hits"])
