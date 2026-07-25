@@ -23,6 +23,11 @@ class SkillCoverageError(ValueError):
     """A structural violation in the coverage inputs."""
 
 
+_VALID_ENROLLMENTS: frozenset[str] = frozenset({
+    "enrolled", "out-of-domain", "undeclared",
+})
+
+
 @dataclass(frozen=True, slots=True)
 class TermUsage:
     plan_ref: str
@@ -59,6 +64,10 @@ class ProjectEvidence:
     unresolved_related_refs: tuple[UnresolvedRef, ...] = ()
 
     def __post_init__(self) -> None:
+        if self.enrollment not in _VALID_ENROLLMENTS:
+            raise SkillCoverageError(
+                f"{self.project}: unknown enrollment {self.enrollment!r}"
+            )
         if self.enrollment != "enrolled" and (
             self.term_usages
             or self.untagged_usages

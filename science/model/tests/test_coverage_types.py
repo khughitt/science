@@ -40,6 +40,11 @@ def test_project_evidence_rejects_facts_when_not_enrolled() -> None:
     ProjectEvidence(project="p", enrollment=EnrollmentStatus.OUT_OF_DOMAIN)
 
 
+def test_project_evidence_rejects_unknown_enrollment() -> None:
+    with pytest.raises(SkillCoverageError, match="unknown enrollment"):
+        ProjectEvidence(project="p", enrollment="malformed")
+
+
 def test_occurrence_to_dict_shapes() -> None:
     assert OutOfDomainResult("p").to_dict() == {
         "state": "out-of-domain",
