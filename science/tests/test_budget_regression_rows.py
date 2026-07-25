@@ -91,3 +91,30 @@ def test_entity_list_is_bounded_and_complete(rows_corpus: Path) -> None:
     # (kind=None) surfaces all three kinds -> 900 rows.
     _assert_stdout_projected("entity list", ["entity", "list"], seeded_total=900)
     _assert_file_complete("entity list", ["entity", "list"], seeded_total=900, out_dir=rows_corpus)
+
+
+def test_feedback_list_is_bounded_and_complete(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from science_tool.feedback import VALID_CATEGORIES
+
+    category = next(iter(sorted(VALID_CATEGORIES)))
+    fb_dir = tmp_path / "feedback"
+    fb_dir.mkdir()
+    for i in range(300):
+        (fb_dir / f"fb-2026-01-01-{i:03d}.yaml").write_text(
+            f"id: fb-2026-01-01-{i:03d}\n"
+            'created: "2026-01-01"\n'
+            f"project: demo-project-{i:03d}\n"
+            f"target: command:some-long-target-name-{i:03d}\n"
+            "concern: methodology:design\n"  # a valid VALID_CONCERNS value
+            f"category: {category}\n"
+            f"summary: Summary {i} exercising wrapping behavior\n"
+            "status: open\n"
+            "recurrence: 1\n"
+        )
+    monkeypatch.setenv("SCIENCE_FEEDBACK_DIR", str(fb_dir))
+    monkeypatch.chdir(tmp_path)
+
+    _assert_stdout_projected("feedback list", ["feedback", "list"], seeded_total=300)
+    _assert_file_complete("feedback list", ["feedback", "list"], seeded_total=300, out_dir=tmp_path)

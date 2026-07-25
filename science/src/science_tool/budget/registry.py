@@ -63,6 +63,7 @@ BUDGETS: dict[str, CommandBudget] = {
     "entities inventory": CommandBudget(max_chars=20_000, shape=PayloadShape.DOCUMENT),
     "data audit": CommandBudget(max_chars=20_000, shape=PayloadShape.DOCUMENT),
     "entity list": CommandBudget(max_chars=20_000, shape=PayloadShape.ROWS, max_rows=40),
+    "feedback list": CommandBudget(max_chars=20_000, shape=PayloadShape.ROWS, max_rows=40),
 }
 
 EXEMPTIONS: dict[str, str] = {
@@ -144,7 +145,6 @@ DEFERRED: dict[str, DeferredCommand] = {
     "interpretations list": DeferredCommand("one row per interpretation", "1b", 97_281),
     "curate consolidation-candidates": DeferredCommand("one row per candidate cluster", "1b", 71_553),
     "entity needs-review": DeferredCommand("one row per flagged entity", "1b", 59_697),
-    "feedback list": DeferredCommand("one row per feedback item", "1b", 44_307),
     "discussions list": DeferredCommand("one row per discussion", "1b", 30_780),
     # Growable but small on the audited project -- the case that has no truthful
     # exemption. Populated further by Task 13 Step 3.

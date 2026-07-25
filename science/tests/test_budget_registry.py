@@ -61,7 +61,6 @@ def test_the_ten_measured_offenders_are_deferred() -> None:
         "questions list",
         "interpretations list",
         "discussions list",
-        "feedback list",
         "entity needs-review",
         "curate consolidation-candidates",
         "curate inventory",

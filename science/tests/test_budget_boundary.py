@@ -22,9 +22,9 @@ from science_tool.budget.registry import BUDGETS, DEFERRED, EXEMPTIONS
 from science_tool.cli import main
 
 EXPECTED_CLASSIFICATION_COUNTS = {
-    "budgeted": 5,
+    "budgeted": 6,
     "exempt": 67,
-    "deferred": 205,
+    "deferred": 204,
 }
 
 

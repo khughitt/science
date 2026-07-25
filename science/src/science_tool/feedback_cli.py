@@ -158,6 +158,13 @@ def _parse_from_recent_index(extra_args: list[str], *, from_recent: bool) -> int
 @click.option("--project", default=None, help="Filter by project name")
 @click.option("--concern", default=None, help="Filter by concern (supports fnmatch globs, e.g. 'methodology:*')")
 @click.option("--format", "output_format", default="table", type=click.Choice(OUTPUT_FORMATS))
+@click.option(
+    "--output",
+    "output_path",
+    type=click.Path(path_type=Path),
+    default=None,
+    help="Write the complete, unprojected result to this path instead of truncating stdout.",
+)
 def feedback_list(
     status: str | None,
     target: str | None,
@@ -165,9 +172,15 @@ def feedback_list(
     project: str | None,
     concern: str | None,
     output_format: str,
+    output_path: Path | None,
 ) -> None:
     """List feedback entries (default: open only)."""
     from science_tool.feedback import list_entries
+
+    from science_tool.budget.control import bounded_control_notice
+    from science_tool.budget.invocation import build_complete_via
+    from science_tool.budget.registry import lookup
+    from science_tool.budget.sink import BoundedSink
 
     if status == "all":
         status = None
@@ -198,7 +211,22 @@ def feedback_list(
         }
         for e in entries
     ]
-    emit_query_rows(output_format=output_format, title="Feedback", columns=columns, rows=rows)
+    complete_via = build_complete_via(click.get_current_context(), output_hint="feedback.json")
+    control_notice = (
+        bounded_control_notice(f"wrote {len(rows)} feedback entries to {output_path}")
+        if output_path is not None
+        else None
+    )
+    sink = BoundedSink(
+        lookup("feedback list"),
+        output_path=output_path,
+        command_path="feedback list",
+        complete_via=complete_via,
+    )
+    emit_query_rows(output_format=output_format, title="Feedback", columns=columns, rows=rows, sink=sink)
+    sink.flush()
+    if control_notice is not None:
+        click.echo(control_notice)
 
 
 @feedback_group.command("update")
