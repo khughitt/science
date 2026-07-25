@@ -156,6 +156,10 @@ _BATTERY: dict[str, list[Any]] = {
     "source_refs": [42, [42], ["papers/x.md"]],
     "aliases": [42, [42], ["alias"]],
     "added_by": [42, "science:explore-ideas"],
+    # `run:` prefix + non-empty-after-strip remainder, enforced identically by
+    # `Entity._validate_autonomous_run` and the mixin's `pattern`. "bogus" (no prefix) and
+    # "run:" (empty remainder) probe that neither authority is looser than the other.
+    "autonomous_run": [42, "bogus", "run:", "run:2026-07-24-curation-sweep-a3f1"],
     "profile": [42, "core"],
     "id": [42, "topic:x", "hypothesis:0001-x"],
     "kind": [42, "dataset", "hypothesis"],

@@ -9,6 +9,7 @@ from typing import Any, ClassVar, Literal, Protocol
 
 from pydantic import BaseModel, ConfigDict, Field, PrivateAttr, field_validator, model_validator
 
+from science_model.autonomous_runs import RUN_ID_PREFIX
 from science_model.identity import (  # noqa: F401  (EntityClass re-exported; relocated to identity in Spec 2)
     EntityClass,
     EntityScope,
@@ -360,6 +361,12 @@ class Entity(BaseModel):
     lens_views: list[LensView] = Field(default_factory=list)
     # Discovery stamp: who/what surfaced this entity into the project.
     added_by: str | None = None
+    # Execution stamp: the autonomous run that wrote this entity's file. Distinct from
+    # `added_by`, which records how the IDEA entered the project ("user" is a legitimate
+    # value there and no run record could explain it), and from EvidenceLineEntity.run_refs,
+    # which names fingerprinted WORKFLOW runs and IS belief-bearing. Provenance metadata
+    # only; MUST NOT affect evidential weight.
+    autonomous_run: str | None = None
     content_preview: str
     content: str = ""
     file_path: str
@@ -385,6 +392,19 @@ class Entity(BaseModel):
     # coincidence; it must be carried, never inferred. Private: never serialized to graph,
     # frontmatter, or inventory, and never part of the kind field-presence surface.
     _authored_aliases: frozenset[str] = PrivateAttr(default_factory=frozenset)
+
+    @field_validator("autonomous_run")
+    @classmethod
+    def _validate_autonomous_run(cls, value: str | None) -> str | None:
+        # Shape only. Whether a run record with this id exists is a resolution question,
+        # answered by the graph build and by `science refs check`.
+        if value is None:
+            return value
+        # `.strip()` on the remainder, not just a length check: `"run:   "` clears a bare
+        # length test while naming nothing. `triggered_by` guards the same way.
+        if not value.startswith(RUN_ID_PREFIX) or not value[len(RUN_ID_PREFIX) :].strip():
+            raise ValueError(f"autonomous_run must be a 'run:<id>' reference, got {value!r}")
+        return value
 
     @model_validator(mode="after")
     def _validate_lens_views(self) -> "Entity":
