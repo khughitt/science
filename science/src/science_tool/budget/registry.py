@@ -157,6 +157,10 @@ DEFERRED: dict[str, DeferredCommand] = {
         "compare mode emits one MOVED row per changed pre-existing entity",
         "1b",
     ),
+    "autonomy path-gate": DeferredCommand(
+        "one output member per denial, which grows with the run's change set",
+        "1b",
+    ),
 }
 
 DEFERRED.update(

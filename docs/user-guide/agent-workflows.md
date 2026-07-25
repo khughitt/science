@@ -38,3 +38,34 @@ intent to agent workflows and representative CLI commands.
 | File feedback / inspect telemetry | `/science:post-mortem` | `science-post-mortem` | `science feedback ...`, `science telemetry ...` |
 | Package or verify a project | workflow-guided | workflow-guided | `science project serialize`, `science project verify` |
 | Sync projects | `/science:sync` | `science-sync` | `science peers list`, `science sync status`, `science sync run` |
+
+## The autonomy path gate
+
+An unattended run is confined to a write surface decided by
+`science autonomy path-gate`, which compares the run's recorded `base..head` commit
+range against a **default-deny** policy: every repository path, and every entity
+frontmatter field, that is not explicitly allowed is denied — including fields nobody
+has invented yet.
+
+```bash
+science autonomy path-gate --base <sha> --head <sha> --tier belief-neutral
+```
+
+Exit `0` means every change was inside the tier's surface, `1` means something was not
+(each denial names the path, the reason, and the field when applicable), and `2` means the range could
+not be read. Exit `2` is deliberately not exit `0`: a gate that cannot see must not
+report clean.
+
+Two tiers exist. `report-only` may write only the run's own report path. `belief-neutral`
+may additionally edit allowlisted fields on pre-existing entities. There is no third
+tier — changing belief is human work by definition.
+
+The allowlist is small on purpose and is **not project-overridable**. A field is added
+only after a human traces its materialization path and its belief dependencies; a
+perturbation test that observes no movement is not sufficient grounds. The reverse is
+automatic: if perturbing an allowed field is ever found to move the belief basis, the
+field comes off the list.
+
+The gate is one of four layers. It is syntactic and complete by construction, but it
+does not prove belief-neutrality — `science graph belief-basis` does that, and it is
+authoritative precisely because it does not depend on this allowlist being correct.

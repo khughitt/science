@@ -6,6 +6,7 @@ from typing import Any
 import click
 
 from science_tool.annotation.cli import annotate_group
+from science_tool.autonomy.cli import autonomy_group
 from science_tool.belief_cli import belief_group
 from science_tool.benchmark_cli import benchmark_group
 from science_tool.bib_cli import bib_group
@@ -197,6 +198,7 @@ main.add_command(verdict_group)
 main.add_command(big_picture_group)
 main.add_command(refs_group)
 main.add_command(annotate_group)
+main.add_command(autonomy_group)
 main.add_command(markers_group)
 main.add_command(prose_group)
 main.add_command(skills_group)

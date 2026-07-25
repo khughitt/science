@@ -24,7 +24,7 @@ from science_tool.cli import main
 EXPECTED_CLASSIFICATION_COUNTS = {
     "budgeted": 10,
     "exempt": 67,
-    "deferred": 201,
+    "deferred": 202,
 }
 
 
@@ -64,7 +64,9 @@ def test_classification_partition_has_the_audited_cardinality() -> None:
     occurrences, diagnostics, candidates, and skipped projects. Slice 1b-1 then wired
     six ROWS offenders (entity list, feedback list, questions/interpretations/
     discussions list, entity needs-review), moving them from deferred to budgeted. The
-    live partition is therefore 10/67/201 = 278.
+    autonomy path-gate command adds one deferred leaf because it emits one row per
+    denial, which grows with the run's change set. The live partition is therefore
+    10/67/202 = 279.
     """
     actual = {
         "budgeted": len(BUDGETS),
