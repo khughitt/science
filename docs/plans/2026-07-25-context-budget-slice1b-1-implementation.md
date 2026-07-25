@@ -155,13 +155,13 @@ def _assert_stdout_projected(command_path: str, base_args: list[str], seeded_tot
     assert payload["truncation"]["total"] == seeded_total
 
 
-def _assert_file_complete(base_args: list[str], seeded_total: int, out_dir: Path) -> None:
+def _assert_file_complete(command_path: str, base_args: list[str], seeded_total: int, out_dir: Path) -> None:
     """--output PATH is complete and unprojected, in both formats."""
     json_target = out_dir / "complete.json"
     jr = _invoke([*base_args, "--format", "json", "--output", str(json_target)])
     assert jr.exit_code == 0, jr.output
     payload = json.loads(json_target.read_text())
-    assert len(payload["rows"]) == seeded_total
+    assert len(payload["rows"]) == seeded_total   # exact per-row completeness, JSON branch
     assert "truncation" not in payload
 
     table_target = out_dir / "complete.txt"
@@ -170,13 +170,19 @@ def _assert_file_complete(base_args: list[str], seeded_total: int, out_dir: Path
     written = table_target.read_text()
     assert "showing " not in written
     assert "complete output:" not in written
+    # An empty or projected table file slips past the two negative checks above -- that
+    # was the prior regression. A complete, unprojected table holds far more than any
+    # budgeted stdout ever could, so it must exceed the ceiling. This rejects both an
+    # empty file (0 chars) and one capped at max_rows. Exact per-row identity is already
+    # proven by the JSON branch, which parses and counts every row from the same sink.
+    assert visible_len(written) > BUDGETS[command_path].max_chars
 
 
 def test_entity_list_is_bounded_and_complete(rows_corpus: Path) -> None:
     # rows_corpus seeds 300 each of questions, interpretations, discussions; `entity list`
     # (kind=None) surfaces all three kinds -> 900 rows.
     _assert_stdout_projected("entity list", ["entity", "list"], seeded_total=900)
-    _assert_file_complete(["entity", "list"], seeded_total=900, out_dir=rows_corpus)
+    _assert_file_complete("entity list", ["entity", "list"], seeded_total=900, out_dir=rows_corpus)
 ```
 
 - [ ] **Step 2: Run the test to verify it fails**
@@ -332,7 +338,7 @@ def test_feedback_list_is_bounded_and_complete(
     monkeypatch.chdir(tmp_path)
 
     _assert_stdout_projected("feedback list", ["feedback", "list"], seeded_total=300)
-    _assert_file_complete(["feedback", "list"], seeded_total=300, out_dir=tmp_path)
+    _assert_file_complete("feedback list", ["feedback", "list"], seeded_total=300, out_dir=tmp_path)
 ```
 
 `feedback list` defaults to `--status open`; every seeded entry is `status: open`, so the default invocation returns all 300.
@@ -436,29 +442,41 @@ def test_typed_entity_list_is_bounded_and_complete(
     rows_corpus: Path, command_path: str, base_args: list[str]
 ) -> None:
     _assert_stdout_projected(command_path, base_args, seeded_total=300)
-    _assert_file_complete(base_args, seeded_total=300, out_dir=rows_corpus)
+    _assert_file_complete(command_path, base_args, seeded_total=300, out_dir=rows_corpus)
 
 
 @pytest.mark.parametrize(
-    "base_args",
-    [["hypotheses", "list"], ["propositions", "list"], ["evidence-lines", "list"]],
+    ("kind", "plural", "base_args"),
+    [
+        ("hypothesis", "hypotheses", ["hypotheses", "list"]),
+        ("proposition", "propositions", ["propositions", "list"]),
+        ("evidence-line", "evidence-lines", ["evidence-lines", "list"]),
+    ],
 )
-def test_unbudgeted_typed_entity_callers_still_work(rows_corpus: Path, base_args: list[str]) -> None:
-    """The three list_typed_entities callers NOT wired in 1b-1 pass sink=None and behave
-    as before -- the keyword-only sink defaults to None, so nothing is budgeted or projected.
-    rows_corpus seeds none of these kinds, so each returns an empty table and exits 0; the
-    point is that the signature change does not break the sink=None code path."""
-    result = _invoke(base_args)
+def test_unbudgeted_typed_entity_callers_return_everything(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, kind: str, plural: str, base_args: list[str]
+) -> None:
+    """The three list_typed_entities callers NOT wired in 1b-1 pass sink=None: they must
+    return every row unprojected -- the opposite of a budgeted command. Seeding 50
+    (> max_rows=40) is what gives the test teeth: a caller that mistakenly acquired a sink
+    would truncate to 40 rows and add a `truncation` object, failing both assertions. An
+    empty corpus could not tell the two paths apart."""
+    (tmp_path / "science.yaml").write_text("id: demo\nname: demo\n")
+    _seed_entities(tmp_path, kind, plural, 50)
+    monkeypatch.chdir(tmp_path)
+    result = _invoke([*base_args, "--format", "json"])
     assert result.exit_code == 0, result.output
-    assert "showing " not in result.output
+    payload = json.loads(result.output)
+    assert len(payload["rows"]) == 50
+    assert "truncation" not in payload
 ```
 
-The single-invocation `_assert_stdout_projected`/`_assert_file_complete` helpers cover both `--format table` and `--format json` internally, so the parametrization no longer enumerates formats.
+The single-invocation `_assert_stdout_projected`/`_assert_file_complete` helpers cover both `--format table` and `--format json` internally, so the wired-command parametrization no longer enumerates formats.
 
 - [ ] **Step 2: Run to verify it fails**
 
 Run: `cd science && uv run --frozen pytest tests/test_budget_regression_rows.py::test_typed_entity_list_is_bounded_and_complete -v`
-Expected: FAIL — none of the three is in `BUDGETS`; each returns 300 rows well over the ceiling and offers no `--output`. (`test_unbudgeted_typed_entity_callers_still_work` already passes: those callers are untouched at this point.)
+Expected: FAIL — none of the three is in `BUDGETS`; each returns 300 rows well over the ceiling and offers no `--output`. (`test_unbudgeted_typed_entity_callers_return_everything` already passes: those callers are untouched at this point and return all 50 seeded rows.)
 
 - [ ] **Step 3: Register the three budgets and drop the three deferrals**
 
@@ -557,7 +575,7 @@ The file-success control notice is omitted here: `list_typed_entities` owns the 
 - [ ] **Step 7: Run tests, lint, types**
 
 Run: `cd science && uv run --frozen pytest tests/test_budget_regression_rows.py tests/test_budget_boundary.py -v && uv run ruff check && uv run pyright`
-Expected: PASS/clean; partition `9/67/201`. `test_unbudgeted_typed_entity_callers_still_work` (added in Step 1) is the guard that the three non-wired callers of `list_typed_entities` still execute the `sink=None` path — it invokes each command directly rather than relying on a `-k` node-name match, which would not actually exercise those commands. Also run the existing questions/interpretations/discussions CLI test modules if present to confirm no regression.
+Expected: PASS/clean; partition `9/67/201`. `test_unbudgeted_typed_entity_callers_return_everything` (added in Step 1) is the guard that the three non-wired callers of `list_typed_entities` still execute the `sink=None` path — it seeds 50 entities of each unwired kind and asserts the JSON returns all 50 with no `truncation`, invoking each command directly rather than relying on a `-k` node-name match (which would not actually exercise those commands). Also run the existing questions/interpretations/discussions CLI test modules if present to confirm no regression.
 
 - [ ] **Step 8: Commit**
 
@@ -604,7 +622,7 @@ def test_needs_review_is_bounded_and_complete(
     monkeypatch.chdir(tmp_path)
 
     _assert_stdout_projected("entity needs-review", ["entity", "needs-review"], seeded_total=400)
-    _assert_file_complete(["entity", "needs-review"], seeded_total=400, out_dir=tmp_path)
+    _assert_file_complete("entity needs-review", ["entity", "needs-review"], seeded_total=400, out_dir=tmp_path)
 ```
 
 - [ ] **Step 2: Run to verify it fails**
@@ -753,7 +771,7 @@ git commit -m "test(budget): record slice 1b-1 in the partition-cardinality docs
 
 **Guard alignment.** Each wired callback constructs its sink in its own body (not a nested scope), satisfying `test_every_budgeted_command_constructs_its_own_sink`, and exposes `--output`, satisfying `test_every_budgeted_command_offers_the_output_escape`. The typed-entity commands deliberately build the sink in the callback rather than in `list_typed_entities` for exactly this reason.
 
-**Behavioural coverage beyond the AST guards.** The AST guards prove a sink is *constructed* and an `--output` option *exists*; they cannot prove the file payload is complete or that projection actually ran. Each command therefore also has: (a) `_assert_stdout_projected`, which asserts the JSON payload carries a `truncation` object whose `total` equals the seeded corpus and whose `rows` length equals `max_rows`, plus the table footer — proving a no-op sink cannot pass; (b) `_assert_file_complete`, which asserts `--output` (both formats) contains every seeded row with no `truncation`/footer. The `needs-review` corpus is 400 rows precisely so its naturally-narrow payload exceeds the ceiling and forces projection. The three unwired `list_typed_entities` callers are exercised by an explicit invocation test rather than a `-k` node-name filter, which would not run them.
+**Behavioural coverage beyond the AST guards.** The AST guards prove a sink is *constructed* and an `--output` option *exists*; they cannot prove the file payload is complete or that projection actually ran. Each command therefore also has: (a) `_assert_stdout_projected`, which asserts the JSON payload carries a `truncation` object whose `total` equals the seeded corpus and whose `rows` length equals `max_rows`, plus the table footer — proving a no-op sink cannot pass; (b) `_assert_file_complete`, whose JSON branch asserts `--output` contains exactly every seeded row with no `truncation`, and whose table branch asserts the file exceeds the ceiling — an empty or projected table file would pass a footer-absence check alone (the prior regression) but cannot exceed the budget. The `needs-review` corpus is 400 rows precisely so its naturally-narrow payload exceeds the ceiling and forces projection. The three unwired `list_typed_entities` callers are exercised by seeding 50 entities (> `max_rows`) of each kind and asserting the JSON returns all 50 unprojected — an empty corpus could not distinguish the `sink=None` path from a budgeted one — via direct invocation rather than a `-k` node-name filter, which would not run them.
 
 **Known limits.**
 - `max_rows=40` is carried from `tasks list`. The per-command size regressions assert `visible_len <= 20_000`; if a wide-row render (e.g. `feedback list`, 8 columns) ever exceeds the ceiling at 40 rows, lower that command's `max_rows` until the regression is green. The measured sizes make this unlikely at 40 rows.
