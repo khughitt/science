@@ -222,3 +222,20 @@ def test_policy_swap_is_a_delta_even_with_identical_units():
         )
     ]
     assert compare_bases(before, after)[0].changed == ("policy",)
+
+
+def test_changed_targets_are_reported():
+    """The targets branch needs its own load-bearing test.
+
+    Every other comparison test leaves target_uris empty on both sides, so
+    deleting the targets branch outright would not fail any of them.
+    """
+    before = [_basis("proposition:a", ("k1",))]
+    after = [
+        EntityBasis(
+            entity_id="proposition:a", uri=str(PROJECT_NS["proposition/a"]),
+            target_uris=(str(PROJECT_NS["proposition/a"]),), unit_keys=("k1",),
+            policy_id="core-default", policy_version="1",
+        )
+    ]
+    assert compare_bases(before, after)[0].changed == ("targets",)

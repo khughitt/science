@@ -186,7 +186,11 @@ def compare_bases(before: Iterable[EntityBasis], after: Iterable[EntityBasis]) -
         new = after_by_id.get(entity_id)
         if new is None:
             deltas.append(
-                BasisDelta(entity_id=entity_id, changed=("removed",), detail="entity present before the run, absent after")
+                BasisDelta(
+                    entity_id=entity_id,
+                    changed=("removed",),
+                    detail="entity present before the run, absent after",
+                )
             )
             continue
         changed: list[str] = []
