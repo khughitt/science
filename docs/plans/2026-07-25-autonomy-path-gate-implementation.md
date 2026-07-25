@@ -16,8 +16,9 @@ model + path→kind classification) → `extract.py` (git range → change set) 
 pipeline. Layer 3 is a *test* module, not shipped code: it perturbs each allowlisted
 field through a real materialized project and asserts the belief basis does not move.
 
-**Tech Stack:** Python 3.12+, pydantic v2, click, PyYAML, rdflib (via existing graph
-code), `git` via `subprocess`. No new dependencies.
+**Tech Stack:** Python 3.11+ (`requires-python = ">=3.11"` in all three packages;
+pyright targets `3.11`), pydantic v2, click, PyYAML, rdflib (via existing graph code),
+`git` via `subprocess`. No new dependencies.
 
 ## What this plan does NOT ship
 
@@ -55,10 +56,15 @@ but must not contradict them.
   authored aliases into the `ReferenceResolver`, so an alias can change **which entity a
   reference resolves to**, and therefore the target closure. `aliases` is consequently
   **not** on the seed allowlist. Do not add it.
-- **`entity_policies(project_root)`** (`science/src/science_tool/entities.py:180`)
-  returns `{kind: EntityPathPolicy}` where `.root` is the kind's home — a directory for
-  most kinds, and a **file** for the two singletons (`entities/research-question.md`,
-  `entities/claim-registry.yaml`).
+- **`CORE_PROFILE.entity_kinds` carries each kind's home** (`kind.home`) — a directory
+  for most kinds, and a **file** for the two singletons (`entities/research-question.md`,
+  `entities/claim-registry.yaml`); 36 kinds declare one. `science_model.profiles.core`
+  imports cleanly standalone. **`science_tool.entities.entity_policies` is the richer
+  API but is unusable here** — see the import-cycle note in Task 2.
+- **`git` honours `.git/refs/replace` by default.** A replacement ref grafts one
+  commit's content onto another's identity, so `git diff base head` can report an empty
+  diff for a commit that really changed the tree. Every git invocation in this package
+  passes `--no-replace-objects` (Task 4).
 - **`split_frontmatter(text) -> (dict, body)`**
   (`science/model/src/science_model/frontmatter.py:113`) parses frontmatter from *text*
   — the right tool for a `git show` blob. It returns `({}, text)` when there is no
@@ -72,10 +78,11 @@ but must not contradict them.
 - **Every top-level command must appear in the CLI workflow map** —
   `science/tests/test_user_guide_docs.py:105` scans `docs/user-guide/cli-and-workflows.md`
   for backticked spans. A new `autonomy` group fails this test until documented.
-- **`science_tool.entities` is circular-import sensitive.** Importing it as the very
-  first `science_tool` import raises `ImportError` via `commons/validator.py`. Import it
-  inside functions, or after another `science_tool` import, exactly as
-  `migrate_specs.py:29` and `entity_import.py:45` already do.
+- **`science_tool.entities` cannot be imported from this package at all.** As the first
+  `science_tool` import it raises `ImportError` through `commons/validator.py`,
+  deterministically, on clean `main`. Deferring the import into a function does **not**
+  help — the failure is about which module loads first, not when. This is a pre-existing
+  toolkit defect that Plan C works around rather than fixes; see Task 2.
 
 ### The `task` finding — why the seed allowlist has no task fields
 
@@ -102,23 +109,30 @@ Every task's requirements implicitly include this section.
 4. **Entity kind is derived from the path, never from the file's own `kind:`
    frontmatter.** An actor that chose its own kind would choose its own allowlist.
    `kind` is additionally on no allowlist, so relabelling is denied twice.
-5. **Two-dot commit ranges only.** `git diff <base> <head>` (tree-to-tree). **Never**
+5. **Every git invocation passes `--no-replace-objects`,** before `-C`. Replacement refs
+   are actor-writable and make ordinary git report an empty diff for a commit that
+   changed the tree. A gate that reads a tampered history is worse than no gate.
+6. **A change the gate cannot account for is denied, never ignored.** An unreadable
+   blob, unparseable frontmatter, and a modification with no field-level change (a
+   chmod, a byte-level edit) are all denials or errors — never an empty field list that
+   evaluates to allowed.
+7. **Two-dot commit ranges only.** `git diff <base> <head>` (tree-to-tree). **Never**
    three-dot `<base>...<head>`, which diffs from the merge-base and moves under rebase
    and integration-branch advancement — the failure design §6 explicitly rejects.
    Note `annotation/query.py:326` uses three-dot for an unrelated purpose; it is not a
    precedent for this.
-6. **Reuse `RunTier` from `science_model.autonomous_runs`.** Do not redefine tiers, and
+8. **Reuse `RunTier` from `science_model.autonomous_runs`.** Do not redefine tiers, and
    do not add a third one.
-7. **pydantic models are `frozen=True, extra="forbid"`**, matching Plan A's `EntityBasis`
+9. **pydantic models are `frozen=True, extra="forbid"`**, matching Plan A's `EntityBasis`
    and Plan B's `AutonomousRunRecord`.
-8. **Exit-code contract mirrors `science graph belief-basis`** (`graph/cli.py:1249`):
+10. **Exit-code contract mirrors `science graph belief-basis`** (`graph/cli.py:1249`):
    `0` allowed, `1` denied, `2` could not evaluate. **`2` is explicitly not `0`** — a
    gate that cannot see must not report allowed.
-9. **Run the suite with an explicit long timeout.** The suite takes ~290s; the Bash
+11. **Run the suite with an explicit long timeout.** The suite takes ~290s; the Bash
    tool's default is 120s. Use `timeout: 600000` on every `pytest` call, and never run
    it in the background.
-10. **No AI-attribution trailer or footer** on any commit message.
-11. **Use `~/d/` or repo-relative paths** in docs and code comments, never
+12. **No AI-attribution trailer or footer** on any commit message.
+13. **Use `~/d/` or repo-relative paths** in docs and code comments, never
     `/home/keith/` or `/mnt/ssd/Dropbox/`.
 
 ## File Structure
@@ -230,25 +244,26 @@ def test_allowlists_cannot_be_mutated_at_runtime():
 def test_policy_module_reads_no_project_state():
     """Design §4: the gate is NOT project-overridable. An override is a hole that will be
     widened under pressure by the very agents it constrains. This is the guard."""
+    # An ALLOWLIST, not a blacklist. A blacklist cannot express "reads no project
+    # state": any unlisted module (`science_tool.project_config`, `configparser`,
+    # `importlib.resources`, ...) walks straight through it. These four are everything
+    # policy.py legitimately needs, so anything else is a design change that must be
+    # argued for here first.
+    permitted_imports = {"__future__", "collections.abc", "types"}
     tree = ast.parse(POLICY_SOURCE.read_text(encoding="utf-8"))
-    banned_calls = {"open", "getenv", "read_text", "read_bytes", "glob", "resolve_paths"}
-    banned_modules = {"os", "pathlib", "yaml", "json", "science_tool.paths", "science_tool.entities"}
 
-    def _is_banned(module: str) -> bool:
-        # Prefix-aware: comparing only the first segment would let
-        # `import science_tool.paths` through, since its first segment is `science_tool`,
-        # which is not itself banned.
-        return any(module == banned or module.startswith(f"{banned}.") for banned in banned_modules)
-
+    imported: set[str] = set()
     for node in ast.walk(tree):
-        if isinstance(node, ast.Call):
-            name = getattr(node.func, "attr", None) or getattr(node.func, "id", None)
-            assert name not in banned_calls, f"policy.py must not call {name}()"
         if isinstance(node, ast.Import):
-            for alias in node.names:
-                assert not _is_banned(alias.name), f"policy.py must not import {alias.name}"
-        if isinstance(node, ast.ImportFrom) and node.module:
-            assert not _is_banned(node.module), f"policy.py must not import from {node.module}"
+            imported.update(alias.name for alias in node.names)
+        elif isinstance(node, ast.ImportFrom) and node.module:
+            imported.add(node.module)
+
+    assert imported <= permitted_imports, (
+        f"policy.py imports {sorted(imported - permitted_imports)}. The gate is not "
+        "project-overridable: it must read no project state. Widening this allowlist is "
+        "a design change, not a fix."
+    )
 ```
 
 - [ ] **Step 2: Run the tests to verify they fail**
@@ -395,9 +410,31 @@ git commit -m "feat(autonomy): add default-deny write policy tables"
 - Create: `science/src/science_tool/autonomy/changes.py`
 - Test: `science/tests/test_autonomy_changes.py`
 
+**`science_tool.entities` is unusable here — this is load-bearing.** On clean `main`
+(`b0c6dfa7`), `from science_tool.entities import entity_policies` as the first
+`science_tool` import fails **deterministically**:
+
+```
+science_tool/commons/cli.py:72 -> commons/validator.py:17
+ImportError: cannot import name 'valid_statuses' from partially initialized module
+'science_tool.entities' (most likely due to a circular import)
+```
+
+Verified in this worktree. (A cycle-breaking refactor extracting
+`science_tool/kind_descriptors.py` is in flight uncommitted in the main checkout — do
+not depend on it; it is not on `main`.)
+
+This task therefore reads homes from **`science_model.profiles.core.CORE_PROFILE`**,
+which imports cleanly on its own. The consequence is deliberate and *safer*, not a
+compromise: **project-local kinds are not classified at all**, so their entity files
+return `None` and are denied. A project-local kind has no `FIELD_ALLOWLIST` entry
+either way, so classifying it could never have allowed anything — dropping the
+dependency can only ever deny more, which is the correct direction under default-deny.
+
 **Interfaces:**
-- Consumes: `entity_policies` from `science_tool.entities` (import inside the function —
-  see Global Constraint on circular imports).
+- Consumes: `CORE_PROFILE` from `science_model.profiles.core`. **Do not import
+  `science_tool.entities`, `entity_policies`, or `resolve_path_policy` anywhere in this
+  package.**
 - Produces:
   - `class ChangeType(StrEnum)` with `MODIFIED = "modified"`, `ADDED = "added"`,
     `DELETED = "deleted"`.
@@ -406,7 +443,8 @@ git commit -m "feat(autonomy): add default-deny write policy tables"
   - `class ChangeSet(BaseModel)` — `base_commit: str`, `head_commit: str`,
     `changes: tuple[PathChange, ...]`.
   - `BODY_FIELD: str = "content"`.
-  - `entity_kind_for_path(rel_path: str, *, project_root: Path | None = None) -> str | None`.
+  - `entity_kind_for_path(rel_path: str) -> str | None` — **no `project_root` parameter**;
+    classification is profile-derived, not project-derived.
 
 - [ ] **Step 1: Write the failing tests**
 
@@ -460,6 +498,22 @@ def test_a_non_markdown_file_in_a_markdown_home_is_not_an_entity():
     assert entity_kind_for_path("entities/papers/smith2020.pdf") is None
 
 
+def test_a_project_local_kind_home_is_unclassified_and_therefore_denied():
+    """Classification is derived from CORE_PROFILE only, so a project-local kind is
+    never classified. That is safe by construction: a local kind has no allowlist entry,
+    so classifying it could not have allowed anything. Denying more is the correct
+    direction under default-deny."""
+    assert entity_kind_for_path("entities/designs/d01-thing.md") is None
+
+
+def test_classification_needs_no_project_root():
+    """Guard for the import boundary: `science_tool.entities` cycles when it is the
+    first `science_tool` import, so this module must stay profile-derived."""
+    import inspect
+
+    assert "project_root" not in inspect.signature(entity_kind_for_path).parameters
+
+
 def test_path_change_is_frozen_and_closed():
     from pydantic import ValidationError
 
@@ -499,9 +553,10 @@ Create `science/src/science_tool/autonomy/changes.py`:
 from __future__ import annotations
 
 from enum import StrEnum
-from pathlib import Path, PurePosixPath
+from pathlib import PurePosixPath
 
 from pydantic import BaseModel, ConfigDict
+from science_model.profiles.core import CORE_PROFILE
 
 #: Body prose is gated as a pseudo-field so it is denied by default exactly like any
 #: frontmatter field. It is named for `Entity.content`, which is what it becomes.
@@ -541,30 +596,35 @@ class ChangeSet(BaseModel):
     changes: tuple[PathChange, ...]
 
 
-def entity_kind_for_path(rel_path: str, *, project_root: Path | None = None) -> str | None:
-    """The kind that owns `rel_path`, or None when it is not an entity markdown file.
+#: kind -> home, derived from CORE_PROFILE at import time.
+#:
+#: `science_tool.entities` is NOT used: importing it as the first `science_tool` module
+#: fails deterministically through `commons/validator.py` (a real cycle on `main`).
+#: Reading CORE_PROFILE instead means project-LOCAL kinds are never classified, so their
+#: files return None and are denied. That is safe by construction -- a local kind has no
+#: FIELD_ALLOWLIST entry, so classifying it could never have allowed anything.
+_CORE_HOMES: tuple[tuple[str, PurePosixPath], ...] = tuple(
+    sorted(
+        ((kind.name, PurePosixPath(kind.home)) for kind in CORE_PROFILE.entity_kinds if kind.home),
+        # Longest root first, so a nested home wins over a parent that prefixes it.
+        key=lambda item: len(str(item[1])),
+        reverse=True,
+    )
+)
 
-    Consulting the project's kind registry is safe despite the gate being
-    non-overridable: a project-local kind gets NO allowlist entry, so registering one
-    can only ever deny more.
+
+def entity_kind_for_path(rel_path: str) -> str | None:
+    """The core kind that owns `rel_path`, or None when it is not a core entity file.
+
+    None means "unclassified", which the gate reads as denied. Every non-entity path,
+    every project-local kind, every archive-tier path, and every non-markdown file
+    lands here.
     """
-    # Deferred, not module-scope, as cheap insurance: an import cycle through
-    # `commons/validator.py` has been observed intermittently when `science_tool.entities`
-    # is the first `science_tool` module loaded. It does NOT reproduce on a clean tree at
-    # b0c6dfa7 -- verified both at module scope and under a real pytest run -- so this is
-    # a hedge, not a workaround for a known-broken import. If it ever DOES raise here,
-    # that is a signal about the cycle, not about this module: report it rather than
-    # redesigning around it.
-    from science_tool.entities import entity_policies
-
     candidate = PurePosixPath(rel_path)
     if any(segment.startswith("_") for segment in candidate.parts):
         return None  # archive tier -- unclassified, therefore denied
 
-    policies = entity_policies(project_root)
-    # Longest root first so a nested local home (`entities/a/b`) wins over its parent.
-    for kind, policy in sorted(policies.items(), key=lambda item: len(str(item[1].root)), reverse=True):
-        root = PurePosixPath(policy.root.as_posix())
+    for kind, root in _CORE_HOMES:
         if root.suffix:  # singleton home: the home IS the file
             if candidate == root:
                 return kind
@@ -580,9 +640,8 @@ def entity_kind_for_path(rel_path: str, *, project_root: Path | None = None) -> 
 cd science && uv run --frozen pytest tests/test_autonomy_changes.py -q
 ```
 
-Expected: 10 passed. If `test_a_markdown_singleton_home_classifies` fails because the
-`claim-registry` singleton has a `.yaml` suffix, that is expected behaviour — only the
-`.md` singleton classifies, and a `.yaml` singleton stays unclassified (denied).
+Expected: 12 passed. Only the `.md` singleton classifies; the `claim-registry.yaml`
+singleton stays unclassified (denied), which is correct.
 
 - [ ] **Step 5: Lint and type-check**
 
@@ -738,6 +797,14 @@ def test_an_empty_change_set_is_allowed():
     assert evaluate(_cs(), tier=RunTier.BELIEF_NEUTRAL).allowed is True
 
 
+def test_a_modification_with_no_changed_fields_is_denied():
+    """Fail-open regression: git reports a chmod as `M` with identical blobs, so a
+    modification carrying no field change must not read as 'nothing to deny'."""
+    verdict = evaluate(_cs(_paper(())), tier=RunTier.BELIEF_NEUTRAL)
+    assert verdict.allowed is False
+    assert "no field-level change" in verdict.denials[0].reason
+
+
 def test_denials_are_ordered_by_path_then_field():
     verdict = evaluate(
         _cs(
@@ -847,6 +914,21 @@ def _denials_for(change: PathChange) -> list[Denial]:
             )
         ]
 
+    if not change.fields:
+        # git reports an executable-bit or other metadata-only change as `M` with
+        # identical blobs, and frontmatter key REORDERING parses to an identical dict.
+        # Both reach here with no changed field. Allowing them would let repository
+        # metadata escape the default-deny surface entirely -- so an unexplained
+        # modification is denied, like anything else the gate cannot account for.
+        return [
+            Denial(
+                path=change.path,
+                field=None,
+                reason="modified with no field-level change (file mode or byte-level edit); "
+                "nothing about this modification is on an allowlist",
+            )
+        ]
+
     return [
         Denial(
             path=change.path,
@@ -893,7 +975,7 @@ def evaluate(
 cd science && uv run --frozen pytest tests/test_autonomy_path_gate.py -q
 ```
 
-Expected: 16 passed.
+Expected: 18 passed (16 test functions, one of which is parametrized over 3 values).
 
 - [ ] **Step 5: Lint and type-check**
 
@@ -922,7 +1004,7 @@ git commit -m "feat(autonomy): add default-deny path gate evaluator"
   `science_model.frontmatter`.
 - Produces:
   - `class ExtractError(ValueError)`.
-  - `extract_change_set(repo_root: Path, base: str, head: str, *, project_root: Path | None = None) -> ChangeSet`.
+  - `extract_change_set(repo_root: Path, base: str, head: str) -> ChangeSet`.
 
 - [ ] **Step 1: Write the failing tests**
 
@@ -980,7 +1062,7 @@ def test_a_frontmatter_edit_reports_that_field(repo: Path):
     _write(repo, PAPER, _paper_text(venue="Science"))
     head = _commit(repo, "edit venue")
 
-    change_set = extract_change_set(repo, base, head, project_root=repo)
+    change_set = extract_change_set(repo, base, head)
     assert len(change_set.changes) == 1
     change = change_set.changes[0]
     assert change.path == PAPER
@@ -994,7 +1076,7 @@ def test_a_body_edit_reports_the_content_pseudo_field(repo: Path):
     _write(repo, PAPER, _paper_text(body="Rewritten abstract.\n"))
     head = _commit(repo, "edit body")
 
-    assert extract_change_set(repo, base, head, project_root=repo).changes[0].fields == (BODY_FIELD,)
+    assert extract_change_set(repo, base, head).changes[0].fields == (BODY_FIELD,)
 
 
 def test_an_added_field_is_reported(repo: Path):
@@ -1002,7 +1084,7 @@ def test_an_added_field_is_reported(repo: Path):
     _write(repo, PAPER, _paper_text().replace("venue: Nature\n", "venue: Nature\nconfidence: 0.9\n"))
     head = _commit(repo, "add confidence")
 
-    assert extract_change_set(repo, base, head, project_root=repo).changes[0].fields == ("confidence",)
+    assert extract_change_set(repo, base, head).changes[0].fields == ("confidence",)
 
 
 def test_a_removed_field_is_reported(repo: Path):
@@ -1010,7 +1092,7 @@ def test_a_removed_field_is_reported(repo: Path):
     _write(repo, PAPER, _paper_text().replace("venue: Nature\n", ""))
     head = _commit(repo, "drop venue")
 
-    assert extract_change_set(repo, base, head, project_root=repo).changes[0].fields == ("venue",)
+    assert extract_change_set(repo, base, head).changes[0].fields == ("venue",)
 
 
 def test_a_new_entity_file_is_an_addition(repo: Path):
@@ -1018,7 +1100,7 @@ def test_a_new_entity_file_is_an_addition(repo: Path):
     _write(repo, "entities/papers/jones2021.md", _paper_text())
     head = _commit(repo, "new paper")
 
-    change = extract_change_set(repo, base, head, project_root=repo).changes[0]
+    change = extract_change_set(repo, base, head).changes[0]
     assert change.change_type is ChangeType.ADDED
     assert change.entity_kind == "paper"
 
@@ -1028,7 +1110,7 @@ def test_a_deleted_entity_file_is_a_deletion(repo: Path):
     (repo / PAPER).unlink()
     head = _commit(repo, "delete paper")
 
-    change = extract_change_set(repo, base, head, project_root=repo).changes[0]
+    change = extract_change_set(repo, base, head).changes[0]
     assert change.change_type is ChangeType.DELETED
     assert change.entity_kind == "paper"
 
@@ -1040,7 +1122,7 @@ def test_a_rename_is_a_deletion_plus_an_addition(repo: Path):
     _git(repo, "mv", PAPER, "entities/papers/renamed.md")
     head = _commit(repo, "rename")
 
-    kinds = {(c.path, c.change_type) for c in extract_change_set(repo, base, head, project_root=repo).changes}
+    kinds = {(c.path, c.change_type) for c in extract_change_set(repo, base, head).changes}
     assert (PAPER, ChangeType.DELETED) in kinds
     assert ("entities/papers/renamed.md", ChangeType.ADDED) in kinds
 
@@ -1050,7 +1132,7 @@ def test_a_non_entity_path_carries_no_fields(repo: Path):
     _write(repo, "core/decisions.md", "flag: on\n")
     head = _commit(repo, "touch decisions")
 
-    change = next(c for c in extract_change_set(repo, base, head, project_root=repo).changes if c.path == "core/decisions.md")
+    change = next(c for c in extract_change_set(repo, base, head).changes if c.path == "core/decisions.md")
     assert change.entity_kind is None
     assert change.fields == ()
 
@@ -1074,14 +1156,42 @@ def test_the_range_is_two_dot_not_merge_base(repo: Path):
     _write(repo, PAPER, _paper_text(venue="Cell"))
     c = _commit(repo, "main edit")
 
-    fields = extract_change_set(repo, c, b, project_root=repo).changes[0].fields
+    fields = extract_change_set(repo, c, b).changes[0].fields
     assert set(fields) == {"venue", BODY_FIELD}, "three-dot semantics would report only the body"
 
 
 def test_an_unresolvable_commit_is_an_error_not_an_empty_change_set(repo: Path):
     base = _git(repo, "rev-parse", "HEAD")
     with pytest.raises(ExtractError):
-        extract_change_set(repo, base, "0" * 40, project_root=repo)
+        extract_change_set(repo, base, "0" * 40)
+
+
+def test_a_replacement_ref_cannot_hide_a_change(repo: Path):
+    """`git replace` grafts one commit's content onto another's identity, and ordinary
+    git honours it -- a diff over a tampered repository reports NOTHING. Every git
+    invocation must pass --no-replace-objects."""
+    base = _git(repo, "rev-parse", "HEAD")
+    _write(repo, "science.yaml", "name: t\nschema_version: 2\n")
+    head = _commit(repo, "edit config")
+    _git(repo, "replace", head, base)  # graft base's tree onto head's identity
+
+    changes = extract_change_set(repo, base, head).changes
+    assert [c.path for c in changes] == ["science.yaml"], (
+        "replacement ref hid the change; git ran without --no-replace-objects"
+    )
+
+
+def test_a_mode_only_change_is_reported_as_a_modification(repo: Path):
+    """A chmod produces `M` with identical blobs and therefore no changed fields. The
+    extractor must still report the modification so the gate can deny it."""
+    base = _git(repo, "rev-parse", "HEAD")
+    (repo / PAPER).chmod(0o755)
+    head = _commit(repo, "chmod")
+
+    changes = extract_change_set(repo, base, head).changes
+    assert len(changes) == 1
+    assert changes[0].change_type is ChangeType.MODIFIED
+    assert changes[0].fields == ()
 
 
 def test_an_unreadable_entity_blob_is_an_error_not_an_empty_field_list(repo: Path):
@@ -1092,7 +1202,7 @@ def test_an_unreadable_entity_blob_is_an_error_not_an_empty_field_list(repo: Pat
     head = _commit(repo, "invalid utf-8")
 
     with pytest.raises(ExtractError):
-        extract_change_set(repo, base, head, project_root=repo)
+        extract_change_set(repo, base, head)
 
 
 def test_malformed_frontmatter_is_an_error_not_a_body_only_change(repo: Path):
@@ -1103,7 +1213,7 @@ def test_malformed_frontmatter_is_an_error_not_a_body_only_change(repo: Path):
     head = _commit(repo, "malformed frontmatter")
 
     with pytest.raises(ExtractError):
-        extract_change_set(repo, base, head, project_root=repo)
+        extract_change_set(repo, base, head)
 
 
 def test_changes_are_ordered_by_path(repo: Path):
@@ -1112,7 +1222,7 @@ def test_changes_are_ordered_by_path(repo: Path):
     _write(repo, "aaa.txt", "a\n")
     head = _commit(repo, "two files")
 
-    paths = [c.path for c in extract_change_set(repo, base, head, project_root=repo).changes]
+    paths = [c.path for c in extract_change_set(repo, base, head).changes]
     assert paths == sorted(paths)
 ```
 
@@ -1161,7 +1271,18 @@ class ExtractError(ValueError):
 
 
 def _git(repo_root: Path, *args: str) -> bytes:
-    result = subprocess.run(["git", "-C", str(repo_root), *args], capture_output=True)
+    """Run one git command with replacement objects DISABLED.
+
+    `--no-replace-objects` is a security control, not a tidiness flag. Ordinary git
+    honours `.git/refs/replace`, so an actor able to write the repository can graft one
+    commit's content onto another's identity and make `git diff base head` report
+    NOTHING while the tree really changed. Reproduced: a commit adding `science.yaml`
+    diffs empty after `git replace`, and shows `A science.yaml` with this flag. The flag
+    is global and must precede `-C`.
+    """
+    result = subprocess.run(
+        ["git", "--no-replace-objects", "-C", str(repo_root), *args], capture_output=True
+    )
     if result.returncode != 0:
         raise ExtractError(
             f"git {' '.join(args)} failed in {repo_root}: {result.stderr.decode('utf-8', 'replace').strip()}"
@@ -1225,9 +1346,7 @@ def _changed_fields(before_text: str | None, after_text: str | None) -> tuple[st
     return tuple(sorted(changed))
 
 
-def extract_change_set(
-    repo_root: Path, base: str, head: str, *, project_root: Path | None = None
-) -> ChangeSet:
+def extract_change_set(repo_root: Path, base: str, head: str) -> ChangeSet:
     """Diff `base` against `head` and describe every changed path.
 
     `--no-renames` is deliberate: a rename becomes a deletion plus an addition, which is
@@ -1251,7 +1370,7 @@ def extract_change_set(
         if change_type is None:
             raise ExtractError(f"unhandled git diff status {status!r} for {path!r}")
 
-        kind = entity_kind_for_path(path, project_root=project_root)
+        kind = entity_kind_for_path(path)
         if kind is None:
             changes.append(
                 PathChange(path=path, change_type=change_type, entity_kind=None, fields=())
@@ -1282,7 +1401,7 @@ def extract_change_set(
 cd science && uv run --frozen pytest tests/test_autonomy_extract.py -q
 ```
 
-Expected: 13 passed.
+Expected: 15 passed.
 
 - [ ] **Step 5: Lint and type-check**
 
@@ -1518,7 +1637,7 @@ def path_gate_command(
     from science_tool.autonomy.path_gate import GateInputError, evaluate
 
     try:
-        change_set = extract_change_set(project_root, base, head, project_root=project_root)
+        change_set = extract_change_set(project_root, base, head)
         verdict = evaluate(change_set, tier=RunTier(tier), report_path=report_path)
     except (ExtractError, GateInputError) as exc:
         click.echo(f"could not evaluate: {exc}")
@@ -1956,14 +2075,19 @@ git commit -m "docs(autonomy): document the path gate and record Plan C rulings"
 
 ## Final verification
 
-Run before finishing the branch:
+Run before finishing the branch, from the repository root. Each line is a **subshell**:
+a bare `cd science` followed by `cd science/model` would resolve to
+`science/science/model` and fail, because the working directory persists.
 
 ```bash
-cd science && uv run --frozen pytest          # timeout: 600000
-cd science/model && uv run --frozen pytest    # timeout: 600000
-cd science && uv run ruff check && uv run pyright
-cd science/model && uv run ruff check
+(cd science && uv run --frozen pytest)          # timeout: 600000
+(cd science/model && uv run --frozen pytest)    # timeout: 600000
+(cd science && uv run ruff check && uv run pyright)
+(cd science/model && uv run ruff check)
 ```
+
+The same applies to the per-task `cd science && ...` steps if you run several in one
+shell — wrap them or return to the repository root between commands.
 
 ## Design-test coverage
 
