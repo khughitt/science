@@ -109,7 +109,7 @@ def test_feedback_list_is_bounded_and_complete(
             f"target: command:some-long-target-name-{i:03d}\n"
             "concern: methodology:design\n"  # a valid VALID_CONCERNS value
             f"category: {category}\n"
-            f"summary: Summary {i} exercising wrapping behavior\n"
+            f"summary: A deliberately long feedback summary line number {i} to exercise wrapping\n"
             "status: open\n"
             "recurrence: 1\n"
         )

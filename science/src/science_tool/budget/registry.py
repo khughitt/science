@@ -63,7 +63,7 @@ BUDGETS: dict[str, CommandBudget] = {
     "entities inventory": CommandBudget(max_chars=20_000, shape=PayloadShape.DOCUMENT),
     "data audit": CommandBudget(max_chars=20_000, shape=PayloadShape.DOCUMENT),
     "entity list": CommandBudget(max_chars=20_000, shape=PayloadShape.ROWS, max_rows=40),
-    "feedback list": CommandBudget(max_chars=20_000, shape=PayloadShape.ROWS, max_rows=40),
+    "feedback list": CommandBudget(max_chars=20_000, shape=PayloadShape.ROWS, max_rows=20),
 }
 
 EXEMPTIONS: dict[str, str] = {
