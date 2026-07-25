@@ -195,13 +195,25 @@ Lives in **`science-model`** (the coverage module, beside the `data_products` ca
 `build_skill_overlay(inventory: dict, catalog) -> SkillOverlay` turns the loaded inventory into
 **role-typed** resources, each identified by its canonical `id` (the INDEX key):
 
-- `LeafSkill` — `id`, `name`, `archetype` (**required**), `covers: list[str]` (each validated
-  against the catalog; empty when uncovered), `description`, `sources: list[str]` (`[]` when the
-  inventory omits it), `companions: list[Companion]`;
-- `RouterSkill` — `id`, `name`, `description`, `companions: list[Companion]`; **no** `archetype`,
-  **no** `covers`;
+- `LeafSkill` — `id`, `name`, `archetype` (**required**), `covers: tuple[str, ...]` (each validated
+  against the catalog; empty when uncovered), `description`, `sources: tuple[str, ...]` (`()` when
+  the inventory omits it), `companions: tuple[Companion, ...]`;
+- `RouterSkill` — `id`, `name`, `description`, `companions: tuple[Companion, ...]`; **no**
+  `archetype`, **no** `covers`;
 - `Companion` — `target: str` (canonical id, or `science-skill-index`), `role:
-  "leaf"|"router"|"index"`.
+  Literal["leaf", "router", "index"]`.
+
+The resources are **frozen, slotted dataclasses**, so the collection fields are immutable `tuple`s
+(not `list`s) and the roles are `Literal`s, not bare `str` — an unknown companion role, or a
+`covers`/`sources` field that is present but not a list of strings, is a structural error at build
+(§5), never silently coerced.
+
+**This overlay is a role-typed, in-memory Python index — not an RDF graph.** It supersedes the
+parent design's "constructs the RDF overlay in memory" phrasing (`2026-07-23-…-design.md` §"Skill
+overlay"): the RDF side of the coverage join already exists as sub-plan 2's reified
+`sci:skill/<id>` skill-load records in the project graph. Sub-plan 4 joins those graph targets
+against this overlay **by canonical id** — the overlay is the lookup/validation structure over the
+corpus, and materializing it as a second in-memory triple store would add no join capability.
 
 `SkillOverlay` exposes lookup **by `id`** and iteration in **canonical-id order** (stable, matching
 the inventory list order), and is what sub-plan 4 joins against the reified `sci:skill/<id>` targets
