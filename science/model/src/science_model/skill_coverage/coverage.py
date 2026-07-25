@@ -12,20 +12,22 @@ from collections import defaultdict
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Literal
 
+from science_model.skill_coverage.enrollment import (
+    ENROLLMENT_STATUSES,
+    EnrollmentStatus,
+)
 from science_model.skill_coverage.overlay import LeafSkill, SkillOverlay
 
 if TYPE_CHECKING:
     from science_model.data_products import DataProductCatalog
-    from science_model.skill_coverage import EnrollmentStatus
 
 
 class SkillCoverageError(ValueError):
     """A structural violation in the coverage inputs."""
 
 
-_VALID_ENROLLMENTS: frozenset[str] = frozenset({
-    "enrolled", "out-of-domain", "undeclared",
-})
+_UNDECLARED_ENROLLMENT = "undeclared"
+_VALID_ENROLLMENTS = ENROLLMENT_STATUSES | frozenset({_UNDECLARED_ENROLLMENT})
 
 
 @dataclass(frozen=True, slots=True)

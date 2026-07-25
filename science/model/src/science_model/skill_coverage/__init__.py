@@ -9,8 +9,10 @@ shape, in GENERATION_3_DOMAINS); the two status values live only in EnrollmentSt
 
 from __future__ import annotations
 
-from enum import StrEnum
-
+from science_model.skill_coverage.enrollment import (
+    ENROLLMENT_STATUSES,
+    EnrollmentStatus,
+)
 from science_model.skill_coverage.overlay import (
     Companion,
     LeafSkill,
@@ -21,22 +23,9 @@ from science_model.skill_coverage.overlay import (
 )
 
 
-class EnrollmentStatus(StrEnum):
-    """The two authored enrollment statuses. `undeclared` is NOT here: it is an ABSENCE state, never
-    an authored value, so it is resolved by the reader, not selected in science.yaml."""
-
-    ENROLLED = "enrolled"
-    OUT_OF_DOMAIN = "out-of-domain"
-
-
 # Enrollable domain keys. Closed: a `skill_coverage.domains` key outside this set is a hard config
 # error, never a silently-preserved unknown. v1 ships exactly the molecular-measurement domain.
 DOMAIN_KEYS: frozenset[str] = frozenset({"molecular-measurement"})
-
-# The enrollment status VALUES, DERIVED from EnrollmentStatus so the set can never drift from the
-# type. Consumers that need the values as a set read this; consumers that validate a field type read
-# EnrollmentStatus directly.
-ENROLLMENT_STATUSES: frozenset[str] = frozenset(status.value for status in EnrollmentStatus)
 
 # Domains whose coverage analysis reads the generation-3 capability shape. Enrolling one of these
 # requires the project to be pinned `entity_schema_version: 3`; the cross-field rule that enforces
