@@ -123,6 +123,53 @@ def test_report_orders_deterministically_including_tying_unmapped() -> None:
     assert serialize_coverage_report(report) == text  # deterministic
 
 
+def test_report_orders_tied_candidates_deterministically() -> None:
+    candidates = (
+        Candidate(
+            "data-product:t",
+            "archetype-a",
+            0.5,
+            (EvidenceTriple("p", "plan:1", "dataset:b"),),
+        ),
+        Candidate(
+            "data-product:t",
+            "archetype-a",
+            0.5,
+            (EvidenceTriple("p", "plan:1", "dataset:a"),),
+        ),
+        Candidate(
+            "data-product:t",
+            "archetype-b",
+            0.5,
+            (EvidenceTriple("p", "plan:1", "dataset:a"),),
+        ),
+    )
+
+    def serialize(candidates: tuple[Candidate, ...]) -> str:
+        return serialize_coverage_report(
+            CoverageReport(
+                scope=ReportScope("portfolio"),
+                coverage_occurrences=(),
+                skill_reference_diagnostics=(),
+                dataset_reference_diagnostics=(),
+                candidates=candidates,
+                skipped_projects=(),
+            )
+        )
+
+    text = serialize(candidates)
+    assert serialize(tuple(reversed(candidates))) == text
+    assert [candidate["likely_archetype"] for candidate in json.loads(text)["candidates"]] == [
+        "archetype-a",
+        "archetype-a",
+        "archetype-b",
+    ]
+    assert [
+        candidate["evidence"][0]["dataset_ref"]
+        for candidate in json.loads(text)["candidates"]
+    ] == ["dataset:a", "dataset:b", "dataset:a"]
+
+
 def test_scope_single_project_carries_project() -> None:
     assert ReportScope("single-project", "mm30").to_dict() == {
         "mode": "single-project",

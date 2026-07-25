@@ -244,6 +244,20 @@ def _occurrence_sort_key(occurrence: Occurrence) -> tuple[object, ...]:
     )
 
 
+def _candidate_sort_key(candidate: Candidate) -> tuple[object, ...]:
+    evidence = tuple(
+        sorted(
+            (item.project, item.plan_ref, item.dataset_ref) for item in candidate.evidence
+        )
+    )
+    return (
+        -candidate.score,
+        candidate.proposed_scope,
+        candidate.likely_archetype,
+        evidence,
+    )
+
+
 @dataclass(frozen=True, slots=True)
 class CoverageReport:
     scope: ReportScope
@@ -288,7 +302,7 @@ class CoverageReport:
                 candidate.to_dict()
                 for candidate in sorted(
                     self.candidates,
-                    key=lambda candidate: (-candidate.score, candidate.proposed_scope),
+                    key=_candidate_sort_key,
                 )
             ],
             "skipped_projects": [
