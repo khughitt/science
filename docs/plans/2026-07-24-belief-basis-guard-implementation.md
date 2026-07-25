@@ -41,7 +41,7 @@
 - Test: `science/tests/test_belief_basis.py`
 
 **Interfaces:**
-- Consumes: `EvidenceUnit` from `science_tool.graph.belief` — a `@dataclass(frozen=True)` with **18 fields** spanning `graph/belief.py:20-48`. Do not assume you have seen them all by reading the first screenful; the last four (`target_polarity`, `quant_beta`, `quant_prob_sign`, `confidence`, `qa_failed_datasets`) are appended below a comment block.
+- Consumes: `EvidenceUnit` from `science_tool.graph.belief` — a `@dataclass(frozen=True)` with **18 fields** spanning `graph/belief.py:20-48`. Do not assume you have seen them all by reading the first screenful; the last five (`target_polarity`, `quant_beta`, `quant_prob_sign`, `confidence`, `qa_failed_datasets`) are appended below a comment block.
 - Produces: `unit_key(unit: EvidenceUnit) -> str`.
 
 The key is built from `dataclasses.asdict` rather than a hand-listed field subset. This is the load-bearing property: when someone adds a new field to `EvidenceUnit`, it enters the key automatically, so an unrecognized belief input changes the basis instead of being silently omitted from it. A hand-listed subset would fail open on exactly the change most likely to matter.
@@ -105,6 +105,19 @@ def test_every_field_value_affects_the_key():
     for field in dataclasses.fields(EvidenceUnit):
         mutated = dataclasses.replace(base, **{field.name: _distinct(getattr(base, field.name))})
         assert unit_key(mutated) != unit_key(base), f"{field.name} does not affect the key"
+
+
+def test_unserializable_value_raises_rather_than_coercing():
+    """No `default=` fallback: an unrepresentable value must fail loudly at capture.
+
+    A `default=str` would stringify this and could collapse two distinct objects
+    into one key, silently weakening the basis.
+    """
+    import pytest
+
+    unit = dataclasses.replace(_u(), source=object())
+    with pytest.raises(TypeError):
+        unit_key(unit)
 ```
 
 - [ ] **Step 2: Run the tests to verify they fail**
@@ -147,7 +160,7 @@ def unit_key(unit: EvidenceUnit) -> str:
 - [ ] **Step 4: Run the tests to verify they pass**
 
 Run: `cd science && uv run --frozen pytest tests/test_belief_basis.py -v`
-Expected: PASS (3 tests)
+Expected: PASS (4 tests)
 
 - [ ] **Step 5: Commit**
 
@@ -309,7 +322,7 @@ def capture_basis(
 - [ ] **Step 4: Run the tests to verify they pass**
 
 Run: `cd science && uv run --frozen pytest tests/test_belief_basis.py -v`
-Expected: PASS (7 tests)
+Expected: PASS (8 tests)
 
 - [ ] **Step 5: Commit**
 
@@ -394,7 +407,7 @@ def basis_digest(bases: Iterable[EntityBasis]) -> str:
 - [ ] **Step 4: Run the tests to verify they pass**
 
 Run: `cd science && uv run --frozen pytest tests/test_belief_basis.py -v`
-Expected: PASS (10 tests)
+Expected: PASS (11 tests)
 
 - [ ] **Step 5: Commit**
 
@@ -415,7 +428,11 @@ git commit -m "feat(graph): add order-independent belief-basis digest"
 - Consumes: `EntityBasis` (Task 2), `basis_digest` (Task 3).
 - Produces: `BASIS_SNAPSHOT_SCHEMA_VERSION: int`; `class BasisSnapshot` (frozen, `extra="forbid"`, fields `schema_version: int`, `digest: str`, `rows: tuple[EntityBasis, ...]`); `class SnapshotIntegrityError(ValueError)`; `build_snapshot(rows: Iterable[EntityBasis]) -> BasisSnapshot`; `load_snapshot(payload: dict) -> BasisSnapshot`.
 
-A digest that is written but never checked is decoration. `load_snapshot` recomputes the digest from the rows and refuses to return a snapshot whose stored digest disagrees, so a corrupted or substituted baseline cannot yield a clean comparison — it raises, and the CLI turns that into `unwired`.
+A digest that is written but never checked is decoration. `load_snapshot` recomputes the digest from the rows and refuses to return a snapshot whose stored digest disagrees, so a baseline that was **corrupted or altered without being resealed** cannot yield a clean comparison — it raises, and the CLI turns that into `unwired`.
+
+Be precise about what this does not do: a wholly substituted snapshot whose digest was *recomputed* over the substituted rows is internally consistent and passes. That is integrity, not authenticity, and closing it is out of scope for Plan A — authenticity comes from comparing against the supervisor-attested digest in the run record (Plan B/D), which the actor cannot write.
+
+`load_snapshot` takes `object`, not `dict`, and goes through `model_validate`. Wrong-shaped JSON — a top-level array, a string, `null` — must surface as a caught `ValidationError` (which subclasses `ValueError`) rather than a `TypeError` escaping from `**payload` unpacking, which the CLI's handler would miss and report as a belief movement.
 
 `extra="forbid"` plus an explicit `schema_version` closes the other direction: a *newer* snapshot carrying basis fields this code does not know about must fail loudly rather than be silently truncated into a comparison that then reports clean. Plan D additionally compares this digest against the supervisor-attested digest in the run record; Plan A only guarantees internal consistency.
 
@@ -424,6 +441,7 @@ A digest that is written but never checked is decoration. `load_snapshot` recomp
 ```python
 # append to science/tests/test_belief_basis.py
 import pytest
+from pydantic import ValidationError
 
 from science_tool.graph.belief_basis import (
     BASIS_SNAPSHOT_SCHEMA_VERSION,
@@ -459,7 +477,18 @@ def test_unknown_basis_field_is_rejected_not_dropped():
     """A newer snapshot must fail loudly rather than be truncated into a clean compare."""
     payload = build_snapshot([_basis("proposition:a")]).model_dump(mode="json")
     payload["rows"][0]["future_field"] = "value"
-    with pytest.raises(Exception):  # pydantic ValidationError via extra="forbid"
+    with pytest.raises(ValidationError):  # extra="forbid"
+        load_snapshot(payload)
+
+
+@pytest.mark.parametrize("payload", [[], "snapshot", None, 42])
+def test_wrong_shaped_payload_raises_validation_error(payload: object):
+    """A top-level array or scalar must raise ValidationError, not TypeError.
+
+    A TypeError from `**payload` unpacking would escape the CLI's handler and be
+    reported as exit 1 — a belief movement — instead of unwired.
+    """
+    with pytest.raises(ValidationError):
         load_snapshot(payload)
 ```
 
@@ -500,9 +529,14 @@ def build_snapshot(rows: Iterable[EntityBasis]) -> BasisSnapshot:
     )
 
 
-def load_snapshot(payload: dict) -> BasisSnapshot:
-    """Parse and VERIFY a snapshot. Raises rather than returning something untrustworthy."""
-    snapshot = BasisSnapshot(**payload)
+def load_snapshot(payload: object) -> BasisSnapshot:
+    """Parse and VERIFY a snapshot. Raises rather than returning something untrustworthy.
+
+    Takes `object` and validates: a top-level array or scalar must raise
+    pydantic's ValidationError (a ValueError), not a TypeError from `**` unpacking
+    that the CLI handler would let through as a belief movement.
+    """
+    snapshot = BasisSnapshot.model_validate(payload)
     if snapshot.schema_version != BASIS_SNAPSHOT_SCHEMA_VERSION:
         raise SnapshotIntegrityError(
             f"snapshot schema_version {snapshot.schema_version} != {BASIS_SNAPSHOT_SCHEMA_VERSION}; "
@@ -517,7 +551,7 @@ def load_snapshot(payload: dict) -> BasisSnapshot:
 - [ ] **Step 4: Run the tests to verify they pass**
 
 Run: `cd science && uv run --frozen pytest tests/test_belief_basis.py -v`
-Expected: PASS (14 tests)
+Expected: PASS (19 tests)
 
 - [ ] **Step 5: Commit**
 
@@ -650,7 +684,7 @@ def compare_bases(before: Iterable[EntityBasis], after: Iterable[EntityBasis]) -
 - [ ] **Step 4: Run the tests to verify they pass**
 
 Run: `cd science && uv run --frozen pytest tests/test_belief_basis.py -v`
-Expected: PASS (19 tests)
+Expected: PASS (24 tests)
 
 - [ ] **Step 5: Commit**
 
@@ -810,6 +844,40 @@ def test_malformed_baseline_json_is_unwired(tmp_path: Path):
         graph_group, ["belief-basis", "--graph-path", str(graph_path), "--compare", str(baseline)]
     )
     assert result.exit_code == 2
+
+
+def test_json_array_baseline_is_unwired_not_moved(tmp_path: Path):
+    """Valid JSON of the wrong shape must not escape as exit 1.
+
+    `BasisSnapshot(**payload)` on a list raises TypeError, which the handler would
+    miss; load_snapshot uses model_validate so this is a caught ValidationError.
+    """
+    graph_path, baseline = tmp_path / "graph.trig", tmp_path / "before.json"
+    _write_graph(graph_path, with_line=True)
+    baseline.write_text("[]")
+    result = CliRunner().invoke(
+        graph_group, ["belief-basis", "--graph-path", str(graph_path), "--compare", str(baseline)]
+    )
+    assert result.exit_code == 2
+
+
+def test_capture_serialization_failure_is_unwired(tmp_path: Path, monkeypatch):
+    """A basis that cannot be serialized is uncomputable, not a belief movement.
+
+    unit_key raises TypeError by design on a non-JSON-native field value; that
+    must reach exit 2 rather than escaping as exit 1.
+    """
+    def _boom(*_args, **_kwargs):
+        raise TypeError("Object of type object is not JSON serializable")
+
+    monkeypatch.setattr("science_tool.graph.belief_basis.capture_basis", _boom)
+    graph_path = tmp_path / "graph.trig"
+    _write_graph(graph_path, with_line=True)
+    result = CliRunner().invoke(
+        graph_group, ["belief-basis", "--graph-path", str(graph_path), "--out", str(tmp_path / "o.json")]
+    )
+    assert result.exit_code == 2
+    assert "could not compute basis" in result.output
 ```
 
 - [ ] **Step 2: Run the tests to verify they fail**
@@ -840,9 +908,9 @@ def belief_basis_command(graph_path: Path, out_path: Path | None, compare_path: 
     """
     import json
     import sys
+    from typing import NoReturn
 
     from science_tool.graph.belief_basis import (
-        SnapshotIntegrityError,
         build_snapshot,
         capture_basis,
         compare_bases,
@@ -851,7 +919,8 @@ def belief_basis_command(graph_path: Path, out_path: Path | None, compare_path: 
     from science_tool.graph.store.identity import graph_uri
     from science_tool.graph.trig import load_trig_dataset_preserving_literals
 
-    def _unwired(message: str) -> None:
+    def _unwired(message: str) -> NoReturn:
+        """Exit 2. Typed NoReturn so the checker knows nothing after a call is reachable."""
         click.echo(f"unwired: {message}")
         sys.exit(2)
 
@@ -862,26 +931,35 @@ def belief_basis_command(graph_path: Path, out_path: Path | None, compare_path: 
 
     try:
         dataset = load_trig_dataset_preserving_literals(graph_path)
-    except Exception as exc:  # unreadable/malformed graph is uncomputable, not a movement
-        _unwired(f"could not read {graph_path}: {exc}")
+        result = capture_basis(
+            dataset.graph(graph_uri("graph/knowledge")),
+            dataset.graph(graph_uri("graph/provenance")),
+        )
+    except Exception as exc:
+        # Two distinct uncomputable cases share this handler: an unreadable or
+        # malformed graph, and a basis that cannot be serialized (a future
+        # EvidenceUnit field with a non-JSON-native type raises TypeError in
+        # unit_key by design). Neither is a belief movement.
+        _unwired(f"could not compute basis from {graph_path}: {exc}")
 
-    result = capture_basis(
-        dataset.graph(graph_uri("graph/knowledge")),
-        dataset.graph(graph_uri("graph/provenance")),
-    )
     if result.status == "unwired":
         _unwired(f"({result.code}) {result.reason}")
 
     if out_path is not None:
-        out_path.parent.mkdir(parents=True, exist_ok=True)
-        out_path.write_text(build_snapshot(result.rows).model_dump_json(indent=2))
+        try:
+            out_path.parent.mkdir(parents=True, exist_ok=True)
+            out_path.write_text(build_snapshot(result.rows).model_dump_json(indent=2))
+        except Exception as exc:  # unwritable output is uncomputable, not clean
+            _unwired(f"could not write capture to {out_path}: {exc}")
         click.echo(f"captured {len(result.rows)} entities -> {out_path}")
         sys.exit(0)
 
     assert compare_path is not None  # exactly-one check above
     try:
         previous = load_snapshot(json.loads(compare_path.read_text()))
-    except (OSError, json.JSONDecodeError, SnapshotIntegrityError, ValueError) as exc:
+    except Exception as exc:
+        # OSError, JSONDecodeError, ValidationError, SnapshotIntegrityError — a
+        # baseline we cannot read or cannot trust is unwired, never clean.
         _unwired(f"could not trust baseline {compare_path}: {exc}")
 
     deltas = compare_bases(previous.rows, result.rows)
@@ -896,7 +974,7 @@ def belief_basis_command(graph_path: Path, out_path: Path | None, compare_path: 
 - [ ] **Step 4: Run the tests to verify they pass**
 
 Run: `cd science && uv run --frozen pytest tests/test_belief_basis_cli.py -v`
-Expected: PASS (8 tests)
+Expected: PASS (10 tests)
 
 - [ ] **Step 5: Run the full check suite**
 
