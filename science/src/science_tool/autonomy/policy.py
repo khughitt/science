@@ -15,6 +15,8 @@ from __future__ import annotations
 from collections.abc import Mapping
 from types import MappingProxyType
 
+from science_model.frontmatter import PROJECT_CONFIG_FILENAME
+
 #: Per-kind fields an autonomous run may write on a PRE-EXISTING entity. Every kind
 #: absent from this mapping, and every field absent from a kind's entry, is DENIED
 #: with no registration required.
@@ -61,7 +63,7 @@ DENIAL_REASONS: Mapping[str, str] = MappingProxyType(
     {
         "data": "payload boundary; autonomous runs never touch measurement payload",
         "knowledge/graph.trig": "source is its only durable writer (kernel closure)",
-        "science.yaml": "the schema-version pin is sole write authority",
+        PROJECT_CONFIG_FILENAME: "the schema-version pin is sole write authority",
         "core/decisions.md": "guard integrity -- belief machinery reads its flags",
         "runs": "supervisor-owned (design §0)",
         "pyproject.toml": "toolchain selection; high blast radius",

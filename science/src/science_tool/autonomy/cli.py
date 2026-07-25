@@ -2,12 +2,13 @@
 
 from __future__ import annotations
 
-import json
 import sys
 from pathlib import Path
 
 import click
 from science_model.autonomous_runs import RunTier
+
+from science_tool.output import OUTPUT_FORMATS, emit
 
 
 @click.group("autonomy")
@@ -37,9 +38,23 @@ def autonomy_group() -> None:
     show_default=True,
     help="Repository root the range is read from.",
 )
-@click.option("--json", "as_json", is_flag=True, help="Emit the verdict as JSON.")
+@click.option("--json", "as_json", is_flag=True, default=False, help="Emit the verdict as JSON.")
+@click.option(
+    "--format",
+    "output_format",
+    type=click.Choice(OUTPUT_FORMATS),
+    default="table",
+    show_default=True,
+    help="Output format. `--json` is kept as a convenience alias.",
+)
 def path_gate_command(
-    base: str, head: str, tier: str, report_path: str | None, project_root: Path, as_json: bool
+    base: str,
+    head: str,
+    tier: str,
+    report_path: str | None,
+    project_root: Path,
+    as_json: bool,
+    output_format: str,
 ) -> None:
     """Decide whether a base..head range stayed inside the tier's write surface.
 
@@ -49,24 +64,31 @@ def path_gate_command(
     from science_tool.autonomy.extract import ExtractError, extract_change_set
     from science_tool.autonomy.path_gate import GateInputError, evaluate
 
+    effective_format = "json" if as_json else output_format
     try:
         change_set = extract_change_set(project_root, base, head)
         verdict = evaluate(change_set, tier=RunTier(tier), report_path=report_path)
     except (ExtractError, GateInputError) as exc:
         message = f"could not evaluate: {exc}"
-        if as_json:
-            click.echo(json.dumps({"allowed": False, "denials": [], "error": message}))
-        else:
-            click.echo(message)
+        emit(
+            output_format=effective_format,
+            payload={"allowed": False, "denials": [], "error": message},
+            render_text=lambda: click.echo(message),
+        )
         sys.exit(2)
 
-    if as_json:
-        click.echo(verdict.model_dump_json(indent=2))
-    elif verdict.allowed:
-        click.echo(f"allowed: {len(change_set.changes)} change(s) within tier {tier!r}")
-    else:
+    def _render_text() -> None:
+        if verdict.allowed:
+            click.echo(f"allowed: {len(change_set.changes)} change(s) within tier {tier!r}")
+            return
         for denial in verdict.denials:
             location = denial.path if denial.field is None else f"{denial.path} field {denial.field!r}"
             click.echo(f"denied: {location} -- {denial.reason}")
+
+    emit(
+        output_format=effective_format,
+        payload=verdict.model_dump(mode="json"),
+        render_text=_render_text,
+    )
 
     sys.exit(0 if verdict.allowed else 1)

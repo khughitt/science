@@ -64,9 +64,15 @@ def test_policy_module_reads_no_project_state():
     # An ALLOWLIST, not a blacklist. A blacklist cannot express "reads no project
     # state": any unlisted module (`science_tool.project_config`, `configparser`,
     # `importlib.resources`, ...) walks straight through it. These four are everything
-    # policy.py legitimately needs, so anything else is a design change that must be
-    # argued for here first.
-    permitted_imports = {"__future__", "collections.abc", "types"}
+    # policy.py legitimately needs, plus the pure filename constant imported directly
+    # from its single authority. Anything else is a design change that must be argued
+    # for here first.
+    permitted_imports = {
+        "__future__",
+        "collections.abc",
+        "science_model.frontmatter",
+        "types",
+    }
     tree = ast.parse(POLICY_SOURCE.read_text(encoding="utf-8"))
 
     imported: set[str] = set()
@@ -80,4 +86,14 @@ def test_policy_module_reads_no_project_state():
         f"policy.py imports {sorted(imported - permitted_imports)}. The gate is not "
         "project-overridable: it must read no project state. Widening this allowlist is "
         "a design change, not a fix."
+    )
+    frontmatter_imports = [
+        alias.name
+        for node in ast.walk(tree)
+        if isinstance(node, ast.ImportFrom) and node.module == "science_model.frontmatter"
+        for alias in node.names
+    ]
+    assert frontmatter_imports == ["PROJECT_CONFIG_FILENAME"], (
+        "policy.py may import only the pure PROJECT_CONFIG_FILENAME authority from "
+        "science_model.frontmatter; path helpers would make project-state access possible."
     )
