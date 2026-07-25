@@ -379,6 +379,7 @@ out-of-domain result; a registered project that has not declared yields
   any `--output` target **untouched**. Such a project is **never** classified as
   `undeclared-domain` — undeclared is a coverage state for a validly-loaded,
   enrolled-vocabulary project, not a stand-in for a load failure.
+  > **Superseded by sub-plan 4** ([`2026-07-25-skill-coverage-command-design.md`](2026-07-25-skill-coverage-command-design.md) §6): "fails canonical loading" is narrowed to a two-tier gate — a valid `science.yaml` is required of **every** project, but **source/entity** loading (and its failure gate) applies **only to enrolled** projects; a non-enrolled project's entity integrity is `validate`'s job. The `--output` untouched guarantee is made real by an atomic same-directory temp-file + `os.replace`.
 - **Report destination & ownership:** the toolkit has no `results/` convention, so
   there is **no implicit path** — the `coverage-report` JSON is written to
   **stdout by default**, with optional `--output PATH` for a file.
@@ -400,6 +401,7 @@ out-of-domain result; a registered project that has not declared yields
   `candidates[]` from `uncovered` only: `{proposed_scope, likely_archetype |
   indeterminate, score, evidence_refs[]}`. Evidence-backed candidates only — **no
   skill prose is generated.**
+  > **Superseded by sub-plan 4** (§5): the diagnostic is `{project, plan_ref, skill_id}` — the reified `SkillLoadRecord` keeps only the **canonical** id, so it reports the canonical (post-alias) id under `skill_id` (not `raw_skill_id`) and adds `project` for cross-project disambiguation. Occurrence and candidate evidence are **structured** (`{plan_ref, dataset_ref}` pairs; candidate `evidence` uses `{project, plan_ref, dataset_ref}` triples), not flattened `evidence_refs[]`, so the cross-project score is reproducible from the report.
 
 ## Prioritization
 
@@ -518,8 +520,10 @@ typed companion-edge relation semantics.
 - `skills_loaded`: migrated plan materializes a reified load record; retired id resolves
   via alias; unknown id → `unmapped-skill-reference` with raw id + plan ref, never
   "no covering skill."
+  > **Superseded by sub-plan 4** (§5): the diagnostic carries `{project, plan_ref, skill_id}` (canonical id, since the authored id is not retained by the reified record).
 - Occurrence: `dataset_usage` chain yields an `analysis-usage` occurrence; project
   inventory does not; q/h-reach fallback is tagged `project-demand`.
+  > **Deferred by sub-plan 4** (§3): v1 emits `analysis-usage` occurrences only; the `project-demand` q/h-reachability fallback is out of scope (it needs epistemic-graph reachability, which the lightweight no-graph read path does not build). The `observation_level` field is kept forward-compatible.
 - Enrollment: `molecular-measurement: enrolled` → coverage occurrences; `out-of-domain`
   → one out-of-domain result; **absent → one `undeclared` diagnostic**; an unknown
   domain key is a hard config error; **`enrolled` without `entity_schema_version: 3`

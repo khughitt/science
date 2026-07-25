@@ -36,7 +36,7 @@ then emits a `coverage-report` and evidence-backed skill candidates. It closes P
   ids **carry** the `data-product:` prefix. **Prefix asymmetry — never cross-normalize the two.**
 - **Enrollment ⟹ gen-3.** `ProjectConfig._enrolled_requires_generation_3` already guarantees an
   enrolled project is pinned gen-3, which is exactly when `skill_loads` is populated and capability
-  shape is validated. `domain_enrollment_status(config, "molecular-measurement") ->
+  shape is validated. `domain_enrollment(config, "molecular-measurement") ->
   EnrollmentStatus | "undeclared"` is the reader. The only enrollable domain in v1 is
   `molecular-measurement`.
 
@@ -63,7 +63,10 @@ types and pure logic; the tool fills the inputs from `Entity` objects).
 EnrollmentStatus | Literal["undeclared"]` (reusing the enrollment vocabulary in the same package),
 and — **only when enrolled** — the raw join facts below. Non-enrolled projects are represented as a
 `ProjectEvidence` with the status set and empty facts, so the model can emit their single result
-without the tool loading their sources.
+without the tool loading their sources. To keep the contradictory combination unrepresentable rather
+than silently dropped, `__post_init__` **rejects** any non-empty fact tuple when `enrollment !=
+EnrollmentStatus.ENROLLED` (a populated `out-of-domain`/`undeclared` instance is a construction-time
+error, not evidence the join quietly ignores).
 
 `project_evidence(project: str, sources: ProjectSources) -> ProjectEvidence` (enrolled projects
 only) walks `sources.entities` once:
@@ -196,7 +199,7 @@ CoverageReport`:
 
 1. `load_global_config(config_path).projects`.
 2. Per registered project: resolve root, load `ProjectConfig` (`project_config_path(root)`),
-   read `domain_enrollment_status(config, "molecular-measurement")`:
+   read `domain_enrollment(config, "molecular-measurement")`:
    - `out-of-domain` → one `OutOfDomainResult`;
    - `undeclared` → one `UndeclaredDomainResult`;
    - `out-of-domain` / `undeclared` → a `ProjectEvidence` carrying only `project` + `enrollment`;
@@ -213,9 +216,13 @@ select the same identifier — which would make occurrences indistinguishable an
 candidate's `n_projects`. A **duplicate selected identifier across the portfolio is a hard error**
 (`SkillCoverageScanError`), rejected before any coverage computation.
 
-**Failure semantics (fail-early).** The full report is assembled in memory and written **once** at
-the very end, so any raised error aborts with a **nonzero exit**, **no partial report**, and any
-`--output` target **untouched**. Two tiers, matching what each project is actually asked to do:
+**Failure semantics (fail-early).** The full report is assembled and serialized in memory before any
+write, so any scan/serialization error aborts with a **nonzero exit** and **no partial report**. The
+`--output` target is left **untouched** on failure — and because a plain `write_text` truncates an
+existing file before it can fail on I/O, the write itself is **atomic**: serialize to a
+same-directory temp file, then `os.replace` onto the target (the repo's established atomic-output
+pattern). A stale prior report is never left half-overwritten. Two tiers, matching what each project
+is actually asked to do:
 
 - **Every** registered project must have a loadable, valid `science.yaml` — the scan reads each
   project's `ProjectConfig` to determine enrollment. Missing/unreadable/invalid config →
@@ -261,11 +268,19 @@ list[ProjectEvidence] + SkillOverlay + DataProductCatalog
   shapes; deterministic ordering under shuffled input; `out-of-domain` / `undeclared` single
   results; the non-catalog `data_product` hard error.
 - **`evidence.py` (tool):** a synthetic `ProjectSources` (datasets with/without capabilities, plans
-  with `dataset_usage` + grouped `skill_loads`) → expected `ProjectEvidence`; dangling
-  `dataset_usage.ref` → hard error.
+  with `dataset_usage` + grouped `skill_loads`) → expected `ProjectEvidence`; a `dataset_usage.ref`
+  that is a **valid dataset alias / manual-alias** resolves (is **not** flagged dangling), while a
+  genuinely unresolvable ref → hard error; `ProjectEvidence.__post_init__` rejects facts on a
+  non-enrolled instance.
 - **`scan.py` (tool):** a temp `config.yaml` registry pointing at temp project dirs
-  (enrolled / out-of-domain / undeclared / load-failure) → expected report; a failing project aborts
-  the scan and leaves `--output` untouched.
+  (enrolled / out-of-domain / undeclared / load-failure) → expected report; **duplicate selected
+  project identifiers** → hard error before computation; an **enrolled** project whose sources fail
+  to load aborts the scan; a **non-enrolled project with malformed entities** is still classified
+  (`out-of-domain`/`undeclared`) **without** its sources being loaded; a failing project leaves an
+  existing `--output` file byte-for-byte unchanged (atomic-write / untouched-on-failure).
+- **structured evidence reproducibility (model):** rebuild a candidate's `(n_occurrences,
+  n_projects)` purely from its serialized `evidence[]` triples and assert it yields the reported
+  `score` — proving the evidence substantiates the score.
 - **CLI:** `science skills coverage` via click `CliRunner` — stdout JSON parses; `--output` writes
   the file; a failing portfolio exits nonzero with no file written.
 
