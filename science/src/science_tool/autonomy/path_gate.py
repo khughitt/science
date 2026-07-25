@@ -113,6 +113,9 @@ def evaluate(
     `report_path` is the run's own report, supplied by the supervisor (design §0) -- it
     is the ONLY path `report-only` may write, and it is allowed in `belief-neutral` too.
     """
+    if tier is not RunTier.REPORT_ONLY and tier is not RunTier.BELIEF_NEUTRAL:
+        raise GateInputError(f"tier must be a supported RunTier member, got {tier!r}")
+
     allowed_report = _validate_report_path(report_path)
 
     denials: list[Denial] = []

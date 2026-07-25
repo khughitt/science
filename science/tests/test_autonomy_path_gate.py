@@ -108,6 +108,15 @@ def test_report_only_with_no_report_path_allows_nothing():
     assert evaluate(_cs(change), tier=RunTier.REPORT_ONLY).allowed is False
 
 
+@pytest.mark.parametrize("invalid_tier", ["report-only", "third-tier"])
+def test_an_invalid_runtime_tier_is_rejected(invalid_tier: str):
+    with pytest.raises(GateInputError):
+        evaluate(
+            _cs(_paper(("venue",))),
+            tier=invalid_tier,  # type: ignore[arg-type]
+        )
+
+
 @pytest.mark.parametrize("bad", ["/abs/report.md", "../escape.md", "a/../../escape.md"])
 def test_an_unsafe_report_path_is_rejected_rather_than_honoured(bad: str):
     with pytest.raises(GateInputError):
