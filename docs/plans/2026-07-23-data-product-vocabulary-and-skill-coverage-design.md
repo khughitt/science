@@ -324,6 +324,8 @@ Only this establishes "an analysis touching product X loaded skill Y", tagged
 reach is tagged `observation_level: project-demand` and makes **no**
 co-observation claim.
 
+> **Superseded by sub-plan 4** ([`2026-07-25-skill-coverage-command-design.md`](2026-07-25-skill-coverage-command-design.md) §2): the plan→dataset edge is **`dataset_usage` ∪ `related: dataset:*`**, not `dataset_usage` alone. Corpus reality at `c06e6073`: **0 of 351 plan entities author `dataset_usage`** (it is authored on evidence-lines/papers/propositions, not plans), while `related: dataset:*` carries the edge (120 refs across 11 projects). `related` edges are **mention-grade** (no `role`/`overlap`), so a pair is a gap-detection signal, not a confirmed analysis. The `project-demand` fallback is deferred (§3); v1 tags every occurrence `analysis-usage`.
+
 ### Enrollment as a closed declaration
 
 Enrollment is a **closed declaration** in `science.yaml`. The `out-of-domain`

@@ -16,10 +16,11 @@ then emits a `coverage-report` and evidence-backed skill candidates. It closes P
 ## Grounding (verified against the live corpus at `c06e6073`)
 
 > **Population, not just schema.** Types and signatures below are code-verified; the **join edge is
-> also population-verified**. `dataset_usage` is essentially unauthored on `kind: plan` (1 of 114 mm30
-> plans), so the plan→dataset edge is `dataset_usage` **∪** `related: dataset:*` (§2). `covers:` is
-> sparse too — only 11 of 54 catalog terms are covered by any leaf — so `uncovered` occurrences +
-> candidates are the command's dominant output by design (§4).
+> also population-verified**. `dataset_usage` is **unauthored on plans portfolio-wide** (0 of 351 plan
+> entities; the field appears only on evidence-lines/papers/propositions), so the plan→dataset edge is
+> `dataset_usage` **∪** `related: dataset:*` (120 refs across 11 projects, §2). `covers:` is sparse
+> too — only 11 of 54 catalog terms are covered by any leaf — so `uncovered` occurrences + candidates
+> are the command's dominant output by design (§4).
 
 - **Registry.** `science_tool.registry.config.load_global_config() -> GlobalConfig` enumerates
   `projects: list[RegisteredProject]` from `~/.config/science/config.yaml` (XDG-aware via
@@ -80,10 +81,17 @@ only) walks `sources.entities` once:
 - **datasets:** for each `kind: dataset`, `parse_gen3_capabilities(model_extra["provided_capabilities"])`
   → the set of `data_product` term ids it provides (a dataset with none is *untagged*).
 - **plans:** for each `kind: plan`, its **dataset edge = `dataset_usage[].ref` ∪ the `dataset:*`
-  members of the typed `related: list[str]` field** (`entities.py:163`). Corpus reality (verified at
-  `c06e6073`): `dataset_usage` is essentially unauthored on plans (1 of 114 mm30 plans), while
-  `related: dataset:*` is how a plan actually names the datasets it concerns — so the union is the
-  only non-empty plan→dataset edge today, and it self-migrates as `dataset_usage` adoption grows.
+  members of the typed `related: list[str]` field** (`entities.py:351`). Corpus reality (verified at
+  `c06e6073`): `dataset_usage` is **unauthored on plans portfolio-wide** (0 of 351 plan entities),
+  while `related: dataset:*` is how a plan actually names the datasets it concerns (120 refs across 11
+  projects) — so the union is the only non-empty plan→dataset edge today, and it self-migrates as
+  `dataset_usage` adoption grows. **The two edge sources are not equivalent:** `dataset_usage` is
+  typed and carries `role`/`overlap`; a `related` ref is **mention-grade** — a bare association with
+  no role/overlap, so it may name a dataset the plan critiques or rejects (e.g. mm30 `plan:0116`
+  `related`-lists `dataset:gse234261` while its own verdict is `not-ready`). For a gap-detection
+  instrument that is acceptable (a mention is enough to ask "was a covering skill loaded?"), but the
+  report must not present a `related`-derived pair as a confirmed analysis — see the evidence note in
+  §5.
   Both sides resolve through the **same reference-resolution semantics materialization uses**: build
   `ReferenceResolver.from_entities(sources.entities, manual_aliases=sources.manual_aliases,
   archive_alias_tokens=sources.archive_alias_tokens, identity_table=build_identity_table(sources))`;
@@ -94,8 +102,11 @@ only) walks `sources.entities` once:
   the resolver cannot resolve is the hard error (not a dict miss). The union is de-duplicated (a
   dataset named by both `dataset_usage` and `related` is one edge). Group `sources.skill_loads` by
   `plan_id` → the canonical skill ids that plan loaded.
-- Emit raw join facts (no overlay/catalog knowledge — that is the model's job). Datasets are
-  classified project-owned vs commons via `sources.commons_overlay_paths` (§3 commons scoping):
+- Emit raw join facts (no overlay/catalog knowledge — that is the model's job). A dataset is
+  **commons-owned** iff `sources.entity_source_adapters[canonical_id] == "commons-merged"` (the
+  **owner's** adapter, `commons_sources.py:49/197`); everything else is project-owned. (Do **not** use
+  `commons_overlay_paths` — it is populated only for *borrowers*, `identity_arbitration.py:472`, i.e.
+  project-owned ids that commons merely annotates, so it classifies exactly backwards.) See §3:
   - `term_usages: tuple[TermUsage, ...]` — one `(plan_ref, dataset_ref, term, owned: bool)` per
     used-and-tagged pairing (project-owned **and** commons datasets, since either means the plan
     touches the term; `owned` lets the model gate the off-catalog hard error, §3);
@@ -103,11 +114,20 @@ only) walks `sources.entities` once:
     **project-owned** dataset that does **not** declare `capability_scope` (commons and
     intentionally-scoped datasets are excluded — not the project's mapping debt);
   - `plan_loaded_skills: tuple[PlanSkills, ...]` — `(plan_ref, skill_ids: tuple[str, ...])` for every
-    plan that loaded at least one skill.
+    plan that loaded at least one skill;
+  - `unresolved_related_refs: tuple[UnresolvedRef, ...]` — `(plan_ref, ref)` for each `related:
+    dataset:*` ref the resolver could not resolve (→ `dataset_reference_diagnostics[]`; a dangling
+    `dataset_usage.ref` never reaches here — it already hard-errored).
 
-A plan dataset-edge ref (from `dataset_usage` or `related: dataset:*`) that the resolver **cannot
-resolve** to a dataset entity is a **hard error** (fail-early — a genuinely dangling ref is malformed
-evidence; a resolvable alias is not).
+**Dangling refs, by edge source.** A `dataset_usage.ref` that the resolver cannot resolve is a **hard
+error** (a typed usage claim pointing nowhere is malformed evidence). An unresolvable `related:
+dataset:*` ref is instead **demoted to a reported diagnostic** — `dataset_reference_diagnostics[]`
+`{project, plan_ref, ref}` — not a scan abort: `related` is a loose hand-authored list, the same
+stale-pointer class as the skipped registry entries. **Commons coupling (stated, not hidden):** these
+refs resolve today (0 unresolvable across 11 projects) *only because* `include_commons=True` —
+health-meta's three dataset refs resolve solely through the commons store, so an unsynced/missing
+commons store would turn them unresolvable. Demoting `related` dangles to a diagnostic keeps that
+external-state dependency from aborting the whole scan.
 
 ## 3. Coverage states (`science-model`, exact-term)
 
@@ -149,11 +169,16 @@ Other states:
 
 **Commons scoping.** `load_project_sources` runs with `include_commons=True` so a plan's `related`/
 `dataset_usage` refs into shared commons datasets **resolve** (else they would abort as dangling).
-But `unmapped` and the off-catalog hard error apply only to **project-owned** datasets (commons
-entities are identified via `sources.commons_overlay_paths` and excluded) — a project is not blamed
-for commons's untagged or malformed data, and one bad commons dataset cannot abort every enrolled
-project. A commons dataset a plan actually uses still contributes its `term` to the plan's coverage
-(the project genuinely touches that term).
+But `unmapped` and the off-catalog hard error apply only to **project-owned** datasets — a dataset is
+commons-owned iff `sources.entity_source_adapters[canonical_id] == "commons-merged"` (the owner's
+adapter), and those are excluded. (The natural case — a dataset the project never declares, owned
+outright by commons — has **no** borrower row and is **absent** from `commons_overlay_paths`, which
+is exactly why that map is the wrong test.) A project is not blamed for commons's untagged or
+malformed data, and one bad commons dataset cannot abort every enrolled project. A commons dataset a
+plan actually uses still contributes its `term` to the plan's coverage (the project genuinely touches
+that term). Concretely: health-meta's `dataset:reactome`, `dataset:gene-crosswalk-hgnc`, and
+`dataset:ccle-proteomics-nusinow-2020` are commons-owned and carry no capabilities — under the
+corrected discriminator they are **not** health-meta `unmapped` debt.
 
 A **project-owned** (`owned=True`) used dataset whose `data_product` is **not** a catalog term is a
 **hard error** (aborts the scan): coverage is the first consumer that joins datasets against the
@@ -228,18 +253,27 @@ that failed to resolve against the overlay, named `skill_id` rather than the par
 narrows the parent's `{raw_skill_id, plan_ref}` contract (the authored id is not recoverable from the
 reified record without re-parsing raw frontmatter, which this sub-plan deliberately does not do).
 
-`CoverageReport{coverage_occurrences[], skill_reference_diagnostics[], candidates[],
-skipped_projects[]}.to_dict()` → the report object (`skipped_projects[]` = `{path, reason}` for
-registry entries skipped per §6, so skipping is reported, never silent).
-`serialize_coverage_report(report) -> str` = `json.dumps(indent=2, sort_keys=True) + "\n"`.
-**Deterministic ordering** independent of scan order, on **scalar** keys (never a list of dicts,
-which is unorderable):
+`evidence_refs`/candidate `evidence` are **mention-grade** where a pair originates from a plan's
+`related` edge (no `role`/`overlap`; the plan may even reject the dataset, §2) — the report is a
+gap-detection instrument, and a pair is not a claim of a confirmed, successful analysis. (v1 does not
+tag each pair with its edge source; if that distinction is later needed it is an additive field.)
+
+`CoverageReport{scope, coverage_occurrences[], skill_reference_diagnostics[],
+dataset_reference_diagnostics[], candidates[], skipped_projects[]}.to_dict()` → the report object.
+`scope = {mode: "portfolio" | "single-project", project?}` records how the report was produced —
+under `--project SLUG` (`mode: "single-project"`) every candidate necessarily has `n_projects = 1`
+and a deflated `score`, so the mode must be legible in the otherwise byte-identical report shape.
+`dataset_reference_diagnostics[]` = `{project, plan_ref, ref}` (unresolvable `related` dataset refs,
+§2); `skipped_projects[]` = `{path, reason}` (§6). `serialize_coverage_report(report) -> str` =
+`json.dumps(indent=2, sort_keys=True) + "\n"`. **Deterministic ordering** independent of scan order,
+on **scalar** keys (never a list of dicts, which is unorderable):
 
 - `coverage_occurrences` sorted by `(state, project, term or "", dataset_ref or "",
   tuple(sorted((e["plan_ref"], e["dataset_ref"]) for e in evidence_refs)))` — the trailing element is
   a tuple of string pairs, which orders; it disambiguates the `(project, dataset)`-grain `unmapped`
   entries that otherwise tie on `(state, project, "")`.
 - `skill_reference_diagnostics` sorted by `(project, plan_ref, skill_id)`.
+- `dataset_reference_diagnostics` sorted by `(project, plan_ref, ref)`.
 - `candidates` sorted by `(-score, proposed_scope)`.
 - `skipped_projects` sorted by `path`.
 
@@ -264,8 +298,9 @@ report (below) it lets a user run coverage even when an unrelated registered pro
    Every non-skipped project contributes exactly one `ProjectEvidence` to the list.
 3. Build the overlay (`build_skill_overlay(load_skill_inventory(), catalog)`) + catalog
    (`load_catalog()`), call `compute_coverage(projects, overlay, catalog)` — which assembles the
-   coverage/diagnostic/candidate sections (non-enrolled single results included); the scan attaches
-   `skipped_projects[]`.
+   coverage/diagnostic/candidate sections (non-enrolled single results and
+   `dataset_reference_diagnostics[]` included); the scan attaches `skipped_projects[]` and sets
+   `scope` (`{mode: "single-project", project: SLUG}` under `--project`, else `{mode: "portfolio"}`).
 4. `serialize_coverage_report(report)` → stdout, or `--output PATH` file.
 
 `project` identifier = `RegisteredProject.id or name` (id preferred; name fallback for legacy
@@ -315,12 +350,15 @@ load_global_config().projects   (absent/empty registry ▶ hard error)
     ├─ missing path / no science.yaml ──▶ skipped_projects[] {path, reason}   (scan continues)
     ├─ non-enrolled ──▶ ProjectEvidence(project, enrollment, <empty facts>)
     └─ enrolled ──load_project_sources(include_commons=True)──▶ ProjectSources(.entities, .skill_loads)
-                         └─project_evidence──▶ ProjectEvidence(project, enrollment, term_usages[owned], untagged_usages, plan_loaded_skills)
-                              (plan dataset edge = dataset_usage ∪ related:dataset:*, resolver-resolved)
+                         └─project_evidence──▶ ProjectEvidence(project, enrollment, term_usages[owned], untagged_usages,
+                                                               plan_loaded_skills, unresolved_related_refs)
+                              (plan dataset edge = dataset_usage ∪ related:dataset:*, resolver-resolved;
+                               owned = entity_source_adapters[id] != "commons-merged")
 list[ProjectEvidence] + SkillOverlay + DataProductCatalog
-    ──compute_coverage──▶ CoverageReport(coverage_occurrences, skill_reference_diagnostics, candidates)
+    ──compute_coverage──▶ CoverageReport(scope, coverage_occurrences, skill_reference_diagnostics,
+                                          dataset_reference_diagnostics, candidates)
         (non-enrolled ▶ OutOfDomainResult / UndeclaredDomainResult; enrolled ▶ the join + candidates)
-    + skipped_projects[] ──serialize_coverage_report──▶ canonical JSON ──▶ stdout | --output PATH
+    + skipped_projects[] + scope{mode,project?} ──serialize_coverage_report──▶ canonical JSON ──▶ stdout | --output PATH
 ```
 
 ## Testing approach
@@ -338,9 +376,14 @@ list[ProjectEvidence] + SkillOverlay + DataProductCatalog
 - **`evidence.py` (tool):** a synthetic `ProjectSources` (datasets with/without capabilities, plans
   with `dataset_usage` **and** `related: dataset:*` + grouped `skill_loads`) → expected
   `ProjectEvidence` — the **union** edge picks up a `related`-only dataset and de-dups one named by
-  both; a **valid dataset alias / manual-alias** resolves (not flagged dangling) while a genuinely
-  unresolvable ref → hard error; a **commons** dataset is marked `owned=False` and excluded from
-  `untagged_usages`; `ProjectEvidence.__post_init__` rejects facts on a non-enrolled instance.
+  both; a **valid dataset alias / manual-alias** resolves (not flagged dangling); a dangling
+  `dataset_usage.ref` → hard error, while a dangling **`related`** ref → a
+  `dataset_reference_diagnostics` entry (no abort); the **commons discriminator** keys on
+  `entity_source_adapters[id] == "commons-merged"` — a commons-**owned** dataset (adapter
+  `commons-merged`, absent from `commons_overlay_paths`) is `owned=False` and excluded from
+  `untagged_usages`, while a project-owned dataset that commons merely annotates (present in
+  `commons_overlay_paths`) stays `owned=True` (the regression guard for the inverted discriminator);
+  `ProjectEvidence.__post_init__` rejects facts on a non-enrolled instance.
 - **`scan.py` (tool):** a temp `config.yaml` registry pointing at temp project dirs
   (enrolled / out-of-domain / undeclared / present-but-invalid / **missing path**) → expected report;
   a **missing / no-`science.yaml`** entry lands in `skipped_projects[]` and the scan exits 0; a
@@ -349,7 +392,8 @@ list[ProjectEvidence] + SkillOverlay + DataProductCatalog
   project (unknown slug → hard error); an **enrolled** project whose sources fail to load aborts; a
   **non-enrolled project with malformed entities** is still classified **without** its sources being
   loaded; a failing project leaves an existing `--output` file byte-for-byte unchanged (atomic-write /
-  untouched-on-failure).
+  untouched-on-failure); `--project SLUG` sets `scope.mode == "single-project"` in the report while
+  the default sets `"portfolio"`.
 - **structured evidence reproducibility (model):** rebuild a candidate's `(n_occurrences,
   n_projects)` purely from its serialized `evidence[]` triples and assert it yields the reported
   `score` — proving the evidence substantiates the score.
