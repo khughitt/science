@@ -12,6 +12,11 @@ from science_model.profiles.core import CORE_PROFILE
 #: frontmatter field. It is named for `Entity.content`, which is what it becomes.
 BODY_FIELD = "content"
 
+#: A mode or source-syntax change that cannot be represented as one of the entity's
+#: semantic fields. It intentionally has no policy allowlist entry, so the path gate
+#: denies it by default rather than letting it piggyback on an allowed field edit.
+UNACCOUNTED_CHANGE_FIELD = "_unaccounted_change"
+
 
 class ChangeType(StrEnum):
     MODIFIED = "modified"

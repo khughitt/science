@@ -4,10 +4,12 @@ import subprocess
 from pathlib import Path
 
 import pytest
+from science_model.autonomous_runs import RunTier
 
 import science_tool.autonomy.extract as extract
-from science_tool.autonomy.changes import BODY_FIELD, ChangeType
+from science_tool.autonomy.changes import BODY_FIELD, ChangeType, UNACCOUNTED_CHANGE_FIELD
 from science_tool.autonomy.extract import ExtractError, extract_change_set
+from science_tool.autonomy.path_gate import evaluate
 
 PAPER = "entities/papers/smith2020.md"
 
@@ -173,9 +175,8 @@ def test_a_replacement_ref_cannot_hide_a_change(repo: Path):
     )
 
 
-def test_a_mode_only_change_is_reported_as_a_modification(repo: Path):
-    """A chmod produces `M` with identical blobs and therefore no changed fields. The
-    extractor must still report the modification so the gate can deny it."""
+def test_a_mode_only_change_reports_an_unaccounted_component(repo: Path):
+    """A chmod must be explicit so it cannot piggyback on an allowed field edit."""
     base = _git(repo, "rev-parse", "HEAD")
     (repo / PAPER).chmod(0o755)
     head = _commit(repo, "chmod")
@@ -183,7 +184,7 @@ def test_a_mode_only_change_is_reported_as_a_modification(repo: Path):
     changes = extract_change_set(repo, base, head).changes
     assert len(changes) == 1
     assert changes[0].change_type is ChangeType.MODIFIED
-    assert changes[0].fields == ()
+    assert changes[0].fields == (UNACCOUNTED_CHANGE_FIELD,)
 
 
 def test_an_unreadable_entity_blob_is_an_error_not_an_empty_field_list(repo: Path):
@@ -234,3 +235,89 @@ def test_malformed_diff_records_are_errors(
 
     with pytest.raises(ExtractError):
         extract_change_set(repo, "base", "head")
+
+
+def test_a_boolean_to_integer_edit_is_accounted_as_a_denied_field(repo: Path):
+    _write(repo, PAPER, _paper_text().replace("venue: Nature\n", "venue: Nature\nconfidence: true\n"))
+    _commit(repo, "add boolean confidence")
+    base = _git(repo, "rev-parse", "HEAD")
+    _write(repo, PAPER, _paper_text(venue="Science").replace("venue: Science\n", "venue: Science\nconfidence: 1\n"))
+    head = _commit(repo, "change venue and confidence")
+
+    change = extract_change_set(repo, base, head).changes[0]
+    assert change.fields == ("confidence", "venue")
+    assert evaluate(
+        extract_change_set(repo, base, head), tier=RunTier.BELIEF_NEUTRAL
+    ).allowed is False
+
+
+def test_frontmatter_keys_that_collide_when_stringified_are_uncomputable(repo: Path):
+    base = _git(repo, "rev-parse", "HEAD")
+    _write(
+        repo,
+        PAPER,
+        _paper_text(venue="Science").replace("venue: Science\n", "1: a\n'1': b\nvenue: Science\n"),
+    )
+    head = _commit(repo, "introduce colliding keys")
+
+    with pytest.raises(ExtractError):
+        extract_change_set(repo, base, head)
+
+
+def test_an_allowed_field_plus_a_mode_change_is_denied(repo: Path):
+    base = _git(repo, "rev-parse", "HEAD")
+    _write(repo, PAPER, _paper_text(venue="Science"))
+    (repo / PAPER).chmod(0o755)
+    head = _commit(repo, "edit venue and chmod")
+
+    change_set = extract_change_set(repo, base, head)
+    assert "venue" in change_set.changes[0].fields
+    assert UNACCOUNTED_CHANGE_FIELD in change_set.changes[0].fields
+    assert evaluate(change_set, tier=RunTier.BELIEF_NEUTRAL).allowed is False
+
+
+def test_an_allowed_field_plus_a_frontmatter_comment_change_is_denied(repo: Path):
+    base = _git(repo, "rev-parse", "HEAD")
+    _write(
+        repo,
+        PAPER,
+        _paper_text(venue="Science").replace("venue: Science\n", "# source verified\nvenue: Science\n"),
+    )
+    head = _commit(repo, "edit venue and comment")
+
+    change_set = extract_change_set(repo, base, head)
+    assert "venue" in change_set.changes[0].fields
+    assert UNACCOUNTED_CHANGE_FIELD in change_set.changes[0].fields
+    assert evaluate(change_set, tier=RunTier.BELIEF_NEUTRAL).allowed is False
+
+
+def test_a_nul_containing_revision_is_an_extract_error(repo: Path):
+    base = _git(repo, "rev-parse", "HEAD")
+
+    with pytest.raises(ExtractError):
+        extract_change_set(repo, base, "HEAD\0malicious")
+
+
+def test_option_like_revisions_are_delimited_before_rev_parse(
+    repo: Path, monkeypatch: pytest.MonkeyPatch
+):
+    calls: list[tuple[str, ...]] = []
+
+    def fake_git(_repo_root: Path, *args: str) -> bytes:
+        calls.append(args)
+        return b"a" * 40 + b"\n"
+
+    monkeypatch.setattr(extract, "_git", fake_git)
+
+    extract._require_commit(repo, "--show-toplevel")
+
+    assert calls == [
+        ("rev-parse", "--verify", "--end-of-options", "--show-toplevel^{commit}")
+    ]
+
+
+def test_an_option_like_revision_is_an_extract_error(repo: Path):
+    base = _git(repo, "rev-parse", "HEAD")
+
+    with pytest.raises(ExtractError):
+        extract_change_set(repo, base, "--show-toplevel")
