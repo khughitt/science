@@ -52,7 +52,10 @@ Neither correction changes the design's substance — the record, its fields, it
 Every task's requirements implicitly include this section.
 
 - **Provenance only.** Run records and `sci:autonomousRun` edges are written to `graph/provenance` and nowhere else. No triple whose subject or object is a run node may appear in `graph/knowledge`. This is load-bearing: at weekly cadences run records would otherwise become one of the largest node populations in the graph and would skew attention rankings (`graph/attention.py`).
-- **Records on disk are FINALIZED records.** Every attested field is required — there is no partial or in-flight record shape. A supervisor that crashes mid-run leaves no record, and its branch therefore reads as *unattested* rather than *clean*. Do not add optionality to make an in-flight write easier; that is the fail-open this whole slice exists to prevent.
+- **Records on disk are FINALIZED records.** Every attested field is required — there is no partial or in-flight record shape. `triggered_by` is the single exception, and only because the design marks it "Optional until S2; omitted, not blank, when absent". A supervisor that crashes mid-run leaves no record, and its branch therefore reads as *unattested* rather than *clean*. Do not add optionality to make an in-flight write easier; that is the fail-open this whole slice exists to prevent.
+- **A run record is an attestation, so its parse must be strict.** `parse_frontmatter` uses `yaml.safe_load`, which collapses duplicate keys **last-wins before pydantic ever sees them** — so `extra="forbid"` provides no protection against a file declaring `tier:` twice. Run records get their own composing parser (Task 2). Never route a run record through the ordinary entity frontmatter path.
+- **`autonomous_run` names the LAST run that wrote the file, not every run that ever touched it.** It is a scalar and it is overwritten. Full attribution history lives in git, in the run's `base_commit..head_commit` range — which is the authoritative binding anyway (design §0). Task 8 corrects the design's claim that run→entities is fully derivable by querying this field; with last-writer-wins it is derivable only for each entity's current state.
+- **`autonomous_run` is entity-authored in this plan and therefore NOT yet an attested binding.** Materialization checks that the named run *exists*, not that this run wrote this file — so an actor can still attribute its work to an unrelated prior run. Closing that is Plan D's job and is recorded in Task 8: the supervisor must stamp the field itself, or verify every value it finds against the run's own `base_commit..head_commit`. Do not describe this field as attested anywhere in code comments or docs until that lands.
 - **Fail early at load.** A malformed record, or an id that disagrees with its filename, raises. A run record is an attestation; an attestation that cannot be read is not one that can be skipped.
 - **Commit shas are full 40-character lowercase hex.** An abbreviated sha is not a stable binding.
 - **`extra="forbid"` and `frozen=True` on every persisted model.** An unrecognized key in a run record is an error, never a silently dropped field.
@@ -73,8 +76,9 @@ Every task's requirements implicitly include this section.
 | `science/model/src/science_model/autonomous_runs.py` | **Create.** The persisted shape: `RUN_ID_PREFIX`, `RunTier`, `RunDisposition`, `PolicyIdentity`, `RunBudget`, `AutonomousRunRecord`, `RunRecordError`. Pure — pydantic, `re`, `datetime`, `enum` only. |
 | `science/model/src/science_model/entities.py` | **Modify.** Add `autonomous_run` to `Entity` with a shape validator. |
 | `science/model/src/science_model/frontmatter.py` | **Modify.** Map `autonomous_run` from frontmatter into entity kwargs. |
-| `science/model/src/science_model/schemas/mixin-hypothesis-2.0.json` | **Modify.** Declare `autonomous_run` — hypothesis is the one project mixin validated strictly. |
-| `science/src/science_tool/graph/autonomous_runs.py` | **Create.** `RUNS_DIRNAME`, `load_run_records`, `run_node_uri`, `add_run_record_to_graph`. |
+| `science/model/src/science_model/schemas/mixin-hypothesis-1.0.json` and `-2.0.json` | **Modify.** Declare `autonomous_run` in **both** — hypothesis is the one project mixin validated strictly, and generations 2 and 3 resolve it through different files. |
+| `science/src/science_tool/graph/autonomous_runs.py` | **Create.** `RUNS_DIRNAME`, the strict frontmatter parser, `load_run_records`, `run_node_uri`, `add_run_record_to_graph`. |
+| `science/src/science_tool/graph/store/constants.py` | **Modify.** Register the new `sci:run*` and `sci:autonomousRun` predicates in `PREDICATE_REGISTRY` under `graph/provenance`. |
 | `science/src/science_tool/graph/sources.py` | **Modify.** `ProjectSources.run_records` + collection in `load_project_sources`. |
 | `science/src/science_tool/graph/materialize.py` | **Modify.** `_add_run_record_edges` and `_add_autonomous_run_edges`, both provenance-only. |
 | `science/src/science_tool/refs.py` | **Modify.** Report a dangling `autonomous_run` as a `RefIssue`. |
@@ -82,7 +86,8 @@ Every task's requirements implicitly include this section.
 | `science/model/tests/test_autonomous_run_record.py` | **Create.** Model shape and validation. |
 | `science/model/tests/test_autonomous_run_field.py` | **Create.** `Entity.autonomous_run` shape validation and the frontmatter round trip. |
 | `science/tests/test_autonomous_run_schema.py` | **Create.** The gen-3 strict-mixin gate for `autonomous_run`. |
-| `science/tests/test_autonomous_runs.py` | **Create.** Loader + node URI + graph emission. |
+| `science/tests/test_autonomous_runs.py` | **Create.** Loader (including the strict-YAML and filesystem boundaries) + node URI + graph emission. |
+| `science/tests/test_autonomous_run_predicates.py` | **Create.** Every emitted predicate is registered, to the provenance layer. |
 | `science/tests/test_autonomous_run_materialize.py` | **Create.** End-to-end through `load_project_sources` + `build_dataset_from_sources`, including layer isolation. |
 | `science/tests/test_refs_autonomous_run.py` | **Create.** Dangling-reference detection. |
 | `docs/user-guide/entities.md`, `docs/user-guide/project-layout.md` | **Modify.** Document the field and the `runs/` root. |
@@ -146,6 +151,7 @@ def _payload(**overrides: object) -> dict[str, object]:
         "basis_digest": _DIGEST,
         "started": datetime(2026, 7, 24, 9, 0, tzinfo=UTC),
         "ended": datetime(2026, 7, 24, 9, 30, tzinfo=UTC),
+        "budget": {"tokens": 12000, "wall_clock_seconds": 1800.5},
         "disposition": "clean",
     }
     payload.update(overrides)
@@ -159,8 +165,8 @@ def test_valid_record_round_trips() -> None:
     assert record.tier is RunTier.BELIEF_NEUTRAL
     assert record.disposition is RunDisposition.CLEAN
     assert record.policy_identity.id == "core-default"
+    assert record.budget == RunBudget(tokens=12000, wall_clock_seconds=1800.5)
     assert record.triggered_by is None
-    assert record.budget is None
 
 
 def test_record_is_frozen() -> None:
@@ -257,19 +263,49 @@ def test_triggered_by_is_kept_when_present() -> None:
     assert record.triggered_by == "schedule:weekly-curation"
 
 
+def test_budget_is_required() -> None:
+    # The design marks only `triggered_by` optional. A run that reports no cost is a run
+    # whose cost nobody can audit, and S4's estimates are built from exactly this field.
+    payload = _payload()
+    del payload["budget"]
+    with pytest.raises(ValidationError):
+        AutonomousRunRecord.model_validate(payload)
+
+
 def test_budget_requires_at_least_one_measure() -> None:
     with pytest.raises(ValidationError, match="tokens"):
         AutonomousRunRecord.model_validate(_payload(budget={}))
 
 
-def test_budget_refuses_negative_values() -> None:
+@pytest.mark.parametrize("measure", ["tokens", "wall_clock_seconds"])
+def test_budget_refuses_negative_values(measure: str) -> None:
     with pytest.raises(ValidationError, match="negative"):
-        AutonomousRunRecord.model_validate(_payload(budget={"tokens": -1}))
+        AutonomousRunRecord.model_validate(_payload(budget={measure: -1}))
+
+
+@pytest.mark.parametrize("value", [float("nan"), float("inf"), float("-inf")])
+def test_budget_refuses_non_finite_wall_clock(value: float) -> None:
+    # `nan < 0` and `inf < 0` are both False, so a bare sign check lets these through.
+    with pytest.raises(ValidationError, match="finite"):
+        AutonomousRunRecord.model_validate(_payload(budget={"wall_clock_seconds": value}))
 
 
 def test_budget_accepts_either_measure() -> None:
     record = AutonomousRunRecord.model_validate(_payload(budget={"tokens": 12000}))
     assert record.budget == RunBudget(tokens=12000)
+
+
+@pytest.mark.parametrize("field_name", ["model", "agent"])
+def test_blank_identity_strings_are_refused(field_name: str) -> None:
+    with pytest.raises(ValidationError):
+        AutonomousRunRecord.model_validate(_payload(**{field_name: "   "}))
+
+
+@pytest.mark.parametrize("part", ["id", "version"])
+def test_blank_policy_identity_parts_are_refused(part: str) -> None:
+    identity = {"id": "core-default", "version": "1"} | {part: "  "}
+    with pytest.raises(ValidationError, match="may not be blank"):
+        AutonomousRunRecord.model_validate(_payload(policy_identity=identity))
 
 
 def test_tier_vocabulary_is_closed() -> None:
@@ -313,6 +349,7 @@ makes that safe.
 
 from __future__ import annotations
 
+import math
 import re
 from datetime import date, datetime
 from enum import StrEnum
@@ -367,6 +404,14 @@ class PolicyIdentity(BaseModel):
     id: str
     version: str
 
+    @model_validator(mode="after")
+    def _validate(self) -> "PolicyIdentity":
+        for field_name in ("id", "version"):
+            value: str = getattr(self, field_name)
+            if not value.strip():
+                raise ValueError(f"policy_identity {field_name} may not be blank")
+        return self
+
 
 class RunBudget(BaseModel):
     """What the run consumed. Slice S4 turns these into estimates."""
@@ -382,10 +427,17 @@ class RunBudget(BaseModel):
             raise ValueError("budget must record tokens, wall_clock_seconds, or both")
         if self.tokens is not None and self.tokens < 0:
             raise ValueError(f"budget tokens may not be negative, got {self.tokens}")
-        if self.wall_clock_seconds is not None and self.wall_clock_seconds < 0:
-            raise ValueError(
-                f"budget wall_clock_seconds may not be negative, got {self.wall_clock_seconds}"
-            )
+        if self.wall_clock_seconds is not None:
+            # Order matters: `nan < 0` and `inf < 0` are both False, so a sign check alone
+            # admits both. Finiteness is checked first and separately.
+            if not math.isfinite(self.wall_clock_seconds):
+                raise ValueError(
+                    f"budget wall_clock_seconds must be finite, got {self.wall_clock_seconds}"
+                )
+            if self.wall_clock_seconds < 0:
+                raise ValueError(
+                    f"budget wall_clock_seconds may not be negative, got {self.wall_clock_seconds}"
+                )
         return self
 
 
@@ -411,9 +463,11 @@ class AutonomousRunRecord(BaseModel):
     basis_digest: str
     started: datetime
     ended: datetime
+    budget: RunBudget
     disposition: RunDisposition
+    # The ONLY optional field, and only because the design marks it
+    # "Optional until S2; omitted, not blank, when absent".
     triggered_by: str | None = None
-    budget: RunBudget | None = None
 
     @property
     def slug(self) -> str:
@@ -423,6 +477,8 @@ class AutonomousRunRecord(BaseModel):
     @model_validator(mode="after")
     def _validate(self) -> "AutonomousRunRecord":
         self._validate_identity()
+        if not self.model.strip():
+            raise ValueError("model may not be blank")
         for field_name in ("base_commit", "head_commit", "toolkit_revision"):
             value: str = getattr(self, field_name)
             if not _SHA_RE.fullmatch(value):
@@ -546,6 +602,9 @@ policy_identity:
 basis_digest: {digest}
 started: 2026-07-24T09:00:00+00:00
 ended: 2026-07-24T09:30:00+00:00
+budget:
+  tokens: 12000
+  wall_clock_seconds: 1800.5
 disposition: clean
 ---
 
@@ -626,6 +685,100 @@ def test_nested_directory_raises_rather_than_being_skipped(tmp_path: Path) -> No
     (tmp_path / "runs" / "2026").mkdir()
     with pytest.raises(RunRecordError, match="flat"):
         load_run_records(tmp_path)
+
+
+def test_runs_as_a_regular_file_raises(tmp_path: Path) -> None:
+    # `is_dir()` is False here, so a plain "no runs directory -> []" would report a
+    # project with a broken runs path as a project that never ran unattended.
+    (tmp_path / "runs").write_text("not a directory\n", encoding="utf-8")
+    with pytest.raises(RunRecordError, match="not a directory"):
+        load_run_records(tmp_path)
+
+
+def test_symlinked_runs_directory_raises(tmp_path: Path) -> None:
+    elsewhere = tmp_path / "elsewhere"
+    elsewhere.mkdir()
+    (tmp_path / "runs").symlink_to(elsewhere, target_is_directory=True)
+    with pytest.raises(RunRecordError, match="symlink"):
+        load_run_records(tmp_path)
+
+
+def test_symlinked_record_raises(tmp_path: Path) -> None:
+    # An out-of-tree file must not be able to become an accepted attestation.
+    outside = tmp_path / "outside.md"
+    outside.write_text(
+        _RECORD.format(base="a" * 40, head="b" * 40, toolkit="c" * 40, digest="d" * 64),
+        encoding="utf-8",
+    )
+    runs = tmp_path / "runs"
+    runs.mkdir()
+    (runs / "2026-07-24-curation-sweep-a3f1.md").symlink_to(outside)
+    with pytest.raises(RunRecordError, match="symlink"):
+        load_run_records(tmp_path)
+
+
+def test_non_markdown_child_raises(tmp_path: Path) -> None:
+    # Including README.md's absence of a run shape: runs/ holds run records only.
+    _write_record(tmp_path)
+    (tmp_path / "runs" / "notes.txt").write_text("scratch\n", encoding="utf-8")
+    with pytest.raises(RunRecordError, match="flat"):
+        load_run_records(tmp_path)
+
+
+def test_duplicate_top_level_key_raises(tmp_path: Path) -> None:
+    # yaml.safe_load collapses this to the LAST value, so `extra="forbid"` never sees it.
+    # A record that declares two tiers must not be read as declaring one.
+    path = _write_record(tmp_path)
+    path.write_text(
+        path.read_text(encoding="utf-8").replace(
+            "tier: belief-neutral", "tier: report-only\ntier: belief-neutral"
+        ),
+        encoding="utf-8",
+    )
+    with pytest.raises(RunRecordError, match="duplicate key"):
+        load_run_records(tmp_path)
+
+
+def test_duplicate_nested_key_raises(tmp_path: Path) -> None:
+    path = _write_record(tmp_path)
+    path.write_text(
+        path.read_text(encoding="utf-8").replace(
+            "  version: \"1\"", "  version: \"1\"\n  version: \"2\""
+        ),
+        encoding="utf-8",
+    )
+    with pytest.raises(RunRecordError, match="duplicate key"):
+        load_run_records(tmp_path)
+
+
+def test_yaml_merge_key_raises(tmp_path: Path) -> None:
+    path = _write_record(tmp_path)
+    path.write_text(
+        path.read_text(encoding="utf-8").replace(
+            "disposition: clean", "disposition: clean\n<<: {tier: report-only}"
+        ),
+        encoding="utf-8",
+    )
+    with pytest.raises(RunRecordError, match="merge key"):
+        load_run_records(tmp_path)
+
+
+def test_undecodable_record_raises(tmp_path: Path) -> None:
+    runs = tmp_path / "runs"
+    runs.mkdir()
+    (runs / "2026-07-24-curation-sweep-a3f1.md").write_bytes(b"---\n\xff\xfe\n---\n")
+    with pytest.raises(RunRecordError):
+        load_run_records(tmp_path)
+
+
+def test_unparseable_yaml_raises(tmp_path: Path) -> None:
+    runs = tmp_path / "runs"
+    runs.mkdir()
+    (runs / "2026-07-24-curation-sweep-a3f1.md").write_text(
+        "---\nid: [unclosed\n---\n\nBody.\n", encoding="utf-8"
+    )
+    with pytest.raises(RunRecordError):
+        load_run_records(tmp_path)
 ```
 
 - [ ] **Step 2: Run the tests to verify they fail**
@@ -650,46 +803,108 @@ from pathlib import Path
 
 from pydantic import ValidationError
 from science_model.autonomous_runs import AutonomousRunRecord, RunRecordError
-from science_model.frontmatter import parse_frontmatter
+import yaml
 
 RUNS_DIRNAME = "runs"
+
+
+def _reject_duplicate_and_merge_keys(node: yaml.Node, path: Path) -> None:
+    """Refuse duplicate keys and YAML merge keys anywhere in the document.
+
+    Recursive, unlike `skill_loads._reject_duplicate_keys`: a run record nests
+    `policy_identity` and `budget`, and a duplicate inside either is exactly as
+    silent as one at the top level.
+
+    Operates on the NODE tree from `yaml.compose`, which builds no Python objects
+    (so no `!!python/object` exposure) while still seeing what `safe_load` would
+    collapse to last-wins.
+    """
+    if isinstance(node, yaml.MappingNode):
+        seen: set[object] = set()
+        for key_node, value_node in node.value:
+            if key_node.tag == "tag:yaml.org,2002:merge":
+                raise RunRecordError(f"{path}: YAML merge keys are not allowed in a run record")
+            key = getattr(key_node, "value", None)
+            if key in seen:
+                raise RunRecordError(f"{path}: duplicate key {key!r} in run record")
+            seen.add(key)
+            _reject_duplicate_and_merge_keys(value_node, path)
+    elif isinstance(node, yaml.SequenceNode):
+        for item in node.value:
+            _reject_duplicate_and_merge_keys(item, path)
+
+
+def _parse_run_record_frontmatter(path: Path) -> dict[str, object]:
+    """Parse one run record's frontmatter under attestation-grade rules.
+
+    Deliberately NOT `science_model.frontmatter.parse_frontmatter`: that reaches
+    `yaml.safe_load`, which silently collapses a duplicate `tier:` to last-wins
+    BEFORE pydantic runs, so `extra="forbid"` never sees the conflict. An
+    attestation that says two things must not be read as saying one.
+    """
+    try:
+        text = path.read_text(encoding="utf-8")
+    except (OSError, UnicodeDecodeError) as exc:
+        raise RunRecordError(f"{path}: run record is unreadable: {exc}") from exc
+    if not text.startswith("---"):
+        raise RunRecordError(f"{path}: run record has no frontmatter")
+    parts = text.split("---", 2)
+    if len(parts) < 3:
+        raise RunRecordError(f"{path}: run record frontmatter is unterminated")
+    block = parts[1]
+    try:
+        node = yaml.compose(block, Loader=yaml.SafeLoader)
+        if node is not None:
+            _reject_duplicate_and_merge_keys(node, path)
+        # Parse the SAME text again rather than constructing from the node tree: the two
+        # passes must agree, and safe_load is the parser whose result pydantic validates.
+        data = yaml.safe_load(block)
+    except yaml.YAMLError as exc:
+        raise RunRecordError(f"{path}: run record frontmatter is not valid YAML: {exc}") from exc
+    if not isinstance(data, dict) or not data:
+        raise RunRecordError(f"{path}: run record has no frontmatter")
+    return data
 
 
 def load_run_records(project_root: Path) -> list[AutonomousRunRecord]:
     """Every finalized run record under `<project_root>/runs/`, in filename order.
 
-    A missing directory yields no records -- most projects never run unattended.
-    Everything else fails loudly: a malformed record, a record whose id disagrees
-    with its filename, or a nested directory (which would leave a real record
-    silently unscanned). A run record is an attestation, and an attestation that
-    cannot be read is not one that can be skipped.
+    A genuinely absent directory yields no records -- most projects never run
+    unattended. Everything else fails loudly, and the distinctions matter:
+
+    * `runs` present but not a directory is a broken project, not an empty one.
+    * A symlink -- on the directory or on any record -- is refused, so an
+      out-of-tree file can never become an accepted attestation.
+    * Any child that is not a flat regular `*.md` file raises, so a record filed
+      one level down is never silently unscanned.
 
     No duplicate-id check: `slug == path.stem` plus filesystem uniqueness already
-    makes duplicates impossible within one directory.
+    makes duplicates impossible within one directory, so such a check would be a
+    branch no test can reach.
     """
     runs_dir = project_root / RUNS_DIRNAME
-    if not runs_dir.is_dir():
+    # Symlink first: a symlink to a missing target reports `exists() is False`, so an
+    # existence check would return "no records" for a redirected runs directory.
+    if runs_dir.is_symlink():
+        raise RunRecordError(f"{runs_dir}: runs must not be a symlink")
+    if not runs_dir.exists():
         return []
-    for child in sorted(runs_dir.iterdir()):
-        if child.is_dir():
-            raise RunRecordError(
-                f"{child}: runs/ is flat -- nested directories are not scanned"
-            )
+    if not runs_dir.is_dir():
+        raise RunRecordError(f"{runs_dir}: runs exists but is not a directory")
     records: list[AutonomousRunRecord] = []
-    for path in sorted(runs_dir.glob("*.md")):
-        parsed = parse_frontmatter(path)
-        if parsed is None:
-            raise RunRecordError(f"{path}: run record is unreadable")
-        frontmatter, _body = parsed
-        if not isinstance(frontmatter, dict) or not frontmatter:
-            raise RunRecordError(f"{path}: run record has no frontmatter")
+    for child in sorted(runs_dir.iterdir()):
+        if child.is_symlink():
+            raise RunRecordError(f"{child}: run records must not be symlinks")
+        if not child.is_file() or child.suffix != ".md":
+            raise RunRecordError(f"{child}: runs/ holds only flat *.md run records")
+        frontmatter = _parse_run_record_frontmatter(child)
         try:
             record = AutonomousRunRecord.model_validate(frontmatter)
         except ValidationError as exc:
-            raise RunRecordError(f"{path}: invalid run record: {exc}") from exc
-        if record.slug != path.stem:
+            raise RunRecordError(f"{child}: invalid run record: {exc}") from exc
+        if record.slug != child.stem:
             raise RunRecordError(
-                f"{path}: run id {record.id!r} disagrees with filename stem {path.stem!r}"
+                f"{child}: run id {record.id!r} disagrees with filename stem {child.stem!r}"
             )
         records.append(record)
     return records
@@ -769,6 +984,8 @@ def test_emission_writes_the_attested_fields(tmp_path: Path) -> None:
     assert (node, SCI_NS.runPolicyVersion, Literal("1")) in graph
     assert (node, SCI_NS.runBasisDigest, Literal("d" * 64)) in graph
     assert (node, SCI_NS.runDisposition, Literal("clean")) in graph
+    assert (node, SCI_NS.runBudgetTokens, Literal(12000)) in graph
+    assert (node, SCI_NS.runBudgetWallClockSeconds, Literal(1800.5)) in graph
     assert (
         node,
         PROV.startedAtTime,
@@ -781,23 +998,19 @@ def test_emission_writes_the_attested_fields(tmp_path: Path) -> None:
     ) in graph
 
 
-def test_absent_optional_fields_emit_no_triple(tmp_path: Path) -> None:
+def test_absent_triggered_by_emits_no_triple(tmp_path: Path) -> None:
     record = _record(tmp_path)
     graph = Graph()
     add_run_record_to_graph(record, graph)
-    node = run_node_uri(record.id)
-    assert (node, SCI_NS.runTriggeredBy, None) not in graph
-    assert (node, SCI_NS.runBudgetTokens, None) not in graph
-    assert (node, SCI_NS.runBudgetWallClockSeconds, None) not in graph
+    assert (run_node_uri(record.id), SCI_NS.runTriggeredBy, None) not in graph
 
 
-def test_optional_fields_emit_when_present(tmp_path: Path) -> None:
+def test_triggered_by_emits_when_present(tmp_path: Path) -> None:
     path = _write_record(tmp_path)
     path.write_text(
         path.read_text(encoding="utf-8").replace(
             "disposition: clean",
-            "disposition: clean\ntriggered_by: schedule:weekly-curation\n"
-            "budget:\n  tokens: 12000\n  wall_clock_seconds: 1800.5",
+            "disposition: clean\ntriggered_by: schedule:weekly-curation",
         ),
         encoding="utf-8",
     )
@@ -806,8 +1019,20 @@ def test_optional_fields_emit_when_present(tmp_path: Path) -> None:
     add_run_record_to_graph(record, graph)
     node = run_node_uri(record.id)
     assert (node, SCI_NS.runTriggeredBy, Literal("schedule:weekly-curation")) in graph
+
+
+def test_budget_with_one_measure_emits_only_that_measure(tmp_path: Path) -> None:
+    path = _write_record(tmp_path)
+    path.write_text(
+        path.read_text(encoding="utf-8").replace("  wall_clock_seconds: 1800.5\n", ""),
+        encoding="utf-8",
+    )
+    record = load_run_records(tmp_path)[0]
+    graph = Graph()
+    add_run_record_to_graph(record, graph)
+    node = run_node_uri(record.id)
     assert (node, SCI_NS.runBudgetTokens, Literal(12000)) in graph
-    assert (node, SCI_NS.runBudgetWallClockSeconds, Literal(1800.5)) in graph
+    assert (node, SCI_NS.runBudgetWallClockSeconds, None) not in graph
 
 
 def test_emission_is_idempotent(tmp_path: Path) -> None:
@@ -879,17 +1104,12 @@ def add_run_record_to_graph(record: AutonomousRunRecord, graph: Graph) -> None:
     graph.add((node, SCI_NS.runDisposition, RDFLiteral(record.disposition.value)))
     if record.triggered_by is not None:
         graph.add((node, SCI_NS.runTriggeredBy, RDFLiteral(record.triggered_by)))
-    if record.budget is not None:
-        if record.budget.tokens is not None:
-            graph.add((node, SCI_NS.runBudgetTokens, RDFLiteral(record.budget.tokens)))
-        if record.budget.wall_clock_seconds is not None:
-            graph.add(
-                (
-                    node,
-                    SCI_NS.runBudgetWallClockSeconds,
-                    RDFLiteral(record.budget.wall_clock_seconds),
-                )
-            )
+    if record.budget.tokens is not None:
+        graph.add((node, SCI_NS.runBudgetTokens, RDFLiteral(record.budget.tokens)))
+    if record.budget.wall_clock_seconds is not None:
+        graph.add(
+            (node, SCI_NS.runBudgetWallClockSeconds, RDFLiteral(record.budget.wall_clock_seconds))
+        )
 ```
 
 - [ ] **Step 4: Run the tests to verify they pass**
@@ -897,10 +1117,91 @@ def add_run_record_to_graph(record: AutonomousRunRecord, graph: Graph) -> None:
 Run: `cd science && uv run --frozen pytest tests/test_autonomous_runs.py -v`
 Expected: all pass.
 
-- [ ] **Step 5: Commit**
+- [ ] **Step 5: Write the failing registry test**
+
+This task mints sixteen new `sci:` predicates. `PREDICATE_REGISTRY`
+(`science/src/science_tool/graph/store/constants.py:177`) is the public answer to
+"what predicates does this graph use", read by `science graph predicates` — and the
+skill-load precedent this plan follows *does* register its predicates
+(`sci:hasSkillLoad`, `sci:loadReason`, `sci:usageSource`). An unregistered vocabulary
+leaves that command quietly incomplete.
+
+The test derives the expected set from the emitter rather than from a second hand-written
+list, so a predicate added to `add_run_record_to_graph` later cannot slip past it.
+
+```python
+# science/tests/test_autonomous_run_predicates.py
+from __future__ import annotations
+
+from pathlib import Path
+
+from rdflib import Graph
+
+from science_tool.graph.autonomous_runs import add_run_record_to_graph, load_run_records
+from science_tool.graph.store import SCI_NS
+from science_tool.graph.store.constants import PREDICATE_REGISTRY
+# Bare module name, not `tests.…`: pytest puts `science/tests/` on sys.path directly.
+# `test_graph_origins.py:19` imports across test modules the same way.
+from test_autonomous_runs import _write_record
+
+
+def _emitted_sci_predicates(tmp_path: Path) -> set[str]:
+    _write_record(tmp_path)
+    graph = Graph()
+    add_run_record_to_graph(load_run_records(tmp_path)[0], graph)
+    return {
+        f"sci:{str(p).removeprefix(str(SCI_NS))}"
+        for _s, p, _o in graph
+        if str(p).startswith(str(SCI_NS))
+    }
+
+
+def test_every_emitted_run_predicate_is_registered(tmp_path: Path) -> None:
+    registered = {row["predicate"] for row in PREDICATE_REGISTRY}
+    missing = sorted(_emitted_sci_predicates(tmp_path) - registered)
+    assert missing == [], f"unregistered run predicates: {missing}"
+
+
+def test_run_predicates_are_registered_to_the_provenance_layer(tmp_path: Path) -> None:
+    emitted = _emitted_sci_predicates(tmp_path)
+    layers = {
+        row["predicate"]: row["layer"] for row in PREDICATE_REGISTRY if row["predicate"] in emitted
+    }
+    assert layers, "no run predicates found in the registry"
+    assert set(layers.values()) == {"graph/provenance"}
+```
+
+> If importing `_write_record` across test modules is awkward in this suite, copy the
+> record fixture into this file instead — do **not** weaken the test by hand-listing the
+> predicate names.
+
+Run it and confirm it fails listing all sixteen predicates as unregistered.
+
+- [ ] **Step 6: Register the predicates**
+
+Add one `PREDICATE_REGISTRY` entry per emitted predicate, all with
+`"layer": "graph/provenance"`: `sci:runId`, `sci:runAgent`, `sci:runModel`, `sci:runTier`,
+`sci:runBranch`, `sci:runBaseCommit`, `sci:runHeadCommit`, `sci:runToolkitRevision`,
+`sci:runPolicyId`, `sci:runPolicyVersion`, `sci:runBasisDigest`, `sci:runDisposition`,
+`sci:runTriggeredBy`, `sci:runBudgetTokens`, `sci:runBudgetWallClockSeconds`. Follow the
+existing row shape, e.g.:
+
+```python
+    {
+        "predicate": "sci:runTier",
+        "description": "Autonomous run write tier (report-only | belief-neutral)",
+        "layer": "graph/provenance",
+    },
+```
+
+`sci:autonomousRun` is minted in Task 6, not here; register it there.
+
+Re-run: both registry tests pass.
+
+- [ ] **Step 7: Commit**
 
 ```bash
-git add science/src/science_tool/graph/autonomous_runs.py science/tests/test_autonomous_runs.py
+git add science/src/science_tool/graph/autonomous_runs.py science/src/science_tool/graph/store/constants.py science/tests/test_autonomous_runs.py science/tests/test_autonomous_run_predicates.py
 git commit -m "feat(graph): emit autonomous run records into provenance"
 ```
 
@@ -954,6 +1255,9 @@ policy_identity:
 basis_digest: {"d" * 64}
 started: 2026-07-24T09:00:00+00:00
 ended: 2026-07-24T09:30:00+00:00
+budget:
+  tokens: 12000
+  wall_clock_seconds: 1800.5
 disposition: clean
 ---
 
@@ -1119,7 +1423,7 @@ git commit -m "feat(graph): materialize run records into the provenance layer"
 **Files:**
 - Modify: `science/model/src/science_model/entities.py`
 - Modify: `science/model/src/science_model/frontmatter.py:524` (the `entity_kwargs` dict)
-- Modify: `science/model/src/science_model/schemas/mixin-hypothesis-2.0.json`
+- Modify: `science/model/src/science_model/schemas/mixin-hypothesis-1.0.json` **and** `mixin-hypothesis-2.0.json`
 - Test: `science/model/tests/test_autonomous_run_field.py` (create) — run from `science/model/`
 - Test: `science/tests/test_autonomous_run_schema.py` (create) — run from `science/`
 
@@ -1131,7 +1435,9 @@ A field only reaches the graph if it is wired at every layer. Miss the `frontmat
 
 The validator checks **shape only** — `run:` prefix, non-empty remainder. Whether a run record with that id exists is a *resolution* question answered in Tasks 6 and 7, exactly as `OriginRecord` validates a `paper:` prefix at the model layer and leaves resolution to the graph.
 
-`mixin-hypothesis-2.0.json` is the only project mixin validated strictly (`PROJECT_MIXIN_NAMES = frozenset({"hypothesis"})`, `entity_schema/profile.py:24`), and generation 3 maps `hypothesis` to `2.0`. Other kinds carry the key as a preserved extra with no schema gate.
+`hypothesis` is the only project mixin validated strictly (`PROJECT_MIXIN_NAMES = frozenset({"hypothesis"})`, `entity_schema/profile.py:24`); other kinds carry the key as a preserved extra with no schema gate.
+
+**Both hypothesis mixins need the property.** `ARMED_SCHEMA_GENERATIONS = frozenset({2, 3})` and `_MIXIN_VERSION_BY_GENERATION` (`entity_schema/profile.py:92-95`) maps hypothesis to `1.0` at generation 2 and `2.0` at generation 3. I verified both generations currently reject `autonomous_run` with `Unevaluated properties are not allowed`, so touching only `2.0` would leave every pinned gen-2 project unable to carry the field. The schema test below is parameterized over both.
 
 Run this task from `science/model/`.
 
@@ -1187,6 +1493,11 @@ def test_reference_without_the_run_prefix_is_refused() -> None:
 def test_bare_prefix_is_refused() -> None:
     with pytest.raises(ValidationError, match="run:<id>"):
         _entity(autonomous_run="run:")
+
+
+def test_whitespace_only_reference_is_refused() -> None:
+    with pytest.raises(ValidationError, match="run:<id>"):
+        _entity(autonomous_run="run:   ")
 
 
 def test_workflow_run_reference_is_refused() -> None:
@@ -1253,7 +1564,9 @@ And the shape validator (place it beside the other `field_validator`s on this mo
         # answered by the graph build and by `refs-check`.
         if value is None:
             return value
-        if not value.startswith(RUN_ID_PREFIX) or len(value) <= len(RUN_ID_PREFIX):
+        # `.strip()` on the remainder, not just a length check: `"run:   "` clears a bare
+        # length test while naming nothing. `triggered_by` guards the same way.
+        if not value.startswith(RUN_ID_PREFIX) or not value[len(RUN_ID_PREFIX) :].strip():
             raise ValueError(f"autonomous_run must be a 'run:<id>' reference, got {value!r}")
         return value
 ```
@@ -1283,14 +1596,21 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import pytest
+
 from science_tool.graph.sources import load_project_sources
 
 RUN_ID = "run:2026-07-24-curation-sweep-a3f1"
 
+# Both armed generations, and they resolve hypotheses through DIFFERENT mixin files:
+# generation 2 -> mixin-hypothesis-1.0.json, generation 3 -> mixin-hypothesis-2.0.json.
+ARMED_GENERATIONS = (2, 3)
 
-def _write_gen3_project(root: Path, *, extra: str = "") -> None:
+
+def _write_project(root: Path, *, generation: int, extra: str = "") -> None:
     (root / "science.yaml").write_text(
-        "name: demo\nknowledge_profiles:\n  local: local\nentity_schema_version: 3\n",
+        "name: demo\nknowledge_profiles:\n  local: local\n"
+        f"entity_schema_version: {generation}\n",
         encoding="utf-8",
     )
     hypotheses = root / "entities" / "hypotheses"
@@ -1312,35 +1632,39 @@ def _write_gen3_project(root: Path, *, extra: str = "") -> None:
     )
 
 
-def test_gen3_hypothesis_accepts_autonomous_run(tmp_path: Path) -> None:
+@pytest.mark.parametrize("generation", ARMED_GENERATIONS)
+def test_pinned_hypothesis_accepts_autonomous_run(tmp_path: Path, generation: int) -> None:
     # `hypothesis` is the one project mixin validated strictly
     # (PROJECT_MIXIN_NAMES, entity_schema/profile.py:24), so an undeclared key here is a
     # hard load failure -- not a preserved extra as on every other kind.
-    _write_gen3_project(tmp_path, extra=f"autonomous_run: {RUN_ID}\n")
+    _write_project(tmp_path, generation=generation, extra=f"autonomous_run: {RUN_ID}\n")
     sources = load_project_sources(tmp_path)
     entity = next(e for e in sources.entities if e.canonical_id == "hypothesis:h01")
     assert entity.autonomous_run == RUN_ID
 
 
-def test_gen3_hypothesis_without_the_field_still_loads(tmp_path: Path) -> None:
-    _write_gen3_project(tmp_path)
+@pytest.mark.parametrize("generation", ARMED_GENERATIONS)
+def test_pinned_hypothesis_without_the_field_still_loads(tmp_path: Path, generation: int) -> None:
+    _write_project(tmp_path, generation=generation)
     sources = load_project_sources(tmp_path)
     assert sources.entities[0].autonomous_run is None
 ```
 
 Run: `cd science && uv run --frozen pytest tests/test_autonomous_run_schema.py -v`
-Expected: `test_gen3_hypothesis_accepts_autonomous_run` fails with
-`Unevaluated properties are not allowed ('autonomous_run' was unexpected)`.
+Expected: `test_pinned_hypothesis_accepts_autonomous_run` fails for **both** generations with
+`Unevaluated properties are not allowed ('autonomous_run' was unexpected)`. Verified: this is
+the current behaviour at both 2 and 3.
 
-- [ ] **Step 6: Declare it in the strict mixin**
+- [ ] **Step 6: Declare it in BOTH strict hypothesis mixins**
 
-In `science/model/src/science_model/schemas/mixin-hypothesis-2.0.json`, add to `properties`, beside `added_by`:
+In `science/model/src/science_model/schemas/mixin-hypothesis-1.0.json` **and**
+`mixin-hypothesis-2.0.json`, add to `properties`, beside `added_by`:
 
 ```json
     "autonomous_run": { "type": "string" },
 ```
 
-Re-run the schema test; both cases must now pass.
+Re-run the schema test; all four parameterized cases must now pass.
 
 - [ ] **Step 7: Run the tests to verify they pass**
 
@@ -1462,6 +1786,20 @@ and call it immediately after `_add_run_record_edges(sources, provenance=provena
     _add_autonomous_run_edges(sources, provenance=provenance)
 ```
 
+Register the predicate this task mints, alongside Task 3's entries in
+`science/src/science_tool/graph/store/constants.py`:
+
+```python
+    {
+        "predicate": "sci:autonomousRun",
+        "description": "Entity was last written by this autonomous run",
+        "layer": "graph/provenance",
+    },
+```
+
+The description says **last written by** deliberately: the field is a scalar and is
+overwritten, so it names the most recent run, not every run that ever touched the file.
+
 - [ ] **Step 4: Run the tests to verify they pass**
 
 ```bash
@@ -1496,6 +1834,12 @@ This is design testing item 10. It is a **second surface, not a second rule**: b
 
 A malformed run record propagates its `RunRecordError` out of `check_refs`. That is intended: silently treating an unreadable `runs/` as empty would report every valid reference as dangling, which is a worse diagnosis than the real one.
 
+`_extract_autonomous_run_ref` parses each file's frontmatter a second time, since
+`_extract_frontmatter_refs` already parsed it. That is an accepted cost — `refs.py` already
+re-parses per check, and matching that style beats threading a parsed-frontmatter cache
+through this function for a corpus of this size. Worth revisiting only if `check_refs`
+becomes hot.
+
 - [ ] **Step 1: Write the failing tests**
 
 ```python
@@ -1526,6 +1870,9 @@ policy_identity:
 basis_digest: {"d" * 64}
 started: 2026-07-24T09:00:00+00:00
 ended: 2026-07-24T09:30:00+00:00
+budget:
+  tokens: 12000
+  wall_clock_seconds: 1800.5
 disposition: clean
 ---
 
@@ -1659,9 +2006,10 @@ with the import at the top of the module:
 from science_tool.graph.autonomous_runs import load_run_records
 ```
 
-> **Import-cycle check:** `refs.py` must not create a cycle with `graph/`. Verify with
-> `cd science && uv run python -c "import science_tool.refs"`. If a cycle appears, move the
-> import inside `check_refs` (a function-level import) and note that in your report.
+A module-level import is safe here — verified: no module under `science_tool/graph/`
+imports `science_tool.refs`, and `graph.autonomous_runs` imports only `science_model` plus
+`graph.store`, so there is no cycle to create. Confirm with
+`cd science && uv run python -c "import science_tool.refs"` after the edit.
 
 - [ ] **Step 4: Run the tests to verify they pass**
 
@@ -1762,8 +2110,12 @@ counts as evidence, and neither updates belief.
 
 It is also distinct from an evidence line's `run_refs`, which names fingerprinted
 workflow runs and *does* bear on belief. A dangling `autonomous_run` — one naming
-a run with no record in `runs/` — is reported by `science refs-check` and fails
+a run with no record in `runs/` — is reported by `science refs check` and fails
 the graph build.
+
+The field is a scalar and is overwritten, so it names the **last** run that wrote
+the file. Full attribution history lives in git, under each run record's
+`base_commit..head_commit` range.
 ```
 
 - [ ] **Step 7: Correct the design document**
@@ -1789,7 +2141,40 @@ record could ever explain.
 > owns `RunRecord`. The `run:` id prefix is unused and is kept as designed.
 ```
 
-Also update the §5 and testing-section references to `run_ref` (testing item 10) to say `autonomous_run`.
+**Then sweep the remaining occurrences.** `run_ref` survives in four places in the design;
+verify with `grep -n 'run_ref' docs/plans/2026-07-24-autonomy-envelope-design.md` and fix
+all of them:
+
+- **line 146**, the §2 field table: "referent of `run_ref` and the commit trailer" →
+  `autonomous_run`.
+- **line 167**, the derivability paragraph. This one needs more than a rename — the claim
+  itself is now weaker. Replace with:
+
+  ```markdown
+  The record deliberately does **not** index the entities it wrote. Each entity's *current*
+  writer is derivable by querying `autonomous_run` in the provenance graph, and full
+  history is derivable from the run's own `base_commit..head_commit` range — which is the
+  authoritative binding in any case (§0). A maintained list would be a second spelling that
+  drifts.
+  ```
+
+- **line 197**, §3 — replaced by the block above.
+- **line 339**, testing item 10 — rename, and change `refs-check` to `refs check` (the CLI
+  is a `refs` group with a `check` subcommand, `refs_cli.py:16,68`).
+
+- [ ] **Step 7b: Record what Plan B did NOT close**
+
+Add to §3, after the corrected entity paragraph:
+
+```markdown
+> **Not yet an attested binding (Plan B ships the field only).** Materialization checks
+> that the run a value names *exists*; it does not check that this run wrote this file. An
+> actor can therefore still attribute its work to an unrelated prior run. Plan D must close
+> this by having the supervisor stamp `autonomous_run` itself, or by verifying every value
+> it finds against the run's own recorded `base_commit..head_commit` range. Until then the
+> field is a convenience for humans reading the corpus, and the commit range remains the
+> only authoritative binding (§0).
+```
 
 - [ ] **Step 8: Run everything**
 
@@ -1824,4 +2209,8 @@ Run after Task 8, before finishing the branch:
 - [ ] No line in a new or modified file exceeds 100 characters (ruff does not check this)
 - [ ] `grep -rn 'run_ref' science/src science/model/src` returns only the pre-existing
       `run_refs` (workflow-run) hits — this plan introduced no new `run_ref` spelling
+- [ ] `grep -n 'run_ref' docs/plans/2026-07-24-autonomy-envelope-design.md` returns nothing
+- [ ] `cd science && uv run science graph predicates` lists every new `sci:run*` predicate
+      and `sci:autonomousRun`
 - [ ] A project with no `runs/` directory still loads, builds, and validates unchanged
+- [ ] A run record declaring `tier:` twice is refused, not silently read as its last value
