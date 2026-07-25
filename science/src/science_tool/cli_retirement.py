@@ -156,11 +156,19 @@ def register_retirements(root: click.Group) -> None:
     """
     for path, forward in RETIRED_GROUPS.items():
         *parent_parts, name = path.split()
-        _resolve_parent(root, parent_parts).add_command(
-            RetiredGroup(name, path=path, forward=forward)
-        )
+        parent = _resolve_parent(root, parent_parts)
+        existing = parent.commands.get(name)
+        if existing is not None:
+            raise RuntimeError(
+                f"cannot attach retirement {path!r}: existing command {existing.name!r}"
+            )
+        parent.add_command(RetiredGroup(name, path=path, forward=forward))
     for path, forward in RETIREMENTS.items():
         *parent_parts, name = path.split()
-        _resolve_parent(root, parent_parts).add_command(
-            RetiredCommand(name, path=path, forward=forward)
-        )
+        parent = _resolve_parent(root, parent_parts)
+        existing = parent.commands.get(name)
+        if existing is not None:
+            raise RuntimeError(
+                f"cannot attach retirement {path!r}: existing command {existing.name!r}"
+            )
+        parent.add_command(RetiredCommand(name, path=path, forward=forward))

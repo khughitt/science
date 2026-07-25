@@ -389,7 +389,7 @@ def register_retirements(root: click.Group) -> None:
 cd science && uv run --frozen pytest tests/test_cli_retirement_mechanics.py -q
 ```
 
-Expected: 13 passed.
+Expected: 15 passed.
 
 - [ ] **Step 5: Lint and type-check**
 
@@ -621,7 +621,7 @@ Ruff reports `F401` for every import the deleted bodies were the last user of. D
 cd science && uv run --frozen pytest tests/test_cli_retirement.py tests/test_cli_retirement_mechanics.py -q
 ```
 
-Expected: all pass — 2 set-equality assertions, 22 parameter assertions, 23 hidden assertions, plus Task 1's 13.
+Expected: all pass — 2 set-equality assertions, 22 parameter assertions, 23 hidden assertions, plus Task 1's 15.
 
 - [ ] **Step 8: Repair `test_graph_add_paper_command_is_removed`**
 

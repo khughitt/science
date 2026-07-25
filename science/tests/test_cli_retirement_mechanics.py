@@ -127,3 +127,51 @@ def test_registering_under_a_leaf_fails_at_the_boundary(tree: click.Group) -> No
 
     with pytest.raises(RuntimeError, match="is not a group"):
         cli_retirement._resolve_parent(tree, ["outer", "solo"])
+
+
+def test_registering_leaf_at_existing_destination_fails(
+    tree: click.Group, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from science_tool import cli_retirement
+
+    outer = tree.commands["outer"]
+    assert isinstance(outer, click.Group)
+    existing = outer.commands["solo"]
+    monkeypatch.setattr(cli_retirement, "RETIRED_GROUPS", {})
+    monkeypatch.setattr(
+        cli_retirement,
+        "RETIREMENTS",
+        {"outer solo": "Run `science entity create thing <title>`."},
+    )
+
+    with pytest.raises(
+        RuntimeError,
+        match="cannot attach retirement 'outer solo': existing command 'solo'",
+    ):
+        cli_retirement.register_retirements(tree)
+
+    assert outer.commands["solo"] is existing
+
+
+def test_registering_group_at_existing_destination_fails(
+    tree: click.Group, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from science_tool import cli_retirement
+
+    outer = tree.commands["outer"]
+    assert isinstance(outer, click.Group)
+    existing = outer.commands["add"]
+    monkeypatch.setattr(
+        cli_retirement,
+        "RETIRED_GROUPS",
+        {"outer add": "Author the entity instead."},
+    )
+    monkeypatch.setattr(cli_retirement, "RETIREMENTS", {})
+
+    with pytest.raises(
+        RuntimeError,
+        match="cannot attach retirement 'outer add': existing command 'add'",
+    ):
+        cli_retirement.register_retirements(tree)
+
+    assert outer.commands["add"] is existing

@@ -130,16 +130,18 @@ that was eyeballed, not counted.)
 **The CLI is not excess.** 243 of 278 leaf commands (87%) are named in agent-facing docs. Size
 alone is not the defect and "delete commands" is not the goal.
 
-The defect is narrower:
+The original baseline here was wrong. As measured in
+[S7a §1](2026-07-25-s7a-retired-command-surface-design.md#1-what-the-target-document-got-wrong),
+all 22 retired callback bodies already raised replacement-naming errors; seven was the user
+guide's list, not the retirement count. The actual defects were that help and discovery
+presented those commands as live, and Click parameter validation could prevent the retirement
+error from being reached
+([S7a §2](2026-07-25-s7a-retired-command-surface-design.md#2-the-defect-that-is-actually-there)).
 
-> **Retirement is prose-only.** The user guide states `inquiry add-node`, `add-edge`,
-> `add-assumption`, `add-transformation`, `set-estimand`, `graph add concept`, and
-> `graph add proposition --bridge-between` are retired. All are registered, callable, and
-> advertise themselves with encouraging help text. Nothing in-band warns an agent off.
-
-Target: **a retired command is unregistered, or it errors naming the replacement. There is no
-third state.** Also: every check message must name an action its own system accepts — the
-`fb-2026-07-11-017` follow-on was exactly that failure.
+Target: **retired commands are absent or hidden from discovery, and every invocation rejects
+before parameter validation with an error naming the replacement.** Also: every check message
+must name an action its own system accepts — the `fb-2026-07-11-017` follow-on was exactly that
+failure.
 
 Not yet measured, therefore not claimed: whether the 39 groups carve the space well, whether
 plural-kind groups duplicate `entity`, whether the check vocabulary overlaps. S7's audit.
