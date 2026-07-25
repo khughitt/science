@@ -113,9 +113,11 @@ class RunBudget(BaseModel):
 class AutonomousRunRecord(BaseModel):
     """One finalized unattended run.
 
-    Every attested field is required. There is no in-flight shape: a supervisor
-    that dies mid-run leaves no record, so its branch reads as unattested rather
-    than clean. That is the intended failure direction.
+    Every attested field is required except `basis_digest`, which is required
+    when `disposition` is not `unwired` and required ABSENT when it is -- never
+    optional in the sense of "may be omitted freely". There is no in-flight
+    shape: a supervisor that dies mid-run leaves no record, so its branch reads
+    as unattested rather than clean. That is the intended failure direction.
     """
 
     model_config = ConfigDict(extra="forbid", frozen=True)
@@ -129,7 +131,12 @@ class AutonomousRunRecord(BaseModel):
     head_commit: str
     toolkit_revision: str
     policy_identity: PolicyIdentity
-    basis_digest: str
+    # Required, EXCEPT when `disposition` is `unwired` — which the design defines as
+    # "blocked; basis was not computable". Requiring a digest there would force the
+    # supervisor to fabricate one, and a fabricated value inside an attestation is the
+    # exact failure this slice exists to prevent. The rule is stricter than a plain
+    # optional: absent is REQUIRED when unwired, and forbidden otherwise.
+    basis_digest: str | None = None
     started: datetime
     ended: datetime
     budget: RunBudget
@@ -157,7 +164,18 @@ class AutonomousRunRecord(BaseModel):
                     f"{field_name} must be a full 40-character lowercase hex sha, "
                     f"got {value!r}"
                 )
-        if not _DIGEST_RE.fullmatch(self.basis_digest):
+        if self.disposition is RunDisposition.UNWIRED:
+            if self.basis_digest is not None:
+                raise ValueError(
+                    "basis_digest must be omitted when disposition is 'unwired' — "
+                    "an unwired run is one whose basis was not computable, so any "
+                    f"digest is fabricated, got {self.basis_digest!r}"
+                )
+        elif self.basis_digest is None:
+            raise ValueError(
+                f"basis_digest is required when disposition is {self.disposition.value!r}"
+            )
+        elif not _DIGEST_RE.fullmatch(self.basis_digest):
             raise ValueError(
                 f"basis_digest must be a 64-character lowercase sha256, "
                 f"got {self.basis_digest!r}"
