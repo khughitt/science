@@ -63,6 +63,11 @@ def test_row_without_severity_survives_every_threshold() -> None:
     assert meets_threshold({"code": "x"}, "error") is True
 
 
+def test_unknown_threshold_is_rejected_without_a_severity() -> None:
+    with pytest.raises(ValueError, match="unknown health threshold"):
+        meets_threshold({"code": "x"}, "critical")
+
+
 def test_unknown_severity_is_rejected() -> None:
     with pytest.raises(ValueError, match="unknown health severity"):
         meets_threshold({"severity": "critical"}, "warn")

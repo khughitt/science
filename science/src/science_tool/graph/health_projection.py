@@ -82,6 +82,8 @@ def meets_threshold(row: Mapping[str, Any], threshold: str) -> bool:
     evidence of low severity, and dropping such rows would hide findings. A present value,
     including explicit ``None``, must be a registered severity string.
     """
+    if threshold not in _THRESHOLD_FLOOR:
+        raise ValueError(f"unknown health threshold {threshold!r}")
     if "severity" not in row:
         return True
     severity = row["severity"]
