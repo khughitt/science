@@ -404,12 +404,24 @@ def compute_coverage(
             dataset_diags.append(
                 DatasetReferenceDiagnostic(evidence.project, unresolved.plan_ref, unresolved.ref)
             )
+        unmapped_by_dataset: dict[str, set[tuple[str, str]]] = defaultdict(set)
         for untagged in evidence.untagged_usages:
-            occurrences.append(UnmappedOccurrence(
-                evidence.project,
-                untagged.dataset_ref,
-                (EvidencePair(untagged.plan_ref, untagged.dataset_ref),),
-            ))
+            unmapped_by_dataset[untagged.dataset_ref].add(
+                (untagged.plan_ref, untagged.dataset_ref)
+            )
+        for dataset_ref in sorted(unmapped_by_dataset):
+            occurrences.append(
+                UnmappedOccurrence(
+                    evidence.project,
+                    dataset_ref,
+                    tuple(
+                        EvidencePair(plan_ref, evidence_dataset_ref)
+                        for plan_ref, evidence_dataset_ref in sorted(
+                            unmapped_by_dataset[dataset_ref]
+                        )
+                    ),
+                )
+            )
         for plan_skills in evidence.plan_loaded_skills:
             for skill_id in plan_skills.skill_ids:
                 if overlay.get(skill_id) is None:

@@ -19,6 +19,7 @@ from science_model.skill_coverage.coverage import (
     UnresolvedRef,
 )
 
+from science_tool.datasets.capability_scope import is_valid_scope
 from science_tool.datasets.capability_shape import parse_gen3_capabilities
 from science_tool.graph.identity_table import build_identity_table
 from science_tool.graph.reference_resolution import ReferenceResolver
@@ -73,7 +74,9 @@ def project_evidence(project: str, sources: ProjectSources) -> ProjectEvidence:
         )
         dataset_terms[entity.canonical_id] = terms
         dataset_owned[entity.canonical_id] = adapters.get(entity.canonical_id) != _COMMONS_ADAPTER
-        dataset_scoped[entity.canonical_id] = bool(extra.get("capability_scope"))
+        dataset_scoped[entity.canonical_id] = is_valid_scope(
+            extra.get("capability_scope")
+        )
 
     loaded: dict[str, list[str]] = defaultdict(list)
     for record in sources.skill_loads:

@@ -114,6 +114,36 @@ def test_unmapped_and_skill_and_dataset_diagnostics() -> None:
     assert report.dataset_reference_diagnostics[0].ref == "dataset:gone"
 
 
+def test_unmapped_groups_and_orders_evidence_by_dataset() -> None:
+    catalog = _catalog()
+    overlay = _overlay(catalog)
+    ev = ProjectEvidence(
+        "p1",
+        EnrollmentStatus.ENROLLED,
+        untagged_usages=(
+            DatasetUse("plan:2", "dataset:untagged"),
+            DatasetUse("plan:1", "dataset:untagged"),
+            DatasetUse("plan:2", "dataset:untagged"),
+        ),
+    )
+
+    report = compute_coverage([ev], overlay, catalog, scope=_SCOPE)
+
+    unmapped = [
+        occurrence
+        for occurrence in report.coverage_occurrences
+        if occurrence.to_dict()["state"] == "unmapped"
+    ]
+    assert len(unmapped) == 1
+    assert [
+        (evidence.plan_ref, evidence.dataset_ref)
+        for evidence in unmapped[0].evidence_refs
+    ] == [
+        ("plan:1", "dataset:untagged"),
+        ("plan:2", "dataset:untagged"),
+    ]
+
+
 def test_off_catalog_owned_raises_commons_skips() -> None:
     catalog = _catalog()
     overlay = _overlay(catalog)

@@ -61,6 +61,20 @@ def test_scan_classifies_and_skips(tmp_path: Path) -> None:
     assert report.scope.mode == "portfolio"
 
 
+def test_scan_skips_registered_directory_without_science_yaml(tmp_path: Path) -> None:
+    bare = tmp_path / "bare"
+    bare.mkdir()
+    config_path = _registry(tmp_path, [
+        {"path": str(bare), "name": "bare", "id": "bare", "registered": "2026-07-25"},
+    ])
+
+    report = scan_portfolio(config_path)
+
+    assert [skipped.to_dict() for skipped in report.skipped_projects] == [
+        {"path": str(bare), "reason": "path missing or no science.yaml"}
+    ]
+
+
 def test_scan_empty_registry_is_hard_error(tmp_path: Path) -> None:
     config_path = _registry(tmp_path, [])
     with pytest.raises(SkillCoverageScanError, match="no registered projects"):
