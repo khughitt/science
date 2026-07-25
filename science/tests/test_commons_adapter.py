@@ -402,6 +402,42 @@ def test_scan_rejects_type_path_mismatch(tmp_path: Path) -> None:
     assert records == []
 
 
+def test_scan_rejects_autonomous_run_on_a_commons_record(tmp_path: Path) -> None:
+    """A run is project-local (one repo's branch, one base..head commit range), so a
+    commons record carrying `autonomous_run` would resolve against a `runs/` directory
+    no consuming project owns. The adapter must reject it, not `science_model.Entity`
+    (scope: shared is a documented project-local pattern, not a commons signal)."""
+    root = _make_store(tmp_path, "valid")
+    impostor = root / "papers" / "Adams2025.md"
+    impostor.write_text(
+        "---\n"
+        'schema_profile: "science-entity-base/1.0+paper/1.0"\n'
+        'id: "paper:Adams2025"\n'
+        'kind: "paper"\n'
+        'title: "Adams"\n'
+        'version: "1.0.0"\n'
+        'status: "active"\n'
+        'created: "2026-05-13"\n'
+        'updated: "2026-05-13"\n'
+        'bibkey: "Adams2025"\n'
+        'authors: ["X"]\n'
+        "year: 2025\n"
+        'journal: "T"\n'
+        'autonomous_run: "run:2026-07-24-curation-sweep-a3f1"\n'
+        "ontology_terms: []\n"
+        "tags: []\n"
+        "---\nbody\n",
+        encoding="utf-8",
+    )
+    adapter = CommonsEntityAdapter(root)
+    items = list(adapter.scan())
+    paper_records = [r for r in items if isinstance(r, CommonsEntityRecord) and r.type == "paper"]
+    paper_errors = [e for e in items if isinstance(e, CommonsEntityError) and e.path == impostor]
+    assert paper_records == [], "a record carrying autonomous_run must not be indexed"
+    assert len(paper_errors) == 1
+    assert "autonomous_run" in str(paper_errors[0].cause)
+
+
 def test_load_returns_record_for_known_id(tmp_path: Path) -> None:
     root = _make_store(tmp_path, "valid")
     adapter = CommonsEntityAdapter(root)

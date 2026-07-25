@@ -36,6 +36,10 @@ def _emitted_sci_predicates(tmp_path: Path) -> set[str]:
     add_run_record_to_graph(load_run_records(tmp_path)[0], graph)
     emitted = _sci_predicates(graph)
     assert "sci:runTriggeredBy" in emitted, "fixture is no longer maximal"
+    # The fixture's disposition is `clean`, so `sci:runBasisDigest` is emitted too — it
+    # is dropped only for `unwired`. Pin it symmetrically: a later edit that flips the
+    # fixture to `unwired` must not silently drop this predicate from the certified set.
+    assert "sci:runBasisDigest" in emitted, "fixture is no longer maximal"
     return emitted
 
 

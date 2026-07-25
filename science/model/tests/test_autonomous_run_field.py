@@ -83,3 +83,12 @@ def test_field_survives_the_frontmatter_round_trip(tmp_path: Path) -> None:
     entity = parse_entity_file(path, "demo")
     assert entity is not None
     assert entity.autonomous_run == RUN_ID
+
+
+def test_a_project_local_shared_scope_entity_may_carry_the_field() -> None:
+    # `scope: shared` means shared CANONICAL IDENTITY, not "lives in the commons store" —
+    # it is a documented, supported thing to author on an ordinary project-local entity
+    # (docs/process/entity-creation-cookbook.md, `gene:`/`protein:` examples). The commons
+    # prohibition on `autonomous_run` is enforced at the commons adapter boundary instead
+    # (science_tool.commons.adapter._build), not here.
+    assert _entity(scope="shared", autonomous_run=RUN_ID).autonomous_run == RUN_ID

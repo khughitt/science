@@ -133,6 +133,14 @@ def test_validate_aliases_rejects_duplicate_keys() -> None:
         )
 
 
+def test_validate_aliases_rejects_yaml_equivalent_duplicate_keys() -> None:
+    # `yes:` and `true:` are different raw scalar TEXT but both resolve to `True`, so a
+    # duplicate check comparing `key_node.value` misses the pair while `yaml.safe_load`
+    # collapses it to a single last-wins entry. Comparing constructed objects catches it.
+    with pytest.raises(SkillLoadValidationError, match="duplicate"):
+        validate_skill_aliases_yaml("yes: driver-selection\ntrue: mutational-signatures-qa\n")
+
+
 def test_validate_aliases_rejects_merge_key() -> None:
     with pytest.raises(SkillLoadValidationError, match="merge"):
         validate_skill_aliases_yaml(

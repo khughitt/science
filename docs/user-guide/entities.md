@@ -773,6 +773,9 @@ The field is a scalar and is overwritten, so it names the **last** run that
 wrote the file. Full attribution history lives in git, under each run
 record's `base_commit..head_commit` range.
 
+`autonomous_run` is not permitted on commons-canonical records: a run is
+project-local, so no consuming project could resolve it.
+
 ## Entity Classes
 
 Science groups core entity kinds into three classes.

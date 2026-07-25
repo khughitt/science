@@ -201,3 +201,29 @@ def test_disposition_vocabulary_is_closed() -> None:
     with pytest.raises(ValidationError):
         AutonomousRunRecord.model_validate(_payload(disposition="passed"))
     assert {d.value for d in RunDisposition} == {"clean", "quarantined", "unwired"}
+
+
+def test_unwired_run_must_omit_its_basis_digest() -> None:
+    # `unwired` means the basis was NOT computable. A digest on such a record can only
+    # have been fabricated, and a fabricated value inside a supervisor attestation is the
+    # precise failure the run record exists to make impossible.
+    with pytest.raises(ValidationError, match="must be omitted when disposition is 'unwired'"):
+        AutonomousRunRecord.model_validate(_payload(disposition="unwired"))
+
+
+def test_unwired_run_validates_without_a_basis_digest() -> None:
+    record = AutonomousRunRecord.model_validate(
+        _payload(disposition="unwired", basis_digest=None)
+    )
+    assert record.disposition is RunDisposition.UNWIRED
+    assert record.basis_digest is None
+
+
+@pytest.mark.parametrize("disposition", ["clean", "quarantined"])
+def test_a_wired_run_still_requires_its_basis_digest(disposition: str) -> None:
+    # The rule is conditional in BOTH directions: omitting the digest is required when
+    # unwired and refused otherwise. A plain `str | None` would silently accept this.
+    with pytest.raises(ValidationError, match="basis_digest is required"):
+        AutonomousRunRecord.model_validate(
+            _payload(disposition=disposition, basis_digest=None)
+        )

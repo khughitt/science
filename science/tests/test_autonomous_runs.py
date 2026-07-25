@@ -338,3 +338,30 @@ def test_emission_is_idempotent(tmp_path: Path) -> None:
     add_run_record_to_graph(record, twice)
     add_run_record_to_graph(record, twice)
     assert set(once) == set(twice)
+
+
+def test_yaml_equivalent_duplicate_keys_raise(tmp_path: Path) -> None:
+    # `yes:` and `true:` are DIFFERENT raw scalar text but both resolve to `True`, so a
+    # duplicate check that compares `key_node.value` misses the pair while `yaml.safe_load`
+    # collapses it to `{True: <last>}`. Comparing constructed objects is what catches it.
+    path = _write_record(tmp_path)
+    path.write_text(
+        path.read_text(encoding="utf-8").replace(
+            "tier: belief-neutral", "tier: belief-neutral\nyes: 1\ntrue: 2"
+        ),
+        encoding="utf-8",
+    )
+    with pytest.raises(RunRecordError, match="duplicate key"):
+        load_run_records(tmp_path)
+
+
+def test_yaml_equivalent_duplicate_nested_keys_raise(tmp_path: Path) -> None:
+    path = _write_record(tmp_path)
+    path.write_text(
+        path.read_text(encoding="utf-8").replace(
+            "  version: \"1\"", "  version: \"1\"\n  1: a\n  1.0: b"
+        ),
+        encoding="utf-8",
+    )
+    with pytest.raises(RunRecordError, match="duplicate key"):
+        load_run_records(tmp_path)

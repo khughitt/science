@@ -178,6 +178,12 @@ class CommonsEntityAdapter:
                 raise EntityValidationError(
                     f"frontmatter kind {declared_kind!r} does not match path-derived type {type_name!r}"
                 )
+            if "autonomous_run" in frontmatter:
+                raise EntityValidationError(
+                    "autonomous_run is not permitted on a commons-canonical record: a run is "
+                    "project-local -- it names one repository's branch and one "
+                    "base_commit..head_commit range -- so no consuming project can resolve it"
+                )
         except EntityValidationError as exc:
             return CommonsEntityError(body_path, canonical_id=canonical_id, cause=exc)
         except Exception as exc:  # pragma: no cover — unexpected I/O / yaml errors
