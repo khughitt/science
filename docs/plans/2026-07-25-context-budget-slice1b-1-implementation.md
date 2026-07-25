@@ -90,15 +90,23 @@ git commit -m "docs(budget): record the slice 1b shape-based decomposition"
 Create `science/tests/test_budget_regression_rows.py`. The fixture is deliberately separate from `test_budget_regression.py::project`, whose exact entity counts are asserted by slice-1a tests; adding kinds there would break them.
 
 ```python
-"""Emitted sizes for the slice 1b-1 ROWS commands on an over-budget corpus.
+"""Sizes AND completeness for the slice 1b-1 ROWS commands on an over-budget corpus.
 
 Separate from ``test_budget_regression.py`` because that module's ``project`` fixture
 asserts exact entity counts; this one seeds extra kinds (interpretations, discussions),
 feedback, and a needs-review graph without disturbing those assertions.
+
+Three properties are proven per command:
+  1. stdout stays under the ceiling AND projection actually ran -- a truncation footer
+     (table) / ``truncation`` object with the full total (JSON) is present. A size-only
+     check would pass a no-op sink that never dropped rows on a naturally-small payload.
+  2. ``--output PATH`` is complete and unprojected, in both formats.
+  3. the three ``list_typed_entities`` callers NOT wired here still work with sink=None.
 """
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
 import pytest
@@ -134,20 +142,47 @@ def _invoke(args: list[str]):
     return CliRunner().invoke(main, args, prog_name="science")
 
 
-def test_entity_list_stays_within_its_ceiling(rows_corpus: Path) -> None:
-    for args in (["entity", "list"], ["entity", "list", "--format", "json"]):
-        result = _invoke(args)
-        assert result.exit_code == 0, result.output
-        ceiling = BUDGETS["entity list"].max_chars
-        assert visible_len(result.output) <= ceiling, (
-            f"{args} emitted {visible_len(result.output)} > {ceiling}"
-        )
+def _assert_stdout_projected(command_path: str, base_args: list[str], seeded_total: int) -> None:
+    """stdout is bounded AND projection actually ran (guards against a no-op sink)."""
+    table = _invoke(base_args)
+    assert table.exit_code == 0, table.output
+    ceiling = BUDGETS[command_path].max_chars
+    assert visible_len(table.output) <= ceiling, f"{base_args} -> {visible_len(table.output)} > {ceiling}"
+    assert "showing " in table.output  # truncation footer proves rows were dropped
+
+    payload = json.loads(_invoke([*base_args, "--format", "json"]).output)
+    assert len(payload["rows"]) == BUDGETS[command_path].max_rows
+    assert payload["truncation"]["total"] == seeded_total
+
+
+def _assert_file_complete(base_args: list[str], seeded_total: int, out_dir: Path) -> None:
+    """--output PATH is complete and unprojected, in both formats."""
+    json_target = out_dir / "complete.json"
+    jr = _invoke([*base_args, "--format", "json", "--output", str(json_target)])
+    assert jr.exit_code == 0, jr.output
+    payload = json.loads(json_target.read_text())
+    assert len(payload["rows"]) == seeded_total
+    assert "truncation" not in payload
+
+    table_target = out_dir / "complete.txt"
+    tr = _invoke([*base_args, "--output", str(table_target)])
+    assert tr.exit_code == 0, tr.output
+    written = table_target.read_text()
+    assert "showing " not in written
+    assert "complete output:" not in written
+
+
+def test_entity_list_is_bounded_and_complete(rows_corpus: Path) -> None:
+    # rows_corpus seeds 300 each of questions, interpretations, discussions; `entity list`
+    # (kind=None) surfaces all three kinds -> 900 rows.
+    _assert_stdout_projected("entity list", ["entity", "list"], seeded_total=900)
+    _assert_file_complete(["entity", "list"], seeded_total=900, out_dir=rows_corpus)
 ```
 
 - [ ] **Step 2: Run the test to verify it fails**
 
 Run: `cd science && uv run --frozen pytest tests/test_budget_regression_rows.py -v`
-Expected: FAIL — `entity list` is not in `BUDGETS` yet (`KeyError`), and its unbudgeted output over 900 entities is far above 20,000 chars.
+Expected: FAIL — `entity list` is not in `BUDGETS` yet (`KeyError` in the helper), it has no `--output` option (the completeness helper errors on an unknown option), and its unbudgeted output over 900 entities is far above 20,000 chars.
 
 - [ ] **Step 3: Move `entity list` from `DEFERRED` to `BUDGETS`**
 
@@ -273,7 +308,7 @@ git commit -m "feat(budget): bound entity list output through a sink"
 Feedback entries are read from `$SCIENCE_FEEDBACK_DIR` (see `feedback_cli._get_feedback_dir`), not the project tree, so the test points that env var at a seeded directory. Append to `science/tests/test_budget_regression_rows.py`:
 
 ```python
-def test_feedback_list_stays_within_its_ceiling(
+def test_feedback_list_is_bounded_and_complete(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     from science_tool.feedback import VALID_CATEGORIES
@@ -294,20 +329,18 @@ def test_feedback_list_stays_within_its_ceiling(
             "recurrence: 1\n"
         )
     monkeypatch.setenv("SCIENCE_FEEDBACK_DIR", str(fb_dir))
+    monkeypatch.chdir(tmp_path)
 
-    for args in (["feedback", "list"], ["feedback", "list", "--format", "json"]):
-        result = _invoke(args)
-        assert result.exit_code == 0, result.output
-        ceiling = BUDGETS["feedback list"].max_chars
-        assert visible_len(result.output) <= ceiling, (
-            f"{args} emitted {visible_len(result.output)} > {ceiling}"
-        )
+    _assert_stdout_projected("feedback list", ["feedback", "list"], seeded_total=300)
+    _assert_file_complete(["feedback", "list"], seeded_total=300, out_dir=tmp_path)
 ```
+
+`feedback list` defaults to `--status open`; every seeded entry is `status: open`, so the default invocation returns all 300.
 
 - [ ] **Step 2: Run to verify it fails**
 
-Run: `cd science && uv run --frozen pytest tests/test_budget_regression_rows.py::test_feedback_list_stays_within_its_ceiling -v`
-Expected: FAIL — `feedback list` not in `BUDGETS`; 300 wide feedback rows exceed 20,000 chars.
+Run: `cd science && uv run --frozen pytest tests/test_budget_regression_rows.py::test_feedback_list_is_bounded_and_complete -v`
+Expected: FAIL — `feedback list` not in `BUDGETS`; 300 wide feedback rows exceed 20,000 chars, and it has no `--output` option yet.
 
 The seed uses `category = next(iter(sorted(VALID_CATEGORIES)))` and `concern: methodology:design` (both verified valid against `science_tool.feedback`), so parsing should succeed; if a required `FeedbackEntry` field is nonetheless missing, the RED run surfaces it in stderr — add it to the seed before proceeding.
 
@@ -392,31 +425,40 @@ Append to `science/tests/test_budget_regression_rows.py`:
 
 ```python
 @pytest.mark.parametrize(
-    ("command_path", "args"),
+    ("command_path", "base_args"),
     [
         ("questions list", ["questions", "list"]),
-        ("questions list", ["questions", "list", "--format", "json"]),
         ("interpretations list", ["interpretations", "list"]),
-        ("interpretations list", ["interpretations", "list", "--format", "json"]),
         ("discussions list", ["discussions", "list"]),
-        ("discussions list", ["discussions", "list", "--format", "json"]),
     ],
 )
-def test_typed_entity_list_stays_within_its_ceiling(
-    rows_corpus: Path, command_path: str, args: list[str]
+def test_typed_entity_list_is_bounded_and_complete(
+    rows_corpus: Path, command_path: str, base_args: list[str]
 ) -> None:
-    result = _invoke(args)
+    _assert_stdout_projected(command_path, base_args, seeded_total=300)
+    _assert_file_complete(base_args, seeded_total=300, out_dir=rows_corpus)
+
+
+@pytest.mark.parametrize(
+    "base_args",
+    [["hypotheses", "list"], ["propositions", "list"], ["evidence-lines", "list"]],
+)
+def test_unbudgeted_typed_entity_callers_still_work(rows_corpus: Path, base_args: list[str]) -> None:
+    """The three list_typed_entities callers NOT wired in 1b-1 pass sink=None and behave
+    as before -- the keyword-only sink defaults to None, so nothing is budgeted or projected.
+    rows_corpus seeds none of these kinds, so each returns an empty table and exits 0; the
+    point is that the signature change does not break the sink=None code path."""
+    result = _invoke(base_args)
     assert result.exit_code == 0, result.output
-    ceiling = BUDGETS[command_path].max_chars
-    assert visible_len(result.output) <= ceiling, (
-        f"{args} emitted {visible_len(result.output)} > {ceiling}"
-    )
+    assert "showing " not in result.output
 ```
+
+The single-invocation `_assert_stdout_projected`/`_assert_file_complete` helpers cover both `--format table` and `--format json` internally, so the parametrization no longer enumerates formats.
 
 - [ ] **Step 2: Run to verify it fails**
 
-Run: `cd science && uv run --frozen pytest tests/test_budget_regression_rows.py::test_typed_entity_list_stays_within_its_ceiling -v`
-Expected: FAIL — none of the three is in `BUDGETS`; each returns 300 rows well over the ceiling.
+Run: `cd science && uv run --frozen pytest tests/test_budget_regression_rows.py::test_typed_entity_list_is_bounded_and_complete -v`
+Expected: FAIL — none of the three is in `BUDGETS`; each returns 300 rows well over the ceiling and offers no `--output`. (`test_unbudgeted_typed_entity_callers_still_work` already passes: those callers are untouched at this point.)
 
 - [ ] **Step 3: Register the three budgets and drop the three deferrals**
 
@@ -514,15 +556,10 @@ The file-success control notice is omitted here: `list_typed_entities` owns the 
 
 - [ ] **Step 7: Run tests, lint, types**
 
-Run: `cd science && uv run --frozen pytest tests/test_budget_regression_rows.py tests/test_budget_boundary.py tests/test_typed_entity_cli.py -v && uv run ruff check && uv run pyright`
-Expected: PASS/clean; partition `9/67/201`. If `test_typed_entity_cli.py` does not exist, drop it from the invocation; run the questions/interpretations/discussions CLI tests that do exist to confirm no regression in the unbudgeted callers.
+Run: `cd science && uv run --frozen pytest tests/test_budget_regression_rows.py tests/test_budget_boundary.py -v && uv run ruff check && uv run pyright`
+Expected: PASS/clean; partition `9/67/201`. `test_unbudgeted_typed_entity_callers_still_work` (added in Step 1) is the guard that the three non-wired callers of `list_typed_entities` still execute the `sink=None` path — it invokes each command directly rather than relying on a `-k` node-name match, which would not actually exercise those commands. Also run the existing questions/interpretations/discussions CLI test modules if present to confirm no regression.
 
-- [ ] **Step 8: Verify the unbudgeted callers still work**
-
-Run: `cd science && uv run --frozen pytest -k "hypotheses or propositions or evidence_lines" -v`
-Expected: PASS — `hypotheses list`, `propositions list`, `evidence-lines list` call `list_typed_entities` without a sink and behave exactly as before.
-
-- [ ] **Step 9: Commit**
+- [ ] **Step 8: Commit**
 
 ```bash
 git add science/src/science_tool/budget/registry.py science/src/science_tool/typed_entity_cli.py science/src/science_tool/questions_cli.py science/src/science_tool/interpretations_cli.py science/src/science_tool/discussions_cli.py science/tests/test_budget_boundary.py science/tests/test_budget_regression_rows.py
@@ -545,10 +582,10 @@ git commit -m "feat(budget): bound the typed-entity list commands through a sink
 
 - [ ] **Step 1: Add the regression case with a hand-built needs-review graph**
 
-`list_needs_review` reads the materialized graph directly, so the fixture writes a `graph.trig` with 60 flagged entities using the same namespaces the reader uses — no full materialization pipeline. Append to `science/tests/test_budget_regression_rows.py`:
+`list_needs_review` reads the materialized graph directly, so the fixture writes a `graph.trig` with flagged entities using the same namespaces the reader uses — no full materialization pipeline. Seed **400** rows: `needs-review` rows are only three narrow columns (`state`/`kind`/`id`), and 60 of them measure ~5.3k chars (table) / ~8.2k (JSON) — both *under* the 20k ceiling, so a 60-row corpus would leave the payload unprojected and let a no-op sink pass. 400 rows (~35k unbudgeted) forces genuine projection, and the projection assertions in `_assert_stdout_projected` then prove the sink actually dropped rows. Append to `science/tests/test_budget_regression_rows.py`:
 
 ```python
-def test_needs_review_stays_within_its_ceiling(
+def test_needs_review_is_bounded_and_complete(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     from rdflib import Dataset, Literal
@@ -558,7 +595,7 @@ def test_needs_review_stays_within_its_ceiling(
     (tmp_path / "science.yaml").write_text("id: demo\nname: demo\n")
     ds = Dataset()
     knowledge = ds.graph(PROJECT_NS["graph/knowledge"])
-    for i in range(60):
+    for i in range(400):
         uri = PROJECT_NS[f"question/q{i:04d}-a-deliberately-long-descriptive-slug"]
         knowledge.add((uri, SCI_NS.freshnessState, Literal("needs-review")))
     trig_path = tmp_path / DEFAULT_GRAPH_PATH
@@ -566,19 +603,14 @@ def test_needs_review_stays_within_its_ceiling(
     ds.serialize(destination=str(trig_path), format="trig")
     monkeypatch.chdir(tmp_path)
 
-    for args in (["entity", "needs-review"], ["entity", "needs-review", "--format", "json"]):
-        result = _invoke(args)
-        assert result.exit_code == 0, result.output
-        ceiling = BUDGETS["entity needs-review"].max_chars
-        assert visible_len(result.output) <= ceiling, (
-            f"{args} emitted {visible_len(result.output)} > {ceiling}"
-        )
+    _assert_stdout_projected("entity needs-review", ["entity", "needs-review"], seeded_total=400)
+    _assert_file_complete(["entity", "needs-review"], seeded_total=400, out_dir=tmp_path)
 ```
 
 - [ ] **Step 2: Run to verify it fails**
 
-Run: `cd science && uv run --frozen pytest tests/test_budget_regression_rows.py::test_needs_review_stays_within_its_ceiling -v`
-Expected: FAIL — `entity needs-review` not in `BUDGETS`. (60 short rows may or may not exceed 20k unbudgeted; the case still fails on the missing `BUDGETS` key. If 60 rows do not exceed the ceiling, raise the loop to 400 so the RED state also demonstrates flooding, matching the other cases.)
+Run: `cd science && uv run --frozen pytest tests/test_budget_regression_rows.py::test_needs_review_is_bounded_and_complete -v`
+Expected: FAIL — `entity needs-review` not in `BUDGETS` (`KeyError`) and it has no `--output` option yet. The 400-row corpus (~35k unbudgeted) also exceeds the 20k ceiling, so the assertion would fail on size too once the key exists but the sink is absent.
 
 - [ ] **Step 3: Register the budget and drop the deferral**
 
@@ -697,7 +729,7 @@ Append a sentence recording this slice, so the number's provenance stays truthfu
 
 Run: `cd science && uv run --frozen pytest tests/ -k budget -v`
 Then: `cd science && uv run --frozen pytest`
-Expected: all pass. The registry-completeness guard, sink-construction guard, output-escape guard, and the six new size regressions are green; no slice-1a test regressed.
+Expected: all pass. The registry-completeness guard, sink-construction guard, output-escape guard, the six new bounded-and-complete regressions (stdout projected + `--output` complete, both formats), and the unbudgeted-caller smoke test are green; no slice-1a test regressed.
 
 - [ ] **Step 3: Lint and type-check the whole package**
 
@@ -720,6 +752,8 @@ git commit -m "test(budget): record slice 1b-1 in the partition-cardinality docs
 **Type consistency.** Every command registers `CommandBudget(max_chars=20_000, shape=PayloadShape.ROWS, max_rows=40)` and constructs `BoundedSink(lookup(<path>), output_path=..., command_path=<path>, complete_via=...)` with the exact signature slice 1a ships. `list_typed_entities` gains a keyword-only `sink: BoundedSink | None = None`, leaving its three unbudgeted callers unchanged. The `EXPECTED_CLASSIFICATION_COUNTS` dict advances 4→5→6→9→10 budgeted and 206→205→204→201→200 deferred across Tasks 2-5, matching the six moves.
 
 **Guard alignment.** Each wired callback constructs its sink in its own body (not a nested scope), satisfying `test_every_budgeted_command_constructs_its_own_sink`, and exposes `--output`, satisfying `test_every_budgeted_command_offers_the_output_escape`. The typed-entity commands deliberately build the sink in the callback rather than in `list_typed_entities` for exactly this reason.
+
+**Behavioural coverage beyond the AST guards.** The AST guards prove a sink is *constructed* and an `--output` option *exists*; they cannot prove the file payload is complete or that projection actually ran. Each command therefore also has: (a) `_assert_stdout_projected`, which asserts the JSON payload carries a `truncation` object whose `total` equals the seeded corpus and whose `rows` length equals `max_rows`, plus the table footer — proving a no-op sink cannot pass; (b) `_assert_file_complete`, which asserts `--output` (both formats) contains every seeded row with no `truncation`/footer. The `needs-review` corpus is 400 rows precisely so its naturally-narrow payload exceeds the ceiling and forces projection. The three unwired `list_typed_entities` callers are exercised by an explicit invocation test rather than a `-k` node-name filter, which would not run them.
 
 **Known limits.**
 - `max_rows=40` is carried from `tasks list`. The per-command size regressions assert `visible_len <= 20_000`; if a wide-row render (e.g. `feedback list`, 8 columns) ever exceeds the ceiling at 40 rows, lower that command's `max_rows` until the regression is green. The measured sizes make this unlikely at 40 rows.
