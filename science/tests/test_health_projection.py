@@ -38,6 +38,32 @@ def test_classifications_are_disjoint() -> None:
     assert not (COUNTS_AS_ISSUE_SECTIONS & UNFILTERED_SECTIONS)
 
 
+def test_section_classifications_are_exact() -> None:
+    assert SEVERITY_SECTIONS == {
+        "validation",
+        "schema_invalid",
+        "dataset_anomalies",
+        "entity_identity",
+        "cross_paper_evidence",
+        "prose_epistemics",
+    }
+    assert COUNTS_AS_ISSUE_SECTIONS == {"managed_artifacts"}
+    assert UNFILTERED_SECTIONS == {
+        "agent_context",
+        "archive_lag",
+        "identity_policy",
+        "invalid_entity_aspects",
+        "layered_claims",
+        "legacy_task_type",
+        "lingering_tags_lines",
+        "unregistered_ref_kinds",
+        "unresolved_refs",
+        "tooling_scaffold",
+        "accepted_validation",
+        "unwired_checks",
+    }
+
+
 @pytest.mark.parametrize(
     ("severity", "threshold", "expected"),
     [
@@ -59,8 +85,9 @@ def test_counts_as_issue_never_filters_display() -> None:
     assert meets_threshold({"severity": "warning", "counts_as_issue": True}, "error") is False
 
 
-def test_row_without_severity_survives_every_threshold() -> None:
-    assert meets_threshold({"code": "x"}, "error") is True
+@pytest.mark.parametrize("threshold", ["all", "warn", "error"])
+def test_row_without_severity_survives_every_valid_threshold(threshold: str) -> None:
+    assert meets_threshold({"code": "x"}, threshold) is True
 
 
 def test_unknown_threshold_is_rejected_without_a_severity() -> None:

@@ -22,10 +22,22 @@ def build_complete_via(ctx: click.Context, *, output_hint: str) -> str:
     filter containing spaces, and reconstructing the command by naive joining would strip
     that protection and advertise a command that does something different.
 
-    The command path itself is not quoted -- it is a sequence of literal words, and
-    quoting it would produce ``'science tasks list'`` as one token.
+    The command path is reconstructed as tokens from the Click context chain before the
+    entire invocation is passed through ``shlex.join``. This preserves an unusual root
+    ``prog_name`` containing whitespace or shell metacharacters without collapsing the
+    ordinary command hierarchy into one token.
     """
-    tokens: list[str] = []
+    command_tokens: list[str] = []
+    current: click.Context | None = ctx
+    while current is not None:
+        name = current.info_name or current.command.name
+        if not name:
+            raise ValueError("cannot reconstruct a Click command path without a name")
+        command_tokens.append(name)
+        current = current.parent
+    command_tokens.reverse()
+
+    tokens = command_tokens
     params_by_name = {param.name: param for param in ctx.command.params}
 
     for name, value in ctx.params.items():
@@ -48,4 +60,4 @@ def build_complete_via(ctx: click.Context, *, output_hint: str) -> str:
             tokens.extend([flag, str(value)])
 
     tokens.extend(["--output", output_hint])
-    return f"{ctx.command_path} {shlex.join(tokens)}"
+    return shlex.join(tokens)

@@ -14,8 +14,8 @@ output format, through the four commands that bypass the shared emitters — `ta
 the whole payload and either writes it to stdout, writes it complete to `--output PATH`, or
 raises. Semantic narrowing happens earlier, in a **projection** chosen by the command's declared
 payload shape; an unregistered shape refuses rather than degrading. After a successful
-`--output` write, a command may emit one fixed, non-payload success confirmation directly to
-stdout; those bounded confirmations are the sole sink-bypass exception.
+`--output` write, a command may emit one fixed-shape bounded control notice directly to
+stdout; those notices are the sole sink-bypass exception.
 
 **Tech Stack:** Python 3.11 (see Global Constraints), Click, Rich, Pydantic, pytest. All work is
 in `science/`.
@@ -58,7 +58,7 @@ exactly one of `BUDGETS`, `EXEMPTIONS`, or `DEFERRED`.
 - **Semantic truncation never happens in the sink.** The sink routes, measures, raises.
 - **`total_issues` never changes meaning.** It stays the unfiltered clean-report gate.
 - **Every budgeted command owns exactly one sink** and emits no payload outside it. A single
-  fixed success confirmation after a successful `--output` write is the sole exception.
+  fixed-shape bounded control notice after a successful `--output` write is the sole exception.
 - Composition over inheritance; explicit over defensive; fail early, no silent fallbacks.
 - No "legacy"/"compatibility" layers. No `Unified` prefix.
 - Conventional commits. No AI-attribution trailers.
@@ -78,7 +78,7 @@ imports.
 | `budget/invocation.py` | `build_complete_via` — derives the escape command from the live Click context. |
 
 **Modified:** `output.py` (both branches through the sink), `styles.py` (`width`),
-`tasks_cli.py`, `tasks_display.py`, `graph/health.py` (extract `count_issues`),
+`tasks_cli.py`, `tasks_display.py`, `graph/health_count.py` (extract `count_issues`),
 `graph/health_cli.py`, `entities_inventory_cli.py`, `data_cli.py`.
 
 **New:** `graph/health_projection.py` — health-specific projection, beside health rather than in
@@ -517,8 +517,8 @@ no ceiling to escape, so neither needs one. There is no synthesized
 `sink.console.print(...)` and lines via `sink.echo(...)`. The entire payload accumulates in one
 buffer and is measured once at `flush()`. This is what makes a 21-table command obey one
 command-payload ceiling, and what makes `--output` capture the complete payload rather than only
-its JSON branch. A fixed success notice emitted only after a successful file write is control
-output, not payload, and is the sole permitted bypass.
+its JSON branch. A fixed-shape bounded control notice emitted only after a successful file
+write is control output, not payload, and is the sole permitted bypass.
 
 Buffer-then-flush also means an over-budget command prints **nothing** rather than a truncated
 prefix.
@@ -669,7 +669,7 @@ Expected: FAIL — `ModuleNotFoundError: No module named 'science_tool.budget.si
 A budgeted command constructs ONE sink, renders its complete payload into it, and flushes
 once. Rich renderables go through ``sink.console``; plain lines through ``sink.echo``. No
 payload reaches stdout until ``flush()``. After a successful file flush, a command may emit
-one fixed success confirmation directly; that bounded control notice is the sole exception.
+one fixed-shape bounded control notice directly; that notice is the sole exception.
 
 Why a channel rather than a wrapper around ``emit``'s JSON branch: a command like
 ``health`` renders 21 tables and a dozen messages directly. Wrapping only the final
@@ -1608,7 +1608,7 @@ Add `output_path: Path | None` to the signature, then replace the body's tail:
         render_tasks_table(projected.rows, resolver=resolver, sink=sink, footer=footer)
 
     sink.flush()
-    # This fixed success confirmation is intentionally outside the payload sink. It is
+    # This fixed-shape bounded control notice is intentionally outside the payload sink.
     # allowed only AFTER a successful file flush, never in `finally`: a `finally` here would announce
     # "wrote ..." even when rendering raised or the write failed, reporting success for
     # a file that may not exist.
@@ -1689,7 +1689,7 @@ from __future__ import annotations
 
 import pytest
 
-from science_tool.graph.health import count_issues
+from science_tool.graph.health_count import count_issues
 
 
 def _report(**overrides: object) -> dict[str, object]:
@@ -2219,7 +2219,7 @@ Expected: `366` — the value measured on 2026-07-24.
 - [ ] **Step 6: Commit**
 
 ```bash
-git add science/src/science_tool/graph/health.py science/tests/test_health_count_issues.py
+git add science/src/science_tool/graph/health_count.py science/src/science_tool/graph/health.py science/tests/test_health_count_issues.py
 git commit -m "refactor(health): extract count_issues as the single issue-counting definition"
 ```
 
@@ -2418,9 +2418,9 @@ _THRESHOLD_FLOOR: dict[str, int] = {"all": 0, "warn": 1, "error": 2}
 def meets_threshold(row: Mapping[str, Any], threshold: str) -> bool:
     """True when ``row`` is at or above ``threshold``.
 
-    A row with no ``severity`` key survives every threshold: absence of the signal is not
-    evidence of low severity, and dropping such rows would hide findings. A present value,
-    including explicit ``None``, must be a registered severity string.
+    A row with no ``severity`` key survives every valid threshold: absence of the signal
+    is not evidence of low severity, and dropping such rows would hide findings. A present
+    value, including explicit ``None``, must be a registered severity string.
     """
     if "severity" not in row:
         return True
@@ -2470,7 +2470,7 @@ from __future__ import annotations
 
 import pytest
 
-from science_tool.graph.health import count_issues
+from science_tool.graph.health_count import count_issues
 from science_tool.graph.health_projection import (
     SECTION_ROW_CAP,
     UnknownSection,
@@ -2971,7 +2971,7 @@ def project_health_report(
     ``count_issues`` over the PROJECTED report, so "showing N of M" compares like with
     like rather than a raw row count against an issue count.
     """
-    from science_tool.graph.health import count_issues
+    from science_tool.graph.health_count import count_issues
 
     effective_cap = SECTION_ROW_CAP if cap is None else cap
     omitted: dict[str, int] = {}
@@ -3281,7 +3281,7 @@ gate keys off the untouched `report["total_issues"]`:
 
     emit(output_format=output_format, payload=displayed, render_text=_render_report, sink=sink)
     sink.flush()
-    # This fixed, non-payload success confirmation is the sole permitted sink bypass.
+    # This fixed-shape bounded control notice is the sole permitted sink bypass.
     # Emit it only AFTER a successful flush, never in `finally` — see Task 7.
     if output_path is not None:
         click.echo(f"wrote the complete health report to {output_path}")
@@ -4173,15 +4173,15 @@ against the projected rows and `tasks list` reports `only_status` instead of the
 
 **Fourth-review corrections.** `Path.touch()` is not a writability check: it succeeds for an
 existing directory and can succeed for a read-only file. Before `apply_fixes`, `data audit`
-now rejects directory-valued `--output` arguments and actually opens the destination for append,
-creating it without truncating an existing report; missing-parent, directory, and permission
-regressions prove the tree remains intact (Task 12). Entity-inventory regressions pass
+now rejects directory-valued `--output` arguments and reserves a writable same-directory
+temporary file without touching an existing report; missing-parent, directory, and reservation
+failure regressions prove the tree remains intact (Task 12). Entity-inventory regressions pass
 `--project-root` explicitly in both Task 12 and Task 13: its current Click default is
 `Path.cwd()` evaluated when the command module is imported, so changing directory later does not
 retarget the invocation.
 
 **Pre-flight rulings.** The invariant covers payload output: every payload byte goes through the
-sink, while one fixed success confirmation after a successful `--output` flush is the sole
+sink, while one fixed-shape bounded control notice after a successful `--output` flush is the sole
 bypass. The failure regression exercises that ordering in every supported file-output path
 (Tasks 7, 11–13). A budgeted stdout sink rejects missing `complete_via` at construction; file and
 unbudgeted sinks remain valid without it, and no synthesized escape remains (Task 3).
@@ -4200,13 +4200,26 @@ findings (Task 8). `meets_threshold` distinguishes a missing `severity` key from
 (Task 9). Health projection validates mapping members and the full required shapes of its
 registered mapping, nested-report, and scalar sections before filtering or capping (Task 10).
 
+**Whole-branch review fixes.** File sinks write to a same-directory temporary file, flush and
+`fsync` it, and atomically replace the destination; failures clean up the temporary file and
+preserve any prior destination. Mutation flows explicitly reserve that temporary destination
+before acting. `data audit --fix` also resolves the requested output, every violation source,
+and every proposed destination through absolute paths and symlinks, refusing collisions before
+mutation. The command path and selected options are reconstructed as tokens and the entire
+invocation passes through `shlex.join`. The sole sink bypass is a single-line control notice
+with an explicit 8,192-visible-character ceiling, not a “fixed success” string. Strict health
+counting and its validation helpers live cohesively in `graph/health_count.py`, leaving
+`graph/health.py` focused on aggregation.
+
 **Known limits, stated.** Guard 2 proves sink *construction*, not that every branch routes
 through it — Task 11 Step 5's grep and the regression suite cover the rest. The `DEFERRED` table
 is a bookkeeping ratchet: it prevents silence, not oversized output, and those commands stay
 unbounded until 1b. The `--fix` gate is coarser than strictly necessary — it fires on any
 violation, including `leaked_payload` rows the fixer only flags — because the precise version
 would depend on `data_audit._planned_action` staying in lockstep with `apply_fixes`, which
-nothing enforces. It is a deliberate behaviour change to an existing command. Opening the
-destination before mutation removes known path/type/permission failures; it does not make
+nothing enforces. It is a deliberate behaviour change to an existing command. Reserving a
+writable sibling before mutation removes known path/type/permission failures; it does not make
 `apply_fixes` transactional or prevent a later flush failure caused by disk exhaustion or an
-external filesystem change.
+external filesystem change. A later mutation/render failure can still leave the project tree
+changed because `apply_fixes` is not transactional, but the reserved report destination remains
+byte-for-byte intact and no sibling temporary file leaks.

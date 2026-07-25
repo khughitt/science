@@ -81,6 +81,7 @@ def health_command(
     from rich.table import Table
 
     from science_tool.budget.invocation import build_complete_via
+    from science_tool.budget.control import bounded_control_notice
     from science_tool.budget.registry import lookup
     from science_tool.budget.sink import BoundedSink
     from science_tool.graph.health import build_health_report, list_health_checks
@@ -93,6 +94,11 @@ def health_command(
         complete_via=build_complete_via(
             click.get_current_context(), output_hint="health.json"
         ),
+    )
+    control_notice = (
+        bounded_control_notice(f"wrote the complete health report to {output_path}")
+        if output_path is not None
+        else None
     )
 
     project_root = project_root.resolve()
@@ -516,7 +522,7 @@ def health_command(
         sink=sink,
     )
     sink.flush()
-    # A fixed success confirmation is the sole permitted sink bypass. It follows a
-    # successful flush, never a finally block, so a failed write cannot claim success.
-    if output_path is not None:
-        click.echo(f"wrote the complete health report to {output_path}")
+    # This fixed-shape bounded control notice is the sole permitted sink bypass. It
+    # follows a successful flush, never a finally block.
+    if control_notice is not None:
+        click.echo(control_notice)

@@ -13,6 +13,7 @@ import pytest
 from click.testing import CliRunner
 
 from science_tool.budget.measure import visible_len
+from science_tool.budget.control import CONTROL_NOTICE_MAX_CHARS
 from science_tool.budget.registry import BUDGETS
 from science_tool.cli import main
 
@@ -240,3 +241,24 @@ def test_no_success_message_when_the_command_fails(
 def test_tasks_list_json_reports_the_full_total(project: Path) -> None:
     result = _invoke(["tasks", "list", "--status", "proposed", "--format", "json"])
     assert json.loads(result.output)["truncation"]["total"] == 395
+
+
+@pytest.mark.parametrize(
+    ("args", "target_name"),
+    [
+        (["tasks", "list", "--all"], "task report with spaces.txt"),
+        (["health"], "health report with spaces.txt"),
+        (["entities", "inventory"], "inventory report with spaces.json"),
+        (["data", "audit"], "audit report with spaces.txt"),
+    ],
+)
+def test_file_success_control_notices_are_single_line_and_bounded(
+    project: Path,
+    args: list[str],
+    target_name: str,
+) -> None:
+    target = project / target_name
+    result = _invoke([*_scope_project(args, project), "--output", str(target)])
+    assert result.exit_code in {0, 1}, result.output
+    assert result.output.count("\n") == 1
+    assert visible_len(result.output.rstrip("\n")) <= CONTROL_NOTICE_MAX_CHARS

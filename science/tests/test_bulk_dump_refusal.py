@@ -199,21 +199,20 @@ def test_fix_refuses_a_directory_output_before_moving(
     assert not (tmp_path / "results").exists(), "files were moved despite a directory --output"
 
 
-def test_fix_refuses_a_read_only_output_before_moving(
+def test_fix_refuses_an_unreservable_output_before_moving(
     tmp_path: Path, monkeypatch
 ) -> None:
-    """Opening the destination, not touching it, proves the report can be written."""
+    """Creating the sibling temp, not touching the target, proves output is reservable."""
+    from science_tool.budget import sink as sink_module
+
     _stranded_project(tmp_path)
     monkeypatch.chdir(tmp_path)
     target = tmp_path / "audit.json"
-    real_open = Path.open
 
-    def deny_report_open(self: Path, *args: object, **kwargs: object):
-        if self == target:
-            raise PermissionError("read-only destination")
-        return real_open(self, *args, **kwargs)
+    def deny_reservation(*args: object, **kwargs: object):
+        raise PermissionError("read-only destination")
 
-    monkeypatch.setattr(Path, "open", deny_report_open)
+    monkeypatch.setattr(sink_module.tempfile, "mkstemp", deny_reservation)
     result = _invoke(["data", "audit", "--fix", "--output", str(target)])
 
     assert result.exit_code != 0

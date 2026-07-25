@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import pytest
 
-from science_tool.graph.health import count_issues
+from science_tool.graph.health_count import count_issues
 
 
 def _report(**overrides: object) -> dict[str, object]:

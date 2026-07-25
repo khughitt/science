@@ -3,7 +3,7 @@
 A budgeted command constructs ONE sink, renders its complete payload into it, and flushes
 once. Rich renderables go through ``sink.console``; plain lines through ``sink.echo``. No
 payload reaches stdout until ``flush()``. After a successful file flush, a command may emit
-one fixed success confirmation directly; that bounded control notice is the sole exception.
+one fixed-shape bounded control notice directly; that notice is the sole exception.
 
 Why a channel rather than a wrapper around ``emit``'s JSON branch: a command like
 ``health`` renders 21 tables and a dozen messages directly. Wrapping only the final
@@ -19,6 +19,10 @@ nothing rather than a misleading prefix.
 
 from __future__ import annotations
 
+import os
+import tempfile
+from collections.abc import Iterator
+from contextlib import contextmanager
 from io import StringIO
 from pathlib import Path
 
@@ -52,6 +56,7 @@ class BoundedSink:
         self._buffer = StringIO()
         self._console: Console | None = None
         self._flushed = False
+        self._reserved_path: Path | None = None
 
     @property
     def console(self) -> Console:
@@ -96,13 +101,34 @@ class BoundedSink:
         """Append raw text with no trailing newline added."""
         self._buffer.write(text)
 
+    @contextmanager
+    def reserve_output(self) -> Iterator[None]:
+        """Reserve a writable sibling temp file for a mutation-before-report flow.
+
+        Entering the context proves that the output parent exists, the destination is
+        not a directory, and a same-directory temporary file can be created. The final
+        destination is left untouched until ``flush()`` atomically replaces it. Any
+        exception before or during flush removes the reservation.
+        """
+        if self._output_path is None:
+            raise ValueError("reserve_output requires a file sink")
+        if self._reserved_path is not None:
+            raise RuntimeError("output is already reserved")
+        reserved = self._create_temp_path()
+        self._reserved_path = reserved
+        try:
+            yield
+        finally:
+            reserved.unlink(missing_ok=True)
+            self._reserved_path = None
+
     def flush(self) -> None:
         if self._flushed:
             return
         text = self._buffer.getvalue()
 
         if self._output_path is not None:
-            self._output_path.write_text(text, encoding="utf-8")
+            self._flush_file(text)
             self._flushed = True
             return
 
@@ -124,6 +150,33 @@ class BoundedSink:
         )
         click.echo(text, nl=False, color=color)
         self._flushed = True
+
+    def _create_temp_path(self) -> Path:
+        assert self._output_path is not None
+        if self._output_path.is_dir():
+            raise IsADirectoryError(f"{self._output_path} is a directory")
+        parent = self._output_path.parent
+        if not parent.is_dir():
+            raise FileNotFoundError(f"output parent does not exist: {parent}")
+        fd, raw_path = tempfile.mkstemp(
+            dir=parent,
+            prefix=f".{self._output_path.name}.",
+            suffix=".tmp",
+        )
+        os.close(fd)
+        return Path(raw_path)
+
+    def _flush_file(self, text: str) -> None:
+        assert self._output_path is not None
+        temp_path = self._reserved_path or self._create_temp_path()
+        try:
+            with temp_path.open("w", encoding="utf-8") as stream:
+                stream.write(text)
+                stream.flush()
+                os.fsync(stream.fileno())
+            os.replace(temp_path, self._output_path)
+        finally:
+            temp_path.unlink(missing_ok=True)
 
     def _exceeded(self, size: int) -> BudgetExceeded:
         assert self._budget is not None

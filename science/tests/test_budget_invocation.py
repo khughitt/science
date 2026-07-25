@@ -114,3 +114,21 @@ def test_values_with_spaces_are_quoted() -> None:
 def test_shell_metacharacters_are_quoted() -> None:
     out = _run(["list", "--status", "a;rm -rf b"])
     assert shlex.split(out)[3] == "a;rm -rf b"
+
+
+def test_command_path_and_values_are_all_shell_quoted() -> None:
+    CAPTURED.clear()
+    result = CliRunner().invoke(
+        demo,
+        ["list", "--status", "needs review; echo nope"],
+        prog_name="science toolkit; false",
+    )
+    assert result.exit_code == 0, result.output
+    assert shlex.split(CAPTURED[0]) == [
+        "science toolkit; false",
+        "list",
+        "--status",
+        "needs review; echo nope",
+        "--output",
+        "out.json",
+    ]

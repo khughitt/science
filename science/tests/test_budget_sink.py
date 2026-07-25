@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 from pathlib import Path
 
 import click
@@ -210,6 +211,94 @@ def test_file_sink_never_contains_ansi(tmp_path: Path) -> None:
 
     assert result.exit_code == 0, result.output
     assert target.read_text() == "x\n"
+
+
+def test_write_does_not_add_a_newline(capsys) -> None:
+    sink = BoundedSink(ROWS_BUDGET, command_path="tasks list", complete_via=TASKS_COMPLETE)
+    sink.write("raw")
+    sink.flush()
+    assert capsys.readouterr().out == "raw"
+
+
+def test_complete_via_is_exposed() -> None:
+    sink = BoundedSink(ROWS_BUDGET, command_path="tasks list", complete_via=TASKS_COMPLETE)
+    assert sink.complete_via == TASKS_COMPLETE
+
+
+def test_rich_content_reaches_file_sink_without_ansi(tmp_path: Path) -> None:
+    target = tmp_path / "rich.txt"
+    sink = BoundedSink(ROWS_BUDGET, output_path=target, command_path="tasks list")
+    sink.console.print("[bold red]important[/bold red]")
+    sink.flush()
+    assert target.read_text() == "important\n"
+    assert "\x1b[" not in target.read_text()
+
+
+@pytest.mark.parametrize("failure", ["write", "sync", "replace"])
+def test_atomic_file_flush_preserves_prior_destination_on_failure(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    failure: str,
+) -> None:
+    from science_tool.budget import sink as sink_module
+
+    target = tmp_path / "report.txt"
+    target.write_bytes(b"prior report\n")
+    sink = BoundedSink(None, output_path=target, command_path="health")
+    sink.write("replacement\n")
+
+    if failure == "write":
+        real_open = Path.open
+
+        class FailingWriter:
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *_args):
+                return False
+
+            def write(self, _text: str) -> int:
+                raise OSError("injected write failure")
+
+            def flush(self) -> None:
+                pass
+
+            def fileno(self) -> int:
+                return -1
+
+        def fail_temp_open(path: Path, *args, **kwargs):
+            if path != target:
+                return FailingWriter()
+            return real_open(path, *args, **kwargs)
+
+        monkeypatch.setattr(Path, "open", fail_temp_open)
+    elif failure == "sync":
+        monkeypatch.setattr(os, "fsync", lambda _fd: (_ for _ in ()).throw(OSError("injected sync failure")))
+    else:
+        monkeypatch.setattr(
+            sink_module.os,
+            "replace",
+            lambda _src, _dst: (_ for _ in ()).throw(OSError("injected replace failure")),
+        )
+
+    with pytest.raises(OSError, match=f"injected {failure} failure"):
+        sink.flush()
+
+    assert target.read_bytes() == b"prior report\n"
+    assert list(tmp_path.glob(".report.txt.*.tmp")) == []
+
+
+def test_reserved_file_output_is_cleaned_up_when_body_fails(tmp_path: Path) -> None:
+    target = tmp_path / "report.txt"
+    target.write_bytes(b"prior report\n")
+    sink = BoundedSink(None, output_path=target, command_path="health")
+
+    with pytest.raises(RuntimeError, match="later failure"):
+        with sink.reserve_output():
+            raise RuntimeError("later failure")
+
+    assert target.read_bytes() == b"prior report\n"
+    assert list(tmp_path.glob(".report.txt.*.tmp")) == []
 
 
 def test_flush_is_idempotent(capsys) -> None:

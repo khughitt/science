@@ -17,6 +17,8 @@ from __future__ import annotations
 from collections.abc import Mapping
 from typing import Any
 
+from science_tool.graph.health_count import count_issues
+
 
 class UnknownSection(Exception):
     """A report section with no registered classification.
@@ -78,9 +80,9 @@ _THRESHOLD_FLOOR: dict[str, int] = {"all": 0, "warn": 1, "error": 2}
 def meets_threshold(row: Mapping[str, Any], threshold: str) -> bool:
     """True when ``row`` is at or above ``threshold``.
 
-    A row with no ``severity`` key survives every threshold: absence of the signal is not
-    evidence of low severity, and dropping such rows would hide findings. A present value,
-    including explicit ``None``, must be a registered severity string.
+    A row with no ``severity`` key survives every valid threshold: absence of the signal
+    is not evidence of low severity, and dropping such rows would hide findings. A
+    present value, including explicit ``None``, must be a registered severity string.
     """
     if threshold not in _THRESHOLD_FLOOR:
         raise ValueError(f"unknown health threshold {threshold!r}")
@@ -501,8 +503,6 @@ def project_health_report(
     ``count_issues`` over the PROJECTED report, so "showing N of M" compares like with
     like rather than a raw row count against an issue count.
     """
-    from science_tool.graph.health import count_issues
-
     if cap is not None:
         if type(cap) is not int:
             raise TypeError(

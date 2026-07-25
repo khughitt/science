@@ -54,6 +54,7 @@ def entities_inventory_command(
 ) -> None:
     """Emit the versioned Science entity inventory for a project."""
     from science_tool.budget.invocation import build_complete_via
+    from science_tool.budget.control import bounded_control_notice
     from science_tool.budget.registry import lookup
     from science_tool.budget.sink import BoundedSink
 
@@ -67,10 +68,15 @@ def entities_inventory_command(
             click.get_current_context(), output_hint="inventory.json"
         ),
     )
+    control_notice = (
+        bounded_control_notice(f"wrote the entity inventory to {output}")
+        if output is not None
+        else None
+    )
     sink.write(rendered)
     sink.flush()
-    if output is not None:
-        click.echo(f"wrote the entity inventory to {output}")
+    if control_notice is not None:
+        click.echo(control_notice)
 
 
 @entities_group.command("audit-identifiers")

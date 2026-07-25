@@ -517,6 +517,7 @@ def tasks_list(
     from science_model.tasks import Task
 
     from science_tool.budget.invocation import build_complete_via
+    from science_tool.budget.control import bounded_control_notice
     from science_tool.budget.projection import project_rows
     from science_tool.budget.registry import lookup
     from science_tool.budget.sink import BoundedSink
@@ -546,6 +547,11 @@ def tasks_list(
     matched = sort_tasks(matched)
 
     complete_via = build_complete_via(click.get_current_context(), output_hint="tasks.json")
+    control_notice = (
+        bounded_control_notice(f"wrote {len(matched)} tasks to {output_path}")
+        if output_path is not None
+        else None
+    )
     sink = BoundedSink(
         lookup("tasks list"),
         output_path=output_path,
@@ -644,8 +650,8 @@ def tasks_list(
         render_tasks_table(projected.rows, resolver=resolver, sink=sink, footer=footer)
 
     sink.flush()
-    if output_path is not None:
-        click.echo(f"wrote {len(matched)} tasks to {output_path}")
+    if control_notice is not None:
+        click.echo(control_notice)
 
 
 @tasks_group.command("show")
