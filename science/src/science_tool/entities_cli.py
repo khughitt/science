@@ -205,6 +205,13 @@ def entity_remove(target: str, apply_changes: bool) -> None:
     help="Include archived (relocated) entities from the archive index.",
 )
 @click.option("--format", "output_format", type=click.Choice(OUTPUT_FORMATS), default="table", show_default=True)
+@click.option(
+    "--output",
+    "output_path",
+    type=click.Path(path_type=Path),
+    default=None,
+    help="Write the complete, unbudgeted payload to PATH instead of stdout.",
+)
 def entity_list(
     kind_arg: str | None,
     kind: str | None,
@@ -213,8 +220,13 @@ def entity_list(
     include_hidden: bool,
     include_archived: bool,
     output_format: str,
+    output_path: Path | None,
 ) -> None:
     """List source-authored entities."""
+    from science_tool.budget.control import bounded_control_notice
+    from science_tool.budget.invocation import build_complete_via
+    from science_tool.budget.registry import lookup
+    from science_tool.budget.sink import BoundedSink
 
     if kind_arg is not None:
         if kind is not None and kind != kind_arg:
@@ -231,13 +243,29 @@ def entity_list(
         )
     except EntityCommandError as exc:
         raise click.ClickException(str(exc)) from exc
+    complete_via = build_complete_via(click.get_current_context(), output_hint="entities.json")
+    control_notice = (
+        bounded_control_notice(f"wrote {len(rows)} entities to {output_path}")
+        if output_path is not None
+        else None
+    )
+    sink = BoundedSink(
+        lookup("entity list"),
+        output_path=output_path,
+        command_path="entity list",
+        complete_via=complete_via,
+    )
     emit_query_rows(
         output_format=output_format,
         title="Entities",
         columns=[("id", "ID"), ("kind", "Kind"), ("status", "Status"), ("title", "Title"), ("path", "Path")],
         rows=rows,
         renderers=entity_table_renderers(),
+        sink=sink,
     )
+    sink.flush()
+    if control_notice is not None:
+        click.echo(control_notice)
 
 
 @entity_group.command("field-inventory")
@@ -606,18 +634,45 @@ def entity_review(ref: str, note: str | None) -> None:
     default="table",
     show_default=True,
 )
-def entity_needs_review(output_format: str) -> None:
+@click.option(
+    "--output",
+    "output_path",
+    type=click.Path(path_type=Path),
+    default=None,
+    help="Write the complete, unbudgeted payload to PATH instead of stdout.",
+)
+def entity_needs_review(output_format: str, output_path: Path | None) -> None:
     """List epistemic entities flagged needs-review or stale by the materialized graph."""
+    from science_tool.budget.control import bounded_control_notice
+    from science_tool.budget.invocation import build_complete_via
+    from science_tool.budget.registry import lookup
+    from science_tool.budget.sink import BoundedSink
     from science_tool.entity_review import list_needs_review
     from science_tool.output import emit_query_rows
 
     rows = list_needs_review(Path.cwd())
+    complete_via = build_complete_via(click.get_current_context(), output_hint="needs-review.json")
+    control_notice = (
+        bounded_control_notice(f"wrote {len(rows)} flagged entities to {output_path}")
+        if output_path is not None
+        else None
+    )
+    sink = BoundedSink(
+        lookup("entity needs-review"),
+        output_path=output_path,
+        command_path="entity needs-review",
+        complete_via=complete_via,
+    )
     emit_query_rows(
         output_format=output_format,
         title="Entities needing review",
         columns=[("state", "State"), ("kind", "Kind"), ("id", "ID")],
         rows=rows,
+        sink=sink,
     )
+    sink.flush()
+    if control_notice is not None:
+        click.echo(control_notice)
 
 
 @entity_group.command("rotation")

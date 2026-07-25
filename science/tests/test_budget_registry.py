@@ -55,14 +55,11 @@ def test_every_deferred_entry_states_what_makes_it_grow() -> None:
         assert entry.target_slice.strip(), f"{path} is deferred with no target slice"
 
 
-def test_the_ten_measured_offenders_are_deferred() -> None:
+def test_the_remaining_measured_offenders_are_deferred() -> None:
+    """The six ROWS offenders were wired across slice 1b-1 Tasks 2-5; the remaining
+    non-ROWS offenders (curate consolidation-candidates, curate inventory, prose
+    lint, validate) stay deferred to 1b-2."""
     measured = {
-        "entity list",
-        "questions list",
-        "interpretations list",
-        "discussions list",
-        "feedback list",
-        "entity needs-review",
         "curate consolidation-candidates",
         "curate inventory",
         "prose lint",

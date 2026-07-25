@@ -17,6 +17,7 @@ import click
 from pydantic import ValidationError
 from rich.text import Text
 
+from science_tool.budget.sink import BoundedSink
 from science_tool.entities import (
     EntityCommandError,
     create_entity,
@@ -98,7 +99,14 @@ def show_typed_entity(kind: str, ref: str, output_format: str) -> None:
     emit_entity_show(location, output_format)
 
 
-def list_typed_entities(kind: str, status: str | None, related: str | None, output_format: str) -> None:
+def list_typed_entities(
+    kind: str,
+    status: str | None,
+    related: str | None,
+    output_format: str,
+    *,
+    sink: BoundedSink | None = None,
+) -> None:
     try:
         rows = list_entities(Path.cwd(), kind=kind, status=status, related=related)
     except EntityCommandError as exc:
@@ -109,7 +117,10 @@ def list_typed_entities(kind: str, status: str | None, related: str | None, outp
         columns=[("id", "ID"), ("status", "Status"), ("title", "Title"), ("path", "Path")],
         rows=rows,
         renderers=entity_table_renderers(),
+        sink=sink,
     )
+    if sink is not None:
+        sink.flush()
 
 
 ENTITY_LIST_TITLES = {

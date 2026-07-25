@@ -1,0 +1,779 @@
+# Context Budget — Slice 1b-1 (wire the ROWS offenders) Implementation Plan
+
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+
+**Goal:** Bring the six measured-over-budget, flat-row commands (`entity list`, `feedback list`, `questions list`, `interpretations list`, `discussions list`, `entity needs-review`) under the slice-1a context budget by routing each through a `BoundedSink`.
+
+**Architecture:** Slice 1a already built the machinery — `BUDGETS`/`DEFERRED` registry, `project_rows` projection, `BoundedSink`, and the `emit`/`emit_query_rows` payload channel that projects rows and records truncation when a `sink` is supplied. This slice adds no architecture. Each command gains a `--output PATH` escape, constructs a `BoundedSink` from the registry in its own callback, passes that sink to `emit_query_rows`, and flushes. The three typed-entity lists share one helper (`list_typed_entities`), so the sink is threaded through it as an optional parameter — the other three callers of that helper stay unbudgeted.
+
+**Tech Stack:** Python 3.11, Click, Rich, pytest, rdflib (needs-review reads the materialized graph).
+
+## Global Constraints
+
+- **Python floor is 3.11** — all three packages pin `requires-python = ">=3.11"` and `pyrightconfig.json` sets `pythonVersion: 3.11`. PEP 695 syntax (`class Foo[T]`, `def f[T]()`) is a **3.12** feature; use `TypeVar` + `Generic`.
+- **`stdout is always budgeted; `--output PATH` is always complete.** Projection never runs against a file sink. This is the slice-1a contract and every task here inherits it.
+- **Conventional commits.** No AI-attribution trailer/footer on commits, PRs, or comments.
+- **Use `~/d/` or relative paths** in docs and code, never absolute `/home/...` or `/mnt/...` paths.
+- **Composition over inheritance; explicit over defensive; fail early, no silent fallbacks; no "legacy"/"compatibility" layers; no `Unified` prefix.**
+- **Run tests from `science/`:** `cd science && uv run --frozen pytest`. Lint: `uv run ruff check`. Types: `uv run pyright`.
+- **The registry partition is asserted.** `tests/test_budget_boundary.py::EXPECTED_CLASSIFICATION_COUNTS` is currently `{"budgeted": 4, "exempt": 67, "deferred": 206}`. Every task that moves a key from `DEFERRED` to `BUDGETS` MUST update this dict in the same commit or the partition test fails. Final state after this slice: `{"budgeted": 10, "exempt": 67, "deferred": 200}`.
+
+## Boundary guards every wired command must satisfy
+
+Two AST/tree guards in `tests/test_budget_boundary.py` run over `BUDGETS` automatically — no per-command test authoring, but the wiring must be shaped to pass them:
+
+1. `test_every_budgeted_command_constructs_its_own_sink` — the command's **own callback body** (not a nested function, lambda, or comprehension) must contain a `BoundedSink(...)` call. A command that delegates sink construction to a helper fails. This is why the typed-entity commands construct the sink in each callback and pass it *into* `list_typed_entities`, rather than letting the helper build it.
+2. `test_every_budgeted_command_offers_the_output_escape` — the command must expose a `--output` option.
+
+---
+
+## Task 1: Record the slice-1b decomposition in the umbrella design
+
+**Files:**
+- Modify: `docs/plans/2026-07-24-agent-context-budget-program-design.md`
+
+**Interfaces:**
+- Consumes: nothing.
+- Produces: nothing consumed by later tasks; this is the design-of-record for why slice 1b is split by payload shape.
+
+- [ ] **Step 1: Add a "Slice 1b decomposition" subsection under "Slice 1 — the context-budget contract"**
+
+Insert after the existing slice-1 body (before "### Slice 2"):
+
+```markdown
+#### Slice 1b decomposition
+
+Slice 1a wired the four hand-picked commands and mass-registered every other growable
+leaf as `DeferredCommand(..., "1b")` to satisfy the completeness guard. That deferral
+set is ~200 commands of three different payload shapes, so 1b is not one plan. It is
+split by shape, because the projection mechanism differs by shape:
+
+- **1b-1 — ROWS offenders (this slice).** The measured-over-budget commands whose payload
+  is a flat row list: `entity list` (1.7M chars), `questions list`, `interpretations list`,
+  `entity needs-review`, `feedback list`, `discussions list`. Uniform `emit_query_rows`
+  wiring; `project_rows` already handles narrowing. Highest value (includes the single
+  worst offender) at lowest risk.
+- **1b-2 — REPORT/DOCUMENT offenders (next).** `prose lint`, `validate`, and
+  `curate consolidation-candidates` are REPORT-shaped (a summary plus a growable list) and
+  need the per-section projection `health` uses; `curate inventory` is a versioned
+  structured document that must refuse past budget like `entities inventory`, because
+  dropping records corrupts the model. Forcing these through row-projection would emit
+  misleading output, so they are deliberately excluded from 1b-1.
+- **1b-3+ — the long tail.** The remaining ~190 generic-registered commands. Each needs a
+  per-command audit: genuinely growable ones get wired; fixed-shape ones (mutation and
+  creation confirmations mis-labeled growable) move to `EXEMPTIONS`.
+```
+
+- [ ] **Step 2: Commit**
+
+```bash
+git add docs/plans/2026-07-24-agent-context-budget-program-design.md
+git commit -m "docs(budget): record the slice 1b shape-based decomposition"
+```
+
+---
+
+## Task 2: Wire `entity list`
+
+**Files:**
+- Modify: `science/src/science_tool/budget/registry.py` (move `entity list` from `DEFERRED` to `BUDGETS`)
+- Modify: `science/src/science_tool/entities_cli.py:193-242` (the `entity_list` callback)
+- Modify: `science/tests/test_budget_boundary.py` (bump `EXPECTED_CLASSIFICATION_COUNTS`)
+- Create: `science/tests/test_budget_regression_rows.py` (new size-regression module + shared fixture)
+
+**Interfaces:**
+- Consumes from slice 1a: `BoundedSink(budget, *, output_path, command_path, complete_via)`; `budget.registry.lookup(command_path) -> CommandBudget | None`; `budget.invocation.build_complete_via(ctx, *, output_hint) -> str`; `budget.control.bounded_control_notice(message) -> str`; `output.emit_query_rows(*, output_format, title, columns, rows, meta=None, renderers=None, sink=None)`.
+- Produces: `entity list` registered as `CommandBudget(max_chars=20_000, shape=ROWS, max_rows=40)`; a new test module and `rows_corpus` fixture that Tasks 3-5 extend.
+
+- [ ] **Step 1: Write the new regression module with the shared fixture and the `entity list` case**
+
+Create `science/tests/test_budget_regression_rows.py`. The fixture is deliberately separate from `test_budget_regression.py::project`, whose exact entity counts are asserted by slice-1a tests; adding kinds there would break them.
+
+```python
+"""Sizes AND completeness for the slice 1b-1 ROWS commands on an over-budget corpus.
+
+Separate from ``test_budget_regression.py`` because that module's ``project`` fixture
+asserts exact entity counts; this one seeds extra kinds (interpretations, discussions),
+feedback, and a needs-review graph without disturbing those assertions.
+
+Three properties are proven per command:
+  1. stdout stays under the ceiling AND projection actually ran -- a truncation footer
+     (table) / ``truncation`` object with the full total (JSON) is present. A size-only
+     check would pass a no-op sink that never dropped rows on a naturally-small payload.
+  2. ``--output PATH`` is complete and unprojected, in both formats.
+  3. the three ``list_typed_entities`` callers NOT wired here still work with sink=None.
+"""
+
+from __future__ import annotations
+
+import json
+from pathlib import Path
+
+import pytest
+from click.testing import CliRunner
+
+from science_tool.budget.measure import visible_len
+from science_tool.budget.registry import BUDGETS
+from science_tool.cli import main
+
+
+def _seed_entities(root: Path, kind: str, plural: str, count: int) -> None:
+    folder = root / "entities" / plural
+    folder.mkdir(parents=True, exist_ok=True)
+    for i in range(count):
+        (folder / f"{i:04d}.md").write_text(
+            f"---\nid: {kind}:{kind[0]}{i:04d}-a-deliberately-long-descriptive-slug\n"
+            f"kind: {kind}\ntitle: {kind.title()} {i} with a long title to exercise wrapping\n"
+            f"status: open\n---\n\nBody paragraph for {kind} {i}.\n"
+        )
+
+
+@pytest.fixture
+def rows_corpus(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
+    (tmp_path / "science.yaml").write_text("id: demo\nname: demo\n")
+    _seed_entities(tmp_path, "question", "questions", 300)
+    _seed_entities(tmp_path, "interpretation", "interpretations", 300)
+    _seed_entities(tmp_path, "discussion", "discussions", 300)
+    monkeypatch.chdir(tmp_path)
+    return tmp_path
+
+
+def _invoke(args: list[str]):
+    return CliRunner().invoke(main, args, prog_name="science")
+
+
+def _assert_stdout_projected(command_path: str, base_args: list[str], seeded_total: int) -> None:
+    """stdout is bounded AND projection actually ran (guards against a no-op sink)."""
+    table = _invoke(base_args)
+    assert table.exit_code == 0, table.output
+    ceiling = BUDGETS[command_path].max_chars
+    assert visible_len(table.output) <= ceiling, f"{base_args} -> {visible_len(table.output)} > {ceiling}"
+    assert "showing " in table.output  # truncation footer proves rows were dropped
+
+    payload = json.loads(_invoke([*base_args, "--format", "json"]).output)
+    assert len(payload["rows"]) == BUDGETS[command_path].max_rows
+    assert payload["truncation"]["total"] == seeded_total
+
+
+def _assert_file_complete(command_path: str, base_args: list[str], seeded_total: int, out_dir: Path) -> None:
+    """--output PATH is complete and unprojected, in both formats."""
+    json_target = out_dir / "complete.json"
+    jr = _invoke([*base_args, "--format", "json", "--output", str(json_target)])
+    assert jr.exit_code == 0, jr.output
+    payload = json.loads(json_target.read_text())
+    assert len(payload["rows"]) == seeded_total   # exact per-row completeness, JSON branch
+    assert "truncation" not in payload
+
+    table_target = out_dir / "complete.txt"
+    tr = _invoke([*base_args, "--output", str(table_target)])
+    assert tr.exit_code == 0, tr.output
+    written = table_target.read_text()
+    assert "showing " not in written
+    assert "complete output:" not in written
+    # An empty or projected table file slips past the two negative checks above -- that
+    # was the prior regression. A complete, unprojected table holds far more than any
+    # budgeted stdout ever could, so it must exceed the ceiling. This rejects both an
+    # empty file (0 chars) and one capped at max_rows. Exact per-row identity is already
+    # proven by the JSON branch, which parses and counts every row from the same sink.
+    assert visible_len(written) > BUDGETS[command_path].max_chars
+
+
+def test_entity_list_is_bounded_and_complete(rows_corpus: Path) -> None:
+    # rows_corpus seeds 300 each of questions, interpretations, discussions; `entity list`
+    # (kind=None) surfaces all three kinds -> 900 rows.
+    _assert_stdout_projected("entity list", ["entity", "list"], seeded_total=900)
+    _assert_file_complete("entity list", ["entity", "list"], seeded_total=900, out_dir=rows_corpus)
+```
+
+- [ ] **Step 2: Run the test to verify it fails**
+
+Run: `cd science && uv run --frozen pytest tests/test_budget_regression_rows.py -v`
+Expected: FAIL — `entity list` is not in `BUDGETS` yet (`KeyError` in the helper), it has no `--output` option (the completeness helper errors on an unknown option), and its unbudgeted output over 900 entities is far above 20,000 chars.
+
+- [ ] **Step 3: Move `entity list` from `DEFERRED` to `BUDGETS`**
+
+In `science/src/science_tool/budget/registry.py`, add to the `BUDGETS` dict:
+
+```python
+    "entity list": CommandBudget(max_chars=20_000, shape=PayloadShape.ROWS, max_rows=40),
+```
+
+and delete this line from the `DEFERRED` dict:
+
+```python
+    "entity list": DeferredCommand("one row per entity", "1b", 1_706_994),
+```
+
+- [ ] **Step 4: Bump the asserted partition**
+
+In `science/tests/test_budget_boundary.py`, change `EXPECTED_CLASSIFICATION_COUNTS`:
+
+```python
+EXPECTED_CLASSIFICATION_COUNTS = {
+    "budgeted": 5,
+    "exempt": 67,
+    "deferred": 205,
+}
+```
+
+(The explanatory docstring on `test_classification_partition_has_the_audited_cardinality` is refreshed once in Task 6, after all six moves.)
+
+- [ ] **Step 5: Wire the `entity_list` callback**
+
+In `science/src/science_tool/entities_cli.py`, add the `--output` option and `output_path` parameter, construct the sink, pass it to `emit_query_rows`, and flush. The command's top-level imports already include `emit_query_rows`; add the budget imports locally as `tasks list` does.
+
+Replace the decorator/signature (currently ends at the `--format` option and `def entity_list(... output_format: str) -> None:`) so it reads:
+
+```python
+@click.option("--format", "output_format", type=click.Choice(OUTPUT_FORMATS), default="table", show_default=True)
+@click.option(
+    "--output",
+    "output_path",
+    type=click.Path(path_type=Path),
+    default=None,
+    help="Write the complete, unbudgeted payload to PATH instead of stdout.",
+)
+def entity_list(
+    kind_arg: str | None,
+    kind: str | None,
+    status: str | None,
+    related: str | None,
+    include_hidden: bool,
+    include_archived: bool,
+    output_format: str,
+    output_path: Path | None,
+) -> None:
+    """List source-authored entities."""
+    from science_tool.budget.control import bounded_control_notice
+    from science_tool.budget.invocation import build_complete_via
+    from science_tool.budget.registry import lookup
+    from science_tool.budget.sink import BoundedSink
+```
+
+Keep the existing body that resolves `kind` and builds `rows`. Replace the trailing `emit_query_rows(...)` call with:
+
+```python
+    complete_via = build_complete_via(click.get_current_context(), output_hint="entities.json")
+    control_notice = (
+        bounded_control_notice(f"wrote {len(rows)} entities to {output_path}")
+        if output_path is not None
+        else None
+    )
+    sink = BoundedSink(
+        lookup("entity list"),
+        output_path=output_path,
+        command_path="entity list",
+        complete_via=complete_via,
+    )
+    emit_query_rows(
+        output_format=output_format,
+        title="Entities",
+        columns=[("id", "ID"), ("kind", "Kind"), ("status", "Status"), ("title", "Title"), ("path", "Path")],
+        rows=rows,
+        renderers=entity_table_renderers(),
+        sink=sink,
+    )
+    sink.flush()
+    if control_notice is not None:
+        click.echo(control_notice)
+```
+
+- [ ] **Step 6: Run the regression, the boundary guards, and the full budget suite**
+
+Run: `cd science && uv run --frozen pytest tests/test_budget_regression_rows.py tests/test_budget_boundary.py -v`
+Expected: PASS — `entity list` stays under 20,000 chars, constructs its own sink, and offers `--output`; the partition is `5/67/205`.
+
+- [ ] **Step 7: Lint and type-check**
+
+Run: `cd science && uv run ruff check && uv run pyright`
+Expected: clean.
+
+- [ ] **Step 8: Commit**
+
+```bash
+git add science/src/science_tool/budget/registry.py science/src/science_tool/entities_cli.py science/tests/test_budget_boundary.py science/tests/test_budget_regression_rows.py
+git commit -m "feat(budget): bound entity list output through a sink"
+```
+
+---
+
+## Task 3: Wire `feedback list`
+
+**Files:**
+- Modify: `science/src/science_tool/budget/registry.py`
+- Modify: `science/src/science_tool/feedback_cli.py:154-201` (the `feedback_list` callback)
+- Modify: `science/tests/test_budget_boundary.py`
+- Modify: `science/tests/test_budget_regression_rows.py`
+
+**Interfaces:**
+- Consumes: the slice-1a helpers listed in Task 2.
+- Produces: `feedback list` registered as `CommandBudget(max_chars=20_000, shape=ROWS, max_rows=40)`.
+
+- [ ] **Step 1: Add the `feedback list` regression case**
+
+Feedback entries are read from `$SCIENCE_FEEDBACK_DIR` (see `feedback_cli._get_feedback_dir`), not the project tree, so the test points that env var at a seeded directory. Append to `science/tests/test_budget_regression_rows.py`:
+
+```python
+def test_feedback_list_is_bounded_and_complete(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from science_tool.feedback import VALID_CATEGORIES
+
+    category = next(iter(sorted(VALID_CATEGORIES)))
+    fb_dir = tmp_path / "feedback"
+    fb_dir.mkdir()
+    for i in range(300):
+        (fb_dir / f"fb-2026-01-01-{i:03d}.yaml").write_text(
+            f"id: fb-2026-01-01-{i:03d}\n"
+            "created: 2026-01-01\n"
+            f"project: demo-project-{i:03d}\n"
+            f"target: command:some-long-target-name-{i:03d}\n"
+            "concern: methodology:design\n"  # a valid VALID_CONCERNS value
+            f"category: {category}\n"
+            f"summary: A deliberately long feedback summary line number {i} to exercise wrapping\n"
+            "status: open\n"
+            "recurrence: 1\n"
+        )
+    monkeypatch.setenv("SCIENCE_FEEDBACK_DIR", str(fb_dir))
+    monkeypatch.chdir(tmp_path)
+
+    _assert_stdout_projected("feedback list", ["feedback", "list"], seeded_total=300)
+    _assert_file_complete("feedback list", ["feedback", "list"], seeded_total=300, out_dir=tmp_path)
+```
+
+`feedback list` defaults to `--status open`; every seeded entry is `status: open`, so the default invocation returns all 300.
+
+- [ ] **Step 2: Run to verify it fails**
+
+Run: `cd science && uv run --frozen pytest tests/test_budget_regression_rows.py::test_feedback_list_is_bounded_and_complete -v`
+Expected: FAIL — `feedback list` not in `BUDGETS`; 300 wide feedback rows exceed 20,000 chars, and it has no `--output` option yet.
+
+The seed uses `category = next(iter(sorted(VALID_CATEGORIES)))` and `concern: methodology:design` (both verified valid against `science_tool.feedback`), so parsing should succeed; if a required `FeedbackEntry` field is nonetheless missing, the RED run surfaces it in stderr — add it to the seed before proceeding.
+
+- [ ] **Step 3: Register the budget and drop the deferral**
+
+In `registry.py`, add to `BUDGETS`:
+
+```python
+    "feedback list": CommandBudget(max_chars=20_000, shape=PayloadShape.ROWS, max_rows=40),
+```
+
+and delete from `DEFERRED`:
+
+```python
+    "feedback list": DeferredCommand("one row per feedback item", "1b", 44_307),
+```
+
+- [ ] **Step 4: Bump the partition**
+
+`EXPECTED_CLASSIFICATION_COUNTS` → `{"budgeted": 6, "exempt": 67, "deferred": 204}`.
+
+- [ ] **Step 5: Wire the `feedback_list` callback**
+
+Add the `--output` option after the `--format` option, add `output_path: Path | None` to the signature, and — because `feedback_cli.py` does not import `Path` at module top in this function's scope — ensure `from pathlib import Path` is present at the top of the module (it is used elsewhere; verify). Then replace the trailing `emit_query_rows(...)` call:
+
+```python
+    from science_tool.budget.control import bounded_control_notice
+    from science_tool.budget.invocation import build_complete_via
+    from science_tool.budget.registry import lookup
+    from science_tool.budget.sink import BoundedSink
+
+    complete_via = build_complete_via(click.get_current_context(), output_hint="feedback.json")
+    control_notice = (
+        bounded_control_notice(f"wrote {len(rows)} feedback entries to {output_path}")
+        if output_path is not None
+        else None
+    )
+    sink = BoundedSink(
+        lookup("feedback list"),
+        output_path=output_path,
+        command_path="feedback list",
+        complete_via=complete_via,
+    )
+    emit_query_rows(output_format=output_format, title="Feedback", columns=columns, rows=rows, sink=sink)
+    sink.flush()
+    if control_notice is not None:
+        click.echo(control_notice)
+```
+
+Place the four budget imports at the top of the callback body (after the existing `from science_tool.feedback import list_entries`).
+
+- [ ] **Step 6: Run tests, lint, types**
+
+Run: `cd science && uv run --frozen pytest tests/test_budget_regression_rows.py tests/test_budget_boundary.py -v && uv run ruff check && uv run pyright`
+Expected: PASS/clean; partition `6/67/204`.
+
+- [ ] **Step 7: Commit**
+
+```bash
+git add science/src/science_tool/budget/registry.py science/src/science_tool/feedback_cli.py science/tests/test_budget_boundary.py science/tests/test_budget_regression_rows.py
+git commit -m "feat(budget): bound feedback list output through a sink"
+```
+
+---
+
+## Task 4: Wire the typed-entity lists (`questions list`, `interpretations list`, `discussions list`)
+
+**Files:**
+- Modify: `science/src/science_tool/budget/registry.py` (three moves)
+- Modify: `science/src/science_tool/typed_entity_cli.py:101` (`list_typed_entities` gains an optional `sink`)
+- Modify: `science/src/science_tool/questions_cli.py:80-86`, `interpretations_cli.py:61-67`, `discussions_cli.py:61-67` (three callbacks)
+- Modify: `science/tests/test_budget_boundary.py`
+- Modify: `science/tests/test_budget_regression_rows.py`
+
+**Interfaces:**
+- Consumes: slice-1a helpers; the `rows_corpus` fixture from Task 2 (already seeds 300 each of questions, interpretations, discussions).
+- Produces: `list_typed_entities(kind, status, related, output_format, *, sink: BoundedSink | None = None)` — the added parameter is keyword-only and defaults to `None`, so the three unbudgeted callers (`hypotheses list`, `propositions list`, `evidence-lines list`) are unchanged. Each of the three wired commands is registered `CommandBudget(max_chars=20_000, shape=ROWS, max_rows=40)`.
+
+- [ ] **Step 1: Add the regression cases**
+
+Append to `science/tests/test_budget_regression_rows.py`:
+
+```python
+@pytest.mark.parametrize(
+    ("command_path", "base_args"),
+    [
+        ("questions list", ["questions", "list"]),
+        ("interpretations list", ["interpretations", "list"]),
+        ("discussions list", ["discussions", "list"]),
+    ],
+)
+def test_typed_entity_list_is_bounded_and_complete(
+    rows_corpus: Path, command_path: str, base_args: list[str]
+) -> None:
+    _assert_stdout_projected(command_path, base_args, seeded_total=300)
+    _assert_file_complete(command_path, base_args, seeded_total=300, out_dir=rows_corpus)
+
+
+@pytest.mark.parametrize(
+    ("kind", "plural", "base_args"),
+    [
+        ("hypothesis", "hypotheses", ["hypotheses", "list"]),
+        ("proposition", "propositions", ["propositions", "list"]),
+        ("evidence-line", "evidence-lines", ["evidence-lines", "list"]),
+    ],
+)
+def test_unbudgeted_typed_entity_callers_return_everything(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, kind: str, plural: str, base_args: list[str]
+) -> None:
+    """The three list_typed_entities callers NOT wired in 1b-1 pass sink=None: they must
+    return every row unprojected -- the opposite of a budgeted command. Seeding 50
+    (> max_rows=40) is what gives the test teeth: a caller that mistakenly acquired a sink
+    would truncate to 40 rows and add a `truncation` object, failing both assertions. An
+    empty corpus could not tell the two paths apart."""
+    (tmp_path / "science.yaml").write_text("id: demo\nname: demo\n")
+    _seed_entities(tmp_path, kind, plural, 50)
+    monkeypatch.chdir(tmp_path)
+    result = _invoke([*base_args, "--format", "json"])
+    assert result.exit_code == 0, result.output
+    payload = json.loads(result.output)
+    assert len(payload["rows"]) == 50
+    assert "truncation" not in payload
+```
+
+The single-invocation `_assert_stdout_projected`/`_assert_file_complete` helpers cover both `--format table` and `--format json` internally, so the wired-command parametrization no longer enumerates formats.
+
+- [ ] **Step 2: Run to verify it fails**
+
+Run: `cd science && uv run --frozen pytest tests/test_budget_regression_rows.py::test_typed_entity_list_is_bounded_and_complete -v`
+Expected: FAIL — none of the three is in `BUDGETS`; each returns 300 rows well over the ceiling and offers no `--output`. (`test_unbudgeted_typed_entity_callers_return_everything` already passes: those callers are untouched at this point and return all 50 seeded rows.)
+
+- [ ] **Step 3: Register the three budgets and drop the three deferrals**
+
+In `registry.py`, add to `BUDGETS`:
+
+```python
+    "questions list": CommandBudget(max_chars=20_000, shape=PayloadShape.ROWS, max_rows=40),
+    "interpretations list": CommandBudget(max_chars=20_000, shape=PayloadShape.ROWS, max_rows=40),
+    "discussions list": CommandBudget(max_chars=20_000, shape=PayloadShape.ROWS, max_rows=40),
+```
+
+and delete from `DEFERRED`:
+
+```python
+    "questions list": DeferredCommand("one row per question", "1b", 113_076),
+    "interpretations list": DeferredCommand("one row per interpretation", "1b", 97_281),
+    "discussions list": DeferredCommand("one row per discussion", "1b", 30_780),
+```
+
+- [ ] **Step 4: Bump the partition**
+
+`EXPECTED_CLASSIFICATION_COUNTS` → `{"budgeted": 9, "exempt": 67, "deferred": 201}`.
+
+- [ ] **Step 5: Thread an optional sink through `list_typed_entities`**
+
+In `science/src/science_tool/typed_entity_cli.py`, change the helper signature and pass the sink to `emit_query_rows`, flushing when present:
+
+```python
+def list_typed_entities(
+    kind: str,
+    status: str | None,
+    related: str | None,
+    output_format: str,
+    *,
+    sink: BoundedSink | None = None,
+) -> None:
+    try:
+        rows = list_entities(Path.cwd(), kind=kind, status=status, related=related)
+    except EntityCommandError as exc:
+        raise click.ClickException(str(exc)) from exc
+    emit_query_rows(
+        output_format=output_format,
+        title=ENTITY_LIST_TITLES.get(kind, kind.replace("-", " ").title() + "s"),
+        columns=[("id", "ID"), ("status", "Status"), ("title", "Title"), ("path", "Path")],
+        rows=rows,
+        renderers=entity_table_renderers(),
+        sink=sink,
+    )
+    if sink is not None:
+        sink.flush()
+```
+
+Add the import at the top of `typed_entity_cli.py`:
+
+```python
+from science_tool.budget.sink import BoundedSink
+```
+
+- [ ] **Step 6: Wire the three command callbacks**
+
+Each callback constructs the sink in its own body (required by the AST guard) and passes it in. For `questions_cli.py`, replace the `question_list` command:
+
+```python
+@question_group.command("list")
+@click.option("--status")
+@click.option("--related")
+@click.option("--format", "output_format", type=click.Choice(OUTPUT_FORMATS), default="table", show_default=True)
+@click.option(
+    "--output",
+    "output_path",
+    type=click.Path(path_type=Path),
+    default=None,
+    help="Write the complete, unbudgeted payload to PATH instead of stdout.",
+)
+def question_list(status: str | None, related: str | None, output_format: str, output_path: Path | None) -> None:
+    """List source-authored questions."""
+    from science_tool.budget.invocation import build_complete_via
+    from science_tool.budget.registry import lookup
+    from science_tool.budget.sink import BoundedSink
+
+    sink = BoundedSink(
+        lookup("questions list"),
+        output_path=output_path,
+        command_path="questions list",
+        complete_via=build_complete_via(click.get_current_context(), output_hint="questions.json"),
+    )
+    list_typed_entities("question", status, related, output_format, sink=sink)
+```
+
+Apply the identical transformation to `interpretation_list` in `interpretations_cli.py` (command path `"interpretations list"`, kind `"interpretation"`, hint `"interpretations.json"`) and `discussion_list` in `discussions_cli.py` (command path `"discussions list"`, kind `"discussion"`, hint `"discussions.json"`).
+
+Import note (verified against source): `questions_cli.py` already imports `Path`, `click`, and `OUTPUT_FORMATS`. `interpretations_cli.py` and `discussions_cli.py` import `click` and `OUTPUT_FORMATS` but **not** `Path` — add `from pathlib import Path` to the top of each of those two modules (the new `output_path: Path | None` parameter type needs it).
+
+The file-success control notice is omitted here: `list_typed_entities` owns the flush, and these three commands did not previously print a post-flush line. `--output` completeness is still covered because the sink writes the full payload to the file; the boundary guard only requires the option to exist and the sink to be constructed.
+
+- [ ] **Step 7: Run tests, lint, types**
+
+Run: `cd science && uv run --frozen pytest tests/test_budget_regression_rows.py tests/test_budget_boundary.py -v && uv run ruff check && uv run pyright`
+Expected: PASS/clean; partition `9/67/201`. `test_unbudgeted_typed_entity_callers_return_everything` (added in Step 1) is the guard that the three non-wired callers of `list_typed_entities` still execute the `sink=None` path — it seeds 50 entities of each unwired kind and asserts the JSON returns all 50 with no `truncation`, invoking each command directly rather than relying on a `-k` node-name match (which would not actually exercise those commands). Also run the existing questions/interpretations/discussions CLI test modules if present to confirm no regression.
+
+- [ ] **Step 8: Commit**
+
+```bash
+git add science/src/science_tool/budget/registry.py science/src/science_tool/typed_entity_cli.py science/src/science_tool/questions_cli.py science/src/science_tool/interpretations_cli.py science/src/science_tool/discussions_cli.py science/tests/test_budget_boundary.py science/tests/test_budget_regression_rows.py
+git commit -m "feat(budget): bound the typed-entity list commands through a sink"
+```
+
+---
+
+## Task 5: Wire `entity needs-review`
+
+**Files:**
+- Modify: `science/src/science_tool/budget/registry.py`
+- Modify: `science/src/science_tool/entities_cli.py:601-620` (the `entity_needs_review` callback)
+- Modify: `science/tests/test_budget_boundary.py`
+- Modify: `science/tests/test_budget_regression_rows.py`
+
+**Interfaces:**
+- Consumes: slice-1a helpers; `entity_review.list_needs_review(project_root)`, which reads `graph.trig` and returns rows for triples whose `sci:freshnessState` is `"needs-review"` or `"stale"`.
+- Produces: `entity needs-review` registered as `CommandBudget(max_chars=20_000, shape=ROWS, max_rows=40)`. Final partition `10/67/200`.
+
+- [ ] **Step 1: Add the regression case with a hand-built needs-review graph**
+
+`list_needs_review` reads the materialized graph directly, so the fixture writes a `graph.trig` with flagged entities using the same namespaces the reader uses — no full materialization pipeline. Seed **400** rows: `needs-review` rows are only three narrow columns (`state`/`kind`/`id`), and 60 of them measure ~5.3k chars (table) / ~8.2k (JSON) — both *under* the 20k ceiling, so a 60-row corpus would leave the payload unprojected and let a no-op sink pass. 400 rows (~35k unbudgeted) forces genuine projection, and the projection assertions in `_assert_stdout_projected` then prove the sink actually dropped rows. Append to `science/tests/test_budget_regression_rows.py`:
+
+```python
+def test_needs_review_is_bounded_and_complete(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from rdflib import Dataset, Literal
+
+    from science_tool.graph.store import DEFAULT_GRAPH_PATH, PROJECT_NS, SCI_NS
+
+    (tmp_path / "science.yaml").write_text("id: demo\nname: demo\n")
+    ds = Dataset()
+    knowledge = ds.graph(PROJECT_NS["graph/knowledge"])
+    for i in range(400):
+        uri = PROJECT_NS[f"question/q{i:04d}-a-deliberately-long-descriptive-slug"]
+        knowledge.add((uri, SCI_NS.freshnessState, Literal("needs-review")))
+    trig_path = tmp_path / DEFAULT_GRAPH_PATH
+    trig_path.parent.mkdir(parents=True, exist_ok=True)
+    ds.serialize(destination=str(trig_path), format="trig")
+    monkeypatch.chdir(tmp_path)
+
+    _assert_stdout_projected("entity needs-review", ["entity", "needs-review"], seeded_total=400)
+    _assert_file_complete("entity needs-review", ["entity", "needs-review"], seeded_total=400, out_dir=tmp_path)
+```
+
+- [ ] **Step 2: Run to verify it fails**
+
+Run: `cd science && uv run --frozen pytest tests/test_budget_regression_rows.py::test_needs_review_is_bounded_and_complete -v`
+Expected: FAIL — `entity needs-review` not in `BUDGETS` (`KeyError`) and it has no `--output` option yet. The 400-row corpus (~35k unbudgeted) also exceeds the 20k ceiling, so the assertion would fail on size too once the key exists but the sink is absent.
+
+- [ ] **Step 3: Register the budget and drop the deferral**
+
+In `registry.py`, add to `BUDGETS`:
+
+```python
+    "entity needs-review": CommandBudget(max_chars=20_000, shape=PayloadShape.ROWS, max_rows=40),
+```
+
+and delete from `DEFERRED`:
+
+```python
+    "entity needs-review": DeferredCommand("one row per flagged entity", "1b", 59_697),
+```
+
+- [ ] **Step 4: Bump the partition**
+
+`EXPECTED_CLASSIFICATION_COUNTS` → `{"budgeted": 10, "exempt": 67, "deferred": 200}`.
+
+- [ ] **Step 5: Wire the `entity_needs_review` callback**
+
+In `science/src/science_tool/entities_cli.py`, add the `--output` option, thread `output_path`, construct the sink, and pass it in:
+
+```python
+@entity_group.command("needs-review")
+@click.option(
+    "--format",
+    "output_format",
+    type=click.Choice(OUTPUT_FORMATS),
+    default="table",
+    show_default=True,
+)
+@click.option(
+    "--output",
+    "output_path",
+    type=click.Path(path_type=Path),
+    default=None,
+    help="Write the complete, unbudgeted payload to PATH instead of stdout.",
+)
+def entity_needs_review(output_format: str, output_path: Path | None) -> None:
+    """List epistemic entities flagged needs-review or stale by the materialized graph."""
+    from science_tool.budget.control import bounded_control_notice
+    from science_tool.budget.invocation import build_complete_via
+    from science_tool.budget.registry import lookup
+    from science_tool.budget.sink import BoundedSink
+    from science_tool.entity_review import list_needs_review
+    from science_tool.output import emit_query_rows
+
+    rows = list_needs_review(Path.cwd())
+    complete_via = build_complete_via(click.get_current_context(), output_hint="needs-review.json")
+    control_notice = (
+        bounded_control_notice(f"wrote {len(rows)} flagged entities to {output_path}")
+        if output_path is not None
+        else None
+    )
+    sink = BoundedSink(
+        lookup("entity needs-review"),
+        output_path=output_path,
+        command_path="entity needs-review",
+        complete_via=complete_via,
+    )
+    emit_query_rows(
+        output_format=output_format,
+        title="Entities needing review",
+        columns=[("state", "State"), ("kind", "Kind"), ("id", "ID")],
+        rows=rows,
+        sink=sink,
+    )
+    sink.flush()
+    if control_notice is not None:
+        click.echo(control_notice)
+```
+
+- [ ] **Step 6: Run tests, lint, types**
+
+Run: `cd science && uv run --frozen pytest tests/test_budget_regression_rows.py tests/test_budget_boundary.py -v && uv run ruff check && uv run pyright`
+Expected: PASS/clean; partition `10/67/200`.
+
+- [ ] **Step 7: Commit**
+
+```bash
+git add science/src/science_tool/budget/registry.py science/src/science_tool/entities_cli.py science/tests/test_budget_boundary.py science/tests/test_budget_regression_rows.py
+git commit -m "feat(budget): bound entity needs-review output through a sink"
+```
+
+---
+
+## Task 6: Refresh the partition docstring and run the full suite
+
+**Files:**
+- Modify: `science/tests/test_budget_boundary.py` (docstring only)
+
+**Interfaces:**
+- Consumes: the final `10/67/200` partition established by Tasks 2-5.
+- Produces: nothing.
+
+- [ ] **Step 1: Update the explanatory docstring on `test_classification_partition_has_the_audited_cardinality`**
+
+Append a sentence recording this slice, so the number's provenance stays truthful:
+
+```python
+    """Lock the audited partition, not only its absence of unclassified leaves.
+
+    Task 1 supplied 4 budgeted, 3 exempt, and 11 deferred paths. Task 13's RED
+    surfaced 258 more, classified as 65 exempt and 193 deferred. Review then
+    corrected tasks summary from exempt to deferred because its distinct type/group
+    keys are unbounded. The post-merge belief-basis command adds one deferred leaf
+    because compare mode emits one row per changed entity. Slice 1b-1 then wired six
+    ROWS offenders (entity list, feedback list, questions/interpretations/discussions
+    list, entity needs-review), moving them from deferred to budgeted. The live
+    partition is therefore 10/67/200 = 277.
+    """
+```
+
+- [ ] **Step 2: Run the entire budget suite plus the whole test run**
+
+Run: `cd science && uv run --frozen pytest tests/ -k budget -v`
+Then: `cd science && uv run --frozen pytest`
+Expected: all pass. The registry-completeness guard, sink-construction guard, output-escape guard, the six new bounded-and-complete regressions (stdout projected + `--output` complete, both formats), and the unbudgeted-caller smoke test are green; no slice-1a test regressed.
+
+- [ ] **Step 3: Lint and type-check the whole package**
+
+Run: `cd science && uv run ruff check && uv run pyright`
+Expected: clean.
+
+- [ ] **Step 4: Commit**
+
+```bash
+git add science/tests/test_budget_boundary.py
+git commit -m "test(budget): record slice 1b-1 in the partition-cardinality docstring"
+```
+
+---
+
+## Self-Review
+
+**Spec coverage.** All six measured ROWS offenders are wired: `entity list` (Task 2), `feedback list` (Task 3), `questions`/`interpretations`/`discussions list` (Task 4), `entity needs-review` (Task 5). The four non-ROWS offenders (`prose lint`, `validate`, `curate consolidation-candidates`, `curate inventory`) are explicitly deferred to 1b-2 and recorded in the umbrella design (Task 1). No other slice-1b command is in scope.
+
+**Type consistency.** Every command registers `CommandBudget(max_chars=20_000, shape=PayloadShape.ROWS, max_rows=40)` and constructs `BoundedSink(lookup(<path>), output_path=..., command_path=<path>, complete_via=...)` with the exact signature slice 1a ships. `list_typed_entities` gains a keyword-only `sink: BoundedSink | None = None`, leaving its three unbudgeted callers unchanged. The `EXPECTED_CLASSIFICATION_COUNTS` dict advances 4→5→6→9→10 budgeted and 206→205→204→201→200 deferred across Tasks 2-5, matching the six moves.
+
+**Guard alignment.** Each wired callback constructs its sink in its own body (not a nested scope), satisfying `test_every_budgeted_command_constructs_its_own_sink`, and exposes `--output`, satisfying `test_every_budgeted_command_offers_the_output_escape`. The typed-entity commands deliberately build the sink in the callback rather than in `list_typed_entities` for exactly this reason.
+
+**Behavioural coverage beyond the AST guards.** The AST guards prove a sink is *constructed* and an `--output` option *exists*; they cannot prove the file payload is complete or that projection actually ran. Each command therefore also has: (a) `_assert_stdout_projected`, which asserts the JSON payload carries a `truncation` object whose `total` equals the seeded corpus and whose `rows` length equals `max_rows`, plus the table footer — proving a no-op sink cannot pass; (b) `_assert_file_complete`, whose JSON branch asserts `--output` contains exactly every seeded row with no `truncation`, and whose table branch asserts the file exceeds the ceiling — an empty or projected table file would pass a footer-absence check alone (the prior regression) but cannot exceed the budget. The `needs-review` corpus is 400 rows precisely so its naturally-narrow payload exceeds the ceiling and forces projection. The three unwired `list_typed_entities` callers are exercised by seeding 50 entities (> `max_rows`) of each kind and asserting the JSON returns all 50 unprojected — an empty corpus could not distinguish the `sink=None` path from a budgeted one — via direct invocation rather than a `-k` node-name filter, which would not run them.
+
+**Known limits.**
+- `max_rows=40` is carried from `tasks list`. The per-command size regressions assert `visible_len <= 20_000`; if a wide-row render (e.g. `feedback list`, 8 columns) ever exceeds the ceiling at 40 rows, lower that command's `max_rows` until the regression is green. The measured sizes make this unlikely at 40 rows.
+- The `entity needs-review` regression builds `graph.trig` directly rather than materializing it. This exercises `list_needs_review`'s actual read path but not the freshness-computation that assigns `freshnessState` in production; that computation is covered by the graph-materialization tests, not this budget slice.
+- `curate inventory` (683k) and `prose lint` (550k) — offenders #2 and #3 by size — remain unbounded until 1b-2, because row-projection would corrupt a structured document and misrepresent a summary-plus-findings report respectively.

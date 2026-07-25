@@ -22,9 +22,9 @@ from science_tool.budget.registry import BUDGETS, DEFERRED, EXEMPTIONS
 from science_tool.cli import main
 
 EXPECTED_CLASSIFICATION_COUNTS = {
-    "budgeted": 4,
+    "budgeted": 10,
     "exempt": 67,
-    "deferred": 207,
+    "deferred": 201,
 }
 
 
@@ -61,8 +61,10 @@ def test_classification_partition_has_the_audited_cardinality() -> None:
     keys are unbounded. The post-merge belief-basis command adds one deferred leaf
     because compare mode emits one row per changed entity. The skills coverage
     command adds one deferred leaf because its report grows with registered projects,
-    occurrences, diagnostics, candidates, and skipped projects. The live partition is
-    therefore 4/67/207 = 278.
+    occurrences, diagnostics, candidates, and skipped projects. Slice 1b-1 then wired
+    six ROWS offenders (entity list, feedback list, questions/interpretations/
+    discussions list, entity needs-review), moving them from deferred to budgeted. The
+    live partition is therefore 10/67/201 = 278.
     """
     actual = {
         "budgeted": len(BUDGETS),

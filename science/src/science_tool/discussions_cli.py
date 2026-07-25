@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from pathlib import Path
+
 import click
 
 from science_tool.output import OUTPUT_FORMATS
@@ -62,6 +64,23 @@ def discussion_show(ref: str, output_format: str) -> None:
 @click.option("--status")
 @click.option("--related")
 @click.option("--format", "output_format", type=click.Choice(OUTPUT_FORMATS), default="table", show_default=True)
-def discussion_list(status: str | None, related: str | None, output_format: str) -> None:
+@click.option(
+    "--output",
+    "output_path",
+    type=click.Path(path_type=Path),
+    default=None,
+    help="Write the complete, unbudgeted payload to PATH instead of stdout.",
+)
+def discussion_list(status: str | None, related: str | None, output_format: str, output_path: Path | None) -> None:
     """List source-authored discussions."""
-    list_typed_entities("discussion", status, related, output_format)
+    from science_tool.budget.invocation import build_complete_via
+    from science_tool.budget.registry import lookup
+    from science_tool.budget.sink import BoundedSink
+
+    sink = BoundedSink(
+        lookup("discussions list"),
+        output_path=output_path,
+        command_path="discussions list",
+        complete_via=build_complete_via(click.get_current_context(), output_hint="discussions.json"),
+    )
+    list_typed_entities("discussion", status, related, output_format, sink=sink)
