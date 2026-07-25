@@ -1092,11 +1092,13 @@ def test_check_report_to_dict_shape(tmp_path: Path) -> None:
                 "candidate_id": "cand-mechanism-vagal-cytokine-loop",
                 "kind": "question",
                 "title": "Vagal tone as a cytokine feedback regulator",
+                "slug": None,
             },
             {
                 "candidate_id": "cand-methodology-retest-drift-threshold",
                 "kind": "hypothesis",
                 "title": "Retest interval drives apparent measurement drift",
+                "slug": None,
             },
         ],
         "skipped_applied": [],
@@ -1612,7 +1614,7 @@ lens_views:
 def test_build_create_plan_carries_lens_views() -> None:
     data = {
         "proposed_kind": "question",
-        "title": "T",
+        "title": "Vagal tone as a cytokine regulator",
         "lens": "mechanism",
         "rationale": "framing",
         "origin_plan": {"origins": [{"type": "assistant", "ref": "explore-ideas-mechanism"}]},
@@ -1624,21 +1626,21 @@ def test_build_create_plan_carries_lens_views() -> None:
 def test_build_create_plan_rejects_duplicate_lens() -> None:
     data = {
         "proposed_kind": "question",
-        "title": "T",
+        "title": "Vagal tone as a cytokine regulator",
         "lens_views": [
             {"lens": "mechanism", "rationale": "a", "origin_ref": "explore-ideas-mechanism"},
             {"lens": "mechanism", "rationale": "b"},
         ],
         "origin_plan": {"origins": [{"type": "assistant", "ref": "explore-ideas-mechanism"}]},
     }
-    with pytest.raises(ApplyValidationError):
+    with pytest.raises(ApplyValidationError, match="duplicate lens_views"):
         build_create_plan("cand-x", data, "model-1")
 
 
 def test_build_create_plan_rejects_duplicate_origin_ref() -> None:
     data = {
         "proposed_kind": "question",
-        "title": "T",
+        "title": "Vagal tone as a cytokine regulator",
         "lens": "mechanism",
         "rationale": "framing",
         "origin_plan": {
@@ -1650,6 +1652,165 @@ def test_build_create_plan_rejects_duplicate_origin_ref() -> None:
     }
     with pytest.raises(ApplyValidationError):
         build_create_plan("cand-x", data, "model-1")
+
+
+# fb-2026-07-25: a 13-block report applied 2 entities then failed the remaining
+# 11 on "Title is too long to derive a safe id slug". Two defects: the block
+# schema had no way to name a slug, so the report carried no recovery path; and
+# the check ran per-entity at write time, so the run stranded half-applied and
+# had to be hand-unwound. The slug is now decided at plan time, from the title
+# alone, for every keep block before the first write.
+
+_LONG_TITLE = (
+    "Collaboration scale at which the single-owner graph model breaks down "
+    "under concurrent authorship"
+)
+
+_LONG_TITLE_REPORT = f"""\
+---
+kind: meta
+id: explore-2026-07-25
+---
+
+```yaml
+candidate_id: cand-short
+proposed_kind: question
+title: A perfectly ordinary question title
+decision: keep
+origin_plan:
+  origins:
+    - type: assistant
+      ref: explore-ideas-mechanism
+```
+
+```yaml
+candidate_id: cand-long
+proposed_kind: question
+title: {_LONG_TITLE}
+decision: keep
+origin_plan:
+  origins:
+    - type: assistant
+      ref: explore-ideas-temporal
+```
+"""
+
+
+def _write_report(root: Path, text: str, stem: str = "explore-2026-07-25") -> Path:
+    directory = root / "doc" / "explorations"
+    directory.mkdir(parents=True, exist_ok=True)
+    report = directory / f"{stem}.md"
+    report.write_text(text, encoding="utf-8")
+    return report
+
+
+def test_apply_rejects_untruncatable_title_before_writing_anything(tmp_path: Path) -> None:
+    # The failing block is the SECOND one: a per-entity check would already have
+    # written the first entity by the time it fired.
+    seed_project(tmp_path)
+    report = _write_report(tmp_path, _LONG_TITLE_REPORT)
+
+    with pytest.raises(ApplyValidationError) as excinfo:
+        apply_report(tmp_path, "explore-2026-07-25", "m", date(2026, 7, 25))
+
+    message = str(excinfo.value)
+    assert "cand-long" in message
+    assert "concurrent-authorship" in message  # names the tail that would be lost
+    assert "slug:" in message  # names the in-report recovery path
+    # Nothing written, and the report is untouched -- no half-applied state to unwind.
+    assert not list((tmp_path / "entities" / "questions").glob("*.md"))
+    assert "decision: applied" not in report.read_text(encoding="utf-8")
+
+
+def test_check_reports_untruncatable_title(tmp_path: Path) -> None:
+    # --check runs the same planner, so the human sees the failure before apply.
+    seed_project(tmp_path)
+    _write_report(tmp_path, _LONG_TITLE_REPORT)
+
+    with pytest.raises(ApplyValidationError, match="cand-long"):
+        check_report(tmp_path, "explore-2026-07-25", "m")
+
+
+def test_apply_honors_explicit_slug_in_candidate_block(tmp_path: Path) -> None:
+    seed_project(tmp_path)
+    report = _write_report(
+        tmp_path,
+        _LONG_TITLE_REPORT.replace(
+            "      ref: explore-ideas-temporal\n",
+            "      ref: explore-ideas-temporal\nslug: single-owner-graph-collaboration-scale\n",
+        ),
+    )
+
+    result = apply_report(tmp_path, "explore-2026-07-25", "m", date(2026, 7, 25))
+
+    assert result.failures == []
+    long_block = next(c for c in result.created if c.candidate_id == "cand-long")
+    assert long_block.entity_id.endswith("single-owner-graph-collaboration-scale")
+    # The full title survives on the entity; only the id is shortened.
+    assert _LONG_TITLE in long_block.path.read_text(encoding="utf-8")
+    assert "applied_as: " + long_block.entity_id in report.read_text(encoding="utf-8")
+
+
+def test_check_surfaces_planned_slug(tmp_path: Path) -> None:
+    seed_project(tmp_path)
+    _write_report(
+        tmp_path,
+        _LONG_TITLE_REPORT.replace(
+            "      ref: explore-ideas-temporal\n",
+            "      ref: explore-ideas-temporal\nslug: single-owner-graph-collaboration-scale\n",
+        ),
+    )
+
+    payload = cast(list[dict], check_report(tmp_path, "explore-2026-07-25", "m").to_dict()["to_create"])
+
+    assert [row["slug"] for row in payload] == [None, "single-owner-graph-collaboration-scale"]
+
+
+def test_apply_rejects_malformed_explicit_slug(tmp_path: Path) -> None:
+    seed_project(tmp_path)
+    _write_report(
+        tmp_path,
+        _LONG_TITLE_REPORT.replace(
+            "      ref: explore-ideas-temporal\n",
+            "      ref: explore-ideas-temporal\nslug: Not A Valid Slug\n",
+        ),
+    )
+
+    with pytest.raises(ApplyValidationError, match="Invalid slug"):
+        apply_report(tmp_path, "explore-2026-07-25", "m", date(2026, 7, 25))
+
+    assert not list((tmp_path / "entities" / "questions").glob("*.md"))
+
+
+def test_apply_rejects_empty_explicit_slug(tmp_path: Path) -> None:
+    seed_project(tmp_path)
+    _write_report(
+        tmp_path,
+        _LONG_TITLE_REPORT.replace(
+            "      ref: explore-ideas-temporal\n",
+            "      ref: explore-ideas-temporal\nslug: ''\n",
+        ),
+    )
+
+    with pytest.raises(ApplyValidationError, match="non-empty string"):
+        apply_report(tmp_path, "explore-2026-07-25", "m", date(2026, 7, 25))
+
+
+def test_plan_report_collects_every_bad_title_in_one_pass(tmp_path: Path) -> None:
+    # The point of planning up front: the human fixes all offending blocks in one
+    # edit instead of discovering them one failed apply at a time.
+    seed_project(tmp_path)
+    text = _LONG_TITLE_REPORT.replace(
+        "title: A perfectly ordinary question title",
+        f"title: {_LONG_TITLE} in a second way",
+    )
+    _write_report(tmp_path, text)
+
+    with pytest.raises(ApplyValidationError) as excinfo:
+        check_report(tmp_path, "explore-2026-07-25", "m")
+
+    message = str(excinfo.value)
+    assert "cand-short" in message and "cand-long" in message
 
 
 def test_cli_apply_nonzero_on_failure(monkeypatch: pytest.MonkeyPatch) -> None:
