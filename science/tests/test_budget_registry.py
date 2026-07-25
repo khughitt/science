@@ -55,17 +55,6 @@ def test_every_deferred_entry_states_what_makes_it_grow() -> None:
         assert entry.target_slice.strip(), f"{path} is deferred with no target slice"
 
 
-def test_the_remaining_measured_offenders_are_deferred() -> None:
-    """The six ROWS offenders were wired across slice 1b-1 Tasks 2-5; curate inventory
-    (DOCUMENT), prose lint (REPORT), curate consolidation-candidates (REPORT), and
-    validate (REPORT) were wired in slice 1b-2 Tasks 1-4. The measured set is now
-    empty."""
-    measured: set[str] = set()
-    assert measured <= set(DEFERRED)
-    for path in measured:
-        assert (DEFERRED[path].measured_chars or 0) > 20_000
-
-
 def test_a_growable_but_small_command_can_be_deferred() -> None:
     """tasks archive emits one row per archivable task but measures tiny.
 
