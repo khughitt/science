@@ -4,10 +4,13 @@ from contextlib import redirect_stdout
 from dataclasses import replace
 from io import StringIO
 from pathlib import Path
-from typing import Any, cast
+from typing import TYPE_CHECKING, Any, cast
 
 import click
 from rich.text import Text
+
+if TYPE_CHECKING:
+    from science_tool.budget.sink import BoundedSink
 
 from science_tool.output import emit
 from science_tool.styles import ERROR_STYLE, SUCCESS_STYLE, WARNING_STYLE
@@ -219,7 +222,7 @@ def _emit_text(
     result: RunResult,
     shown_results: list[Result],
     omitted: int,
-    sink,
+    sink: BoundedSink,
     *,
     verbose: bool = False,
 ) -> None:

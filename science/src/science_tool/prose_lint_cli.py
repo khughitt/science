@@ -5,8 +5,12 @@ from __future__ import annotations
 import sys
 from dataclasses import asdict
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 import click
+
+if TYPE_CHECKING:
+    from science_tool.budget.sink import BoundedSink
 
 from science_tool.bibliography import load_bib_author_surnames
 from science_tool.data_root import project_config_path
@@ -131,7 +135,7 @@ def lint_cmd(root: Path, fmt: str, checks: tuple[str, ...], strict: bool, output
         else None
     )
     displayed = payload if output_path is not None else project_prose_lint(payload)
-    emit(output_format=fmt, payload=displayed, render_text=lambda: _render_table(displayed, root, sink), sink=sink)
+    emit(output_format=fmt, payload=displayed, render_text=lambda: _render_table(displayed, sink), sink=sink)
     sink.flush()
     if control_notice is not None:
         click.echo(control_notice)
@@ -142,7 +146,7 @@ def lint_cmd(root: Path, fmt: str, checks: tuple[str, ...], strict: bool, output
         sys.exit(1)
 
 
-def _render_table(payload: dict, root: Path, sink) -> None:
+def _render_table(payload: dict, sink: BoundedSink) -> None:
     hits = payload["hits"]
     numeric_coverage = (payload.get("coverage") or {}).get("numeric-verification")
     if numeric_coverage:
