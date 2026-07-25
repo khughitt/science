@@ -233,15 +233,22 @@ def test_policy_module_reads_no_project_state():
     tree = ast.parse(POLICY_SOURCE.read_text(encoding="utf-8"))
     banned_calls = {"open", "getenv", "read_text", "read_bytes", "glob", "resolve_paths"}
     banned_modules = {"os", "pathlib", "yaml", "json", "science_tool.paths", "science_tool.entities"}
+
+    def _is_banned(module: str) -> bool:
+        # Prefix-aware: comparing only the first segment would let
+        # `import science_tool.paths` through, since its first segment is `science_tool`,
+        # which is not itself banned.
+        return any(module == banned or module.startswith(f"{banned}.") for banned in banned_modules)
+
     for node in ast.walk(tree):
         if isinstance(node, ast.Call):
             name = getattr(node.func, "attr", None) or getattr(node.func, "id", None)
             assert name not in banned_calls, f"policy.py must not call {name}()"
         if isinstance(node, ast.Import):
             for alias in node.names:
-                assert alias.name.split(".")[0] not in banned_modules, f"policy.py must not import {alias.name}"
+                assert not _is_banned(alias.name), f"policy.py must not import {alias.name}"
         if isinstance(node, ast.ImportFrom) and node.module:
-            assert node.module not in banned_modules, f"policy.py must not import from {node.module}"
+            assert not _is_banned(node.module), f"policy.py must not import from {node.module}"
 ```
 
 - [ ] **Step 2: Run the tests to verify they fail**
@@ -541,9 +548,13 @@ def entity_kind_for_path(rel_path: str, *, project_root: Path | None = None) -> 
     non-overridable: a project-local kind gets NO allowlist entry, so registering one
     can only ever deny more.
     """
-    # Imported here, not at module scope: `science_tool.entities` raises ImportError
-    # when it is the first `science_tool` module imported (circular via
-    # commons/validator.py). `migrate_specs.py` and `entity_import.py` do the same.
+    # Deferred, not module-scope, as cheap insurance: an import cycle through
+    # `commons/validator.py` has been observed intermittently when `science_tool.entities`
+    # is the first `science_tool` module loaded. It does NOT reproduce on a clean tree at
+    # b0c6dfa7 -- verified both at module scope and under a real pytest run -- so this is
+    # a hedge, not a workaround for a known-broken import. If it ever DOES raise here,
+    # that is a signal about the cycle, not about this module: report it rather than
+    # redesigning around it.
     from science_tool.entities import entity_policies
 
     candidate = PurePosixPath(rel_path)
@@ -1073,6 +1084,28 @@ def test_an_unresolvable_commit_is_an_error_not_an_empty_change_set(repo: Path):
         extract_change_set(repo, base, "0" * 40, project_root=repo)
 
 
+def test_an_unreadable_entity_blob_is_an_error_not_an_empty_field_list(repo: Path):
+    """Fail-open regression: a blob that cannot be decoded must NOT diff to zero
+    changed fields, which the evaluator would allow."""
+    base = _git(repo, "rev-parse", "HEAD")
+    (repo / PAPER).write_bytes(b"---\nid: paper:smith2020\nkind: paper\ntitle: \xff\xfe\n---\n")
+    head = _commit(repo, "invalid utf-8")
+
+    with pytest.raises(ExtractError):
+        extract_change_set(repo, base, head, project_root=repo)
+
+
+def test_malformed_frontmatter_is_an_error_not_a_body_only_change(repo: Path):
+    """A delimited but unparseable block raises out of `split_frontmatter`; it must
+    surface as ExtractError so the CLI can report 'could not evaluate' (exit 2)."""
+    base = _git(repo, "rev-parse", "HEAD")
+    _write(repo, PAPER, "---\nid: paper:smith2020\nvenue: [unclosed\n---\n\nAbstract.\n")
+    head = _commit(repo, "malformed frontmatter")
+
+    with pytest.raises(ExtractError):
+        extract_change_set(repo, base, head, project_root=repo)
+
+
 def test_changes_are_ordered_by_path(repo: Path):
     base = _git(repo, "rev-parse", "HEAD")
     _write(repo, "zzz.txt", "z\n")
@@ -1108,6 +1141,7 @@ from __future__ import annotations
 import subprocess
 from pathlib import Path
 
+import yaml
 from science_model.frontmatter import split_frontmatter
 
 from science_tool.autonomy.changes import (
@@ -1139,16 +1173,20 @@ def _require_commit(repo_root: Path, rev: str) -> str:
     return _git(repo_root, "rev-parse", "--verify", f"{rev}^{{commit}}").decode().strip()
 
 
-def _blob(repo_root: Path, commit: str, path: str) -> str | None:
-    """File text at `commit`, or None when it is absent or not utf-8 text."""
-    try:
-        raw = _git(repo_root, "show", f"{commit}:{path}")
-    except ExtractError:
-        return None
+def _blob(repo_root: Path, commit: str, path: str) -> str:
+    """File text at `commit`. Raises rather than returning a sentinel.
+
+    FAIL-OPEN HAZARD: if an unreadable blob degraded to None, a MODIFIED entity whose
+    blobs both failed to read would diff to zero changed fields, and the evaluator
+    would ALLOW it. An unreadable blob is uncomputable, never clean -- the same rule
+    `graph belief-basis` applies with exit 2. `None` in this module means only "absent
+    by construction on one side of an add or a delete".
+    """
+    raw = _git(repo_root, "show", f"{commit}:{path}")  # raises ExtractError on failure
     try:
         return raw.decode("utf-8")
-    except UnicodeDecodeError:
-        return None
+    except UnicodeDecodeError as exc:
+        raise ExtractError(f"{path} at {commit} is not utf-8 text: {exc}") from exc
 
 
 #: Sentinel distinguishing "key absent" from "key present with value None", which are
@@ -1162,13 +1200,18 @@ def _changed_fields(before_text: str | None, after_text: str | None) -> tuple[st
     Keys are stringified: a YAML key that is not a string (`true:`, `1:`) becomes a
     field name that is on no allowlist, and is therefore denied rather than crashing.
 
-    A file whose frontmatter block is absent or unparseable yields `({}, whole_text)`
-    from `split_frontmatter`, so its edit surfaces as a BODY_FIELD change -- also
-    denied. An actor cannot use malformed YAML to reclassify a field edit into
-    something more permissive, because neither is permitted.
+    A file with NO frontmatter delimiters yields `({}, whole_text)`, so its edit
+    surfaces as a BODY_FIELD change -- denied like any other. A file with delimiters
+    around MALFORMED yaml is different: `split_frontmatter` calls `yaml.safe_load` and
+    lets `yaml.YAMLError` escape. That is converted to `ExtractError` here so the CLI
+    reports "could not evaluate" (exit 2) instead of crashing, because a change set we
+    cannot parse is uncomputable, not clean.
     """
-    before_fm, before_body = split_frontmatter(before_text) if before_text is not None else ({}, "")
-    after_fm, after_body = split_frontmatter(after_text) if after_text is not None else ({}, "")
+    try:
+        before_fm, before_body = split_frontmatter(before_text) if before_text is not None else ({}, "")
+        after_fm, after_body = split_frontmatter(after_text) if after_text is not None else ({}, "")
+    except yaml.YAMLError as exc:
+        raise ExtractError(f"unparseable frontmatter: {exc}") from exc
 
     before = {str(key): value for key, value in before_fm.items()}
     after = {str(key): value for key, value in after_fm.items()}
@@ -1239,7 +1282,7 @@ def extract_change_set(
 cd science && uv run --frozen pytest tests/test_autonomy_extract.py -q
 ```
 
-Expected: 11 passed.
+Expected: 13 passed.
 
 - [ ] **Step 5: Lint and type-check**
 
@@ -1366,6 +1409,20 @@ def test_an_unresolvable_commit_exits_two_not_zero(repo: Path):
     assert "could not evaluate" in result.output
 
 
+def test_malformed_frontmatter_exits_two_not_a_traceback(repo: Path):
+    """An unparseable change set is uncomputable, not clean, and must land on the
+    exit-2 branch rather than escaping as an unhandled YAMLError."""
+    base = _git(repo, "rev-parse", "HEAD")
+    _write(repo, PAPER, "---\nid: paper:smith2020\nvenue: [unclosed\n---\n\nAbstract.\n")
+    _git(repo, "add", "-A")
+    _git(repo, "commit", "-q", "-m", "malformed")
+    head = _git(repo, "rev-parse", "HEAD")
+
+    result = _run(repo, base, head)
+    assert result.exit_code == 2, result.output
+    assert "could not evaluate" in result.output
+
+
 def test_report_only_denies_an_entity_edit(repo: Path):
     base = _git(repo, "rev-parse", "HEAD")
     _write(repo, PAPER, _paper_text(venue="Science"))
@@ -1414,7 +1471,6 @@ Create `science/src/science_tool/autonomy/cli.py`:
 
 from __future__ import annotations
 
-import json
 import sys
 from pathlib import Path
 
@@ -1611,16 +1667,21 @@ from science_tool.cli import main
 from science_tool.graph.belief_basis import capture_basis, compare_bases
 from science_tool.graph.io import PROJECT_NS
 
-#: (kind, field, perturbed value rendered as a YAML scalar). One case per allowlist
-#: entry -- `test_every_allowlisted_field_has_a_perturbation_case` is the ratchet that
-#: makes an unalarmed allowlist entry impossible.
+#: (kind, field, perturbed value as a RAW YAML FRAGMENT). One case per allowlist entry
+#: -- `test_every_allowlisted_field_has_a_perturbation_case` is the ratchet that makes
+#: an unalarmed allowlist entry impossible.
+#:
+#: The third element is spliced into the document verbatim, so its YAML type must match
+#: the model's. `pmid` and `isbn` are `str` on the entity model, and unquoted `99999999`
+#: parses as an int, which pydantic REJECTS -- so those values carry explicit quotes.
+#: `year` and `duration_minutes` are `int | None` and must stay unquoted.
 PERTURBATIONS: tuple[tuple[str, str, str], ...] = (
     ("paper", "venue", "Journal of Perturbation"),
-    ("paper", "pmid", "99999999"),
+    ("paper", "pmid", '"99999999"'),
     ("paper", "year", "1999"),
     ("paper", "url", "https://example.org/perturbed"),
     ("book", "publisher", "Perturbation Press"),
-    ("book", "isbn", "978-0-00-000000-0"),
+    ("book", "isbn", '"978-0-00-000000-0"'),
     ("book", "year", "1999"),
     ("book", "url", "https://example.org/perturbed-book"),
     ("talk", "venue", "Perturbation Symposium"),
@@ -1629,13 +1690,15 @@ PERTURBATIONS: tuple[tuple[str, str, str], ...] = (
 
 #: Where each perturbable kind's fixture entity lives, and its authored frontmatter.
 _FIXTURE_ENTITIES: dict[str, tuple[str, str]] = {
+    # `pmid` and `isbn` are quoted: unquoted digits parse as int and pydantic rejects
+    # an int for a `str` field, so the fixture would fail to materialize at all.
     "paper": (
         "entities/papers/x.md",
-        "id: paper:x\nkind: paper\ntitle: X\nvenue: Nature\npmid: 111\nyear: 2020\nurl: https://example.org/x\n",
+        'id: paper:x\nkind: paper\ntitle: X\nvenue: Nature\npmid: "111"\nyear: 2020\nurl: https://example.org/x\n',
     ),
     "book": (
         "entities/books/b.md",
-        "id: book:b\nkind: book\ntitle: B\npublisher: Old Press\nisbn: 978-1-11-111111-1\nyear: 2019\nurl: https://example.org/b\n",
+        'id: book:b\nkind: book\ntitle: B\npublisher: Old Press\nisbn: "978-1-11-111111-1"\nyear: 2019\nurl: https://example.org/b\n',
     ),
     "talk": (
         "entities/talks/t.md",
