@@ -138,8 +138,15 @@ _ROW_SCHEMAS: dict[str, dict[str, str]] = {
         "source_file": "str",
         "message": "str",
     },
-    # dataset_anomalies is deliberately absent: HealthReport declares list[dict], so
-    # only its projection-relevant severity field is validated below.
+    # check_dataset_anomalies documents and emits this stable five-field row shape even
+    # though HealthReport's historical annotation is only list[dict].
+    "dataset_anomalies": {
+        "code": "str",
+        "severity": "severity",
+        "entity_id": "str",
+        "file_path": "str",
+        "message": "str",
+    },
     "schema_invalid": {
         "code": "str",
         "severity": "severity",
@@ -189,6 +196,17 @@ _CROSS_PAPER_FINDING_SCHEMA = {
     "detail": "str",
 }
 
+# prose_health._finding and the prose health-check error branches share this stable
+# shape even though the nested report is annotated as dict[str, object].
+_PROSE_FINDING_SCHEMA = {
+    "code": "str",
+    "severity": "severity",
+    "counts_as_issue": "bool",
+    "source_ref": "optional_str",
+    "path": "str",
+    "message": "str",
+}
+
 _LAYERED_ROW_SCHEMAS: dict[str, dict[str, str]] = {
     "rival_model_packets_missing_discriminating_predictions": {
         "proposition": "str",
@@ -202,8 +220,6 @@ _LAYERED_ROW_SCHEMAS: dict[str, dict[str, str]] = {
         "todos": "str_list",
     },
 }
-
-_GENERIC_ROW_SECTIONS = frozenset({"dataset_anomalies"})
 
 
 def _required_field(container: Mapping[str, Any], key: str, path: str) -> Any:
@@ -286,9 +302,6 @@ def _validate_row_section(rows: list[Any], section: str) -> None:
         row_path = f"{path}[{index}]"
         if schema is not None:
             _validate_row_schema(row, schema, row_path)
-        elif section in _GENERIC_ROW_SECTIONS:
-            severity = _required_field(row, "severity", row_path)
-            _validate_field_kind(severity, "severity", f"{row_path}.severity")
         else:  # pragma: no cover - every registered row section is explicit above
             raise AssertionError(f"health report section {section!r} has no row schema")
 
@@ -376,14 +389,7 @@ def _validate_nested_section(
                 finding_path,
             )
         else:
-            severity = _required_field(finding, "severity", finding_path)
-            _validate_field_kind(severity, "severity", f"{finding_path}.severity")
-            counts_as_issue = _required_field(finding, "counts_as_issue", finding_path)
-            _validate_field_kind(
-                counts_as_issue,
-                "bool",
-                f"{finding_path}.counts_as_issue",
-            )
+            _validate_row_schema(finding, _PROSE_FINDING_SCHEMA, finding_path)
     return findings
 
 
@@ -509,9 +515,15 @@ def project_health_report(
 
     effective_cap = SECTION_ROW_CAP if cap is None else cap
     _validate_report(report)
-    # Task 8's counter is also the complete-root contract validator. Run it over the
-    # source before narrowing, then again below over the projection for displayed_issues.
-    count_issues(report)
+    # Task 8's counter is also the complete-root contract validator. A total that does
+    # not match the same counter used for displayed_issues would make "N of M" false and
+    # could allow the displayed subset to exceed its announced total.
+    full_count = count_issues(report)
+    if full_count != report["total_issues"]:
+        raise ValueError(
+            "health report total_issues does not match count_issues(report): "
+            f"{report['total_issues']} != {full_count}"
+        )
 
     omitted: dict[str, int] = {}
     projected: dict[str, Any] = {}

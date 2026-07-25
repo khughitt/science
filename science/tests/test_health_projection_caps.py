@@ -166,6 +166,7 @@ def test_nested_findings_are_projected_in_place() -> None:
         ],
         "propositions": [],
     }
+    report["total_issues"] = 464
     projected = project_health_report(report, threshold="error")
     assert len(projected["cross_paper_evidence"]["findings"]) == SECTION_ROW_CAP
     assert projected["cross_paper_evidence"]["status"] == "active"
@@ -436,7 +437,15 @@ def test_malformed_managed_artifact_beyond_cap_is_rejected_before_projection() -
 def test_filtered_prose_finding_is_validated_before_thresholding() -> None:
     report = _natural_systems_shaped_report()
     prose = dict(report["prose_epistemics"])
-    prose["findings"] = [{"severity": "info"}]
+    prose["findings"] = [
+        {
+            "code": "undeclared_grounding_report",
+            "severity": "info",
+            "source_ref": "prose-source:a",
+            "path": "data/prose-grounding/a/grounding.json",
+            "message": "undeclared report",
+        }
+    ]
     report["prose_epistemics"] = prose
     with pytest.raises(ValueError, match=r"prose_epistemics\.findings\[0\].*counts_as_issue"):
         project_health_report(report, threshold="warn")
@@ -485,5 +494,66 @@ def test_meta_timing_requires_name_and_duration() -> None:
     with pytest.raises(
         ValueError,
         match=r"_meta\.timings\[0\].*duration_seconds",
+    ):
+        project_health_report(report, threshold="warn")
+
+
+@pytest.mark.parametrize("total_issues", [363, 365])
+def test_total_issues_must_equal_the_full_issue_count(total_issues: int) -> None:
+    report = _natural_systems_shaped_report()
+    report["total_issues"] = total_issues
+    with pytest.raises(ValueError, match=r"total_issues.*count_issues"):
+        project_health_report(report, threshold="warn")
+
+
+def test_one_issue_cannot_claim_total_zero() -> None:
+    report = _natural_systems_shaped_report()
+    report["validation"] = [report["validation"][0]]
+    report["unresolved_refs"] = []
+    report["archive_lag"] = {
+        "done_in_active": 0,
+        "retired_in_active": 0,
+        "missing_completed": 0,
+    }
+    report["total_issues"] = 0
+    with pytest.raises(ValueError, match=r"total_issues.*count_issues"):
+        project_health_report(report, threshold="warn")
+
+
+def test_dataset_anomaly_beyond_cap_requires_full_producer_shape() -> None:
+    report = _natural_systems_shaped_report()
+    valid = {
+        "code": "dataset_stale_review",
+        "severity": "warning",
+        "entity_id": "dataset:a",
+        "file_path": "entities/datasets/a.md",
+        "message": "review is stale",
+    }
+    report["dataset_anomalies"] = [
+        dict(valid) for _ in range(SECTION_ROW_CAP)
+    ] + [{key: value for key, value in valid.items() if key != "message"}]
+    with pytest.raises(
+        ValueError,
+        match=rf"dataset_anomalies\[{SECTION_ROW_CAP}\].*message",
+    ):
+        project_health_report(report, threshold="warn")
+
+
+def test_filtered_prose_finding_requires_full_producer_shape() -> None:
+    report = _natural_systems_shaped_report()
+    prose = dict(report["prose_epistemics"])
+    prose["findings"] = [
+        {
+            "code": "undeclared_grounding_report",
+            "severity": "info",
+            "counts_as_issue": False,
+            "source_ref": "prose-source:a",
+            "path": "data/prose-grounding/a/grounding.json",
+        }
+    ]
+    report["prose_epistemics"] = prose
+    with pytest.raises(
+        ValueError,
+        match=r"prose_epistemics\.findings\[0\].*message",
     ):
         project_health_report(report, threshold="warn")
