@@ -62,6 +62,7 @@ BUDGETS: dict[str, CommandBudget] = {
     "health": CommandBudget(max_chars=30_000, shape=PayloadShape.REPORT),
     "entities inventory": CommandBudget(max_chars=20_000, shape=PayloadShape.DOCUMENT),
     "data audit": CommandBudget(max_chars=20_000, shape=PayloadShape.DOCUMENT),
+    "entity list": CommandBudget(max_chars=20_000, shape=PayloadShape.ROWS, max_rows=40),
 }
 
 EXEMPTIONS: dict[str, str] = {
@@ -136,7 +137,6 @@ EXEMPTIONS: dict[str, str] = {
 
 DEFERRED: dict[str, DeferredCommand] = {
     # Measured over budget on 2026-07-24; wiring scheduled for slice 1b.
-    "entity list": DeferredCommand("one row per entity", "1b", 1_706_994),
     "curate inventory": DeferredCommand("one record per entity", "1b", 683_657),
     "prose lint": DeferredCommand("one row per prose finding", "1b", 550_226),
     "questions list": DeferredCommand("one row per question", "1b", 113_076),
