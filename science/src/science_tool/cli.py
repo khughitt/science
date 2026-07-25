@@ -12,6 +12,7 @@ from science_tool.benchmark_cli import benchmark_group
 from science_tool.bib_cli import bib_group
 from science_tool.big_picture.cli import big_picture_group
 from science_tool.book_split_cli import book_split_command
+from science_tool.cli_retirement import register_retirements
 from science_tool.commons import commons_group
 from science_tool.curate.cli import curate_group
 from science_tool.data_cli import data_group
@@ -237,6 +238,10 @@ main.add_command(bib_group)
 main.add_command(sync_group)
 main.add_command(paper_group)
 main.add_command(paper_fetch_command)
+
+# Retired commands are declared in cli_retirement.RETIREMENTS, not here. This must run
+# after every group is attached: the manifest resolves parents by walking the live tree.
+register_retirements(main)
 
 
 if __name__ == "__main__":

@@ -22,12 +22,6 @@ def inquiry_group() -> None:
     """Inquiry subgraph commands."""
 
 
-def _retired_mutator(slug: str) -> click.ClickException:
-    return click.ClickException(
-        f"Inquiry graph mutation is retired. Edit entities/patches/{slug}.md and run `science graph build`."
-    )
-
-
 def _ref_from_uri(value: str) -> str:
     """Best-effort reverse of entity_uri_for_ref for the import bridge."""
     from science_tool.graph.io import PROJECT_NS
@@ -207,75 +201,6 @@ def inquiry_import(slug, project_root, graph_path, force):
     dest.parent.mkdir(parents=True, exist_ok=True)
     dest.write_text(text, encoding="utf-8")
     click.echo(f"Imported inquiry/{slug} -> {dest}")
-
-
-@inquiry_group.command("add-node")
-@click.argument("slug")
-@click.argument("entity")
-@click.option("--role", required=False, type=click.Choice(["BoundaryIn", "BoundaryOut"]), default=None)
-@click.option(
-    "--path", "graph_path", default=str(DEFAULT_GRAPH_PATH), show_default=True, type=click.Path(path_type=Path)
-)
-def inquiry_add_node(slug: str, entity: str, role: str | None, graph_path: Path) -> None:
-    """Add a node to an inquiry, optionally with a boundary role."""
-    raise _retired_mutator(slug)
-
-
-@inquiry_group.command("add-edge")
-@click.argument("slug")
-@click.argument("subject")
-@click.argument("predicate")
-@click.argument("object", metavar="OBJECT")
-@click.option("--claim", "claim_refs", multiple=True, help="Supporting proposition reference (repeatable)")
-@click.option(
-    "--path", "graph_path", default=str(DEFAULT_GRAPH_PATH), show_default=True, type=click.Path(path_type=Path)
-)
-def inquiry_add_edge(
-    slug: str,
-    subject: str,
-    predicate: str,
-    object: str,
-    claim_refs: tuple[str, ...],
-    graph_path: Path,
-) -> None:
-    """Add an edge within an inquiry subgraph."""
-    raise _retired_mutator(slug)
-
-
-@inquiry_group.command("add-assumption")
-@click.argument("slug")
-@click.argument("label")
-@click.option("--source", required=True, help="Evidence source (e.g. paper:doi_...)")
-@click.option(
-    "--path", "graph_path", default=str(DEFAULT_GRAPH_PATH), show_default=True, type=click.Path(path_type=Path)
-)
-def inquiry_add_assumption(slug: str, label: str, source: str, graph_path: Path) -> None:
-    """Add an assumption to an inquiry with provenance."""
-    raise _retired_mutator(slug)
-
-
-@inquiry_group.command("add-transformation")
-@click.argument("slug")
-@click.argument("label")
-@click.option("--tool", default="", help="Tool or library name")
-@click.option(
-    "--path", "graph_path", default=str(DEFAULT_GRAPH_PATH), show_default=True, type=click.Path(path_type=Path)
-)
-def inquiry_add_transformation(slug: str, label: str, tool: str, graph_path: Path) -> None:
-    """Add a transformation step to an inquiry."""
-    raise _retired_mutator(slug)
-
-
-@inquiry_group.command("set-estimand")
-@click.argument("slug")
-@click.option("--treatment", required=True, help="Treatment variable (e.g. concept/drug)")
-@click.option("--outcome", required=True, help="Outcome variable (e.g. concept/recovery)")
-@click.option(
-    "--path", "graph_path", default=str(DEFAULT_GRAPH_PATH), show_default=True, type=click.Path(path_type=Path)
-)
-def inquiry_set_estimand(slug: str, treatment: str, outcome: str, graph_path: Path) -> None:
-    """Set treatment and outcome variables for a causal inquiry."""
-    raise _retired_mutator(slug)
 
 
 @inquiry_group.command("list")

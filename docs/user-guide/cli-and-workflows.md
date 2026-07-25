@@ -19,7 +19,7 @@ This chapter is a command-family map, not an exhaustive reference. Use
 | Migration-only | Exists to move old project state into the current model. |
 | Exploratory | Useful for experiments or manual diagnostics; avoid as normal durable authoring. |
 | Legacy | Kept for compatibility or cleanup; avoid in new workflows. |
-| Retired | No longer executes; use the replacement source-authoring or build-from-source path. |
+| Retired | No longer executes and is unlisted in `--help`; invoking one names the replacement source-authoring or build-from-source path. |
 
 ## Write Classes
 
