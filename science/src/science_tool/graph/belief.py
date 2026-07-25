@@ -136,7 +136,11 @@ def collect_evidence_units(
     units: list[EvidenceUnit] = []
     seen: set[str] = set()
     target_set = frozenset(targets)
-    for target in target_set:
+    # Sorted, not raw frozenset order: URIRef subclasses str, so set iteration order
+    # varies with the process-wide string hash seed. A line shared by two targets of
+    # DIFFERENT polarity would otherwise inherit whichever target won that race, making
+    # the resulting units — and any digest over them — irreproducible across processes.
+    for target in sorted(target_set):
         # Authored sign of THIS target (materialized on the proposition URI). A line
         # de-dupes to the first target that claims it, so it inherits that target's
         # polarity for the oriented quant contribution.

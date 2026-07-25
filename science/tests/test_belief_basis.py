@@ -1,6 +1,10 @@
 from __future__ import annotations
 
 import dataclasses
+import json
+import os
+import subprocess
+import sys
 
 import pytest
 from pydantic import ValidationError
@@ -121,6 +125,88 @@ def test_layer_uris_are_not_entities():
     knowledge, provenance = Graph(), Graph()
     knowledge.add((URIRef(PROJECT_NS["graph/knowledge"]), RDF.type, SCI_NS.Layer))
     assert capture_basis(knowledge, provenance).status == "unwired"
+
+
+#: Captures one hypothesis whose evidence-target closure holds two propositions of
+#: OPPOSING polarity, both linked by the SAME evidence line. Prints the surviving
+#: unit's inherited target_polarity and the whole-capture digest.
+#:
+#: This must run in a fresh interpreter: `collect_evidence_units` iterated a
+#: `frozenset` of URIRef (a str subclass), so the target that claimed the shared
+#: line — and therefore the polarity baked into the unit key — depended on the
+#: process-wide string hash seed. Capturing twice in ONE process shares one seed
+#: and cannot detect that; baseline and comparison captures are separate processes
+#: by construction, so the seed is exactly what differs in production.
+_CROSS_PROCESS_PROBE = '''
+import json
+
+from rdflib import Graph, Literal, URIRef
+from rdflib.namespace import RDF
+
+from science_tool.graph.belief import EVIDENCE_LINE_CLASS, collect_evidence_units
+from science_tool.graph.belief_basis import basis_digest, capture_basis
+from science_tool.graph.io import CITO_NS, PROJECT_NS, SCI_NS
+from science_tool.graph.store import _evidence_targets_for_uri
+
+HYP = URIRef(PROJECT_NS["hypothesis/h"])
+CLAIM_A = URIRef(PROJECT_NS["proposition/a"])
+CLAIM_Z = URIRef(PROJECT_NS["proposition/z"])
+LINE = URIRef(PROJECT_NS["evidence-line/e"])
+
+knowledge, provenance = Graph(), Graph()
+knowledge.add((HYP, RDF.type, SCI_NS.Hypothesis))
+knowledge.add((LINE, RDF.type, EVIDENCE_LINE_CLASS))
+for claim, polarity in ((CLAIM_A, "affirms"), (CLAIM_Z, "negates")):
+    knowledge.add((claim, RDF.type, SCI_NS.Proposition))
+    knowledge.add((claim, CITO_NS.discusses, HYP))
+    knowledge.add((LINE, CITO_NS.supports, claim))
+    provenance.add((claim, SCI_NS.polarity, Literal(polarity)))
+
+units = collect_evidence_units(knowledge, provenance, _evidence_targets_for_uri(knowledge, HYP))
+result = capture_basis(knowledge, provenance)
+print(json.dumps({"polarity": [u.target_polarity for u in units], "digest": basis_digest(result.rows)}))
+'''
+
+#: Seeds 0 and 1 already disagree without the fix; the rest are margin against a
+#: future interpreter whose table layout happens to agree on one pair.
+_HASH_SEEDS = ("0", "1", "2", "3", "4", "5")
+
+
+def _probe_across_hash_seeds(tmp_path) -> list[dict[str, object]]:
+    script = tmp_path / "cross_process_probe.py"
+    script.write_text(_CROSS_PROCESS_PROBE)
+    outputs: list[dict[str, object]] = []
+    for seed in _HASH_SEEDS:
+        completed = subprocess.run(
+            [sys.executable, str(script)],
+            capture_output=True,
+            text=True,
+            check=True,
+            env={**os.environ, "PYTHONHASHSEED": seed},
+        )
+        outputs.append(json.loads(completed.stdout))
+    return outputs
+
+
+def test_capture_is_reproducible_across_processes(tmp_path):
+    """The digest must not depend on the interpreter's string hash seed.
+
+    A baseline captured at run start and a comparison captured at run end are
+    different processes. If the digest moves with the seed, `--compare` reports a
+    belief movement on a run that changed nothing, and the guard gets switched off.
+    """
+    digests = {probe["digest"] for probe in _probe_across_hash_seeds(tmp_path)}
+    assert len(digests) == 1, f"basis digest varies with PYTHONHASHSEED: {sorted(digests)}"
+
+
+def test_shared_line_inherits_the_lowest_target_polarity(tmp_path):
+    """Pins WHICH target claims a shared line, so the reproducibility above is not accidental.
+
+    Targets are visited in sorted URI order, so `proposition/a` claims the line
+    before `proposition/z` and the unit carries "affirms" in every process.
+    """
+    polarities = {tuple(probe["polarity"]) for probe in _probe_across_hash_seeds(tmp_path)}
+    assert polarities == {("affirms",)}
 
 
 def _basis(entity_id: str, unit_keys: tuple[str, ...] = ()) -> EntityBasis:
