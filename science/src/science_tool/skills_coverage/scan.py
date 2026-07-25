@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+import tempfile
 from pathlib import Path
 
 from science_model.data_products import load_catalog
@@ -93,6 +94,13 @@ def scan_portfolio(
 def write_report_atomically(path: Path, text: str) -> None:
     # Serialize-then-replace: a plain write_text truncates before it can fail on I/O, which would
     # leave a stale report half-overwritten. os.replace onto the target is atomic on the same fs.
-    tmp = path.with_name(f"{path.name}.tmp")
-    tmp.write_text(text, encoding="utf-8")
-    os.replace(tmp, path)
+    fd, tmp_name = tempfile.mkstemp(
+        prefix=f".{path.name}.", suffix=".tmp", dir=path.parent, text=True
+    )
+    tmp = Path(tmp_name)
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as output:
+            output.write(text)
+        os.replace(tmp, path)
+    finally:
+        tmp.unlink(missing_ok=True)

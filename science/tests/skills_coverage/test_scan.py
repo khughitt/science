@@ -102,3 +102,25 @@ def test_atomic_write_leaves_target_untouched_on_prior_content(tmp_path: Path) -
     target.write_text("PRIOR", encoding="utf-8")
     write_report_atomically(target, "NEW\n")
     assert target.read_text(encoding="utf-8") == "NEW\n"
+
+
+def test_atomic_write_preserves_preexisting_sibling_temp_file(tmp_path: Path) -> None:
+    target = tmp_path / "out.json"
+    sibling_temp = tmp_path / "out.json.tmp"
+    sibling_temp.write_text("SENTINEL", encoding="utf-8")
+
+    write_report_atomically(target, "NEW\n")
+
+    assert target.read_text(encoding="utf-8") == "NEW\n"
+    assert sibling_temp.read_text(encoding="utf-8") == "SENTINEL"
+
+
+def test_atomic_write_cleans_temp_when_replacement_fails(tmp_path: Path) -> None:
+    target = tmp_path / "out.json"
+    target.mkdir()
+
+    with pytest.raises(OSError):
+        write_report_atomically(target, "NEW\n")
+
+    assert target.is_dir()
+    assert sorted(path.name for path in tmp_path.iterdir()) == ["out.json"]
