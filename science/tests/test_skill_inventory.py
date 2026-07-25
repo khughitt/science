@@ -24,6 +24,12 @@ def test_parse_frontmatter_rejects_duplicate_key() -> None:
         parse_skill_frontmatter(text)
 
 
+def test_parse_frontmatter_rejects_yaml_equivalent_duplicate_key() -> None:
+    text = "---\n1: first\n01: second\n---\n\nB\n"
+    with pytest.raises(SkillInventoryError, match="duplicate"):
+        parse_skill_frontmatter(text)
+
+
 def test_parse_frontmatter_rejects_merge_key() -> None:
     text = "---\nbase: &b\n  k: v\nname: <<\n<<: *b\n---\n\nB\n"
     with pytest.raises(SkillInventoryError, match="merge"):
