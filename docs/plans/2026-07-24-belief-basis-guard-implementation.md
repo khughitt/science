@@ -374,9 +374,16 @@ def test_digest_changes_when_a_unit_changes():
     assert before != after
 
 
-def test_digest_of_nothing_is_stable():
-    assert basis_digest([]) == basis_digest([])
+def test_empty_capture_has_its_own_digest():
+    """The empty basis must be distinguishable, not merely reproducible."""
+    assert basis_digest([]) != basis_digest([_basis("proposition:a")])
 ```
+
+> **Corrected during execution.** This test was originally drafted as
+> `assert basis_digest([]) == basis_digest([])`, which is true for any
+> implementation — including one that ignores its argument entirely. A test whose
+> assertion cannot distinguish a correct implementation from a stub is decoration.
+> Every assertion in a plan's test code has to be able to fail.
 
 - [ ] **Step 2: Run the tests to verify they fail**
 
@@ -397,12 +404,19 @@ def basis_digest(bases: Iterable[EntityBasis]) -> str:
     Persisted in the snapshot envelope and in the run record so a later
     validation can prove it compared against the same starting state.
     """
-    payload = json.dumps(
-        [b.model_dump(mode="json") for b in sorted(bases, key=lambda b: b.uri)],
-        sort_keys=True,
-    )
-    return hashlib.sha256(payload.encode("utf-8")).hexdigest()
+    Ordered by the serialized row itself, not by (uri, entity_id): that pair is not
+    unique by construction, and two rows sharing it would otherwise fall back to
+    input order, leaving a known input-order dependence in the observable this
+    whole module exists to make reproducible.
+    """
+    rows = sorted(json.dumps(b.model_dump(mode="json"), sort_keys=True) for b in bases)
+    return hashlib.sha256(json.dumps(rows).encode("utf-8")).hexdigest()
 ```
+
+> **Corrected during execution.** The sort key was drafted as `b.uri` alone. Any
+> key that is not unique leaves ties broken by input order, so the "order-independent"
+> claim in the docstring would have been false for rows sharing it. Sort by the
+> serialized row and the order is total by construction.
 
 - [ ] **Step 4: Run the tests to verify they pass**
 
@@ -426,7 +440,7 @@ git commit -m "feat(graph): add order-independent belief-basis digest"
 
 **Interfaces:**
 - Consumes: `EntityBasis` (Task 2), `basis_digest` (Task 3).
-- Produces: `BASIS_SNAPSHOT_SCHEMA_VERSION: int`; `class BasisSnapshot` (frozen, `extra="forbid"`, fields `schema_version: int`, `digest: str`, `rows: tuple[EntityBasis, ...]`); `class SnapshotIntegrityError(ValueError)`; `build_snapshot(rows: Iterable[EntityBasis]) -> BasisSnapshot`; `load_snapshot(payload: dict) -> BasisSnapshot`.
+- Produces: `BASIS_SNAPSHOT_SCHEMA_VERSION: int`; `class BasisSnapshot` (frozen, `extra="forbid"`, fields `schema_version: int`, `digest: str`, `rows: tuple[EntityBasis, ...]`); `class SnapshotIntegrityError(ValueError)`; `build_snapshot(rows: Iterable[EntityBasis]) -> BasisSnapshot`; `load_snapshot(payload: object) -> BasisSnapshot`.
 
 A digest that is written but never checked is decoration. `load_snapshot` recomputes the digest from the rows and refuses to return a snapshot whose stored digest disagrees, so a baseline that was **corrupted or altered without being resealed** cannot yield a clean comparison — it raises, and the CLI turns that into `unwired`.
 
@@ -827,15 +841,34 @@ def test_tampered_baseline_is_unwired_not_clean(tmp_path: Path):
     _write_graph(graph_path, with_line=True)
     _snapshot(graph_path, baseline)
     payload = json.loads(baseline.read_text())
-    payload["rows"][0]["unit_keys"] = []
+    # Target by entity_id, not position: rows are sorted by URI, and
+    # "evidence-line:e" sorts before "proposition:p" and already has empty
+    # unit_keys, so a positional rows[0] edit is a no-op that leaves the
+    # digest unchanged and the baseline still (correctly) trusted.
+    row = next(r for r in payload["rows"] if r["entity_id"] == "proposition:p")
+    row["unit_keys"] = []
     baseline.write_text(json.dumps(payload))
     result = CliRunner().invoke(
         graph_group, ["belief-basis", "--graph-path", str(graph_path), "--compare", str(baseline)]
     )
     assert result.exit_code == 2
     assert "digest mismatch" in result.output
+```
 
+> **Corrected during execution.** The tamper above was drafted as
+> `payload["rows"][0]["unit_keys"] = []`, which is a no-op: `capture_basis` sorts
+> rows by full URI, so row 0 is `evidence-line:e`, whose `unit_keys` is already
+> empty. The digest still matched, the baseline was still trusted, and the test
+> failed on `assert 0 == 2`. Select the row you mean to corrupt by identity, never
+> by position in a sorted list.
+>
+> A related lesson from the same review: the exit-2 assertions in this section are
+> **not** sufficient on their own. Click returns exit 2 for its own usage errors,
+> so `assert result.exit_code == 2` still passes if the command is removed from the
+> group or an option renamed. Every exit-2 test also needs `assert "unwired:" in
+> result.output`, as the shipped tests do.
 
+```python
 def test_malformed_baseline_json_is_unwired(tmp_path: Path):
     graph_path, baseline = tmp_path / "graph.trig", tmp_path / "before.json"
     _write_graph(graph_path, with_line=True)
