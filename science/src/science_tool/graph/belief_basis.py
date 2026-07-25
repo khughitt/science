@@ -111,3 +111,49 @@ def basis_digest(bases: Iterable[EntityBasis]) -> str:
         sort_keys=True,
     )
     return hashlib.sha256(payload.encode("utf-8")).hexdigest()
+
+
+#: Bump when the shape of EntityBasis or the snapshot envelope changes.
+BASIS_SNAPSHOT_SCHEMA_VERSION = 1
+
+
+class SnapshotIntegrityError(ValueError):
+    """A snapshot could not be trusted: bad digest, or a schema version this code cannot read."""
+
+
+class BasisSnapshot(BaseModel):
+    """A sealed capture. The digest is verified on load, never merely carried."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    schema_version: int
+    digest: str
+    rows: tuple[EntityBasis, ...]
+
+
+def build_snapshot(rows: Iterable[EntityBasis]) -> BasisSnapshot:
+    sealed = tuple(rows)
+    return BasisSnapshot(
+        schema_version=BASIS_SNAPSHOT_SCHEMA_VERSION,
+        digest=basis_digest(sealed),
+        rows=sealed,
+    )
+
+
+def load_snapshot(payload: object) -> BasisSnapshot:
+    """Parse and VERIFY a snapshot. Raises rather than returning something untrustworthy.
+
+    Takes `object` and validates: a top-level array or scalar must raise
+    pydantic's ValidationError (a ValueError), not a TypeError from `**` unpacking
+    that the CLI handler would let through as a belief movement.
+    """
+    snapshot = BasisSnapshot.model_validate(payload)
+    if snapshot.schema_version != BASIS_SNAPSHOT_SCHEMA_VERSION:
+        raise SnapshotIntegrityError(
+            f"snapshot schema_version {snapshot.schema_version} != {BASIS_SNAPSHOT_SCHEMA_VERSION}; "
+            "this snapshot was written by a different version of the basis format"
+        )
+    recomputed = basis_digest(snapshot.rows)
+    if recomputed != snapshot.digest:
+        raise SnapshotIntegrityError(f"snapshot digest mismatch: stored {snapshot.digest}, recomputed {recomputed}")
+    return snapshot

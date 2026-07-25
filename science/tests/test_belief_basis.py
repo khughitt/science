@@ -3,11 +3,22 @@ from __future__ import annotations
 import dataclasses
 
 import pytest
+from pydantic import ValidationError
 from rdflib import Graph, Literal, URIRef
 from rdflib.namespace import RDF
 
 from science_tool.graph.belief import EVIDENCE_LINE_CLASS, EvidenceUnit
-from science_tool.graph.belief_basis import NO_TYPED_ENTITIES, EntityBasis, basis_digest, capture_basis, unit_key
+from science_tool.graph.belief_basis import (
+    BASIS_SNAPSHOT_SCHEMA_VERSION,
+    NO_TYPED_ENTITIES,
+    EntityBasis,
+    SnapshotIntegrityError,
+    basis_digest,
+    build_snapshot,
+    capture_basis,
+    load_snapshot,
+    unit_key,
+)
 from science_tool.graph.io import CITO_NS, PROJECT_NS, SCI_NS
 
 
@@ -136,3 +147,44 @@ def test_digest_changes_when_a_unit_changes():
 def test_empty_capture_has_its_own_digest():
     """The empty basis must be distinguishable, not merely reproducible."""
     assert basis_digest([]) != basis_digest([_basis("proposition:a")])
+
+
+def test_snapshot_round_trips():
+    snapshot = build_snapshot([_basis("proposition:a", ("k1",))])
+    reloaded = load_snapshot(snapshot.model_dump(mode="json"))
+    assert reloaded.rows == snapshot.rows
+    assert reloaded.digest == snapshot.digest
+
+
+def test_tampered_rows_are_rejected():
+    """A substituted baseline must not be able to produce a clean comparison."""
+    payload = build_snapshot([_basis("proposition:a", ("k1",))]).model_dump(mode="json")
+    payload["rows"][0]["unit_keys"] = ["k2"]
+    with pytest.raises(SnapshotIntegrityError, match="digest mismatch"):
+        load_snapshot(payload)
+
+
+def test_unknown_schema_version_is_rejected():
+    payload = build_snapshot([_basis("proposition:a")]).model_dump(mode="json")
+    payload["schema_version"] = BASIS_SNAPSHOT_SCHEMA_VERSION + 1
+    with pytest.raises(SnapshotIntegrityError, match="schema_version"):
+        load_snapshot(payload)
+
+
+def test_unknown_basis_field_is_rejected_not_dropped():
+    """A newer snapshot must fail loudly rather than be truncated into a clean compare."""
+    payload = build_snapshot([_basis("proposition:a")]).model_dump(mode="json")
+    payload["rows"][0]["future_field"] = "value"
+    with pytest.raises(ValidationError):  # extra="forbid"
+        load_snapshot(payload)
+
+
+@pytest.mark.parametrize("payload", [[], "snapshot", None, 42])
+def test_wrong_shaped_payload_raises_validation_error(payload: object):
+    """A top-level array or scalar must raise ValidationError, not TypeError.
+
+    A TypeError from `**payload` unpacking would escape the CLI's handler and be
+    reported as exit 1 — a belief movement — instead of unwired.
+    """
+    with pytest.raises(ValidationError):
+        load_snapshot(payload)
