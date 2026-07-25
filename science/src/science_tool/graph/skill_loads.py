@@ -76,9 +76,11 @@ class SkillLoadValidationError(ValueError):
 
 
 def _reject_duplicate_keys(node: yaml.Node) -> None:
-    # Duplicate detection at the NODE level: yaml.compose builds the node tree without
-    # constructing any Python objects (no `!!python/object` risk), so this stays safe while
-    # catching a dup key that yaml.safe_load would silently collapse to last-wins.
+    # Duplicate detection at the NODE level: yaml.compose builds the node tree, and keys
+    # are then constructed via `loader.construct_object` below, so this does build Python
+    # objects for keys. The safety is `SafeLoader`'s -- its constructor refuses any unsafe
+    # tag (e.g. `!!python/object`) -- not the absence of a node tree, while still catching
+    # a dup key that yaml.safe_load would silently collapse to last-wins.
     if not isinstance(node, yaml.MappingNode):
         return
     seen: set[object] = set()

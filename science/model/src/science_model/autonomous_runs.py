@@ -113,9 +113,11 @@ class RunBudget(BaseModel):
 class AutonomousRunRecord(BaseModel):
     """One finalized unattended run.
 
-    Every attested field is required. There is no in-flight shape: a supervisor
-    that dies mid-run leaves no record, so its branch reads as unattested rather
-    than clean. That is the intended failure direction.
+    Every attested field is required except `basis_digest`, which is required
+    when `disposition` is not `unwired` and required ABSENT when it is -- never
+    optional in the sense of "may be omitted freely". There is no in-flight
+    shape: a supervisor that dies mid-run leaves no record, so its branch reads
+    as unattested rather than clean. That is the intended failure direction.
     """
 
     model_config = ConfigDict(extra="forbid", frozen=True)

@@ -153,7 +153,7 @@ depends on (`graph/attention.py` — `NEEDS_REVIEW_MULTIPLIER = 3.0`, `STALE_MUL
 | `head_commit` | Exact commit the run ended at. | supervisor |
 | `toolkit_revision` | Science revision the gate ran from. | supervisor |
 | `policy_identity` | `(policy_id, policy_version)` in force. | supervisor |
-| `basis_digest` | Digest of the belief basis at `base_commit`. Required unless `disposition` is `unwired`, and **required absent** when it is. | supervisor |
+| `basis_digest` | Digest of the belief basis at `base_commit`. Omitted exactly when `disposition` is `unwired`. | supervisor |
 | `started`, `ended` | Time window. | supervisor |
 | `budget` | Tokens / wall-clock consumed (S4 consumes this). | supervisor |
 | `disposition` | `clean` \| `quarantined` \| `unwired`. **Attested, not self-declared.** | supervisor |
@@ -175,8 +175,9 @@ substitute a sentinel, a zero digest, or the digest of an empty basis.
 construction — it names one repository's branch, one `base_commit..head_commit` range, and
 one toolkit revision. A commons record carrying the field would resolve against a `runs/`
 directory no consuming project owns, so every consumer's graph build would fail over a
-reference only the commons author can fix. `Entity` rejects the combination outright, which
-puts the failure on `science commons validate` at authoring time rather than downstream.
+reference only the commons author can fix. The commons adapter rejects the field when it
+builds the record, which is the path both `science commons validate` and every consumer's
+commons scan take, so the failure lands on the commons author at authoring time.
 
 The record deliberately does **not** index the entities it wrote. Each entity's *current*
 writer is derivable by querying `autonomous_run` in the provenance graph, and full

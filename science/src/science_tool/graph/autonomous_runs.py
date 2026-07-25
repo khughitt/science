@@ -28,9 +28,11 @@ def _reject_duplicate_and_merge_keys(node: yaml.Node, path: Path) -> None:
     `policy_identity` and `budget`, and a duplicate inside either is exactly as
     silent as one at the top level.
 
-    Operates on the NODE tree from `yaml.compose`, which builds no Python objects
-    (so no `!!python/object` exposure) while still seeing what `safe_load` would
-    collapse to last-wins.
+    Operates on the NODE tree from `yaml.compose` while still seeing what `safe_load`
+    would collapse to last-wins. Keys are constructed via `loader.construct_object`
+    below, so this does build Python objects for keys -- the safety property is not
+    "no objects built", it is that `SafeLoader`'s constructor refuses any unsafe tag
+    (e.g. `!!python/object`), so an unsafe key can never reach `construct_object` intact.
     """
     if isinstance(node, yaml.MappingNode):
         seen: set[object] = set()

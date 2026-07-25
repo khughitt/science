@@ -85,21 +85,10 @@ def test_field_survives_the_frontmatter_round_trip(tmp_path: Path) -> None:
     assert entity.autonomous_run == RUN_ID
 
 
-def test_a_commons_canonical_entity_may_not_carry_the_field() -> None:
-    # A run names one repo's branch and one base..head commit range, so a commons record
-    # carrying it would resolve against a `runs/` directory no consuming project owns —
-    # failing every consumer's graph build over a reference only the author can fix.
-    with pytest.raises(ValidationError, match="not permitted on a commons-canonical entity"):
-        _entity(scope="shared", autonomous_run=RUN_ID)
-
-
-def test_a_commons_canonical_entity_without_the_field_is_fine() -> None:
-    # The rejection is scoped to the field, not to shared scope generally.
-    assert _entity(scope="shared").autonomous_run is None
-
-
-def test_a_project_entity_may_carry_the_field() -> None:
-    # Guards against a validator that rejects the field regardless of scope: `project` is
-    # the default, so an over-broad check would make every other test in this file fail —
-    # but an explicit scope pins the intended contrast.
-    assert _entity(scope="project", autonomous_run=RUN_ID).autonomous_run == RUN_ID
+def test_a_project_local_shared_scope_entity_may_carry_the_field() -> None:
+    # `scope: shared` means shared CANONICAL IDENTITY, not "lives in the commons store" —
+    # it is a documented, supported thing to author on an ordinary project-local entity
+    # (docs/process/entity-creation-cookbook.md, `gene:`/`protein:` examples). The commons
+    # prohibition on `autonomous_run` is enforced at the commons adapter boundary instead
+    # (science_tool.commons.adapter._build), not here.
+    assert _entity(scope="shared", autonomous_run=RUN_ID).autonomous_run == RUN_ID
