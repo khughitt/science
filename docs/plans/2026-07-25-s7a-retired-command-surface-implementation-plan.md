@@ -6,7 +6,13 @@
 
 **Architecture:** Two plain dicts (`RETIREMENTS`, `RETIRED_GROUPS`) become the sole declaration of which commands are retired and what replaces them. A `RetiredCommand` raises from `parse_args` — ahead of all click parameter handling — and carries `hidden=True` and no parameters; a `RetiredGroup` owns the cases where no child is named. `budget/registry.py` computes its retired exemptions from the manifest instead of listing them, and a parametrized guard test binds the live command tree back to the manifest.
 
-**Tech Stack:** Python 3.12+, click 8.3.1, pytest, uv.
+**Tech Stack:** Python ≥3.11, click ≥8.1, pytest, uv — the floors declared in
+`science/pyproject.toml`, with pyright targeting 3.11. **This plan does not change
+either floor.** Every behaviour in it was measured on click 8.3.1, the version in
+`uv.lock`; the APIs it relies on (`Context.resilient_parsing`, `Command.parse_args`,
+`Group.resolve_command`, `hidden=`) are stable across click 8.x, so no compatibility
+work is scoped here. If a future change needs to *raise* the floor, that is its own
+task with its own verification.
 
 **Design:** [`meta/doc/plans/2026-07-25-s7a-retired-command-surface-design.md`](../../meta/doc/plans/2026-07-25-s7a-retired-command-surface-design.md)
 
@@ -81,6 +87,11 @@ from click.testing import CliRunner
 from science_tool.cli_retirement import RetiredCommand, RetiredGroup
 
 
+GROUP_FORWARD = "Author the entity instead."
+LEAF_FORWARD = "Run `science entity create concept <title>`."
+SOLO_FORWARD = "Run `science entity create thing <title>`."
+
+
 @pytest.fixture
 def tree() -> click.Group:
     @click.group()
@@ -90,14 +101,11 @@ def tree() -> click.Group:
     outer = click.Group("outer")
     root.add_command(outer)
 
-    group = RetiredGroup("add", path="outer add", forward="Author the entity instead.")
+    group = RetiredGroup("add", path="outer add", forward=GROUP_FORWARD)
     outer.add_command(group)
-    group.add_command(
-        RetiredCommand("concept", path="outer add concept", forward="Run `science entity create concept <title>`.")
-    )
+    group.add_command(RetiredCommand("concept", path="outer add concept", forward=LEAF_FORWARD))
 
-    leaf = RetiredCommand("solo", path="outer solo", forward="Run `science entity create thing <title>`.")
-    outer.add_command(leaf)
+    outer.add_command(RetiredCommand("solo", path="outer solo", forward=SOLO_FORWARD))
     return root
 
 
@@ -136,23 +144,27 @@ def test_retired_nodes_are_hidden(tree: click.Group) -> None:
 
 
 @pytest.mark.parametrize(
-    ("args", "owner"),
+    ("args", "owner", "forward"),
     [
-        (["outer", "add"], "outer add"),
-        (["outer", "add", "--help"], "outer add"),
-        (["outer", "add", "bogus"], "outer add"),
-        (["outer", "add", "concept"], "outer add concept"),
-        (["outer", "add", "concept", "--help"], "outer add concept"),
-        (["outer", "add", "concept", "x", "--path", "/tmp"], "outer add concept"),
+        (["outer", "add"], "outer add", GROUP_FORWARD),
+        (["outer", "add", "--help"], "outer add", GROUP_FORWARD),
+        (["outer", "add", "bogus"], "outer add", GROUP_FORWARD),
+        (["outer", "add", "concept"], "outer add concept", LEAF_FORWARD),
+        (["outer", "add", "concept", "--help"], "outer add concept", LEAF_FORWARD),
+        (["outer", "add", "concept", "x", "--path", "/tmp"], "outer add concept", LEAF_FORWARD),
     ],
 )
 def test_group_and_leaf_cases_are_answered_by_their_owner(
-    tree: click.Group, args: list[str], owner: str
+    tree: click.Group, args: list[str], owner: str, forward: str
 ) -> None:
-    """A named child answers for itself; only the unnamed cases fall to the group."""
+    """A named child answers for itself; only the unnamed cases fall to the group.
+
+    Asserts the complete message, not just the path. A hard-coded group message that
+    ignored its `forward` argument entirely would satisfy a path-only assertion.
+    """
     result = CliRunner().invoke(tree, args)
 
-    assert f"{owner} is retired" in result.output
+    assert f"{owner} is retired. {forward}" in result.output
 
 
 def test_unknown_child_keeps_usage_exit_code(tree: click.Group) -> None:
@@ -168,6 +180,26 @@ def test_completion_does_not_raise(tree: click.Group) -> None:
 
     for args in (["outer", "add"], ["outer", "add", "concept"], ["outer", "solo"]):
         completer.get_completions(args, "")
+
+
+def test_registering_under_a_missing_parent_fails_at_the_boundary(tree: click.Group) -> None:
+    from science_tool import cli_retirement
+
+    with pytest.raises(RuntimeError, match="no command 'nope'"):
+        cli_retirement._resolve_parent(tree, ["nope"])
+
+
+def test_registering_under_a_leaf_fails_at_the_boundary(tree: click.Group) -> None:
+    """A manifest path naming a leaf as a parent must fail here, not later.
+
+    The descent loop only checks nodes it passes *through*; the terminal node needs its
+    own check, or this returns a Command and blows up on `.add_command` far from the
+    malformed declaration.
+    """
+    from science_tool import cli_retirement
+
+    with pytest.raises(RuntimeError, match="is not a group"):
+        cli_retirement._resolve_parent(tree, ["outer", "solo"])
 ```
 
 - [ ] **Step 2: Run the test to verify it fails**
@@ -325,6 +357,12 @@ def _resolve_parent(root: click.Group, parts: list[str]) -> click.Group:
         if child is None:
             raise RuntimeError(f"cannot attach retirement: no command {part!r} under {node.name!r}")
         node = child
+    if not isinstance(node, click.Group):
+        # The loop only checks nodes it must descend *through*; the terminal node is
+        # never tested by it. Without this, a manifest path naming a leaf as a parent
+        # returns a Command and fails later with AttributeError on .add_command --
+        # far from the malformed declaration that caused it.
+        raise RuntimeError(f"cannot attach retirement: {node.name!r} is not a group")
     return node
 
 
@@ -491,27 +529,50 @@ register_retirements(main)
 
 - [ ] **Step 3b: Prove the manifest reproduces today's graph messages verbatim**
 
-This must run **before** Step 5 deletes `_retired_writer`, which is the only remaining
-witness to what those messages said. Run from `science/`:
+This must run **before** Step 5 deletes the seventeen `_retired_writer(...)` call sites,
+which are the only remaining witness to what those messages said.
+
+**The comparison must read the old call *arguments*, not re-derive them from the new
+manifest.** An earlier draft of this step passed each manifest string, minus its suffix,
+back through `_retired_writer` and compared the result to the manifest string — which is
+the identity function, and passes for a manifest entry reading `WRONG, then run
+\`science graph build\`.` It proved nothing. Extract the old arguments from the AST
+instead. Run from `science/`:
 
 ```bash
-uv run --frozen python -c "
+uv run --frozen python - <<'EOF'
+import ast, pathlib
 from science_tool.cli_retirement import RETIREMENTS
-from science_tool.graph.cli import _retired_writer
-bad = []
-for path, forward in RETIREMENTS.items():
-    if not path.startswith('graph'):
+
+tree = ast.parse(pathlib.Path("src/science_tool/graph/cli.py").read_text())
+old = {}
+for node in ast.walk(tree):
+    if not isinstance(node, ast.FunctionDef):
         continue
-    current = _retired_writer(path, forward.rsplit(', then run', 1)[0]).format_message()
-    if current != f'{path} is retired. {forward}':
-        bad.append(path)
-print('MISMATCH:', bad) if bad else print('all 17 graph messages reproduce verbatim')
-"
+    for inner in ast.walk(node):
+        if (
+            isinstance(inner, ast.Raise)
+            and isinstance(inner.exc, ast.Call)
+            and getattr(inner.exc.func, "id", "") == "_retired_writer"
+        ):
+            cmd, forward_path = (ast.literal_eval(a) for a in inner.exc.args)
+            old[cmd] = f"{cmd} is retired. {forward_path}, then run `science graph build`."
+
+bad = [
+    cmd for cmd in old
+    if old[cmd] != f"{cmd} is retired. {RETIREMENTS.get(cmd, '<MISSING>')}"
+]
+missing = sorted(set(old) - set(RETIREMENTS))
+print(f"extracted {len(old)} old messages")
+print("MISMATCH:", bad) if bad else print(f"{len(old)}/{len(old)} reproduce verbatim")
+print("MISSING FROM MANIFEST:", missing) if missing else None
+EOF
 ```
 
-Expected: `all 17 graph messages reproduce verbatim`. If any path mismatches, fix the
-manifest string — do **not** relax `test_retired_graph_writer_commands_report_forward_path`,
-which is the contract this preserves.
+Expected: `extracted 17 old messages` then `17/17 reproduce verbatim`, and no
+`MISSING` line. If any path mismatches, fix the manifest string — do **not** relax
+`test_retired_graph_writer_commands_report_forward_path`, which is the contract this
+preserves.
 
 The five inquiry messages deliberately do *not* reproduce verbatim: they drop the slug
 interpolation, per design §3.4. `TestInquiryMutatorsRetired` asserts only that the output
@@ -617,22 +678,22 @@ to:
 - [ ] **Step 11: Run every affected suite**
 
 ```bash
-cd science && uv run --frozen pytest tests/test_cli_retirement.py tests/test_cli_retirement_mechanics.py tests/test_graph_cli.py tests/test_inquiry_cli.py tests/test_inquiry_cli_subsumption.py tests/test_inquiry_e2e.py tests/test_user_guide_docs.py tests/test_command_docs.py -q
+cd science && uv run --frozen pytest \
+  tests/test_cli_retirement.py tests/test_cli_retirement_mechanics.py \
+  tests/test_graph_cli.py tests/test_inquiry_cli.py tests/test_inquiry_cli_subsumption.py \
+  tests/test_inquiry_e2e.py tests/test_entities_cli.py tests/test_distill.py \
+  tests/test_user_guide_docs.py tests/test_command_docs.py -q
 ```
 
 Expected: all pass. In particular `test_retired_graph_writer_commands_report_forward_path` passes **unchanged** — it asserts `"<command> is retired"`, the forward key, and `"science graph build"`, all of which the manifest preserves verbatim.
 
+`test_entities_cli.py` and `test_distill.py` are in this list because they assert retirement messages directly and would otherwise be missed: `test_entities_cli.py` at lines 1231, 1374, 1395, 1422, and 1444 asserts `"graph add <kind> is retired"`, and `test_distill.py` at lines 260–261 and 272 asserts `"graph import is retired"` and `"Raw-triple import is retired"`. Neither file's name suggests it touches this change.
+
 If `test_user_guide_docs.py` fails on the Step 10 edit, the doc test asserts that row byte-for-byte; update the assertion to match the new wording rather than reverting the doc.
 
-- [ ] **Step 12: Run the full suite**
+**Do not run the full suite here.** `AGENTS.md` reserves full-suite runs for the top-level agent: a foreground run exceeds the 120s default timeout, auto-backgrounds, and a subagent that yields waiting on it will not reliably resume. The final gate is at the end of this plan.
 
-```bash
-cd science && uv run --frozen pytest -q
-```
-
-Use a 600000 ms timeout — the suite takes ~2–3 min. Expected: no new failures. This step exists because the previous review round found a broken test (`test_graph_add_paper_command_is_removed`) that no targeted search would have surfaced: it concerned a command that was *removed* rather than retired, so it lived under a different name and asserted a different thing. Grepping for the concept you are changing does not answer "does the suite still pass."
-
-- [ ] **Step 13: Commit**
+- [ ] **Step 12: Commit**
 
 ```bash
 cd ..   # repo root of the worktree
@@ -699,10 +760,15 @@ def test_retired_command_answers_without_a_correct_invocation(path: str, suffix:
     ],
 )
 def test_group_owned_and_leaf_owned_cases_stay_distinct(args: list[str], owner: str) -> None:
-    """Only the shapes naming no child fall to the group; the rest keep their own path."""
+    """Only the shapes naming no child fall to the group; the rest keep their own path.
+
+    Asserts the complete manifest text for whichever owner answers, so a group message
+    that ignored `RETIRED_GROUPS` and hard-coded its guidance would fail here.
+    """
+    forward = RETIRED_GROUPS.get(owner) or RETIREMENTS[owner]
     result = CliRunner().invoke(main, args)
 
-    assert f"{owner} is retired" in result.output
+    assert f"{owner} is retired. {forward}" in result.output
 
 
 def test_unknown_subcommand_keeps_the_usage_exit_code() -> None:
@@ -778,7 +844,13 @@ Removes the last surface that independently repeats the retired list.
 - Consumes: `RETIREMENTS` from Task 1.
 - Produces: `EXEMPTIONS` containing exactly the same 22 retired keys, computed.
 
-- [ ] **Step 1: Write the failing derivation test**
+**This task is a behaviour-preserving refactor, not TDD.** The registry already holds
+exactly the right 22 keys; what is wrong is that it holds them *independently*. Step 1's
+test is therefore a **characterization test** — green before and after — and Step 3
+changes the source so those keys can no longer be edited in two places. Step 4 is the
+real gate: it proves the derivation reproduces the set exactly.
+
+- [ ] **Step 1: Write the characterization test (expected green)**
 
 Append to `science/tests/test_cli_retirement.py`:
 
@@ -846,13 +918,13 @@ cd science && uv run --frozen python -c "import science_tool.budget.registry; pr
 
 Expected: `ok`. `budget/registry.py` previously imported only stdlib; `cli_retirement` imports only click, so the new edge is acyclic.
 
-- [ ] **Step 6: Full suite, lint, types**
+- [ ] **Step 6: Lint and types**
 
 ```bash
-cd science && uv run --frozen pytest -q && uv run ruff check && uv run pyright
+cd science && uv run ruff check && uv run pyright
 ```
 
-Use a 600000 ms timeout. Expected: no new failures, both tools clean.
+Expected: both clean. **Do not run the full suite here** — see the final gate below.
 
 - [ ] **Step 7: Commit**
 
@@ -873,6 +945,39 @@ yields a group."
 
 ---
 
+## Final gate — top-level agent only
+
+**Not a delegated task.** `AGENTS.md` reserves full-suite runs for the top-level agent,
+because a foreground run exceeds the 120s default timeout, auto-backgrounds, and a
+subagent that yields waiting on it will not reliably resume. Run this once, after Task 4
+is committed.
+
+- [ ] **Run the full suite**
+
+```bash
+cd science && uv run --frozen pytest -q
+```
+
+Pass an explicit 600000 ms timeout. Expected: no failures beyond any already failing on
+`main` before this branch — establish that baseline first if it is not already known.
+
+This gate exists because the third design-review round found a broken test,
+`test_graph_add_paper_command_is_removed`, that no targeted search would have surfaced:
+it concerned a command that was *removed* rather than retired, so it lived under a
+different name and asserted a different thing. Step 11 of Task 2 now names two more such
+files (`test_entities_cli.py`, `test_distill.py`) found only by grepping for the message
+text rather than the concept. There is no reason to believe that list is complete —
+only the suite settles it.
+
+- [ ] **Run the model suite**
+
+```bash
+cd science/model && uv run --frozen pytest -q
+```
+
+Expected: unaffected. Included because the two package suites are independent and a
+green `science` suite says nothing about `science-model`.
+
 ## Self-Review
 
 **Spec coverage.** Design §3.1 `RetiredCommand` → Task 1. §3.2 `RetiredGroup`, including the `UsageError` choice and the six shapes → Tasks 1 and 3. §3.3 manifests as owner, the complete-`forward` rule, and the registry derivation → Tasks 1 and 4. §3.4 the dropped slug interpolation → Task 1's `INQUIRY_MUTATION_FORWARD`. §4 guard assertions 1–6 → Tasks 2 (1–3), 3 (4–6), 4 (registry). §6 scope → the file table. §7.1 the `graph add paper` repair → Task 2 Step 8; §7.2 the `--help` break and the test deletion → Task 2 Step 9. §8 verification → Task 2 Steps 11–12, Task 4 Step 6. §9 is explicitly deferred and has no task, correctly.
@@ -881,4 +986,10 @@ yields a group."
 
 **Type consistency.** `path` and `forward` are the constructor keywords in Task 1 and are used with those names in Tasks 2–4. `register_retirements(root: click.Group) -> None` is called with `main` in Task 2. `_nodes` is defined in Task 2's test file and reused by Task 3's additions to the same file. `RETIREMENTS` and `RETIRED_GROUPS` keep their names and `dict[str, str]` shape throughout.
 
-**One deviation from strict TDD, stated rather than hidden.** Task 3's assertions are green on arrival, because Task 2 necessarily implements the behaviour they describe. The RED-first proof for that logic is Task 1, which tests the same mechanics against a synthetic tree before the live one exists — and Task 3 Step 3 re-establishes falsifiability directly by breaking the implementation and observing the guard fail.
+**Two deviations from strict TDD, both stated rather than hidden.**
+
+Task 3's assertions are green on arrival, because Task 2 necessarily implements the behaviour they describe. The RED-first proof for that logic is Task 1, which tests the same mechanics against a synthetic tree before the live one exists — and Task 3 Step 3 re-establishes falsifiability directly by breaking the implementation and observing the guard fail.
+
+Task 4 is a behaviour-preserving refactor with a **characterization test**, green before and after. Its gate is not a red-to-green transition but Step 4's proof that the derivation reproduces the 22 keys exactly, holding both `test_every_leaf_command_is_classified` and the pinned `exempt: 67` cardinality. An earlier draft labelled its Step 1 "write the failing derivation test" while Step 2 correctly expected a pass — a contradiction that would have told the implementer their environment was broken.
+
+**Full-suite placement.** Tasks 2 and 4 originally ended in full-suite runs, which conflicts with `AGENTS.md` under the recommended subagent execution: a foreground full run auto-backgrounds past the 120s default and a yielding subagent will not reliably resume. Both are replaced by scoped selections, with a single full-suite gate outside the delegated tasks.
