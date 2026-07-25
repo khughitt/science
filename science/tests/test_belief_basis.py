@@ -7,7 +7,7 @@ from rdflib import Graph, Literal, URIRef
 from rdflib.namespace import RDF
 
 from science_tool.graph.belief import EVIDENCE_LINE_CLASS, EvidenceUnit
-from science_tool.graph.belief_basis import NO_TYPED_ENTITIES, capture_basis, unit_key
+from science_tool.graph.belief_basis import NO_TYPED_ENTITIES, EntityBasis, basis_digest, capture_basis, unit_key
 from science_tool.graph.io import CITO_NS, PROJECT_NS, SCI_NS
 
 
@@ -109,3 +109,29 @@ def test_layer_uris_are_not_entities():
     knowledge, provenance = Graph(), Graph()
     knowledge.add((URIRef(PROJECT_NS["graph/knowledge"]), RDF.type, SCI_NS.Layer))
     assert capture_basis(knowledge, provenance).status == "unwired"
+
+
+def _basis(entity_id: str, unit_keys: tuple[str, ...] = ()) -> EntityBasis:
+    return EntityBasis(
+        entity_id=entity_id,
+        uri=str(PROJECT_NS[entity_id.replace(":", "/")]),
+        target_uris=(),
+        unit_keys=unit_keys,
+        policy_id="core-default",
+        policy_version="1",
+    )
+
+
+def test_digest_is_order_independent():
+    a, b = _basis("proposition:a"), _basis("proposition:b")
+    assert basis_digest([a, b]) == basis_digest([b, a])
+
+
+def test_digest_changes_when_a_unit_changes():
+    before = basis_digest([_basis("proposition:a", ("k1",))])
+    after = basis_digest([_basis("proposition:a", ("k2",))])
+    assert before != after
+
+
+def test_digest_of_nothing_is_stable():
+    assert basis_digest([]) == basis_digest([])

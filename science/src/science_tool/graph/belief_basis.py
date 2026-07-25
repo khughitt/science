@@ -7,7 +7,9 @@ and must still be detected.
 
 from __future__ import annotations
 
+import hashlib
 import json
+from collections.abc import Iterable
 from dataclasses import asdict
 
 from pydantic import BaseModel, ConfigDict
@@ -96,3 +98,16 @@ def capture_basis(
             )
         )
     return InstrumentResult.from_rows(rows)
+
+
+def basis_digest(bases: Iterable[EntityBasis]) -> str:
+    """Order-independent sha256 over a whole capture.
+
+    Persisted in the snapshot envelope and in the run record so a later
+    validation can prove it compared against the same starting state.
+    """
+    payload = json.dumps(
+        [b.model_dump(mode="json") for b in sorted(bases, key=lambda b: b.uri)],
+        sort_keys=True,
+    )
+    return hashlib.sha256(payload.encode("utf-8")).hexdigest()
