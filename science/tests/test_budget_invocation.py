@@ -31,9 +31,37 @@ def demo_list(
     CAPTURED.append(build_complete_via(click.get_current_context(), output_hint="out.json"))
 
 
+@click.command("list")
+@click.option("--status", default=lambda: "proposed")
+@click.option("--output", "output_path", default=None)
+def callable_default_list(status: str, output_path: str | None) -> None:
+    CAPTURED.append(build_complete_via(click.get_current_context(), output_hint="out.json"))
+
+
+@click.command("list")
+@click.option("--status", default="proposed")
+@click.option("--output", "output_path", default=None)
+def static_default_list(status: str, output_path: str | None) -> None:
+    CAPTURED.append(build_complete_via(click.get_current_context(), output_hint="out.json"))
+
+
 def _run(args: list[str]) -> str:
     CAPTURED.clear()
     result = CliRunner().invoke(demo, args, prog_name="science")
+    assert result.exit_code == 0, result.output
+    return CAPTURED[0]
+
+
+def _run_callable_default(args: list[str]) -> str:
+    CAPTURED.clear()
+    result = CliRunner().invoke(callable_default_list, args, prog_name="science")
+    assert result.exit_code == 0, result.output
+    return CAPTURED[0]
+
+
+def _run_static_default(args: list[str]) -> str:
+    CAPTURED.clear()
+    result = CliRunner().invoke(static_default_list, args, prog_name="science")
     assert result.exit_code == 0, result.output
     return CAPTURED[0]
 
@@ -67,6 +95,14 @@ def test_existing_output_option_is_replaced_not_duplicated() -> None:
 
 def test_defaults_are_omitted() -> None:
     assert "--status" not in _run(["list"])
+
+
+def test_callable_defaults_are_omitted() -> None:
+    assert _run_callable_default([]) == "science --output out.json"
+
+
+def test_explicit_value_equal_to_default_is_preserved() -> None:
+    assert _run_static_default(["--status", "proposed"]) == "science --status proposed --output out.json"
 
 
 def test_values_with_spaces_are_quoted() -> None:

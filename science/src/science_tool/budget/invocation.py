@@ -10,12 +10,13 @@ from __future__ import annotations
 import shlex
 
 import click
+from click.core import ParameterSource
 
 _OUTPUT_PARAMS = frozenset({"output_path", "output"})
 
 
 def build_complete_via(ctx: click.Context, *, output_hint: str) -> str:
-    """Return ``<command path> <non-default options> --output <hint>``, shell-safe.
+    """Return ``<command path> <caller-selected options> --output <hint>``, shell-safe.
 
     Values are quoted with ``shlex.join``: the caller's shell already protected a path or
     filter containing spaces, and reconstructing the command by naive joining would strip
@@ -33,7 +34,7 @@ def build_complete_via(ctx: click.Context, *, output_hint: str) -> str:
         param = params_by_name.get(name)
         if param is None or not isinstance(param, click.Option):
             continue
-        if value is None or value == param.default:
+        if ctx.get_parameter_source(name) is ParameterSource.DEFAULT:
             continue
         flag = max(param.opts, key=len)
         if value is True:
