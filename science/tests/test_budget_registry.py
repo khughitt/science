@@ -56,12 +56,11 @@ def test_every_deferred_entry_states_what_makes_it_grow() -> None:
 
 
 def test_the_remaining_measured_offenders_are_deferred() -> None:
-    """The six ROWS offenders were wired across slice 1b-1 Tasks 2-5; the remaining
-    non-ROWS offenders (curate consolidation-candidates, curate inventory, prose
-    lint, validate) stay deferred to 1b-2."""
+    """The six ROWS offenders were wired across slice 1b-1 Tasks 2-5; curate inventory
+    was wired (DOCUMENT) in slice 1b-2 Task 1. The remaining non-ROWS offenders
+    (curate consolidation-candidates, prose lint, validate) stay deferred."""
     measured = {
         "curate consolidation-candidates",
-        "curate inventory",
         "prose lint",
         "validate",
     }

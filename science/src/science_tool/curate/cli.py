@@ -30,20 +30,47 @@ def curate_group() -> None:
     show_default=True,
     help="Cap recently_modified to the K most-recent entries; pass 0 to disable.",
 )
+@click.option(
+    "--output",
+    "output_path",
+    type=click.Path(path_type=Path),
+    default=None,
+    help="Write the complete, unbudgeted inventory to PATH instead of stdout.",
+)
 def inventory_cmd(
     project_root: Path,
     output_format: str,
     recently_modified_days: int,
     recently_modified_top_k: int,
+    output_path: Path | None,
 ) -> None:
     """Print a deterministic project corpus inventory."""
+    from science_tool.budget.control import bounded_control_notice
+    from science_tool.budget.invocation import build_complete_via
+    from science_tool.budget.registry import lookup
+    from science_tool.budget.sink import BoundedSink
+
     inventory = collect_inventory(
         project_root,
         recent_days=recently_modified_days,
         recent_top_k=None if recently_modified_top_k <= 0 else recently_modified_top_k,
     )
     payload = inventory.model_dump(mode="json")
-    emit(output_format=output_format, payload=payload, render_text=lambda: None, sort_keys=True)
+    sink = BoundedSink(
+        lookup("curate inventory"),
+        output_path=output_path,
+        command_path="curate inventory",
+        complete_via=build_complete_via(click.get_current_context(), output_hint="inventory.json"),
+    )
+    control_notice = (
+        bounded_control_notice(f"wrote the curate inventory to {output_path}")
+        if output_path is not None
+        else None
+    )
+    emit(output_format=output_format, payload=payload, render_text=lambda: None, sort_keys=True, sink=sink)
+    sink.flush()
+    if control_notice is not None:
+        click.echo(control_notice)
 
 
 @curate_group.command("consolidation-candidates")

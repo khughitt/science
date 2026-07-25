@@ -22,9 +22,9 @@ from science_tool.budget.registry import BUDGETS, DEFERRED, EXEMPTIONS
 from science_tool.cli import main
 
 EXPECTED_CLASSIFICATION_COUNTS = {
-    "budgeted": 10,
+    "budgeted": 11,
     "exempt": 67,
-    "deferred": 201,
+    "deferred": 200,
 }
 
 
@@ -63,8 +63,9 @@ def test_classification_partition_has_the_audited_cardinality() -> None:
     command adds one deferred leaf because its report grows with registered projects,
     occurrences, diagnostics, candidates, and skipped projects. Slice 1b-1 then wired
     six ROWS offenders (entity list, feedback list, questions/interpretations/
-    discussions list, entity needs-review), moving them from deferred to budgeted. The
-    live partition is therefore 10/67/201 = 278.
+    discussions list, entity needs-review), moving them from deferred to budgeted. Slice
+    1b-2 Task 1 then wired curate inventory (DOCUMENT), moving one more deferred leaf to
+    budgeted. The live partition is therefore 11/67/200 = 278.
     """
     actual = {
         "budgeted": len(BUDGETS),
