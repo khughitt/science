@@ -109,7 +109,7 @@ def validate_cmd(
         click.echo(sidecar_stdout, nl=False, err=True)
 
     from science_tool.budget.control import bounded_control_notice
-    from science_tool.budget.invocation import build_complete_via
+    from science_tool.budget.invocation import build_complete_via, hint_for
     from science_tool.budget.registry import lookup
     from science_tool.budget.sink import BoundedSink
     from science_tool.validate.projection import project_validate_results
@@ -118,7 +118,7 @@ def validate_cmd(
         lookup("validate"),
         output_path=output_path,
         command_path="validate",
-        complete_via=build_complete_via(click.get_current_context(), output_hint="validate.json"),
+        complete_via=build_complete_via(click.get_current_context(), output_hint=hint_for("validate", output_format)),
     )
     control_notice = (
         bounded_control_notice(f"wrote the complete validation report to {output_path}")

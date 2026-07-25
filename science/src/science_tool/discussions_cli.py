@@ -73,7 +73,7 @@ def discussion_show(ref: str, output_format: str) -> None:
 )
 def discussion_list(status: str | None, related: str | None, output_format: str, output_path: Path | None) -> None:
     """List source-authored discussions."""
-    from science_tool.budget.invocation import build_complete_via
+    from science_tool.budget.invocation import build_complete_via, hint_for
     from science_tool.budget.registry import lookup
     from science_tool.budget.sink import BoundedSink
 
@@ -81,6 +81,6 @@ def discussion_list(status: str | None, related: str | None, output_format: str,
         lookup("discussions list"),
         output_path=output_path,
         command_path="discussions list",
-        complete_via=build_complete_via(click.get_current_context(), output_hint="discussions.json"),
+        complete_via=build_complete_via(click.get_current_context(), output_hint=hint_for("discussions", output_format)),
     )
     list_typed_entities("discussion", status, related, output_format, sink=sink)

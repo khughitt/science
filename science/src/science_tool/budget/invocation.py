@@ -15,6 +15,17 @@ from click.core import ParameterSource
 _OUTPUT_PARAMS = frozenset({"output_path", "output"})
 
 
+def hint_for(stem: str, output_format: str) -> str:
+    """Return ``<stem>.<ext>`` with the extension matching the effective output format.
+
+    The escape command reproduces exactly what was truncated, so a text/table run's
+    complete output is text (``.txt``) and a ``--format json`` run's is JSON (``.json``).
+    A hint that always said ``.json`` would advertise a file whose contents contradict its
+    name whenever the caller was viewing the default text render.
+    """
+    return f"{stem}.{'json' if output_format == 'json' else 'txt'}"
+
+
 def build_complete_via(ctx: click.Context, *, output_hint: str) -> str:
     """Return ``<command path> <caller-selected options> --output <hint>``, shell-safe.
 

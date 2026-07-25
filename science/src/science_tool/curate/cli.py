@@ -46,7 +46,7 @@ def inventory_cmd(
 ) -> None:
     """Print a deterministic project corpus inventory."""
     from science_tool.budget.control import bounded_control_notice
-    from science_tool.budget.invocation import build_complete_via
+    from science_tool.budget.invocation import build_complete_via, hint_for
     from science_tool.budget.registry import lookup
     from science_tool.budget.sink import BoundedSink
 
@@ -60,7 +60,7 @@ def inventory_cmd(
         lookup("curate inventory"),
         output_path=output_path,
         command_path="curate inventory",
-        complete_via=build_complete_via(click.get_current_context(), output_hint="inventory.json"),
+        complete_via=build_complete_via(click.get_current_context(), output_hint=hint_for("inventory", output_format)),
     )
     control_notice = (
         bounded_control_notice(f"wrote the curate inventory to {output_path}")
@@ -96,7 +96,7 @@ def consolidation_candidates_cmd(
 ) -> None:
     """Report consolidation candidates (read-only; superseded-lineage + semantic)."""
     from science_tool.budget.control import bounded_control_notice
-    from science_tool.budget.invocation import build_complete_via
+    from science_tool.budget.invocation import build_complete_via, hint_for
     from science_tool.budget.registry import lookup
     from science_tool.budget.sink import BoundedSink
     from science_tool.consolidation_candidates import (
@@ -117,7 +117,7 @@ def consolidation_candidates_cmd(
         lookup("curate consolidation-candidates"),
         output_path=output_path,
         command_path="curate consolidation-candidates",
-        complete_via=build_complete_via(click.get_current_context(), output_hint="consolidation-candidates.json"),
+        complete_via=build_complete_via(click.get_current_context(), output_hint=hint_for("consolidation-candidates", output_format)),
     )
     control_notice = (
         bounded_control_notice(f"wrote the complete consolidation report to {output_path}")

@@ -53,7 +53,7 @@ def entities_inventory_command(
     output: Path | None,
 ) -> None:
     """Emit the versioned Science entity inventory for a project."""
-    from science_tool.budget.invocation import build_complete_via
+    from science_tool.budget.invocation import build_complete_via, hint_for
     from science_tool.budget.control import bounded_control_notice
     from science_tool.budget.registry import lookup
     from science_tool.budget.sink import BoundedSink
@@ -65,7 +65,7 @@ def entities_inventory_command(
         output_path=output,
         command_path="entities inventory",
         complete_via=build_complete_via(
-            click.get_current_context(), output_hint="inventory.json"
+            click.get_current_context(), output_hint=hint_for("inventory", output_format)
         ),
     )
     control_notice = (

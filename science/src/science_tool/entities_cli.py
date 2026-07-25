@@ -224,7 +224,7 @@ def entity_list(
 ) -> None:
     """List source-authored entities."""
     from science_tool.budget.control import bounded_control_notice
-    from science_tool.budget.invocation import build_complete_via
+    from science_tool.budget.invocation import build_complete_via, hint_for
     from science_tool.budget.registry import lookup
     from science_tool.budget.sink import BoundedSink
 
@@ -243,7 +243,7 @@ def entity_list(
         )
     except EntityCommandError as exc:
         raise click.ClickException(str(exc)) from exc
-    complete_via = build_complete_via(click.get_current_context(), output_hint="entities.json")
+    complete_via = build_complete_via(click.get_current_context(), output_hint=hint_for("entities", output_format))
     control_notice = (
         bounded_control_notice(f"wrote {len(rows)} entities to {output_path}")
         if output_path is not None
@@ -644,14 +644,14 @@ def entity_review(ref: str, note: str | None) -> None:
 def entity_needs_review(output_format: str, output_path: Path | None) -> None:
     """List epistemic entities flagged needs-review or stale by the materialized graph."""
     from science_tool.budget.control import bounded_control_notice
-    from science_tool.budget.invocation import build_complete_via
+    from science_tool.budget.invocation import build_complete_via, hint_for
     from science_tool.budget.registry import lookup
     from science_tool.budget.sink import BoundedSink
     from science_tool.entity_review import list_needs_review
     from science_tool.output import emit_query_rows
 
     rows = list_needs_review(Path.cwd())
-    complete_via = build_complete_via(click.get_current_context(), output_hint="needs-review.json")
+    complete_via = build_complete_via(click.get_current_context(), output_hint=hint_for("needs-review", output_format))
     control_notice = (
         bounded_control_notice(f"wrote {len(rows)} flagged entities to {output_path}")
         if output_path is not None
