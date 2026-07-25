@@ -3,6 +3,8 @@ name: transcriptomics-scrna-qa
 description: Use when ingesting or QA-reviewing single-cell RNA-Seq cohorts, especially before pseudobulk meta-analysis or cell-type composition claims.
 archetype: measurement-qa
 sources: [scanpy, tirosh-2016]
+covers:
+  - data-product:gene-expression-single-cell
 ---
 
 # Single-Cell RNA-Seq QA

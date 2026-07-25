@@ -2,6 +2,8 @@
 
 > **Status:** design / spec for review. The implementation plan is a separate
 > `docs/plans/2026-07-23-…-implementation.md` produced after this design is approved.
+> **Rev 5** — clarifies that the skill overlay is a role-typed Python index joined
+> to the project graph by canonical id, not a second in-memory RDF graph.
 > **Rev 4** — adds the generation-dispatch matrix, the raw-field/generation-aware
 > parser boundary, the command's read-path data-flow, the concrete enrollment
 > shape, the structurally discriminated report union, and the full RDF identity
@@ -263,17 +265,21 @@ skill: canonical name, role (leaf/router), `archetype` (leaves), authored
 against root `skills/`** by a script + a guard test — the same generated-artifact
 discipline as `codex-skills/` (`scripts/generate_codex_skills.py`). An installed
 `science` at a pinned revision thus carries the inventory that matches its own
-code. The inventory is an **input resource**; the command still constructs the
-RDF overlay in memory from it (below) — the inventory is not a persistent overlay.
+code. The inventory is an **input resource**; the command builds a role-typed
+Python overlay/index in memory from it (below) — the inventory is not a persistent
+overlay, and the corpus is not materialized into a second RDF graph.
 
 ### Skill overlay (derived, role-typed, in-memory)
 
 Derived from the packaged skill inventory (above), never a `kind: skill`. Because
 the toolkit repo is not a project and graph layers are per-project, the overlay is
 **constructed in-memory by the coverage command** from the inventory + catalog —
-no persistent global RDF layer, no staleness/fingerprint problem, and trivially
-"hideable" since it never enters any assertional graph. (A persistent XDG global
-artifact with fingerprint rules is a deferred option, not v1.)
+a role-typed Python lookup keyed by canonical skill id, with no second RDF
+materialization, no staleness/fingerprint problem, and nothing to hide from an
+assertional graph. The project graph already carries the reified
+`sci:skill/<id>` load targets; the command joins those ids against this lookup.
+(A persistent XDG global artifact with fingerprint rules is a deferred option,
+not v1.)
 
 Overlay resources are **role-typed**:
 - **leaf** — requires `archetype`; may carry authored `covers:` (canonical

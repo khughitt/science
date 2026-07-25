@@ -3,6 +3,9 @@ name: genomics-copy-number-sv-qa
 description: Use when ingesting or auditing copy-number segments, structural-variant/breakpoint calls, or AmpliconArchitect/AmpliconClassifier focal-amplicon and ecDNA outputs, from bulk WGS/WES or per-cell scWGS (e.g. DLP+).
 archetype: measurement-qa
 sources: [ampliconarchitect]
+covers:
+  - data-product:copy-number
+  - data-product:structural-variant
 ---
 
 # Copy-Number, Structural-Variant, and Amplicon QA

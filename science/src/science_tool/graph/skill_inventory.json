@@ -1,0 +1,1335 @@
+{
+  "skills": [
+    {
+      "description": "Use when a biological-assay dataset (genomics, transcriptomics, proteomics, functional-genomics) needs measurement QA. Routes to the assay subtree.",
+      "id": "bio",
+      "name": "bio",
+      "path": "skills/bio/SKILL.md",
+      "role": "router"
+    },
+    {
+      "companions": [
+        {
+          "role": "leaf",
+          "target": "data-management-conventions"
+        },
+        {
+          "role": "leaf",
+          "target": "data-management-acquisition"
+        },
+        {
+          "role": "leaf",
+          "target": "data-management-frictionless"
+        }
+      ],
+      "description": "Router for data acquisition, preprocessing, on-disk layout, and QA. Load when working with datasets, downloading data, laying out data/results directories, or managing data provenance. Routes to the leaves below.",
+      "id": "data-management",
+      "name": "data-management",
+      "path": "skills/data-management/SKILL.md",
+      "role": "router"
+    },
+    {
+      "archetype": "practice-guide",
+      "companions": [
+        {
+          "role": "router",
+          "target": "data-management"
+        },
+        {
+          "role": "leaf",
+          "target": "data-management-conventions"
+        },
+        {
+          "role": "leaf",
+          "target": "data-management-frictionless"
+        },
+        {
+          "role": "leaf",
+          "target": "literature-evaluation"
+        },
+        {
+          "role": "leaf",
+          "target": "literature-citation-discipline"
+        }
+      ],
+      "description": "Use when acquiring or registering a new data source for a project, or scripting reproducible preprocessing before data enters analysis.",
+      "id": "data-management-acquisition",
+      "name": "data-management-acquisition",
+      "path": "skills/data-management/acquisition.md",
+      "role": "leaf"
+    },
+    {
+      "archetype": "normative-reference",
+      "companions": [
+        {
+          "role": "leaf",
+          "target": "research-package-spec"
+        },
+        {
+          "role": "router",
+          "target": "data-management"
+        },
+        {
+          "role": "leaf",
+          "target": "data-management-frictionless"
+        }
+      ],
+      "description": "Use when laying out a project's data and workflow-result directories, placing QA artifacts, or writing a result-package manifest. Defines the on-disk layout and descriptor contract for research data and results.",
+      "id": "data-management-conventions",
+      "name": "data-management-conventions",
+      "path": "skills/data-management/conventions.md",
+      "role": "leaf",
+      "sources": [
+        "edam"
+      ]
+    },
+    {
+      "archetype": "normative-reference",
+      "companions": [
+        {
+          "role": "leaf",
+          "target": "data-management-conventions"
+        },
+        {
+          "role": "leaf",
+          "target": "data-management-acquisition"
+        },
+        {
+          "role": "leaf",
+          "target": "research-package-spec"
+        },
+        {
+          "role": "leaf",
+          "target": "pipeline-snakemake"
+        }
+      ],
+      "description": "Use when authoring or validating a datapackage.json descriptor \u2014 its resources, schemas, field types, and validation. Defines the Frictionless descriptor format for files in data and result directories.",
+      "id": "data-management-frictionless",
+      "name": "data-management-frictionless",
+      "path": "skills/data-management/frictionless.md",
+      "role": "leaf",
+      "sources": [
+        "frictionless-spec",
+        "frictionless"
+      ]
+    },
+    {
+      "description": "Use when propositions, evidence, or curated annotations must be schema-valid, graph-reasoned, or agreement-checked. Routes to the epistemics leaves.",
+      "id": "epistemics",
+      "name": "epistemics",
+      "path": "skills/epistemics/SKILL.md",
+      "role": "router"
+    },
+    {
+      "archetype": "measurement-qa",
+      "companions": [
+        {
+          "role": "leaf",
+          "target": "literature-evaluation"
+        },
+        {
+          "role": "leaf",
+          "target": "literature-citation-discipline"
+        },
+        {
+          "role": "leaf",
+          "target": "study-design-sensitivity-arbitration"
+        }
+      ],
+      "description": "Use when creating or auditing curated labels, extracted claims, taxonomy/facet assignments, model annotations, literature-derived tables, or LLM-assisted annotation workflows.",
+      "id": "epistemics-annotation-curation-qa",
+      "name": "epistemics-annotation-curation-qa",
+      "path": "skills/epistemics/annotation-curation-qa.md",
+      "role": "leaf"
+    },
+    {
+      "archetype": "analysis-discipline",
+      "companions": [
+        {
+          "role": "leaf",
+          "target": "epistemics-proposition-schema"
+        },
+        {
+          "role": "leaf",
+          "target": "literature-evaluation"
+        },
+        {
+          "role": "index",
+          "target": "science-skill-index"
+        }
+      ],
+      "description": "Use when interpreting or updating the project's own proposition graph \u2014 assessing hypothesis support, reading dashboard signals, or deciding where to direct effort.",
+      "id": "epistemics-proposition-graph-reasoning",
+      "name": "epistemics-proposition-graph-reasoning",
+      "path": "skills/epistemics/proposition-graph-reasoning.md",
+      "role": "leaf"
+    },
+    {
+      "archetype": "normative-reference",
+      "companions": [
+        {
+          "role": "leaf",
+          "target": "literature-evaluation"
+        },
+        {
+          "role": "leaf",
+          "target": "literature-citation-discipline"
+        },
+        {
+          "role": "leaf",
+          "target": "epistemics-proposition-graph-reasoning"
+        },
+        {
+          "role": "leaf",
+          "target": "epistemics-annotation-curation-qa"
+        }
+      ],
+      "description": "Use when authoring or updating proposition entities, hypothesis frontmatter, or knowledge-graph claim metadata. Defines the strict enums and field semantics for the Science project model.",
+      "id": "epistemics-proposition-schema",
+      "name": "epistemics-proposition-schema",
+      "path": "skills/epistemics/proposition-schema.md",
+      "role": "leaf"
+    },
+    {
+      "archetype": "measurement-qa",
+      "companions": [
+        {
+          "role": "leaf",
+          "target": "ml-embeddings-manifold-qa"
+        },
+        {
+          "role": "leaf",
+          "target": "transcriptomics-scrna-qa"
+        },
+        {
+          "role": "leaf",
+          "target": "study-design-sensitivity-arbitration"
+        }
+      ],
+      "covers": [
+        "data-product:genetic-dependency",
+        "data-product:genetic-perturbation",
+        "data-product:drug-sensitivity"
+      ],
+      "description": "Use when working with CRISPR/RNAi screens, DepMap dependency data, perturb-seq, LINCS/L1000 signatures, drug-response matrices, viability assays, or perturbation replication analyses.",
+      "id": "functional-genomics-qa",
+      "name": "functional-genomics-qa",
+      "path": "skills/bio/functional-genomics-qa.md",
+      "role": "leaf",
+      "sources": [
+        "depmap",
+        "mageck"
+      ]
+    },
+    {
+      "companions": [
+        {
+          "role": "leaf",
+          "target": "data-management-conventions"
+        },
+        {
+          "role": "router",
+          "target": "transcriptomics"
+        },
+        {
+          "role": "leaf",
+          "target": "study-design-power-floor-acknowledgement"
+        },
+        {
+          "role": "leaf",
+          "target": "study-design-sensitivity-arbitration"
+        }
+      ],
+      "description": "Source of truth for genomic-mutation data ingestion and QA. Use when working with somatic mutation calls, mutational signatures, dN/dS, or driver-selection analyses.",
+      "id": "genomics",
+      "name": "genomics",
+      "path": "skills/bio/genomics/SKILL.md",
+      "role": "router"
+    },
+    {
+      "archetype": "measurement-qa",
+      "companions": [
+        {
+          "role": "router",
+          "target": "genomics"
+        },
+        {
+          "role": "leaf",
+          "target": "genomics-somatic-mutation-qa"
+        },
+        {
+          "role": "leaf",
+          "target": "statistics-population-genetics-likelihood"
+        },
+        {
+          "role": "leaf",
+          "target": "study-design-power-floor-acknowledgement"
+        },
+        {
+          "role": "leaf",
+          "target": "study-design-sensitivity-arbitration"
+        }
+      ],
+      "covers": [
+        "data-product:copy-number",
+        "data-product:structural-variant"
+      ],
+      "description": "Use when ingesting or auditing copy-number segments, structural-variant/breakpoint calls, or AmpliconArchitect/AmpliconClassifier focal-amplicon and ecDNA outputs, from bulk WGS/WES or per-cell scWGS (e.g. DLP+).",
+      "id": "genomics-copy-number-sv-qa",
+      "name": "genomics-copy-number-sv-qa",
+      "path": "skills/bio/genomics/copy-number-sv-qa.md",
+      "role": "leaf",
+      "sources": [
+        "ampliconarchitect"
+      ]
+    },
+    {
+      "archetype": "analysis-discipline",
+      "companions": [
+        {
+          "role": "leaf",
+          "target": "genomics-somatic-mutation-qa"
+        },
+        {
+          "role": "leaf",
+          "target": "genomics-mutational-signatures-qa"
+        },
+        {
+          "role": "leaf",
+          "target": "study-design-power-floor-acknowledgement"
+        },
+        {
+          "role": "leaf",
+          "target": "study-design-sensitivity-arbitration"
+        }
+      ],
+      "description": "Use when analyzing driver-gene enrichment, dN/dS, dNdScv, replication-timing bias, or positive/negative selection signals from somatic mutation data, before interpreting a gene rank as selection.",
+      "id": "genomics-driver-selection",
+      "name": "genomics-driver-selection",
+      "path": "skills/bio/genomics/driver-selection.md",
+      "role": "leaf",
+      "sources": [
+        "dndscv"
+      ]
+    },
+    {
+      "archetype": "measurement-qa",
+      "companions": [
+        {
+          "role": "leaf",
+          "target": "genomics-somatic-mutation-qa"
+        },
+        {
+          "role": "leaf",
+          "target": "genomics-driver-selection"
+        },
+        {
+          "role": "leaf",
+          "target": "study-design-power-floor-acknowledgement"
+        },
+        {
+          "role": "leaf",
+          "target": "study-design-sensitivity-arbitration"
+        }
+      ],
+      "covers": [
+        "data-product:mutational-signature"
+      ],
+      "description": "Use when analyzing SBS/DBS/ID mutational signatures, tumor mutational burden, or signature assignment from somatic mutation data.",
+      "id": "genomics-mutational-signatures-qa",
+      "name": "genomics-mutational-signatures-qa",
+      "path": "skills/bio/genomics/mutational-signatures-qa.md",
+      "role": "leaf",
+      "sources": [
+        "cosmic-signatures",
+        "focr-tmb-harmonization"
+      ]
+    },
+    {
+      "archetype": "measurement-qa",
+      "companions": [
+        {
+          "role": "leaf",
+          "target": "genomics-mutational-signatures-qa"
+        },
+        {
+          "role": "leaf",
+          "target": "genomics-driver-selection"
+        },
+        {
+          "role": "leaf",
+          "target": "study-design-power-floor-acknowledgement"
+        },
+        {
+          "role": "leaf",
+          "target": "study-design-sensitivity-arbitration"
+        }
+      ],
+      "covers": [
+        "data-product:somatic-variant"
+      ],
+      "description": "Use when ingesting or auditing tumor mutation calls from cBioPortal, AACR GENIE, TCGA/MC3, ICGC, MAF files, study supplements, or targeted-panel cohorts.",
+      "id": "genomics-somatic-mutation-qa",
+      "name": "genomics-somatic-mutation-qa",
+      "path": "skills/bio/genomics/somatic-mutation-qa.md",
+      "role": "leaf"
+    },
+    {
+      "description": "Use when finding, evaluating, or citing scientific literature. Routes to the literature leaves.",
+      "id": "literature",
+      "name": "literature",
+      "path": "skills/literature/SKILL.md",
+      "role": "router"
+    },
+    {
+      "archetype": "normative-reference",
+      "companions": [
+        {
+          "role": "leaf",
+          "target": "literature-evaluation"
+        },
+        {
+          "role": "leaf",
+          "target": "scientific-writing"
+        },
+        {
+          "role": "index",
+          "target": "science-skill-index"
+        }
+      ],
+      "description": "Use when authoring or validating citations, source pointers, and bibliography references in project documents.",
+      "id": "literature-citation-discipline",
+      "name": "literature-citation-discipline",
+      "path": "skills/literature/citation-discipline.md",
+      "role": "leaf"
+    },
+    {
+      "archetype": "practice-guide",
+      "companions": [
+        {
+          "role": "leaf",
+          "target": "literature-citation-discipline"
+        },
+        {
+          "role": "leaf",
+          "target": "epistemics-proposition-graph-reasoning"
+        },
+        {
+          "role": "index",
+          "target": "science-skill-index"
+        }
+      ],
+      "description": "Use when reviewing literature, assessing source quality, or synthesizing findings across papers, before writing durable claims.",
+      "id": "literature-evaluation",
+      "name": "literature-evaluation",
+      "path": "skills/literature/literature-evaluation.md",
+      "role": "leaf"
+    },
+    {
+      "archetype": "tool-guide",
+      "companions": [
+        {
+          "role": "leaf",
+          "target": "literature-source-pubmed"
+        },
+        {
+          "role": "leaf",
+          "target": "epistemics-annotation-curation-qa"
+        },
+        {
+          "role": "leaf",
+          "target": "literature-citation-discipline"
+        },
+        {
+          "role": "leaf",
+          "target": "scientific-writing"
+        }
+      ],
+      "description": "OpenAlex source guidance for literature search and metadata normalization. Use when running `/science:search-literature`, collecting paper metadata, or reconciling identifiers across sources.",
+      "id": "literature-source-openalex",
+      "name": "literature-source-openalex",
+      "path": "skills/literature/sources/openalex.md",
+      "role": "leaf",
+      "sources": [
+        "openalex"
+      ]
+    },
+    {
+      "archetype": "tool-guide",
+      "companions": [
+        {
+          "role": "leaf",
+          "target": "literature-source-openalex"
+        },
+        {
+          "role": "leaf",
+          "target": "epistemics-annotation-curation-qa"
+        },
+        {
+          "role": "leaf",
+          "target": "literature-citation-discipline"
+        },
+        {
+          "role": "leaf",
+          "target": "scientific-writing"
+        }
+      ],
+      "description": "PubMed E-utilities source guidance for literature search and metadata normalization. Use when running `/science:search-literature` for biomedical topics or validating biomedical identifiers.",
+      "id": "literature-source-pubmed",
+      "name": "literature-source-pubmed",
+      "path": "skills/literature/sources/pubmed.md",
+      "role": "leaf",
+      "sources": [
+        "ncbi-eutilities"
+      ]
+    },
+    {
+      "description": "Use when embedding, manifold, or unsupervised-structure output needs QA. Routes to the ML QA leaves.",
+      "id": "ml",
+      "name": "ml",
+      "path": "skills/ml/SKILL.md",
+      "role": "router"
+    },
+    {
+      "archetype": "measurement-qa",
+      "companions": [
+        {
+          "role": "leaf",
+          "target": "proteomics-protein-sequence-structure-qa"
+        },
+        {
+          "role": "leaf",
+          "target": "study-design-bias-vs-variance-decomposition"
+        }
+      ],
+      "description": "Use when analyzing high-dimensional embeddings, UMAP/t-SNE/PCA projections, HDBSCAN clusters, Mapper graphs, CKA, kNN purity, Moran's I, archetypes, or multi-lens comparisons.",
+      "id": "ml-embeddings-manifold-qa",
+      "name": "ml-embeddings-manifold-qa",
+      "path": "skills/ml/embeddings-manifold-qa.md",
+      "role": "leaf",
+      "sources": [
+        "umap",
+        "hdbscan"
+      ]
+    },
+    {
+      "archetype": "tool-guide",
+      "companions": [
+        {
+          "role": "leaf",
+          "target": "pipeline-reproducibility"
+        },
+        {
+          "role": "router",
+          "target": "pipelines"
+        },
+        {
+          "role": "leaf",
+          "target": "pipeline-snakemake"
+        }
+      ],
+      "description": "Marimo reactive notebook construction and best practices. Use when creating interactive analysis notebooks, exploratory data analysis, parameter exploration, or the user mentions marimo, notebooks, or interactive analysis.",
+      "id": "pipeline-marimo",
+      "name": "pipeline-marimo",
+      "path": "skills/pipelines/marimo.md",
+      "role": "leaf",
+      "sources": [
+        "marimo"
+      ]
+    },
+    {
+      "archetype": "practice-guide",
+      "companions": [
+        {
+          "role": "index",
+          "target": "science-skill-index"
+        },
+        {
+          "role": "router",
+          "target": "pipelines"
+        },
+        {
+          "role": "leaf",
+          "target": "pipeline-snakemake"
+        },
+        {
+          "role": "leaf",
+          "target": "pipeline-marimo"
+        },
+        {
+          "role": "leaf",
+          "target": "pipeline-runpod"
+        }
+      ],
+      "description": "Use when constructing a computational pipeline that must be reproducible \u2014 after methodology is decided, before and while committing to an orchestration substrate.",
+      "id": "pipeline-reproducibility",
+      "name": "pipeline-reproducibility",
+      "path": "skills/pipelines/reproducibility.md",
+      "role": "leaf"
+    },
+    {
+      "archetype": "tool-guide",
+      "companions": [
+        {
+          "role": "leaf",
+          "target": "pipeline-reproducibility"
+        },
+        {
+          "role": "router",
+          "target": "pipelines"
+        },
+        {
+          "role": "leaf",
+          "target": "pipeline-snakemake"
+        }
+      ],
+      "description": "RunPod GPU workflow construction and operational best practices. Use when setting up rented GPU pods for uv-based projects, syncing code or data to RunPod, bootstrapping dependencies on a pod, or the user mentions RunPod, remote GPU pods, or pushing jobs to a rented GPU.",
+      "id": "pipeline-runpod",
+      "name": "pipeline-runpod",
+      "path": "skills/pipelines/runpod.md",
+      "role": "leaf",
+      "sources": [
+        "runpod"
+      ]
+    },
+    {
+      "archetype": "tool-guide",
+      "companions": [
+        {
+          "role": "leaf",
+          "target": "pipeline-reproducibility"
+        },
+        {
+          "role": "router",
+          "target": "pipelines"
+        },
+        {
+          "role": "leaf",
+          "target": "data-management-frictionless"
+        },
+        {
+          "role": "leaf",
+          "target": "research-package-spec"
+        }
+      ],
+      "description": "Snakemake workflow construction and best practices. Use when creating computational pipelines, writing Snakefiles, connecting data acquisition to analysis, or the user mentions Snakemake, pipelines, workflows, or reproducible analysis.",
+      "id": "pipeline-snakemake",
+      "name": "pipeline-snakemake",
+      "path": "skills/pipelines/snakemake.md",
+      "role": "leaf",
+      "sources": [
+        "snakemake",
+        "molder-snakemake"
+      ]
+    },
+    {
+      "companions": [
+        {
+          "role": "leaf",
+          "target": "data-management-conventions"
+        },
+        {
+          "role": "leaf",
+          "target": "research-package-spec"
+        },
+        {
+          "role": "router",
+          "target": "statistics"
+        }
+      ],
+      "description": "Source of truth for choosing and combining computational-execution skills (Snakemake, marimo, RunPod). Load when planning the orchestration shape of an analysis after methodology is decided. Routes to the leaves below.",
+      "id": "pipelines",
+      "name": "pipelines",
+      "path": "skills/pipelines/SKILL.md",
+      "role": "router"
+    },
+    {
+      "description": "Use when a proteomics or protein sequence/structure dataset needs measurement QA. Routes to the proteomics leaves.",
+      "id": "proteomics",
+      "name": "proteomics",
+      "path": "skills/bio/proteomics/SKILL.md",
+      "role": "router"
+    },
+    {
+      "archetype": "measurement-qa",
+      "companions": [
+        {
+          "role": "leaf",
+          "target": "ml-embeddings-manifold-qa"
+        },
+        {
+          "role": "leaf",
+          "target": "data-management-conventions"
+        }
+      ],
+      "description": "Use when working with protein sequences, UniProt mappings, Pfam/InterPro/CATH labels, Foldseek/MMseqs clusters, PLM embeddings, DeepLoc/Meltome labels, or sequence/structure benchmark splits.",
+      "id": "proteomics-protein-sequence-structure-qa",
+      "name": "proteomics-protein-sequence-structure-qa",
+      "path": "skills/bio/proteomics/protein-sequence-structure-qa.md",
+      "role": "leaf",
+      "sources": [
+        "uniprot",
+        "foldseek"
+      ]
+    },
+    {
+      "archetype": "measurement-qa",
+      "companions": [
+        {
+          "role": "leaf",
+          "target": "proteomics-protein-sequence-structure-qa"
+        },
+        {
+          "role": "leaf",
+          "target": "data-management-frictionless"
+        },
+        {
+          "role": "leaf",
+          "target": "study-design-bias-vs-variance-decomposition"
+        },
+        {
+          "role": "leaf",
+          "target": "study-design-sensitivity-arbitration"
+        }
+      ],
+      "covers": [
+        "data-product:proteomics"
+      ],
+      "description": "Use when ingesting or QA-reviewing proteomics, phosphoproteomics, mass-spectrometry, peptide-intensity, TMT, LFQ, DIA, DDA, or protein-abundance datasets.",
+      "id": "proteomics-qa",
+      "name": "proteomics-qa",
+      "path": "skills/bio/proteomics/proteomics-qa.md",
+      "role": "leaf"
+    },
+    {
+      "description": "Use when building or validating a research-package bundle (datapackage + cells) and its provenance route. Routes to the research-package leaves.",
+      "id": "research-package",
+      "name": "research-package",
+      "path": "skills/research-package/SKILL.md",
+      "role": "router"
+    },
+    {
+      "archetype": "practice-guide",
+      "companions": [
+        {
+          "role": "leaf",
+          "target": "research-package-spec"
+        },
+        {
+          "role": "leaf",
+          "target": "scientific-writing"
+        },
+        {
+          "role": "leaf",
+          "target": "literature-citation-discipline"
+        },
+        {
+          "role": "leaf",
+          "target": "pipeline-snakemake"
+        }
+      ],
+      "description": "Use when rendering research-package materials into notebook-like review views, summaries, or inspection pages.",
+      "id": "research-package-rendering",
+      "name": "research-package-rendering",
+      "path": "skills/research-package/research-package-rendering.md",
+      "role": "leaf"
+    },
+    {
+      "archetype": "normative-reference",
+      "companions": [
+        {
+          "role": "leaf",
+          "target": "data-management-frictionless"
+        },
+        {
+          "role": "leaf",
+          "target": "pipeline-snakemake"
+        },
+        {
+          "role": "leaf",
+          "target": "epistemics-proposition-schema"
+        }
+      ],
+      "description": "Use when defining or reviewing research-package provenance, manifests, evidence tables, and reproducibility metadata.",
+      "id": "research-package-spec",
+      "name": "research-package-spec",
+      "path": "skills/research-package/research-package-spec.md",
+      "role": "leaf"
+    },
+    {
+      "archetype": "practice-guide",
+      "companions": [
+        {
+          "role": "leaf",
+          "target": "literature-citation-discipline"
+        },
+        {
+          "role": "leaf",
+          "target": "literature-evaluation"
+        },
+        {
+          "role": "router",
+          "target": "statistics"
+        },
+        {
+          "role": "index",
+          "target": "science-skill-index"
+        }
+      ],
+      "description": "Scientific writing conventions for research documents. This skill should be used whenever writing or editing research documents, background sections, paper summaries, hypothesis descriptions, overview documents, or any content in the doc/ directory. Also use when the user asks to write, draft, revise, or edit any scientific or technical prose, or when creating content that will be part of a research project's documentation.",
+      "id": "scientific-writing",
+      "name": "scientific-writing",
+      "path": "skills/writing/scientific-writing.md",
+      "role": "leaf"
+    },
+    {
+      "archetype": "practice-guide",
+      "companions": [
+        {
+          "role": "leaf",
+          "target": "skill-taxonomy"
+        },
+        {
+          "role": "index",
+          "target": "science-skill-index"
+        }
+      ],
+      "description": "Use when creating, naming, placing, splitting, or extending a Science skill. The decision procedure, naming and placement rules, and template-eligibility doctrine.",
+      "id": "skill-authoring",
+      "name": "skill-authoring",
+      "path": "skills/meta/skill-authoring.md",
+      "role": "leaf"
+    },
+    {
+      "description": "Use when creating, extending, classifying, naming, organizing, or reviewing a Science skill. Routes to the taxonomy contract and the authoring procedure.",
+      "id": "skill-development",
+      "name": "skill-development",
+      "path": "skills/meta/SKILL.md",
+      "role": "router"
+    },
+    {
+      "archetype": "normative-reference",
+      "companions": [
+        {
+          "role": "leaf",
+          "target": "skill-authoring"
+        },
+        {
+          "role": "index",
+          "target": "science-skill-index"
+        }
+      ],
+      "description": "Use when classifying a skill, choosing its archetype, or applying the skill frontmatter contract. Defines the axes, the six leaf archetypes, and the metadata contract.",
+      "id": "skill-taxonomy",
+      "name": "skill-taxonomy",
+      "path": "skills/meta/skill-taxonomy.md",
+      "role": "leaf"
+    },
+    {
+      "description": "Use when designing, building, fitting, comparing, or reviewing a finite-sample statistical model \u2014 survival / hierarchical / mixed-effects, compositional, time-series / longitudinal, likelihood model comparison (AIC/BIC/LRT, bootstrap CIs), population-genetics likelihood, or Bayesian workflow (priors, MCMC, convergence, calibration).",
+      "id": "statistics",
+      "name": "statistics",
+      "path": "skills/statistics/SKILL.md",
+      "role": "router"
+    },
+    {
+      "archetype": "method-guide",
+      "companions": [
+        {
+          "role": "leaf",
+          "target": "statistics-survival-and-hierarchical-models"
+        },
+        {
+          "role": "leaf",
+          "target": "study-design-sensitivity-arbitration"
+        },
+        {
+          "role": "leaf",
+          "target": "statistics-likelihood-model-comparison"
+        }
+      ],
+      "description": "Use when building, fitting, or reviewing a Bayesian/probabilistic model \u2014 prior choice, MCMC sampling, convergence diagnostics, posterior-predictive and calibration checks, prior sensitivity, and Bayesian model comparison.",
+      "id": "statistics-bayesian-workflow",
+      "name": "statistics-bayesian-workflow",
+      "path": "skills/statistics/bayesian-workflow.md",
+      "role": "leaf",
+      "sources": [
+        "baygent-skills",
+        "gelman-bayesian-workflow",
+        "vehtari-loo"
+      ]
+    },
+    {
+      "archetype": "method-guide",
+      "companions": [
+        {
+          "role": "leaf",
+          "target": "transcriptomics-scrna-qa"
+        },
+        {
+          "role": "leaf",
+          "target": "statistics-survival-and-hierarchical-models"
+        },
+        {
+          "role": "leaf",
+          "target": "study-design-bias-vs-variance-decomposition"
+        }
+      ],
+      "description": "Use when analyzing proportions, fractions, cell-type composition, microbiome relative abundance, clone fractions, topic mixtures, deconvolution outputs, or any features constrained to sum to one.",
+      "id": "statistics-compositional-data",
+      "name": "statistics-compositional-data",
+      "path": "skills/statistics/compositional-data.md",
+      "role": "leaf"
+    },
+    {
+      "archetype": "method-guide",
+      "companions": [
+        {
+          "role": "leaf",
+          "target": "study-design-estimator-certification"
+        },
+        {
+          "role": "leaf",
+          "target": "statistics-bayesian-workflow"
+        },
+        {
+          "role": "leaf",
+          "target": "study-design-sensitivity-arbitration"
+        },
+        {
+          "role": "leaf",
+          "target": "study-design-power-floor-acknowledgement"
+        },
+        {
+          "role": "leaf",
+          "target": "statistics-population-genetics-likelihood"
+        }
+      ],
+      "description": "Use when comparing parametric models by likelihood \u2014 AIC, BIC, likelihood-ratio tests, nested vs non-nested comparison, identifiability and rare-event numerical-precision audits, bootstrap CIs, and Bayesian out-of-sample comparison (PSIS-LOO / ELPD / stacking weights).",
+      "id": "statistics-likelihood-model-comparison",
+      "name": "statistics-likelihood-model-comparison",
+      "path": "skills/statistics/likelihood-model-comparison.md",
+      "role": "leaf",
+      "sources": [
+        "baygent-skills",
+        "vehtari-loo"
+      ]
+    },
+    {
+      "archetype": "method-guide",
+      "companions": [
+        {
+          "role": "leaf",
+          "target": "statistics-likelihood-model-comparison"
+        },
+        {
+          "role": "leaf",
+          "target": "genomics-copy-number-sv-qa"
+        },
+        {
+          "role": "leaf",
+          "target": "study-design-power-floor-acknowledgement"
+        },
+        {
+          "role": "leaf",
+          "target": "study-design-sensitivity-arbitration"
+        }
+      ],
+      "description": "Use when constructing or fitting population-genetics likelihoods \u2014 Wright-Fisher, Moran, or binomial-segregation+selection models (e.g. ecDNA copy number) \u2014 and comparing selection against a neutral null.",
+      "id": "statistics-population-genetics-likelihood",
+      "name": "statistics-population-genetics-likelihood",
+      "path": "skills/statistics/population-genetics-likelihood.md",
+      "role": "leaf"
+    },
+    {
+      "archetype": "method-guide",
+      "companions": [
+        {
+          "role": "leaf",
+          "target": "statistics-bayesian-workflow"
+        },
+        {
+          "role": "leaf",
+          "target": "study-design-sensitivity-arbitration"
+        },
+        {
+          "role": "leaf",
+          "target": "study-design-power-floor-acknowledgement"
+        },
+        {
+          "role": "leaf",
+          "target": "statistics-compositional-data"
+        }
+      ],
+      "description": "Use when designing or reviewing Cox, Weibull, AFT, frailty, mixed-effects, Bayesian hierarchical, or multi-dataset causal models.",
+      "id": "statistics-survival-and-hierarchical-models",
+      "name": "statistics-survival-and-hierarchical-models",
+      "path": "skills/statistics/survival-and-hierarchical-models.md",
+      "role": "leaf",
+      "sources": [
+        "baygent-skills"
+      ]
+    },
+    {
+      "archetype": "method-guide",
+      "companions": [
+        {
+          "role": "leaf",
+          "target": "statistics-survival-and-hierarchical-models"
+        },
+        {
+          "role": "leaf",
+          "target": "study-design-sensitivity-arbitration"
+        },
+        {
+          "role": "leaf",
+          "target": "study-design-power-floor-acknowledgement"
+        },
+        {
+          "role": "leaf",
+          "target": "study-design-bias-vs-variance-decomposition"
+        }
+      ],
+      "description": "Use when designing or reviewing repeated-measure, wearable, sensor, EMA, actigraphy, symptom-diary, time-series, cross-lag, mixed-effects, or longitudinal analyses.",
+      "id": "statistics-time-series-and-longitudinal-models",
+      "name": "statistics-time-series-and-longitudinal-models",
+      "path": "skills/statistics/time-series-and-longitudinal-models.md",
+      "role": "leaf"
+    },
+    {
+      "description": "Use when analysis rigor must be pre-committed or a numeric verdict certified / arbitrated \u2014 pre-registration, replicate / permutation / bootstrap / Monte-Carlo / downsampling count justification (over a round-number default), power-floor acknowledgement, bias-vs-variance decomposition, sensitivity arbitration, defensive instrumentation, estimator certification, or causal identification. Routes to the discipline leaves.",
+      "id": "study-design",
+      "name": "study-design",
+      "path": "skills/study-design/SKILL.md",
+      "role": "router"
+    },
+    {
+      "archetype": "analysis-discipline",
+      "companions": [
+        {
+          "role": "leaf",
+          "target": "study-design-replicate-count-justification"
+        },
+        {
+          "role": "leaf",
+          "target": "study-design-sensitivity-arbitration"
+        },
+        {
+          "role": "leaf",
+          "target": "study-design-power-floor-acknowledgement"
+        }
+      ],
+      "description": "Use when choosing estimators, replicate counts, correction terms, simulation designs, or sensitivity analyses where stochastic noise and systematic error could be confused.",
+      "id": "study-design-bias-vs-variance-decomposition",
+      "name": "study-design-bias-vs-variance-decomposition",
+      "path": "skills/study-design/bias-vs-variance-decomposition.md",
+      "role": "leaf"
+    },
+    {
+      "archetype": "analysis-discipline",
+      "companions": [
+        {
+          "role": "leaf",
+          "target": "statistics-survival-and-hierarchical-models"
+        },
+        {
+          "role": "leaf",
+          "target": "study-design-bias-vs-variance-decomposition"
+        },
+        {
+          "role": "leaf",
+          "target": "statistics-bayesian-workflow"
+        }
+      ],
+      "description": "Use when estimating a causal effect from observational data \u2014 choosing an adjustment set, checking the backdoor criterion, distinguishing confounders from mediators/colliders, avoiding over-adjustment and M-bias, or deciding what to do when the effect is not identified.",
+      "id": "study-design-causal-identification",
+      "name": "study-design-causal-identification",
+      "path": "skills/study-design/causal-identification.md",
+      "role": "leaf",
+      "sources": [
+        "baygent-skills",
+        "hernan-robins-whatif",
+        "pearl-primer",
+        "vanderweele-ding-evalue",
+        "rosenbaum-sensitivity"
+      ]
+    },
+    {
+      "archetype": "analysis-discipline",
+      "companions": [
+        {
+          "role": "leaf",
+          "target": "statistics-likelihood-model-comparison"
+        },
+        {
+          "role": "leaf",
+          "target": "statistics-population-genetics-likelihood"
+        },
+        {
+          "role": "leaf",
+          "target": "study-design-sensitivity-arbitration"
+        },
+        {
+          "role": "leaf",
+          "target": "study-design-bias-vs-variance-decomposition"
+        },
+        {
+          "role": "leaf",
+          "target": "study-design-prereg-defensive-instrumentation"
+        }
+      ],
+      "description": "Use when an analysis fits parameters numerically \u2014 an optimiser, a profile likelihood, nuisance parameters, an ODE or any other discretisation in the inferential path \u2014 and especially before a pre-registered threshold, compute budget, or gate is allowed to depend on the fit.",
+      "id": "study-design-estimator-certification",
+      "name": "study-design-estimator-certification",
+      "path": "skills/study-design/estimator-certification.md",
+      "role": "leaf"
+    },
+    {
+      "archetype": "analysis-discipline",
+      "companions": [
+        {
+          "role": "leaf",
+          "target": "study-design-sensitivity-arbitration"
+        },
+        {
+          "role": "leaf",
+          "target": "study-design-bias-vs-variance-decomposition"
+        },
+        {
+          "role": "leaf",
+          "target": "study-design-replicate-count-justification"
+        }
+      ],
+      "description": "Use before interpreting null, weak, or boundary results from finite-sample analyses, especially pre-registrations, replication attempts, subgroup tests, and negative findings.",
+      "id": "study-design-power-floor-acknowledgement",
+      "name": "study-design-power-floor-acknowledgement",
+      "path": "skills/study-design/power-floor-acknowledgement.md",
+      "role": "leaf"
+    },
+    {
+      "archetype": "analysis-discipline",
+      "companions": [
+        {
+          "role": "leaf",
+          "target": "study-design-sensitivity-arbitration"
+        },
+        {
+          "role": "leaf",
+          "target": "study-design-power-floor-acknowledgement"
+        }
+      ],
+      "description": "Use when a follow-up analysis changes data, operationalisation, model, thresholds, or scope after an earlier pre-registration exists.",
+      "id": "study-design-prereg-amendment-vs-fresh",
+      "name": "study-design-prereg-amendment-vs-fresh",
+      "path": "skills/study-design/prereg-amendment-vs-fresh.md",
+      "role": "leaf"
+    },
+    {
+      "archetype": "analysis-discipline",
+      "companions": [
+        {
+          "role": "leaf",
+          "target": "study-design-prereg-amendment-vs-fresh"
+        },
+        {
+          "role": "leaf",
+          "target": "study-design-sensitivity-arbitration"
+        },
+        {
+          "role": "leaf",
+          "target": "study-design-replicate-count-justification"
+        },
+        {
+          "role": "leaf",
+          "target": "study-design-power-floor-acknowledgement"
+        }
+      ],
+      "description": "Use when pre-registering a test that selects a winner among multiple candidates, depends on frozen inputs, or could produce a result that \"looks too good\" \u2014 covers universe-locking, candidate-snapshot freezing, familywise nulls, leakage hedges, suspicious-result tripwires, and locked decision tables.",
+      "id": "study-design-prereg-defensive-instrumentation",
+      "name": "study-design-prereg-defensive-instrumentation",
+      "path": "skills/study-design/prereg-defensive-instrumentation.md",
+      "role": "leaf"
+    },
+    {
+      "archetype": "analysis-discipline",
+      "companions": [
+        {
+          "role": "leaf",
+          "target": "study-design-bias-vs-variance-decomposition"
+        },
+        {
+          "role": "leaf",
+          "target": "study-design-power-floor-acknowledgement"
+        },
+        {
+          "role": "leaf",
+          "target": "statistics-survival-and-hierarchical-models"
+        }
+      ],
+      "description": "Use when choosing the number of replicates for stochastic estimators (bootstrap, permutation, Monte Carlo, downsampling, MCMC) and you would otherwise pick a round-number default.",
+      "id": "study-design-replicate-count-justification",
+      "name": "study-design-replicate-count-justification",
+      "path": "skills/study-design/replicate-count-justification.md",
+      "role": "leaf"
+    },
+    {
+      "archetype": "analysis-discipline",
+      "companions": [
+        {
+          "role": "leaf",
+          "target": "study-design-power-floor-acknowledgement"
+        },
+        {
+          "role": "leaf",
+          "target": "statistics-survival-and-hierarchical-models"
+        },
+        {
+          "role": "leaf",
+          "target": "statistics-compositional-data"
+        }
+      ],
+      "description": "Use when an analysis includes multiple robustness checks, alternate operationalisations, filters, covariate sets, priors, models, or negative controls whose results could change interpretation.",
+      "id": "study-design-sensitivity-arbitration",
+      "name": "study-design-sensitivity-arbitration",
+      "path": "skills/study-design/sensitivity-arbitration.md",
+      "role": "leaf",
+      "sources": [
+        "baygent-skills"
+      ]
+    },
+    {
+      "description": "Use when ingesting, QA-reviewing, or integrating transcriptomic datasets \u2014 bulk RNA-seq, microarray, or scRNA-seq cohorts (GEO, ArrayExpress, MMRF, HCA, recount, ARCHS4), especially before meta-analysis. Routes to the leaves below.",
+      "id": "transcriptomics",
+      "name": "transcriptomics",
+      "path": "skills/bio/transcriptomics/SKILL.md",
+      "role": "router"
+    },
+    {
+      "archetype": "measurement-qa",
+      "companions": [
+        {
+          "role": "leaf",
+          "target": "transcriptomics-cohort-qa"
+        },
+        {
+          "role": "leaf",
+          "target": "transcriptomics-data-integration"
+        },
+        {
+          "role": "leaf",
+          "target": "study-design-power-floor-acknowledgement"
+        },
+        {
+          "role": "leaf",
+          "target": "study-design-bias-vs-variance-decomposition"
+        }
+      ],
+      "covers": [
+        "data-product:gene-expression-bulk-rna"
+      ],
+      "description": "Use when ingesting or QA-reviewing bulk RNA-Seq cohorts (TCGA, GTEx, recount3, ARCHS4, GEO, MMRF), especially before meta-analysis.",
+      "id": "transcriptomics-bulk-rnaseq-qa",
+      "name": "transcriptomics-bulk-rnaseq-qa",
+      "path": "skills/bio/transcriptomics/bulk-rnaseq-qa.md",
+      "role": "leaf",
+      "sources": [
+        "deseq2",
+        "edger"
+      ]
+    },
+    {
+      "archetype": "measurement-qa",
+      "description": "Use when ingesting or QA-reviewing a single transcriptomic cohort (bulk RNA-seq, microarray, or scRNA-seq; GEO, ArrayExpress, MMRF, HCA, recount, ARCHS4) before it enters analysis.",
+      "id": "transcriptomics-cohort-qa",
+      "name": "transcriptomics-cohort-qa",
+      "path": "skills/bio/transcriptomics/cohort-qa.md",
+      "role": "leaf"
+    },
+    {
+      "archetype": "analysis-discipline",
+      "description": "Use when integrating or aggregating multiple heterogeneous transcriptomic cohorts for meta-analysis, before designing per-cohort preprocessing \u2014 committing to a cross-cohort strategy and handling experiment-level technical variation.",
+      "id": "transcriptomics-data-integration",
+      "name": "transcriptomics-data-integration",
+      "path": "skills/bio/transcriptomics/data-integration.md",
+      "role": "leaf"
+    },
+    {
+      "archetype": "measurement-qa",
+      "companions": [
+        {
+          "role": "leaf",
+          "target": "transcriptomics-cohort-qa"
+        },
+        {
+          "role": "leaf",
+          "target": "transcriptomics-data-integration"
+        },
+        {
+          "role": "leaf",
+          "target": "transcriptomics-bulk-rnaseq-qa"
+        },
+        {
+          "role": "leaf",
+          "target": "study-design-bias-vs-variance-decomposition"
+        }
+      ],
+      "covers": [
+        "data-product:gene-expression-microarray"
+      ],
+      "description": "Use when ingesting or QA-reviewing bulk microarray cohorts (Affymetrix, Agilent, Illumina BeadArray) for legacy meta-analysis.",
+      "id": "transcriptomics-microarray-qa",
+      "name": "transcriptomics-microarray-qa",
+      "path": "skills/bio/transcriptomics/microarray-qa.md",
+      "role": "leaf",
+      "sources": [
+        "limma"
+      ]
+    },
+    {
+      "archetype": "measurement-qa",
+      "companions": [
+        {
+          "role": "leaf",
+          "target": "transcriptomics-cohort-qa"
+        },
+        {
+          "role": "leaf",
+          "target": "transcriptomics-data-integration"
+        },
+        {
+          "role": "leaf",
+          "target": "statistics-compositional-data"
+        },
+        {
+          "role": "leaf",
+          "target": "study-design-power-floor-acknowledgement"
+        }
+      ],
+      "covers": [
+        "data-product:gene-expression-single-cell"
+      ],
+      "description": "Use when ingesting or QA-reviewing single-cell RNA-Seq cohorts, especially before pseudobulk meta-analysis or cell-type composition claims.",
+      "id": "transcriptomics-scrna-qa",
+      "name": "transcriptomics-scrna-qa",
+      "path": "skills/bio/transcriptomics/scrna-qa.md",
+      "role": "leaf",
+      "sources": [
+        "scanpy",
+        "tirosh-2016"
+      ]
+    },
+    {
+      "companions": [
+        {
+          "role": "index",
+          "target": "science-skill-index"
+        }
+      ],
+      "description": "Use when scientific prose for a research project is in scope. Routes to the writing leaves below.",
+      "id": "writing",
+      "name": "writing",
+      "path": "skills/writing/SKILL.md",
+      "role": "router"
+    }
+  ]
+}

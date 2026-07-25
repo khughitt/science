@@ -11,6 +11,15 @@ from __future__ import annotations
 
 from enum import StrEnum
 
+from science_model.skill_coverage.overlay import (
+    Companion,
+    LeafSkill,
+    RouterSkill,
+    SkillOverlay,
+    SkillOverlayError,
+    build_skill_overlay,
+)
+
 
 class EnrollmentStatus(StrEnum):
     """The two authored enrollment statuses. `undeclared` is NOT here: it is an ABSENCE state, never
@@ -35,4 +44,15 @@ ENROLLMENT_STATUSES: frozenset[str] = frozenset(status.value for status in Enrol
 # DOMAIN_KEYS by construction.
 GENERATION_3_DOMAINS: frozenset[str] = frozenset({"molecular-measurement"})
 
-__all__ = ["DOMAIN_KEYS", "ENROLLMENT_STATUSES", "GENERATION_3_DOMAINS", "EnrollmentStatus"]
+__all__ = [
+    "Companion",
+    "DOMAIN_KEYS",
+    "ENROLLMENT_STATUSES",
+    "EnrollmentStatus",
+    "GENERATION_3_DOMAINS",
+    "LeafSkill",
+    "RouterSkill",
+    "SkillOverlay",
+    "SkillOverlayError",
+    "build_skill_overlay",
+]

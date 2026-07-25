@@ -3,6 +3,8 @@ name: genomics-somatic-mutation-qa
 description: Use when ingesting or auditing tumor mutation calls from cBioPortal, AACR GENIE, TCGA/MC3, ICGC, MAF files, study supplements, or targeted-panel cohorts.
 archetype: measurement-qa
 provenance: internal
+covers:
+  - data-product:somatic-variant
 ---
 
 # Somatic Mutation QA
