@@ -97,7 +97,11 @@ def test_data_audit_text_branch_is_budgeted(tmp_path: Path, monkeypatch) -> None
     _stranded_project(tmp_path)
     monkeypatch.chdir(tmp_path)
     result = _invoke(["data", "audit"])
+    assert result.exit_code != 0
     assert "--output" in result.output
+    assert "stranded_record" not in result.output
+    assert "data/processed/exp00000/RESULTS.md" not in result.output
+    assert "data/processed/exp00399/RESULTS.md" not in result.output
 
 
 def test_data_audit_output_file_is_complete_in_text_format(
@@ -107,15 +111,30 @@ def test_data_audit_output_file_is_complete_in_text_format(
     monkeypatch.chdir(tmp_path)
     target = tmp_path / "audit.txt"
     result = _invoke(["data", "audit", "--output", str(target)])
-    assert result.exit_code in (0, 1)
-    assert len(target.read_text()) > BUDGETS["data audit"].max_chars
+    assert result.exit_code == 1
+    report = target.read_text()
+    assert report.count("[stranded_record]") == STRANDED_RECORDS
+    assert (
+        "  [stranded_record] data/processed/exp00000/RESULTS.md "
+        "→ results/exp00000/RESULTS.md\n"
+    ) in report
+    assert report.endswith(
+        "  [stranded_record] data/processed/exp00399/RESULTS.md "
+        "→ results/exp00399/RESULTS.md\n"
+    )
+    assert len(report) > BUDGETS["data audit"].max_chars
+    assert result.output == f"wrote the data audit report to {target}\n"
 
 
 def test_data_audit_json_branch_is_budgeted(tmp_path: Path, monkeypatch) -> None:
     _stranded_project(tmp_path)
     monkeypatch.chdir(tmp_path)
     result = _invoke(["data", "audit", "--format", "json"])
+    assert result.exit_code != 0
     assert "--output" in result.output
+    assert '"violations"' not in result.output
+    assert "data/processed/exp00000/RESULTS.md" not in result.output
+    assert "data/processed/exp00399/RESULTS.md" not in result.output
 
 
 def test_data_audit_output_file_is_complete_in_json_format(
@@ -125,9 +144,15 @@ def test_data_audit_output_file_is_complete_in_json_format(
     monkeypatch.chdir(tmp_path)
     target = tmp_path / "audit.json"
     result = _invoke(["data", "audit", "--format", "json", "--output", str(target)])
-    assert result.exit_code in (0, 1)
-    json.loads(target.read_text())
-    assert len(target.read_text()) > BUDGETS["data audit"].max_chars
+    assert result.exit_code == 1
+    report = target.read_text()
+    payload = json.loads(report)
+    assert len(payload["violations"]) == STRANDED_RECORDS
+    assert payload["violations"][0]["path"] == "data/processed/exp00000/RESULTS.md"
+    assert payload["violations"][-1]["path"] == "data/processed/exp00399/RESULTS.md"
+    assert all(not row["performed"] for row in payload["violations"])
+    assert len(report) > BUDGETS["data audit"].max_chars
+    assert result.output == f"wrote the data audit report to {target}\n"
 
 
 def test_fix_without_output_refuses_before_moving_any_file(
