@@ -24,7 +24,7 @@ from science_tool.cli import main
 EXPECTED_CLASSIFICATION_COUNTS = {
     "budgeted": 4,
     "exempt": 67,
-    "deferred": 206,
+    "deferred": 207,
 }
 
 
@@ -59,8 +59,10 @@ def test_classification_partition_has_the_audited_cardinality() -> None:
     surfaced 258 more, classified as 65 exempt and 193 deferred. Review then
     corrected tasks summary from exempt to deferred because its distinct type/group
     keys are unbounded. The post-merge belief-basis command adds one deferred leaf
-    because compare mode emits one row per changed entity. The live partition is
-    therefore 4/67/206 = 277.
+    because compare mode emits one row per changed entity. The skills coverage
+    command adds one deferred leaf because its report grows with registered projects,
+    occurrences, diagnostics, candidates, and skipped projects. The live partition is
+    therefore 4/67/207 = 278.
     """
     actual = {
         "budgeted": len(BUDGETS),

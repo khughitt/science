@@ -486,8 +486,11 @@ DEFERRED.update(
 )
 DEFERRED.update(
     {
-        path: DeferredCommand("one output member per skill, source reference, or lint finding", "1b")
+        path: DeferredCommand(
+            "one output member per skill, source reference, coverage report member, or lint finding", "1b"
+        )
         for path in (
+            "skills coverage",
             "skills lint",
             "skills sources check",
             "skills sources list",

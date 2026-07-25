@@ -21,6 +21,10 @@ _PROJECT_OPTION_ALLOWLIST: dict[str, tuple[str, str]] = {
         "named registered project overlay selector",
         "registered project",
     ),
+    "skills coverage": (
+        "named registered-project identifier selector",
+        "registered project",
+    ),
     "dag audit": (
         "older DAG filesystem-root flag; prefer --project-root for new commands",
         "project root",
