@@ -35,6 +35,7 @@ from science_model.entity_schema import (
 from science_model.entity_schema.loader import SchemaNotFoundError
 from science_model.entity_schema.profile import ProfileComponent
 
+from science_tool.identity_authoring import COMMONS_DATASET_GENERATION
 from science_tool.commons.config import check_override_conflict, registry_root_for_id
 from science_tool.commons.datapackage import render_canonical_datapackage_yaml
 from science_tool.commons.promote_body_loss import canonical_body_loss
@@ -173,8 +174,8 @@ PROMOTE_KIND_DATASET = PromoteKindConfig(
     id_prefix="dataset:",
     slug_regex=re.compile(r"^[a-z0-9][a-z0-9-]{1,63}$"),
     slug_match="exact",
-    mixin_schema_id="https://schemas.science/mixin-dataset-2.0.json",
-    default_profile=default_profile_for_kind("dataset"),
+    mixin_schema_id=f"https://schemas.science/mixin-dataset-{COMMONS_DATASET_GENERATION}.0.json",
+    default_profile=default_profile_for_kind("dataset", generation=COMMONS_DATASET_GENERATION),
     eligibility_filter=None,
     side_channel_apply=_dataset_side_channel_apply,
     slug_from_id=True,

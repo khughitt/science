@@ -6,7 +6,11 @@ import sys
 
 from science_model.entity_schema.profile import default_profile_for_kind
 
-from science_tool.identity_authoring import BASE_DATASET_SCHEMA_PROFILE, project_dataset_schema_profile
+from science_tool.identity_authoring import (
+    BASE_DATASET_SCHEMA_PROFILE,
+    COMMONS_DATASET_GENERATION,
+    project_dataset_schema_profile,
+)
 
 
 def _write_science_yaml(root: Path, pin_line: str = "") -> None:
@@ -33,16 +37,19 @@ def test_project_dataset_schema_profile_unpinned_is_gen2(tmp_path: Path) -> None
 def test_base_dataset_profile_is_derived_not_declared() -> None:
     """The authoring default has no independent value authority.
 
-    A literal here is a second declaration of "what profile does a new dataset get", and it
-    drifted from `default_profile_for_kind` once already: the constant stayed at dataset/1.0
-    when the default moved to 2.0, which would have had every commons-born scaffold re-create
-    the `status: REPLACE` crash the dataset/2.0 migration exists to close.
+    The profile string is derived from `default_profile_for_kind` at the single-authority
+    generation `COMMONS_DATASET_GENERATION`; a literal profile here would be a second
+    declaration of "what profile does a new dataset get". That drifted once already: the
+    constant stayed at dataset/1.0 when the default moved to 2.0, which would have had every
+    commons-born scaffold re-create the `status: REPLACE` crash the migration exists to close.
     """
-    assert BASE_DATASET_SCHEMA_PROFILE == default_profile_for_kind("dataset").render()
+    assert BASE_DATASET_SCHEMA_PROFILE == default_profile_for_kind(
+        "dataset", generation=COMMONS_DATASET_GENERATION
+    ).render()
 
 
 def test_newly_authored_datasets_default_to_the_migrated_mixin() -> None:
-    assert BASE_DATASET_SCHEMA_PROFILE == "science-entity-base/1.0+dataset/2.0"
+    assert BASE_DATASET_SCHEMA_PROFILE == "science-entity-base/1.0+dataset/3.0"
 
 
 def test_identity_authoring_imports_in_clean_process() -> None:
