@@ -340,7 +340,8 @@ mappings:
     qualifiers: {}
   # [pai]
   - match: {analysis_role: "mr_exposure", trait: "autoimmune-disease"}
-    out_of_scope: {disposition: refuse, rationale: "Mendelian-randomization requirement (analysis_role) has no molecular data-product; author must re-model it as an explicit analysis requirement"}
+    data_product: data-product:gwas-summary-statistics
+    qualifiers: {trait: "autoimmune-disease"}
   # [pai]
   - match: {modality: "transcriptomics", assay: "bulk-rna", trigger: "q-fever", cohort_design: "case-control"}
     data_product: data-product:gene-expression-bulk-rna
@@ -357,19 +358,24 @@ mappings:
     out_of_scope: {disposition: drop, rationale: "facet-only / non-molecular: no molecular assay names a data-product (descriptive facets only)"}
   # [pai]
   - match: {modality: "genetics", assay: "gwas-sumstats", cohort_design: "summary-stats", analysis_role: "mr_exposure", trait: "sex-hormone-biomarker", outcome: "sex-hormone-level", stratification: "sex"}
-    out_of_scope: {disposition: refuse, rationale: "Mendelian-randomization requirement (analysis_role) has no molecular data-product; author must re-model it as an explicit analysis requirement"}
+    data_product: data-product:gwas-summary-statistics
+    qualifiers: {cohort_design: "summary-stats", stratification: "sex", trait: "sex-hormone-biomarker"}
   # [pai]
   - match: {modality: "genetics", assay: "gwas-sumstats", cohort_design: "summary-stats", analysis_role: "mr_exposure", trait: "autoimmune-disease"}
-    out_of_scope: {disposition: refuse, rationale: "Mendelian-randomization requirement (analysis_role) has no molecular data-product; author must re-model it as an explicit analysis requirement"}
+    data_product: data-product:gwas-summary-statistics
+    qualifiers: {cohort_design: "summary-stats", trait: "autoimmune-disease"}
   # [pai]
   - match: {analysis_role: "mr_exposure", trait: "sex-hormone-biomarker"}
-    out_of_scope: {disposition: refuse, rationale: "Mendelian-randomization requirement (analysis_role) has no molecular data-product; author must re-model it as an explicit analysis requirement"}
+    data_product: data-product:gwas-summary-statistics
+    qualifiers: {trait: "sex-hormone-biomarker"}
   # [pai]
   - match: {modality: "genetics", assay: "gwas-sumstats", cohort_design: "summary-stats", trigger: "sars-cov-2", analysis_role: "mr_outcome", trait: "long-covid"}
-    out_of_scope: {disposition: refuse, rationale: "Mendelian-randomization requirement (analysis_role) has no molecular data-product; author must re-model it as an explicit analysis requirement"}
+    data_product: data-product:gwas-summary-statistics
+    qualifiers: {cohort_design: "summary-stats", trait: "long-covid", trigger: "sars-cov-2"}
   # [pai]
   - match: {analysis_role: "mr_outcome", trait: "long-covid"}
-    out_of_scope: {disposition: refuse, rationale: "Mendelian-randomization requirement (analysis_role) has no molecular data-product; author must re-model it as an explicit analysis requirement"}
+    data_product: data-product:gwas-summary-statistics
+    qualifiers: {trait: "long-covid"}
   # [pai]
   - match: {modality: "transcriptomics", assay: "bulk-rna", cohort_design: "case-control"}
     data_product: data-product:gene-expression-bulk-rna
