@@ -175,3 +175,27 @@ def test_consolidation_candidates_is_bounded_and_complete(tmp_path: Path, monkey
         ),
         summary_of=lambda p: p["counts"],
     )
+
+
+def test_validate_is_bounded_and_complete(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    (tmp_path / "science.yaml").write_text("id: demo\nname: demo\n")
+    # Many unresolved references produce many validation findings. Seed entities whose
+    # `related:` points at nonexistent targets. Confirmed against source: 20 such entities
+    # produce 160 findings (37 errors, 123 warnings, 0 infos), so 400 far exceed the ceiling
+    # and `validate` exits 1 (errors present).
+    folder = tmp_path / "entities" / "questions"
+    folder.mkdir(parents=True)
+    for i in range(400):
+        (folder / f"{i:04d}.md").write_text(
+            f"---\nid: question:q{i:04d}-a-long-descriptive-slug\nkind: question\n"
+            f"title: Question {i}\nstatus: open\n"
+            f"related: [hypothesis:h{i:04d}-does-not-exist-anywhere-in-this-project]\n---\n\nbody\n"
+        )
+    monkeypatch.chdir(tmp_path)
+    _assert_report_projection(
+        "validate", ["validate"], tmp_path,
+        expected_exit=1,  # errors present -> ctx.exit(1) on the full result
+        omitted_key="results_omitted",
+        count_items=lambda p: len(p["results"]),
+        summary_of=lambda p: p["summary"],
+    )
