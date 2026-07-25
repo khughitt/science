@@ -861,8 +861,6 @@ background rows, bridge rows routed to multiple hypotheses, and a failure case f
 generation-time role. See MM30 t900/t903 for the concrete audit, manual correction, and remaining
 evidence-wiring work.
 
-
-
 ## [t101] Make the curation-ratchet model explicit and formulate its evaluation
 - priority: P2
 - status: proposed
@@ -892,3 +890,83 @@ MEASUREMENT HAZARD (design constraint, not a caveat): a curation system evaluate
 6. Blind adjudication. Before/after pairs in random order to an independent judge; expensive per sample, so use it to calibrate the cheap metrics rather than as the primary measure.
 
 Two standing rules regardless of which are chosen: the curator must not be able to READ its own score (compute it in the supervisor, which already sits outside the actor's write surface), and the metric plus refutation threshold must be pre-registered — the toolkit already requires this for estimators, and this is the same failure mode.
+
+## [t102] Fold the 7 explore-ideas worklist items into their target questions
+- priority: P2
+- status: proposed
+- aspects: []
+- related: [question:0008-llm-agents-as-fallible-sources]
+- group: explore-ideas-followup
+- created: 2026-07-25
+
+explore-2026-07-25 produced 7 fold items: retrieval-bias staging -> q0008; belief-action loss function -> q0018/q0009; calibration resolution-events -> q0017/q0018; inter-prompt reliability threshold -> q0005/q0008; evidence-sparsity floor -> q0018; authoring-model vintage drift -> q0008/q0012; schema-vs-ontology evolution -> q0012. Hand-fold each; apply deliberately created no entity for these.
+
+## [t103] Promote explore-2026-07-25 literature anchors to paper entities
+- priority: P2
+- status: proposed
+- aspects: []
+- related: [topic:evaluating-research-tools]
+- group: explore-ideas-followup
+- created: 2026-07-25
+
+13 applied entities carry unresolved_anchors warnings. All anchor identifiers are model-generated and unverified. Verify each DOI resolves to the work the anchor claims BEFORE promoting; a valid-looking DOI can name a real but unrelated paper. Priority intake: Ko 2013, Breznau 2022, Gneiting 2007, Guyatt 2004/2011, Shapiro 2011, Kelly 2004.
+
+## [t104] Deepen topic:evaluating-research-tools via research-topic
+- priority: P2
+- status: proposed
+- aspects: []
+- related: [topic:evaluating-research-tools]
+- group: toolkit-evaluation
+- created: 2026-07-25
+
+Topic is a scoped reading brief with an unverified intake list; no source has been read. Run /science:research-topic to build a real synthesis. Serves q0041, q0042, q0043, h0008.
+
+## [t105] Deepen topic:evidence-grading-and-belief-ceilings via research-topic
+- priority: P2
+- status: proposed
+- aspects: []
+- related: [topic:evidence-grading-and-belief-ceilings]
+- group: explore-ideas-followup
+- created: 2026-07-25
+
+Serves question:0051. Establish whether quality, hermeticity, and elapsed-validation are genuinely independent ceiling axes.
+
+## [t106] Deepen topic:structured-analytic-techniques via research-topic
+- priority: P3
+- status: proposed
+- aspects: []
+- related: [topic:structured-analytic-techniques]
+- group: explore-ideas-followup
+- created: 2026-07-25
+
+Serves q0045 and q0046. Both were narrowed at triage against existing compare-hypotheses / bias-audit tooling, so establish whether the structural half earns its authoring cost.
+
+## [t107] Check whether belief aggregation is commutative and associative
+- priority: P2
+- status: proposed
+- aspects: []
+- related: [question:0044-is-cross-project-belief-merge-a-join-semilattice]
+- group: toolkit-evaluation
+- created: 2026-07-25
+
+Answers half of question:0044 by inspection rather than study: read the aggregation implementation and test whether merging evidence sets in different orders yields identical belief. If it does not, cross-project composition can produce divergent belief states. Cheapest high-value item from explore-2026-07-25.
+
+## [t108] Read Cartwright (1999) The Dappled World
+- priority: P2
+- status: proposed
+- aspects: []
+- related: [topic:philosophy-of-models-and-patchwork-epistemology]
+- group: explore-ideas-followup
+- created: 2026-07-25
+
+topic:philosophy-of-models names this as the batch's most important missing intake and the common ancestor of the patchwork convergence grounding hypothesis:0007. Still unread.
+
+## [t109] Run the multi-model extraction audit deferred by question:0005
+- priority: P2
+- status: proposed
+- aspects: []
+- related: [question:0005-authoring-cost-audit]
+- group: toolkit-evaluation
+- created: 2026-07-25
+
+q0005 names this as the next useful increment and it has never been run: a true full-context human pass before any LLM output is visible, or a multi-model audit separating model-family calibration from rubric ambiguity. Also supplies the reliability threshold folded in from explore-2026-07-25.
