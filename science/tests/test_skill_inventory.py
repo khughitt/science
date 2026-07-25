@@ -4,13 +4,17 @@ from pathlib import Path
 
 import pytest
 
+from science_model.data_products import build_catalog
+
 from science_tool.graph.skill_inventory import (
     SkillInventoryError,
+    build_skill_inventory,
     companion_section,
     load_index_registry,
     parse_skill_frontmatter,
     real_skill_paths,
     resolve_companions,
+    serialize_inventory,
 )
 
 
@@ -182,3 +186,134 @@ def test_resolve_companions_rejects_duplicate_target(tmp_path: Path) -> None:
 
 def test_resolve_companions_empty_section() -> None:
     assert resolve_companions(Path("/x"), "skills/a.md", "", _PATH_TO_ID) == []
+
+
+def _catalog():
+    return build_catalog({
+        "schema_version": "1",
+        "terms": [
+            {"id": "data-product:gene-expression-single-cell", "label": "scRNA", "assay": "rna"},
+            {"id": "data-product:somatic-variant", "label": "SNV", "assay": "dna"},
+        ],
+    })
+
+
+def _leaf(name, archetype="measurement-qa", covers="", sources="", companions=""):
+    fm = f"---\nname: {name}\ndescription: d for {name}\narchetype: {archetype}\n"
+    fm += covers + sources + "---\n\nBody.\n\n## Companion Skills\n\n" + companions
+    return fm
+
+
+def _router(name):
+    return f"---\nname: {name}\ndescription: router {name}\n---\n\nBody.\n\n## Companion Skills\n\n"
+
+
+def _mkcorpus(root: Path) -> None:
+    (root / "skills").mkdir(parents=True, exist_ok=True)
+    _write(root, "skills/SKILL.md", _router("bio"))
+    _write(root, "skills/scrna.md", _leaf(
+        "scrna",
+        covers="covers:\n  - data-product:gene-expression-single-cell\n",
+        sources="sources: [scanpy]\n",
+        companions="- [`somatic`](somatic.md) - x\n",
+    ))
+    _write(root, "skills/somatic.md", _leaf("somatic", covers="covers:\n  - data-product:somatic-variant\n"))
+    _write(root, "skills/INDEX.md",
+           "---\nname: science-skill-index\n---\n\n"
+           "- `bio`: `skills/SKILL.md`\n- `scrna`: `skills/scrna.md`\n- `somatic`: `skills/somatic.md`\n")
+
+
+def test_build_inventory_shape_and_order(tmp_path: Path) -> None:
+    _mkcorpus(tmp_path)
+    inv = build_skill_inventory(tmp_path, _catalog())
+    assert [s["id"] for s in inv["skills"]] == ["bio", "scrna", "somatic"]  # id-sorted
+    bio = inv["skills"][0]
+    assert bio["role"] == "router" and "archetype" not in bio and "covers" not in bio
+    scrna = inv["skills"][1]
+    assert scrna["role"] == "leaf"
+    assert scrna["archetype"] == "measurement-qa"
+    assert scrna["covers"] == ["data-product:gene-expression-single-cell"]
+    assert scrna["sources"] == ["scanpy"]
+    assert scrna["companions"] == [{"target": "somatic", "role": "leaf"}]
+    somatic = inv["skills"][2]
+    assert "sources" not in somatic  # absent -> omitted
+    assert "companions" not in somatic  # empty section -> omitted
+
+
+def test_build_inventory_keys_off_index_not_name(tmp_path: Path) -> None:
+    _mkcorpus(tmp_path)
+    # Rewrite one leaf's frontmatter name to diverge from its INDEX id.
+    p = tmp_path / "skills/scrna.md"
+    p.write_text(p.read_text().replace("name: scrna", "name: totally-different"), encoding="utf-8")
+    inv = build_skill_inventory(tmp_path, _catalog())
+    scrna = next(s for s in inv["skills"] if s["id"] == "scrna")
+    assert scrna["id"] == "scrna" and scrna["name"] == "totally-different"
+
+
+def test_serialized_inventory_changes_when_corpus_changes(tmp_path: Path) -> None:
+    _mkcorpus(tmp_path)
+    baseline = serialize_inventory(build_skill_inventory(tmp_path, _catalog()))
+    p = tmp_path / "skills/somatic.md"
+    p.write_text(
+        p.read_text(encoding="utf-8").replace(
+            "description: d for somatic", "description: changed"
+        ),
+        encoding="utf-8",
+    )
+    changed = serialize_inventory(build_skill_inventory(tmp_path, _catalog()))
+    assert changed != baseline
+
+
+def test_build_inventory_rejects_off_catalog_covers(tmp_path: Path) -> None:
+    _mkcorpus(tmp_path)
+    p = tmp_path / "skills/scrna.md"
+    p.write_text(p.read_text().replace(
+        "data-product:gene-expression-single-cell", "data-product:not-a-term"), encoding="utf-8")
+    with pytest.raises(SkillInventoryError, match="not in .*catalog"):
+        build_skill_inventory(tmp_path, _catalog())
+
+
+def test_build_inventory_rejects_duplicate_covers(tmp_path: Path) -> None:
+    _mkcorpus(tmp_path)
+    p = tmp_path / "skills/scrna.md"
+    p.write_text(p.read_text().replace(
+        "covers:\n  - data-product:gene-expression-single-cell\n",
+        "covers:\n  - data-product:gene-expression-single-cell\n  - data-product:gene-expression-single-cell\n",
+    ), encoding="utf-8")
+    with pytest.raises(SkillInventoryError, match="duplicate covers"):
+        build_skill_inventory(tmp_path, _catalog())
+
+
+def test_build_inventory_rejects_null_covers(tmp_path: Path) -> None:
+    _mkcorpus(tmp_path)
+    p = tmp_path / "skills/scrna.md"
+    p.write_text(p.read_text().replace(
+        "covers:\n  - data-product:gene-expression-single-cell\n", "covers: null\n"), encoding="utf-8")
+    with pytest.raises(SkillInventoryError, match="list of strings"):
+        build_skill_inventory(tmp_path, _catalog())
+
+
+def test_build_inventory_rejects_router_with_covers(tmp_path: Path) -> None:
+    _mkcorpus(tmp_path)
+    p = tmp_path / "skills/SKILL.md"
+    p.write_text(p.read_text().replace(
+        "description: router bio\n", "description: router bio\ncovers:\n  - data-product:somatic-variant\n"),
+        encoding="utf-8",
+    )
+    with pytest.raises(SkillInventoryError, match="router.*covers"):
+        build_skill_inventory(tmp_path, _catalog())
+
+
+def test_build_inventory_rejects_leaf_without_archetype(tmp_path: Path) -> None:
+    _mkcorpus(tmp_path)
+    p = tmp_path / "skills/somatic.md"
+    p.write_text(p.read_text().replace("archetype: measurement-qa\n", ""), encoding="utf-8")
+    with pytest.raises(SkillInventoryError, match="archetype"):
+        build_skill_inventory(tmp_path, _catalog())
+
+
+def test_serialize_is_canonical(tmp_path: Path) -> None:
+    _mkcorpus(tmp_path)
+    text = serialize_inventory(build_skill_inventory(tmp_path, _catalog()))
+    assert text.endswith("\n")
+    assert text == serialize_inventory(build_skill_inventory(tmp_path, _catalog()))  # deterministic
