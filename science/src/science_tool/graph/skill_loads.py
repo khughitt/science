@@ -82,13 +82,21 @@ def _reject_duplicate_keys(node: yaml.Node) -> None:
     if not isinstance(node, yaml.MappingNode):
         return
     seen: set[object] = set()
-    for key_node, _ in node.value:
-        if key_node.tag == "tag:yaml.org,2002:merge":
-            raise SkillLoadValidationError("YAML merge keys are not allowed in skill aliases")
-        key = getattr(key_node, "value", None)
-        if key in seen:
-            raise SkillLoadValidationError(f"duplicate alias key {key!r}")
-        seen.add(key)
+    # `construct_object`, not `key_node.value`: `.value` is the raw scalar TEXT, so `yes:`
+    # and `true:` read as different keys while `yaml.safe_load` resolves both to `True` and
+    # collapses them last-wins. Comparing constructed objects catches the YAML-equivalent
+    # pairs (`yes`/`true`, `1`/`1.0`, `null`/`~`) that the text does not.
+    loader = yaml.SafeLoader("")
+    try:
+        for key_node, _ in node.value:
+            if key_node.tag == "tag:yaml.org,2002:merge":
+                raise SkillLoadValidationError("YAML merge keys are not allowed in skill aliases")
+            key = loader.construct_object(key_node, deep=True)
+            if key in seen:
+                raise SkillLoadValidationError(f"duplicate alias key {key!r}")
+            seen.add(key)
+    finally:
+        loader.dispose()
 
 
 def _valid_name(value: object) -> bool:

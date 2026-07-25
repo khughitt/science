@@ -407,6 +407,21 @@ class Entity(BaseModel):
         return value
 
     @model_validator(mode="after")
+    def _reject_autonomous_run_on_shared_scope(self) -> "Entity":
+        # A run is project-local by construction: it names one repo's branch, one
+        # `base_commit..head_commit` range, and one toolkit revision. A commons-canonical
+        # record carrying the field would resolve against a `runs/` directory no consuming
+        # project owns, so every consumer's graph build would fail on a reference only the
+        # commons author can fix. Reject it where it is authored instead.
+        if self.scope is EntityScope.SHARED and self.autonomous_run is not None:
+            raise ValueError(
+                "autonomous_run is not permitted on a commons-canonical entity: a run is "
+                f"project-local and cannot be resolved by a consumer, got "
+                f"{self.autonomous_run!r}"
+            )
+        return self
+
+    @model_validator(mode="after")
     def _validate_lens_views(self) -> "Entity":
         if not self.lens_views:
             return self

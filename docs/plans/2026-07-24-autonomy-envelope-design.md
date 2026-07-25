@@ -153,7 +153,7 @@ depends on (`graph/attention.py` — `NEEDS_REVIEW_MULTIPLIER = 3.0`, `STALE_MUL
 | `head_commit` | Exact commit the run ended at. | supervisor |
 | `toolkit_revision` | Science revision the gate ran from. | supervisor |
 | `policy_identity` | `(policy_id, policy_version)` in force. | supervisor |
-| `basis_digest` | Digest of the belief basis at `base_commit`. | supervisor |
+| `basis_digest` | Digest of the belief basis at `base_commit`. Required unless `disposition` is `unwired`, and **required absent** when it is. | supervisor |
 | `started`, `ended` | Time window. | supervisor |
 | `budget` | Tokens / wall-clock consumed (S4 consumes this). | supervisor |
 | `disposition` | `clean` \| `quarantined` \| `unwired`. **Attested, not self-declared.** | supervisor |
@@ -162,6 +162,21 @@ depends on (`graph/attention.py` — `NEEDS_REVIEW_MULTIPLIER = 3.0`, `STALE_MUL
 reproducible later. A merge-base is not a usable baseline: it moves under rebase and under
 integration-branch advancement, and mixed human/autonomous history cannot be reliably
 reconstructed by filtering commits.
+
+**`basis_digest` and `unwired` are mutually exclusive.** `unwired` means the basis was not
+computable, so requiring a digest there would force the supervisor to write a value it did
+not compute — a fabricated field inside an attestation, which is the failure this whole
+slice exists to prevent. The rule is conditional in *both* directions and is therefore
+stricter than a plain optional: the digest is required when `disposition` is `clean` or
+`quarantined`, and required to be **absent** when it is `unwired`. Plan D's writer must not
+substitute a sentinel, a zero digest, or the digest of an empty basis.
+
+**`autonomous_run` is forbidden on commons-canonical entities.** A run is project-local by
+construction — it names one repository's branch, one `base_commit..head_commit` range, and
+one toolkit revision. A commons record carrying the field would resolve against a `runs/`
+directory no consuming project owns, so every consumer's graph build would fail over a
+reference only the commons author can fix. `Entity` rejects the combination outright, which
+puts the failure on `science commons validate` at authoring time rather than downstream.
 
 The record deliberately does **not** index the entities it wrote. Each entity's *current*
 writer is derivable by querying `autonomous_run` in the provenance graph, and full

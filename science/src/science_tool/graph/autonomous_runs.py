@@ -34,14 +34,24 @@ def _reject_duplicate_and_merge_keys(node: yaml.Node, path: Path) -> None:
     """
     if isinstance(node, yaml.MappingNode):
         seen: set[object] = set()
-        for key_node, value_node in node.value:
-            if key_node.tag == "tag:yaml.org,2002:merge":
-                raise RunRecordError(f"{path}: YAML merge keys are not allowed in a run record")
-            key = getattr(key_node, "value", None)
-            if key in seen:
-                raise RunRecordError(f"{path}: duplicate key {key!r} in run record")
-            seen.add(key)
-            _reject_duplicate_and_merge_keys(value_node, path)
+        # `construct_object`, not `key_node.value`: `.value` is the raw scalar TEXT, so
+        # `yes:` and `true:` read as different keys while `yaml.safe_load` resolves both to
+        # `True` and collapses them last-wins. Comparing the constructed objects catches the
+        # YAML-equivalent pairs (`yes`/`true`, `1`/`1.0`, `null`/`~`) that the text does not.
+        loader = yaml.SafeLoader("")
+        try:
+            for key_node, value_node in node.value:
+                if key_node.tag == "tag:yaml.org,2002:merge":
+                    raise RunRecordError(
+                        f"{path}: YAML merge keys are not allowed in a run record"
+                    )
+                key = loader.construct_object(key_node, deep=True)
+                if key in seen:
+                    raise RunRecordError(f"{path}: duplicate key {key!r} in run record")
+                seen.add(key)
+                _reject_duplicate_and_merge_keys(value_node, path)
+        finally:
+            loader.dispose()
     elif isinstance(node, yaml.SequenceNode):
         for item in node.value:
             _reject_duplicate_and_merge_keys(item, path)
@@ -168,7 +178,10 @@ def add_run_record_to_graph(record: AutonomousRunRecord, graph: Graph) -> None:
     graph.add((node, SCI_NS.runToolkitRevision, RDFLiteral(record.toolkit_revision)))
     graph.add((node, SCI_NS.runPolicyId, RDFLiteral(record.policy_identity.id)))
     graph.add((node, SCI_NS.runPolicyVersion, RDFLiteral(record.policy_identity.version)))
-    graph.add((node, SCI_NS.runBasisDigest, RDFLiteral(record.basis_digest)))
+    # Absent exactly when `disposition` is `unwired` — the model forbids a digest there,
+    # so an unwired run carries no `sci:runBasisDigest` triple rather than a fabricated one.
+    if record.basis_digest is not None:
+        graph.add((node, SCI_NS.runBasisDigest, RDFLiteral(record.basis_digest)))
     graph.add(
         (node, PROV.startedAtTime, RDFLiteral(record.started.isoformat(), datatype=XSD.dateTime))
     )
