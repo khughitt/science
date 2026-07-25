@@ -15,6 +15,12 @@ then emits a `coverage-report` and evidence-backed skill candidates. It closes P
 
 ## Grounding (verified against the live corpus at `c06e6073`)
 
+> **Population, not just schema.** Types and signatures below are code-verified; the **join edge is
+> also population-verified**. `dataset_usage` is essentially unauthored on `kind: plan` (1 of 114 mm30
+> plans), so the plan→dataset edge is `dataset_usage` **∪** `related: dataset:*` (§2). `covers:` is
+> sparse too — only 11 of 54 catalog terms are covered by any leaf — so `uncovered` occurrences +
+> candidates are the command's dominant output by design (§4).
+
 - **Registry.** `science_tool.registry.config.load_global_config() -> GlobalConfig` enumerates
   `projects: list[RegisteredProject]` from `~/.config/science/config.yaml` (XDG-aware via
   `get_science_config_dir()`). Each `RegisteredProject` exposes `path: str`, `name: str`,
@@ -73,25 +79,35 @@ only) walks `sources.entities` once:
 
 - **datasets:** for each `kind: dataset`, `parse_gen3_capabilities(model_extra["provided_capabilities"])`
   → the set of `data_product` term ids it provides (a dataset with none is *untagged*).
-- **plans:** for each `kind: plan`, obtain its used datasets by the **same reference-resolution
-  semantics materialization uses** — build `ReferenceResolver.from_entities(sources.entities,
-  manual_aliases=sources.manual_aliases, archive_alias_tokens=sources.archive_alias_tokens,
-  identity_table=build_identity_table(sources))` and read resolved dataset refs by reusing
-  `usage_records_for_entity(plan, resolve_dataset_ref=<same callable `_add_dataset_usage_edges`
-  passes>)`. Authored refs on the entity are **not** canonical — a valid dataset **alias** or manual
+- **plans:** for each `kind: plan`, its **dataset edge = `dataset_usage[].ref` ∪ the `dataset:*`
+  members of the typed `related: list[str]` field** (`entities.py:163`). Corpus reality (verified at
+  `c06e6073`): `dataset_usage` is essentially unauthored on plans (1 of 114 mm30 plans), while
+  `related: dataset:*` is how a plan actually names the datasets it concerns — so the union is the
+  only non-empty plan→dataset edge today, and it self-migrates as `dataset_usage` adoption grows.
+  Both sides resolve through the **same reference-resolution semantics materialization uses**: build
+  `ReferenceResolver.from_entities(sources.entities, manual_aliases=sources.manual_aliases,
+  archive_alias_tokens=sources.archive_alias_tokens, identity_table=build_identity_table(sources))`;
+  obtain `dataset_usage` refs by reusing `usage_records_for_entity(plan, resolve_dataset_ref=<same
+  callable `_add_dataset_usage_edges` passes>)`, and resolve each `related` `dataset:*` ref through
+  the same callable. Authored refs are **not** canonical — a valid dataset **alias** or manual
   mapping resolves through the resolver, so a raw dict lookup would falsely flag it dangling. A ref
-  the resolver cannot resolve is the hard error (matching materialization), not a dict miss. Group
-  `sources.skill_loads` by `plan_id` → the canonical skill ids that plan loaded.
-- Emit raw join facts (no overlay/catalog knowledge — that is the model's job):
-  - `term_usages: tuple[TermUsage, ...]` — one `(plan_ref, dataset_ref, term)` per used-and-tagged
-    pairing;
+  the resolver cannot resolve is the hard error (not a dict miss). The union is de-duplicated (a
+  dataset named by both `dataset_usage` and `related` is one edge). Group `sources.skill_loads` by
+  `plan_id` → the canonical skill ids that plan loaded.
+- Emit raw join facts (no overlay/catalog knowledge — that is the model's job). Datasets are
+  classified project-owned vs commons via `sources.commons_overlay_paths` (§3 commons scoping):
+  - `term_usages: tuple[TermUsage, ...]` — one `(plan_ref, dataset_ref, term, owned: bool)` per
+    used-and-tagged pairing (project-owned **and** commons datasets, since either means the plan
+    touches the term; `owned` lets the model gate the off-catalog hard error, §3);
   - `untagged_usages: tuple[DatasetUse, ...]` — one `(plan_ref, dataset_ref)` per used-but-untagged
-    dataset;
+    **project-owned** dataset that does **not** declare `capability_scope` (commons and
+    intentionally-scoped datasets are excluded — not the project's mapping debt);
   - `plan_loaded_skills: tuple[PlanSkills, ...]` — `(plan_ref, skill_ids: tuple[str, ...])` for every
     plan that loaded at least one skill.
 
-A `dataset_usage.ref` that the resolver **cannot resolve** to a dataset entity is a **hard error**
-(fail-early — a genuinely dangling usage ref is malformed evidence; a resolvable alias is not).
+A plan dataset-edge ref (from `dataset_usage` or `related: dataset:*`) that the resolver **cannot
+resolve** to a dataset entity is a **hard error** (fail-early — a genuinely dangling ref is malformed
+evidence; a resolvable alias is not).
 
 ## 3. Coverage states (`science-model`, exact-term)
 
@@ -120,15 +136,31 @@ For each project and each `term` it touches (grain: `(project, term)`):
 
 Other states:
 
-- **`unmapped`** — per `(project, dataset)` untagged usage: `{project, observation_level,
-  evidence_refs}` (no term). Analysis activity present, dataset not tagged against any term.
+- **`unmapped`** — per `(project, dataset)` untagged usage: `{state, project, dataset_ref,
+  observation_level, evidence_refs}`. Analysis activity present, dataset not tagged against any term.
+  **Honors `capability_scope`:** a dataset that positively declares `capability_scope` asserts its
+  empty `provided_capabilities` is *intentional and complete* (`capability_scope.py`; the
+  `_scope_gate` in `validate/checks/dataset_capabilities.py` suppresses the missing-capabilities
+  finding for exactly these), so a scoped dataset is **not** `unmapped` debt — it is skipped, matching
+  the parent's "coverage checks WARN-first, honoring `capability_scope`" invariant.
 - **`unmapped-skill-reference`** diagnostic — for every `(plan, skill_id)` in `plan_loaded_skills`
   where `overlay.get(skill_id) is None`: `{project, plan_ref, skill_id}` (canonical post-alias id —
   the id that failed to resolve). Coexists with any coverage state.
 
-A used dataset whose `data_product` is **not** a catalog term is a **hard error** (aborts the scan):
-coverage is the first consumer that joins datasets against the closed catalog vocabulary, so it is
-the natural integrity gate — consistent with "closed vocabulary, unknown = hard error".
+**Commons scoping.** `load_project_sources` runs with `include_commons=True` so a plan's `related`/
+`dataset_usage` refs into shared commons datasets **resolve** (else they would abort as dangling).
+But `unmapped` and the off-catalog hard error apply only to **project-owned** datasets (commons
+entities are identified via `sources.commons_overlay_paths` and excluded) — a project is not blamed
+for commons's untagged or malformed data, and one bad commons dataset cannot abort every enrolled
+project. A commons dataset a plan actually uses still contributes its `term` to the plan's coverage
+(the project genuinely touches that term).
+
+A **project-owned** (`owned=True`) used dataset whose `data_product` is **not** a catalog term is a
+**hard error** (aborts the scan): coverage is the first consumer that joins datasets against the
+closed catalog vocabulary, so it is the natural integrity gate — consistent with "closed vocabulary,
+unknown = hard error". A **commons** (`owned=False`) term not in the catalog is **skipped** (not
+classified, not aborted) — commons vocabulary integrity is commons's own pipeline's job, and this is
+what keeps one bad commons dataset from aborting every enrolled consumer.
 
 **`observation_level` is `analysis-usage` for every occurrence in v1.** The parent's `project-demand`
 fallback (a term demanded via shared question/hypothesis reachability, with no analysis plan
@@ -147,16 +179,27 @@ One candidate per **distinct uncovered term** across the portfolio:
   collapse.
 - `score = round(1 - 1 / (1 + n_occurrences + (n_projects - 1)), 3)` where `n_occurrences` = distinct
   `(project, plan, dataset)` triples touching the term across the portfolio and `n_projects` =
-  distinct projects exhibiting it. Deterministic, in `(0, 1)`, monotone in both repeated use and
-  cross-project breadth.
+  distinct projects exhibiting it. Deterministic and monotone in both repeated use and cross-project
+  breadth. With `n_occurrences ≥ 1` and `n_projects ≥ 1` the attainable range is **`[0.5, 1)`** (a
+  lone single-project occurrence scores exactly `0.5`).
 - `likely_archetype` = **catalog sibling inference**:
   - `parents` = `term.broader` (a catalog term may have several). If empty → `indeterminate`.
   - `siblings` = catalog terms `S != term` with `S.broader ∩ parents != ∅`.
   - `covered_sibling_archetypes` = the archetype of each overlay leaf that covers some sibling.
   - **exactly one** archetype in that set → use it; otherwise (zero, or ≥2 distinct) →
     `indeterminate`.
+  - **Expected yield (documented, not a defect):** over the shipped catalog + inventory only ~4 of 54
+    terms resolve to a single archetype (50 → `indeterminate`), and only 11 of 54 terms are covered
+    by any leaf — so 43 are uncoverable portfolio-wide. The command's dominant signal is therefore
+    `uncovered` occurrences + their candidates (which *is* the point — surfacing coverage gaps);
+    `likely_archetype` is a conservative best-effort hint that is usually `indeterminate` by design.
 
 No skill prose is generated — candidates are evidence-backed pointers only.
+
+**Deferred ranking signal.** The parent's Prioritization section lists **feedback recurrence
+(`concern`+`target`)** as a v1 signal; this sub-plan's score (which you selected as evidence-count +
+sibling inference) does **not** consume it. Feedback recurrence is **deferred** — it is a separate
+data source (feedback entities), out of scope here — and the parent section is annotated accordingly.
 
 ## 5. Report schema (`coverage-report`) — structural discriminated union
 
@@ -167,7 +210,9 @@ producing exactly its shape:
 
 - `OutOfDomainResult` → `{state: "out-of-domain", project}` — no term, no observation_level.
 - `UndeclaredDomainResult` → `{state: "undeclared-domain", project}`.
-- `UnmappedOccurrence` → `{state: "unmapped", project, observation_level, evidence_refs[]}`.
+- `UnmappedOccurrence` → `{state: "unmapped", project, dataset_ref, observation_level,
+  evidence_refs[]}` — `dataset_ref` is a first-class field (it *is* the occurrence's grain, not
+  something to recover from inside `evidence_refs`).
 - `UncoveredOccurrence` → `{state: "uncovered", project, term, observation_level, evidence_refs[]}`.
 - `CoveredNotLoadedOccurrence` → `{state: "covered-not-loaded", project, term, observation_level,
   available_skill_ids[], evidence_refs[]}`.
@@ -183,31 +228,44 @@ that failed to resolve against the overlay, named `skill_id` rather than the par
 narrows the parent's `{raw_skill_id, plan_ref}` contract (the authored id is not recoverable from the
 reified record without re-parsing raw frontmatter, which this sub-plan deliberately does not do).
 
-`CoverageReport{coverage_occurrences[], skill_reference_diagnostics[], candidates[]}.to_dict()` →
-the report object. `serialize_coverage_report(report) -> str` = `json.dumps(indent=2, sort_keys=True)
-+ "\n"`. **Deterministic ordering** independent of scan order:
+`CoverageReport{coverage_occurrences[], skill_reference_diagnostics[], candidates[],
+skipped_projects[]}.to_dict()` → the report object (`skipped_projects[]` = `{path, reason}` for
+registry entries skipped per §6, so skipping is reported, never silent).
+`serialize_coverage_report(report) -> str` = `json.dumps(indent=2, sort_keys=True) + "\n"`.
+**Deterministic ordering** independent of scan order, on **scalar** keys (never a list of dicts,
+which is unorderable):
 
-- `coverage_occurrences` sorted by `(state, project, term or "", evidence_refs)`.
+- `coverage_occurrences` sorted by `(state, project, term or "", dataset_ref or "",
+  tuple(sorted((e["plan_ref"], e["dataset_ref"]) for e in evidence_refs)))` — the trailing element is
+  a tuple of string pairs, which orders; it disambiguates the `(project, dataset)`-grain `unmapped`
+  entries that otherwise tie on `(state, project, "")`.
 - `skill_reference_diagnostics` sorted by `(project, plan_ref, skill_id)`.
 - `candidates` sorted by `(-score, proposed_scope)`.
+- `skipped_projects` sorted by `path`.
 
 ## 6. Command & portfolio scan (`science-tool`)
 
-`science skills coverage [--output PATH]`, a new subcommand on the existing
-`skills_group` (`skills_lint/cli.py`). `scan_portfolio(config_path: Path | None = None) ->
-CoverageReport`:
+`science skills coverage [--output PATH] [--project SLUG]`, a new subcommand on the existing
+`skills_group` (`skills_lint/cli.py`). `--project SLUG` restricts the scan to the single registered
+project whose selected identifier is `SLUG` (unknown slug → hard error); combined with skip-and-
+report (below) it lets a user run coverage even when an unrelated registered project is broken.
+`scan_portfolio(config_path: Path | None = None, *, only: str | None = None) -> CoverageReport`:
 
-1. `load_global_config(config_path).projects`.
-2. Per registered project: resolve root, load `ProjectConfig` (`project_config_path(root)`),
-   read `domain_enrollment(config, "molecular-measurement")`:
-   - `out-of-domain` → one `OutOfDomainResult`;
-   - `undeclared` → one `UndeclaredDomainResult`;
+1. `load_global_config(config_path)`. An **absent/empty registry** (no config file, or no `projects`)
+   is a **hard error** — coverage over zero projects is a malformed request, not a valid empty
+   report (no fail-open).
+2. Per registered project: resolve root. A path that is **missing or lacks `science.yaml`** is
+   **skipped** and recorded in `skipped_projects[]` (§6 failure semantics); otherwise load
+   `ProjectConfig` (`project_config_path(root)`) and read
+   `domain_enrollment(config, "molecular-measurement")`:
    - `out-of-domain` / `undeclared` → a `ProjectEvidence` carrying only `project` + `enrollment`;
-   - `enrolled` → `load_project_sources(root)`, `project_evidence(project, sources)`.
-   Every project (enrolled or not) contributes exactly one `ProjectEvidence` to the list.
+   - `enrolled` → `load_project_sources(root, include_commons=True)`, `project_evidence(project,
+     sources)`.
+   Every non-skipped project contributes exactly one `ProjectEvidence` to the list.
 3. Build the overlay (`build_skill_overlay(load_skill_inventory(), catalog)`) + catalog
    (`load_catalog()`), call `compute_coverage(projects, overlay, catalog)` — which assembles the
-   whole report, non-enrolled results included.
+   coverage/diagnostic/candidate sections (non-enrolled single results included); the scan attaches
+   `skipped_projects[]`.
 4. `serialize_coverage_report(report)` → stdout, or `--output PATH` file.
 
 `project` identifier = `RegisteredProject.id or name` (id preferred; name fallback for legacy
@@ -221,19 +279,24 @@ write, so any scan/serialization error aborts with a **nonzero exit** and **no p
 `--output` target is left **untouched** on failure — and because a plain `write_text` truncates an
 existing file before it can fail on I/O, the write itself is **atomic**: serialize to a
 same-directory temp file, then `os.replace` onto the target (the repo's established atomic-output
-pattern). A stale prior report is never left half-overwritten. Two tiers, matching what each project
-is actually asked to do:
+pattern). A stale prior report is never left half-overwritten. Three outcomes, matching what each
+project is actually asked to do (stale registry entries are *expected* — `registry/sync.py:42` skips
+non-dir/no-`science.yaml` paths and `prune_missing_projects` exists precisely for this):
 
-- **Every** registered project must have a loadable, valid `science.yaml` — the scan reads each
-  project's `ProjectConfig` to determine enrollment. Missing/unreadable/invalid config →
-  `SkillCoverageScanError`, abort. Such a project is **never** reclassified as `undeclared-domain`
-  (undeclared is a state for a validly-loaded project, not a stand-in for a load failure).
+- **Skip (missing path):** a registered path that does not exist or has no `science.yaml` is
+  **skipped** and recorded in `skipped_projects[]` `{path, reason}` — not silent, not a fallback, and
+  not a coverage state. The scan continues and exits 0. (This is why the live `f1-revision3`
+  stale-worktree entry no longer aborts the scan.)
+- **Abort (present but invalid):** a path that **exists with a `science.yaml`** but is unreadable or
+  has invalid config → `SkillCoverageScanError`, abort. Such a project is **never** reclassified as
+  `undeclared-domain` (undeclared is a state for a validly-loaded project, not a stand-in for a load
+  failure).
 - **Enrolled** projects are additionally canonically loaded (`load_project_sources`); a source/entity
   load failure there → abort. **Non-enrolled projects are not source-loaded at all**, so their entity
   integrity is *not* gated by coverage — that is `science validate`'s job. This narrows the parent
-  design's blanket "fails canonical loading aborts" to the projects coverage actually loads, and is
-  the reason an `out-of-domain`/`undeclared` project with malformed *entities* is still classified
-  (not aborted): coverage never looks at its entities.
+  design's blanket "fails canonical loading aborts" to the projects coverage actually loads (and to
+  present-but-invalid config), and is the reason an `out-of-domain`/`undeclared` project with
+  malformed *entities* is still classified (not aborted): coverage never looks at its entities.
 
 Coverage findings are **not** failures: a clean scan that surfaces `uncovered`/`covered-not-loaded`
 occurrences still exits 0. (A future `--strict` exit-nonzero-on-findings flag is out of scope.)
@@ -248,14 +311,16 @@ rule, and the `science skills coverage` command + report schema. Link it from th
 ## Data flow
 
 ```text
-load_global_config().projects
+load_global_config().projects   (absent/empty registry ▶ hard error)
+    ├─ missing path / no science.yaml ──▶ skipped_projects[] {path, reason}   (scan continues)
     ├─ non-enrolled ──▶ ProjectEvidence(project, enrollment, <empty facts>)
-    └─ enrolled ──load_project_sources──▶ ProjectSources(.entities, .skill_loads)
-                         └─project_evidence──▶ ProjectEvidence(project, enrollment, term_usages, untagged_usages, plan_loaded_skills)
+    └─ enrolled ──load_project_sources(include_commons=True)──▶ ProjectSources(.entities, .skill_loads)
+                         └─project_evidence──▶ ProjectEvidence(project, enrollment, term_usages[owned], untagged_usages, plan_loaded_skills)
+                              (plan dataset edge = dataset_usage ∪ related:dataset:*, resolver-resolved)
 list[ProjectEvidence] + SkillOverlay + DataProductCatalog
     ──compute_coverage──▶ CoverageReport(coverage_occurrences, skill_reference_diagnostics, candidates)
         (non-enrolled ▶ OutOfDomainResult / UndeclaredDomainResult; enrolled ▶ the join + candidates)
-    ──serialize_coverage_report──▶ canonical JSON ──▶ stdout | --output PATH
+    + skipped_projects[] ──serialize_coverage_report──▶ canonical JSON ──▶ stdout | --output PATH
 ```
 
 ## Testing approach
@@ -263,21 +328,28 @@ list[ProjectEvidence] + SkillOverlay + DataProductCatalog
 - **`coverage.py` (pure, model):** each state in isolation — `uncovered`, `covered-not-loaded`,
   covered-and-loaded (emits nothing), `unmapped`, `unmapped-skill-reference`; **exact-term** on a
   parent/child term pair (broader-covering leaf does not cover the child); the score formula on
-  known `(n_occurrences, n_projects)`; sibling inference (single-archetype consensus → that
-  archetype, mixed → `indeterminate`, no-broader → `indeterminate`); discriminated-union `to_dict()`
-  shapes; deterministic ordering under shuffled input; `out-of-domain` / `undeclared` single
-  results; the non-catalog `data_product` hard error.
+  known `(n_occurrences, n_projects)` including the `0.5` floor for a lone occurrence; sibling
+  inference (single-archetype consensus → that archetype, mixed → `indeterminate`, no-broader →
+  `indeterminate`); discriminated-union `to_dict()` shapes; **deterministic ordering under shuffled
+  input including several `unmapped` entries in one project** (the list-of-dicts sort-key regression);
+  `out-of-domain` / `undeclared` single results; an **owned** off-catalog `data_product` → hard
+  error, a **commons** off-catalog term → skipped (not aborted); a `capability_scope` dataset is
+  **not** `unmapped`.
 - **`evidence.py` (tool):** a synthetic `ProjectSources` (datasets with/without capabilities, plans
-  with `dataset_usage` + grouped `skill_loads`) → expected `ProjectEvidence`; a `dataset_usage.ref`
-  that is a **valid dataset alias / manual-alias** resolves (is **not** flagged dangling), while a
-  genuinely unresolvable ref → hard error; `ProjectEvidence.__post_init__` rejects facts on a
-  non-enrolled instance.
+  with `dataset_usage` **and** `related: dataset:*` + grouped `skill_loads`) → expected
+  `ProjectEvidence` — the **union** edge picks up a `related`-only dataset and de-dups one named by
+  both; a **valid dataset alias / manual-alias** resolves (not flagged dangling) while a genuinely
+  unresolvable ref → hard error; a **commons** dataset is marked `owned=False` and excluded from
+  `untagged_usages`; `ProjectEvidence.__post_init__` rejects facts on a non-enrolled instance.
 - **`scan.py` (tool):** a temp `config.yaml` registry pointing at temp project dirs
-  (enrolled / out-of-domain / undeclared / load-failure) → expected report; **duplicate selected
-  project identifiers** → hard error before computation; an **enrolled** project whose sources fail
-  to load aborts the scan; a **non-enrolled project with malformed entities** is still classified
-  (`out-of-domain`/`undeclared`) **without** its sources being loaded; a failing project leaves an
-  existing `--output` file byte-for-byte unchanged (atomic-write / untouched-on-failure).
+  (enrolled / out-of-domain / undeclared / present-but-invalid / **missing path**) → expected report;
+  a **missing / no-`science.yaml`** entry lands in `skipped_projects[]` and the scan exits 0; a
+  **present-but-invalid** config aborts; an **absent/empty registry** → hard error; **duplicate
+  selected identifiers** → hard error before computation; **`--project SLUG`** restricts to one
+  project (unknown slug → hard error); an **enrolled** project whose sources fail to load aborts; a
+  **non-enrolled project with malformed entities** is still classified **without** its sources being
+  loaded; a failing project leaves an existing `--output` file byte-for-byte unchanged (atomic-write /
+  untouched-on-failure).
 - **structured evidence reproducibility (model):** rebuild a candidate's `(n_occurrences,
   n_projects)` purely from its serialized `evidence[]` triples and assert it yields the reported
   `score` — proving the evidence substantiates the score.
@@ -287,6 +359,10 @@ list[ProjectEvidence] + SkillOverlay + DataProductCatalog
 ## Out of scope (deferred)
 
 - `observation_level: project-demand` (epistemic q/h reachability fallback).
+- **Feedback-recurrence ranking signal** (`concern`+`target`) — a separate data source; the score
+  stays evidence-count + sibling inference (parent Prioritization annotated).
+- A cross-project migration authoring typed `dataset_usage` on analysis plans (v1 reads the
+  `related: dataset:*` edge instead; the union self-migrates as `dataset_usage` adoption grows).
 - A `--strict` flag that exits nonzero when findings exist.
 - Additional enrollable domains beyond `molecular-measurement`.
 - Any persistent overlay/report artifact, graph materialization, or `results/` convention.

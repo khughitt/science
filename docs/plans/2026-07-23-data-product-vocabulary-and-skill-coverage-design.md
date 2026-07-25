@@ -379,7 +379,7 @@ out-of-domain result; a registered project that has not declared yields
   any `--output` target **untouched**. Such a project is **never** classified as
   `undeclared-domain` — undeclared is a coverage state for a validly-loaded,
   enrolled-vocabulary project, not a stand-in for a load failure.
-  > **Superseded by sub-plan 4** ([`2026-07-25-skill-coverage-command-design.md`](2026-07-25-skill-coverage-command-design.md) §6): "fails canonical loading" is narrowed to a two-tier gate — a valid `science.yaml` is required of **every** project, but **source/entity** loading (and its failure gate) applies **only to enrolled** projects; a non-enrolled project's entity integrity is `validate`'s job. The `--output` untouched guarantee is made real by an atomic same-directory temp-file + `os.replace`.
+  > **Superseded by sub-plan 4** ([`2026-07-25-skill-coverage-command-design.md`](2026-07-25-skill-coverage-command-design.md) §6): "fails canonical loading aborts" is narrowed to three outcomes — a registered path that is **missing / has no `science.yaml` is skipped** and reported in `skipped_projects[]` (stale entries are expected, per `registry/sync.py`); a path that **exists but has invalid config aborts**; and **source/entity** loading (and its failure gate) applies **only to enrolled** projects (a non-enrolled project's entity integrity is `validate`'s job). An absent/empty registry is a hard error (no fail-open). The `--output` untouched guarantee is made real by an atomic same-directory temp-file + `os.replace`.
 - **Report destination & ownership:** the toolkit has no `results/` convention, so
   there is **no implicit path** — the `coverage-report` JSON is written to
   **stdout by default**, with optional `--output PATH` for a file.
@@ -411,6 +411,7 @@ recurrence (`concern`+`target`), and coverage absence/over-generality. Non-
 structured factors (consequence severity, detection lateness) are deferred unless
 a transparent derivation exists; `likely_archetype` is emitted only when inferable,
 else `indeterminate`.
+> **Narrowed by sub-plan 4** ([`2026-07-25-skill-coverage-command-design.md`](2026-07-25-skill-coverage-command-design.md) §4): v1's `score` uses the evidence-count signals (occurrence count × cross-project breadth) + sibling-inferred `likely_archetype`. **Feedback recurrence (`concern`+`target`) is deferred** — it is a separate data source (feedback entities) not consumed by this sub-plan.
 
 ## Scope
 
