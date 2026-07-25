@@ -84,6 +84,15 @@ def test_a_growable_but_small_command_can_be_deferred() -> None:
     assert entry.growth_reason.strip()
 
 
+def test_tasks_summary_is_deferred_because_distinct_keys_make_it_grow() -> None:
+    """Each arbitrary task type/group value adds a member to both output formats."""
+    assert "tasks summary" not in EXEMPTIONS
+    entry = DEFERRED["tasks summary"]
+    assert entry.target_slice == "1b"
+    assert "type" in entry.growth_reason
+    assert "group" in entry.growth_reason
+
+
 def test_the_three_tables_are_mutually_disjoint() -> None:
     assert not (set(BUDGETS) & set(EXEMPTIONS))
     assert not (set(BUDGETS) & set(DEFERRED))

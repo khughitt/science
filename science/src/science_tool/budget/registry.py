@@ -103,7 +103,6 @@ EXEMPTIONS: dict[str, str] = {
     "graph import": "fixed retired-command error",
     "graph init": "at most three fixed initialization guidance lines",
     "graph migrate-addresses": "fixed retired-command error",
-    "tasks summary": "measured 1,692 chars on 2026-07-24; aggregate counts, cannot grow with backlog size",
     "graph stats": "measured 341 chars on 2026-07-24; fixed-shape summary",
     "graph stamp-revision": "fixed retired-command error",
     "inquiry add-assumption": "fixed retired-command error",
@@ -150,6 +149,10 @@ DEFERRED: dict[str, DeferredCommand] = {
     # Growable but small on the audited project -- the case that has no truthful
     # exemption. Populated further by Task 13 Step 3.
     "tasks archive": DeferredCommand("one row per archivable task", "1b"),
+    "tasks summary": DeferredCommand(
+        "one output member per distinct task type and group value",
+        "1b",
+    ),
 }
 
 DEFERRED.update(

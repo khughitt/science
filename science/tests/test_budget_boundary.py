@@ -23,8 +23,8 @@ from science_tool.cli import main
 
 EXPECTED_CLASSIFICATION_COUNTS = {
     "budgeted": 4,
-    "exempt": 68,
-    "deferred": 204,
+    "exempt": 67,
+    "deferred": 205,
 }
 
 
@@ -56,8 +56,9 @@ def test_classification_partition_has_the_audited_cardinality() -> None:
     """Lock the audited partition, not only its absence of unclassified leaves.
 
     Task 1 supplied 4 budgeted, 3 exempt, and 11 deferred paths. Task 13's RED
-    surfaced 258 more, classified as 65 exempt and 193 deferred. The resulting
-    live partition is therefore 4/68/204 = 276.
+    surfaced 258 more, classified as 65 exempt and 193 deferred. Review then
+    corrected tasks summary from exempt to deferred because its distinct type/group
+    keys are unbounded. The live partition is therefore 4/67/205 = 276.
     """
     actual = {
         "budgeted": len(BUDGETS),
@@ -79,6 +80,54 @@ def _callback_source(cmd: click.Command) -> str | None:
         return None
 
 
+_NESTED_SCOPES = (ast.FunctionDef, ast.AsyncFunctionDef, ast.Lambda, ast.ClassDef)
+
+
+def _callback_constructs_bounded_sink(source: str) -> bool:
+    """Whether the callback body itself constructs a sink.
+
+    Calls inside a nested function, lambda, or class belong to that nested scope and
+    cannot establish that the Click callback owns its payload channel.
+    """
+    tree = ast.parse(inspect.cleandoc(source))
+    callbacks = [
+        node
+        for node in tree.body
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))
+    ]
+    if len(callbacks) != 1:
+        return False
+
+    def _owned_nodes(node: ast.AST):
+        if isinstance(node, _NESTED_SCOPES):
+            return
+        yield node
+        for child in ast.iter_child_nodes(node):
+            yield from _owned_nodes(child)
+
+    return any(
+        isinstance(node, ast.Call)
+        and isinstance(node.func, ast.Name)
+        and node.func.id == "BoundedSink"
+        for statement in callbacks[0].body
+        for node in _owned_nodes(statement)
+    )
+
+
+def test_nested_sink_construction_does_not_establish_callback_ownership() -> None:
+    source = """
+def callback() -> None:
+    def nested() -> None:
+        BoundedSink(None)
+
+    deferred = lambda: BoundedSink(None)
+
+    class Factory:
+        sink = BoundedSink(None)
+"""
+    assert _callback_constructs_bounded_sink(source) is False
+
+
 def test_every_budgeted_command_constructs_its_own_sink() -> None:
     by_path = dict(_leaf_commands(main, []))
     missing: list[str] = []
@@ -91,14 +140,7 @@ def test_every_budgeted_command_constructs_its_own_sink() -> None:
         if source is None:
             missing.append(f"{command_path} (callback source unavailable)")
             continue
-        tree = ast.parse(inspect.cleandoc(source))
-        constructs = any(
-            isinstance(node, ast.Call)
-            and isinstance(node.func, ast.Name)
-            and node.func.id == "BoundedSink"
-            for node in ast.walk(tree)
-        )
-        if not constructs:
+        if not _callback_constructs_bounded_sink(source):
             missing.append(command_path)
     assert not missing, "Budgeted commands whose callback never constructs a BoundedSink:\n  " + "\n  ".join(missing)
 
