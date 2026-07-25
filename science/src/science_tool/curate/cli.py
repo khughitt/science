@@ -30,37 +30,81 @@ def curate_group() -> None:
     show_default=True,
     help="Cap recently_modified to the K most-recent entries; pass 0 to disable.",
 )
+@click.option(
+    "--output",
+    "output_path",
+    type=click.Path(path_type=Path),
+    default=None,
+    help="Write the complete, unbudgeted inventory to PATH instead of stdout.",
+)
 def inventory_cmd(
     project_root: Path,
     output_format: str,
     recently_modified_days: int,
     recently_modified_top_k: int,
+    output_path: Path | None,
 ) -> None:
     """Print a deterministic project corpus inventory."""
+    from science_tool.budget.control import bounded_control_notice
+    from science_tool.budget.invocation import build_complete_via
+    from science_tool.budget.registry import lookup
+    from science_tool.budget.sink import BoundedSink
+
     inventory = collect_inventory(
         project_root,
         recent_days=recently_modified_days,
         recent_top_k=None if recently_modified_top_k <= 0 else recently_modified_top_k,
     )
     payload = inventory.model_dump(mode="json")
-    emit(output_format=output_format, payload=payload, render_text=lambda: None, sort_keys=True)
+    sink = BoundedSink(
+        lookup("curate inventory"),
+        output_path=output_path,
+        command_path="curate inventory",
+        complete_via=build_complete_via(click.get_current_context(), output_hint="inventory.json"),
+    )
+    control_notice = (
+        bounded_control_notice(f"wrote the curate inventory to {output_path}")
+        if output_path is not None
+        else None
+    )
+    emit(output_format=output_format, payload=payload, render_text=lambda: None, sort_keys=True, sink=sink)
+    sink.flush()
+    if control_notice is not None:
+        click.echo(control_notice)
 
 
 @curate_group.command("consolidation-candidates")
 @click.option("--project-root", type=click.Path(exists=True, file_okay=False, path_type=Path), default=Path("."), show_default=True)
-@click.option("--format", "output_format", type=click.Choice(["json", "text"]), default="json", show_default=True)
+@click.option("--format", "output_format", type=click.Choice(["json", "text"]), default="text", show_default=True)
 @click.option("--related-jaccard", type=float, default=0.7, show_default=True, help="Jaccard threshold for the related-overlap signal.")
 @click.option("--min-cluster-size", type=int, default=2, show_default=True, help="Minimum members for a reported cluster.")
 @click.option("--max-cluster-size", type=int, default=15, show_default=True, help="Suppress (but count) qualifying clusters larger than this.")
+@click.option(
+    "--output",
+    "output_path",
+    type=click.Path(path_type=Path),
+    default=None,
+    help="Write the complete, unbudgeted consolidation report to PATH instead of stdout.",
+)
 def consolidation_candidates_cmd(
     project_root: Path,
     output_format: str,
     related_jaccard: float,
     min_cluster_size: int,
     max_cluster_size: int,
+    output_path: Path | None,
 ) -> None:
     """Report consolidation candidates (read-only; superseded-lineage + semantic)."""
-    from science_tool.consolidation_candidates import detect_consolidation_candidates, render_text
+    from science_tool.budget.control import bounded_control_notice
+    from science_tool.budget.invocation import build_complete_via
+    from science_tool.budget.registry import lookup
+    from science_tool.budget.sink import BoundedSink
+    from science_tool.consolidation_candidates import (
+        ConsolidationCandidates,
+        detect_consolidation_candidates,
+        render_text,
+    )
+    from science_tool.consolidation_candidates_projection import project_consolidation_candidates
 
     report = detect_consolidation_candidates(
         project_root,
@@ -68,7 +112,33 @@ def consolidation_candidates_cmd(
         min_cluster_size=min_cluster_size,
         max_cluster_size=max_cluster_size,
     )
-    def _render() -> None:
-        click.echo(render_text(report))
+    full_payload = report.model_dump(mode="json")
+    sink = BoundedSink(
+        lookup("curate consolidation-candidates"),
+        output_path=output_path,
+        command_path="curate consolidation-candidates",
+        complete_via=build_complete_via(click.get_current_context(), output_hint="consolidation-candidates.json"),
+    )
+    control_notice = (
+        bounded_control_notice(f"wrote the complete consolidation report to {output_path}")
+        if output_path is not None
+        else None
+    )
+    displayed = full_payload if output_path is not None else project_consolidation_candidates(full_payload)
 
-    emit(output_format=output_format, payload=report.model_dump(mode="json"), render_text=_render, sort_keys=True)
+    def _render() -> None:
+        sink.echo(render_text(ConsolidationCandidates.model_validate(displayed)))
+        omitted = displayed.get("candidates_omitted", 0)
+        if omitted:
+            shown = (
+                len(displayed["superseded_lineage"]["linear"])
+                + len(displayed["superseded_lineage"]["non_linear"])
+                + len(displayed["semantic_clusters"])
+            )
+            sink.echo(f"\nshowing {shown} of {shown + omitted} candidates")
+            sink.echo(f"  complete output:  {sink.complete_via}")
+
+    emit(output_format=output_format, payload=displayed, render_text=_render, sink=sink, sort_keys=True)
+    sink.flush()
+    if control_notice is not None:
+        click.echo(control_notice)

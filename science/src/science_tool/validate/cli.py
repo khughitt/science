@@ -4,13 +4,16 @@ from contextlib import redirect_stdout
 from dataclasses import replace
 from io import StringIO
 from pathlib import Path
-from typing import Any, cast
+from typing import TYPE_CHECKING, Any, cast
 
 import click
 from rich.text import Text
 
+if TYPE_CHECKING:
+    from science_tool.budget.sink import BoundedSink
+
 from science_tool.output import emit
-from science_tool.styles import ERROR_STYLE, SUCCESS_STYLE, WARNING_STYLE, get_console
+from science_tool.styles import ERROR_STYLE, SUCCESS_STYLE, WARNING_STYLE
 from science_tool.validate._helpers import section_banner
 from science_tool.validate.acceptance import filter_accepted_warnings
 from science_tool.validate.context import ValidateContextError
@@ -64,6 +67,13 @@ _VISIBLE_INFO_RULES = frozenset({"prose_lints.config"})
     show_default="current working directory",
     help="Science project root.",
 )
+@click.option(
+    "--output",
+    "output_path",
+    type=click.Path(path_type=Path),
+    default=None,
+    help="Write the complete, unbudgeted validation report to PATH instead of stdout.",
+)
 @click.pass_context
 def validate_cmd(
     ctx: click.Context,
@@ -74,6 +84,7 @@ def validate_cmd(
     output_format: str,
     profile: str,
     project_root: Path,
+    output_path: Path | None,
 ) -> None:
     """Validate a Science project."""
     captured_stdout = StringIO()
@@ -97,12 +108,56 @@ def validate_cmd(
     if sidecar_stdout:
         click.echo(sidecar_stdout, nl=False, err=True)
 
-    emit(
-        output_format=output_format,
-        payload=_json_payload(result),
-        render_text=lambda: _emit_text(result, verbose=verbose),
+    from science_tool.budget.control import bounded_control_notice
+    from science_tool.budget.invocation import build_complete_via
+    from science_tool.budget.registry import lookup
+    from science_tool.budget.sink import BoundedSink
+    from science_tool.validate.projection import project_validate_results
+
+    sink = BoundedSink(
+        lookup("validate"),
+        output_path=output_path,
+        command_path="validate",
+        complete_via=build_complete_via(click.get_current_context(), output_hint="validate.json"),
+    )
+    control_notice = (
+        bounded_control_notice(f"wrote the complete validation report to {output_path}")
+        if output_path is not None
+        else None
     )
 
+    # Visibility is FORMAT-SPECIFIC and MUST be applied before the cap: INFO rows must never
+    # consume the cap, and each format's omission count must reflect what that format shows.
+    # (JSON drops all INFO; text keeps only "visible info" per _display_filter.)
+    json_visible = [item for item in result.results if item.severity is not Severity.INFO]
+    text_visible = [item for item in result.results if _display_filter(item, verbose=verbose)]
+    if output_path is not None:
+        json_results, json_omitted = json_visible, 0
+        text_results, text_omitted = text_visible, 0
+    else:
+        json_results, json_omitted = project_validate_results(json_visible)
+        text_results, text_omitted = project_validate_results(text_visible)
+
+    # Summary counts always come from the FULL result (via _json_payload); projection
+    # narrows only the displayed `results`. results_omitted is added only when it projected.
+    payload = {
+        "summary": _json_payload(result)["summary"],
+        "results": [item.to_dict() for item in json_results],
+    }
+    if json_omitted:
+        payload["results_omitted"] = json_omitted
+
+    emit(
+        output_format=output_format,
+        payload=payload,
+        render_text=lambda: _emit_text(result, text_results, text_omitted, sink, verbose=verbose),
+        sink=sink,
+    )
+    sink.flush()
+    if control_notice is not None:
+        click.echo(control_notice)
+
+    # Exit reflects the FULL result, never the projected display.
     if result.errors or result.gated:
         ctx.exit(1)
 
@@ -163,8 +218,17 @@ def _with_accepted_warnings_filtered(project_root: Path, result: RunResult) -> R
     )
 
 
-def _emit_text(result: RunResult, *, verbose: bool = False) -> None:
-    console = get_console(file=click.get_text_stream("stdout"))
+def _emit_text(
+    result: RunResult,
+    shown_results: list[Result],
+    omitted: int,
+    sink: BoundedSink,
+    *,
+    verbose: bool = False,
+) -> None:
+    # shown_results is already filtered by _display_filter AND capped by the caller; render
+    # it as-is. The header/coverage/notices/summary come from the FULL result.
+    console = sink.console
     console.print(BANNER)
     console.print("Science Project Validation")
     console.print(BANNER)
@@ -176,8 +240,12 @@ def _emit_text(result: RunResult, *, verbose: bool = False) -> None:
         for section in _section_names(result):
             console.print(section_banner(section))
 
-    for item in _text_results(result, verbose=verbose):
+    for item in shown_results:
         console.print(_format_result(item), soft_wrap=True)
+
+    if omitted:
+        sink.echo(f"showing {len(shown_results)} of {len(shown_results) + omitted} findings")
+        sink.echo(f"  complete output:  {sink.complete_via}")
 
     console.print()
     console.print(BANNER)
@@ -193,10 +261,10 @@ def _format_check_coverage(result: RunResult) -> str:
     return f"Checks: {included_count} included, 0 skipped (profile: {result.profile})"
 
 
-def _text_results(result: RunResult, *, verbose: bool) -> list[Result]:
+def _display_filter(item: Result, *, verbose: bool) -> bool:
     if verbose:
-        return [item for item in result.results if not _is_visible_info(item)]
-    return [item for item in result.results if item.severity is not Severity.INFO]
+        return not _is_visible_info(item)
+    return item.severity is not Severity.INFO
 
 
 def _notice_results(result: RunResult) -> list[Result]:
