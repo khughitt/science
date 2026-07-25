@@ -59,7 +59,8 @@ def parse_skill_frontmatter(text: str) -> dict:
     return data
 
 
-_INDEX_LINE_RE = re.compile(r"^\s*-\s*`([^`]+)`:\s*`(skills/[^`]+)`", re.MULTILINE)
+_INDEX_REGISTRY_PREFIX_RE = re.compile(r"^\s*-\s+`[^`]+`\s*:")
+_INDEX_ROW_RE = re.compile(r"^\s*-\s+`([^`]+)`:\s+`([^`]+)`$")
 
 
 def real_skill_paths(repo_root: Path) -> set[str]:
@@ -72,14 +73,48 @@ def real_skill_paths(repo_root: Path) -> set[str]:
     return out
 
 
+def _index_registry_entries(index_text: str) -> list[tuple[str, str]]:
+    entries: list[tuple[str, str]] = []
+    for line_number, line in enumerate(index_text.splitlines(), start=1):
+        if _INDEX_REGISTRY_PREFIX_RE.match(line) is None:
+            continue
+        match = _INDEX_ROW_RE.fullmatch(line)
+        if match is None:
+            raise SkillInventoryError(
+                f"malformed INDEX registry row on line {line_number}: {line!r}"
+            )
+        entries.append((match.group(1), match.group(2)))
+    return entries
+
+
+def _validate_index_path(repo_root: Path, rel: str) -> None:
+    parts = rel.split("/")
+    lexically_safe = (
+        len(parts) > 1
+        and parts[0] == "skills"
+        and all(part not in {"", ".", ".."} for part in parts)
+        and "\\" not in rel
+    )
+    if lexically_safe:
+        try:
+            (repo_root / rel).resolve().relative_to((repo_root / "skills").resolve())
+        except ValueError:
+            lexically_safe = False
+    if not lexically_safe:
+        raise SkillInventoryError(
+            f"INDEX path {rel!r} must be a safe repository-relative path under 'skills/'"
+        )
+
+
 def load_index_registry(repo_root: Path) -> list[tuple[str, str]]:
     index_text = (repo_root / "skills" / "INDEX.md").read_text(encoding="utf-8")
-    entries = _INDEX_LINE_RE.findall(index_text)
+    entries = _index_registry_entries(index_text)
     ids: set[str] = set()
     paths: set[str] = set()
     for sid, rel in entries:
         if SKILL_NAME_RE.fullmatch(sid) is None:
             raise SkillInventoryError(f"INDEX id {sid!r} fails the canonical skill-id grammar")
+        _validate_index_path(repo_root, rel)
         if sid in ids:
             raise SkillInventoryError(f"duplicate INDEX id {sid!r}")
         if rel in paths:
@@ -101,7 +136,7 @@ def load_index_registry(repo_root: Path) -> list[tuple[str, str]]:
 _COMPANION_SECTION_RE = re.compile(
     r"^## Companion Skills\s*$(.*?)(?=^## |\Z)", re.MULTILINE | re.DOTALL
 )
-_LINK_TARGET_RE = re.compile(r"\]\(([^)]+)\)")
+_LINK_TARGET_RE = re.compile(r"\]\(([^)]*)\)")
 
 
 def companion_section(text: str) -> str:
@@ -117,9 +152,12 @@ def resolve_companions(
     edges: list[dict] = []
     seen: set[str] = set()
     for target in _LINK_TARGET_RE.findall(section):
-        raw = target.split()[0].split("#")[0]
+        target_parts = target.split()
+        raw = target_parts[0].split("#")[0] if target_parts else ""
         if not raw:
-            continue
+            raise SkillInventoryError(
+                f"{skill_rel_path}: companion link needs a file target"
+            )
         resolved = (skill_abs.parent / raw).resolve()
         try:
             rel = resolved.relative_to(root).as_posix()

@@ -92,6 +92,59 @@ def test_build_overlay_rejects_leaf_without_archetype() -> None:
         ]), _catalog())
 
 
+@pytest.mark.parametrize(
+    ("entry", "path"),
+    [
+        (
+            {
+                "id": "leaf",
+                "name": "leaf",
+                "role": "leaf",
+                "description": "d",
+                "archetype": "a",
+            },
+            None,
+        ),
+        (
+            {
+                "id": "leaf",
+                "name": "leaf",
+                "role": "leaf",
+                "description": "d",
+                "archetype": "a",
+            },
+            42,
+        ),
+        (
+            {
+                "id": "router",
+                "name": "router",
+                "role": "router",
+                "description": "d",
+            },
+            None,
+        ),
+        (
+            {
+                "id": "router",
+                "name": "router",
+                "role": "router",
+                "description": "d",
+            },
+            42,
+        ),
+    ],
+    ids=["leaf-missing", "leaf-non-string", "router-missing", "router-non-string"],
+)
+def test_build_overlay_rejects_missing_or_non_string_path(
+    entry: dict, path: object
+) -> None:
+    if path is not None:
+        entry["path"] = path
+    with pytest.raises(SkillOverlayError, match="path"):
+        build_skill_overlay(_inv([entry]), _catalog())
+
+
 def test_build_overlay_rejects_unknown_companion_role() -> None:
     with pytest.raises(SkillOverlayError, match="role"):
         build_skill_overlay(_inv([

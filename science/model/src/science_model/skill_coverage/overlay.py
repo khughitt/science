@@ -146,6 +146,7 @@ def build_skill_overlay(inventory: dict, catalog: DataProductCatalog) -> SkillOv
             raise SkillOverlayError("each inventory skill must be a mapping")
         skill_id = _required_string(entry, "id")
         name = _required_string(entry, "name")
+        _required_string(entry, "path")
         description = _required_string(entry, "description")
         role = _required_string(entry, "role")
         if role == "leaf":

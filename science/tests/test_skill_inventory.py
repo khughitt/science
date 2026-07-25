@@ -88,6 +88,19 @@ def test_registry_reads_pairs_in_index_order(tmp_path: Path) -> None:
     assert load_index_registry(tmp_path) == entries
 
 
+def test_registry_ignores_unrelated_inline_code_bullet(tmp_path: Path) -> None:
+    entries = [("bio", "skills/bio/SKILL.md")]
+    _write_corpus(
+        tmp_path,
+        entries,
+        index_lines=[
+            "- `bio`: `skills/bio/SKILL.md`",
+            "- `science tasks` inspects project work.",
+        ],
+    )
+    assert load_index_registry(tmp_path) == entries
+
+
 def test_real_skill_paths_excludes_index_and_templates(tmp_path: Path) -> None:
     _write(tmp_path, "skills/bio/x-qa.md")
     _write(tmp_path, "skills/INDEX.md")
@@ -114,6 +127,43 @@ def test_registry_rejects_bad_grammar(tmp_path: Path) -> None:
     _write(tmp_path, "skills/a.md")
     _write_corpus(tmp_path, [], index_lines=["- `Bad_Id`: `skills/a.md`"])
     with pytest.raises(SkillInventoryError, match="grammar"):
+        load_index_registry(tmp_path)
+
+
+def test_registry_rejects_path_outside_skills(tmp_path: Path) -> None:
+    _write(tmp_path, "docs/not-a-skill.md")
+    _write_corpus(
+        tmp_path,
+        [],
+        index_lines=["- `off-corpus`: `docs/not-a-skill.md`"],
+    )
+    with pytest.raises(SkillInventoryError, match="under 'skills/'"):
+        load_index_registry(tmp_path)
+
+
+def test_registry_rejects_traversal_path(tmp_path: Path) -> None:
+    _write(tmp_path, "docs/not-a-skill.md")
+    _write_corpus(
+        tmp_path,
+        [],
+        index_lines=["- `escaping`: `skills/../docs/not-a-skill.md`"],
+    )
+    with pytest.raises(SkillInventoryError, match="safe repository-relative"):
+        load_index_registry(tmp_path)
+
+
+@pytest.mark.parametrize(
+    "row",
+    [
+        "- `trailing`: `skills/a.md` trailing text",
+        "- `unclosed`: `skills/a.md",
+    ],
+    ids=["trailing-junk", "unclosed-path"],
+)
+def test_registry_rejects_malformed_registry_row(tmp_path: Path, row: str) -> None:
+    _write(tmp_path, "skills/a.md")
+    _write_corpus(tmp_path, [], index_lines=[row])
+    with pytest.raises(SkillInventoryError, match="malformed"):
         load_index_registry(tmp_path)
 
 
@@ -181,6 +231,23 @@ def test_resolve_companions_rejects_broken_target(tmp_path: Path) -> None:
             tmp_path,
             "skills/bio/transcriptomics/scrna-qa.md",
             "- [`x`](../../nope/ghost.md)\n",
+            _PATH_TO_ID,
+        )
+
+
+@pytest.mark.parametrize(
+    "link",
+    ["- [`anchor`](#qa)\n", "- [`empty`]()\n"],
+    ids=["anchor-only", "empty"],
+)
+def test_resolve_companions_rejects_link_without_file_target(
+    tmp_path: Path, link: str
+) -> None:
+    with pytest.raises(SkillInventoryError, match="file target"):
+        resolve_companions(
+            tmp_path,
+            "skills/bio/transcriptomics/scrna-qa.md",
+            link,
             _PATH_TO_ID,
         )
 
