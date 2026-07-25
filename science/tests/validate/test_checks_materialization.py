@@ -129,6 +129,77 @@ def test_empty_list_supersedes_is_an_error(tmp_path: Path) -> None:
     assert [r.severity for r in _results(tmp_path)] == [Severity.ERROR]
 
 
+# The remediation must be one the graph will actually accept. `sci:supersedes` admits only
+# workflow-run, hypothesis, spec, and the 6 conclusion kinds as source endpoints; the 12 kinds
+# the RelationKind comment calls "frozen debt" (plan, decision, inquiry, mechanism, method,
+# observation, pre-registration, proposition, synthesis, theme, topic, workflow-step) are flagged
+# by this check but CANNOT author the edge -- materialize raises RelationRejection("illegal-kind-pair").
+# Prescribing the relations: form to them sent the author to a dead end whose only exit was
+# deleting the authored lineage.
+
+
+def test_inadmissible_kind_is_not_told_to_author_the_relation(tmp_path: Path) -> None:
+    """`plan` cannot be a `sci:supersedes` source, so the relations: form must NOT be prescribed."""
+    _entity(
+        tmp_path, "plans/0001-x.md",
+        entity_id="plan:0001-x", kind="plan",
+        extra="supersedes: plan:0000-y\n",
+    )
+    results = _results(tmp_path)
+    assert [r.severity for r in results] == [Severity.ERROR]
+    msg = results[0].message
+    assert "plan:0001-x" in msg
+    assert "top-level 'supersedes:'" in msg
+    # The dead-end prescription must be gone...
+    assert "relations:" not in msg
+    assert "<target-id>" not in msg
+    # ...replaced by the reason it cannot be authored at all.
+    assert "cannot" in msg
+    assert "plan" in msg
+    assert results[0].rule == "non-materializing-field"
+
+
+def test_admissible_kind_still_gets_the_relations_prescription(tmp_path: Path) -> None:
+    """The kind-awareness must not weaken the message where the edge IS authorable."""
+    _entity(
+        tmp_path, "specs/0001-x.md",
+        entity_id="spec:0001-x", kind="spec",
+        extra="supersedes: spec:0000-y\n",
+    )
+    results = _results(tmp_path)
+    assert [r.severity for r in results] == [Severity.ERROR]
+    assert "relations:" in results[0].message
+    assert "sci:supersedes" in results[0].message
+
+
+def test_amends_on_a_kind_that_cannot_author_it(tmp_path: Path) -> None:
+    """`amends` admits only the 6 conclusion kinds -- `hypothesis` is not one of them, even
+    though `hypothesis` CAN author `supersedes`. The two relations are judged independently."""
+    _entity(
+        tmp_path, "hypotheses/0001-x.md",
+        entity_id="hypothesis:0001-x", kind="hypothesis",
+        extra="amends: hypothesis:0000-y\n",
+    )
+    results = _results(tmp_path)
+    assert [r.severity for r in results] == [Severity.ERROR]
+    msg = results[0].message
+    assert "relations:" not in msg
+    assert "cannot" in msg
+
+
+def test_malformed_kind_keeps_the_schematic_prescription(tmp_path: Path) -> None:
+    """A non-string kind cannot be tested for admissibility. It must still flag, and must not
+    claim the kind 'cannot' author the edge -- that would be an assertion we cannot support."""
+    _entity(
+        tmp_path, "interpretations/0001-x.md",
+        entity_id="interpretation:0001-x", kind="[oops]",
+        extra="supersedes: interpretation:0000-y\n",
+    )
+    results = _results(tmp_path)
+    assert [r.severity for r in results] == [Severity.ERROR]
+    assert "relations:" in results[0].message
+
+
 def test_clean_entity_yields_nothing(tmp_path: Path) -> None:
     """Non-vacuity guard: with no offending key, the check is silent -- so the ERROR cases
     prove it can fire, not that it fires on everything."""

@@ -17,6 +17,11 @@ from the D5 schema, and deriving from the schema would falsely flag it. Note `en
 lists `supersedes` in `_REMOVABLE_FRONTMATTER_REF_KEYS`, but that is generic entity-deletion
 reference cleanup with no supersession semantics and no emitted edge; it does not legitimize
 the key as lineage authoring on other kinds.
+
+The REMEDIATION is kind-aware for a second, independent reason: naming the `relations:` form
+is only useful where that form is admissible. `sci:supersedes` declares 9 source kinds and
+`sci:amends` 6, so for most kinds the prescribed replacement is itself rejected by
+materialize -- see `_remediation`.
 """
 
 from __future__ import annotations
@@ -24,12 +29,14 @@ from __future__ import annotations
 from collections.abc import Iterator
 
 from science_tool.entity_scan import iter_entity_markdown
+from science_tool.kind_descriptors import kind_can_author_relation
 from science_tool.validate.checks import Check
 from science_tool.validate.context import ValidateContext
 from science_tool.validate.result import Result, Severity
 
-#: Top-level frontmatter keys that materialize NOTHING and must be authored as a
-#: ``relations:`` entry with the given predicate instead.
+#: Top-level frontmatter key -> the relation name (and thus predicate) that DOES materialize.
+#: The key materializes nothing on every kind; whether the relation is authorable in its
+#: place is a separate, per-kind question -- see `_remediation`.
 _NON_MATERIALIZING: dict[str, str] = {
     "supersedes": "sci:supersedes",
     "amends": "sci:amends",
@@ -43,6 +50,33 @@ _LEGIT_TOP_LEVEL: frozenset[tuple[str, str]] = frozenset(
         ("workflow-run", "supersedes"),  # read by qa_audit/runs.py:47 for the QA-audit chain
     }
 )
+
+
+def _remediation(key: str, predicate: str, kind: object) -> str:
+    """The actionable half of the message, for this key on this kind.
+
+    The relations: form is prescribed ONLY where the kind may actually author it. The
+    `supersedes` RelationKind admits 9 source kinds and `amends` 6, so for most kinds the
+    old blanket prescription named a form materialize rejects with
+    `RelationRejection("illegal-kind-pair")` -- an ERROR whose only exit was deleting the
+    authored lineage. A check that judges whether authored information has any effect must
+    not, in the same breath, direct the author at a form that also has none.
+
+    A non-string `kind` cannot be tested for admissibility, so it keeps the schematic
+    prescription: "this kind cannot author the edge" is a claim, and it is not one we can
+    support for a kind we failed to read.
+    """
+    relation_name = key  # the frontmatter key and the RelationKind share a name
+    if isinstance(kind, str) and not kind_can_author_relation(relation_name, kind):
+        return (
+            f"kind '{kind}' cannot author '{predicate}' either (it is not a declared source "
+            f"endpoint for that relation), so there is no supported spelling for this lineage: "
+            f"remove the key, or widen the relation's endpoints if the lineage is real."
+        )
+    return (
+        f"Author it as a relations: entry with 'predicate: {predicate}' and a "
+        f"'target: <target-id>' instead."
+    )
 
 
 @Check(section="non-materializing frontmatter fields", order=23)
@@ -71,8 +105,7 @@ def check_non_materializing_fields(ctx: ValidateContext) -> Iterator[Result]:
                 None,
                 (
                     f"{entity_id}: top-level '{key}:' materializes no triples and is "
-                    f"silently ignored by the graph. Author it as a relations: entry with "
-                    f"'predicate: {predicate}' and a 'target: <target-id>' instead."
+                    f"silently ignored by the graph. {_remediation(key, predicate, kind)}"
                 ),
                 "non-materializing-field",
                 None,
