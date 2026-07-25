@@ -106,6 +106,37 @@ def test_malformed_frontmatter_exits_two_not_a_traceback(repo: Path):
     assert "could not evaluate" in result.output
 
 
+def test_invalid_timestamp_constructor_exits_two_not_a_traceback(repo: Path):
+    base = _git(repo, "rev-parse", "HEAD")
+    _write(repo, PAPER, _paper_text(extra="updated: 2026-99-99\n"))
+    _git(repo, "add", "-A")
+    _git(repo, "commit", "-q", "-m", "invalid timestamp")
+    head = _git(repo, "rev-parse", "HEAD")
+
+    result = _run(repo, base, head)
+
+    assert result.exit_code == 2, result.output
+    assert "could not evaluate" in result.output
+    assert "Traceback" not in result.output
+
+
+def test_invalid_timestamp_constructor_json_error_is_parseable(repo: Path):
+    base = _git(repo, "rev-parse", "HEAD")
+    _write(repo, PAPER, _paper_text(extra="updated: 2026-99-99\n"))
+    _git(repo, "add", "-A")
+    _git(repo, "commit", "-q", "-m", "invalid timestamp")
+    head = _git(repo, "rev-parse", "HEAD")
+
+    result = _run(repo, base, head, "--format", "json")
+
+    assert result.exit_code == 2, result.output
+    assert "Traceback" not in result.output
+    payload = json.loads(result.output)
+    assert payload["allowed"] is False
+    assert payload["denials"] == []
+    assert payload["error"].startswith("could not evaluate:")
+
+
 def test_report_only_denies_an_entity_edit(repo: Path):
     base = _git(repo, "rev-parse", "HEAD")
     _write(repo, PAPER, _paper_text(venue="Science"))

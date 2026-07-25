@@ -142,7 +142,7 @@ def _frontmatter_delimiter(text: str) -> str | None:
 def _yaml_key(node: ScalarNode) -> object:
     try:
         return yaml.safe_load(yaml.serialize(node))
-    except yaml.YAMLError as exc:
+    except (yaml.YAMLError, ValueError) as exc:
         raise ExtractError(f"unparseable frontmatter key: {exc}") from exc
 
 
@@ -204,7 +204,7 @@ def _field_map(frontmatter: dict, block: str | None) -> dict[str, object]:
     if block is not None:
         try:
             node = yaml.compose(block)
-        except yaml.YAMLError as exc:
+        except (yaml.YAMLError, ValueError) as exc:
             raise ExtractError(f"unparseable frontmatter: {exc}") from exc
         if node is not None:
             _validate_mapping_keys(node, top_level=True)
@@ -236,7 +236,7 @@ def _frontmatter_template(
             if raw_key and leading:
                 try:
                     parsed = yaml.safe_load(f"{raw_key}: null\n")
-                except yaml.YAMLError as exc:
+                except (yaml.YAMLError, ValueError) as exc:
                     raise ExtractError(f"unparseable frontmatter key: {exc}") from exc
                 if isinstance(parsed, dict) and len(parsed) == 1:
                     key = str(next(iter(parsed)))
@@ -291,7 +291,7 @@ def _changed_fields(before_text: str | None, after_text: str | None) -> tuple[st
             split_frontmatter(before_text) if before_text is not None else ({}, "")
         )
         after_fm, after_body = split_frontmatter(after_text) if after_text is not None else ({}, "")
-    except yaml.YAMLError as exc:
+    except (yaml.YAMLError, ValueError) as exc:
         raise ExtractError(f"unparseable frontmatter: {exc}") from exc
 
     before_block = _frontmatter_block(before_text) if before_text is not None else None

@@ -4,6 +4,7 @@ import subprocess
 from pathlib import Path
 
 import pytest
+import yaml
 from science_model.autonomous_runs import RunTier
 
 import science_tool.autonomy.extract as extract
@@ -207,6 +208,44 @@ def test_malformed_frontmatter_is_an_error_not_a_body_only_change(repo: Path):
 
     with pytest.raises(ExtractError):
         extract_change_set(repo, base, head)
+
+
+def test_invalid_timestamp_constructor_is_an_extract_error(repo: Path):
+    base = _git(repo, "rev-parse", "HEAD")
+    _write(
+        repo,
+        PAPER,
+        _paper_text().replace("venue: Nature\n", "venue: Nature\nupdated: 2026-99-99\n"),
+    )
+    head = _commit(repo, "invalid timestamp")
+
+    with pytest.raises(ExtractError):
+        extract_change_set(repo, base, head)
+
+
+def test_invalid_timestamp_constructor_in_yaml_key_is_an_extract_error():
+    node = yaml.compose("2026-99-99\n")
+    assert isinstance(node, yaml.ScalarNode)
+
+    with pytest.raises(ExtractError):
+        extract._yaml_key(node)
+
+
+def test_invalid_timestamp_constructor_in_template_key_is_an_extract_error():
+    with pytest.raises(ExtractError):
+        extract._frontmatter_template("2026-99-99: value\n")
+
+
+def test_value_error_from_yaml_composition_is_an_extract_error(
+    monkeypatch: pytest.MonkeyPatch,
+):
+    def invalid_composition(_block: str):
+        raise ValueError("invalid YAML composition")
+
+    monkeypatch.setattr(extract.yaml, "compose", invalid_composition)
+
+    with pytest.raises(ExtractError):
+        extract._field_map({}, "field: value\n")
 
 
 def test_changes_are_ordered_by_path(repo: Path):
