@@ -18,6 +18,15 @@ from science_model.data_products import DataProductCatalog
 
 CompanionRole = Literal["leaf", "router", "index"]
 _COMPANION_ROLES: frozenset[str] = frozenset({"leaf", "router", "index"})
+_TOP_LEVEL_FIELDS: frozenset[str] = frozenset({"skills"})
+_COMMON_SKILL_FIELDS: frozenset[str] = frozenset({
+    "id", "name", "path", "role", "description", "companions",
+})
+_LEAF_SKILL_FIELDS: frozenset[str] = _COMMON_SKILL_FIELDS | frozenset({
+    "archetype", "covers", "sources",
+})
+_ROUTER_EXCEPTION_FIELDS: frozenset[str] = frozenset({"archetype", "covers"})
+_COMPANION_FIELDS: frozenset[str] = frozenset({"target", "role"})
 
 
 class SkillOverlayError(ValueError):
@@ -74,6 +83,13 @@ class SkillOverlay:
         return len(self._by_id)
 
 
+def _reject_unknown_keys(mapping: dict, allowed: frozenset[str], context: str) -> None:
+    unknown = set(mapping) - allowed
+    if unknown:
+        rendered = ", ".join(repr(key) for key in sorted(unknown, key=repr))
+        raise SkillOverlayError(f"{context} has unknown key(s): {rendered}")
+
+
 def _string_tuple(entry: dict, field: str) -> tuple[str, ...]:
     # A present non-list value (for example, `sources: "scanpy"`) is a hard error.
     raw = entry.get(field, [])
@@ -101,6 +117,9 @@ def _companions(entry: dict) -> tuple[Companion, ...]:
             raise SkillOverlayError(
                 f"skill {entry['id']!r} companion must be a mapping"
             )
+        _reject_unknown_keys(
+            companion, _COMPANION_FIELDS, f"companion of {entry['id']!r}"
+        )
         target = companion.get("target")
         role = companion.get("role")
         if not isinstance(target, str) or not target:
@@ -117,6 +136,7 @@ def build_skill_overlay(inventory: dict, catalog: DataProductCatalog) -> SkillOv
     catalog_ids = catalog.by_id
     if not isinstance(inventory, dict):
         raise SkillOverlayError("inventory must be a mapping")
+    _reject_unknown_keys(inventory, _TOP_LEVEL_FIELDS, "inventory")
     entries = inventory.get("skills")
     if not isinstance(entries, list):
         raise SkillOverlayError("inventory must contain a 'skills' list")
@@ -128,6 +148,18 @@ def build_skill_overlay(inventory: dict, catalog: DataProductCatalog) -> SkillOv
         name = _required_string(entry, "name")
         description = _required_string(entry, "description")
         role = _required_string(entry, "role")
+        if role == "leaf":
+            _reject_unknown_keys(entry, _LEAF_SKILL_FIELDS, f"skill {skill_id!r}")
+        elif role == "router":
+            # Keep archetype/covers visible to the existing role invariant below so their
+            # presence produces the role-specific error rather than a generic unknown-key error.
+            _reject_unknown_keys(
+                entry,
+                _COMMON_SKILL_FIELDS | _ROUTER_EXCEPTION_FIELDS,
+                f"skill {skill_id!r}",
+            )
+        else:
+            _reject_unknown_keys(entry, _LEAF_SKILL_FIELDS, f"skill {skill_id!r}")
         companions = _companions(entry)
         if role == "router":
             if "covers" in entry or "archetype" in entry:

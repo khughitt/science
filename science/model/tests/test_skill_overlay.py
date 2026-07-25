@@ -103,3 +103,26 @@ def test_build_overlay_rejects_unknown_companion_role() -> None:
 def test_build_overlay_rejects_missing_skills_list() -> None:
     with pytest.raises(SkillOverlayError, match="skills"):
         build_skill_overlay({}, _catalog())
+
+
+def test_build_overlay_rejects_unknown_top_level_key() -> None:
+    with pytest.raises(SkillOverlayError, match="unknown"):
+        build_skill_overlay({"skills": [], "schema_version": "1"}, _catalog())
+
+
+def test_build_overlay_rejects_unknown_leaf_key() -> None:
+    with pytest.raises(SkillOverlayError, match="unknown"):
+        build_skill_overlay(_inv([
+            {"id": "x", "name": "x", "path": "skills/x.md", "role": "leaf",
+             "description": "d", "archetype": "a", "soruces": ["scanpy"]},
+        ]), _catalog())
+
+
+def test_build_overlay_rejects_unknown_companion_key() -> None:
+    with pytest.raises(SkillOverlayError, match="unknown"):
+        build_skill_overlay(_inv([
+            {"id": "r", "name": "r", "path": "skills/SKILL.md", "role": "router",
+             "description": "d", "companions": [
+                 {"target": "x", "role": "leaf", "label": "extra"},
+             ]},
+        ]), _catalog())
