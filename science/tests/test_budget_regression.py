@@ -243,6 +243,18 @@ def test_tasks_list_json_reports_the_full_total(project: Path) -> None:
     assert json.loads(result.output)["truncation"]["total"] == 395
 
 
+def test_escape_hint_extension_tracks_the_output_format(project: Path) -> None:
+    """The truncation footer must name a file whose extension matches what was truncated:
+    a default text/table run gets a .txt escape, a --format json run gets a .json escape.
+    A .json name over a rendered table is exactly the mismatch this guards against."""
+    text = _invoke(["tasks", "list", "--all"])
+    assert "--output tasks.txt" in text.output
+    assert "tasks.json" not in text.output
+
+    js = _invoke(["tasks", "list", "--all", "--format", "json"])
+    assert json.loads(js.output)["truncation"]["complete_via"].endswith("--output tasks.json")
+
+
 @pytest.mark.parametrize(
     ("args", "target_name"),
     [

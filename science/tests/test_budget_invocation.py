@@ -5,7 +5,7 @@ import shlex
 import click
 from click.testing import CliRunner
 
-from science_tool.budget.invocation import build_complete_via
+from science_tool.budget.invocation import build_complete_via, hint_for
 
 CAPTURED: list[str] = []
 
@@ -132,3 +132,14 @@ def test_command_path_and_values_are_all_shell_quoted() -> None:
         "--output",
         "out.json",
     ]
+
+
+def test_hint_for_uses_txt_for_non_json_formats() -> None:
+    """A text/table run's complete output is text, so the escape names a .txt file."""
+    assert hint_for("health", "table") == "health.txt"
+    assert hint_for("validate", "text") == "validate.txt"
+
+
+def test_hint_for_uses_json_for_the_json_format() -> None:
+    assert hint_for("health", "json") == "health.json"
+    assert hint_for("consolidation-candidates", "json") == "consolidation-candidates.json"

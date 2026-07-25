@@ -178,7 +178,7 @@ def feedback_list(
     from science_tool.feedback import list_entries
 
     from science_tool.budget.control import bounded_control_notice
-    from science_tool.budget.invocation import build_complete_via
+    from science_tool.budget.invocation import build_complete_via, hint_for
     from science_tool.budget.registry import lookup
     from science_tool.budget.sink import BoundedSink
 
@@ -211,7 +211,7 @@ def feedback_list(
         }
         for e in entries
     ]
-    complete_via = build_complete_via(click.get_current_context(), output_hint="feedback.json")
+    complete_via = build_complete_via(click.get_current_context(), output_hint=hint_for("feedback", output_format))
     control_notice = (
         bounded_control_notice(f"wrote {len(rows)} feedback entries to {output_path}")
         if output_path is not None

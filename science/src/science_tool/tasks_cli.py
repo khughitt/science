@@ -516,7 +516,7 @@ def tasks_list(
     """List tasks. Active and blocked tasks are shown by default; use --all for every status."""
     from science_model.tasks import Task
 
-    from science_tool.budget.invocation import build_complete_via
+    from science_tool.budget.invocation import build_complete_via, hint_for
     from science_tool.budget.control import bounded_control_notice
     from science_tool.budget.projection import project_rows
     from science_tool.budget.registry import lookup
@@ -546,7 +546,7 @@ def tasks_list(
         matched = [task for task in matched if task.status in WORKING_SET]
     matched = sort_tasks(matched)
 
-    complete_via = build_complete_via(click.get_current_context(), output_hint="tasks.json")
+    complete_via = build_complete_via(click.get_current_context(), output_hint=hint_for("tasks", output_format))
     control_notice = (
         bounded_control_notice(f"wrote {len(matched)} tasks to {output_path}")
         if output_path is not None

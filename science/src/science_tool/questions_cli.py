@@ -90,7 +90,7 @@ def question_show(ref: str, output_format: str) -> None:
 )
 def question_list(status: str | None, related: str | None, output_format: str, output_path: Path | None) -> None:
     """List source-authored questions."""
-    from science_tool.budget.invocation import build_complete_via
+    from science_tool.budget.invocation import build_complete_via, hint_for
     from science_tool.budget.registry import lookup
     from science_tool.budget.sink import BoundedSink
 
@@ -98,7 +98,7 @@ def question_list(status: str | None, related: str | None, output_format: str, o
         lookup("questions list"),
         output_path=output_path,
         command_path="questions list",
-        complete_via=build_complete_via(click.get_current_context(), output_hint="questions.json"),
+        complete_via=build_complete_via(click.get_current_context(), output_hint=hint_for("questions", output_format)),
     )
     list_typed_entities("question", status, related, output_format, sink=sink)
 
