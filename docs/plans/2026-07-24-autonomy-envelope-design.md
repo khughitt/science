@@ -277,6 +277,26 @@ is §0: the gate runs from a supervisor-owned pinned installation, so worktree t
 cannot reach the code that judges the run. Without that property, denying these files would be
 load-bearing and still incomplete.
 
+> **Revised during implementation (Plan C).** Four rulings the design did not settle:
+>
+> 1. **The seed allowlist is `paper` / `book` / `talk` bibliographic fields only** —
+>    `venue`, `pmid`, `publisher`, `isbn`, `duration_minutes` (which materialize no
+>    triple at all) plus `year` and `url` on `paper`/`book` (which materialize to
+>    `dcterms:date` and `dcat:downloadURL` in `graph/knowledge`, and are read by no
+>    evidence unit and no target closure). Every entry is covered by a Layer 3 case,
+>    enforced by a ratchet test that fails when an entry has none.
+> 2. **`aliases` is denied.** It feeds reference resolution (`graph/sources.py:787-793`),
+>    so an alias can re-point a reference and move the target closure. `doi` is denied
+>    too, as identity-adjacent — accepted overbreadth per §4.
+> 3. **`task` fields cannot be gated at all.** `task` has no markdown home
+>    (`CORE_PROFILE`: `home=None`), so it has no frontmatter file for a path-and-field
+>    gate to decide over. Extending the gate to structured sources is a separate design
+>    conversation.
+> 4. **Entity kind is derived from the path, never from the file's own `kind:`
+>    frontmatter**, and renames are extracted as deletion-plus-addition (`--no-renames`).
+>    An actor that could choose its own kind could choose its own allowlist; a
+>    similarity-scored rename would hide the addition half.
+
 ### 5. Layered enforcement
 
 The earlier draft of this section claimed the path gate and a perturbation test could *mutually
