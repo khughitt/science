@@ -64,6 +64,9 @@ BUDGETS: dict[str, CommandBudget] = {
     "data audit": CommandBudget(max_chars=20_000, shape=PayloadShape.DOCUMENT),
     "entity list": CommandBudget(max_chars=20_000, shape=PayloadShape.ROWS, max_rows=40),
     "feedback list": CommandBudget(max_chars=20_000, shape=PayloadShape.ROWS, max_rows=20),
+    "questions list": CommandBudget(max_chars=20_000, shape=PayloadShape.ROWS, max_rows=40),
+    "interpretations list": CommandBudget(max_chars=20_000, shape=PayloadShape.ROWS, max_rows=40),
+    "discussions list": CommandBudget(max_chars=20_000, shape=PayloadShape.ROWS, max_rows=40),
 }
 
 EXEMPTIONS: dict[str, str] = {
@@ -140,12 +143,9 @@ DEFERRED: dict[str, DeferredCommand] = {
     # Measured over budget on 2026-07-24; wiring scheduled for slice 1b.
     "curate inventory": DeferredCommand("one record per entity", "1b", 683_657),
     "prose lint": DeferredCommand("one row per prose finding", "1b", 550_226),
-    "questions list": DeferredCommand("one row per question", "1b", 113_076),
     "validate": DeferredCommand("one row per validation finding", "1b", 109_466),
-    "interpretations list": DeferredCommand("one row per interpretation", "1b", 97_281),
     "curate consolidation-candidates": DeferredCommand("one row per candidate cluster", "1b", 71_553),
     "entity needs-review": DeferredCommand("one row per flagged entity", "1b", 59_697),
-    "discussions list": DeferredCommand("one row per discussion", "1b", 30_780),
     # Growable but small on the audited project -- the case that has no truthful
     # exemption. Populated further by Task 13 Step 3.
     "tasks archive": DeferredCommand("one row per archivable task", "1b"),

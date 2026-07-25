@@ -28,11 +28,16 @@ from science_tool.cli import main
 def _seed_entities(root: Path, kind: str, plural: str, count: int) -> None:
     folder = root / "entities" / plural
     folder.mkdir(parents=True, exist_ok=True)
+    # evidence-line's schema requires `stance` and `target` (science_model.entities
+    # .EvidenceLineEntity) beyond the generic id/kind/title/status every other typed
+    # entity accepts -- without them `list_entities` raises a schema validation error
+    # before a single row is ever produced.
+    extra_frontmatter = "stance: supports\ntarget: proposition:placeholder\n" if kind == "evidence-line" else ""
     for i in range(count):
         (folder / f"{i:04d}.md").write_text(
             f"---\nid: {kind}:{kind[0]}{i:04d}-a-deliberately-long-descriptive-slug\n"
             f"kind: {kind}\ntitle: {kind.title()} {i} with a long title to exercise wrapping\n"
-            f"status: open\n---\n\nBody paragraph for {kind} {i}.\n"
+            f"status: open\n{extra_frontmatter}---\n\nBody paragraph for {kind} {i}.\n"
         )
 
 
@@ -118,3 +123,44 @@ def test_feedback_list_is_bounded_and_complete(
 
     _assert_stdout_projected("feedback list", ["feedback", "list"], seeded_total=300)
     _assert_file_complete("feedback list", ["feedback", "list"], seeded_total=300, out_dir=tmp_path)
+
+
+@pytest.mark.parametrize(
+    ("command_path", "base_args"),
+    [
+        ("questions list", ["questions", "list"]),
+        ("interpretations list", ["interpretations", "list"]),
+        ("discussions list", ["discussions", "list"]),
+    ],
+)
+def test_typed_entity_list_is_bounded_and_complete(
+    rows_corpus: Path, command_path: str, base_args: list[str]
+) -> None:
+    _assert_stdout_projected(command_path, base_args, seeded_total=300)
+    _assert_file_complete(command_path, base_args, seeded_total=300, out_dir=rows_corpus)
+
+
+@pytest.mark.parametrize(
+    ("kind", "plural", "base_args"),
+    [
+        ("hypothesis", "hypotheses", ["hypotheses", "list"]),
+        ("proposition", "propositions", ["propositions", "list"]),
+        ("evidence-line", "evidence-lines", ["evidence-lines", "list"]),
+    ],
+)
+def test_unbudgeted_typed_entity_callers_return_everything(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, kind: str, plural: str, base_args: list[str]
+) -> None:
+    """The three list_typed_entities callers NOT wired in 1b-1 pass sink=None: they must
+    return every row unprojected -- the opposite of a budgeted command. Seeding 50
+    (> max_rows=40) is what gives the test teeth: a caller that mistakenly acquired a sink
+    would truncate to 40 rows and add a `truncation` object, failing both assertions. An
+    empty corpus could not tell the two paths apart."""
+    (tmp_path / "science.yaml").write_text("id: demo\nname: demo\n")
+    _seed_entities(tmp_path, kind, plural, 50)
+    monkeypatch.chdir(tmp_path)
+    result = _invoke([*base_args, "--format", "json"])
+    assert result.exit_code == 0, result.output
+    payload = json.loads(result.output)
+    assert len(payload["rows"]) == 50
+    assert "truncation" not in payload
