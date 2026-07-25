@@ -140,23 +140,76 @@ def test_ansi_does_not_count_against_the_ceiling(capsys) -> None:
     assert "\x1b[" not in output
 
 
-def test_flush_preserves_ansi_selected_by_color_policy() -> None:
+def _color_sink_command(
+    policy: ColorPolicy,
+    *,
+    output_path: Path | None = None,
+) -> click.Command:
     @click.command()
     @click.pass_context
     def command(ctx: click.Context) -> None:
-        set_color_policy(ctx, ColorPolicy.ALWAYS)
+        set_color_policy(ctx, policy)
         sink = BoundedSink(
             ROWS_BUDGET,
+            output_path=output_path,
             command_path="tasks list",
-            complete_via=TASKS_COMPLETE,
+            complete_via=TASKS_COMPLETE if output_path is None else "",
         )
         sink.console.print("[bold]x[/bold]")
         sink.flush()
 
-    result = CliRunner().invoke(command)
+    return command
+
+
+def test_auto_preserves_ansi_on_tty_like_stdout() -> None:
+    result = CliRunner().invoke(
+        _color_sink_command(ColorPolicy.AUTO),
+        color=True,
+    )
 
     assert result.exit_code == 0, result.output
     assert "\x1b[" in result.output
+
+
+def test_auto_strips_ansi_on_non_tty_stdout() -> None:
+    result = CliRunner().invoke(
+        _color_sink_command(ColorPolicy.AUTO),
+        color=False,
+    )
+
+    assert result.exit_code == 0, result.output
+    assert "\x1b[" not in result.output
+
+
+def test_never_strips_ansi_on_tty_like_stdout() -> None:
+    result = CliRunner().invoke(
+        _color_sink_command(ColorPolicy.NEVER),
+        color=True,
+    )
+
+    assert result.exit_code == 0, result.output
+    assert "\x1b[" not in result.output
+
+
+def test_always_preserves_ansi_on_non_tty_stdout() -> None:
+    result = CliRunner().invoke(
+        _color_sink_command(ColorPolicy.ALWAYS),
+        color=False,
+    )
+
+    assert result.exit_code == 0, result.output
+    assert "\x1b[" in result.output
+
+
+def test_file_sink_never_contains_ansi(tmp_path: Path) -> None:
+    target = tmp_path / "out.txt"
+    result = CliRunner().invoke(
+        _color_sink_command(ColorPolicy.ALWAYS, output_path=target),
+        color=True,
+    )
+
+    assert result.exit_code == 0, result.output
+    assert target.read_text() == "x\n"
 
 
 def test_flush_is_idempotent(capsys) -> None:

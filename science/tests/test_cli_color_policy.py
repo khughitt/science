@@ -18,7 +18,7 @@ def _write_active_tasks() -> None:
     (tasks_dir / "active.md").write_text(
         "## [t001] Color task\n"
         "- priority: P1\n"
-        "- status: proposed\n"
+        "- status: active\n"
         "- related: [question:q001-demo, custom-kind:alpha]\n"
         "- created: 2026-05-01\n\n"
         "Description.\n"
@@ -59,6 +59,22 @@ def test_tasks_list_auto_has_no_ansi_under_clirunner() -> None:
     assert ANSI_RE.search(result.output) is None
 
 
+def test_tasks_list_auto_emits_ansi_on_tty_like_stdout() -> None:
+    runner = CliRunner()
+    with runner.isolated_filesystem():
+        _write_active_tasks()
+
+        result = runner.invoke(
+            main,
+            ["--color", "auto", "tasks", "list"],
+            color=True,
+        )
+
+    assert result.exit_code == 0, result.output
+    assert "Color task" in result.output
+    assert ANSI_RE.search(result.output) is not None
+
+
 def test_tasks_list_explicit_auto_ignores_force_color_under_clirunner(monkeypatch: pytest.MonkeyPatch) -> None:
     runner = CliRunner()
     monkeypatch.setenv("FORCE_COLOR", "1")
@@ -83,6 +99,24 @@ def test_tasks_list_always_emits_ansi() -> None:
     assert result.exit_code == 0, result.output
     assert "Color task" in result.output
     assert ANSI_RE.search(result.output) is not None
+
+
+def test_tasks_list_output_file_has_no_ansi_when_color_always() -> None:
+    runner = CliRunner()
+    with runner.isolated_filesystem():
+        _write_active_tasks()
+        target = Path("tasks.txt")
+
+        result = runner.invoke(
+            main,
+            ["--color", "always", "tasks", "list", "--output", str(target)],
+            color=True,
+        )
+        written = target.read_text()
+
+    assert result.exit_code == 0, result.output
+    assert "Color task" in written
+    assert ANSI_RE.search(written) is None
 
 
 def test_tasks_list_json_has_no_ansi_even_when_color_forced() -> None:

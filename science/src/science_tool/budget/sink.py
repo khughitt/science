@@ -57,7 +57,17 @@ class BoundedSink:
     def console(self) -> Console:
         """A Rich console writing into this sink at the pinned budget width."""
         if self._console is None:
-            self._console = get_console(file=self._buffer, width=BUDGET_CONSOLE_WIDTH)
+            selected = get_color_policy()
+            render_policy = (
+                ColorPolicy.NEVER
+                if self._output_path is not None or selected is ColorPolicy.NEVER
+                else ColorPolicy.ALWAYS
+            )
+            self._console = get_console(
+                file=self._buffer,
+                width=BUDGET_CONSOLE_WIDTH,
+                color_policy=render_policy,
+            )
         return self._console
 
     @property

@@ -174,11 +174,17 @@ def get_console(
     context: click.Context | None = None,
     file: TextIO | None = None,
     width: int | None = None,
+    color_policy: ColorPolicy | None = None,
 ) -> Console:
-    policy = get_color_policy(context)
-    if file is not None or width is not None:
+    """Return a Rich console for the active or explicitly selected color policy.
+
+    ``color_policy`` lets a buffered output channel choose what Rich should render
+    independently of the eventual destination. The final stream may still strip ANSI.
+    """
+    policy = color_policy or get_color_policy(context)
+    if file is not None or width is not None or color_policy is not None:
         # Never cached: the cache is keyed only by context, so a file- or width-specific
-        # console would otherwise be handed back to unrelated callers.
+        # or policy-specific console would otherwise be handed to unrelated callers.
         return _new_console(policy, file, width)
 
     current = context or click.get_current_context(silent=True)
