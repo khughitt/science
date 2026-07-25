@@ -67,11 +67,18 @@ Verified at `2320124e`. Do not contradict these.
   requires `id`, `target`, and `summary`; use `next_feedback_id(dir, date_str)` and
   `save_entry(dir, entry)`.
 - **Adding a CLI command trips the budget guards.** `test_budget_boundary.py` requires a
-  `BUDGETS | EXEMPTIONS | DEFERRED` entry and locks the partition cardinality. Plan C
-  moved it to `4/67/208 = 279`; **re-read the current value before editing** — this plan
-  adds three leaves (`autonomy start`, `autonomy finish`, and nothing else), so the
-  deferred count rises by 2 (start emits a fixed record; finish emits one row per
-  denial/delta). Update `EXPECTED_CLASSIFICATION_COUNTS` and the docstring together.
+  `BUDGETS | EXEMPTIONS | DEFERRED` entry and locks the partition cardinality, which at
+  the time of writing is `budgeted 10 / exempt 67 / deferred 202 = 279` (`:24`). It has
+  already moved once since Plan C, so **re-read the constant before editing**. This plan
+  adds two deferred leaves — `autonomy start` and `autonomy finish` — so the deferred
+  count rises by 2. Update `EXPECTED_CLASSIFICATION_COUNTS` and the explanatory docstring
+  in the same edit.
+- **Validate checks may shell out to git.** `validate/checks/prereg_vehicles.py:49` runs
+  `subprocess.run(["git", ...])` inside a check. The "must not spawn subprocesses"
+  comment in `tooling.py:28` scopes to that check, not to the framework.
+- **A check module on disk but absent from `CANONICAL_CHECK_MODULES` never runs**, and
+  `test_check_registry_is_complete.py` derives its scope from the filesystem to catch
+  exactly that. Registration is a separate act from writing the module.
 
 ### The baseline lives outside the repository
 
@@ -1180,40 +1187,502 @@ git commit -m "feat(autonomy): add the run lifecycle and verdict"
 
 **Files:**
 - Modify: `science/src/science_tool/autonomy/cli.py`
+- Modify: `science/src/science_tool/autonomy/lifecycle.py` (add `file_quarantine_feedback`)
 - Modify: `science/src/science_tool/budget/registry.py`
-- Modify: `science/tests/test_budget_boundary.py` (cardinality lock and docstring)
-- Modify: `docs/user-guide/cli-and-workflows.md` (the `autonomy` row already exists —
-  extend its `Use` cell; the guard test needs no new row)
+- Modify: `science/tests/test_budget_boundary.py`
+- Modify: `docs/user-guide/cli-and-workflows.md`
 - Test: `science/tests/test_autonomy_lifecycle_cli.py`
 
-Exit codes: `0` clean, `1` quarantined, `2` unwired. On quarantine, `finish` files a
-`science feedback` item naming the entity and the delta (design §6), using
-`next_feedback_id` + `save_entry` against the directory `feedback_cli.py:27` resolves —
-**never** a path inside the project.
+**Interfaces:**
+- Consumes: `start_run`, `finish_run`, `RunOutcome` (Task 5).
+- Produces:
+  - `start_command` / `finish_command` on the existing `autonomy_group`.
+  - `file_quarantine_feedback(outcome: RunOutcome, *, feedback_dir: Path, project: str) -> Path`
+    in `lifecycle.py`.
 
-**Before editing the cardinality lock, read its current value.** Plan C left it at
-`4/67/208 = 279`; this task adds two deferred leaves.
+**Match the shipped `path-gate` output contract exactly.** It uses
+`science_tool.output.emit(output_format=..., payload=..., render_text=...)` with both a
+`--format` choice over `OUTPUT_FORMATS` and a `--json` flag kept as a convenience alias
+(`effective_format = "json" if as_json else output_format`). Do not invent a third
+output style; read `autonomy/cli.py` before writing.
 
-- [ ] **Step 1: Write the failing tests** — cover: `start` exits 0 and writes no record;
-  `finish` exits 0 on a clean run, 1 on quarantine, 2 on a missing baseline; a
-  quarantine files exactly one feedback entry whose summary names the run id; both
-  commands refuse a `--baseline-out` / `--baseline` inside the project root; both are
-  registered under the `autonomy` group.
+**The cardinality lock has moved.** It is now `budgeted 10 / exempt 67 / deferred 202 =
+279` (`tests/test_budget_boundary.py:24`) — the context-budget work changed it after
+Plan C. This task adds **two** deferred leaves, so it becomes `10/67/204 = 281`.
+Re-read the constant before editing rather than trusting this paragraph.
+
+- [ ] **Step 1: Write the failing tests**
+
+Create `science/tests/test_autonomy_lifecycle_cli.py`:
+
+```python
+from __future__ import annotations
+
+import json
+import subprocess
+from pathlib import Path
+
+import pytest
+from click.testing import CliRunner
+
+from science_tool.cli import main
+
+AGENT = "curation-sweep"
+
+
+def _git(root: Path, *args: str) -> str:
+    return subprocess.run(
+        ["git", "-c", "user.email=t@t", "-c", "user.name=t", "-C", str(root), *args],
+        capture_output=True, text=True, check=True,
+    ).stdout.strip()
+
+
+@pytest.fixture
+def project(tmp_path: Path) -> Path:
+    """Reuses Task 5's seeded project; a basis of zero units makes every case vacuous."""
+    from tests.test_autonomy_lifecycle import _seed_science_project
+
+    root = tmp_path / "project"
+    root.mkdir()
+    _seed_science_project(root)
+    _git(root, "init", "-q")
+    _git(root, "add", "-A")
+    _git(root, "commit", "-q", "-m", "base")
+    return root
+
+
+@pytest.fixture
+def baseline_path(tmp_path: Path) -> Path:
+    return tmp_path / "supervisor-state" / "run.json"
+
+
+@pytest.fixture
+def feedback_dir(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
+    """`feedback_cli._get_feedback_dir` reads SCIENCE_FEEDBACK_DIR before falling back to
+    the user's config dir. Redirect it so a test never writes to the real one."""
+    target = tmp_path / "feedback"
+    monkeypatch.setenv("SCIENCE_FEEDBACK_DIR", str(target))
+    return target
+
+
+def _start(project: Path, baseline_path: Path, *extra: str):
+    return CliRunner().invoke(
+        main,
+        [
+            "autonomy", "start", "--project-root", str(project),
+            "--agent", AGENT, "--model", "test-model",
+            "--short-id", "a3f1", "--baseline-out", str(baseline_path), *extra,
+        ],
+    )
+
+
+def _finish(project: Path, baseline_path: Path, *extra: str):
+    return CliRunner().invoke(
+        main,
+        [
+            "autonomy", "finish", "--project-root", str(project),
+            "--baseline", str(baseline_path), "--head", _git(project, "rev-parse", "HEAD"),
+            "--tokens", "100", "--wall-clock-seconds", "1800", *extra,
+        ],
+    )
+
+
+def _edit_and_commit(project: Path, old: str, new: str, run_id: str, *, marked: bool = True) -> None:
+    paper = project / "entities" / "papers" / "x.md"
+    paper.write_text(paper.read_text(encoding="utf-8").replace(old, new), encoding="utf-8")
+    _git(project, "add", "-A")
+    message = f"docs: edit\n\nScience-Run: {run_id}" if marked else "docs: edit"
+    _git(project, "commit", "-q", "-m", message, "--author", f"{AGENT} <agent@science.local>")
+
+
+def _run_id(baseline_path: Path) -> str:
+    return json.loads(baseline_path.read_text(encoding="utf-8"))["run_id"]
+
+
+def test_start_exits_zero_and_writes_a_baseline_but_no_record(project: Path, baseline_path: Path):
+    result = _start(project, baseline_path)
+    assert result.exit_code == 0, result.output
+    assert baseline_path.exists()
+    assert not (project / "runs").exists()
+
+
+def test_start_json_names_the_run_and_the_baseline(project: Path, baseline_path: Path):
+    result = _start(project, baseline_path, "--json")
+    assert result.exit_code == 0, result.output
+    payload = json.loads(result.output)
+    assert payload["run_id"].startswith("run:")
+    assert payload["baseline_path"] == str(baseline_path)
+    assert payload["branch"] == f"auto/{payload['run_id'].removeprefix('run:')}"
+    assert "snapshot" not in payload, "the payload is a summary, not the whole capture"
+
+
+def test_start_refuses_a_baseline_inside_the_project(project: Path):
+    result = _start(project, project / "runs" / "b.json")
+    assert result.exit_code == 2
+    assert "inside the project root" in result.output
+
+
+def test_finish_exits_zero_on_a_clean_run(project: Path, baseline_path: Path, feedback_dir: Path):
+    _start(project, baseline_path)
+    _edit_and_commit(project, "venue: Nature", "venue: Science", _run_id(baseline_path))
+
+    result = _finish(project, baseline_path)
+    assert result.exit_code == 0, result.output
+    assert "clean" in result.output
+    assert not feedback_dir.exists(), "a clean run files no feedback"
+
+
+def test_finish_exits_one_on_quarantine_and_names_the_cause(project: Path, baseline_path: Path, feedback_dir: Path):
+    _start(project, baseline_path)
+    _edit_and_commit(
+        project, "venue: Nature", "venue: Nature\nmethods_summary: rewritten", _run_id(baseline_path)
+    )
+
+    result = _finish(project, baseline_path)
+    assert result.exit_code == 1, result.output
+    assert "quarantined" in result.output
+    assert "methods_summary" in result.output
+
+
+def test_a_quarantine_files_exactly_one_feedback_entry(project: Path, baseline_path: Path, feedback_dir: Path):
+    import yaml
+
+    _start(project, baseline_path)
+    run_id = _run_id(baseline_path)
+    _edit_and_commit(project, "venue: Nature", "venue: Nature\nmethods_summary: rewritten", run_id)
+
+    assert _finish(project, baseline_path).exit_code == 1
+
+    entries = sorted(feedback_dir.glob("fb-*.yaml"))
+    assert len(entries) == 1
+    entry = yaml.safe_load(entries[0].read_text(encoding="utf-8"))
+    assert run_id in entry["summary"]
+    assert entry["target"] == "command:autonomy-finish"
+    assert entry["status"] == "open"
+    assert "methods_summary" in entry["detail"]
+
+
+def test_finish_exits_two_on_a_missing_baseline(project: Path, tmp_path: Path, feedback_dir: Path):
+    result = CliRunner().invoke(
+        main,
+        [
+            "autonomy", "finish", "--project-root", str(project),
+            "--baseline", str(tmp_path / "absent.json"),
+            "--head", _git(project, "rev-parse", "HEAD"),
+            "--tokens", "0", "--wall-clock-seconds", "1",
+        ],
+    )
+    assert result.exit_code == 2
+    assert "unwired" in result.output
+    assert not feedback_dir.exists(), "unwired blocks; it does not file a quarantine item"
+
+
+def test_finish_refuses_a_baseline_inside_the_project(project: Path):
+    result = CliRunner().invoke(
+        main,
+        [
+            "autonomy", "finish", "--project-root", str(project),
+            "--baseline", str(project / "runs" / "b.json"),
+            "--head", _git(project, "rev-parse", "HEAD"),
+            "--tokens", "0", "--wall-clock-seconds", "1",
+        ],
+    )
+    assert result.exit_code == 2
+    assert "inside the project root" in result.output
+
+
+def test_finish_json_carries_the_disposition_and_the_denials(project: Path, baseline_path: Path, feedback_dir: Path):
+    _start(project, baseline_path)
+    _edit_and_commit(
+        project, "venue: Nature", "venue: Nature\nmethods_summary: rewritten", _run_id(baseline_path)
+    )
+
+    result = _finish(project, baseline_path, "--json")
+    assert result.exit_code == 1
+    payload = json.loads(result.output)
+    assert payload["disposition"] == "quarantined"
+    assert any(d["field"] == "methods_summary" for d in payload["denials"])
+
+
+def test_both_commands_are_registered_under_the_autonomy_group():
+    group = main.commands["autonomy"]
+    assert {"start", "finish", "path-gate"} <= set(group.commands)  # type: ignore[attr-defined]
+```
 
 - [ ] **Step 2: Run to verify failure**
 
-- [ ] **Step 3: Implement the two commands** as thin wrappers over Task 5.
+```bash
+cd science && uv run --frozen pytest tests/test_autonomy_lifecycle_cli.py -q
+```
 
-- [ ] **Step 4: Add both `DeferredCommand` entries** (`autonomy start` — fixed record;
-  `autonomy finish` — one row per denial and delta).
+Expected: every test fails — `start` and `finish` do not exist.
 
-- [ ] **Step 5: Update `EXPECTED_CLASSIFICATION_COUNTS` and the docstring sentence.**
+- [ ] **Step 3: Add `file_quarantine_feedback` to `lifecycle.py`**
 
-- [ ] **Step 6: Run** `tests/test_autonomy_lifecycle_cli.py tests/test_budget_boundary.py tests/test_user_guide_docs.py`
+```python
+def file_quarantine_feedback(outcome: RunOutcome, *, feedback_dir: Path, project: str) -> Path:
+    """File one feedback item naming the run, the entity, and the delta (design §6).
 
-- [ ] **Step 7: Lint, type-check, commit**
+    Escalation reuses the existing `science feedback` surface rather than inventing a
+    second channel. The directory resolves OUTSIDE the project (`$SCIENCE_FEEDBACK_DIR`
+    or the user config dir), so escalating writes nothing into the run's worktree.
+
+    Only a QUARANTINE files an item. `unwired` is a blocked run with no finding to
+    triage -- filing one would put "we could not tell" into a queue meant for things
+    that went wrong.
+    """
+    from science_tool.feedback import FeedbackEntry, next_feedback_id, save_entry
+
+    if outcome.disposition is not RunDisposition.QUARANTINED:
+        raise ValueError(f"only a quarantined run files feedback, got {outcome.disposition.value!r}")
+    assert outcome.record is not None  # a quarantine always has a record
+
+    lines: list[str] = []
+    for delta in outcome.deltas:
+        lines.append(f"belief basis moved for {delta.entity_id}: {', '.join(delta.changed)} -- {delta.detail}")
+    for denial in outcome.denials:
+        location = denial.path if denial.field is None else f"{denial.path} field {denial.field!r}"
+        lines.append(f"path gate denied {location} -- {denial.reason}")
+    for issue in outcome.mark_issues:
+        lines.append(f"commit {issue.commit[:12]} -- {issue.reason}")
+
+    created = outcome.record.ended.date().isoformat()
+    entry = FeedbackEntry(
+        id=next_feedback_id(feedback_dir, created),
+        created=created,
+        project=project,
+        target="command:autonomy-finish",
+        category="bug",
+        status="open",
+        summary=f"autonomous run {outcome.record.id} quarantined",
+        detail="\n".join(lines),
+        concern="tooling",
+    )
+    return save_entry(feedback_dir, entry)
+```
+
+- [ ] **Step 4: Add both commands to `autonomy/cli.py`**
+
+```python
+@autonomy_group.command("start")
+@click.option("--agent", required=True, help="Agent ROLE (e.g. curation-sweep), not the model.")
+@click.option("--model", required=True, help="Model that will execute the run.")
+@click.option(
+    "--tier",
+    type=click.Choice([tier.value for tier in RunTier]),
+    default=RunTier.BELIEF_NEUTRAL.value,
+    show_default=True,
+    help="Tier the supervisor attests this run to (design §1).",
+)
+@click.option("--short-id", required=True, help="Short disambiguator for the run id.")
+@click.option(
+    "--baseline-out",
+    type=click.Path(path_type=Path),
+    required=True,
+    help="Where to write the baseline. MUST be outside the project root.",
+)
+@click.option(
+    "--project-root", type=click.Path(path_type=Path), default=Path("."), show_default=True,
+)
+@click.option("--json", "as_json", is_flag=True, default=False, help="Emit the summary as JSON.")
+@click.option(
+    "--format", "output_format", type=click.Choice(OUTPUT_FORMATS), default="table", show_default=True,
+    help="Output format. `--json` is kept as a convenience alias.",
+)
+def start_command(
+    agent: str, model: str, tier: str, short_id: str, baseline_out: Path,
+    project_root: Path, as_json: bool, output_format: str,
+) -> None:
+    """Open a run: capture the belief basis and write the supervisor's baseline.
+
+    Writes NO run record. A supervisor that dies mid-run leaves no attestation, so its
+    branch reads as unattested rather than clean.
+
+    Exit codes: 0 opened, 2 could not open.
+    """
+    from datetime import UTC, datetime
+
+    from science_tool.autonomy.baseline import BaselineError
+    from science_tool.autonomy.lifecycle import start_run
+    from science_tool.autonomy.toolkit import ToolkitError
+
+    effective_format = "json" if as_json else output_format
+    try:
+        baseline = start_run(
+            project_root, agent=agent, model=model, tier=RunTier(tier), short_id=short_id,
+            started=datetime.now(UTC), baseline_out=baseline_out,
+        )
+    except (BaselineError, ToolkitError, Exception) as exc:  # see note below
+        message = f"could not start: {exc}"
+        emit(
+            output_format=effective_format,
+            payload={"started": False, "error": message},
+            render_text=lambda: click.echo(message),
+        )
+        sys.exit(2)
+
+    payload = {
+        "started": True,
+        "run_id": baseline.run_id,
+        "branch": baseline.branch,
+        "base_commit": baseline.base_commit,
+        "toolkit_revision": baseline.toolkit_revision,
+        "basis_digest": baseline.snapshot.digest,
+        "baseline_path": str(baseline_out),
+    }
+    emit(
+        output_format=effective_format,
+        payload=payload,
+        render_text=lambda: click.echo(
+            f"started {baseline.run_id} (base {baseline.base_commit[:12]}) -> {baseline_out}"
+        ),
+    )
+    sys.exit(0)
+```
+
+The broad `except` above is deliberate and must carry this comment: *starting is
+all-or-nothing, and a partial start that reports success would leave the supervisor
+believing it holds a baseline it does not.* Narrow it to
+`(BaselineError, ToolkitError, OSError, RunRecordError)` if the implementation's actual
+failure modes are exactly those; do **not** leave a bare `except Exception` without the
+justification.
+
+```python
+@autonomy_group.command("finish")
+@click.option(
+    "--baseline", "baseline_path", type=click.Path(path_type=Path), required=True,
+    help="Baseline written by `autonomy start`. MUST be outside the project root.",
+)
+@click.option("--head", required=True, help="Commit the run ended at.")
+@click.option("--tokens", type=int, default=None, help="Tokens consumed (S4 consumes this).")
+@click.option("--wall-clock-seconds", type=float, default=None, help="Wall-clock seconds consumed.")
+@click.option(
+    "--report-path", default=None,
+    help="Repository-relative path of the run's own report, if it wrote one.",
+)
+@click.option(
+    "--project-root", type=click.Path(path_type=Path), default=Path("."), show_default=True,
+)
+@click.option("--json", "as_json", is_flag=True, default=False)
+@click.option(
+    "--format", "output_format", type=click.Choice(OUTPUT_FORMATS), default="table", show_default=True,
+)
+def finish_command(
+    baseline_path: Path, head: str, tokens: int | None, wall_clock_seconds: float | None,
+    report_path: str | None, project_root: Path, as_json: bool, output_format: str,
+) -> None:
+    """Close a run: re-materialize, recapture the basis, gate, and attest.
+
+    Exit codes: 0 clean, 1 quarantined, 2 unwired. Exit 2 is explicitly NOT clean --
+    a guard that cannot see must not report clean (design §5).
+    """
+    from datetime import UTC, datetime
+
+    from science_model.autonomous_runs import RunDisposition
+
+    from science_tool.autonomy.lifecycle import file_quarantine_feedback, finish_run
+    from science_tool.feedback_cli import _get_feedback_dir
+
+    effective_format = "json" if as_json else output_format
+    outcome = finish_run(
+        project_root, baseline_path=baseline_path, head=head, ended=datetime.now(UTC),
+        tokens=tokens, wall_clock_seconds=wall_clock_seconds, report_path=report_path,
+    )
+
+    feedback_path: Path | None = None
+    if outcome.disposition is RunDisposition.QUARANTINED:
+        feedback_path = file_quarantine_feedback(
+            outcome, feedback_dir=_get_feedback_dir(), project=project_root.resolve().name
+        )
+
+    payload = outcome.model_dump(mode="json")
+    payload["feedback_path"] = str(feedback_path) if feedback_path is not None else None
+
+    def _render_text() -> None:
+        click.echo(f"{outcome.disposition.value}: {outcome.reason}")
+        for delta in outcome.deltas:
+            click.echo(f"  basis moved: {delta.entity_id} ({', '.join(delta.changed)})")
+        for denial in outcome.denials:
+            location = denial.path if denial.field is None else f"{denial.path} field {denial.field!r}"
+            click.echo(f"  denied: {location} -- {denial.reason}")
+        for issue in outcome.mark_issues:
+            click.echo(f"  mark: {issue.commit[:12]} -- {issue.reason}")
+        if feedback_path is not None:
+            click.echo(f"  filed {feedback_path}")
+
+    emit(output_format=effective_format, payload=payload, render_text=_render_text)
+    sys.exit({RunDisposition.CLEAN: 0, RunDisposition.QUARANTINED: 1, RunDisposition.UNWIRED: 2}[outcome.disposition])
+```
+
+`finish_run` never raises for an expected condition (Task 5), so this command has no
+`try`. If it grows one, the handler must exit `2`, never `0`.
+
+- [ ] **Step 5: Classify both commands in the budget registry**
+
+In `science/src/science_tool/budget/registry.py`, beside the existing
+`"autonomy path-gate"` entry:
+
+```python
+    "autonomy start": DeferredCommand(
+        "one fixed summary record per invocation",
+        "1b",
+    ),
+    "autonomy finish": DeferredCommand(
+        "one output member per basis delta, gate denial, and commit-mark issue",
+        "1b",
+    ),
+```
+
+- [ ] **Step 6: Update the cardinality lock**
+
+In `science/tests/test_budget_boundary.py`, change `EXPECTED_CLASSIFICATION_COUNTS`
+`"deferred"` from its current value to that value **+ 2** (at the time of writing:
+`202` → `204`, total `279` → `281`). Append to
+`test_classification_partition_has_the_audited_cardinality`'s docstring, before the
+final "The live partition is therefore" sentence:
+
+```
+    The autonomy start and finish commands add two deferred leaves: start emits one fixed
+    summary record, and finish emits one row per basis delta, gate denial, and commit-mark
+    issue.
+```
+
+Then update that final sentence to the new `budgeted/exempt/deferred = total`.
+
+- [ ] **Step 7: Extend the CLI workflow map**
+
+`docs/user-guide/cli-and-workflows.md` already carries an `autonomy` row from Plan C, so
+`test_cli_workflow_map_mentions_every_top_level_command` still passes without edits.
+Extend that row's **Use** cell so the family description covers the lifecycle, keeping
+the four-column shape:
+
+```markdown
+| `autonomy` | Derived-state | Mixed | Open and close unattended runs (`start` / `finish`) and decide whether a run's recorded `base..head` range stayed inside its tier's default-deny write surface (`path-gate`). `finish` writes the attested run record; the baseline it reads lives outside the repository. |
+```
+
+The Write class changes from `Read-only` to `Mixed` because `finish` now writes
+`runs/<slug>.md`. Both tokens already exist in that table's vocabulary.
+
+- [ ] **Step 8: Run the tests**
 
 ```bash
+cd science && uv run --frozen pytest tests/test_autonomy_lifecycle_cli.py tests/test_budget_boundary.py tests/test_user_guide_docs.py -q
+```
+
+Expected: all pass.
+
+- [ ] **Step 9: Lint and type-check**
+
+```bash
+cd science && uv run ruff check src/science_tool tests && uv run pyright
+```
+
+- [ ] **Step 10: Commit**
+
+```bash
+git add science/src/science_tool/autonomy science/src/science_tool/budget/registry.py \
+        science/tests/test_autonomy_lifecycle_cli.py science/tests/test_budget_boundary.py \
+        docs/user-guide/cli-and-workflows.md
 git commit -m "feat(autonomy): add science autonomy start and finish"
 ```
 
@@ -1223,38 +1692,368 @@ git commit -m "feat(autonomy): add science autonomy start and finish"
 
 **Files:**
 - Create: `science/src/science_tool/validate/checks/autonomous_runs.py`
-- Modify: `science/src/science_tool/validate/checks/__init__.py` (add to
-  `CANONICAL_CHECK_MODULES`)
+- Modify: `science/src/science_tool/validate/checks/__init__.py`
 - Test: `science/tests/test_autonomy_validate_check.py`
 
-**Integrity and coverage, not recomputation.** The check must not rebuild the graph or
-check out commits — `validate` runs constantly and its cost must not grow with run
-history. It reports:
+**Interfaces:**
+- Consumes: `Check`, `ValidateContext`, `Result`, `Severity`; `load_run_records` and
+  `RunRecordError`.
+- Produces: `check_autonomous_runs(ctx: ValidateContext) -> Iterator[Result]`, rule
+  string `"autonomous-runs"`.
 
-| Condition | Severity |
-|---|---|
-| A commit in the project's history carries a `Science-Run:` trailer with no matching record | error — "unwired: unattested autonomous commits" |
-| A record names a `base_commit` or `head_commit` that is unreachable | error |
-| A record's `disposition` is `unwired` but a `basis_digest` is present, or vice versa | error |
-| A record's `branch` does not match `auto/<slug>` | warning |
-| No `runs/` directory | no results — most projects never run unattended |
+**Registration is a separate act from writing the module.**
+`test_check_registry_is_complete.py` derives its scope from the *filesystem*, so a module
+on disk that is missing from `CANONICAL_CHECK_MODULES` fails that guard. Add
+`"autonomous_runs"` to the tuple in the same commit.
 
-- [ ] **Step 1: Write the failing tests** — one per row above, plus a clean project
-  yielding no results, plus a project with no `runs/` yielding no results.
+**Integrity and coverage, never recomputation.** No graph build, no checkout. Cost is
+bounded by the number of *autonomous* commits, not by history length, because the
+trailer scan is pushed into git with `--grep`.
+
+**One row of the design table is reached through an exception, not a branch.** A record
+whose `disposition` is `unwired` while `basis_digest` is set (or the reverse) fails
+`AutonomousRunRecord` validation inside `load_run_records`, which raises
+`RunRecordError`. There is no separate consistency branch to write — converting
+`RunRecordError` into an error `Result` *is* that row. An implementer who writes an
+explicit consistency check will have written code no test can reach.
+
+| Condition | Severity | Reached via |
+|---|---|---|
+| A commit carries `Science-Run:` naming a run with no record | ERROR | trailer scan |
+| A record names an unreachable `base_commit`/`head_commit` | ERROR | `rev-parse --verify` |
+| A record is internally inconsistent (unwired with a digest, or the reverse) | ERROR | `RunRecordError` |
+| A record's `branch` is not `auto/<slug>` | WARN | record field |
+| No `runs/` directory, or not a git repo | — no results | early return |
+
+- [ ] **Step 1: Write the failing tests**
+
+Create `science/tests/test_autonomy_validate_check.py`:
+
+```python
+from __future__ import annotations
+
+import subprocess
+from pathlib import Path
+
+import pytest
+
+from science_tool.validate.checks.autonomous_runs import check_autonomous_runs
+from science_tool.validate.result import Severity
+
+RUN_ID = "run:2026-07-25-curation-sweep-a3f1"
+SLUG = "2026-07-25-curation-sweep-a3f1"
+
+
+def _git(root: Path, *args: str) -> str:
+    return subprocess.run(
+        ["git", "-c", "user.email=t@t", "-c", "user.name=t", "-C", str(root), *args],
+        capture_output=True, text=True, check=True,
+    ).stdout.strip()
+
+
+def _ctx(project_root: Path):
+    """Minimal ValidateContext -- this check reads only `project_root`."""
+    from science_tool.validate.context import ValidateContext
+
+    return ValidateContext(
+        project_root=project_root,
+        doc_dir=project_root / "doc",
+        specs_dir=project_root / "entities" / "specs",
+        papers_dir=project_root / "entities" / "papers",
+        provenance_dir=None,
+        themes_dir=None,
+        manifest={},
+        strict=False,
+        verbose=False,
+    )
+
+
+def _record_text(*, base: str, head: str, branch: str = f"auto/{SLUG}", extra: str = "") -> str:
+    return (
+        "---\n"
+        f"id: {RUN_ID}\n"
+        "agent: curation-sweep\n"
+        "model: test-model\n"
+        "tier: belief-neutral\n"
+        f"branch: {branch}\n"
+        f"base_commit: {base}\n"
+        f"head_commit: {head}\n"
+        f"toolkit_revision: {'c' * 40}\n"
+        "policy_identity:\n  id: core-default\n  version: '1'\n"
+        f"basis_digest: {'d' * 64}\n"
+        "started: '2026-07-25T09:00:00+00:00'\n"
+        "ended: '2026-07-25T09:30:00+00:00'\n"
+        "budget:\n  tokens: 100\n  wall_clock_seconds: 1800.0\n"
+        "disposition: clean\n"
+        f"{extra}"
+        "---\n"
+    )
+
+
+def _write_record(root: Path, text: str, *, stem: str = SLUG) -> None:
+    runs = root / "runs"
+    runs.mkdir(parents=True, exist_ok=True)
+    (runs / f"{stem}.md").write_text(text, encoding="utf-8")
+
+
+@pytest.fixture
+def repo(tmp_path: Path) -> Path:
+    _git(tmp_path, "init", "-q")
+    (tmp_path / "f.txt").write_text("a\n", encoding="utf-8")
+    _git(tmp_path, "add", "-A")
+    _git(tmp_path, "commit", "-q", "-m", "base")
+    return tmp_path
+
+
+def _commit_with_trailer(root: Path, run_id: str) -> str:
+    (root / "f.txt").write_text(f"{run_id}\n", encoding="utf-8")
+    _git(root, "add", "-A")
+    _git(root, "commit", "-q", "-m", f"docs: work\n\nScience-Run: {run_id}")
+    return _git(root, "rev-parse", "HEAD")
+
+
+def test_a_project_with_no_runs_directory_yields_nothing(repo: Path):
+    assert list(check_autonomous_runs(_ctx(repo))) == []
+
+
+def test_a_non_git_project_yields_nothing(tmp_path: Path):
+    (tmp_path / "runs").mkdir()
+    assert list(check_autonomous_runs(_ctx(tmp_path))) == []
+
+
+def test_a_consistent_record_yields_nothing(repo: Path):
+    base = _git(repo, "rev-parse", "HEAD")
+    head = _commit_with_trailer(repo, RUN_ID)
+    _write_record(repo, _record_text(base=base, head=head))
+
+    assert list(check_autonomous_runs(_ctx(repo))) == []
+
+
+def test_an_unattested_autonomous_commit_is_an_error(repo: Path):
+    """A commit claiming a run that has no record: exactly the coverage gap §6 names."""
+    _commit_with_trailer(repo, "run:2026-01-01-ghost-0000")
+
+    results = list(check_autonomous_runs(_ctx(repo)))
+    assert [r.severity for r in results] == [Severity.ERROR]
+    assert "run:2026-01-01-ghost-0000" in results[0].message
+    assert "no run record" in results[0].message
+
+
+def test_an_unreachable_base_commit_is_an_error(repo: Path):
+    head = _commit_with_trailer(repo, RUN_ID)
+    _write_record(repo, _record_text(base="0" * 40, head=head))
+
+    results = list(check_autonomous_runs(_ctx(repo)))
+    assert any(r.severity is Severity.ERROR and "base_commit" in r.message for r in results)
+
+
+def test_an_unreachable_head_commit_is_an_error(repo: Path):
+    base = _git(repo, "rev-parse", "HEAD")
+    _commit_with_trailer(repo, RUN_ID)
+    _write_record(repo, _record_text(base=base, head="0" * 40))
+
+    results = list(check_autonomous_runs(_ctx(repo)))
+    assert any(r.severity is Severity.ERROR and "head_commit" in r.message for r in results)
+
+
+def test_an_internally_inconsistent_record_is_an_error(repo: Path):
+    """unwired + a digest fails model validation inside load_run_records, so this row is
+    reached by converting RunRecordError -- there is no separate branch to write."""
+    base = _git(repo, "rev-parse", "HEAD")
+    head = _commit_with_trailer(repo, RUN_ID)
+    _write_record(
+        repo, _record_text(base=base, head=head).replace("disposition: clean", "disposition: unwired")
+    )
+
+    results = list(check_autonomous_runs(_ctx(repo)))
+    assert [r.severity for r in results] == [Severity.ERROR]
+    assert "basis_digest" in results[0].message
+
+
+def test_a_malformed_record_does_not_crash_validate(repo: Path):
+    _write_record(repo, "not frontmatter at all\n")
+
+    results = list(check_autonomous_runs(_ctx(repo)))
+    assert [r.severity for r in results] == [Severity.ERROR]
+
+
+def test_a_nonconforming_branch_is_a_warning(repo: Path):
+    base = _git(repo, "rev-parse", "HEAD")
+    head = _commit_with_trailer(repo, RUN_ID)
+    _write_record(repo, _record_text(base=base, head=head, branch="feature/hand-made"))
+
+    results = list(check_autonomous_runs(_ctx(repo)))
+    assert [r.severity for r in results] == [Severity.WARN]
+    assert "auto/" in results[0].message
+
+
+def test_the_check_module_is_registered():
+    """Writing the module does not enable it: `validate` runs only what
+    CANONICAL_CHECK_MODULES names."""
+    from science_tool.validate.checks import CANONICAL_CHECK_MODULES
+
+    assert "autonomous_runs" in CANONICAL_CHECK_MODULES
+```
 
 - [ ] **Step 2: Run to verify failure**
 
-- [ ] **Step 3: Implement** with `@Check(section="autonomous runs...", order=0)`,
-  yielding `Result(Severity.ERROR, path, None, message, "autonomous-runs", None)`.
-  Reuse `load_run_records`; let `RunRecordError` surface as an error result rather than
-  crashing `validate`.
+```bash
+cd science && uv run --frozen pytest tests/test_autonomy_validate_check.py -q
+```
 
-- [ ] **Step 4: Run** — including `tests/test_check_registry_is_complete.py`, which may
-  require registering the new check module.
+Expected: `ModuleNotFoundError: No module named 'science_tool.validate.checks.autonomous_runs'`.
 
-- [ ] **Step 5: Lint, type-check, commit**
+- [ ] **Step 3: Implement the check**
+
+Create `science/src/science_tool/validate/checks/autonomous_runs.py`:
+
+```python
+"""Design §6: expose run-record integrity as a `validate` check, so violations are
+catchable by anyone, independent of the run harness.
+
+INTEGRITY AND COVERAGE, NOT RECOMPUTATION. This check never builds a graph and never
+checks a commit out. `validate` runs constantly, and a check whose cost grows with run
+history would make it unusable at the weekly cadence the design targets. The full
+before/after comparison lives in `science autonomy finish`, where the pinned
+installation and the baseline both are.
+
+`prereg_vehicles.py` establishes the precedent for shelling out to git from a check.
+"""
+
+from __future__ import annotations
+
+import subprocess
+from collections.abc import Iterator
+from pathlib import Path
+
+from science_tool.graph.autonomous_runs import RUNS_DIRNAME, load_run_records
+from science_model.autonomous_runs import RunRecordError
+from science_tool.validate.checks import Check
+from science_tool.validate.context import ValidateContext
+from science_tool.validate.result import Result, Severity
+
+RULE = "autonomous-runs"
+TRAILER_KEY = "Science-Run"
+_SEP = "\x1e"
+
+
+def _result(severity: Severity, relative: str | None, message: str) -> Result:
+    return Result(severity, Path(relative) if relative is not None else None, None, message, RULE, None)
+
+
+def _git(root: Path, *args: str) -> subprocess.CompletedProcess[str]:
+    # --no-replace-objects, as everywhere in the autonomy surface: replacement refs are
+    # actor-writable and would let a tampered repository hide its own history.
+    return subprocess.run(
+        ["git", "--no-replace-objects", "-C", str(root), *args],
+        capture_output=True, text=True,
+    )
+
+
+def _commit_exists(root: Path, sha: str) -> bool:
+    return _git(root, "rev-parse", "--verify", f"{sha}^{{commit}}").returncode == 0
+
+
+def _marked_commits(root: Path) -> list[tuple[str, str]]:
+    """(commit, trailer value) for every commit carrying a Science-Run trailer.
+
+    `--grep` pushes the filter into git, so the cost is bounded by the number of
+    autonomous commits rather than by history length.
+    """
+    completed = _git(
+        root, "log", "-E", f"--grep=^{TRAILER_KEY}:",
+        f"--format=%H{_SEP}%(trailers:key={TRAILER_KEY},valueonly){_SEP}",
+    )
+    if completed.returncode != 0:
+        return []
+    marked: list[tuple[str, str]] = []
+    for entry in completed.stdout.split(f"{_SEP}\n"):
+        if not entry.strip():
+            continue
+        commit, trailers = entry.split(_SEP, 1)
+        for line in trailers.splitlines():
+            value = line.strip()
+            if value:
+                marked.append((commit, value))
+    return marked
+
+
+@Check(section="autonomous runs...", order=0)
+def check_autonomous_runs(ctx: ValidateContext) -> Iterator[Result]:
+    """Run-record integrity and coverage. Silent in projects that never run unattended."""
+    root = ctx.project_root
+    runs_dir = root / RUNS_DIRNAME
+    is_repo = (root / ".git").exists()
+    if not is_repo:
+        return
+    if not runs_dir.exists() and not _marked_commits(root):
+        # No records and no autonomous commits: this project does not run unattended.
+        return
+
+    try:
+        records = load_run_records(root)
+    except RunRecordError as exc:
+        # Covers the internally-inconsistent record too: unwired-with-a-digest fails
+        # model validation inside the loader. One bad record blinds the whole check, so
+        # report and stop rather than proceeding on a partial view.
+        yield _result(Severity.ERROR, RUNS_DIRNAME, f"run records could not be read: {exc}")
+        return
+
+    by_id = {record.id: record for record in records}
+
+    for commit, run_id in _marked_commits(root):
+        if run_id not in by_id:
+            yield _result(
+                Severity.ERROR,
+                None,
+                f"commit {commit[:12]} carries {TRAILER_KEY}: {run_id} but there is no run record "
+                f"for it -- unwired: autonomous commits with no attestation",
+            )
+
+    for record in records:
+        relative = f"{RUNS_DIRNAME}/{record.slug}.md"
+        for field_name, sha in (("base_commit", record.base_commit), ("head_commit", record.head_commit)):
+            if not _commit_exists(root, sha):
+                yield _result(
+                    Severity.ERROR,
+                    relative,
+                    f"{record.id}: {field_name} {sha[:12]} is unreachable -- the recorded "
+                    "transition cannot be validated",
+                )
+        expected_branch = f"auto/{record.slug}"
+        if record.branch != expected_branch:
+            yield _result(
+                Severity.WARN,
+                relative,
+                f"{record.id}: branch {record.branch!r} does not follow the {expected_branch!r} convention",
+            )
+```
+
+- [ ] **Step 4: Register the module**
+
+In `science/src/science_tool/validate/checks/__init__.py`, add `"autonomous_runs"` to
+`CANONICAL_CHECK_MODULES`. Place it after `"graph"`, which is where the other
+graph-adjacent checks sit.
+
+- [ ] **Step 5: Run the tests**
 
 ```bash
+cd science && uv run --frozen pytest tests/test_autonomy_validate_check.py tests/test_check_registry_is_complete.py -q
+```
+
+Expected: all pass. `test_EVERY_check_module_on_disk_is_REGISTERED` is the one that
+fails if Step 4 was skipped.
+
+- [ ] **Step 6: Lint and type-check**
+
+```bash
+cd science && uv run ruff check src/science_tool/validate tests/test_autonomy_validate_check.py && uv run pyright
+```
+
+- [ ] **Step 7: Commit**
+
+```bash
+git add science/src/science_tool/validate science/tests/test_autonomy_validate_check.py
 git commit -m "feat(validate): check autonomous run record integrity and coverage"
 ```
 
@@ -1266,27 +2065,125 @@ git commit -m "feat(validate): check autonomous run record integrity and coverag
 - Modify: `docs/user-guide/agent-workflows.md`
 - Modify: `docs/plans/2026-07-24-autonomy-envelope-design.md`
 
-- [ ] **Step 1: Extend the autonomy section of the user guide** with the two-command
-  lifecycle, the three dispositions and their exit codes, the rule that a quarantined
-  run keeps its branch and files feedback, and the requirement that the baseline live
-  outside the repository.
+- [ ] **Step 1: Add the lifecycle to the user guide**
 
-- [ ] **Step 2: Append a Plan D revision note to §6** recording: the record is written
-  only at finish (no in-flight shape); the baseline lives outside the repository because
-  `runs/` accepts only flat `*.md` records *and* because the actor writes the worktree;
-  `finish` re-materializes before capturing, closing Plan A's gap; gate externality is
-  enforced by both revision match and source location; and `validate` checks integrity
-  and coverage rather than recomputing bases.
+`docs/user-guide/agent-workflows.md` already ends with the `## The autonomy path gate`
+section from Plan C (it starts at line 42 and ends with the paragraph about
+`science graph belief-basis`). **Append** the following after it — do not modify the
+existing section. The outer fence here is four backticks because the content contains a
+three-backtick block; write the inner block as a normal fence.
 
-- [ ] **Step 3: Mark S1 complete** in the design doc's status line, noting that Plans
-  A–D all shipped and what remains open (`autonomous_run` is stamped by the supervisor
-  but still not cross-checked per-entity against the range — say so plainly if Task 5
-  did not close it).
+````markdown
+## Running an unattended run
 
-- [ ] **Step 4: Run the docs guards, then commit**
+An unattended run is bracketed by two supervisor commands. Nothing between them is part
+of Science: the actor is driven by whatever harness you use.
+
+```bash
+science autonomy start --agent curation-sweep --model <model> \
+    --short-id a3f1 --baseline-out ~/supervisor-state/a3f1.json
+
+#  ... the actor works on auto/<run-id> ...
+
+science autonomy finish --baseline ~/supervisor-state/a3f1.json \
+    --head "$(git rev-parse HEAD)" --tokens 12000 --wall-clock-seconds 900
+```
+
+`start` captures the belief basis and writes a **baseline**. It writes no run record: a
+supervisor that dies mid-run leaves no attestation, so its branch reads as unattested
+rather than clean. The baseline must live **outside the repository** — both commands
+refuse a path inside the project root, because the actor's whole job is writing that
+tree, and a baseline it can reach is a baseline it can rewrite.
+
+`finish` re-materializes the graph, recaptures the basis, compares it against the
+baseline, runs the path gate over the recorded range, verifies the commit marks, and
+writes the attested record to `runs/<run-id>.md`. The re-materialization is not
+optional: `graph.trig` is derived state the actor controls, so a run that edited
+entities and never rebuilt would otherwise be judged against a stale graph.
+
+Three dispositions, and the exit codes match:
+
+| Disposition | Exit | Meaning |
+|---|---|---|
+| `clean` | 0 | Eligible to merge. |
+| `quarantined` | 1 | The branch is held intact and a `science feedback` item is filed naming the entity and the delta. |
+| `unwired` | 2 | The basis was not computable. Blocked — a guard that cannot see must not report clean. |
+
+**Nothing is discarded on quarantine.** The branch and its commits stay exactly as the
+run left them, so a human triages with the entity and the delta in hand. The first
+violations will mostly be design discoveries — a sweep that legitimately needs something
+the gate forbids — and destroying the evidence destroys the signal.
+
+`science validate` carries an `autonomous-runs` check so the same violations are
+catchable by anyone, independent of the run harness. It verifies record integrity and
+coverage — every autonomous commit has a record, every record's commits are reachable —
+without rebuilding the graph, so its cost does not grow with run history.
+````
+
+- [ ] **Step 2: Record the Plan D rulings in the design doc**
+
+In `docs/plans/2026-07-24-autonomy-envelope-design.md`, append this blockquote to the end
+of §6, immediately after the paragraph beginning "Escalation reuses the existing
+`science feedback` surface" and before the `## Testing` heading:
+
+```markdown
+> **Revised during implementation (Plan D).** Five rulings the design did not settle:
+>
+> 1. **The record is written only at `finish`.** `AutonomousRunRecord` has no in-flight
+>    shape, so `start` writes no record at all. A supervisor that dies mid-run leaves an
+>    unattested branch, which is the intended failure direction.
+> 2. **The baseline lives outside the repository.** `runs/` accepts only flat `*.md`
+>    records, so the before-capture cannot go there — and it must not go anywhere in the
+>    worktree, because the actor writes that tree. Both commands refuse a baseline path
+>    inside the project root.
+> 3. **`finish` re-materializes before capturing.** `graph.trig` is derived and
+>    actor-controlled; without this, a run that edited entities and never rebuilt would
+>    be judged against a stale graph and pass. This closes the gap Plan A recorded.
+> 4. **Gate externality is enforced two ways** — the running toolkit revision must match
+>    the one the baseline recorded, and the executing `science_tool` must not resolve
+>    inside the project root. Either check alone leaves the other open.
+> 5. **The `validate` check verifies integrity and coverage, not the comparison.** It
+>    confirms that every autonomous commit has a record and that every record's commits
+>    are reachable, without rebuilding the graph. Re-deriving each historical run's basis
+>    would make `validate` runtime grow without bound at the cadence this design targets.
+>    The authoritative comparison stays in `finish`, where the pinned installation and the
+>    baseline both live.
+```
+
+- [ ] **Step 3: Update the status line and state what S1 did NOT close**
+
+Replace the `> **Status:**` blockquote at the top of the design doc with:
+
+```markdown
+> **Status:** implemented. Slice S1 of the autonomous-research program, shipped as four
+> plans — A (belief-basis guard), B (run record), C (path gate + perturbation alarm), and
+> D (supervisor lifecycle, quarantine, `validate` wiring). S1 ships **no autonomous
+> agent**: it is the contract, verified by tests, that the first one will run inside.
+> Downstream slices (S2 recurrence, S3 task eligibility, S4 telemetry→estimates, S5
+> harness, S6 multi-agent design→plan, S7 context management) all consume this contract
+> and are out of scope here.
+>
+> **One gap S1 did not close.** `autonomous_run` on an entity is still not an attested
+> per-entity binding. `finish` verifies that the run's *commits* carry the run's own
+> trailer over the recorded range, but it does not check that each entity's
+> `autonomous_run` value names the run that actually wrote that file — so an actor can
+> still attribute its work to an unrelated prior run. The commit range remains the only
+> authoritative binding (§0). Closing this means having the supervisor stamp
+> `autonomous_run` itself, or verifying every value it finds against the recorded
+> `base_commit..head_commit` range; it is deferred, not solved.
+```
+
+Then update Plan B's existing "Not yet an attested binding" note in §3 to point at this
+status line rather than at "Plan D", since Plan D did not close it.
+
+- [ ] **Step 4: Verify the docs guards and commit**
 
 ```bash
 cd science && uv run --frozen pytest tests/test_user_guide_docs.py tests/test_command_docs.py -q
+```
+
+```bash
+git add docs/user-guide/agent-workflows.md docs/plans/2026-07-24-autonomy-envelope-design.md
 git commit -m "docs(autonomy): document the run lifecycle and record Plan D rulings"
 ```
 
