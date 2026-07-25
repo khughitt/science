@@ -31,7 +31,7 @@ from science_tool.graph.health_checks.unregistered_ref_kinds import Unregistered
 from science_tool.graph.health_checks.unresolved_refs import UnresolvedRef
 from science_tool.graph.health_checks.validate import ValidationFinding
 from science_tool.graph.migrate import LayeredClaimMigrationReport
-from science_tool.graph.health_count import count_issues
+from science_tool.graph.health_count import count_issues as _count_issues
 from science_tool.graph.sources import load_project_sources
 from science_tool.instruments import InstrumentResult
 from science_tool.validate.acceptance import accepted_validation_entries, entry_suppresses
@@ -370,7 +370,7 @@ def build_health_report(
         "unwired_checks": unwired_checks,
         "total_issues": 0,
     }
-    report["total_issues"] = count_issues(report)
+    report["total_issues"] = _count_issues(report)
     if collect_timings:
         report["_meta"] = {
             "timings": context.timings,

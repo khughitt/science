@@ -506,7 +506,8 @@ git commit -m "feat(budget): add ANSI-stripped measurement and an explicit conso
 - Produces: `BudgetExceeded(click.ClickException)`,
   `BoundedSink(budget, *, output_path=None, command_path="", complete_via="")` with
   `.console: Console`, `.echo(text: str = "") -> None`, `.write(text: str) -> None`,
-  `.flush() -> None`, `.is_file_sink: bool`, `.max_rows: int | None`, `.complete_via: str`.
+  `.reserve_output() -> AbstractContextManager[None]`, `.flush() -> None`,
+  `.is_file_sink: bool`, `.max_rows: int | None`, `.complete_via: str`.
 
 `complete_via` is conditionally required: constructing a **budgeted stdout** sink without it
 fails immediately. A file sink is already the complete-output route, and an unbudgeted sink has
@@ -649,11 +650,12 @@ def test_flush_is_idempotent(capsys) -> None:
 
 ```
 
-The sink has **no preflight method**. An earlier draft added `flush_check()` so that
+The sink has **no size-preflight method**. An earlier draft added `flush_check()` so that
 `data audit --fix` could measure before mutating. That was unsound: the post-fix report is not
-bounded by anything measurable pre-fix (see Task 12), so a passing preflight promised nothing.
-The gate in Task 12 replaces it, and an unused "just in case" primitive would be exactly the
-speculative API this plan's own rules reject.
+bounded by anything measurable pre-fix (see Task 12), so a passing size check promised nothing.
+It does expose `reserve_output()` for mutation flows: entering that context creates a writable
+same-directory temporary file without touching the final destination. This is a path/writability
+reservation, not a speculative payload measurement.
 
 - [ ] **Step 2: Run test to verify it fails**
 
@@ -685,6 +687,10 @@ nothing rather than a misleading prefix.
 
 from __future__ import annotations
 
+import os
+import tempfile
+from collections.abc import Iterator
+from contextlib import contextmanager
 from io import StringIO
 from pathlib import Path
 
@@ -718,6 +724,7 @@ class BoundedSink:
         self._buffer = StringIO()
         self._console: Console | None = None
         self._flushed = False
+        self._reserved_path: Path | None = None
 
     @property
     def console(self) -> Console:
@@ -752,14 +759,29 @@ class BoundedSink:
         """Append raw text with no trailing newline added."""
         self._buffer.write(text)
 
+    @contextmanager
+    def reserve_output(self) -> Iterator[None]:
+        """Reserve a writable sibling temp before a mutation-before-report flow."""
+        if self._output_path is None:
+            raise ValueError("reserve_output requires a file sink")
+        if self._reserved_path is not None:
+            raise RuntimeError("output is already reserved")
+        reserved = self._create_temp_path()
+        self._reserved_path = reserved
+        try:
+            yield
+        finally:
+            reserved.unlink(missing_ok=True)
+            self._reserved_path = None
+
     def flush(self) -> None:
         if self._flushed:
             return
-        self._flushed = True
         text = self._buffer.getvalue()
 
         if self._output_path is not None:
-            self._output_path.write_text(text, encoding="utf-8")
+            self._flush_file(text)
+            self._flushed = True
             return
 
         if self._budget is not None:
@@ -768,6 +790,34 @@ class BoundedSink:
                 raise self._exceeded(size)
 
         click.echo(text, nl=False)
+        self._flushed = True
+
+    def _create_temp_path(self) -> Path:
+        assert self._output_path is not None
+        if self._output_path.is_dir():
+            raise IsADirectoryError(f"{self._output_path} is a directory")
+        parent = self._output_path.parent
+        if not parent.is_dir():
+            raise FileNotFoundError(f"output parent does not exist: {parent}")
+        fd, raw_path = tempfile.mkstemp(
+            dir=parent,
+            prefix=f".{self._output_path.name}.",
+            suffix=".tmp",
+        )
+        os.close(fd)
+        return Path(raw_path)
+
+    def _flush_file(self, text: str) -> None:
+        assert self._output_path is not None
+        temp_path = self._reserved_path or self._create_temp_path()
+        try:
+            with temp_path.open("w", encoding="utf-8") as stream:
+                stream.write(text)
+                stream.flush()
+                os.fsync(stream.fileno())
+            os.replace(temp_path, self._output_path)
+        finally:
+            temp_path.unlink(missing_ok=True)
 
     def _exceeded(self, size: int) -> BudgetExceeded:
         assert self._budget is not None
@@ -1649,15 +1699,18 @@ git commit -m "feat(tasks): budget both supported list formats, default to the w
 ### Task 8: Extract `count_issues` so displayed and total are comparable
 
 **Files:**
+- Create: `science/src/science_tool/graph/health_count.py` — strict counting and its
+  validation helpers
 - Modify: `science/src/science_tool/graph/health.py` — the typing import (`:12`), the
   `layered_claim_issue_count` / `coverage_gaps` locals and their loop (`:342-351`), the inline
   `total_issues` sum (`:353-374`), and the `layered_claims` entry of the report literal (`:365-370`)
 - Test: `science/tests/test_health_count_issues.py`
 
 **Interfaces:**
-- Produces: `count_issues(report: Mapping[str, Any]) -> int` in `graph/health.py`.
+- Produces: `count_issues(report: Mapping[str, Any]) -> int` in `graph/health_count.py`.
+  `graph/health.py` imports it privately as `_count_issues`; it does not re-export the helper.
   `build_health_report` assembles a real `HealthReport` with a placeholder total and then sets
-  `report["total_issues"] = count_issues(report)`, replacing the inline sum.
+  `report["total_issues"] = _count_issues(report)`, replacing the inline sum.
 
 **Why this task exists.** The previous plan computed `displayed_issues` as `len(kept)` summed
 over sections — not the same quantity as `total_issues`, which counts `managed_artifacts` only
@@ -1745,6 +1798,12 @@ def _layered(**overrides: object) -> dict[str, object]:
 
 def test_empty_report_counts_zero() -> None:
     assert count_issues(_report()) == 0
+
+
+def test_health_aggregator_does_not_reexport_count_issues() -> None:
+    from science_tool.graph import health
+
+    assert not hasattr(health, "count_issues")
 
 
 def test_rival_model_gaps_count_alongside_migration_issues() -> None:
@@ -1943,20 +2002,19 @@ def test_prose_findings_count_only_when_flagged() -> None:
 - [ ] **Step 2: Run test to verify it fails**
 
 Run: `cd science && uv run --frozen pytest tests/test_health_count_issues.py -v`
-Expected: FAIL — `ImportError: cannot import name 'count_issues'`
+Expected: FAIL — `ModuleNotFoundError: No module named 'science_tool.graph.health_count'`
 
 - [ ] **Step 3: Extract the function**
 
-In `science/src/science_tool/graph/health.py`, widen the typing import — the module currently has
-`from typing import NotRequired, TypedDict, cast` (`health.py:12`) and no `collections.abc`
-import:
+Create `science/src/science_tool/graph/health_count.py` with the collection and typing imports
+needed by the strict counter:
 
 ```python
 from collections.abc import Mapping
-from typing import Any, NotRequired, TypedDict, cast
+from typing import Any, cast
 ```
 
-Then add above `build_health_report`:
+Then add the counter and its validation helpers to that module:
 
 ```python
 def count_issues(report: Mapping[str, Any]) -> int:
@@ -2158,7 +2216,13 @@ and Ruff flags each as `F841`. Delete all of them:
 
 Keep `prose_epistemics` (the dict at `health.py:334`, still spread into the report literal),
 `proposition_coverage`, and `causal_coverage` — the last two feed the `layered_claims` local
-below. `archive_lag_total` stays imported: `count_issues` calls it.
+below. `archive_lag_total` moves to `health_count.py`, where `count_issues` calls it.
+
+Import the counter privately in `health.py`:
+
+```python
+from science_tool.graph.health_count import count_issues as _count_issues
+```
 
 ```python
     layered_claims: LayeredClaimHealthReport = {
@@ -2185,7 +2249,7 @@ below. `archive_lag_total` stays imported: `count_issues` calls it.
         # ... every remaining key of the existing literal, unchanged and in place ...
         "total_issues": 0,  # placeholder: count_issues reads the assembled report below
     }
-    report["total_issues"] = count_issues(report)
+    report["total_issues"] = _count_issues(report)
 ```
 
 Everything between `archive_lag` and `total_issues` in the existing literal stays exactly as it
@@ -2193,10 +2257,10 @@ is; only `layered_claims` changes (inline dict → the typed local) and `total_i
 (inline sum → placeholder plus the assignment). `_meta` is `NotRequired` and is attached later by
 the caller, unaffected.
 
-`count_issues` is now called on the same shape in both places — the assembled `HealthReport` here,
-the projected report in Task 10 — so no normalization step can drift between them. Its parameter
-type is `Mapping[str, Any]`, which both a `HealthReport` and the projected `dict[str, Any]`
-satisfy.
+The same `health_count.count_issues` implementation is now called on the same shape in both
+places — privately over the assembled `HealthReport` here, and directly over the projected
+report in Task 10 — so no normalization step can drift between them. Its parameter type is
+`Mapping[str, Any]`, which both a `HealthReport` and the projected `dict[str, Any]` satisfy.
 
 - [ ] **Step 4: Run tests to verify they pass**
 
@@ -3466,27 +3530,44 @@ def test_fix_refuses_a_directory_output_before_moving(tmp_path: Path, monkeypatc
     assert not (tmp_path / "results").exists(), "files were moved despite a directory --output"
 
 
-def test_fix_refuses_a_read_only_output_before_moving(tmp_path: Path, monkeypatch) -> None:
-    """Opening the destination, not touching it, proves the report can be written."""
+def test_fix_refuses_an_unreservable_output_before_moving(tmp_path: Path, monkeypatch) -> None:
+    """Creating the sibling temp, not touching the target, proves output is reservable."""
+    from science_tool.budget import sink as sink_module
+
     _stranded_project(tmp_path)
     monkeypatch.chdir(tmp_path)
     target = tmp_path / "audit.json"
-    real_open = Path.open
 
-    def deny_report_open(self: Path, *args: object, **kwargs: object):
-        if self == target:
-            raise PermissionError("read-only destination")
-        return real_open(self, *args, **kwargs)
+    def deny_reservation(*args: object, **kwargs: object):
+        raise PermissionError("read-only destination")
 
-    monkeypatch.setattr(Path, "open", deny_report_open)
+    monkeypatch.setattr(sink_module.tempfile, "mkstemp", deny_reservation)
     result = _invoke(["data", "audit", "--fix", "--output", str(target)])
 
     assert result.exit_code != 0
     assert not (tmp_path / "results").exists(), "files were moved despite a read-only --output"
 
 
+def test_fix_rejects_output_ancestor_of_a_proposed_destination(
+    tmp_path: Path, monkeypatch
+) -> None:
+    """The report path must not become a directory created by the planned move."""
+    _stranded_project(tmp_path)
+    monkeypatch.chdir(tmp_path)
+    (tmp_path / "results").mkdir()
+    target = tmp_path / "results" / "exp00000"
+
+    result = _invoke(["data", "audit", "--fix", "--output", str(target)])
+
+    assert result.exit_code != 0
+    assert "overlaps" in result.output
+    assert (tmp_path / "data" / "processed" / "exp00000" / "RESULTS.md").exists()
+    assert not target.exists()
+    assert list((tmp_path / "results").glob(".exp00000.*.tmp")) == []
+
+
 def test_fix_with_output_mutates_and_writes_the_complete_report(tmp_path: Path, monkeypatch) -> None:
-    """A pre-opened file sink removes the known size and destination failures."""
+    """A reserved file sink removes known size and destination failures."""
     _stranded_project(tmp_path)
     monkeypatch.chdir(tmp_path)
     target = tmp_path / "audit.json"
@@ -3541,7 +3622,7 @@ def _stranded_project(root: Path) -> None:
 
 Run: `cd science && uv run --frozen pytest tests/test_bulk_dump_refusal.py -v`
 Expected: FAIL — `data audit` has no `--output`; entity inventory still floods stdout; and the
-pre-mutation directory/read-only destination checks are absent.
+pre-mutation reservation/normalized-overlap checks are absent.
 
 - [ ] **Step 3: Wire `entities inventory`**
 
@@ -3564,7 +3645,7 @@ def entities_inventory_command(project_path: Path, output_format: str, output: P
     )
     sink.write(rendered)
     sink.flush()
-    # The fixed confirmation is non-payload control output and may bypass the sink only
+    # The fixed-shape bounded control notice is non-payload and may bypass the sink only
     # after the file write succeeds.
     if output is not None:
         click.echo(f"wrote the entity inventory to {output}")
@@ -3591,6 +3672,28 @@ First amend the existing `--fix` option's help so the new requirement is discove
 Then add the `--output` option and the gate:
 
 ```python
+def _paths_overlap(left: Path, right: Path) -> bool:
+    return left == right or left in right.parents or right in left.parents
+
+
+def _fix_output_overlap(
+    project_path: Path,
+    output_path: Path,
+    violations: list[Violation],
+) -> tuple[str, str] | None:
+    normalized_output = output_path.resolve(strict=False)
+    project_root = project_path.resolve()
+    for violation in violations:
+        source = (project_root / violation.path).resolve(strict=False)
+        if _paths_overlap(normalized_output, source):
+            return "source", violation.path
+        if violation.proposed_target is not None:
+            destination = (project_root / violation.proposed_target).resolve(strict=False)
+            if _paths_overlap(normalized_output, destination):
+                return "proposed destination", violation.proposed_target
+    return None
+
+
 @click.option(
     "--output",
     "output_path",
@@ -3636,39 +3739,58 @@ def data_audit_command(
                 f"failure after mutating would leave the tree changed with no report. "
                 f"Re-run with --output PATH."
             )
-        # 2. A DESTINATION THAT CANNOT BE OPENED. The sink writes the file only at
-        #    flush(), after apply_fixes. Open it for append here, so a directory,
-        #    missing parent, or permission error fails while the tree is intact.
-        #    Append mode creates/reserves a new file without truncating an existing
-        #    report; BoundedSink.flush() overwrites it after the moves.
-        try:
-            with output_path.open("a", encoding="utf-8"):
-                pass
-        except OSError as exc:
+        # 2. OUTPUT TOPOLOGY. Normalize through absolute paths and symlinks, then
+        #    reject equality or ancestor/descendant overlap with every violation source
+        #    and proposed destination. Otherwise apply_fixes could create the requested
+        #    report path as a directory (or move the source out from under it) before
+        #    flush.
+        overlap = _fix_output_overlap(project_path, output_path, violations)
+        if overlap is not None:
+            kind, audited_path = overlap
             raise click.UsageError(
-                f"data audit --fix cannot write its report to {output_path}: {exc}. "
-                f"Refusing before any file is moved."
-            ) from exc
+                f"data audit --fix output {output_path} collides with or overlaps audited "
+                f"{kind} {audited_path}. Refusing before any file is moved."
+            )
 
     if fix:
-        # Reachable only when there is nothing to act on, or when --output named a
-        # file the command successfully opened. The first mutates nothing; the second
-        # has a ceiling-free destination with known path/type/permission errors ruled
-        # out. This is not a transaction: disk exhaustion or an external filesystem
-        # change can still make the later flush fail.
-        outcomes = apply_fixes(project_path, violations)
-        if emit_json:
-            sink.write(render_json(violations, outcomes, notes))
+        def apply_render_and_flush() -> None:
+            outcomes = apply_fixes(project_path, violations)
+            if emit_json:
+                sink.write(render_json(violations, outcomes, notes))
+            else:
+                performed = sum(1 for o in outcomes if o.performed)
+                flagged = sum(1 for o in outcomes if not o.performed)
+                for o in outcomes:
+                    mark = "moved" if o.performed else "FLAG"
+                    tgt = o.violation.proposed_target or "-"
+                    sink.echo(
+                        f"  [{mark}] {o.violation.path} → {tgt}"
+                        + (f"  ({o.reason})" if o.reason else "")
+                    )
+                sink.echo(
+                    f"\n{performed} moved (staged, not committed), {flagged} flagged."
+                )
+            sink.flush()
+
+        if violations:
+            # Entering the context creates a writable sibling temp without touching the
+            # final destination. It therefore fails for a missing parent, directory
+            # target, or inability to reserve while the source tree is still intact.
+            reserved = False
+            try:
+                with sink.reserve_output():
+                    reserved = True
+                    apply_render_and_flush()
+            except OSError as exc:
+                if not reserved:
+                    raise click.UsageError(
+                        f"data audit --fix cannot reserve its report destination "
+                        f"{output_path}: {exc}. Refusing before any file is moved."
+                    ) from exc
+                raise
         else:
-            performed = sum(1 for o in outcomes if o.performed)
-            flagged = sum(1 for o in outcomes if not o.performed)
-            for o in outcomes:
-                mark = "moved" if o.performed else "FLAG"
-                tgt = o.violation.proposed_target or "-"
-                sink.echo(f"  [{mark}] {o.violation.path} → {tgt}" + (f"  ({o.reason})" if o.reason else ""))
-            sink.echo(f"\n{performed} moved (staged, not committed), {flagged} flagged.")
-        sink.flush()
-        # Sole sink-bypass exception: one fixed confirmation after a successful file write.
+            apply_render_and_flush()
+        # Sole sink-bypass exception: one fixed-shape bounded control notice after flush.
         if output_path is not None:
             click.echo(f"wrote the data audit report to {output_path}")
         return
@@ -3685,7 +3807,7 @@ def data_audit_command(
             sink.echo(f"  [{v.quadrant.value}] {v.path} → {tgt}")
 
     sink.flush()
-    # Sole sink-bypass exception: one fixed confirmation after a successful file write.
+    # Sole sink-bypass exception: one fixed-shape bounded control notice after flush.
     if output_path is not None:
         click.echo(f"wrote the data audit report to {output_path}")
     if violations:
@@ -4204,8 +4326,9 @@ registered mapping, nested-report, and scalar sections before filtering or cappi
 `fsync` it, and atomically replace the destination; failures clean up the temporary file and
 preserve any prior destination. Mutation flows explicitly reserve that temporary destination
 before acting. `data audit --fix` also resolves the requested output, every violation source,
-and every proposed destination through absolute paths and symlinks, refusing collisions before
-mutation. The command path and selected options are reconstructed as tokens and the entire
+and every proposed destination through absolute paths and symlinks, refusing equality and
+ancestor/descendant overlaps before mutation. The command path and selected options are
+reconstructed as tokens and the entire
 invocation passes through `shlex.join`. The sole sink bypass is a single-line control notice
 with an explicit 8,192-visible-character ceiling, not a “fixed success” string. Strict health
 counting and its validation helpers live cohesively in `graph/health_count.py`, leaving

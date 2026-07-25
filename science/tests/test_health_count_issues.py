@@ -60,6 +60,12 @@ def test_empty_report_counts_zero() -> None:
     assert count_issues(_report()) == 0
 
 
+def test_health_aggregator_does_not_reexport_count_issues() -> None:
+    from science_tool.graph import health
+
+    assert not hasattr(health, "count_issues")
+
+
 def test_rival_model_gaps_count_alongside_migration_issues() -> None:
     """health.py:342 sums BOTH lists into layered_claim_issue_count."""
     layered = _layered(

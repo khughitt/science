@@ -124,6 +124,25 @@ def test_fix_rejects_relative_output_that_is_a_proposed_destination(
     assert destination.read_bytes() == b"# prior destination\n"
 
 
+def test_fix_rejects_output_directory_that_would_contain_a_proposed_destination(
+    tmp_path: Path,
+):
+    _init_repo(tmp_path)
+    source = tmp_path / "data/processed/exp1/RESULTS.md"
+    _write(tmp_path, "data/processed/exp1/RESULTS.md", b"# source\n")
+    (tmp_path / "results").mkdir()
+    output = tmp_path / "results/exp1"
+
+    res = _run(tmp_path, "--fix", "--json", "--output", str(output))
+
+    assert res.exit_code != 0
+    assert "overlaps" in res.output
+    assert "proposed destination" in res.output
+    assert source.read_bytes() == b"# source\n"
+    assert not output.exists()
+    assert list((tmp_path / "results").glob(".exp1.*.tmp")) == []
+
+
 def test_fix_rejects_symlink_normalized_output_collision(tmp_path: Path):
     _init_repo(tmp_path)
     source = tmp_path / "data/processed/exp1/RESULTS.md"

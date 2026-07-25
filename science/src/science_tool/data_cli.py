@@ -15,21 +15,25 @@ def data_group() -> None:
     """Audit the data/results/entities tracking boundary."""
 
 
-def _fix_output_collision(
+def _paths_overlap(left: Path, right: Path) -> bool:
+    return left == right or left in right.parents or right in left.parents
+
+
+def _fix_output_overlap(
     project_path: Path,
     output_path: Path,
     violations: list[Violation],
 ) -> tuple[str, str] | None:
-    """Return the first audited path that normalizes to the output destination."""
+    """Return the first audited path that overlaps the normalized output path."""
     normalized_output = output_path.resolve(strict=False)
     project_root = project_path.resolve()
     for violation in violations:
         source = (project_root / violation.path).resolve(strict=False)
-        if normalized_output == source:
+        if _paths_overlap(normalized_output, source):
             return "source", violation.path
         if violation.proposed_target is not None:
             destination = (project_root / violation.proposed_target).resolve(strict=False)
-            if normalized_output == destination:
+            if _paths_overlap(normalized_output, destination):
                 return "proposed destination", violation.proposed_target
     return None
 
@@ -124,12 +128,12 @@ def data_audit_command(
                 f"A budget failure after mutating would leave the tree changed with no "
                 f"report. Re-run with --output PATH."
             )
-        collision = _fix_output_collision(project_path, output_path, violations)
-        if collision is not None:
-            kind, audited_path = collision
+        overlap = _fix_output_overlap(project_path, output_path, violations)
+        if overlap is not None:
+            kind, audited_path = overlap
             raise click.UsageError(
-                f"data audit --fix output {output_path} collides with audited {kind} "
-                f"{audited_path}. Refusing before any file is moved."
+                f"data audit --fix output {output_path} collides with or overlaps audited "
+                f"{kind} {audited_path}. Refusing before any file is moved."
             )
 
     if fix:
