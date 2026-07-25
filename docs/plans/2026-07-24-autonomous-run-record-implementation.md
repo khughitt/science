@@ -1726,6 +1726,15 @@ In `science/model/src/science_model/schemas/mixin-hypothesis-1.0.json` **and**
     "autonomous_run": { "type": "string" },
 ```
 
+> **Revised during implementation.** A bare `{"type": "string"}` is not strict enough:
+> `test_the_schema_is_at_least_as_strict_as_the_projection` (`test_hypothesis_entity.py`)
+> requires every mixin property to be at least as strict as the model field it projects, and a
+> bare string accepts `"bogus"` while `Entity._validate_autonomous_run` rejects it. What shipped
+> is `{"type": "string", "pattern": "^run:\\s*\\S", "$comment": "..."}` in both mixin files,
+> plus an `autonomous_run` entry in `test_hypothesis_entity.py`'s `_BATTERY`, which
+> `test_the_BATTERY_is_EXACTLY_the_shared_surface` makes mandatory once a field is declared in
+> both the model and the mixin.
+
 Re-run the schema test; all four parameterized cases must now pass.
 
 - [ ] **Step 7: Run the tests to verify they pass**

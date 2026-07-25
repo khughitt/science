@@ -33,7 +33,7 @@ from science_tool.project_package.manifest import data_version_chunks
 from science_tool.project_package.payload import PayloadError, payload_inventory
 
 SCHEMA_VERSION = "science-project-serialized.v1"
-SOURCE_ROOTS = ("entities", "results")
+SOURCE_ROOTS = ("entities", "results", "runs")
 TOP_LEVEL_SINGLES = (PROJECT_CONFIG_FILENAME, "papers/references.bib", "knowledge/graph.trig")
 
 
