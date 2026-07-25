@@ -52,7 +52,7 @@ science autonomy path-gate --base <sha> --head <sha> --tier belief-neutral
 ```
 
 Exit `0` means every change was inside the tier's surface, `1` means something was not
-(each denial names the path, the field, and the reason), and `2` means the range could
+(each denial names the path, the reason, and the field when applicable), and `2` means the range could
 not be read. Exit `2` is deliberately not exit `0`: a gate that cannot see must not
 report clean.
 
