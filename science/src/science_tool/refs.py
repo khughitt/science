@@ -16,6 +16,7 @@ from science_model.frontmatter import parse_frontmatter
 
 from science_tool.addressing import classify_entity_ref
 from science_tool.bibliography import bibliography_key_from_reference, load_bib_keys
+from science_tool.graph.autonomous_runs import load_run_records
 from science_tool.markdown_utils import (
     frontmatter_line_numbers as _frontmatter_line_numbers,
 )
@@ -433,6 +434,21 @@ def _scan_body_typed_refs(
     return issues
 
 
+def _extract_autonomous_run_ref(path: Path) -> str | None:
+    """The file's `autonomous_run` value, or None.
+
+    Deliberately not folded into `_extract_frontmatter_refs`: those values are
+    classified against `_LOCAL_ENTITY_KINDS`, and `run` is not an entity kind, so
+    every valid reference would come back as `unknown-namespace`.
+    """
+    parsed = parse_frontmatter(path)
+    if parsed is None:
+        return None
+    frontmatter, _body = parsed
+    value = frontmatter.get("autonomous_run")
+    return value if isinstance(value, str) and value else None
+
+
 def _extract_frontmatter_refs(path: Path) -> list[tuple[str, str]]:
     parsed = parse_frontmatter(path)
     if parsed is None:
@@ -610,10 +626,24 @@ def check_refs(root: Path, *, include_body: bool = False) -> list[RefIssue]:
     project_ids = _load_project_ids(root)
     doi_corpus = _load_doi_corpus(root)
     pmid_corpus = _load_pmid_corpus(root)
+    # Raises on a malformed record rather than reporting an empty set: treating an
+    # unreadable runs/ as "no runs" would report every valid reference as dangling.
+    run_ids = {record.id for record in load_run_records(root)}
 
     for file_path in files:
         rel_path = str(file_path.relative_to(root))
         frontmatter_lines = _frontmatter_line_numbers(file_path)
+        run_ref = _extract_autonomous_run_ref(file_path)
+        if run_ref is not None and run_ref not in run_ids:
+            issues.append(
+                RefIssue(
+                    file=rel_path,
+                    line=1,
+                    ref_type="autonomous-run",
+                    ref_value=run_ref,
+                    message=f"{run_ref} — no run record in runs/",
+                )
+            )
         for field_name, raw_ref in _extract_frontmatter_refs(file_path):
             if field_name in {"source_refs", "evidence_refs"}:
                 bibkey = bibliography_key_from_reference(raw_ref)

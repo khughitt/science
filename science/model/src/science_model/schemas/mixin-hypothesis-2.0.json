@@ -37,6 +37,7 @@
     "aliases": { "type": "array", "items": { "type": "string" } },
     "datasets": { "type": "array", "items": { "type": "string" } },
     "added_by": { "type": "string" },
+    "autonomous_run": { "type": "string", "pattern": "^run:\\s*\\S", "$comment": "Mirrors `Entity._validate_autonomous_run`: `run:` prefix, then a non-empty remainder AFTER stripping -- `\\s*\\S` finds the first non-whitespace character past the prefix, so `run:` and `run:   ` both fail to match exactly as the model rejects them." },
     "profile": { "type": "string", "$comment": "AUTHORED and honored — sources.py:765-772 is fill-if-missing, materialize.py:640 emits sci:profile, entities_inventory.py:195-199 derives registration_state from it. 3 files author it. An earlier draft called it derived and stripped it; that was wrong." },
 
     "relations": {

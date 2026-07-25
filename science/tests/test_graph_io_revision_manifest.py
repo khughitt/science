@@ -37,6 +37,27 @@ def test_entities_dir_is_in_the_walk_set(tmp_path: Path) -> None:
     assert "entities/hypotheses/0001-x.md" in manifest["files"]
 
 
+def test_runs_dir_is_in_the_walk_set(tmp_path: Path) -> None:
+    """`runs/` MUST be walked.
+
+    `load_run_records` makes run records a project source, so an added or edited run
+    record must be visible to `science graph diff` -- otherwise a project can add a new
+    supervisor-attested run and `graph diff` still reports "all inputs up to date" while
+    `graph.trig` silently lacks the attestation. Same failure shape as the `entities/`
+    omission above, applied to `runs/`.
+    """
+    _seed_project(tmp_path, "name: fixture\nprofile: research\n")
+    (tmp_path / "runs").mkdir()
+    (tmp_path / "runs" / "0001-x.md").write_text(
+        "---\nid: run:0001-x\nkind: autonomous_run\n---\n", encoding="utf-8"
+    )
+
+    manifest = build_input_manifest(tmp_path / "knowledge" / "graph.trig")
+
+    assert "runs" in manifest["walked"]
+    assert "runs/0001-x.md" in manifest["files"]
+
+
 def test_build_input_manifest_excludes_configured_generated_report(tmp_path: Path) -> None:
     _seed_project(
         tmp_path,

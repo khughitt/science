@@ -522,6 +522,7 @@ def parse_entity_file(path: Path, project_slug: str) -> Entity | None:
         "source_refs": fm.get("source_refs") or [],
         "origins": fm.get("origins") or [],
         "added_by": fm.get("added_by"),
+        "autonomous_run": fm.get("autonomous_run"),
         "content_preview": body[:200] if body else "",
         "content": body or "",
         "file_path": rel_path,

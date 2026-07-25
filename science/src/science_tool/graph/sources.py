@@ -42,6 +42,7 @@ from science_model.source_contracts import (
     StructuredEntitySource,
 )
 from science_model.source_ref import SourceRef
+from science_model.autonomous_runs import AutonomousRunRecord
 
 from science_model.entity_schema import PROJECT_MIXIN_NAMES, EntityValidationError
 from science_model.entity_schema.merge import MergePolicy, read_merge_policy
@@ -56,6 +57,7 @@ from science_tool.entity_profiles import (
     load_project_schema,
 )
 from science_tool.project_config import validated_entity_schema_version
+from science_tool.graph.autonomous_runs import load_run_records
 from science_tool.graph.entity_registry import EntityKindNotRegisteredError, EntityRegistry
 from science_tool.graph.errors import ContributionConflictError, EntityIdentityCollisionError
 from science_tool.graph.identity_arbitration import (
@@ -237,6 +239,10 @@ class ProjectSources(BaseModel):
     # (see graph/skill_loads.py). Empty for gen-<=2 / unpinned projects. Emitted into
     # graph/provenance by materialize._add_skill_load_edges.
     skill_loads: list[SkillLoadRecord] = Field(default_factory=list)
+    # Finalized autonomous run records loaded from `runs/` (see graph/autonomous_runs.py).
+    # Empty for every project that has never run unattended. Emitted into graph/provenance
+    # by materialize._add_run_record_edges, and NEVER into graph/knowledge.
+    run_records: list[AutonomousRunRecord] = Field(default_factory=list)
 
 
 SourceBinding = BindingSource
@@ -692,6 +698,7 @@ def load_project_sources(
         generation=generation,
         aliases=load_skill_aliases() if generation == 3 else {},
     )
+    run_records = load_run_records(project_root)
 
     return ProjectSources(
         project_name=str(config["name"]),
@@ -716,6 +723,7 @@ def load_project_sources(
         dataset_parents=dataset_parents,
         strict_schema_kinds=PROJECT_MIXIN_NAMES if project_schema is not None else frozenset(),
         skill_loads=skill_loads,
+        run_records=run_records,
     )
 
 

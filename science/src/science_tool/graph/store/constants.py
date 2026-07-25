@@ -475,4 +475,84 @@ PREDICATE_REGISTRY: list[dict[str, str]] = [
         "description": "Parameter controls bifurcation/onset",
         "layer": "graph/knowledge",
     },
+    {
+        "predicate": "sci:runId",
+        "description": "Autonomous run id, restated as a literal on its provenance node",
+        "layer": "graph/provenance",
+    },
+    {
+        "predicate": "sci:runAgent",
+        "description": "Autonomous run agent slug",
+        "layer": "graph/provenance",
+    },
+    {
+        "predicate": "sci:runModel",
+        "description": "Model that executed the autonomous run",
+        "layer": "graph/provenance",
+    },
+    {
+        "predicate": "sci:runTier",
+        "description": "Autonomous run write tier (report-only | belief-neutral)",
+        "layer": "graph/provenance",
+    },
+    {
+        "predicate": "sci:runBranch",
+        "description": "Git branch the autonomous run wrote to",
+        "layer": "graph/provenance",
+    },
+    {
+        "predicate": "sci:runBaseCommit",
+        "description": "Base commit sha the autonomous run started from",
+        "layer": "graph/provenance",
+    },
+    {
+        "predicate": "sci:runHeadCommit",
+        "description": "Head commit sha the autonomous run ended at",
+        "layer": "graph/provenance",
+    },
+    {
+        "predicate": "sci:runToolkitRevision",
+        "description": "Toolkit revision sha in force during the autonomous run",
+        "layer": "graph/provenance",
+    },
+    {
+        "predicate": "sci:runPolicyId",
+        "description": "Policy id in force during the autonomous run",
+        "layer": "graph/provenance",
+    },
+    {
+        "predicate": "sci:runPolicyVersion",
+        "description": "Policy version in force during the autonomous run",
+        "layer": "graph/provenance",
+    },
+    {
+        "predicate": "sci:runBasisDigest",
+        "description": "Digest of the belief basis the autonomous run was checked against",
+        "layer": "graph/provenance",
+    },
+    {
+        "predicate": "sci:runDisposition",
+        "description": "Verdict rendered on the autonomous run (clean | quarantined | unwired)",
+        "layer": "graph/provenance",
+    },
+    {
+        "predicate": "sci:runTriggeredBy",
+        "description": "What triggered the autonomous run, when attested",
+        "layer": "graph/provenance",
+    },
+    {
+        "predicate": "sci:runBudgetTokens",
+        "description": "Token budget consumed by the autonomous run",
+        "layer": "graph/provenance",
+    },
+    {
+        "predicate": "sci:runBudgetWallClockSeconds",
+        "description": "Wall-clock seconds consumed by the autonomous run",
+        "layer": "graph/provenance",
+    },
+    {
+        "predicate": "sci:autonomousRun",
+        "description": "Entity was last written by this autonomous run",
+        "layer": "graph/provenance",
+    },
 ]

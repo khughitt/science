@@ -1,6 +1,6 @@
 """`science project serialize` — deterministic, git-faithful project bundle.
 
-Source files (entities + results, no data/ payloads) + a manifest that
+Source files (entities + results + runs, no data/ payloads) + a manifest that
 hash-inventories the excluded payloads. See
 docs/user-guide/project-packaging.md.
 """
@@ -33,7 +33,7 @@ from science_tool.project_package.manifest import data_version_chunks
 from science_tool.project_package.payload import PayloadError, payload_inventory
 
 SCHEMA_VERSION = "science-project-serialized.v1"
-SOURCE_ROOTS = ("entities", "results")
+SOURCE_ROOTS = ("entities", "results", "runs")
 TOP_LEVEL_SINGLES = (PROJECT_CONFIG_FILENAME, "papers/references.bib", "knowledge/graph.trig")
 
 

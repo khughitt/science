@@ -143,7 +143,7 @@ depends on (`graph/attention.py` — `NEEDS_REVIEW_MULTIPLIER = 3.0`, `STALE_MUL
 
 | Field | Meaning | Written by |
 |---|---|---|
-| `id` | Canonical run id; referent of `run_ref` and the commit trailer. | supervisor |
+| `id` | Canonical run id; referent of `autonomous_run` and the commit trailer. | supervisor |
 | `agent` | Agent **role** (`curation-sweep`), not the model. | supervisor |
 | `model` | Model that executed the run. | supervisor |
 | `tier` | `report-only` \| `belief-neutral`. **Attested, not self-declared.** | supervisor |
@@ -163,8 +163,11 @@ reproducible later. A merge-base is not a usable baseline: it moves under rebase
 integration-branch advancement, and mixed human/autonomous history cannot be reliably
 reconstructed by filtering commits.
 
-The record deliberately does **not** index the entities it wrote. That is derivable by querying
-`run_ref` in the provenance graph, and a maintained list would be a second spelling that drifts.
+The record deliberately does **not** index the entities it wrote. Each entity's *current*
+writer is derivable by querying `autonomous_run` in the provenance graph, and full
+history is derivable from the run's own `base_commit..head_commit` range — which is the
+authoritative binding in any case (§0). A maintained list would be a second spelling that
+drifts.
 
 ### 3. Attribution
 
@@ -194,11 +197,30 @@ unconditionally and unchanged. An unattended commit is a different category: no 
 the loop, so the mark is provenance, not credit. The distinguishing test is *was a human in the
 loop for this commit* — not *did an LLM touch it*, which is always true and discriminates nothing.
 
-**Entities.** A new field `run_ref` carries a validated reference to a run record, materialized
-into `graph/provenance` alongside `added_by`. `added_by` **keeps its existing discovery
-semantics unchanged** — it answers "how did this idea enter the project", which is a different
-question from "which execution wrote this file", and the corpus already contains values
-(`user`) that no run record could ever explain.
+**Entities.** A new field `autonomous_run` carries a validated reference to a run
+record, materialized into `graph/provenance` alongside `added_by`. `added_by`
+**keeps its existing discovery semantics unchanged** — it answers "how did this
+idea enter the project", which is a different question from "which execution
+wrote this file", and the corpus already contains values (`user`) that no run
+record could ever explain.
+
+> **Revised during implementation (Plan B).** This field was originally specified
+> as `run_ref`. That name was already taken by `EvidenceLineEntity.run_refs`, which
+> names fingerprinted workflow runs, materializes to `sci:runRef` in
+> `graph/knowledge`, and **bears on belief** through `graph/store/validation.py`. A
+> provenance field spelled `run_ref` beside a belief-bearing field spelled
+> `run_refs` is a one-character path across the belief boundary. The predicate is
+> `sci:autonomousRun` and the node type `sci:AutonomousRun` for the same reason;
+> the persisted model is `AutonomousRunRecord`, since `qa_audit/runs.py` already
+> owns `RunRecord`. The `run:` id prefix is unused and is kept as designed.
+
+> **Not yet an attested binding (Plan B ships the field only).** Materialization checks
+> that the run a value names *exists*; it does not check that this run wrote this file. An
+> actor can therefore still attribute its work to an unrelated prior run. Plan D must close
+> this by having the supervisor stamp `autonomous_run` itself, or by verifying every value
+> it finds against the run's own recorded `base_commit..head_commit` range. Until then the
+> field is a convenience for humans reading the corpus, and the commit range remains the
+> only authoritative binding (§0).
 
 Canonicalizing `added_by`'s discovery vocabulary — it currently has two spellings in flight,
 `llm:<model>:research-topic` (`commands/research-topic.md:53`) and
@@ -336,8 +358,8 @@ channel; feedback already has a triage program behind it.
    verdict after the integration branch advances and after a rebase.
 9. **Provenance-layer isolation** — no run triple appears in `graph/knowledge`, and run records
    are absent from attention candidates.
-10. **`run_ref` resolution** — a canonical `run_ref` resolves through `refs-check`; a dangling
-    one fails. `added_by` values such as `user` remain valid and untouched.
+10. **`autonomous_run` resolution** — a canonical `autonomous_run` resolves through `refs check`;
+    a dangling one fails. `added_by` values such as `user` remain valid and untouched.
 11. **Interactive commits unaffected** — no author rewrite and no trailer on human-driven commits.
 
 ## Open questions deferred to later slices

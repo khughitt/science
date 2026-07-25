@@ -18,6 +18,7 @@ agents and humans to find.
 | `specs/` | Structured project specifications such as research questions, scope boundaries, requirements, and product/research planning notes. Not an entity owner root. |
 | `tasks/` | Active, blocked, deferred, retired, and completed work. |
 | `results/` | Workflow-run records and data-package descriptors. A serialize **source root**, bundled into reproducibility archives. |
+| `runs/` | Supervisor-written **autonomous-run records**, one flat `<date>-<agent>-<short-id>.md` per finished unattended run. Not an entity root: run records materialize only into `graph/provenance` and never become belief bearers. Distinct from `results/`, which holds fingerprinted *workflow*-run records (compute reproducibility, not agent authority). |
 | `data/` | Gitignored **payload** bytes (datasets, large artifacts). The data-boundary payload root — not committed source. |
 | `knowledge/` | Generated graph files, summaries, snapshots, and other derived knowledge artifacts. |
 | `papers/references.bib` | Bibliography entries for cited literature. |
