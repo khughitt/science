@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import cast
+from typing import Any, cast
 
 import click
 
@@ -51,6 +51,21 @@ from science_tool.output import emit
     is_flag=True,
     help="List available health checks and exit.",
 )
+@click.option(
+    "--severity",
+    type=click.Choice(["error", "warn", "all"]),
+    default="warn",
+    show_default=True,
+    help="Minimum severity to display. A THRESHOLD, not an equality filter: "
+    "`warn` shows warnings AND errors.",
+)
+@click.option(
+    "--output",
+    "output_path",
+    type=click.Path(path_type=Path),
+    default=None,
+    help="Write the complete, unbudgeted report to PATH instead of stdout.",
+)
 def health_command(
     project_root: Path,
     output_format: str,
@@ -59,13 +74,32 @@ def health_command(
     checks: tuple[str, ...],
     skip_checks: tuple[str, ...],
     list_checks: bool,
+    severity: str,
+    output_path: Path | None,
 ) -> None:
     """Aggregate diagnostics for the project: unresolved refs, lingering tags, etc."""
     from rich.table import Table
 
+    from science_tool.budget.invocation import build_complete_via
+    from science_tool.budget.control import bounded_control_notice
+    from science_tool.budget.registry import lookup
+    from science_tool.budget.sink import BoundedSink
     from science_tool.graph.health import build_health_report, list_health_checks
     from science_tool.graph.health_checks.archive_lag import archive_lag_total
-    from science_tool.styles import get_console
+
+    sink = BoundedSink(
+        lookup("health"),
+        output_path=output_path,
+        command_path="health",
+        complete_via=build_complete_via(
+            click.get_current_context(), output_hint="health.json"
+        ),
+    )
+    control_notice = (
+        bounded_control_notice(f"wrote the complete health report to {output_path}")
+        if output_path is not None
+        else None
+    )
 
     project_root = project_root.resolve()
     if list_checks:
@@ -73,14 +107,24 @@ def health_command(
 
         def _render_checks() -> None:
             table = Table(title="Health checks")
-            table.add_column("Name", style="bold")
+            table.add_column("Check")
             table.add_column("Requires sources")
             table.add_column("Description")
             for row in available_checks:
-                table.add_row(str(row["name"]), "yes" if row["requires_sources"] else "no", str(row["description"]))
-            get_console().print(table)
+                table.add_row(
+                    str(row["name"]),
+                    "yes" if row["requires_sources"] else "no",
+                    str(row["description"]),
+                )
+            sink.console.print(table)
 
-        emit(output_format=output_format, payload={"checks": available_checks}, render_text=_render_checks)
+        emit(
+            output_format=output_format,
+            payload={"checks": available_checks},
+            render_text=_render_checks,
+            sink=sink,
+        )
+        sink.flush()
         return
 
     try:
@@ -97,9 +141,21 @@ def health_command(
     except ValueError as exc:
         raise click.ClickException(str(exc)) from exc
 
+    from science_tool.graph.health_projection import (
+        SECTION_ROW_CAP,
+        project_health_report,
+    )
+
+    # --output is complete: no projection at all when writing to a file.
+    displayed: dict[str, Any] = (
+        cast("dict[str, Any]", report)
+        if output_path is not None
+        else project_health_report(cast("dict[str, Any]", report), threshold=severity)
+    )
+
     def _render_report() -> None:
         if timings:
-            meta = report.get("_meta") or {}
+            meta = displayed.get("_meta") or {}
             timing_rows = meta.get("timings") or []
             total_duration = meta.get("total_duration_seconds")
             click.echo("Health timings:", err=True)
@@ -108,26 +164,26 @@ def health_command(
             if isinstance(total_duration, int | float):
                 click.echo(f"  total: {total_duration:.3f}s", err=True)
 
-        layered_claims = report["layered_claims"]
-        archive_lag = report["archive_lag"]
+        layered_claims = displayed["layered_claims"]
+        archive_lag = displayed["archive_lag"]
         lag_total = archive_lag_total(archive_lag)
 
-        managed_artifacts = report.get("managed_artifacts") or []
-        tooling_scaffold = report.get("tooling_scaffold") or []
-        agent_context = report.get("agent_context") or []
-        unregistered_ref_kinds = report.get("unregistered_ref_kinds") or []
-        entity_identity = report.get("entity_identity") or []
-        schema_invalid = report.get("schema_invalid") or []
-        validation = report.get("validation") or []
-        accepted_validation = report.get("accepted_validation") or []
-        prose_epistemics = report.get("prose_epistemics") or {}
+        managed_artifacts = displayed.get("managed_artifacts") or []
+        tooling_scaffold = displayed.get("tooling_scaffold") or []
+        agent_context = displayed.get("agent_context") or []
+        unregistered_ref_kinds = displayed.get("unregistered_ref_kinds") or []
+        entity_identity = displayed.get("entity_identity") or []
+        schema_invalid = displayed.get("schema_invalid") or []
+        validation = displayed.get("validation") or []
+        accepted_validation = displayed.get("accepted_validation") or []
+        prose_epistemics = displayed.get("prose_epistemics") or {}
         raw_prose_epistemics_findings = prose_epistemics.get("findings") if isinstance(prose_epistemics, dict) else None
         prose_epistemics_findings: list[dict[str, object]] = (
             [cast("dict[str, object]", row) for row in raw_prose_epistemics_findings if isinstance(row, dict)]
             if isinstance(raw_prose_epistemics_findings, list)
             else []
         )
-        cross_paper_evidence = report.get("cross_paper_evidence") or {}
+        cross_paper_evidence = displayed.get("cross_paper_evidence") or {}
         raw_cross_paper_findings = cross_paper_evidence.get("findings") if isinstance(cross_paper_evidence, dict) else None
         cross_paper_findings: list[dict[str, object]] = (
             [cast("dict[str, object]", row) for row in raw_cross_paper_findings if isinstance(row, dict)]
@@ -135,9 +191,7 @@ def health_command(
             else []
         )
 
-        unwired_checks = report.get("unwired_checks") or []
-
-        console = get_console()
+        unwired_checks = displayed.get("unwired_checks") or []
 
         # An unwired check DID NOT RUN. Print it before anything else and never let a
         # report that contains one claim the project is clean: zero findings from a
@@ -149,8 +203,8 @@ def health_command(
             uw_table.add_column("Why it did not run", overflow="fold")
             for row in unwired_checks:
                 uw_table.add_row(row["check"], row["code"], row.get("reason") or "")
-            console.print(uw_table)
-            console.print(
+            sink.console.print(uw_table)
+            sink.console.print(
                 "\n[bold]These checks found nothing because they did not run — not because "
                 "the project is clean.[/bold] Their input is missing; supply it, then rerun."
             )
@@ -158,14 +212,14 @@ def health_command(
         total_issues = report["total_issues"]
         if total_issues == 0:
             if unwired_checks:
-                click.echo(
+                sink.echo(
                     f"No issues found by the checks that ran — but {len(unwired_checks)} check(s) "
                     "could not run (see above). This is NOT a clean bill of health."
                 )
             else:
-                click.echo("Project is clean — no issues found.")
+                sink.echo("Project is clean — no issues found.")
             if accepted_validation:
-                click.echo(f"Accepted validation warnings: {len(accepted_validation)}")
+                sink.echo(f"Accepted validation warnings: {len(accepted_validation)}")
             return
 
         if lag_total:
@@ -174,8 +228,8 @@ def health_command(
             lag_table.add_column("Count", justify="right")
             for key in ("done_in_active", "retired_in_active", "missing_completed"):
                 lag_table.add_row(key, str(archive_lag[key]))
-            console.print(lag_table)
-            console.print(
+            sink.console.print(lag_table)
+            sink.console.print(
                 "\n[bold]Next:[/bold] run [cyan]science tasks archive[/cyan] to preview, then [cyan]--apply[/cyan]."
             )
 
@@ -187,8 +241,8 @@ def health_command(
             ma_table.add_column("Detail")
             for row in flagged_managed_artifacts:
                 ma_table.add_row(row["name"], row["status"], row["detail"])
-            console.print(ma_table)
-            console.print(
+            sink.console.print(ma_table)
+            sink.console.print(
                 "\n[bold]Next:[/bold] run "
                 "[cyan]science project artifacts check[/cyan] / "
                 "[cyan]update[/cyan] / [cyan]install[/cyan] per status."
@@ -201,8 +255,8 @@ def health_command(
             ts_table.add_column("Fix")
             for row in tooling_scaffold:
                 ts_table.add_row(row["code"], row["detail"], row["fix"])
-            console.print(ts_table)
-            console.print(
+            sink.console.print(ts_table)
+            sink.console.print(
                 "\n[bold]Next:[/bold] follow the suggested fix for each row — "
                 "see [cyan]commands/create-project.md[/cyan] for the canonical scaffold."
             )
@@ -215,8 +269,8 @@ def health_command(
             ac_table.add_column("Fix")
             for row in agent_context:
                 ac_table.add_row(row["code"], row["source_file"], row["detail"], row["fix"])
-            console.print(ac_table)
-            console.print(
+            sink.console.print(ac_table)
+            sink.console.print(
                 "\n[bold]Next:[/bold] keep [cyan]CLAUDE.md[/cyan] minimal, remove [cyan]@core/*[/cyan] "
                 "includes, and keep [cyan]core/overview.md[/cyan] as concise boot context."
             )
@@ -228,8 +282,8 @@ def health_command(
             si_table.add_column("Detail")
             for row in schema_invalid:
                 si_table.add_row(row["kind"], row["path"], row["message"])
-            console.print(si_table)
-            console.print(
+            sink.console.print(si_table)
+            sink.console.print(
                 "\n[bold]Next:[/bold] fix each entity's frontmatter to satisfy its schema "
                 "(these are excluded from the graph until repaired); rerun "
                 "[cyan]science validate[/cyan] for the authoritative error."
@@ -247,8 +301,10 @@ def health_command(
                     str(row.get("source_ref") or ""),
                     f"{row.get('message', '')}\nNext action: {prose_epistemics_next}",
                 )
-            console.print(pe_table)
-            console.print(f"\n[bold]Next:[/bold] run [cyan]{prose_epistemics_next}[/cyan].")
+            sink.console.print(pe_table)
+            sink.console.print(
+                f"\n[bold]Next:[/bold] run [cyan]{prose_epistemics_next}[/cyan]."
+            )
 
         if cross_paper_findings:
             cpe_table = Table(title=f"Cross-paper evidence ({len(cross_paper_findings)})")
@@ -272,21 +328,26 @@ def health_command(
                     annotation,
                     detail,
                 )
-            console.print(cpe_table)
-            console.print("\n[bold]Next:[/bold] fix stale promoted_to refs or proposition source_refs, then rerun health.")
+            sink.console.print(cpe_table)
+            sink.console.print(
+                "\n[bold]Next:[/bold] fix stale promoted_to refs or proposition "
+                "source_refs, then rerun health."
+            )
 
-        if report["unresolved_refs"]:
-            table = Table(title=f"Unresolved references ({len(report['unresolved_refs'])})")
+        if displayed["unresolved_refs"]:
+            table = Table(
+                title=f"Unresolved references ({len(displayed['unresolved_refs'])})"
+            )
             table.add_column("Target", style="bold")
             table.add_column("Mentions", justify="right")
             table.add_column("Suggested triage")
             table.add_column("Sources (first 3)")
-            for row in report["unresolved_refs"]:
+            for row in displayed["unresolved_refs"]:
                 srcs = ", ".join(row["sources"][:3])
                 if len(row["sources"]) > 3:
                     srcs += f", … (+{len(row['sources']) - 3})"
                 table.add_row(row["target"], str(row["mention_count"]), row["looks_like"], srcs)
-            console.print(table)
+            sink.console.print(table)
 
         if unregistered_ref_kinds:
             table = Table(title=f"Unregistered reference kinds ({len(unregistered_ref_kinds)})")
@@ -303,15 +364,17 @@ def health_command(
                 if len(row["sources"]) > 3:
                     srcs += f", … (+{len(row['sources']) - 3})"
                 table.add_row(row["kind"], row["field"], str(row["mention_count"]), refs, srcs)
-            console.print(table)
-            console.print(
+            sink.console.print(table)
+            sink.console.print(
                 "\n[bold]Next:[/bold] register these entity kinds in a profile, migrate the refs to "
                 "registered kinds, or move non-entity annotations to [cyan]meta:*[/cyan]."
             )
 
-        if report["lingering_tags_lines"]:
-            with_values = [r for r in report["lingering_tags_lines"] if r["values"]]
-            empty_count = len(report["lingering_tags_lines"]) - len(with_values)
+        if displayed["lingering_tags_lines"]:
+            with_values = [
+                r for r in displayed["lingering_tags_lines"] if r["values"]
+            ]
+            empty_count = len(displayed["lingering_tags_lines"]) - len(with_values)
 
             if with_values:
                 title = f"Legacy `tags:` fields to migrate ({len(with_values)})"
@@ -320,20 +383,30 @@ def health_command(
                 table.add_column("Values")
                 for row in with_values:
                     table.add_row(row["file"], ", ".join(row["values"]))
-                console.print(table)
+                sink.console.print(table)
 
             if empty_count:
-                console.print(f"[dim]...and {empty_count} additional file(s) with empty `tags: []` (cosmetic only).[/dim]")
+                sink.console.print(
+                    f"[dim]...and {empty_count} additional file(s) with empty "
+                    "`tags: []` (cosmetic only).[/dim]"
+                )
 
-        if report["identity_policy"]:
-            table = Table(title=f"Identity Policy ({len(report['identity_policy'])})")
+        if displayed["identity_policy"]:
+            table = Table(
+                title=f"Identity Policy ({len(displayed['identity_policy'])})"
+            )
             table.add_column("Check", style="bold")
             table.add_column("Entity")
             table.add_column("File")
             table.add_column("Message")
-            for row in report["identity_policy"]:
-                table.add_row(row["check"], row["entity_id"], row["source_file"], row["message"])
-            console.print(table)
+            for row in displayed["identity_policy"]:
+                table.add_row(
+                    row["check"],
+                    row["entity_id"],
+                    row["source_file"],
+                    row["message"],
+                )
+            sink.console.print(table)
 
         if entity_identity:
             table = Table(title=f"Entity Identity ({len(entity_identity)})")
@@ -350,7 +423,7 @@ def health_command(
                     row.get("canonical_id") or "",
                     row["message"],
                 )
-            console.print(table)
+            sink.console.print(table)
 
         if validation:
             table = Table(title=f"Validation ({len(validation)})")
@@ -371,7 +444,7 @@ def health_command(
                     row.get("task") or "",
                     row.get("message", ""),
                 )
-            console.print(table)
+            sink.console.print(table)
 
         adoption_table = Table(title="Layered-Claim Adoption")
         adoption_table.add_column("Check", style="bold")
@@ -389,7 +462,7 @@ def health_command(
                 f"{metric['numerator']}/{metric['denominator']}",
                 f"{metric['fraction']:.2f}",
             )
-        console.print(adoption_table)
+        sink.console.print(adoption_table)
 
         if layered_claims["migration_issues"]:
             issue_table = Table(title=f"Layered-Claim Migration Issues ({len(layered_claims['migration_issues'])})")
@@ -402,7 +475,7 @@ def health_command(
                     "; ".join(row["warnings"]) or "-",
                     "; ".join(row["todos"]) or "-",
                 )
-            console.print(issue_table)
+            sink.console.print(issue_table)
 
         if layered_claims["rival_model_packets_missing_discriminating_predictions"]:
             rival_table = Table(
@@ -415,9 +488,9 @@ def health_command(
             rival_table.add_column("Packet")
             for row in layered_claims["rival_model_packets_missing_discriminating_predictions"]:
                 rival_table.add_row(row["proposition"], row["packet_id"])
-            console.print(rival_table)
+            sink.console.print(rival_table)
 
-        dataset_anomalies = report.get("dataset_anomalies") or []
+        dataset_anomalies = displayed.get("dataset_anomalies") or []
         if dataset_anomalies:
             ds_table = Table(title=f"Dataset Anomalies ({len(dataset_anomalies)})")
             ds_table.add_column("Code", style="bold")
@@ -431,6 +504,25 @@ def health_command(
                     row.get("entity_id", ""),
                     row.get("message", ""),
                 )
-            console.print(ds_table)
+            sink.console.print(ds_table)
 
-    emit(output_format=output_format, payload=report, render_text=_render_report)
+        omitted = displayed.get("section_omitted") or {}
+        if omitted:
+            hidden = sum(omitted.values())
+            sink.echo(
+                f"showing {displayed['displayed_issues']} of {total_issues} issues "
+                f"(severity: {severity}, cap: {SECTION_ROW_CAP}/section)"
+            )
+            sink.echo(f"  {hidden} finding(s) hidden — {sink.complete_via}")
+
+    emit(
+        output_format=output_format,
+        payload=displayed,
+        render_text=_render_report,
+        sink=sink,
+    )
+    sink.flush()
+    # This fixed-shape bounded control notice is the sole permitted sink bypass. It
+    # follows a successful flush, never a finally block.
+    if control_notice is not None:
+        click.echo(control_notice)

@@ -19,7 +19,7 @@ from science_tool.graph.health_checks import (
     context_sources,
 )
 from science_tool.graph.health_checks.agent_context import AgentContextFinding
-from science_tool.graph.health_checks.archive_lag import TaskArchiveLag, archive_lag_total
+from science_tool.graph.health_checks.archive_lag import TaskArchiveLag
 from science_tool.graph.health_checks.cross_paper_evidence import CrossPaperEvidenceHealthReport
 from science_tool.graph.health_checks.entity_identity import EntityIdentityFinding
 from science_tool.graph.health_checks.identity_policy import IdentityPolicyFinding
@@ -31,6 +31,7 @@ from science_tool.graph.health_checks.unregistered_ref_kinds import Unregistered
 from science_tool.graph.health_checks.unresolved_refs import UnresolvedRef
 from science_tool.graph.health_checks.validate import ValidationFinding
 from science_tool.graph.migrate import LayeredClaimMigrationReport
+from science_tool.graph.health_count import count_issues as _count_issues
 from science_tool.graph.sources import load_project_sources
 from science_tool.instruments import InstrumentResult
 from science_tool.validate.acceptance import accepted_validation_entries, entry_suppresses
@@ -332,15 +333,6 @@ def build_health_report(
         cast("list[ValidationFinding]", check_results["validate"]),
     )
     prose_epistemics = cast("dict[str, object]", check_results["prose_epistemics"])
-    prose_epistemics_findings = prose_epistemics.get("findings") if isinstance(prose_epistemics, dict) else []
-    prose_epistemics_issue_count = (
-        sum(1 for row in prose_epistemics_findings if isinstance(row, dict) and row.get("counts_as_issue") is True)
-        if isinstance(prose_epistemics_findings, list)
-        else 0
-    )
-
-    layered_claim_issue_count = len(migration_issues) + len(rival_model_gaps)
-    coverage_gaps = 0
     proposition_coverage = _coverage_metric(
         numerator=sum(1 for entity in proposition_entities if entity.claim_layer is not None),
         denominator=len(proposition_entities),
@@ -349,30 +341,12 @@ def build_health_report(
         numerator=sum(1 for row in causal_leaning_rows if row["authored_identification_strength"] is not None),
         denominator=len(causal_leaning_rows),
     )
-    for metric in (proposition_coverage, causal_coverage):
-        if metric["denominator"] > 0 and metric["numerator"] < metric["denominator"]:
-            coverage_gaps += 1
-
-    lag_total = archive_lag_total(archive_lag)
-
-    total_issues = (
-        len(unresolved_refs)
-        + len(unregistered_ref_kinds)
-        + len(lingering_tags_lines)
-        + len(agent_context)
-        + len(identity_policy_findings)
-        + len(entity_identity)
-        + layered_claim_issue_count
-        + coverage_gaps
-        + len(dataset_anomalies)
-        + len(schema_invalid)
-        + (1 if lag_total else 0)
-        + sum(1 for f in managed_artifacts if f["counts_as_issue"])
-        + len(tooling_scaffold)
-        + len(validation)
-        + prose_epistemics_issue_count
-        + len(cross_paper_evidence["findings"])
-    )
+    layered_claims: LayeredClaimHealthReport = {
+        "proposition_claim_layer_coverage": proposition_coverage,
+        "causal_leaning_identification_coverage": causal_coverage,
+        "rival_model_packets_missing_discriminating_predictions": rival_model_gaps,
+        "migration_issues": migration_issues,
+    }
 
     report: HealthReport = {
         "unresolved_refs": unresolved_refs,
@@ -381,12 +355,7 @@ def build_health_report(
         "agent_context": agent_context,
         "identity_policy": identity_policy_findings,
         "entity_identity": entity_identity,
-        "layered_claims": {
-            "proposition_claim_layer_coverage": proposition_coverage,
-            "causal_leaning_identification_coverage": causal_coverage,
-            "rival_model_packets_missing_discriminating_predictions": rival_model_gaps,
-            "migration_issues": migration_issues,
-        },
+        "layered_claims": layered_claims,
         "cross_paper_evidence": cross_paper_evidence,
         "legacy_task_type": legacy_task_type,
         "invalid_entity_aspects": invalid_entity_aspects,
@@ -399,8 +368,9 @@ def build_health_report(
         "accepted_validation": accepted_validation,
         "prose_epistemics": prose_epistemics,
         "unwired_checks": unwired_checks,
-        "total_issues": total_issues,
+        "total_issues": 0,
     }
+    report["total_issues"] = _count_issues(report)
     if collect_timings:
         report["_meta"] = {
             "timings": context.timings,

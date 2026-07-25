@@ -494,8 +494,15 @@ def tasks_note(task_id: str, note: str, note_date_raw: str | None) -> None:
 @click.option("--related", default=None)
 @click.option("--group", default=None, help="Filter by group (exact match)")
 @click.option("--aspect", "aspects", multiple=True, help="Filter by aspect (repeatable)")
-@click.option("--all", "show_all", is_flag=True, default=False, help="Include done and retired tasks")
+@click.option("--all", "show_all", is_flag=True, default=False, help="Include all task statuses")
 @click.option("--format", "output_format", default="table", type=click.Choice(OUTPUT_FORMATS))
+@click.option(
+    "--output",
+    "output_path",
+    type=click.Path(path_type=Path),
+    default=None,
+    help="Write the complete, unbudgeted payload to PATH instead of stdout.",
+)
 def tasks_list(
     priority: str | None,
     status: str | None,
@@ -504,13 +511,21 @@ def tasks_list(
     aspects: tuple[str, ...],
     show_all: bool,
     output_format: str,
+    output_path: Path | None,
 ) -> None:
-    """List tasks. Done/retired tasks are hidden by default; use --all or --status=done to include them."""
+    """List tasks. Active and blocked tasks are shown by default; use --all for every status."""
     from science_model.tasks import Task
 
+    from science_tool.budget.invocation import build_complete_via
+    from science_tool.budget.control import bounded_control_notice
+    from science_tool.budget.projection import project_rows
+    from science_tool.budget.registry import lookup
+    from science_tool.budget.sink import BoundedSink
     from science_tool.tasks import list_tasks, parse_tasks_for_cli
     from science_tool.tasks_display import render_tasks_table, sort_tasks
     from science_tool.tasks_readiness import make_project_resolver
+
+    WORKING_SET = ("active", "blocked")
 
     # Surface legacy-untyped-blocker warnings on stderr.
     _, warnings = parse_tasks_for_cli(DEFAULT_TASKS_DIR / "active.md")
@@ -527,7 +542,22 @@ def tasks_list(
         aspects=list(aspects) or None,
         include_done=show_all,
     )
+    if status is None and not show_all:
+        matched = [task for task in matched if task.status in WORKING_SET]
     matched = sort_tasks(matched)
+
+    complete_via = build_complete_via(click.get_current_context(), output_hint="tasks.json")
+    control_notice = (
+        bounded_control_notice(f"wrote {len(matched)} tasks to {output_path}")
+        if output_path is not None
+        else None
+    )
+    sink = BoundedSink(
+        lookup("tasks list"),
+        output_path=output_path,
+        command_path="tasks list",
+        complete_via=complete_via,
+    )
 
     try:
         resolver = make_project_resolver()
@@ -592,16 +622,36 @@ def tasks_list(
         if aspects:
             applied_filters["aspects"] = list(aspects)
         if not show_all and status is None:
-            applied_filters["exclude_status"] = ["done", "retired"]
+            applied_filters["only_status"] = list(WORKING_SET)
         meta = {
             "active_total": active_total,
             "returned_count": len(rows),
             "sort_order": "status_rank,id",
             "applied_filters": applied_filters,
         }
-        emit_query_rows(output_format=output_format, title="Tasks", columns=columns, rows=rows, meta=meta)
+        emit_query_rows(
+            output_format=output_format,
+            title="Tasks",
+            columns=columns,
+            rows=rows,
+            meta=meta,
+            sink=sink,
+        )
     else:
-        render_tasks_table(matched, resolver=resolver)
+        projected = project_rows(matched, sink.max_rows)
+        footer = (
+            [
+                f"showing {len(projected.rows)} of {projected.total} rows",
+                f"  complete output:  {complete_via}",
+            ]
+            if projected.truncated
+            else []
+        )
+        render_tasks_table(projected.rows, resolver=resolver, sink=sink, footer=footer)
+
+    sink.flush()
+    if control_notice is not None:
+        click.echo(control_notice)
 
 
 @tasks_group.command("show")
@@ -699,4 +749,3 @@ def tasks_summary(output_format: str) -> None:
         render_text=_render,
         sort_keys=True,
     )
-

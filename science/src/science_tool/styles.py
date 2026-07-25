@@ -142,21 +142,50 @@ def get_color_policy(context: click.Context | None = None) -> ColorPolicy:
     return resolve_color_policy(None)
 
 
-def _new_console(policy: ColorPolicy, file: TextIO | None = None) -> Console:
+def _new_console(
+    policy: ColorPolicy,
+    file: TextIO | None = None,
+    width: int | None = None,
+) -> Console:
     match policy:
         case ColorPolicy.NEVER:
-            return Console(file=file, force_terminal=False, color_system=None, no_color=True)
+            return Console(
+                file=file,
+                force_terminal=False,
+                color_system=None,
+                no_color=True,
+                width=width,
+            )
         case ColorPolicy.ALWAYS:
-            return Console(file=file, force_terminal=True, color_system="standard", no_color=False)
+            return Console(
+                file=file,
+                force_terminal=True,
+                color_system="standard",
+                no_color=False,
+                width=width,
+            )
         case ColorPolicy.AUTO:
             auto_env = {key: value for key, value in os.environ.items() if key not in _COLOR_ENV_KEYS}
-            return Console(file=file, no_color=False, _environ=auto_env)
+            return Console(file=file, no_color=False, _environ=auto_env, width=width)
 
 
-def get_console(*, context: click.Context | None = None, file: TextIO | None = None) -> Console:
-    policy = get_color_policy(context)
-    if file is not None:
-        return _new_console(policy, file)
+def get_console(
+    *,
+    context: click.Context | None = None,
+    file: TextIO | None = None,
+    width: int | None = None,
+    color_policy: ColorPolicy | None = None,
+) -> Console:
+    """Return a Rich console for the active or explicitly selected color policy.
+
+    ``color_policy`` lets a buffered output channel choose what Rich should render
+    independently of the eventual destination. The final stream may still strip ANSI.
+    """
+    policy = color_policy or get_color_policy(context)
+    if file is not None or width is not None or color_policy is not None:
+        # Never cached: the cache is keyed only by context, so a file- or width-specific
+        # or policy-specific console would otherwise be handed to unrelated callers.
+        return _new_console(policy, file, width)
 
     current = context or click.get_current_context(silent=True)
     if current is None:

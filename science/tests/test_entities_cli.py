@@ -677,7 +677,7 @@ def test_entities_inventory_cli_writes_contract_json_to_output_file(tmp_path) ->
     )
 
     assert result.exit_code == 0, result.output
-    assert result.output == ""
+    assert result.output == f"wrote the entity inventory to {output}\n"
     payload = InventoryPayloadV2.model_validate_json(output.read_text(encoding="utf-8"))
     assert payload.project_id == "cli-output-project"
     assert payload.entities[0].id == "finding:f001"

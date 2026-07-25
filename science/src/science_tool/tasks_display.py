@@ -6,6 +6,7 @@ from rich.table import Table
 from rich.text import Text
 from science_model.tasks import Task
 
+from science_tool.budget.sink import BoundedSink
 from science_tool.styles import (
     TASK_PRIORITY_STYLES,
     TASK_STATUS_STYLES,
@@ -67,8 +68,13 @@ def _render_related_refs(refs: list[str]) -> Text:
     return text
 
 
-def render_tasks_table(tasks: list[Task], resolver: ReadinessResolver | None = None) -> None:
-    """Render a colored Rich table of tasks to stdout."""
+def render_tasks_table(
+    tasks: list[Task],
+    resolver: ReadinessResolver | None = None,
+    sink: BoundedSink | None = None,
+    footer: list[str] | None = None,
+) -> None:
+    """Render a colored Rich table of tasks, through ``sink`` when one is supplied."""
     has_groups = any(t.group for t in tasks)
     has_related = any(t.related for t in tasks)
 
@@ -101,11 +107,21 @@ def render_tasks_table(tasks: list[Task], resolver: ReadinessResolver | None = N
 
         table.add_row(*row)
 
-    console = get_console()
-    console.print(table)
-
+    lines: list[str] = []
     if resolver is not None:
         for t in tasks:
             summary = render_blocker_summary(t, resolver)
             if summary is not None:
-                console.print(summary)
+                lines.append(summary)
+    lines.extend(footer or [])
+
+    if sink is None:
+        console = get_console()
+        console.print(table)
+        for line in lines:
+            console.print(line)
+        return
+
+    sink.console.print(table)
+    for line in lines:
+        sink.echo(line)
