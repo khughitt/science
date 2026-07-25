@@ -767,7 +767,7 @@ Neither counts as evidence, and neither updates belief.
 It is also distinct from an evidence line's `run_refs`, which names
 fingerprinted workflow runs and *does* bear on belief. A dangling
 `autonomous_run` — one naming a run with no record in `runs/` — is reported by
-`science refs check` and fails the graph build.
+`science refs check`. The graph build also fails on it.
 
 The field is a scalar and is overwritten, so it names the **last** run that
 wrote the file. Full attribution history lives in git, under each run

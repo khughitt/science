@@ -1,6 +1,6 @@
 """`science project serialize` — deterministic, git-faithful project bundle.
 
-Source files (entities + results, no data/ payloads) + a manifest that
+Source files (entities + results + runs, no data/ payloads) + a manifest that
 hash-inventories the excluded payloads. See
 docs/user-guide/project-packaging.md.
 """

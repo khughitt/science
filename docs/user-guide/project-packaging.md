@@ -26,6 +26,7 @@ The command includes tracked project source:
 - `science.yaml`
 - `entities/**`
 - `results/**`
+- `runs/**`
 - `papers/references.bib`, if tracked
 - `knowledge/graph.trig`, if tracked
 
