@@ -3,9 +3,16 @@ from __future__ import annotations
 from pathlib import Path
 
 import pytest
+from rdflib import Graph, Literal, URIRef
+from rdflib.namespace import PROV, RDF, XSD
 
 from science_model.autonomous_runs import RunRecordError
-from science_tool.graph.autonomous_runs import load_run_records
+from science_tool.graph.autonomous_runs import (
+    add_run_record_to_graph,
+    load_run_records,
+    run_node_uri,
+)
+from science_tool.graph.store import PROJECT_NS, SCI_NS
 
 _RECORD = """---
 id: run:2026-07-24-curation-sweep-a3f1
@@ -237,3 +244,97 @@ def test_triple_dash_inside_a_value_does_not_truncate_the_block(tmp_path: Path) 
     record = load_run_records(tmp_path)[0]
     assert record.model == "claude---opus---5"
     assert record.disposition.value == "clean"
+
+
+def _record(tmp_path: Path):
+    _write_record(tmp_path)
+    return load_run_records(tmp_path)[0]
+
+
+def test_node_uri_is_derived_from_the_slug(tmp_path: Path) -> None:
+    record = _record(tmp_path)
+    assert run_node_uri(record.id) == URIRef(PROJECT_NS["run/2026-07-24-curation-sweep-a3f1"])
+
+
+def test_node_uri_accepts_the_id_string_directly(tmp_path: Path) -> None:
+    record = _record(tmp_path)
+    assert run_node_uri("run:2026-07-24-curation-sweep-a3f1") == run_node_uri(record.id)
+
+
+def test_emission_writes_the_attested_fields(tmp_path: Path) -> None:
+    record = _record(tmp_path)
+    graph = Graph()
+    add_run_record_to_graph(record, graph)
+    node = run_node_uri(record.id)
+    assert (node, RDF.type, SCI_NS.AutonomousRun) in graph
+    assert (node, RDF.type, PROV.Activity) in graph
+    assert (node, SCI_NS.runId, Literal(record.id)) in graph
+    assert (node, SCI_NS.runAgent, Literal("curation-sweep")) in graph
+    assert (node, SCI_NS.runModel, Literal("claude-opus-5")) in graph
+    assert (node, SCI_NS.runTier, Literal("belief-neutral")) in graph
+    assert (node, SCI_NS.runBranch, Literal("auto/2026-07-24-curation-sweep-a3f1")) in graph
+    assert (node, SCI_NS.runBaseCommit, Literal("a" * 40)) in graph
+    assert (node, SCI_NS.runHeadCommit, Literal("b" * 40)) in graph
+    assert (node, SCI_NS.runToolkitRevision, Literal("c" * 40)) in graph
+    assert (node, SCI_NS.runPolicyId, Literal("core-default")) in graph
+    assert (node, SCI_NS.runPolicyVersion, Literal("1")) in graph
+    assert (node, SCI_NS.runBasisDigest, Literal("d" * 64)) in graph
+    assert (node, SCI_NS.runDisposition, Literal("clean")) in graph
+    assert (node, SCI_NS.runBudgetTokens, Literal(12000)) in graph
+    assert (node, SCI_NS.runBudgetWallClockSeconds, Literal(1800.5)) in graph
+    assert (
+        node,
+        PROV.startedAtTime,
+        Literal("2026-07-24T09:00:00+00:00", datatype=XSD.dateTime),
+    ) in graph
+    assert (
+        node,
+        PROV.endedAtTime,
+        Literal("2026-07-24T09:30:00+00:00", datatype=XSD.dateTime),
+    ) in graph
+
+
+def test_absent_triggered_by_emits_no_triple(tmp_path: Path) -> None:
+    record = _record(tmp_path)
+    graph = Graph()
+    add_run_record_to_graph(record, graph)
+    assert (run_node_uri(record.id), SCI_NS.runTriggeredBy, None) not in graph
+
+
+def test_triggered_by_emits_when_present(tmp_path: Path) -> None:
+    path = _write_record(tmp_path)
+    path.write_text(
+        path.read_text(encoding="utf-8").replace(
+            "disposition: clean",
+            "disposition: clean\ntriggered_by: schedule:weekly-curation",
+        ),
+        encoding="utf-8",
+    )
+    record = load_run_records(tmp_path)[0]
+    graph = Graph()
+    add_run_record_to_graph(record, graph)
+    node = run_node_uri(record.id)
+    assert (node, SCI_NS.runTriggeredBy, Literal("schedule:weekly-curation")) in graph
+
+
+def test_budget_with_one_measure_emits_only_that_measure(tmp_path: Path) -> None:
+    path = _write_record(tmp_path)
+    path.write_text(
+        path.read_text(encoding="utf-8").replace("  wall_clock_seconds: 1800.5\n", ""),
+        encoding="utf-8",
+    )
+    record = load_run_records(tmp_path)[0]
+    graph = Graph()
+    add_run_record_to_graph(record, graph)
+    node = run_node_uri(record.id)
+    assert (node, SCI_NS.runBudgetTokens, Literal(12000)) in graph
+    assert (node, SCI_NS.runBudgetWallClockSeconds, None) not in graph
+
+
+def test_emission_is_idempotent(tmp_path: Path) -> None:
+    record = _record(tmp_path)
+    once, twice = Graph(), Graph()
+    add_run_record_to_graph(record, once)
+    add_run_record_to_graph(record, twice)
+    add_run_record_to_graph(record, twice)
+    assert set(once) == set(twice)

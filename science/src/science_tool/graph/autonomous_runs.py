@@ -10,8 +10,13 @@ from __future__ import annotations
 from pathlib import Path
 
 from pydantic import ValidationError
-from science_model.autonomous_runs import AutonomousRunRecord, RunRecordError
+from rdflib import Graph, URIRef
+from rdflib import Literal as RDFLiteral
+from rdflib.namespace import PROV, RDF, XSD
+from science_model.autonomous_runs import RUN_ID_PREFIX, AutonomousRunRecord, RunRecordError
 import yaml
+
+from science_tool.graph.store import PROJECT_NS, SCI_NS
 
 RUNS_DIRNAME = "runs"
 
@@ -129,3 +134,53 @@ def load_run_records(project_root: Path) -> list[AutonomousRunRecord]:
             )
         records.append(record)
     return records
+
+
+def run_node_uri(run_id: str) -> URIRef:
+    """The provenance node for a run id.
+
+    Takes the id string, not the record, so the record pass and the entity-edge
+    pass cannot drift into two spellings of one URI. The slug is already
+    constrained to lowercase alphanumerics, hyphens, and the leading date, so no
+    escaping is needed.
+    """
+    if not run_id.startswith(RUN_ID_PREFIX):
+        raise RunRecordError(f"run id must start with {RUN_ID_PREFIX!r}, got {run_id!r}")
+    return URIRef(PROJECT_NS[f"run/{run_id[len(RUN_ID_PREFIX):]}"])
+
+
+def add_run_record_to_graph(record: AutonomousRunRecord, graph: Graph) -> None:
+    """Write one run record's triples. Caller supplies the PROVENANCE graph.
+
+    Dual-typed `sci:AutonomousRun` + `prov:Activity`: the PROV type makes the run
+    legible to any PROV reader, and the Science type is what our own queries key on.
+    """
+    node = run_node_uri(record.id)
+    graph.add((node, RDF.type, SCI_NS.AutonomousRun))
+    graph.add((node, RDF.type, PROV.Activity))
+    graph.add((node, SCI_NS.runId, RDFLiteral(record.id)))
+    graph.add((node, SCI_NS.runAgent, RDFLiteral(record.agent)))
+    graph.add((node, SCI_NS.runModel, RDFLiteral(record.model)))
+    graph.add((node, SCI_NS.runTier, RDFLiteral(record.tier.value)))
+    graph.add((node, SCI_NS.runBranch, RDFLiteral(record.branch)))
+    graph.add((node, SCI_NS.runBaseCommit, RDFLiteral(record.base_commit)))
+    graph.add((node, SCI_NS.runHeadCommit, RDFLiteral(record.head_commit)))
+    graph.add((node, SCI_NS.runToolkitRevision, RDFLiteral(record.toolkit_revision)))
+    graph.add((node, SCI_NS.runPolicyId, RDFLiteral(record.policy_identity.id)))
+    graph.add((node, SCI_NS.runPolicyVersion, RDFLiteral(record.policy_identity.version)))
+    graph.add((node, SCI_NS.runBasisDigest, RDFLiteral(record.basis_digest)))
+    graph.add(
+        (node, PROV.startedAtTime, RDFLiteral(record.started.isoformat(), datatype=XSD.dateTime))
+    )
+    graph.add(
+        (node, PROV.endedAtTime, RDFLiteral(record.ended.isoformat(), datatype=XSD.dateTime))
+    )
+    graph.add((node, SCI_NS.runDisposition, RDFLiteral(record.disposition.value)))
+    if record.triggered_by is not None:
+        graph.add((node, SCI_NS.runTriggeredBy, RDFLiteral(record.triggered_by)))
+    if record.budget.tokens is not None:
+        graph.add((node, SCI_NS.runBudgetTokens, RDFLiteral(record.budget.tokens)))
+    if record.budget.wall_clock_seconds is not None:
+        graph.add(
+            (node, SCI_NS.runBudgetWallClockSeconds, RDFLiteral(record.budget.wall_clock_seconds))
+        )
