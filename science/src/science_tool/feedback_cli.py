@@ -163,7 +163,7 @@ def _parse_from_recent_index(extra_args: list[str], *, from_recent: bool) -> int
     "output_path",
     type=click.Path(path_type=Path),
     default=None,
-    help="Write the complete, unprojected result to this path instead of truncating stdout.",
+    help="Write the complete, unbudgeted payload to PATH instead of stdout.",
 )
 def feedback_list(
     status: str | None,
