@@ -70,6 +70,7 @@ BUDGETS: dict[str, CommandBudget] = {
     "entity needs-review": CommandBudget(max_chars=20_000, shape=PayloadShape.ROWS, max_rows=40),
     "curate inventory": CommandBudget(max_chars=20_000, shape=PayloadShape.DOCUMENT),
     "prose lint": CommandBudget(max_chars=30_000, shape=PayloadShape.REPORT),
+    "curate consolidation-candidates": CommandBudget(max_chars=30_000, shape=PayloadShape.REPORT),
 }
 
 EXEMPTIONS: dict[str, str] = {
@@ -145,7 +146,6 @@ EXEMPTIONS: dict[str, str] = {
 DEFERRED: dict[str, DeferredCommand] = {
     # Measured over budget on 2026-07-24; wiring scheduled for slice 1b.
     "validate": DeferredCommand("one row per validation finding", "1b", 109_466),
-    "curate consolidation-candidates": DeferredCommand("one row per candidate cluster", "1b", 71_553),
     # Growable but small on the audited project -- the case that has no truthful
     # exemption. Populated further by Task 13 Step 3.
     "tasks archive": DeferredCommand("one row per archivable task", "1b"),

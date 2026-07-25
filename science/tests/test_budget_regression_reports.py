@@ -138,3 +138,40 @@ def test_prose_lint_is_bounded_and_complete(tmp_path: Path, monkeypatch: pytest.
     # The per-check `counts` are the summary; they must equal the full hit total.
     complete = json.loads((tmp_path / "complete.json").read_text())
     assert sum(complete["counts"].values()) == len(complete["hits"])
+
+
+def test_consolidation_candidates_is_bounded_and_complete(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    import yaml
+
+    (tmp_path / "science.yaml").write_text("id: demo\nname: demo\n")
+    folder = tmp_path / "entities" / "interpretations"
+    folder.mkdir(parents=True)
+
+    def _write(name: str, fm: dict) -> None:
+        (folder / f"{name}.md").write_text("---\n" + yaml.safe_dump(fm, sort_keys=False) + "---\n\nbody\n")
+
+    # The supersession edge is a RELATION with predicate "sci:supersedes" on the successor
+    # (top-level `supersedes:` is ignored -- verified against consolidation.py). Each pair is
+    # one linear lineage chain. Distinct id stems (oldNNNN / newNNNN) avoid the alias
+    # collision that a shared numeric stem (qNNNN-old / qNNNN-new) would raise. 450 pairs
+    # (not 300): the default render format is "text", whose complete rendering of 300
+    # pairs measures ~23,500 chars -- under the 30,000 ceiling -- so 300 would not prove
+    # the complete --output file needs the ceiling at all; 450 measures ~35,200.
+    for i in range(450):
+        _write(f"old{i:04d}", {"id": f"interpretation:old{i:04d}", "kind": "interpretation",
+                               "title": f"Old {i}", "status": "superseded"})
+        _write(f"new{i:04d}", {"id": f"interpretation:new{i:04d}", "kind": "interpretation",
+                               "title": f"New {i}", "status": "open",
+                               "relations": [{"predicate": "sci:supersedes", "target": f"interpretation:old{i:04d}"}]})
+    monkeypatch.chdir(tmp_path)
+    _assert_report_projection(
+        "curate consolidation-candidates", ["curate", "consolidation-candidates"], tmp_path,
+        expected_exit=0,  # read-only report
+        omitted_key="candidates_omitted",
+        count_items=lambda p: (
+            len(p["superseded_lineage"]["linear"])
+            + len(p["superseded_lineage"]["non_linear"])
+            + len(p["semantic_clusters"])
+        ),
+        summary_of=lambda p: p["counts"],
+    )
