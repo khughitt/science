@@ -1,199 +1,224 @@
 # The ideal core — target state
 
-**Date:** 2026-07-25
-**Status:** Working target. **Revised, not refuted** — implementation evidence changes this
-document; it does not get defended against.
-**Input:** [`2026-07-25-multi-surface-fact-inventory.md`](2026-07-25-multi-surface-fact-inventory.md)
+**Date:** 2026-07-25 (rev 2 — re-sequenced after review; rev 1 mis-stated the starting position)
+**Status:** Working target. **Revised, not refuted.**
+**Input:** [`2026-07-25-multi-surface-fact-inventory.md`](2026-07-25-multi-surface-fact-inventory.md) (rev 2)
 **Optimizing for:** *agent legibility.* When principles conflict, the winner is whichever makes
 a wrong answer harder to reach.
 
-This is deliberately thin. It states what "good" looks like and what has to go, so each
-sub-project can be judged against something. It is not a spec, and it does not re-decide
-anything already ruled (D1–D5, D-001…D-011).
+Thin by design. It states what "good" looks like so each sub-project can be judged against
+something. It is not a spec, and it does not re-decide anything already ruled (D1–D5,
+D-001…D-011).
 
 ## 1. The operating principle
 
-> **Every fact has exactly one owner. Every other surface derives from that owner, and says
-> so where it is read.**
+> **Every fact has exactly one owner. Every other surface derives from that owner, and says so
+> where it is read.**
 
-The recurring defect is not complexity — it is *authority without a single source*. Six
-inventory rows are the same failure: a fact stored where it was needed instead of declared once.
-
-Because the primary operator is an agent, the failure mode is specific and severe. An agent
-reads one surface and trusts it. It does not cross-check three declarations for agreement, and
-it has no way to know a fourth exists. A stale copy is not a maintenance annoyance here; it is a
-wrong answer delivered with full confidence.
+Because the primary operator is an agent, the failure mode is specific. An agent reads one
+surface and trusts it; it does not cross-check declarations for agreement, and has no way to
+know a fourth exists. A stale copy is a wrong answer delivered with full confidence.
 
 Three consequences, in priority order:
 
-1. **Zero redundancy of authority.** Redundant *prose* is fine and often good. A second place
-   that can be *believed* is not.
-2. **A wrong answer must be unreachable, not discouraged.** Documentation saying "this is
-   retired" is not a retirement. If it can be called, it will be called.
-3. **Boring beats clever.** Fifty-three explicit declarations an agent can read in one place
-   beat one elegant derivation it has to reconstruct. Derivation is for *consumers* of a fact,
-   never for the *statement* of it.
+1. **Zero redundancy of authority.** Redundant *prose* is fine. A second place that can be
+   *believed* is not.
+2. **A wrong answer must be unreachable, not discouraged.** Documentation saying "retired" is
+   not a retirement.
+3. **Boring beats clever.** Explicit declarations an agent reads in one place beat an elegant
+   derivation it must reconstruct. Derive for *consumers* of a fact, never for the *statement*
+   of it.
+
+**Where we actually start.** Rev 1 framed this as building a missing mechanism. That was wrong.
+Two mechanisms exist and are well built — `test_hypothesis_entity.py` reconciles schema against
+model field-by-field, and `test_supersedable_gate.py` ratchets the supersedability mismatch as
+declared debt. **Their coverage is one kind and one fact.** The program generalizes a working
+pattern.
 
 ## 2. Three layers, strictly
 
 | Layer | Contains | Writable by |
 |---|---|---|
-| **Authored** | entity markdown + frontmatter; the local YAML source surfaces | humans and agents |
-| **Declared** | what a kind is: fields, states, placement, admissible relations, lineage | toolkit release only |
-| **Derived** | graph, belief, snapshots, reports, renderings | rebuild only, never by hand |
+| **Authored** | entity markdown + frontmatter; local YAML source surfaces | humans and agents |
+| **Declared** | what a kind is: fields, states, placement, admissible relations | toolkit release only |
+| **Derived** | graph, belief, snapshots, reports, renderings | rebuild only |
 
-Authored and derived are already right, and are the system's best existing property. **The
-declared layer is the whole problem.** Today it is split three ways (`EntityKind` descriptors,
-Pydantic classes, JSON Schema mixins) *and* partially embedded in layer-3 consumers — the
-validator's legit-reader set, materialize's endpoint rules, `mark_superseded`'s stamping policy.
-Facts about kinds live inside the code that reads them.
-
-**Target: the declared layer is one thing, and no layer-3 module contains a fact about a kind.**
-A consumer needing such a fact asks the declaration. If the declaration cannot express it, that
-is a gap to close in the declaration, not a local table to add.
+Authored and derived are the system's best existing property. The declared layer is where the
+work is.
 
 ## 3. The declaration layer
 
-Covers F1, F2, F4, F5, F9.
+Covers F1, F2, F4, F5.
 
-D3/D5 already ruled the shape: **JSON Schema is authoritative, Pydantic is a projection built
-after schema validation, and a reconciliation check binds them.** Code generation was
-considered and rejected. That ruling stands; this document does not reopen it.
+D3/D5 ruled the shape: **JSON Schema is authoritative for entity fields, Pydantic is a projection
+built after schema validation, and a reconciliation check binds them.** Generation was rejected.
+That stands.
 
-What the target adds is completeness and the missing binding:
+**Ownership matrix.** Rev 1 said "the declared layer is one thing" without saying who owns what,
+which an implementer cannot act on. Authority stays distributed by *fact type*; what unifies is
+the **read path**, not the storage:
 
-- **Every kind is declared.** Not 5 of 53. A kind with no schema is not a lightweight kind, it
-  is an undeclared one.
-- **Every per-kind fact is declared, explicitly, per kind.** Statuses today; also placement,
-  which state axes apply, which relations it may source and target, and whether it carries
-  lineage. Written out per kind rather than inferred from a family rule — an agent reading one
-  kind's declaration should see its answers, not a join.
-- **The reconciliation check exists and gates.** D3 point 4, unimplemented today. It is the
-  mechanism that would have caught both F1 and F2, and it is the highest-leverage single item
-  in the program.
-- **Four state axes or one, but declared either way.** `status`, `phase`, `verdict`,
-  `disposition`, `role` are in use; one is declared. D1/D2 already ruled the semantics; the
-  declaration has not caught up.
+| Fact | Authoritative artifact | Read through |
+|---|---|---|
+| Which fields a kind may carry | composed JSON Schema | `EntityValidator` / effective-fields API |
+| Field types and invariants | composed JSON Schema | same |
+| Status vocabulary | `EntityKind.statuses` | resolved declaration API |
+| Placement (`home`) | `EntityKind.home` | resolved declaration API |
+| Relation endpoint admissibility | `RelationKind` | `relation_allows_kinds` |
+| Lineage capability | **currently split — S2 must rule it** | — |
 
-The 12 dead-letter `superseded` terminals and the 3 unstampable kinds are the acceptance corpus.
-Each must end up either carrying a real edge or losing a status it could never earn — **by a
-written ruling per kind**, not by an implementation arc running out of room.
+Two rules make this legible rather than merely distributed:
+
+- **One authoritative artifact per fact.** Not one artifact for all facts.
+- **One resolved read API per fact, and consumers use only it.** No layer-3 module may carry its
+  own table of a per-kind fact. The validator's legit-reader set and `mark_superseded`'s stamping
+  policy are the current violations.
+
+What the target adds beyond today:
+
+- **Every kind is declared**, not 5 of 53.
+- **Every kind is reconciled**, not 1 of 53.
+- **The reverse supersedability direction is guarded** — `relation_allows ⇒ declares`, which
+  today is unguarded and worked around defensively in `consolidation.py`.
+- **Per-kind facts are written per kind**, explicitly, so one kind's declaration answers its own
+  questions without a join.
+
+The 12 half-wired kinds and the 3 unstampable kinds are S2's acceptance corpus: each ends up
+carrying a real edge or losing a state it cannot reach, **by a written ruling per kind**.
 
 ## 4. Links and lineage
 
-Covers F3, F7.
+Covers F3, F7. **Rev 1 mandated deletions here on a false premise and this section is now
+deliberately weaker.**
 
-**Lineage: one authored spelling.** Seven exist. The canonical edge (`relations:` with the
-predicate) is the one; everything else is either derived-and-labelled or deleted. `superseded_by`
-and friends survive only if they are *derived* and marked as such in-band.
+F3 is not seven spellings of one fact. It is at least four facts — replacement (`sci:supersedes`),
+amendment (`sci:amends`, explicitly *without* replacing), identity resolution (`deprecated_ids`),
+archive membership (`consolidated_into`) — plus a derived inverse D5 requires (`superseded_by`)
+and a one-to-many split (`resynthesized_into`). Only the non-materializing top-level
+`supersedes:` is clearly dead.
 
-**Links: two authored spellings, maximum.** One untyped associative and one typed. `discusses:`
-becomes a typed relation carrying a role. The local YAML surfaces stay only as *compiled inputs*
-with no independent authority — a link's meaning must not depend on which file it was written in.
+**Target:** a semantic taxonomy with an owner per fact, produced by S3 *before* any deletion is
+specified. The only pre-committed constraint: each fact has one authored spelling, and derived
+inverses are computed, never authored.
+
+"Marked as such in-band" is left to S3 to specify concretely — the candidate mechanisms are a
+read-only computed field, a schema annotation, or exclusion from the authored schema entirely.
+Rev 1 asserted the requirement without a mechanism; naming one is S3's job.
+
+F7 likewise: **six link surfaces is redundancy, not demonstrated divergence.** S4 begins as an
+authority audit. Convergence is conditional on it showing conflict.
 
 ## 5. Claims and belief
 
-Covers F8. **This is the part that is mostly right**, and the target is conservative here.
+Covers F8. **Mostly right; the target is conservative.**
 
-Keep: belief derived and never authored; the versioned aggregation policy persisted with its
-outputs; the refusal to roll up across mixed policies; ceilings and caps as first-class;
-independence groups; propositions-as-edges. These are the system's best ideas and several are
-rare. The factoring of `belief_state` (a reading of a proposition) from verdict tokens (a
-conclusion about a test) is *correct* and stays.
+Keep: belief derived and never authored; the versioned policy persisted with outputs; the refusal
+to roll up across mixed policies; ceilings and caps; independence groups; propositions-as-edges.
+The factoring of `belief_state` from verdict tokens is correct and stays.
 
-Change one thing: **derived projections are computed at the point of use, never stored.**
-`derived_edge_status` is self-described as "a lossy compatibility projection over canonical
-state." Under principle 1 that is a second believable answer. It becomes a rendering function or
-it goes.
+Rev 1 proposed moving `derived_edge_status` to render time. **It is already there** — computed in
+`render.py`, absent from the proposition-edge projection, stripped before output. The residual
+gap is only that nothing *forbids* authoring `edge_status`, so the work is a guard, not a
+migration.
 
 ## 6. The operator surface
 
-The agent's real interface. Measured 2026-07-25: **278 leaf commands** across 39 groups plus 7
-top-level; **59 check modules** emitting roughly **124 distinct rule names**.
+Measured 2026-07-25: **46 top-level entries — 39 groups plus 7 single commands — and 278 leaf
+commands**; 59 check modules emitting roughly 124 distinct rule names. (Rev 1 said "47 groups";
+that was eyeballed, not counted.)
 
-**A correction to an earlier impression.** I had assumed this surface was substantially excess.
-It is not: **243 of 278 commands (87%) are named in agent-facing docs.** The CLI is large and
-*documented*, not orphaned. Size alone is not the defect, and "delete commands" is not the goal.
+**The CLI is not excess.** 243 of 278 leaf commands (87%) are named in agent-facing docs. Size
+alone is not the defect and "delete commands" is not the goal.
 
-The defect is narrower and worse:
+The defect is narrower:
 
-> **Retirement is prose-only.** The user guide states that `inquiry add-node`, `add-edge`,
+> **Retirement is prose-only.** The user guide states `inquiry add-node`, `add-edge`,
 > `add-assumption`, `add-transformation`, `set-estimand`, `graph add concept`, and
-> `graph add proposition --bridge-between` are retired. All are fully registered, callable, and
-> advertise themselves with encouraging help text. `set-estimand --help` documents required
-> options. Nothing in-band tells an agent not to use them.
+> `graph add proposition --bridge-between` are retired. All are registered, callable, and
+> advertise themselves with encouraging help text. Nothing in-band warns an agent off.
 
-This is principle 2 violated exactly. An agent reading `--help` is reading the wrong answer with
-no signal. The target:
+Target: **a retired command is unregistered, or it errors naming the replacement. There is no
+third state.** Also: every check message must name an action its own system accepts — the
+`fb-2026-07-11-017` follow-on was exactly that failure.
 
-- **A retired command is unregistered, or it errors telling you what to do instead.** There is no
-  third state.
-- **Every check's message names an action its own system will accept.** The `fb-2026-07-11-017`
-  follow-on was precisely this failure: an ERROR prescribing a form the graph rejects. A check
-  that cannot name a valid remedy must say so rather than invent one.
-- **Rule names are a declared vocabulary**, not 124 strings that happen to appear in `Result(...)`
-  calls.
+Not yet measured, therefore not claimed: whether the 39 groups carve the space well, whether
+plural-kind groups duplicate `entity`, whether the check vocabulary overlaps. S7's audit.
 
-**Not yet measured, and therefore not yet claimed:** whether the 39 groups carve the space well,
-whether plural-kind groups duplicate the `entity` group, and whether the check vocabulary has
-overlaps. Those need their own audit before this chapter earns a stronger opinion.
-
-## 7. What goes
+## 7. What goes / what stays
 
 | Goes | Why |
 |---|---|
 | Retired-but-registered commands | principle 2 — reachable wrong answers |
-| Stored derived projections (`derived_edge_status`) | principle 1 — a second believable answer |
-| Six of the seven lineage spellings | principle 1 |
-| Per-kind facts embedded in layer-3 consumers | §2 — declaration belongs in the declared layer |
-| Declared-but-unreachable vocabulary (12 terminals, 2 reserved composition rules) | promises the machinery does not keep |
-| The 67-field god-object base | §3 — undeclared kinds wearing a shared coat |
+| Top-level `supersedes:` | materializes nothing; already flagged |
+| Per-kind fact tables inside layer-3 consumers | §3 — one resolved read API per fact |
+| States a kind cannot reach (the 12 + the 3) | promises the machinery does not keep |
+| Undeclared kinds (48 of 53 today) | a kind with no schema is undeclared, not lightweight |
 
 | Stays | Why |
 |---|---|
-| Authored-is-truth, derived-is-rebuildable | the system's foundation, and it works |
+| Authored-is-truth, derived-is-rebuildable | the foundation, and it works |
 | Belief derived under a versioned, persisted policy | best idea in the system |
 | Ceilings, caps, independence groups | encode what evidence *cannot* buy |
-| Propositions-as-edges | the unification everything else should imitate |
+| Propositions-as-edges | the unification others should imitate |
 | status/verdict as orthogonal axes | D1 ruled it; the matrix is right |
-| The large CLI, in the main | measured as documented and used, not excess |
-| Honest yellow | a stance, not a slogan |
+| The existing reconciliation and ratchet tests | the pattern the program generalizes |
+| The large CLI, in the main | measured as documented and used |
+
+Rev 1 listed "the 67-field god-object base" as going. Softened: it is a real legibility problem,
+but the corrected F1 shows the schema layer — not the Python base class — is the authority for
+fields. Whether the base shrinks is a *consequence* of S1b's coverage work, not a goal of its own.
 
 ## 8. How we get there
 
-Sub-projects, each its own design → plan → implementation cycle:
-
 | | Sub-project | Covers | Depends on |
 |---|---|---|---|
-| **S1** | Bind the two entity-shape declarations (D3 point 4, then widen coverage) | F1 | — |
-| **S2** | Per-kind facts declared per kind, not embedded in consumers | F2, F4, F5, F9 | S1 |
-| **S3** | Collapse lineage to one authored spelling | F3 | S2 |
-| **S4** | Link-authoring convergence | F7 | S1 |
-| **S5** | Demote stored projections to render-time | F8 | — |
-| **S6** | Inquiry store unification | F10 | — |
-| **S7** | Operator-surface audit, then retirement enforcement | §6 | — |
-| **S0** | Generalize S1's reconciliation into a multiplicity ratchet | meta-finding | S1 |
+| **S7a** | Enforce existing retirements (unregister or error) | §6 | — **can ship now** |
+| **S1a** | Generalize the reconciliation mechanism; make it a gate | F1 | — |
+| **S1b** | Widen schema + reconciliation coverage toward 53 kinds | F1 | S1a |
+| **S2** | Per-kind facts declared per kind; guard the reverse direction | F2, F4, F5 | S1a |
+| **S3** | Lineage/amendment/identity/archive taxonomy, then convergence | F3 | S2 |
+| **S4** | Link-authority **audit**; convergence only if divergence shown | F7 | — |
+| **S5** | Guard forbidding authored/persisted `edge_status` | F8 | — |
+| **S6** | Inquiry **audit**; unification only if divergence shown | F10 | — |
+| **S7b** | Operator-surface audit (groups, duplication, rule vocabulary) | §6 | — |
+| **S0** | Generalize the ratchet across fact classes | meta-finding | S1a |
 
-S1 first: it is the keystone, and its direction is already ruled, so it is implementation of an
-adopted contract rather than a new decision. S5, S6, S7 are independent and can run any time.
+Changes from rev 1's sequence, all from review:
 
-**Breaking changes are expected.** Downstream projects pin toolkit revisions in `uv.lock`, so
-each upgrades on its own schedule; migrations ship with the change. No compatibility layers —
-that is what produced `derived_edge_status`.
+- **S1 split.** S1a ships the mechanism as a gate over existing coverage; S1b widens coverage
+  under it. Rev 1 bundled two very different bodies of work on the program's critical path.
+- **S7a promoted to first.** The retirement fix is a principle-2 violation with no dependencies
+  and a small diff. It should not wait behind the keystone.
+- **S4 and S6 are audits first.** Rev 1 mandated convergence without demonstrated divergence,
+  contradicting the inventory's own multiplicity-vs-divergence rule.
+- **S5 shrank** from a migration to a guard, because the migration is already done.
+- **S3 starts with a taxonomy**, not a deletion list.
+
+**Breaking changes are expected.** Downstream projects pin toolkit revisions in `uv.lock`;
+migrations ship with the change. No compatibility layers.
 
 ## 9. How we would know it worked
 
-- The reconciliation check exists, gates, and covers every kind.
+- The reconciliation gate covers every declared kind, not one.
 - No layer-3 module contains a per-kind fact table.
+- **Every derived surface carries a machine-readable pointer to its authoritative source** —
+  the "says so where it is read" half of the principle, which rev 1 stated and then failed to
+  test for.
 - Every documented retirement is unreachable in-band.
-- A new kind added to the profile cannot arrive half-wired — the ratchet refuses it.
-- The dead-letter corpus is empty: no kind declares a state it cannot reach.
+- A newly added kind cannot arrive half-wired; the ratchet refuses it.
+- No kind declares a state it cannot reach.
 
 ## 10. Open questions
 
-Deliberately unresolved; each belongs to a sub-project, not here.
+1. Which kinds *should* carry supersession lineage? (S2 — the 12 + 3 are the corpus.)
+2. Do the other 52 kinds enforce D1/D2 as `mixin-hypothesis-2.0` does, and what enforces it for
+   kinds with no schema? (S1b.) *Rev 1 asked whether the axes survive; they were already ruled,
+   and this is the real remaining question.*
+3. Do the six link surfaces actually disagree? (S4 — measurement precedes design.)
+4. Does the commons/project entity boundary survive S1, or does convergence dissolve it? (S1b.)
+5. Are the plural-kind CLI groups duplicates of `entity`? (S7b.)
 
-1. Which kinds *should* carry supersession lineage? (S2 — the 12 dead letters are the corpus.)
-2. Do the four state axes survive as four, or collapse under D1/D2? (S2.)
-3. Are the plural-kind CLI groups duplicates of `entity`? (S7 — needs measurement.)
-4. Does the commons/project entity boundary survive S1, or does convergence dissolve it? (S1.)
+---
+
+*One stance, not a technical row: an honest yellow warning is often the correct state of the
+science. Nothing in this program should make a dashboard greener than the evidence.*

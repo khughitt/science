@@ -1,229 +1,233 @@
 # Multi-surface fact inventory
 
-**Date:** 2026-07-25
+**Date:** 2026-07-25 (rev 2 — corrected after review; rev 1's headline was wrong, see §Corrections)
 **Status:** Audit complete. Input to the system-cohesion design program; no rulings made here.
 **Method:** Every quantity below was produced by running code against the shipped profiles and
-models, not read out of documentation. Where a claim is argued rather than measured it is
-marked **(judgment)**.
+models. Where a claim is argued rather than measured it is marked **(judgment)**.
 
 ## Why this exists
 
 Science grew by solving real problems as they arrived. Each solution needed some fact about the
 system — what a kind is called, where it lives, what states it may hold, which edges it may
-carry — and each took the cheapest route to that fact: store it where it is needed. The second
-consumer copied rather than reached, because reaching requires a layer that may not exist yet.
+carry — and some took the cheapest route: store it where it is needed.
 
-The result is a recurring defect with one shape: **a fact answered independently by more than
-one surface, with nothing comparing the answers.** The copies drift silently. Every instance
-found so far was found by a person tripping over it, not by a check.
+The resulting risk has one shape: **a fact answered by more than one surface.** Where nothing
+compares the answers, they drift silently.
 
-This document inventories those facts. It is deliberately descriptive — the design work of
-deciding who should own each one comes after.
+The important correction from review: **Science already has working mechanisms for exactly this,
+and they are good.** The problem is not absence. It is *coverage* — the mechanisms cover one
+kind and one fact.
 
 ### The instance that prompted it
 
-`fb-2026-07-11-017` closed on 2026-07-15 with a check that errors on a top-level `supersedes:`
-key, correctly, because it materializes no triples. The check told authors to re-author it as a
-`relations:` entry — a form the graph rejects for most kinds. Fixing that (`6cb39f23`) surfaced
-the general pattern: **four** surfaces answer "can this kind be superseded", and no two agree.
+`fb-2026-07-11-017` closed on 2026-07-15 with a check that errors on a top-level `supersedes:`.
+The check told authors to re-author as a `relations:` entry — a form the graph rejects for most
+kinds. Fixing that (`6cb39f23`) prompted this audit.
 
 ## The inventory
 
-Each row is one question the system must answer. "Surfaces" counts places that answer it
-independently — not places that read a shared answer.
-
-| # | Fact | Surfaces | Divergence observed |
+| # | Fact | Surfaces | Status |
 |---|---|---|---|
-| F1 | What fields may a kind carry? | 3 | schema covers 5/53 kinds; model covers 17/53; descriptor covers 0 |
-| F2 | Can this kind be superseded? | 4 | 18 vs 9 vs 18 vs (was) 52 |
-| F3 | How is "this replaced that" spelled? | 7 | 5 of 7 spellings are not model fields |
-| F4 | What state is an entity in? | 3+ | 4 state axes exist; 1 is declared in the profile |
-| F5 | Where does a kind's files live? | 3 | 36/53 declare a home; 1 home is a file, not a directory |
-| F6 | How is an entity named? | 8+ | — **(judgment: not yet shown to diverge)** |
-| F7 | How is a link between entities authored? | 6 | — **(judgment: redundancy, not measured drift)** |
-| F8 | How good is a claim? | 5+ | one is self-described as a "lossy compatibility projection" |
-| F9 | Which relations may a kind participate in? | 2 mechanisms | 21 relations use the loose form, 2 the precise one |
-| F10 | Where is an inquiry authored? | 2 | documented in the user guide as a known duality |
+| F1 | What fields may a kind carry? | 3 | reconciled for **1 of 53** kinds; schema covers 5 |
+| F2 | Can this kind be superseded? | 4 | one direction **ratcheted**; the reverse is unguarded |
+| F3 | Lineage, amendment, identity, archive | 7 fields | **not one fact** — needs a taxonomy |
+| F4 | What state is an entity in? | 5 axes | D1/D2 **enforced** by schema for hypothesis |
+| F5 | Where does a kind's files live? | 3 | 36/53 declare a home |
+| F6 | How is an entity named? | 8 | no divergence measured |
+| F7 | How is a link authored? | 6 | redundancy; divergence **not** measured |
+| F8 | How good is a claim? | 5+ | projections already computed at render time |
+| F9 | Relation endpoint admissibility | 2 mechanisms | **representation**, not a second authority |
+| F10 | Where is an inquiry authored? | 2 | documented duality; divergence not measured |
 
 ---
 
 ### F1 — What fields may a kind carry?
 
-**The most consequential row.** Three systems describe entity shape, and none covers the corpus.
-
 | Surface | Kinds covered | What it declares |
 |---|---|---|
-| `EntityKind` descriptor (`profiles/core.py`) | **53 / 53** | 15 metadata fields — home, category, statuses, prefix. **No field schema.** |
-| Pydantic classes (`science_model/entities.py`) | **17 / 53** have a subclass | field types, on a **67-field base** every kind inherits whole |
-| JSON Schema mixins (`schemas/mixin-*.json`) | **5 / 53** (dataset, hypothesis, paper, theme, topic) | versioned fields, `allOf` composition, conditional invariants |
+| `EntityKind` descriptor | **53 / 53** | 15 metadata fields. **No field schema.** |
+| Pydantic classes | **17 / 53** have a subclass | field types, on a 67-field base |
+| JSON Schema mixins | **5 / 53** (dataset, hypothesis, paper, theme, topic) | versioned fields, `allOf`, conditional invariants |
 
-Measured divergence, `hypothesis`:
+**Rev 1 got the divergence badly wrong.** It reported "17 fields the Pydantic model has never
+heard of." Measured correctly, the hypothesis mixin's 39 `properties` keys are:
 
 ```
-mixin-hypothesis-2.0 properties: 39
-HypothesisEntity fields:         74
-shared:                          22
-only in the schema:              17   phase, disposition, belief_state, role,
-                                      evidence_stance, promotion_criteria, ...
+22  admitted fields
+17  FORBIDDEN — the property schema is literally `false`
 ```
 
-36 of 53 kinds have no type of their own, so a `topic` formally carries `parent_dataset` and
-`accessions` from the shared base.
+The 17 include `phase`, `disposition`, `role`, `belief_state`. They are not fields the model is
+missing; they are fields the schema **rejects outright**. Their absence from the model is the
+design working, not drift.
 
-**This is already ruled on.** The D5 design (`docs/plans/2026-07-12-authoritative-entity-schema-design.md`
-§2) identified exactly this, named the JSON Schema system as already authoritative, and ruled
-**converge, do not invent a third**. D3 was adopted with a five-point contract: schema validates
-first, Pydantic is a projection built after, projections preserve extension fields, **a CI
-reconciliation check verifies every projected field against the effective composed schema**, and
-invariants JSON Schema cannot express are enumerated escape hatches. D3 explicitly **rejects
-generating** one system from the other.
+Of the 22 admitted, **20 are on the model**. The 2 that are not —
+`required_capabilities`, `capability_scope` — are a *documented, named exception* in
+`model/tests/test_hypothesis_entity.py`, with the reader that consumes them identified and an
+explicit rule against the set growing.
 
-**What shipped and what did not.** The silent-drop symptom is fixed: `Entity` moved from
-`extra="ignore"` to `extra="allow"`, so `phase`, `role`, `disposition` now survive
-`model_validate` instead of vanishing. Verified. But:
+**D3 point 4 is implemented.** `test_hypothesis_entity.py` performs the field-by-field
+reconciliation, deriving admitted fields from the **composed** profile (base ∪ mixin, minus
+forbidden). Rev 1 derived from the mixin alone — the exact error that file's own comment warns
+about: *"Deriving this from the mixin ALONE is how `description` hid for four drafts."*
 
-- **D3 point 4 has no implementation.** No test or check compares composed schema properties to
-  Pydantic model fields. `read_effective_frontmatter_fields` exists and is called by exactly one
-  CLI report (`entity sections`, meta D-011) and one model test — nothing gates on it.
-- **Schema coverage stalled at 5 kinds.** The system to converge *on* describes under 10% of the
-  corpus.
+**The real gap is coverage.** Grepping for the reconciliation pattern: `hypothesis` has it.
+`dataset`, `paper`, `theme`, `topic` have schema tests that do **not** reference `model_fields`
+— they test the schema, not schema↔model agreement. So:
 
-So the drift is no longer silent at the *value* layer, but nothing binds the two *declarations*.
-That unbuilt clause is the single highest-leverage item in this inventory. **(judgment)**
+- schema mixins: **5 / 53** kinds
+- schema↔model reconciliation: **1 / 53** kinds
+
+That is a strong pattern applied narrowly, which is a much better starting position than a
+missing mechanism.
 
 ### F2 — Can this kind be superseded?
 
 | Surface | Answer | Mechanism |
 |---|---|---|
-| Status vocabulary | **18 kinds** | `EntityKind.statuses ∋ "superseded"` |
-| Relation admissibility | **9 kinds** | `allowed_kind_pairs` on the `supersedes` RelationKind |
-| `mark_superseded` stamping policy | **18 kinds** | `_supports_superseded` reads `_STATUS_VALUES` (consolidation.py:111) |
-| Validator remediation | was **52 kinds** | `_LEGIT_TOP_LEVEL` — fixed 2026-07-25 to derive from the relation |
+| Status vocabulary | 18 kinds | `EntityKind.statuses ∋ "superseded"` |
+| Relation admissibility | 9 kinds | `allowed_kind_pairs` on `supersedes` |
+| `mark_superseded` policy | 18 kinds | `_supports_superseded` (consolidation.py:111) |
+| Validator remediation | was 52 | fixed 2026-07-25 to derive from the relation |
 
-Two live consequences:
+**This is guarded in one direction.** `model/tests/test_supersedable_gate.py` derives the
+mismatch — kinds declaring `superseded` that cannot author the canonical edge — and ratchets it
+with a **subset** assertion, deliberately chosen so the 12 known half-wired kinds can be repaired
+without failing the suite. It is declared, frozen debt with a guard, not silent drift. Rev 1's
+"nothing noticed" framing was wrong; that test's comment says plainly that nothing noticed
+*until it existed*.
 
-- **12 dead-letter terminals.** `decision, inquiry, mechanism, method, observation, plan,
-  pre-registration, proposition, synthesis, theme, topic, workflow-step` each declare a
-  `superseded` status they cannot legitimately reach, because no canonical edge can exist for
-  them. The RelationKind comment calls this set "declared, frozen debt" — implementation history
-  stored where a rule belongs.
-- **3 unstampable kinds.** `story`, `validation-report`, `workflow-run` can author the edge but
-  declare no `superseded` status, so a real lineage never reaches the entity.
-  `consolidation.py:105-111` documents this and *skips* them defensively rather than resolving it.
+**The reverse direction is unguarded, and is a real finding.** The gate asserts
+`declares ⇒ relation_allows`. It does not assert `relation_allows ⇒ declares`. Three kinds —
+`story`, `validation-report`, `workflow-run` — can author the edge but declare no `superseded`
+status, so a real authored lineage can never reach the entity. `consolidation.py:105-111`
+documents this and *skips* those kinds defensively rather than resolving it.
 
-`core.py:729-745` records the same disagreement being found and repaired **by hand for
-`hypothesis`** — one kind, not the class. This is the third such repair.
+### F3 — Lineage, amendment, identity, and archive are four facts, not one
 
-### F3 — How is "this replaced that" spelled?
+**Rev 1 listed seven "spellings of 'this replaced that'". That was a category error**, and it
+made rev 1's proposal to delete six of them unsafe. Measured semantics:
 
-Seven spellings, two of which are declared model fields:
+| Field | What it actually means |
+|---|---|
+| `relations:` + `sci:supersedes` | "A newer entity **replaces** an older as canonical" |
+| `sci:amends` | "revises, narrows, qualifies, or extends **without replacing**" |
+| top-level `supersedes:` | non-materializing; genuinely dead (now flagged) |
+| `superseded_by` | **derived inverse**, required by D5 |
+| `resynthesized_into` | one-to-**many** lineage (a split), not replacement |
+| `deprecated_ids` | **identity resolution** — prior ids for the *same* entity |
+| `consolidated_into` | **archive** digest membership |
 
-| Spelling | Declared on `Entity`? | Modules referencing |
-|---|---|---|
-| `relations:` + `sci:supersedes` | n/a (canonical edge) | 15 |
-| top-level `supersedes:` | no | 15 |
-| `superseded_by` | no | 14 |
-| `resynthesized_into` | no | 7 |
-| `replaced_by` | **yes** | 6 |
-| `amends` | no | 6 |
-| `consolidated_into` | no | 4 |
-| `deprecated_ids` | **yes** | 5 |
-| `status: superseded` (terminal) | via `status` | — |
+Only the third is clearly disposable. The rest express different relations between different
+things. **F3 needs a semantic taxonomy and an ownership table before any deletion can be
+specified.**
 
 ### F4 — What state is an entity in?
 
-`EntityKind` declares exactly one state axis: `statuses`. 34/53 kinds declare a vocabulary;
-**19 have an open set** (no declared vocabulary at all). 23 distinct status tokens exist
-corpus-wide.
+Five axes are in use: `status`, `phase`, `verdict`, `disposition`, `role`. (Rev 1 said "four"
+while listing five.)
 
-But four state axes are in use. `mixin-hypothesis-2.0` declares `status`, `phase`, `verdict`,
-`disposition`, and `role`. Of these, only `status` has any declaration in the profile; `phase`,
-`verdict`, `disposition` and `role` are **not** declared fields on the Pydantic model either
-(verified — they survive only via `extra="allow"`).
+`EntityKind` declares one (`statuses`): 34/53 kinds declare a vocabulary, **19 have an open set**.
+23 distinct status tokens exist corpus-wide.
 
-D1/D2 ruled the semantics here (`status` is lifecycle; delete `disposition`, keep
-`closure_basis`) — the rulings exist; the declaration layer has not caught up.
+**But the other axes are not undeclared drift — for hypothesis they are explicitly forbidden.**
+`mixin-hypothesis-2.0` sets `phase`, `disposition`, and `role` to `false`. That is D1 (status is
+the lifecycle) and D2 (delete `disposition`) being *enforced at the schema*. Rev 1 read the
+forbiddance as a declaration and concluded the rulings hadn't landed. They had.
+
+What remains open is narrower: whether the *other 52 kinds* enforce the same, given only 5 have
+schemas at all.
 
 ### F5 — Where does a kind's files live?
 
-`EntityKind.home` covers **36/53** kinds. 17 declare none. One (`research-question`) declares a
-home that is a *file*, not a directory — a special case inside a field that otherwise means
-directory. `paths.py` separately carries an `entities_dir` default, and the
-`directory_structure` validate check has its own view.
+`EntityKind.home` covers **36/53** kinds; 17 declare none; one (`research-question`) declares a
+home that is a *file*, not a directory. `paths.py` carries an `entities_dir` default and the
+`directory_structure` check has its own view. No divergence measured between them. **(judgment:
+worth an audit, not yet a finding)**
 
 ### F6 — How is an entity named?
 
-Identity-bearing fields on the base model: `id`, `canonical_id`, `aliases`, `deprecated_ids`,
-`file_path`, `local_path`, `primary_external_id` — plus `citekey` for bibliographic kinds,
-derived slugs, and the `knowledge/sources/local/mappings.yaml` alias table.
+`id`, `canonical_id`, `aliases`, `deprecated_ids`, `file_path`, `local_path`,
+`primary_external_id`, plus citekeys, derived slugs, and the `mappings.yaml` alias table. No
+divergence measured. Listed because identity is load-bearing for resolution. **(judgment)**
 
-No divergence measured. Listed because the surface count is high and identity is load-bearing
-for resolution; it deserves a targeted audit rather than an assumption. **(judgment)**
+### F7 — How is a link authored?
 
-### F7 — How is a link between entities authored?
+Six surfaces: `related:`, `relations:`, `source_refs:`, `discusses:`,
+`knowledge/sources/local/relations.yaml`, `.edges.yaml` sidecars.
 
-Six surfaces: `related:` (untyped), `relations:` (typed predicate + target), `source_refs:`,
-`discusses:` (bundle membership carrying roles), `knowledge/sources/local/relations.yaml`, and
-`.edges.yaml` sidecars — alongside `entities.yaml`, `terms.yaml`, `mappings.yaml` as further
-local source files the graph reads.
-
-This is redundancy of *spelling* rather than measured disagreement. It matters because each
-spelling is a place a future fact can be stored inconsistently. **(judgment)**
+Redundancy of *spelling*. **No conflicting authority has been demonstrated.** Whether these
+disagree is unmeasured, and convergence should be conditional on an audit that shows they do.
+**(judgment)**
 
 ### F8 — How good is a claim?
 
-Parallel vocabularies: `belief_state` (4 levels), verdict tokens (5), `derived_edge_status`
-(5), plus `claim_layer`, `identification_strength`, `polarity`, `evidence_stance`, `strength`,
-`confidence`.
+`belief_state` (4), verdict tokens (5), `derived_edge_status` (5), plus `claim_layer`,
+`identification_strength`, `polarity`, `evidence_stance`, `strength`, `confidence`.
 
-Some of this is legitimate factoring — a verdict is a conclusion about a *test*, `belief_state`
-is a reading of a *proposition*, and they should not be merged. But `derived_edge_status` is
-described in the user guide as "a lossy compatibility projection over canonical state": a
-compatibility layer that became permanent. **(judgment)**
+Much of this is legitimate factoring: a verdict concerns a *test*, `belief_state` a
+*proposition*. **And `derived_edge_status` is already computed at render time** — `render.py:171`
+computes it, `proposition_edges.py:11-12` states it is "never carried here", and `render.py:333`
+strips it before output. Rev 1 called it a stored projection. It is not.
 
-### F9 — Which relations may a kind participate in?
+The residual concern is only that nothing *forbids* authoring `edge_status`. **(judgment)**
 
-23 declared relation kinds, expressed through **two mechanisms in the same field set**:
+### F9 — Relation endpoint admissibility (representation, not authority)
 
-- `allowed_kind_pairs` — an explicit non-Cartesian allow-list. Used by **2** relations
-  (`supersedes`, `amends`).
-- `source_kinds` × `target_kinds` — the Cartesian product. Used by **21**.
+23 relation kinds; 2 use `allowed_kind_pairs`, 21 use `source_kinds` × `target_kinds`.
 
-The Cartesian form is harmless where the sets are 1×1 (most of them). It is exactly the two
-relations with large endpoint sets that needed the precise form — and those are precisely where
-the frozen debt sits. The mechanism duality is not the defect; the content is. **(judgment)**
+**By this document's own definition this is not a multi-surface fact** — both are read through
+`relation_allows_kinds`, which is a single authority. Recorded as a *representation* finding: the
+Cartesian form silently admits every combination, which is why the two relations with large
+endpoint sets needed the precise form. Relabelled from rev 1.
 
 ### F10 — Where is an inquiry authored?
 
-Two source surfaces: `entities/inquiries/<slug>.md` (prose-first entity) and
-`entities/patches/<slug>.md` with `patch_type: inquiry` (the compiled, graph-backed path). The
-user guide names the second "a compatibility view over the patch-definition source path, not a
-second truth-owning inquiry store" — an accurate description of intent and a known duality.
+Two surfaces: `entities/inquiries/<slug>.md` and `entities/patches/<slug>.md` with
+`patch_type: inquiry`. The user guide assigns them distinct roles and states the compiled graph
+is a view, not a second store. **No divergence measured.** **(judgment)**
 
-## The meta-finding
+## The meta-finding (corrected)
 
-Every instance above was found by a person hitting it. **There is no check for declaration
-multiplicity**, and D3's reconciliation clause — the one mechanism that would have caught F1 and
-F2 — was adopted and never built.
+Rev 1 claimed there is no check for declaration multiplicity and that every instance was found by
+a person tripping over it. **Both are false.** Two mechanisms exist, both well built:
 
-This matters more than any individual row. The toolkit is *good* at ratcheting: AST guards,
-frozen allowlists, RED-by-construction tests, reconciliation gates. That machinery works and is
-used well. It just gets aimed at each fact after that fact has already broken something.
+- `test_hypothesis_entity.py` — full schema↔model field reconciliation, composed-profile-derived.
+- `test_supersedable_gate.py` — derives the F2 mismatch and ratchets it as declared debt.
+
+The honest finding is narrower and more actionable:
+
+> **The mechanisms are right and their coverage is 1 kind and 1 fact.** The program is to
+> generalize a working pattern, not to build a missing one.
+
+## Corrections from review (rev 1 → rev 2)
+
+| Rev 1 claim | Reality |
+|---|---|
+| "17 fields the model has never heard of" | 17 are **forbidden** by the schema; real gap is 2, documented |
+| "D3 point 4 has no implementation" | implemented in `test_hypothesis_entity.py` for hypothesis |
+| "nothing binds the two declarations" | bound for hypothesis; **unbound for the other 52** |
+| "seven spellings of 'this replaced that'" | four distinct facts; only one field is clearly dead |
+| "four state axes" | five, and three are schema-**forbidden** for hypothesis (D1/D2 enforced) |
+| "`derived_edge_status` is stored" | computed at render time and stripped before output |
+| "47 CLI groups" | **46** top-level entries = 39 groups + 7 single commands |
+| F2 "nothing noticed" | ratcheted by `test_supersedable_gate.py`; the *reverse* direction is unguarded |
+
+**Root cause of the errors:** rev 1 derived admitted fields from the mixin alone and counted
+`false` property schemas as declarations. The file it should have read first warns against
+exactly that. Grounding the claim in the existing tests — rather than in a fresh script — would
+have caught all of it.
 
 ## Scope and honesty
 
-- This is a broad sweep, not an exhaustive audit. Facts not listed here are unexamined, not
-  cleared.
-- All counts were produced by running code on 2026-07-25 against local `main` at `87ac7337`.
-- Rows F6–F9 record surface *multiplicity*; only F1, F2, F4 and F5 have measured *disagreement*.
-  That distinction should survive into the design — redundancy is a smell, divergence is a bug.
-- Nothing here is a ruling. In particular, F1's direction was already settled by D3/D5 and this
-  document does not reopen it: the finding is that the adopted contract is **incompletely
-  implemented**, not that it was wrong.
+- A broad sweep, not an exhaustive audit. Facts not listed are unexamined, not cleared.
+- Counts run 2026-07-25 against local `main` at `87ac7337`.
+- **Measured divergence: F1 (coverage), F2 (reverse direction), F5 (partial declaration).**
+  F3 is a taxonomy problem. F6–F10 are redundancy or representation with no demonstrated
+  divergence — that distinction must survive into the design.
+- Nothing here is a ruling.
 
 ## What this does not cover
 
-Deliberately out of scope, and worth their own passes: the CLI surface (47 command groups), the
-checking/reporting systems (`validate`, `qa_audit`, `curate`, `big_picture`, `wander`,
-`distill`, `skills_coverage`), test-suite organisation, and the commons/project boundary beyond
-its entity-schema aspect.
+The CLI surface, the checking/reporting systems, test-suite organisation, and the
+commons/project boundary beyond its entity-schema aspect.
