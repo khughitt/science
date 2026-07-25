@@ -48,7 +48,7 @@ Two AST/tree guards in `tests/test_budget_boundary.py` run over `BUDGETS` automa
 
 **Interfaces:**
 - Consumes from slice 1a: `BoundedSink(budget, *, output_path, command_path, complete_via)`; `budget.registry.lookup`; `budget.invocation.build_complete_via(ctx, *, output_hint)`; `budget.control.bounded_control_notice`; `output.emit(*, output_format, payload, render_text, sort_keys=False, sink=None)`.
-- Produces: `curate inventory` registered `CommandBudget(max_chars=20_000, shape=PayloadShape.DOCUMENT)`; the shared test helpers `_invoke`, `_assert_document_refuses`, `_assert_document_file_complete`, `_assert_report_stdout_projected`, `_assert_report_file_complete` that Tasks 2-4 reuse.
+- Produces: `curate inventory` registered `CommandBudget(max_chars=20_000, shape=PayloadShape.DOCUMENT)`; the shared test helpers `_invoke`, `_seed_entities`, `_assert_document_refuses`, `_assert_document_file_complete`, and `_assert_report_projection` that Tasks 2-4 reuse.
 
 - [ ] **Step 1: Create the regression module with DOCUMENT + REPORT helpers and the `curate inventory` case**
 
@@ -96,65 +96,77 @@ def _invoke(args: list[str]):
     return CliRunner().invoke(main, args, prog_name="science")
 
 
-def _assert_document_refuses(command_path: str, base_args: list[str]) -> None:
-    """A DOCUMENT over budget refuses on stdout: nonzero exit, names --output, no partial."""
+def _assert_document_refuses(command_path: str, base_args: list[str], *, sentinel: str) -> None:
+    """A DOCUMENT over budget refuses on stdout: nonzero exit, names --output, leaks nothing."""
     result = _invoke(base_args)
     assert result.exit_code != 0, result.output
     assert "--output" in result.output
     assert visible_len(result.output) <= BUDGETS[command_path].max_chars
+    assert sentinel not in result.output  # no partial payload leaked past the refusal
 
 
-def _assert_document_file_complete(base_args: list[str], out_dir: Path, probe: str) -> None:
+def _assert_document_file_complete(base_args, out_dir, *, expected_items, count_items):
+    """--output writes the complete document; every seeded record is present."""
     target = out_dir / "complete.json"
     result = _invoke([*base_args, "--output", str(target)])
     assert result.exit_code == 0, result.output
-    written = target.read_text()
-    payload = json.loads(written)  # the complete document parses as one JSON object
-    assert probe in written
+    payload = json.loads(target.read_text())  # the complete document parses whole
+    assert count_items(payload) == expected_items
+    return payload
 
 
-def _assert_report_stdout_projected(command_path: str, base_args: list[str]) -> None:
-    """stdout is bounded AND projection actually ran (guards against a no-op projector)."""
-    table = _invoke(base_args)
-    assert table.exit_code in (0, 1), table.output  # 1 is allowed (validate/strict findings)
-    ceiling = BUDGETS[command_path].max_chars
-    assert visible_len(table.output) <= ceiling, f"{base_args} -> {visible_len(table.output)} > {ceiling}"
-    assert "showing " in table.output  # projection footer proves rows were dropped
+def _assert_report_projection(command_path, base_args, out_dir, *, expected_exit, omitted_key, count_items, summary_of):
+    """Prove the REPORT contract with the --output file as ground truth.
 
-    payload = json.loads(_invoke([*base_args, "--format", "json"]).output)
-    # The projector records the omission inside the payload (emit's JSON branch adds nothing).
-    omitted = payload.get("truncation") or {k: v for k, v in payload.items() if k.endswith("_omitted")}
-    assert omitted, f"no omission marker in JSON payload keys: {sorted(payload)}"
+    - exact exit code in every format;
+    - the file is complete and unprojected (no omission marker);
+    - projected stdout math reconciles: shown + omitted == the full total;
+    - the summary block is byte-identical projected vs complete (projection alters display only);
+    - projected stdout stays under the ceiling and carries the "showing " footer;
+    - the complete table file exceeds the ceiling (rejects an empty/projected file).
+    """
+    file_json = out_dir / "complete.json"
+    fr = _invoke([*base_args, "--format", "json", "--output", str(file_json)])
+    assert fr.exit_code == expected_exit, fr.output
+    complete = json.loads(file_json.read_text())
+    assert complete.get(omitted_key, 0) == 0, "file JSON must not be projected"
+    total = count_items(complete)
 
+    sr = _invoke([*base_args, "--format", "json"])
+    assert sr.exit_code == expected_exit, sr.output
+    proj = json.loads(sr.output)
+    shown, omitted = count_items(proj), proj.get(omitted_key, 0)
+    assert omitted > 0, f"expected projection but {omitted_key}={omitted}"
+    assert shown + omitted == total, f"{shown} + {omitted} != {total}"
+    assert summary_of(proj) == summary_of(complete), "projection must not alter the summary"
 
-def _assert_report_file_complete(command_path: str, base_args: list[str], out_dir: Path) -> None:
-    """--output is complete and unprojected, in both formats."""
-    json_target = out_dir / "complete.json"
-    jr = _invoke([*base_args, "--format", "json", "--output", str(json_target)])
-    assert jr.exit_code in (0, 1), jr.output
-    payload = json.loads(json_target.read_text())
-    assert not (payload.get("truncation")), "file JSON must not be projected"
-    assert not any(k.endswith("_omitted") and payload[k] for k in payload), "file JSON must not record omissions"
+    tr = _invoke(base_args)
+    assert tr.exit_code == expected_exit, tr.output
+    assert visible_len(tr.output) <= BUDGETS[command_path].max_chars
+    assert "showing " in tr.output
 
-    table_target = out_dir / "complete.txt"
-    tr = _invoke([*base_args, "--output", str(table_target)])
-    assert tr.exit_code in (0, 1), tr.output
-    written = table_target.read_text()
+    file_txt = out_dir / "complete.txt"
+    ttr = _invoke([*base_args, "--output", str(file_txt)])
+    assert ttr.exit_code == expected_exit, ttr.output
+    written = file_txt.read_text()
     assert "showing " not in written
-    # A complete, unprojected report holds far more than any budgeted stdout ever could,
-    # so it must exceed the ceiling. Rejects both an empty file and a projected one.
     assert visible_len(written) > BUDGETS[command_path].max_chars
 
 
 def test_curate_inventory_refuses_and_completes(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     (tmp_path / "science.yaml").write_text("id: demo\nname: demo\n")
-    # One record per entity: ~900 entities makes the inventory JSON far exceed 20,000 chars.
+    # One record per entity: 900 entities makes the inventory JSON ~340k chars, far over 20,000.
     _seed_entities(tmp_path, "question", "questions", 300)
     _seed_entities(tmp_path, "interpretation", "interpretations", 300)
     _seed_entities(tmp_path, "discussion", "discussions", 300)
     monkeypatch.chdir(tmp_path)
-    _assert_document_refuses("curate inventory", ["curate", "inventory"])
-    _assert_document_file_complete(["curate", "inventory"], tmp_path, probe="schema_version")
+    # A seeded artifact id proves nothing partial leaks when the DOCUMENT refuses on stdout.
+    _assert_document_refuses("curate inventory", ["curate", "inventory"], sentinel="discussion:d0000")
+    payload = _assert_document_file_complete(
+        ["curate", "inventory"], tmp_path,
+        expected_items=900, count_items=lambda p: len(p["artifacts"]),
+    )
+    assert sum(payload["artifact_counts"].values()) == 900  # {question:300, interpretation:300, discussion:300}
 ```
 
 - [ ] **Step 2: Run to verify it fails**
@@ -300,12 +312,20 @@ def test_prose_lint_is_bounded_and_complete(tmp_path: Path, monkeypatch: pytest.
     (tmp_path / "science.yaml").write_text("id: demo\nname: demo\n")
     _seed_prose_hits(tmp_path, 400)
     monkeypatch.chdir(tmp_path)
-    _assert_report_stdout_projected("prose lint", ["prose", "lint"])
-    _assert_report_file_complete("prose lint", ["prose", "lint"], tmp_path)
+    _assert_report_projection(
+        "prose lint", ["prose", "lint"], tmp_path,
+        expected_exit=0,  # no --strict -> prose lint never fails the run
+        omitted_key="hits_omitted",
+        count_items=lambda p: len(p["hits"]),
+        summary_of=lambda p: p["counts"],
+    )
+    # The per-check `counts` are the summary; they must equal the full hit total.
+    complete = json.loads((tmp_path / "complete.json").read_text())
+    assert sum(complete["counts"].values()) == len(complete["hits"])
 ```
 
 Run: `cd science && uv run --frozen pytest tests/test_budget_regression_reports.py::test_prose_lint_is_bounded_and_complete -v`
-Expected: FAIL — `prose lint` not in `BUDGETS`; 400 bare-author-year hits print unbudgeted, far over 30,000 chars, and there is no `--output`. If `bare-author-year` is not the enabled default or the seed produces no hits, inspect `science_tool.prose_lint.CHECKS`, pick a check that fires on cheap seeded input, and adjust `_seed_prose_hits` until the RED run reports >30,000 chars of hits before proceeding.
+Expected: FAIL — `prose lint` not in `BUDGETS`; the seed produces two hits per file (`bare-author-year` + `frontmatter-inline-gap`), so 400 files ≈ 800 hits print unbudgeted, far over 30,000 chars, and there is no `--output`. Confirmed against source: 20 files produce 40 hits with `sum(counts.values()) == len(hits)`. If a future default-check change drops the seed under 30,000 chars, inspect `science_tool.prose_lint.CHECKS` and grow the seed until the RED run exceeds the ceiling.
 
 - [ ] **Step 2: Write the projector**
 
@@ -471,26 +491,40 @@ Append to `science/tests/test_budget_regression_reports.py`:
 
 ```python
 def test_consolidation_candidates_is_bounded_and_complete(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    import yaml
+
     (tmp_path / "science.yaml").write_text("id: demo\nname: demo\n")
-    # Each superseded pair (a -> b via `supersedes:`) is one linear lineage chain; 300 pairs
-    # is 300 candidate rows, well over the ceiling.
-    folder = tmp_path / "entities" / "questions"
+    folder = tmp_path / "entities" / "interpretations"
     folder.mkdir(parents=True)
+
+    def _write(name: str, fm: dict) -> None:
+        (folder / f"{name}.md").write_text("---\n" + yaml.safe_dump(fm, sort_keys=False) + "---\n\nbody\n")
+
+    # The supersession edge is a RELATION with predicate "sci:supersedes" on the successor
+    # (top-level `supersedes:` is ignored -- verified against consolidation.py). Each pair is
+    # one linear lineage chain. Distinct id stems (oldNNNN / newNNNN) avoid the alias
+    # collision that a shared numeric stem (qNNNN-old / qNNNN-new) would raise.
     for i in range(300):
-        (folder / f"{i:04d}-old.md").write_text(
-            f"---\nid: question:q{i:04d}-old-a-long-descriptive-slug\nkind: question\n"
-            f"title: Old question {i}\nstatus: superseded\nsupersedes: []\n---\n\nbody\n"
-        )
-        (folder / f"{i:04d}-new.md").write_text(
-            f"---\nid: question:q{i:04d}-new-a-long-descriptive-slug\nkind: question\n"
-            f"title: New question {i}\nstatus: open\nsupersedes: [question:q{i:04d}-old-a-long-descriptive-slug]\n---\n\nbody\n"
-        )
+        _write(f"old{i:04d}", {"id": f"interpretation:old{i:04d}", "kind": "interpretation",
+                               "title": f"Old {i}", "status": "superseded"})
+        _write(f"new{i:04d}", {"id": f"interpretation:new{i:04d}", "kind": "interpretation",
+                               "title": f"New {i}", "status": "open",
+                               "relations": [{"predicate": "sci:supersedes", "target": f"interpretation:old{i:04d}"}]})
     monkeypatch.chdir(tmp_path)
-    _assert_report_stdout_projected("curate consolidation-candidates", ["curate", "consolidation-candidates"])
-    _assert_report_file_complete("curate consolidation-candidates", ["curate", "consolidation-candidates"], tmp_path)
+    _assert_report_projection(
+        "curate consolidation-candidates", ["curate", "consolidation-candidates"], tmp_path,
+        expected_exit=0,  # read-only report
+        omitted_key="candidates_omitted",
+        count_items=lambda p: (
+            len(p["superseded_lineage"]["linear"])
+            + len(p["superseded_lineage"]["non_linear"])
+            + len(p["semantic_clusters"])
+        ),
+        summary_of=lambda p: p["counts"],
+    )
 ```
 
-Run the case. Expected: FAIL — not budgeted, no `--output`, output over budget. If the seeded supersedes chains do not produce candidate rows (inspect `detect_consolidation_candidates`), adjust the seed (e.g. add `related:` overlaps for semantic clusters) until the unbudgeted run exceeds 30,000 chars.
+Run the case. Expected: FAIL — not budgeted, no `--output`, output over budget. Confirmed against source: 6 relation-pairs produce 6 linear chains (exit 0), so 300 pairs produce 300 chains, ~exceeding 30,000 chars. If a future detector change drops the count, add `related:` overlaps for semantic clusters until the unbudgeted run exceeds 30,000 chars.
 
 - [ ] **Step 2: Write the projector**
 
@@ -598,7 +632,7 @@ def consolidation_candidates_cmd(
         click.echo(control_notice)
 ```
 
-Add the `--output` option (identical shape to Task 2) and the `output_path: Path | None` parameter to the decorator/signature. The footer uses the `"showing "` convention that the shared `_assert_report_stdout_projected` helper checks, matching the other REPORT commands.
+Add the `--output` option (identical shape to Task 2) and the `output_path: Path | None` parameter to the decorator/signature. The footer uses the `"showing "` convention that the shared `_assert_report_projection` helper checks, matching the other REPORT commands.
 
 - [ ] **Step 5: Run tests, lint, types**
 
@@ -636,7 +670,9 @@ Append to `science/tests/test_budget_regression_reports.py`:
 def test_validate_is_bounded_and_complete(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     (tmp_path / "science.yaml").write_text("id: demo\nname: demo\n")
     # Many unresolved references produce many validation findings. Seed entities whose
-    # `related:` points at nonexistent targets.
+    # `related:` points at nonexistent targets. Confirmed against source: 20 such entities
+    # produce 160 findings (37 errors, 123 warnings, 0 infos), so 400 far exceed the ceiling
+    # and `validate` exits 1 (errors present).
     folder = tmp_path / "entities" / "questions"
     folder.mkdir(parents=True)
     for i in range(400):
@@ -646,11 +682,16 @@ def test_validate_is_bounded_and_complete(tmp_path: Path, monkeypatch: pytest.Mo
             f"related: [hypothesis:h{i:04d}-does-not-exist-anywhere-in-this-project]\n---\n\nbody\n"
         )
     monkeypatch.chdir(tmp_path)
-    _assert_report_stdout_projected("validate", ["validate"])
-    _assert_report_file_complete("validate", ["validate"], tmp_path)
+    _assert_report_projection(
+        "validate", ["validate"], tmp_path,
+        expected_exit=1,  # errors present -> ctx.exit(1) on the full result
+        omitted_key="results_omitted",
+        count_items=lambda p: len(p["results"]),
+        summary_of=lambda p: p["summary"],
+    )
 ```
 
-Run the case. Expected: FAIL — `validate` not budgeted, no `--output`, findings printed unbudgeted. If unresolved-ref seeding does not yield >30,000 chars of findings, inspect `validate/runner.py` for a cheaper high-volume finding and adjust the seed until the RED run exceeds the ceiling. (`validate` exits 1 on errors; the helpers already allow exit code 1.)
+Run the case. Expected: FAIL — `validate` not budgeted, no `--output`, findings printed unbudgeted. If unresolved-ref seeding does not yield >30,000 chars of findings, inspect `validate/runner.py` for a cheaper high-volume finding and grow the seed until the RED run exceeds the ceiling.
 
 - [ ] **Step 2: Write the projector**
 
@@ -710,43 +751,55 @@ Add the option to the decorator and `output_path: Path | None` to the signature.
         else None
     )
 
+    # Visibility is FORMAT-SPECIFIC and MUST be applied before the cap: INFO rows must never
+    # consume the cap, and each format's omission count must reflect what that format shows.
+    # (JSON drops all INFO; text keeps only "visible info" per _display_filter.)
+    json_visible = [item for item in result.results if item.severity is not Severity.INFO]
+    text_visible = [item for item in result.results if _display_filter(item, verbose=verbose)]
     if output_path is not None:
-        displayed_results, omitted = list(result.results), 0
+        json_results, json_omitted = json_visible, 0
+        text_results, text_omitted = text_visible, 0
     else:
-        displayed_results, omitted = project_validate_results(list(result.results))
+        json_results, json_omitted = project_validate_results(json_visible)
+        text_results, text_omitted = project_validate_results(text_visible)
 
-    payload = _json_payload(result)
-    if output_path is None:
-        # JSON display carries only the projected findings + the omission marker; the
-        # summary counts stay full (they come from _json_payload's full result).
-        emitted = [item for item in displayed_results if item.severity is not Severity.INFO]
-        payload = {**payload, "results": [item.to_dict() for item in emitted], "results_omitted": omitted}
+    # Summary counts always come from the FULL result (via _json_payload); projection
+    # narrows only the displayed `results`. results_omitted is added only when it projected.
+    payload = {
+        "summary": _json_payload(result)["summary"],
+        "results": [item.to_dict() for item in json_results],
+    }
+    if json_omitted:
+        payload["results_omitted"] = json_omitted
 
     emit(
         output_format=output_format,
         payload=payload,
-        render_text=lambda: _emit_text(result, displayed_results, omitted, sink, verbose=verbose),
+        render_text=lambda: _emit_text(result, text_results, text_omitted, sink, verbose=verbose),
         sink=sink,
     )
     sink.flush()
     if control_notice is not None:
         click.echo(control_notice)
 
+    # Exit reflects the FULL result, never the projected display.
     if result.errors or result.gated:
         ctx.exit(1)
 ```
 
-Rewire `_emit_text` to render through the sink's console and print the footer, taking the displayed results:
+Rewire `_emit_text` to render through the sink's console and print the footer, taking the already-visible-and-capped results:
 
 ```python
 def _emit_text(
     result: RunResult,
-    displayed_results: list[Result],
+    shown_results: list[Result],
     omitted: int,
     sink,
     *,
     verbose: bool = False,
 ) -> None:
+    # shown_results is already filtered by _display_filter AND capped by the caller; render
+    # it as-is. The header/coverage/notices/summary come from the FULL result.
     console = sink.console
     console.print(BANNER)
     console.print("Science Project Validation")
@@ -759,12 +812,11 @@ def _emit_text(
         for section in _section_names(result):
             console.print(section_banner(section))
 
-    shown = [item for item in displayed_results if _display_filter(item, verbose=verbose)]
-    for item in shown:
+    for item in shown_results:
         console.print(_format_result(item), soft_wrap=True)
 
     if omitted:
-        sink.echo(f"showing {len(shown)} of {len(shown) + omitted} findings")
+        sink.echo(f"showing {len(shown_results)} of {len(shown_results) + omitted} findings")
         sink.echo(f"  complete output:  {sink.complete_via}")
 
     console.print()
@@ -772,7 +824,7 @@ def _emit_text(
     console.print(_format_summary(result), soft_wrap=True)
 ```
 
-Add a small `_display_filter` helper equivalent to the old `_text_results` predicate (INFO handling), so the display filter can run over `displayed_results` rather than `result.results`:
+Add a small `_display_filter` helper equivalent to the old `_text_results` predicate (INFO handling), so the caller can filter `result.results` before capping:
 
 ```python
 def _display_filter(item: Result, *, verbose: bool) -> bool:
@@ -851,7 +903,7 @@ git commit -m "test(budget): retire the discharged measured-offenders test; reco
 
 **Guard alignment.** Each wired callback constructs its `BoundedSink` in its own body and exposes `--output`, satisfying both AST guards. DOCUMENT refuse is `flush()` raising `BudgetExceeded`; REPORT projection is skipped when `output_path is not None`, so `--output` is always complete.
 
-**Behavioural coverage.** DOCUMENT: `_assert_document_refuses` (nonzero exit + names `--output` + nothing partial) and `_assert_document_file_complete` (full document written). REPORT: `_assert_report_stdout_projected` (stdout under ceiling AND a `"showing "` footer AND a JSON omission marker) and `_assert_report_file_complete` (both formats complete, no omission markers, file exceeds the ceiling). Summary counts and exit codes are asserted implicitly by allowing exit code 1 and by the full-suite run; the FULL-result invariant is enforced in the wiring, not the display.
+**Behavioural coverage.** DOCUMENT: `_assert_document_refuses` (nonzero exit + names `--output` + a seeded artifact-id sentinel is absent, proving no partial payload leaked) and `_assert_document_file_complete` (the `--output` file parses whole and holds exactly the seeded record count — 900 artifacts). REPORT: one helper, `_assert_report_projection`, uses the `--output` file as ground truth and asserts, per command: the **exact** exit code in both formats (prose 0, consolidation 0, validate 1); the file is complete and unprojected (`omitted_key == 0`); the projected stdout reconciles (`shown + omitted == full total`); the summary block is identical projected-vs-complete (projection alters display only, never counts); projected stdout is under the ceiling with the `"showing "` footer; and the complete table file exceeds the ceiling (rejecting an empty or projected file). These are command-specific via the `count_items`/`summary_of`/`expected_exit`/`omitted_key` parameters, so a wrong total, an altered summary, a wrong exit code, or an incomplete file all fail. The FULL-result invariant (summary + exit) is enforced in the wiring and verified by the summary-invariance and exact-exit-code assertions.
 
 **Known limits.**
 - `max_chars=30_000` / per-command cap 40 are carried from `health`/`SECTION_ROW_CAP`. If any projected REPORT exceeds 30,000 chars at cap 40 (wide rows), lower that command's cap constant until the regression is green — never shrink the test seed (the slice-1b-1 lesson).
