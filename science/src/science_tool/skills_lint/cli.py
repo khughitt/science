@@ -8,6 +8,7 @@ from urllib.parse import urlparse
 import click
 
 from science_tool.output import emit
+from science_tool.skills_coverage.cli import coverage_command
 from science_tool.skills_lint.discovery import iter_skill_files
 from science_tool.skills_lint.lint import SkillIssue, check_skills
 from science_tool.skills_lint.sources import (
@@ -23,6 +24,9 @@ from science_tool.skills_lint.sources import (
 @click.group(name="skills")
 def skills_group() -> None:
     """Skills library tooling."""
+
+
+skills_group.add_command(coverage_command)
 
 
 @skills_group.command(name="lint")

@@ -324,6 +324,8 @@ Only this establishes "an analysis touching product X loaded skill Y", tagged
 reach is tagged `observation_level: project-demand` and makes **no**
 co-observation claim.
 
+> **Superseded by sub-plan 4** ([`2026-07-25-skill-coverage-command-design.md`](2026-07-25-skill-coverage-command-design.md) §2): the plan→dataset edge is **`dataset_usage` ∪ `related: dataset:*`**, not `dataset_usage` alone. Corpus reality at `c06e6073`: **0 of 351 plan entities author `dataset_usage`** (it is authored on evidence-lines/papers/propositions, not plans), while `related: dataset:*` carries the edge (120 refs across 11 projects). `related` edges are **mention-grade** (no `role`/`overlap`), so a pair is a gap-detection signal, not a confirmed analysis. The `project-demand` fallback is deferred (§3); v1 tags every occurrence `analysis-usage`.
+
 ### Enrollment as a closed declaration
 
 Enrollment is a **closed declaration** in `science.yaml`. The `out-of-domain`
@@ -379,6 +381,7 @@ out-of-domain result; a registered project that has not declared yields
   any `--output` target **untouched**. Such a project is **never** classified as
   `undeclared-domain` — undeclared is a coverage state for a validly-loaded,
   enrolled-vocabulary project, not a stand-in for a load failure.
+  > **Superseded by sub-plan 4** ([`2026-07-25-skill-coverage-command-design.md`](2026-07-25-skill-coverage-command-design.md) §6): "fails canonical loading aborts" is narrowed to three outcomes — a registered path that is **missing / has no `science.yaml` is skipped** and reported in `skipped_projects[]` (stale entries are expected, per `registry/sync.py`); a path that **exists but has invalid config aborts**; and **source/entity** loading (and its failure gate) applies **only to enrolled** projects (a non-enrolled project's entity integrity is `validate`'s job). An absent/empty registry is a hard error (no fail-open). The `--output` untouched guarantee is made real by an atomic same-directory temp-file + `os.replace`.
 - **Report destination & ownership:** the toolkit has no `results/` convention, so
   there is **no implicit path** — the `coverage-report` JSON is written to
   **stdout by default**, with optional `--output PATH` for a file.
@@ -400,6 +403,7 @@ out-of-domain result; a registered project that has not declared yields
   `candidates[]` from `uncovered` only: `{proposed_scope, likely_archetype |
   indeterminate, score, evidence_refs[]}`. Evidence-backed candidates only — **no
   skill prose is generated.**
+  > **Superseded by sub-plan 4** (§5): the diagnostic is `{project, plan_ref, skill_id}` — the reified `SkillLoadRecord` keeps only the **canonical** id, so it reports the canonical (post-alias) id under `skill_id` (not `raw_skill_id`) and adds `project` for cross-project disambiguation. Occurrence and candidate evidence are **structured** (`{plan_ref, dataset_ref}` pairs; candidate `evidence` uses `{project, plan_ref, dataset_ref}` triples), not flattened `evidence_refs[]`, so the cross-project score is reproducible from the report.
 
 ## Prioritization
 
@@ -409,6 +413,7 @@ recurrence (`concern`+`target`), and coverage absence/over-generality. Non-
 structured factors (consequence severity, detection lateness) are deferred unless
 a transparent derivation exists; `likely_archetype` is emitted only when inferable,
 else `indeterminate`.
+> **Narrowed by sub-plan 4** ([`2026-07-25-skill-coverage-command-design.md`](2026-07-25-skill-coverage-command-design.md) §4): v1's `score` uses the evidence-count signals (occurrence count × cross-project breadth) + sibling-inferred `likely_archetype`. **Feedback recurrence (`concern`+`target`) is deferred** — it is a separate data source (feedback entities) not consumed by this sub-plan.
 
 ## Scope
 
@@ -518,8 +523,10 @@ typed companion-edge relation semantics.
 - `skills_loaded`: migrated plan materializes a reified load record; retired id resolves
   via alias; unknown id → `unmapped-skill-reference` with raw id + plan ref, never
   "no covering skill."
+  > **Superseded by sub-plan 4** (§5): the diagnostic carries `{project, plan_ref, skill_id}` (canonical id, since the authored id is not retained by the reified record).
 - Occurrence: `dataset_usage` chain yields an `analysis-usage` occurrence; project
   inventory does not; q/h-reach fallback is tagged `project-demand`.
+  > **Deferred by sub-plan 4** (§3): v1 emits `analysis-usage` occurrences only; the `project-demand` q/h-reachability fallback is out of scope (it needs epistemic-graph reachability, which the lightweight no-graph read path does not build). The `observation_level` field is kept forward-compatible.
 - Enrollment: `molecular-measurement: enrolled` → coverage occurrences; `out-of-domain`
   → one out-of-domain result; **absent → one `undeclared` diagnostic**; an unknown
   domain key is a hard config error; **`enrolled` without `entity_schema_version: 3`

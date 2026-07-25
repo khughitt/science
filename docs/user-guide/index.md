@@ -40,6 +40,7 @@ that order:
 | [Codex](codex.md) | Using Science with OpenAI Codex via native skill discovery: install and skill generation. |
 | [Feedback And Telemetry](feedback-and-telemetry.md) | Feedback entries, concern taxonomy, local telemetry, redaction, reporting, pruning, and telemetry-assisted triage. |
 | [Benchmarking](benchmarking.md) | Benchmark metadata, validation, catalog coverage, opportunities, gaps, calibration, and read-only test projections. |
+| [Skill Coverage](../conventions/skill-coverage.md) | Enrolling projects in skill coverage and scanning portfolio coverage. |
 | [Project Packaging](project-packaging.md) | Deterministic project bundles, manifest payload inventories, verification, extraction, and exit-code semantics. |
 | [Cross-Project Work](cross-project-work.md) | Peers, sync, project collections, and federated Science projects. |
 
