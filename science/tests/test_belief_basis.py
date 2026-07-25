@@ -3,9 +3,12 @@ from __future__ import annotations
 import dataclasses
 
 import pytest
+from rdflib import Graph, Literal, URIRef
+from rdflib.namespace import RDF
 
-from science_tool.graph.belief import EvidenceUnit
-from science_tool.graph.belief_basis import unit_key
+from science_tool.graph.belief import EVIDENCE_LINE_CLASS, EvidenceUnit
+from science_tool.graph.belief_basis import NO_TYPED_ENTITIES, capture_basis, unit_key
+from science_tool.graph.io import CITO_NS, PROJECT_NS, SCI_NS
 
 
 def _u(stance: str = "supports", **kw) -> EvidenceUnit:
@@ -64,3 +67,45 @@ def test_unserializable_value_raises_rather_than_coercing():
     unit = dataclasses.replace(_u(), source=object())
     with pytest.raises(TypeError):
         unit_key(unit)
+
+
+CLAIM = URIRef(PROJECT_NS["proposition/p"])
+LINE = URIRef(PROJECT_NS["evidence-line/e"])
+
+
+def _graphs_with_one_supporting_line() -> tuple[Graph, Graph]:
+    knowledge, provenance = Graph(), Graph()
+    knowledge.add((CLAIM, RDF.type, SCI_NS.Proposition))
+    knowledge.add((LINE, RDF.type, EVIDENCE_LINE_CLASS))
+    knowledge.add((LINE, CITO_NS.supports, CLAIM))
+    provenance.add((LINE, SCI_NS.evidenceStrength, Literal("strong")))
+    return knowledge, provenance
+
+
+def test_capture_records_one_unit_for_the_claim():
+    knowledge, provenance = _graphs_with_one_supporting_line()
+    result = capture_basis(knowledge, provenance)
+    assert result.status == "ok"
+    claim = next(r for r in result.rows if r.entity_id == "proposition:p")
+    assert len(claim.unit_keys) == 1
+    assert claim.target_uris == (str(CLAIM),)
+
+
+def test_capture_records_policy_identity():
+    knowledge, provenance = _graphs_with_one_supporting_line()
+    claim = next(r for r in capture_basis(knowledge, provenance).rows if r.entity_id == "proposition:p")
+    assert claim.policy_id == "core-default"
+    assert claim.policy_version
+
+
+def test_empty_graph_is_unwired_not_empty():
+    """No typed entities means belief was never assessed — that is not 'no changes'."""
+    result = capture_basis(Graph(), Graph())
+    assert result.status == "unwired"
+    assert result.code == NO_TYPED_ENTITIES
+
+
+def test_layer_uris_are_not_entities():
+    knowledge, provenance = Graph(), Graph()
+    knowledge.add((URIRef(PROJECT_NS["graph/knowledge"]), RDF.type, SCI_NS.Layer))
+    assert capture_basis(knowledge, provenance).status == "unwired"
