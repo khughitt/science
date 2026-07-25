@@ -58,7 +58,6 @@ def test_every_deferred_entry_states_what_makes_it_grow() -> None:
 def test_the_ten_measured_offenders_are_deferred() -> None:
     """`entity list` was wired in slice 1b-1 Task 2; the other nine remain deferred."""
     measured = {
-        "entity needs-review",
         "curate consolidation-candidates",
         "curate inventory",
         "prose lint",

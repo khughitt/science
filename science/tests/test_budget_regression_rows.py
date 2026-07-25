@@ -98,6 +98,28 @@ def test_entity_list_is_bounded_and_complete(rows_corpus: Path) -> None:
     _assert_file_complete("entity list", ["entity", "list"], seeded_total=900, out_dir=rows_corpus)
 
 
+def test_needs_review_is_bounded_and_complete(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from rdflib import Dataset, Literal
+
+    from science_tool.graph.store import DEFAULT_GRAPH_PATH, PROJECT_NS, SCI_NS
+
+    (tmp_path / "science.yaml").write_text("id: demo\nname: demo\n")
+    ds = Dataset()
+    knowledge = ds.graph(PROJECT_NS["graph/knowledge"])
+    for i in range(400):
+        uri = PROJECT_NS[f"question/q{i:04d}-a-deliberately-long-descriptive-slug"]
+        knowledge.add((uri, SCI_NS.freshnessState, Literal("needs-review")))
+    trig_path = tmp_path / DEFAULT_GRAPH_PATH
+    trig_path.parent.mkdir(parents=True, exist_ok=True)
+    ds.serialize(destination=str(trig_path), format="trig")
+    monkeypatch.chdir(tmp_path)
+
+    _assert_stdout_projected("entity needs-review", ["entity", "needs-review"], seeded_total=400)
+    _assert_file_complete("entity needs-review", ["entity", "needs-review"], seeded_total=400, out_dir=tmp_path)
+
+
 def test_feedback_list_is_bounded_and_complete(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
