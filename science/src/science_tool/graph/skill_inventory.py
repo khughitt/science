@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import json
 import re
+from collections.abc import Mapping
+from importlib import resources
 from pathlib import Path
 
 import yaml
@@ -155,7 +157,7 @@ def _optional_string_list(rel: str, frontmatter: dict, field: str) -> list[str]:
     return list(raw)
 
 
-def _validate_covers(rel: str, frontmatter: dict, catalog_ids: dict[str, object]) -> list[str]:
+def _validate_covers(rel: str, frontmatter: dict, catalog_ids: Mapping[str, object]) -> list[str]:
     terms = _optional_string_list(rel, frontmatter, "covers")
     seen: set[str] = set()
     for term in terms:
@@ -210,3 +212,20 @@ def build_skill_inventory(repo_root: Path, catalog: DataProductCatalog) -> dict:
 
 def serialize_inventory(inventory: dict) -> str:
     return json.dumps(inventory, indent=2, sort_keys=True) + "\n"
+
+
+_RESOURCE_NAME = "skill_inventory.json"
+
+
+def load_skill_inventory() -> dict:
+    text = (
+        resources.files("science_tool.graph")
+        .joinpath(_RESOURCE_NAME)
+        .read_text(encoding="utf-8")
+    )
+    data = json.loads(text)
+    # Fail early on a malformed resource: a missing/non-list `skills` must NOT degrade into an
+    # empty corpus (which would masquerade as "no covering skills" downstream in sub-plan 4).
+    if not isinstance(data, dict) or not isinstance(data.get("skills"), list):
+        raise SkillInventoryError("skill_inventory.json must be a mapping with a 'skills' list")
+    return data

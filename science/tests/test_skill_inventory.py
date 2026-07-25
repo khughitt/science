@@ -1,21 +1,28 @@
 from __future__ import annotations
 
+import subprocess
+import sys
+import zipfile
+from importlib import resources
 from pathlib import Path
 
 import pytest
 
-from science_model.data_products import build_catalog
+from science_model.data_products import build_catalog, load_catalog
 
 from science_tool.graph.skill_inventory import (
     SkillInventoryError,
     build_skill_inventory,
     companion_section,
+    load_skill_inventory,
     load_index_registry,
     parse_skill_frontmatter,
     real_skill_paths,
     resolve_companions,
     serialize_inventory,
 )
+
+_REPO_ROOT = Path(__file__).resolve().parents[2]
 
 
 def test_parse_frontmatter_reads_mapping() -> None:
@@ -317,3 +324,76 @@ def test_serialize_is_canonical(tmp_path: Path) -> None:
     text = serialize_inventory(build_skill_inventory(tmp_path, _catalog()))
     assert text.endswith("\n")
     assert text == serialize_inventory(build_skill_inventory(tmp_path, _catalog()))  # deterministic
+
+
+def test_committed_inventory_matches_regeneration() -> None:
+    generated = serialize_inventory(build_skill_inventory(_REPO_ROOT, load_catalog()))
+    committed = (
+        resources.files("science_tool.graph")
+        .joinpath("skill_inventory.json")
+        .read_text(encoding="utf-8")
+    )
+    assert (
+        generated == committed
+    ), "skill_inventory.json is stale — run scripts/generate_skill_inventory.py"
+
+
+def test_load_skill_inventory_round_trips() -> None:
+    inv = load_skill_inventory()
+    ids = [s["id"] for s in inv["skills"]]
+    assert ids == sorted(ids)  # canonical-id order
+    assert "transcriptomics-scrna-qa" in ids
+    scrna = next(s for s in inv["skills"] if s["id"] == "transcriptomics-scrna-qa")
+    assert scrna["covers"] == ["data-product:gene-expression-single-cell"]
+
+
+def test_load_skill_inventory_rejects_missing_skills(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    (tmp_path / "skill_inventory.json").write_text("{}", encoding="utf-8")
+    monkeypatch.setattr(resources, "files", lambda _package: tmp_path)
+    with pytest.raises(SkillInventoryError, match="skills"):
+        load_skill_inventory()
+
+
+@pytest.mark.packaging
+def test_installed_wheel_loads_inventory(tmp_path: Path) -> None:
+    # Build the wheel and confirm the resource is packaged...
+    subprocess.run(
+        ["uv", "build", "--wheel", "--out-dir", str(tmp_path)],
+        cwd=_REPO_ROOT / "science",
+        check=True,
+    )
+    wheel = next(tmp_path.glob("*.whl"))
+    with zipfile.ZipFile(wheel) as archive:
+        assert any(
+            n.endswith("science_tool/graph/skill_inventory.json")
+            for n in archive.namelist()
+        )
+    # ...then prove the INSTALLED loader resolves it without a network-dependent dependency
+    # installation. Install only the wheel into an isolated target; the subprocess uses the
+    # current test interpreter for dependencies but prepends that target and asserts science_tool
+    # itself came from it. A cwd outside the source tree prevents accidental corpus-relative reads.
+    site = tmp_path / "site"
+    subprocess.run(
+        ["uv", "pip", "install", "--target", str(site), "--no-deps", str(wheel)],
+        check=True,
+    )
+    code = (
+        "import sys\n"
+        "from pathlib import Path\n"
+        "site = Path(sys.argv[1]).resolve()\n"
+        "sys.path.insert(0, str(site))\n"
+        "import science_tool\n"
+        "from science_tool.graph.skill_inventory import load_skill_inventory\n"
+        "assert Path(science_tool.__file__).resolve().is_relative_to(site)\n"
+        "print(len(load_skill_inventory()['skills']))\n"
+    )
+    result = subprocess.run(
+        [sys.executable, "-c", code, str(site)],
+        cwd=tmp_path,
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+    assert result.stdout.strip() == "60"

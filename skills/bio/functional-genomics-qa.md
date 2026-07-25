@@ -3,6 +3,10 @@ name: functional-genomics-qa
 description: Use when working with CRISPR/RNAi screens, DepMap dependency data, perturb-seq, LINCS/L1000 signatures, drug-response matrices, viability assays, or perturbation replication analyses.
 archetype: measurement-qa
 sources: [depmap, mageck]
+covers:
+  - data-product:genetic-dependency
+  - data-product:genetic-perturbation
+  - data-product:drug-sensitivity
 ---
 
 # Functional Genomics QA

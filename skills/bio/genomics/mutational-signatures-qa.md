@@ -3,6 +3,8 @@ name: genomics-mutational-signatures-qa
 description: Use when analyzing SBS/DBS/ID mutational signatures, tumor mutational burden, or signature assignment from somatic mutation data.
 archetype: measurement-qa
 sources: [cosmic-signatures, focr-tmb-harmonization]
+covers:
+  - data-product:mutational-signature
 ---
 
 # Mutational Signature QA
