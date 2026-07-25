@@ -22,7 +22,7 @@ This plan ships the **record and its bindings**. It ships **no writer and no gat
 | Loading `runs/*.md` into `ProjectSources` | Deciding a run's `disposition` (Plan D) |
 | Materializing run records into `graph/provenance` | The default-deny path gate (Plan C) |
 | The `autonomous_run` entity field, end to end | Comparing belief bases across a run (Plan D) |
-| `refs-check` detection of a dangling `autonomous_run` | `science validate` wiring of the semantic gate (Plan D) |
+| `science refs check` detection of a dangling `autonomous_run` | `science validate` wiring of the semantic gate (Plan D) |
 | — | Commit attribution: the bot author and the `Science-Run:` trailer (design §3, first half) are things the *supervisor* does to commits, so they land with the supervisor (Plan D) |
 
 Run records in this plan's tests are **hand-authored fixtures**. That is the correct input shape: this plan defines what a valid record *is*, so Plan D's writer has something to be checked against.
@@ -85,7 +85,7 @@ Every task's requirements implicitly include this section.
 | `science/src/science_tool/project_package/serialize.py` | **Modify.** Add `runs` to `SOURCE_ROOTS`. |
 | `science/model/tests/test_autonomous_run_record.py` | **Create.** Model shape and validation. |
 | `science/model/tests/test_autonomous_run_field.py` | **Create.** `Entity.autonomous_run` shape validation and the frontmatter round trip. |
-| `science/tests/test_autonomous_run_schema.py` | **Create.** The gen-3 strict-mixin gate for `autonomous_run`. |
+| `science/tests/test_autonomous_run_schema.py` | **Create.** The strict-mixin gate for `autonomous_run`, parameterized over both armed generations (2 and 3). |
 | `science/tests/test_autonomous_runs.py` | **Create.** Loader (including the strict-YAML and filesystem boundaries) + node URI + graph emission. |
 | `science/tests/test_autonomous_run_predicates.py` | **Create.** Every emitted predicate is registered, to the provenance layer. |
 | `science/tests/test_autonomous_run_materialize.py` | **Create.** End-to-end through `load_project_sources` + `build_dataset_from_sources`, including layer isolation. |
@@ -565,7 +565,7 @@ git commit -m "feat(model): add the autonomous run record shape"
 - Test: `science/tests/test_autonomous_runs.py`
 
 **Interfaces:**
-- Consumes: `AutonomousRunRecord`, `RunRecordError` from `science_model.autonomous_runs`; `parse_frontmatter` from `science_model.frontmatter`.
+- Consumes: `AutonomousRunRecord`, `RunRecordError` from `science_model.autonomous_runs`; `yaml` directly. **Not** `science_model.frontmatter.parse_frontmatter` — see the strict-parse constraint.
 - Produces: `RUNS_DIRNAME: str` (`"runs"`), `load_run_records(project_root: Path) -> list[AutonomousRunRecord]`.
 
 **There is deliberately no duplicate-id check.** Every record's `slug` must equal its filename stem, and a directory cannot hold two files with the same stem — so within one `runs/` directory duplicate ids are impossible by construction. Adding a duplicate check would create a branch no test can reach, which is worse than no check: it reads as a guarantee while proving nothing.
@@ -779,6 +779,44 @@ def test_unparseable_yaml_raises(tmp_path: Path) -> None:
     )
     with pytest.raises(RunRecordError):
         load_run_records(tmp_path)
+
+
+def test_malformed_opening_delimiter_raises(tmp_path: Path) -> None:
+    # `text.startswith("---")` accepts this; a line-exact check must not.
+    path = _write_record(tmp_path)
+    path.write_text(
+        "---not-a-delimiter\n" + path.read_text(encoding="utf-8").split("\n", 1)[1],
+        encoding="utf-8",
+    )
+    with pytest.raises(RunRecordError, match="delimiter line"):
+        load_run_records(tmp_path)
+
+
+def test_malformed_closing_delimiter_raises(tmp_path: Path) -> None:
+    path = _write_record(tmp_path)
+    path.write_text(
+        path.read_text(encoding="utf-8").replace(
+            "disposition: clean\n---\n", "disposition: clean\n---not-a-delimiter\n"
+        ),
+        encoding="utf-8",
+    )
+    with pytest.raises(RunRecordError, match="unterminated"):
+        load_run_records(tmp_path)
+
+
+def test_triple_dash_inside_a_value_does_not_truncate_the_block(tmp_path: Path) -> None:
+    # `text.split("---", 2)` cuts here, silently dropping every field after `model` --
+    # including `tier` and `disposition`. A line-exact scan must read the whole block.
+    path = _write_record(tmp_path)
+    path.write_text(
+        path.read_text(encoding="utf-8").replace(
+            "model: claude-opus-5", "model: claude---opus---5"
+        ),
+        encoding="utf-8",
+    )
+    record = load_run_records(tmp_path)[0]
+    assert record.model == "claude---opus---5"
+    assert record.disposition.value == "clean"
 ```
 
 - [ ] **Step 2: Run the tests to verify they fail**
@@ -846,12 +884,20 @@ def _parse_run_record_frontmatter(path: Path) -> dict[str, object]:
         text = path.read_text(encoding="utf-8")
     except (OSError, UnicodeDecodeError) as exc:
         raise RunRecordError(f"{path}: run record is unreadable: {exc}") from exc
-    if not text.startswith("---"):
-        raise RunRecordError(f"{path}: run record has no frontmatter")
-    parts = text.split("---", 2)
-    if len(parts) < 3:
+    # Delimiters are whole LINES. `text.startswith("---")` would accept
+    # `---not-a-delimiter` as an opening, and `text.split("---", 2)` would cut the block
+    # at the first `---` appearing INSIDE a value (`model: claude---5` truncates to
+    # `model: claude`). Both are silent corruptions of an attestation.
+    lines = text.splitlines()
+    if not lines or lines[0].strip() != "---":
+        raise RunRecordError(f"{path}: run record must open with a '---' delimiter line")
+    for index, line in enumerate(lines[1:], start=1):
+        if line.strip() == "---":
+            closing = index
+            break
+    else:
         raise RunRecordError(f"{path}: run record frontmatter is unterminated")
-    block = parts[1]
+    block = "\n".join(lines[1:closing])
     try:
         node = yaml.compose(block, Loader=yaml.SafeLoader)
         if node is not None:
@@ -1119,7 +1165,8 @@ Expected: all pass.
 
 - [ ] **Step 5: Write the failing registry test**
 
-This task mints sixteen new `sci:` predicates. `PREDICATE_REGISTRY`
+This task mints **fifteen** new `sci:` predicates (Task 6 adds a sixteenth,
+`sci:autonomousRun`, which `add_run_record_to_graph` never emits). `PREDICATE_REGISTRY`
 (`science/src/science_tool/graph/store/constants.py:177`) is the public answer to
 "what predicates does this graph use", read by `science graph predicates` — and the
 skill-load precedent this plan follows *does* register its predicates
@@ -1145,15 +1192,30 @@ from science_tool.graph.store.constants import PREDICATE_REGISTRY
 from test_autonomous_runs import _write_record
 
 
-def _emitted_sci_predicates(tmp_path: Path) -> set[str]:
-    _write_record(tmp_path)
-    graph = Graph()
-    add_run_record_to_graph(load_run_records(tmp_path)[0], graph)
+def _sci_predicates(graph: Graph) -> set[str]:
     return {
         f"sci:{str(p).removeprefix(str(SCI_NS))}"
         for _s, p, _o in graph
         if str(p).startswith(str(SCI_NS))
     }
+
+
+def _emitted_sci_predicates(tmp_path: Path) -> set[str]:
+    # The MAXIMAL record: every optional field populated. With the default fixture's
+    # absent `triggered_by`, `sci:runTriggeredBy` is never emitted and this test would
+    # certify a registry that omits it.
+    path = _write_record(tmp_path)
+    path.write_text(
+        path.read_text(encoding="utf-8").replace(
+            "disposition: clean", "disposition: clean\ntriggered_by: schedule:weekly-curation"
+        ),
+        encoding="utf-8",
+    )
+    graph = Graph()
+    add_run_record_to_graph(load_run_records(tmp_path)[0], graph)
+    emitted = _sci_predicates(graph)
+    assert "sci:runTriggeredBy" in emitted, "fixture is no longer maximal"
+    return emitted
 
 
 def test_every_emitted_run_predicate_is_registered(tmp_path: Path) -> None:
@@ -1561,7 +1623,7 @@ And the shape validator (place it beside the other `field_validator`s on this mo
     @classmethod
     def _validate_autonomous_run(cls, value: str | None) -> str | None:
         # Shape only. Whether a run record with this id exists is a resolution question,
-        # answered by the graph build and by `refs-check`.
+        # answered by the graph build and by `science refs check`.
         if value is None:
             return value
         # `.strip()` on the remainder, not just a length check: `"run:   "` clears a bare
@@ -1679,8 +1741,9 @@ Expected: `EXIT=0` and all schema tests pass.
 - [ ] **Step 8: Commit**
 
 ```bash
-git add science/model/src/science_model/entities.py science/model/src/science_model/frontmatter.py science/model/src/science_model/schemas/mixin-hypothesis-2.0.json science/model/tests/test_autonomous_run_field.py science/tests/test_autonomous_run_schema.py
+git add science/model/src/science_model/entities.py science/model/src/science_model/frontmatter.py science/model/src/science_model/schemas/mixin-hypothesis-1.0.json science/model/src/science_model/schemas/mixin-hypothesis-2.0.json science/model/tests/test_autonomous_run_field.py science/tests/test_autonomous_run_schema.py
 git commit -m "feat(model): add the autonomous_run provenance field to Entity"
+git status --porcelain   # MUST be empty
 ```
 
 ---
@@ -1689,7 +1752,9 @@ git commit -m "feat(model): add the autonomous_run provenance field to Entity"
 
 **Files:**
 - Modify: `science/src/science_tool/graph/materialize.py`
+- Modify: `science/src/science_tool/graph/store/constants.py` (register `sci:autonomousRun`)
 - Test: `science/tests/test_autonomous_run_materialize.py`
+- Test: `science/tests/test_autonomous_run_predicates.py` (extend)
 
 **Interfaces:**
 - Consumes: `ProjectSources.run_records`, `run_node_uri`, `Entity.autonomous_run`.
@@ -1800,6 +1865,38 @@ Register the predicate this task mints, alongside Task 3's entries in
 The description says **last written by** deliberately: the field is a scalar and is
 overwritten, so it names the most recent run, not every run that ever touched the file.
 
+Then extend the derived registry coverage — Task 3's test calls `add_run_record_to_graph`
+directly and structurally cannot observe this predicate. Append to
+`science/tests/test_autonomous_run_predicates.py`:
+
+```python
+def test_materialized_run_predicates_are_all_registered(tmp_path: Path) -> None:
+    """Every sci: predicate this feature ADDS to a real provenance graph is registered.
+
+    Derived by differencing two full builds rather than by naming predicates: the
+    baseline absorbs everything the provenance layer already emitted, so what remains
+    is exactly this feature's vocabulary -- including `sci:autonomousRun`, which the
+    record emitter alone never produces.
+    """
+    from test_autonomous_run_materialize import RUN_ID, graphs, write_project
+
+    baseline_root = tmp_path / "baseline"
+    write_project(baseline_root, with_run=False)
+    _s, _k, baseline = graphs(baseline_root)
+    before = _sci_predicates(baseline)
+
+    with_run_root = tmp_path / "with-run"
+    write_project(with_run_root, entity_extra=f"autonomous_run: {RUN_ID}\n")
+    _s2, _k2, provenance = graphs(with_run_root)
+    added = _sci_predicates(provenance) - before
+
+    assert "sci:autonomousRun" in added
+    registered = {row["predicate"] for row in PREDICATE_REGISTRY}
+    assert sorted(added - registered) == []
+```
+
+Run it and confirm it fails on `sci:autonomousRun` before you add the registry row.
+
 - [ ] **Step 4: Run the tests to verify they pass**
 
 ```bash
@@ -1812,13 +1909,14 @@ Expected: `EXIT=0`.
 - [ ] **Step 5: Commit**
 
 ```bash
-git add science/src/science_tool/graph/materialize.py science/tests/test_autonomous_run_materialize.py
+git add science/src/science_tool/graph/materialize.py science/src/science_tool/graph/store/constants.py science/tests/test_autonomous_run_materialize.py science/tests/test_autonomous_run_predicates.py
 git commit -m "feat(graph): link entities to their autonomous run in provenance"
+git status --porcelain   # MUST be empty: a green suite on a dirty tree proves nothing
 ```
 
 ---
 
-### Task 7: `refs-check` detects a dangling `autonomous_run`
+### Task 7: `science refs check` detects a dangling `autonomous_run`
 
 **Files:**
 - Modify: `science/src/science_tool/refs.py`
@@ -1828,7 +1926,7 @@ git commit -m "feat(graph): link entities to their autonomous run in provenance"
 - Consumes: `load_run_records` from `science_tool.graph.autonomous_runs`; `RefIssue`, `check_refs` from `science_tool.refs`.
 - Produces: a `RefIssue` with `ref_type="autonomous-run"`.
 
-This is design testing item 10. It is a **second surface, not a second rule**: both this check and Task 6's raise derive the valid set from the same `load_run_records`, so they cannot drift about which run ids exist. `refs-check` earns its place by needing no graph build — a curator can catch a dangling reference before materialization ever runs.
+This is design testing item 10. It is a **second surface, not a second rule**: both this check and Task 6's raise derive the valid set from the same `load_run_records`, so they cannot drift about which run ids exist. `science refs check` earns its place by needing no graph build — a curator can catch a dangling reference before materialization ever runs.
 
 **Do not add `autonomous_run` to `_extract_frontmatter_refs`'s key tuple.** That routes values through `classify_entity_ref` against `_LOCAL_ENTITY_KINDS`, and `run` is not an entity kind — every valid reference would be reported as `unknown-namespace`. For the same reason, do not add `run` to `_LOCAL_ENTITY_KINDS`.
 
@@ -2201,6 +2299,13 @@ git commit -m "docs: document the runs/ root and the autonomous_run field"
 
 Run after Task 8, before finishing the branch:
 
+- [ ] `git status --porcelain` — **empty**. Run this FIRST. Every check below runs against
+      the working tree, so a green suite on a tree with uncommitted edits certifies
+      something the branch does not contain. Two files in this plan are edited by a task
+      whose natural `git add` list would omit them (`mixin-hypothesis-1.0.json`,
+      `graph/store/constants.py`), which is exactly how that happens.
+- [ ] `git diff --stat main..HEAD -- science/model/src/science_model/schemas/` shows **both**
+      hypothesis mixins
 - [ ] `cd science && uv run --frozen pytest` — exit 0 (check `$?`, not a pipe's status)
 - [ ] `cd science/model && uv run --frozen pytest` — exit 0
 - [ ] `cd science && uv run ruff check` and `cd science/model && uv run ruff check` — clean
