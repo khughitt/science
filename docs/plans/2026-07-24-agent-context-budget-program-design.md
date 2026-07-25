@@ -369,6 +369,28 @@ pattern is established in the codebase rather than novel.
    out of scope by design.
 3. **Budget regression.** Per-command character ceilings asserted against a fixture project.
 
+#### Slice 1b decomposition
+
+Slice 1a wired the four hand-picked commands and mass-registered every other growable
+leaf as `DeferredCommand(..., "1b")` to satisfy the completeness guard. That deferral
+set is ~200 commands of three different payload shapes, so 1b is not one plan. It is
+split by shape, because the projection mechanism differs by shape:
+
+- **1b-1 — ROWS offenders (this slice).** The measured-over-budget commands whose payload
+  is a flat row list: `entity list` (1.7M chars), `questions list`, `interpretations list`,
+  `entity needs-review`, `feedback list`, `discussions list`. Uniform `emit_query_rows`
+  wiring; `project_rows` already handles narrowing. Highest value (includes the single
+  worst offender) at lowest risk.
+- **1b-2 — REPORT/DOCUMENT offenders (next).** `prose lint`, `validate`, and
+  `curate consolidation-candidates` are REPORT-shaped (a summary plus a growable list) and
+  need the per-section projection `health` uses; `curate inventory` is a versioned
+  structured document that must refuse past budget like `entities inventory`, because
+  dropping records corrupts the model. Forcing these through row-projection would emit
+  misleading output, so they are deliberately excluded from 1b-1.
+- **1b-3+ — the long tail.** The remaining ~190 generic-registered commands. Each needs a
+  per-command audit: genuinely growable ones get wired; fixed-shape ones (mutation and
+  creation confirmations mis-labeled growable) move to `EXEMPTIONS`.
+
 ### Slice 2 — guidance, and the capability it depends on
 
 **Add the missing query first.** Extend `tasks list` with `--since <date>`, reusing the
