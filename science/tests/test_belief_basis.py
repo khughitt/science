@@ -16,6 +16,7 @@ from science_tool.graph.belief_basis import (
     basis_digest,
     build_snapshot,
     capture_basis,
+    compare_bases,
     load_snapshot,
     unit_key,
 )
@@ -188,3 +189,36 @@ def test_wrong_shaped_payload_raises_validation_error(payload: object):
     """
     with pytest.raises(ValidationError):
         load_snapshot(payload)
+
+
+def test_identical_captures_have_no_delta():
+    before = [_basis("proposition:a", ("k1",))]
+    assert compare_bases(before, list(before)) == []
+
+
+def test_changed_units_are_reported():
+    deltas = compare_bases([_basis("proposition:a", ("k1",))], [_basis("proposition:a", ("k2",))])
+    assert [d.entity_id for d in deltas] == ["proposition:a"]
+    assert deltas[0].changed == ("units",)
+
+
+def test_new_entity_is_not_a_delta():
+    """A bot filing a new question is permitted; it has no before-value to move."""
+    assert compare_bases([], [_basis("question:0042")]) == []
+
+
+def test_removed_entity_is_a_delta():
+    deltas = compare_bases([_basis("proposition:a")], [])
+    assert deltas[0].changed == ("removed",)
+
+
+def test_policy_swap_is_a_delta_even_with_identical_units():
+    before = [_basis("proposition:a", ("k1",))]
+    after = [
+        EntityBasis(
+            entity_id="proposition:a", uri=str(PROJECT_NS["proposition/a"]),
+            target_uris=(), unit_keys=("k1",),
+            policy_id="other-policy", policy_version="1",
+        )
+    ]
+    assert compare_bases(before, after)[0].changed == ("policy",)

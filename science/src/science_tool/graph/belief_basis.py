@@ -157,3 +157,55 @@ def load_snapshot(payload: object) -> BasisSnapshot:
     if recomputed != snapshot.digest:
         raise SnapshotIntegrityError(f"snapshot digest mismatch: stored {snapshot.digest}, recomputed {recomputed}")
     return snapshot
+
+
+class BasisDelta(BaseModel):
+    """One pre-existing entity whose belief basis moved."""
+
+    model_config = ConfigDict(frozen=True)
+
+    entity_id: str
+    changed: tuple[str, ...]
+    detail: str
+
+
+def compare_bases(before: Iterable[EntityBasis], after: Iterable[EntityBasis]) -> list[BasisDelta]:
+    """Deltas for PRE-EXISTING entities only.
+
+    An entity present only in `after` is new and yields no delta — it had no
+    before-value. Its effect on any existing entity surfaces as a delta on that
+    entity. An entity present only in `before` was removed, which can move belief
+    elsewhere and is reported.
+    """
+    before_by_id = {b.entity_id: b for b in before}
+    after_by_id = {a.entity_id: a for a in after}
+
+    deltas: list[BasisDelta] = []
+    for entity_id in sorted(before_by_id):
+        old = before_by_id[entity_id]
+        new = after_by_id.get(entity_id)
+        if new is None:
+            deltas.append(
+                BasisDelta(entity_id=entity_id, changed=("removed",), detail="entity present before the run, absent after")
+            )
+            continue
+        changed: list[str] = []
+        if old.target_uris != new.target_uris:
+            changed.append("targets")
+        if old.unit_keys != new.unit_keys:
+            changed.append("units")
+        if (old.policy_id, old.policy_version) != (new.policy_id, new.policy_version):
+            changed.append("policy")
+        if changed:
+            deltas.append(
+                BasisDelta(
+                    entity_id=entity_id,
+                    changed=tuple(changed),
+                    detail=(
+                        f"targets {len(old.target_uris)}->{len(new.target_uris)}, "
+                        f"units {len(old.unit_keys)}->{len(new.unit_keys)}, "
+                        f"policy {old.policy_id}/{old.policy_version}->{new.policy_id}/{new.policy_version}"
+                    ),
+                )
+            )
+    return deltas
