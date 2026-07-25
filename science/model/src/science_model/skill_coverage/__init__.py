@@ -64,6 +64,7 @@ from science_model.skill_coverage.coverage import (  # noqa: E402
     UndeclaredDomainResult,
     UnmappedOccurrence,
     UnresolvedRef,
+    compute_coverage,
     serialize_coverage_report,
 )
 
@@ -97,5 +98,6 @@ __all__ = [
     "UnmappedOccurrence",
     "UnresolvedRef",
     "build_skill_overlay",
+    "compute_coverage",
     "serialize_coverage_report",
 ]

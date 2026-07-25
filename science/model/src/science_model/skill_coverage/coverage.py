@@ -8,10 +8,14 @@ imports ``science_tool``.
 from __future__ import annotations
 
 import json
+from collections import defaultdict
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Literal
 
+from science_model.skill_coverage.overlay import LeafSkill, SkillOverlay
+
 if TYPE_CHECKING:
+    from science_model.data_products import DataProductCatalog
     from science_model.skill_coverage import EnrollmentStatus
 
 
@@ -314,3 +318,150 @@ class CoverageReport:
 
 def serialize_coverage_report(report: CoverageReport) -> str:
     return json.dumps(report.to_dict(), indent=2, sort_keys=True) + "\n"
+
+
+def _covering_leaf_ids(term: str, overlay: SkillOverlay) -> set[str]:
+    return {skill.id for skill in overlay if isinstance(skill, LeafSkill) and term in skill.covers}
+
+
+def _infer_archetype(
+    term: str, overlay: SkillOverlay, catalog: "DataProductCatalog"
+) -> str:
+    entry = catalog.by_id.get(term)
+    if entry is None or not entry.broader:
+        return "indeterminate"
+    parents = set(entry.broader)
+    sibling_ids = {
+        catalog_term.id
+        for catalog_term in catalog.terms
+        if catalog_term.id != term and (set(catalog_term.broader) & parents)
+    }
+    archetypes = {
+        skill.archetype
+        for skill in overlay
+        if isinstance(skill, LeafSkill) and any(covered in sibling_ids for covered in skill.covers)
+    }
+    if len(archetypes) == 1:
+        return next(iter(archetypes))
+    return "indeterminate"
+
+
+def _build_candidates(
+    uncovered: dict[str, list[EvidenceTriple]],
+    overlay: SkillOverlay,
+    catalog: "DataProductCatalog",
+) -> tuple[Candidate, ...]:
+    candidates: list[Candidate] = []
+    for term, triples in uncovered.items():
+        unique = sorted({(triple.project, triple.plan_ref, triple.dataset_ref) for triple in triples})
+        n_occurrences = len(unique)
+        n_projects = len({project for project, _, _ in unique})
+        score = round(1 - 1 / (1 + n_occurrences + (n_projects - 1)), 3)
+        evidence = tuple(EvidenceTriple(project, plan_ref, dataset_ref) for project, plan_ref, dataset_ref in unique)
+        candidates.append(Candidate(
+            proposed_scope=term,
+            likely_archetype=_infer_archetype(term, overlay, catalog),
+            score=score,
+            evidence=evidence,
+        ))
+    return tuple(candidates)
+
+
+def compute_coverage(
+    projects: list[ProjectEvidence],
+    overlay: SkillOverlay,
+    catalog: "DataProductCatalog",
+    *,
+    scope: ReportScope,
+    skipped_projects: tuple[SkippedProject, ...] = (),
+) -> CoverageReport:
+    catalog_ids = catalog.by_id
+    occurrences: list[Occurrence] = []
+    skill_diags: list[SkillReferenceDiagnostic] = []
+    dataset_diags: list[DatasetReferenceDiagnostic] = []
+    uncovered: dict[str, list[EvidenceTriple]] = defaultdict(list)
+
+    for evidence in projects:
+        if evidence.enrollment == "out-of-domain":
+            occurrences.append(OutOfDomainResult(evidence.project))
+            continue
+        if evidence.enrollment == "undeclared":
+            occurrences.append(UndeclaredDomainResult(evidence.project))
+            continue
+
+        for unresolved in evidence.unresolved_related_refs:
+            dataset_diags.append(
+                DatasetReferenceDiagnostic(evidence.project, unresolved.plan_ref, unresolved.ref)
+            )
+        for untagged in evidence.untagged_usages:
+            occurrences.append(UnmappedOccurrence(
+                evidence.project,
+                untagged.dataset_ref,
+                (EvidencePair(untagged.plan_ref, untagged.dataset_ref),),
+            ))
+        for plan_skills in evidence.plan_loaded_skills:
+            for skill_id in plan_skills.skill_ids:
+                if overlay.get(skill_id) is None:
+                    skill_diags.append(
+                        SkillReferenceDiagnostic(evidence.project, plan_skills.plan_ref, skill_id)
+                    )
+        loaded_by_plan = {
+            plan_skills.plan_ref: set(plan_skills.skill_ids)
+            for plan_skills in evidence.plan_loaded_skills
+        }
+
+        by_term: dict[str, list[TermUsage]] = defaultdict(list)
+        for usage in evidence.term_usages:
+            if usage.term not in catalog_ids:
+                if usage.owned:
+                    raise SkillCoverageError(
+                        f"{evidence.project}: dataset {usage.dataset_ref} declares off-catalog "
+                        f"data_product {usage.term!r}"
+                    )
+                continue
+            by_term[usage.term].append(usage)
+
+        for term, usages in by_term.items():
+            covering = _covering_leaf_ids(term, overlay)
+            all_pairs = tuple(EvidencePair(plan_ref, dataset_ref) for plan_ref, dataset_ref in sorted(
+                {(usage.plan_ref, usage.dataset_ref) for usage in usages}
+            ))
+            if not covering:
+                occurrences.append(UncoveredOccurrence(evidence.project, term, all_pairs))
+                for usage in usages:
+                    uncovered[term].append(
+                        EvidenceTriple(evidence.project, usage.plan_ref, usage.dataset_ref)
+                    )
+                continue
+            plans_touching = {usage.plan_ref for usage in usages}
+            not_loaded = {
+                plan_ref
+                for plan_ref in plans_touching
+                if not (loaded_by_plan.get(plan_ref, set()) & covering)
+            }
+            if not_loaded:
+                not_loaded_pairs = tuple(
+                    EvidencePair(plan_ref, dataset_ref)
+                    for plan_ref, dataset_ref in sorted(
+                        {
+                            (usage.plan_ref, usage.dataset_ref)
+                            for usage in usages
+                            if usage.plan_ref in not_loaded
+                        }
+                    )
+                )
+                occurrences.append(CoveredNotLoadedOccurrence(
+                    evidence.project,
+                    term,
+                    tuple(sorted(covering)),
+                    not_loaded_pairs,
+                ))
+
+    return CoverageReport(
+        scope=scope,
+        coverage_occurrences=tuple(occurrences),
+        skill_reference_diagnostics=tuple(skill_diags),
+        dataset_reference_diagnostics=tuple(dataset_diags),
+        candidates=_build_candidates(uncovered, overlay, catalog),
+        skipped_projects=skipped_projects,
+    )
