@@ -114,3 +114,16 @@ def test_shell_completion_over_retired_surfaces_does_not_raise() -> None:
 
     for args in (["graph", "add"], ["graph", "add", "concept"], ["inquiry", "add-node"]):
         completer.get_completions(args, "")
+
+
+def test_budget_exemptions_are_derived_from_the_manifest() -> None:
+    """The registry must not be a second place the retired list can be edited.
+
+    An equality assertion between two hand-written lists detects drift; it does not
+    remove the second authority. This asserts derivation: every manifest entry is
+    exempt for the retirement reason, and no other entry claims that reason.
+    """
+    from science_tool.budget.registry import EXEMPTIONS
+
+    reason = "fixed retired-command error"
+    assert {path for path, why in EXEMPTIONS.items() if why == reason} == set(RETIREMENTS)

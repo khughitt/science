@@ -23,6 +23,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 from enum import StrEnum
 
+from science_tool.cli_retirement import RETIREMENTS
+
 
 class PayloadShape(StrEnum):
     """How a command's payload may be narrowed.
@@ -86,32 +88,10 @@ EXEMPTIONS: dict[str, str] = {
     "entity review": "single review result",
     "feedback scaffold-test": "three fixed guidance lines for one scaffold",
     "feedback update": "single update confirmation",
-    "graph add article": "fixed retired-command error",
-    "graph add concept": "fixed retired-command error",
-    "graph add discussion": "fixed retired-command error",
-    "graph add edge": "fixed retired-command error",
-    "graph add evidence": "fixed retired-command error",
-    "graph add falsification": "fixed retired-command error",
-    "graph add finding": "fixed retired-command error",
-    "graph add hypothesis": "fixed retired-command error",
-    "graph add interpretation": "fixed retired-command error",
-    "graph add mechanism": "fixed retired-command error",
-    "graph add observation": "fixed retired-command error",
-    "graph add proposition": "fixed retired-command error",
-    "graph add question": "fixed retired-command error",
-    "graph add story": "fixed retired-command error",
-    "graph import": "fixed retired-command error",
     "graph init": "at most three fixed initialization guidance lines",
-    "graph migrate-addresses": "fixed retired-command error",
     "graph stats": "measured 341 chars on 2026-07-24; fixed-shape summary",
-    "graph stamp-revision": "fixed retired-command error",
-    "inquiry add-assumption": "fixed retired-command error",
-    "inquiry add-edge": "fixed retired-command error",
-    "inquiry add-node": "fixed retired-command error",
-    "inquiry add-transformation": "fixed retired-command error",
     "inquiry import": "single imported-inquiry path",
     "inquiry init": "single scaffold path",
-    "inquiry set-estimand": "fixed retired-command error",
     "labnote export": "single export-path and warning-count summary",
     "paper persist-source": "single persisted-source path",
     "peers show": "five fixed fields for one peer",
@@ -133,6 +113,16 @@ EXEMPTIONS: dict[str, str] = {
     "telemetry prune": "one fixed-shape prune summary row",
     "telemetry status": "measured 366 chars on 2026-07-24; fixed-shape summary",
 }
+
+# Retired commands are exempt by construction: cli_retirement.RETIREMENTS owns which
+# commands are retired, and a fixed error string cannot grow with project size. Listing
+# them here as well would make this a second place the retired set could be edited.
+#
+# Deliberately RETIREMENTS only, not RETIRED_GROUPS: test_budget_boundary asserts that
+# every classified path is live, where "live" comes from _leaf_commands -- which recurses
+# through groups and yields only non-groups. An entry for `graph add` would fail as a
+# table naming a command absent from the CLI tree.
+EXEMPTIONS.update(dict.fromkeys(RETIREMENTS, "fixed retired-command error"))
 
 DEFERRED: dict[str, DeferredCommand] = {
     # Measured over budget on 2026-07-24; wiring scheduled for slice 1b.
