@@ -91,3 +91,50 @@ def load_index_registry(repo_root: Path) -> list[tuple[str, str]]:
     if extra:
         raise SkillInventoryError(f"INDEX lists paths that are not a real skill: {sorted(extra)}")
     return entries
+
+
+_COMPANION_SECTION_RE = re.compile(
+    r"^## Companion Skills\s*$(.*?)(?=^## |\Z)", re.MULTILINE | re.DOTALL
+)
+_LINK_TARGET_RE = re.compile(r"\]\(([^)]+)\)")
+
+
+def companion_section(text: str) -> str:
+    match = _COMPANION_SECTION_RE.search(text)
+    return match.group(1) if match else ""
+
+
+def resolve_companions(
+    repo_root: Path, skill_rel_path: str, section: str, path_to_id: dict[str, str]
+) -> list[dict]:
+    root = repo_root.resolve()
+    skill_abs = root / skill_rel_path
+    edges: list[dict] = []
+    seen: set[str] = set()
+    for target in _LINK_TARGET_RE.findall(section):
+        raw = target.split()[0].split("#")[0]
+        if not raw:
+            continue
+        resolved = (skill_abs.parent / raw).resolve()
+        try:
+            rel = resolved.relative_to(root).as_posix()
+        except ValueError as exc:
+            raise SkillInventoryError(
+                f"{skill_rel_path}: companion target {raw!r} escapes the repo"
+            ) from exc
+        if rel == "skills/INDEX.md":
+            target_id, role = "science-skill-index", "index"
+        elif rel in path_to_id:
+            target_id = path_to_id[rel]
+            role = "router" if resolved.name == "SKILL.md" else "leaf"
+        else:
+            raise SkillInventoryError(
+                f"{skill_rel_path}: companion target {raw!r} resolves to non-skill {rel!r}"
+            )
+        if target_id in seen:
+            raise SkillInventoryError(
+                f"{skill_rel_path}: duplicate companion target {target_id!r}"
+            )
+        seen.add(target_id)
+        edges.append({"target": target_id, "role": role})
+    return edges

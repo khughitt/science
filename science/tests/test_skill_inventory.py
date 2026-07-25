@@ -6,9 +6,11 @@ import pytest
 
 from science_tool.graph.skill_inventory import (
     SkillInventoryError,
+    companion_section,
     load_index_registry,
     parse_skill_frontmatter,
     real_skill_paths,
+    resolve_companions,
 )
 
 
@@ -131,3 +133,52 @@ def test_registry_rejects_extra_non_skill(tmp_path: Path) -> None:
     )
     with pytest.raises(SkillInventoryError, match="not a real skill"):
         load_index_registry(tmp_path)
+
+
+_PATH_TO_ID = {
+    "skills/bio/transcriptomics/cohort-qa.md": "transcriptomics-cohort-qa",
+    "skills/bio/transcriptomics/SKILL.md": "transcriptomics",
+    "skills/statistics/compositional-data.md": "statistics-compositional-data",
+}
+
+
+def test_companion_section_extracts_only_that_section() -> None:
+    text = "# T\n\n## Companion Skills\n\n- [`a`](a.md)\n\n## Next\n\n- not this\n"
+    assert "- [`a`](a.md)" in companion_section(text)
+    assert "not this" not in companion_section(text)
+
+
+def test_resolve_companions_typed_targets(tmp_path: Path) -> None:
+    section = (
+        "- [`cohort-qa.md`](cohort-qa.md) - x\n"
+        "- [`SKILL.md`](SKILL.md) - the router\n"
+        "- [`compositional-data`](../../statistics/compositional-data.md#anchor) - y\n"
+        "- [`index`](../../INDEX.md) - the index\n"
+    )
+    edges = resolve_companions(tmp_path, "skills/bio/transcriptomics/scrna-qa.md", section, _PATH_TO_ID)
+    assert edges == [
+        {"target": "transcriptomics-cohort-qa", "role": "leaf"},
+        {"target": "transcriptomics", "role": "router"},
+        {"target": "statistics-compositional-data", "role": "leaf"},
+        {"target": "science-skill-index", "role": "index"},
+    ]
+
+
+def test_resolve_companions_rejects_broken_target(tmp_path: Path) -> None:
+    with pytest.raises(SkillInventoryError, match="non-skill"):
+        resolve_companions(
+            tmp_path,
+            "skills/bio/transcriptomics/scrna-qa.md",
+            "- [`x`](../../nope/ghost.md)\n",
+            _PATH_TO_ID,
+        )
+
+
+def test_resolve_companions_rejects_duplicate_target(tmp_path: Path) -> None:
+    section = "- [`a`](cohort-qa.md)\n- [`a again`](cohort-qa.md)\n"
+    with pytest.raises(SkillInventoryError, match="duplicate companion"):
+        resolve_companions(tmp_path, "skills/bio/transcriptomics/scrna-qa.md", section, _PATH_TO_ID)
+
+
+def test_resolve_companions_empty_section() -> None:
+    assert resolve_companions(Path("/x"), "skills/a.md", "", _PATH_TO_ID) == []
