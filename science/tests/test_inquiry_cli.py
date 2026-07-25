@@ -241,14 +241,7 @@ class TestInquiryMutatorsRetired:
         assert "retired" in result.output.lower()
 
 
-class TestInquiryAddEdge:
-    def test_edge_claim_help_uses_proposition_language(self, runner: CliRunner) -> None:
-        for args in (["graph", "add", "edge", "--help"], ["inquiry", "add-edge", "--help"]):
-            result = runner.invoke(main, args)
-            assert result.exit_code == 0, result.output
-            assert "Supporting proposition reference" in result.output
-            assert "relation claim" not in result.output
-
+class TestInquiryFlowEdgeClaims:
     def test_compiled_edge_with_relation_claim_attaches_claim_to_edge(
         self, runner: CliRunner, graph_path: Path
     ) -> None:

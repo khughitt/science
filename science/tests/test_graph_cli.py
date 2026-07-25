@@ -507,10 +507,16 @@ def test_graph_stats_supports_json_format() -> None:
 
 
 def test_graph_add_paper_command_is_removed() -> None:
+    """`paper` is not a command, and the whole `graph add` group is retired.
+
+    The exit code stays 2 -- naming a command that does not exist is a usage error --
+    but the message now names a replacement instead of only reporting the mistake.
+    """
     runner = CliRunner()
     result = runner.invoke(main, ["graph", "add", "paper", "A title", "--story", "story:s01"])
     assert result.exit_code == 2
-    assert "No such command 'paper'" in result.output
+    assert "graph add is retired" in result.output
+    assert "science entity create" in result.output
 
 
 def test_graph_validate_passes_on_fresh_graph() -> None:
