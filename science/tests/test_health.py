@@ -1242,10 +1242,9 @@ class TestHealthCLI:
            change, not a refactor, so it is allowed to move the key set — once,
            on the record, here.
 
-        The test was renamed from `..._is_byte_identical_to_pre_task6_shape`: after
-        claim 2 the shape is no longer byte-identical to the pre-Task 6 one, and a
-        guard whose name misdescribes what it guards is the very defect the
-        convergence exists to remove.
+        Budgeted stdout is deliberately a projected payload, so its two projection
+        metadata keys are also pinned here. Complete file output retains the original
+        unprojected key set.
         """
         from click.testing import CliRunner
 
@@ -1282,6 +1281,10 @@ class TestHealthCLI:
             # Deliberate addition (claim 2 above). NOT folded into total_issues: a check
             # that could not run is not an issue found, and must not be counted as one.
             "unwired_checks",
+            # Budget projection metadata: the complete report written by --output does
+            # not contain these keys.
+            "displayed_issues",
+            "section_omitted",
         }
 
     def test_json_output_with_timings_includes_meta(self, tmp_path: Path) -> None:

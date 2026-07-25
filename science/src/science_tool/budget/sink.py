@@ -27,7 +27,7 @@ from rich.console import Console
 
 from science_tool.budget.measure import BUDGET_CONSOLE_WIDTH, visible_len
 from science_tool.budget.registry import CommandBudget
-from science_tool.styles import get_console
+from science_tool.styles import ColorPolicy, get_color_policy, get_console
 
 
 class BudgetExceeded(click.ClickException):
@@ -101,7 +101,18 @@ class BoundedSink:
             if size > self._budget.max_chars:
                 raise self._exceeded(size)
 
-        click.echo(text, nl=False)
+        # Rich already applied the caller's color policy while rendering into the
+        # buffer. Preserve explicit ALWAYS, strip explicit NEVER, and let Click make
+        # its normal terminal decision for AUTO.
+        color_policy = get_color_policy()
+        color = (
+            True
+            if color_policy is ColorPolicy.ALWAYS
+            else False
+            if color_policy is ColorPolicy.NEVER
+            else None
+        )
+        click.echo(text, nl=False, color=color)
         self._flushed = True
 
     def _exceeded(self, size: int) -> BudgetExceeded:

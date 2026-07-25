@@ -2,12 +2,15 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import click
 import pytest
+from click.testing import CliRunner
 from rich.table import Table
 
 from science_tool.budget.measure import BUDGET_CONSOLE_WIDTH
 from science_tool.budget.registry import CommandBudget, PayloadShape
 from science_tool.budget.sink import BoundedSink, BudgetExceeded
+from science_tool.styles import ColorPolicy, set_color_policy
 
 ROWS_BUDGET = CommandBudget(max_chars=100, shape=PayloadShape.ROWS, max_rows=5)
 TASKS_COMPLETE = "science tasks list --output tasks.json"
@@ -132,7 +135,28 @@ def test_ansi_does_not_count_against_the_ceiling(capsys) -> None:
     )
     sink.echo("\x1b[1;31m" + "x" * 9 + "\x1b[0m")
     sink.flush()
-    assert "x" * 9 in capsys.readouterr().out
+    output = capsys.readouterr().out
+    assert "x" * 9 in output
+    assert "\x1b[" not in output
+
+
+def test_flush_preserves_ansi_selected_by_color_policy() -> None:
+    @click.command()
+    @click.pass_context
+    def command(ctx: click.Context) -> None:
+        set_color_policy(ctx, ColorPolicy.ALWAYS)
+        sink = BoundedSink(
+            ROWS_BUDGET,
+            command_path="tasks list",
+            complete_via=TASKS_COMPLETE,
+        )
+        sink.console.print("[bold]x[/bold]")
+        sink.flush()
+
+    result = CliRunner().invoke(command)
+
+    assert result.exit_code == 0, result.output
+    assert "\x1b[" in result.output
 
 
 def test_flush_is_idempotent(capsys) -> None:
