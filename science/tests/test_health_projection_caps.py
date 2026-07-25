@@ -14,11 +14,40 @@ def _natural_systems_shaped_report() -> dict[str, object]:
     """All-warning validation against a non-zero total_issues -- the real 2026-07-24 shape."""
     return {
         "validation": [
-            {"severity": "warning", "code": "document_structure", "message": f"m{i}"}
+            {
+                "severity": "warning",
+                "path": None,
+                "line": None,
+                "message": f"m{i}",
+                "rule": "document_structure",
+                "task": None,
+            }
             for i in range(361)
         ],
-        "managed_artifacts": [{"counts_as_issue": False, "name": "a"}],
-        "unresolved_refs": [{"ref": "r1"}, {"ref": "r2"}],
+        "managed_artifacts": [
+            {
+                "name": "a",
+                "install_target": "AGENTS.md",
+                "version": "1",
+                "status": "current",
+                "detail": "current",
+                "counts_as_issue": False,
+            }
+        ],
+        "unresolved_refs": [
+            {
+                "target": "r1",
+                "mention_count": 1,
+                "sources": ["a.md"],
+                "looks_like": "unknown",
+            },
+            {
+                "target": "r2",
+                "mention_count": 1,
+                "sources": ["b.md"],
+                "looks_like": "unknown",
+            },
+        ],
         "unregistered_ref_kinds": [],
         "lingering_tags_lines": [],
         "agent_context": [],
@@ -106,7 +135,9 @@ def test_error_threshold_hides_warnings_but_reports_them_as_omitted() -> None:
 
 def test_unfiltered_sections_ignore_threshold_and_cap() -> None:
     report = _natural_systems_shaped_report()
-    report["unwired_checks"] = [{"name": f"check{i}"} for i in range(100)]
+    report["unwired_checks"] = [
+        {"check": f"check{i}", "code": "unwired", "reason": None} for i in range(100)
+    ]
     projected = project_health_report(report, threshold="error")
     assert len(projected["unwired_checks"]) == 100
 
@@ -122,7 +153,17 @@ def test_nested_findings_are_projected_in_place() -> None:
         "status": "active",
         "empty_state": "active",
         "summary": {},
-        "findings": [{"severity": "error", "code": f"c{i}"} for i in range(100)],
+        "findings": [
+            {
+                "severity": "error",
+                "code": f"c{i}",
+                "sidecar": "annotations/a.json",
+                "annotation": "annotation:a",
+                "reason": "invalid",
+                "detail": "invalid annotation",
+            }
+            for i in range(100)
+        ],
         "propositions": [],
     }
     projected = project_health_report(report, threshold="error")
@@ -321,4 +362,128 @@ def test_registered_scalars_require_their_registered_shape(
     report = _natural_systems_shaped_report()
     report[section] = value
     with pytest.raises((TypeError, ValueError), match=section):
+        project_health_report(report, threshold="warn")
+
+
+@pytest.mark.parametrize("cap", [-1, True, False, 1.5, "40"])
+def test_cap_must_be_a_non_negative_integer(cap: object) -> None:
+    with pytest.raises((TypeError, ValueError), match="cap"):
+        project_health_report(_natural_systems_shaped_report(), threshold="warn", cap=cap)
+
+
+def test_zero_cap_is_valid() -> None:
+    projected = project_health_report(
+        _natural_systems_shaped_report(), threshold="warn", cap=0
+    )
+    assert projected["validation"] == []
+
+
+def test_projector_rejects_unknown_threshold_when_severity_sections_are_empty() -> None:
+    report = _natural_systems_shaped_report()
+    report["validation"] = []
+    with pytest.raises(ValueError, match="unknown health threshold"):
+        project_health_report(report, threshold="critical")
+
+
+@pytest.mark.parametrize(
+    "section",
+    [
+        "unresolved_refs",
+        "unregistered_ref_kinds",
+        "lingering_tags_lines",
+        "agent_context",
+        "identity_policy",
+        "entity_identity",
+        "legacy_task_type",
+        "invalid_entity_aspects",
+        "schema_invalid",
+        "managed_artifacts",
+        "tooling_scaffold",
+        "validation",
+        "accepted_validation",
+        "unwired_checks",
+    ],
+)
+def test_typed_dict_row_sections_require_their_producer_fields(section: str) -> None:
+    report = _natural_systems_shaped_report()
+    report[section] = [{}]
+    with pytest.raises((TypeError, ValueError), match=rf"{section}\[0\]"):
+        project_health_report(report, threshold="warn")
+
+
+def test_malformed_typed_row_beyond_cap_is_rejected_before_projection() -> None:
+    report = _natural_systems_shaped_report()
+    rows = list(report["validation"])
+    rows[SECTION_ROW_CAP].pop("message")
+    report["validation"] = rows
+    with pytest.raises(ValueError, match=rf"validation\[{SECTION_ROW_CAP}\].*message"):
+        project_health_report(report, threshold="warn")
+
+
+def test_malformed_managed_artifact_beyond_cap_is_rejected_before_projection() -> None:
+    report = _natural_systems_shaped_report()
+    valid = dict(report["managed_artifacts"][0])
+    report["managed_artifacts"] = [
+        dict(valid) for _ in range(SECTION_ROW_CAP)
+    ] + [{**valid, "counts_as_issue": "yes"}]
+    with pytest.raises(
+        TypeError,
+        match=rf"managed_artifacts\[{SECTION_ROW_CAP}\]\.counts_as_issue",
+    ):
+        project_health_report(report, threshold="warn")
+
+
+def test_filtered_prose_finding_is_validated_before_thresholding() -> None:
+    report = _natural_systems_shaped_report()
+    prose = dict(report["prose_epistemics"])
+    prose["findings"] = [{"severity": "info"}]
+    report["prose_epistemics"] = prose
+    with pytest.raises(ValueError, match=r"prose_epistemics\.findings\[0\].*counts_as_issue"):
+        project_health_report(report, threshold="warn")
+
+
+def test_cross_paper_finding_requires_full_producer_shape_before_capping() -> None:
+    report = _natural_systems_shaped_report()
+    cross_paper = dict(report["cross_paper_evidence"])
+    valid = {
+        "severity": "error",
+        "code": "cross_paper_evidence.invalid",
+        "sidecar": "annotations/a.json",
+        "annotation": "annotation:a",
+        "reason": "invalid",
+        "detail": "invalid annotation",
+    }
+    cross_paper["findings"] = [
+        dict(valid) for _ in range(SECTION_ROW_CAP)
+    ] + [{key: value for key, value in valid.items() if key != "detail"}]
+    report["cross_paper_evidence"] = cross_paper
+    with pytest.raises(
+        ValueError,
+        match=rf"cross_paper_evidence\.findings\[{SECTION_ROW_CAP}\].*detail",
+    ):
+        project_health_report(report, threshold="warn")
+
+
+def test_layered_claim_rows_require_full_producer_shape() -> None:
+    report = _natural_systems_shaped_report()
+    layered = dict(report["layered_claims"])
+    layered["migration_issues"] = [{"proposition": "p1"}]
+    report["layered_claims"] = layered
+    with pytest.raises(
+        ValueError,
+        match=r"layered_claims\.migration_issues\[0\].*source_path",
+    ):
+        project_health_report(report, threshold="warn")
+
+
+def test_meta_timing_requires_name_and_duration() -> None:
+    report = _natural_systems_shaped_report()
+    report["_meta"] = {
+        "timings": [{"name": "validate"}],
+        "total_duration_seconds": 0.5,
+    }
+    with pytest.raises(
+        ValueError,
+        match=r"_meta\.timings\[0\].*duration_seconds",
+    ):
         project_health_report(report, threshold="warn")

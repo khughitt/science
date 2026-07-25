@@ -94,6 +94,117 @@ def meets_threshold(row: Mapping[str, Any], threshold: str) -> bool:
 
 SECTION_ROW_CAP = 40
 
+_ROW_SCHEMAS: dict[str, dict[str, str]] = {
+    "unresolved_refs": {
+        "target": "str",
+        "mention_count": "int",
+        "sources": "str_list",
+        "looks_like": "str",
+    },
+    "unregistered_ref_kinds": {
+        "kind": "str",
+        "field": "str",
+        "mention_count": "int",
+        "refs": "str_list",
+        "sources": "str_list",
+    },
+    "lingering_tags_lines": {"file": "str", "values": "str_list"},
+    "agent_context": {
+        "code": "str",
+        "source_file": "str",
+        "detail": "str",
+        "fix": "str",
+    },
+    "identity_policy": {
+        "check": "str",
+        "entity_id": "str",
+        "source_file": "str",
+        "message": "str",
+    },
+    "entity_identity": {
+        "code": "str",
+        "severity": "severity",
+        "message": "str",
+        "path": "optional_str",
+        "canonical_id": "optional_str",
+    },
+    "legacy_task_type": {
+        "task_id": "str",
+        "legacy_type": "str",
+        "source_file": "str",
+    },
+    "invalid_entity_aspects": {
+        "entity_id": "str",
+        "source_file": "str",
+        "message": "str",
+    },
+    # dataset_anomalies is deliberately absent: HealthReport declares list[dict], so
+    # only its projection-relevant severity field is validated below.
+    "schema_invalid": {
+        "code": "str",
+        "severity": "severity",
+        "kind": "str",
+        "path": "str",
+        "message": "str",
+    },
+    "managed_artifacts": {
+        "name": "str",
+        "install_target": "str",
+        "version": "str",
+        "status": "str",
+        "detail": "str",
+        "counts_as_issue": "bool",
+    },
+    "tooling_scaffold": {"code": "str", "detail": "str", "fix": "str"},
+    "validation": {
+        "severity": "severity",
+        "path": "optional_str",
+        "line": "optional_int",
+        "message": "str",
+        "rule": "optional_str",
+        "task": "optional_str",
+    },
+    "accepted_validation": {
+        "severity": "severity",
+        "path": "optional_str",
+        "line": "optional_int",
+        "message": "str",
+        "rule": "optional_str",
+        "task": "optional_str",
+        "accepted_reason": "str",
+    },
+    "unwired_checks": {
+        "check": "str",
+        "code": "str",
+        "reason": "optional_str",
+    },
+}
+
+_CROSS_PAPER_FINDING_SCHEMA = {
+    "code": "str",
+    "severity": "severity",
+    "sidecar": "str",
+    "annotation": "str",
+    "reason": "str",
+    "detail": "str",
+}
+
+_LAYERED_ROW_SCHEMAS: dict[str, dict[str, str]] = {
+    "rival_model_packets_missing_discriminating_predictions": {
+        "proposition": "str",
+        "source_path": "str",
+        "packet_id": "str",
+    },
+    "migration_issues": {
+        "proposition": "str",
+        "source_path": "str",
+        "warnings": "str_list",
+        "todos": "str_list",
+    },
+}
+
+_GENERIC_ROW_SECTIONS = frozenset({"dataset_anomalies"})
+
 
 def _required_field(container: Mapping[str, Any], key: str, path: str) -> Any:
     if key not in container:
@@ -123,6 +234,63 @@ def _validate_mapping_members(rows: list[Any], path: str) -> None:
     for index, row in enumerate(rows):
         if not isinstance(row, Mapping):
             raise TypeError(f"{path}[{index}] must be a mapping, got {type(row).__name__}")
+
+
+def _validate_field_kind(value: Any, kind: str, path: str) -> None:
+    if kind == "severity":
+        if not isinstance(value, str) or value not in SEVERITY_ORDER:
+            raise ValueError(f"unknown health severity {value!r} at {path}")
+        return
+    if kind == "str":
+        valid = isinstance(value, str)
+        expected = "a str"
+    elif kind == "optional_str":
+        valid = value is None or isinstance(value, str)
+        expected = "a str or None"
+    elif kind == "int":
+        valid = type(value) is int
+        expected = "an int"
+    elif kind == "optional_int":
+        valid = value is None or type(value) is int
+        expected = "an int or None"
+    elif kind == "bool":
+        valid = type(value) is bool
+        expected = "a bool"
+    elif kind == "numeric":
+        valid = isinstance(value, (int, float)) and not isinstance(value, bool)
+        expected = "numeric"
+    elif kind == "str_list":
+        valid = isinstance(value, list) and all(isinstance(item, str) for item in value)
+        expected = "a list of str"
+    else:  # pragma: no cover - schemas above are closed over these kinds
+        raise AssertionError(f"unknown health projection field kind {kind!r}")
+    if not valid:
+        raise TypeError(f"{path} must be {expected}, got {type(value).__name__}")
+
+
+def _validate_row_schema(
+    row: Mapping[str, Any],
+    schema: Mapping[str, str],
+    path: str,
+) -> None:
+    for key, kind in schema.items():
+        value = _required_field(row, key, path)
+        _validate_field_kind(value, kind, f"{path}.{key}")
+
+
+def _validate_row_section(rows: list[Any], section: str) -> None:
+    path = f"health report section {section}"
+    _validate_mapping_members(rows, path)
+    schema = _ROW_SCHEMAS.get(section)
+    for index, row in enumerate(rows):
+        row_path = f"{path}[{index}]"
+        if schema is not None:
+            _validate_row_schema(row, schema, row_path)
+        elif section in _GENERIC_ROW_SECTIONS:
+            severity = _required_field(row, "severity", row_path)
+            _validate_field_kind(severity, "severity", f"{row_path}.severity")
+        else:  # pragma: no cover - every registered row section is explicit above
+            raise AssertionError(f"health report section {section!r} has no row schema")
 
 
 def _validate_integer_field(container: Mapping[str, Any], key: str, path: str) -> None:
@@ -165,6 +333,12 @@ def _validate_mapping_section(section: str, value: Mapping[str, Any]) -> None:
     ):
         rows = _required_list(value, key, path)
         _validate_mapping_members(rows, f"{path}.{key}")
+        for index, row in enumerate(rows):
+            _validate_row_schema(
+                row,
+                _LAYERED_ROW_SCHEMAS[key],
+                f"{path}.{key}[{index}]",
+            )
 
 
 def _validate_nested_section(
@@ -193,6 +367,23 @@ def _validate_nested_section(
 
     findings = _required_list(value, "findings", path)
     _validate_mapping_members(findings, f"{path}.findings")
+    for index, finding in enumerate(findings):
+        finding_path = f"{path}.findings[{index}]"
+        if section == "cross_paper_evidence":
+            _validate_row_schema(
+                finding,
+                _CROSS_PAPER_FINDING_SCHEMA,
+                finding_path,
+            )
+        else:
+            severity = _required_field(finding, "severity", finding_path)
+            _validate_field_kind(severity, "severity", f"{finding_path}.severity")
+            counts_as_issue = _required_field(finding, "counts_as_issue", finding_path)
+            _validate_field_kind(
+                counts_as_issue,
+                "bool",
+                f"{finding_path}.counts_as_issue",
+            )
     return findings
 
 
@@ -207,12 +398,14 @@ def _validate_scalar_section(section: str, value: Any) -> None:
         raise TypeError(f"{path} must be a mapping, got {type(value).__name__}")
     timings = _required_list(value, "timings", path)
     _validate_mapping_members(timings, f"{path}.timings")
-    duration = _required_field(value, "total_duration_seconds", path)
-    if not isinstance(duration, (int, float)) or isinstance(duration, bool):
-        raise TypeError(
-            f"{path}.total_duration_seconds must be numeric, "
-            f"got {type(duration).__name__}"
+    for index, timing in enumerate(timings):
+        _validate_row_schema(
+            timing,
+            {"name": "str", "duration_seconds": "numeric"},
+            f"{path}.timings[{index}]",
         )
+    duration = _required_field(value, "total_duration_seconds", path)
+    _validate_field_kind(duration, "numeric", f"{path}.total_duration_seconds")
 
 
 def _classified(section: str) -> str:
@@ -253,6 +446,42 @@ def _project_section(
     return capped
 
 
+def _validate_report(report: Mapping[str, Any]) -> None:
+    """Validate the complete registered source shape before narrowing any section."""
+    for key, value in report.items():
+        if key in SCALAR_SECTIONS:
+            _validate_scalar_section(key, value)
+            continue
+
+        if key in NESTED_FINDING_SECTIONS:
+            if not isinstance(value, Mapping):
+                raise TypeError(
+                    f"health report section {key!r} must be a mapping, "
+                    f"got {type(value).__name__}"
+                )
+            _validate_nested_section(key, value)
+            continue
+
+        if key in MAPPING_SECTIONS:
+            if not isinstance(value, Mapping):
+                raise TypeError(
+                    f"health report section {key!r} must be a mapping, "
+                    f"got {type(value).__name__}"
+                )
+            _validate_mapping_section(key, value)
+            continue
+
+        # Classify before checking the value type so unknown scalars are refused as
+        # unregistered sections rather than mislabeled as malformed row sections.
+        _classified(key)
+        if not isinstance(value, list):
+            raise TypeError(
+                f"health report section {key!r} must be a list, "
+                f"got {type(value).__name__}"
+            )
+        _validate_row_section(value, key)
+
+
 def project_health_report(
     report: dict[str, Any],
     threshold: str,
@@ -268,7 +497,22 @@ def project_health_report(
     """
     from science_tool.graph.health import count_issues
 
+    if cap is not None:
+        if type(cap) is not int:
+            raise TypeError(
+                f"health projection cap must be an int, got {type(cap).__name__}"
+            )
+        if cap < 0:
+            raise ValueError(f"health projection cap must be non-negative, got {cap}")
+    if threshold not in _THRESHOLD_FLOOR:
+        raise ValueError(f"unknown health threshold {threshold!r}")
+
     effective_cap = SECTION_ROW_CAP if cap is None else cap
+    _validate_report(report)
+    # Task 8's counter is also the complete-root contract validator. Run it over the
+    # source before narrowing, then again below over the projection for displayed_issues.
+    count_issues(report)
+
     omitted: dict[str, int] = {}
     projected: dict[str, Any] = {}
 
