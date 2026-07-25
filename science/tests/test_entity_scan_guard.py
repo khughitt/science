@@ -38,6 +38,7 @@ ALLOWLIST: set[str] = {
     "prose.py", "prose_lint.py", "markers.py", "refs.py",
     "cli.py",
     "skills_lint/discovery.py",  # shared skills/ discovery, not entities/
+    "graph/skill_inventory.py",  # skills/ corpus inventory, not entities/
 }
 
 
