@@ -573,7 +573,11 @@ def assess_numeric_claims(
         _BARE_YEAR_RE, _BOLD_STRUCTURAL_LABEL_RE, _CROSS_REFERENCE_RE,
         _HEADER_OR_LIST_RE, _LIST_RE, _NUMERIC_CLAIM_RE, _mask_numeric_identifier_spans,
     )
-    from science_tool.markdown_utils import strip_inline_code
+    # `blank_inline_code`, not `strip_inline_code`: every column below -- the
+    # one reported to the author, the one `classify_structural` slices a window
+    # around, and the one `_within_bound_span` compares -- is measured on this
+    # line and must index the real file line (fb-2026-07-26-007).
+    from science_tool.markdown_utils import blank_inline_code
 
     marker_scopes = compute_marker_scopes(document)
     entity_cands = entity_source_candidates(document, index, config)
@@ -605,7 +609,7 @@ def assess_numeric_claims(
         in_list_item = False
         if raw.lstrip().startswith("|"):
             continue
-        line = _mask_numeric_identifier_spans(strip_inline_code(raw))
+        line = _mask_numeric_identifier_spans(blank_inline_code(raw))
         crossref_spans = [m.span() for m in _CROSS_REFERENCE_RE.finditer(line)]
         pid = document.paragraph_id_per_line[lineno]
         sid = document.section_id_per_line[lineno]
@@ -620,8 +624,10 @@ def assess_numeric_claims(
                                  paragraph_id=pid, section_id=sid)
             if _within_bound_span(lineno, match.start() + 1, len(value), bound_spans):
                 continue
-            # 1 — NotClaim
-            reason = classify_structural(value, raw, match.start() + 1)
+            # 1 — NotClaim. Classified against `line`, the string the column was
+            # measured on; its adjacency triggers are prose words, never the
+            # identifier spans the maskers blank, so nothing it looks for is lost.
+            reason = classify_structural(value, line, match.start() + 1)
             if reason is not None:
                 out.append(NotClaim(claim=claim, reason=reason))
                 continue

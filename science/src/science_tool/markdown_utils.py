@@ -43,8 +43,22 @@ def strip_inline_code(text: str) -> str:
 
     Used to exclude tokens-as-documentation (e.g., `[UNVERIFIED]` discussed
     in prose about the convention itself) from prose-level scanning.
+
+    This SHORTENS the text. Any caller that reports a position, or that hands a
+    column measured on the result to something reading a different string, wants
+    `blank_inline_code` instead.
     """
     return _INLINE_CODE_RE.sub("", text)
+
+
+def blank_inline_code(text: str) -> str:
+    """Blank out backticked inline-code spans, preserving column offsets.
+
+    The column-preserving sibling of `strip_inline_code`, matching the
+    convention every masker in `prose_lint` follows: substitute equal-length
+    runs of spaces so offsets measured on the result still index the original.
+    """
+    return _INLINE_CODE_RE.sub(lambda match: " " * len(match.group(0)), text)
 
 
 def _strip_comments_and_inline_code(text: str, *, preserve_inline_code: bool) -> str:
