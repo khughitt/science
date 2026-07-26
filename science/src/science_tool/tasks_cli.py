@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 from collections.abc import Callable
 from pathlib import Path
 from typing import Any, cast
@@ -176,6 +177,16 @@ def _missing_project_entity_lookup(_ref: str) -> object | None:
     return None
 
 
+def _active_source_hash(tasks_dir: Path) -> str:
+    """Hash active task filenames and bytes for an optimistic write recheck."""
+    digest = hashlib.sha256()
+    for path in sorted((tasks_dir / "active").glob("*.md")):
+        for part in (path.name.encode("utf-8"), path.read_bytes()):
+            digest.update(len(part).to_bytes(8, byteorder="big"))
+            digest.update(part)
+    return digest.hexdigest()
+
+
 @tasks_group.command("blockers")
 @click.argument("task_id")
 @click.option("--format", "fmt", type=click.Choice(["table", "json"]), default="table")
@@ -289,8 +300,11 @@ def tasks_fix_blockers(dry_run: bool, output_format: str, output_path: Path | No
     from science_tool.budget.registry import lookup
     from science_tool.budget.sink import BoundedSink
     from science_tool.tasks import (
-        _write_active,
-        parse_tasks_for_cli,
+        _read_active,
+        _require_split,
+        _task_allocation_lock,
+        find_task_location,
+        write_task_file,
     )
     from science_tool.tasks_blockers import is_typed_ref
 
@@ -311,8 +325,14 @@ def tasks_fix_blockers(dry_run: bool, output_format: str, output_path: Path | No
         else None
     )
 
-    tasks_path = DEFAULT_TASKS_DIR / "active.md"
-    tasks_, warnings = parse_tasks_for_cli(tasks_path)
+    source_hash = _active_source_hash(DEFAULT_TASKS_DIR)
+    tasks_ = _read_active(DEFAULT_TASKS_DIR)
+    warnings = [
+        f"task {task.id}: legacy untyped blocker {ref!r} — run 'science tasks fix-blockers' to retype"
+        for task in tasks_
+        for ref in task.blocked_by
+        if not is_typed_ref(ref)
+    ]
 
     if not warnings or dry_run:
         projected = project_rows(warnings, sink.max_rows)
@@ -342,8 +362,9 @@ def tasks_fix_blockers(dry_run: bool, output_format: str, output_path: Path | No
             click.echo(control_notice)
         return
 
-    changed = False
+    changed_tasks = []
     for task in tasks_:
+        original_blockers = task.blocked_by
         new_blockers: list[str] = []
         for ref in task.blocked_by:
             if is_typed_ref(ref):
@@ -359,18 +380,41 @@ def tasks_fix_blockers(dry_run: bool, output_format: str, output_path: Path | No
             if replacement == "!":
                 new_blockers.append(ref)
             elif replacement == "":
-                changed = True  # drop
+                pass  # drop
             else:
                 if not is_typed_ref(replacement):
                     click.echo(f"  ! {replacement!r} not a typed ref; keeping original")
                     new_blockers.append(ref)
                 else:
                     new_blockers.append(replacement)
-                    changed = True
         task.blocked_by = new_blockers
+        if new_blockers != original_blockers:
+            changed_tasks.append(task)
 
-    if changed and click.confirm("\nWrite changes to tasks/active.md?", default=True):
-        _write_active(DEFAULT_TASKS_DIR, tasks_)
+    if changed_tasks and click.confirm("\nWrite changes to active task files?", default=True):
+        with _task_allocation_lock(DEFAULT_TASKS_DIR):
+            _require_split(DEFAULT_TASKS_DIR)
+            _read_active(DEFAULT_TASKS_DIR, require_split=False)
+            if _active_source_hash(DEFAULT_TASKS_DIR) != source_hash:
+                raise click.ClickException("tasks changed under you; re-run fix-blockers")
+
+            try:
+                for task in changed_tasks:
+                    location = find_task_location(
+                        DEFAULT_TASKS_DIR,
+                        task.id,
+                        require_split=False,
+                    )
+                    if location.path.parent != DEFAULT_TASKS_DIR / "active":
+                        raise ValueError(
+                            f"task {task.id} is no longer an active task; "
+                            "re-run fix-blockers"
+                        )
+            except (KeyError, ValueError) as exc:
+                raise click.ClickException(str(exc)) from exc
+
+            for task in changed_tasks:
+                write_task_file(DEFAULT_TASKS_DIR, task)
         click.echo("Updated.")
     else:
         click.echo("No changes written.")
