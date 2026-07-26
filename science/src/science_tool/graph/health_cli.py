@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections import Counter
 from pathlib import Path
 from typing import Any, cast
 
@@ -426,7 +427,17 @@ def health_command(
             sink.console.print(table)
 
         if validation:
-            table = Table(title=f"Validation ({len(validation)})")
+            # A bare integer here could not be reconciled with `science validate`'s
+            # own count (fb-2026-07-26-006). It IS that instrument, under four
+            # narrowings none of which used to be stated. Break the figure out by
+            # severity and name the scope, so the two reconcile by construction.
+            severity_counts = Counter(str(row.get("severity", "") or "unknown") for row in validation)
+            breakdown = ", ".join(
+                f"{severity_counts[name]} {name}"
+                for name in ("error", "warning", "unknown")
+                if severity_counts.get(name)
+            )
+            table = Table(title=f"Validation ({len(validation)}: {breakdown})")
             table.add_column("Severity", style="bold")
             table.add_column("Path", overflow="fold")
             table.add_column("Rule")
@@ -445,6 +456,15 @@ def health_command(
                     row.get("message", ""),
                 )
             sink.console.print(table)
+            scope = [
+                "Scope: `science validate` without --strict and without the Python sidecar,",
+                "info-severity findings dropped",
+            ]
+            if accepted_validation:
+                scope.append(f"minus {len(accepted_validation)} accepted-warning ledger entries")
+            sink.console.print(
+                f"[dim]{', '.join(scope)}. A `science validate` run reports a larger set.[/dim]"
+            )
 
         adoption_table = Table(title="Layered-Claim Adoption")
         adoption_table.add_column("Check", style="bold")

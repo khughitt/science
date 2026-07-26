@@ -34,6 +34,10 @@ from science_tool.project_package.payload import PayloadError, payload_inventory
 
 SCHEMA_VERSION = "science-project-serialized.v1"
 SOURCE_ROOTS = ("entities", "results", "runs")
+# Relative INVENTORY paths inside the serialized tarball, not filesystem lookups:
+# they are part of the payload-hash contract, so they stay literal. Resolving
+# them through `ProjectPaths` would make a package's inventory depend on the
+# producing project's manifest and break byte-comparability across projects.
 TOP_LEVEL_SINGLES = (PROJECT_CONFIG_FILENAME, "papers/references.bib", "knowledge/graph.trig")
 
 

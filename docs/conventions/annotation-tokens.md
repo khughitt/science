@@ -32,6 +32,25 @@ A token's *meaning* depends on whether it appears inside an inline-code span or 
 
 This split lets convention docs (this file included) discuss the tokens without polluting validation output.
 
+## Payload
+
+A token may carry a short reason after a colon — `[UNVERIFIED: not in the abstract]`
+— and both forms count identically toward severity tallies. The payload is
+recorded on the hit (`MarkerHit.reason`) and surfaced by `science markers scan`,
+so a reason is queryable rather than being prose the scanner steps over.
+
+- The reason ends at the first `]`. A reason containing a bracket therefore
+  truncates — `[UNVERIFIED: see table [3]]` yields the reason `see table [3`.
+  The marker still **counts**: a malformed reason is not grounds for the honesty
+  tally to lose a flag.
+- An empty payload (`[UNVERIFIED:]`) counts as a bare marker with no reason.
+- Whitespace around the reason is stripped; `[UNVERIFIED:why]` and
+  `[UNVERIFIED: why]` are equivalent.
+
+Prefer a payload when the reason is not obvious from the surrounding sentence —
+it is what a later reader (or a lift into a sidecar annotation record) needs in
+order to act on the flag.
+
 ## Choosing the right token
 
 ```

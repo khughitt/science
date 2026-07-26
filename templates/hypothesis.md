@@ -7,8 +7,12 @@ status: "active"  # draft | active | complete | superseded | retired | archived.
 # closure_basis: required when status is `retired` (and for `archived`) -- why this stopped being worked. Prose, or a pre-registration ref.
 # aspects: ["hypothesis-testing"]  # optional override; omitted entities inherit project aspects
 source_refs: []
-# origins: known originators (user | assistant | literature). Provenance only;
-# does not affect belief. literature ref must be paper:<key> or cite:<key>.
+# origins: known originators. Each entry is a RECORD, not a bare word:
+#   origins: [{type: literature, ref: paper:Smith2024}]
+# type is one of user | assistant | literature; a literature ref must be
+# paper:<key> or cite:<key>. A bare `[literature]` fails schema validation,
+# which drops the whole entity from the source load. Provenance only; does
+# not affect belief.
 origins: []
 related: []
 created: "{{YYYY-MM-DD}}"

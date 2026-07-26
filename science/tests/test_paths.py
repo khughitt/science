@@ -107,3 +107,19 @@ def test_empty_root_rejected(tmp_path: Path) -> None:
 def test_duplicate_roots_deduplicated(tmp_path: Path) -> None:
     (tmp_path / "science.yaml").write_text("name: t\ncode_roots:\n  - code\n  - code\n", encoding="utf-8")
     assert resolve_paths(tmp_path).code_roots == (tmp_path / "code",)
+
+
+def test_pdfs_dir_sits_under_papers_dir(tmp_path):
+    """`papers/pdfs/` is the scaffolded, de-facto convention for paper PDFs.
+
+    fb-2026-07-26-003: the convention existed only inside the `.gitignore` block
+    that `create-project`/`import-project` scaffold, so it was reachable by
+    reading a command doc and nothing could resolve it programmatically. Four of
+    five surveyed projects had converged on it independently.
+    """
+    from science_tool.paths import resolve_paths
+
+    paths = resolve_paths(tmp_path)
+
+    assert paths.pdfs_dir == paths.papers_dir / "pdfs"
+    assert paths.pdfs_dir == tmp_path / "papers" / "pdfs"

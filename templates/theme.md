@@ -7,8 +7,12 @@ theme_kind: "methodological"  # methodological | biological | translational | ev
 theme_scope: "project"  # project | cross-project. `project` for themes local to a single Science project; `cross-project` for themes organized at the federation/meta level.
 related: []
 source_refs: []
-# origins: known originators (user | assistant | literature). Provenance only;
-# does not affect belief. literature ref must be paper:<key> or cite:<key>.
+# origins: known originators. Each entry is a RECORD, not a bare word:
+#   origins: [{type: literature, ref: paper:Smith2024}]
+# type is one of user | assistant | literature; a literature ref must be
+# paper:<key> or cite:<key>. A bare `[literature]` fails schema validation,
+# which drops the whole entity from the source load. Provenance only; does
+# not affect belief.
 origins: []
 evidence_refs: []
 created: "{{created}}"

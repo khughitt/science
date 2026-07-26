@@ -23,6 +23,10 @@ _COMMON_DEFAULTS: dict[str, str] = {
     "prompts_dir": ".ai/prompts",
 }
 
+# PDFs live UNDER the papers dir rather than beside it, so relocating `papers/`
+# carries its payload directory with it. Derived, never a second literal.
+_PDFS_SUBDIR = "pdfs"
+
 _CODE_DIR_BY_PROFILE: dict[ProjectProfile, str] = {
     "research": "code",
     "software": "src",
@@ -42,6 +46,7 @@ class ProjectPaths:
     models_dir: Path
     specs_dir: Path
     papers_dir: Path
+    pdfs_dir: Path  # paper/book PDFs — gitignored payload, see docs/conventions/
     knowledge_dir: Path
     tasks_dir: Path
     templates_dir: Path
@@ -119,6 +124,7 @@ def resolve_paths(project_root: Path) -> ProjectPaths:
         models_dir=project_root / _COMMON_DEFAULTS["models_dir"],
         specs_dir=project_root / _COMMON_DEFAULTS["specs_dir"],
         papers_dir=project_root / _COMMON_DEFAULTS["papers_dir"],
+        pdfs_dir=project_root / _COMMON_DEFAULTS["papers_dir"] / _PDFS_SUBDIR,
         knowledge_dir=project_root / _COMMON_DEFAULTS["knowledge_dir"],
         tasks_dir=project_root / _COMMON_DEFAULTS["tasks_dir"],
         templates_dir=project_root / _COMMON_DEFAULTS["templates_dir"],

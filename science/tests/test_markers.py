@@ -67,6 +67,71 @@ def test_scan_text_finds_bare_unverified() -> None:
     assert h.line == 1
 
 
+def test_scan_text_finds_the_reason_payload_form() -> None:
+    """`[TOKEN: reason]` is a marker, not prose.
+
+    fb-2026-07-26-001: the scanner matched only the bare `[TOKEN]` form, so the
+    payload form — in wide fleet use and strictly more informative — contributed
+    nothing to the honesty tally. Measured at the time of the fix: 111
+    occurrences in multiple-myeloma against 114 the scanner could see, and in
+    natural-systems the payload form outnumbered the bare one (111 vs 97).
+    """
+    hits = scan_text(Path("x.md"), "Some fact [UNVERIFIED: no source yet] here.\n", strict=False)
+    assert len(hits) == 1
+    h = hits[0]
+    assert h.token == "UNVERIFIED"
+    assert h.severity == "warn"
+    assert h.in_documentation is False
+    assert h.reason == "no source yet"
+    assert h.literal == "[UNVERIFIED: no source yet]"
+
+
+def test_scan_text_records_the_matched_literal_for_the_bare_form() -> None:
+    """`literal` is what was matched, never a reconstruction.
+
+    Consumers used to rebuild `f"[{token}]"`; that is lossy the moment a payload
+    or unusual spacing exists, and the loss was silent (an unfindable literal
+    dropped the annotation instead of failing).
+    """
+    hits = scan_text(Path("x.md"), "Some fact [UNVERIFIED] here.\n", strict=False)
+    assert hits[0].literal == "[UNVERIFIED]"
+    assert hits[0].reason is None
+
+
+def test_scan_text_reason_payload_without_space_after_colon() -> None:
+    hits = scan_text(Path("x.md"), "Claim [MISSING_CITATION:need a cite] here.\n", strict=False)
+    assert len(hits) == 1
+    assert hits[0].token == "MISSING_CITATION"
+    assert hits[0].reason == "need a cite"
+
+
+def test_scan_text_empty_reason_payload_counts_with_no_reason() -> None:
+    """An empty payload is still a marker; the reason normalizes to absent."""
+    hits = scan_text(Path("x.md"), "Claim [UNVERIFIED:] here.\n", strict=False)
+    assert len(hits) == 1
+    assert hits[0].token == "UNVERIFIED"
+    assert hits[0].reason is None
+
+
+def test_scan_text_reason_payload_stops_at_the_first_bracket() -> None:
+    """A reason containing `]` truncates rather than swallowing the line.
+
+    The marker must still COUNT — a malformed reason is not grounds for the
+    honesty tally to lose the flag.
+    """
+    hits = scan_text(Path("x.md"), "Claim [UNVERIFIED: see table [3]] here.\n", strict=False)
+    assert len(hits) == 1
+    assert hits[0].token == "UNVERIFIED"
+    assert hits[0].reason == "see table [3"
+
+
+def test_scan_text_excludes_backticked_reason_payload_form() -> None:
+    text = "Write `[UNVERIFIED: why]` when the source is unchecked.\n"
+    hits = scan_text(Path("x.md"), text, strict=False)
+    assert len(hits) == 1
+    assert hits[0].in_documentation is True
+
+
 def test_scan_text_excludes_backticked_token() -> None:
     text = "Mark the claim with `[UNVERIFIED]` per the convention.\n"
     hits = scan_text(Path("x.md"), text, strict=False)

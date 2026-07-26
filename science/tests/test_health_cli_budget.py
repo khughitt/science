@@ -127,3 +127,46 @@ def test_list_checks_also_routes_through_the_sink(tmp_path: Path) -> None:
     result = _invoke(["health", "--list-checks", "--output", str(target)])
     assert result.exit_code == 0, result.output
     assert target.read_text().strip() != ""
+
+
+def _report_with(validation: list[dict], accepted: list[dict] | None = None) -> dict:
+    report = dict(REPORT)
+    report["validation"] = validation
+    report["accepted_validation"] = accepted or []
+    report["total_issues"] = len(validation)
+    return report
+
+
+def test_validation_count_is_broken_out_by_severity(monkeypatch: pytest.MonkeyPatch) -> None:
+    """The headline figure must be reconcilable with `science validate`.
+
+    fb-2026-07-26-006: health printed `Validation (N)` as a bare integer. It is
+    `science validate`'s own finding set under four narrowings -- non-strict, no
+    Python sidecar, info-severity dropped, minus the acceptance ledger -- none of
+    which appeared on screen, so the number could not be reconciled with the one
+    `science validate` reports.
+    """
+    from science_tool.graph import health as health_module
+
+    rows = [
+        {"severity": "error", "path": "a", "line": None, "rule": "r", "task": None, "message": "m"},
+        {"severity": "warning", "path": "b", "line": None, "rule": "r", "task": None, "message": "m"},
+        {"severity": "warning", "path": "c", "line": None, "rule": "r", "task": None, "message": "m"},
+    ]
+    accepted = [
+        {"severity": "warning", "path": "d", "line": None, "rule": "r", "task": None,
+         "message": "m", "accepted_reason": "known"},
+    ]
+    monkeypatch.setattr(
+        health_module, "build_health_report", lambda *_a, **_k: _report_with(rows, accepted)
+    )
+
+    result = CliRunner().invoke(main, ["health", "--format", "table"], prog_name="science")
+
+    assert result.exit_code == 0, result.output
+    assert "1 error" in result.output
+    assert "2 warning" in result.output
+    # The scope that makes the figure reconcilable.
+    assert "--strict" in result.output
+    assert "sidecar" in result.output
+    assert "1 accepted-warning ledger entries" in result.output

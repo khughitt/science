@@ -559,3 +559,47 @@ def test_number_not_anchored_by_topical_hypothesis_ref(tmp_path):
     out = assess_numeric_claims(build_document_context(path), idx, _CFG)
     kinds = {type(a).__name__ for a in out if a.claim.value == "221"}
     assert kinds == {"Unanchored"}   # …yet a topical citation must not clear the claim
+
+
+# --- inline-code spans must not shift columns (fb-2026-07-26-007) ------------
+
+def test_notclaim_classification_survives_an_earlier_inline_code_span(tmp_path):
+    """A hardware-prefixed number stays a NotClaim when inline code precedes it.
+
+    fb-2026-07-26-007: every masker in the chain is column-preserving by design,
+    but `strip_inline_code` DELETES its spans. The claim's column was therefore
+    measured on the shortened line while `classify_structural` was handed the
+    raw one, so after any inline-code span it inspected the wrong window --
+    here missing the adjacent "GPU" and reporting a spurious numeric claim.
+    """
+    from science_tool.prose_lint import detect_numeric_anchor
+    p = tmp_path / "e.md"
+    p.write_text("---\nkind: report\n---\nThe `foo` GPU 4096 cores were used.\n")
+
+    issues = detect_numeric_anchor(p)
+
+    assert [i.match for i in issues] == [], (
+        "4096 is adjacent to GPU and must classify as hardware-id, not a claim"
+    )
+
+
+def test_reported_column_is_correct_after_an_inline_code_span(tmp_path):
+    """The column handed to the author must index the real line.
+
+    Same root cause as above, second symptom: `NumericClaim.col` was measured on
+    the inline-code-stripped line, so every reported column after such a span
+    pointed at the wrong character of the file.
+    """
+    from science_tool.prose_lint import detect_numeric_anchor
+    body = "Alpha `code` reports 7.94 fold."
+    p = tmp_path / "e.md"
+    p.write_text(f"---\nkind: report\n---\n{body}\n")
+
+    issues = detect_numeric_anchor(p)
+
+    assert len(issues) == 1
+    issue = issues[0]
+    assert issue.match == "7.94"
+    assert body[issue.col - 1 : issue.col - 1 + len(issue.match)] == "7.94", (
+        f"col {issue.col} does not index 7.94 in the real line"
+    )

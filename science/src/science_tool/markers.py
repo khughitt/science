@@ -33,6 +33,8 @@ class MarkerHit:
     token: str  # one of TOKENS
     severity: str  # "warn" | "info"
     in_documentation: bool  # True if backticked or inside a fenced code block
+    literal: str = ""  # exact matched text, e.g. "[UNVERIFIED: no source yet]"
+    reason: str | None = None  # the `[TOKEN: reason]` payload, absent when bare
 
 
 def severity_for(token: str, *, strict: bool) -> str:
@@ -43,10 +45,15 @@ def severity_for(token: str, *, strict: bool) -> str:
     return base
 
 
-# Pattern matches every literal canonical marker token. Anything else inside
-# brackets is left alone.
+# Pattern matches every literal canonical marker token, bare or carrying a
+# `: reason` payload. Anything else inside brackets is left alone.
+#
+# The payload is bounded by `[^\]]*` so a reason containing `]` truncates at the
+# first one instead of swallowing the rest of the line. The marker still COUNTS
+# in that case: a malformed reason is not grounds for the honesty tally to lose
+# the flag (fb-2026-07-26-001).
 _RECOGNIZED_INNER = "|".join(sorted(TOKENS, key=len, reverse=True))
-_TOKEN_RE = re.compile(rf"\[(?P<inner>{_RECOGNIZED_INNER})\]")
+_TOKEN_RE = re.compile(rf"\[(?P<token>{_RECOGNIZED_INNER})(?::(?P<reason>[^\]]*))?\]")
 
 
 def _frontmatter_end_line(lines: list[str]) -> int:
@@ -112,7 +119,9 @@ def scan_text(file: Path, text: str, *, strict: bool) -> list[MarkerHit]:
         backticks = [] if (in_fenced or is_fence) else _backtick_spans(raw_line)
 
         for m in _TOKEN_RE.finditer(raw_line):
-            token = m.group("inner")
+            token = m.group("token")
+            raw_reason = m.group("reason")
+            reason = raw_reason.strip() if raw_reason is not None else None
             in_doc = in_fenced or is_fence or _position_inside_any(m.start(), backticks)
             hits.append(
                 MarkerHit(
@@ -121,6 +130,8 @@ def scan_text(file: Path, text: str, *, strict: bool) -> list[MarkerHit]:
                     token=token,
                     severity=severity_for(token, strict=strict),
                     in_documentation=in_doc,
+                    literal=m.group(0),
+                    reason=reason or None,
                 )
             )
 

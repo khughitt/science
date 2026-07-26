@@ -6,7 +6,10 @@ status: "active"
 ontology_terms: []
 datasets: []                    # omit if not applicable to this topic
 source_refs: []                  # use cite:<bibkey> for bibliography refs; paper:<bibkey> for graph-visible paper notes
-# origins: known originators (user | assistant | literature). Provenance only.
+# origins: known originators. Each entry is a RECORD, not a bare word:
+#   origins: [{type: literature, ref: paper:Smith2024}]
+# type is one of user | assistant | literature. A bare `[literature]` fails
+# schema validation, which drops the whole entity. Provenance only.
 origins: []
 related: []
 created: "{{YYYY-MM-DD}}"
