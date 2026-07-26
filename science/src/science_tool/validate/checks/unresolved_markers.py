@@ -40,7 +40,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 from science_tool.markers import scan_markers
-from science_tool.markers_cli import _filter_lifted
+from science_tool.markers_lifted import filter_lifted
 from science_tool.validate.checks import Check
 from science_tool.validate.result import Result, Severity
 
@@ -57,7 +57,7 @@ def check_unresolved_markers(ctx: "ValidateContext") -> Iterable[Result]:
     if not ctx.doc_dir.is_dir():
         return []
 
-    filtered_hits = _filter_lifted(scan_markers(ctx.project_root, strict=ctx.strict, include_documentation=False))
+    filtered_hits = filter_lifted(scan_markers(ctx.project_root, strict=ctx.strict, include_documentation=False))
 
     counts = Counter(hit.token for hit in filtered_hits)
     severity_by_token: dict[str, str] = {}

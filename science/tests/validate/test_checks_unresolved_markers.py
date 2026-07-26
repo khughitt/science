@@ -171,7 +171,7 @@ def test_lifted_filter_can_drop_all_hits(tmp_path: Path, monkeypatch) -> None:
     doc_dir = tmp_path / "doc"
     doc_dir.mkdir()
     doc_dir.joinpath("note.md").write_text("[UNVERIFIED]\n", encoding="utf-8")
-    monkeypatch.setattr(unresolved_markers, "_filter_lifted", lambda hits: [])
+    monkeypatch.setattr(unresolved_markers, "filter_lifted", lambda hits: [])
 
     results = list(unresolved_markers.check_unresolved_markers(_ctx(tmp_path)))
 

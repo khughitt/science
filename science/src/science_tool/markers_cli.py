@@ -8,6 +8,7 @@ from pathlib import Path
 import click
 
 from science_tool.markers import scan_markers
+from science_tool.markers_lifted import filter_lifted
 from science_tool.output import emit
 
 
@@ -56,7 +57,7 @@ def scan(
     root = root_path.resolve()
     hits = scan_markers(root, strict=strict, include_documentation=include_documentation)
     if ignore_lifted:
-        hits = _filter_lifted(hits)
+        hits = filter_lifted(hits)
     counts = Counter(h.token for h in hits)
 
     payload = {
@@ -87,75 +88,3 @@ def scan(
             click.echo(f"  {rel}:{h.line}  [{h.token}]  {h.severity}")
 
     emit(output_format=output_format, payload=payload, render_text=_render)
-
-
-def _filter_lifted(hits: list) -> list:
-    """Drop hits whose enclosing sentence has a sidecar row marker-lifted."""
-    from science_tool.annotation.io import read_sidecar  # noqa: PLC0415
-
-    sidecar_cache: dict[Path, "object"] = {}
-
-    def load(p: Path):
-        if p in sidecar_cache:
-            return sidecar_cache[p]
-        try:
-            sc = read_sidecar(p) if p.exists() else None
-        except Exception as exc:
-            click.echo(
-                f"warning: could not parse {p}: {exc}", err=True,
-            )
-            sc = None
-        sidecar_cache[p] = sc
-        return sc
-
-    out = []
-    for hit in hits:
-        sidecar_path = hit.file.with_suffix(".anno.trig")
-        sc = load(sidecar_path)
-        if sc is None:
-            out.append(hit)
-            continue
-        if not _hit_is_lifted(hit, sc):
-            out.append(hit)
-    return out
-
-
-def _hit_is_lifted(hit, sidecar) -> bool:
-    """True if any sidecar annotation matches this hit by source + token + line."""
-    from science_tool.annotation.selector import (  # noqa: PLC0415
-        ResolutionStatus,
-        resolve_selector,
-    )
-
-    # `hit.literal` is the exact matched text, not a reconstruction: a marker
-    # carrying a `: reason` payload has a literal the old `f"[{token}]"` form
-    # could never produce, and the mismatch silently failed to match its lift.
-    literal = hit.literal
-    try:
-        source_text = hit.file.read_text(encoding="utf-8")
-    except (OSError, UnicodeDecodeError):
-        return False
-
-    line_offsets = [0]
-    for i, ch in enumerate(source_text):
-        if ch == "\n":
-            line_offsets.append(i + 1)
-    if hit.line < 1 or hit.line > len(line_offsets):
-        return False
-    line_start = line_offsets[hit.line - 1]
-    line_end = line_offsets[hit.line] if hit.line < len(line_offsets) else len(source_text)
-
-    for ann in sidecar.annotations:
-        if ann.source != "marker-scanner:phase-2":
-            continue
-        if ann.lifted_from != literal:
-            continue
-        result = resolve_selector(source_text, ann.target.selector)
-        if result.status == ResolutionStatus.SUPERSEDED:
-            continue
-        if result.start is None or result.end is None:
-            continue
-        # Containment: any character of the resolved range lies on hit.line.
-        if result.start < line_end and result.end > line_start:
-            return True
-    return False

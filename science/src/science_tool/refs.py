@@ -865,8 +865,13 @@ def check_refs(root: Path, *, include_body: bool = False) -> list[RefIssue]:
             )
 
     from science_tool.markers import scan_markers
+    from science_tool.markers_lifted import filter_lifted
 
-    for hit in scan_markers(root, strict=False):
+    # A marker lifted into a `.anno.trig` sidecar has been adjudicated, and the
+    # sidecar is the record of that ruling. `validate`'s unresolved_markers check
+    # already honours it; counting them here anyway made the two surfaces report
+    # different totals for the same tree (fb-2026-07-26-012).
+    for hit in filter_lifted(scan_markers(root, strict=False)):
         rel = str(hit.file.relative_to(root))
         token_label = f"[{hit.token}]"
         issues.append(
