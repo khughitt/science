@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+import stat
 import subprocess
 from pathlib import Path
 
@@ -46,6 +47,26 @@ def test_sync_installs_block_and_is_idempotent(tmp_path: Path):
     assert (repo / ".gitignore").read_text() == text
 
 
+def test_sync_preserves_gitignore_mode(tmp_path: Path):
+    repo = _repo(tmp_path, DECL)
+    (repo / ".gitignore").chmod(0o640)
+
+    sync(repo)
+
+    assert stat.S_IMODE((repo / ".gitignore").stat().st_mode) == 0o640
+
+
+def test_sync_uses_explicit_mode_when_gitignore_was_absent(tmp_path: Path):
+    repo = _repo(tmp_path, DECL)
+    (repo / ".gitignore").unlink()
+    subprocess.run(["git", "-C", str(repo), "rm", "-q", "--cached", ".gitignore"], check=True)
+    subprocess.run(["git", "-C", str(repo), "commit", "-qm", "drop"], check=True)
+
+    sync(repo)
+
+    assert stat.S_IMODE((repo / ".gitignore").stat().st_mode) == 0o644
+
+
 def test_verify_refuses_dirty_gitignore(tmp_path: Path):
     repo = _repo(tmp_path, DECL)
     (repo / ".gitignore").write_text("dirty\n")
@@ -68,6 +89,15 @@ def test_verify_restores_original_when_clean(tmp_path: Path):
     before = (repo / ".gitignore").read_text()
     verify_current_tree(repo)
     assert (repo / ".gitignore").read_text() == before
+
+
+def test_verify_restores_gitignore_mode(tmp_path: Path):
+    repo = _repo(tmp_path, DECL)
+    (repo / ".gitignore").chmod(0o640)
+
+    verify_current_tree(repo)
+
+    assert stat.S_IMODE((repo / ".gitignore").stat().st_mode) == 0o640
 
 
 def test_verify_detects_a_flip_on_an_already_tracked_file(tmp_path: Path):
@@ -111,6 +141,45 @@ def test_verify_restores_on_exception(tmp_path: Path, monkeypatch):
         verify_current_tree(repo)
     assert calls == 2
     assert (repo / ".gitignore").read_text() == before
+
+
+def test_verify_restores_mode_on_exception(tmp_path: Path, monkeypatch):
+    repo = _repo(tmp_path, DECL)
+    (repo / ".gitignore").chmod(0o640)
+    import science_tool.boundary.sync as sync_mod
+
+    calls = 0
+
+    def boom(*_a, **_k):
+        nonlocal calls
+        calls += 1
+        if calls == 2:
+            raise RuntimeError("boom")
+        return {}
+
+    monkeypatch.setattr(sync_mod, "_probe_decisions", boom)
+    with pytest.raises(RuntimeError, match="boom"):
+        verify_current_tree(repo)
+
+    assert stat.S_IMODE((repo / ".gitignore").stat().st_mode) == 0o640
+
+
+def test_verify_restores_when_post_install_hook_fails(tmp_path: Path, monkeypatch):
+    import science_tool.boundary.sync as sync_mod
+
+    repo = _repo(tmp_path, DECL)
+    before = (repo / ".gitignore").read_bytes()
+    (repo / ".gitignore").chmod(0o640)
+
+    def boom(_path: Path):
+        raise RuntimeError("post-install")
+
+    monkeypatch.setattr(sync_mod, "_after_atomic_replace", boom)
+    with pytest.raises(RuntimeError, match="post-install"):
+        verify_current_tree(repo)
+
+    assert (repo / ".gitignore").read_bytes() == before
+    assert stat.S_IMODE((repo / ".gitignore").stat().st_mode) == 0o640
 
 
 @pytest.mark.parametrize("operation", [sync, verify_current_tree])
@@ -173,7 +242,7 @@ def test_verify_preserves_same_byte_candidate_replacement(tmp_path: Path, monkey
         replacement_inode = path.stat().st_ino
 
     monkeypatch.setattr(sync_mod, "_after_atomic_replace", replace_candidate)
-    with pytest.raises(BoundaryGitError, match="candidate installation"):
+    with pytest.raises(BoundaryGitError, match="changed during verification"):
         verify_current_tree(repo)
 
     assert (repo / ".gitignore").stat().st_ino == replacement_inode
@@ -214,6 +283,34 @@ def test_staging_cleanup_removes_unchanged_temp_on_pre_replace_failure(tmp_path:
 
     monkeypatch.setattr(sync_mod, "_before_atomic_replace", abort_replace)
     with pytest.raises(RuntimeError, match="abort"):
+        sync(repo)
+
+    assert not list(repo.glob(".science-boundary-*.tmp"))
+
+
+@pytest.mark.parametrize("failure", ["write", "fsync"])
+def test_staging_failure_cleans_its_partial_temp(tmp_path: Path, monkeypatch, failure: str):
+    import science_tool.boundary.sync as sync_mod
+
+    repo = _repo(tmp_path, DECL)
+
+    if failure == "write":
+
+        def partial_write(stream, _content: bytes, _mode: int):
+            stream.write(b"partial")
+            raise RuntimeError("write failure")
+
+        monkeypatch.setattr(sync_mod, "_write_staged", partial_write)
+        problem = "write failure"
+    else:
+
+        def fail_fsync(_descriptor: int):
+            raise RuntimeError("fsync failure")
+
+        monkeypatch.setattr(sync_mod.os, "fsync", fail_fsync)
+        problem = "fsync failure"
+
+    with pytest.raises(RuntimeError, match=problem):
         sync(repo)
 
     assert not list(repo.glob(".science-boundary-*.tmp"))

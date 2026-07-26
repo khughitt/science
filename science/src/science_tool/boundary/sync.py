@@ -14,6 +14,7 @@ import subprocess
 import tempfile
 from dataclasses import dataclass
 from pathlib import Path
+from typing import BinaryIO
 
 from science_tool.boundary.config import BoundaryConfig, BoundaryConfigError
 from science_tool.boundary.generate import extract_managed_block, render_managed_block, splice_managed_block
@@ -23,6 +24,7 @@ from science_tool.boundary.walk import iter_repo_files
 from science_tool.project_config import load_project_config
 
 GITIGNORE = ".gitignore"
+_DEFAULT_IGNORE_MODE = 0o644
 
 
 class BoundaryDirtyError(Exception):
@@ -40,6 +42,7 @@ class _IgnoreState:
     device: int
     inode: int
     change_ns: int
+    mode: int
     content: bytes
 
 
@@ -52,7 +55,7 @@ class _StagedFile:
 def _same_inode_and_content(left: _IgnoreState | None, right: _IgnoreState | None) -> bool:
     if left is None or right is None:
         return left is right
-    return (left.device, left.inode, left.content) == (right.device, right.inode, right.content)
+    return (left.device, left.inode, left.mode, left.content) == (right.device, right.inode, right.mode, right.content)
 
 
 def _snapshot_ignore_file(project_root: Path) -> _IgnoreState | None:
@@ -80,7 +83,11 @@ def _snapshot_ignore_file(project_root: Path) -> _IgnoreState | None:
         raise BoundaryGitError(f"cannot read root .gitignore without following symlinks: {exc}") from exc
     try:
         opened = os.fstat(descriptor)
-        if not stat.S_ISREG(opened.st_mode) or (opened.st_dev, opened.st_ino) != (metadata.st_dev, metadata.st_ino):
+        if (
+            not stat.S_ISREG(opened.st_mode)
+            or (opened.st_dev, opened.st_ino) != (metadata.st_dev, metadata.st_ino)
+            or stat.S_IMODE(opened.st_mode) != stat.S_IMODE(metadata.st_mode)
+        ):
             raise BoundaryGitError("root .gitignore changed during safe read")
         with os.fdopen(descriptor, "rb") as stream:
             descriptor = -1
@@ -88,6 +95,7 @@ def _snapshot_ignore_file(project_root: Path) -> _IgnoreState | None:
                 device=opened.st_dev,
                 inode=opened.st_ino,
                 change_ns=opened.st_ctime_ns,
+                mode=stat.S_IMODE(opened.st_mode),
                 content=stream.read(),
             )
     finally:
@@ -107,37 +115,97 @@ def _before_staged_cleanup(_path: Path) -> None:
     """Test seam immediately before identity-guarded staging cleanup."""
 
 
-def _stage_bytes(project_root: Path, content: bytes) -> _StagedFile:
+def _write_staged(stream: BinaryIO, content: bytes, mode: int) -> None:
+    stream.write(content)
+    stream.flush()
+    os.fchmod(stream.fileno(), mode)
+    os.fsync(stream.fileno())
+
+
+def _refresh_owned_staged(staged: _StagedFile) -> _StagedFile:
+    """Refresh metadata after closing a failed buffered write without trusting a replacement."""
+    try:
+        metadata = os.lstat(staged.path)
+    except FileNotFoundError:
+        return staged
+    if (metadata.st_dev, metadata.st_ino) != (staged.state.device, staged.state.inode):
+        return staged
+    return _StagedFile(
+        path=staged.path,
+        state=_IgnoreState(
+            metadata.st_dev,
+            metadata.st_ino,
+            metadata.st_ctime_ns,
+            stat.S_IMODE(metadata.st_mode),
+            staged.state.content,
+        ),
+    )
+
+
+def _stage_bytes(project_root: Path, content: bytes, mode: int) -> _StagedFile:
     descriptor, raw_path = tempfile.mkstemp(prefix=".science-boundary-", suffix=".tmp", dir=project_root)
     path = Path(raw_path)
     metadata = os.fstat(descriptor)
     staged = _StagedFile(
         path=path,
-        state=_IgnoreState(metadata.st_dev, metadata.st_ino, metadata.st_ctime_ns, content),
+        state=_IgnoreState(
+            metadata.st_dev,
+            metadata.st_ino,
+            metadata.st_ctime_ns,
+            stat.S_IMODE(metadata.st_mode),
+            content,
+        ),
     )
+    stream: BinaryIO | None = None
     try:
-        with os.fdopen(descriptor, "wb") as stream:
-            descriptor = -1
-            stream.write(content)
-            stream.flush()
-            os.fsync(stream.fileno())
-            metadata = os.fstat(stream.fileno())
-            staged = _StagedFile(
-                path=path,
-                state=_IgnoreState(metadata.st_dev, metadata.st_ino, metadata.st_ctime_ns, content),
-            )
+        stream = os.fdopen(descriptor, "wb")
+        descriptor = -1
+        _write_staged(stream, content, mode)
+        metadata = os.fstat(stream.fileno())
+        staged = _StagedFile(
+            path=path,
+            state=_IgnoreState(
+                metadata.st_dev,
+                metadata.st_ino,
+                metadata.st_ctime_ns,
+                stat.S_IMODE(metadata.st_mode),
+                content,
+            ),
+        )
+        stream.close()
+        stream = None
     except BaseException:
+        if stream is not None:
+            try:
+                metadata = os.fstat(stream.fileno())
+                staged = _StagedFile(
+                    path=path,
+                    state=_IgnoreState(
+                        metadata.st_dev,
+                        metadata.st_ino,
+                        metadata.st_ctime_ns,
+                        stat.S_IMODE(metadata.st_mode),
+                        content,
+                    ),
+                )
+            except (OSError, ValueError):
+                pass
+            try:
+                stream.close()
+            except BaseException:
+                pass
+            staged = _refresh_owned_staged(staged)
         if descriptor != -1:
             os.close(descriptor)
         try:
-            _discard_staged(staged)
+            _discard_staged(staged, require_content=False)
         except BaseException:
             pass
         raise
     return staged
 
 
-def _discard_staged(staged: _StagedFile) -> None:
+def _discard_staged(staged: _StagedFile, *, require_content: bool = True) -> None:
     """Remove only the temporary inode created by this transaction.
 
     The lstat/unlink sequence has the same unavoidable portable-CAS gap as the
@@ -149,10 +217,11 @@ def _discard_staged(staged: _StagedFile) -> None:
         metadata = os.lstat(staged.path)
     except FileNotFoundError:
         return
-    if (metadata.st_dev, metadata.st_ino, metadata.st_ctime_ns) != (
+    if (metadata.st_dev, metadata.st_ino, metadata.st_ctime_ns, stat.S_IMODE(metadata.st_mode)) != (
         staged.state.device,
         staged.state.inode,
         staged.state.change_ns,
+        staged.state.mode,
     ):
         return
     if not hasattr(os, "O_NOFOLLOW"):
@@ -163,15 +232,16 @@ def _discard_staged(staged: _StagedFile) -> None:
         return
     try:
         opened = os.fstat(descriptor)
-        if (opened.st_dev, opened.st_ino, opened.st_ctime_ns) != (
+        if (opened.st_dev, opened.st_ino, opened.st_ctime_ns, stat.S_IMODE(opened.st_mode)) != (
             staged.state.device,
             staged.state.inode,
             staged.state.change_ns,
+            staged.state.mode,
         ):
             return
         with os.fdopen(descriptor, "rb") as stream:
             descriptor = -1
-            if stream.read() != staged.state.content:
+            if require_content and stream.read() != staged.state.content:
                 return
     finally:
         if descriptor != -1:
@@ -179,7 +249,13 @@ def _discard_staged(staged: _StagedFile) -> None:
     staged.path.unlink()
 
 
-def _replace_if_unchanged(project_root: Path, expected: _IgnoreState | None, content: bytes) -> _IgnoreState:
+def _replace_if_unchanged(
+    project_root: Path,
+    expected: _IgnoreState | None,
+    content: bytes,
+    *,
+    mode: int | None = None,
+) -> _IgnoreState:
     """Atomically replace only the snapshot this transaction observed.
 
     There is no portable compare-and-swap rename.  We check immediately before
@@ -190,7 +266,8 @@ def _replace_if_unchanged(project_root: Path, expected: _IgnoreState | None, con
     gap before its no-follow unlink.
     """
     path = project_root / GITIGNORE
-    staged = _stage_bytes(project_root, content)
+    target_mode = _DEFAULT_IGNORE_MODE if expected is None else expected.mode
+    staged = _stage_bytes(project_root, content, target_mode if mode is None else mode)
     try:
         _before_atomic_replace(path)
         if _snapshot_ignore_file(project_root) != expected:
@@ -212,27 +289,38 @@ class _IgnoreTransaction:
     candidate: _IgnoreState
 
     def restore(self) -> None:
-        current = _snapshot_ignore_file(self.project_root)
-        if current != self.candidate:
+        _restore_candidate(self.project_root, self.original, self.candidate)
+
+
+def _restore_candidate(project_root: Path, original: _IgnoreState | None, candidate: _IgnoreState) -> None:
+    current = _snapshot_ignore_file(project_root)
+    if current != candidate:
+        raise BoundaryGitError("root .gitignore changed during verification; preserving concurrent content")
+    if original is None:
+        path = project_root / GITIGNORE
+        _before_atomic_replace(path)
+        if _snapshot_ignore_file(project_root) != candidate:
             raise BoundaryGitError("root .gitignore changed during verification; preserving concurrent content")
-        if self.original is None:
-            path = self.project_root / GITIGNORE
-            _before_atomic_replace(path)
-            if _snapshot_ignore_file(self.project_root) != self.candidate:
-                raise BoundaryGitError("root .gitignore changed during verification; preserving concurrent content")
-            path.unlink()
-            return
-        _replace_if_unchanged(self.project_root, self.candidate, self.original.content)
+        path.unlink()
+        return
+    _replace_if_unchanged(project_root, candidate, original.content, mode=original.mode)
 
 
 def _install_candidate(project_root: Path, original: _IgnoreState | None, content: bytes) -> _IgnoreTransaction:
     staged_candidate = _replace_if_unchanged(project_root, original, content)
-    _after_atomic_replace(project_root / GITIGNORE)
-    candidate = _snapshot_ignore_file(project_root)
-    if not _same_inode_and_content(candidate, staged_candidate):
-        raise BoundaryGitError("root .gitignore changed during candidate installation; preserving concurrent content")
-    assert candidate is not None
-    return _IgnoreTransaction(project_root=project_root, original=original, candidate=candidate)
+    try:
+        candidate = _snapshot_ignore_file(project_root)
+        if not _same_inode_and_content(candidate, staged_candidate):
+            raise BoundaryGitError("root .gitignore changed during candidate installation; preserving concurrent content")
+        assert candidate is not None
+        return _IgnoreTransaction(project_root=project_root, original=original, candidate=candidate)
+    except BaseException:
+        current = _snapshot_ignore_file(project_root)
+        if not _same_inode_and_content(current, staged_candidate):
+            raise BoundaryGitError("root .gitignore changed during candidate installation; preserving concurrent content")
+        assert current is not None
+        _restore_candidate(project_root, original, current)
+        raise
 
 
 def _config(project_root: Path) -> BoundaryConfig:
@@ -339,6 +427,7 @@ def verify_current_tree(project_root: Path) -> list[tuple[str, bool, bool]]:
         splice_managed_block(_text(original), render_managed_block(cfg)).encode("utf-8", "surrogateescape"),
     )
     try:
+        _after_atomic_replace(project_root / GITIGNORE)
         after = _probe_decisions(project_root, subjects)
     finally:
         transaction.restore()
