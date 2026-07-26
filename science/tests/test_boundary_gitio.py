@@ -428,6 +428,40 @@ def test_matching_rules_are_case_sensitive_without_it(tmp_path: Path):
     assert matching_unmanaged_rules(repo, ["d/x.parquet"]) == {}
 
 
+@pytest.mark.parametrize(
+    ("value", "expected"),
+    [
+        ("true", "true"),
+        ("false", "false"),
+        ("", "false"),
+    ],
+)
+def test_ignore_case_accepts_git_boolean_values(
+    tmp_path: Path,
+    value: str,
+    expected: str,
+):
+    from science_tool.boundary.gitio import _ignore_case
+
+    repo = _repo(tmp_path)
+    subprocess.run(
+        ["git", "-C", str(repo), "config", "core.ignoreCase", value],
+        check=True,
+    )
+    assert _ignore_case(repo) == expected
+
+
+def test_ignore_case_accepts_bare_true_and_unset(tmp_path: Path):
+    from science_tool.boundary.gitio import _ignore_case
+
+    repo = _repo(tmp_path)
+    assert _ignore_case(repo) is None
+
+    config = repo / ".git" / "config"
+    config.write_text(config.read_text() + "[core]\n\tignoreCase\n")
+    assert _ignore_case(repo) == "true"
+
+
 def test_matching_rules_ignore_git_init_templates(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -513,6 +547,40 @@ def test_tracked_ignored_rejects_incomplete_verbose_record(
         gitio.tracked_ignored(tmp_path)
 
 
+@pytest.mark.parametrize(
+    "payload",
+    [
+        b"a.parquet",
+        b"a.parquet\0\0",
+    ],
+)
+def test_tracked_ignored_rejects_malformed_ls_files_stream(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    payload: bytes,
+):
+    from science_tool.boundary import gitio
+    from science_tool.boundary.gitio import BoundaryGitError
+
+    calls = 0
+
+    def fake_git(
+        project_root: Path,
+        *args: str,
+        stdin: bytes | None = None,
+        ok: tuple[int, ...] = (0,),
+    ) -> bytes:
+        nonlocal calls
+        calls += 1
+        if calls > 1:
+            pytest.fail("malformed ls-files output was forwarded to check-ignore")
+        return payload
+
+    monkeypatch.setattr(gitio, "_git", fake_git)
+    with pytest.raises(BoundaryGitError, match="malformed NUL-delimited"):
+        gitio.tracked_ignored(tmp_path)
+
+
 def test_tracked_ignored_rejects_invalid_verbose_line_number(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -586,7 +654,37 @@ def test_ignore_case_query_uses_nul_framing(
 
     monkeypatch.setattr(gitio, "_git", fake_git)
     assert gitio._ignore_case(tmp_path) == "true"
-    assert seen == ("config", "-z", "--get", "core.ignoreCase")
+    assert seen == ("config", "-z", "--type=bool", "--get", "core.ignoreCase")
+
+
+@pytest.mark.parametrize(
+    "payload",
+    [
+        b"true",
+        b"true\0false\0",
+        b"\0",
+        b"maybe\0",
+    ],
+)
+def test_ignore_case_rejects_malformed_scalar_output(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    payload: bytes,
+):
+    from science_tool.boundary import gitio
+    from science_tool.boundary.gitio import BoundaryGitError
+
+    def fake_git(
+        project_root: Path,
+        *args: str,
+        stdin: bytes | None = None,
+        ok: tuple[int, ...] = (0,),
+    ) -> bytes:
+        return payload
+
+    monkeypatch.setattr(gitio, "_git", fake_git)
+    with pytest.raises(BoundaryGitError):
+        gitio._ignore_case(tmp_path)
 
 
 def test_leading_whitespace_in_a_rule_is_preserved(tmp_path: Path):

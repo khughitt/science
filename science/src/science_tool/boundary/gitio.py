@@ -200,14 +200,17 @@ def _ignore_case(project_root: Path) -> str | None:
         project_root,
         "config",
         "-z",
+        "--type=bool",
         "--get",
         "core.ignoreCase",
         ok=(0, 1),
     )
-    values = _split_z(raw)
-    if len(values) > 1:
-        raise BoundaryGitError("git config returned multiple core.ignoreCase values")
-    return values[0] if values else None
+    value = _scalar_z(raw, label="git config core.ignoreCase output")
+    if value not in {None, "true", "false"}:
+        raise BoundaryGitError(
+            f"git config returned invalid normalized core.ignoreCase value {value!r}"
+        )
+    return value
 
 
 def _split_z(payload: bytes) -> list[str]:
@@ -220,6 +223,14 @@ def _split_z(payload: bytes) -> list[str]:
     if any(not chunk for chunk in chunks):
         raise BoundaryGitError("malformed NUL-delimited git output: empty field")
     return [chunk.decode("utf-8", "surrogateescape") for chunk in chunks]
+
+
+def _scalar_z(payload: bytes, *, label: str) -> str | None:
+    """Parse an optional scalar from a strict NUL-framed Git query."""
+    values = _split_z(payload)
+    if len(values) > 1:
+        raise BoundaryGitError(f"{label} returned multiple values")
+    return values[0] if values else None
 
 
 def _check_ignore_records(payload: bytes) -> list[tuple[str, int, str, str]]:
@@ -265,8 +276,10 @@ def visible_paths(project_root: Path) -> set[str]:
 def tracked_ignored(project_root: Path) -> list[IgnoreHit]:
     """Tracked files that nonetheless match an ignore rule."""
     tracked = _git(project_root, "ls-files", "-z")
-    if not tracked:
+    tracked_paths = _split_z(tracked)
+    if not tracked_paths:
         return []
+    tracked_stdin = "\0".join(tracked_paths).encode("utf-8", "surrogateescape") + b"\0"
     raw = _git(
         project_root,
         "check-ignore",
@@ -274,7 +287,7 @@ def tracked_ignored(project_root: Path) -> list[IgnoreHit]:
         "--stdin",
         "-z",
         "-v",
-        stdin=tracked,
+        stdin=tracked_stdin,
         ok=(0, 1),
     )
     hits: list[IgnoreHit] = []
@@ -410,6 +423,7 @@ def matching_unmanaged_rules(
 
             next_active: list[str] = []
             for group in groups.values():
+                group_paths = set(group)
                 group_blanked = blanked_by_path[group[0]]
                 for rel, lines in sources.items():
                     rendered = [
@@ -433,7 +447,7 @@ def matching_unmanaged_rules(
                 )
                 reported: set[str] = set()
                 for source, number, pattern, path in _check_ignore_records(raw_out):
-                    if path not in group:
+                    if path not in group_paths:
                         raise BoundaryGitError(
                             f"git check-ignore returned unexpected path {path!r}"
                         )
