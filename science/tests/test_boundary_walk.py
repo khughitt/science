@@ -2,6 +2,9 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import pytest
+
+import science_tool.boundary.walk as walk
 from science_tool.boundary.config import BoundaryRoot
 from science_tool.boundary.walk import manifest_candidates
 
@@ -34,6 +37,25 @@ def test_matches_glob_pattern(tmp_path: Path):
 
 def test_missing_root_is_empty(tmp_path: Path):
     assert manifest_candidates(tmp_path, _root()) == []
+
+
+def test_propagates_walk_error(monkeypatch: pytest.MonkeyPatch, tmp_path: Path):
+    error = OSError("permission denied")
+
+    def failing_walk(top: Path, *, topdown: bool = True, onerror=None, followlinks: bool = False):
+        assert top == tmp_path
+        assert topdown
+        assert not followlinks
+        if onerror is not None:
+            onerror(error)
+        return iter(())
+
+    monkeypatch.setattr(walk.os, "walk", failing_walk)
+
+    with pytest.raises(OSError) as raised:
+        walk.iter_repo_files(tmp_path)
+
+    assert raised.value is error
 
 
 def test_does_not_descend_into_symlinked_directory(tmp_path: Path):

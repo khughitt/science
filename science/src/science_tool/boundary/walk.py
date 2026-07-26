@@ -31,6 +31,10 @@ def _is_nested_repo(directory: Path) -> bool:
     return marker.is_dir() or marker.is_file()
 
 
+def _raise_walk_error(error: OSError) -> None:
+    raise error
+
+
 def iter_repo_files(project_root: Path, base: Path | None = None) -> list[str]:
     """List sorted repo-relative paths while excluding repository internals.
 
@@ -44,7 +48,7 @@ def iter_repo_files(project_root: Path, base: Path | None = None) -> list[str]:
         return []
 
     found: list[str] = []
-    for dirpath, dirnames, filenames in os.walk(top, followlinks=False):
+    for dirpath, dirnames, filenames in os.walk(top, onerror=_raise_walk_error, followlinks=False):
         current = Path(dirpath)
         if current != project_root and _is_nested_repo(current):
             dirnames[:] = []
