@@ -133,6 +133,15 @@ exactly as today (`_format_note` / `_append_note_to_description`).
   their model defaults. `render_task_file` always emits the full field set, so
   every migrator- or toolkit-written file round-trips with all required keys
   present; the required-key check only bites files edited by hand.
+- **Single-line title.** `Task.title` has no newline constraint (model `tasks.py:27`),
+  but it lives in the `## [tNNN] title` DSL header (a single line) — a newline
+  there is unrepresentable and would corrupt the done ledger, and even in
+  frontmatter a multiline title serves no purpose. Rather than invent a reversible
+  header encoding for a value that should never span lines, **titles containing a
+  newline (or a bare `]` that would break the header) are rejected at every task
+  boundary**: `add_task`/`edit_task` input, `parse_task_file` (frontmatter), the
+  ledger `_parse_task_block` header parse, and the migrator. Fail early, single
+  place per boundary.
 - **`active/` holds open tasks — enforced at the parse boundary.** `Task.status`
   is a plain `str`, not `TaskStatus` (model `tasks.py:32`), so required-key
   presence alone does not constrain the *value*. `parse_task_file` therefore
@@ -163,6 +172,10 @@ mutation, and by the migrator (see §3):
   locate the existing file by a `tNNN-*.md` glob and require **exactly one**
   match (zero for a fresh `add`); 2+ matches is an error, never an
   overwrite-one-arbitrarily.
+- **All per-file writes are atomic.** `write_task_file` (and the rename's
+  content step, below) write via `atomic_write_text`
+  (`science_model.frontmatter.atomic_write_text`, `frontmatter.py:69`; temp-file +
+  rename), so a crash never leaves a truncated task file.
 - New functions in `tasks.py`: `parse_task_file(path) -> Task` (frontmatter via
   `markdown_utils.frontmatter_span`, body → `description`) and
   `render_task_file(task) -> str` (canonical frontmatter renderer + body). A
@@ -204,15 +217,19 @@ mutation, and by the migrator (see §3):
     legitimately changes `completed`/suffix) but far stronger than `(id, created)`.
 - Slug derivation reuses `entities.derive_slug(title)` (lowercase, hyphenate,
   word-boundary truncate). `id` is the stable identity; the slug is cosmetic. A
-  title change on `tasks edit` re-derives the slug and renames the file. The
-  rename is **atomic**: write the new (round-trip-verified) content to the
-  *existing* path, then `os.replace(old_path, new_path)` (a single POSIX rename
+  title change on `tasks edit` re-derives the slug and renames the file. Both
+  steps are atomic: (1) write the new (round-trip-verified) content to the
+  *existing* path via the `atomic_write_text` primitive
+  (`science_model.frontmatter.atomic_write_text`, `frontmatter.py:69` — temp-file
+  + rename, so a crash never leaves a truncated file); (2) confirm the new-slug
+  path does **not** already exist (refuse if it does — that is a collision, not an
+  overwrite), then `os.replace(old_path, new_path)` (a single POSIX rename
   syscall). This never leaves a two-file window — which would otherwise trip the
-  unique-id read error below — and never zero files. A crash leaves exactly one
-  file: either the old-slug path with new content (rename not yet run; slug stale
-  but the id resolves and a later edit reconciles it) or the new-slug path.
-  Tested with a crash-between-write-and-replace case (exactly one file present,
-  id resolves, no data loss).
+  unique-id read error below — never a truncated file, and never zero files. A
+  crash leaves exactly one intact file: either the old-slug path with new content
+  (rename not yet run; slug stale but the id resolves and a later edit reconciles
+  it) or the new-slug path. Tested with a crash-between-atomic-write-and-replace
+  case (exactly one intact file present, id resolves, no data loss).
 
 ### 1b. Storage-state gate (fail loudly on non-split layouts)
 
@@ -493,7 +510,29 @@ pattern of `datasets/capability_migration.py`:
   `migrate-storage --apply` routes its open tasks into `active/` and its terminal
   `t089`/`t093` into a `done/` ledger — no separate archive step.
 
-### 4. Done-ledger DSL, storage adapter & docs
+### 4. Done-ledger DSL, storage adapter, archive-lag removal & docs
+
+- **Archive-lag health-report removal — the full public surface (decision 3).**
+  Removing the check means removing it from every place the health report's shape
+  is declared, computed, projected, rendered, and budgeted — an omission anywhere
+  leaves a dangling `archive_lag` section or a KeyError. Concretely:
+  - `graph/health_checks/archive_lag.py` — the whole module (`TaskArchiveLag`,
+    `archive_lag_total`, `_collect_archive_lag`, `CHECK`, `empty`).
+  - `graph/health_checks/__init__.py` — drop the `archive_lag` import and its
+    entry in the `CHECK`s list (`:12,:40`).
+  - `graph/health_cli.py` — drop the `archive_lag_total` import and the
+    `archive_lag` table rendering (`:88,:168-169,:229-230`).
+  - `graph/health_projection.py` — drop `archive_lag` from the section list and
+    `MAPPING_SECTIONS`, and the `section == "archive_lag"` projection branch
+    (`:47,:68,:335-336`).
+  - `graph/health_count.py` — drop `_validate_archive_lag` and its import
+    (`:8,:62`).
+  - `instruments.py` — drop the `graph/health_checks/archive_lag.py` instrument
+    entry (`:56`).
+  - Budget registry — drop the `tasks-archive` command's registry/`hint_for`
+    entry (the retired CLI's `BoundedSink`).
+  - Snapshot/fixtures of the health report shape are regenerated so no
+    `archive_lag` key remains.
 
 - **The done-ledger DSL must round-trip every `Task` field, reversibly.** Done
   ledgers keep the `## [tNNN]` block format (a Non-goal is splitting them), but
@@ -516,11 +555,18 @@ pattern of `datasets/capability_migration.py`:
   newline is JSON-encoded likewise. This is belt-and-suspenders with the upgraded
   round-trip verifier below — the verifier is the backstop that makes a
   non-representable value fail the write rather than corrupt silently.
-- **Reject duplicate ledger keys; verify every field.** `_parse_task_block`
-  currently overwrites duplicate metadata keys last-wins (`tasks.py:145`), so a
-  contradictory ledger block (`- status:` twice) parses cleanly and could satisfy
-  structural dedup against the wrong value — it must **reject duplicate metadata
-  keys** (fail early), mirroring the frontmatter strict-YAML rule (§1). And
+- **Reject duplicate AND unknown ledger keys; verify every field.**
+  `_parse_task_block` currently overwrites duplicate metadata keys last-wins
+  (`tasks.py:145`), so a contradictory ledger block (`- status:` twice) parses
+  cleanly and could satisfy structural dedup against the wrong value — it must
+  **reject duplicate metadata keys** (fail early), mirroring the frontmatter
+  strict-YAML rule (§1). It also currently **accepts arbitrary metadata names and
+  silently ignores** any outside the known set (it only ever reads known keys via
+  `fields.get(...)`), so an unknown `- foo: bar` line would be dropped on the next
+  re-render while the full-field verifier — which only sees the already-projected
+  `Task` — never notices. So `_parse_task_block` must **reject unknown DSL keys**
+  too (the known set = the rendered field names), symmetric with frontmatter's
+  unknown-key rejection. And
   `_verify_round_trip` today compares only ids and descriptions
   (`tasks.py:227-239`); it is **upgraded to compare every `Task` field**, using
   the **same canonical-description normalization** the §1a structural predicate
@@ -542,10 +588,16 @@ pattern of `datasets/capability_migration.py`:
   (those docs still point agents at `science tasks list`, not at reading files);
   the content guard `test_no_raw_task_file_reads_in_docs.py` allow-list is
   updated for any changed legit line.
-- Archive-retirement docs: any user-guide / command-reference / help text that
-  mentions `science tasks archive` or the `science health` archive-lag metric is
-  updated to reflect the retirement (decision 3). The implementation plan greps
-  the tree for `tasks archive` / `count_archivable` and updates every hit.
+- Archive-retirement docs — **scoped, not every grep hit.** Rewrite only
+  **executable code, tests, current user-guide / command-reference / help text,
+  and active design docs**. **Historical records are preserved** — prior
+  implementation plans and audit/post-mortem docs under `docs/plans/` (and any
+  dated retrospective) described a command that was correct *at the time*;
+  rewriting them falsifies the record. Leave them as-is, or add a clearly marked
+  one-line retrospective note pointing at decision 3 if a reader would otherwise
+  be misled. The grep for `tasks archive` / `count_archivable` is a discovery
+  aid, and each hit is triaged into "current surface → update" vs "historical
+  record → preserve."
 
 ## Non-goals
 
@@ -589,6 +641,11 @@ pattern of `datasets/capability_migration.py`:
   and `findings` round-trips losslessly through `render_task`/`_parse_task_block`,
   and through `done`, `retire`, and `migrate-storage` (structural equality holds
   across the active→done boundary — no false conflict on replay).
+- Done-ledger unknown key: a `## [tNNN]` block with an unknown metadata line
+  (`- foo: bar`) is REJECTED, not silently dropped (symmetric with frontmatter).
+- Single-line title: a title containing a newline (or a `]`) is REJECTED at
+  `add`/`edit`, frontmatter parse, DSL header parse, and migration — no boundary
+  admits it.
 - Required persisted keys: a file missing `created` (or `status`/`priority`/
   `aspects`/`id`/`title`) is REJECTED naming the key — it does NOT silently
   acquire `date.today()` / `proposed` / `P2`; a file with all required keys and
@@ -656,6 +713,11 @@ pattern of `datasets/capability_migration.py`:
   archive-lag check are gone (invoking `tasks archive` errors as an unknown
   command; health no longer emits archive-lag counts); no remaining code imports
   `tasks_archive.plan_archive`/`apply_archive`/`count_archivable`.
+- Health-report surface: the projected/rendered/counted health report has **no
+  `archive_lag` section** (projection, CLI table, `health_count`, and the
+  regenerated snapshot fixtures all omit it); the check registry no longer lists
+  it and `instruments.py` no longer names the module — `science health` runs clean
+  end-to-end.
 - Primitive relocation: after moving `_read_destination`/`_destination_for` to
   their neutral home, Slice-2's `--since` (`_read_since_candidates`) still returns
   the same rows (its existing `test_tasks_since.py` suite stays green).
