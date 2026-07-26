@@ -22,6 +22,25 @@ _BIB_HEADER = (
 )
 
 
+_BIB_FILENAME = "references.bib"
+
+
+def resolve_bib_path(project_root: Path) -> Path:
+    """Resolve the project's BibTeX database through `ProjectPaths.papers_dir`.
+
+    The single resolver for every reader and writer in this module. Four call
+    sites used to hardcode `project_root / "papers" / "references.bib"` while a
+    fifth already went through a `papers_dir` variable, so the module
+    contradicted itself and bypassed the abstraction that exists for this
+    (fb-2026-07-26-004). No fallback to the literal: a project whose manifest
+    cannot be resolved should fail here rather than silently read a different
+    file than the rest of the toolkit writes.
+    """
+    from science_tool.paths import resolve_paths  # noqa: PLC0415 — avoid an import cycle
+
+    return resolve_paths(project_root).papers_dir / _BIB_FILENAME
+
+
 def bibliography_key_from_reference(raw: str) -> str | None:
     """Return the BibTeX key from ``cite:<key>``, or None for other refs."""
     if not raw.startswith(_BIBLIOGRAPHY_PREFIX):
@@ -37,7 +56,7 @@ def is_bibliography_reference(raw: str) -> bool:
 
 def load_bib_keys(project_root: Path) -> set[str]:
     """Extract BibTeX entry keys from ``papers/references.bib``."""
-    bib_path = project_root / "papers" / "references.bib"
+    bib_path = resolve_bib_path(project_root)
     if not bib_path.is_file():
         return set()
     keys: set[str] = set()
@@ -53,7 +72,7 @@ def raw_bib_entry_keys(project_root: Path) -> list[str]:
     repeats so callers can detect duplicate citekeys, which the dict/set forms
     silently collapse.
     """
-    bib_path = project_root / "papers" / "references.bib"
+    bib_path = resolve_bib_path(project_root)
     if not bib_path.is_file():
         return []
     text = bib_path.read_text(encoding="utf-8")
@@ -85,7 +104,7 @@ def load_bib_author_surnames(project_root: Path) -> set[str] | None:
     "bibliography present but this surname is not in it" (skip). Co-authors from
     every entry's ``author`` field are included.
     """
-    bib_path = project_root / "papers" / "references.bib"
+    bib_path = resolve_bib_path(project_root)
     if not bib_path.is_file():
         return None
     text = bib_path.read_text(encoding="utf-8")
@@ -161,7 +180,7 @@ def load_bib_entries(project_root: Path) -> dict[str, "BibEntry"]:
     external-reference node — the invariant the retirement backed/un-backed test
     relies on. A truncated entry contributes no key. Missing fields are None.
     """
-    bib_path = project_root / "papers" / "references.bib"
+    bib_path = resolve_bib_path(project_root)
     if not bib_path.is_file():
         return {}
     text = bib_path.read_text(encoding="utf-8")
@@ -253,10 +272,10 @@ def add_bib_entry(project_root: Path, entry: str, *, replace: bool = False) -> B
     if _entry_span(entry, key) is None:
         raise ValueError(f"entry for {key!r} has unbalanced braces (truncated?)")
 
-    papers_dir = project_root / "papers"
+    bib_path = resolve_bib_path(project_root)
+    papers_dir = bib_path.parent
     papers_dir.mkdir(parents=True, exist_ok=True)
-    bib_path = papers_dir / "references.bib"
-    lock_path = papers_dir / ".references.bib.lock"
+    lock_path = papers_dir / f".{_BIB_FILENAME}.lock"
 
     with open(lock_path, "w") as lock_file:
         fcntl.flock(lock_file.fileno(), fcntl.LOCK_EX)

@@ -147,3 +147,27 @@ def test_concurrent_add_no_lost_writes(tmp_path: Path) -> None:
     assert load_bib_keys(tmp_path) == {f"Author{i}_2024" for i in range(n)}, (
         "concurrent appends lost entries from references.bib"
     )
+
+
+def test_bib_path_follows_the_resolved_papers_dir(tmp_path, monkeypatch):
+    """The bibliography layer resolves through ProjectPaths, not a literal.
+
+    fb-2026-07-26-004: four of the five call sites hardcoded
+    `project_root / "papers" / "references.bib"` while a fifth already resolved
+    through a `papers_dir` variable, so the module contradicted itself and the
+    `ProjectPaths.papers_dir` abstraction that exists for this was bypassed.
+
+    Relocating the resolved papers dir must move every reader with it.
+    """
+    from science_tool import paths as paths_mod
+    from science_tool.bibliography import load_bib_keys, raw_bib_entry_keys
+
+    monkeypatch.setitem(paths_mod._COMMON_DEFAULTS, "papers_dir", "refs")
+    relocated = tmp_path / "refs"
+    relocated.mkdir()
+    (relocated / "references.bib").write_text(
+        "@article{Smith2024,\n  title = {A title},\n}\n", encoding="utf-8"
+    )
+
+    assert load_bib_keys(tmp_path) == {"Smith2024"}
+    assert raw_bib_entry_keys(tmp_path) == ["Smith2024"]
