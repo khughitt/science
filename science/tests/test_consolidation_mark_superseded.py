@@ -342,6 +342,57 @@ def test_apply_sets_superseded_status_on_members(tmp_path: Path) -> None:
     assert fm_v4 is not None and fm_v4.get("status") in (None, "active")
 
 
+@pytest.mark.parametrize(
+    ("kind", "kind_dir", "old_name", "new_name"),
+    [
+        pytest.param("story", "stories", "old-story", "new-story", id="story"),
+        pytest.param(
+            "validation-report",
+            "validation-reports",
+            "0001-old",
+            "0002-new",
+            id="validation-report",
+        ),
+    ],
+)
+def test_reverse_gap_kind_is_stamped_on_apply(
+    tmp_path: Path,
+    kind: str,
+    kind_dir: str,
+    old_name: str,
+    new_name: str,
+) -> None:
+    _seed(tmp_path)
+    old_id = f"{kind}:{old_name}"
+    new_id = f"{kind}:{new_name}"
+    old_path = _write(
+        tmp_path,
+        kind_dir,
+        old_name,
+        {"id": old_id, "kind": kind, "status": "active"},
+    )
+    _write(
+        tmp_path,
+        kind_dir,
+        new_name,
+        {
+            "id": new_id,
+            "kind": kind,
+            "status": "active",
+            "relations": [_supersedes(old_id)],
+        },
+    )
+
+    report = mark_superseded(tmp_path, apply=True)
+    frontmatter = read_frontmatter(old_path)
+
+    assert report["applied"] == [old_id]
+    assert report["skipped_kinds"] == []
+    assert frontmatter is not None
+    assert frontmatter["status"] == "superseded"
+    assert frontmatter["superseded_by"] == new_id
+
+
 def test_cli_mark_superseded_dry_run_emits_json(tmp_path: Path) -> None:
     import json
 

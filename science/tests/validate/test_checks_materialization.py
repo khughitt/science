@@ -87,7 +87,7 @@ def test_supersedes_on_workflow_run_is_an_error(tmp_path: Path) -> None:
 
 
 def test_amends_on_workflow_run_is_an_error(tmp_path: Path) -> None:
-    """The exclusion is PAIR-specific: workflow-run does not get a blanket pass."""
+    """Top-level `amends:` is independently and unconditionally rejected; there are no exemptions."""
     _entity(
         tmp_path, "workflow-runs/0001-x.md",
         entity_id="workflow-run:0001-x", kind="workflow-run",

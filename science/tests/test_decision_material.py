@@ -3,6 +3,7 @@ from __future__ import annotations
 import dataclasses
 from pathlib import Path
 
+import pytest
 import yaml
 
 from science_tool.consolidation import (
@@ -302,6 +303,74 @@ def test_material_carries_supported_kinds_and_digest_covers_the_policy(monkeypat
     monkeypatch.setattr(c, "DECLARED_SUPERSEDABLE", extended, raising=False)
     after = decision_digest(build_decision_material(tmp_path))
     assert before != after  # the policy change moved the digest
+
+
+def test_project_local_kind_is_neither_supported_nor_admitted_for_supersession(
+    tmp_path: Path,
+) -> None:
+    from science_tool.consolidation import SupersessionError, mark_superseded
+
+    (tmp_path / "science.yaml").write_text(
+        "name: local-inertness\nknowledge_profiles:\n  local: local\n",
+        encoding="utf-8",
+    )
+    manifest = tmp_path / "knowledge" / "sources" / "local" / "manifest.yaml"
+    manifest.parent.mkdir(parents=True)
+    manifest.write_text(
+        """\
+name: local-inertness
+imports:
+  - core
+strictness: typed-extension
+entity_kinds:
+  - name: project-note
+    canonical_prefix: project-note
+    layer: layer/local
+    description: Project-local note.
+    home: entities/project-notes
+    strategy: numeric
+    default_status: active
+    statuses: [active, superseded]
+    supersedable: true
+relation_kinds: []
+""",
+        encoding="utf-8",
+    )
+    _write_entity(
+        tmp_path,
+        "project-notes",
+        "0001-old",
+        {"id": "project-note:0001-old", "kind": "project-note", "status": "active"},
+    )
+    _write_entity(
+        tmp_path,
+        "project-notes",
+        "0002-new",
+        {
+            "id": "project-note:0002-new",
+            "kind": "project-note",
+            "status": "active",
+            "relations": [_supersedes_edge("project-note:0001-old")],
+        },
+    )
+    old_path = tmp_path / "entities" / "project-notes" / "0001-old.md"
+    new_path = tmp_path / "entities" / "project-notes" / "0002-new.md"
+    before = {path: path.read_bytes() for path in (old_path, new_path)}
+
+    material = build_decision_material(tmp_path)
+    report = mark_superseded(tmp_path, apply=False)
+
+    # This is the discriminating operation-level assertion: reaching `to_mark` would require both
+    # core relation admission and entry into the frozen auto-stamping policy.
+    assert report["to_mark"] == []
+    assert "project-note" not in material.supported_kinds
+    assert material.admitted_supersedes == []
+    assert [defect.code for defect in material.defects] == ["illegal-kind-pair"]
+    assert [defect["code"] for defect in report["invalid_relations"]] == ["illegal-kind-pair"]
+
+    with pytest.raises(SupersessionError, match="invalid authored relation endpoint"):
+        mark_superseded(tmp_path, apply=True)
+    assert {path: path.read_bytes() for path in (old_path, new_path)} == before
 
 
 def test_disposition_reads_supported_kinds_from_the_graph_not_the_module(monkeypatch, tmp_path: Path) -> None:

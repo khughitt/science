@@ -100,10 +100,12 @@ safe and true.
 `DECLARED_SUPERSEDABLE` is built in `kind_descriptors.py` from `KIND_DESCRIPTORS`, mirroring
 `DECLARED_STATUSES` exactly. That shape is load-bearing, not cosmetic: `KIND_DESCRIPTORS` covers the
 shipped profiles only, so a kind declared in a project manifest is **absent** from the map and
-resolves to `False`. This preserves the existing protection that a project-local kind must never be
-auto-stamped, because the write boundary's `_validate_status` indexes `_STATUS_VALUES[kind]` and
-would raise `KeyError`. Deriving from a map built over the same population keeps that guarantee
-without reintroducing a join.
+cannot enter the frozen `supported_kinds` policy. Independently, authored `sci:supersedes`
+admission resolves against the core profile's relation descriptor, whose endpoint pairs contain
+shipped kinds only, so a project-local pair is refused before disposition. Those are the two
+guarantees that keep project-local kinds inert. The write boundary is not one of them:
+`_validate_status` resolves project-local vocabularies explicitly and can write a valid local
+status.
 
 **The stamping policy is `supported_kinds`, not `_supports_superseded`.** This matters, and an
 earlier draft of this design got it wrong. `_supports_superseded` (`consolidation.py:101`) has **no
@@ -178,6 +180,17 @@ all ten cross-kind amendment admissibility that nothing in this design ruled on.
 - `validation-report` — a re-validation replaces the prior report as canonical. It declares no
   vocabulary today, so this also gives it one, mirroring `report`:
   `active` / `archived` / `complete` / `draft` / `retired` / `superseded`.
+
+#### Validation-report write-path ruling
+
+The capability is operational, not read-only: once `validation-report` is admitted and appears in
+`supported_kinds`, `mark_superseded --apply` must be able to locate and rewrite the report it placed
+in `to_mark`. Therefore `validation-report` also follows the established report-like Markdown
+contract: `home="entities/validation-reports"` and `strategy="numeric"`, parallel to `report`'s
+plural home and numeric strategy. Leaving both fields unset produces a split authority: the graph
+scanner can discover and admit an authored chain, but the descriptor-derived write policy cannot
+find the target. Adding this policy deliberately re-freezes `FROZEN_MARKDOWN_POLICIES`; it repairs
+the S2 write path rather than weakening the oracle.
 
 ### Lose the endpoint (1)
 

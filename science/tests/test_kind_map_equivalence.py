@@ -42,6 +42,11 @@ FROZEN_MARKDOWN_POLICIES = {
     "synthesis": EntityPathPolicy(Path("entities/synthesis"), "numeric"),
     "story": EntityPathPolicy(Path("entities/stories"), "slug"),
     "report": EntityPathPolicy(Path("entities/reports"), "numeric"),
+    # ☠️ DELIBERATE S2 RE-FREEZE. The validation-report ruling makes its supersedable capability
+    # operational: the apply writer must find the entity that dry-run placed in `to_mark`. It uses
+    # the report-like plural home and numeric strategy; this fixes that write-path gap rather than
+    # accepting unexplained descriptor drift.
+    "validation-report": EntityPathPolicy(Path("entities/validation-reports"), "numeric"),
     "plan": EntityPathPolicy(Path("entities/plans"), "numeric"),
     "spec": EntityPathPolicy(Path("entities/specs"), "numeric"),
     "search": EntityPathPolicy(Path("entities/searches"), "numeric"),
