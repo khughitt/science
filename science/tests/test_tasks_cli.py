@@ -3,11 +3,14 @@
 from __future__ import annotations
 
 import json
+from datetime import date
 from pathlib import Path
 
 import pytest
 from click.testing import CliRunner
+from science_model.tasks import Task
 
+from science_tool import tasks as task_module
 from science_tool.cli import main
 
 
@@ -812,6 +815,24 @@ def _write_dp(tmp_path: Path, slug: str) -> None:
     )
 
 
+def _write_split_legacy_blocker(tmp_path: Path) -> Path:
+    task = Task(
+        id="t001",
+        title="Old",
+        type="dev",
+        priority="P2",
+        status="blocked",
+        aspects=[],
+        blocked_by=["old-string"],
+        created=date(2026, 5, 1),
+        description="Body.",
+    )
+    path = tmp_path / "tasks" / "active" / "t001-old.md"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(task_module.render_task_file(task), encoding="utf-8")
+    return path
+
+
 def _setup(tmp_path):
     seed_project(tmp_path)
     _write_dp(tmp_path, "foo")
@@ -995,19 +1016,7 @@ def test_tasks_edit_clear_blockers_conflicts_with_blocked_by(tmp_path, monkeypat
 def test_tasks_fix_blockers_lists_legacy(tmp_path, monkeypatch):
     monkeypatch.chdir(tmp_path)
     seed_project(tmp_path)
-    # Hand-write an active.md with a legacy untyped blocker, since the new
-    # CLI rejects them at write time.
-    (tmp_path / "tasks").mkdir(exist_ok=True)
-    (tmp_path / "tasks" / "active.md").write_text(
-        "## [t001] Old\n"
-        "- type: dev\n"
-        "- priority: P2\n"
-        "- status: blocked\n"
-        "- blocked-by: [old-string]\n"
-        "- created: 2026-05-01\n\n"
-        "Body.\n",
-        encoding="utf-8",
-    )
+    _write_split_legacy_blocker(tmp_path)
     runner = CliRunner()
     # Non-interactive dry-run: just lists what would change.
     result = runner.invoke(main, ["tasks", "fix-blockers", "--dry-run"])
@@ -1020,22 +1029,12 @@ def test_tasks_fix_blockers_retypes_with_input(tmp_path, monkeypatch):
     monkeypatch.chdir(tmp_path)
     seed_project(tmp_path)
     _write_dp(tmp_path, "foo")
-    (tmp_path / "tasks").mkdir(exist_ok=True)
-    (tmp_path / "tasks" / "active.md").write_text(
-        "## [t001] Old\n"
-        "- type: dev\n"
-        "- priority: P2\n"
-        "- status: blocked\n"
-        "- blocked-by: [old-string]\n"
-        "- created: 2026-05-01\n\n"
-        "Body.\n",
-        encoding="utf-8",
-    )
+    active_path = _write_split_legacy_blocker(tmp_path)
     runner = CliRunner()
     # Interactive: provide replacement, then accept.
     result = runner.invoke(main, ["tasks", "fix-blockers"], input="dataset:foo\ny\n")
     assert result.exit_code == 0, result.output
-    rewritten = (tmp_path / "tasks" / "active.md").read_text()
+    rewritten = active_path.read_text()
     assert "dataset:foo" in rewritten
     assert "old-string" not in rewritten
 
@@ -1044,24 +1043,36 @@ def test_tasks_fix_blockers_drops_with_empty_input(tmp_path, monkeypatch):
     """User dropping a blocker (empty input) is persisted, not silently discarded."""
     monkeypatch.chdir(tmp_path)
     seed_project(tmp_path)
-    (tmp_path / "tasks").mkdir(exist_ok=True)
-    (tmp_path / "tasks" / "active.md").write_text(
+    active_path = _write_split_legacy_blocker(tmp_path)
+    runner = CliRunner()
+    # Interactive: empty input drops the blocker; then accept the write.
+    result = runner.invoke(main, ["tasks", "fix-blockers"], input="\ny\n")
+    assert result.exit_code == 0, result.output
+    rewritten = active_path.read_text()
+    assert "old-string" not in rewritten
+    assert "Updated." in result.output
+
+
+def test_tasks_fix_blockers_legacy_active_requires_migration(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    seed_project(tmp_path)
+    tasks_dir = tmp_path / "tasks"
+    tasks_dir.mkdir(exist_ok=True)
+    (tasks_dir / "active.md").write_text(
         "## [t001] Old\n"
-        "- type: dev\n"
         "- priority: P2\n"
         "- status: blocked\n"
+        "- aspects: []\n"
         "- blocked-by: [old-string]\n"
         "- created: 2026-05-01\n\n"
         "Body.\n",
         encoding="utf-8",
     )
-    runner = CliRunner()
-    # Interactive: empty input drops the blocker; then accept the write.
-    result = runner.invoke(main, ["tasks", "fix-blockers"], input="\ny\n")
-    assert result.exit_code == 0, result.output
-    rewritten = (tmp_path / "tasks" / "active.md").read_text()
-    assert "old-string" not in rewritten
-    assert "Updated." in result.output
+
+    result = CliRunner().invoke(main, ["tasks", "fix-blockers", "--dry-run"])
+
+    assert result.exit_code != 0
+    assert "migrate-storage --apply" in str(result.exception)
 
 
 # ---------------------------------------------------------------------------
