@@ -647,17 +647,17 @@ def find_dangling_task_refs(tasks_dir: Path) -> dict[str, list[str]]:
     return dangling
 
 
-def parse_tasks_for_cli(path: Path) -> tuple[list[Task], list[str]]:
+def parse_tasks_for_cli(tasks_dir: Path) -> tuple[list[Task], list[str]]:
     """Parse tasks AND surface user-facing warnings.
 
     Detects legacy untyped blocker refs and returns them as warning strings.
-    Programmatic callers should prefer `parse_tasks` to avoid noise.
+    Programmatic callers should prefer `_read_active` to avoid noise.
     """
     # Deferred import to avoid a circular dependency:
     # tasks_blockers -> entities -> graph -> tasks
     from science_tool.tasks_blockers import is_typed_ref  # noqa: PLC0415
 
-    tasks = parse_tasks(path)
+    tasks = _read_active(tasks_dir)
     warnings: list[str] = []
     for task in tasks:
         for ref in task.blocked_by:

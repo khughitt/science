@@ -89,8 +89,8 @@ def test_task_ids_resolve_refs_but_retired_aggregate_ids_do_not(tmp_path: Path) 
         tmp_path / "entities" / "reports" / "a.md",
         "---\nid: report:a\nrelated: [task:t001, task:t099, entity:one, term:one]\n---\n",
     )
-    _write(tmp_path / "tasks" / "active.md", "## [t001] Active task\n")
-    _write(tmp_path / "tasks" / "done" / "archive.md", "## [T099] Done task\n")
+    _write(tmp_path / "tasks" / "active" / "t001-active-task.md", "---\nid: t001\n---\n")
+    _write(tmp_path / "tasks" / "done" / "archive.md", "## [t099] Done task\n")
     _write(tmp_path / "knowledge" / "sources" / "demo" / "entities.yaml", "entities:\n  - canonical_id: entity:one\n")
     _write(tmp_path / "knowledge" / "sources" / "demo" / "terms.yaml", "terms:\n  - id: term:one\n")
 

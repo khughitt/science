@@ -86,13 +86,18 @@ def curated_project(tmp_path: Path) -> Path:
         "    title: Hypothesis One\n",
     )
     _write(
-        project_root / "tasks/active.md",
-        "## [t001] Active task\n"
-        "- type: research\n"
-        "- priority: P1\n"
-        "- status: in_progress\n"
-        "- related: [question:q1]\n"
-        "- created: 2026-04-20\n"
+        project_root / "tasks/active/t001-active-task.md",
+        "---\n"
+        "id: t001\n"
+        "title: Active task\n"
+        "type: research\n"
+        "priority: P1\n"
+        "status: active\n"
+        "aspects: []\n"
+        "related: [question:q1]\n"
+        "blocked_by: []\n"
+        "created: 2026-04-20\n"
+        "---\n"
         "\n"
         "Active task body.\n",
     )
@@ -117,7 +122,7 @@ def curated_project(tmp_path: Path) -> Path:
     _set_mtime(project_root / "entities/topics/topic-a.md", today - timedelta(days=4))
     _set_mtime(project_root / "entities/discussions/d1.md", today - timedelta(days=6))
     _set_mtime(project_root / "knowledge/sources/local/entities.yaml", today - timedelta(days=60))
-    _set_mtime(project_root / "tasks/active.md", today - timedelta(days=1))
+    _set_mtime(project_root / "tasks/active/t001-active-task.md", today - timedelta(days=1))
     _set_mtime(project_root / "tasks/done/2026-04-01.md", today - timedelta(days=90))
 
     return project_root
@@ -146,7 +151,7 @@ def test_collect_inventory_tracks_counts_and_candidate_signals(curated_project: 
         "entities/questions/q1.md",
         "entities/topics/topic-a.md",
         "knowledge/sources/local/entities.yaml",
-        "tasks/active.md#t001",
+        "tasks/active/t001-active-task.md#t001",
         "tasks/done/2026-04-01.md#t002",
     ]
 
@@ -155,7 +160,7 @@ def test_collect_inventory_tracks_counts_and_candidate_signals(curated_project: 
     assert inventory.candidate_signals.no_outbound_links == ["entities/questions/q1.md"]
     assert inventory.candidate_signals.recently_modified == [
         "entities/questions/q1.md",
-        "tasks/active.md#t001",
+        "tasks/active/t001-active-task.md#t001",
         "entities/papers/p1.md",
         "entities/topics/topic-a.md",
         "entities/discussions/d1.md",
@@ -215,7 +220,7 @@ def test_collect_inventory_recent_top_k_caps_recently_modified(curated_project: 
     # Ensure the cap kept the most-recent (smallest modified_days_ago).
     assert inventory.candidate_signals.recently_modified == [
         "entities/questions/q1.md",
-        "tasks/active.md#t001",
+        "tasks/active/t001-active-task.md#t001",
     ]
 
 
@@ -225,7 +230,7 @@ def test_collect_inventory_recent_days_tightens_window(curated_project: Path) ->
     # With a 1-day window, only artifacts modified within 1 day qualify.
     assert inventory.candidate_signals.recently_modified == [
         "entities/questions/q1.md",
-        "tasks/active.md#t001",
+        "tasks/active/t001-active-task.md#t001",
     ]
 
 

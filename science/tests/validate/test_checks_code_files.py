@@ -179,10 +179,9 @@ def test_unknown_task_id_is_unresolved(tmp_path: Path) -> None:
 
 def test_resolved_task_id_is_silent(tmp_path: Path) -> None:
     (tmp_path / "code").mkdir()
-    (tmp_path / "tasks").mkdir()
-    (tmp_path / "tasks" / "active.md").write_text(
-        "## [t491] Real task\n- created: 2026-01-01\n", encoding="utf-8"
-    )
+    active = tmp_path / "tasks" / "active"
+    active.mkdir(parents=True)
+    (active / "t491-real-task.md").write_text("---\nid: t491\n---\n", encoding="utf-8")
     (tmp_path / "code" / "x.py").write_text(
         "# science:code\n# status: workflow-owned\n# task_ids: [t491]\n# science:end\nprint(1)\n",
         encoding="utf-8",

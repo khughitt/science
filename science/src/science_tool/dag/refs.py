@@ -14,6 +14,7 @@ from pathlib import Path
 import yaml
 
 from science_tool.dag.schema import RefEntry
+from science_tool.tasks import known_task_ids
 
 logger = logging.getLogger(__name__)
 
@@ -98,19 +99,8 @@ def _papers_doi_index(project_root: Path) -> frozenset[str]:
 
 
 def _task_exists(task_id: str, project_root: Path) -> bool:
-    """Return True if task_id is declared in tasks/active.md or tasks/done/*.md."""
-    pattern = re.compile(rf"^##\s+\[{re.escape(task_id)}\]")
-    candidates: list[Path] = [project_root / "tasks/active.md"]
-    done_dir = project_root / "tasks/done"
-    if done_dir.exists():
-        candidates.extend(sorted(done_dir.glob("*.md")))
-    for md in candidates:
-        if not md.exists():
-            continue
-        for line in md.read_text(encoding="utf-8").splitlines():
-            if pattern.match(line):
-                return True
-    return False
+    """Return True if task_id is declared in tasks/active/*.md or tasks/done/*.md."""
+    return task_id in known_task_ids(project_root / "tasks")
 
 
 def validate_ref_entry(entry: RefEntry, project_root: Path) -> None:
@@ -124,7 +114,7 @@ def validate_ref_entry(entry: RefEntry, project_root: Path) -> None:
 
     if kind == "task":
         if not _task_exists(value, project_root):
-            raise RefResolutionError(f"task {value} not found in tasks/active.md or tasks/done/*.md")
+            raise RefResolutionError(f"task {value} not found in tasks/active/*.md or tasks/done/*.md")
 
     elif kind == "interpretation":
         path = project_root / "doc/interpretations" / f"{value}.md"

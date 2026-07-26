@@ -17,6 +17,7 @@ from science_tool.big_picture.frontmatter import read_frontmatter
 from science_tool.big_picture.resolver import ResolverOutput, resolve_questions
 from science_tool.entity_scan import iter_entity_markdown
 from science_tool.instruments import InstrumentResult
+from science_tool.tasks import known_task_ids
 
 IssueKind = Literal[
     "nonexistent_reference",
@@ -150,35 +151,10 @@ def _collect_project_ids(project_root: Path) -> set[str]:
             fm = read_frontmatter(path)
             if fm and "id" in fm:
                 ids.add(str(fm["id"]))
-    # Tasks are aggregated into markdown files with one heading per task.
     tasks_root = project_root / "tasks"
     if tasks_root.is_dir():
-        for path in tasks_root.rglob("*.md"):
-            fm = read_frontmatter(path)
-            if fm and "id" in fm:
-                ids.add(str(fm["id"]))
-            ids.update(_extract_aggregated_task_ids(path))
+        ids.update(f"task:{task_id}" for task_id in known_task_ids(tasks_root))
     return ids
-
-
-# Matches "## [tNNN]" or "## [t-nnn]" headings used in aggregated task files
-# (e.g., tasks/active.md, tasks/done/2026-04.md), where each heading is a task
-# rather than each file being a task. Captures the ID (e.g., "t082").
-AGGREGATED_TASK_HEADING = re.compile(r"^#{1,6}\s*\[([a-zA-Z][\w\-.]*)\]", re.MULTILINE)
-
-
-def _extract_aggregated_task_ids(path: Path) -> set[str]:
-    """Extract `task:<id>` entries from aggregated task files.
-
-    Many Science projects (e.g., mm30) consolidate tasks into a single
-    markdown file with `## [tNNN]` headings per task, rather than one file
-    per task. This helper harvests those inlined task IDs.
-    """
-    try:
-        text = path.read_text(encoding="utf-8")
-    except (OSError, UnicodeDecodeError):
-        return set()
-    return {f"task:{m.group(1)}" for m in AGGREGATED_TASK_HEADING.finditer(text)}
 
 
 def list_research_orphans(

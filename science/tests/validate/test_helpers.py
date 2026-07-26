@@ -11,6 +11,24 @@ def _project(root: Path) -> ValidateContext:
     return ValidateContext.from_project_root(root, strict=False, verbose=False)
 
 
+def _write_active_task(root: Path, task_id: str, *, title: str) -> Path:
+    path = root / "tasks" / "active" / f"{task_id}-{title.lower().replace(' ', '-')}.md"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(
+        "---\n"
+        f"id: {task_id}\n"
+        f"title: {title}\n"
+        "priority: P1\n"
+        "status: active\n"
+        "aspects: []\n"
+        "created: 2026-01-01\n"
+        "---\n\n"
+        "Body.\n",
+        encoding="utf-8",
+    )
+    return path
+
+
 def test_parse_frontmatter_document_returns_frontmatter_and_body(tmp_path: Path) -> None:
     ctx = _project(tmp_path)
     path = tmp_path / "doc" / "note.md"
@@ -97,23 +115,29 @@ def test_resolve_reference_resolves_cite_key_to_bibliography(tmp_path: Path) -> 
 
 def test_resolve_reference_resolves_task_id_and_bare_task_id(tmp_path: Path) -> None:
     ctx = _project(tmp_path)
-    active_path = tmp_path / "tasks" / "active.md"
+    active_path = _write_active_task(tmp_path, "t012", title="Active task")
     done_path = tmp_path / "tasks" / "done" / "archive.md"
-    active_path.parent.mkdir(parents=True)
     done_path.parent.mkdir(parents=True)
-    active_path.write_text("# Active\n\n## [t012] Active task\n", encoding="utf-8")
-    done_path.write_text("# Done\n\n## [t099] Done task\n", encoding="utf-8")
+    done_path.write_text(
+        "# Done\n\n"
+        "## [t099] Done task\n"
+        "- priority: P1\n"
+        "- status: done\n"
+        "- aspects: []\n"
+        "- created: 2026-01-01\n"
+        "- completed: 2026-01-02\n\n"
+        "Done.\n",
+        encoding="utf-8",
+    )
 
     assert resolve_reference(ctx, "task:t012") == active_path
     assert resolve_reference(ctx, "t099") == done_path
     assert resolve_reference(ctx, "task:t404") is None
 
 
-def test_resolve_reference_resolves_long_task_ids_with_flexible_heading_whitespace(tmp_path: Path) -> None:
+def test_resolve_reference_resolves_long_split_task_ids(tmp_path: Path) -> None:
     ctx = _project(tmp_path)
-    active_path = tmp_path / "tasks" / "active.md"
-    active_path.parent.mkdir(parents=True)
-    active_path.write_text("# Active\n\n##   [t1000] Long task\n", encoding="utf-8")
+    active_path = _write_active_task(tmp_path, "t1000", title="Long task")
 
     assert resolve_reference(ctx, "task:t1000") == active_path
     assert resolve_reference(ctx, "t1000") == active_path

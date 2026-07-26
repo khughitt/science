@@ -729,7 +729,7 @@ def tasks_list(
         raise click.ClickException(str(exc)) from exc
 
     # Surface legacy-untyped-blocker warnings on stderr.
-    _, warnings = parse_tasks_for_cli(DEFAULT_TASKS_DIR / "active.md")
+    _, warnings = parse_tasks_for_cli(DEFAULT_TASKS_DIR)
     for w in warnings:
         click.echo(f"WARNING: {w}", err=True)
 
@@ -795,7 +795,7 @@ def tasks_list(
             return row
 
         rows = [_row_with_readiness(t) for t in matched]
-        # Total count of active-file tasks before any filtering, so callers can
+        # Total count of active tasks before any filtering, so callers can
         # tell whether they're looking at a curated view or the full list
         # (fb-2026-05-01-006).
         from science_tool.tasks import _read_active
@@ -819,7 +819,7 @@ def tasks_list(
             "sort_order": "status_rank,id",
             "applied_filters": applied_filters,
         }
-        # active_total counts only tasks/active.md and is meaningless for a
+        # active_total counts only tasks/active/ and is meaningless for a
         # --since query, whose rows come from the archive union — omit it
         # rather than ship a "curated vs full" ratio that doesn't apply.
         if since is None:

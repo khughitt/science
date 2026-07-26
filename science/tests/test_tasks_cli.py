@@ -19,6 +19,43 @@ def runner() -> CliRunner:
     return CliRunner()
 
 
+def _write_active_task(
+    root: Path,
+    *,
+    task_id: str,
+    title: str,
+    priority: str = "P1",
+    status: str = "proposed",
+    task_type: str = "",
+    aspects: list[str] | None = None,
+    blocked_by: list[str] | None = None,
+    created: date = date(2026, 3, 1),
+    description: str = "Body.",
+) -> Path:
+    task = Task(
+        id=task_id,
+        title=title,
+        type=task_type,
+        priority=priority,
+        status=status,
+        aspects=aspects or [],
+        blocked_by=blocked_by or [],
+        created=created,
+        description=description,
+    )
+    path = root / "tasks" / "active" / f"{task_id}-{title.lower().replace(' ', '-')}.md"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(task_module.render_task_file(task), encoding="utf-8")
+    return path
+
+
+def _active_task_path(root: Path, task_id: str) -> Path:
+    matches = list((root / "tasks" / "active").glob(f"{task_id}-*.md"))
+    matches.extend((root / "tasks" / "active").glob(f"{task_id}.md"))
+    assert len(matches) == 1
+    return matches[0]
+
+
 class TestTasksAdd:
     def test_add_creates_task(self, runner: CliRunner) -> None:
         with runner.isolated_filesystem():
@@ -153,7 +190,7 @@ class TestTasksEdit:
 
             tasks_dir = Path("tasks")
             (tasks_dir / "done").mkdir(parents=True)
-            (tasks_dir / "active.md").write_text("")
+            (tasks_dir / "active").mkdir()
             archived_path = tasks_dir / "done" / "2026-04.md"
             archived_path.write_text(
                 "## [t141] Archived task\n"
@@ -176,7 +213,7 @@ class TestTasksEdit:
 
             tasks_dir = Path("tasks")
             (tasks_dir / "done").mkdir(parents=True)
-            (tasks_dir / "active.md").write_text("")
+            (tasks_dir / "active").mkdir()
             archived_path = tasks_dir / "done" / "2026-04.md"
             archived_path.write_text(
                 "## [t141] Archived task\n"
@@ -206,7 +243,7 @@ class TestTasksNote:
 
             assert result.exit_code == 0, result.output
             assert "Added note to [t001] (2026-04-28)" in result.output
-            body = Path("tasks/active.md").read_text()
+            body = _active_task_path(Path(), "t001").read_text()
             assert "### Notes" in body
             assert "- 2026-04-28: Clarified scope." in body
 
@@ -216,7 +253,7 @@ class TestTasksNote:
 
             tasks_dir = Path("tasks")
             (tasks_dir / "done").mkdir(parents=True)
-            (tasks_dir / "active.md").write_text("")
+            (tasks_dir / "active").mkdir()
             archived_path = tasks_dir / "done" / "2026-04.md"
             archived_path.write_text(
                 "## [t141] Archived task\n"
@@ -280,19 +317,21 @@ class TestTasksList:
             Path("science.yaml").write_text(
                 "name: demo\nprofile: research\naspects: [hypothesis-testing, software-development]\n"
             )
-            tasks_dir = Path("tasks")
-            tasks_dir.mkdir()
-            (tasks_dir / "active.md").write_text(
-                "## [t001] Dev task\n"
-                "- priority: P1\n"
-                "- status: proposed\n"
-                "- aspects: [software-development]\n"
-                "- created: 2026-03-01\n\nDev.\n\n"
-                "## [t002] Research task\n"
-                "- priority: P2\n"
-                "- status: proposed\n"
-                "- aspects: [hypothesis-testing]\n"
-                "- created: 2026-03-02\n\nRes.\n"
+            _write_active_task(
+                Path(),
+                task_id="t001",
+                title="Dev task",
+                aspects=["software-development"],
+                description="Dev.",
+            )
+            _write_active_task(
+                Path(),
+                task_id="t002",
+                title="Research task",
+                priority="P2",
+                aspects=["hypothesis-testing"],
+                created=date(2026, 3, 2),
+                description="Res.",
             )
             result = runner.invoke(
                 main,
@@ -306,74 +345,59 @@ class TestTasksList:
         with runner.isolated_filesystem():
             from pathlib import Path
 
-            # Manually write a file with both open and done tasks
-            tasks_dir = Path("tasks")
-            tasks_dir.mkdir()
-            (tasks_dir / "active.md").write_text(
-                "## [t001] Open task\n- type: dev\n- priority: P1\n- status: active\n- created: 2026-03-01\n\nOpen.\n\n"
-                "## [t002] Done task\n- type: dev\n- priority: P2\n- status: done\n- created: 2026-03-02\n- completed: 2026-03-05\n\nDone.\n"
+            _write_active_task(
+                Path(),
+                task_id="t001",
+                title="Open task",
+                status="active",
+                task_type="dev",
+                description="Open.",
             )
             result = runner.invoke(main, ["tasks", "list"])
             assert result.exit_code == 0
             assert "Open task" in result.output
             assert "Done task" not in result.output
 
-    def test_list_all_shows_done(self, runner: CliRunner) -> None:
+    def test_list_all_shows_non_working_active_statuses(self, runner: CliRunner) -> None:
         with runner.isolated_filesystem():
-            from pathlib import Path
-
-            tasks_dir = Path("tasks")
-            tasks_dir.mkdir()
-            (tasks_dir / "active.md").write_text(
-                "## [t001] Open task\n- type: dev\n- priority: P1\n- status: proposed\n- created: 2026-03-01\n\nOpen.\n\n"
-                "## [t002] Done task\n- type: dev\n- priority: P2\n- status: done\n- created: 2026-03-02\n- completed: 2026-03-05\n\nDone.\n"
+            _write_active_task(Path(), task_id="t001", title="Proposed task", task_type="dev")
+            _write_active_task(
+                Path(),
+                task_id="t002",
+                title="Deferred task",
+                priority="P2",
+                status="deferred",
+                task_type="dev",
+                created=date(2026, 3, 2),
             )
             result = runner.invoke(main, ["tasks", "list", "--all"])
             assert result.exit_code == 0
-            assert "Open task" in result.output
-            assert "Done task" in result.output
+            assert "Proposed task" in result.output
+            assert "Deferred task" in result.output
 
-    def test_list_status_done_filter(self, runner: CliRunner) -> None:
+    def test_list_status_done_filter_is_empty_for_split_active_store(self, runner: CliRunner) -> None:
         with runner.isolated_filesystem():
-            from pathlib import Path
-
-            tasks_dir = Path("tasks")
-            tasks_dir.mkdir()
-            (tasks_dir / "active.md").write_text(
-                "## [t001] Open task\n- type: dev\n- priority: P1\n- status: proposed\n- created: 2026-03-01\n\nOpen.\n\n"
-                "## [t002] Done task\n- type: dev\n- priority: P2\n- status: done\n- created: 2026-03-02\n- completed: 2026-03-05\n\nDone.\n"
-            )
+            _write_active_task(Path(), task_id="t001", title="Open task", task_type="dev")
             result = runner.invoke(main, ["tasks", "list", "--status", "done"])
             assert result.exit_code == 0
-            assert "Done task" in result.output
             assert "Open task" not in result.output
 
-    def test_list_reports_duplicate_entity_ids_without_traceback(self, runner: CliRunner) -> None:
+    def test_list_reports_duplicate_active_task_ids_without_traceback(self, runner: CliRunner) -> None:
         with runner.isolated_filesystem():
-            from pathlib import Path
-
-            tasks_dir = Path("tasks")
-            done_dir = tasks_dir / "done"
-            done_dir.mkdir(parents=True)
-            (tasks_dir / "active.md").write_text(
-                "## [t001] Active task\n"
-                "- priority: P1\n"
-                "- status: proposed\n"
-                "- created: 2026-05-07\n\n"
-                "Active.\n"
+            first = _write_active_task(
+                Path(),
+                task_id="t001",
+                title="Active task",
+                created=date(2026, 5, 7),
+                description="Active.",
             )
-            (done_dir / "2026-05.md").write_text(
-                "## [t001] Archived duplicate\n"
-                "- priority: P2\n"
-                "- status: done\n"
-                "- created: 2026-05-06\n"
-                "- completed: 2026-05-06\n\n"
-                "Done.\n"
-            )
+            duplicate = first.with_name("t001-duplicate.md")
+            duplicate.write_bytes(first.read_bytes())
 
             result = runner.invoke(main, ["tasks", "list"])
             assert result.exit_code != 0
-            assert "entity 'task:t001' produced by multiple sources" in result.output
+            assert "duplicate task ids" in result.output
+            assert "t001" in result.output
             assert "Traceback" not in result.output
 
     def test_list_json_format(self, runner: CliRunner) -> None:
@@ -429,10 +453,14 @@ class TestTasksList:
             tasks_dir = Path("tasks")
             done_dir = tasks_dir / "done"
             done_dir.mkdir(parents=True)
-            (tasks_dir / "active.md").write_text(
-                "## [t001] Still open\n"
-                "- type: dev\n- priority: P1\n- status: active\n"
-                "- created: 2026-01-01\n\nOpen, no completed date.\n"
+            _write_active_task(
+                Path(),
+                task_id="t001",
+                title="Still open",
+                status="active",
+                task_type="dev",
+                created=date(2026, 1, 1),
+                description="Open, no completed date.",
             )
             (done_dir / f"{month_str}.md").write_text(
                 "## [t002] Closed after since\n"
@@ -449,7 +477,7 @@ class TestTasksList:
             # --since queries every status, so the working-set-only marker
             # must not be present in the applied-filters meta.
             assert "only_status" not in data["meta"]["applied_filters"]
-            # active_total counts only active.md and is meaningless for a
+            # active_total counts only active/ and is meaningless for a
             # --since query spanning the archive -- it must be omitted.
             assert "active_total" not in data["meta"]
 
@@ -509,7 +537,7 @@ class TestTasksShow:
 
             tasks_dir = Path("tasks")
             (tasks_dir / "done").mkdir(parents=True)
-            (tasks_dir / "active.md").write_text("")
+            (tasks_dir / "active").mkdir()
             (tasks_dir / "done" / "2026-04.md").write_text(
                 "## [t141] Archived task\n"
                 "- priority: P1\n"
@@ -532,7 +560,7 @@ class TestTasksShow:
 
             tasks_dir = Path("tasks")
             (tasks_dir / "done").mkdir(parents=True)
-            (tasks_dir / "active.md").write_text("")
+            (tasks_dir / "active").mkdir()
             (tasks_dir / "done" / "2026-04.md").write_text("")
 
             result = runner.invoke(main, ["tasks", "show", "t999"])
@@ -595,11 +623,12 @@ class TestTasksGroups:
             assert "T1" in result.output
             assert "T2" not in result.output
 
-    def test_edit_status_retired(self, runner: CliRunner) -> None:
+    def test_edit_status_retired_requires_terminal_command(self, runner: CliRunner) -> None:
         with runner.isolated_filesystem():
             runner.invoke(main, ["tasks", "add", "To retire", "--priority", "P1"])
             result = runner.invoke(main, ["tasks", "edit", "t001", "--status", "retired"])
-            assert result.exit_code == 0
+            assert result.exit_code != 0
+            assert "use science tasks done/retire to close a task" in result.output
 
 
 class TestTasksSummary:
@@ -641,8 +670,8 @@ def test_tasks_add_accepts_aspects_flag(tmp_path, monkeypatch):
         ],
     )
     assert result.exit_code == 0, result.output
-    body = (tmp_path / "tasks" / "active.md").read_text()
-    assert "- aspects: [hypothesis-testing]" in body
+    task = task_module.parse_task_file(_active_task_path(tmp_path, "t001"))
+    assert task.aspects == ["hypothesis-testing"]
 
 
 def test_tasks_add_accepts_task_scoped_aspect_when_project_aspects_absent(
@@ -670,8 +699,8 @@ def test_tasks_add_accepts_task_scoped_aspect_when_project_aspects_absent(
         ],
     )
     assert result.exit_code == 0, result.output
-    body = (tmp_path / "tasks" / "active.md").read_text()
-    assert "- aspects: [computational-analysis]" in body
+    task = task_module.parse_task_file(_active_task_path(tmp_path, "t001"))
+    assert task.aspects == ["computational-analysis"]
 
 
 def test_tasks_add_without_type_or_aspects(tmp_path, monkeypatch):
@@ -686,11 +715,11 @@ def test_tasks_add_without_type_or_aspects(tmp_path, monkeypatch):
     runner = CliRunner()
     result = runner.invoke(main, ["tasks", "add", "Demo", "--priority", "P2"])
     assert result.exit_code == 0, result.output
-    body = (tmp_path / "tasks" / "active.md").read_text()
+    task = task_module.parse_task_file(_active_task_path(tmp_path, "t001"))
     # aspects is validate-required, so add without --aspects still emits '[]'
     # (feedback fb-2026-05-30-005); only type stays omitted when empty.
-    assert "- aspects: []" in body
-    assert "- type:" not in body
+    assert task.aspects == []
+    assert task.type == ""
 
 
 def test_tasks_edit_updates_aspects(tmp_path, monkeypatch):
@@ -698,12 +727,14 @@ def test_tasks_edit_updates_aspects(tmp_path, monkeypatch):
 
     from science_tool.cli import main
 
-    (tmp_path / "tasks").mkdir()
     (tmp_path / "science.yaml").write_text(
         "name: demo\nprofile: research\naspects: [hypothesis-testing, software-development]\n"
     )
-    (tmp_path / "tasks" / "active.md").write_text(
-        "## [t001] Demo\n- priority: P1\n- status: proposed\n- created: 2026-04-19\n\nBody.\n"
+    _write_active_task(
+        tmp_path,
+        task_id="t001",
+        title="Demo",
+        created=date(2026, 4, 19),
     )
     monkeypatch.chdir(tmp_path)
 
@@ -719,8 +750,8 @@ def test_tasks_edit_updates_aspects(tmp_path, monkeypatch):
         ],
     )
     assert result.exit_code == 0, result.output
-    body = (tmp_path / "tasks" / "active.md").read_text()
-    assert "- aspects: [software-development]" in body
+    task = task_module.parse_task_file(_active_task_path(tmp_path, "t001"))
+    assert task.aspects == ["software-development"]
 
 
 def test_tasks_edit_accepts_task_scoped_aspect_when_project_aspects_absent(
@@ -730,10 +761,12 @@ def test_tasks_edit_accepts_task_scoped_aspect_when_project_aspects_absent(
 
     from science_tool.cli import main
 
-    (tmp_path / "tasks").mkdir()
     (tmp_path / "science.yaml").write_text("name: demo\nprofile: research\n")
-    (tmp_path / "tasks" / "active.md").write_text(
-        "## [t001] Demo\n- priority: P1\n- status: proposed\n- aspects: []\n- created: 2026-04-19\n\nBody.\n"
+    _write_active_task(
+        tmp_path,
+        task_id="t001",
+        title="Demo",
+        created=date(2026, 4, 19),
     )
     monkeypatch.chdir(tmp_path)
 
@@ -749,8 +782,8 @@ def test_tasks_edit_accepts_task_scoped_aspect_when_project_aspects_absent(
         ],
     )
     assert result.exit_code == 0, result.output
-    body = (tmp_path / "tasks" / "active.md").read_text()
-    assert "- aspects: [computational-analysis]" in body
+    task = task_module.parse_task_file(_active_task_path(tmp_path, "t001"))
+    assert task.aspects == ["computational-analysis"]
 
 
 def test_tasks_list_filter_by_aspect(tmp_path, monkeypatch):
@@ -758,26 +791,22 @@ def test_tasks_list_filter_by_aspect(tmp_path, monkeypatch):
 
     from science_tool.cli import main
 
-    (tmp_path / "tasks").mkdir()
     (tmp_path / "science.yaml").write_text(
         "name: demo\nprofile: research\naspects: [hypothesis-testing, software-development]\n"
     )
-    (tmp_path / "tasks" / "active.md").write_text(
-        "## [t001] Research task\n"
-        "- priority: P1\n"
-        "- status: proposed\n"
-        "- aspects: [hypothesis-testing]\n"
-        "- created: 2026-04-19\n"
-        "\n"
-        "Body.\n"
-        "\n"
-        "## [t002] Software task\n"
-        "- priority: P1\n"
-        "- status: proposed\n"
-        "- aspects: [software-development]\n"
-        "- created: 2026-04-19\n"
-        "\n"
-        "Body.\n"
+    _write_active_task(
+        tmp_path,
+        task_id="t001",
+        title="Research task",
+        aspects=["hypothesis-testing"],
+        created=date(2026, 4, 19),
+    )
+    _write_active_task(
+        tmp_path,
+        task_id="t002",
+        title="Software task",
+        aspects=["software-development"],
+        created=date(2026, 4, 19),
     )
     monkeypatch.chdir(tmp_path)
 
@@ -855,12 +884,13 @@ def _setup_host_with_peer_task(tmp_path: Path) -> Path:
         encoding="utf-8",
     )
     (peer / "science.yaml").write_text("name: peer\nid: peer\n", encoding="utf-8")
-    (peer / "tasks").mkdir()
-    (peer / "tasks" / "active.md").write_text(
+    (peer / "tasks" / "done").mkdir(parents=True)
+    (peer / "tasks" / "done" / "2026-06.md").write_text(
         "## [t001] Peer task\n"
         "- type: dev\n"
         "- priority: P2\n"
         "- status: done\n"
+        "- aspects: []\n"
         "- created: 2026-06-01\n"
         "- completed: 2026-06-02\n\n"
         "Done in the peer project.\n",
@@ -871,15 +901,14 @@ def _setup_host_with_peer_task(tmp_path: Path) -> Path:
 
 def test_tasks_block_accepts_declared_peer_task(tmp_path, monkeypatch):
     host = _setup_host_with_peer_task(tmp_path)
-    (host / "tasks").mkdir()
-    (host / "tasks" / "active.md").write_text(
-        "## [t001] Host task\n"
-        "- type: dev\n"
-        "- priority: P2\n"
-        "- status: proposed\n"
-        "- created: 2026-06-03\n\n"
-        "Can be blocked on the peer project.\n",
-        encoding="utf-8",
+    _write_active_task(
+        host,
+        task_id="t001",
+        title="Host task",
+        priority="P2",
+        task_type="dev",
+        created=date(2026, 6, 3),
+        description="Can be blocked on the peer project.",
     )
 
     monkeypatch.chdir(host)
@@ -887,7 +916,7 @@ def test_tasks_block_accepts_declared_peer_task(tmp_path, monkeypatch):
 
     assert result.exit_code == 0, result.output
     assert "peer:task:t001" in result.output
-    assert "blocked-by: [peer:task:t001]" in (host / "tasks" / "active.md").read_text(encoding="utf-8")
+    assert task_module.parse_task_file(_active_task_path(host, "t001")).blocked_by == ["peer:task:t001"]
 
 
 def test_tasks_block_rejects_untyped(tmp_path, monkeypatch):
@@ -964,16 +993,16 @@ def test_tasks_blockers_json_unresolved(tmp_path, monkeypatch):
 
 def test_tasks_blockers_json_resolves_declared_peer_task(tmp_path, monkeypatch):
     host = _setup_host_with_peer_task(tmp_path)
-    (host / "tasks").mkdir()
-    (host / "tasks" / "active.md").write_text(
-        "## [t001] Host task\n"
-        "- type: dev\n"
-        "- priority: P2\n"
-        "- status: blocked\n"
-        "- blocked-by: [peer:task:t001]\n"
-        "- created: 2026-06-03\n\n"
-        "Blocked on the peer project.\n",
-        encoding="utf-8",
+    _write_active_task(
+        host,
+        task_id="t001",
+        title="Host task",
+        priority="P2",
+        status="blocked",
+        task_type="dev",
+        blocked_by=["peer:task:t001"],
+        created=date(2026, 6, 3),
+        description="Blocked on the peer project.",
     )
 
     monkeypatch.chdir(host)
@@ -994,11 +1023,11 @@ def test_tasks_edit_clear_blockers_drops_blocked_by(tmp_path, monkeypatch):
     runner = _setup(tmp_path)
     block = runner.invoke(main, ["tasks", "block", "t001", "--by", "dataset:foo"])
     assert block.exit_code == 0, block.output
-    assert "blocked-by: [dataset:foo]" in (tmp_path / "tasks" / "active.md").read_text()
+    assert task_module.parse_task_file(_active_task_path(tmp_path, "t001")).blocked_by == ["dataset:foo"]
 
     result = runner.invoke(main, ["tasks", "edit", "t001", "--clear-blockers"])
     assert result.exit_code == 0, result.output
-    assert "blocked-by" not in (tmp_path / "tasks" / "active.md").read_text()
+    assert task_module.parse_task_file(_active_task_path(tmp_path, "t001")).blocked_by == []
 
 
 def test_tasks_edit_clear_blockers_conflicts_with_blocked_by(tmp_path, monkeypatch):
@@ -1197,11 +1226,24 @@ def test_tasks_show_accepts_format_json(tmp_path, monkeypatch):
 def test_tasks_summary_accepts_format_json(tmp_path, monkeypatch):
     monkeypatch.chdir(tmp_path)
     runner = _setup(tmp_path)
+    runner.invoke(main, ["tasks", "add", "Second", "--priority", "P1"])
 
     result = runner.invoke(main, ["tasks", "summary", "--format", "json"])
 
     assert result.exit_code == 0, result.output
     payload = json.loads(result.output)
-    assert payload["total"] == 1
-    assert payload["by_status"]["proposed"] == 1
+    assert payload["total"] == 2
+    assert payload["by_status"]["proposed"] == 2
     assert payload["by_priority"]["P2"] == 1
+    assert payload["by_priority"]["P1"] == 1
+
+
+def test_tasks_list_warns_about_legacy_blockers_in_split_layout(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    seed_project(tmp_path)
+    _write_split_legacy_blocker(tmp_path)
+
+    result = CliRunner().invoke(main, ["tasks", "list"])
+
+    assert result.exit_code == 0, result.output
+    assert "WARNING: task t001: legacy untyped blocker 'old-string'" in result.output

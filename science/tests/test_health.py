@@ -24,6 +24,37 @@ from science_tool.graph.health_checks.dataset_anomalies import check_dataset_ano
 _CREATED = datetime(2026, 6, 30, tzinfo=timezone.utc)
 
 
+def _write_split_task(
+    root: Path,
+    *,
+    task_id: str = "t001",
+    title: str = "Task",
+    task_type: str | None = None,
+    tags: list[str] | None = None,
+) -> Path:
+    path = root / "tasks" / "active" / f"{task_id}-{title.lower().replace(' ', '-')}.md"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    optional = ""
+    if task_type is not None:
+        optional += f"type: {task_type}\n"
+    if tags is not None:
+        optional += f"tags: [{', '.join(tags)}]\n"
+    path.write_text(
+        "---\n"
+        f"id: {task_id}\n"
+        f"title: {title}\n"
+        f"{optional}"
+        "priority: P1\n"
+        "status: proposed\n"
+        "aspects: []\n"
+        "created: 2026-04-13\n"
+        "---\n\n"
+        "Desc.\n",
+        encoding="utf-8",
+    )
+    return path
+
+
 def _write_cross_paper_manifest(root: Path) -> None:
     (root / "science.yaml").write_text("name: test\n", encoding="utf-8")
 
@@ -364,22 +395,12 @@ class TestCollectLingeringTags:
         from science_tool.graph.health_checks.lingering_tags import collect_lingering_tags
 
         (tmp_path / "science.yaml").write_text("name: test\n")
-        tasks_dir = tmp_path / "tasks"
-        tasks_dir.mkdir()
-        (tasks_dir / "active.md").write_text(
-            "## [t001] Task\n"
-            "- type: dev\n"
-            "- priority: P1\n"
-            "- status: active\n"
-            "- tags: [foo, bar]\n"
-            "- created: 2026-04-13\n"
-            "\nDesc.\n"
-        )
+        _write_split_task(tmp_path, tags=["foo", "bar"])
 
         results = collect_lingering_tags(tmp_path).rows
 
         assert len(results) == 1
-        assert results[0]["file"].endswith("active.md")
+        assert results[0]["file"].endswith("tasks/active/t001-task.md")
         assert results[0]["values"] == ["foo", "bar"]
 
 
@@ -1718,14 +1739,12 @@ def test_health_flags_legacy_task_type_field(tmp_path) -> None:
     from science_tool.graph.health_checks.legacy_task_type import collect_legacy_task_type
 
     project_root = Path(tmp_path)
-    (project_root / "tasks").mkdir()
-    (project_root / "tasks" / "active.md").write_text(
-        "## [t001] Legacy\n- type: research\n- priority: P2\n- status: proposed\n- created: 2026-04-01\n\nBody.\n"
-    )
+    _write_split_task(project_root, title="Legacy", task_type="research")
     findings = collect_legacy_task_type(project_root).rows
     assert len(findings) == 1
     assert findings[0]["task_id"] == "t001"
     assert findings[0]["legacy_type"] == "research"
+    assert findings[0]["source_file"] == "tasks/active/t001-legacy.md"
 
 
 def test_health_flags_invalid_entity_aspects(tmp_path) -> None:
@@ -1750,10 +1769,7 @@ def test_build_health_report_includes_aspect_findings(tmp_path) -> None:
     from science_tool.graph.health import build_health_report
 
     project_root = Path(tmp_path)
-    (project_root / "tasks").mkdir()
-    (project_root / "tasks" / "active.md").write_text(
-        "## [t001] Legacy task\n- type: dev\n- priority: P2\n- status: proposed\n- created: 2026-04-01\n\nBody.\n"
-    )
+    _write_split_task(project_root, title="Legacy task", task_type="dev")
     (project_root / "entities" / "questions").mkdir(parents=True)
     (project_root / "science.yaml").write_text("name: demo\nprofile: research\naspects: [hypothesis-testing]\n")
     (project_root / "entities" / "questions" / "q01.md").write_text(

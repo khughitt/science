@@ -106,7 +106,7 @@ def _synthetic_project(root: Path, *, severity: str) -> Path:
         "tasks",
     ]:
         project.joinpath(directory).mkdir()
-    project.joinpath("tasks", "active.md").write_text("# Active Tasks\n", encoding="utf-8")
+    project.joinpath("tasks", "active").mkdir()
     project.joinpath("validate.local.sh").write_text(
         "\n".join(
             [

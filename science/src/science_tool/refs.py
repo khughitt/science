@@ -24,6 +24,7 @@ from science_tool.markdown_utils import (
     rendered_prose as _rendered_prose,
 )
 from science_tool.project_config import DEFAULT_DOI_PMID_EXEMPT_DIRS, load_project_config
+from science_tool.tasks import known_task_ids
 
 
 @dataclass
@@ -69,7 +70,7 @@ _TASK_ID_RE = re.compile(r"\bt(\d{2,})\b")
 # Task ID *declarations* in task ledger/archive headers, of the form
 # `## [tNN] ...` or `## [tNNN] ...`.
 _TASK_DECL_RE = re.compile(r"^\s*#+\s*\[t(\d{2,})\]", re.MULTILINE)
-_TASK_REF_SOURCES = "tasks/active.md, tasks/done/*.md, or tasks/archive.md"
+_TASK_REF_SOURCES = "tasks/active/*.md, tasks/done/*.md, or tasks/archive.md"
 # Tokens that should not trigger task-ID validation when they happen to match
 # the regex above (e.g. the `t` of an article slug).
 _TASK_FALSE_POSITIVE_PARENTS = (
@@ -207,17 +208,12 @@ def _load_task_ids(root: Path) -> set[str]:
     promoting the task back into active/done, not by teaching the graph to read
     archive.md.
     """
-    declared: set[str] = set()
+    tasks_dir = root / "tasks"
+    declared = {task_id[1:] for task_id in known_task_ids(tasks_dir)}
     candidates: list[Path] = []
-    active = root / "tasks" / "active.md"
-    if active.is_file():
-        candidates.append(active)
     archive = root / "tasks" / "archive.md"
     if archive.is_file():
         candidates.append(archive)
-    done_dir = root / "tasks" / "done"
-    if done_dir.is_dir():
-        candidates.extend(done_dir.glob("*.md"))
     for path in candidates:
         try:
             text = path.read_text(encoding="utf-8")

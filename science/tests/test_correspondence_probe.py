@@ -1,11 +1,43 @@
 from pathlib import Path
 
+import pytest
+
 from science_tool.correspondence.probe import (
     ProbeResult,
     TaskState,
     probe_path,
     resolve_task,
 )
+
+
+def _write_active_task(root: Path, task_id: str) -> None:
+    path = root / "tasks" / "active" / f"{task_id}-thing.md"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(
+        "---\n"
+        f"id: {task_id}\n"
+        "title: Thing\n"
+        "priority: P1\n"
+        "status: active\n"
+        "aspects: []\n"
+        "created: 2026-07-01\n"
+        "---\n\n"
+        "Body.\n"
+    )
+
+
+def _write_done_task(root: Path, task_id: str) -> None:
+    path = root / "tasks" / "done" / "2026-07.md"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(
+        f"## [{task_id}] Thing\n"
+        "- priority: P1\n"
+        "- status: done\n"
+        "- aspects: []\n"
+        "- created: 2026-07-01\n"
+        "- completed: 2026-07-02\n\n"
+        "Done.\n"
+    )
 
 
 def test_present_when_file_exists(tmp_path: Path):
@@ -39,33 +71,29 @@ def test_directory_counts_as_present(tmp_path: Path):
 
 
 def test_task_done_when_in_done_dir(tmp_path: Path):
-    (tmp_path / "tasks" / "done").mkdir(parents=True)
-    (tmp_path / "tasks" / "done" / "t254-thing.md").write_text("x")
+    _write_done_task(tmp_path, "t254")
     assert resolve_task(tmp_path, "t254") is TaskState.DONE
 
 
 def test_task_active_when_named_in_active_file(tmp_path: Path):
-    (tmp_path / "tasks").mkdir()
-    (tmp_path / "tasks" / "active.md").write_text("- task:t254 do the thing\n")
+    _write_active_task(tmp_path, "t254")
     assert resolve_task(tmp_path, "t254") is TaskState.ACTIVE
 
 
 def test_task_missing_when_nowhere(tmp_path: Path):
-    (tmp_path / "tasks").mkdir()
-    (tmp_path / "tasks" / "active.md").write_text("- task:t999\n")
+    (tmp_path / "tasks" / "active").mkdir(parents=True)
     assert resolve_task(tmp_path, "t254") is TaskState.MISSING
 
 
-def test_done_wins_over_active(tmp_path: Path):
-    """A task both filed done and left in active.md is done; the file is the record."""
-    (tmp_path / "tasks" / "done").mkdir(parents=True)
-    (tmp_path / "tasks" / "done" / "t254-x.md").write_text("x")
-    (tmp_path / "tasks" / "active.md").write_text("- task:t254\n")
-    assert resolve_task(tmp_path, "t254") is TaskState.DONE
+def test_duplicate_active_and_done_task_is_rejected(tmp_path: Path):
+    _write_done_task(tmp_path, "t254")
+    _write_active_task(tmp_path, "t254")
+
+    with pytest.raises(ValueError, match="duplicate task id t254"):
+        resolve_task(tmp_path, "t254")
 
 
 def test_task_id_is_matched_whole(tmp_path: Path):
     """t25 must not match t254."""
-    (tmp_path / "tasks" / "done").mkdir(parents=True)
-    (tmp_path / "tasks" / "done" / "t254-x.md").write_text("x")
+    _write_done_task(tmp_path, "t254")
     assert resolve_task(tmp_path, "t25") is TaskState.MISSING

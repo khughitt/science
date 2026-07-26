@@ -8,7 +8,6 @@ absence.
 
 from __future__ import annotations
 
-import re
 from dataclasses import dataclass
 from enum import StrEnum
 from pathlib import Path, PurePosixPath
@@ -44,15 +43,10 @@ def probe_path(worktree: Path, rel: str) -> Probe:
 
 
 def resolve_task(worktree: Path, task_id: str) -> TaskState:
-    done_dir = worktree / "tasks" / "done"
-    if done_dir.is_dir():
-        # Whole-id match: `t25-*.md` must not be satisfied by `t254-*.md`.
-        for path in done_dir.glob(f"{task_id}*.md"):
-            stem = path.stem
-            if stem == task_id or stem.startswith(f"{task_id}-"):
-                return TaskState.DONE
-    active = worktree / "tasks" / "active.md"
-    if active.is_file():
-        if re.search(rf"\b{re.escape(task_id)}\b", active.read_text(errors="replace")):
-            return TaskState.ACTIVE
-    return TaskState.MISSING
+    from science_tool.tasks import find_task_location
+
+    try:
+        location = find_task_location(worktree / "tasks", task_id)
+    except KeyError:
+        return TaskState.MISSING
+    return TaskState.DONE if location.path.parent.name == "done" else TaskState.ACTIVE

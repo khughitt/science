@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import importlib
+import re
 from collections.abc import Iterable
 from pathlib import Path
 
@@ -38,9 +39,20 @@ def _messages(results: Iterable[Result], severity: Severity | None = None) -> li
 
 
 def _write_active(root: Path, text: str) -> None:
-    path = root / "tasks" / "active.md"
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(text, encoding="utf-8")
+    active_dir = root / "tasks" / "active"
+    active_dir.mkdir(parents=True, exist_ok=True)
+    blocks = re.split(r"(?=^##\s+\[)", text, flags=re.MULTILINE)
+    for index, block in enumerate(candidate for candidate in blocks if candidate.strip()):
+        heading, *body = block.splitlines()
+        match = re.match(r"^##\s+\[([^\]]+)\]\s+(.+)$", heading)
+        assert match is not None
+        task_id, title = match.groups()
+        fields = "\n".join(line[2:] if line.startswith("- ") else line for line in body)
+        path = active_dir / f"{task_id}-{index}.md"
+        path.write_text(
+            f"---\nid: {task_id}\ntitle: {title}\n{fields}\n---\n",
+            encoding="utf-8",
+        )
 
 
 def _valid_task(task_id: str, *, extra: str = "") -> str:
@@ -61,18 +73,18 @@ def test_missing_active_file_warns_and_stops(tmp_path: Path) -> None:
 
     results = list(check_tasks(_ctx(tmp_path)))
 
-    assert _messages(results) == ["tasks/active.md not found (use /science:tasks to create)"]
+    assert _messages(results) == ["tasks/active/ not found (use /science:tasks to create)"]
     assert [result.severity for result in results] == [Severity.WARN]
 
 
-def test_empty_active_file_reports_exists_and_no_tasks(tmp_path: Path) -> None:
+def test_empty_active_directory_reports_exists_and_no_tasks(tmp_path: Path) -> None:
     from science_tool.validate.checks.tasks import check_tasks
 
     _write_active(tmp_path, "")
 
     assert _messages(check_tasks(_ctx(tmp_path))) == [
-        "tasks/active.md exists",
-        "  no tasks in active.md",
+        "tasks/active/ exists",
+        "  no tasks in active/",
     ]
 
 
@@ -85,7 +97,7 @@ def test_active_and_done_task_blocks_count_together(tmp_path: Path) -> None:
     done.joinpath("2026-01.md").write_text(_valid_task("t003"), encoding="utf-8")
 
     assert _messages(check_tasks(_ctx(tmp_path)), Severity.INFO) == [
-        "tasks/active.md exists",
+        "tasks/active/ exists",
         "  3 task(s) validated",
     ]
 
@@ -106,7 +118,7 @@ def test_invalid_header_id_errors_and_is_not_counted(tmp_path: Path) -> None:
     results = list(check_tasks(_ctx(tmp_path)))
 
     assert _messages(results, Severity.ERROR) == [
-        "Invalid task id 't01.fragment' in tasks/active.md: task ids must match tNNN. "
+        "Invalid task id 't01.fragment' in tasks/active/t01.fragment-0.md: task ids must match tNNN. "
         "Use parent: task:t001 for fragments or subtasks."
     ]
     assert "  1 task(s) validated" in _messages(results, Severity.INFO)
@@ -148,7 +160,7 @@ def test_duplicate_ids_across_active_and_done_emit_bash_parity_message(tmp_path:
     done.mkdir()
     done.joinpath("2026-01.md").write_text(_valid_task("t001"), encoding="utf-8")
 
-    assert _messages(check_tasks(_ctx(tmp_path)), Severity.ERROR) == ["duplicate task IDs in active.md: t001"]
+    assert _messages(check_tasks(_ctx(tmp_path)), Severity.ERROR) == ["duplicate task IDs in active/: t001"]
 
 
 def test_invalid_parent_emits_exact_error(tmp_path: Path) -> None:
@@ -185,9 +197,9 @@ def test_task_refs_validate_declared_stale_invalid_and_typed_refs(tmp_path: Path
     )
 
     assert _messages(check_tasks(_ctx(tmp_path)), Severity.ERROR) == [
-        "stale task ref 't999' in tasks/active.md",
-        "stale or invalid task ref 't123a' in tasks/active.md",
-        "stale task ref 't555' in tasks/active.md",
+        "stale task ref 't999' in tasks/active/t001-0.md",
+        "stale or invalid task ref 't123a' in tasks/active/t001-0.md",
+        "stale task ref 't555' in tasks/active/t001-0.md",
     ]
 
 
