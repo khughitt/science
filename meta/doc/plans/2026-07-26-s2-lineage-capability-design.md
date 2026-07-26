@@ -322,12 +322,27 @@ precisely *because* it is the admitted-but-unstampable kind:
 | `test_consolidation_mark_superseded.py:298` `test_member_whose_kind_lacks_superseded_vocab_is_skipped_not_crashed` | such a member lands in `skipped_kinds` rather than crashing | same |
 | `test_graph_materialize.py:1109` `test_materialize_graph_preserves_workflow_run_supersedes` | the edge materializes | invert into a **rejection** test, or move to a retained endpoint kind |
 
-This surfaces a property worth stating plainly: **after S2, `skipped_kinds` is unreachable through
-the shipped profile.** Property 3 makes "admitted endpoint whose kind lacks the vocabulary" a
-contradiction, so the skip path can only be reached by a project-local kind or a hand-built graph.
-The behaviour must still be covered — a project-local kind can genuinely reach it — but it can no
-longer be demonstrated with a shipped kind, and a test that quietly swaps in another shipped kind
-would be re-testing an impossible state.
+#### `skipped_kinds` after S2: retained, and reachable from exactly one direction
+
+**After S2 no authored project input can reach the skip path — including a project-local kind.**
+An earlier draft of this design claimed a project-local kind could still reach it. That is **false**:
+`_profile_relation_for_predicate` (`materialize.py:1907`) resolves an authored `sci:supersedes`
+against `CORE_PROFILE.relation_kinds` and nothing else, so admission is decided by the core pairs
+whatever a project profile declares. A project-local kind is never admitted, so it never becomes a
+member to skip. Combined with property 3, every admitted object kind is one of the 18 supersedable
+kinds — which is exactly `supported_kinds`.
+
+One direction remains: **decision material whose `supported_kinds` disagrees with its admitted
+edges** — stale or hand-built material. That is a real state by construction, since I4 freezes the
+policy onto the graph precisely so preview/apply drift is detectable, and `_disposition_report`
+reads the authenticated `graph.supported_kinds` rather than a live module value.
+
+**Ruling: the skip behaviour is retained**, because deleting it would make `_disposition_report`
+assume its graph's policy always covers every member — the assumption that stale material violates.
+The two tests above are therefore **rebuilt to construct that graph directly** (a `SupersedesGraph`
+whose `supported_kinds` omits a member's kind), not deleted and not re-pointed at another shipped
+kind, which would be asserting an impossible state. That is the precise boundary to test: reachable
+from material, unreachable from authored input.
 
 ### `workflow-run`'s top-level `supersedes:` is retired
 
@@ -354,7 +369,10 @@ So it is precisely the dead non-materializing field `fb-2026-07-11-017` exists t
 by a one-entry exemption whose reason does not hold. The program's own rule — compat projections get
 deleted, not documented — applies directly. It is removed, not re-labelled:
 
-- `templates/workflow-run.md` — delete the `supersedes:` line.
+- `templates/workflow-run.md` — **two** places, not one: the `supersedes:` frontmatter line (line 9)
+  and the `- **Supersedes:** \`workflow-run:<slug>\` (if applicable)` bullet in the body's Entity
+  Cross-References section (line 54). Leaving the prose would keep recommending a field the
+  validator now rejects.
 - `science/src/science_tool/qa_audit/runs.py` — drop `supersedes` from `RunRecord` and from the
   loader; correct `chain_depth`'s docstring to say it counts runs recorded for the workflow.
 - `science/src/science_tool/qa_audit/verdicts.py` — correct the `iteration_verdict` docstring,
@@ -369,6 +387,15 @@ deleted, not documented — applies directly. It is removed, not re-labelled:
   asserts `chain_depth == 3`, which the function returns whether or not those keys exist: it is
   tautological with respect to its own name and must be renamed to what it actually asserts.
 - `science/tests/test_qa_audit_audit.py` — remove the same fixture argument.
+- `science/tests/validate/test_checks_materialization.py` — **two** tests change.
+  `test_supersedes_on_workflow_run_is_accepted` (line 77) asserts no result and must **invert** to
+  expect a single `ERROR`, with its docstring — which cites the now-deleted `qa_audit/runs.py:47`
+  reader — rewritten. `test_inadmissible_kind_is_not_told_to_author_the_relation` (line 141) picks
+  `plan` as its inadmissible kind, and S2 makes `plan` an admissible `sci:supersedes` source; it
+  must be **retargeted** to a kind that stays non-supersedable (`question` is the natural choice)
+  or it silently stops testing the behaviour it names. The comment block at lines 135-138, which
+  enumerates the twelve half-wired kinds as the reason for the kind-aware remediation, is rewritten
+  — after S2 that set is empty and the remediation's population is the 32 non-supersedable kinds.
 
 Removing the exemption means the materialization check will now ERROR on a `workflow-run` carrying
 `supersedes:`. That is the intended behaviour and affects no existing entity.
@@ -399,6 +426,10 @@ cited in the commit that touches the literal.
   the five state axes across 50 kinds is not S2's.
 - **F3 — the lineage taxonomy.** Whether `status: superseded` and the derived `superseded_by`
   inverse are two spellings of one fact is S3's question. S2 rules *capability*, not spelling, and
-  deletes nothing from the lineage vocabulary.
+  removes nothing from the **canonical** lineage vocabulary — `sci:supersedes`, `sci:amends`,
+  `superseded_by`, `resynthesized_into`, `deprecated_ids` and `consolidated_into` are all untouched.
+  It does delete one non-canonical surface: `workflow-run`'s top-level `supersedes:` key, which
+  materializes no triple and which the inventory already classed as the single clearly disposable
+  member of that list.
 - **The six candidate kinds** listed above.
 - **S1b** — widening value-reconciliation batteries; unrelated and independently sequenced.
