@@ -803,7 +803,7 @@ callers, so repointing it would have left the declaration owning nothing."
 - Modify: `science/tests/validate/test_checks_materialization.py:77`
 - Modify: `science/tests/test_qa_audit_runs.py`, `science/tests/test_qa_audit_audit.py`
 - Modify: `docs/process/pipeline-audit-and-refactor.md:238`
-- Modify: `commands/next-steps.md:76` and `:210`
+- Modify: `commands/next-steps.md:75-76` and `:210`
 - Regenerate: `codex-skills/science-next-steps/SKILL.md` (generated mirror — never hand-edited)
 
 The field sustains nothing: `RunRecord.supersedes` is written and never read; `chain_depth` counts runs per workflow and follows no link; no entity in any project authors the key.
@@ -889,16 +889,23 @@ In `docs/process/pipeline-audit-and-refactor.md:238`, the playbook says `science
 
 `commands/next-steps.md` tells agents to look for workflow-run states that S2 makes unreachable. Two lines, not one:
 
-- **Line 76**, under `#### Workflow Runs`: "Report: recent runs (last 7 days), superseded runs, runs with status `draft`."
+- **Line 76**, under `#### Workflow Runs`: "Report: recent runs (last 7 days), superseded runs, runs with status `draft`." (Line 75, which supplies its scan, is rewritten with it — see below.)
 - **Line 210**, under **Unreflected failures**: "a **discarded / superseded / `draft` workflow run** (already surfaced under Workflow Runs above)…" — this line back-references line 76, so correcting one without the other leaves a dangling pointer.
 
 `superseded` is what S2 removes: `workflow-run` loses the `sci:supersedes` endpoint (Task 3) and the top-level field (this task), and it never declared a `superseded` status. **`discarded` and `draft` are independently unreachable** and were already so before S2 — `workflow-run` declares a closed vocabulary, `statuses=["running", "complete", "failed"]` with `default_status="running"` (`core.py:568-578`). That is a pre-existing defect, not one this change creates, but both tokens sit inside sentences this step is rewriting, and leaving a known-false state name in a line being edited is not defensible. Correct all three against the declared vocabulary.
 
-Line 76 becomes:
+**The status claim needs a source that carries status.** Line 75 scans `results/` for `datapackage.json` manifests, and run *status* does not live there — the template puts `status` in the workflow-run entity frontmatter (`templates/workflow-run.md:5`) and points at the manifest separately, as `datapackage.yaml`, via `manifest_path` (`:7`, `:47`). Reporting `failed` off a manifest scan would be unreachable guidance, so lines 75-76 are rewritten together: the entity is the status authority, the manifest is the result detail.
+
+Lines 75-76 become:
 
 ```markdown
-- Report: recent runs (last 7 days) and runs with status `failed`.
+- List workflow-run entities with `science entity list workflow-run --format json`; read result
+  details from each run's `manifest_path` manifest.
+- Report: recent runs (last 7 days) and runs with status `failed`
+  (`science entity list workflow-run --status failed --format json`).
 ```
+
+Verified against the CLI: `entity list` takes the kind positionally and accepts `--status` and `--format json`. Leave the **Fallback when no manifests exist** paragraph below (lines 79-84) alone — it is about inferring bundles from `results/` directory conventions when no manifest exists, and its "superseded by a later one with the same slug" clause is about bundle filenames, not entity lineage.
 
 Line 210 becomes:
 
@@ -907,7 +914,7 @@ Line 210 becomes:
   with no interpretation and no post-mortem.
 ```
 
-Leave line 194 alone — `sci:supersedes` plus `status: superseded` on a *conclusion* is exactly the supersedable path S2 keeps. Leave line 81 alone: it is about analysis bundles superseded by filename, not entity lineage.
+Leave line 194 alone — `sci:supersedes` plus `status: superseded` on a *conclusion* is exactly the supersedable path S2 keeps.
 
 Then regenerate the mirror. `codex-skills/` is a git-tracked generated tree; `test_committed_codex_skills_match_fresh_generation` (`science/tests/test_codex_skills.py:799`) fails if the committed output drifts from a fresh run, so this is not optional:
 
@@ -915,7 +922,7 @@ Then regenerate the mirror. `codex-skills/` is a git-tracked generated tree; `te
 cd science && uv run --frozen python ../scripts/generate_codex_skills.py
 ```
 
-Expected: `codex-skills/science-next-steps/SKILL.md` picks up both corrections (its copies sit at `:195` and `:329`). Do not hand-edit the mirror.
+Expected: `codex-skills/science-next-steps/SKILL.md` picks up all three corrections (its copies of lines 75-76 sit at `:194-195`, and of line 210 at `:329`). Do not hand-edit the mirror.
 
 - [ ] **Step 9: Run both suites, lint and types**
 
@@ -930,7 +937,15 @@ From the repository root:
 rg -n "supersedes" templates/workflow-run.md docs/process/pipeline-audit-and-refactor.md
 rg -n -i "superseded|discarded|draft" commands/next-steps.md codex-skills/science-next-steps/SKILL.md
 ```
-Expected: the first command reports no matches. The second reports only the conclusion-supersession guidance (`commands/next-steps.md:194` and its mirror) and the analysis-bundle line — no `workflow-run` state.
+Expected: the first command reports no matches. The second is deliberately broad — it matches every occurrence of the words, so read its output against this list rather than expecting silence. Exactly three families of match must remain, in both the command and its mirror, and **none of them is a `workflow-run` state**:
+
+| line (command) | match | why it stays |
+|---|---|---|
+| `:81` | "bundles whose name appears superseded by a later one with the same slug" | analysis-bundle *filenames*, not entity lineage |
+| `:111` | "tasks superseded by results or no longer decision-relevant" | ordinary English in task-pruning guidance; no entity state named |
+| `:194` | "`sci:supersedes` plus `status: superseded` on the old conclusion" | the supersedable path S2 *keeps* — conclusion kinds |
+
+Any fourth match, or any match naming a `workflow-run`, means the retirement is incomplete.
 
 Do **not** edit the dated design and plan documents under `docs/plans/` that mention the exemption — `2026-07-15-non-materializing-fields-plan.md:20` and `2026-07-12-d4-status-vocabulary-audit.md:47`. They are historical records of completed work; rewriting them would falsify the record of why the exemption existed.
 
