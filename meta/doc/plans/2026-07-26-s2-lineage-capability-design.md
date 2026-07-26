@@ -19,7 +19,7 @@ declaration instead of inferring it from each other.
 |---|---|---|
 | Status vocabulary | 18 kinds | `EntityKind.statuses ∋ "superseded"` |
 | Relation admissibility | 9 kinds | `allowed_kind_pairs` on `supersedes` |
-| Auto-stamping policy | 18 kinds | `_supports_superseded` (`consolidation.py:111`) |
+| Auto-stamping policy | 18 kinds | `supported_kinds`, built from `_STATUS_VALUES` (`consolidation.py:648`) |
 
 Of 50 core entity kinds, 18 declare a `superseded` status and 9 are admissible `sci:supersedes`
 endpoints. The subject and object endpoint sets are identical; `allowed_kind_pairs` holds 39 pairs
@@ -95,20 +95,51 @@ safe and true.
 |---|---|---|
 | Status vocabulary | `statuses ∋ "superseded"` *is* the de-facto declaration | gated: `"superseded" ∈ statuses` ⟺ `supersedable` |
 | Relation endpoints | hand-listed `allowed_kind_pairs` | gated: every `target_kind` is supersedable, and every supersedable kind is some pair's target |
-| Auto-stamping | `_SUPERSEDED in _STATUS_VALUES.get(kind, …)` | `DECLARED_SUPERSEDABLE.get(kind, False)` |
+| Auto-stamping policy | `supported_kinds` built from `_STATUS_VALUES` (`consolidation.py:648`) | `supported_kinds` built from `DECLARED_SUPERSEDABLE` |
 
 `DECLARED_SUPERSEDABLE` is built in `kind_descriptors.py` from `KIND_DESCRIPTORS`, mirroring
 `DECLARED_STATUSES` exactly. That shape is load-bearing, not cosmetic: `KIND_DESCRIPTORS` covers the
 shipped profiles only, so a kind declared in a project manifest is **absent** from the map and
-resolves to `False`. This preserves the existing protection that `_supports_superseded`'s docstring
-describes — a project-local kind must never be auto-stamped, because the write boundary's
-`_validate_status` indexes `_STATUS_VALUES[kind]` and would raise `KeyError`. Deriving from a map
-built over the same population keeps that guarantee without reintroducing a join.
+resolves to `False`. This preserves the existing protection that a project-local kind must never be
+auto-stamped, because the write boundary's `_validate_status` indexes `_STATUS_VALUES[kind]` and
+would raise `KeyError`. Deriving from a map built over the same population keeps that guarantee
+without reintroducing a join.
+
+**The stamping policy is `supported_kinds`, not `_supports_superseded`.** This matters, and an
+earlier draft of this design got it wrong. `_supports_superseded` (`consolidation.py:101`) has **no
+production callers** — it survives only in comments and two test references. The live policy is
+serialized at `consolidation.py:648` directly from `_STATUS_VALUES`, frozen onto the graph as
+`SupersedesGraph.supported_kinds` (I4: the policy travels *with* the graph), and consumed by
+`_disposition_report` at `consolidation.py:713`. Repointing the dead helper would leave the
+declaration owning nothing and make its mutation proof exercise dead code — the precise failure S1a
+shipped three times. The change is therefore at line 648, and `_supports_superseded` is **deleted**
+rather than updated, so no decoy remains for a future reader to mistake for the policy.
+
+Deleting it touches two tests that reference it. `test_decision_material.py:311` monkeypatches it as
+a negative control proving `_disposition_report` reads the authenticated `graph.supported_kinds`
+rather than a live module value; that intent is preserved by re-pointing the monkeypatch at
+`DECLARED_SUPERSEDABLE`. `test_consolidation_mark_superseded.py` mentions it only in prose.
 
 **The endpoint list stays hand-authored.** Supersedability is *necessary* for the object endpoint,
 not *sufficient* for a pair: the cross-kind pairs encode real restriction (`hypothesis` is
 self-only) that a generated Cartesian product would destroy. Only the **object** side is gated — a
 subject is the replacement, and a non-supersedable kind replacing a supersedable one is legitimate.
+
+### The relation descriptor has three more surfaces
+
+`allowed_kind_pairs` is the admission rule, but `RelationKind` also carries `source_kinds`,
+`target_kinds`, and a prose `description` — and all three currently enumerate `workflow-run` and
+omit the ten additions (`core.py:744-757`). The flat lists are the fallback admission rule when a
+relation declares no pairs, so they cannot simply be deleted; they must be *reconciled*. Editing
+only the pairs would leave three surfaces contradicting the one that decides — the same
+multi-surface defect this program exists to close, reintroduced by its own fix.
+
+All four are updated together, and a new guard asserts **`set(source_kinds)` equals the pairs'
+source union and `set(target_kinds)` equals the target union, for every relation declaring pairs**.
+Measured at baseline: 2 relations declare pairs (`supersedes`, `amends`) and both already satisfy
+this, so the guard is free to add today and blocks exactly the drift described above. The stale
+comment block at `core.py:735-742`, which describes the twelve half-wired kinds as this arc's frozen
+debt, is rewritten — S2 dissolves that debt rather than carrying it.
 
 ## The rulings
 
@@ -128,6 +159,11 @@ post-change endpoint-target set are each equal to it.
 `topic` is the clearest: it is the legacy note kind explicitly being replaced by typed entities, so
 supersession is its use case. `plan` and `proposition` each already have a live entity carrying
 `status: superseded` with no edge able to back it.
+
+**Each is added as a SELF-PAIR** (`decision → decision`, and so on), matching how `hypothesis` and
+`spec` are already wired. They must **not** be added to `_CONCLUSION_KINDS` (`core.py:12-19`): that
+list has six members and is shared with the `amends` relation, so widening it would silently give
+all ten cross-kind amendment admissibility that nothing in this design ruled on.
 
 ### Lose the status (2)
 
@@ -187,7 +223,7 @@ Downstream consumers pin the toolkit revision in `uv.lock`, so no compatibility 
 shrunk**: with all 15 kinds ruled there is no debt left to ratchet, so the assertions become exact
 equality in both directions, and a stale exemption fails as loudly as a new gap.
 
-Four properties, each executable:
+Five properties, each executable:
 
 1. **Every shipped kind declares the fact.** `"supersedable" in ek.model_fields_set` for every kind
    in `CORE_PROFILE` and `LOCAL_PROFILE`. This is what makes kind 51 impossible to add silently.
@@ -198,8 +234,13 @@ Four properties, each executable:
    the supersedable set. Asked through `relation_allows_kinds`, the authoritative admission helper —
    not `source_kinds & target_kinds`, which is not the admission rule when `allowed_kind_pairs` is
    present.
-4. **Stamping agrees.** `_supports_superseded(kind) == supersedable(kind)` for all 53 shipped kinds,
-   and a project-local kind name absent from `KIND_DESCRIPTORS` returns `False`.
+4. **The flat projections agree with the pairs.** For every relation declaring
+   `allowed_kind_pairs`, `set(source_kinds)` equals the pairs' source union and `set(target_kinds)`
+   equals the target union. Universal over the profile, not scoped to `supersedes`.
+5. **Stamping agrees.** The policy actually carried on the graph matches the declaration:
+   `build_decision_material(project_root).supported_kinds` equals the sorted supersedable set, and
+   `_disposition_report` skips a member whose kind is absent from `graph.supported_kinds`. Asserted
+   against the live policy path, never against the deleted helper.
 
 ### Anti-tautology
 
@@ -209,11 +250,12 @@ property 3 would be vacuous if the endpoint pairs were. Neither is generated: `s
 authored surfaces. A test that derived one side from the other would be the identity function —
 the failure mode S7a hit and S1a re-derived.
 
-Property 4 is guarded against a different vacuity: `_supports_superseded` must be changed to read
-`DECLARED_SUPERSEDABLE`, so asserting it equals `supersedable` would be trivially true if the
-comparison were against the same expression. The test asserts it against the **profile declaration**
-(`EntityKind.supersedable`), reached independently of `kind_descriptors`, plus the explicit
-absent-kind case.
+Property 5 is guarded against a different vacuity. `supported_kinds` will be *built* from
+`DECLARED_SUPERSEDABLE`, so comparing it back to `DECLARED_SUPERSEDABLE` is the identity function.
+The test compares it to the **profile declaration** (`EntityKind.supersedable` read off
+`CORE_PROFILE`), reached independently of `kind_descriptors`, and adds the behavioural half — that a
+non-supersedable member is actually skipped by `_disposition_report` — so the property is proven by
+what the code does, not by what two expressions spell.
 
 ### Mutation proofs
 
@@ -224,8 +266,14 @@ not committed:
 |---|---|---|
 | 1 | delete `supersedable=` from one core kind's `EntityKind(...)` | fails, naming that kind |
 | 2 | set `topic.supersedable = False` while leaving `superseded` in its statuses | fails, naming `topic` on the vocabulary side |
-| 3 | remove `story` from the `supersedes` pairs while leaving `supersedable=True` | fails, naming `story` on the endpoint side |
-| 4 | make `_supports_superseded` return `True` unconditionally | fails on every non-supersedable kind |
+| 3 | remove the `decision → decision` self-pair while leaving `decision.supersedable = True` | fails, naming `decision` on the endpoint side (and trips 4, since `source_kinds` still lists it) |
+| 4 | append `"workflow-run"` to `supersedes.source_kinds` only | fails, naming the source-union mismatch |
+| 5 | drop `topic` from the set built at `consolidation.py:648` | fails twice: the material no longer equals the declaration, and a `topic` member stops being stamped |
+
+Mutation 5 is deliberately *not* "revert line 648 to `_STATUS_VALUES`". Once the rulings land,
+property 2 forces the two sources equal, so that mutation produces an identical set and proves
+nothing — an inert probe of exactly the kind S1a shipped. The mutation must remove a kind the
+assertion reads.
 
 These are proofs of a *live* gate, distinct from the suite passing. S1a's plan shipped three
 mutation proofs that could not run as written; each mutation above was chosen to touch a value the
@@ -236,13 +284,42 @@ assertion actually reads.
 - `science/model/src/science_model/profiles/schema.py` — add `supersedable` to `EntityKind`.
 - `science/model/src/science_model/profiles/core.py` — 50 declarations; add `superseded` to
   `story` and `validation-report` (the latter also gains a full vocabulary); remove it from
-  `observation` and `pre-registration`; edit the `supersedes` `allowed_kind_pairs` to add the 10
-  and drop `workflow-run`.
+  `observation` and `pre-registration`; add 10 self-pairs to the `supersedes`
+  `allowed_kind_pairs` and drop `workflow-run`; bring `source_kinds`, `target_kinds`, and the
+  `description` into line with the pairs; rewrite the frozen-debt comment at lines 735-742.
 - `science/model/src/science_model/profiles/local.py` — 3 declarations.
 - `science/src/science_tool/kind_descriptors.py` — add `DECLARED_SUPERSEDABLE`.
-- `science/src/science_tool/consolidation.py` — `_supports_superseded` reads it; update the
-  docstring, which currently explains the `_STATUS_VALUES` membership check.
+- `science/src/science_tool/consolidation.py` — build `supported_kinds` (line 648) from
+  `DECLARED_SUPERSEDABLE`; **delete** `_supports_superseded` and the comments describing it.
 - `science/model/tests/test_supersedable_gate.py` — rewritten; `_KNOWN_HALF_WIRED` deleted.
+- `science/tests/test_kind_map_equivalence.py` — re-freeze `FROZEN_STATUS_VALUES` (see below).
+- `science/model/tests/test_profile_manifests.py` — `line 99` asserts
+  `relation_allows_kinds(supersedes, "workflow-run", "workflow-run")`, which this design makes
+  false; revise it to assert the *absence* of that pair, and extend the pair coverage to the ten
+  new self-pairs.
+- `science/tests/test_decision_material.py` — re-point the `_supports_superseded` monkeypatch
+  (line 311) at `DECLARED_SUPERSEDABLE`, preserving the negative control.
+- `science/tests/test_consolidation_mark_superseded.py` — prose references to
+  `_supports_superseded` only.
+
+### The frozen status oracle must be re-frozen, deliberately
+
+`test_kind_map_equivalence.py` holds `FROZEN_STATUS_VALUES` — a literal snapshot of every kind's
+vocabulary — and `test_status_values_equal_prior_literal` (line 181) asserts `_STATUS_VALUES` equals
+it **exactly**. Four of this design's rulings necessarily break it:
+
+| kind | edit to the frozen literal |
+|---|---|
+| `observation` | remove `"superseded"` |
+| `pre-registration` | remove `"superseded"` |
+| `story` | add `"superseded"` |
+| `validation-report` | add a new entry — it is absent today, having declared no vocabulary |
+
+This is an **intentional re-freeze against a written ruling**, and it is called out here precisely
+so it cannot happen quietly. That oracle exists to catch *unintended* vocabulary drift; editing it
+to match a change nobody ruled on would be tuning the instrument to silence the check. Every edit
+above traces to a ruling in this document, and the implementation plan must require the ruling be
+cited in the commit that touches the literal.
 
 ## Out of scope
 
