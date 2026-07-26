@@ -104,6 +104,7 @@ FROZEN_DEFAULT_STATUS = {
     "workflow": "active",
     "workflow-run": "running",
     "workflow-step": "active",
+    "validation-report": "active",
 }
 
 FROZEN_STATUS_VALUES = {
@@ -123,11 +124,11 @@ FROZEN_STATUS_VALUES = {
     "finding": frozenset({"active", "superseded", "retired", "archived"}),
     "inquiry": frozenset({"active", "complete", "superseded", "archived"}),
     "topic": frozenset({"active", "superseded", "retired", "archived"}),
-    "observation": frozenset({"active", "superseded", "retired", "archived"}),
+    "observation": frozenset({"active", "retired", "archived"}),
     "falsification": frozenset({"draft", "active", "retired", "archived"}),
     "mechanism": frozenset({"active", "superseded", "retired", "archived"}),
     "synthesis": frozenset({"active", "superseded", "retired", "archived"}),
-    "story": frozenset({"draft", "developing", "mature"}),
+    "story": frozenset({"draft", "developing", "mature", "superseded"}),
     # `draft`/`complete` added: pure-lifecycle kinds, and a report had no way to say it
     # was FINISHED. `plan: proposed` deliberately NOT minted -- it is drift toward `draft`.
     "report": frozenset({"draft", "active", "complete", "superseded", "retired", "archived"}),
@@ -140,7 +141,7 @@ FROZEN_STATUS_VALUES = {
     # (committed/amended) is not a document lifecycle -- draft/complete stay out until the
     # lifecycle axis is split off.
     "pre-registration": frozenset(
-        {"active", "committed", "amended", "superseded", "retired"}
+        {"active", "committed", "amended", "retired"}
     ),
     "paper": frozenset({"active", "retired"}),
     "prose-source": frozenset({"active", "retired"}),
@@ -154,6 +155,9 @@ FROZEN_STATUS_VALUES = {
     "workflow": frozenset({"planned", "active", "deprecated", "retired"}),
     "workflow-run": frozenset({"running", "complete", "failed"}),
     "workflow-step": frozenset({"active", "superseded", "retired"}),
+    "validation-report": frozenset(
+        {"draft", "active", "complete", "superseded", "retired", "archived"}
+    ),
 }
 
 FROZEN_SHORTFORM = {

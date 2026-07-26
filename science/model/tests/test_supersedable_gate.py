@@ -125,3 +125,15 @@ def test_the_declared_population_is_exactly_the_ruling() -> None:
         f"declared but not in the ruling: {sorted(declared - SUPERSEDABLE_KINDS)}; "
         f"ruled but not declared: {sorted(SUPERSEDABLE_KINDS - declared)}"
     )
+
+
+def test_the_status_vocabulary_agrees_with_the_declaration() -> None:
+    # The vocabulary is a HAND-AUTHORED declaration, not generated from `supersedable` -- which is
+    # what makes this comparison non-vacuous. If `statuses` were derived, this test would be the
+    # identity function.
+    declares_status = {k.name for k in SHIPPED_KINDS if "superseded" in (k.statuses or ())}
+    supersedable = {k.name for k in SHIPPED_KINDS if k.supersedable}
+    assert declares_status == supersedable, (
+        f"declares `superseded` but is not supersedable: {sorted(declares_status - supersedable)}; "
+        f"supersedable but cannot reach the state: {sorted(supersedable - declares_status)}"
+    )

@@ -120,7 +120,7 @@ CORE_PROFILE = ProfileManifest(
             home="entities/observations",
             strategy="slug",
             default_status="active",
-            statuses=["active", "superseded", "retired", "archived"],
+            statuses=["active", "retired", "archived"],
             supersedable=False,
         ),
         EntityKind(
@@ -166,7 +166,7 @@ CORE_PROFILE = ProfileManifest(
             home="entities/stories",
             strategy="slug",
             default_status="draft",
-            statuses=["draft", "developing", "mature"],
+            statuses=["draft", "developing", "mature", "superseded"],
             supersedable=True,
         ),
         EntityKind(
@@ -212,6 +212,8 @@ CORE_PROFILE = ProfileManifest(
             entity_class=EntityClass.EPISTEMIC,
             curation_scope=CurationScope.EPISTEMIC,
             category=KindCategory.AUTHORED_CORE,
+            default_status="active",
+            statuses=["draft", "active", "complete", "superseded", "retired", "archived"],
             supersedable=True,
         ),
         EntityKind(
@@ -473,7 +475,7 @@ CORE_PROFILE = ProfileManifest(
             # are lifecycle words, they belong on the lifecycle axis once `status` is
             # split, and adding them now would deepen the very collapse the split exists
             # to undo. Those files stay WARN -- that warning IS the migration signal.
-            statuses=["active", "committed", "amended", "superseded", "retired"],
+            statuses=["active", "committed", "amended", "retired"],
             supersedable=False,
         ),
         EntityKind(
