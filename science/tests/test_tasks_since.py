@@ -7,7 +7,7 @@ from pathlib import Path
 
 import pytest
 
-from science_tool.tasks import list_tasks
+from science_tool.tasks import list_tasks, parse_tasks, render_task_file, render_tasks
 
 
 def _write(path: Path, content: str) -> None:
@@ -109,14 +109,25 @@ in the missing-completed stderr note.
 
 def _setup(tmp_path: Path) -> Path:
     tasks_dir = tmp_path / "tasks"
-    _write(tasks_dir / "active.md", ACTIVE_MD.format(today=TODAY.isoformat()))
+    fixture_path = tmp_path / "active-fixture.md"
+    _write(fixture_path, ACTIVE_MD.format(today=TODAY.isoformat()))
+    fixture_tasks = parse_tasks(fixture_path)
+    active_dir = tasks_dir / "active"
+    for task in fixture_tasks:
+        if task.status not in {"done", "retired"}:
+            _write(active_dir / f"{task.id}.md", render_task_file(task))
+
     before = date(BOUNDARY_YEAR, BOUNDARY_MONTH, 14).isoformat()
     after = date(BOUNDARY_YEAR, BOUNDARY_MONTH, 20).isoformat()
     _write(
         tasks_dir / "done" / f"{BOUNDARY_MONTH_STR}.md",
         BOUNDARY_ARCHIVE_MD.format(before=before, since=SINCE.isoformat(), after=after),
     )
-    _write(tasks_dir / "done" / f"{CURRENT_MONTH_STR}.md", CURRENT_ARCHIVE_MD)
+    retired = [task for task in fixture_tasks if task.status == "retired"]
+    _write(
+        tasks_dir / "done" / f"{CURRENT_MONTH_STR}.md",
+        render_tasks(retired) + CURRENT_ARCHIVE_MD,
+    )
     return tasks_dir
 
 

@@ -756,7 +756,7 @@ def tasks_list(
         # (fb-2026-05-01-006).
         from science_tool.tasks import _read_active
 
-        active_total = len(_read_active(DEFAULT_TASKS_DIR))
+        active_total = len(_read_active(DEFAULT_TASKS_DIR, require_split=False))
         applied_filters: dict[str, object] = {}
         if priority is not None:
             applied_filters["priority"] = priority

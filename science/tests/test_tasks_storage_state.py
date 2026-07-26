@@ -183,6 +183,49 @@ def test_list_gates_malformed_legacy_store_before_parsing_it(
     assert _LEGACY_MESSAGE in result.output
 
 
+@pytest.mark.parametrize("output_format", ["table", "json"])
+def test_list_since_gates_legacy_store_before_reading_ledgers(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    output_format: str,
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    tasks_dir = Path("tasks")
+    _write_legacy(tasks_dir)
+    today = date.today()
+    done = tasks_dir / "done" / f"{today:%Y-%m}.md"
+    done.parent.mkdir()
+    done.write_text(
+        "## [t002] Done task\n"
+        "- priority: P1\n"
+        "- status: done\n"
+        "- aspects: []\n"
+        f"- created: {today.isoformat()}\n"
+        f"- completed: {today.isoformat()}\n"
+        "\n"
+        "Done details.\n",
+        encoding="utf-8",
+    )
+
+    result = CliRunner().invoke(
+        main,
+        [
+            "tasks",
+            "list",
+            "--status",
+            "done",
+            "--since",
+            today.isoformat(),
+            "--format",
+            output_format,
+        ],
+    )
+
+    assert result.exit_code != 0
+    assert _LEGACY_MESSAGE in result.output
+    assert "Done task" not in result.output
+
+
 @pytest.mark.parametrize(
     "args",
     [

@@ -1204,7 +1204,12 @@ def list_tasks(
     default (the `include_done`/default-hiding behavior below is bypassed --
     ``since`` is itself the closed-task selector).
     """
-    tasks = _read_since_candidates(tasks_dir, since) if since is not None else _read_active(tasks_dir)
+    _require_split(tasks_dir)
+    tasks = (
+        _read_since_candidates(tasks_dir, since)
+        if since is not None
+        else _read_active(tasks_dir, require_split=False)
+    )
 
     warn_invalid_statuses(tasks)
 
