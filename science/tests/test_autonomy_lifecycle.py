@@ -180,7 +180,14 @@ def test_a_denied_field_quarantines(project: Path, baseline_path: Path):
 
 
 def test_a_belief_basis_move_quarantines(project: Path, baseline_path: Path):
-    """The authoritative layer: this must fire even though the path gate would too."""
+    """The authoritative layer: this must fire even though the path gate would too.
+
+    Weakening `strength` moves the basis -- one `('units',)` delta on `proposition:p1`. It
+    does NOT move the aggregated ordinal magnitude, which stays `fragile`; this test
+    simply never measures that.
+    `test_a_basis_move_that_leaves_the_magnitude_UNCHANGED_still_quarantines` is where the
+    magnitude is measured and pinned.
+    """
     baseline = _start(project, baseline_path)
     line = project / "entities" / "evidence-lines" / "e1.md"
     line.write_text(line.read_text(encoding="utf-8").replace("strength: strong", "strength: weak"), encoding="utf-8")
@@ -227,13 +234,23 @@ def test_a_basis_move_that_leaves_the_magnitude_UNCHANGED_still_quarantines(
 ):
     """Design test 1, and the reason the basis is the observable rather than the verdict.
 
-    Renaming an evidence line changes `EvidenceUnit.line_uri` -- the first field of the
-    unit, so the first thing `unit_key` serializes -- while leaving every belief-relevant
-    attribute identical. The aggregated ordinal magnitude is therefore unchanged. A guard
+    Renaming the evidence line changes `EvidenceUnit.line_uri` -- the unit's identity, and
+    the first key `unit_key` serializes -- while leaving every belief-WEIGHTED attribute
+    (stance, strength, source, role) identical. The aggregated ordinal magnitude of the
+    surviving `proposition:p1` is therefore unchanged: `fragile` before and after. A guard
     watching the verdict sees nothing here; a guard watching the inputs must not.
 
-    The magnitude equality is ASSERTED, not assumed. Without it this test degrades into
-    another copy of `test_a_belief_basis_move_quarantines` the moment the fixture changes.
+    The mutation is broader than that one unit, and the assertions have to account for it.
+    The rename also DROPS 8 entities from the basis -- the evidence line itself plus 7
+    derived `bears-on-edge:*` entities -- so 8 of the 9 deltas are `('removed',)` and only
+    ONE is the `('units',)` delta this test exists to pin. A bare `assert outcome.deltas`
+    would pass on the removals alone, so the `units` delta is asserted by name.
+
+    The magnitude equality is MEASURED and asserted, not assumed -- and that, not any
+    contrast with `test_a_belief_basis_move_quarantines`, is what makes this test
+    load-bearing. In this fixture that sibling's `strength: strong -> weak` also leaves
+    `proposition:p1` at `fragile`, so it happens to be magnitude-preserving too; it just
+    never checks.
     """
     before = _magnitudes(project)
     baseline = _start(project, baseline_path)
@@ -258,12 +275,19 @@ def test_a_basis_move_that_leaves_the_magnitude_UNCHANGED_still_quarantines(
     shared = before.keys() & after.keys()
     assert shared, "the rename removed every entity; there is nothing left to compare"
     assert {k: after[k] for k in shared} == {k: before[k] for k in shared}, (
-        "the mutation must NOT move the ordinal verdict -- otherwise this test is just "
-        "another basis-move test and design test 1 is undischarged"
+        "the mutation must NOT move the ordinal verdict -- if it does, this test no longer "
+        "shows the basis moving where the verdict does not, and design test 1 is undischarged"
     )
 
     assert outcome.disposition is RunDisposition.QUARANTINED, outcome.reason
-    assert outcome.deltas
+    # The SPECIFIC delta, not the truthiness of the list: 8 of the 9 deltas here are
+    # `('removed',)` rows from entities the rename dropped, so a bare `assert
+    # outcome.deltas` would still hold if unit-key sensitivity regressed away entirely --
+    # which is the one thing this test exists to pin.
+    assert any(
+        delta.entity_id == "proposition:p1" and "units" in delta.changed
+        for delta in outcome.deltas
+    ), outcome.deltas
 
 
 def test_an_unrebuilt_graph_still_sees_the_change(project: Path, baseline_path: Path):
@@ -341,7 +365,9 @@ def test_a_dirty_judging_toolkit_is_unwired(project: Path, baseline_path: Path, 
 
     outcome = _finish(project, baseline_path)
     assert outcome.disposition is RunDisposition.UNWIRED
-    assert "uncommitted" in outcome.reason
+    # Names step 2, not merely "uncommitted": the step-3 repository-state message says
+    # that word too, so the looser assertion would pass on the wrong refusal.
+    assert "the judging toolkit" in outcome.reason
 
 
 def test_an_uncommitted_denied_edit_is_unwired_not_clean(project: Path, baseline_path: Path):
@@ -359,7 +385,9 @@ def test_an_uncommitted_denied_edit_is_unwired_not_clean(project: Path, baseline
 
     outcome = _finish(project, baseline_path)
     assert outcome.disposition is RunDisposition.UNWIRED, outcome.reason
-    assert "uncommitted" in outcome.reason
+    # Names step 3, not merely "uncommitted": the step-2 toolkit message says that word
+    # too, and this test is about the tree being judged, not the toolkit judging it.
+    assert "the working tree is not commit" in outcome.reason
 
 
 def test_an_untracked_file_is_unwired_not_clean(project: Path, baseline_path: Path):
