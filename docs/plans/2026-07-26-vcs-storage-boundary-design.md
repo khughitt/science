@@ -209,10 +209,25 @@ is mechanically a `payload` root, and silently accepting it would leave two
 spellings of one meaning — the sort of ambiguity this design exists to remove.
 Omitting `tracked:` entirely on a `manifest` root is the same error.
 
-`unmanaged_allow` entries are matched against `.gitignore` **pattern text**, not
-against paths: an entry silences the rule whose text it equals. Equality rather
-than glob matching keeps the allowlist auditable — an entry names exactly one
-rule it excuses, so it cannot quietly widen as the ignore file grows.
+`unmanaged_allow` entries are **source-aware**. Pattern text alone cannot
+identify a rule: `build/` may appear in the root `.gitignore` and in
+`inc/shiny/.gitignore` with entirely different scopes, and a text-only entry
+would silence both. Each entry therefore names the file it excuses a rule in:
+
+```yaml
+boundary:
+  unmanaged_allow:
+    - ".venv/"                                  # shorthand: source is the root
+    - {source: "inc/shiny/.gitignore", pattern: "node_modules/"}
+```
+
+A bare string is shorthand for `{source: ".gitignore", pattern: <string>}`,
+which covers the common case and keeps the shipped defaults terse; every default
+entry is root-scoped. Matching is `(source, pattern)` equality — not glob — so
+an entry excuses exactly one rule in exactly one file and cannot quietly widen
+as either grows. A `source` naming a file that does not exist, or that is not in
+the governed universe below, is an **error**, so the allowlist cannot rot
+silently into a set of no-ops.
 
 There is deliberately **no `derived` class**. A "regenerable output" root and a
 "raw payload" root differ semantically but are mechanically identical — both are
@@ -283,6 +298,37 @@ All six are mechanical. No heuristic participates in enforcement.
 | `boundary.unanchored-pattern` | all projects | WARN | bare directory-name pattern with no leading `/`, in the unmanaged region |
 
 Two universal checks, four declaration-derived; four ERROR, two WARN.
+
+#### Source universe
+
+The six checks split into two kinds that must read different sources, and
+conflating them is what made the allowlist ambiguous in the first place.
+
+**Rule-text checks** — `declaration-conflict`, `ignored-undeclared`,
+`unanchored-pattern` — inspect pattern text, and are scoped to **tracked,
+in-worktree `.gitignore` files**: the root file's unmanaged region plus any
+nested `.gitignore`. This is the project's shareable, version-controlled
+declaration surface, and it is exactly the set `unmanaged_allow` may name.
+
+Explicitly **outside** that universe:
+
+- `.git/info/exclude` — per-clone and untracked, so a finding against it could
+  not be fixed in the repository or seen by anyone else
+- `core.excludesFile` — machine-wide, and editing it affects every repository on
+  that machine, which is not a decision a project may make
+- a nested `.gitignore` that is itself ignored (one inside a `payload` root, for
+  instance) — untracked, therefore not shareable, therefore not governed
+
+**Effect checks** — `tracked-ignored` and `unreachable-tracked` — use git's
+**full effective resolution**, including `.git/info/exclude` and
+`core.excludesFile`, because they ask what actually happened rather than what
+was declared. A machine-local rule that causes a real defect must still surface;
+MM30's global bare `archive` is precisely that case.
+
+The principle: **govern what is shareable, diagnose whatever actually bites.**
+An effect check may therefore report a rule that no rule-text check governs and
+that science will never rewrite — so its message must name the source file and
+line, since remediation is the reader's decision and may lie outside the repo.
 
 Generated patterns are anchored by construction, so `unanchored-pattern` only
 ever inspects the hand-written region and any nested `.gitignore`.
@@ -506,6 +552,12 @@ Required, or the declaration becomes a fourth opinion rather than the authority:
 - `tracked:` and `unmanaged_allow` grammar: newline, control character, absolute
   path, `..`, leading `!`, leading `#`, trailing `/`, dangling escape, duplicate,
   and empty/omitted `tracked:` on a `manifest` root each raise.
+- Allowlist source-scoping: identical pattern text in the root and in a nested
+  `.gitignore` produces two findings; a root-scoped allow entry silences only
+  the root one. A `source` outside the governed universe raises.
+- Source universe: a rule in `.git/info/exclude` or `core.excludesFile` produces
+  no rule-text finding, but a defect it causes is still reported by
+  `tracked-ignored` with its source file and line.
 - `--verify-current-tree` restores the original `.gitignore` on the failure
   path, on the success path, and on exception; and refuses to run against a
   dirty `.gitignore`.
