@@ -121,6 +121,7 @@ BUDGETS: dict[str, CommandBudget] = {
     "explore-ideas apply": CommandBudget(max_chars=30_000, shape=PayloadShape.REPORT),
     "explore-ideas gaps": CommandBudget(max_chars=30_000, shape=PayloadShape.REPORT),
     "explore-ideas resolve-anchors": CommandBudget(max_chars=30_000, shape=PayloadShape.REPORT),
+    "explore-ideas seed-coverage": CommandBudget(max_chars=30_000, shape=PayloadShape.REPORT),
     "dag audit": CommandBudget(max_chars=30_000, shape=PayloadShape.REPORT),
     "dag validate": CommandBudget(max_chars=30_000, shape=PayloadShape.REPORT),
     "inquiry show": CommandBudget(max_chars=30_000, shape=PayloadShape.REPORT),
