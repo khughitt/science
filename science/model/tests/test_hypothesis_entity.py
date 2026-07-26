@@ -345,11 +345,12 @@ def test_the_schema_is_at_least_as_strict_as_the_projection(generation: int, fie
 def test_every_value_the_schema_ADMITS_SURVIVES_the_projection(generation: int, field: str) -> None:
     """D3 point 4, half three — the half that "the model accepted it" cannot see.
 
-    Acceptance and preservation are DIFFERENT properties, and a NESTED `extra="forbid"` submodel is
-    exactly the gap between them: the outer field is declared, the model accepts the object, and
-    `model_dump()` loses the inner keys the submodel did not declare. `rival_model_packet` sat in
-    that gap -- schema admits the four single-rival keys, Pydantic accepts the object, four
-    authored values gone. Every test in the earlier draft passed.
+    Acceptance and preservation are DIFFERENT properties, and a NESTED submodel left at pydantic's
+    default `extra="ignore"` is exactly the gap between them: the outer field is declared, the model
+    accepts the object, and `model_dump()` silently loses the inner keys the submodel did not
+    declare -- `extra="forbid"` would instead REJECT the object outright, a different test's failure
+    mode. `rival_model_packet` sat in that gap -- schema admits the four single-rival keys, Pydantic
+    accepts the object, four authored values gone. Every test in the earlier draft passed.
 
     A field that validates on disk and evaporates on load is not a contract; it is a **trap**, and it
     is precisely `phase`'s failure mode reappearing one nesting level down. So the claim is not "the
