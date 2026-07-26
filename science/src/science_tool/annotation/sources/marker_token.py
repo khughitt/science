@@ -55,7 +55,11 @@ class MarkerTokenSource:
             if hit.in_documentation:
                 continue
             atype, body_msg = TOKEN_TYPE_MAP[hit.token]
-            literal = f"[{hit.token}]"
+            # The exact matched text, never `f"[{token}]"`: a `[TOKEN: reason]`
+            # marker's reconstructed literal is absent from the source line, so
+            # `sentence_range_containing_literal` returned None and the
+            # annotation was dropped without a word (fb-2026-07-26-001).
+            literal = hit.literal
             rng = sentence_range_containing_literal(text, hit.line, literal)
             if rng is None:
                 continue

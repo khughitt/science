@@ -68,3 +68,24 @@ def test_token_type_map_covers_all_four_canonical_tokens() -> None:
     assert set(TOKEN_TYPE_MAP) == {
         "UNVERIFIED", "MISSING_CITATION", "SPECULATION", "INACCESSIBLE",
     }
+
+
+def test_scan_lifts_a_reason_payload_marker(tmp_path: Path) -> None:
+    """A `[TOKEN: reason]` marker reaches the annotation layer.
+
+    fb-2026-07-26-001: the source rebuilt the literal as `f"[{token}]"`, which is
+    absent from a payload-form line, so `sentence_range_containing_literal`
+    returned None and the annotation was dropped with no diagnostic — the marker
+    was invisible to the lifting pipeline as well as to the tally.
+    """
+    doc = tmp_path / "x.md"
+    doc.write_text("The cohort size is 412 [UNVERIFIED: not in the abstract].\n", encoding="utf-8")
+
+    rows = list(MarkerTokenSource().scan(doc))
+
+    assert len(rows) == 1
+    row = rows[0]
+    assert row.annotation_type == "unverified"
+    assert row.lifted_from == "[UNVERIFIED: not in the abstract]"
+    assert row.match_text == "[UNVERIFIED: not in the abstract]"
+    assert row.motivation == Motivation.CLASSIFYING

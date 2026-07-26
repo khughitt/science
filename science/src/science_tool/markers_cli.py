@@ -127,7 +127,10 @@ def _hit_is_lifted(hit, sidecar) -> bool:
         resolve_selector,
     )
 
-    literal = f"[{hit.token}]"
+    # `hit.literal` is the exact matched text, not a reconstruction: a marker
+    # carrying a `: reason` payload has a literal the old `f"[{token}]"` form
+    # could never produce, and the mismatch silently failed to match its lift.
+    literal = hit.literal
     try:
         source_text = hit.file.read_text(encoding="utf-8")
     except (OSError, UnicodeDecodeError):
