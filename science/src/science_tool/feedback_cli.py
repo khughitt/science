@@ -13,6 +13,10 @@ _FB_CATEGORIES = VALID_CATEGORIES
 _FB_STATUSES = VALID_STATUSES
 _FB_CONCERNS = VALID_CONCERNS
 
+# `find_similar_open` scans the whole open backlog; without a cap, a project with many
+# open entries would turn this O(1) create confirmation into an O(backlog) one.
+_SIMILAR_NEIGHBORS_DISPLAY_LIMIT = 5
+
 
 @click.group("feedback")
 def feedback_group() -> None:
@@ -128,8 +132,12 @@ def feedback_add(
     )
     if neighbors:
         click.echo("Possible similar open entries (not merged):")
-        for neighbor in neighbors:
+        shown = neighbors[:_SIMILAR_NEIGHBORS_DISPLAY_LIMIT]
+        for neighbor in shown:
             click.echo(f"  - {neighbor.id} [{neighbor.target}] {neighbor.summary}")
+        remaining = len(neighbors) - len(shown)
+        if remaining > 0:
+            click.echo(f"  ... and {remaining} more; run `science feedback report` to review")
         click.echo("Merge with: science feedback add ... --merge-into <id>  (or link via feedback update --related)")
 
 

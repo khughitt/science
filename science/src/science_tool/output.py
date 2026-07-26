@@ -16,6 +16,42 @@ OUTPUT_FORMATS: tuple[str, str] = ("table", "json")
 
 RowT = TypeVar("RowT")
 
+# `science_tool.entities._validate_prospective_write(s)` prefixes any baseline-corpus
+# audit failure it surfaces as a warning with this string, to distinguish it from a
+# warning about the write itself.
+PREEXISTING_AUDIT_PREFIX = "pre-existing audit failure:"
+
+
+def summarize_preexisting_warnings(
+    warnings: Sequence[str], *, show_preexisting: bool
+) -> tuple[list[str], str | None]:
+    """Split WARNINGS into what a write command should print, plus an optional note.
+
+    `_validate_prospective_write(s)` warnings mix two things a write command must not
+    treat alike: the write's OWN new findings, and pre-existing whole-corpus audit
+    failures it happens to surface as a side effect. The latter can grow with total
+    project size, so printing them in full would turn an O(1) write confirmation into
+    an O(project) one (fb-2026-06-28-015, generalized past `dataset verify-access` to
+    every write command that surfaces these warnings).
+
+    Returns `(to_print, note)`. `to_print` always keeps the write's own warnings, in
+    their original order. When `show_preexisting` (or there are none to collapse), the
+    pre-existing ones are included too and `note` is `None`. Otherwise the pre-existing
+    warnings are dropped from `to_print` and `note` names how many were omitted and how
+    to see them -- never truncated, always a path back to the full set.
+    """
+    if show_preexisting:
+        return list(warnings), None
+    preexisting_count = sum(1 for warning in warnings if warning.startswith(PREEXISTING_AUDIT_PREFIX))
+    if not preexisting_count:
+        return list(warnings), None
+    kept = [warning for warning in warnings if not warning.startswith(PREEXISTING_AUDIT_PREFIX)]
+    note = (
+        f"note: {preexisting_count} pre-existing project audit warning(s) unrelated to this "
+        "write (run `science validate`, or --show-preexisting to list here)"
+    )
+    return kept, note
+
 
 def emit(
     *,

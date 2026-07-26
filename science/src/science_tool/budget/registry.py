@@ -16,6 +16,12 @@ to be small today -- ``tasks archive`` emits one row per archivable task
 exempt would assert something false. Every non-budgeted command therefore carries a
 justification string either way: ``EXEMPTIONS`` says why it cannot grow, ``DEFERRED``
 says what makes it grow.
+
+A command's OWN output growing with project size is not the only way it can leak: seven
+write/action commands were reclassified ``DEFERRED`` -> ``EXEMPTIONS`` once a *side
+channel* -- whole-corpus pre-existing audit warnings, or an uncapped near-duplicate scan
+-- was bounded instead (slice 1b-3 write-audit-leak fix), so growability has to be
+checked through every channel a command echoes, not just its primary payload.
 """
 
 from __future__ import annotations
@@ -228,6 +234,26 @@ EXEMPTIONS.update({
     "verdict parse": "parses exactly ONE named file argument into a single ParseResult document",
 })
 
+# Reclassified from DEFERRED by the 2026-07-26 slice 1b-3 write-audit-leak fix
+# (docs/plans/2026-07-25-context-budget-1b3-audit.md, Write-audit-leak section): these
+# write/action commands were growable only through a side channel -- pre-existing
+# whole-corpus project-audit warnings (`_validate_prospective_write(s)`) or, for
+# `feedback add`, an uncapped near-duplicate scan of the whole open backlog -- not
+# through their own confirmation output. `emit_entity_warnings`/
+# `summarize_preexisting_warnings` (science_tool.output) now summarize the former by
+# default (`--show-preexisting` lists it); `feedback add` caps the latter to the top
+# `_SIMILAR_NEIGHBORS_DISPLAY_LIMIT` neighbors plus a count. Both make the classification
+# true rather than assumed.
+EXEMPTIONS.update({
+    "dataset add": "O(1) write confirmation; pre-existing audit warnings summarized by default (--show-preexisting to list)",
+    "dataset verify-access": "O(1) write confirmation; pre-existing audit warnings summarized by default (--show-preexisting to list)",
+    "entities import": "O(1) write confirmation; pre-existing audit warnings summarized by default (--show-preexisting to list)",
+    "entity create": "O(1) write confirmation; pre-existing audit warnings summarized by default (--show-preexisting to list)",
+    "entity edit": "O(1) write confirmation; pre-existing audit warnings summarized by default (--show-preexisting to list)",
+    "entity note": "O(1) write confirmation; pre-existing audit warnings summarized by default (--show-preexisting to list)",
+    "feedback add": "O(1) create confirmation; near-duplicate scan capped to top-K + count",
+})
+
 # Retired commands are exempt by construction: cli_retirement.RETIREMENTS owns which
 # commands are retired, and a fixed error string cannot grow with project size. Listing
 # them here as well would make this a second place the retired set could be edited.
@@ -346,13 +372,11 @@ DEFERRED.update(
     {
         path: DeferredCommand("one output member per dataset, consumer, capability, link, resource, run, or warning", "1b")
         for path in (
-            "dataset add",
             "dataset capability-pairs",
             "dataset consumers",
             "dataset identity resolve",
             "dataset list",
             "dataset stochasticity",
-            "dataset verify-access",
         )
     }
 )
@@ -384,7 +408,6 @@ DEFERRED.update(
             "entities consolidate apply",
             "entities consolidate scaffold",
             "entities generate-decisions",
-            "entities import",
             "entities mark-superseded",
             "entities unarchive",
         )
@@ -394,13 +417,10 @@ DEFERRED.update(
     {
         path: DeferredCommand("one output member per entity, field, relation, warning, migration action, or body element", "1b")
         for path in (
-            "entity create",
-            "entity edit",
             "entity field-inventory",
             "entity migrate-hypothesis",
             "entity migrate-specs",
             "entity neighbors",
-            "entity note",
             "entity remove",
             "entity status-inventory",
         )
@@ -416,7 +436,6 @@ DEFERRED.update(
     {
         path: DeferredCommand("one output member per feedback entry, target, neighbor, cluster, or occurrence", "1b")
         for path in (
-            "feedback add",
             "feedback report",
             "feedback show",
             "feedback triage",

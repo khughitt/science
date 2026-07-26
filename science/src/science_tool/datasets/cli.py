@@ -8,7 +8,7 @@ from typing import cast
 import click
 
 from science_tool.datasets_identity import identity_group as dataset_identity_group
-from science_tool.output import OUTPUT_FORMATS, emit, unwrap_instrument
+from science_tool.output import OUTPUT_FORMATS, emit, summarize_preexisting_warnings, unwrap_instrument
 
 
 def _project_root_from_env() -> Path:
@@ -399,6 +399,13 @@ def dataset_capability_pairs(project_root: Path | None, commons_root: Path | Non
 @click.option("--gene-namespace", default=None, help="Gene identifier namespace to declare.")
 @click.option("--protein-namespace", default=None, help="Protein identifier namespace to declare.")
 @click.option(
+    "--show-preexisting",
+    "show_preexisting",
+    is_flag=True,
+    default=False,
+    help="List pre-existing project audit failures individually instead of summarizing them",
+)
+@click.option(
     "--project-root",
     default=None,
     type=click.Path(path_type=Path, file_okay=False, dir_okay=True),
@@ -419,6 +426,7 @@ def dataset_add(
     assembly: str | None,
     gene_namespace: str | None,
     protein_namespace: str | None,
+    show_preexisting: bool,
     project_root: Path | None,
 ) -> None:
     """Author a candidate external dataset entity under entities/datasets/."""
@@ -454,8 +462,11 @@ def dataset_add(
     except (EntityCommandError, IdentityAuthoringError) as exc:
         click.echo(str(exc), err=True)
         raise click.exceptions.Exit(1)
-    for w in warnings:
+    to_print, note = summarize_preexisting_warnings(warnings, show_preexisting=show_preexisting)
+    for w in to_print:
         click.echo(f"warning: {w}", err=True)
+    if note is not None:
+        click.echo(note, err=True)
     click.echo(f"created {entity_id} -> {dest.relative_to(root)}")
 
 
@@ -559,17 +570,11 @@ def dataset_verify_access(
     # pre-existing, unrelated project audit warnings (fb-2026-06-28-015).
     click.echo(f"{entity_id} -> access={state} (weight {weight:g}), runtime={runtime_state}")
 
-    preexisting = [w for w in warnings if w.startswith("pre-existing audit failure:")]
-    for w in warnings:
-        if w in preexisting and not show_preexisting:
-            continue
+    to_print, preexisting_note = summarize_preexisting_warnings(warnings, show_preexisting=show_preexisting)
+    for w in to_print:
         click.echo(f"warning: {w}", err=True)
-    if preexisting and not show_preexisting:
-        click.echo(
-            f"note: {len(preexisting)} pre-existing project audit warning(s) unrelated to this "
-            "dataset (run `science validate`, or --show-preexisting to list here)",
-            err=True,
-        )
+    if preexisting_note is not None:
+        click.echo(preexisting_note, err=True)
 
 
 @dataset_group.command("link")

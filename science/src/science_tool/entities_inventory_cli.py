@@ -3,13 +3,14 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+from typing import Any
 
 import click
 
 from science_tool.entities_inventory import build_inventory
 from science_tool.entity_kinds import register_local_kind
 from science_tool.entity_migrations import audit_identifiers
-from science_tool.output import emit
+from science_tool.output import PREEXISTING_AUDIT_PREFIX, emit
 from science_tool.project_config import project_config_path
 
 
@@ -465,6 +466,36 @@ def entities_register_kind_command(kind: str, entity_class: str, project_path: P
     click.echo(f"{kind}: {result}")
 
 
+def _import_warning_text(item: object) -> str:
+    """Text of one warning entry: a plain string, or an AttributedWarning dump's `message`."""
+    if isinstance(item, str):
+        return item
+    if isinstance(item, dict):
+        return str(item.get("message", ""))
+    return ""
+
+
+def _bound_import_warnings(payload: dict[str, Any], *, show_preexisting: bool) -> dict[str, Any]:
+    """Cap the echoed ``warnings`` list to this import's own findings.
+
+    ``ImportPlan``/``CohortImportPlan.warnings`` mixes this import's own findings with
+    whole-corpus pre-existing audit failures surfaced by `_validate_prospective_write(s)`
+    -- printing them all would make an O(1) import preview/apply grow with project size.
+    The plan object itself (and any ``--save-plan`` file, whose bytes a later
+    ``--apply-plan`` re-hashes) is untouched; only this echoed stdout payload is bounded.
+    """
+    if show_preexisting:
+        return payload
+    warnings = payload.get("warnings")
+    if not isinstance(warnings, list):
+        return payload
+    omitted = sum(1 for item in warnings if _import_warning_text(item).startswith(PREEXISTING_AUDIT_PREFIX))
+    if not omitted:
+        return payload
+    kept = [item for item in warnings if not _import_warning_text(item).startswith(PREEXISTING_AUDIT_PREFIX)]
+    return {**payload, "warnings": kept, "preexisting_warnings_omitted": omitted}
+
+
 @entities_group.command("import")
 @click.argument(
     "sources",
@@ -501,6 +532,13 @@ def entities_register_kind_command(kind: str, entity_class: str, project_path: P
     help="Apply a plan saved by an earlier preview. Mutually exclusive with SOURCE.",
 )
 @click.option("--expected-plan-sha256", default=None, help="Required with --apply-plan: SHA-256 of the raw plan bytes.")
+@click.option(
+    "--show-preexisting",
+    "show_preexisting",
+    is_flag=True,
+    default=False,
+    help="List pre-existing project audit failures individually instead of summarizing them",
+)
 def entities_import_command(
     sources: tuple[Path, ...],
     kind: str | None,
@@ -512,6 +550,7 @@ def entities_import_command(
     overwrite_plan: bool,
     apply_plan_path: Path | None,
     expected_plan_sha256: str | None,
+    show_preexisting: bool,
 ) -> None:
     """Import a loose markdown document as a canonical entity.
 
@@ -593,7 +632,11 @@ def entities_import_command(
                 )
         except (EntityImportError, EntityCommandError, ReferenceDriftError) as exc:
             raise click.ClickException(str(exc)) from exc
-        emit(output_format="json", payload=payload, render_text=lambda: None)
+        emit(
+            output_format="json",
+            payload=_bound_import_warnings(payload, show_preexisting=show_preexisting),
+            render_text=lambda: None,
+        )
         return
 
     if not sources or kind is None:
@@ -656,8 +699,15 @@ def entities_import_command(
             ) from exc
         emit(
             output_format="json",
-            payload={**plan.model_dump(), "plan_sha256": plan_sha256(payload_bytes)},
+            payload=_bound_import_warnings(
+                {**plan.model_dump(), "plan_sha256": plan_sha256(payload_bytes)},
+                show_preexisting=show_preexisting,
+            ),
             render_text=lambda: None,
         )
         return
-    emit(output_format="json", payload=plan.model_dump(), render_text=lambda: None)
+    emit(
+        output_format="json",
+        payload=_bound_import_warnings(plan.model_dump(), show_preexisting=show_preexisting),
+        render_text=lambda: None,
+    )

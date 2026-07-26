@@ -23,8 +23,8 @@ from science_tool.cli import main
 
 EXPECTED_CLASSIFICATION_COUNTS = {
     "budgeted": 68,
-    "exempt": 111,
-    "deferred": 100,
+    "exempt": 118,
+    "deferred": 93,
 }
 
 
@@ -118,8 +118,16 @@ def test_classification_partition_has_the_audited_cardinality() -> None:
     dedicated follow-up. Batch W5 then wired the final DOCUMENT command, `inquiry
     export-pgmpy`, routing its generated script through a `BoundedSink` that refuses
     past budget on stdout and writes the complete script to `--output`; `inquiry
-    export-chirho` was left deferred (unwired). The live partition is therefore
-    68/111/100 = 279.
+    export-chirho` was left deferred (unwired). The write-audit-leak fix then closed
+    the side channel `feedback add` was dropped from W3 for, and generalized the
+    `dataset verify-access` precedent (fb-2026-06-28-015) to the rest of the entity/
+    dataset write surface: `emit_entity_warnings`/`summarize_preexisting_warnings`
+    (science_tool.output) now summarize -- rather than dump -- pre-existing whole-
+    corpus audit warnings by default on `entity create/edit/note`, `entities import`,
+    and `dataset add/verify-access` (each gaining `--show-preexisting` to list them),
+    while `feedback add` caps its near-duplicate scan to the top
+    `_SIMILAR_NEIGHBORS_DISPLAY_LIMIT` entries plus a count; this moved all 7 from
+    deferred to exempt. The live partition is therefore 68/118/93 = 279.
     """
     actual = {
         "budgeted": len(BUDGETS),

@@ -43,6 +43,13 @@ def entity_group() -> None:
 @click.option("--with", "with_sections", multiple=True, help="Include optional template section key (repeatable)")
 @click.option("--without", "without_sections", multiple=True, help="Drop required template section key (repeatable)")
 @click.option("--no-hints", is_flag=True, help="Strip authored HTML hint comments from the rendered shell")
+@click.option(
+    "--show-preexisting",
+    "show_preexisting",
+    is_flag=True,
+    default=False,
+    help="List pre-existing project audit failures individually instead of summarizing them",
+)
 def entity_create(
     kind: str,
     title: str,
@@ -55,6 +62,7 @@ def entity_create(
     with_sections: tuple[str, ...],
     without_sections: tuple[str, ...],
     no_hints: bool,
+    show_preexisting: bool,
 ) -> None:
     """Create a source-authored entity markdown file."""
 
@@ -76,7 +84,7 @@ def entity_create(
     except EntityCommandError as exc:
         raise click.ClickException(str(exc)) from exc
     click.echo(f"Created {result.entity_id} at {result.path.relative_to(Path.cwd())}")
-    emit_entity_warnings(result.warnings)
+    emit_entity_warnings(result.warnings, show_preexisting=show_preexisting)
 
 
 @entity_group.command("show")
@@ -121,6 +129,13 @@ def entity_show(ref: str, output_format: str) -> None:
 @click.option("--related", "related_refs", multiple=True, help="Related entity reference (repeatable)")
 @click.option("--source-ref", "source_refs", multiple=True, help="Source reference (repeatable)")
 @click.option("--updated")
+@click.option(
+    "--show-preexisting",
+    "show_preexisting",
+    is_flag=True,
+    default=False,
+    help="List pre-existing project audit failures individually instead of summarizing them",
+)
 def entity_edit(
     ref: str,
     title: str | None,
@@ -131,6 +146,7 @@ def entity_edit(
     related_refs: tuple[str, ...],
     source_refs: tuple[str, ...],
     updated: str | None,
+    show_preexisting: bool,
 ) -> None:
     """Edit source-authored entity metadata.
 
@@ -155,14 +171,21 @@ def entity_edit(
     except EntityCommandError as exc:
         raise click.ClickException(str(exc)) from exc
     click.echo(f"Updated {result.entity_id} at {result.path.relative_to(Path.cwd())}")
-    emit_entity_warnings(result.warnings)
+    emit_entity_warnings(result.warnings, show_preexisting=show_preexisting)
 
 
 @entity_group.command("note")
 @click.argument("ref")
 @click.argument("note")
 @click.option("--date", "note_date")
-def entity_note(ref: str, note: str, note_date: str | None) -> None:
+@click.option(
+    "--show-preexisting",
+    "show_preexisting",
+    is_flag=True,
+    default=False,
+    help="List pre-existing project audit failures individually instead of summarizing them",
+)
+def entity_note(ref: str, note: str, note_date: str | None, show_preexisting: bool) -> None:
     """Append a dated note to a source-authored entity."""
 
     from datetime import date as _date
@@ -174,7 +197,7 @@ def entity_note(ref: str, note: str, note_date: str | None) -> None:
         raise click.ClickException(str(exc)) from exc
     display_date = (date_value or _date.today()).isoformat()
     click.echo(f"Added note to {result.entity_id} ({display_date})")
-    emit_entity_warnings(result.warnings)
+    emit_entity_warnings(result.warnings, show_preexisting=show_preexisting)
 
 
 @entity_group.command("remove")

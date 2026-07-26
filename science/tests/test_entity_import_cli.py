@@ -541,3 +541,99 @@ def test_cli_single_import_preserves_explicit_slug(tmp_path: Path) -> None:
     result = _apply(root, saved)
     assert result.exit_code == 0, result.output
     assert (root / "entities/plans/0001-custom-slug.md").exists()
+
+
+def _monkeypatch_many_preexisting_audit_failures(monkeypatch: pytest.MonkeyPatch, count: int) -> None:
+    """Same fixed baseline-failure fake used across the write-audit-leak tests
+
+    (`test_entities_cli.py`, `test_entities.py`): every prospective-write audit
+    reports `count` unrelated pre-existing failures, proving `entities import`
+    stays O(1) regardless of how large the project's unrelated failure set is.
+    """
+    from science_tool.instruments import ValidationVerdict
+
+    rows = [
+        {
+            "check": "unresolved_reference",
+            "status": "fail",
+            "source": f"question:{i:04d}-existing",
+            "field": "related",
+            "target": f"hypothesis:{i:04d}-missing",
+            "details": "pre-existing missing hypothesis",
+        }
+        for i in range(count)
+    ]
+
+    def fake_audit_project_sources(sources: object) -> ValidationVerdict[dict[str, str]]:
+        return ValidationVerdict.from_has_failures(rows, True)
+
+    monkeypatch.setattr("science_tool.entities.audit_project_sources", fake_audit_project_sources)
+
+
+def test_import_preview_summarizes_many_preexisting_warnings(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    root = _project(tmp_path)
+    source = root / "doc/plans/x.md"
+    _monkeypatch_many_preexisting_audit_failures(monkeypatch, 400)
+
+    result = CliRunner().invoke(
+        main, ["entities", "import", str(source), "--kind", "plan", "--project-root", str(root)]
+    )
+
+    assert result.exit_code == 0, result.output
+    assert "pre-existing audit failure:" not in result.output
+    payload = json.loads(result.output)
+    assert payload["warnings"] == []
+    assert payload["preexisting_warnings_omitted"] == 400
+
+
+def test_import_preview_show_preexisting_lists_them(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    root = _project(tmp_path)
+    source = root / "doc/plans/x.md"
+    _monkeypatch_many_preexisting_audit_failures(monkeypatch, 5)
+
+    result = CliRunner().invoke(
+        main,
+        ["entities", "import", str(source), "--kind", "plan", "--project-root", str(root), "--show-preexisting"],
+    )
+
+    assert result.exit_code == 0, result.output
+    payload = json.loads(result.output)
+    assert len(payload["warnings"]) == 5
+    assert "preexisting_warnings_omitted" not in payload
+
+
+def test_import_save_plan_file_keeps_full_fidelity_while_stdout_is_bounded(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The persisted --save-plan file must NOT be summarized: --apply-plan re-hashes it."""
+    root = _project(tmp_path)
+    source = root / "doc/plans/x.md"
+    _monkeypatch_many_preexisting_audit_failures(monkeypatch, 10)
+    plan_file = root / "preview.json"
+
+    result = CliRunner().invoke(
+        main,
+        ["entities", "import", str(source), "--kind", "plan", "--project-root", str(root),
+         "--save-plan", str(plan_file)],
+    )
+
+    assert result.exit_code == 0, result.output
+    stdout_payload = json.loads(result.output)
+    assert stdout_payload["warnings"] == []
+    assert stdout_payload["preexisting_warnings_omitted"] == 10
+    saved_payload = json.loads(plan_file.read_text(encoding="utf-8"))
+    assert len(saved_payload["warnings"]) == 10
+
+
+def test_import_apply_plan_stdout_is_also_bounded(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    root = _project(tmp_path)
+    source = root / "doc/plans/x.md"
+    _monkeypatch_many_preexisting_audit_failures(monkeypatch, 30)
+    _payload, plan_file = _preview(root, source)
+
+    result = _apply(root, plan_file)
+
+    assert result.exit_code == 0, result.output
+    payload = json.loads(result.output)
+    assert payload["warnings"] == []
+    assert payload["preexisting_warnings_omitted"] == 30

@@ -281,6 +281,35 @@ class TestFeedbackNonLossyMerge:
         assert first_id
         assert "similar" in result.output.lower() or "possible" in result.output.lower()
 
+    def test_add_caps_many_near_duplicate_neighbors(self, runner: CliRunner, tmp_path, monkeypatch: pytest.MonkeyPatch):
+        """`find_similar_open` scans the whole open backlog; the CLI must cap what it
+        prints so a project with a large backlog stays an O(1) create confirmation
+        (slice 1b-3 write-audit-leak fix)."""
+        from science_tool.feedback import FeedbackEntry
+
+        neighbors = [
+            FeedbackEntry(
+                id=f"fb-2026-01-{i:02d}-001",
+                target="command:next-steps",
+                summary=f"Neighbor summary {i}",
+            )
+            for i in range(1, 13)  # 12 neighbors, well over the display cap
+        ]
+        monkeypatch.setattr("science_tool.feedback.find_similar_open", lambda *a, **k: neighbors)
+
+        env = {"SCIENCE_FEEDBACK_DIR": str(tmp_path)}
+        result = runner.invoke(
+            main,
+            ["feedback", "add", "--target", "command:next-steps", "--summary", "New entry summary"],
+            env=env,
+        )
+
+        assert result.exit_code == 0, result.output
+        shown = sum(1 for n in neighbors if n.id in result.output)
+        assert shown == 5  # _SIMILAR_NEIGHBORS_DISPLAY_LIMIT
+        assert "... and 7 more" in result.output
+        assert "feedback report" in result.output
+
 
 class TestFeedbackTargets:
     def test_targets_lists_existing_spellings(self, runner: CliRunner, tmp_path):
