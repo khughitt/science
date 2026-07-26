@@ -22,7 +22,7 @@ from science_tool.budget.registry import BUDGETS, DEFERRED, EXEMPTIONS
 from science_tool.cli import main
 
 EXPECTED_CLASSIFICATION_COUNTS = {
-    "budgeted": 68,
+    "budgeted": 69,
     "exempt": 118,
     "deferred": 95,
 }
@@ -131,7 +131,8 @@ def test_classification_partition_has_the_audited_cardinality() -> None:
 
     The autonomy supervisor then added two deferred leaves: `autonomy start` emits one
     fixed summary record, and `autonomy finish` emits one row per basis delta, gate
-    denial, and commit-mark issue. The live partition is therefore 68/118/95 = 281.
+    denial, and commit-mark issue. The task-storage migrator then adds one budgeted
+    ROWS leaf. The live partition is therefore 69/118/95 = 282.
     """
     actual = {
         "budgeted": len(BUDGETS),

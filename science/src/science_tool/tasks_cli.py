@@ -433,6 +433,236 @@ def tasks_unblock(task_id: str) -> None:
     click.echo(f"[{task.id}] unblocked → active")
 
 
+@tasks_group.command("migrate-storage")
+@click.option("--apply", "do_apply", is_flag=True, help="Apply the migration (default is dry-run).")
+@click.option("--resume", "do_resume", is_flag=True, help="Resume an interrupted migration from its journal.")
+@click.option(
+    "--tasks-dir",
+    default=DEFAULT_TASKS_DIR,
+    show_default=True,
+    type=click.Path(path_type=Path, file_okay=False, dir_okay=True),
+)
+@click.option(
+    "--format",
+    "output_format",
+    type=click.Choice(OUTPUT_FORMATS),
+    default="table",
+    show_default=True,
+)
+@click.option(
+    "--output",
+    "output_path",
+    type=click.Path(path_type=Path),
+    default=None,
+    help="Write the complete, unbudgeted migration plan to PATH.",
+)
+def tasks_migrate_storage(
+    do_apply: bool,
+    do_resume: bool,
+    tasks_dir: Path,
+    output_format: str,
+    output_path: Path | None,
+) -> None:
+    """Plan, apply, or resume the transactional split-storage migration."""
+    from contextlib import nullcontext
+    from datetime import date
+
+    from science_tool.budget.control import bounded_control_notice
+    from science_tool.budget.invocation import build_complete_via, hint_for
+    from science_tool.budget.registry import lookup
+    from science_tool.budget.sink import BoundedSink
+    from science_tool.tasks import _tasks_storage_state
+    from science_tool.tasks_migrate import (
+        MigrationPlan,
+        MigrationRefused,
+        apply_migration,
+        migration_mode_refusal,
+        plan_migration,
+        resume_migration,
+    )
+
+    if do_apply and do_resume:
+        raise click.UsageError("--apply and --resume are mutually exclusive")
+
+    if output_path is not None:
+        tasks_root = tasks_dir.resolve()
+        resolved_output = output_path.resolve()
+        protected_files = {
+            tasks_root / "active.md",
+            tasks_root / ".tasks.lock",
+            tasks_root / ".science" / "task-storage-migration.journal",
+        }
+        protected_directories = (tasks_root / "active", tasks_root / "done")
+        if resolved_output in protected_files or any(
+            resolved_output.is_relative_to(directory)
+            for directory in protected_directories
+        ):
+            raise click.UsageError(
+                "--output overlaps transaction-owned task storage; choose a path "
+                "outside active.md, active/, done/, the journal, and .tasks.lock"
+            )
+
+    sink = BoundedSink(
+        lookup("tasks migrate-storage"),
+        output_path=output_path,
+        command_path="tasks migrate-storage",
+        complete_via=build_complete_via(
+            click.get_current_context(),
+            output_hint=hint_for("tasks-migrate-storage", output_format),
+        ),
+    )
+
+    def _plan_rows(plan: MigrationPlan) -> list[dict[str, str]]:
+        return [
+            {
+                "id": entry.task.id,
+                "status": entry.task.status,
+                "destination": entry.destination.as_posix() if entry.destination is not None else "",
+                "action": entry.action,
+            }
+            for entry in plan.entries
+        ]
+
+    def _emit_rows(
+        rows: list[dict[str, str]],
+        *,
+        title: str,
+        mode: str,
+        summary: str,
+        source_count: int | None = None,
+    ) -> None:
+        emit_query_rows(
+            output_format=output_format,
+            title=title,
+            columns=[
+                ("id", "ID"),
+                ("status", "Status"),
+                ("destination", "Destination"),
+                ("action", "Action"),
+            ],
+            rows=rows,
+            meta={
+                "mode": mode,
+                "source_count": len(rows) if source_count is None else source_count,
+            },
+            sink=sink,
+        )
+        if output_format != "json":
+            sink.echo(summary)
+
+    def _flush_with_notice(row_count: int, *, noun: str) -> None:
+        sink.flush()
+        if output_path is not None:
+            click.echo(
+                bounded_control_notice(f"wrote {row_count} {noun} rows to {output_path}")
+            )
+
+    def _exit_with_refusal(exc: MigrationRefused, *, mode: str) -> None:
+        reasons = [line.strip() for line in str(exc).splitlines() if line.strip()]
+        rows = [
+            {
+                "id": "",
+                "status": "refusal",
+                "destination": "",
+                "action": reason,
+            }
+            for reason in reasons
+        ]
+        _emit_rows(
+            rows,
+            title="Task Storage Migration Refused",
+            mode=mode,
+            summary=f"Migration refused during {mode}; nothing further was written.",
+            source_count=0,
+        )
+        _flush_with_notice(len(rows), noun="migration-refusal")
+        click.get_current_context().exit(1)
+
+    if do_resume:
+        state_refusal = migration_mode_refusal(_tasks_storage_state(tasks_dir), "resume")
+        if state_refusal is not None:
+            raise click.ClickException(state_refusal)
+        try:
+            reservation = sink.reserve_output() if sink.is_file_sink else nullcontext()
+            with reservation:
+                written = resume_migration(tasks_dir)
+                rows = [
+                    {
+                        "id": "",
+                        "status": "",
+                        "destination": str(path),
+                        "action": "written",
+                    }
+                    for path in written
+                ]
+                _emit_rows(
+                    rows,
+                    title="Task Storage Migration Resume",
+                    mode="resumed",
+                    summary=(
+                        "Resumed storage migration; "
+                        f"wrote {len(written)} missing post-image(s)."
+                    ),
+                )
+                _flush_with_notice(len(rows), noun="migration-resume")
+        except MigrationRefused as exc:
+            _exit_with_refusal(exc, mode="resume")
+        return
+
+    if do_apply:
+        state_refusal = migration_mode_refusal(_tasks_storage_state(tasks_dir), "apply")
+        if state_refusal is not None:
+            raise click.ClickException(state_refusal)
+        try:
+            reservation = sink.reserve_output() if sink.is_file_sink else nullcontext()
+            with reservation:
+                plan = apply_migration(tasks_dir, today=date.today())
+                rows = _plan_rows(plan)
+                _emit_rows(
+                    rows,
+                    title="Task Storage Migration Applied",
+                    mode="applied",
+                    summary=f"Migrated {len(rows)} task(s).",
+                )
+                _flush_with_notice(len(rows), noun="migration-plan")
+        except MigrationRefused as exc:
+            _exit_with_refusal(exc, mode="apply")
+        return
+
+    plan = plan_migration(tasks_dir, today=date.today())
+    if plan.refusals:
+        rows = [
+            {
+                "id": "",
+                "status": "refusal",
+                "destination": "",
+                "action": reason,
+            }
+            for reason in plan.refusals
+        ]
+        rows.extend(_plan_rows(plan))
+        _emit_rows(
+            rows,
+            title="Task Storage Migration Refused",
+            mode="refused",
+            summary=(
+                "Mode: dry-run — migration refused; "
+                f"{len(plan.refusals)} issue(s), nothing written."
+            ),
+            source_count=len(plan.entries),
+        )
+        _flush_with_notice(len(rows), noun="migration-plan")
+        click.get_current_context().exit(1)
+    rows = _plan_rows(plan)
+    _emit_rows(
+        rows,
+        title="Task Storage Migration Plan",
+        mode="dry-run",
+        summary=f"Mode: dry-run — would migrate {len(rows)} task(s).",
+    )
+    _flush_with_notice(len(rows), noun="migration-plan")
+
+
 @tasks_group.command("archive")
 @click.option("--apply", "do_apply", is_flag=True, help="Write changes to disk (default is dry-run).")
 @click.option(

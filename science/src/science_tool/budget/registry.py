@@ -101,6 +101,7 @@ BUDGETS: dict[str, CommandBudget] = {
     "inquiry export-pgmpy": CommandBudget(max_chars=20_000, shape=PayloadShape.DOCUMENT),
     "project index": CommandBudget(max_chars=20_000, shape=PayloadShape.ROWS, max_rows=40),
     "tasks archive": CommandBudget(max_chars=20_000, shape=PayloadShape.ROWS, max_rows=40),
+    "tasks migrate-storage": CommandBudget(max_chars=20_000, shape=PayloadShape.ROWS, max_rows=40),
     "annotate promote": CommandBudget(max_chars=20_000, shape=PayloadShape.ROWS, max_rows=40),
     "big-picture resolve-questions": CommandBudget(max_chars=20_000, shape=PayloadShape.ROWS, max_rows=40),
     "book-split": CommandBudget(max_chars=20_000, shape=PayloadShape.ROWS, max_rows=40),
