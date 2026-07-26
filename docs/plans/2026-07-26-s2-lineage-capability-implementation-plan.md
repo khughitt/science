@@ -47,7 +47,8 @@ Design: [`meta/doc/plans/2026-07-26-s2-lineage-capability-design.md`](../../meta
 - Modify: `science/model/src/science_model/profiles/schema.py:23-48` (the `EntityKind` model)
 - Modify: `science/model/src/science_model/profiles/core.py` (all 50 `EntityKind(...)` blocks)
 - Modify: `science/model/src/science_model/profiles/local.py` (all 3 `EntityKind(...)` blocks)
-- Test: `science/model/tests/test_supersedable_gate.py`
+- Test: `science/model/tests/test_supersedable_gate.py` (**append only** — the existing ratchet must survive this task)
+- Test: `science/model/tests/test_entity_kind_schema.py:17` (pin the `False` default)
 
 **Interfaces:**
 - Produces: `EntityKind.supersedable: bool` (default `False`). Later tasks read it off `CORE_PROFILE.entity_kinds` and off `LOCAL_PROFILE.entity_kinds`.
@@ -56,24 +57,13 @@ This task only adds data. No surface consumes it yet, so both suites must stay g
 
 - [ ] **Step 1: Write the failing test**
 
-Create `science/model/tests/test_supersedable_gate.py`, replacing the existing file wholesale. For this task write only the module docstring and the first property; Tasks 2-4 append theirs.
+**APPEND to `science/model/tests/test_supersedable_gate.py`. Do not replace the file.**
+
+`_KNOWN_HALF_WIRED` and `test_every_supersedable_kind_can_author_the_CANONICAL_edge` must survive Tasks 1 and 2 — they are the *only* endpoint guard until Task 3 installs the exact gate, and deleting them here would leave two intermediate commits with no endpoint coverage at all. Task 3 removes them at the moment it replaces them. The module docstring is likewise rewritten in Task 3, not here.
+
+Add these imports and constants beside the existing ones, then the two tests:
 
 ```python
-"""Lineage capability: ONE declaration, and the surfaces that must agree with it.
-
-`EntityKind.supersedable` answers "can an entity of this kind be replaced as canonical by a newer
-one?" It is DECLARED per kind, never inferred. The status vocabulary, the `sci:supersedes` endpoint
-list, and the auto-stamping policy are all gated against it by EXACT equality in both directions --
-so a stale exemption fails as loudly as a new gap.
-
-This file replaced a SUBSET ratchet over `_KNOWN_HALF_WIRED`, a frozen allowlist of twelve
-half-wired kinds. That ratchet was correct while the debt existed; S2 rules all fifteen affected
-kinds, so there is no debt left to freeze and the assertions became equalities. Restoring a subset
-assertion here would re-open the hole by construction.
-"""
-
-from __future__ import annotations
-
 import pytest
 
 from science_model.profiles import CORE_PROFILE
@@ -117,7 +107,7 @@ def test_the_declared_population_is_exactly_the_ruling() -> None:
 - [ ] **Step 2: Run the test to verify it fails**
 
 Run: `cd science/model && uv run --frozen pytest tests/test_supersedable_gate.py -q`
-Expected: collection error — `EntityKind` has no field `supersedable`.
+Expected: the module still **collects** — nothing at import time touches the new field. 53 failures of `test_every_shipped_kind_DECLARES_supersedable` (`"supersedable"` is not in `model_fields_set`) and one `AttributeError` in `test_the_declared_population_is_exactly_the_ruling` (`EntityKind` has no attribute `supersedable`). The pre-existing tests in the file stay green.
 
 - [ ] **Step 3: Add the field**
 
@@ -136,10 +126,18 @@ In `science/model/src/science_model/profiles/schema.py`, inside `class EntityKin
 
 Add `supersedable=True,` to the `EntityKind(...)` block of each of the 18 kinds named in Global Constraints, and `supersedable=False,` to every other block in `core.py` (32) and `local.py` (3). Place it immediately after `statuses=` where present, otherwise as the last argument.
 
-- [ ] **Step 5: Verify the declaration is complete and correct**
+- [ ] **Step 5: Pin the `False` default**
 
-Run: `cd science/model && uv run --frozen pytest tests/test_supersedable_gate.py -q`
-Expected: PASS, 55 tests (53 parametrized + the population test).
+The shipped-kind tests all declare explicitly, so none of them can catch the default flipping to `True` — and that default is load-bearing: it is what keeps a project-authored manifest kind inert. Extend the existing `test_entity_kind_new_fields_default_to_neutral` in `science/model/tests/test_entity_kind_schema.py:17`, which constructs a bare `EntityKind`:
+
+```python
+    assert ek.supersedable is False
+```
+
+- [ ] **Step 6: Verify the declaration is complete and correct**
+
+Run: `cd science/model && uv run --frozen pytest tests/test_supersedable_gate.py tests/test_entity_kind_schema.py -q`
+Expected: PASS. The gate file contributes 54 new tests (53 parametrized + the population test) on top of its pre-existing ones.
 
 Then confirm the counts:
 
@@ -152,19 +150,25 @@ print(len(k), sum(x.supersedable for x in k))"
 ```
 Expected: `53 18`
 
-- [ ] **Step 6: Prove the gate can fail (mutation proof 1)**
+- [ ] **Step 7: Prove the gates can fail (mutation proof 1)**
 
-Temporarily delete `supersedable=False,` from the `question` block in `core.py`. Re-run the test file. Expected: `test_every_shipped_kind_DECLARES_supersedable[question]` FAILS naming `question`. **Revert the mutation** and confirm the file is green again. Do not commit the mutation.
+Temporarily delete `supersedable=False,` from the `question` block in `core.py`. Re-run the test file. Expected: `test_every_shipped_kind_DECLARES_supersedable[question]` FAILS naming `question`. **Revert the mutation** and confirm the file is green again.
 
-- [ ] **Step 7: Run both suites**
+Then temporarily change the field default in `schema.py` to `supersedable: bool = True`. Expected: `test_entity_kind_new_fields_default_to_neutral` FAILS. **Revert.** Do not commit either mutation.
+
+- [ ] **Step 8: Run both suites**
 
 Run: `cd science/model && uv run --frozen pytest -q` then `cd science && uv run --frozen pytest -q` (allow ~3 min).
-Expected: both green. Nothing consumes the new field yet.
+Expected: both green. Nothing consumes the new field yet, and the pre-existing endpoint ratchet is untouched.
 
-- [ ] **Step 8: Commit**
+- [ ] **Step 9: Commit**
 
 ```bash
-git add science/model/src/science_model/profiles/ science/model/tests/test_supersedable_gate.py
+git add science/model/src/science_model/profiles/schema.py \
+        science/model/src/science_model/profiles/core.py \
+        science/model/src/science_model/profiles/local.py \
+        science/model/tests/test_supersedable_gate.py \
+        science/model/tests/test_entity_kind_schema.py
 git commit -m "feat(profile): declare lineage capability per kind"
 ```
 
@@ -352,7 +356,25 @@ def test_the_flat_endpoint_lists_agree_with_the_pairs(relation: RelationKind) ->
     )
 ```
 
-Then **delete** `_KNOWN_HALF_WIRED`, the old `test_every_supersedable_kind_can_author_the_CANONICAL_edge` subset assertion, `test_hypothesis_is_a_supersedes_ENDPOINT` and `test_spec_is_a_supersedes_ENDPOINT` from the file — the parametrized version above covers both, and by derivation rather than by naming two kinds. Keep `test_supersedes_description_names_spec_replacement`.
+**Only now** delete the old ratchet — this is the task that replaces it, and Tasks 1 and 2 deliberately left it in place as the sole endpoint guard. Remove from the file: `_KNOWN_HALF_WIRED`, the old subset-asserting `test_every_supersedable_kind_can_author_the_CANONICAL_edge`, `test_hypothesis_is_a_supersedes_ENDPOINT`, and `test_spec_is_a_supersedes_ENDPOINT` — the parametrized version above covers both by derivation rather than by naming two kinds. Keep `test_supersedes_description_names_spec_replacement`.
+
+Replace the module docstring, which describes the ratchet, with:
+
+```python
+"""Lineage capability: ONE declaration, and the surfaces that must agree with it.
+
+`EntityKind.supersedable` answers "can an entity of this kind be replaced as canonical by a newer
+one?" It is DECLARED per kind, never inferred. The status vocabulary, the `sci:supersedes` endpoint
+list, and the auto-stamping policy are all gated against it by EXACT equality in both directions --
+so a stale exemption fails as loudly as a new gap.
+
+This file used to carry a SUBSET ratchet over `_KNOWN_HALF_WIRED`, a frozen allowlist of twelve
+half-wired kinds. That ratchet was right while the debt existed -- exact equality would have made
+repairing any one of the twelve fail the suite. S2 rules all fifteen affected kinds, so there is no
+debt left to freeze and the assertions became equalities. Restoring a subset assertion here would
+re-open the hole by construction.
+"""
+```
 
 - [ ] **Step 2: Run the tests to verify they fail**
 
@@ -434,6 +456,22 @@ In `science/model/tests/test_profile_manifests.py`, replace the `workflow-run` a
     assert relation_allows_kinds(supersedes, "topic", "topic")
     assert not relation_allows_kinds(supersedes, "topic", "plan")
 ```
+
+**The same test asserts `workflow-run` a second time**, further down at line 111, against the pair set rather than the admission helper:
+
+```python
+    assert ("workflow-run", "workflow-run") in supersedes_pairs
+```
+
+Invert it, and add the self-pair coverage beside it:
+
+```python
+    assert ("workflow-run", "workflow-run") not in supersedes_pairs
+    for self_superseding in ("topic", "plan", "decision", "workflow-step"):
+        assert (self_superseding, self_superseding) in supersedes_pairs
+```
+
+Leave `test_tests_relation_accepts_workflow_run` and `test_executes_relation_targets_workflow` alone — `workflow-run` remains a valid endpoint of `tests` and `executes`; only its *supersession* is retired.
 
 Run: `cd science/model && uv run --frozen pytest -q`
 Expected: green.
@@ -558,7 +596,13 @@ Mutation 4: temporarily append `"workflow-run"` to the `supersedes` `source_kind
 - [ ] **Step 12: Commit**
 
 ```bash
-git add science/model/src/science_model/profiles/core.py science/model/tests/ science/tests/
+git add science/model/src/science_model/profiles/core.py \
+        science/model/tests/test_supersedable_gate.py \
+        science/model/tests/test_profile_manifests.py \
+        science/tests/test_graph_materialize.py \
+        science/tests/validate/test_checks_materialization.py \
+        science/tests/test_consolidation_candidates.py \
+        science/tests/test_consolidation_mark_superseded.py
 git commit -m "feat(profile): gate supersedes endpoints against lineage capability
 
 Ten kinds gain self-pairs, workflow-run is removed, and the flat endpoint
@@ -574,7 +618,8 @@ are exact equalities in both directions."
 **Files:**
 - Modify: `science/src/science_tool/kind_descriptors.py:51-54`
 - Modify: `science/src/science_tool/consolidation.py:101-111` (delete), `:640-650`, `:799`
-- Modify: `science/tests/test_decision_material.py:287`, `:311`
+- Modify: `science/tests/test_decision_material.py:287` (the driver), `:311`
+- Modify: `science/tests/test_consolidation_mark_superseded.py:11`, `:1131` (prose references to the deleted helper)
 - Test: `science/tests/test_kind_reconciliation_lineage.py` (new)
 
 **Interfaces:**
@@ -583,12 +628,24 @@ are exact equalities in both directions."
 
 The live policy is `supported_kinds`, serialized at `consolidation.py:648` and frozen onto the graph. `_supports_superseded` has **no production callers** — repointing it would leave the declaration owning nothing.
 
+**A value-equality test cannot drive this task.** After Task 2 the status-derived set and the declaration-derived set are *identical* — 18 kinds, with the 3 local kinds contributing to neither side because they declare no `statuses`. So `supported_kinds == declared` passes **before** the implementation change and proves nothing about which authority produced it. The driver must be a test that distinguishes the two *sources*, not their current values.
+
 - [ ] **Step 1: Write the failing test**
 
-Create `science/tests/test_kind_reconciliation_lineage.py`:
+The discriminating test already exists in skeleton form: `test_material_carries_supported_kinds_and_digest_covers_the_policy` in `science/tests/test_decision_material.py:287` injects a fake eligible kind and asserts the digest moves. Re-point its injection at the new authority — under the old implementation, patching `DECLARED_SUPERSEDABLE` has no effect on a policy built from `_STATUS_VALUES`, so the digest does not move and the test fails.
 
 ```python
-"""The auto-stamping policy carried on the graph must equal the declaration.
+    extended = dict(c.DECLARED_SUPERSEDABLE)
+    extended["zzz-fake-kind"] = True  # a new auto-apply-eligible kind
+    monkeypatch.setattr(c, "DECLARED_SUPERSEDABLE", extended)
+```
+
+Update its comment to name `DECLARED_SUPERSEDABLE` as the policy source.
+
+Then create `science/tests/test_kind_reconciliation_lineage.py` with the *behavioural* half — a supersedable kind is actually stamped. This is what gives mutation proof 5 something to break beyond an equality:
+
+```python
+"""The auto-stamping policy carried on the graph must follow the declaration.
 
 Tool-side, not model-side: `build_decision_material` lives in `science_tool`, and `science_model`
 must not import its consumer.
@@ -599,25 +656,37 @@ from __future__ import annotations
 from pathlib import Path
 
 from science_model.profiles import CORE_PROFILE
-from science_tool.consolidation import build_decision_material
+from science_tool.consolidation import build_decision_material, mark_superseded
+
+
+def test_a_newly_supersedable_kind_is_actually_stamped(tmp_path: Path) -> None:
+    # `topic` gained its endpoint in Task 3 and has always declared the status. If the policy stops
+    # following the declaration, this member silently stops being stamped -- which an equality
+    # assertion over two currently-identical sets would not catch.
+    _seed_topic_supersession(tmp_path)  # see below
+
+    report = mark_superseded(tmp_path, apply=False)
+
+    assert "topic:t-old" in report["to_mark"]
+    assert report["skipped_kinds"] == []
 
 
 def test_the_frozen_policy_equals_the_profile_declaration(tmp_path: Path) -> None:
-    # Compared against the PROFILE, reached independently of `kind_descriptors` -- because
-    # `supported_kinds` will be BUILT from `DECLARED_SUPERSEDABLE`, so comparing it back to that map
-    # would be the identity function.
+    # Regression, not the driver: compared against the PROFILE, reached independently of
+    # `kind_descriptors`, because `supported_kinds` is BUILT from `DECLARED_SUPERSEDABLE` and
+    # comparing it back to that map would be the identity function.
     (tmp_path / "entities").mkdir()
     material = build_decision_material(tmp_path)
     declared = sorted(k.name for k in CORE_PROFILE.entity_kinds if k.supersedable)
     assert material.supported_kinds == declared
 ```
 
-- [ ] **Step 2: Run the test to verify it fails**
+Write `_seed_topic_supersession` to author two `topic` entities under `entities/topics/`, the newer carrying `relations: [{predicate: "sci:supersedes", target: "topic:t-old"}]`. Copy the fixture helpers from `science/tests/test_consolidation_mark_superseded.py` (`_seed`, `_write`, `_supersedes`) rather than inventing a new frontmatter shape.
 
-Run: `cd science && uv run --frozen pytest tests/test_kind_reconciliation_lineage.py -q`
-Expected: FAIL — `supported_kinds` is derived from `_STATUS_VALUES`, which covers core **and local** kinds, so the two lists differ.
+- [ ] **Step 2: Run the tests to verify the driver fails**
 
-If it unexpectedly passes, the assertion is not yet discriminating: widen it by also asserting a local-profile kind is absent, and confirm the failure before proceeding.
+Run: `cd science && uv run --frozen pytest tests/test_decision_material.py::test_material_carries_supported_kinds_and_digest_covers_the_policy tests/test_kind_reconciliation_lineage.py -q`
+Expected: the digest test FAILS (`before != after` is false — the patched authority is not consulted). The two new tests in `test_kind_reconciliation_lineage.py` PASS already; they are regressions guarding the change, not drivers of it.
 
 - [ ] **Step 3: Add the tool-side lookup**
 
@@ -645,6 +714,14 @@ In `science/src/science_tool/consolidation.py`, import `DECLARED_SUPERSEDABLE` a
 
 Delete `_supports_superseded` (lines 101-111) and the two comments referring to it (at `:646` and `:700`). Its remaining references are prose only, in `science/tests/test_consolidation_mark_superseded.py` at lines 11 and 1131 — update both to name `DECLARED_SUPERSEDABLE`, since a comment pointing at a deleted symbol is the rot this whole change is about.
 
+**Drop the now-unused import.** `_STATUS_VALUES` was used only by the deleted helper and by the line just replaced, so the import at `consolidation.py:53` becomes dead and Ruff will fail the build:
+
+```python
+from science_tool.entities import _commit_write, _PreparedWrite
+```
+
+`_SUPERSEDED` (line 61) **stays** — it is still used at lines 687 and 719 to write and compare the status.
+
 - [ ] **Step 5: Correct the public return documentation**
 
 In `consolidation.py`, the `mark_superseded` return docs at `:799` define these keys by status capability, which S2 eliminates. Rewrite the two entries:
@@ -659,26 +736,14 @@ In `consolidation.py`, the `mark_superseded` return docs at `:799` define these 
       to detect.
 ```
 
-- [ ] **Step 6: Run the test to verify it passes**
+- [ ] **Step 6: Run the driver to verify it now passes**
 
-Run: `cd science && uv run --frozen pytest tests/test_kind_reconciliation_lineage.py -q`
-Expected: PASS.
+Run: `cd science && uv run --frozen pytest tests/test_decision_material.py::test_material_carries_supported_kinds_and_digest_covers_the_policy tests/test_kind_reconciliation_lineage.py -q`
+Expected: PASS. The patched `DECLARED_SUPERSEDABLE` now reaches the policy, so the digest moves.
 
-- [ ] **Step 7: Fix the two decision-material tests**
+- [ ] **Step 7: Fix the remaining decision-material test**
 
-In `science/tests/test_decision_material.py`:
-
-`test_material_carries_supported_kinds_and_digest_covers_the_policy` (line 287) injects a fake eligible kind by patching `_STATUS_VALUES`; that patch is now inert. Patch the new authority instead:
-
-```python
-    extended = dict(c.DECLARED_SUPERSEDABLE)
-    extended["zzz-fake-kind"] = True  # a new auto-apply-eligible kind
-    monkeypatch.setattr(c, "DECLARED_SUPERSEDABLE", extended)
-```
-
-Update its comment to name `DECLARED_SUPERSEDABLE` as the policy source.
-
-`test_disposition_reads_supported_kinds_from_the_graph_not_the_module` (line 311) monkeypatches the now-deleted `_supports_superseded`. Preserve the negative control by neutralizing the module-level policy map instead:
+In `science/tests/test_decision_material.py`, `test_disposition_reads_supported_kinds_from_the_graph_not_the_module` (line 311) monkeypatches the now-deleted `_supports_superseded`. Preserve the negative control by neutralizing the module-level policy map instead:
 
 ```python
     monkeypatch.setattr(c, "DECLARED_SUPERSEDABLE", {})  # would empty to_mark if consulted
@@ -691,14 +756,24 @@ Expected: both green.
 
 - [ ] **Step 9: Prove the gate can fail (mutation proof 5)**
 
-Temporarily change the `supported_kinds=` expression to drop one kind, e.g. `sorted(k for k, v in DECLARED_SUPERSEDABLE.items() if v and k != "topic")`. Expected: `test_the_frozen_policy_equals_the_profile_declaration` FAILS. **Revert.**
+Temporarily change the `supported_kinds=` expression to drop one kind: `sorted(k for k, v in DECLARED_SUPERSEDABLE.items() if v and k != "topic")`.
+
+Expected — **both halves must fail**, and the behavioural one is the point:
+- `test_the_frozen_policy_equals_the_profile_declaration` FAILS (the equality half).
+- `test_a_newly_supersedable_kind_is_actually_stamped` FAILS — `topic:t-old` drops out of `to_mark` and appears in `skipped_kinds`. A policy that silently stops stamping a ruled kind is the actual harm; an equality over two sets is only its shadow.
+
+**Revert** and confirm both pass again.
 
 Do **not** use "revert line 648 to `_STATUS_VALUES`" as the mutation. After Task 2 the two sources are forced equal by the vocabulary gate, so that mutation produces an identical set and proves nothing — an inert probe.
 
 - [ ] **Step 10: Commit**
 
 ```bash
-git add science/src/science_tool/kind_descriptors.py science/src/science_tool/consolidation.py science/tests/
+git add science/src/science_tool/kind_descriptors.py \
+        science/src/science_tool/consolidation.py \
+        science/tests/test_kind_reconciliation_lineage.py \
+        science/tests/test_decision_material.py \
+        science/tests/test_consolidation_mark_superseded.py
 git commit -m "feat(consolidation): derive the auto-stamping policy from the declaration
 
 supported_kinds is built from DECLARED_SUPERSEDABLE rather than re-derived from
@@ -749,6 +824,14 @@ In `science/src/science_tool/validate/checks/materialization.py`, delete `_LEGIT
 
 A future top-level key with a genuine reader can reintroduce the mechanism together with the reader that justifies it; keeping an empty exemption set would be documenting a compat projection rather than deleting it.
 
+**Three prose surfaces in the same area go stale with it** and must be corrected in this step:
+
+- `materialization.py:21` (module docstring) — "`sci:supersedes` declares 9 source kinds and `sci:amends` 6". After S2 it is **18** and 6.
+- `materialization.py:58` (`_remediation` docstring) — "The `supersedes` RelationKind admits 9 source kinds and `amends` 6". Same correction.
+- `science/tests/validate/test_checks_materialization.py:7` (module docstring) — "`workflow-run.supersedes` is the ONE legitimate top-level use (read by qa_audit/runs.py:47), so the exception is that exact (kind, key) PAIR". Replace with a note that S2 retired the field and there is no longer any legitimate top-level use, so the check has no exemptions.
+
+Both numbers describe *why the remediation is kind-aware*, so leaving them stale re-creates the defect this program exists to close — a fact answered two ways.
+
 - [ ] **Step 4: Run the test to verify it passes**
 
 Run: `cd science && uv run --frozen pytest tests/validate/test_checks_materialization.py -q`
@@ -756,7 +839,13 @@ Expected: PASS.
 
 - [ ] **Step 5: Drop the dead QA field**
 
-In `science/src/science_tool/qa_audit/runs.py`, remove `supersedes` from the `RunRecord` dataclass and from the `records.append(...)` call, and correct `chain_depth`'s docstring:
+In `science/src/science_tool/qa_audit/runs.py`, remove `supersedes` from the `RunRecord` dataclass and from the `records.append(...)` call. That line is the only use of `field`, so narrow the import or Ruff will fail:
+
+```python
+from dataclasses import dataclass
+```
+
+Then correct `chain_depth`'s docstring:
 
 ```python
 def chain_depth(runs: list[RunRecord], workflow: str) -> int:
@@ -789,8 +878,10 @@ Expected: all green.
 
 - [ ] **Step 9: Verify the live-surface sweep is complete**
 
+From the repository root:
+
 ```bash
-cd /path/to/worktree && rg -n "supersedes" templates/workflow-run.md docs/process/pipeline-audit-and-refactor.md
+rg -n "supersedes" templates/workflow-run.md docs/process/pipeline-audit-and-refactor.md
 ```
 Expected: no matches.
 
@@ -799,7 +890,14 @@ Do **not** edit the dated design and plan documents under `docs/plans/` that men
 - [ ] **Step 10: Commit**
 
 ```bash
-git add templates/ docs/process/ science/src/science_tool/ science/tests/
+git add templates/workflow-run.md \
+        docs/process/pipeline-audit-and-refactor.md \
+        science/src/science_tool/qa_audit/runs.py \
+        science/src/science_tool/qa_audit/verdicts.py \
+        science/src/science_tool/validate/checks/materialization.py \
+        science/tests/validate/test_checks_materialization.py \
+        science/tests/test_qa_audit_runs.py \
+        science/tests/test_qa_audit_audit.py
 git commit -m "refactor(qa-audit): retire workflow-run's top-level supersedes field
 
 It materialized no triple, RunRecord.supersedes was written and never read, and
