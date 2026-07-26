@@ -768,7 +768,7 @@ def entity_rotation(show_all: bool, output_format: str, output_path: Path | None
         meta={
             "pool_size": result.pool_size,
             "budget": result.budget,
-            "displayed": len(shown),
+            "returned_count": len(shown),
             "coverage_rounds": result.coverage_rounds,
             "graph_source": result.graph_source,
         },

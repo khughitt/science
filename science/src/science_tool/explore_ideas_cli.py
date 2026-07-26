@@ -72,8 +72,21 @@ def _echo_apply_truncation_footer(sink: BoundedSink, displayed: dict[str, Any]) 
     default=None,
     help="Write the complete, unbudgeted report to PATH instead of stdout.",
 )
+@click.option(
+    "--show-preexisting",
+    "show_preexisting",
+    is_flag=True,
+    default=False,
+    help="List each created entity's pre-existing project audit failures individually "
+    "instead of summarizing them",
+)
 def explore_ideas_apply(
-    from_value: str, model_id: str, check_only: bool, output_format: str, output_path: Path | None
+    from_value: str,
+    model_id: str,
+    check_only: bool,
+    output_format: str,
+    output_path: Path | None,
+    show_preexisting: bool,
 ) -> None:
     """Apply kept candidates from an exploration report to real entities."""
     from science_tool.budget.control import bounded_control_notice
@@ -99,7 +112,11 @@ def explore_ideas_apply(
         if check_only:
             check_result = check_report(Path.cwd(), from_value, model_id)
             full: dict[str, Any] = check_result.to_dict()
-            displayed = full if output_path is not None else project_explore_ideas_apply(full)
+            displayed = (
+                full
+                if output_path is not None
+                else project_explore_ideas_apply(full, show_preexisting=show_preexisting)
+            )
             if output_path is None:
                 truncation = _apply_truncation(full, displayed, complete_via)
                 if truncation is not None:
@@ -136,7 +153,9 @@ def explore_ideas_apply(
         raise click.ClickException(str(exc)) from exc
 
     full: dict[str, Any] = result.to_dict()
-    displayed = full if output_path is not None else project_explore_ideas_apply(full)
+    displayed = (
+        full if output_path is not None else project_explore_ideas_apply(full, show_preexisting=show_preexisting)
+    )
     if output_path is None:
         truncation = _apply_truncation(full, displayed, complete_via)
         if truncation is not None:
@@ -166,6 +185,9 @@ def explore_ideas_apply(
         for created in displayed["created"]:
             for warning in created["warnings"]:
                 sink.echo(f"WARNING: {warning}")
+            preexisting_note = created.get("preexisting_warnings_note")
+            if preexisting_note is not None:
+                sink.echo(preexisting_note)
         _echo_apply_truncation_footer(sink, displayed)
 
     emit(output_format=output_format, payload=displayed, render_text=_render_result, sink=sink)

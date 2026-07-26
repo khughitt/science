@@ -198,3 +198,18 @@ exempt 111, deferred 98 (154 − 56). Verify the full suite once at the end from
 - Per-command ceiling honored against an overflowing fixture; `--output` file complete.
 - Footer/JSON-truncation metadata present when projected; summary + exit from full result.
 - Boundary guards (sink ownership, `--output` presence, partition cardinality) stay green.
+
+## Known follow-ups (post-review)
+
+Recorded from the 1b-3-FIX consolidated review pass; none block a clean merge, none fixed
+in that pass.
+
+- **Minor-2:** `--output` is advertised but a no-op on `tasks archive --check` and on the
+  empty-result early returns of `datasets search`/`datasets files`. Those are O(1) branches
+  with nothing to escape to a file, so the flag is accepted and silently does nothing there.
+- **Minor-4:** several nested lists are still uncapped: `explore-ideas gaps` (`entity.gaps`),
+  `annotate synthesize` (`proposition.statements`), `inquiry show` (`edge.claims`). Bounded
+  today by per-item complexity rather than project size, so not an active leak, but worth a
+  projector pass if any of those nested lists start scaling with corpus size.
+- `commons promote dataset` remains **DEFERRED** — it shares `_promote_kind_cmd` with other
+  `commons promote` targets and has no JSON payload to project yet.
