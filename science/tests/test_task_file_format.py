@@ -104,6 +104,45 @@ def test_rejects_duplicate_and_merge_keys(tmp_path: Path, extra: str) -> None:
         task_module.parse_task_file(path)
 
 
+def test_parse_uses_one_file_snapshot(monkeypatch: pytest.MonkeyPatch) -> None:
+    version_a = _task_text(title="version A").replace("body\n", "body A\n")
+    version_b = _task_text(title="version B").replace("body\n", "body B\n")
+    snapshots = iter((version_a, version_b))
+    read_count = 0
+
+    def changing_read(_path: Path, *, encoding: str) -> str:
+        nonlocal read_count
+        read_count += 1
+        return next(snapshots)
+
+    monkeypatch.setattr(Path, "read_text", changing_read)
+
+    task = task_module.parse_task_file(Path("t042-x.md"))
+
+    assert (read_count, task.title, task.description) == (1, "version A", "body A")
+
+
+def test_duplicate_key_in_first_snapshot_cannot_be_bypassed(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    duplicate = _task_text(extra="priority: P2\n")
+    clean = _task_text()
+    snapshots = iter((duplicate, clean))
+    read_count = 0
+
+    def changing_read(_path: Path, *, encoding: str) -> str:
+        nonlocal read_count
+        read_count += 1
+        return next(snapshots)
+
+    monkeypatch.setattr(Path, "read_text", changing_read)
+
+    with pytest.raises(ValueError, match="duplicate"):
+        task_module.parse_task_file(Path("t042-x.md"))
+
+    assert read_count == 1
+
+
 def test_rejects_missing_required_key(tmp_path: Path) -> None:
     path = _write(
         tmp_path / "t042-x.md",

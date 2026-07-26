@@ -18,7 +18,7 @@ from typing import Iterator
 
 import yaml
 from science_model.tasks import Task, TaskCreate, TaskStatus, TaskUpdate
-from science_tool.markdown_utils import frontmatter_span, reject_duplicate_and_merge_keys
+from science_tool.markdown_utils import reject_duplicate_and_merge_keys
 
 __all__ = [
     "Task",
@@ -332,7 +332,12 @@ def parse_task_file(path: Path) -> Task:
             on_error=lambda message: ValueError(f"{path}: {message}"),
         )
 
-    data, _ = frontmatter_span(path)
+    try:
+        loaded = yaml.safe_load(frontmatter_text) or {}
+    except yaml.YAMLError as exc:
+        raise ValueError(f"{path}: invalid YAML frontmatter: {exc}") from exc
+    data = loaded if isinstance(loaded, dict) else {}
+
     unknown = set(data) - _KNOWN_KEYS
     if unknown:
         raise ValueError(f"{path}: unknown frontmatter key(s): {sorted(unknown)}")
