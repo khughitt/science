@@ -53,6 +53,21 @@ Use output formats consistently:
 If a command can be used in scripts, prefer stable field names in JSON and avoid
 embedding presentation-only strings as the only source of status.
 
+### Budgeted output and `--output`
+
+Budgeted commands hold their stdout to a character ceiling. When a run exceeds
+it, **nothing is printed** and the command names the escape: rerun with
+`--output PATH`, which is always complete and never row-projected.
+
+For `--format json` on a large project this is the expected path, not a
+malfunction. Row projection caps *rows*, but a full JSON payload for a large
+corpus stays over the ceiling regardless, so a big project's JSON is reached
+through `--output`. `science health --format json` is the common case.
+
+`--output PATH` is interpreted relative to the current directory, so a bare
+filename lands wherever the command was run — often the repository root, as an
+untracked file. Pass a path that is gitignored or outside the repository.
+
 ## Report-Then-Apply
 
 Commands that perform broad, risky, or hard-to-review changes should separate
