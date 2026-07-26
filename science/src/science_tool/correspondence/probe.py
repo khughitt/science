@@ -8,10 +8,13 @@ absence.
 
 from __future__ import annotations
 
-import re
 from dataclasses import dataclass
 from enum import StrEnum
 from pathlib import Path, PurePosixPath
+
+from science_model.tasks import TaskStatus
+
+from science_tool.tasks import task_status_index
 
 
 class ProbeResult(StrEnum):
@@ -24,6 +27,7 @@ class TaskState(StrEnum):
     DONE = "done"
     ACTIVE = "active"
     MISSING = "missing"
+    UNKNOWN = "unknown"
 
 
 @dataclass(frozen=True)
@@ -43,16 +47,30 @@ def probe_path(worktree: Path, rel: str) -> Probe:
     return Probe(rel, ProbeResult.ABSENT, f"{rel}: not found at {target}")
 
 
+def _state_for(status: str | None) -> TaskState:
+    if status is None:
+        return TaskState.MISSING
+    if status == TaskStatus.DONE:
+        return TaskState.DONE
+    if status == TaskStatus.RETIRED:
+        # Abandonment is off the progress axis: it is neither completion nor
+        # work in flight. Same rule as an UNKNOWN probe -- the instrument does
+        # not know what it measured.
+        return TaskState.UNKNOWN
+    return TaskState.ACTIVE
+
+
+def resolve_tasks(worktree: Path, task_ids: list[str]) -> list[tuple[str, TaskState]]:
+    """Resolve every cited task id against the task ledgers, reading them once.
+
+    The status field is the record, not the filename and not which file the
+    block sits in: `tasks_archive` routes terminal entries into
+    `tasks/done/YYYY-MM.md` month rollups, so a per-file glob resolves nothing
+    in any project on the shipped archive format (fb-2026-07-26-013).
+    """
+    index = task_status_index(worktree / "tasks")
+    return [(task_id, _state_for(index.get(task_id))) for task_id in task_ids]
+
+
 def resolve_task(worktree: Path, task_id: str) -> TaskState:
-    done_dir = worktree / "tasks" / "done"
-    if done_dir.is_dir():
-        # Whole-id match: `t25-*.md` must not be satisfied by `t254-*.md`.
-        for path in done_dir.glob(f"{task_id}*.md"):
-            stem = path.stem
-            if stem == task_id or stem.startswith(f"{task_id}-"):
-                return TaskState.DONE
-    active = worktree / "tasks" / "active.md"
-    if active.is_file():
-        if re.search(rf"\b{re.escape(task_id)}\b", active.read_text(errors="replace")):
-            return TaskState.ACTIVE
-    return TaskState.MISSING
+    return resolve_tasks(worktree, [task_id])[0][1]

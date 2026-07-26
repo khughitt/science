@@ -13,7 +13,13 @@ from pathlib import Path
 
 from science_tool.correspondence.adjudicate import Adjudicated, adjudicate
 from science_tool.correspondence.extract import extract_deliverables, extract_task_refs
-from science_tool.correspondence.probe import Probe, ProbeResult, TaskState, probe_path, resolve_task
+from science_tool.correspondence.probe import (
+    Probe,
+    ProbeResult,
+    TaskState,
+    probe_path,
+    resolve_tasks,
+)
 from science_tool.correspondence.signature import evidence_signature
 from science_tool.entity_scan import iter_entity_markdown
 from science_tool.validate.checks import Check
@@ -72,7 +78,7 @@ def check_correspondence_drift(ctx: ValidateContext) -> Iterator[Result]:
         if not deliverables:
             continue  # nothing probeable -> indeterminate -> silent
         probes = [probe_path(ctx.project_root, d) for d in deliverables]
-        task_states = [(t, resolve_task(ctx.project_root, t)) for t in extract_task_refs(ctx.body(path))]
+        task_states = resolve_tasks(ctx.project_root, extract_task_refs(ctx.body(path)))
         adjudicated = adjudicate(
             [p.result for p in probes],
             [state for _ref, state in task_states],
