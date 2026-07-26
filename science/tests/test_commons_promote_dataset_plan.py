@@ -670,7 +670,7 @@ def test_dataset_canonical_entity_emits_required_base_fields(tmp_path, monkeypat
 
     fm = _canonical_entity_frontmatter(d)
 
-    assert fm["schema_profile"] == "science-entity-base/1.0+dataset/2.0"
+    assert fm["schema_profile"] == "science-entity-base/1.0+dataset/3.0"
     assert fm["id"] == "dataset:fixture-ds"
     assert fm["kind"] == "dataset"
     assert fm["title"] == "Fixture dataset"

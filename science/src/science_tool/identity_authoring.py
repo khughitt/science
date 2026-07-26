@@ -11,14 +11,21 @@ from science_model.entity_schema.profile import ProfileParseError, default_profi
 from science_model.packages.schema import IdentityContext
 from science_tool.project_config import project_entity_schema_version
 
-# Derived, never declared. This is the fixed generation-2 default for commons callers;
-# project writers must use `project_dataset_schema_profile()` so their default honors the
-# project's `entity_schema_version` pin. `default_profile_for_kind` remains the single authority:
-# a literal here would be a second declaration of the same fact, and the two would drift the
-# moment either moved. That happened when this constant sat at dataset/1.0 while the default moved
-# to 2.0, so every commons-born scaffold would have re-created the `status: REPLACE` crash
-# (fb-2026-07-12-006) that the dataset/2.0 migration exists to close.
-BASE_DATASET_SCHEMA_PROFILE = default_profile_for_kind("dataset").render()
+# The single authority for the schema generation commons writes dataset records at. Every commons
+# dataset write default (this constant, plus promote's PROMOTE_KIND_DATASET) derives from it, so
+# the generation lives in exactly one place. A second literal declaration would drift the moment
+# either moved -- that happened when BASE_DATASET_SCHEMA_PROFILE sat at dataset/1.0 while the
+# default moved to 2.0, re-creating the `status: REPLACE` crash (fb-2026-07-12-006). Generation 3
+# is the gen-3 capability shape ({data_product, qualifiers}); the pre-3 mixins are RETAINED for
+# existing records, which validate against their own declared schema_profile.
+COMMONS_DATASET_GENERATION = 3
+
+# Derived, never declared. This is the fixed default for commons callers; project writers must use
+# `project_dataset_schema_profile()` so their default honors the project's `entity_schema_version`
+# pin. `default_profile_for_kind` remains the single authority for the profile string.
+BASE_DATASET_SCHEMA_PROFILE = default_profile_for_kind(
+    "dataset", generation=COMMONS_DATASET_GENERATION
+).render()
 
 
 def project_dataset_schema_profile(project_root: Path) -> str:

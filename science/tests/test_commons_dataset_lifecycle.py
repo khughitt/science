@@ -75,7 +75,7 @@ def test_scaffold_dataset_package_writes_required_files(tmp_path: Path) -> None:
     # consumes the shared default. A writer that stopped consuming it and inlined
     # dataset/1.0 would re-create the `status: REPLACE` crash (fb-2026-07-12-006) for every
     # commons-born dataset, while every test that only examines the constant stayed green.
-    assert "schema_profile: science-entity-base/1.0+dataset/2.0" in entity_text
+    assert "schema_profile: science-entity-base/1.0+dataset/3.0" in entity_text
     assert "kind: dataset" in entity_text
     assert "type: dataset" not in entity_text
     assert 'version: "0.1.0"' in entity_text
