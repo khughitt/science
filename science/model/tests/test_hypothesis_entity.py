@@ -4,8 +4,9 @@ D3 rules that `mixin-hypothesis-1.0.json` is THE authority for shape and invaria
 `HypothesisEntity` is a PROJECTION of it. That sentence has an executable meaning, and this file is
 it. Three properties, and the last two are the ones a naive test cannot see:
 
-1. Every field the schema ADMITS is REPRESENTABLE on the model  (else: validates on disk, silently
-   dropped on load -- `Entity` is `extra="ignore"`).
+1. Every field the schema ADMITS is REPRESENTABLE on the model  (else: it validates on disk and
+   reaches the model as an UNTYPED extra -- `Entity` is `extra="allow"` since D3.3, so it is
+   preserved but unwired: no declared type, no graph predicate).
 2. The schema is AT LEAST AS STRICT as the model  (else: the model is the real authority and the
    schema is decoration).
 3. Every value the schema admits SURVIVES the round trip  (else: it validates, the model *accepts*
@@ -35,6 +36,8 @@ from science_model.entities import HypothesisEntity
 from science_model.entity_schema import (
     EntityValidationError,
     EntityValidator,
+    ProfileString,
+    admitted_field_names,
     default_profile_for_kind,
 )
 from science_model.profiles.core import CORE_PROFILE
@@ -42,19 +45,22 @@ from science_model.profiles.core import CORE_PROFILE
 MIXIN = json.loads(
     (files("science_model.schemas") / "mixin-hypothesis-1.0.json").read_text(encoding="utf-8")
 )
-BASE_2 = json.loads(
-    (files("science_model.schemas") / "science-entity-base-2.0.json").read_text(encoding="utf-8")
-)["properties"]
-_PROFILE = default_profile_for_kind("hypothesis")
+_GENERATIONS = (2, 3)
+_PROFILE_BY_GENERATION = {
+    generation: default_profile_for_kind("hypothesis", generation=generation)
+    for generation in _GENERATIONS
+}
+_PROFILE = _PROFILE_BY_GENERATION[2]
 _V = EntityValidator()
 
-# Admitted by the COMPOSED profile = what the base declares (minus what the mixin forbids) plus what
-# the mixin declares. Deriving this from the mixin ALONE is how `description` hid for four drafts:
-# it is CORE, authored by 3 files, declared in base 2.0 -- and on no model.
-_ADMITTED = (
-    {n for n in BASE_2 if MIXIN["properties"].get(n) is not False}
-    | {n for n, s in MIXIN["properties"].items() if s is not False}
-)
+# The composed profile's admitted surface, from the ONE derivation in `science_model`. It was a
+# local six-line copy here; two readers of the same fact is the defect this sub-project exists to
+# remove, and the copy could not be reused by the tool-side gate.
+_ADMITTED_BY_GENERATION = {
+    generation: admitted_field_names(profile)
+    for generation, profile in _PROFILE_BY_GENERATION.items()
+}
+_ADMITTED = _ADMITTED_BY_GENERATION[2]
 
 # Admitted by the schema, absent from the model, and CORRECT -- for exactly one reason: these two
 # are the P1 capability subsystem, whose readers re-parse RAW frontmatter and never go through the
@@ -62,11 +68,14 @@ _ADMITTED = (
 # DELETES this exception -- it must never grow a third member without a reader named beside it.
 _NOT_ON_THE_MODEL = {"required_capabilities", "capability_scope"}
 
-# The fields BOTH authorities describe. Derived from `_ADMITTED`, so the base surface
-# (`created`, `updated`, `title`, `description`, `ontology_terms`, `same_as`, `dataset_usage`) is
-# reconciled too. `false` properties are excluded by `_ADMITTED`: the schema rejects them outright,
-# so "at least as strict" holds trivially and there is nothing to compare.
-_SHARED_FIELDS = _ADMITTED & set(HypothesisEntity.model_fields)
+# The fields BOTH authorities describe, per generation. `false` properties are excluded by
+# `_ADMITTED_BY_GENERATION`: the schema rejects them outright, so "at least as strict" holds
+# trivially and there is nothing to compare.
+_SHARED_BY_GENERATION = {
+    generation: admitted & set(HypothesisEntity.model_fields)
+    for generation, admitted in _ADMITTED_BY_GENERATION.items()
+}
+_SHARED_FIELDS = _SHARED_BY_GENERATION[2]
 
 # Model-only required fields. NOT frontmatter -- the loader stamps them -- so they never appear in a
 # schema payload, and every direct model construction here goes through `_model_payload` rather than
@@ -213,9 +222,9 @@ def _model_payload(**over: Any) -> dict[str, Any]:
     return _MODEL_ONLY | _payload(**over)
 
 
-def _schema_accepts(field: str, value: Any) -> bool:
+def _schema_accepts(field: str, value: Any, profile: ProfileString = _PROFILE) -> bool:
     try:
-        _V.validate_as(_payload(**{field: value}), _PROFILE)
+        _V.validate_as(_payload(**{field: value}), profile)
         return True
     except EntityValidationError:
         return False
@@ -279,17 +288,20 @@ def test_the_projection_does_NOT_reimplement_the_schema_invariants() -> None:
     assert not _schema_accepts("status", "complete")  # ...and the schema DOES. Both halves, or neither.
 
 
-def test_every_field_the_schema_ADMITS_is_REPRESENTABLE_in_the_projection() -> None:
-    # A field the schema admits but the projection cannot hold is a field that validates on disk and
-    # is SILENTLY DROPPED on load (`Entity` is `extra="ignore"`) -- which is `phase`'s entire
-    # history, and the reason this arc exists. `description` was the third instance, and it survived
-    # every earlier draft because no test looked at the fields the BASE contributes.
-    missing = _ADMITTED - set(HypothesisEntity.model_fields) - _NOT_ON_THE_MODEL
-    assert not missing, f"schema admits {sorted(missing)}; the projection would silently drop them"
+@pytest.mark.parametrize("generation", _GENERATIONS)
+def test_every_field_the_schema_ADMITS_is_REPRESENTABLE_in_the_projection(generation: int) -> None:
+    # A field the schema admits but the projection cannot hold is a field that validates on disk
+    # and reaches the model as an UNTYPED extra (`Entity` is `extra="allow"` -- D3.3). It is
+    # preserved, but it is unwired: no declared type, no graph predicate, and no general
+    # diagnostic covers it. `phase` is that history and `description` was the third instance,
+    # surviving every earlier draft because no test looked at the fields the BASE contributes.
+    missing = _ADMITTED_BY_GENERATION[generation] - set(HypothesisEntity.model_fields) - _NOT_ON_THE_MODEL
+    assert not missing, f"schema admits {sorted(missing)}; the projection has no declared field for them"
 
 
+@pytest.mark.parametrize("generation", _GENERATIONS)
 @pytest.mark.parametrize("field", sorted(_SHARED_FIELDS))
-def test_the_schema_is_at_least_as_strict_as_the_projection(field: str) -> None:
+def test_the_schema_is_at_least_as_strict_as_the_projection(field: str, generation: int) -> None:
     """D3 point 4, half two — and the one that actually bites.
 
     **No payload the schema accepts may be rejected by the model.** If one is, the model is the real
@@ -304,41 +316,43 @@ def test_the_schema_is_at_least_as_strict_as_the_projection(field: str) -> None:
     model would ignore, and it enforces `complete -> verdict`, which the model deliberately does
     not). Strictness beyond the projection is the design working as intended.
     """
+    profile = _PROFILE_BY_GENERATION[generation]
     for value in _BATTERY[field]:
-        schema_ok = _schema_accepts(field, value)
+        schema_ok = _schema_accepts(field, value, profile)
         model_ok = _model_accepts(field, value)
         assert not (schema_ok and not model_ok), (
-            f"{field}={value!r}: the SCHEMA admits it and the MODEL rejects it. "
+            f"gen {generation} {field}={value!r}: the SCHEMA admits it and the MODEL rejects it. "
             f"The schema is not authoritative for this field."
         )
 
-    # Anti-tautology: a battery the schema accepts in full is a battery that proves nothing. If this
-    # fires, the field's contract is vacuous (or the battery is) -- exactly the state the five `{}`
-    # declarations were in, where every test still passed.
-    assert any(not _schema_accepts(field, v) for v in _BATTERY[field]), (
-        f"{field}: the schema rejected NOTHING in the battery -- its contract admits anything"
+    assert any(not _schema_accepts(field, v, profile) for v in _BATTERY[field]), (
+        f"gen {generation} {field}: the schema rejected NOTHING in the battery -- its contract "
+        f"admits anything"
     )
 
 
+@pytest.mark.parametrize("generation", _GENERATIONS)
 @pytest.mark.parametrize("field", sorted(_SHARED_FIELDS))
-def test_every_value_the_schema_ADMITS_SURVIVES_the_projection(field: str) -> None:
+def test_every_value_the_schema_ADMITS_SURVIVES_the_projection(field: str, generation: int) -> None:
     """D3 point 4, half three — the half that "the model accepted it" cannot see.
 
-    Acceptance and preservation are DIFFERENT properties, and `extra="ignore"` is exactly the gap
-    between them: the model accepts the object, and `model_dump()` loses the keys it did not
-    declare. `rival_model_packet` sat in that gap -- schema admits the four single-rival keys,
-    Pydantic accepts the object, four authored values gone. Every test in the earlier draft passed.
+    Acceptance and preservation are DIFFERENT properties, and a NESTED `extra="forbid"` submodel is
+    exactly the gap between them: the outer field is declared, the model accepts the object, and
+    `model_dump()` loses the inner keys the submodel did not declare. `rival_model_packet` sat in
+    that gap -- schema admits the four single-rival keys, Pydantic accepts the object, four
+    authored values gone. Every test in the earlier draft passed.
 
     A field that validates on disk and evaporates on load is not a contract; it is a **trap**, and it
     is precisely `phase`'s failure mode reappearing one nesting level down. So the claim is not "the
     model tolerated it" but "the author's value is still there afterwards."
     """
+    profile = _PROFILE_BY_GENERATION[generation]
     for value in _BATTERY[field]:
-        if not _schema_accepts(field, value):
+        if not _schema_accepts(field, value, profile):
             continue  # the schema already refused it; nothing is owed
         assert _model_preserves(field, value), (
-            f"{field}={value!r}: the SCHEMA admits it, the MODEL accepts it, and `model_dump()` "
-            f"DROPS it. The value validates and then evaporates."
+            f"gen {generation} {field}={value!r}: the SCHEMA admits it, the MODEL accepts it, and "
+            f"`model_dump()` DROPS it. The value validates and then evaporates."
         )
 
 
@@ -367,15 +381,19 @@ def test_the_composition_rule_vocabulary_is_not_a_SECOND_authority() -> None:
     )
 
 
-def test_the_BATTERY_is_EXACTLY_the_shared_surface() -> None:
-    # EQUALITY, not coverage. `_SHARED_FIELDS` is derived; the battery is hand-written -- so the
-    # battery is the half that falls behind, and it falls behind in BOTH directions:
+@pytest.mark.parametrize("generation", _GENERATIONS)
+def test_the_BATTERY_is_EXACTLY_the_shared_surface(generation: int) -> None:
+    # EQUALITY, not coverage, and now per GENERATION -- a generation that adds a shared field
+    # must gain a battery entry, and one that drops a field must lose it. `_SHARED_BY_GENERATION`
+    # is derived; the battery is hand-written, so the battery is the half that falls behind, and
+    # it falls behind in BOTH directions:
     #
     #   missing  -> a field is declared by both authorities and reconciled by neither, while every
     #               test still passes. (`description` and the whole base surface lived here.)
     #   spurious -> a battery entry for a field nobody declares. It never runs, and it reads like
     #               coverage that does not exist -- which is worse than no entry at all.
-    assert set(_BATTERY) == _SHARED_FIELDS, (
-        f"unreconciled: {sorted(_SHARED_FIELDS - set(_BATTERY))}; "
-        f"stale: {sorted(set(_BATTERY) - _SHARED_FIELDS)}"
+    shared = _SHARED_BY_GENERATION[generation]
+    assert set(_BATTERY) == shared, (
+        f"gen {generation} unreconciled: {sorted(shared - set(_BATTERY))}; "
+        f"stale: {sorted(set(_BATTERY) - shared)}"
     )
