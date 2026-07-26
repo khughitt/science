@@ -287,29 +287,31 @@ def test_material_admitted_edges_are_canonically_sorted(tmp_path: Path) -> None:
 
 def test_material_carries_supported_kinds_and_digest_covers_the_policy(monkeypatch, tmp_path: Path) -> None:
     # I4: the auto-apply supported-kind policy is part of the authenticated decision surface. It is
-    # serialized (sorted) into the material, and changing it flips the digest — so a policy shift
-    # between preview and apply is caught as drift, not silently applied.
+    # serialized (sorted) into the material from DECLARED_SUPERSEDABLE, and changing it flips the
+    # digest — so a policy shift between preview and apply is caught as drift, not silently applied.
     import science_tool.consolidation as c
+    from science_model.profiles import CORE_PROFILE
+
     _seed(tmp_path)
     mat = build_decision_material(tmp_path)
     assert "interpretation" in mat.supported_kinds
     assert mat.supported_kinds == sorted(mat.supported_kinds)  # canonical
     before = decision_digest(mat)
-    extended = dict(c._STATUS_VALUES)
-    extended["zzz-fake-kind"] = frozenset({c._SUPERSEDED})  # a new auto-apply-eligible kind
-    monkeypatch.setattr(c, "_STATUS_VALUES", extended)
+    extended = {ek.name: ek.supersedable for ek in CORE_PROFILE.entity_kinds}
+    extended["zzz-fake-kind"] = True  # a new auto-apply-eligible kind
+    monkeypatch.setattr(c, "DECLARED_SUPERSEDABLE", extended, raising=False)
     after = decision_digest(build_decision_material(tmp_path))
     assert before != after  # the policy change moved the digest
 
 
 def test_disposition_reads_supported_kinds_from_the_graph_not_the_module(monkeypatch, tmp_path: Path) -> None:
     # _disposition_report must consult graph.supported_kinds (authenticated), not the live module
-    # policy. Neutralizing the module function while the graph still carries the policy keeps the
+    # policy. Neutralizing the module map while the graph still carries the policy keeps the
     # disposition correct — proving the read moved onto the material.
     import science_tool.consolidation as c
     _seed(tmp_path)
     graph = build_supersedes_graph_from_material(build_decision_material(tmp_path))
-    monkeypatch.setattr(c, "_supports_superseded", lambda kind: False)  # would empty to_mark if consulted
+    monkeypatch.setattr(c, "DECLARED_SUPERSEDABLE", {})  # would empty to_mark if consulted
     report = c._disposition_report(graph, ids=None)
     assert report["to_mark"]  # still non-empty: the policy came from the graph, not the patched module
 

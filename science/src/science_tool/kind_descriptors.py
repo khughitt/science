@@ -51,3 +51,10 @@ def kind_can_author_relation(relation_name: str, kind: str) -> bool:
 DECLARED_STATUSES: dict[str, frozenset[str]] = {
     ek.name: frozenset(ek.statuses) for ek in KIND_DESCRIPTORS if ek.statuses
 }
+
+#: Kind -> whether it may be superseded (S2). Built over `KIND_DESCRIPTORS` -- the SHIPPED
+#: profiles only -- exactly like `DECLARED_STATUSES`. That population is load-bearing: a kind
+#: declared in a project manifest is ABSENT here and resolves to False, which preserves the rule
+#: that a project-local kind is never auto-stamped (the write boundary's `_validate_status`
+#: indexes `_STATUS_VALUES[kind]` and would raise KeyError).
+DECLARED_SUPERSEDABLE: dict[str, bool] = {ek.name: bool(ek.supersedable) for ek in KIND_DESCRIPTORS}

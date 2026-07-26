@@ -8,7 +8,7 @@ acyclicity scan, the reconciliation) is exercised on `interpretation`, which has
 without changing what any existing file means.
 
 `hypothesis` could not be tested here AT ALL until its descriptor declared a `superseded` terminal:
-`_supports_superseded` consults `_STATUS_VALUES`, so every hypothesis member was routed to
+`DECLARED_SUPERSEDABLE` follows that declaration, so every hypothesis member was routed to
 `skipped_kinds` and nothing was written. A hypothesis apply-test would not have failed loudly — it
 would have reported `to_mark == []`, written nothing, and gone **green over an operation that did
 nothing**. That is why the hypothesis tests at the bottom of this file arrive with the descriptor
@@ -1140,10 +1140,38 @@ def test_a_CYCLE_THROUGH_AN_UNMANAGED_NODE_KEEPS_ITS_COMPONENT_OUT_OF_THE_TOPOLO
     assert len(graph.invalid) == 2
 
 
+def test_a_newly_supersedable_kind_is_actually_stamped(tmp_path: Path) -> None:
+    # `topic` gained its endpoint in Task 3 and has always declared the status. If the policy stops
+    # following the declaration, this member silently stops being stamped -- which an equality
+    # assertion over two currently-identical sets would not catch.
+    _seed(tmp_path)
+    _write(tmp_path, "topics", "t-old", {"id": "topic:t-old", "kind": "topic", "status": "active"})
+    _write(tmp_path, "topics", "t-new", {"id": "topic:t-new", "kind": "topic", "status": "active",
+                                         "relations": [_supersedes("topic:t-old")]})
+
+    report = mark_superseded(tmp_path, apply=False)
+
+    assert report["to_mark"] == ["topic:t-old"]
+    assert report["skipped_kinds"] == []
+
+
+def test_the_frozen_policy_equals_the_profile_declaration(tmp_path: Path) -> None:
+    # Regression, not the driver: compared against the PROFILE, reached independently of
+    # `kind_descriptors`, because `supported_kinds` is BUILT from `DECLARED_SUPERSEDABLE` and
+    # comparing it back to that map would be the identity function.
+    from science_tool.consolidation import build_decision_material
+
+    _seed(tmp_path)
+    (tmp_path / "entities").mkdir()
+    material = build_decision_material(tmp_path)
+    declared = sorted(ek.name for ek in CORE_PROFILE.entity_kinds if ek.supersedable)
+    assert material.supported_kinds == declared
+
+
 # ---------------------------------------------------------------------------------------------
 # hypothesis — EXECUTABLE for the first time
 #
-# Every test above runs on `interpretation`, and not by preference: `_supports_superseded` was False
+# Every test above runs on `interpretation`, and not by preference: `DECLARED_SUPERSEDABLE` was False
 # for `hypothesis` until its descriptor declared a `superseded` terminal, so `mark_superseded` routed
 # every hypothesis to `skipped_kinds` and wrote nothing. There was no hypothesis apply-test to write.
 # These three are the D4 triangle closed, on the kind the whole arc is about.

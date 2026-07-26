@@ -50,10 +50,11 @@ from typing import TYPE_CHECKING, Any, Mapping
 from pydantic import BaseModel, ConfigDict
 
 from science_tool.big_picture.frontmatter import read_frontmatter
-from science_tool.entities import _commit_write, _PreparedWrite, _STATUS_VALUES
+from science_tool.entities import _commit_write, _PreparedWrite
 from science_tool.entity_scan import iter_entity_markdown
 from science_tool.graph.reference_resolution import ReferenceResolver
 from science_tool.graph.relation_audit import RelationAudit, RelationDefect, audit_relations
+from science_tool.kind_descriptors import DECLARED_SUPERSEDABLE
 
 if TYPE_CHECKING:
     from science_tool.graph.sources import ProjectSources
@@ -96,19 +97,6 @@ def _kind_or_prefix(entity_id: str, declared: object) -> str:
 
 def _kind_of(entity_id: str, fm: dict[str, Any]) -> str:
     return _kind_or_prefix(entity_id, fm.get("kind"))
-
-
-def _supports_superseded(kind: str) -> bool:
-    """Whether `kind` is a BUILT-IN markdown kind that declares the `superseded` status.
-
-    Auto-apply is restricted to built-in policy-backed kinds: a project-local kind would pass a naive
-    vocab check but then fail inside the write boundary, whose `find_entity` lookup iterates the
-    built-in policies only and whose `_validate_status` indexes `_STATUS_VALUES[kind]` (KeyError for
-    a local kind). Checking `_STATUS_VALUES` membership directly covers both the status-less eligible
-    kinds (`workflow-run`/`story`/`validation-report`, absent from the map) and all local kinds —
-    every one is skipped, never crashed.
-    """
-    return _SUPERSEDED in _STATUS_VALUES.get(kind, frozenset())
 
 
 # ---------------------------------------------------------------------------------------------
@@ -643,9 +631,9 @@ def _project_inputs(inputs: SupersessionInputs) -> SupersessionDecisionMaterial:
         mutable_population=sorted(resolution.mutable),
         archived_population=sorted(resolution.archived),
         # The auto-apply supported-kind policy IS a decision input (design §5.2): serialize it so
-        # the digest covers it. `_supports_superseded(k)` is `_SUPERSEDED in _STATUS_VALUES.get(k,
-        # ...)`, so the supported set is exactly the kinds whose status vocab admits `superseded`.
-        supported_kinds=sorted(k for k, v in _STATUS_VALUES.items() if _SUPERSEDED in v),
+        # the digest covers it. It is the DECLARATION (S2) -- not a re-derivation from the status
+        # vocabulary, which was how lineage capability came to be answered by two surfaces.
+        supported_kinds=sorted(k for k, v in DECLARED_SUPERSEDABLE.items() if v),
     )
 
 
@@ -696,9 +684,9 @@ def _disposition_report(graph: SupersedesGraph, *, ids: frozenset[str] | None) -
     second filesystem load. Raises `SupersessionError` when an allowlisted id is not a derivable
     member, exactly as `mark_superseded` did before the extraction.
 
-    Reads `graph.supported_kinds` -- the AUTHENTICATED policy carried on the graph (I4) -- not the
-    live module-level `_supports_superseded`: a preview built from a saved material must derive the
-    same disposition even if the live project's policy has since moved.
+    Reads `graph.supported_kinds` -- the AUTHENTICATED policy carried on the graph (I4): a preview
+    built from a saved material must derive the same disposition even if the live project's policy
+    has since moved.
     """
     chains: list[dict[str, Any]] = []
     to_mark: list[str] = []
@@ -797,9 +785,13 @@ def mark_superseded(
     - ``non_linear``: BRANCHED components as ``{"nodes" (sorted), "reason"}``. No longer "branched
       *or cyclic*" — a cycle is a relation-validity failure and has its own key, which BLOCKS.
     - ``to_mark``: member ids a linear chain would stamp ``superseded`` (excludes already-superseded
-      members and members whose kind can't carry the status). **Unchanged meaning.**
+      members and members whose kind is absent from the graph's frozen ``supported_kinds``).
     - ``applied``: member ids actually stamped (empty unless ``apply=True``). **Unchanged meaning.**
-    - ``skipped_kinds``: ``{"id", "kind"}`` for members whose kind does not declare ``superseded``.
+    - ``skipped_kinds``: ``{"id", "kind"}`` for members whose kind is absent from the graph's frozen
+      ``supported_kinds`` policy. After S2 no authored input reaches this: every admissible
+      supersedes target is supersedable. It remains reachable from STALE or hand-built decision
+      material whose policy disagrees with its admitted edges -- which is what the I4 digest exists
+      to detect.
     - ``to_repair`` / ``repaired``: members whose status was ALREADY ``superseded`` but whose derived
       inverse was missing or stale. A separate key on purpose — widening ``applied`` would silently
       change what an existing, JSON-serialized key means for every consumer already reading it, and
