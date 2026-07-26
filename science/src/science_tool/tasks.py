@@ -409,6 +409,31 @@ def _tasks_equal(a: Task, b: Task) -> bool:
     )
 
 
+def _move_recovery_equivalent(
+    active: Task,
+    ledger: Task,
+    *,
+    target_status: str,
+) -> bool:
+    """Return whether ``ledger`` is the prior append for this terminal move."""
+    if active.id != ledger.id or ledger.status != target_status:
+        return False
+
+    ignored_transition_fields = {
+        "status": "",
+        "completed": None,
+        "description": "",
+    }
+    stable_fields_match = _tasks_equal(
+        active.model_copy(update=ignored_transition_fields),
+        ledger.model_copy(update=ignored_transition_fields),
+    )
+    description_extends_active = _canonical_description(ledger.description).startswith(
+        _canonical_description(active.description)
+    )
+    return stable_fields_match and description_extends_active
+
+
 def _verify_round_trip(text: str, expected: list[Task], *, path: Path | None) -> None:
     """Guard against silent task-file corruption / data loss.
 
@@ -696,12 +721,11 @@ def _strict_task_ids_in_path(path: Path) -> list[str]:
 
 @contextmanager
 def _task_allocation_lock(tasks_dir: Path) -> Iterator[None]:
-    """Serialize ID allocation + active.md writes across concurrent processes.
+    """Serialize all ``active/`` and ``done/`` writes across processes.
 
-    Without this, parallel `science tasks add` invocations each read the same max
-    ID and the same active.md, producing duplicate IDs and lost writes. An
-    exclusive advisory lock on a sentinel file makes the read-allocate-write
-    sequence atomic; the lock auto-releases if a holder crashes.
+    Acquire once at the top level and never re-acquire in a helper: ``flock``
+    deadlocks when the same process takes the lock through a second file
+    descriptor. The lock auto-releases if its holder crashes.
     """
     tasks_dir.mkdir(parents=True, exist_ok=True)
     lock_path = tasks_dir / ".tasks.lock"
@@ -948,28 +972,51 @@ def add_task(
     return task
 
 
-def _move_task_to_done(tasks_dir: Path, remaining: list[Task], done_path: Path, task: Task) -> None:
-    """Atomically move a task from active.md to a done archive.
+def _move_task_to_done(tasks_dir: Path, task: Task, *, target_status: str) -> None:
+    """Append a terminal task to its ledger, then delete its active file.
 
-    Both the new active.md and the new done file are rendered AND round-trip
-    verified before either is written, so a corrupting payload (or a parser
-    fragility) aborts the whole move instead of half-applying it and losing data.
+    The caller must already hold ``_task_allocation_lock``. This helper must
+    never acquire it again because a second ``flock`` file descriptor deadlocks.
     """
-    tasks_dir.mkdir(parents=True, exist_ok=True)
+    from science_tool.tasks_ledger import _destination_for, _read_destination  # noqa: PLC0415
+
+    done_dir = tasks_dir / "done"
+    occurrences: list[tuple[Path, Task]] = []
+    for path in _task_search_paths(tasks_dir):
+        if path.parent != done_dir or not path.is_file():
+            continue
+        _preamble, ledger_tasks = _read_destination(path)
+        occurrences.extend((path, ledger) for ledger in ledger_tasks if ledger.id == task.id)
+
+    if len(occurrences) > 1:
+        locations = ", ".join(str(path) for path, _ledger in occurrences)
+        raise ValueError(
+            f"multiple done-ledger occurrences for task {task.id}: {locations}"
+        )
+    if occurrences:
+        path, ledger = occurrences[0]
+        if not _move_recovery_equivalent(
+            task,
+            ledger,
+            target_status=target_status,
+        ):
+            raise ValueError(
+                f"conflicting done-ledger occurrence for task {task.id}: {path}"
+            )
+        delete_task_file(tasks_dir, task.id)
+        return
+
+    relative_destination, _missing_completed = _destination_for(task, date.today())
+    done_path = tasks_dir / relative_destination
     done_path.parent.mkdir(parents=True, exist_ok=True)
+    preamble, ledger_tasks = _read_destination(done_path)
+    ledger_tasks.append(task)
+    done_text = preamble + render_tasks(ledger_tasks)
+    _verify_round_trip(done_text, ledger_tasks, path=done_path)
 
-    active = tasks_dir / "active.md"
-    active_text = _render_task_file(active, remaining)
-    _verify_round_trip(active_text, remaining, path=active)
-
-    existing_done = parse_tasks(done_path)
-    existing_done.append(task)
-    done_text = render_tasks(existing_done)
-    _verify_round_trip(done_text, existing_done, path=done_path)
-
-    # Both renders verified — now commit both writes.
-    active.write_text(active_text)
-    done_path.write_text(done_text)
+    # Commit the recoverable side first: a retry can recognize this ledger entry.
+    atomic_write_text(done_path, done_text)
+    delete_task_file(tasks_dir, task.id)
 
 
 def complete_task(tasks_dir: Path, task_id: str, note: str | None = None) -> Task:
