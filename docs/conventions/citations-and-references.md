@@ -6,6 +6,26 @@ citations. `papers/references.bib` is the bibliography authority for
 are project-owned reading or interpretation records; they do not replace the
 bibliography authority.
 
+## Where the PDFs live
+
+Paper and book PDFs belong in **`papers/pdfs/`** — a sibling of the tracked
+`papers/references.bib`, under the same `papers/` root.
+
+`papers/pdfs/` is **gitignored payload territory**, consistent with the
+[data boundary](data-boundary.md): the PDFs are large redistributable-restricted
+binaries, so tracking status is legible from location and nothing is force-added
+in place. What is tracked is the record that *cites* the PDF — the bibliography
+entry and any `paper:<bibkey>` note — never the bytes.
+
+Both `science create-project` and `science import-project` already scaffold the
+`papers/pdfs/` ignore rule, and tooling resolves the directory through
+`ProjectPaths.pdfs_dir` (derived as `papers_dir / "pdfs"`, so relocating
+`papers/` carries its payload directory with it). Resolve it rather than
+hardcoding the literal.
+
+Keep a `.gitkeep` in the directory if the project wants the empty tree to
+survive a fresh clone.
+
 ## Reference Records
 
 App-facing reference bundles use the `science.references` contract:
