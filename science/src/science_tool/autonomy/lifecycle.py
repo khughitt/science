@@ -261,6 +261,52 @@ def finish_run(
     )
 
 
+def file_quarantine_feedback(outcome: RunOutcome, *, feedback_dir: Path, project: str) -> Path:
+    """File one feedback item naming the run, the entity, and the delta (design §6).
+
+    Escalation reuses the existing `science feedback` surface rather than inventing a
+    second channel. The directory resolves OUTSIDE the project (`$SCIENCE_FEEDBACK_DIR`
+    or the user config dir), so escalating writes nothing into the run's worktree.
+
+    Only a QUARANTINE files an item. `unwired` is a blocked run with no finding to
+    triage -- filing one would put "we could not tell" into a queue meant for things
+    that went wrong.
+    """
+    from science_tool.feedback import FeedbackEntry, next_feedback_id, save_entry
+
+    if outcome.disposition is not RunDisposition.QUARANTINED:
+        raise ValueError(f"only a quarantined run files feedback, got {outcome.disposition.value!r}")
+    assert outcome.record is not None  # a quarantine always has a record
+
+    lines: list[str] = []
+    for delta in outcome.deltas:
+        lines.append(f"belief basis moved for {delta.entity_id}: {', '.join(delta.changed)} -- {delta.detail}")
+    for denial in outcome.denials:
+        location = denial.path if denial.field is None else f"{denial.path} field {denial.field!r}"
+        lines.append(f"path gate denied {location} -- {denial.reason}")
+    for issue in outcome.mark_issues:
+        lines.append(f"commit {issue.commit[:12]} -- {issue.reason}")
+
+    created = outcome.record.ended.date().isoformat()
+    entry = FeedbackEntry(
+        id=next_feedback_id(feedback_dir, created),
+        created=created,
+        project=project,
+        target="command:autonomy-finish",
+        # `feedback.VALID_CATEGORIES` is ("friction", "gap", "guidance", "suggestion",
+        # "positive") -- `category` has no field validator, so an invented value like
+        # "bug" would be accepted and then never appear in any category-filtered view.
+        # "friction" is the honest fit: a run hit the envelope. "gap" would claim the
+        # toolkit is missing a capability, which a quarantine does not establish.
+        category="friction",
+        status="open",
+        summary=f"autonomous run {outcome.record.id} quarantined",
+        detail="\n".join(lines),
+        concern="tooling",
+    )
+    return save_entry(feedback_dir, entry)
+
+
 def _finalize(
     project_root: Path,
     baseline: RunBaseline,

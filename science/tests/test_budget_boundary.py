@@ -24,7 +24,7 @@ from science_tool.cli import main
 EXPECTED_CLASSIFICATION_COUNTS = {
     "budgeted": 10,
     "exempt": 67,
-    "deferred": 202,
+    "deferred": 204,
 }
 
 
@@ -65,8 +65,13 @@ def test_classification_partition_has_the_audited_cardinality() -> None:
     six ROWS offenders (entity list, feedback list, questions/interpretations/
     discussions list, entity needs-review), moving them from deferred to budgeted. The
     autonomy path-gate command adds one deferred leaf because it emits one row per
-    denial, which grows with the run's change set. The live partition is therefore
-    10/67/202 = 279.
+    denial, which grows with the run's change set.
+
+    The autonomy start and finish commands add two deferred leaves: start emits one fixed
+    summary record, and finish emits one row per basis delta, gate denial, and commit-mark
+    issue.
+
+    The live partition is therefore 10/67/204 = 281.
     """
     actual = {
         "budgeted": len(BUDGETS),
