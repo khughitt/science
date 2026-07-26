@@ -436,16 +436,29 @@ def inquiry_validate(slug: str, output_format: str, graph_path: Path, output_pat
 )
 def inquiry_export_pgmpy(slug: str, output_path: Path | None, graph_path: Path) -> None:
     """Export a causal inquiry as a pgmpy scaffold script."""
+    from science_tool.budget.control import bounded_control_notice
+    from science_tool.budget.invocation import build_complete_via
+    from science_tool.budget.registry import lookup
+    from science_tool.budget.sink import BoundedSink
+
     try:
         script = export_pgmpy_script(graph_path, slug)
     except ValueError as e:
         raise click.ClickException(str(e))
 
-    if output_path:
-        output_path.write_text(script, encoding="utf-8")
-        click.echo(f"Wrote pgmpy script to {output_path}")
-    else:
-        click.echo(script)
+    sink = BoundedSink(
+        lookup("inquiry export-pgmpy"),
+        output_path=output_path,
+        command_path="inquiry export-pgmpy",
+        complete_via=build_complete_via(click.get_current_context(), output_hint="export-pgmpy.py"),
+    )
+    control_notice = (
+        bounded_control_notice(f"wrote the pgmpy script to {output_path}") if output_path is not None else None
+    )
+    sink.write(script)
+    sink.flush()
+    if control_notice is not None:
+        click.echo(control_notice)
 
 
 @inquiry_group.command("export-chirho")

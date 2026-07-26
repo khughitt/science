@@ -22,9 +22,9 @@ from science_tool.budget.registry import BUDGETS, DEFERRED, EXEMPTIONS
 from science_tool.cli import main
 
 EXPECTED_CLASSIFICATION_COUNTS = {
-    "budgeted": 67,
+    "budgeted": 68,
     "exempt": 111,
-    "deferred": 101,
+    "deferred": 100,
 }
 
 
@@ -115,7 +115,11 @@ def test_classification_partition_has_the_audited_cardinality() -> None:
     inside the registered command's own callback -- retrofitting a structured payload
     across five early-return branches of a side-effecting (git-committing) promote
     workflow is a bigger, riskier change than this wiring batch, so it is left for a
-    dedicated follow-up. The live partition is therefore 67/111/101 = 279.
+    dedicated follow-up. Batch W5 then wired the final DOCUMENT command, `inquiry
+    export-pgmpy`, routing its generated script through a `BoundedSink` that refuses
+    past budget on stdout and writes the complete script to `--output`; `inquiry
+    export-chirho` was left deferred (unwired). The live partition is therefore
+    68/111/100 = 279.
     """
     actual = {
         "budgeted": len(BUDGETS),

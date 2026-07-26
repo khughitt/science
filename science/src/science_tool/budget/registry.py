@@ -92,6 +92,7 @@ BUDGETS: dict[str, CommandBudget] = {
     "feedback regression-candidates": CommandBudget(max_chars=20_000, shape=PayloadShape.ROWS, max_rows=40),
     "feedback targets": CommandBudget(max_chars=20_000, shape=PayloadShape.ROWS, max_rows=40),
     "inquiry list": CommandBudget(max_chars=20_000, shape=PayloadShape.ROWS, max_rows=40),
+    "inquiry export-pgmpy": CommandBudget(max_chars=20_000, shape=PayloadShape.DOCUMENT),
     "project index": CommandBudget(max_chars=20_000, shape=PayloadShape.ROWS, max_rows=40),
     "tasks archive": CommandBudget(max_chars=20_000, shape=PayloadShape.ROWS, max_rows=40),
     "annotate promote": CommandBudget(max_chars=20_000, shape=PayloadShape.ROWS, max_rows=40),
@@ -441,10 +442,7 @@ DEFERRED.update(
 DEFERRED.update(
     {
         path: DeferredCommand("one output member per inquiry, node, edge, validation check, or generated script line", "1b")
-        for path in (
-            "inquiry export-chirho",
-            "inquiry export-pgmpy",
-        )
+        for path in ("inquiry export-chirho",)
     }
 )
 DEFERRED.update(

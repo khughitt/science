@@ -11,11 +11,13 @@ from pathlib import Path
 
 import pytest
 from click.testing import CliRunner
+from conftest import build_inquiry_graph
 
 from science_tool.budget.measure import visible_len
 from science_tool.budget.control import CONTROL_NOTICE_MAX_CHARS
 from science_tool.budget.registry import BUDGETS
 from science_tool.cli import main
+from science_tool.graph.store import INITIAL_GRAPH_TEMPLATE, _graph_uri, _load_dataset, _resolve_term, _save_dataset
 
 TASKS = "\n".join(
     f"""## [t{i:03d}] Task {i} with a deliberately long title to exercise wrapping behaviour
@@ -1106,3 +1108,84 @@ def test_tasks_summary_output_file_is_complete(tasks_summary_overflow_project: P
     payload = json.loads(target.read_text())
     assert len(payload["by_group"]) == 45
     assert "by_group_omitted" not in payload
+
+
+_INQUIRY_EXPORT_PGMPY_EDGE_COUNT = 350
+
+
+@pytest.fixture
+def inquiry_export_pgmpy_overflow_graph(tmp_path: Path) -> Path:
+    """A causal inquiry with enough unclaimed edges that the pgmpy export exceeds 20,000 chars.
+
+    Each of ``_INQUIRY_EXPORT_PGMPY_EDGE_COUNT`` boundary variables directly causes a shared
+    outcome with no attached relation claim, so every edge contributes both a model tuple line
+    and a "no attached relation claim" TODO line (``export_pgmpy.py``).
+    """
+    graph_path = tmp_path / "knowledge" / "graph.trig"
+    graph_path.parent.mkdir(parents=True)
+    graph_path.write_text(INITIAL_GRAPH_TEMPLATE, encoding="utf-8")
+
+    n = _INQUIRY_EXPORT_PGMPY_EDGE_COUNT
+    build_inquiry_graph(
+        graph_path,
+        slug="overflowdag",
+        title="Overflow DAG",
+        profile="causal",
+        focal="hypothesis:h0",
+        treatment="concept:x0000",
+        outcome="concept:y",
+        boundary_roles=[
+            *({"ref": f"concept:x{i:04d}", "role": "BoundaryIn"} for i in range(n)),
+            {"ref": "concept:y", "role": "BoundaryOut"},
+        ],
+    )
+
+    dataset = _load_dataset(graph_path)
+    causal = dataset.graph(_graph_uri("graph/causal"))
+    causes = _resolve_term("scic:causes")
+    outcome_uri = _resolve_term("concept:y")
+    for i in range(n):
+        causal.add((_resolve_term(f"concept:x{i:04d}"), causes, outcome_uri))
+    _save_dataset(dataset, graph_path)
+    return graph_path
+
+
+def test_inquiry_export_pgmpy_stdout_refuses_rather_than_flooding(
+    inquiry_export_pgmpy_overflow_graph: Path,
+) -> None:
+    """DOCUMENT-shaped: stdout refuses whole rather than emitting a partial script."""
+    result = _invoke(["inquiry", "export-pgmpy", "overflowdag", "--path", str(inquiry_export_pgmpy_overflow_graph)])
+    assert result.exit_code != 0, result.output
+    assert "--output" in result.output
+    ceiling = BUDGETS["inquiry export-pgmpy"].max_chars
+    assert visible_len(result.output) <= ceiling
+    # No partial script content leaks past the refusal.
+    assert "DiscreteBayesianNetwork" not in result.output
+    assert "x0000" not in result.output
+
+
+def test_inquiry_export_pgmpy_output_file_is_complete(
+    inquiry_export_pgmpy_overflow_graph: Path, tmp_path: Path
+) -> None:
+    """``--output PATH`` still writes the complete, unbudgeted script."""
+    target = tmp_path / "overflowdag.py"
+    result = _invoke(
+        [
+            "inquiry",
+            "export-pgmpy",
+            "overflowdag",
+            "--path",
+            str(inquiry_export_pgmpy_overflow_graph),
+            "--output",
+            str(target),
+        ]
+    )
+    assert result.exit_code == 0, result.output
+    assert "wrote the pgmpy script to" in result.output
+
+    written = target.read_text()
+    assert visible_len(written) > BUDGETS["inquiry export-pgmpy"].max_chars
+    n = _INQUIRY_EXPORT_PGMPY_EDGE_COUNT
+    assert written.count('"),') == n  # one model-tuple line per unclaimed edge
+    assert written.count("has no attached relation claim") == n
+    assert all(f'("x{i:04d}", "y")' in written for i in range(n))
