@@ -122,12 +122,19 @@ def test_parse_uses_one_file_snapshot(monkeypatch: pytest.MonkeyPatch) -> None:
     assert (read_count, task.title, task.description) == (1, "version A", "body A")
 
 
-def test_duplicate_key_in_first_snapshot_cannot_be_bypassed(
+def test_unchecked_duplicate_second_snapshot_cannot_replace_clean_snapshot(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    duplicate = _task_text(extra="priority: P2\n")
-    clean = _task_text()
-    snapshots = iter((duplicate, clean))
+    clean = (
+        _task_text(title="clean version")
+        .replace("priority: P1\n", "priority: P0\n")
+        .replace("body\n", "clean body\n")
+    )
+    duplicate = (
+        _task_text(title="unchecked version", extra="priority: P2\n")
+        .replace("body\n", "unchecked body\n")
+    )
+    snapshots = iter((clean, duplicate))
     read_count = 0
 
     def changing_read(_path: Path, *, encoding: str) -> str:
@@ -137,10 +144,14 @@ def test_duplicate_key_in_first_snapshot_cannot_be_bypassed(
 
     monkeypatch.setattr(Path, "read_text", changing_read)
 
-    with pytest.raises(ValueError, match="duplicate"):
-        task_module.parse_task_file(Path("t042-x.md"))
+    task = task_module.parse_task_file(Path("t042-x.md"))
 
-    assert read_count == 1
+    assert (read_count, task.title, task.priority, task.description) == (
+        1,
+        "clean version",
+        "P0",
+        "clean body",
+    )
 
 
 def test_rejects_missing_required_key(tmp_path: Path) -> None:
