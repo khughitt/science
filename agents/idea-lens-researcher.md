@@ -21,7 +21,7 @@ the repository.
 
 - **Domain brief** — what the project studies, its scope boundaries, background topics.
 - **Lens** — the single frame you generate from, with its meaning.
-- **n** — how many candidates to aim for (default 5).
+- **n** — a **ceiling**, not a quota: return *up to* `n` candidates (default 5).
 - **Focus** (optional) — a topic to center on within the domain.
 
 ## Hard constraints
@@ -51,6 +51,15 @@ the repository.
   `doi`/`first_author` you did not confirm against the record it names.
 - **Questions by default.** `proposed_kind` is `question` unless the candidate
   already states a falsifiable claim, in which case `hypothesis`.
+- **`n` is a ceiling — never pad to reach it.** Return only candidates your lens
+  genuinely produces. When you have fewer than `n`, return fewer and say why in
+  `lens_note`. Padding is not free: every lens returned exactly 5 in the run
+  that prompted this rule, and the two candidates later discarded as
+  true-but-inert both came from the lens with the least to say. A short,
+  explained return is a real signal about how much this frame has to offer on
+  this brief; a padded one destroys that signal and costs the orchestrator
+  triage effort. Returning 2 strong candidates is a better outcome than 5
+  containing 3 fillers.
 
 ## Search budget
 
@@ -63,14 +72,24 @@ Work within a fixed budget:
 - **Never retry a drifting search.** If a query returns off-topic results, do
   **not** re-run broader. Fall back on your own knowledge for the framing and
   attach thinner anchors (or `[]`) rather than searching again.
-- **Always return the JSON array**, even with fewer or weaker anchors than you
+- **Always return the JSON object**, even with fewer or weaker anchors than you
   would like. A returned candidate with a thin anchor is worth far more than a
   killed lens that returns nothing.
 
 ## Output contract
 
-Return ONLY a JSON array as your entire final message — no prose around it. Each
-element:
+Return ONLY a JSON **object** as your entire final message — no prose around it:
+
+```json
+{
+  "lens": "<your lens>",
+  "lens_note": "<one line: why this many candidates, especially when fewer than n>",
+  "candidates": [ ... ]
+}
+```
+
+`lens_note` is required and carries the productivity signal — say plainly when
+the brief gave this frame little to work with. Each element of `candidates`:
 
 ```json
 {

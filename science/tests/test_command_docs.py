@@ -255,9 +255,9 @@ def test_explore_ideas_documents_multi_lens_convergence_representation() -> None
     text = _read("commands/explore-ideas.md")
     normalized = _norm(text)
 
-    assert "Convergence detection" in text
-    assert "Convergent lenses are **not** collapsed to one" in text
-    assert "single block carrying multiple `lens_views`" in normalized
+    assert "Convergence and cluster detection" in text
+    assert "Convergent lenses are not collapsed to" in text
+    assert "one** block carrying multiple `lens_views`" in normalized
     assert "When two lenses independently converge on the **same idea**, emit **one block**" in text
     assert "not one per lens" in normalized
     assert "one `origin_plan.origins` entry per lens" in normalized
