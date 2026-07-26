@@ -51,3 +51,11 @@ def kind_can_author_relation(relation_name: str, kind: str) -> bool:
 DECLARED_STATUSES: dict[str, frozenset[str]] = {
     ek.name: frozenset(ek.statuses) for ek in KIND_DESCRIPTORS if ek.statuses
 }
+
+#: Kind -> whether it may be superseded (S2). Built over `KIND_DESCRIPTORS` -- the SHIPPED
+#: profiles only -- exactly like `DECLARED_STATUSES`. That population is load-bearing: a kind
+#: declared in a project manifest is ABSENT here and cannot enter the frozen `supported_kinds`
+#: policy. Authored `sci:supersedes` admission independently resolves against the core relation
+#: descriptor, so a project-local endpoint pair is refused. The writer itself supports
+#: project-local status vocabularies; inertness does not depend on a write-time failure.
+DECLARED_SUPERSEDABLE: dict[str, bool] = {ek.name: bool(ek.supersedable) for ek in KIND_DESCRIPTORS}

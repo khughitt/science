@@ -59,20 +59,6 @@ def test_lineage_non_linear_reported(tmp_path: Path) -> None:
     assert report.superseded_lineage.non_linear[0].nodes == ["interpretation:i-a", "interpretation:i-b", "interpretation:i-v3"]
 
 
-def test_lineage_reports_kind_lacking_superseded_vocab(tmp_path: Path) -> None:
-    # workflow-run is supersedes-eligible but declares NO status vocabulary;
-    # mark_superseded(apply) skips it, but the read-only detector still reports it.
-    _seed(tmp_path)
-    _write(tmp_path, "workflow-runs", "wr-old", {"id": "workflow-run:wr-old", "kind": "workflow-run"})
-    _write(tmp_path, "workflow-runs", "wr-new", {"id": "workflow-run:wr-new", "kind": "workflow-run", "relations": [_supersedes("workflow-run:wr-old")]})
-
-    from science_tool.consolidation_candidates import detect_consolidation_candidates
-
-    report = detect_consolidation_candidates(tmp_path)
-    assert len(report.superseded_lineage.linear) == 1
-    assert report.superseded_lineage.linear[0].archivable == ["workflow-run:wr-old"]
-
-
 def test_id_stem_clusters_within_a_kind(tmp_path: Path) -> None:
     _seed(tmp_path)
     _write(tmp_path, "interpretations", "0001-foo-v1", {"id": "interpretation:0001-foo-v1", "kind": "interpretation"})

@@ -18,7 +18,7 @@ from rdflib import Dataset, Literal, Namespace, URIRef
 from rdflib.namespace import RDF, SKOS, XSD
 
 from science_tool.cli import main
-from science_tool.graph.materialize import materialize_graph
+from science_tool.graph.materialize import RelationRejection, materialize_graph
 from science_tool.graph.sources import load_project_sources
 from science_tool.graph.store import diff_graph_inputs
 
@@ -1106,7 +1106,9 @@ def test_materialize_graph_accepts_conclusion_amends_and_supersedes(tmp_path: Pa
     assert (PROJECT_NS["interpretation/new"], SCI.supersedes, PROJECT_NS["interpretation/old"]) in knowledge
 
 
-def test_materialize_graph_preserves_workflow_run_supersedes(tmp_path: Path) -> None:
+def test_materialize_graph_REJECTS_workflow_run_supersedes(tmp_path: Path) -> None:
+    # S2: a re-run is a new record, not a replacement. `workflow-run` is no longer a `sci:supersedes`
+    # endpoint, so authoring the edge must be refused rather than silently materialized.
     project = tmp_path / "demo"
     _write_demo_project(project)
     _write_minimal_entity(project / "entities" / "runs" / "old.md", "workflow-run:old-run", "workflow-run", "Old run")
@@ -1122,12 +1124,8 @@ def test_materialize_graph_preserves_workflow_run_supersedes(tmp_path: Path) -> 
         ],
     )
 
-    trig_path = materialize_graph(project)
-
-    dataset = Dataset()
-    dataset.parse(source=str(trig_path), format="trig")
-    knowledge = dataset.graph(PROJECT_NS["graph/knowledge"])
-    assert (PROJECT_NS["workflow-run/new-run"], SCI.supersedes, PROJECT_NS["workflow-run/old-run"]) in knowledge
+    with pytest.raises(RelationRejection, match="invalid authored relation endpoint"):
+        materialize_graph(project)
 
 
 def test_materialize_graph_rejects_invalid_supersedes_pair(tmp_path: Path) -> None:

@@ -96,11 +96,14 @@ def test_core_profile_declares_amends_and_non_cartesian_supersedes() -> None:
     assert relation_allows_kinds(amends, "report", "interpretation")
     assert not relation_allows_kinds(amends, "workflow-run", "workflow-run")
 
-    assert relation_allows_kinds(supersedes, "workflow-run", "workflow-run")
+    assert not relation_allows_kinds(supersedes, "workflow-run", "workflow-run")
     assert relation_allows_kinds(supersedes, "interpretation", "finding")
     assert relation_allows_kinds(supersedes, "story", "validation-report")
     assert not relation_allows_kinds(supersedes, "interpretation", "workflow-run")
     assert not relation_allows_kinds(supersedes, "workflow-run", "interpretation")
+    # Self-superseding kinds are self-only: `topic` replaces a topic, never a plan.
+    assert relation_allows_kinds(supersedes, "topic", "topic")
+    assert not relation_allows_kinds(supersedes, "topic", "plan")
 
     amends_pairs = {(pair.source_kind, pair.target_kind) for pair in amends.allowed_kind_pairs}
     supersedes_pairs = {(pair.source_kind, pair.target_kind) for pair in supersedes.allowed_kind_pairs}
@@ -108,7 +111,9 @@ def test_core_profile_declares_amends_and_non_cartesian_supersedes() -> None:
         for target_kind in conclusion_kinds:
             assert (source_kind, target_kind) in amends_pairs
             assert (source_kind, target_kind) in supersedes_pairs
-    assert ("workflow-run", "workflow-run") in supersedes_pairs
+    assert ("workflow-run", "workflow-run") not in supersedes_pairs
+    for self_superseding in ("topic", "plan", "decision", "workflow-step"):
+        assert (self_superseding, self_superseding) in supersedes_pairs
 
 
 def test_tests_relation_accepts_workflow_run() -> None:

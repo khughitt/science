@@ -38,6 +38,11 @@ class EntityKind(BaseModel):
     strategy: str | None = None  # raw manifest input; the EntityFilenameStrategy vocab is enforced tool-side by the path-policy loader, not at the schema boundary
     default_status: str | None = None
     statuses: list[str] | None = None
+    # Lineage capability (S2): can an entity of this kind be replaced as canonical by a newer one?
+    # DECLARED per kind -- never inferred from `statuses`, which is how the two drifted. Defaults
+    # False because project-authored manifest kinds validate through this model and must not be
+    # forced to declare; a test asserts every SHIPPED kind sets it explicitly.
+    supersedable: bool = False
     # Structured-source declaration: a project-local kind whose entities are
     # generated/maintained as rows in a single-type YAML data file under
     # knowledge/sources/<profile>/ (NOT the multi-type entities.yaml/terms.yaml

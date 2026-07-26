@@ -21,6 +21,7 @@ def test_entity_kind_new_fields_default_to_neutral() -> None:
     assert ek.template_ready is False
     assert ek.shortform is None
     assert ek.strategy is None
+    assert ek.supersedable is False
 
 
 def test_entity_kind_typed_fields_coerce() -> None:

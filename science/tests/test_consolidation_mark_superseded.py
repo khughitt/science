@@ -7,13 +7,14 @@ acyclicity scan, the reconciliation) is exercised on `interpretation`, which has
 `superseded` and been an admitted `sci:supersedes` endpoint all along — so leg 3 could be certified
 without changing what any existing file means.
 
-`hypothesis` could not be tested here AT ALL until its descriptor declared a `superseded` terminal:
-`_supports_superseded` consults `_STATUS_VALUES`, so every hypothesis member was routed to
-`skipped_kinds` and nothing was written. A hypothesis apply-test would not have failed loudly — it
-would have reported `to_mark == []`, written nothing, and gone **green over an operation that did
-nothing**. That is why the hypothesis tests at the bottom of this file arrive with the descriptor
-that makes them executable, and not one task earlier. *A test belongs in the task where its subject
-exists.*
+`hypothesis` could not be tested here AT ALL until its descriptor declared both a `superseded`
+terminal and `supersedable=True`. The former makes the eventual writer's status valid; the latter
+alone enters `DECLARED_SUPERSEDABLE`, the auto-stamping policy map. Historically, before the
+descriptor acquired those requirements, every hypothesis member was routed to `skipped_kinds` and
+nothing was written. A hypothesis apply-test would not have failed loudly — it would have reported
+`to_mark == []`, written nothing, and gone **green over an operation that did nothing**. That is
+why the hypothesis tests at the bottom of this file arrive with the descriptor that makes them
+executable, and not one task earlier. *A test belongs in the task where its subject exists.*
 """
 
 from __future__ import annotations
@@ -35,6 +36,7 @@ from science_tool.consolidation import (
     SupersededChain,
     SupersessionError,
     SupersessionInputs,
+    build_decision_material,
     build_supersedes_graph,
     load_supersession_inputs,
     mark_superseded,
@@ -45,6 +47,8 @@ from science_tool.graph.materialize import AdmittedRelation
 from science_tool.graph.reference_resolution import ReferenceResolver
 from science_tool.graph.relation_audit import RelationAudit, RelationDefect
 from science_tool.graph.sources import SourceRelation
+from science_tool.plan_common import AllSupersessionMembers
+from science_tool.supersede_plan import derive_supersede_plan
 
 
 def _write(root: Path, kind_dir: str, name: str, fm: dict) -> Path:
@@ -295,21 +299,33 @@ def test_report_flags_non_linear_chain_and_skips_it(tmp_path: Path) -> None:
     }
 
 
-def test_member_whose_kind_lacks_superseded_vocab_is_skipped_not_crashed(tmp_path: Path) -> None:
+def test_member_omitted_from_the_frozen_policy_is_skipped_not_crashed(tmp_path: Path) -> None:
+    # The fixture is a NORMALLY SUPERSEDABLE kind held out of its material's `supported_kinds` --
+    # not a "kind lacking the vocabulary", which after S2 cannot be an admitted member at all.
+    # Reachable only from stale or hand-built material, so it is built through the material path
+    # rather than by hand-constructing a graph: the point is that inconsistent material SURVIVES
+    # `build_supersedes_graph_from_material` and is then skipped, and a hand-built graph would
+    # bypass that step entirely.
     _seed(tmp_path)
-    # workflow-run is a supersedes endpoint but declares NO status vocabulary. The member must be
-    # reported under skipped_kinds, never crash. (`hypothesis` took this same route until the
-    # descriptor gave it a `superseded` terminal; it now stamps, and the tests at the bottom of this
-    # file are the ones that could not exist while it was skipped.)
-    _write(tmp_path, "workflow-runs", "wr-old", {"id": "workflow-run:wr-old", "kind": "workflow-run"})
-    _write(tmp_path, "workflow-runs", "wr-new", {"id": "workflow-run:wr-new", "kind": "workflow-run",
-                                                 "relations": [_supersedes("workflow-run:wr-old")]})
+    _write(tmp_path, "interpretations", "i-old", {"id": "interpretation:i-old", "kind": "interpretation"})
+    _write(tmp_path, "interpretations", "i-new", {"id": "interpretation:i-new", "kind": "interpretation",
+                                                  "relations": [_supersedes("interpretation:i-old")]})
 
-    report = mark_superseded(tmp_path, apply=False)
+    material = build_decision_material(tmp_path)
+    assert "interpretation" in material.supported_kinds  # the fixture is meaningful only if so
+    narrowed = material.model_copy(
+        update={"supported_kinds": [k for k in material.supported_kinds if k != "interpretation"]}
+    )
 
-    assert report["to_mark"] == []
-    assert {entry["id"] for entry in report["skipped_kinds"]} == {"workflow-run:wr-old"}
-    assert report["skipped_kinds"][0]["kind"] == "workflow-run"
+    plan = derive_supersede_plan(
+        tmp_path,
+        narrowed,
+        selection=AllSupersessionMembers(kind="all"),
+        preview_date="2026-07-26",
+    )
+
+    assert plan.preview_report.to_mark == []
+    assert {entry.id for entry in plan.preview_report.skipped_kinds} == {"interpretation:i-old"}
 
 
 def test_apply_sets_superseded_status_on_members(tmp_path: Path) -> None:
@@ -324,6 +340,59 @@ def test_apply_sets_superseded_status_on_members(tmp_path: Path) -> None:
     assert fm is not None and fm["status"] == "superseded"
     fm_v4 = read_frontmatter(tmp_path / "entities/interpretations/i-v4.md")   # survivor untouched
     assert fm_v4 is not None and fm_v4.get("status") in (None, "active")
+
+
+@pytest.mark.parametrize(
+    ("kind", "kind_dir", "starting_status", "old_name", "new_name"),
+    [
+        pytest.param("story", "stories", "draft", "old-story", "new-story", id="story"),
+        pytest.param(
+            "validation-report",
+            "validation-reports",
+            "active",
+            "0001-old",
+            "0002-new",
+            id="validation-report",
+        ),
+    ],
+)
+def test_reverse_gap_kind_is_stamped_on_apply(
+    tmp_path: Path,
+    kind: str,
+    kind_dir: str,
+    starting_status: str,
+    old_name: str,
+    new_name: str,
+) -> None:
+    _seed(tmp_path)
+    old_id = f"{kind}:{old_name}"
+    new_id = f"{kind}:{new_name}"
+    old_path = _write(
+        tmp_path,
+        kind_dir,
+        old_name,
+        {"id": old_id, "kind": kind, "status": starting_status},
+    )
+    _write(
+        tmp_path,
+        kind_dir,
+        new_name,
+        {
+            "id": new_id,
+            "kind": kind,
+            "status": starting_status,
+            "relations": [_supersedes(old_id)],
+        },
+    )
+
+    report = mark_superseded(tmp_path, apply=True)
+    frontmatter = read_frontmatter(old_path)
+
+    assert report["applied"] == [old_id]
+    assert report["skipped_kinds"] == []
+    assert frontmatter is not None
+    assert frontmatter["status"] == "superseded"
+    assert frontmatter["superseded_by"] == new_id
 
 
 def test_cli_mark_superseded_dry_run_emits_json(tmp_path: Path) -> None:
@@ -1125,13 +1194,41 @@ def test_a_CYCLE_THROUGH_AN_UNMANAGED_NODE_KEEPS_ITS_COMPONENT_OUT_OF_THE_TOPOLO
     assert len(graph.invalid) == 2
 
 
+def test_a_newly_supersedable_kind_is_actually_stamped(tmp_path: Path) -> None:
+    # `topic` gained its endpoint in Task 3 and has always declared the status. If the policy stops
+    # following the declaration, this member silently stops being stamped -- which an equality
+    # assertion over two currently-identical sets would not catch.
+    _seed(tmp_path)
+    _write(tmp_path, "topics", "t-old", {"id": "topic:t-old", "kind": "topic", "status": "active"})
+    _write(tmp_path, "topics", "t-new", {"id": "topic:t-new", "kind": "topic", "status": "active",
+                                         "relations": [_supersedes("topic:t-old")]})
+
+    report = mark_superseded(tmp_path, apply=False)
+
+    assert report["to_mark"] == ["topic:t-old"]
+    assert report["skipped_kinds"] == []
+
+
+def test_the_frozen_policy_equals_the_profile_declaration(tmp_path: Path) -> None:
+    # Regression, not the driver: compared against the PROFILE, reached independently of
+    # `kind_descriptors`, because `supported_kinds` is BUILT from `DECLARED_SUPERSEDABLE` and
+    # comparing it back to that map would be the identity function.
+    from science_tool.consolidation import build_decision_material
+
+    _seed(tmp_path)
+    (tmp_path / "entities").mkdir()
+    material = build_decision_material(tmp_path)
+    declared = sorted(ek.name for ek in CORE_PROFILE.entity_kinds if ek.supersedable)
+    assert material.supported_kinds == declared
+
+
 # ---------------------------------------------------------------------------------------------
 # hypothesis — EXECUTABLE for the first time
 #
-# Every test above runs on `interpretation`, and not by preference: `_supports_superseded` was False
-# for `hypothesis` until its descriptor declared a `superseded` terminal, so `mark_superseded` routed
-# every hypothesis to `skipped_kinds` and wrote nothing. There was no hypothesis apply-test to write.
-# These three are the D4 triangle closed, on the kind the whole arc is about.
+# The original D4 cases in this section exercise `interpretation`, and not by preference: hypothesis
+# became executable only when its descriptor declared both the `superseded` terminal and
+# `supersedable=True`. The status makes the write valid; `DECLARED_SUPERSEDABLE` follows only the
+# capability. These three are the D4 triangle closed, on the kind the whole arc is about.
 # ---------------------------------------------------------------------------------------------
 
 
