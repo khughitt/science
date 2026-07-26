@@ -53,6 +53,7 @@ CORE_PROFILE = ProfileManifest(
             # consolidation -- a capability lost with no error anywhere.
             default_status="active",
             statuses=["draft", "active", "complete", "superseded", "retired", "archived"],
+            supersedable=True,
         ),
         EntityKind(
             name="question",
@@ -68,6 +69,7 @@ CORE_PROFILE = ProfileManifest(
             strategy="numeric",
             default_status="active",
             statuses=["active", "partially-answered", "answered", "deferred", "retired", "archived"],
+            supersedable=False,
         ),
         EntityKind(
             name="research-question",
@@ -79,6 +81,7 @@ CORE_PROFILE = ProfileManifest(
             category=KindCategory.AUTHORED_CORE,
             home="entities/research-question.md",
             strategy="singleton",
+            supersedable=False,
         ),
         EntityKind(
             name="task",
@@ -87,6 +90,7 @@ CORE_PROFILE = ProfileManifest(
             description="Operational project task tracked in the graph.",
             entity_class=EntityClass.OPERATIONAL,
             category=KindCategory.AUTHORED_CORE,
+            supersedable=False,
         ),
         EntityKind(
             name="proposition",
@@ -102,6 +106,7 @@ CORE_PROFILE = ProfileManifest(
             strategy="slug",
             default_status="draft",
             statuses=["draft", "active", "supported", "contested", "weakened", "retired", "superseded", "archived"],
+            supersedable=True,
         ),
         EntityKind(
             name="observation",
@@ -116,6 +121,7 @@ CORE_PROFILE = ProfileManifest(
             strategy="slug",
             default_status="active",
             statuses=["active", "superseded", "retired", "archived"],
+            supersedable=False,
         ),
         EntityKind(
             name="finding",
@@ -130,6 +136,7 @@ CORE_PROFILE = ProfileManifest(
             strategy="numeric",
             default_status="active",
             statuses=["active", "superseded", "retired", "archived"],
+            supersedable=True,
         ),
         EntityKind(
             name="interpretation",
@@ -145,6 +152,7 @@ CORE_PROFILE = ProfileManifest(
             strategy="numeric",
             default_status="active",
             statuses=["active", "complete", "superseded", "archived"],
+            supersedable=True,
         ),
         EntityKind(
             name="story",
@@ -159,6 +167,7 @@ CORE_PROFILE = ProfileManifest(
             strategy="slug",
             default_status="draft",
             statuses=["draft", "developing", "mature"],
+            supersedable=True,
         ),
         EntityKind(
             name="synthesis",
@@ -173,6 +182,7 @@ CORE_PROFILE = ProfileManifest(
             strategy="numeric",
             default_status="active",
             statuses=["active", "superseded", "retired", "archived"],
+            supersedable=True,
         ),
         EntityKind(
             name="report",
@@ -192,6 +202,7 @@ CORE_PROFILE = ProfileManifest(
             # illegally and 8 said `draft`. Added by construction, as the lifecycle words
             # they are -- not because files existed.
             statuses=["draft", "active", "complete", "superseded", "retired", "archived"],
+            supersedable=True,
         ),
         EntityKind(
             name="validation-report",
@@ -201,6 +212,7 @@ CORE_PROFILE = ProfileManifest(
             entity_class=EntityClass.EPISTEMIC,
             curation_scope=CurationScope.EPISTEMIC,
             category=KindCategory.AUTHORED_CORE,
+            supersedable=True,
         ),
         EntityKind(
             name="discussion",
@@ -216,6 +228,7 @@ CORE_PROFILE = ProfileManifest(
             strategy="numeric",
             default_status="active",
             statuses=["active", "complete", "superseded", "archived"],
+            supersedable=True,
         ),
         EntityKind(
             name="inquiry",
@@ -229,6 +242,7 @@ CORE_PROFILE = ProfileManifest(
             strategy="numeric",
             default_status="active",
             statuses=["active", "complete", "superseded", "archived"],
+            supersedable=True,
         ),
         EntityKind(
             name="mechanism",
@@ -243,6 +257,7 @@ CORE_PROFILE = ProfileManifest(
             strategy="numeric",
             default_status="active",
             statuses=["active", "superseded", "retired", "archived"],
+            supersedable=True,
         ),
         EntityKind(
             name="theme",
@@ -258,6 +273,7 @@ CORE_PROFILE = ProfileManifest(
             strategy="numeric",
             default_status="active",
             statuses=["draft", "active", "superseded", "retired", "archived"],
+            supersedable=True,
         ),
         EntityKind(
             name="assumption",
@@ -267,6 +283,7 @@ CORE_PROFILE = ProfileManifest(
             entity_class=EntityClass.EPISTEMIC,
             curation_scope=CurationScope.EPISTEMIC,
             category=KindCategory.AUTHORED_CORE,
+            supersedable=False,
         ),
         EntityKind(
             name="patch-definition",
@@ -280,6 +297,7 @@ CORE_PROFILE = ProfileManifest(
             strategy="slug",
             default_status="active",
             statuses=["active", "retired"],
+            supersedable=False,
         ),
         EntityKind(
             name="paper",
@@ -293,6 +311,7 @@ CORE_PROFILE = ProfileManifest(
             strategy="citekey",
             default_status="active",
             statuses=["active", "retired"],
+            supersedable=False,
         ),
         EntityKind(
             name="prose-source",
@@ -306,6 +325,7 @@ CORE_PROFILE = ProfileManifest(
             strategy="slug",
             default_status="active",
             statuses=["active", "retired"],
+            supersedable=False,
         ),
         EntityKind(
             name="book",
@@ -319,6 +339,7 @@ CORE_PROFILE = ProfileManifest(
             strategy="citekey",
             default_status="active",
             statuses=["active", "retired"],
+            supersedable=False,
         ),
         EntityKind(
             name="talk",
@@ -331,6 +352,7 @@ CORE_PROFILE = ProfileManifest(
             strategy="citekey",
             default_status="active",
             statuses=["active", "retired"],
+            supersedable=False,
         ),
         EntityKind(
             name="article",
@@ -339,6 +361,7 @@ CORE_PROFILE = ProfileManifest(
             description="External article or document referenced as a source.",
             entity_class=EntityClass.REFERENCE,
             category=KindCategory.AUTHORED_CORE,
+            supersedable=False,
         ),
         EntityKind(
             name="concept",
@@ -352,6 +375,7 @@ CORE_PROFILE = ProfileManifest(
             strategy="slug",
             default_status="active",
             statuses=["active", "deprecated"],
+            supersedable=False,
         ),
         EntityKind(
             name="construct",
@@ -364,6 +388,7 @@ CORE_PROFILE = ProfileManifest(
             strategy="slug",
             default_status="active",
             statuses=["active", "retired"],
+            supersedable=False,
         ),
         EntityKind(
             name="outcome",
@@ -376,6 +401,7 @@ CORE_PROFILE = ProfileManifest(
             strategy="slug",
             default_status="active",
             statuses=["active", "retired"],
+            supersedable=False,
         ),
         EntityKind(
             name="topic",
@@ -388,6 +414,7 @@ CORE_PROFILE = ProfileManifest(
             strategy="slug",
             default_status="active",
             statuses=["active", "superseded", "retired", "archived"],
+            supersedable=True,
         ),
         EntityKind(
             name="variable",
@@ -396,6 +423,7 @@ CORE_PROFILE = ProfileManifest(
             description="A modeled variable in an analysis or causal model.",
             entity_class=EntityClass.REFERENCE,
             category=KindCategory.AUTHORED_CORE,
+            supersedable=False,
         ),
         EntityKind(
             name="experiment",
@@ -404,6 +432,7 @@ CORE_PROFILE = ProfileManifest(
             description="Experiment or analysis step that tests project questions.",
             entity_class=EntityClass.OPERATIONAL,
             category=KindCategory.AUTHORED_CORE,
+            supersedable=False,
         ),
         EntityKind(
             name="method",
@@ -418,6 +447,7 @@ CORE_PROFILE = ProfileManifest(
             strategy="slug",
             default_status="active",
             statuses=["active", "superseded", "retired", "archived"],
+            supersedable=True,
         ),
         EntityKind(
             name="pre-registration",
@@ -444,6 +474,7 @@ CORE_PROFILE = ProfileManifest(
             # split, and adding them now would deepen the very collapse the split exists
             # to undo. Those files stay WARN -- that warning IS the migration signal.
             statuses=["active", "committed", "amended", "superseded", "retired"],
+            supersedable=False,
         ),
         EntityKind(
             name="plan",
@@ -465,6 +496,7 @@ CORE_PROFILE = ProfileManifest(
             # minting a synonym would entrench the ad-hoc per-kind divergence this whole
             # exercise is trying to end. Those 25 stay WARN and migrate to `draft`.
             statuses=["draft", "active", "complete", "superseded", "retired", "archived"],
+            supersedable=True,
         ),
         EntityKind(
             name="search",
@@ -477,6 +509,7 @@ CORE_PROFILE = ProfileManifest(
             strategy="numeric",
             default_status="active",
             statuses=["active", "complete", "retired", "archived"],
+            supersedable=False,
         ),
         EntityKind(
             name="decision",
@@ -489,6 +522,7 @@ CORE_PROFILE = ProfileManifest(
             strategy="verbatim",
             default_status="active",
             statuses=["active", "superseded", "abandoned", "archived"],
+            supersedable=True,
         ),
         EntityKind(
             name="claim-registry",
@@ -500,6 +534,7 @@ CORE_PROFILE = ProfileManifest(
             category=KindCategory.AUTHORED_CORE,
             home="entities/claim-registry.yaml",
             strategy="singleton",
+            supersedable=False,
         ),
         EntityKind(
             name="spec",
@@ -518,6 +553,7 @@ CORE_PROFILE = ProfileManifest(
             # screen remains plan-only. `superseded` here requires the `spec -> spec`
             # `sci:supersedes` pair below, or the D4 supersedable gate goes red.
             statuses=["draft", "active", "complete", "superseded", "retired", "archived"],
+            supersedable=True,
         ),
         EntityKind(
             name="transformation",
@@ -527,6 +563,7 @@ CORE_PROFILE = ProfileManifest(
             entity_class=EntityClass.OPERATIONAL,
             curation_scope=CurationScope.CORRESPONDENCE,
             category=KindCategory.AUTHORED_CORE,
+            supersedable=False,
         ),
         EntityKind(
             name="curation-sweep",
@@ -536,6 +573,7 @@ CORE_PROFILE = ProfileManifest(
             entity_class=EntityClass.OPERATIONAL,
             curation_scope=CurationScope.CORRESPONDENCE,
             category=KindCategory.AUTHORED_CORE,
+            supersedable=False,
         ),
         EntityKind(
             name="dataset",
@@ -550,6 +588,7 @@ CORE_PROFILE = ProfileManifest(
             # of the dataset lifecycle is deferred to the 2026-04-19 lifecycle design.
             default_status="active",
             statuses=["proposed", "candidate", "active", "retired", "deprecated"],
+            supersedable=False,
         ),
         EntityKind(
             name="workflow",
@@ -563,6 +602,7 @@ CORE_PROFILE = ProfileManifest(
             strategy="id-local",
             default_status="active",
             statuses=["planned", "active", "deprecated", "retired"],
+            supersedable=False,
         ),
         EntityKind(
             name="workflow-run",
@@ -575,6 +615,7 @@ CORE_PROFILE = ProfileManifest(
             strategy="id-local",
             default_status="running",
             statuses=["running", "complete", "failed"],
+            supersedable=False,
         ),
         EntityKind(
             name="workflow-step",
@@ -587,6 +628,7 @@ CORE_PROFILE = ProfileManifest(
             strategy="id-local",
             default_status="active",
             statuses=["active", "superseded", "retired"],
+            supersedable=True,
         ),
         EntityKind(
             name="data-package",
@@ -595,6 +637,7 @@ CORE_PROFILE = ProfileManifest(
             description="Frictionless research package containing analysis results, prose, and provenance metadata.",
             entity_class=EntityClass.OPERATIONAL,
             category=KindCategory.AUTHORED_CORE,
+            supersedable=False,
         ),
         EntityKind(
             name="research-package",
@@ -604,6 +647,7 @@ CORE_PROFILE = ProfileManifest(
             entity_class=EntityClass.OPERATIONAL,
             curation_scope=CurationScope.CORRESPONDENCE,
             category=KindCategory.AUTHORED_CORE,
+            supersedable=False,
         ),
         EntityKind(
             name="structural-chain",
@@ -613,6 +657,7 @@ CORE_PROFILE = ProfileManifest(
             entity_class=EntityClass.EPISTEMIC,
             curation_scope=CurationScope.EPISTEMIC,
             category=KindCategory.AUTHORED_CORE,
+            supersedable=False,
         ),
         EntityKind(
             name="chain-audit",
@@ -622,6 +667,7 @@ CORE_PROFILE = ProfileManifest(
             entity_class=EntityClass.EPISTEMIC,
             curation_scope=CurationScope.EPISTEMIC,
             category=KindCategory.AUTHORED_CORE,
+            supersedable=False,
         ),
         EntityKind(
             name="code-file",
@@ -630,6 +676,7 @@ CORE_PROFILE = ProfileManifest(
             description="Source-code file implementing workflow steps and methods.",
             entity_class=EntityClass.OPERATIONAL,
             category=KindCategory.AUTHORED_CORE,
+            supersedable=False,
         ),
         EntityKind(
             name="evidence-line",
@@ -644,6 +691,7 @@ CORE_PROFILE = ProfileManifest(
             strategy="slug",
             default_status="draft",
             statuses=["draft", "active", "retired", "archived"],
+            supersedable=False,
         ),
         EntityKind(
             name="falsification",
@@ -658,6 +706,7 @@ CORE_PROFILE = ProfileManifest(
             strategy="slug",
             default_status="draft",
             statuses=["draft", "active", "retired", "archived"],
+            supersedable=False,
         ),
         EntityKind(
             name="unknown",
@@ -666,6 +715,7 @@ CORE_PROFILE = ProfileManifest(
             description="Built-in sentinel kind for unrecognized entities.",
             entity_class=EntityClass.REFERENCE,
             category=KindCategory.RESERVED,
+            supersedable=False,
         ),
     ],
     relation_kinds=[

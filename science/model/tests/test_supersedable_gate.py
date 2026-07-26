@@ -20,8 +20,11 @@ The schema leg is tested in `test_mixin_hypothesis.py`, beside the mixin it cons
 
 from __future__ import annotations
 
+import pytest
+
 from science_model.profiles.core import CORE_PROFILE
-from science_model.profiles.schema import RelationKind
+from science_model.profiles.local import LOCAL_PROFILE
+from science_model.profiles.schema import EntityKind, RelationKind
 from science_model.relations import relation_allows_kinds  # THE authoritative admission rule
 
 # The twelve kinds that declare `superseded` while `sci:supersedes` forbids them as endpoints.
@@ -88,3 +91,37 @@ def test_supersedes_description_names_spec_replacement() -> None:
     # The descriptor prose is part of the contract: a reader of the relation must learn that spec
     # replacement is valid, not only that spec appears in the endpoint lists.
     assert "spec" in _supersedes().description.lower()
+
+
+SHIPPED_KINDS: tuple[EntityKind, ...] = (*CORE_PROFILE.entity_kinds, *LOCAL_PROFILE.entity_kinds)
+
+# The authored ruling. Kept here, beside the gate, so a reader sees the population the gate is
+# about without opening the profile -- and so a silent edit to the profile fails HERE.
+SUPERSEDABLE_KINDS: frozenset[str] = frozenset(
+    {
+        "decision", "discussion", "finding", "hypothesis", "inquiry", "interpretation",
+        "mechanism", "method", "plan", "proposition", "report", "spec", "story",
+        "synthesis", "theme", "topic", "validation-report", "workflow-step",
+    }
+)
+
+
+@pytest.mark.parametrize("kind", SHIPPED_KINDS, ids=lambda k: k.name)
+def test_every_shipped_kind_DECLARES_supersedable(kind: EntityKind) -> None:
+    # `model_fields_set` -- not the value. The field defaults to False so a project-authored
+    # manifest kind stays inert, which means a shipped kind that simply FORGOT to declare would be
+    # indistinguishable from one ruled non-supersedable. Presence is the only thing that separates
+    # them, and kind 51 must not be able to arrive silently.
+    assert "supersedable" in kind.model_fields_set, (
+        f"{kind.name} does not declare `supersedable`; every shipped kind must rule explicitly"
+    )
+
+
+def test_the_declared_population_is_exactly_the_ruling() -> None:
+    # Both directions. Adding a kind to the profile without ruling it, or leaving this manifest
+    # naming a kind the profile no longer declares supersedable, both fail here.
+    declared = {kind.name for kind in SHIPPED_KINDS if kind.supersedable}
+    assert declared == SUPERSEDABLE_KINDS, (
+        f"declared but not in the ruling: {sorted(declared - SUPERSEDABLE_KINDS)}; "
+        f"ruled but not declared: {sorted(SUPERSEDABLE_KINDS - declared)}"
+    )

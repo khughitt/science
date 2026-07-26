@@ -14,6 +14,7 @@ LOCAL_PROFILE = ProfileManifest(
             description="Project-local scientific model.",
             entity_class=EntityClass.OPERATIONAL,
             category=KindCategory.SOURCE_ONLY,
+            supersedable=False,
         ),
         EntityKind(
             name="canonical_parameter",
@@ -22,6 +23,7 @@ LOCAL_PROFILE = ProfileManifest(
             description="Project-local canonical model parameter.",
             entity_class=EntityClass.OPERATIONAL,
             category=KindCategory.SOURCE_ONLY,
+            supersedable=False,
         ),
         EntityKind(
             name="parameter_binding",
@@ -30,6 +32,7 @@ LOCAL_PROFILE = ProfileManifest(
             description="Provenance node that binds a model to a canonical parameter.",
             entity_class=EntityClass.OPERATIONAL,
             category=KindCategory.SOURCE_ONLY,
+            supersedable=False,
         ),
     ],
     relation_kinds=[],
