@@ -68,7 +68,7 @@ uv run science <command>
 ### Step 1: Gather Context
 
 Read these project files if they exist:
-- `specs/research-question.md`
+- the `research-question` spec — locate with `science project spec-path --slug research-question`
 - `entities/hypotheses/`
 - `entities/questions/`
 - `knowledge/graph.trig`

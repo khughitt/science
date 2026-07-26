@@ -5,7 +5,7 @@ description: Search scientific literature using OpenAlex and PubMed, rank result
 # Search Literature
 
 Search literature for `$ARGUMENTS`.
-If no argument is provided, derive candidate search foci from `specs/research-question.md` and `entities/questions/`, then ask the user to confirm the focus.
+If no argument is provided, derive candidate search foci from the `research-question` spec (`science project spec-path --slug research-question`) and `entities/questions/`, then ask the user to confirm the focus.
 
 ## Setup
 
@@ -17,8 +17,10 @@ Additionally:
    - `${CLAUDE_PLUGIN_ROOT}/skills/literature/sources/pubmed.md`
 2. Read `.ai/templates/paper.md` first; if not found, read `${CLAUDE_PLUGIN_ROOT}/templates/paper.md`.
 3. Read project context:
-   - `specs/research-question.md`
-   - `specs/scope-boundaries.md`
+   - the `research-question` spec — resolve with `science project spec-path --slug research-question`
+   - the `scope-boundaries` spec — resolve with `science project spec-path --slug scope-boundaries`
+     (both resolve the canonical `entities/specs/` layout first, then legacy `specs/`, and exit
+     non-zero when the document exists in neither — do not treat a failed lookup as "no declared scope")
    - `entities/questions/`
    - `entities/hypotheses/`
    - `entities/papers/`

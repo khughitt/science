@@ -137,7 +137,7 @@ Additionally:
    - If the user input names a hypothesis: read that hypothesis and its related documents
    - If the user input names an inquiry: load the inquiry and its related documents
    - If the user input names a pipeline: read the pipeline plan and its source inquiry
-   - If no scope: identify the most recently modified research documents (use `git log --oneline -10 --name-only -- doc/ specs/ models/`)
+   - If no scope: identify the most recently modified research documents (use `git log --oneline -10 --name-only -- doc/ entities/specs/ specs/ models/`)
 3. Read scoped documents:
    - Relevant hypotheses from `entities/hypotheses/`
    - Relevant topics from `entities/topics/`

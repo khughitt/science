@@ -24,8 +24,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from pathlib import Path
 
-from science_model.frontmatter import parse_frontmatter
-
+from science_tool.spec_paths import resolve_spec
 from science_tool.topic_coverage import TopicCoverage, compute_topic_coverage
 
 #: The boundary was found and read; the brief carries the project's own words.
@@ -42,13 +41,6 @@ SCOPE_ABSENT = "absent"
 SCOPE_INFERRED = "inferred"
 
 VALID_SCOPE_SOURCES = {SCOPE_DECLARED, SCOPE_INFERRED, SCOPE_ABSENT}
-
-#: Canonical home, post `science entity migrate-specs`.
-_CANONICAL_SPECS_DIR = ("entities", "specs")
-#: Pre-migration location. Still scaffolded by `create-project`, so it is a
-#: live case rather than a historical one.
-_LEGACY_SCOPE_PATH = ("specs", "scope-boundaries.md")
-_LEGACY_QUESTION_PATH = ("specs", "research-question.md")
 
 _SCOPE_SLUG = "scope-boundaries"
 _QUESTION_SLUG = "research-question"
@@ -94,38 +86,16 @@ class SeedCoverage:
         return out
 
 
-def _canonical_spec(project_root: Path, slug: str) -> Path | None:
-    """Find a migrated spec by slug.
+def _resolve_source(project_root: Path, name: str) -> BriefSource:
+    """One brief input, resolved through the shared spec resolver.
 
-    Migration renames to `NNNN-<slug>.md` and preserves the old id as an alias,
-    so the slug is matched against both the filename tail and the frontmatter
-    `id`/`aliases` -- a project that renamed the title would otherwise read as
-    absent while the document sits in plain view.
+    Layout resolution lives in `spec_paths`, not here: five other commands read
+    the same documents, and a second copy of the canonical-then-legacy rule is
+    how the readers came to disagree in the first place (fb-2026-07-26-020).
     """
-    specs_dir = project_root.joinpath(*_CANONICAL_SPECS_DIR)
-    if not specs_dir.is_dir():
-        return None
-    for path in sorted(specs_dir.glob("*.md")):
-        stem = path.stem
-        if stem == slug or (stem[:4].isdigit() and stem[5:] == slug):
-            return path
-        parsed = parse_frontmatter(path)
-        if parsed is None:
-            continue
-        data, _ = parsed
-        identifiers = [data.get("id"), *(data.get("aliases") or [])]
-        if any(isinstance(value, str) and value.split(":")[-1] == slug for value in identifiers):
-            return path
-    return None
-
-
-def _resolve_source(project_root: Path, name: str, legacy: tuple[str, ...]) -> BriefSource:
-    canonical = _canonical_spec(project_root, name)
-    if canonical is not None:
-        return BriefSource(name, SCOPE_DECLARED, canonical.relative_to(project_root).as_posix(), "canonical")
-    legacy_path = project_root.joinpath(*legacy)
-    if legacy_path.is_file():
-        return BriefSource(name, SCOPE_DECLARED, legacy_path.relative_to(project_root).as_posix(), "legacy")
+    location = resolve_spec(project_root, name)
+    if location.found:
+        return BriefSource(name, SCOPE_DECLARED, location.path, location.layout)
     return BriefSource(name, SCOPE_ABSENT, None, None)
 
 
@@ -134,7 +104,7 @@ def compute_seed_coverage(project_root: Path) -> SeedCoverage:
     return SeedCoverage(
         coverage=compute_topic_coverage(project_root),
         sources=(
-            _resolve_source(project_root, _SCOPE_SLUG, _LEGACY_SCOPE_PATH),
-            _resolve_source(project_root, _QUESTION_SLUG, _LEGACY_QUESTION_PATH),
+            _resolve_source(project_root, _SCOPE_SLUG),
+            _resolve_source(project_root, _QUESTION_SLUG),
         ),
     )

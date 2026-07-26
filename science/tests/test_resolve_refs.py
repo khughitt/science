@@ -5,6 +5,7 @@ from pathlib import Path
 
 from click.testing import CliRunner
 
+from science_tool.cli import main
 from science_tool.resolve_refs import build_ref_index
 
 _ROWS = [
@@ -133,3 +134,34 @@ def test_cli_text_reports_unresolved(tmp_path: Path) -> None:
     assert res.exit_code == 0, res.output
     assert "nope-xyz" in res.output
     assert "unresolved" in res.output
+
+
+def test_project_commands_fail_outside_a_project_root(tmp_path: Path) -> None:
+    """A subdirectory is not an empty project (fb-2026-07-25-008).
+
+    Run from `entities/questions/`, these commands resolved `--project-root` to
+    `.`, found no entities, and answered `unresolved` / `n_topics: 0`. Those are
+    well-formed negatives to a question that was never asked, and the empty
+    answer gets copied into a report as fact. They must fail instead.
+    """
+    project = tmp_path / "proj"
+    (project / "entities" / "questions").mkdir(parents=True)
+    (project / "science.yaml").write_text("name: guard-test\n", encoding="utf-8")
+    subdir = project / "entities" / "questions"
+
+    runner = CliRunner()
+    invocations = [
+        ["project", "resolve-refs", "--project-root", str(subdir), "--query", "question:0037-x"],
+        ["project", "topic-coverage", "--project-root", str(subdir)],
+        ["project", "index", "--project-root", str(subdir)],
+    ]
+    for argv in invocations:
+        res = runner.invoke(main, argv)
+        assert res.exit_code != 0, f"{argv[1]} reported success outside a project: {res.output}"
+        assert "is not a Science project" in res.output
+
+    # The same commands succeed against the root itself, so the guard is
+    # rejecting the location and not the invocation.
+    for argv in invocations:
+        rooted = [*argv[:3], str(project), *argv[4:]]
+        assert runner.invoke(main, rooted).exit_code == 0, rooted

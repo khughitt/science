@@ -146,7 +146,11 @@ def test_validate_passes_on_well_formed_chain_audit(tmp_path: Path, monkeypatch)
     )
     assert result.exit_code == 0, result.output
     payload = json.loads(result.output)
-    assert all(row["status"] == "pass" for row in payload["rows"])
+    # This fixture declares no causal edges, so `causal_acyclicity` is unchecked
+    # rather than satisfied — `pass` there would assert a property of a graph
+    # that does not exist (fb-2026-07-19-001).
+    assert not [row for row in payload["rows"] if row["status"] == "fail"]
+    assert all(row["status"] == "pass" for row in payload["rows"] if row["check"] != "causal_acyclicity")
 
 
 def test_validate_flags_dangling_chain_link(tmp_path: Path) -> None:

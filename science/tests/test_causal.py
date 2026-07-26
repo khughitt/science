@@ -285,6 +285,150 @@ class TestCausalValidation:
         assert "causal_acyclicity" not in check_names
 
 
+class TestCausalEdgesAreReadFromBothAuthoringRoutes:
+    """`scic:causes` reaches the graph two ways and the checks must read both.
+
+    Route 1 is an entity relation carrying `graph_layer: graph/causal`; route 2
+    is an `inquiry:` block flow edge with `predicate: causes`, which the compiler
+    writes into `inquiry/<slug>`. Every pre-existing test in this file authors
+    route 1 (`_causal_relation` hardcodes the layer), so the suite could not
+    observe that the validators read route 1 only -- the fixture wrote the
+    reader's own convention. These tests author route 2 (fb-2026-07-19-001).
+    """
+
+    def _causal_inquiry_with_flow_edges(self, graph_path: Path, flow_edges: list[dict]) -> str:
+        _author_entities(
+            graph_path,
+            [_concept("x", "X"), _concept("y", "Y"), _concept("z", "Z"), _hypothesis("test_hyp")],
+        )
+        _build_production_inquiry_graph(
+            graph_path,
+            slug="flow-authored",
+            profile="causal",
+            boundary_roles=[
+                {"ref": "concept:x", "role": "BoundaryIn"},
+                {"ref": "concept:y", "role": "BoundaryOut"},
+                {"ref": "concept:z", "role": "BoundaryIn"},
+            ],
+            flow_edges=flow_edges,
+            treatment="concept:x",
+            outcome="concept:y",
+        )
+        return "flow-authored"
+
+    def test_flow_authored_edges_are_checked_for_acyclicity(self, graph_path: Path) -> None:
+        """A cycle authored as inquiry flow edges is caught.
+
+        Before the shared resolver this reported `pass`: the check read
+        `graph/causal`, the edges were in `inquiry/<slug>`, and an empty edge set
+        is vacuously acyclic.
+        """
+        slug = self._causal_inquiry_with_flow_edges(
+            graph_path,
+            [
+                {"subject": "concept:x", "predicate": "causes", "object": "concept:y"},
+                {"subject": "concept:y", "predicate": "causes", "object": "concept:x"},
+            ],
+        )
+        acyclicity = next(r for r in validate_inquiry(graph_path, slug).rows if r["check"] == "causal_acyclicity")
+        assert acyclicity["status"] == "fail"
+
+    def test_flow_authored_common_cause_is_seen(self, graph_path: Path) -> None:
+        """An undeclared common cause authored as flow edges is reported."""
+        slug = self._causal_inquiry_with_flow_edges(
+            graph_path,
+            [
+                {"subject": "concept:z", "predicate": "causes", "object": "concept:x"},
+                {"subject": "concept:z", "predicate": "causes", "object": "concept:y"},
+            ],
+        )
+        confounders = next(
+            r for r in validate_inquiry(graph_path, slug).rows if r["check"] == "confounders_declared"
+        )
+        assert confounders["status"] == "warn"
+        assert "z" in confounders["message"]
+
+
+class TestEmptyCausalEdgeSetIsNotAPass:
+    """Acyclicity and confounder declaration are vacuously true over zero edges.
+
+    Reporting `pass` there certifies a structure nothing inspected -- the defect
+    behind fb-2026-07-19-001. The two ways of arriving at an empty set are
+    different facts and must not share a verdict.
+    """
+
+    def _causal_inquiry(self, graph_path: Path, *, boundary_roles: list[dict], flow_edges: list[dict]) -> str:
+        _author_entities(
+            graph_path,
+            [_concept("x", "X"), _concept("y", "Y"), _concept("z", "Z"), _hypothesis("test_hyp")],
+        )
+        _build_production_inquiry_graph(
+            graph_path,
+            slug="empty-causal",
+            profile="causal",
+            boundary_roles=boundary_roles,
+            flow_edges=flow_edges,
+            treatment="concept:x",
+            outcome="concept:y",
+        )
+        return "empty-causal"
+
+    def test_no_edges_authored_skips_rather_than_passes(self, graph_path: Path) -> None:
+        slug = self._causal_inquiry(
+            graph_path,
+            boundary_roles=[
+                {"ref": "concept:x", "role": "BoundaryIn"},
+                {"ref": "concept:y", "role": "BoundaryOut"},
+            ],
+            flow_edges=[],
+        )
+        rows = {r["check"]: r for r in validate_inquiry(graph_path, slug).rows}
+        assert rows["causal_acyclicity"]["status"] == "skip"
+        assert rows["confounders_declared"]["status"] == "skip"
+        assert "No causal edges authored" in rows["causal_acyclicity"]["message"]
+
+    def test_declared_but_unresolved_edges_fail(self, graph_path: Path) -> None:
+        """Edges authored in `graph/causal` whose endpoints are not inquiry members.
+
+        The member filter drops them, leaving nothing to check. That is a
+        declared-versus-resolved gap, not a clean graph, so it fails and names
+        the dropped edges.
+        """
+        _author_entities(
+            graph_path,
+            [_concept("x", "X"), _concept("y", "Y"), _concept("z", "Z"), _hypothesis("test_hyp")],
+            relations=[_causal_relation("concept:x", "scic:causes", "concept:z")],
+        )
+        _build_production_inquiry_graph(
+            graph_path,
+            slug="dropped-edge",
+            profile="causal",
+            boundary_roles=[
+                {"ref": "concept:x", "role": "BoundaryIn"},
+                {"ref": "concept:y", "role": "BoundaryOut"},
+            ],
+            treatment="concept:x",
+            outcome="concept:y",
+        )
+        rows = {r["check"]: r for r in validate_inquiry(graph_path, "dropped-edge").rows}
+        assert rows["causal_acyclicity"]["status"] == "fail"
+        assert rows["confounders_declared"]["status"] == "fail"
+        assert "none resolve to inquiry members" in rows["causal_acyclicity"]["message"]
+
+    def test_export_refuses_to_emit_an_empty_model(self, graph_path: Path) -> None:
+        """`export-pgmpy` must not hand back `DiscreteBayesianNetwork([])`."""
+        slug = self._causal_inquiry(
+            graph_path,
+            boundary_roles=[
+                {"ref": "concept:x", "role": "BoundaryIn"},
+                {"ref": "concept:y", "role": "BoundaryOut"},
+            ],
+            flow_edges=[],
+        )
+        with pytest.raises(ValueError, match="resolves no scic:causes edges"):
+            export_pgmpy_script(graph_path, slug)
+
+
 class TestExportPgmpy:
     def _build_simple_dag(self, graph_path: Path) -> str:
         """Build a simple X->Y<-Z causal inquiry."""

@@ -184,6 +184,11 @@ Verify:
 - The inquiry exists and is type `causal`
 - Structural validation passes (or note failures)
 - Treatment and outcome are set
+- **The causal structure was actually inspected.** In the `validate` output,
+  `causal_acyclicity` and `confounders_declared` report `skip` when the inquiry
+  authored no causal edges and `fail` when edges were declared but none resolved
+  to inquiry members. Either verdict means there is no DAG to analyze, whatever
+  the other checks say — route to Vacuous-DAG Mode below, not to Step 2.
 
 ### Pre-DAG Critique Mode
 
@@ -205,6 +210,34 @@ that is not yet registered as a graph-backed causal inquiry.
 Skip Step 2 for pre-DAG mode; resume at Step 3 using the candidate relationships
 described in the Markdown inquiry.
 
+### Vacuous-DAG Mode
+
+Graph-backed is not the same as populated. An inquiry can register as a causal
+inquiry, pass reachability and acyclicity, and still carry no causal structure a
+check can compute over — and that state used to be indistinguishable from a
+clean DAG, because every check over an empty edge set is vacuously satisfied
+(fb-2026-07-19-003).
+
+Enter this mode when `validate` reports `skip` or `fail` on
+`causal_acyclicity` / `confounders_declared`, or when `export-pgmpy` exits
+non-zero saying the inquiry resolves no `scic:causes` edges.
+
+- **Do not run Step 2**, and do not install pgmpy to "get past" the skipped
+  identifiability checks: pgmpy answers identifiability questions about an empty
+  model without complaint, and a green answer about nothing is worse than a
+  skipped one.
+- Report the state as the finding it is. Quote the `validate` message — it
+  distinguishes "no causal edges authored" from "N declared but none resolve to
+  inquiry members", and only the second implies a repair (the endpoints are
+  outside the inquiry's boundary/flow membership).
+- Derive d-separation and adjustment sets by hand from the edges the inquiry
+  *document* asserts, and say explicitly that they are hand-derived rather than
+  computed.
+- Label the report "vacuous-DAG critique" in the title or reviewed-status line,
+  and do not claim formal back-door validation or pgmpy identifiability analysis.
+
+Resume at Step 3 using the hand-derived structure.
+
 ### Step 2: Graph-theoretic analysis
 
 Export to pgmpy and analyze:
@@ -213,7 +246,12 @@ Export to pgmpy and analyze:
 science inquiry export-pgmpy "<slug>" --output /tmp/dag_analysis.py
 ```
 
-Read the generated script. Identify:
+This command exits non-zero rather than emitting an empty model. If it fails
+with "resolves no scic:causes edges", the inquiry is vacuous — switch to
+Vacuous-DAG Mode above instead of proceeding.
+
+Read the generated script and confirm its `DiscreteBayesianNetwork([...])` edge
+list is non-empty before reading any identifiability result from it. Identify:
 - **Adjustment sets**: What should be conditioned on to identify the causal effect?
 - **Testable implications**: What conditional independencies does the DAG predict?
 - **Identifiability**: Is the target effect (treatment → outcome) identifiable given observed variables?

@@ -227,6 +227,7 @@ EXEMPTIONS.update({
     "project artifacts list": "One line per artifact TYPE in the toolkit's static registry.yaml (currently exactly 1: validate.sh)",
     "project artifacts update": "Fixed confirmation for ONE named artifact update: from-version -> to-version, commit status, backup path",
     "project resolve-refs": "Output is one line per --query argument the CALLER supplies (a repeatable option), not per record in the project",
+    "project spec-path": "Resolves ONE --slug to one path; the payload is a fixed three-field record (slug, path, layout) or a hard failure",
     "propositions create": "Echoes exactly one 'Created <id> at <path>' line plus the created entity's own validation warnings",
     "propositions show": "Renders one entity's fixed field set",
     "questions create": "Echoes exactly one 'Created <id> at <path>' line plus the created entity's own validation warnings",

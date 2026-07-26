@@ -262,7 +262,8 @@ def export_pgmpy_script(graph_path: Path, slug: str) -> str:
     import pgmpy -- it only produces a string.
 
     Raises:
-        ValueError: If the inquiry is not of type ``causal``.
+        ValueError: If the inquiry is not of type ``causal``, or if no causal
+            edge resolves for it.
     """
     info = get_inquiry(graph_path, slug)
 
@@ -270,6 +271,18 @@ def export_pgmpy_script(graph_path: Path, slug: str) -> str:
         raise ValueError(f"pgmpy export only supported for causal inquiries (got '{info.get('inquiry_type')}')")
 
     edges = _get_causal_edges_for_inquiry(graph_path, slug)
+
+    # Refuse to emit `DiscreteBayesianNetwork([])`. An empty model is not an
+    # empty answer -- pgmpy computes identifiability and adjustment sets over it
+    # without complaint, and the reader gets green checks about nothing
+    # (fb-2026-07-19-001, fb-2026-07-19-003). Fail here instead.
+    if not any(e["pred_type"] == "causes" for e in edges):
+        raise ValueError(
+            f"Inquiry '{slug}' resolves no scic:causes edges, so the export would be an empty "
+            "model that every downstream check passes vacuously. Run 'science inquiry validate' "
+            f"{slug!r} -- it reports whether edges were declared but fell outside the inquiry's "
+            "boundary/flow members, or whether none were authored at all."
+        )
 
     # Query revision hash from provenance graph
     dataset = _load_dataset(graph_path)

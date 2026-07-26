@@ -195,7 +195,7 @@ project/
 ├── entities/
 ├── doc/
 ├── tasks/
-├── specs/
+├── entities/specs/
 ├── knowledge/
 ├── code/
 │   ├── scripts/
@@ -230,7 +230,7 @@ project/
 ├── entities/
 ├── doc/
 ├── tasks/
-├── specs/
+├── entities/specs/
 ├── knowledge/
 ├── src/
 └── tests/

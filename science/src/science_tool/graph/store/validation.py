@@ -63,7 +63,6 @@ def validate_graph_dataset(dataset: Dataset) -> ValidationVerdict[dict[str, str]
 
     knowledge = dataset.graph(_graph_uri("graph/knowledge"))
     provenance = dataset.graph(_graph_uri("graph/provenance"))
-    causal = dataset.graph(_graph_uri("graph/causal"))
 
     provenance_failures = 0
     for entity_type in (SCI_NS.Proposition, SCI_NS.Hypothesis):
@@ -88,8 +87,26 @@ def validate_graph_dataset(dataset: Dataset) -> ValidationVerdict[dict[str, str]
             }
         )
 
-    edges = [(str(subj), str(obj)) for subj, _, obj in causal.triples((None, SCIC_NS.causes, None))]
-    if _has_cycle(edges):
+    # Every graph, not just `graph/causal`. A `scic:causes` edge authored on an
+    # inquiry's `flow_edges` is compiled into `inquiry/<slug>`, so a check scoped
+    # to `graph/causal` alone certifies "causal graph is acyclic" while ignoring
+    # most of the project's causal edges (fb-2026-07-19-001).
+    edges = sorted(
+        {
+            (str(subj), str(obj))
+            for graph in dataset.graphs()
+            for subj, _, obj in graph.triples((None, SCIC_NS.causes, None))
+        }
+    )
+    if not edges:
+        rows.append(
+            {
+                "check": "causal_acyclicity",
+                "status": "skip",
+                "details": "no scic:causes edges in the project — nothing to check for cycles",
+            }
+        )
+    elif _has_cycle(edges):
         rows.append(
             {
                 "check": "causal_acyclicity",
@@ -102,7 +119,7 @@ def validate_graph_dataset(dataset: Dataset) -> ValidationVerdict[dict[str, str]
             {
                 "check": "causal_acyclicity",
                 "status": "pass",
-                "details": "causal graph is acyclic",
+                "details": f"causal graph is acyclic ({len(edges)} scic:causes edge(s) checked)",
             }
         )
 

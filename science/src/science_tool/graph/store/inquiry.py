@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import importlib
 from collections import deque
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
@@ -117,6 +118,67 @@ def resolve_inquiry(dataset: Dataset, slug: str) -> tuple[URIRef, Graph]:
     if match is None:
         raise ValueError(f"Inquiry 'inquiry/{requested}' does not exist")
     return match
+
+
+@dataclass(frozen=True)
+class CausalEdgeResolution:
+    """Causal edges an inquiry declares, and the subset a check can compute over.
+
+    `declared` and `resolved` are different facts and a single edge list cannot
+    carry both. An empty `resolved` means "nothing to check over"; it does NOT
+    mean "nothing was authored". Collapsing the two is what let
+    `causal_acyclicity` and `confounders_declared` report `pass` over an empty
+    edge set (fb-2026-07-19-001).
+    """
+
+    declared: tuple[tuple[URIRef, URIRef], ...]
+    resolved: tuple[tuple[URIRef, URIRef], ...]
+
+
+def resolve_causal_edges(
+    dataset: Dataset,
+    inquiry_graph: Graph,
+    members: set[URIRef],
+    predicate: URIRef = SCIC_NS.causes,
+) -> CausalEdgeResolution:
+    """Collect an inquiry's causal edges across BOTH authoring routes.
+
+    `scic:causes` reaches the graph two ways, and a reader that knows only one
+    of them sees an empty edge set on projects that used the other:
+
+    1. An entity `relations:` entry with `graph_layer: graph/causal`, which
+       materializes into the `graph/causal` named graph. This is the route
+       `constants.py` declares and `export.py` enforces.
+    2. An `inquiry:` block `flow_edges` entry with `predicate: causes`, which
+       `inquiry_compile` writes into the named graph `inquiry/<slug>`.
+
+    Both are legal, so both are read here — once, in one function, rather than
+    at each call site. `fc9e0201` fixed the exporter alone and left the two
+    validators reading route 1 only; this exists so that cannot recur.
+
+    An edge is `declared` for this inquiry when it was authored on the inquiry's
+    own graph, or when it sits in `graph/causal` touching at least one member.
+    It is `resolved` when BOTH endpoints are members — the member filter that
+    otherwise drops such edges silently.
+    """
+    causal_graph = dataset.graph(_graph_uri("graph/causal"))
+    declared: list[tuple[URIRef, URIRef]] = []
+    seen: set[tuple[URIRef, URIRef]] = set()
+    for graph in (inquiry_graph, causal_graph):
+        authored_here = graph is inquiry_graph
+        for subj, _p, obj in graph.triples((None, predicate, None)):
+            if not isinstance(subj, URIRef) or not isinstance(obj, URIRef):
+                continue
+            if not authored_here and subj not in members and obj not in members:
+                continue
+            edge = (subj, obj)
+            if edge in seen:
+                continue
+            seen.add(edge)
+            declared.append(edge)
+
+    resolved = [(s, o) for s, o in declared if s in members and o in members]
+    return CausalEdgeResolution(declared=tuple(declared), resolved=tuple(resolved))
 
 
 def get_inquiry(graph_path: Path, slug: str) -> InquiryInfo:
@@ -710,15 +772,38 @@ def validate_inquiry_dataset(dataset: Dataset, slug: str) -> InstrumentResult[di
         # Collect inquiry member entities (boundary + flow nodes)
         members = boundary_in | boundary_out | all_flow_nodes
 
-        # Filter causal edges to inquiry members
-        causal_edges = [
-            (str(s), str(o))
-            for s, _, o in causal_graph.triples((None, SCIC_NS.causes, None))
-            if s in members and o in members
-        ]
+        # Read BOTH authoring routes through the one shared resolver, and keep
+        # "declared" separate from "resolved" so an empty edge set can say which
+        # of the two it is (fb-2026-07-19-001).
+        resolution = resolve_causal_edges(dataset, inquiry_graph, members)
+        causal_edges = [(str(s), str(o)) for s, o in resolution.resolved]
 
-        # causal_acyclicity
-        if _has_cycle(causal_edges):
+        # An empty edge set is not evidence of a well-formed DAG. Acyclicity and
+        # confounder declaration are both vacuously true over zero edges, so
+        # reporting `pass` here certifies a graph nothing inspected. Report what
+        # is actually known instead, and distinguish the two ways to get here.
+        unresolved_causal = not resolution.resolved
+        if unresolved_causal:
+            if resolution.declared:
+                dropped = [
+                    f"{shorten_uri(str(s))} -> {shorten_uri(str(o))}"
+                    for s, o in resolution.declared
+                    if (s, o) not in set(resolution.resolved)
+                ]
+                vacuous_status, vacuous_message = (
+                    "fail",
+                    f"{len(resolution.declared)} causal edge(s) declared for this inquiry but none "
+                    f"resolve to inquiry members, so no causal structure was checked: "
+                    f"{', '.join(dropped)}",
+                )
+            else:
+                vacuous_status, vacuous_message = (
+                    "skip",
+                    "No causal edges authored for this inquiry — no causal structure to check",
+                )
+            results.append({"check": "causal_acyclicity", "status": vacuous_status, "message": vacuous_message})
+            results.append({"check": "confounders_declared", "status": vacuous_status, "message": vacuous_message})
+        elif _has_cycle(causal_edges):
             results.append(
                 {
                     "check": "causal_acyclicity",
@@ -736,7 +821,10 @@ def validate_inquiry_dataset(dataset: Dataset, slug: str) -> InstrumentResult[di
             )
 
         # confounders_declared — check for common causes without scic:confounds
-        # A "common cause" is a variable that causes 2+ other inquiry variables
+        # A "common cause" is a variable that causes 2+ other inquiry variables.
+        # Skipped entirely when no causal edge resolved: the verdict for that
+        # state was already recorded above, and "no common causes found" over an
+        # empty edge set is the vacuous pass this check exists to avoid.
         children: dict[str, set[str]] = {}
         for s_str, o_str in causal_edges:
             children.setdefault(s_str, set()).add(o_str)
@@ -750,7 +838,9 @@ def validate_inquiry_dataset(dataset: Dataset, slug: str) -> InstrumentResult[di
                 confound_sources.add(str(s))
 
         undeclared = [c for c in common_causes if c not in confound_sources]
-        if undeclared:
+        if unresolved_causal:
+            pass
+        elif undeclared:
             short_names = [shorten_uri(u) for u in undeclared]
             results.append(
                 {
@@ -880,18 +970,27 @@ def validate_inquiry_dataset(dataset: Dataset, slug: str) -> InstrumentResult[di
                             }
                         )
                 else:
+                    # Never compute identifiability over an empty model: pgmpy
+                    # answers happily and the answer is about nothing
+                    # (fb-2026-07-19-003). Say which empty this is.
+                    empty_reason = (
+                        f"{len(resolution.declared)} causal edge(s) declared but none resolve to "
+                        "inquiry members"
+                        if resolution.declared
+                        else "no causal edges authored for this inquiry"
+                    )
                     results.append(
                         {
                             "check": "identifiability",
                             "status": "skip",
-                            "message": "No causal edges found — cannot assess identifiability",
+                            "message": f"Cannot assess identifiability — {empty_reason}",
                         }
                     )
                     results.append(
                         {
                             "check": "adjustment_sets",
                             "status": "skip",
-                            "message": "No causal edges found",
+                            "message": f"Cannot compute adjustment sets — {empty_reason}",
                         }
                     )
 

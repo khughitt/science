@@ -82,7 +82,8 @@ Always create:
 │   └── plans/
 ├── tasks/
 │   └── active.md
-├── specs/
+├── entities/
+│   └── specs/
 └── knowledge/
 ```
 
@@ -335,7 +336,7 @@ Keep it strategic only:
 
 Do not put task-queue bookkeeping in `README.md`.
 
-For `software` projects, use `README.md` for high-level context and `entities/plans/` or `specs/` for more detailed planning when needed.
+For `software` projects, use `README.md` for high-level context and `entities/plans/` or `entities/specs/` for more detailed planning when needed.
 
 ### `tasks/active.md`
 
@@ -345,22 +346,29 @@ Create:
 <!-- Task queue. Use /science:tasks to manage. -->
 ```
 
-### `specs/`
+### `entities/specs/`
+
+Specs are typed entities and live under `entities/specs/` — the layout
+`science entity migrate-specs` canonicalizes to. Do **not** scaffold the
+pre-migration `specs/` directory: a project created there is created into the
+layout the migrator moves away from, and every command that reads a spec
+resolves the canonical location first (fb-2026-07-26-020).
 
 For `research` projects:
 
-- write `specs/research-question.md`
-- write `specs/scope-boundaries.md`
+- write `entities/specs/0001-research-question.md`
+- write `entities/specs/0002-scope-boundaries.md`
 
 For `software` projects:
 
-- create `specs/` only as needed for project requirements or product/research planning
+- create `entities/specs/` only as needed for project requirements or
+  product/research planning
 
 ### `entities/`
 
 Create typed owner directories for the project-owned entities that are known at
 scaffold time. New durable entities belong under `entities/<kind>/`; do not
-place typed entity owners under `doc/` or `specs/`.
+place typed entity owners under `doc/` or a top-level `specs/`.
 
 ### `doc/`
 
