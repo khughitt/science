@@ -52,7 +52,7 @@ priority: P1
 status: active
 aspects: [software-development]
 related: [hypothesis:h003]
-blocked-by: []
+blocked_by: []
 group: ""
 parent: ""
 created: 2026-07-20
@@ -69,6 +69,31 @@ exactly as today (`_format_note` / `_append_note_to_description`).
   of what the current `## [tNNN]` DSL emits (the DSL drops
   `project`/`artifacts`/`findings`); migration is therefore lossless w.r.t.
   what `active.md` stores and additionally admits fields the model already has.
+- **Frontmatter keys use the model field names verbatim, with underscores** —
+  `blocked_by`, not the DSL's `blocked-by`. The DSL's hyphenated keys
+  (`blocked-by`) are converted to underscores on migration; `render_task_file`
+  emits underscores. `parse_task_file` **rejects unknown frontmatter keys**
+  (fail early, no silent drop) so a stray `blocked-by` or typo surfaces instead
+  of yielding a silently empty list. (Rationale: pydantic would otherwise ignore
+  `blocked-by` and produce an empty `blocked_by`.)
+
+### 1a. Storage identity invariants
+
+These hold for every `tasks/active/*.md` file and are enforced on read, on
+mutation, and by the migrator (see §3):
+
+- **Canonical id.** `id` matches `t\d+` (`tNNN`). `parse_task_file` refuses a
+  non-canonical id rather than materializing it.
+- **Filename ↔ frontmatter agreement.** The filename's `tNNN` prefix equals the
+  frontmatter `id`. A mismatch is an error, not a silent reconciliation.
+- **Unique ids across `tasks/active/`.** No two active files share an `id`. On
+  read this is a hard error (the current aggregate parser silently accepted
+  duplicate `## [tNNN]` blocks; the split makes uniqueness structural and
+  checked).
+- **Exactly one file per id on mutation.** `write_task_file` / `delete_task_file`
+  locate the existing file by a `tNNN-*.md` glob and require **exactly one**
+  match (zero for a fresh `add`); 2+ matches is an error, never an
+  overwrite-one-arbitrarily.
 - New functions in `tasks.py`: `parse_task_file(path) -> Task` (frontmatter via
   `markdown_utils.frontmatter_span`, body → `description`) and
   `render_task_file(task) -> str` (canonical frontmatter renderer + body). A
@@ -92,6 +117,20 @@ The lever for the ~14 readers is to centralize on one read entry point.
   `tasks edit` field updates, `complete_task`/`retire_task`/`defer`/`block`/
   `unblock`, and `_move_task_to_done` (write the done ledger, delete the active
   per-task file — same atomicity guarantee as today).
+- **Archived tasks keep the ledger path.** `append_task_note` and `tasks edit`
+  today locate a task via `find_task_location`, which can resolve into a
+  `tasks/done/YYYY-MM.md` ledger (`tasks.py:512`, `:676`). When the located task
+  lives in a done ledger, the mutation continues to rewrite that monthly ledger
+  in place (DSL block) — it does NOT create or rename a `tasks/active/` file.
+  The title→filename rename rule applies ONLY to active per-task files. This
+  path is covered by tests.
+- **`tasks_cli.py` direct-`active.md` callers are in scope** and re-pointed at
+  the centralized read: `tasks fix-blockers` (`tasks_cli.py:314`), the
+  `tasks list` legacy-blocker warning pass (`tasks_cli.py:673`,
+  `parse_tasks_for_cli`), and `tasks summary` (`tasks_cli.py:885`,
+  `parse_tasks`). Without this, post-migration `summary` reports zero and
+  `fix-blockers` becomes a no-op. `parse_tasks_for_cli` gains a directory-aware
+  form (or is called over the per-file read) so its warning surface is preserved.
 - `next_task_id` scans `tasks/active/*.md` + `tasks/done/*.md` for the max id.
   `known_task_ids`, `find_task_location`, `_task_search_paths` updated to the
   per-file layout. The `_task_allocation_lock` stays — it still serializes id
@@ -115,15 +154,30 @@ pattern of `datasets/capability_migration.py`:
 - **Plan (dry-run default):** parse `tasks/active.md`; compute the target
   per-task file for each task; report what would be written. Refuse if
   `tasks/active/` already exists and is non-empty (already migrated), or if
-  `tasks/active.md` is absent (nothing to do).
+  `tasks/active.md` is absent (nothing to do). **Collision & identity checks
+  (all must pass before any write):** every source task has a canonical `tNNN`
+  id; **source ids are unique** (the aggregate parser accepts duplicate
+  `## [tNNN]` blocks — a duplicate id is a hard refusal, listing the offenders);
+  the computed **target paths are unique** (two tasks cannot resolve to the same
+  `tNNN-slug.md`; since the path is `id`-prefixed, unique ids give unique paths,
+  but this is asserted, not assumed); and no target path already exists.
 - **Apply (`--apply`):** journal the pre-image (hash of `active.md`) + the full
   post-images (each per-task file path + content); write all per-task files;
   then **delete `tasks/active.md` LAST and confirm it is gone**; then clear the
   journal. Deleting `active.md` is the terminal marker (the analogue of the
   capability migrator's "pin set last").
-- **Resume (`--resume`):** finish an interrupted apply from the journal — write
-  any missing per-task files, delete `active.md`, clear the journal. Never
-  re-plans; refuses if the source changed under it.
+- **Resume (`--resume`):** finish an interrupted apply from the journal, never
+  re-planning. For **each** journalled post-image, classify the target's current
+  state and act — this is the crux of a safe resume while `active.md` may still
+  be the only complete copy:
+  - **absent** → write it from the journal's post-image.
+  - **present and byte-exact to the post-image** (hash match) → accept, no write.
+  - **present but different** → **REFUSE and retain the journal** (a file changed
+    under the migration; never overwrite and never delete the source).
+  Only once every post-image is present-and-exact does resume delete `active.md`
+  (if still present) and clear the journal. This makes resume idempotent and
+  covers the **crash-after-`active.md`-deleted-but-before-journal-clear** case:
+  `active.md` absent + all post-images exact ⇒ just clear the journal.
 - Journal at `.science/task-storage-migration.journal` (mirrors the capability
   migrator's location idiom).
 - Migrate `science/meta` in-slice as the worked example (verify its branch
@@ -173,16 +227,30 @@ pattern of `datasets/capability_migration.py`:
 
 - `parse_task_file`/`render_task_file` round-trip (all fields, empty optionals,
   journal-note bodies, unicode titles).
+- Frontmatter contract: `blocked_by` (underscore) round-trips; an unknown key
+  (e.g. `blocked-by` or a typo) is REJECTED, not silently dropped.
+- Storage identity: non-canonical id rejected; filename/frontmatter-id mismatch
+  rejected; two active files with the same id → read error; a mutation finding
+  2+ `tNNN-*.md` matches → error (no arbitrary overwrite).
 - Slug derivation + rename-on-title-change (file renamed, id stable, no orphan).
 - Read path: `_read_active` over a `tasks/active/` dir returns the same task set
   a DSL `active.md` would have.
 - Every mutator (`add`/`edit`/`note`/`done`/`defer`/`retire`/`block`/`unblock`/
   `archive`) writes/updates/deletes the correct per-task file and leaves the
   round-trip clean.
-- Migrator: dry-run report; apply produces per-task files matching the source
-  task set and removes `active.md`; refuse on already-migrated / absent source;
-  `--resume` finishes an interrupted journal; source-changed-under-migration
-  refusal.
+- Archived-task edit/note: a `tasks edit`/`tasks note` on a task living in
+  `done/YYYY-MM.md` rewrites that ledger in place and creates NO `tasks/active/`
+  file.
+- `tasks_cli` re-points: post-migration `tasks summary` reports the real counts,
+  the `tasks list` warning pass still surfaces legacy-blocker warnings, and
+  `tasks fix-blockers` still repairs.
+- Migrator: dry-run report; **duplicate source id → refusal (offenders listed);
+  colliding/existing target path → refusal**; apply produces per-task files
+  matching the source task set and removes `active.md`; refuse on
+  already-migrated / absent source.
+- Migrator resume states: absent post-image → written; present-exact → accepted;
+  **present-different → refusal with journal retained**; crash-after-delete
+  (`active.md` gone + all post-images exact) → journal cleared, success.
 - Adapter: graph build over a split `tasks/active/` yields the same task nodes.
 - The full validate/health/refs/curate/big-picture readers work over the split
   layout (their existing tests, re-pointed fixtures).
