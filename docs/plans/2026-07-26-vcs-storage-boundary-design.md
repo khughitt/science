@@ -61,17 +61,30 @@ suggests, and the difference matters for remediation. A project `.gitignore`
 **outranks** `core.excludesFile`, so a project-local negation *can* override a
 global rule — but only in one of its two forms:
 
-| negation form | `check-ignore` | `git add .` | ripgrep |
-|---|---|---|---|
-| directory-level (`!/s/m/archive/`) | visible | **picks it up** | sees it |
-| file-level (`!/s/m/archive/a.py`) | visible | **misses it** | sees it |
+| negation form | `git add .` | ripgrep |
+|---|---|---|
+| directory-level (`!/s/m/archive/`) | **stages it** | sees it |
+| file-level (`!/s/m/archive/a.py`) | **misses it** | sees it |
 
-Both report the path as un-ignored, but only the directory-level form restores
-directory traversal. A file-level negation beneath an excluded parent is the
-"appears to succeed while committing nothing" trap in its purest form: every
-diagnostic says the file is fine, and bulk staging silently skips it. The
-design therefore treats an ineffective negation as its own detectable defect
-(`boundary.ineffective-negation`, below) rather than as folklore.
+Only the directory-level form restores directory traversal. A file-level
+negation beneath an excluded parent is the "appears to succeed while committing
+nothing" trap in its purest form: bulk staging silently skips the file.
+
+`git check-ignore` is deliberately absent from that table. Its verdict is
+**index-dependent** — invoked without `--no-index` on an already-tracked path it
+reports the path as un-ignored regardless of the rules — so it answers
+"do the patterns match?" rather than "will git surface this file?". Those are
+different questions, and only the second one matters here. The authoritative
+oracle for reachability is:
+
+```
+git ls-files --cached --others --exclude-standard
+```
+
+Tracked files plus untracked-and-not-ignored files: exactly the set git will
+show you. A file absent from it is unreachable, and this oracle agreed with
+`git add .` in every case tested, including the ones where `check-ignore`
+disagreed. The design uses it for `boundary.unreachable-tracked` below.
 
 ### Why the existing surfaces did not catch it
 
@@ -183,6 +196,24 @@ rejected, a `payload` root can safely emit the terse anchored form.
 - `tracked:` is valid **only** on `class: manifest`; supplying it on `payload`
   is an error rather than a silent no-op
 
+`tracked:` and `unmanaged_allow` grammar. Both become git patterns, so both need
+a closed grammar rather than pass-through. Each entry must be a non-empty
+relative POSIX glob. Reject: newlines and control characters, absolute paths,
+any `..` segment, a leading `!` (negation is the generator's job, never the
+declaration's), a leading `#` (comment syntax), a trailing `/` (these match
+files, not directories), a trailing backslash or other dangling escape, and
+duplicates within a list.
+
+An **empty `tracked:` list is an error**. A `manifest` root that tracks nothing
+is mechanically a `payload` root, and silently accepting it would leave two
+spellings of one meaning — the sort of ambiguity this design exists to remove.
+Omitting `tracked:` entirely on a `manifest` root is the same error.
+
+`unmanaged_allow` entries are matched against `.gitignore` **pattern text**, not
+against paths: an entry silences the rule whose text it equals. Equality rather
+than glob matching keeps the allowlist auditable — an entry names exactly one
+rule it excuses, so it cannot quietly widen as the ignore file grows.
+
 There is deliberately **no `derived` class**. A "regenerable output" root and a
 "raw payload" root differ semantically but are mechanically identical — both are
 entirely ignored. Two classes with identical behaviour is a distinction without
@@ -229,7 +260,7 @@ that killed the previous attempt.
 | command | purpose |
 |---|---|
 | `science boundary sync` | rewrite the managed block; `--check` exits nonzero on drift; `--verify-current-tree` diffs ignore decisions before/after |
-| `science boundary check` | fast standalone predicate for pre-commit; two git calls, no config load |
+| `science boundary check` | fast standalone gate for pre-commit hooks: runs the two universal checks (`tracked-ignored`, `unanchored-pattern`) only, so it needs no config load |
 | `science boundary init` | adoption aid: propose a declaration from the existing tree |
 
 `classify()` keeps exactly two callers: `boundary init` and `data audit`. The
@@ -240,16 +271,18 @@ advisory and blocks nothing). No boundary check consults it.
 
 ### Checks
 
-All four are mechanical. No heuristic participates in enforcement.
+All six are mechanical. No heuristic participates in enforcement.
 
 | check | scope | severity | predicate |
 |---|---|---|---|
 | `boundary.tracked-ignored` | all projects | ERROR | a tracked file matches an ignore rule |
 | `boundary.generated-drift` | declared only | ERROR | managed block ≠ regenerated block |
 | `boundary.declaration-conflict` | declared only | ERROR | an unmanaged rule matches a path under a declared root |
-| `boundary.ineffective-negation` | all projects | ERROR | a file-level negation whose parent directory is excluded |
+| `boundary.unreachable-tracked` | declared only | ERROR | an extant file matching a `tracked:` glob is absent from the git-visibility oracle |
 | `boundary.ignored-undeclared` | declared only | WARN | an unmanaged rule ignores a project path with no declared root and no allowlist entry |
 | `boundary.unanchored-pattern` | all projects | WARN | bare directory-name pattern with no leading `/`, in the unmanaged region |
+
+Two universal checks, four declaration-derived; four ERROR, two WARN.
 
 Generated patterns are anchored by construction, so `unanchored-pattern` only
 ever inspects the hand-written region and any nested `.gitignore`.
@@ -260,8 +293,11 @@ any depth beneath it. `datapackage.json` therefore covers
 naming intermediate directories.
 
 `boundary.tracked-ignored` runs everywhere with no configuration because it
-needs none: it uses the project's own declared boundary rather than guessing,
-so it has **zero false positives by construction**. It would have caught all
+needs none: it compares the git index against the effective ignore sources
+(project `.gitignore`, nested `.gitignore` files, and `core.excludesFile`)
+rather than guessing from filenames, so it has **zero false positives by
+construction** — every hit is a genuine self-contradiction in the repository's
+own configuration. It would have caught all
 three MM30 drift classes on the day each appeared.
 
 `boundary.declaration-conflict` is what makes the declaration *the* authority
@@ -285,10 +321,33 @@ the pattern — both explicit, neither a per-file adjudication. It is a WARN
 because it is declaration-derived and an adopter should not be blocked by
 pre-existing tooling ignores on day one.
 
-`boundary.ineffective-negation` is an ERROR rather than a WARN despite being
-rare, because its failure mode is maximally deceptive: every diagnostic reports
-success while `git add .` stages nothing. Detection is mechanical — for each
-negation pattern, ask whether the parent directory is itself excluded.
+**Implicit-`versioned` semantics begin at enrollment.** In a project with no
+`boundary:` block, `/papers/pdfs/` in the hand-written region is not a
+violation and is not reported — there is no declaration for it to contradict.
+This is the honest reading of the opt-in model chosen for adoption, and it is
+stated here rather than left as an inference, because the alternative (a
+universal warning keyed on a built-in allowance list) would reintroduce exactly
+the built-in-judgement problem the declaration removes. Should undeclared
+projects later need to be visible as debt, the mechanism is a new
+`boundary.declaration-missing` validation warning — which `health` surfaces
+automatically through the existing findings path, with no separate section.
+
+`boundary.unreachable-tracked` is the check that makes the `manifest` class
+trustworthy, and it replaces an earlier "ask whether the parent directory is
+excluded" formulation that was not mechanically definable: `!build/**/README.md`
+has no concrete parent to query.
+
+Asking git directly sidesteps the problem entirely. For every extant file
+matching a declared `tracked:` glob, membership in
+`git ls-files --cached --others --exclude-standard` is the predicate. This works
+identically for literal and glob patterns, needs no pattern analysis, and is by
+construction the same question `git add .` asks.
+
+It is an ERROR because its failure mode is maximally deceptive — the file exists,
+the declaration says it is tracked material, and bulk staging silently skips it.
+It is declaration-derived rather than universal because "which files were
+*meant* to be reachable" is exactly what the declaration supplies; in an
+undeclared project there is no intent to compare against.
 
 Precedent exists: `validate/checks/prereg_vehicles.py` already ships a
 fail-closed, gitignore-aware gate (`prereg.vehicle-gitignored`). This
@@ -315,7 +374,7 @@ Each of these comes from an observed failure, not speculation:
 ### Wiring
 
 - New `validate/checks/boundary.py`, registered in `CANONICAL_CHECKS`.
-- All four checks are cheap enough for `--profile commit` (worst case two git
+- All six checks are cheap enough for `--profile commit` (worst case three git
   calls plus a config load), so they run in the pre-commit path rather than only
   on full validate.
 - **No separate `health` boundary section.** `graph/health_checks/validate.py`
@@ -328,10 +387,11 @@ Each of these comes from an observed failure, not speculation:
 
 ### Adoption
 
-Enforcement is split by check kind rather than staged by release. The universal
-check ships fail-closed immediately because it requires no configuration and
-cannot produce a false positive; the declaration-derived checks activate only
-once a project declares `boundary:`.
+Enforcement is split by check kind rather than staged by release. The two
+universal checks ship immediately — `tracked-ignored` fail-closed, because it
+requires no configuration and cannot produce a false positive, and
+`unanchored-pattern` as a warning. The four declaration-derived checks activate
+only once a project declares `boundary:`.
 
 This deliberately avoids the capability-fit rollout shape, where a fail-closed
 gate went loud across every project simultaneously and required a multi-task
@@ -371,9 +431,29 @@ both depth 1 and depth 3, a dotfile, and a payload-extension file. Old and new
 rule sets must agree on every probe.
 
 Together the two passes cover the extant tree exactly and the future tree
-structurally. Neither is a proof of total equivalence, and the spec should not
-claim one; the residual risk is a filename shape no probe anticipates, which the
-universal `boundary.tracked-ignored` check catches after the fact.
+structurally. Neither is a proof of total equivalence, and the spec does not
+claim one. The residual risk is a filename shape no probe anticipates.
+
+That residual risk is **not** caught by `boundary.tracked-ignored`, and an
+earlier draft wrongly claimed it was. If a future manifest file is mistakenly
+ignored, `git add .` never stages it, so it never enters the index, so a
+tracked-versus-ignored predicate can never see it — the identical failure mode
+the bulk-staging test exists to expose. `boundary.unreachable-tracked` is the
+check that covers it, by asking whether extant files matching a `tracked:` glob
+are reachable at all rather than whether tracked files are ignored.
+
+**Transactional behaviour.** `--verify-current-tree` is a verification mode, so
+it must not leave a candidate block installed merely because it found a change:
+
+- refuses to run when `.gitignore` has uncommitted modifications, so a failure
+  can never discard the user's in-flight edits
+- installs the candidate block, records decisions, and **always restores the
+  original file** before returning, on both the success and failure paths and on
+  exception
+- exits nonzero with the decision diff when any path changed, leaving the tree
+  exactly as it was found
+
+Committing the new block is `sync` without the flag — a separate, deliberate act.
 
 ### Retiring the conflicting convention
 
@@ -414,8 +494,21 @@ Required, or the declaration becomes a fourth opinion rather than the authority:
   generated.
 - Path validation: absolute, `..`, `.`, trailing `/`, embedded newline, glob
   metacharacter, duplicate path, and `tracked:` on a `payload` root each raise.
-- `boundary.ineffective-negation` fires on a file-level negation beneath an
-  excluded parent and stays quiet on the directory-level form.
+- `boundary.unreachable-tracked` fires on a file-level negation beneath an
+  excluded parent, stays quiet on the directory-level form, and fires on a glob
+  case (`!build/**/README.md` under `/build/`) that no parent-directory analysis
+  could evaluate.
+- Oracle-versus-`check-ignore` regression: a fixture where `check-ignore`
+  reports un-ignored while the file is unreachable, asserting the check follows
+  the oracle. Includes the index-dependence case — `check-ignore` without
+  `--no-index` on an already-tracked path — so nobody "simplifies" the
+  implementation back onto `check-ignore`.
+- `tracked:` and `unmanaged_allow` grammar: newline, control character, absolute
+  path, `..`, leading `!`, leading `#`, trailing `/`, dangling escape, duplicate,
+  and empty/omitted `tracked:` on a `manifest` root each raise.
+- `--verify-current-tree` restores the original `.gitignore` on the failure
+  path, on the success path, and on exception; and refuses to run against a
+  dirty `.gitignore`.
 - `boundary.ignored-undeclared` fires on an unmanaged project ignore, and is
   silenced by both remedies (declaring the root, and `unmanaged_allow`).
 - Probe generation: probes are evaluated with `--no-index` against paths that do
@@ -460,9 +553,22 @@ emerges, `atoms` becomes a plausible consumer — it would know which roots need
 journaled effects and which are disposable. That is a consumer relationship to
 leave room for, not a dependency to build.
 
-## Open questions for the implementation plan
+## Resolved decisions
 
-- Ordering of `boundary init` against the MM30 declaration: whether MM30 lands
-  as a worked example inside this branch or as a downstream follow-up.
-- Whether `science health`'s boundary section should report undeclared projects
-  as debt, or stay silent until a project opts in.
+Both questions left open in the first draft are now settled.
+
+**MM30's declaration is a downstream follow-up, not part of this branch.** What
+lands here is a sanitized MM30-derived fixture serving as the acceptance case
+for `init` proposal, generation across all three classes, probe evaluation, and
+migration verification. This keeps the upstream change reviewable on its own
+terms and avoids coupling a framework release to one project's cleanup — the
+same separation the April conventions rollout got right, where downstream shape
+migrations were operator work in downstream repositories rather than science
+plans.
+
+**Undeclared projects stay silent in v1.** Implicit-`versioned` enforcement is
+scoped to projects containing a `boundary:` block, preserving the opt-in
+rollout. If absence later needs to be visible as debt, the mechanism is a
+`boundary.declaration-missing` validation warning, which `health` surfaces
+through the existing findings path — no separate section, consistent with the
+wiring decision above.
