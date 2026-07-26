@@ -14,6 +14,7 @@ import tempfile
 from contextlib import contextmanager
 from dataclasses import dataclass
 from datetime import date
+from enum import Enum
 from pathlib import Path
 from typing import Iterator
 
@@ -30,6 +31,7 @@ __all__ = [
     "TaskLocation",
     "TaskStatus",
     "TaskUpdate",
+    "StorageState",
     "append_task_note",
     "delete_task_file",
     "find_dangling_task_refs",
@@ -65,6 +67,17 @@ _KNOWN_KEYS = frozenset(
     }
 )
 _OPEN_STATUSES = frozenset({"proposed", "active", "blocked", "deferred"})
+_MIGRATION_JOURNAL = Path(".science/task-storage-migration.journal")
+
+
+class StorageState(Enum):
+    """The authoritative task-storage layout state."""
+
+    EMPTY = "empty"
+    SPLIT = "split"
+    LEGACY = "legacy"
+    MIGRATING = "migrating"
+    CONFLICT = "conflict"
 
 
 class TaskIntegrityError(ValueError):
@@ -456,6 +469,43 @@ def _active_dir(tasks_dir: Path) -> Path:
     return tasks_dir / "active"
 
 
+def _tasks_storage_state(tasks_dir: Path) -> StorageState:
+    """Classify task storage, treating a migration journal as authoritative."""
+    if (tasks_dir / _MIGRATION_JOURNAL).exists():
+        return StorageState.MIGRATING
+
+    has_legacy = (tasks_dir / "active.md").is_file()
+    has_split = any(path.is_file() for path in _active_dir(tasks_dir).glob("*.md"))
+    if has_legacy and has_split:
+        return StorageState.CONFLICT
+    if has_legacy:
+        return StorageState.LEGACY
+    if has_split:
+        return StorageState.SPLIT
+    return StorageState.EMPTY
+
+
+def _require_split(tasks_dir: Path) -> None:
+    """Allow normal commands only against empty or split task storage."""
+    state = _tasks_storage_state(tasks_dir)
+    if state in {StorageState.EMPTY, StorageState.SPLIT}:
+        return
+    if state is StorageState.LEGACY:
+        raise ValueError(
+            "tasks/active.md predates the storage split; "
+            "run `science tasks migrate-storage --apply`."
+        )
+    if state is StorageState.MIGRATING:
+        raise ValueError(
+            "an interrupted storage migration is in progress; "
+            "run `science tasks migrate-storage --resume`."
+        )
+    raise ValueError(
+        "both tasks/active.md and tasks/active/ exist with no migration journal; "
+        "inspect and remove one by hand — this is not an auto-resumable migration."
+    )
+
+
 def _find_active_file(tasks_dir: Path, task_id: str) -> Path | None:
     """Find the unique active file for ``task_id``, refusing duplicates.
 
@@ -689,7 +739,9 @@ def _parse_path_tasks(path: Path) -> list[Task]:
     return parse_tasks(path)
 
 
-def _read_active(tasks_dir: Path, *, require_split: bool = False) -> list[Task]:
+def _read_active(tasks_dir: Path, *, require_split: bool = True) -> list[Task]:
+    if require_split:
+        _require_split(tasks_dir)
     active = _active_dir(tasks_dir)
     if not active.is_dir():
         return []
@@ -767,8 +819,15 @@ def _find_matches(tasks_dir: Path, task_id: str) -> list[TaskLocation]:
     return matches
 
 
-def find_task_location(tasks_dir: Path, task_id: str) -> TaskLocation:
+def find_task_location(
+    tasks_dir: Path,
+    task_id: str,
+    *,
+    require_split: bool = True,
+) -> TaskLocation:
     """Find the unique occurrence of a task in active/*.md or done/*.md."""
+    if require_split:
+        _require_split(tasks_dir)
     matches = _find_matches(tasks_dir, task_id)
     if not matches:
         searched = ", ".join(str(path) for path in _task_search_paths(tasks_dir))
@@ -1110,7 +1169,9 @@ def _read_since_candidates(tasks_dir: Path, since: date) -> list[Task]:
     """
     from science_tool.tasks_ledger import _read_destination
 
-    by_id: dict[str, Task] = {t.id: t for t in _read_active(tasks_dir)}
+    by_id: dict[str, Task] = {
+        t.id: t for t in _read_active(tasks_dir, require_split=False)
+    }
     for month in _since_window_months(since, date.today()):
         _preamble, archive_tasks = _read_destination(tasks_dir / "done" / f"{month}.md")
         for t in archive_tasks:

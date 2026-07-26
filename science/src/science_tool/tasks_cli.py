@@ -669,22 +669,26 @@ def tasks_list(
                 "--since only applies to closed tasks; use --status done, --status retired, or --all"
             )
 
+    try:
+        matched = list_tasks(
+            DEFAULT_TASKS_DIR,
+            project_root=Path.cwd(),
+            priority=priority,
+            status=status,
+            related=related,
+            group=group,
+            aspects=list(aspects) or None,
+            include_done=show_all,
+            since=since,
+        )
+    except ValueError as exc:
+        raise click.ClickException(str(exc)) from exc
+
     # Surface legacy-untyped-blocker warnings on stderr.
     _, warnings = parse_tasks_for_cli(DEFAULT_TASKS_DIR / "active.md")
     for w in warnings:
         click.echo(f"WARNING: {w}", err=True)
 
-    matched = list_tasks(
-        DEFAULT_TASKS_DIR,
-        project_root=Path.cwd(),
-        priority=priority,
-        status=status,
-        related=related,
-        group=group,
-        aspects=list(aspects) or None,
-        include_done=show_all,
-        since=since,
-    )
     if status is None and not show_all and since is None:
         matched = [task for task in matched if task.status in WORKING_SET]
     matched = sort_tasks(matched)
@@ -811,7 +815,7 @@ def tasks_show(task_id: str, output_format: str) -> None:
 
     try:
         location = find_task_location(DEFAULT_TASKS_DIR, task_id)
-    except KeyError as exc:
+    except (KeyError, ValueError) as exc:
         raise click.ClickException(str(exc)) from exc
     task = location.task
     try:
@@ -869,7 +873,7 @@ def tasks_summary(output_format: str, output_path: Path | None) -> None:
     from science_tool.budget.invocation import build_complete_via, hint_for
     from science_tool.budget.registry import lookup
     from science_tool.budget.sink import BoundedSink
-    from science_tool.tasks import parse_tasks, warn_invalid_statuses
+    from science_tool.tasks import _read_active, warn_invalid_statuses
     from science_tool.tasks_summary_projection import project_tasks_summary
 
     complete_via = build_complete_via(click.get_current_context(), output_hint=hint_for("tasks-summary", output_format))
@@ -882,7 +886,10 @@ def tasks_summary(output_format: str, output_path: Path | None) -> None:
         else None
     )
 
-    active = parse_tasks(DEFAULT_TASKS_DIR / "active.md")
+    try:
+        active = _read_active(DEFAULT_TASKS_DIR)
+    except ValueError as exc:
+        raise click.ClickException(str(exc)) from exc
     if not active:
         full = {"total": 0, "by_status": {}, "by_type": {}, "by_priority": {}, "by_group": {}}
         emit(output_format=output_format, payload=full, render_text=lambda: sink.echo("No active tasks."), sink=sink)
