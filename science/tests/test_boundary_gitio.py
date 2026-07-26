@@ -257,6 +257,21 @@ def test_matching_rules_attribute_one_rule_to_every_path_it_matches(tmp_path: Pa
     assert sorted(hits) == sorted(paths)
 
 
+def test_matching_rules_peel_independently_for_each_path(tmp_path: Path):
+    """A path-specific winner must not globally peel an earlier shared rule."""
+    repo = _repo(tmp_path)
+    _write(repo, ".gitignore", "*.parquet\nspecial.parquet\n")
+    subprocess.run(["git", "-C", str(repo), "add", ".gitignore"], check=True)
+
+    hits = matching_unmanaged_rules(repo, ["a.parquet", "special.parquet"])
+
+    assert [(r.line, r.pattern) for r in hits["a.parquet"]] == [(1, "*.parquet")]
+    assert [(r.line, r.pattern) for r in hits["special.parquet"]] == [
+        (1, "*.parquet"),
+        (2, "special.parquet"),
+    ]
+
+
 def test_matching_rules_terminate_when_nothing_matches(tmp_path: Path):
     repo = _repo(tmp_path)
     _write(repo, ".gitignore", "/unrelated/\n")
@@ -293,6 +308,39 @@ def test_governed_ignore_files_skip_a_symlink(tmp_path: Path):
 
     assert governed_ignore_files(repo) == []
     assert unmanaged_rules(repo) == []
+
+
+def test_governed_ignore_files_skip_a_symlinked_parent(tmp_path: Path):
+    """No parent component may redirect governed reads outside the repository."""
+    repo = _repo(tmp_path)
+    source = _write(repo, "dir/.gitignore", "*.inside\n")
+    subprocess.run(["git", "-C", str(repo), "add", "dir/.gitignore"], check=True)
+    source.unlink()
+    (repo / "dir").rmdir()
+
+    outside = tmp_path.parent / f"{tmp_path.name}-outside"
+    outside.mkdir()
+    _write(outside, ".gitignore", "*.outside\n")
+    (repo / "dir").symlink_to(outside, target_is_directory=True)
+
+    assert governed_ignore_files(repo) == []
+    assert unmanaged_rules(repo) == []
+
+
+def test_governed_ignore_files_fail_closed_on_parent_access_error(tmp_path: Path):
+    from science_tool.boundary.gitio import BoundaryGitError
+
+    repo = _repo(tmp_path)
+    _write(repo, "dir/.gitignore", "*.parquet\n")
+    subprocess.run(["git", "-C", str(repo), "add", "dir/.gitignore"], check=True)
+    (repo / "dir").chmod(0o000)
+    try:
+        if os.access(repo / "dir", os.R_OK | os.X_OK):
+            pytest.skip("running as root; permissions are not enforced")
+        with pytest.raises(BoundaryGitError, match="cannot inspect governed ignore file"):
+            governed_ignore_files(repo)
+    finally:
+        (repo / "dir").chmod(0o755)
 
 
 def test_unreadable_source_raises_rather_than_reporting_no_rules(tmp_path: Path):
@@ -378,6 +426,167 @@ def test_matching_rules_are_case_sensitive_without_it(tmp_path: Path):
     _write(repo, ".gitignore", "*.PARQUET\n")
     subprocess.run(["git", "-C", str(repo), "add", ".gitignore"], check=True)
     assert matching_unmanaged_rules(repo, ["d/x.parquet"]) == {}
+
+
+def test_matching_rules_ignore_git_init_templates(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    repo = _repo(tmp_path)
+    _write(repo, "inc/.gitignore", "*.parquet\n")
+    subprocess.run(["git", "-C", str(repo), "add", "inc/.gitignore"], check=True)
+
+    template = tmp_path / "template"
+    _write(template, "info/exclude", "inc/\n")
+    monkeypatch.setenv("GIT_TEMPLATE_DIR", str(template))
+
+    hits = matching_unmanaged_rules(repo, ["inc/x.parquet"])
+    assert [(r.source, r.pattern) for r in hits["inc/x.parquet"]] == [
+        ("inc/.gitignore", "*.parquet")
+    ]
+
+
+def test_matching_rules_reject_unexpected_scratch_source(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    from science_tool.boundary import gitio
+    from science_tool.boundary.gitio import BoundaryGitError
+
+    repo = _repo(tmp_path)
+    _write(repo, ".gitignore", "*.parquet\n")
+    subprocess.run(["git", "-C", str(repo), "add", ".gitignore"], check=True)
+    real_git = gitio._git
+
+    def fake_git(
+        project_root: Path,
+        *args: str,
+        stdin: bytes | None = None,
+        ok: tuple[int, ...] = (0,),
+    ) -> bytes:
+        if project_root != repo and args[:2] == ("check-ignore", "--no-index"):
+            return b".git/info/exclude\0" b"1\0" b"*.parquet\0" b"x.parquet\0"
+        return real_git(project_root, *args, stdin=stdin, ok=ok)
+
+    monkeypatch.setattr(gitio, "_git", fake_git)
+    with pytest.raises(BoundaryGitError, match="unexpected ignore source"):
+        matching_unmanaged_rules(repo, ["x.parquet"])
+
+
+@pytest.mark.parametrize(
+    "payload",
+    [
+        b"path-without-terminator",
+        b"first\0\0second\0",
+    ],
+)
+def test_split_z_rejects_malformed_framing(payload: bytes):
+    from science_tool.boundary.gitio import BoundaryGitError, _split_z
+
+    with pytest.raises(BoundaryGitError, match="malformed NUL-delimited"):
+        _split_z(payload)
+
+
+def test_tracked_ignored_rejects_incomplete_verbose_record(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    from science_tool.boundary import gitio
+    from science_tool.boundary.gitio import BoundaryGitError
+
+    calls = 0
+
+    def fake_git(
+        project_root: Path,
+        *args: str,
+        stdin: bytes | None = None,
+        ok: tuple[int, ...] = (0,),
+    ) -> bytes:
+        nonlocal calls
+        calls += 1
+        if calls == 1:
+            return b"a.parquet\0"
+        return b".gitignore\0" b"1\0" b"*.parquet\0"
+
+    monkeypatch.setattr(gitio, "_git", fake_git)
+    with pytest.raises(BoundaryGitError, match="expected four fields"):
+        gitio.tracked_ignored(tmp_path)
+
+
+def test_tracked_ignored_rejects_invalid_verbose_line_number(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    from science_tool.boundary import gitio
+    from science_tool.boundary.gitio import BoundaryGitError
+
+    calls = 0
+
+    def fake_git(
+        project_root: Path,
+        *args: str,
+        stdin: bytes | None = None,
+        ok: tuple[int, ...] = (0,),
+    ) -> bytes:
+        nonlocal calls
+        calls += 1
+        if calls == 1:
+            return b"a.parquet\0"
+        return b".gitignore\0" b"not-a-line\0" b"*.parquet\0" b"a.parquet\0"
+
+    monkeypatch.setattr(gitio, "_git", fake_git)
+    with pytest.raises(BoundaryGitError, match="invalid line number"):
+        gitio.tracked_ignored(tmp_path)
+
+
+def test_matching_rules_reject_incomplete_verbose_record(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    from science_tool.boundary import gitio
+    from science_tool.boundary.gitio import BoundaryGitError
+
+    repo = _repo(tmp_path)
+    _write(repo, ".gitignore", "*.parquet\n")
+    subprocess.run(["git", "-C", str(repo), "add", ".gitignore"], check=True)
+    real_git = gitio._git
+
+    def fake_git(
+        project_root: Path,
+        *args: str,
+        stdin: bytes | None = None,
+        ok: tuple[int, ...] = (0,),
+    ) -> bytes:
+        if project_root != repo and args[:2] == ("check-ignore", "--no-index"):
+            return b".gitignore\0" b"1\0" b"*.parquet\0"
+        return real_git(project_root, *args, stdin=stdin, ok=ok)
+
+    monkeypatch.setattr(gitio, "_git", fake_git)
+    with pytest.raises(BoundaryGitError, match="expected four fields"):
+        matching_unmanaged_rules(repo, ["x.parquet"])
+
+
+def test_ignore_case_query_uses_nul_framing(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    from science_tool.boundary import gitio
+
+    seen: tuple[str, ...] = ()
+
+    def fake_git(
+        project_root: Path,
+        *args: str,
+        stdin: bytes | None = None,
+        ok: tuple[int, ...] = (0,),
+    ) -> bytes:
+        nonlocal seen
+        seen = args
+        return b"true\0"
+
+    monkeypatch.setattr(gitio, "_git", fake_git)
+    assert gitio._ignore_case(tmp_path) == "true"
+    assert seen == ("config", "-z", "--get", "core.ignoreCase")
 
 
 def test_leading_whitespace_in_a_rule_is_preserved(tmp_path: Path):

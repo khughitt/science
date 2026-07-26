@@ -20,6 +20,8 @@ All output framing is NUL-delimited: newlines are legal in git paths.
 
 from __future__ import annotations
 
+import os
+import stat
 import subprocess
 import tempfile
 from dataclasses import dataclass
@@ -99,21 +101,149 @@ def _git_plain(*args: str) -> None:
 
 
 def _read_governed(project_root: Path, rel: str) -> str:
-    """Read a governed `.gitignore`, failing closed, tolerating raw bytes."""
+    """Read a governed `.gitignore` without following any symlink component."""
+    descriptor = _open_governed(project_root, rel, missing_ok=False)
+    assert descriptor is not None
     try:
-        return read_ignore_file(project_root / rel)
+        with os.fdopen(descriptor, "rb") as stream:
+            return stream.read().decode("utf-8", "surrogateescape")
     except OSError as exc:
         raise BoundaryGitError(f"cannot read governed ignore file {rel}: {exc}") from exc
 
 
+def _open_governed(project_root: Path, rel: str, *, missing_ok: bool) -> int | None:
+    """Open a regular governed source without following symlinks.
+
+    Missing paths and symlink components mean the indexed source is not active
+    in the worktree. Other inspection failures are errors, never "not present".
+    Returning an open descriptor closes the stat/open race for the final file.
+    """
+    parts = Path(rel).parts
+    directory_flags = os.O_RDONLY | os.O_DIRECTORY
+    nofollow = os.O_NOFOLLOW
+    try:
+        directory_fd = os.open(project_root, directory_flags)
+    except OSError as exc:
+        raise BoundaryGitError(f"cannot inspect governed ignore file {rel}: {exc}") from exc
+
+    try:
+        for part in parts[:-1]:
+            try:
+                metadata = os.stat(part, dir_fd=directory_fd, follow_symlinks=False)
+            except FileNotFoundError:
+                if missing_ok:
+                    return None
+                raise BoundaryGitError(f"cannot read governed ignore file {rel}: path disappeared")
+            except OSError as exc:
+                raise BoundaryGitError(
+                    f"cannot inspect governed ignore file {rel}: {exc}"
+                ) from exc
+            if stat.S_ISLNK(metadata.st_mode):
+                if missing_ok:
+                    return None
+                raise BoundaryGitError(
+                    f"cannot read governed ignore file {rel}: parent is a symlink"
+                )
+            if not stat.S_ISDIR(metadata.st_mode):
+                raise BoundaryGitError(
+                    f"cannot inspect governed ignore file {rel}: parent is not a directory"
+                )
+            try:
+                child_fd = os.open(
+                    part,
+                    directory_flags | nofollow,
+                    dir_fd=directory_fd,
+                )
+            except FileNotFoundError:
+                if missing_ok:
+                    return None
+                raise BoundaryGitError(f"cannot read governed ignore file {rel}: path disappeared")
+            except OSError as exc:
+                raise BoundaryGitError(
+                    f"cannot inspect governed ignore file {rel}: {exc}"
+                ) from exc
+            os.close(directory_fd)
+            directory_fd = child_fd
+
+        name = parts[-1]
+        try:
+            metadata = os.stat(name, dir_fd=directory_fd, follow_symlinks=False)
+        except FileNotFoundError:
+            if missing_ok:
+                return None
+            raise BoundaryGitError(f"cannot read governed ignore file {rel}: path disappeared")
+        except OSError as exc:
+            raise BoundaryGitError(f"cannot inspect governed ignore file {rel}: {exc}") from exc
+        if stat.S_ISLNK(metadata.st_mode):
+            if missing_ok:
+                return None
+            raise BoundaryGitError(f"cannot read governed ignore file {rel}: source is a symlink")
+        if not stat.S_ISREG(metadata.st_mode):
+            raise BoundaryGitError(
+                f"cannot inspect governed ignore file {rel}: source is not a regular file"
+            )
+        try:
+            return os.open(name, os.O_RDONLY | nofollow, dir_fd=directory_fd)
+        except FileNotFoundError:
+            if missing_ok:
+                return None
+            raise BoundaryGitError(f"cannot read governed ignore file {rel}: path disappeared")
+        except OSError as exc:
+            raise BoundaryGitError(f"cannot read governed ignore file {rel}: {exc}") from exc
+    finally:
+        os.close(directory_fd)
+
+
 def _ignore_case(project_root: Path) -> str | None:
     """The project's effective `core.ignoreCase`, or None if unset."""
-    raw = _git(project_root, "config", "--get", "core.ignoreCase", ok=(0, 1)).decode().strip()
-    return raw or None
+    raw = _git(
+        project_root,
+        "config",
+        "-z",
+        "--get",
+        "core.ignoreCase",
+        ok=(0, 1),
+    )
+    values = _split_z(raw)
+    if len(values) > 1:
+        raise BoundaryGitError("git config returned multiple core.ignoreCase values")
+    return values[0] if values else None
 
 
 def _split_z(payload: bytes) -> list[str]:
-    return [chunk.decode("utf-8", "surrogateescape") for chunk in payload.split(b"\0") if chunk]
+    """Decode a NUL-framed stream, rejecting truncation and empty records."""
+    if not payload:
+        return []
+    if not payload.endswith(b"\0"):
+        raise BoundaryGitError("malformed NUL-delimited git output: missing terminal NUL")
+    chunks = payload[:-1].split(b"\0")
+    if any(not chunk for chunk in chunks):
+        raise BoundaryGitError("malformed NUL-delimited git output: empty field")
+    return [chunk.decode("utf-8", "surrogateescape") for chunk in chunks]
+
+
+def _check_ignore_records(payload: bytes) -> list[tuple[str, int, str, str]]:
+    """Parse exact four-field `check-ignore -v -z` records."""
+    fields = _split_z(payload)
+    if len(fields) % 4:
+        raise BoundaryGitError(
+            "malformed git check-ignore output: expected four fields per record"
+        )
+    records: list[tuple[str, int, str, str]] = []
+    for index in range(0, len(fields), 4):
+        line = fields[index + 1]
+        try:
+            number = int(line)
+        except ValueError as exc:
+            raise BoundaryGitError(
+                f"git check-ignore returned invalid line number {line!r}"
+            ) from exc
+        if number < 1:
+            raise BoundaryGitError(
+                f"git check-ignore returned invalid line number {line!r}"
+            )
+        records.append((fields[index], number, fields[index + 2], fields[index + 3]))
+    return records
 
 
 def visible_paths(project_root: Path) -> set[str]:
@@ -147,19 +277,15 @@ def tracked_ignored(project_root: Path) -> list[IgnoreHit]:
         stdin=tracked,
         ok=(0, 1),
     )
-    fields = raw.split(b"\0")
     hits: list[IgnoreHit] = []
-    for i in range(0, len(fields) - 3, 4):
-        source, line, pattern, path = (
-            field.decode("utf-8", "surrogateescape") for field in fields[i : i + 4]
-        )
-        if not path or pattern.startswith("!"):
+    for source, line, pattern, path in _check_ignore_records(raw):
+        if pattern.startswith("!"):
             continue
         hits.append(
             IgnoreHit(
                 path=path,
                 source=source,
-                line=int(line or 0),
+                line=line,
                 pattern=pattern,
             )
         )
@@ -170,11 +296,14 @@ def governed_ignore_files(project_root: Path) -> list[str]:
     """Tracked, present, non-symlink `.gitignore` files actually in effect."""
     tracked = _split_z(_git(project_root, "ls-files", "-z"))
     named = (path for path in tracked if path == ".gitignore" or path.endswith("/.gitignore"))
-    return sorted(
-        path
-        for path in named
-        if (project_root / path).is_file() and not (project_root / path).is_symlink()
-    )
+    governed: list[str] = []
+    for path in named:
+        descriptor = _open_governed(project_root, path, missing_ok=True)
+        if descriptor is None:
+            continue
+        os.close(descriptor)
+        governed.append(path)
+    return sorted(governed)
 
 
 def unmanaged_rules(project_root: Path) -> list[IgnoreRule]:
@@ -226,7 +355,7 @@ def matching_unmanaged_rules(
     if not governed:
         return {}
 
-    blanked: dict[str, set[int]] = {}
+    initially_blanked: dict[str, set[int]] = {}
     sources: dict[str, list[str]] = {}
     for rel in governed:
         text = _read_governed(project_root, rel)
@@ -246,15 +375,22 @@ def matching_unmanaged_rules(
                 continue
             if inside:
                 managed.add(number)
-        blanked[rel] = managed
+        initially_blanked[rel] = managed
 
     matches: dict[str, list[IgnoreRule]] = {}
-    payload = "\0".join(paths).encode("utf-8", "surrogateescape") + b"\0"
+    unique_paths = list(dict.fromkeys(paths))
+    blanked_by_path = {
+        path: {source: set(lines) for source, lines in initially_blanked.items()}
+        for path in unique_paths
+    }
 
     with tempfile.TemporaryDirectory() as tmp:
         scratch = Path(tmp) / "scratch"
         scratch.mkdir()
-        _git_plain("init", "-q", str(scratch))
+        _git_plain("init", "-q", "--template=", str(scratch))
+        scratch_exclude = scratch / ".git" / "info" / "exclude"
+        scratch_exclude.parent.mkdir(parents=True, exist_ok=True)
+        write_ignore_file(scratch_exclude, "")
         empty = Path(tmp) / "empty-excludes"
         empty.write_text("")
         _git_plain("-C", str(scratch), "config", "core.excludesFile", str(empty))
@@ -262,46 +398,68 @@ def matching_unmanaged_rules(
         if case is not None:
             _git_plain("-C", str(scratch), "config", "core.ignoreCase", case)
 
-        while True:
-            for rel, lines in sources.items():
-                rendered = [
-                    "" if number in blanked[rel] else raw
-                    for number, raw in enumerate(lines, start=1)
-                ]
-                target = scratch / rel
-                target.parent.mkdir(parents=True, exist_ok=True)
-                write_ignore_file(target, "\n".join(rendered))
+        active = unique_paths
+        while active:
+            groups: dict[tuple[tuple[str, tuple[int, ...]], ...], list[str]] = {}
+            for path in active:
+                state = tuple(
+                    (source, tuple(sorted(lines)))
+                    for source, lines in sorted(blanked_by_path[path].items())
+                )
+                groups.setdefault(state, []).append(path)
 
-            raw_out = _git(
-                scratch,
-                "check-ignore",
-                "--no-index",
-                "--stdin",
-                "-z",
-                "-v",
-                stdin=payload,
-                ok=(0, 1),
-            )
-            fields = raw_out.split(b"\0")
-            newly: set[tuple[str, int]] = set()
-            for i in range(0, len(fields) - 3, 4):
-                source, line, pattern, path = (
-                    field.decode("utf-8", "surrogateescape")
-                    for field in fields[i : i + 4]
+            next_active: list[str] = []
+            for group in groups.values():
+                group_blanked = blanked_by_path[group[0]]
+                for rel, lines in sources.items():
+                    rendered = [
+                        "" if number in group_blanked[rel] else raw
+                        for number, raw in enumerate(lines, start=1)
+                    ]
+                    target = scratch / rel
+                    target.parent.mkdir(parents=True, exist_ok=True)
+                    write_ignore_file(target, "\n".join(rendered))
+
+                payload = "\0".join(group).encode("utf-8", "surrogateescape") + b"\0"
+                raw_out = _git(
+                    scratch,
+                    "check-ignore",
+                    "--no-index",
+                    "--stdin",
+                    "-z",
+                    "-v",
+                    stdin=payload,
+                    ok=(0, 1),
                 )
-                if not path or source not in blanked:
-                    continue
-                number = int(line or 0)
-                if number in blanked[source]:
-                    continue
-                matches.setdefault(path, []).append(
-                    IgnoreRule(source=source, line=number, pattern=pattern)
-                )
-                newly.add((source, number))
-            if not newly:
-                break
-            for source, number in newly:
-                blanked[source].add(number)
+                reported: set[str] = set()
+                for source, number, pattern, path in _check_ignore_records(raw_out):
+                    if path not in group:
+                        raise BoundaryGitError(
+                            f"git check-ignore returned unexpected path {path!r}"
+                        )
+                    if path in reported:
+                        raise BoundaryGitError(
+                            f"git check-ignore returned duplicate path {path!r}"
+                        )
+                    reported.add(path)
+                    if source not in sources:
+                        raise BoundaryGitError(
+                            f"git check-ignore returned unexpected ignore source {source!r}"
+                        )
+                    if number < 1 or number > len(sources[source]):
+                        raise BoundaryGitError(
+                            f"git check-ignore returned out-of-range line {number} for {source}"
+                        )
+                    if number in blanked_by_path[path][source]:
+                        raise BoundaryGitError(
+                            f"git check-ignore returned an already-peeled rule {source}:{number}"
+                        )
+                    matches.setdefault(path, []).append(
+                        IgnoreRule(source=source, line=number, pattern=pattern)
+                    )
+                    blanked_by_path[path][source].add(number)
+                    next_active.append(path)
+            active = next_active
 
     for hits in matches.values():
         hits.sort(key=lambda rule: (rule.source, rule.line))
