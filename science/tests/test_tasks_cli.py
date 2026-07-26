@@ -402,6 +402,83 @@ class TestTasksList:
             # Default working set surfaces under applied_filters too.
             assert meta["applied_filters"]["only_status"] == ["active", "blocked"]
 
+    def test_list_since_rejects_non_terminal_status(self, runner: CliRunner) -> None:
+        with runner.isolated_filesystem():
+            result = runner.invoke(
+                main, ["tasks", "list", "--since", "2026-01-01", "--status", "active"]
+            )
+            assert result.exit_code != 0
+            assert "--since only applies to closed tasks" in result.output
+
+    def test_list_since_rejects_invalid_date(self, runner: CliRunner) -> None:
+        with runner.isolated_filesystem():
+            result = runner.invoke(main, ["tasks", "list", "--since", "not-a-date"])
+            assert result.exit_code != 0
+            assert "YYYY-MM-DD" in result.output
+
+    def test_list_since_returns_only_closed_tasks_on_or_after_date(self, runner: CliRunner) -> None:
+        from datetime import date
+
+        today = date.today()
+        since = today.replace(day=1)
+        month_str = today.strftime("%Y-%m")
+        with runner.isolated_filesystem():
+            tasks_dir = Path("tasks")
+            done_dir = tasks_dir / "done"
+            done_dir.mkdir(parents=True)
+            (tasks_dir / "active.md").write_text(
+                "## [t001] Still open\n"
+                "- type: dev\n- priority: P1\n- status: active\n"
+                "- created: 2026-01-01\n\nOpen, no completed date.\n"
+            )
+            (done_dir / f"{month_str}.md").write_text(
+                "## [t002] Closed after since\n"
+                "- type: dev\n- priority: P1\n- status: done\n"
+                f"- created: 2026-01-01\n- completed: {today.isoformat()}\n\nClosed.\n"
+            )
+            result = runner.invoke(
+                main, ["tasks", "list", "--since", since.isoformat(), "--format", "json"]
+            )
+            assert result.exit_code == 0, result.output
+            data = json.loads(result.output)
+            ids = {row["id"] for row in data["rows"]}
+            assert ids == {"t002"}
+
+    def test_list_since_respects_output_sink(self, runner: CliRunner, tmp_path: Path) -> None:
+        from datetime import date
+
+        today = date.today()
+        since = today.replace(day=1)
+        month_str = today.strftime("%Y-%m")
+        with runner.isolated_filesystem():
+            tasks_dir = Path("tasks")
+            done_dir = tasks_dir / "done"
+            done_dir.mkdir(parents=True)
+            (done_dir / f"{month_str}.md").write_text(
+                "## [t002] Closed after since\n"
+                "- type: dev\n- priority: P1\n- status: done\n"
+                f"- created: 2026-01-01\n- completed: {today.isoformat()}\n\nClosed.\n"
+            )
+            output_path = tmp_path / "out.json"
+            result = runner.invoke(
+                main,
+                [
+                    "tasks",
+                    "list",
+                    "--since",
+                    since.isoformat(),
+                    "--format",
+                    "json",
+                    "--output",
+                    str(output_path),
+                ],
+            )
+            assert result.exit_code == 0, result.output
+            assert output_path.exists()
+            data = json.loads(output_path.read_text())
+            ids = {row["id"] for row in data["rows"]}
+            assert ids == {"t002"}
+
 
 class TestTasksShow:
     def test_show_displays_task(self, runner: CliRunner) -> None:
