@@ -591,3 +591,172 @@ def test_a_quarantined_run_keeps_its_work(project: Path, baseline_path: Path):
     _finish(project, baseline_path)
     assert _git(project, "rev-parse", "HEAD") == head
     assert "methods_summary" in paper.read_text(encoding="utf-8")
+
+
+# --- the control plane must not be reachable from inside the worktree -----------------
+#
+# `assert_repository_is_at` runs `git status --porcelain` INSIDE the actor's repository,
+# and several `.git/config` keys name a program git then runs with the supervisor's
+# privileges. `.git/config` is actor-writable, untracked, absent from `base..head` and
+# invisible to `git status`, so neither the path gate nor the basis capture can see the
+# plant. Each test below first proves the vector is live in this environment with an
+# UNHARDENED git, then re-arms it and drives the real code path.
+
+
+def _sentinel_program(directory: Path, sentinel: Path, *, pipe: bool = False) -> Path:
+    """A stand-in for the actor's payload: it records that it ran."""
+    program = directory / f"planted-{sentinel.name}.sh"
+    body = 'cat\n' if pipe else ''
+    program.write_text(f'#!/bin/sh\ntouch "{sentinel}"\n{body}exit 0\n', encoding="utf-8")
+    program.chmod(0o755)
+    return program
+
+
+def _rearm(project: Path) -> None:
+    """Force git to refresh the index on the next command.
+
+    Changing only the mtime leaves the tree clean but makes git re-stat -- and, where a
+    filter driver applies, re-hash the file through it. It is also what makes the
+    `post-index-change` hook fire again.
+    """
+    import os
+
+    os.utime(project / "entities" / "papers" / "x.md", (1, 1))
+
+
+def _unhardened_status(project: Path) -> None:
+    subprocess.run(["git", "-C", str(project), "status", "--porcelain"], capture_output=True)
+
+
+def _assert_vector_is_live(project: Path, sentinel: Path) -> None:
+    """Certification: a plant that never fires would make the assertion below vacuous."""
+    _rearm(project)
+    _unhardened_status(project)
+    assert sentinel.exists(), "the plant never ran, so this test proves nothing"
+    sentinel.unlink()
+    _rearm(project)
+
+
+def test_a_repo_local_fsmonitor_program_does_not_run(project: Path, tmp_path: Path):
+    """core.fsmonitor is the vector the reviewer drove end to end: a planted program ran
+    with the supervisor's privileges and the run still returned `clean`."""
+    from science_tool.autonomy.lifecycle import assert_repository_is_at
+
+    sentinel = tmp_path / "fsmonitor-fired"
+    program = _sentinel_program(tmp_path, sentinel)
+    _git(project, "config", "core.fsmonitor", str(program))
+    _assert_vector_is_live(project, sentinel)
+
+    assert_repository_is_at(project)
+    assert not sentinel.exists(), "the actor's fsmonitor program ran inside the control plane"
+
+
+def test_a_repo_local_hook_does_not_run(project: Path, tmp_path: Path):
+    """`post-index-change` fires on `git status`. `.git/hooks/` is actor-writable and no
+    `-c` key can blank it, so the defense has to move hooks somewhere else entirely."""
+    from science_tool.autonomy.lifecycle import assert_repository_is_at
+
+    sentinel = tmp_path / "hook-fired"
+    program = _sentinel_program(tmp_path, sentinel)
+    (project / ".git" / "hooks" / "post-index-change").write_text(
+        f'#!/bin/sh\nexec "{program}"\n', encoding="utf-8"
+    )
+    (project / ".git" / "hooks" / "post-index-change").chmod(0o755)
+    _assert_vector_is_live(project, sentinel)
+
+    assert_repository_is_at(project)
+    assert not sentinel.exists(), "the actor's git hook ran inside the control plane"
+
+
+def test_a_repo_local_filter_driver_does_not_run(project: Path, tmp_path: Path):
+    """The vector no fixed `-c` key reaches: the driver NAME is the actor's to choose.
+
+    A same-size touch is enough to force the re-hash that runs the driver, so the actor
+    gets execution while the tree still reads clean.
+    """
+    from science_tool.autonomy.lifecycle import assert_repository_is_at
+
+    sentinel = tmp_path / "filter-fired"
+    program = _sentinel_program(tmp_path, sentinel, pipe=True)
+    (project / ".gitattributes").write_text("* filter=whatever\n", encoding="utf-8")
+    _git(project, "add", "-A")
+    _git(project, "commit", "-q", "-m", "chore: attributes")
+    _git(project, "config", "filter.whatever.clean", str(program))
+    _assert_vector_is_live(project, sentinel)
+
+    assert_repository_is_at(project)
+    assert not sentinel.exists(), "the actor's clean filter ran inside the control plane"
+
+
+def test_a_filter_driver_named_so_it_cannot_be_neutralized_is_refused(project: Path):
+    """`-c` splits at the first `=`, so a driver named `a=b` would leave the real key
+    armed while the override set something else. Refuse instead of pretending."""
+    from science_tool.autonomy.extract import ExtractError
+
+    (project / ".git" / "config").write_text(
+        (project / ".git" / "config").read_text(encoding="utf-8")
+        + '[filter "a=b"]\n\tclean = /bin/false\n',
+        encoding="utf-8",
+    )
+    with pytest.raises(ExtractError, match="cannot be neutralized"):
+        lifecycle_module.assert_repository_is_at(project)
+
+
+def test_a_git_that_cannot_be_invoked_is_unwired_not_quarantined(
+    project: Path, baseline_path: Path, monkeypatch: pytest.MonkeyPatch
+):
+    """The one place a blocked run could degrade into a stronger-looking verdict.
+
+    With no `git` on PATH the old `toolkit._git` raised `FileNotFoundError` out of a
+    function contracted never to raise for an expected condition; click has no handler,
+    so it exited 1 -- the code the shipped docs define as `quarantined`. `unwired` is the
+    honest answer, and it is a different exit code for a reason.
+    """
+    from science_tool.autonomy import git as git_module
+
+    _start(project, baseline_path)
+
+    class _NoGit:
+        @staticmethod
+        def run(*args, **kwargs):
+            raise OSError(2, "No such file or directory: 'git'")
+
+    head = _git(project, "rev-parse", "HEAD")
+    monkeypatch.setattr(git_module, "subprocess", _NoGit)
+
+    outcome = finish_run(
+        project, baseline_path=baseline_path, head=head,
+        ended=datetime(2026, 7, 25, 9, 30, tzinfo=UTC), tokens=100, wall_clock_seconds=1800.0,
+    )
+    assert outcome.disposition is RunDisposition.UNWIRED, outcome.reason
+    assert "could not execute git" in outcome.reason
+
+
+def test_a_belief_basis_move_quarantines_with_the_path_gate_silent(
+    project: Path, baseline_path: Path
+):
+    """LAYER 2 ON ITS OWN. The basis check is called authoritative precisely because it
+    does not depend on the allowlist being correct (`path_gate.py:4-6`), and every other
+    basis test in this module is co-satisfied by a path-gate denial -- delete `deltas`
+    from the quarantine condition and they all stay green.
+
+    Here the changed file is waived through the gate as the run's own report, so `deltas`
+    is the only thing left that can quarantine.
+    """
+    baseline = _start(project, baseline_path)
+    line = project / "entities" / "evidence-lines" / "e1.md"
+    line.write_text(
+        line.read_text(encoding="utf-8").replace("strength: strong", "strength: weak"),
+        encoding="utf-8",
+    )
+    _commit_as_agent(project, "chore: weaken evidence", baseline.run_id)
+
+    outcome = finish_run(
+        project, baseline_path=baseline_path, head=_git(project, "rev-parse", "HEAD"),
+        ended=datetime(2026, 7, 25, 9, 30, tzinfo=UTC), tokens=100, wall_clock_seconds=1800.0,
+        report_path="entities/evidence-lines/e1.md",
+    )
+    assert not outcome.denials, "the gate must be silent, or this proves nothing"
+    assert not outcome.mark_issues, "the marks must be clean, or this proves nothing"
+    assert outcome.deltas
+    assert outcome.disposition is RunDisposition.QUARANTINED, outcome.reason

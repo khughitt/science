@@ -291,3 +291,36 @@ def test_finish_json_carries_the_disposition_and_the_denials(project: Path, base
 def test_both_commands_are_registered_under_the_autonomy_group():
     group = main.commands["autonomy"]
     assert {"start", "finish", "path-gate"} <= set(group.commands)  # type: ignore[attr-defined]
+
+
+def test_finish_exits_2_when_git_cannot_be_invoked_at_all(
+    project: Path, baseline_path: Path, monkeypatch: pytest.MonkeyPatch
+):
+    """`unwired` must never degrade into a stronger-looking verdict.
+
+    Exit 1 is `quarantined` in the shipped docs. A `FileNotFoundError` escaping the
+    lifecycle gets click's generic exit 1, so a machine with no git would report the run
+    as a policy violation rather than as unjudgeable.
+    """
+    from science_tool.autonomy import git as git_module
+
+    assert _start(project, baseline_path).exit_code == 0
+    head = _git(project, "rev-parse", "HEAD")
+
+    class _NoGit:
+        @staticmethod
+        def run(*args, **kwargs):
+            raise OSError(2, "No such file or directory: 'git'")
+
+    monkeypatch.setattr(git_module, "subprocess", _NoGit)
+
+    result = CliRunner().invoke(
+        main,
+        [
+            "autonomy", "finish", "--project-root", str(project),
+            "--baseline", str(baseline_path), "--head", head,
+            "--tokens", "100", "--wall-clock-seconds", "1800",
+        ],
+    )
+    assert result.exit_code == 2, result.output
+    assert "unwired" in result.output

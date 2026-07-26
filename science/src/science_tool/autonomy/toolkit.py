@@ -9,10 +9,11 @@ leaves the other open.
 
 from __future__ import annotations
 
-import subprocess
 from pathlib import Path
 
 import science_tool
+
+from science_tool.autonomy.git import GitError, run_git
 
 
 class ToolkitError(ValueError):
@@ -27,9 +28,24 @@ def toolkit_source_root() -> Path:
     return Path(package_file).resolve().parent.parent
 
 
-def _git(root: Path, *args: str) -> subprocess.CompletedProcess[str]:
-    return subprocess.run(
-        ["git", "--no-replace-objects", "-C", str(root), *args], capture_output=True, text=True
+def _git(root: Path, *args: str) -> tuple[int, str, str]:
+    """`(returncode, stdout, stderr)` from the one hardened runner in `autonomy.git`.
+
+    The exit status is handed back rather than acted on, because `toolkit_is_clean` must
+    be able to observe a non-zero exit without raising. A git that could not be RUN is a
+    different thing and does raise: `finish_run` turns `ToolkitError` into `unwired`,
+    whereas a `FileNotFoundError` escaping here would leave click exiting 1 -- the code
+    the shipped docs define as `quarantined`, which is the one direction a blocked run
+    must never degrade in.
+    """
+    try:
+        result = run_git(root, *args)
+    except GitError as exc:
+        raise ToolkitError(str(exc)) from exc
+    return (
+        result.returncode,
+        result.stdout.decode("utf-8", "replace"),
+        result.stderr.decode("utf-8", "replace"),
     )
 
 
@@ -40,12 +56,10 @@ def toolkit_revision(root: Path | None = None) -> str:
     `toolkit_is_clean`; on its own it cannot tell a pinned install from a dirty one.
     """
     target = toolkit_source_root() if root is None else root
-    result = _git(target, "rev-parse", "HEAD")
-    if result.returncode != 0:
-        raise ToolkitError(
-            f"could not read the toolkit revision at {target}: {result.stderr.strip()}"
-        )
-    return result.stdout.strip()
+    returncode, stdout, stderr = _git(target, "rev-parse", "HEAD")
+    if returncode != 0:
+        raise ToolkitError(f"could not read the toolkit revision at {target}: {stderr.strip()}")
+    return stdout.strip()
 
 
 def toolkit_is_clean(root: Path | None = None) -> bool:
@@ -57,10 +71,10 @@ def toolkit_is_clean(root: Path | None = None) -> bool:
     cannot see must not report clean.
     """
     target = toolkit_source_root() if root is None else root
-    result = _git(target, "status", "--porcelain")
-    if result.returncode != 0:
+    returncode, stdout, _ = _git(target, "status", "--porcelain")
+    if returncode != 0:
         return False
-    return not result.stdout.strip()
+    return not stdout.strip()
 
 
 def assert_gate_is_external(project_root: Path) -> None:
