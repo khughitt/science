@@ -130,6 +130,13 @@ def dataset_list(
 @click.option("--format", "output_format", default="table", type=click.Choice(["table", "json"]))
 @click.option("--explain", is_flag=True, help="Show the per-row scoring reason")
 @click.option("--project-root", default=None, type=click.Path(path_type=Path, file_okay=False, dir_okay=True))
+@click.option(
+    "--output",
+    "output_path",
+    type=click.Path(path_type=Path),
+    default=None,
+    help="Write the complete, unbudgeted report to PATH instead of stdout.",
+)
 def dataset_prioritize(
     origin: str | None,
     status: str | None,
@@ -143,8 +150,14 @@ def dataset_prioritize(
     output_format: str,
     explain: bool,
     project_root: Path | None,
+    output_path: Path | None,
 ) -> None:
     """Rank dataset entities by accessibility-weighted, graph-aware usefulness."""
+    from science_tool.budget.control import bounded_control_notice
+    from science_tool.budget.invocation import build_complete_via, hint_for
+    from science_tool.budget.projection import project_single_list_report
+    from science_tool.budget.registry import lookup
+    from science_tool.budget.sink import BoundedSink
     from science_tool.dataset_prioritize import excluded_summary, prioritize, target_coverage
     from science_tool.datasets.semantics import RuntimeState
     from science_tool.entities import graph_is_stale
@@ -193,41 +206,80 @@ def dataset_prioritize(
         runtime_state=runtime_state_filter,
     )
 
+    sink = BoundedSink(
+        lookup("dataset prioritize"),
+        output_path=output_path,
+        command_path="dataset prioritize",
+        complete_via=build_complete_via(
+            click.get_current_context(), output_hint=hint_for("dataset-prioritize", output_format)
+        ),
+    )
+    control_notice = (
+        bounded_control_notice(f"wrote the complete prioritization report to {output_path}")
+        if output_path is not None
+        else None
+    )
+
     if coverage:
         coverage_rows = target_coverage(rows, root)
+        full = {"rows": coverage_rows, "excluded_summary": summary}
+        displayed = full if output_path is not None else project_single_list_report(full, "rows", 40)
+        if output_path is None and displayed.get("rows_omitted", 0):
+            displayed = {
+                **displayed,
+                "truncation": {
+                    "omitted": displayed["rows_omitted"],
+                    "total": len(full["rows"]),
+                    "complete_via": sink.complete_via,
+                },
+            }
 
         def _render_coverage() -> None:
-            if not coverage_rows:
-                click.echo("No question or hypothesis entities found.")
+            displayed_rows = displayed["rows"]
+            if not displayed_rows:
+                sink.echo("No question or hypothesis entities found.")
                 return
-            from rich.console import Console
             from rich.table import Table
 
             table = Table(show_header=True, header_style="bold")
             for c in ["target", "coverage", "gap-reason", "datasets"]:
                 table.add_column(c, overflow="fold", no_wrap=False)
-            for r in coverage_rows:
+            for r in displayed_rows:
                 table.add_row(
                     str(r["target"]),
                     str(r["coverage_state"]),
                     str(r["gap_reason"]),
                     ", ".join(r["datasets"]) if r["datasets"] else "-",
                 )
-            Console(width=200).print(table)
+            sink.console.print(table)
+            if displayed.get("rows_omitted", 0):
+                sink.echo(f"showing {len(displayed_rows)} of {len(full['rows'])} rows")
+                sink.echo(f"  complete output:  {sink.complete_via}")
 
-        emit(
-            output_format=output_format,
-            payload={"rows": coverage_rows, "excluded_summary": summary},
-            render_text=_render_coverage,
-        )
+        emit(output_format=output_format, payload=displayed, render_text=_render_coverage, sink=sink)
+        sink.flush()
+        if control_notice is not None:
+            click.echo(control_notice)
         return
 
+    full = {"rows": rows, "excluded_summary": summary}
+    displayed = full if output_path is not None else project_single_list_report(full, "rows", 40)
+    if output_path is None and displayed.get("rows_omitted", 0):
+        displayed = {
+            **displayed,
+            "truncation": {
+                "omitted": displayed["rows_omitted"],
+                "total": len(full["rows"]),
+                "complete_via": sink.complete_via,
+            },
+        }
+
     def _render_rows() -> None:
-        if not rows:
-            click.echo("No matching dataset entities.")
+        displayed_rows = displayed["rows"]
+        if not displayed_rows:
+            sink.echo("No matching dataset entities.")
             return
 
-        from rich.console import Console
         from rich.table import Table
 
         table = Table(show_header=True, header_style="bold")
@@ -236,7 +288,7 @@ def dataset_prioritize(
             cols.append("reason")
         for c in cols:
             table.add_column(c, overflow="fold", no_wrap=False)
-        for i, r in enumerate(rows, 1):
+        for i, r in enumerate(displayed_rows, 1):
             cells = [
                 str(i),
                 r["id"],
@@ -249,16 +301,22 @@ def dataset_prioritize(
             if explain:
                 cells.append(r["top_reason"])
             table.add_row(*cells)
-        Console(width=200).print(table)
+        sink.console.print(table)
         if any(summary.values()):
-            click.echo(
+            sink.echo(
                 "Excluded by default: "
                 f"{summary['gated']} gated deposits, {summary['reference']} reference datasets, "
                 f"{summary['pointer']} pointer records. Use --include-gated, --include-reference, "
                 "or --include-pointer to inspect them."
             )
+        if displayed.get("rows_omitted", 0):
+            sink.echo(f"showing {len(displayed_rows)} of {len(full['rows'])} rows")
+            sink.echo(f"  complete output:  {sink.complete_via}")
 
-    emit(output_format=output_format, payload={"rows": rows, "excluded_summary": summary}, render_text=_render_rows)
+    emit(output_format=output_format, payload=displayed, render_text=_render_rows, sink=sink)
+    sink.flush()
+    if control_notice is not None:
+        click.echo(control_notice)
 
 
 @dataset_group.command("capability-pairs")

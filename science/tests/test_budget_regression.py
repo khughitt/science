@@ -788,3 +788,122 @@ def test_research_package_build_report_output_file_is_complete(
     payload = json.loads(target.read_text())
     assert len(payload["errors"]) == 50
     assert "truncation" not in payload
+
+
+@pytest.fixture
+def benchmark_list_overflow_project(tmp_path: Path) -> Path:
+    """50 minimal benchmark-capable dataset entities -> 50 growable list rows."""
+    datasets_dir = tmp_path / "entities" / "datasets"
+    datasets_dir.mkdir(parents=True)
+    for i in range(50):
+        (datasets_dir / f"ds-{i:03d}.md").write_text(
+            f"---\n"
+            f"id: dataset:ds-{i:03d}\n"
+            f"kind: dataset\n"
+            f"title: Dataset {i}\n"
+            f"dataset_class: deposit\n"
+            f"benchmark:\n"
+            f"  domains: [biology]\n"
+            f"  benchmark_kinds: [classification]\n"
+            f"  tasks:\n"
+            f"    - id: task-{i:03d}\n"
+            f"---\n\nbody\n",
+            encoding="utf-8",
+        )
+    return tmp_path
+
+
+def _invoke_benchmark_list(project_root: Path, *args: str):
+    return CliRunner().invoke(
+        main,
+        ["benchmark", "list", *args],
+        prog_name="science",
+        env={"SCIENCE_PROJECT_ROOT": str(project_root), "SCIENCE_COMMONS_ROOT": str(project_root / "no-commons")},
+    )
+
+
+def test_benchmark_list_stdout_stays_within_its_ceiling_and_reports_truncation(
+    benchmark_list_overflow_project: Path,
+) -> None:
+    result = _invoke_benchmark_list(benchmark_list_overflow_project)
+    assert result.exit_code == 0, result.output
+    ceiling = BUDGETS["benchmark list"].max_chars
+    assert visible_len(result.output) <= ceiling
+    assert "showing 40 of 50 rows" in result.output
+    assert "complete output:" in result.output
+
+    js = _invoke_benchmark_list(benchmark_list_overflow_project, "--format", "json")
+    payload = json.loads(js.output)
+    assert len(payload["rows"]) == 40
+    assert payload["truncation"]["total"] == 50
+    assert payload["truncation"]["omitted"] == 10
+    assert payload["summary"]["dataset_class"]["deposit"] == 50  # the summary reflects the FULL rows
+
+
+def test_benchmark_list_output_file_is_complete(benchmark_list_overflow_project: Path, tmp_path: Path) -> None:
+    target = tmp_path / "benchmarks.json"
+    result = _invoke_benchmark_list(benchmark_list_overflow_project, "--format", "json", "--output", str(target))
+    assert result.exit_code == 0, result.output
+    assert result.output.count("\n") == 1
+    assert "wrote the complete benchmark list to" in result.output
+
+    payload = json.loads(target.read_text())
+    assert len(payload["rows"]) == 50
+    assert {row["id"] for row in payload["rows"]} == {f"dataset:ds-{i:03d}" for i in range(50)}
+    assert "truncation" not in payload
+
+
+@pytest.fixture
+def explore_ideas_gaps_overflow_project(tmp_path: Path) -> Path:
+    """50 applied report blocks pointing at entities that were never created.
+
+    Each unresolved `applied_as` becomes exactly one GapEntity carrying one
+    `missing_entity` error gap -- 50 growable list rows without creating any entity file.
+    """
+    explorations = tmp_path / "doc" / "explorations"
+    explorations.mkdir(parents=True)
+    blocks = "\n".join(
+        f"```yaml\ncandidate_id: cand-{i:03d}\ndecision: applied\napplied_as: question:missing-{i:03d}\n```\n"
+        for i in range(50)
+    )
+    (explorations / "report.md").write_text(blocks, encoding="utf-8")
+    return tmp_path
+
+
+def _invoke_explore_ideas_gaps(*args: str):
+    return CliRunner().invoke(main, ["explore-ideas", "gaps", *args], prog_name="science")
+
+
+def test_explore_ideas_gaps_stdout_stays_within_its_ceiling_and_reports_truncation(
+    explore_ideas_gaps_overflow_project: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.chdir(explore_ideas_gaps_overflow_project)
+    result = _invoke_explore_ideas_gaps("--from", "report")
+    assert result.exit_code == 0, result.output
+    ceiling = BUDGETS["explore-ideas gaps"].max_chars
+    assert visible_len(result.output) <= ceiling
+    assert "showing 40 of 50 entities" in result.output
+    assert "complete output:" in result.output
+
+    js = _invoke_explore_ideas_gaps("--from", "report", "--format", "json")
+    payload = json.loads(js.output)
+    assert len(payload["entities"]) == 40
+    assert payload["counts"]["entities"] == 50  # the summary reflects the FULL result
+    assert payload["truncation"]["total"] == 50
+    assert payload["truncation"]["omitted"] == 10
+
+
+def test_explore_ideas_gaps_output_file_is_complete(
+    explore_ideas_gaps_overflow_project: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.chdir(explore_ideas_gaps_overflow_project)
+    target = explore_ideas_gaps_overflow_project / "gaps.json"
+    result = _invoke_explore_ideas_gaps("--from", "report", "--format", "json", "--output", str(target))
+    assert result.exit_code == 0, result.output
+    assert result.output.count("\n") == 1
+    assert "wrote the complete gap report to" in result.output
+
+    payload = json.loads(target.read_text())
+    assert len(payload["entities"]) == 50
+    assert {entity["candidate_id"] for entity in payload["entities"]} == {f"cand-{i:03d}" for i in range(50)}
+    assert "truncation" not in payload

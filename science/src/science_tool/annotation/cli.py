@@ -2697,7 +2697,21 @@ def promote_cmd(
     help="Edited candidates.json (required with --apply).",
 )
 @click.option("--format", "fmt", type=click.Choice(("table", "json")), default="json")
-def synthesize_cmd(source_md: Path, root: Path | None, do_apply: bool, input_path: Path | None, fmt: str) -> None:
+@click.option(
+    "--output",
+    "output_path",
+    type=click.Path(path_type=Path),
+    default=None,
+    help="Write the complete, unbudgeted report to PATH instead of stdout.",
+)
+def synthesize_cmd(
+    source_md: Path,
+    root: Path | None,
+    do_apply: bool,
+    input_path: Path | None,
+    fmt: str,
+    output_path: Path | None,
+) -> None:
     """Synthesize predicate/polarity/claim_layer on promoted propositions (curator-reviewed)."""
     from science_tool.annotation.io import sidecar_for_markdown
     from science_tool.annotation.promote import entity_dest
@@ -2710,12 +2724,30 @@ def synthesize_cmd(source_md: Path, root: Path | None, do_apply: bool, input_pat
         in_scope_propositions,
         parse_candidates_doc,
     )
+    from science_tool.budget.control import bounded_control_notice
+    from science_tool.budget.invocation import build_complete_via, hint_for
+    from science_tool.budget.projection import project_single_list_report
+    from science_tool.budget.registry import lookup
+    from science_tool.budget.sink import BoundedSink
     from science_tool.entities import _parse_markdown_file
 
     if do_apply and input_path is None:
         raise click.ClickException("--apply requires --input (the curator-reviewed candidates file)")
     if input_path is not None and not do_apply:
         raise click.ClickException("--input requires --apply")
+
+    complete_via = build_complete_via(click.get_current_context(), output_hint=hint_for("annotate-synthesize", fmt))
+    sink = BoundedSink(
+        lookup("annotate synthesize"),
+        output_path=output_path,
+        command_path="annotate synthesize",
+        complete_via=complete_via,
+    )
+    control_notice = (
+        bounded_control_notice(f"wrote the complete synthesis report to {output_path}")
+        if output_path is not None
+        else None
+    )
 
     project_root = (root or Path.cwd()).resolve()
     sidecar_path = sidecar_for_markdown(source_md)
@@ -2736,14 +2768,30 @@ def synthesize_cmd(source_md: Path, root: Path | None, do_apply: bool, input_pat
 
     if not do_apply:
         file_text = source_md.read_text(encoding="utf-8")
-        scaffold, unresolved = build_scaffold(sidecar, file_text, current, ref_for=ref_for)
+        full, unresolved = build_scaffold(sidecar, file_text, current, ref_for=ref_for)
+        displayed = full if output_path is not None else project_single_list_report(full, "propositions", 40)
+        if output_path is None and displayed.get("propositions_omitted", 0):
+            displayed = {
+                **displayed,
+                "truncation": {
+                    "omitted": displayed["propositions_omitted"],
+                    "total": len(full["propositions"]),
+                    "complete_via": complete_via,
+                },
+            }
 
         def _render_scaffold() -> None:
-            for e in scaffold["propositions"]:
-                click.echo(f"{e['proposition']:50} statements={len(e['statements'])} hints={len(e['relation_hints'])}")
-            click.echo(f"unresolved relation hints: {unresolved}")
+            for e in displayed["propositions"]:
+                sink.echo(f"{e['proposition']:50} statements={len(e['statements'])} hints={len(e['relation_hints'])}")
+            sink.echo(f"unresolved relation hints: {unresolved}")
+            if displayed.get("propositions_omitted", 0):
+                sink.echo(f"showing {len(displayed['propositions'])} of {len(full['propositions'])} propositions")
+                sink.echo(f"  complete output:  {sink.complete_via}")
 
-        emit(output_format=fmt, payload=scaffold, render_text=_render_scaffold)
+        emit(output_format=fmt, payload=displayed, render_text=_render_scaffold, sink=sink)
+        sink.flush()
+        if control_notice is not None:
+            click.echo(control_notice)
         return
 
     assert input_path is not None
@@ -2762,10 +2810,25 @@ def synthesize_cmd(source_md: Path, root: Path | None, do_apply: bool, input_pat
     except SynthesisApplyError as exc:
         raise click.ClickException(str(exc)) from exc
 
-    emit(
-        output_format=fmt,
-        payload={"updated": report.updated, "skipped": dict(report.skipped), "written": report.written_paths},
-        render_text=lambda: click.echo(
-            f"annotate synthesize: {report.updated} updated, skipped {dict(report.skipped) or 'none'}"
-        ),
-    )
+    full = {"updated": report.updated, "skipped": dict(report.skipped), "written": report.written_paths}
+    displayed = full if output_path is not None else project_single_list_report(full, "written", 40)
+    if output_path is None and displayed.get("written_omitted", 0):
+        displayed = {
+            **displayed,
+            "truncation": {
+                "omitted": displayed["written_omitted"],
+                "total": len(full["written"]),
+                "complete_via": complete_via,
+            },
+        }
+
+    def _render_apply() -> None:
+        sink.echo(f"annotate synthesize: {report.updated} updated, skipped {dict(report.skipped) or 'none'}")
+        if displayed.get("written_omitted", 0):
+            sink.echo(f"showing {len(displayed['written'])} of {len(full['written'])} written paths")
+            sink.echo(f"  complete output:  {sink.complete_via}")
+
+    emit(output_format=fmt, payload=displayed, render_text=_render_apply, sink=sink)
+    sink.flush()
+    if control_notice is not None:
+        click.echo(control_notice)

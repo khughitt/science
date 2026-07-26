@@ -3,8 +3,12 @@ from __future__ import annotations
 
 from datetime import date
 from pathlib import Path
+from typing import TYPE_CHECKING, Any
 
 import click
+
+if TYPE_CHECKING:
+    from science_tool.budget.sink import BoundedSink
 
 from science_tool.explore_ideas import (
     ApplyValidationError,
@@ -16,12 +20,38 @@ from science_tool.explore_ideas import (
     resolve_anchors_report,
 )
 from science_tool.output import emit
-from science_tool.typed_entity_cli import emit_entity_warnings
 
 
 @click.group("explore-ideas")
 def explore_ideas_group() -> None:
     """Explore-ideas commands."""
+
+
+def _apply_truncation(full: dict[str, Any], displayed: dict[str, Any], complete_via: str) -> dict[str, Any] | None:
+    """Aggregate the per-list ``<key>_omitted`` markers `project_explore_ideas_apply` left.
+
+    Several lists can each be truncated in the same run, so this collects all of them
+    into one ``truncation`` block rather than the single-list-report ``omitted``/``total``
+    pair -- a payload with only one such pair could name only one truncated list.
+    """
+    omitted = {key[: -len("_omitted")]: displayed[key] for key in displayed if key.endswith("_omitted")}
+    if not omitted:
+        return None
+    return {
+        "omitted": omitted,
+        "total": {key: len(full[key]) for key in omitted},
+        "complete_via": complete_via,
+    }
+
+
+def _echo_apply_truncation_footer(sink: BoundedSink, displayed: dict[str, Any]) -> None:
+    truncation = displayed.get("truncation")
+    if not truncation:
+        return
+    for key, omitted in truncation["omitted"].items():
+        total = truncation["total"][key]
+        sink.echo(f"showing {total - omitted} of {total} {key}")
+    sink.echo(f"  complete output:  {truncation['complete_via']}")
 
 
 @explore_ideas_group.command("apply")
@@ -35,40 +65,85 @@ def explore_ideas_group() -> None:
     default="text",
     show_default=True,
 )
-def explore_ideas_apply(from_value: str, model_id: str, check_only: bool, output_format: str) -> None:
+@click.option(
+    "--output",
+    "output_path",
+    type=click.Path(path_type=Path),
+    default=None,
+    help="Write the complete, unbudgeted report to PATH instead of stdout.",
+)
+def explore_ideas_apply(
+    from_value: str, model_id: str, check_only: bool, output_format: str, output_path: Path | None
+) -> None:
     """Apply kept candidates from an exploration report to real entities."""
+    from science_tool.budget.control import bounded_control_notice
+    from science_tool.budget.invocation import build_complete_via, hint_for
+    from science_tool.budget.registry import lookup
+    from science_tool.budget.sink import BoundedSink
+    from science_tool.explore_ideas_projection import project_explore_ideas_apply
+
+    complete_via = build_complete_via(
+        click.get_current_context(), output_hint=hint_for("explore-ideas-apply", output_format)
+    )
+    sink = BoundedSink(
+        lookup("explore-ideas apply"), output_path=output_path, command_path="explore-ideas apply",
+        complete_via=complete_via,
+    )
+    control_notice = (
+        bounded_control_notice(f"wrote the complete apply report to {output_path}")
+        if output_path is not None
+        else None
+    )
+
     try:
         if check_only:
             check_result = check_report(Path.cwd(), from_value, model_id)
+            full: dict[str, Any] = check_result.to_dict()
+            displayed = full if output_path is not None else project_explore_ideas_apply(full)
+            if output_path is None:
+                truncation = _apply_truncation(full, displayed, complete_via)
+                if truncation is not None:
+                    displayed = {**displayed, "truncation": truncation}
 
             def _render_check() -> None:
-                click.echo(
+                sink.echo(
                     f"{len(check_result.to_create)} would create, "
                     f"{len(check_result.skipped_applied)} already applied, "
                     f"{len(check_result.skipped_other)} deferred/dropped, "
                     f"{len(check_result.manual)} to apply manually, "
                     f"{len(check_result.folds)} to fold manually"
                 )
-                for plan in check_result.to_create:
-                    slug = f" slug={plan.slug}" if plan.slug else ""
-                    click.echo(f"  would create {plan.candidate_id} ({plan.kind}){slug}")
-                for candidate_id in check_result.skipped_applied:
-                    click.echo(f"  already applied: {candidate_id}")
-                for candidate_id in check_result.skipped_other:
-                    click.echo(f"  skipped drop/defer: {candidate_id}")
-                for candidate_id, kind in check_result.manual:
-                    click.echo(f"  apply manually ({kind}): {candidate_id}")
-                for fold in check_result.folds:
-                    click.echo(f"  fold manually: {fold.candidate_id} -> {', '.join(fold.targets)}")
+                for plan in displayed["to_create"]:
+                    slug = f" slug={plan['slug']}" if plan["slug"] else ""
+                    sink.echo(f"  would create {plan['candidate_id']} ({plan['kind']}){slug}")
+                for candidate_id in displayed["skipped_applied"]:
+                    sink.echo(f"  already applied: {candidate_id}")
+                for candidate_id in displayed["skipped_other"]:
+                    sink.echo(f"  skipped drop/defer: {candidate_id}")
+                for item in displayed["manual"]:
+                    sink.echo(f"  apply manually ({item['proposed_kind']}): {item['candidate_id']}")
+                for fold in displayed["folds"]:
+                    sink.echo(f"  fold manually: {fold['candidate_id']} -> {', '.join(fold['targets'])}")
+                _echo_apply_truncation_footer(sink, displayed)
 
-            emit(output_format=output_format, payload=check_result.to_dict(), render_text=_render_check)
+            emit(output_format=output_format, payload=displayed, render_text=_render_check, sink=sink)
+            sink.flush()
+            if control_notice is not None:
+                click.echo(control_notice)
             return
         result = apply_report(Path.cwd(), from_value, model_id, date.today())
     except (ApplyValidationError, ApplyWriteBackError) as exc:
         raise click.ClickException(str(exc)) from exc
 
+    full: dict[str, Any] = result.to_dict()
+    displayed = full if output_path is not None else project_explore_ideas_apply(full)
+    if output_path is None:
+        truncation = _apply_truncation(full, displayed, complete_via)
+        if truncation is not None:
+            displayed = {**displayed, "truncation": truncation}
+
     def _render_result() -> None:
-        click.echo(
+        sink.echo(
             f"{len(result.created)} created, "
             f"{len(result.skipped_applied)} already applied, "
             f"{len(result.skipped_other)} deferred/dropped, "
@@ -76,43 +151,51 @@ def explore_ideas_apply(from_value: str, model_id: str, check_only: bool, output
             f"{len(result.folds)} to fold manually, "
             f"{len(result.failures)} failed"
         )
-        for created in result.created:
-            click.echo(f"  created {created.candidate_id} -> {created.entity_id} ({created.kind})")
-        for candidate_id in result.skipped_applied:
-            click.echo(f"  already applied: {candidate_id}")
-        for candidate_id in result.skipped_other:
-            click.echo(f"  skipped drop/defer: {candidate_id}")
-        for candidate_id, kind in result.manual:
-            click.echo(f"  apply manually ({kind}): {candidate_id}")
-        for fold in result.folds:
-            click.echo(f"  fold manually: {fold.candidate_id} -> {', '.join(fold.targets)}")
-        for candidate_id, error in result.failures:
-            click.echo(f"  FAILED {candidate_id}: {error}")
-        for created in result.created:
-            emit_entity_warnings(created.warnings)
+        for created in displayed["created"]:
+            sink.echo(f"  created {created['candidate_id']} -> {created['entity_id']} ({created['kind']})")
+        for candidate_id in displayed["skipped_applied"]:
+            sink.echo(f"  already applied: {candidate_id}")
+        for candidate_id in displayed["skipped_other"]:
+            sink.echo(f"  skipped drop/defer: {candidate_id}")
+        for item in displayed["manual"]:
+            sink.echo(f"  apply manually ({item['proposed_kind']}): {item['candidate_id']}")
+        for fold in displayed["folds"]:
+            sink.echo(f"  fold manually: {fold['candidate_id']} -> {', '.join(fold['targets'])}")
+        for item in displayed["failures"]:
+            sink.echo(f"  FAILED {item['candidate_id']}: {item['error']}")
+        for created in displayed["created"]:
+            for warning in created["warnings"]:
+                sink.echo(f"WARNING: {warning}")
+        _echo_apply_truncation_footer(sink, displayed)
 
-    emit(output_format=output_format, payload=result.to_dict(), render_text=_render_result)
+    emit(output_format=output_format, payload=displayed, render_text=_render_result, sink=sink)
+    sink.flush()
+    if control_notice is not None:
+        click.echo(control_notice)
 
     if result.failures:
         raise SystemExit(1)
 
 
-def _render_gap_result_text(result) -> None:
-    counts = result.counts
-    click.echo(
+def _render_gap_result_text(full: dict[str, Any], displayed: dict[str, Any], sink: BoundedSink) -> None:
+    counts = full["counts"]
+    sink.echo(
         f"{counts['entities']} applied entities inspected, "
         f"{counts['gaps']} gaps ({counts['errors']} errors, {counts['warnings']} warnings)"
     )
-    for entity in result.entities:
-        if not entity.gaps:
+    for entity in displayed["entities"]:
+        if not entity["gaps"]:
             continue
-        label = entity.entity_id or "<missing applied_as>"
-        kind = entity.kind or "unknown"
-        click.echo("")
-        click.echo(f"{entity.candidate_id} -> {label} ({kind})")
-        for gap in entity.gaps:
-            click.echo(f"  {gap.severity.upper()} {gap.code}: {gap.message}")
-            click.echo(f"    next: {gap.suggested_action}")
+        label = entity["entity_id"] or "<missing applied_as>"
+        kind = entity["kind"] or "unknown"
+        sink.echo("")
+        sink.echo(f"{entity['candidate_id']} -> {label} ({kind})")
+        for gap in entity["gaps"]:
+            sink.echo(f"  {gap['severity'].upper()} {gap['code']}: {gap['message']}")
+            sink.echo(f"    next: {gap['suggested_action']}")
+    if displayed.get("entities_omitted", 0):
+        sink.echo(f"showing {len(displayed['entities'])} of {len(full['entities'])} entities")
+        sink.echo(f"  complete output:  {sink.complete_via}")
 
 
 @explore_ideas_group.command("gaps")
@@ -124,14 +207,60 @@ def _render_gap_result_text(result) -> None:
     default="text",
     show_default=True,
 )
-def explore_ideas_gaps(from_value: str, output_format: str) -> None:
+@click.option(
+    "--output",
+    "output_path",
+    type=click.Path(path_type=Path),
+    default=None,
+    help="Write the complete, unbudgeted report to PATH instead of stdout.",
+)
+def explore_ideas_gaps(from_value: str, output_format: str, output_path: Path | None) -> None:
     """Inspect applied exploration entities for deterministic follow-up gaps."""
+    from science_tool.budget.control import bounded_control_notice
+    from science_tool.budget.invocation import build_complete_via, hint_for
+    from science_tool.budget.projection import project_single_list_report
+    from science_tool.budget.registry import lookup
+    from science_tool.budget.sink import BoundedSink
+
     try:
         result = inspect_gaps_report(Path.cwd(), from_value)
     except ApplyValidationError as exc:
         raise click.ClickException(str(exc)) from exc
 
-    emit(output_format=output_format, payload=result.to_dict(), render_text=lambda: _render_gap_result_text(result))
+    complete_via = build_complete_via(
+        click.get_current_context(), output_hint=hint_for("explore-ideas-gaps", output_format)
+    )
+    sink = BoundedSink(
+        lookup("explore-ideas gaps"), output_path=output_path, command_path="explore-ideas gaps",
+        complete_via=complete_via,
+    )
+    control_notice = (
+        bounded_control_notice(f"wrote the complete gap report to {output_path}")
+        if output_path is not None
+        else None
+    )
+
+    full: dict[str, Any] = result.to_dict()
+    displayed = full if output_path is not None else project_single_list_report(full, "entities", 40)
+    if output_path is None and displayed.get("entities_omitted", 0):
+        displayed = {
+            **displayed,
+            "truncation": {
+                "omitted": displayed["entities_omitted"],
+                "total": len(full["entities"]),
+                "complete_via": complete_via,
+            },
+        }
+
+    emit(
+        output_format=output_format,
+        payload=displayed,
+        render_text=lambda: _render_gap_result_text(full, displayed, sink),
+        sink=sink,
+    )
+    sink.flush()
+    if control_notice is not None:
+        click.echo(control_notice)
 
 
 @explore_ideas_group.command("resolve-anchors")
@@ -143,36 +272,80 @@ def explore_ideas_gaps(from_value: str, output_format: str) -> None:
     default="text",
     show_default=True,
 )
-def explore_ideas_resolve_anchors(from_value: str, output_format: str) -> None:
+@click.option(
+    "--output",
+    "output_path",
+    type=click.Path(path_type=Path),
+    default=None,
+    help="Write the complete, unbudgeted report to PATH instead of stdout.",
+)
+def explore_ideas_resolve_anchors(from_value: str, output_format: str, output_path: Path | None) -> None:
     """Resolve report literature anchors against papers and references.bib."""
+    from science_tool.budget.control import bounded_control_notice
+    from science_tool.budget.invocation import build_complete_via, hint_for
+    from science_tool.budget.projection import project_single_list_report
+    from science_tool.budget.registry import lookup
+    from science_tool.budget.sink import BoundedSink
+
     try:
         result = resolve_anchors_report(Path.cwd(), from_value)
     except ApplyValidationError as exc:
         raise click.ClickException(str(exc)) from exc
 
+    complete_via = build_complete_via(
+        click.get_current_context(), output_hint=hint_for("explore-ideas-resolve-anchors", output_format)
+    )
+    sink = BoundedSink(
+        lookup("explore-ideas resolve-anchors"), output_path=output_path,
+        command_path="explore-ideas resolve-anchors", complete_via=complete_via,
+    )
+    control_notice = (
+        bounded_control_notice(f"wrote the complete anchor-resolution report to {output_path}")
+        if output_path is not None
+        else None
+    )
+
+    full: dict[str, Any] = result.to_dict()
+    displayed = full if output_path is not None else project_single_list_report(full, "anchors", 40)
+    if output_path is None and displayed.get("anchors_omitted", 0):
+        displayed = {
+            **displayed,
+            "truncation": {
+                "omitted": displayed["anchors_omitted"],
+                "total": len(full["anchors"]),
+                "complete_via": complete_via,
+            },
+        }
+
     def _render() -> None:
-        counts = result.counts
-        click.echo(
+        counts = full["counts"]
+        sink.echo(
             f"{counts['resolved']} resolved, "
             f"{counts['already_resolved']} already resolved, "
             f"{counts['ambiguous']} ambiguous, "
             f"{counts['unresolved']} unresolved, "
             f"{counts['mismatch']} mismatch"
         )
-        for row in result.anchors:
-            label = f"{row.candidate_id}[{row.anchor_index}]"
-            if row.status == "resolved":
-                click.echo(f"  {label} -> {row.resolved} ({row.match_kind})")
-            elif row.status == "already-resolved":
-                click.echo(f"  {label} already resolved: {row.resolved}")
-            elif row.status == "ambiguous":
-                click.echo(f"  {label} ambiguous {row.match_kind}: {', '.join(row.candidates)}")
-            elif row.status == "mismatch":
-                click.echo(f"  {label} MISMATCH {row.resolved} ({row.match_kind}): {row.detail}")
+        for row in displayed["anchors"]:
+            label = f"{row['candidate_id']}[{row['anchor_index']}]"
+            if row["status"] == "resolved":
+                sink.echo(f"  {label} -> {row['resolved']} ({row['match_kind']})")
+            elif row["status"] == "already-resolved":
+                sink.echo(f"  {label} already resolved: {row['resolved']}")
+            elif row["status"] == "ambiguous":
+                sink.echo(f"  {label} ambiguous {row['match_kind']}: {', '.join(row['candidates'])}")
+            elif row["status"] == "mismatch":
+                sink.echo(f"  {label} MISMATCH {row['resolved']} ({row['match_kind']}): {row['detail']}")
             else:
-                click.echo(f"  {label} unresolved: {row.query}")
+                sink.echo(f"  {label} unresolved: {row['query']}")
+        if displayed.get("anchors_omitted", 0):
+            sink.echo(f"showing {len(displayed['anchors'])} of {len(full['anchors'])} anchors")
+            sink.echo(f"  complete output:  {sink.complete_via}")
 
-    emit(output_format=output_format, payload=result.to_dict(), render_text=_render)
+    emit(output_format=output_format, payload=displayed, render_text=_render, sink=sink)
+    sink.flush()
+    if control_notice is not None:
+        click.echo(control_notice)
 
 
 @explore_ideas_group.command("backfill-lens-views")

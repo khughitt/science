@@ -45,6 +45,13 @@ def benchmark_group() -> None:
     type=click.Path(path_type=Path, file_okay=False, dir_okay=True),
     help="Project root (defaults to SCIENCE_PROJECT_ROOT env var or cwd).",
 )
+@click.option(
+    "--output",
+    "output_path",
+    type=click.Path(path_type=Path),
+    default=None,
+    help="Write the complete, unbudgeted report to PATH instead of stdout.",
+)
 def benchmark_list(
     domain: str | None,
     benchmark_kind: str | None,
@@ -53,12 +60,17 @@ def benchmark_list(
     coverage_summary_flag: bool,
     output_format: str,
     project_root: Path | None,
+    output_path: Path | None,
 ) -> None:
     """List dataset entities with benchmark metadata."""
-    from rich.console import Console
     from rich.table import Table
 
     from science_tool.benchmark_catalog import coverage_summary, list_benchmarks
+    from science_tool.budget.control import bounded_control_notice
+    from science_tool.budget.invocation import build_complete_via, hint_for
+    from science_tool.budget.projection import project_single_list_report
+    from science_tool.budget.registry import lookup
+    from science_tool.budget.sink import BoundedSink
 
     root = project_root.resolve() if project_root else _project_root_from_env()
     result = list_benchmarks(
@@ -75,6 +87,42 @@ def benchmark_list(
     notice = result.reason if result.code == "commons_unavailable" else None
     summary = coverage_summary(rows)
 
+    sink = BoundedSink(
+        lookup("benchmark list"),
+        output_path=output_path,
+        command_path="benchmark list",
+        complete_via=build_complete_via(
+            click.get_current_context(), output_hint=hint_for("benchmark-list", output_format)
+        ),
+    )
+    control_notice = (
+        bounded_control_notice(f"wrote the complete benchmark list to {output_path}")
+        if output_path is not None
+        else None
+    )
+
+    full: dict[str, Any] = (
+        {"summary": summary, "commons_notice": notice}
+        if coverage_summary_flag
+        else {"rows": rows, "summary": summary, "commons_notice": notice}
+    )
+    # coverage-summary mode has no "rows" list to project: `summary` is a fixed set of
+    # controlled-vocabulary facets, not one entry per project record.
+    displayed = (
+        full
+        if output_path is not None or coverage_summary_flag
+        else project_single_list_report(full, "rows", 40)
+    )
+    if output_path is None and not coverage_summary_flag and displayed.get("rows_omitted", 0):
+        displayed = {
+            **displayed,
+            "truncation": {
+                "omitted": displayed["rows_omitted"],
+                "total": len(full["rows"]),
+                "complete_via": sink.complete_via,
+            },
+        }
+
     def _render() -> None:
         if coverage_summary_flag:
             table = Table(show_header=True, header_style="bold")
@@ -83,17 +131,18 @@ def benchmark_list(
             for facet, counts in summary.items():
                 for value, count in counts.items():
                     table.add_row(facet, value, str(count))
-            Console(width=200).print(table)
+            sink.console.print(table)
             return
 
-        if not rows:
-            click.echo("No matching benchmark dataset entities.")
+        displayed_rows = displayed["rows"]
+        if not displayed_rows:
+            sink.echo("No matching benchmark dataset entities.")
             return
 
         table = Table(show_header=True, header_style="bold")
         for col in ("id", "title", "scope", "class", "domains", "modalities", "signal_types", "kinds", "tasks"):
             table.add_column(col, overflow="fold", no_wrap=False)
-        for row in rows:
+        for row in displayed_rows:
             table.add_row(
                 row["id"],
                 row["title"],
@@ -105,13 +154,15 @@ def benchmark_list(
                 ", ".join(row["benchmark_kinds"]),
                 ", ".join(row["task_ids"]),
             )
-        Console(width=200).print(table)
+        sink.console.print(table)
+        if displayed.get("rows_omitted", 0):
+            sink.echo(f"showing {len(displayed_rows)} of {len(full['rows'])} rows")
+            sink.echo(f"  complete output:  {sink.complete_via}")
 
-    if coverage_summary_flag:
-        payload = {"summary": summary, "commons_notice": notice}
-    else:
-        payload = {"rows": rows, "summary": summary, "commons_notice": notice}
-    emit(output_format=output_format, payload=payload, render_text=_render, sort_keys=True)
+    emit(output_format=output_format, payload=displayed, render_text=_render, sort_keys=True, sink=sink)
+    sink.flush()
+    if control_notice is not None:
+        click.echo(control_notice)
 
 
 @benchmark_group.command("opportunities")

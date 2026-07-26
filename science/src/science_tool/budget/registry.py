@@ -108,6 +108,12 @@ BUDGETS: dict[str, CommandBudget] = {
     "research-package build": CommandBudget(max_chars=20_000, shape=PayloadShape.ROWS, max_rows=40),
     "sync projects": CommandBudget(max_chars=20_000, shape=PayloadShape.ROWS, max_rows=40),
     "tasks fix-blockers": CommandBudget(max_chars=20_000, shape=PayloadShape.ROWS, max_rows=40),
+    "annotate synthesize": CommandBudget(max_chars=30_000, shape=PayloadShape.REPORT),
+    "benchmark list": CommandBudget(max_chars=30_000, shape=PayloadShape.REPORT),
+    "dataset prioritize": CommandBudget(max_chars=30_000, shape=PayloadShape.REPORT),
+    "explore-ideas apply": CommandBudget(max_chars=30_000, shape=PayloadShape.REPORT),
+    "explore-ideas gaps": CommandBudget(max_chars=30_000, shape=PayloadShape.REPORT),
+    "explore-ideas resolve-anchors": CommandBudget(max_chars=30_000, shape=PayloadShape.REPORT),
 }
 
 EXEMPTIONS: dict[str, str] = {
@@ -260,7 +266,6 @@ DEFERRED.update(
             "annotate record-proposition-reconciliation-decisions",
             "annotate resynthesis-draft-context",
             "annotate scaffold-proposition-resynthesis",
-            "annotate synthesize",
             "annotate validate-proposition-reconciliation",
             "annotate validate-proposition-resynthesis",
             "annotate validate-prose-decomposition-artifact",
@@ -282,7 +287,6 @@ DEFERRED.update(
         for path in (
             "benchmark gaps",
             "benchmark hint-candidates",
-            "benchmark list",
             "benchmark opportunities",
             "benchmark test-triage",
             "benchmark tests",
@@ -340,7 +344,6 @@ DEFERRED.update(
             "dataset consumers",
             "dataset identity resolve",
             "dataset list",
-            "dataset prioritize",
             "dataset stochasticity",
             "dataset verify-access",
         )
@@ -399,12 +402,7 @@ DEFERRED.update(
 DEFERRED.update(
     {
         path: DeferredCommand("one output member per idea candidate, lens view, gap, anchor, or apply action", "1b")
-        for path in (
-            "explore-ideas apply",
-            "explore-ideas backfill-lens-views",
-            "explore-ideas gaps",
-            "explore-ideas resolve-anchors",
-        )
+        for path in ("explore-ideas backfill-lens-views",)
     }
 )
 DEFERRED.update(

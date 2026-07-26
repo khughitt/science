@@ -22,9 +22,9 @@ from science_tool.budget.registry import BUDGETS, DEFERRED, EXEMPTIONS
 from science_tool.cli import main
 
 EXPECTED_CLASSIFICATION_COUNTS = {
-    "budgeted": 48,
+    "budgeted": 54,
     "exempt": 111,
-    "deferred": 120,
+    "deferred": 114,
 }
 
 
@@ -85,8 +85,14 @@ def test_classification_partition_has_the_audited_cardinality() -> None:
     deferred -- its only growable output is `find_similar_open`'s whole-open-backlog
     fuzzy-duplicate scan, a write-audit-leak shape (a corpus-wide side dump triggered
     by, but not scaling with, the write), scheduled for the separate write-leak plan
-    rather than forced into ROWS projection. The live partition is therefore
-    48/111/120 = 279.
+    rather than forced into ROWS projection. Batch W4a then wired the first 6 REPORT
+    commands (annotate synthesize, benchmark list, dataset prioritize, explore-ideas
+    apply/gaps/resolve-anchors), moving them from deferred to budgeted; explore-ideas
+    apply needed a bespoke multi-list projector (`explore_ideas_projection.py`) because
+    its payload carries several independently growable lists (created/to_create,
+    skipped_applied, skipped_other, manual, folds, failures) at once, while the other
+    five fit the shared summary+one-list `project_single_list_report` helper. The live
+    partition is therefore 54/111/114 = 279.
     """
     actual = {
         "budgeted": len(BUDGETS),
