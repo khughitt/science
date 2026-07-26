@@ -1,0 +1,2610 @@
+# VCS Storage Boundary Implementation Plan
+
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+
+**Goal:** Make the tracked/ignored boundary a declared, generated, and enforced property of a science project instead of a hand-curated `.gitignore` maintained by per-case judgement.
+
+**Architecture:** `science.yaml` gains a `boundary:` block declaring a storage class per path (`versioned` implicit, `payload`, `manifest`). A generator renders those declarations into a managed block in `.gitignore`. Six mechanical validate checks enforce the result — two universal (needing no config), four declaration-derived. Reachability is decided by asking git directly (`git ls-files --cached --others --exclude-standard`) rather than by analysing patterns.
+
+**Tech Stack:** Python 3.12+, pydantic v2 models (mirroring the `ProjectDataConfig` precedent in `project_config.py`), `click` for CLI, `subprocess` for git plumbing, `pytest`. No new third-party dependencies.
+
+**Design:** `docs/plans/2026-07-26-vcs-storage-boundary-design.md` (committed at `8b58e633`).
+
+## Global Constraints
+
+- Package root is `science/`. Run tests as `cd science && uv run --frozen pytest tests/<file> -v`.
+- ruff `line-length = 120` (`science/pyproject.toml:41`). Run `uv run --frozen ruff check .` and `uv run --frozen ruff format --check .` from `science/`.
+- Nested pydantic config blocks use `model_config = ConfigDict(extra="forbid")`, matching `ProjectDataConfig` (`project_config.py:153`). `ProjectConfig` itself stays `extra="allow"`.
+- **Every git invocation that supports `-z` MUST use it.** Newline-delimited output is wrong for paths containing newlines, which are legal in git and are a real input to a boundary tool.
+- Validate checks register via `@Check(section=..., order=...)` from `science_tool.validate.checks` and yield `Result(severity, path, line, message, rule, task)` from `science_tool.validate.result`.
+- Tests build a context with `ValidateContext.from_project_root(root, strict=False, verbose=False)` (`validate/context.py:43`). There is no `build_context` helper. The fixture must contain a `science.yaml`, or construction raises `ValidateContextError`.
+- `git check-ignore --no-index --stdin -z -v` emits **four** NUL-terminated fields per record in the order `source, line, pattern, path` (verified). A `!`-prefixed pattern means the path is **not** ignored and must be filtered.
+- Check rule names are exactly: `boundary.tracked-ignored`, `boundary.unanchored-pattern`, `boundary.generated-drift`, `boundary.declaration-conflict`, `boundary.unreachable-tracked`, `boundary.ignored-undeclared`.
+- No check may call `data_policy.classify()`. Its only callers are `boundary init` and `data audit`.
+- **`git check-ignore` is never the reachability oracle.** Its verdict is index-dependent. Use the visibility oracle.
+- MM30's real declaration is a downstream follow-up. Only a sanitized fixture lands here.
+
+---
+
+## File Structure
+
+**New package** `science/src/science_tool/boundary/`:
+
+| File | Responsibility |
+|---|---|
+| `__init__.py` | Public re-exports only. |
+| `config.py` | Pydantic models + grammar validation. Pure; no filesystem, no git. |
+| `generate.py` | Render the managed block; splice it into `.gitignore` text. Pure string transforms. |
+| `gitio.py` | All git subprocess calls. Visibility oracle, tracked∩ignored, ignore-rule enumeration. |
+| `walk.py` | Enumerate extant files under a `manifest` root matching its `tracked:` globs. |
+| `probes.py` | Generate synthetic probe paths for a declaration. Pure. |
+| `sync.py` | Managed-block install, drift detection, transactional `--verify-current-tree`. |
+| `init.py` | Declaration proposal from an existing tree (only `classify()` consumer here). |
+| `cli.py` | `science boundary` click group. |
+
+**Modified:**
+
+| File | Change |
+|---|---|
+| `project_config.py:261` | Add `boundary: BoundaryConfig \| None = None`. |
+| `validate/checks/boundary.py` | **New.** The six checks. |
+| `validate/checks/__init__.py:~95` | Append `"boundary"` to `CANONICAL_CHECK_MODULES`. |
+| `cli.py:18,~200` | Import and register `boundary_group`. |
+| `data_audit.py:169` | Re-scope the walk. |
+| `commands/create-project.md:199-290` | Retire the ignore-then-pin idiom. |
+| `docs/conventions/data-boundary.md` | Rewrite *Policy*; resolve deferred follow-ups. |
+| `docs/audits/downstream-project-conventions/synthesis.md` §7.5 | Mark superseded. |
+
+Models live in `boundary/config.py` rather than `project_config.py` despite the `ProjectDataConfig` precedent: the grammar validators are ~80 lines and would bloat an already-large module. `project_config.py` imports from `boundary.config`, which imports only pydantic and stdlib — no cycle.
+
+---
+
+## Task 1: Config models and grammar validation
+
+**Files:**
+- Create: `science/src/science_tool/boundary/__init__.py`
+- Create: `science/src/science_tool/boundary/config.py`
+- Modify: `science/src/science_tool/project_config.py:261`
+- Test: `science/tests/test_boundary_config.py`
+
+**Interfaces:**
+- Consumes: nothing.
+- Produces: `StorageClass`, `BoundaryRoot`, `AllowEntry`, `BoundaryConfig`, `BoundaryConfigError`. `BoundaryRoot` fields: `path: str`, `storage_class: StorageClass` (YAML key `class`), `tracked: tuple[str, ...]`. `AllowEntry` fields: `source: str`, `pattern: str`. `BoundaryConfig` fields: `roots: tuple[BoundaryRoot, ...]`, `unmanaged_allow: tuple[AllowEntry, ...]`.
+
+- [ ] **Step 1: Write the failing tests**
+
+```python
+# science/tests/test_boundary_config.py
+from __future__ import annotations
+
+import pytest
+from pydantic import ValidationError
+
+from science_tool.boundary.config import BoundaryConfig, StorageClass
+
+
+def _cfg(**kw):
+    return BoundaryConfig.model_validate(kw)
+
+
+def test_payload_root_parses():
+    cfg = _cfg(roots=[{"path": "data/raw", "class": "payload"}])
+    assert cfg.roots[0].storage_class is StorageClass.PAYLOAD
+    assert cfg.roots[0].tracked == ()
+
+
+def test_manifest_root_parses_tracked():
+    cfg = _cfg(roots=[{"path": "data/external", "class": "manifest", "tracked": ["datapackage.json"]}])
+    assert cfg.roots[0].tracked == ("datapackage.json",)
+
+
+def test_manifest_requires_nonempty_tracked():
+    # A manifest root tracking nothing IS a payload root. Two spellings of one
+    # meaning is the ambiguity this design removes.
+    with pytest.raises(ValidationError, match="tracked"):
+        _cfg(roots=[{"path": "data/external", "class": "manifest", "tracked": []}])
+    with pytest.raises(ValidationError, match="tracked"):
+        _cfg(roots=[{"path": "data/external", "class": "manifest"}])
+
+
+def test_tracked_rejected_on_payload():
+    with pytest.raises(ValidationError, match="tracked"):
+        _cfg(roots=[{"path": "data/raw", "class": "payload", "tracked": ["a.json"]}])
+
+
+@pytest.mark.parametrize(
+    "bad",
+    ["/abs", "..", "a/../b", ".", "a/", "", "a\nb", "a\tb", "a*b", "a?b", "a[b]", "!a", "a\\"],
+)
+def test_root_path_grammar(bad):
+    with pytest.raises(ValidationError):
+        _cfg(roots=[{"path": bad, "class": "payload"}])
+
+
+def test_duplicate_roots_rejected():
+    with pytest.raises(ValidationError, match="duplicate"):
+        _cfg(roots=[{"path": "data/raw", "class": "payload"}, {"path": "data/raw", "class": "payload"}])
+
+
+def test_nested_roots_rejected():
+    # /data/ would stop git descending and silently disable the child's negations.
+    with pytest.raises(ValidationError, match="nested"):
+        _cfg(
+            roots=[
+                {"path": "data", "class": "payload"},
+                {"path": "data/external", "class": "manifest", "tracked": ["datapackage.json"]},
+            ]
+        )
+
+
+def test_sibling_roots_allowed():
+    cfg = _cfg(
+        roots=[
+            {"path": "data/raw", "class": "payload"},
+            {"path": "data/external", "class": "manifest", "tracked": ["datapackage.json"]},
+        ]
+    )
+    assert len(cfg.roots) == 2
+
+
+@pytest.mark.parametrize("bad", ["/abs", "..", "a/", "", "!x", "#x", "a\nb", "a\\"])
+def test_tracked_glob_grammar(bad):
+    with pytest.raises(ValidationError):
+        _cfg(roots=[{"path": "data/external", "class": "manifest", "tracked": [bad]}])
+
+
+def test_duplicate_tracked_rejected():
+    with pytest.raises(ValidationError, match="duplicate"):
+        _cfg(roots=[{"path": "d", "class": "manifest", "tracked": ["a.json", "a.json"]}])
+
+
+def test_allow_entry_shorthand_expands_to_root():
+    cfg = _cfg(unmanaged_allow=[".venv/"])
+    assert cfg.unmanaged_allow[0].source == ".gitignore"
+    assert cfg.unmanaged_allow[0].pattern == ".venv/"
+
+
+def test_allow_entry_explicit_source():
+    cfg = _cfg(unmanaged_allow=[{"source": "inc/shiny/.gitignore", "pattern": "node_modules/"}])
+    assert cfg.unmanaged_allow[0].source == "inc/shiny/.gitignore"
+
+
+def test_allow_source_must_be_a_gitignore_file():
+    with pytest.raises(ValidationError, match="gitignore"):
+        _cfg(unmanaged_allow=[{"source": "inc/shiny/ignore.txt", "pattern": "x"}])
+
+
+def test_duplicate_allow_pairs_rejected():
+    with pytest.raises(ValidationError, match="duplicate"):
+        _cfg(unmanaged_allow=[".venv/", {"source": ".gitignore", "pattern": ".venv/"}])
+
+
+def test_unknown_key_rejected():
+    with pytest.raises(ValidationError):
+        _cfg(roots=[{"path": "d", "class": "payload", "clazz": "x"}])
+```
+
+- [ ] **Step 2: Run tests to verify they fail**
+
+Run: `cd science && uv run --frozen pytest tests/test_boundary_config.py -v`
+Expected: FAIL — `ModuleNotFoundError: No module named 'science_tool.boundary'`
+
+- [ ] **Step 3: Implement the models**
+
+```python
+# science/src/science_tool/boundary/config.py
+"""Typed, validated `boundary:` declaration.
+
+Pure: no filesystem access, no git. Grammar is closed because every value here
+becomes a git pattern -- pass-through would let a declaration emit rules nobody
+audited. See docs/plans/2026-07-26-vcs-storage-boundary-design.md.
+"""
+
+from __future__ import annotations
+
+from enum import StrEnum
+from typing import Any
+
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+
+
+class BoundaryConfigError(Exception):
+    """Raised for boundary declaration problems outside pydantic validation."""
+
+
+class StorageClass(StrEnum):
+    PAYLOAD = "payload"
+    MANIFEST = "manifest"
+
+
+_PATH_FORBIDDEN = set("*?[]!\\")
+_CONTROL = {chr(c) for c in range(32)}
+
+
+def _reject_control(value: str, label: str) -> None:
+    if any(ch in _CONTROL for ch in value):
+        raise ValueError(f"{label} must not contain control characters or newlines: {value!r}")
+
+
+def _validate_relative(value: str, label: str) -> None:
+    if not value:
+        raise ValueError(f"{label} must not be empty")
+    _reject_control(value, label)
+    if value.startswith("/"):
+        raise ValueError(f"{label} must be repo-relative, not absolute: {value!r}")
+    if value.endswith("/"):
+        raise ValueError(f"{label} must not end with '/': {value!r}")
+    if value.endswith("\\"):
+        raise ValueError(f"{label} must not end with a dangling escape: {value!r}")
+    parts = value.split("/")
+    if any(p in {"", ".", ".."} for p in parts):
+        raise ValueError(f"{label} must not contain empty, '.' or '..' segments: {value!r}")
+
+
+class BoundaryRoot(BaseModel):
+    model_config = ConfigDict(extra="forbid", populate_by_name=True)
+
+    path: str
+    storage_class: StorageClass = Field(alias="class")
+    tracked: tuple[str, ...] = ()
+
+    @field_validator("path")
+    @classmethod
+    def _check_path(cls, value: str) -> str:
+        _validate_relative(value, "root path")
+        if any(ch in _PATH_FORBIDDEN for ch in value):
+            raise ValueError(f"root path must not contain glob metacharacters; globs belong in tracked: {value!r}")
+        return value
+
+    @field_validator("tracked")
+    @classmethod
+    def _check_tracked(cls, value: tuple[str, ...]) -> tuple[str, ...]:
+        for glob in value:
+            if not glob:
+                raise ValueError("tracked glob must not be empty")
+            _reject_control(glob, "tracked glob")
+            if glob.startswith("/"):
+                raise ValueError(f"tracked glob must be relative to its root: {glob!r}")
+            if glob.startswith("!"):
+                raise ValueError(f"tracked glob must not start with '!'; negation is the generator's job: {glob!r}")
+            if glob.startswith("#"):
+                raise ValueError(f"tracked glob must not start with '#': {glob!r}")
+            if glob.endswith("/"):
+                raise ValueError(f"tracked glob matches files, not directories: {glob!r}")
+            if glob.endswith("\\"):
+                raise ValueError(f"tracked glob must not end with a dangling escape: {glob!r}")
+            if ".." in glob.split("/"):
+                raise ValueError(f"tracked glob must not contain '..': {glob!r}")
+        if len(set(value)) != len(value):
+            raise ValueError("duplicate tracked glob")
+        return value
+
+    @model_validator(mode="after")
+    def _check_class_pairing(self) -> "BoundaryRoot":
+        if self.storage_class is StorageClass.MANIFEST and not self.tracked:
+            raise ValueError(
+                f"manifest root {self.path!r} needs a non-empty tracked list; "
+                "a manifest root that tracks nothing is a payload root"
+            )
+        if self.storage_class is StorageClass.PAYLOAD and self.tracked:
+            raise ValueError(f"tracked is only valid on class: manifest, not on payload root {self.path!r}")
+        return self
+
+
+class AllowEntry(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    source: str = ".gitignore"
+    pattern: str
+
+    @model_validator(mode="before")
+    @classmethod
+    def _expand_shorthand(cls, value: Any) -> Any:
+        if isinstance(value, str):
+            return {"source": ".gitignore", "pattern": value}
+        return value
+
+    @field_validator("source")
+    @classmethod
+    def _check_source(cls, value: str) -> str:
+        _validate_relative(value, "allow source")
+        if value != ".gitignore" and not value.endswith("/.gitignore"):
+            raise ValueError(f"allow source must be a .gitignore file: {value!r}")
+        return value
+
+    @field_validator("pattern")
+    @classmethod
+    def _check_pattern(cls, value: str) -> str:
+        if not value:
+            raise ValueError("allow pattern must not be empty")
+        _reject_control(value, "allow pattern")
+        return value
+
+
+DEFAULT_UNMANAGED_ALLOW: tuple[str, ...] = (
+    ".venv/",
+    "__pycache__/",
+    "*.pyc",
+    ".env",
+    "node_modules/",
+    ".DS_Store",
+    ".worktrees/",
+    "*.egg-info",
+)
+
+
+class BoundaryConfig(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    roots: tuple[BoundaryRoot, ...] = ()
+    unmanaged_allow: tuple[AllowEntry, ...] = Field(
+        default_factory=lambda: tuple(AllowEntry(pattern=p) for p in DEFAULT_UNMANAGED_ALLOW)
+    )
+
+    @model_validator(mode="after")
+    def _check_roots(self) -> "BoundaryConfig":
+        paths = [r.path for r in self.roots]
+        if len(set(paths)) != len(paths):
+            raise ValueError("duplicate root path")
+        for outer in paths:
+            for inner in paths:
+                if outer != inner and (inner + "/").startswith(outer + "/"):
+                    raise ValueError(
+                        f"nested roots are not supported: {outer!r} contains {inner!r}. "
+                        f"An anchored exclude for {outer!r} stops git descending, silently "
+                        f"disabling every negation {inner!r} would generate."
+                    )
+        pairs = [(a.source, a.pattern) for a in self.unmanaged_allow]
+        if len(set(pairs)) != len(pairs):
+            raise ValueError("duplicate unmanaged_allow entry")
+        return self
+```
+
+```python
+# science/src/science_tool/boundary/__init__.py
+"""Declared VCS storage boundary: config, generation, git introspection, checks."""
+
+from science_tool.boundary.config import (
+    AllowEntry,
+    BoundaryConfig,
+    BoundaryConfigError,
+    BoundaryRoot,
+    StorageClass,
+)
+
+__all__ = [
+    "AllowEntry",
+    "BoundaryConfig",
+    "BoundaryConfigError",
+    "BoundaryRoot",
+    "StorageClass",
+]
+```
+
+- [ ] **Step 4: Wire the block onto `ProjectConfig`**
+
+In `science/src/science_tool/project_config.py`, add the import near the other model imports and the field after `data_policy` (line 262):
+
+```python
+from science_tool.boundary.config import BoundaryConfig
+```
+
+```python
+    boundary: BoundaryConfig | None = None
+```
+
+- [ ] **Step 5: Run tests to verify they pass**
+
+Run: `cd science && uv run --frozen pytest tests/test_boundary_config.py -v`
+Expected: PASS (all)
+
+- [ ] **Step 6: Verify no import cycle and lint**
+
+```bash
+cd science
+uv run --frozen python -c "from science_tool.project_config import ProjectConfig; print(ProjectConfig.model_fields['boundary'])"
+uv run --frozen ruff check . && uv run --frozen ruff format --check .
+```
+Expected: field prints; ruff clean.
+
+- [ ] **Step 7: Commit**
+
+```bash
+git add science/src/science_tool/boundary/ science/src/science_tool/project_config.py science/tests/test_boundary_config.py
+git commit -m "feat(boundary): add validated boundary declaration models"
+```
+
+---
+
+## Task 2: Managed-block generation
+
+**Files:**
+- Create: `science/src/science_tool/boundary/generate.py`
+- Test: `science/tests/test_boundary_generate.py`
+
+**Interfaces:**
+- Consumes: `BoundaryConfig`, `BoundaryRoot`, `StorageClass` from Task 1.
+- Produces: `MANAGED_BEGIN: str`, `MANAGED_END: str`, `render_managed_block(cfg: BoundaryConfig) -> str`, `splice_managed_block(text: str, block: str) -> str`, `extract_managed_block(text: str) -> str | None`.
+
+- [ ] **Step 1: Write the failing tests**
+
+```python
+# science/tests/test_boundary_generate.py
+from __future__ import annotations
+
+import subprocess
+from pathlib import Path
+
+from science_tool.boundary.config import BoundaryConfig
+from science_tool.boundary.generate import (
+    MANAGED_BEGIN,
+    MANAGED_END,
+    extract_managed_block,
+    render_managed_block,
+    splice_managed_block,
+)
+
+
+def _git(repo: Path, *args: str) -> str:
+    return subprocess.run(["git", "-C", str(repo), *args], capture_output=True, text=True).stdout
+
+
+def _repo(tmp_path: Path) -> Path:
+    subprocess.run(["git", "init", "-q", str(tmp_path)], check=True)
+    return tmp_path
+
+
+def test_payload_root_is_anchored():
+    cfg = BoundaryConfig.model_validate({"roots": [{"path": "data/raw", "class": "payload"}]})
+    assert "/data/raw/" in render_managed_block(cfg)
+
+
+def test_no_generated_pattern_is_unanchored():
+    cfg = BoundaryConfig.model_validate(
+        {
+            "roots": [
+                {"path": "pdfs", "class": "payload"},
+                {"path": "data/external", "class": "manifest", "tracked": ["datapackage.json"]},
+            ]
+        }
+    )
+    for line in render_managed_block(cfg).splitlines():
+        if not line or line.startswith("#"):
+            continue
+        body = line[1:] if line.startswith("!") else line
+        assert body.startswith("/"), f"unanchored generated pattern: {line}"
+
+
+def test_manifest_emits_descend_preserving_form():
+    cfg = BoundaryConfig.model_validate(
+        {"roots": [{"path": "data/external", "class": "manifest", "tracked": ["datapackage.json"]}]}
+    )
+    block = render_managed_block(cfg)
+    assert "/data/external/**" in block
+    assert "!/data/external/**/" in block
+    assert "!/data/external/**/datapackage.json" in block
+    # A bare anchored exclude would stop descent and disable the negations.
+    assert "\n/data/external/\n" not in "\n" + block
+
+
+def test_generation_is_deterministic():
+    payload = {
+        "roots": [
+            {"path": "pdfs", "class": "payload"},
+            {"path": "data/raw", "class": "payload"},
+        ]
+    }
+    a = render_managed_block(BoundaryConfig.model_validate(payload))
+    payload["roots"].reverse()
+    b = render_managed_block(BoundaryConfig.model_validate(payload))
+    assert a == b
+
+
+def test_splice_appends_when_absent():
+    out = splice_managed_block(".venv/\n", "X\n")
+    assert out.startswith(".venv/\n")
+    assert MANAGED_BEGIN in out and MANAGED_END in out
+
+
+def test_splice_replaces_in_place_and_preserves_surroundings():
+    original = splice_managed_block("head\n", "OLD\n")
+    updated = splice_managed_block(original + "tail\n", "NEW\n")
+    assert "OLD" not in updated
+    assert "NEW" in updated
+    assert updated.startswith("head\n")
+    assert updated.rstrip().endswith("tail")
+
+
+def test_splice_is_idempotent():
+    once = splice_managed_block("head\n", "B\n")
+    assert splice_managed_block(once, "B\n") == once
+
+
+def test_extract_roundtrip():
+    text = splice_managed_block("head\n", "B\n")
+    assert extract_managed_block(text) == "B\n"
+    assert extract_managed_block("no markers\n") is None
+
+
+def test_manifest_descriptor_is_really_visible_to_git(tmp_path: Path):
+    """Real git, not string comparison. The trap is that negations LOOK right."""
+    repo = _repo(tmp_path)
+    (repo / "data/external/ot/25.03").mkdir(parents=True)
+    (repo / "data/external/ot/25.03/datapackage.json").write_text("{}\n")
+    (repo / "data/external/ot/25.03/big.parquet").write_text("x\n")
+    cfg = BoundaryConfig.model_validate(
+        {"roots": [{"path": "data/external", "class": "manifest", "tracked": ["datapackage.json"]}]}
+    )
+    (repo / ".gitignore").write_text(splice_managed_block("", render_managed_block(cfg)))
+    subprocess.run(["git", "-C", str(repo), "add", "."], check=True)
+    staged = _git(repo, "ls-files").split()
+    assert "data/external/ot/25.03/datapackage.json" in staged
+    assert "data/external/ot/25.03/big.parquet" not in staged
+
+
+def test_payload_root_stages_nothing(tmp_path: Path):
+    repo = _repo(tmp_path)
+    (repo / "data/raw").mkdir(parents=True)
+    (repo / "data/raw/x.csv").write_text("a\n")
+    cfg = BoundaryConfig.model_validate({"roots": [{"path": "data/raw", "class": "payload"}]})
+    (repo / ".gitignore").write_text(splice_managed_block("", render_managed_block(cfg)))
+    subprocess.run(["git", "-C", str(repo), "add", "."], check=True)
+    assert "data/raw/x.csv" not in _git(repo, "ls-files").split()
+```
+
+- [ ] **Step 2: Run tests to verify they fail**
+
+Run: `cd science && uv run --frozen pytest tests/test_boundary_generate.py -v`
+Expected: FAIL — `ModuleNotFoundError: ... boundary.generate`
+
+- [ ] **Step 3: Implement the generator**
+
+```python
+# science/src/science_tool/boundary/generate.py
+"""Render a BoundaryConfig into the managed .gitignore block, and splice it in.
+
+Pure string transforms; no filesystem access. Two invariants the tests pin:
+every generated pattern is anchored, and a manifest root never emits a bare
+directory exclude (which would stop git descending and silently disable its own
+negations).
+"""
+
+from __future__ import annotations
+
+from science_tool.boundary.config import BoundaryConfig, BoundaryRoot, StorageClass
+
+MANAGED_BEGIN = "# BEGIN science-managed boundary — edit science.yaml, not this block"
+MANAGED_END = "# END science-managed boundary"
+
+
+def _render_root(root: BoundaryRoot) -> list[str]:
+    if root.storage_class is StorageClass.PAYLOAD:
+        return [f"/{root.path}/"]
+    # manifest: `**` + directory re-inclusion keeps git descending so the
+    # per-glob negations below actually apply.
+    lines = [f"/{root.path}/**", f"!/{root.path}/**/"]
+    lines.extend(f"!/{root.path}/**/{glob}" for glob in sorted(root.tracked))
+    return lines
+
+
+def render_managed_block(cfg: BoundaryConfig) -> str:
+    """Deterministic: roots sorted by path, tracked globs sorted within a root."""
+    lines: list[str] = []
+    for root in sorted(cfg.roots, key=lambda r: r.path):
+        lines.extend(_render_root(root))
+    return "".join(f"{line}\n" for line in lines)
+
+
+def extract_managed_block(text: str) -> str | None:
+    """Return the block body between the markers, or None if not present."""
+    start = text.find(MANAGED_BEGIN)
+    if start == -1:
+        return None
+    end = text.find(MANAGED_END, start)
+    if end == -1:
+        return None
+    body_start = start + len(MANAGED_BEGIN)
+    return text[body_start:end].lstrip("\n")
+
+
+def splice_managed_block(text: str, block: str) -> str:
+    """Replace the managed block in `text`, or append it if absent."""
+    rendered = f"{MANAGED_BEGIN}\n{block}{MANAGED_END}\n"
+    start = text.find(MANAGED_BEGIN)
+    if start != -1:
+        end = text.find(MANAGED_END, start)
+        if end != -1:
+            return text[:start] + rendered + text[end + len(MANAGED_END) :].lstrip("\n")
+    prefix = text if text.endswith("\n") or not text else text + "\n"
+    separator = "\n" if prefix else ""
+    return f"{prefix}{separator}{rendered}"
+```
+
+- [ ] **Step 4: Run tests to verify they pass**
+
+Run: `cd science && uv run --frozen pytest tests/test_boundary_generate.py -v`
+Expected: PASS (all, including both real-git tests)
+
+- [ ] **Step 5: Commit**
+
+```bash
+git add science/src/science_tool/boundary/generate.py science/tests/test_boundary_generate.py
+git commit -m "feat(boundary): render the managed .gitignore block"
+```
+
+---
+
+## Task 3: Git introspection layer
+
+Defines the **source universe** split from the design: rule-text reads only tracked in-worktree `.gitignore` files; effect checks use git's full effective resolution.
+
+**Files:**
+- Create: `science/src/science_tool/boundary/gitio.py`
+- Test: `science/tests/test_boundary_gitio.py`
+
+**Interfaces:**
+- Consumes: nothing from earlier tasks.
+- Produces: `IgnoreHit(path: str, source: str, line: int, pattern: str)`, `IgnoreRule(source: str, line: int, pattern: str)`, `visible_paths(project_root: Path) -> set[str]`, `tracked_ignored(project_root: Path) -> list[IgnoreHit]`, `governed_ignore_files(project_root: Path) -> list[str]`, `unmanaged_rules(project_root: Path, managed_body: str | None) -> list[IgnoreRule]`.
+
+**Semantics fixed here** (each has a test below):
+
+| Concern | Behaviour |
+|---|---|
+| Output framing | Every git call uses `-z`; parse on `\0`. |
+| Symlinks | Never followed. `visible_paths` reports the link itself; the walk (Task 4) does not descend into a symlinked directory. |
+| Nested repositories | A submodule or nested `.git` is opaque: git reports the gitlink path only, and we never recurse into it. |
+| Rule sources | `governed_ignore_files` returns only `.gitignore` files that are **tracked**; `.git/info/exclude` and `core.excludesFile` are excluded. |
+| Ordering | All returned lists are sorted by `(source, line)` or `path` so output is stable. |
+
+- [ ] **Step 1: Write the failing tests**
+
+```python
+# science/tests/test_boundary_gitio.py
+from __future__ import annotations
+
+import subprocess
+from pathlib import Path
+
+from science_tool.boundary.gitio import (
+    governed_ignore_files,
+    tracked_ignored,
+    unmanaged_rules,
+    visible_paths,
+)
+
+
+def _repo(tmp_path: Path) -> Path:
+    subprocess.run(["git", "init", "-q", str(tmp_path)], check=True)
+    subprocess.run(["git", "-C", str(tmp_path), "config", "user.email", "t@e"], check=True)
+    subprocess.run(["git", "-C", str(tmp_path), "config", "user.name", "t"], check=True)
+    return tmp_path
+
+
+def _write(repo: Path, rel: str, body: str = "x\n") -> Path:
+    p = repo / rel
+    p.parent.mkdir(parents=True, exist_ok=True)
+    p.write_text(body)
+    return p
+
+
+def test_visible_paths_excludes_ignored(tmp_path: Path):
+    repo = _repo(tmp_path)
+    _write(repo, "keep.txt")
+    _write(repo, "skip.log")
+    _write(repo, ".gitignore", "*.log\n")
+    vis = visible_paths(repo)
+    assert "keep.txt" in vis
+    assert "skip.log" not in vis
+
+
+def test_visible_paths_includes_tracked_even_if_later_ignored(tmp_path: Path):
+    repo = _repo(tmp_path)
+    _write(repo, "a.log")
+    subprocess.run(["git", "-C", str(repo), "add", "-f", "a.log"], check=True)
+    _write(repo, ".gitignore", "*.log\n")
+    assert "a.log" in visible_paths(repo)
+
+
+def test_visible_paths_matches_git_add_for_file_level_negation(tmp_path: Path):
+    """The oracle must agree with staging, where check-ignore does not."""
+    repo = _repo(tmp_path)
+    _write(repo, "s/m/archive/a.py")
+    _write(repo, "gi", "archive\n")
+    subprocess.run(["git", "-C", str(repo), "config", "core.excludesFile", str(repo / "gi")], check=True)
+    _write(repo, ".gitignore", "!/s/m/archive/a.py\n")
+    assert "s/m/archive/a.py" not in visible_paths(repo)
+    subprocess.run(["git", "-C", str(repo), "add", "."], check=True)
+    staged = subprocess.run(
+        ["git", "-C", str(repo), "ls-files"], capture_output=True, text=True
+    ).stdout.split()
+    assert "s/m/archive/a.py" not in staged
+
+
+def test_visible_paths_directory_level_negation_works(tmp_path: Path):
+    repo = _repo(tmp_path)
+    _write(repo, "s/m/archive/a.py")
+    _write(repo, "gi", "archive\n")
+    subprocess.run(["git", "-C", str(repo), "config", "core.excludesFile", str(repo / "gi")], check=True)
+    _write(repo, ".gitignore", "!/s/m/archive/\n")
+    assert "s/m/archive/a.py" in visible_paths(repo)
+
+
+def test_visible_paths_handles_newline_in_filename(tmp_path: Path):
+    repo = _repo(tmp_path)
+    _write(repo, "we\nird.txt")
+    assert "we\nird.txt" in visible_paths(repo)
+
+
+def test_tracked_ignored_reports_source_and_line(tmp_path: Path):
+    repo = _repo(tmp_path)
+    _write(repo, "data/raw/big.csv")
+    subprocess.run(["git", "-C", str(repo), "add", "-f", "data/raw/big.csv"], check=True)
+    _write(repo, ".gitignore", "# c\n/data/raw/\n")
+    hits = tracked_ignored(repo)
+    assert [h.path for h in hits] == ["data/raw/big.csv"]
+    assert hits[0].source.endswith(".gitignore")
+    assert hits[0].line == 2
+    assert hits[0].pattern == "/data/raw/"
+
+
+def test_tracked_ignored_filters_negation_matches(tmp_path: Path):
+    """`check-ignore -v` reports `!`-prefixed matches; those files are NOT ignored."""
+    repo = _repo(tmp_path)
+    _write(repo, "data/keep.tsv")
+    _write(repo, ".gitignore", "data/*\n!data/keep.tsv\n")
+    subprocess.run(["git", "-C", str(repo), "add", "-f", "data/keep.tsv"], check=True)
+    assert tracked_ignored(repo) == []
+
+
+def test_tracked_ignored_sees_global_excludes(tmp_path: Path):
+    repo = _repo(tmp_path)
+    _write(repo, "archive/a.py")
+    subprocess.run(["git", "-C", str(repo), "add", "-f", "archive/a.py"], check=True)
+    _write(repo, "gi", "archive\n")
+    subprocess.run(["git", "-C", str(repo), "config", "core.excludesFile", str(repo / "gi")], check=True)
+    hits = tracked_ignored(repo)
+    assert [h.path for h in hits] == ["archive/a.py"]
+    assert hits[0].source.endswith("gi")
+
+
+def test_governed_files_exclude_untracked_and_info_exclude(tmp_path: Path):
+    repo = _repo(tmp_path)
+    _write(repo, ".gitignore", "/data/**\n!/data/**/\n")
+    _write(repo, "src/.gitignore", "build/\n")
+    _write(repo, "data/nested/.gitignore", "x\n")
+    (repo / ".git/info").mkdir(parents=True, exist_ok=True)
+    (repo / ".git/info/exclude").write_text("secret/\n")
+    subprocess.run(["git", "-C", str(repo), "add", ".gitignore", "src/.gitignore"], check=True)
+    files = governed_ignore_files(repo)
+    assert ".gitignore" in files
+    assert "src/.gitignore" in files
+    assert "data/nested/.gitignore" not in files  # untracked -> not shareable
+    assert not any("info/exclude" in f for f in files)
+
+
+def test_unmanaged_rules_skip_the_managed_block_and_comments(tmp_path: Path):
+    from science_tool.boundary.generate import splice_managed_block
+
+    repo = _repo(tmp_path)
+    text = splice_managed_block("# note\n.venv/\n\n", "/data/raw/\n")
+    _write(repo, ".gitignore", text)
+    subprocess.run(["git", "-C", str(repo), "add", ".gitignore"], check=True)
+    rules = unmanaged_rules(repo, managed_body="/data/raw/\n")
+    patterns = [r.pattern for r in rules]
+    assert patterns == [".venv/"]
+    assert rules[0].source == ".gitignore"
+
+
+def test_unmanaged_rules_from_nested_file_carry_their_source(tmp_path: Path):
+    repo = _repo(tmp_path)
+    _write(repo, ".gitignore", "build/\n")
+    _write(repo, "inc/shiny/.gitignore", "build/\n")
+    subprocess.run(["git", "-C", str(repo), "add", ".gitignore", "inc/shiny/.gitignore"], check=True)
+    rules = unmanaged_rules(repo, managed_body=None)
+    sources = sorted((r.source, r.pattern) for r in rules)
+    assert sources == [(".gitignore", "build/"), ("inc/shiny/.gitignore", "build/")]
+```
+
+- [ ] **Step 2: Run tests to verify they fail**
+
+Run: `cd science && uv run --frozen pytest tests/test_boundary_gitio.py -v`
+Expected: FAIL — `ModuleNotFoundError: ... boundary.gitio`
+
+- [ ] **Step 3: Implement the git layer**
+
+```python
+# science/src/science_tool/boundary/gitio.py
+"""Every git subprocess call the boundary tooling makes.
+
+SOURCE UNIVERSE (design: "govern what is shareable, diagnose whatever bites"):
+
+* Rule-text inspection (`governed_ignore_files`, `unmanaged_rules`) sees only
+  TRACKED, in-worktree `.gitignore` files. `.git/info/exclude` is per-clone and
+  `core.excludesFile` is machine-wide; a finding against either could not be
+  fixed in the repository or seen by anyone else.
+* Effect inspection (`visible_paths`, `tracked_ignored`) uses git's FULL
+  effective resolution, including both of those, because it asks what actually
+  happened. Such a hit is reported with its source path and never rewritten.
+
+`git check-ignore` is NOT the reachability oracle: without `--no-index` it
+reports a tracked path as un-ignored regardless of the rules, so it answers
+"do the patterns match?" rather than "will git surface this file?".
+`visible_paths` answers the second, and agrees with `git add .`.
+
+All output framing is NUL-delimited: newlines are legal in git paths.
+"""
+
+from __future__ import annotations
+
+import subprocess
+from dataclasses import dataclass
+from pathlib import Path
+
+
+@dataclass(frozen=True)
+class IgnoreHit:
+    path: str
+    source: str
+    line: int
+    pattern: str
+
+
+@dataclass(frozen=True)
+class IgnoreRule:
+    source: str
+    line: int
+    pattern: str
+
+
+def _git(project_root: Path, *args: str, stdin: bytes | None = None) -> bytes:
+    proc = subprocess.run(
+        ["git", "-C", str(project_root), *args],
+        input=stdin,
+        capture_output=True,
+        check=False,
+    )
+    return proc.stdout
+
+
+def _split_z(payload: bytes) -> list[str]:
+    return [chunk.decode("utf-8", "surrogateescape") for chunk in payload.split(b"\0") if chunk]
+
+
+def visible_paths(project_root: Path) -> set[str]:
+    """Paths git will surface: tracked, plus untracked-and-not-ignored.
+
+    This is the reachability oracle. A file absent from this set will not be
+    staged by `git add .`, whatever `check-ignore` says about it.
+    """
+    return set(_split_z(_git(project_root, "ls-files", "-z", "--cached", "--others", "--exclude-standard")))
+
+
+def tracked_ignored(project_root: Path) -> list[IgnoreHit]:
+    """Tracked files that nonetheless match an ignore rule.
+
+    Uses `--no-index` so ignore rules apply to tracked paths at all, which also
+    brings global excludes into scope by design.
+    """
+    tracked = _git(project_root, "ls-files", "-z")
+    if not tracked:
+        return []
+    raw = _git(project_root, "check-ignore", "--no-index", "--stdin", "-z", "-v", stdin=tracked)
+    fields = raw.split(b"\0")
+    hits: list[IgnoreHit] = []
+    # -v -z emits 4 NUL-terminated fields per record: source, line, pattern, path.
+    for i in range(0, len(fields) - 3, 4):
+        source, line, pattern, path = (f.decode("utf-8", "surrogateescape") for f in fields[i : i + 4])
+        if not path:
+            continue
+        # A `!`-prefixed pattern means the path is NOT ignored. Reporting these
+        # would be a false positive; MM30 produced 7 of them.
+        if pattern.startswith("!"):
+            continue
+        hits.append(IgnoreHit(path=path, source=source, line=int(line or 0), pattern=pattern))
+    return sorted(hits, key=lambda h: h.path)
+
+
+def governed_ignore_files(project_root: Path) -> list[str]:
+    """Tracked, in-worktree `.gitignore` files -- the shareable rule surface."""
+    tracked = _split_z(_git(project_root, "ls-files", "-z"))
+    return sorted(p for p in tracked if p == ".gitignore" or p.endswith("/.gitignore"))
+
+
+def unmanaged_rules(project_root: Path, managed_body: str | None) -> list[IgnoreRule]:
+    """Every hand-written rule in the governed files, excluding the managed block."""
+    from science_tool.boundary.generate import MANAGED_BEGIN, MANAGED_END
+
+    managed_lines = set((managed_body or "").splitlines())
+    rules: list[IgnoreRule] = []
+    for rel in governed_ignore_files(project_root):
+        try:
+            text = (project_root / rel).read_text(encoding="utf-8")
+        except OSError:
+            continue
+        inside = False
+        for number, raw in enumerate(text.splitlines(), start=1):
+            line = raw.strip()
+            if MANAGED_BEGIN in raw:
+                inside = True
+                continue
+            if MANAGED_END in raw:
+                inside = False
+                continue
+            if inside or not line or line.startswith("#"):
+                continue
+            if rel == ".gitignore" and line in managed_lines:
+                continue
+            rules.append(IgnoreRule(source=rel, line=number, pattern=line))
+    return sorted(rules, key=lambda r: (r.source, r.line))
+```
+
+- [ ] **Step 4: Run tests to verify they pass**
+
+Run: `cd science && uv run --frozen pytest tests/test_boundary_gitio.py -v`
+Expected: PASS (all)
+
+- [ ] **Step 5: Commit**
+
+```bash
+git add science/src/science_tool/boundary/gitio.py science/tests/test_boundary_gitio.py
+git commit -m "feat(boundary): git introspection layer with an explicit source universe"
+```
+
+---
+
+## Task 4: Manifest-root walk, with symlink/nested-repo/pruning semantics and a benchmark
+
+**Files:**
+- Create: `science/src/science_tool/boundary/walk.py`
+- Test: `science/tests/test_boundary_walk.py`
+- Test: `science/tests/test_boundary_walk_perf.py`
+
+**Interfaces:**
+- Consumes: `BoundaryRoot` (Task 1), `visible_paths` (Task 3).
+- Produces: `manifest_candidates(project_root: Path, root: BoundaryRoot) -> list[str]`.
+
+**Why a walk at all:** `unreachable-tracked` must find files that git cannot see, so it cannot ask git for them. It walks the filesystem under `manifest` roots and matches `tracked:` globs.
+
+**Semantics fixed here:**
+
+| Concern | Behaviour | Rationale |
+|---|---|---|
+| Symlinked directories | Not descended into | Prevents cycles and escaping the root; a symlinked tree is not *in* the repo |
+| Symlinked files | Reported if the name matches | Git tracks the link itself |
+| Nested repositories | A directory containing `.git` is pruned | Git treats it as an opaque gitlink |
+| Pruning | Skip `.git`, and skip any directory whose whole subtree cannot match a glob prefix | Bounds the walk |
+| Ordering | Sorted | Stable findings |
+
+- [ ] **Step 1: Write the failing tests**
+
+```python
+# science/tests/test_boundary_walk.py
+from __future__ import annotations
+
+from pathlib import Path
+
+from science_tool.boundary.config import BoundaryRoot
+from science_tool.boundary.walk import manifest_candidates
+
+
+def _root() -> BoundaryRoot:
+    return BoundaryRoot.model_validate(
+        {"path": "data/external", "class": "manifest", "tracked": ["datapackage.json", "*.qa.json"]}
+    )
+
+
+def _mk(base: Path, rel: str, body: str = "x") -> Path:
+    p = base / rel
+    p.parent.mkdir(parents=True, exist_ok=True)
+    p.write_text(body)
+    return p
+
+
+def test_matches_at_any_depth(tmp_path: Path):
+    _mk(tmp_path, "data/external/a/datapackage.json")
+    _mk(tmp_path, "data/external/a/b/c/datapackage.json")
+    _mk(tmp_path, "data/external/a/big.parquet")
+    found = manifest_candidates(tmp_path, _root())
+    assert found == ["data/external/a/b/c/datapackage.json", "data/external/a/datapackage.json"]
+
+
+def test_matches_glob_pattern(tmp_path: Path):
+    _mk(tmp_path, "data/external/a/run.qa.json")
+    assert manifest_candidates(tmp_path, _root()) == ["data/external/a/run.qa.json"]
+
+
+def test_missing_root_is_empty(tmp_path: Path):
+    assert manifest_candidates(tmp_path, _root()) == []
+
+
+def test_does_not_descend_into_symlinked_directory(tmp_path: Path):
+    _mk(tmp_path, "outside/datapackage.json")
+    (tmp_path / "data/external").mkdir(parents=True)
+    (tmp_path / "data/external/link").symlink_to(tmp_path / "outside", target_is_directory=True)
+    assert manifest_candidates(tmp_path, _root()) == []
+
+
+def test_symlinked_file_is_reported(tmp_path: Path):
+    target = _mk(tmp_path, "outside/datapackage.json")
+    (tmp_path / "data/external/a").mkdir(parents=True)
+    (tmp_path / "data/external/a/datapackage.json").symlink_to(target)
+    assert manifest_candidates(tmp_path, _root()) == ["data/external/a/datapackage.json"]
+
+
+def test_symlink_cycle_terminates(tmp_path: Path):
+    (tmp_path / "data/external/a").mkdir(parents=True)
+    (tmp_path / "data/external/a/loop").symlink_to(tmp_path / "data/external", target_is_directory=True)
+    _mk(tmp_path, "data/external/a/datapackage.json")
+    assert manifest_candidates(tmp_path, _root()) == ["data/external/a/datapackage.json"]
+
+
+def test_nested_repository_is_pruned(tmp_path: Path):
+    _mk(tmp_path, "data/external/sub/.git/HEAD", "ref: refs/heads/main\n")
+    _mk(tmp_path, "data/external/sub/datapackage.json")
+    _mk(tmp_path, "data/external/own/datapackage.json")
+    assert manifest_candidates(tmp_path, _root()) == ["data/external/own/datapackage.json"]
+
+
+def test_dot_git_directory_is_skipped(tmp_path: Path):
+    _mk(tmp_path, "data/external/.git/datapackage.json")
+    assert manifest_candidates(tmp_path, _root()) == []
+```
+
+```python
+# science/tests/test_boundary_walk_perf.py
+from __future__ import annotations
+
+import time
+from pathlib import Path
+
+import pytest
+
+from science_tool.boundary.config import BoundaryRoot
+from science_tool.boundary.walk import manifest_candidates
+
+# Open Targets 25.03 alone is ~1526 files under one manifest root, and the walk
+# runs inside the pre-commit profile. Budget is deliberately loose so this
+# guards against an accidental O(n^2) rewrite, not against normal I/O variance.
+FILE_COUNT = 5000
+BUDGET_SECONDS = 2.0
+
+
+@pytest.fixture
+def big_tree(tmp_path: Path) -> Path:
+    for shard in range(50):
+        d = tmp_path / "data/external/ds" / f"{shard:03d}"
+        d.mkdir(parents=True)
+        (d / "datapackage.json").write_text("{}")
+        for n in range(FILE_COUNT // 50 - 1):
+            (d / f"part-{n:05d}.parquet").write_text("x")
+    return tmp_path
+
+
+def test_walk_stays_within_budget(big_tree: Path):
+    root = BoundaryRoot.model_validate(
+        {"path": "data/external", "class": "manifest", "tracked": ["datapackage.json"]}
+    )
+    start = time.perf_counter()
+    found = manifest_candidates(big_tree, root)
+    elapsed = time.perf_counter() - start
+    assert len(found) == 50
+    assert elapsed < BUDGET_SECONDS, f"walk took {elapsed:.2f}s over {FILE_COUNT} files"
+```
+
+- [ ] **Step 2: Run tests to verify they fail**
+
+Run: `cd science && uv run --frozen pytest tests/test_boundary_walk.py tests/test_boundary_walk_perf.py -v`
+Expected: FAIL — `ModuleNotFoundError: ... boundary.walk`
+
+- [ ] **Step 3: Implement the walk**
+
+```python
+# science/src/science_tool/boundary/walk.py
+"""Filesystem walk under a manifest root.
+
+`unreachable-tracked` must find files git CANNOT see, so it cannot ask git for
+them. Semantics fixed here:
+
+* symlinked DIRECTORIES are never descended into -- prevents cycles and stops
+  the walk escaping the root; a symlinked tree is not in the repository
+* symlinked FILES are reported, because git tracks the link itself
+* a directory containing `.git` is pruned: git treats a nested repository as an
+  opaque gitlink and never looks inside
+* `.git` itself is always skipped
+"""
+
+from __future__ import annotations
+
+import os
+from fnmatch import fnmatch
+from pathlib import Path
+
+from science_tool.boundary.config import BoundaryRoot
+
+
+def _matches(name: str, globs: tuple[str, ...]) -> bool:
+    return any(fnmatch(name, glob) for glob in globs)
+
+
+def manifest_candidates(project_root: Path, root: BoundaryRoot) -> list[str]:
+    """Repo-relative paths under `root` whose basename matches a tracked glob."""
+    base = project_root / root.path
+    if not base.is_dir():
+        return []
+
+    found: list[str] = []
+    for dirpath, dirnames, filenames in os.walk(base, followlinks=False):
+        current = Path(dirpath)
+        if ".git" in dirnames:
+            if current != base:
+                # Nested repository: opaque to git, so opaque to us.
+                dirnames[:] = []
+                continue
+            dirnames.remove(".git")
+        # os.walk(followlinks=False) still LISTS symlinked dirs in dirnames and
+        # would recurse into them; prune explicitly.
+        dirnames[:] = sorted(d for d in dirnames if not (current / d).is_symlink())
+        for name in filenames:
+            if _matches(name, root.tracked):
+                found.append((current / name).relative_to(project_root).as_posix())
+    return sorted(found)
+```
+
+- [ ] **Step 4: Run tests to verify they pass**
+
+Run: `cd science && uv run --frozen pytest tests/test_boundary_walk.py tests/test_boundary_walk_perf.py -v`
+Expected: PASS (all)
+
+- [ ] **Step 5: Record the benchmark result**
+
+Run the perf test with timing shown and note the measured figure in the commit body:
+
+```bash
+cd science && uv run --frozen pytest tests/test_boundary_walk_perf.py -v -s
+```
+
+- [ ] **Step 6: Commit**
+
+```bash
+git add science/src/science_tool/boundary/walk.py science/tests/test_boundary_walk.py science/tests/test_boundary_walk_perf.py
+git commit -m "feat(boundary): manifest-root walk with symlink, nested-repo and pruning semantics"
+```
+
+---
+
+## Task 5: The six validate checks
+
+**Files:**
+- Create: `science/src/science_tool/validate/checks/boundary.py`
+- Modify: `science/src/science_tool/validate/checks/__init__.py` (append `"boundary"` to `CANONICAL_CHECK_MODULES`)
+- Test: `science/tests/test_boundary_checks.py`
+
+**Interfaces:**
+- Consumes: everything from Tasks 1–4, plus `render_managed_block`/`extract_managed_block` (Task 2).
+- Produces: `check_boundary(ctx: ValidateContext) -> Iterator[Result]`.
+
+- [ ] **Step 1: Write the failing tests**
+
+```python
+# science/tests/test_boundary_checks.py
+from __future__ import annotations
+
+import subprocess
+from pathlib import Path
+
+import yaml
+
+from science_tool.boundary.config import BoundaryConfig
+from science_tool.boundary.generate import render_managed_block, splice_managed_block
+from science_tool.validate.checks.boundary import check_boundary
+from science_tool.validate.context import ValidateContext
+
+
+def _repo(tmp_path: Path, boundary: dict | None = None) -> Path:
+    subprocess.run(["git", "init", "-q", str(tmp_path)], check=True)
+    subprocess.run(["git", "-C", str(tmp_path), "config", "user.email", "t@e"], check=True)
+    subprocess.run(["git", "-C", str(tmp_path), "config", "user.name", "t"], check=True)
+    payload: dict = {"name": "Demo", "id": "demo"}
+    if boundary is not None:
+        payload["boundary"] = boundary
+    (tmp_path / "science.yaml").write_text(yaml.safe_dump(payload), encoding="utf-8")
+    return tmp_path
+
+
+def _rules(root: Path) -> list[str]:
+    ctx = ValidateContext.from_project_root(root, strict=False, verbose=False)
+    return [r.rule for r in check_boundary(ctx)]
+
+
+def test_tracked_ignored_fires_without_any_declaration(tmp_path: Path):
+    repo = _repo(tmp_path)
+    (repo / "data").mkdir()
+    (repo / "data/big.csv").write_text("x")
+    subprocess.run(["git", "-C", str(repo), "add", "-f", "data/big.csv"], check=True)
+    (repo / ".gitignore").write_text("/data/\n")
+    assert "boundary.tracked-ignored" in _rules(repo)
+
+
+def test_clean_undeclared_project_is_silent(tmp_path: Path):
+    repo = _repo(tmp_path)
+    (repo / ".gitignore").write_text("/papers/pdfs/\n")
+    # Implicit-versioned semantics begin at enrollment: no declaration, no
+    # ignored-undeclared finding.
+    assert _rules(repo) == []
+
+
+def test_unanchored_pattern_warns(tmp_path: Path):
+    repo = _repo(tmp_path)
+    (repo / ".gitignore").write_text("archive\n")
+    subprocess.run(["git", "-C", str(repo), "add", ".gitignore"], check=True)
+    assert "boundary.unanchored-pattern" in _rules(repo)
+
+
+def test_generated_drift_fires_when_block_is_stale(tmp_path: Path):
+    repo = _repo(tmp_path, {"roots": [{"path": "data/raw", "class": "payload"}]})
+    (repo / ".gitignore").write_text(splice_managed_block("", "/wrong/\n"))
+    subprocess.run(["git", "-C", str(repo), "add", ".gitignore"], check=True)
+    assert "boundary.generated-drift" in _rules(repo)
+
+
+def test_no_drift_when_block_matches(tmp_path: Path):
+    decl = {"roots": [{"path": "data/raw", "class": "payload"}]}
+    repo = _repo(tmp_path, decl)
+    cfg = BoundaryConfig.model_validate(decl)
+    (repo / ".gitignore").write_text(splice_managed_block("", render_managed_block(cfg)))
+    subprocess.run(["git", "-C", str(repo), "add", ".gitignore"], check=True)
+    assert "boundary.generated-drift" not in _rules(repo)
+
+
+def test_declaration_conflict_on_hand_rule_under_declared_root(tmp_path: Path):
+    decl = {"roots": [{"path": "data/external", "class": "manifest", "tracked": ["datapackage.json"]}]}
+    repo = _repo(tmp_path, decl)
+    cfg = BoundaryConfig.model_validate(decl)
+    text = splice_managed_block("data/external/foo/*.parquet\n", render_managed_block(cfg))
+    (repo / ".gitignore").write_text(text)
+    subprocess.run(["git", "-C", str(repo), "add", ".gitignore"], check=True)
+    assert "boundary.declaration-conflict" in _rules(repo)
+
+
+def test_ignored_undeclared_warns_and_allowlist_silences_it(tmp_path: Path):
+    decl = {"roots": [{"path": "data/raw", "class": "payload"}]}
+    repo = _repo(tmp_path, decl)
+    cfg = BoundaryConfig.model_validate(decl)
+    (repo / ".gitignore").write_text(splice_managed_block("/papers/pdfs/\n", render_managed_block(cfg)))
+    subprocess.run(["git", "-C", str(repo), "add", ".gitignore"], check=True)
+    assert "boundary.ignored-undeclared" in _rules(repo)
+
+    decl_allowed = dict(decl, unmanaged_allow=["/papers/pdfs/"])
+    repo2 = _repo(tmp_path / "two", decl_allowed)
+    (repo2 / ".gitignore").write_text(splice_managed_block("/papers/pdfs/\n", render_managed_block(cfg)))
+    subprocess.run(["git", "-C", str(repo2), "add", ".gitignore"], check=True)
+    assert "boundary.ignored-undeclared" not in _rules(repo2)
+
+
+def test_allowlist_is_source_scoped(tmp_path: Path):
+    """Same text in root and nested file are DIFFERENT rules."""
+    decl = {"roots": [{"path": "data/raw", "class": "payload"}], "unmanaged_allow": ["build/"]}
+    repo = _repo(tmp_path, decl)
+    cfg = BoundaryConfig.model_validate(decl)
+    (repo / ".gitignore").write_text(splice_managed_block("build/\n", render_managed_block(cfg)))
+    (repo / "inc").mkdir()
+    (repo / "inc/.gitignore").write_text("build/\n")
+    subprocess.run(["git", "-C", str(repo), "add", ".gitignore", "inc/.gitignore"], check=True)
+    ctx = ValidateContext.from_project_root(repo, strict=False, verbose=False)
+    findings = [r for r in check_boundary(ctx) if r.rule == "boundary.ignored-undeclared"]
+    assert len(findings) == 1
+    assert "inc/.gitignore" in str(findings[0].path)
+
+
+def test_unreachable_tracked_fires_on_shadowed_descriptor(tmp_path: Path):
+    decl = {"roots": [{"path": "data/external", "class": "manifest", "tracked": ["datapackage.json"]}]}
+    repo = _repo(tmp_path, decl)
+    (repo / "data/external/ot").mkdir(parents=True)
+    (repo / "data/external/ot/datapackage.json").write_text("{}")
+    # Bare exclude instead of the descend-preserving form: descriptor unreachable.
+    (repo / ".gitignore").write_text(splice_managed_block("", "/data/external/\n"))
+    subprocess.run(["git", "-C", str(repo), "add", ".gitignore"], check=True)
+    assert "boundary.unreachable-tracked" in _rules(repo)
+
+
+def test_unreachable_tracked_quiet_on_correct_generation(tmp_path: Path):
+    decl = {"roots": [{"path": "data/external", "class": "manifest", "tracked": ["datapackage.json"]}]}
+    repo = _repo(tmp_path, decl)
+    cfg = BoundaryConfig.model_validate(decl)
+    (repo / "data/external/ot").mkdir(parents=True)
+    (repo / "data/external/ot/datapackage.json").write_text("{}")
+    (repo / ".gitignore").write_text(splice_managed_block("", render_managed_block(cfg)))
+    subprocess.run(["git", "-C", str(repo), "add", ".gitignore"], check=True)
+    assert "boundary.unreachable-tracked" not in _rules(repo)
+
+
+def test_unreachable_tracked_catches_glob_negation_case(tmp_path: Path):
+    """`!build/**/README.md` under `/build/` -- no parent-directory analysis
+    could evaluate this; the oracle can."""
+    decl = {"roots": [{"path": "build", "class": "manifest", "tracked": ["README.md"]}]}
+    repo = _repo(tmp_path, decl)
+    (repo / "build/sub").mkdir(parents=True)
+    (repo / "build/sub/README.md").write_text("x")
+    (repo / ".gitignore").write_text(splice_managed_block("", "/build/\n!build/**/README.md\n"))
+    subprocess.run(["git", "-C", str(repo), "add", ".gitignore"], check=True)
+    assert "boundary.unreachable-tracked" in _rules(repo)
+
+
+def test_check_ignore_would_disagree_regression(tmp_path: Path):
+    """Pin that the check follows the oracle, not check-ignore. Someone will try
+    to 'simplify' this back onto check-ignore; this test stops them."""
+    decl = {"roots": [{"path": "build", "class": "manifest", "tracked": ["README.md"]}]}
+    repo = _repo(tmp_path, decl)
+    (repo / "build/sub").mkdir(parents=True)
+    (repo / "build/sub/README.md").write_text("x")
+    (repo / ".gitignore").write_text(splice_managed_block("", "/build/\n!/build/sub/README.md\n"))
+    subprocess.run(["git", "-C", str(repo), "add", ".gitignore"], check=True)
+    # check-ignore without --no-index reports it un-ignored; the file is still
+    # unreachable because traversal never enters the excluded directory.
+    rc = subprocess.run(["git", "-C", str(repo), "check-ignore", "-q", "build/sub/README.md"]).returncode
+    assert rc != 0, "fixture precondition: check-ignore reports NOT ignored"
+    assert "boundary.unreachable-tracked" in _rules(repo)
+```
+
+- [ ] **Step 2: Run tests to verify they fail**
+
+Run: `cd science && uv run --frozen pytest tests/test_boundary_checks.py -v`
+Expected: FAIL — `ModuleNotFoundError: ... validate.checks.boundary`
+
+- [ ] **Step 3: Implement the checks**
+
+```python
+# science/src/science_tool/validate/checks/boundary.py
+"""VCS storage boundary checks.
+
+Two universal (no configuration needed), four declaration-derived. All six are
+mechanical: no heuristic classifier participates in enforcement, so a finding is
+always a genuine self-contradiction in the repository's own configuration.
+
+See docs/plans/2026-07-26-vcs-storage-boundary-design.md.
+"""
+
+from __future__ import annotations
+
+from collections.abc import Iterator
+from pathlib import Path
+
+from science_tool.boundary.config import BoundaryConfig, StorageClass
+from science_tool.boundary.generate import extract_managed_block, render_managed_block
+from science_tool.boundary.gitio import tracked_ignored, unmanaged_rules, visible_paths
+from science_tool.boundary.walk import manifest_candidates
+from science_tool.project_config import load_project_config
+from science_tool.validate.checks import Check
+from science_tool.validate.context import ValidateContext
+from science_tool.validate.result import Result, Severity
+
+GITIGNORE = Path(".gitignore")
+
+
+def _is_unanchored_dir_pattern(pattern: str) -> bool:
+    body = pattern[1:] if pattern.startswith("!") else pattern
+    if body.startswith("/") or "/" in body.rstrip("/"):
+        return False
+    return body.endswith("/") or "." not in body
+
+
+def _load(project_root: Path) -> BoundaryConfig | None:
+    try:
+        return load_project_config(project_root).boundary
+    except Exception:  # noqa: BLE001 -- a malformed manifest is reported elsewhere
+        return None
+
+
+@Check(section="version-control boundary", order=14)
+def check_boundary(ctx: ValidateContext) -> Iterator[Result]:
+    root = ctx.project_root
+    if not (root / ".git").exists():
+        return
+
+    # ---- universal: tracked-ignored -------------------------------------
+    for hit in tracked_ignored(root):
+        yield Result(
+            severity=Severity.ERROR,
+            path=Path(hit.path),
+            line=None,
+            message=(
+                f"{hit.path} is tracked but matches ignore rule {hit.pattern!r} "
+                f"({hit.source}:{hit.line}). Ignore rules are not retroactive, so git will "
+                f"never report this on its own, and ripgrep, editor search and ruff all stop "
+                f"seeing the file. Resolve by `git rm --cached` if it belongs outside version "
+                f"control, or by moving it / narrowing the rule if it belongs inside. Do not "
+                f"use `git add -f` or a `!` negation: that records the conflict instead of "
+                f"removing it."
+            ),
+            rule="boundary.tracked-ignored",
+            task=None,
+        )
+
+    cfg = _load(root)
+    gitignore_text = ""
+    if (root / GITIGNORE).is_file():
+        gitignore_text = (root / GITIGNORE).read_text(encoding="utf-8")
+    managed_body = extract_managed_block(gitignore_text)
+
+    # ---- universal: unanchored-pattern ----------------------------------
+    for rule in unmanaged_rules(root, managed_body):
+        if _is_unanchored_dir_pattern(rule.pattern):
+            yield Result(
+                severity=Severity.WARN,
+                path=Path(rule.source),
+                line=rule.line,
+                message=(
+                    f"ignore pattern {rule.pattern!r} is unanchored and matches a directory of "
+                    f"that name at ANY depth. Anchor it (`/{rule.pattern.lstrip('/')}`) so it "
+                    f"cannot silently swallow tracked source in an unrelated subtree."
+                ),
+                rule="boundary.unanchored-pattern",
+                task=None,
+            )
+
+    if cfg is None or not cfg.roots:
+        # Implicit-versioned semantics begin at enrollment.
+        return
+
+    declared = [r.path for r in cfg.roots]
+    allowed = {(a.source, a.pattern) for a in cfg.unmanaged_allow}
+
+    # ---- declared: generated-drift --------------------------------------
+    expected = render_managed_block(cfg)
+    if managed_body != expected:
+        yield Result(
+            severity=Severity.ERROR,
+            path=GITIGNORE,
+            line=None,
+            message=(
+                "the science-managed boundary block is missing or stale. Run "
+                "`science boundary sync` to regenerate it from science.yaml."
+            ),
+            rule="boundary.generated-drift",
+            task=None,
+        )
+
+    # ---- declared: declaration-conflict / ignored-undeclared ------------
+    for rule in unmanaged_rules(root, managed_body):
+        if (rule.source, rule.pattern) in allowed:
+            continue
+        body = rule.pattern.lstrip("!/")
+        under = next((d for d in declared if body == d or body.startswith(d + "/")), None)
+        if under is not None:
+            yield Result(
+                severity=Severity.ERROR,
+                path=Path(rule.source),
+                line=rule.line,
+                message=(
+                    f"hand-written rule {rule.pattern!r} targets declared root {under!r}. The "
+                    f"declaration in science.yaml is the single authority for that root; a rule "
+                    f"outside the managed block re-opens per-case adjudication."
+                ),
+                rule="boundary.declaration-conflict",
+                task=None,
+            )
+        elif not _is_tooling_shaped(rule.pattern):
+            yield Result(
+                severity=Severity.WARN,
+                path=Path(rule.source),
+                line=rule.line,
+                message=(
+                    f"rule {rule.pattern!r} ignores project material with no declared storage "
+                    f"class. Declare a root in science.yaml, or add it to "
+                    f"boundary.unmanaged_allow if it is tooling or editor noise."
+                ),
+                rule="boundary.ignored-undeclared",
+                task=None,
+            )
+
+    # ---- declared: unreachable-tracked ----------------------------------
+    visible = visible_paths(root)
+    for declared_root in cfg.roots:
+        if declared_root.storage_class is not StorageClass.MANIFEST:
+            continue
+        for candidate in manifest_candidates(root, declared_root):
+            if candidate in visible:
+                continue
+            yield Result(
+                severity=Severity.ERROR,
+                path=Path(candidate),
+                line=None,
+                message=(
+                    f"{candidate} matches a tracked: glob of manifest root "
+                    f"{declared_root.path!r} but git will not surface it -- `git add .` stages "
+                    f"nothing and no diagnostic reports a problem. The usual cause is a bare "
+                    f"directory exclude stopping git descending. Run `science boundary sync`."
+                ),
+                rule="boundary.unreachable-tracked",
+                task=None,
+            )
+
+
+def _is_tooling_shaped(pattern: str) -> bool:
+    """Only the shapes git tooling itself creates; everything else needs a decision."""
+    body = pattern.lstrip("!/")
+    return body.startswith(".") or body.startswith("*.")
+```
+
+- [ ] **Step 4: Register the module**
+
+In `science/src/science_tool/validate/checks/__init__.py`, append to `CANONICAL_CHECK_MODULES` (after `"autonomous_runs"`):
+
+```python
+    "boundary",
+```
+
+- [ ] **Step 5: Run tests to verify they pass**
+
+Run: `cd science && uv run --frozen pytest tests/test_boundary_checks.py -v`
+Expected: PASS (all)
+
+- [ ] **Step 6: Verify registration and no regression in the wider suite**
+
+```bash
+cd science
+uv run --frozen python -c "
+from science_tool.validate.checks import CANONICAL_CHECKS
+print([e.fn.__name__ for e in CANONICAL_CHECKS if 'boundary' in e.fn.__name__])"
+uv run --frozen pytest tests/ -q -x -k "validate or check"
+```
+Expected: `['check_boundary']`; existing tests still pass.
+
+- [ ] **Step 7: Commit**
+
+```bash
+git add science/src/science_tool/validate/checks/boundary.py science/src/science_tool/validate/checks/__init__.py science/tests/test_boundary_checks.py
+git commit -m "feat(boundary): six mechanical validate checks"
+```
+
+---
+
+## Task 6: Probes and transactional sync
+
+**Files:**
+- Create: `science/src/science_tool/boundary/probes.py`
+- Create: `science/src/science_tool/boundary/sync.py`
+- Test: `science/tests/test_boundary_sync.py`
+
+**Interfaces:**
+- Consumes: Tasks 1–3.
+- Produces: `probe_paths(cfg: BoundaryConfig) -> list[str]`, `SyncResult(changed: bool, block: str)`, `sync(project_root: Path) -> SyncResult`, `verify_current_tree(project_root: Path) -> list[tuple[str, bool, bool]]`, `BoundaryDirtyError`.
+
+- [ ] **Step 1: Write the failing tests**
+
+```python
+# science/tests/test_boundary_sync.py
+from __future__ import annotations
+
+import subprocess
+from pathlib import Path
+
+import pytest
+import yaml
+
+from science_tool.boundary.config import BoundaryConfig
+from science_tool.boundary.probes import probe_paths
+from science_tool.boundary.sync import BoundaryDirtyError, sync, verify_current_tree
+
+
+def _repo(tmp_path: Path, boundary: dict, gitignore: str = "") -> Path:
+    subprocess.run(["git", "init", "-q", str(tmp_path)], check=True)
+    subprocess.run(["git", "-C", str(tmp_path), "config", "user.email", "t@e"], check=True)
+    subprocess.run(["git", "-C", str(tmp_path), "config", "user.name", "t"], check=True)
+    (tmp_path / "science.yaml").write_text(yaml.safe_dump({"name": "D", "id": "d", "boundary": boundary}))
+    (tmp_path / ".gitignore").write_text(gitignore)
+    subprocess.run(["git", "-C", str(tmp_path), "add", "-A"], check=True)
+    subprocess.run(["git", "-C", str(tmp_path), "commit", "-qm", "init"], check=True)
+    return tmp_path
+
+
+DECL = {"roots": [{"path": "data/external", "class": "manifest", "tracked": ["datapackage.json"]}]}
+
+
+def test_probes_cover_depth_and_each_glob():
+    cfg = BoundaryConfig.model_validate(DECL)
+    probes = probe_paths(cfg)
+    assert any(p.count("/") == 2 for p in probes)
+    assert any(p.count("/") >= 4 for p in probes)
+    assert any(p.endswith("datapackage.json") for p in probes)
+    assert any(p.endswith(".parquet") for p in probes)
+
+
+def test_sync_installs_block_and_is_idempotent(tmp_path: Path):
+    repo = _repo(tmp_path, DECL)
+    first = sync(repo)
+    assert first.changed
+    text = (repo / ".gitignore").read_text()
+    second = sync(repo)
+    assert not second.changed
+    assert (repo / ".gitignore").read_text() == text
+
+
+def test_verify_refuses_dirty_gitignore(tmp_path: Path):
+    repo = _repo(tmp_path, DECL)
+    (repo / ".gitignore").write_text("dirty\n")
+    with pytest.raises(BoundaryDirtyError):
+        verify_current_tree(repo)
+
+
+def test_verify_restores_original_on_change(tmp_path: Path):
+    repo = _repo(tmp_path, DECL, gitignore="/data/external/\n")
+    (repo / "data/external/ot").mkdir(parents=True)
+    (repo / "data/external/ot/datapackage.json").write_text("{}")
+    before = (repo / ".gitignore").read_text()
+    diff = verify_current_tree(repo)
+    assert diff, "descriptor decision must change"
+    assert (repo / ".gitignore").read_text() == before
+
+
+def test_verify_restores_original_when_clean(tmp_path: Path):
+    repo = _repo(tmp_path, DECL, gitignore="")
+    before = (repo / ".gitignore").read_text()
+    verify_current_tree(repo)
+    assert (repo / ".gitignore").read_text() == before
+
+
+def test_verify_restores_on_exception(tmp_path: Path, monkeypatch):
+    repo = _repo(tmp_path, DECL)
+    before = (repo / ".gitignore").read_text()
+    import science_tool.boundary.sync as sync_mod
+
+    def boom(*_a, **_k):
+        raise RuntimeError("boom")
+
+    monkeypatch.setattr(sync_mod, "visible_paths", boom)
+    with pytest.raises(RuntimeError):
+        verify_current_tree(repo)
+    assert (repo / ".gitignore").read_text() == before
+```
+
+- [ ] **Step 2: Run tests to verify they fail**
+
+Run: `cd science && uv run --frozen pytest tests/test_boundary_sync.py -v`
+Expected: FAIL — `ModuleNotFoundError: ... boundary.probes`
+
+- [ ] **Step 3: Implement probes**
+
+```python
+# science/src/science_tool/boundary/probes.py
+"""Synthetic probe paths for a declaration.
+
+`--verify-current-tree` can only speak for paths that exist. Probes cover the
+shapes that do not exist yet -- a new dataset version, a deeper nesting level.
+`git check-ignore --no-index` evaluates hypothetical paths, so probes need no
+files on disk.
+"""
+
+from __future__ import annotations
+
+from science_tool.boundary.config import BoundaryConfig, StorageClass
+
+_DEEP = "p1/p2/p3"
+
+
+def probe_paths(cfg: BoundaryConfig) -> list[str]:
+    probes: list[str] = []
+    for root in sorted(cfg.roots, key=lambda r: r.path):
+        probes.append(f"{root.path}/probe.bin")
+        probes.append(f"{root.path}/{_DEEP}/probe.bin")
+        probes.append(f"{root.path}/probe.parquet")
+        probes.append(f"{root.path}/.hidden")
+        if root.storage_class is StorageClass.MANIFEST:
+            for glob in sorted(root.tracked):
+                name = glob.replace("*", "probe")
+                probes.append(f"{root.path}/d1/{name}")
+                probes.append(f"{root.path}/{_DEEP}/{name}")
+    return sorted(set(probes))
+```
+
+- [ ] **Step 4: Implement sync**
+
+```python
+# science/src/science_tool/boundary/sync.py
+"""Install the managed block, detect drift, and verify a migration.
+
+`verify_current_tree` is a VERIFICATION mode: it must never leave a candidate
+block installed merely because it found a change. It refuses a dirty
+`.gitignore`, and restores the original on every path -- success, failure, and
+exception.
+"""
+
+from __future__ import annotations
+
+import subprocess
+from dataclasses import dataclass
+from pathlib import Path
+
+from science_tool.boundary.config import BoundaryConfig, BoundaryConfigError
+from science_tool.boundary.generate import extract_managed_block, render_managed_block, splice_managed_block
+from science_tool.boundary.gitio import visible_paths
+from science_tool.boundary.probes import probe_paths
+from science_tool.project_config import load_project_config
+
+GITIGNORE = ".gitignore"
+
+
+class BoundaryDirtyError(Exception):
+    """Raised when `.gitignore` has uncommitted changes and must not be touched."""
+
+
+@dataclass(frozen=True)
+class SyncResult:
+    changed: bool
+    block: str
+
+
+def _config(project_root: Path) -> BoundaryConfig:
+    cfg = load_project_config(project_root).boundary
+    if cfg is None or not cfg.roots:
+        raise BoundaryConfigError("science.yaml declares no boundary.roots")
+    return cfg
+
+
+def _read(project_root: Path) -> str:
+    path = project_root / GITIGNORE
+    return path.read_text(encoding="utf-8") if path.is_file() else ""
+
+
+def sync(project_root: Path) -> SyncResult:
+    cfg = _config(project_root)
+    block = render_managed_block(cfg)
+    original = _read(project_root)
+    updated = splice_managed_block(original, block)
+    if updated == original:
+        return SyncResult(changed=False, block=block)
+    (project_root / GITIGNORE).write_text(updated, encoding="utf-8")
+    return SyncResult(changed=True, block=block)
+
+
+def has_drift(project_root: Path) -> bool:
+    cfg = _config(project_root)
+    return extract_managed_block(_read(project_root)) != render_managed_block(cfg)
+
+
+def _probe_decisions(project_root: Path, probes: list[str]) -> dict[str, bool]:
+    if not probes:
+        return {}
+    payload = "\0".join(probes).encode() + b"\0"
+    proc = subprocess.run(
+        ["git", "-C", str(project_root), "check-ignore", "--no-index", "--stdin", "-z"],
+        input=payload,
+        capture_output=True,
+        check=False,
+    )
+    ignored = {c.decode("utf-8", "surrogateescape") for c in proc.stdout.split(b"\0") if c}
+    return {p: (p in ignored) for p in probes}
+
+
+def _assert_clean(project_root: Path) -> None:
+    proc = subprocess.run(
+        ["git", "-C", str(project_root), "status", "--porcelain", "-z", "--", GITIGNORE],
+        capture_output=True,
+        check=False,
+    )
+    if proc.stdout.strip():
+        raise BoundaryDirtyError(
+            f"{GITIGNORE} has uncommitted changes; commit or stash before verifying so a "
+            f"failed verification cannot discard them"
+        )
+
+
+def verify_current_tree(project_root: Path) -> list[tuple[str, bool, bool]]:
+    """Return (path, was_visible, now_visible) for every path whose decision changed.
+
+    Always restores the original `.gitignore`.
+    """
+    _assert_clean(project_root)
+    cfg = _config(project_root)
+    original = _read(project_root)
+    probes = probe_paths(cfg)
+
+    before_visible = visible_paths(project_root)
+    before_probes = _probe_decisions(project_root, probes)
+    try:
+        (project_root / GITIGNORE).write_text(
+            splice_managed_block(original, render_managed_block(cfg)), encoding="utf-8"
+        )
+        after_visible = visible_paths(project_root)
+        after_probes = _probe_decisions(project_root, probes)
+    finally:
+        (project_root / GITIGNORE).write_text(original, encoding="utf-8")
+
+    changes: list[tuple[str, bool, bool]] = []
+    for path in sorted(before_visible | after_visible):
+        was, now = path in before_visible, path in after_visible
+        if was != now:
+            changes.append((path, was, now))
+    for probe in probes:
+        was, now = not before_probes.get(probe, False), not after_probes.get(probe, False)
+        if was != now:
+            changes.append((f"(probe) {probe}", was, now))
+    return changes
+```
+
+- [ ] **Step 5: Run tests to verify they pass**
+
+Run: `cd science && uv run --frozen pytest tests/test_boundary_sync.py -v`
+Expected: PASS (all)
+
+- [ ] **Step 6: Commit**
+
+```bash
+git add science/src/science_tool/boundary/probes.py science/src/science_tool/boundary/sync.py science/tests/test_boundary_sync.py
+git commit -m "feat(boundary): probes and transactional sync verification"
+```
+
+---
+
+## Task 7: `science boundary` CLI
+
+**Files:**
+- Create: `science/src/science_tool/boundary/cli.py`
+- Create: `science/src/science_tool/boundary/init.py`
+- Modify: `science/src/science_tool/cli.py:18` (import) and `:~200` (register)
+- Test: `science/tests/test_boundary_cli.py`
+
+**Interfaces:**
+- Consumes: Tasks 1–6, plus `science_tool.data_policy.classify` and `science_tool.project_config.resolve_data_policy`.
+- Produces: `boundary_group` (click group with `check`, `sync`, `init`), `propose_declaration(project_root: Path) -> dict`.
+
+`boundary check` runs **only the two universal checks**, so it needs no config load and stays fast enough for a pre-commit hook.
+
+- [ ] **Step 1: Write the failing tests**
+
+```python
+# science/tests/test_boundary_cli.py
+from __future__ import annotations
+
+import subprocess
+from pathlib import Path
+
+import yaml
+from click.testing import CliRunner
+
+from science_tool.boundary.cli import boundary_group
+
+
+def _repo(tmp_path: Path, boundary: dict | None = None) -> Path:
+    subprocess.run(["git", "init", "-q", str(tmp_path)], check=True)
+    subprocess.run(["git", "-C", str(tmp_path), "config", "user.email", "t@e"], check=True)
+    subprocess.run(["git", "-C", str(tmp_path), "config", "user.name", "t"], check=True)
+    payload: dict = {"name": "D", "id": "d"}
+    if boundary:
+        payload["boundary"] = boundary
+    (tmp_path / "science.yaml").write_text(yaml.safe_dump(payload))
+    return tmp_path
+
+
+DECL = {"roots": [{"path": "data/external", "class": "manifest", "tracked": ["datapackage.json"]}]}
+
+
+def test_check_exits_zero_on_clean_repo(tmp_path: Path):
+    repo = _repo(tmp_path)
+    result = CliRunner().invoke(boundary_group, ["check", "--project-root", str(repo)])
+    assert result.exit_code == 0, result.output
+    assert "clean" in result.output
+
+
+def test_check_exits_one_and_names_the_rule(tmp_path: Path):
+    repo = _repo(tmp_path)
+    (repo / "data").mkdir()
+    (repo / "data/x.csv").write_text("a")
+    subprocess.run(["git", "-C", str(repo), "add", "-f", "data/x.csv"], check=True)
+    (repo / ".gitignore").write_text("/data/\n")
+    result = CliRunner().invoke(boundary_group, ["check", "--project-root", str(repo)])
+    assert result.exit_code == 1
+    assert "data/x.csv" in result.output
+    assert ".gitignore:1" in result.output
+
+
+def test_sync_writes_the_block(tmp_path: Path):
+    repo = _repo(tmp_path, DECL)
+    result = CliRunner().invoke(boundary_group, ["sync", "--project-root", str(repo)])
+    assert result.exit_code == 0, result.output
+    assert "/data/external/**" in (repo / ".gitignore").read_text()
+
+
+def test_sync_check_flag_reports_drift_without_writing(tmp_path: Path):
+    repo = _repo(tmp_path, DECL)
+    (repo / ".gitignore").write_text("")
+    result = CliRunner().invoke(boundary_group, ["sync", "--check", "--project-root", str(repo)])
+    assert result.exit_code == 1
+    assert (repo / ".gitignore").read_text() == ""
+
+
+def test_init_proposes_roots_without_writing(tmp_path: Path):
+    repo = _repo(tmp_path)
+    (repo / "data/raw").mkdir(parents=True)
+    (repo / "data/raw/big.parquet").write_text("x" * 200_000)
+    (repo / "data/external/ot").mkdir(parents=True)
+    (repo / "data/external/ot/datapackage.json").write_text("{}")
+    result = CliRunner().invoke(boundary_group, ["init", "--project-root", str(repo)])
+    assert result.exit_code == 0, result.output
+    assert "data/raw" in result.output
+    assert "boundary:" not in (repo / "science.yaml").read_text()
+```
+
+- [ ] **Step 2: Run tests to verify they fail**
+
+Run: `cd science && uv run --frozen pytest tests/test_boundary_cli.py -v`
+Expected: FAIL — `ModuleNotFoundError: ... boundary.cli`
+
+- [ ] **Step 3: Implement the proposal engine**
+
+```python
+# science/src/science_tool/boundary/init.py
+"""Propose a boundary declaration from an existing tree.
+
+The ONLY place a heuristic touches the boundary. `classify()` is good at
+suggesting and bad at enforcing, so its output here is a proposal a human reads
+and edits -- never something written without review.
+"""
+
+from __future__ import annotations
+
+from collections import Counter
+from pathlib import Path
+
+from science_tool.boundary.gitio import visible_paths
+from science_tool.data_policy import DEFAULT_DATA_POLICY, FileClass, classify
+from science_tool.project_config import load_project_config, resolve_data_policy
+
+_RECORD_NAMES = ("datapackage.json", "datapackage.yaml")
+
+
+def propose_declaration(project_root: Path) -> dict:
+    """Return a `boundary:` mapping proposal. Never writes."""
+    # NOTE: resolve_data_policy takes a ProjectConfig, not a path
+    # (project_config.py:453).
+    try:
+        policy = resolve_data_policy(load_project_config(project_root))
+    except Exception:  # noqa: BLE001
+        policy = DEFAULT_DATA_POLICY
+
+    payload_dirs: Counter[str] = Counter()
+    manifest_dirs: Counter[str] = Counter()
+    for rel in sorted(visible_paths(project_root)):
+        path = Path(rel)
+        if path.parts and path.parts[0] not in {"data", "pdfs", "results"}:
+            continue
+        absolute = project_root / path
+        try:
+            size = absolute.stat().st_size
+        except OSError:
+            continue
+        top = "/".join(path.parts[:2]) if len(path.parts) > 2 else path.parts[0]
+        if path.name in _RECORD_NAMES:
+            manifest_dirs[top] += 1
+        elif classify(path, size, policy) is FileClass.PAYLOAD:
+            payload_dirs[top] += 1
+
+    roots = []
+    for name in sorted(manifest_dirs):
+        roots.append({"path": name, "class": "manifest", "tracked": list(_RECORD_NAMES[:1])})
+    for name in sorted(payload_dirs):
+        if name in manifest_dirs:
+            continue
+        roots.append({"path": name, "class": "payload"})
+    return {"roots": roots}
+```
+
+- [ ] **Step 4: Implement the CLI**
+
+```python
+# science/src/science_tool/boundary/cli.py
+"""`science boundary` -- declare, generate, and check the VCS storage boundary."""
+
+from __future__ import annotations
+
+import sys
+from pathlib import Path
+
+import click
+import yaml
+
+from science_tool.boundary.config import BoundaryConfigError
+from science_tool.boundary.gitio import tracked_ignored, unmanaged_rules
+from science_tool.boundary.init import propose_declaration
+from science_tool.boundary.sync import BoundaryDirtyError, has_drift, sync, verify_current_tree
+
+_ROOT_OPTION = click.option(
+    "--project-root",
+    type=click.Path(exists=True, file_okay=False, path_type=Path),
+    default=Path("."),
+    help="Project root (default: current directory).",
+)
+
+
+@click.group("boundary")
+def boundary_group() -> None:
+    """Declared version-control storage boundary."""
+
+
+@boundary_group.command("check")
+@_ROOT_OPTION
+def check_command(project_root: Path) -> None:
+    """Run the two universal checks. No config load; fast enough for pre-commit."""
+    from science_tool.validate.checks.boundary import _is_unanchored_dir_pattern
+
+    hits = tracked_ignored(project_root)
+    warnings = [r for r in unmanaged_rules(project_root, None) if _is_unanchored_dir_pattern(r.pattern)]
+    for rule in warnings:
+        click.echo(f"warn  {rule.source}:{rule.line}: unanchored pattern {rule.pattern!r}", err=True)
+    if not hits:
+        click.echo("vcs-boundary: clean (no tracked file matches an ignore rule)")
+        return
+    click.echo(f"vcs-boundary: FAIL -- {len(hits)} tracked file(s) match an ignore rule:", err=True)
+    for hit in hits[:50]:
+        click.echo(f"  {hit.path}  ({hit.source}:{hit.line}: {hit.pattern})", err=True)
+    if len(hits) > 50:
+        click.echo(f"  ... and {len(hits) - 50} more", err=True)
+    sys.exit(1)
+
+
+@boundary_group.command("sync")
+@_ROOT_OPTION
+@click.option("--check", "check_only", is_flag=True, help="Report drift; write nothing.")
+@click.option("--verify-current-tree", "verify", is_flag=True, help="Diff ignore decisions; restore the original.")
+def sync_command(project_root: Path, check_only: bool, verify: bool) -> None:
+    """Regenerate the managed .gitignore block from science.yaml."""
+    try:
+        if check_only:
+            if has_drift(project_root):
+                click.echo("boundary: managed block is stale; run `science boundary sync`", err=True)
+                sys.exit(1)
+            click.echo("boundary: managed block is current")
+            return
+        if verify:
+            changes = verify_current_tree(project_root)
+            if changes:
+                click.echo(f"boundary: {len(changes)} ignore decision(s) would change:", err=True)
+                for path, was, now in changes:
+                    click.echo(f"  {path}: visible={was} -> {now}", err=True)
+                sys.exit(1)
+            click.echo("boundary: no ignore decision changes")
+            return
+        result = sync(project_root)
+        click.echo("boundary: managed block updated" if result.changed else "boundary: already current")
+    except BoundaryDirtyError as exc:
+        click.echo(f"boundary: {exc}", err=True)
+        sys.exit(2)
+    except BoundaryConfigError as exc:
+        click.echo(f"boundary: {exc}", err=True)
+        sys.exit(2)
+
+
+@boundary_group.command("init")
+@_ROOT_OPTION
+def init_command(project_root: Path) -> None:
+    """Propose a boundary declaration for review. Writes nothing."""
+    proposal = propose_declaration(project_root)
+    if not proposal["roots"]:
+        click.echo("boundary: no candidate roots found; declare them by hand in science.yaml")
+        return
+    click.echo("# Proposed for science.yaml -- REVIEW before pasting:")
+    click.echo(yaml.safe_dump({"boundary": proposal}, sort_keys=False).rstrip())
+    click.echo("\n# Then: science boundary sync --verify-current-tree")
+```
+
+- [ ] **Step 5: Register the group**
+
+In `science/src/science_tool/cli.py`, add near line 18:
+
+```python
+from science_tool.boundary.cli import boundary_group
+```
+
+and near line 200, beside the other `add_command` calls:
+
+```python
+main.add_command(boundary_group)
+```
+
+- [ ] **Step 6: Run tests to verify they pass**
+
+Run: `cd science && uv run --frozen pytest tests/test_boundary_cli.py -v`
+Expected: PASS (all)
+
+- [ ] **Step 7: Verify the command is reachable**
+
+```bash
+cd science && uv run --frozen science boundary --help
+```
+Expected: lists `check`, `init`, `sync`.
+
+- [ ] **Step 8: Commit**
+
+```bash
+git add science/src/science_tool/boundary/cli.py science/src/science_tool/boundary/init.py science/src/science_tool/cli.py science/tests/test_boundary_cli.py
+git commit -m "feat(boundary): science boundary check/sync/init commands"
+```
+
+---
+
+## Task 8: Re-scope `data audit`
+
+MM30's audit reports 51,073 violations, ~45,000 of them correctly-ignored `.venv` / `node_modules` / `.snakemake` / `.opencode`. Blanket-pruning ignored paths would be wrong — a `stranded_record` inside an ignored payload root is exactly what the audit exists to find.
+
+**New predicate:** skip a path if it is ignored **and** outside every declared root. Always inspect paths inside a declared root.
+
+**Files:**
+- Modify: `science/src/science_tool/data_audit.py:164-183` (`audit_project`)
+- Test: `science/tests/test_data_audit_scope.py`
+
+**Interfaces:**
+- Consumes: `visible_paths` (Task 3), `load_project_config(...).boundary` (Task 1).
+- Produces: unchanged public signature `audit_project(project_root, policy, data_dirs) -> list[Violation]`.
+
+- [ ] **Step 1: Write the failing tests**
+
+```python
+# science/tests/test_data_audit_scope.py
+from __future__ import annotations
+
+import subprocess
+from pathlib import Path
+
+import yaml
+
+from science_tool.data_audit import audit_project
+
+
+def _repo(tmp_path: Path, boundary: dict | None = None, gitignore: str = "") -> Path:
+    subprocess.run(["git", "init", "-q", str(tmp_path)], check=True)
+    payload: dict = {"name": "D", "id": "d"}
+    if boundary:
+        payload["boundary"] = boundary
+    (tmp_path / "science.yaml").write_text(yaml.safe_dump(payload))
+    (tmp_path / ".gitignore").write_text(gitignore)
+    return tmp_path
+
+
+def test_ignored_tooling_noise_is_skipped(tmp_path: Path):
+    repo = _repo(tmp_path, gitignore=".venv/\n")
+    (repo / ".venv/lib").mkdir(parents=True)
+    (repo / ".venv/lib/blob.parquet").write_text("x" * 200_000)
+    assert all(".venv" not in v.path for v in audit_project(repo))
+
+
+def test_stranded_record_inside_declared_root_is_still_found(tmp_path: Path):
+    decl = {"roots": [{"path": "data/external", "class": "manifest", "tracked": ["datapackage.json"]}]}
+    repo = _repo(tmp_path, decl, gitignore="/data/external/**\n!/data/external/**/\n")
+    (repo / "data/external/ds").mkdir(parents=True)
+    (repo / "data/external/ds/RESULTS.md").write_text("# r\n")
+    paths = [v.path for v in audit_project(repo)]
+    assert "data/external/ds/RESULTS.md" in paths
+
+
+def test_undeclared_project_audits_visible_files_only(tmp_path: Path):
+    repo = _repo(tmp_path, gitignore="build/\n")
+    (repo / "build").mkdir()
+    (repo / "build/x.parquet").write_text("x" * 200_000)
+    (repo / "keep.parquet").write_text("x" * 200_000)
+    paths = [v.path for v in audit_project(repo)]
+    assert "keep.parquet" in paths
+    assert "build/x.parquet" not in paths
+```
+
+- [ ] **Step 2: Run tests to verify they fail**
+
+Run: `cd science && uv run --frozen pytest tests/test_data_audit_scope.py -v`
+Expected: FAIL — `.venv` paths present / stranded record missing
+
+- [ ] **Step 3: Implement the re-scope**
+
+In `science/src/science_tool/data_audit.py`, add imports at the top:
+
+```python
+from science_tool.boundary.gitio import visible_paths
+```
+
+and replace the body of `audit_project` (currently lines 164–183) with:
+
+```python
+def audit_project(
+    project_root: Path,
+    policy: DataPolicy = DEFAULT_DATA_POLICY,
+    data_dirs: tuple[Path, ...] = DEFAULT_DATA_DIRS,
+) -> list[Violation]:
+    """Advisory discovery pass. Blocks nothing; enforcement is the boundary checks.
+
+    SCOPE: skip a path that is ignored AND outside every declared boundary root.
+    Ignored tooling noise (.venv, node_modules) is not the audit's business, but
+    a stranded record inside an ignored payload root is exactly what it exists to
+    find -- so blanket-pruning ignored paths would be wrong.
+    """
+    tracked = git_tracked_set(project_root)
+    try:
+        boundary = load_project_config(project_root).boundary
+    except Exception:  # noqa: BLE001
+        boundary = None
+    declared = tuple(r.path for r in boundary.roots) if boundary else ()
+    visible = visible_paths(project_root)
+
+    violations: list[Violation] = []
+    for abs_path, rel in _iter_project_files(project_root, data_dirs):
+        posix = rel.as_posix()
+        in_declared_root = any(posix == d or posix.startswith(d + "/") for d in declared)
+        if posix not in visible and not in_declared_root:
+            continue
+        try:
+            size = abs_path.stat().st_size
+        except OSError:
+            continue
+        cls = classify(rel, size, policy)
+        loc = location(rel, data_dirs)
+        is_tracked = posix in tracked
+        v = _violation_for(project_root, rel, cls, loc, is_tracked, data_dirs)
+        if v is not None:
+            violations.append(v)
+    violations.sort(key=lambda v: v.path)
+    return violations
+```
+
+Add the config import beside the existing ones if not already present:
+
+```python
+from science_tool.project_config import load_project_config
+```
+
+- [ ] **Step 4: Run tests to verify they pass**
+
+Run: `cd science && uv run --frozen pytest tests/test_data_audit_scope.py -v`
+Expected: PASS (all)
+
+- [ ] **Step 5: Confirm no regression in existing audit tests**
+
+```bash
+cd science && uv run --frozen pytest tests/ -q -k "data_audit or data_cli"
+```
+Expected: PASS.
+
+- [ ] **Step 6: Commit**
+
+```bash
+git add science/src/science_tool/data_audit.py science/tests/test_data_audit_scope.py
+git commit -m "fix(data-audit): scope the walk to visible paths plus declared roots"
+```
+
+---
+
+## Task 9: Retire the ignore-then-pin convention
+
+Without this the declaration is a fourth opinion rather than the authority: `create-project.md` currently prescribes the `dir/*` + negation idiom, and conventions-audit §7.5 recommends blessing it.
+
+**Files:**
+- Modify: `commands/create-project.md:199-290`
+- Modify: `docs/conventions/data-boundary.md`
+- Modify: `docs/audits/downstream-project-conventions/synthesis.md` (§7.5)
+- Test: `science/tests/test_command_docs.py`, `science/tests/test_user_guide_docs.py` (existing guard suites)
+
+- [ ] **Step 1: Rewrite the `create-project.md` `.gitignore` section**
+
+Replace the `### .gitignore` section body (from "Include at minimum:" through the `models/` guidance ending "never emit a bare `models/` exclude.") with:
+
+````markdown
+Include at minimum the tooling, OS, and secret noise that is not project data:
+
+```gitignore
+# Secrets
+.env
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+*.egg-info/
+.mypy_cache/
+
+# Notebooks
+.ipynb_checkpoints/
+
+# Worktrees
+.worktrees/
+
+# Managed artifact rollback backups
+*.pre-update*.bak
+
+# Transient agent outputs
+doc/meta/next-steps-*.md
+docs/meta/next-steps-*.md
+doc/plans/*-plan-review.md
+docs/plans/*-plan-review.md
+
+# OS
+.DS_Store
+```
+
+**Do not hand-write ignore rules for project data.** Declare a storage class in
+`science.yaml` and let `science boundary sync` generate them:
+
+```yaml
+boundary:
+  roots:
+    - path: data/raw
+      class: payload
+    - path: data/external
+      class: manifest
+      tracked: [datapackage.json]
+```
+
+`versioned` is the implicit default, so only exceptions are declared. `payload`
+means nothing under the path is tracked; `manifest` means the declared
+descriptor globs are tracked and everything else is not.
+
+Generated patterns are anchored, so an unanchored `archive` cannot match a
+directory of that name at any depth. A `manifest` root emits the
+descend-preserving `dir/**` + `!dir/**/` form, so its negations actually apply —
+hand-writing a bare `dir/` exclude is the classic trap, because git does not
+descend into a fully-excluded directory and a `git add` then appears to succeed
+while committing nothing.
+
+Prefer separating payload from records by directory rather than mixing them: put
+regenerable dumps in their own root and keep the source directory fully tracked.
+Where a descriptor genuinely belongs beside its payload, `manifest` expresses
+that once, uniformly, instead of per-dataset negations.
+
+Keep version-controlled provenance outside the configured data root. Prefer
+`provenance/` or `research/packages/` for lightweight manifests, QA reports, and
+small summary frames. Do not use `data/provenance/` when the project uses the
+default `./data` data root, because that puts committed provenance inside the
+non-version-controlled root.
+
+When a project configures an out-of-tree data root, document the same resolution
+order in local onboarding notes: `SCIENCE_DATA_ROOT`, then `science.yaml`
+`data.root`, then global `data.root` plus the project id, then `./data`. Keep
+logical references stable: `data/raw` maps to `<resolved-root>/raw`,
+`data/processed` maps to `<resolved-root>/processed`, and `data/external` maps
+to `<resolved-root>/external`.
+````
+
+- [ ] **Step 2: Rewrite the `data-boundary.md` Policy and Audit sections**
+
+Replace the *Policy* section with a pointer to the declaration, and replace the
+closing "Deferred follow-ups" paragraph with:
+
+```markdown
+## Enforcement
+
+The boundary is declared in `science.yaml` under `boundary:` and generated into
+a managed block in `.gitignore` by `science boundary sync`. Six validate checks
+enforce it — `boundary.tracked-ignored` and `boundary.unanchored-pattern` on
+every project, and `boundary.generated-drift`,
+`boundary.declaration-conflict`, `boundary.unreachable-tracked`,
+`boundary.ignored-undeclared` once a project declares roots. See
+`docs/plans/2026-07-26-vcs-storage-boundary-design.md`.
+
+`science data audit` is advisory discovery, not enforcement. It classifies files
+heuristically to surface candidates; it blocks nothing and no validate check
+consults its classifier.
+```
+
+- [ ] **Step 3: Annotate conventions-audit §7.5 as superseded**
+
+In `docs/audits/downstream-project-conventions/synthesis.md`, insert immediately after the §7.5 heading:
+
+```markdown
+> **Superseded (2026-07-26).** This recommendation — bless ignore-then-pin as
+> the canonical pattern — was reversed. The pattern requires per-case
+> adjudication and `git add -f`, and its whole-directory form silently disables
+> its own negations. Replaced by the declared storage boundary in
+> `docs/plans/2026-07-26-vcs-storage-boundary-design.md`.
+```
+
+- [ ] **Step 4: Run the doc guard suites**
+
+```bash
+cd science && uv run --frozen pytest tests/test_command_docs.py tests/test_user_guide_docs.py -v
+```
+Expected: PASS. If a guard asserts on a removed heading, update the guard's anchor to the new heading in the same commit.
+
+- [ ] **Step 5: Confirm the retired idiom is gone**
+
+```bash
+cd /home/keith/d/science/.worktrees/vcs-boundary
+grep -rn 'never emit a bare' commands/ docs/ || echo "retired idiom removed"
+grep -rn 'papers/pdfs' commands/ || echo "hardcoded papers/pdfs removed"
+```
+Expected: both print the confirmation line.
+
+- [ ] **Step 6: Commit**
+
+```bash
+git add commands/create-project.md docs/conventions/data-boundary.md docs/audits/downstream-project-conventions/synthesis.md science/tests/
+git commit -m "docs(boundary): retire the ignore-then-pin convention"
+```
+
+---
+
+## Task 10: MM30-derived fixture as the acceptance case
+
+MM30's real declaration is a downstream follow-up. What lands here is a sanitized fixture exercising all three classes end to end.
+
+**Files:**
+- Create: `science/tests/fixtures/boundary_mm30/README.md`
+- Create: `science/tests/test_boundary_acceptance.py`
+
+**Interfaces:**
+- Consumes: everything.
+- Produces: nothing importable.
+
+- [ ] **Step 1: Write the acceptance test**
+
+```python
+# science/tests/test_boundary_acceptance.py
+"""End-to-end acceptance on a sanitized MM30-shaped tree.
+
+Shape derived from MM30 as of 2026-07-26: an external-dataset root whose
+descriptors are tracked beside ignored bulk parquet and an ignored raw/ subtree,
+a flat gitignored PDF store, and tracked source that an unanchored pattern had
+been hiding. No MM30 content, only its layout.
+"""
+
+from __future__ import annotations
+
+import subprocess
+from pathlib import Path
+
+import yaml
+from click.testing import CliRunner
+
+from science_tool.boundary.cli import boundary_group
+from science_tool.validate.checks.boundary import check_boundary
+from science_tool.validate.context import ValidateContext
+
+DECL = {
+    "roots": [
+        {"path": "data/external", "class": "manifest", "tracked": ["datapackage.json", "*.qa_verdict.json"]},
+        {"path": "data/raw", "class": "payload"},
+        {"path": "pdfs", "class": "payload"},
+    ]
+}
+
+
+def _mm30(tmp_path: Path) -> Path:
+    subprocess.run(["git", "init", "-q", str(tmp_path)], check=True)
+    subprocess.run(["git", "-C", str(tmp_path), "config", "user.email", "t@e"], check=True)
+    subprocess.run(["git", "-C", str(tmp_path), "config", "user.name", "t"], check=True)
+    (tmp_path / "science.yaml").write_text(yaml.safe_dump({"name": "MM", "id": "mm", "boundary": DECL}))
+
+    def w(rel: str, body: str = "x") -> None:
+        p = tmp_path / rel
+        p.parent.mkdir(parents=True, exist_ok=True)
+        p.write_text(body)
+
+    w("data/external/opentargets/25.03/datapackage.json", "{}")
+    w("data/external/opentargets/25.03/opentargets.qa_verdict.json", "{}")
+    w("data/external/opentargets/25.03/mm-associations.parquet")
+    w("data/external/opentargets/25.03/raw/target/part-0.parquet")
+    w("data/raw/GSE1234_series_matrix.txt")
+    w("pdfs/2024_Author_Title.pdf")
+    w("tests/migration/archive/test_pilot.py", "def test_x(): pass\n")
+    w("entities/hypotheses/h0001.md", "# h\n")
+    w(".gitignore", ".venv/\narchive\n")
+    return tmp_path
+
+
+def _rules(root: Path) -> list[str]:
+    ctx = ValidateContext.from_project_root(root, strict=False, verbose=False)
+    return [r.rule for r in check_boundary(ctx)]
+
+
+def test_acceptance_sync_then_clean(tmp_path: Path):
+    repo = _mm30(tmp_path)
+    runner = CliRunner()
+
+    assert runner.invoke(boundary_group, ["sync", "--project-root", str(repo)]).exit_code == 0
+    subprocess.run(["git", "-C", str(repo), "add", "-A"], check=True)
+    staged = subprocess.run(["git", "-C", str(repo), "ls-files"], capture_output=True, text=True).stdout.split()
+
+    # Descriptors tracked; payload not.
+    assert "data/external/opentargets/25.03/datapackage.json" in staged
+    assert "data/external/opentargets/25.03/opentargets.qa_verdict.json" in staged
+    assert "data/external/opentargets/25.03/mm-associations.parquet" not in staged
+    assert "data/external/opentargets/25.03/raw/target/part-0.parquet" not in staged
+    assert "data/raw/GSE1234_series_matrix.txt" not in staged
+    assert "pdfs/2024_Author_Title.pdf" not in staged
+
+    # The unanchored `archive` was hiding tracked source; it is reported, and
+    # the file is still reachable because nothing generated excludes it.
+    assert "tests/migration/archive/test_pilot.py" in staged
+
+    rules = _rules(repo)
+    assert "boundary.tracked-ignored" not in rules
+    assert "boundary.generated-drift" not in rules
+    assert "boundary.unreachable-tracked" not in rules
+    assert "boundary.unanchored-pattern" in rules  # the bare `archive`
+
+
+def test_acceptance_verify_current_tree_is_transactional(tmp_path: Path):
+    repo = _mm30(tmp_path)
+    subprocess.run(["git", "-C", str(repo), "add", "-A"], check=True)
+    subprocess.run(["git", "-C", str(repo), "commit", "-qm", "init"], check=True)
+    before = (repo / ".gitignore").read_text()
+    result = CliRunner().invoke(boundary_group, ["sync", "--verify-current-tree", "--project-root", str(repo)])
+    assert result.exit_code in (0, 1)
+    assert (repo / ".gitignore").read_text() == before
+
+
+def test_acceptance_init_proposes_the_same_shape(tmp_path: Path):
+    repo = _mm30(tmp_path)
+    (repo / "science.yaml").write_text(yaml.safe_dump({"name": "MM", "id": "mm"}))
+    output = CliRunner().invoke(boundary_group, ["init", "--project-root", str(repo)]).output
+    assert "data/external" in output
+    assert "manifest" in output
+```
+
+- [ ] **Step 2: Write the fixture README**
+
+```markdown
+<!-- science/tests/fixtures/boundary_mm30/README.md -->
+# MM30-shaped boundary fixture
+
+Layout derived from MM30 as of 2026-07-26, with no MM30 content. It reproduces
+the three shapes that motivated the design:
+
+- `data/external/<ds>/<ver>/` — tracked `datapackage.json` and QA verdict beside
+  ignored bulk parquet and an ignored `raw/` subtree (`manifest`)
+- `data/raw/`, `pdfs/` — wholly ignored (`payload`)
+- `tests/migration/archive/` — tracked source that an unanchored bare `archive`
+  pattern had been hiding from git, ripgrep, and ruff alike
+
+MM30's real declaration is a downstream follow-up; this fixture is the in-branch
+acceptance case. The tests live in `science/tests/test_boundary_acceptance.py`.
+```
+
+- [ ] **Step 3: Run the acceptance suite**
+
+Run: `cd science && uv run --frozen pytest tests/test_boundary_acceptance.py -v`
+Expected: PASS (all three)
+
+- [ ] **Step 4: Commit**
+
+```bash
+git add science/tests/test_boundary_acceptance.py science/tests/fixtures/boundary_mm30/
+git commit -m "test(boundary): MM30-shaped end-to-end acceptance case"
+```
+
+---
+
+## Task 11: Full-suite verification
+
+- [ ] **Step 1: Run the whole suite**
+
+```bash
+cd science && uv run --frozen pytest tests/ -q 2>&1 | tail -20
+```
+Expected: no failures introduced by this branch. Compare any failure against `main` before assuming this branch caused it.
+
+- [ ] **Step 2: Lint and format**
+
+```bash
+cd science && uv run --frozen ruff check . && uv run --frozen ruff format --check .
+```
+Expected: clean.
+
+- [ ] **Step 3: Self-check the tool against its own repository**
+
+```bash
+cd /home/keith/d/science/.worktrees/vcs-boundary && uv run --frozen --project science science boundary check --project-root .
+```
+Expected: exits 0, or reports genuine violations in the science repo itself. If it reports any, resolve them per the message — that is the tool working.
+
+- [ ] **Step 4: Commit any residue**
+
+```bash
+git add -A && git commit -m "chore(boundary): full-suite verification" || echo "nothing to commit"
+```
+
+---
+
+## Self-Review Notes
+
+**Spec coverage.** Declaration model → Task 1. Generation contract and both invariants → Task 2. Source universe → Task 3. Manifest walk plus symlink/nested-repo/NUL/pruning semantics and the benchmark → Tasks 3–4. Six checks → Task 5. Probes and transactional verification → Task 6. Three commands, `classify()` demoted to proposal → Task 7. `data_audit` re-scope → Task 8. Convention retirement → Task 9. MM30 fixture → Task 10.
+
+**Deliberately deferred.** `science health` gets no change: `collect_validation_findings` already surfaces every non-info result, so registering in `CANONICAL_CHECKS` (Task 5) is sufficient and a separate section would double-count. `boundary.declaration-missing` is not implemented — undeclared projects stay silent in v1 by design.
+
+**Naming consistency.** `storage_class` (Python) ↔ `class` (YAML alias) throughout; `visible_paths` is the single oracle used by Tasks 5, 6, and 8; `manifest_candidates` is used only by Task 5; `_is_unanchored_dir_pattern` is defined in Task 5 and imported by Task 7's CLI.
+
+**Known sharp edge.** Task 5's `_is_tooling_shaped` is the one place a shape heuristic survives, and it exists only to keep `ignored-undeclared` from firing on `.venv/`-style rules that the default `unmanaged_allow` already covers. It gates a WARN, never an ERROR, and no other check calls it. If it proves noisy, delete it and rely on `unmanaged_allow` alone.
