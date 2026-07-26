@@ -16,8 +16,9 @@ import subprocess
 from collections.abc import Iterator
 from pathlib import Path
 
-from science_model.autonomous_runs import RunRecordError
+from science_model.autonomous_runs import AutonomousRunRecord, RunRecordError
 
+from science_tool.autonomy.git import GitError, run_git
 from science_tool.graph.autonomous_runs import RUNS_DIRNAME, load_run_records
 from science_tool.validate.checks import Check
 from science_tool.validate.context import ValidateContext
@@ -37,16 +38,56 @@ def _result(severity: Severity, relative: str | None, message: str) -> Result:
 
 
 def _git(root: Path, *args: str) -> subprocess.CompletedProcess[str]:
-    # --no-replace-objects, as everywhere in the autonomy surface: replacement refs are
-    # actor-writable and would let a tampered repository hide its own history.
-    return subprocess.run(
-        ["git", "--no-replace-objects", "-C", str(root), *args],
-        capture_output=True, text=True,
+    """One hardened git command, decoded.
+
+    The argv -- `--no-replace-objects`, and the config hardening that stops the
+    repository's own `.git/config` from executing code during our reads -- is built by
+    `autonomy.git` and nowhere else. A git that cannot be RUN becomes `_ScanFailed`, so a
+    machine with no git on `PATH` gets an ERROR row instead of a `validate` traceback.
+    """
+    try:
+        completed = run_git(root, *args)
+    except GitError as exc:
+        raise _ScanFailed(str(exc)) from exc
+    return subprocess.CompletedProcess(
+        args=completed.args,
+        returncode=completed.returncode,
+        stdout=completed.stdout.decode("utf-8", "replace"),
+        stderr=completed.stderr.decode("utf-8", "replace"),
     )
 
 
 def _commit_exists(root: Path, sha: str) -> bool:
     return _git(root, "rev-parse", "--verify", f"{sha}^{{commit}}").returncode == 0
+
+
+def _record_added_in_range(root: Path, relative: str, base: str, head: str) -> str | None:
+    """The commit inside `base..head` that ADDED `relative`, if any.
+
+    THE FORGERY DISCRIMINATOR. The actor knows its own run id -- it has to, to write the
+    trailers -- so it can commit `runs/<slug>.md` claiming `disposition: clean`. `finish`
+    then hits the writer's never-overwrite rule, reports `unwired`, and leaves no durable
+    record of its own; the forgery is all that survives, and every later `validate` reads
+    it as an attestation.
+
+    Timing separates the two. A supervisor-written record is created AFTER the range ends
+    -- `head_commit` is an input to writing it -- and is committed later still, so it can
+    never appear inside its own range. There are therefore NO false positives here: this
+    ERROR only ever names a record the run itself committed.
+
+    It is not complete, and the residual is worth naming. An actor cannot predict a
+    future sha, so the only way it gets a plausible late `head_commit` into the record is
+    to fill the range in afterwards -- which is exactly what leaves the ADDING commit
+    inside the range. An actor content to name an EARLY `head_commit`, so that its record
+    commit falls after the range, evades this. Catching that one needs a property this
+    check deliberately does not have: re-deriving the basis, which is `finish`'s job.
+    """
+    completed = _git(
+        root, "log", "--format=%H", "--diff-filter=A", "-1", f"{base}..{head}", "--", relative
+    )
+    if completed.returncode != 0:
+        raise _ScanFailed(completed.stderr.strip() or f"git log failed for {relative}")
+    return completed.stdout.strip() or None
 
 
 def _marked_commits(root: Path) -> list[tuple[str, str]]:
@@ -126,13 +167,47 @@ def check_autonomous_runs(ctx: ValidateContext) -> Iterator[Result]:
                 f"for it -- unwired: autonomous commits with no attestation",
             )
 
-    for record in records:
-        relative = f"{RUNS_DIRNAME}/{record.slug}.md"
-        for field_name, sha in (("base_commit", record.base_commit), ("head_commit", record.head_commit)):
-            if not _commit_exists(root, sha):
-                yield _result(
-                    Severity.ERROR,
-                    relative,
-                    f"{record.id}: {field_name} {sha[:12]} is unreachable -- the recorded "
-                    "transition cannot be validated",
-                )
+    # `_commit_exists` and `_record_added_in_range` shell out too, so the same failure the
+    # scan converts is reachable here. `validate` reports; it does not traceback.
+    try:
+        for record in records:
+            yield from _record_results(root, record)
+    except _ScanFailed as exc:
+        yield _result(
+            Severity.ERROR, RUNS_DIRNAME, f"could not verify the recorded commits: {exc}"
+        )
+
+
+def _record_results(root: Path, record: AutonomousRunRecord) -> Iterator[Result]:
+    """Everything this check can say about one record without rebuilding its basis."""
+    relative = f"{RUNS_DIRNAME}/{record.slug}.md"
+    reachable = True
+    for field_name, sha in (
+        ("base_commit", record.base_commit),
+        ("head_commit", record.head_commit),
+    ):
+        if not _commit_exists(root, sha):
+            reachable = False
+            yield _result(
+                Severity.ERROR,
+                relative,
+                f"{record.id}: {field_name} {sha[:12]} is unreachable -- the recorded "
+                "transition cannot be validated",
+            )
+    if not reachable:
+        # A range with an unreachable end cannot be walked, so the forgery probe below
+        # would fail rather than answer. The unreachable commit is already reported.
+        return
+
+    forging_commit = _record_added_in_range(
+        root, relative, record.base_commit, record.head_commit
+    )
+    if forging_commit is not None:
+        yield _result(
+            Severity.ERROR,
+            relative,
+            f"{record.id}: its own run record was added by commit {forging_commit[:12]}, inside "
+            f"the range {record.base_commit[:12]}..{record.head_commit[:12]} the record itself "
+            "names -- the supervisor writes a record only after that range ends, so this "
+            "attestation was written by the run it attests to",
+        )

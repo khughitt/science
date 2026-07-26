@@ -192,3 +192,63 @@ def test_the_check_module_is_registered():
     from science_tool.validate.checks import CANONICAL_CHECK_MODULES
 
     assert "autonomous_runs" in CANONICAL_CHECK_MODULES
+
+
+def test_a_record_committed_after_its_own_range_yields_nothing(repo: Path):
+    """The legitimate shape. `finish` writes the record only once `head_commit` is known,
+    so the operator's commit of it necessarily lands after the range ends."""
+    base = _git(repo, "rev-parse", "HEAD")
+    head = _commit_with_trailer(repo, RUN_ID)
+    _write_record(repo, _record_text(base=base, head=head))
+    _git(repo, "add", "-A")
+    _git(repo, "commit", "-q", "-m", "chore: attest the run")
+
+    assert list(check_autonomous_runs(_ctx(repo))) == []
+
+
+def test_a_record_added_inside_its_own_range_is_an_error(repo: Path):
+    """The forgery `finish` cannot report on.
+
+    The actor knows its own run id -- it must, to write the trailers -- so it can commit
+    `runs/<slug>.md` claiming `clean`. `finish` then hits the writer's never-overwrite
+    rule, returns `unwired`, and leaves no durable record of its own; the forgery is the
+    only attestation that survives. Nothing else in this check looks at it.
+
+    The range is filled in afterwards, which is how an actor gets a plausible late
+    `head_commit` without knowing a future sha -- and it is exactly what puts the commit
+    that ADDED the record inside the range the record itself names.
+    """
+    base = _git(repo, "rev-parse", "HEAD")
+    _write_record(repo, _record_text(base=base, head=base))
+    _git(repo, "add", "-A")
+    _git(repo, "commit", "-q", "-m", f"chore: attest\n\nScience-Run: {RUN_ID}")
+    head = _commit_with_trailer(repo, RUN_ID)
+    _write_record(repo, _record_text(base=base, head=head))
+    _git(repo, "add", "-A")
+    _git(repo, "commit", "-q", "-m", f"chore: amend attestation\n\nScience-Run: {RUN_ID}")
+
+    results = list(check_autonomous_runs(_ctx(repo)))
+    assert [r.severity for r in results] == [Severity.ERROR]
+    assert "attests" in results[0].message
+    assert str(Path(f"runs/{SLUG}.md")) == str(results[0].path)
+
+
+def test_an_uninvokable_git_is_an_error_not_a_validate_crash(
+    repo: Path, monkeypatch: pytest.MonkeyPatch
+):
+    """`validate` runs on any machine, including one with no git on PATH. An OSError out
+    of the runner must become a row, not a traceback out of the whole report."""
+    from science_tool.autonomy import git as git_module
+
+    _write_record(repo, _record_text(base="0" * 40, head="0" * 40))
+
+    class _NoGit:
+        @staticmethod
+        def run(*args, **kwargs):
+            raise OSError(2, "No such file or directory: 'git'")
+
+    monkeypatch.setattr(git_module, "subprocess", _NoGit)
+
+    results = list(check_autonomous_runs(_ctx(repo)))
+    assert [r.severity for r in results] == [Severity.ERROR]
+    assert "could not execute git" in results[0].message
