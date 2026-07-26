@@ -446,6 +446,9 @@ class TestTasksList:
             # --since queries every status, so the working-set-only marker
             # must not be present in the applied-filters meta.
             assert "only_status" not in data["meta"]["applied_filters"]
+            # active_total counts only active.md and is meaningless for a
+            # --since query spanning the archive -- it must be omitted.
+            assert "active_total" not in data["meta"]
 
     def test_list_since_respects_output_sink(self, runner: CliRunner, tmp_path: Path) -> None:
         from datetime import date

@@ -263,7 +263,7 @@ If status is `locally_modified` or `missing`, point at the corresponding verb (`
 
 ### 3c-bis. Stale Task Status Detection (mandatory)
 
-Before recommending next actions, audit task status against on-disk evidence. For each task returned by `science tasks list --status proposed`, `--status blocked`, or `--status in_progress` (or `science tasks list --all` to gather them together), check whether the work appears already done by scanning for any of:
+Before recommending next actions, audit task status against on-disk evidence. For each task returned by `science tasks list --status proposed`, `--status blocked`, or `--status active` (or `science tasks list --all` to gather them together), check whether the work appears already done by scanning for any of:
 
 - a result file under `results/` whose path or `datapackage.json` references the task ID
 - a doc under `entities/interpretations/`, `entities/findings/`, `entities/reports/`, or `entities/discussions/` whose frontmatter `source_refs` includes the task ID

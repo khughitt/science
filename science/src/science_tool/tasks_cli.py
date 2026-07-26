@@ -767,11 +767,15 @@ def tasks_list(
         if not show_all and status is None and since is None:
             applied_filters["only_status"] = list(WORKING_SET)
         meta = {
-            "active_total": active_total,
             "returned_count": len(rows),
             "sort_order": "status_rank,id",
             "applied_filters": applied_filters,
         }
+        # active_total counts only tasks/active.md and is meaningless for a
+        # --since query, whose rows come from the archive union — omit it
+        # rather than ship a "curated vs full" ratio that doesn't apply.
+        if since is None:
+            meta["active_total"] = active_total
         emit_query_rows(
             output_format=output_format,
             title="Tasks",

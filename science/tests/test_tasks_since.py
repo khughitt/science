@@ -53,6 +53,16 @@ Open, no completed date -- must never appear in --since results.
 - completed: {today}
 
 Retired tasks participate in --since by default.
+
+## [t003] Open status with a stray completed date
+- type: dev
+- priority: P1
+- status: active
+- created: 2026-01-01
+- completed: {today}
+
+An anomalous open task carrying a stray `completed:` date must not leak
+into --since results -- the keep-predicate requires a closed status.
 """
 
 BOUNDARY_ARCHIVE_MD = """\
@@ -152,6 +162,15 @@ class TestSinceFilter:
         ids = {t.id for t in result}
         assert "t001" not in ids
 
+    def test_open_status_with_stray_completed_date_excluded(self, tmp_path: Path) -> None:
+        tasks_dir = _setup(tmp_path)
+        result = list_tasks(tasks_dir, since=SINCE)
+        ids = {t.id for t in result}
+        # t003 is status "active" (open) but carries a completed: date on or
+        # after `since` -- the keep-predicate must require a closed status,
+        # not just a qualifying completed date.
+        assert "t003" not in ids
+
     def test_window_month_with_no_archive_file_is_not_an_error(self, tmp_path: Path) -> None:
         tasks_dir = _setup(tmp_path)
         # NO_FILE_SINCE's month window includes NO_FILE_YEAR/MONTH (and the
@@ -167,4 +186,4 @@ class TestSinceFilter:
         result = list_tasks(tasks_dir)
         ids = {t.id for t in result}
         # Default listing hides done/retired and never reads archives.
-        assert ids == {"t001"}
+        assert ids == {"t001", "t003"}

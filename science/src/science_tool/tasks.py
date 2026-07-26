@@ -855,6 +855,10 @@ def list_tasks(
     if since is not None:
         missing = sum(1 for t in tasks if t.status in _CLOSED_STATUSES and t.completed is None)
         warn_missing_completed(missing)
-        tasks = [t for t in tasks if t.completed is not None and t.completed >= since]
+        tasks = [
+            t
+            for t in tasks
+            if t.status in _CLOSED_STATUSES and t.completed is not None and t.completed >= since
+        ]
 
     return tasks
