@@ -13,6 +13,7 @@ from pydantic.functional_validators import BeforeValidator
 
 from science_model.frontmatter import parse_frontmatter, project_config_path
 from science_model.skill_coverage import DOMAIN_KEYS, GENERATION_3_DOMAINS, EnrollmentStatus
+from science_tool.boundary.config import BoundaryConfig
 from science_tool.data_policy import DataPolicy, DEFAULT_DATA_POLICY
 from science_tool.datasets.semantics import OrdinalReproClass
 
@@ -260,6 +261,7 @@ class ProjectConfig(BaseModel):
     refs: RefsConfig | None = None
     data: ProjectDataConfig | None = None
     data_policy: DataPolicyConfig | None = None
+    boundary: BoundaryConfig | None = None
     reproducibility_policy: ReproducibilityPolicyConfig | None = None
     skill_coverage: SkillCoverageConfig | None = None
     entity_extensions: dict[str, list[str]] = Field(default_factory=dict)
