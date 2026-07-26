@@ -110,8 +110,12 @@ def _filter_driver_overrides(repo_root: Path) -> tuple[str, ...]:
     for key in completed.stdout.decode("utf-8", "replace").split("\0"):
         if not key.startswith("filter."):
             continue
+        # NOT `if not name` -- the empty driver name is a real, reachable driver.
+        # `[filter ""]` selected by `* filter=` yields the key `filter..clean`, and git
+        # both reports and executes it; treating a falsy name as "no driver" left that
+        # one armed. `-c filter..clean=` blanks it like any other.
         name, _, command_key = key[len("filter.") :].rpartition(".")
-        if not name or command_key not in _FILTER_COMMAND_KEYS:
+        if command_key not in _FILTER_COMMAND_KEYS:
             continue
         # `-c` splits at the FIRST `=`, so a driver named `a=b` would turn
         # `-c filter.a=b.clean=` into the key `filter.a` -- leaving the real driver armed.

@@ -688,6 +688,37 @@ def test_a_repo_local_filter_driver_does_not_run(project: Path, tmp_path: Path):
     assert not sentinel.exists(), "the actor's clean filter ran inside the control plane"
 
 
+def test_a_filter_driver_with_an_EMPTY_NAME_does_not_run(project: Path, tmp_path: Path):
+    """The variant that survives a defense which enumerates driver names.
+
+    `[filter ""]`, selected by `* filter=`, produces the config key `filter..clean`.
+    `config --list` reports it like any other, but its subsection name is the empty
+    string -- so a truthiness test on that name reads it as "not a driver" and skips it,
+    leaving the actor's command armed. That is the whole original escape again, reached
+    through the one driver name nobody would think to enumerate.
+
+    `$GIT_DIR/info/attributes` carries the selection rather than `.gitattributes`,
+    because it is untracked and outside `base..head`: nothing else in this design can
+    see the plant, which is exactly why the neutralization has to be complete.
+    """
+    from science_tool.autonomy.lifecycle import assert_repository_is_at
+
+    sentinel = tmp_path / "empty-name-filter-fired"
+    program = _sentinel_program(tmp_path, sentinel, pipe=True)
+    (project / ".git" / "info" / "attributes").write_text("* filter=\n", encoding="utf-8")
+    config = project / ".git" / "config"
+    config.write_text(
+        config.read_text(encoding="utf-8") + f'[filter ""]\n\tclean = {program}\n',
+        encoding="utf-8",
+    )
+    _assert_vector_is_live(project, sentinel)
+
+    assert_repository_is_at(project)
+    assert not sentinel.exists(), (
+        "the actor's empty-named clean filter ran inside the control plane"
+    )
+
+
 def test_a_filter_driver_named_so_it_cannot_be_neutralized_is_refused(project: Path):
     """`-c` splits at the first `=`, so a driver named `a=b` would leave the real key
     armed while the override set something else. Refuse instead of pretending."""
