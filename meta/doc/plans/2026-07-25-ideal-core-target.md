@@ -6,6 +6,13 @@
 **Optimizing for:** *agent legibility.* When principles conflict, the winner is whichever makes
 a wrong answer harder to reach.
 
+
+> **Counts re-derived 2026-07-25 against `d9e79f91`** while designing S1a. The declared-kind
+> count is **50**, not the 53 this document originally used; the figures below are corrected.
+> The input inventory carried three further errors independent of that count — see its own
+> note, and [`2026-07-25-s1a-reconciliation-gate-design.md`](2026-07-25-s1a-reconciliation-gate-design.md) §1.1
+> for the full partition.
+
 Thin by design. It states what "good" looks like so each sub-project can be judged against
 something. It is not a spec, and it does not re-decide anything already ruled (D1–D5,
 D-001…D-011).
@@ -76,8 +83,10 @@ Two rules make this legible rather than merely distributed:
 
 What the target adds beyond today:
 
-- **Every kind is declared**, not 5 of 53.
-- **Every kind is reconciled**, not 1 of 53.
+- **Every kind is declared**, not 5 of 50.
+- **Every kind is reconciled**, not 1 of 50 — and reconciliation needs *two* authorities, so
+  today it is 1 of the 5 kinds where it is even possible. Widening it is an authoring job
+  (S1b), not a test-coverage job.
 - **The reverse supersedability direction is guarded** — `relation_allows ⇒ declares`, which
   today is unguarded and worked around defensively in `consolidation.py`.
 - **Per-kind facts are written per kind**, explicitly, so one kind's declaration answers its own
@@ -154,7 +163,7 @@ plural-kind groups duplicate `entity`, whether the check vocabulary overlaps. S7
 | Top-level `supersedes:` | materializes nothing; already flagged |
 | Per-kind fact tables inside layer-3 consumers | §3 — one resolved read API per fact |
 | States a kind cannot reach (the 12 + the 3) | promises the machinery does not keep |
-| Undeclared kinds (48 of 53 today) | a kind with no schema is undeclared, not lightweight |
+| Undeclared kinds (45 of 50 today) | a kind with no schema is undeclared, not lightweight |
 
 | Stays | Why |
 |---|---|
@@ -176,7 +185,7 @@ fields. Whether the base shrinks is a *consequence* of S1b's coverage work, not 
 |---|---|---|---|
 | **S7a** | Enforce existing retirements (unregister or error) | §6 | — **can ship now** |
 | **S1a** | Generalize the reconciliation mechanism; make it a gate | F1 | — |
-| **S1b** | Widen schema + reconciliation coverage toward 53 kinds | F1 | S1a |
+| **S1b** | Widen schema + reconciliation coverage toward 50 kinds | F1 | S1a |
 | **S2** | Per-kind facts declared per kind; guard the reverse direction | F2, F4, F5 | S1a |
 | **S3** | Lineage/amendment/identity/archive taxonomy, then convergence | F3 | S2 |
 | **S4** | Link-authority **audit**; convergence only if divergence shown | F7 | — |
