@@ -1,6 +1,6 @@
 # VCS Storage Boundary Design
 
-**Status:** DESIGN — awaiting implementation plan.
+**Status:** DESIGN — implementation planned.
 **Branch:** `vcs-boundary`.
 **Supersedes:** the ignore-then-pin recommendation in
 `docs/audits/downstream-project-conventions/synthesis.md` §7.5, and the
@@ -198,11 +198,15 @@ rejected, a `payload` root can safely emit the terse anchored form.
 
 `tracked:` grammar. These become git patterns AND must be evaluated by the
 checker, so the grammar is the subset both engines provably share: **literals
-(including non-ASCII), leading whitespace, and `*`**. Reject newlines and
-control characters, absolute paths, a leading `!` (negation is the generator's
-job), a leading `#`, a trailing `/` (these match files, not directories),
-**trailing** whitespace, empty / `.` / `..` path segments, `**`, `?`, character
-classes, backslashes, and duplicates.
+(including non-ASCII and Unicode whitespace), leading whitespace, and `*`**.
+Reject newlines and control characters, absolute paths, a leading `!`
+(negation is the generator's job), a leading `#`, a trailing `/` (these match
+files, not directories), an **unescaped trailing ASCII space**, empty / `.` /
+`..` path segments, `**`, `?`, character classes, backslashes, and duplicates.
+Because backslashes are rejected independently, every trailing ASCII space in
+a `tracked:` glob is necessarily unescaped. Other Unicode whitespace is a
+literal like any other: `trail.json\u00a0` is matched identically by git and
+`PurePosixPath`.
 
 Exclusions fall into two groups, and conflating them overstates the case:
 
@@ -215,7 +219,7 @@ git rule that `unreachable-tracked` silently never verifies:
 | `foo/**/bar.json` vs `foo/bar.json` | matches | does not |
 | `?.json` vs `é.json` | `?` is one **byte**, so no match | `?` is one **character**, so matches |
 | `foo//bar.json`, `foo/./bar.json` | rule does not fire | segments normalised away, matches |
-| `a.json ` (trailing space) | whitespace stripped from the pattern | significant |
+| `a.json ` (unescaped trailing ASCII space) | ASCII space stripped from the pattern | significant |
 
 **One probe restriction** — `[ab].json` is matched *identically* by both
 engines. It is excluded because probe generation cannot synthesise a witness
@@ -223,18 +227,30 @@ filename for a character class, so `boundary check --probe` could not verify the
 emitted rule. Listing it as a divergence, as an earlier draft did, misstated the
 reason.
 
-Everything else is admitted: literals (including non-ASCII), `*`, and **leading**
-whitespace are byte-for-byte identical in both engines, `*` matches leading dots
-in both, and `!/root/**/ lead.json` really does re-include and stage
-` lead.json`. Each row above and each admitted construct is pinned by a test
-that runs *both* engines, so a claim of divergence cannot survive being wrong.
+Everything else is admitted: literals (including non-ASCII and U+00A0), `*`,
+and **leading** whitespace are byte-for-byte identical in both engines, `*`
+matches leading dots in both, and `!/root/**/ lead.json` really does re-include
+and stage ` lead.json`. Each row above and each admitted construct is pinned by
+a test that runs *both* engines, so a claim of divergence cannot survive being
+wrong.
 
 `unmanaged_allow` grammar is **not** the same, because its entries are matched
 against `.gitignore` rule *text* by equality rather than compiled as patterns. A
 leading `/` (anchored) and a trailing `/` (directory) are both legal and are the
 shapes actually written — `/data/raw/`, `.venv/`. What is rejected is text that
 cannot be a rule: empty, control characters, a comment, a negation (allowing a
-negation is meaningless — it ignores nothing), or surrounding whitespace.
+negation is meaningless — it ignores nothing), or an unescaped trailing ASCII
+space. Leading whitespace, Unicode whitespace, and an escaped trailing ASCII
+space are all significant rule text and are admitted.
+
+Governed ignore files are byte-valued inputs, not UTF-8 documents. They are
+read and written with UTF-8 plus `surrogateescape`, and physical rules are split
+only at LF boundaries. Python's `splitlines()` is forbidden here: it treats
+characters such as U+2028 as line separators, while git treats
+`foo<U+2028>bar/` as one pattern. A CR at the end of a physical line is removed
+(including at EOF); an embedded CR remains pattern text. Within each physical
+line, only git's own normalization is applied: remove unescaped trailing ASCII
+spaces, preserving escaped spaces and every other Unicode whitespace character.
 
 An **empty `tracked:` list is an error**. A `manifest` root that tracks nothing
 is mechanically a `payload` root, and silently accepting it would leave two
@@ -307,7 +323,7 @@ that killed the previous attempt.
 | command | purpose |
 |---|---|
 | `science boundary sync` | rewrite the managed block; `--check` exits nonzero on drift; `--verify-current-tree` diffs ignore decisions before/after |
-| `science boundary check` | fast standalone gate for pre-commit hooks: runs the two universal checks (`tracked-ignored`, `unanchored-pattern`) only, so it needs no config load |
+| `science boundary check` | fast standalone gate for pre-commit hooks: runs the two universal checks (`tracked-ignored`, `unanchored-pattern`) only; it loads the declaration once for `unmanaged_allow`, falling back to defaults when unusable |
 | `science boundary init` | adoption aid: propose a declaration from the existing tree |
 
 `classify()` keeps exactly two callers: `boundary init` and `data audit`. The
@@ -355,9 +371,10 @@ It has to. Six of the rules in the shipped scaffold (`.venv/`, `__pycache__/`,
 directory names, so a freshly created project emitted six warnings on day one
 and then reported itself clean. Anchoring them would be the wrong remedy: a
 nested `inc/shiny/.venv/` must still be ignored, so depth-independence is the
-*intended* behaviour for tool droppings, and the project has already said so by
-listing them. Warning about a rule the project explicitly sanctioned, with
-advice that would break it, is noise that trains people to ignore the check.
+*intended* behaviour for tool droppings, and the declaration or canonical
+default allowlist has already sanctioned them. Warning about a sanctioned rule,
+with advice that would break it, is noise that trains people to ignore the
+check.
 
 This is not the built-in-judgement problem returning. The exemption is keyed on
 the project's own declaration, not on what a pattern *looks like*; the default
@@ -646,10 +663,14 @@ Required, or the declaration becomes a fourth opinion rather than the authority:
   the oracle. Includes the index-dependence case — `check-ignore` without
   `--no-index` on an already-tracked path — so nobody "simplifies" the
   implementation back onto `check-ignore`.
-- `tracked:` and `unmanaged_allow` grammar: newline, control character, absolute
-  path, empty / `.` / `..` segment, leading `!`, leading `#`, trailing `/`,
-  trailing whitespace, backslash, `?`, character class, `**`, duplicate, and
-  empty/omitted `tracked:` on a `manifest` root each raise.
+- `tracked:` grammar: newline, control character, absolute path, empty / `.` /
+  `..` segment, leading `!`, leading `#`, trailing `/`, unescaped trailing ASCII
+  space, backslash, `?`, character class, `**`, duplicate, and empty/omitted
+  `tracked:` on a `manifest` root each raise. U+00A0 is admitted and runs through
+  both engines.
+- `unmanaged_allow` grammar admits leading whitespace, Unicode whitespace and an
+  escaped trailing ASCII space; it rejects an unescaped trailing ASCII space,
+  comments, negations, empty text and control characters.
 - Grammar exclusions are *earned*, not asserted. Every divergent construct and
   every admitted construct is driven through **both** engines for real — the
   matcher, and a throwaway git repository carrying the actual generated rule —
@@ -667,7 +688,11 @@ Required, or the declaration becomes a fourth opinion rather than the authority:
 - Environment fidelity: `core.ignoreCase` is inherited by the isolated
   evaluation, with both the case-folding and case-sensitive directions pinned.
 - Non-UTF-8 tolerance: a byte-valued `.gitignore` pattern and a non-UTF-8
-  filename are both handled, since git handles both.
+  filename are both handled, since git handles both. `sync` preserves the raw
+  rule bytes and verification restores them byte-for-byte.
+- Physical-rule parsing is pinned against real git: U+2028 stays inside one
+  rule, a terminal CR is removed, an escaped trailing ASCII space and U+00A0
+  remain significant, and only an unescaped trailing ASCII space is removed.
 - Conflict detection defeats both shadowing mechanisms: a rule hidden by the
   managed block, a rule hidden by a later hand-written negation, and a standalone
   hand-written negation are each reported; a single rule matching many paths is
