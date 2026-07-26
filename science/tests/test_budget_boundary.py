@@ -22,9 +22,9 @@ from science_tool.budget.registry import BUDGETS, DEFERRED, EXEMPTIONS
 from science_tool.cli import main
 
 EXPECTED_CLASSIFICATION_COUNTS = {
-    "budgeted": 54,
+    "budgeted": 61,
     "exempt": 111,
-    "deferred": 114,
+    "deferred": 107,
 }
 
 
@@ -91,8 +91,18 @@ def test_classification_partition_has_the_audited_cardinality() -> None:
     apply needed a bespoke multi-list projector (`explore_ideas_projection.py`) because
     its payload carries several independently growable lists (created/to_create,
     skipped_applied, skipped_other, manual, folds, failures) at once, while the other
-    five fit the shared summary+one-list `project_single_list_report` helper. The live
-    partition is therefore 54/111/114 = 279.
+    five fit the shared summary+one-list `project_single_list_report` helper. Batch W4b
+    then wired 7 more REPORT commands (dag audit/validate, inquiry show/validate, peers
+    list, refs check, research-package validate), moving them from deferred to budgeted.
+    dag audit needed a bespoke projector (`dag/audit_projection.py`) for its two
+    independently growable lists (validation.findings, nested; mutations, top-level);
+    inquiry show needed one (`inquiry_show_projection.py`) for four independently
+    growable lists (related, boundary_in, boundary_out, edges); refs check needed one
+    (`refs_projection.py`) for its two independently growable lists (broken, markers).
+    dag validate, peers list, and research-package validate fit the shared
+    summary+one-list `project_single_list_report` helper; inquiry validate was
+    restructured from a bare JSON list into a summary+one-list `results` payload to fit
+    the same helper. The live partition is therefore 61/111/107 = 279.
     """
     actual = {
         "budgeted": len(BUDGETS),

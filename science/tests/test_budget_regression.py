@@ -907,3 +907,94 @@ def test_explore_ideas_gaps_output_file_is_complete(
     assert len(payload["entities"]) == 50
     assert {entity["candidate_id"] for entity in payload["entities"]} == {f"cand-{i:03d}" for i in range(50)}
     assert "truncation" not in payload
+
+
+@pytest.fixture
+def dag_audit_overflow_project(tmp_path: Path) -> Path:
+    """A 50-edge chain DAG with no compiled propositions -> 50 growable findings."""
+    project = tmp_path / "project"
+    dag_dir = project / "doc/figures/dags"
+    dag_dir.mkdir(parents=True)
+    (project / "science.yaml").write_text("profile: research\n", encoding="utf-8")
+    edges = "\n".join(f"  n{i} -> n{i + 1};" for i in range(50))
+    (dag_dir / "h1.dot").write_text(f"digraph h1 {{\n{edges}\n}}\n", encoding="utf-8")
+    (project / "tasks").mkdir()
+    return project
+
+
+def _invoke_dag_audit(project_root: Path, *args: str):
+    return CliRunner().invoke(main, ["dag", "audit", "--project", str(project_root), *args], prog_name="science")
+
+
+def test_dag_audit_stdout_stays_within_its_ceiling_and_reports_truncation(dag_audit_overflow_project: Path) -> None:
+    result = _invoke_dag_audit(dag_audit_overflow_project)
+    assert result.exit_code == 1, result.output
+    ceiling = BUDGETS["dag audit"].max_chars
+    assert visible_len(result.output) <= ceiling
+    assert "showing 40 of 50 findings" in result.output
+    assert "complete output:" in result.output
+
+    js = _invoke_dag_audit(dag_audit_overflow_project, "--format", "json")
+    payload = json.loads(js.output)
+    assert len(payload["validation"]["findings"]) == 40
+    assert payload["truncation"]["findings"]["total"] == 50
+    assert payload["truncation"]["findings"]["omitted"] == 10
+    assert "mutations" not in payload["truncation"]
+
+
+def test_dag_audit_output_file_is_complete(dag_audit_overflow_project: Path, tmp_path: Path) -> None:
+    target = tmp_path / "audit.json"
+    result = _invoke_dag_audit(dag_audit_overflow_project, "--format", "json", "--output", str(target))
+    assert result.exit_code == 1, result.output  # exit code from the FULL findings, even on the file-sink path
+    assert result.output.count("\n") == 1
+    assert "wrote the complete audit report to" in result.output
+
+    payload = json.loads(target.read_text())
+    assert len(payload["validation"]["findings"]) == 50
+    assert "truncation" not in payload
+
+
+@pytest.fixture
+def peers_list_overflow_project(tmp_path: Path) -> Path:
+    """50 declared peers pointing at nonexistent paths -> 50 growable list rows."""
+    host = tmp_path / "host"
+    host.mkdir()
+    peers_yaml = "\n".join(f"  - id: peer-{i:03d}\n    path: ../missing-{i:03d}" for i in range(50))
+    (host / "science.yaml").write_text(
+        f'name: host\nid: host\nprofile: research\nresearch_question: "..."\npeers:\n{peers_yaml}\n',
+        encoding="utf-8",
+    )
+    return host
+
+
+def _invoke_peers_list(project_root: Path, *args: str):
+    return CliRunner().invoke(
+        main, ["peers", "list", "--project-root", str(project_root), *args], prog_name="science"
+    )
+
+
+def test_peers_list_stdout_stays_within_its_ceiling_and_reports_truncation(peers_list_overflow_project: Path) -> None:
+    result = _invoke_peers_list(peers_list_overflow_project)
+    assert result.exit_code == 0, result.output
+    ceiling = BUDGETS["peers list"].max_chars
+    assert visible_len(result.output) <= ceiling
+    assert "showing 40 of 50 peers" in result.output
+    assert "complete output:" in result.output
+
+    js = _invoke_peers_list(peers_list_overflow_project, "--format", "json")
+    payload = json.loads(js.output)
+    assert len(payload["peers"]) == 40
+    assert payload["truncation"]["total"] == 50
+    assert payload["truncation"]["omitted"] == 10
+
+
+def test_peers_list_output_file_is_complete(peers_list_overflow_project: Path, tmp_path: Path) -> None:
+    target = tmp_path / "peers.json"
+    result = _invoke_peers_list(peers_list_overflow_project, "--format", "json", "--output", str(target))
+    assert result.exit_code == 0, result.output
+    assert result.output.count("\n") == 1
+    assert "wrote the complete peer list to" in result.output
+
+    payload = json.loads(target.read_text())
+    assert len(payload["peers"]) == 50
+    assert "truncation" not in payload

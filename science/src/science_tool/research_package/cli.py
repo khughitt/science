@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+from typing import Any
 
 import click
 from science_model.packages.validation import check_freshness, validate_package
@@ -58,14 +59,28 @@ def init_cmd(name: str, title: str, workflow: Path | None, output: Path) -> None
     show_default=True,
     help="Output format. `--json` is kept as a convenience alias.",
 )
+@click.option(
+    "--output",
+    "output_path",
+    type=click.Path(path_type=Path),
+    default=None,
+    help="Write the complete, unbudgeted validation report to PATH instead of stdout.",
+)
 def validate_cmd(
     path: Path,
     check_freshness_flag: bool,
     project_root: Path | None,
     as_json: bool,
     output_format: str,
+    output_path: Path | None,
 ) -> None:
     """Validate research package(s)."""
+    from science_tool.budget.control import bounded_control_notice
+    from science_tool.budget.invocation import build_complete_via, hint_for
+    from science_tool.budget.projection import project_single_list_report
+    from science_tool.budget.registry import lookup
+    from science_tool.budget.sink import BoundedSink
+
     packages: list[Path] = []
     if (path / "datapackage.json").is_file():
         packages.append(path)
@@ -95,24 +110,57 @@ def validate_cmd(
         if not result.ok:
             has_errors = True
 
-    def _render() -> None:
-        for result in results:
-            pkg_name = Path(result.package_dir).name
-            if result.ok and not result.warnings:
-                click.echo(f"  \u2713 {result.package_dir}")
-            elif result.ok:
-                for w in result.warnings:
-                    click.echo(f"  \u26a0 {pkg_name}: {w}")
-            else:
-                for e in result.errors:
-                    click.echo(f"  \u2717 {pkg_name}: {e}")
-
     effective_format = "json" if (as_json or output_format == "json") else output_format
-    emit(
-        output_format=effective_format,
-        payload=[r.to_dict() for r in results],
-        render_text=_render,
+    complete_via = build_complete_via(
+        click.get_current_context(), output_hint=hint_for("research-package-validate", effective_format)
     )
+    sink = BoundedSink(
+        lookup("research-package validate"),
+        output_path=output_path,
+        command_path="research-package validate",
+        complete_via=complete_via,
+    )
+    control_notice = (
+        bounded_control_notice(f"wrote the complete validation report to {output_path}")
+        if output_path is not None
+        else None
+    )
+
+    full: dict[str, Any] = {
+        "summary": {"packages": len(results), "errors": sum(1 for r in results if not r.ok)},
+        "results": [r.to_dict() for r in results],
+    }
+    displayed = full if output_path is not None else project_single_list_report(full, "results", 40)
+    results_omitted = displayed.get("results_omitted", 0)
+    if output_path is None and results_omitted:
+        displayed = {
+            **displayed,
+            "truncation": {
+                "omitted": results_omitted,
+                "total": len(full["results"]),
+                "complete_via": complete_via,
+            },
+        }
+
+    def _render() -> None:
+        for result in displayed["results"]:
+            pkg_name = Path(result["package_dir"]).name
+            if result["ok"] and not result["warnings"]:
+                sink.echo(f"  \u2713 {result['package_dir']}")
+            elif result["ok"]:
+                for w in result["warnings"]:
+                    sink.echo(f"  \u26a0 {pkg_name}: {w}")
+            else:
+                for e in result["errors"]:
+                    sink.echo(f"  \u2717 {pkg_name}: {e}")
+        if results_omitted:
+            sink.echo(f"showing {len(displayed['results'])} of {len(full['results'])} package results")
+            sink.echo(f"  complete output:  {complete_via}")
+
+    emit(output_format=effective_format, payload=displayed, render_text=_render, sink=sink)
+    sink.flush()
+    if control_notice is not None:
+        click.echo(control_notice)
 
     raise SystemExit(1 if has_errors else 0)
 

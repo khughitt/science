@@ -114,6 +114,13 @@ BUDGETS: dict[str, CommandBudget] = {
     "explore-ideas apply": CommandBudget(max_chars=30_000, shape=PayloadShape.REPORT),
     "explore-ideas gaps": CommandBudget(max_chars=30_000, shape=PayloadShape.REPORT),
     "explore-ideas resolve-anchors": CommandBudget(max_chars=30_000, shape=PayloadShape.REPORT),
+    "dag audit": CommandBudget(max_chars=30_000, shape=PayloadShape.REPORT),
+    "dag validate": CommandBudget(max_chars=30_000, shape=PayloadShape.REPORT),
+    "inquiry show": CommandBudget(max_chars=30_000, shape=PayloadShape.REPORT),
+    "inquiry validate": CommandBudget(max_chars=30_000, shape=PayloadShape.REPORT),
+    "peers list": CommandBudget(max_chars=30_000, shape=PayloadShape.REPORT),
+    "refs check": CommandBudget(max_chars=30_000, shape=PayloadShape.REPORT),
+    "research-package validate": CommandBudget(max_chars=30_000, shape=PayloadShape.REPORT),
 }
 
 EXEMPTIONS: dict[str, str] = {
@@ -329,8 +336,6 @@ DEFERRED.update(
         path: DeferredCommand("one output member per DAG finding, mutation, changed path, or diff line", "1b")
         for path in (
             "dag apply-workbench",
-            "dag audit",
-            "dag validate",
             "dag workbench",
         )
     }
@@ -438,8 +443,6 @@ DEFERRED.update(
         for path in (
             "inquiry export-chirho",
             "inquiry export-pgmpy",
-            "inquiry show",
-            "inquiry validate",
         )
     }
 )
@@ -455,10 +458,7 @@ DEFERRED.update(
 DEFERRED.update(
     {
         path: DeferredCommand("one output member per peer or peer validation issue", "1b")
-        for path in (
-            "peers check",
-            "peers list",
-        )
+        for path in ("peers check",)
     }
 )
 DEFERRED.update(
@@ -472,18 +472,6 @@ DEFERRED.update(
             "project topic-coverage",
             "project verify",
         )
-    }
-)
-DEFERRED.update(
-    {
-        path: DeferredCommand("one output member per package, package validation finding, or build error", "1b")
-        for path in ("research-package validate",)
-    }
-)
-DEFERRED.update(
-    {
-        path: DeferredCommand("one output member per reference problem or unresolved marker", "1b")
-        for path in ("refs check",)
     }
 )
 DEFERRED.update(
