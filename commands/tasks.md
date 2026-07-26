@@ -20,7 +20,7 @@ Follow `${CLAUDE_PLUGIN_ROOT}/references/command-preamble.md` before executing t
 
 ## Setup
 
-Read `tasks/active.md` if it exists. If `tasks/` directory doesn't exist, create it.
+Run `science tasks list` to see the current queue. If the `tasks/` directory doesn't exist, create it (the first `science tasks add` scaffolds it).
 
 ## Task IDs And References
 

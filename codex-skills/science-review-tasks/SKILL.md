@@ -144,7 +144,7 @@ If `knowledge/graph.trig` exists, also run:
 uv run science graph attention-sample --limit 8 --format json
 ```
 
-Read `tasks/active.md` for full task descriptions. Note the total count and distribution.
+Use `science tasks summary` (already run above) for the total count and distribution, and `science tasks show <id>` when you need a specific task's full description.
 
 ### 2. Identify review scope
 
@@ -256,7 +256,7 @@ git add tasks/ && git commit -m "tasks: backlog review — N status corrections,
 ## Tips
 
 - Use subagents to parallelize codebase searches for multiple tasks
-- Check `tasks/done/` for recently completed tasks that might inform gap analysis
+- Check recently completed tasks (`science tasks list --status done --since <window-start>`) for context that might inform gap analysis
 - Cross-reference `entities/discussions/` and `entities/interpretations/` for research context
 - The `science:next-steps` skill produces complementary forward-looking analysis; this skill is backward-looking (auditing what exists)
 - For a broader project audit beyond just tasks (unresolved references, lingering tags, knowledge gaps), use `science-health`.

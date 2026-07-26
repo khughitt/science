@@ -12,7 +12,7 @@ Use this role profile when the primary objective is high-quality research synthe
 
 1. `specs/research-question.md`
 2. `specs/scope-boundaries.md` (if present)
-3. `tasks/active.md`
+3. Active tasks (`science tasks list --status active`)
 4. Relevant docs in `doc/background/topics/`, `doc/background/papers/`, `entities/questions/`
 5. Skills: `scientific-writing`; for research methodology, read `${CLAUDE_PLUGIN_ROOT}/skills/INDEX.md` and load the relevant `literature/`/`epistemics/` leaves
 
