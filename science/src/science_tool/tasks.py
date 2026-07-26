@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import fcntl
 import json
+import os
 import re
 import sys
 import tempfile
@@ -17,6 +18,7 @@ from pathlib import Path
 from typing import Iterator
 
 import yaml
+from science_model.frontmatter import atomic_write_text
 from science_model.tasks import Task, TaskCreate, TaskStatus, TaskUpdate
 from science_tool.markdown_utils import reject_duplicate_and_merge_keys
 
@@ -29,6 +31,7 @@ __all__ = [
     "TaskStatus",
     "TaskUpdate",
     "append_task_note",
+    "delete_task_file",
     "find_dangling_task_refs",
     "find_task_location",
     "parse_task_file",
@@ -36,6 +39,7 @@ __all__ = [
     "render_task_file",
     "retire_task",
     "validate_task_aspects",
+    "write_task_file",
     "write_task_location",
 ]
 
@@ -423,6 +427,82 @@ def _verify_task_file_round_trip(text: str, task: Task, path: Path) -> None:
             f"refusing to write {path}: task {task.id} does not round-trip "
             f"(a field changed during serialization)"
         )
+
+
+def _active_dir(tasks_dir: Path) -> Path:
+    """Return the canonical per-file open-task directory.
+
+    Mutation callers must hold ``_task_allocation_lock``; this helper never
+    acquires it.
+    """
+    return tasks_dir / "active"
+
+
+def _find_active_file(tasks_dir: Path, task_id: str) -> Path | None:
+    """Find the unique active file for ``task_id``, refusing duplicates.
+
+    Mutation callers must hold ``_task_allocation_lock``; this helper never
+    acquires it.
+    """
+    active = _active_dir(tasks_dir)
+    matches = sorted(active.glob(f"{task_id}-*.md"))
+    slugless = active / f"{task_id}.md"
+    if slugless.is_file():
+        matches.append(slugless)
+    if len(matches) > 1:
+        locations = ", ".join(str(path) for path in matches)
+        raise ValueError(f"duplicate active task files for {task_id}: {locations}")
+    return matches[0] if matches else None
+
+
+def _slug_for(title: str) -> str | None:
+    """Derive a task filename slug, deliberately choosing no slug if impossible."""
+    # Deferred to avoid tasks -> entities -> graph.sources -> tasks at import time.
+    from science_tool.entities import EntityCommandError, derive_slug  # noqa: PLC0415
+
+    try:
+        return derive_slug(title)
+    except EntityCommandError:
+        return None
+
+
+def write_task_file(tasks_dir: Path, task: Task) -> None:
+    """Atomically write one open task file.
+
+    The caller must hold ``_task_allocation_lock``; this helper does not acquire
+    the lock itself.
+    """
+    active = _active_dir(tasks_dir)
+    active.mkdir(parents=True, exist_ok=True)
+    text = render_task_file(task)
+    _verify_task_file_round_trip(text, task, path=active / f"{task.id}.md")
+    existing = _find_active_file(tasks_dir, task.id)
+    slug = _slug_for(task.title)
+    target = active / (f"{task.id}-{slug}.md" if slug else f"{task.id}.md")
+
+    if existing is None:
+        atomic_write_text(target, text)
+        return
+    if existing == target:
+        atomic_write_text(target, text)
+        return
+
+    atomic_write_text(existing, text)
+    if target.exists():
+        raise ValueError(f"rename target already exists: {target}")
+    os.replace(existing, target)
+
+
+def delete_task_file(tasks_dir: Path, task_id: str) -> None:
+    """Delete one active task file.
+
+    The caller must hold ``_task_allocation_lock``; this helper does not acquire
+    the lock itself.
+    """
+    existing = _find_active_file(tasks_dir, task_id)
+    if existing is None:
+        raise FileNotFoundError(f"active task file not found: {task_id}")
+    existing.unlink()
 
 
 def _task_ref_number(ref: str) -> str | None:
