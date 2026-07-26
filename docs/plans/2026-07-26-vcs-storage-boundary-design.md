@@ -53,9 +53,25 @@ None was deliberate. Three consequences worth recording because they generalise:
    `.gitignore`, so the project's "1011 files clean" gate had been silently
    understating its own scope for months.
 3. The offending bare `archive` pattern was in the user's **global** excludes
-   file, not the project's — so the boundary a project declares can be
-   overridden by configuration the project cannot see. A project-local negation
-   could not have fixed it: git does not descend into an excluded directory.
+   file, not the project's — so a project's effective boundary depends on
+   configuration outside the project.
+
+On that third point, precedence runs the other way from what a first reading
+suggests, and the difference matters for remediation. A project `.gitignore`
+**outranks** `core.excludesFile`, so a project-local negation *can* override a
+global rule — but only in one of its two forms:
+
+| negation form | `check-ignore` | `git add .` | ripgrep |
+|---|---|---|---|
+| directory-level (`!/s/m/archive/`) | visible | **picks it up** | sees it |
+| file-level (`!/s/m/archive/a.py`) | visible | **misses it** | sees it |
+
+Both report the path as un-ignored, but only the directory-level form restores
+directory traversal. A file-level negation beneath an excluded parent is the
+"appears to succeed while committing nothing" trap in its purest form: every
+diagnostic says the file is fine, and bulk staging silently skips it. The
+design therefore treats an ineffective negation as its own detectable defect
+(`boundary.ineffective-negation`, below) rather than as folklore.
 
 ### Why the existing surfaces did not catch it
 
@@ -133,6 +149,40 @@ boundary:
 | `payload` | nothing under this path is tracked | anchored whole-directory exclude |
 | `manifest` | payload except the declared `tracked:` globs | descend-preserving idiom |
 
+#### Root composition and validation
+
+Roots do not compose. A `payload` root at `data` emits `/data/`, which stops
+git descending and silently disables every negation a `manifest` root at
+`data/external` would generate. Verified:
+
+```gitignore
+/data/                                        # payload root at data
+!/data/external/**/datapackage.json           # manifest root beneath it
+# -> datapackage.json STILL IGNORED (.gitignore:1). Descent never happens.
+```
+
+**Nested roots are rejected at load time.** A declared root that is an ancestor
+or descendant of another declared root is a configuration error, not a
+precedence puzzle. Sibling roots (`data/raw` payload + `data/external` manifest)
+are the supported shape and compose correctly. Rejecting is chosen over defining
+precedence because the failure is silent when it happens and cheap to forbid.
+
+Generation for a `manifest` root always emits the ancestor re-inclusion form
+(`/root/**` + `!/root/**/` + negations), never a bare `/root/`, which is what
+makes descent survive. The same construction is what a `payload` root must
+*avoid* emitting when any negation could exist beneath it — but since nesting is
+rejected, a `payload` root can safely emit the terse anchored form.
+
+`path` validation, all fail-closed at load:
+
+- repo-relative POSIX only; reject absolute paths, `.`, `..`, leading or
+  trailing `/`, empty strings, and embedded newlines
+- reject git pattern metacharacters (`*`, `?`, `[`, `]`, `!`, `\`) in `path` —
+  globs belong in `tracked:`, and a glob in `path` cannot be anchored reliably
+- reject duplicate `path` values
+- `tracked:` is valid **only** on `class: manifest`; supplying it on `payload`
+  is an error rather than a silent no-op
+
 There is deliberately **no `derived` class**. A "regenerable output" root and a
 "raw payload" root differ semantically but are mechanically identical — both are
 entirely ignored. Two classes with identical behaviour is a distinction without
@@ -178,15 +228,15 @@ that killed the previous attempt.
 
 | command | purpose |
 |---|---|
-| `science boundary sync` | rewrite the managed block; `--check` exits nonzero on drift; `--verify-equivalence` proves no ignore decision changed |
+| `science boundary sync` | rewrite the managed block; `--check` exits nonzero on drift; `--verify-current-tree` diffs ignore decisions before/after |
 | `science boundary check` | fast standalone predicate for pre-commit; two git calls, no config load |
 | `science boundary init` | adoption aid: propose a declaration from the existing tree |
 
-`boundary init` is the **only remaining caller of `classify()`**. The heuristic
-engine is demoted from enforcement, where its false-positive rate makes it
-unusable, to bootstrapping, where a human reviews every proposal before it is
-written. That is the job it is actually good at, and one we need regardless in
-order to absorb existing hand-curated rules.
+`classify()` keeps exactly two callers: `boundary init` and `data audit`. The
+heuristic is removed from *enforcement*, where its false-positive rate makes it
+unusable, and retained for **proposal** (`boundary init`, where a human reviews
+every suggestion before it is written) and **discovery** (`data audit`, which is
+advisory and blocks nothing). No boundary check consults it.
 
 ### Checks
 
@@ -197,6 +247,8 @@ All four are mechanical. No heuristic participates in enforcement.
 | `boundary.tracked-ignored` | all projects | ERROR | a tracked file matches an ignore rule |
 | `boundary.generated-drift` | declared only | ERROR | managed block ≠ regenerated block |
 | `boundary.declaration-conflict` | declared only | ERROR | an unmanaged rule matches a path under a declared root |
+| `boundary.ineffective-negation` | all projects | ERROR | a file-level negation whose parent directory is excluded |
+| `boundary.ignored-undeclared` | declared only | WARN | an unmanaged rule ignores a project path with no declared root and no allowlist entry |
 | `boundary.unanchored-pattern` | all projects | WARN | bare directory-name pattern with no leading `/`, in the unmanaged region |
 
 Generated patterns are anchored by construction, so `unanchored-pattern` only
@@ -215,6 +267,28 @@ three MM30 drift classes on the day each appeared.
 `boundary.declaration-conflict` is what makes the declaration *the* authority
 rather than merely *an* authority. Without it, a hand-added rule below the
 managed block silently re-opens per-case adjudication.
+
+`boundary.ignored-undeclared` closes the complementary hole. `declaration-conflict`
+only inspects paths *beneath a declared root*, so without this check a project
+could hand-write `/papers/pdfs/` in the unmanaged region and ignore project
+material with no declaration at all — the implicit-`versioned` default would be
+quietly false. The escape valve is declarative rather than a judgement call:
+
+```yaml
+boundary:
+  unmanaged_allow: [".venv/", "__pycache__/", ".env", "node_modules/"]
+```
+
+`unmanaged_allow` defaults to a canonical tooling/OS/secret set, so a normal
+project starts clean. Reaching zero means either declaring the root or naming
+the pattern — both explicit, neither a per-file adjudication. It is a WARN
+because it is declaration-derived and an adopter should not be blocked by
+pre-existing tooling ignores on day one.
+
+`boundary.ineffective-negation` is an ERROR rather than a WARN despite being
+rare, because its failure mode is maximally deceptive: every diagnostic reports
+success while `git add .` stages nothing. Detection is mechanical — for each
+negation pattern, ask whether the parent directory is itself excluded.
 
 Precedent exists: `validate/checks/prereg_vehicles.py` already ships a
 fail-closed, gitignore-aware gate (`prereg.vehicle-gitignored`). This
@@ -244,9 +318,13 @@ Each of these comes from an observed failure, not speculation:
 - All four checks are cheap enough for `--profile commit` (worst case two git
   calls plus a config load), so they run in the pre-commit path rather than only
   on full validate.
-- `science health` grows a `boundary` section: whether the project declares
-  roots, and its violation count. This is what makes ecosystem state visible
-  without per-project archaeology.
+- **No separate `health` boundary section.** `graph/health_checks/validate.py`
+  already runs the canonical validation runner and surfaces every non-info
+  result, so registering the checks in `CANONICAL_CHECKS` makes them appear
+  under `validation` automatically. Adding an independent section would re-run
+  the same predicates and double-count their findings. If a boundary rollup is
+  wanted later, it must be **derived** from the findings that check already
+  collects — filtered by `rule` prefix `boundary.` — never a second execution.
 
 ### Adoption
 
@@ -260,7 +338,7 @@ gate went loud across every project simultaneously and required a multi-task
 cleanup campaign (MM30 t832 → t833 → t856, with 154 warnings ultimately left
 demand-gated).
 
-### Migration equivalence harness
+### Migration verification
 
 Replacing hand-curated rules with a generated block risks silently changing what
 is ignored. Comparing `.gitignore` *text* cannot detect this. The harness
@@ -270,13 +348,32 @@ therefore compares **ignore decisions**:
 2. Swap in the generated block.
 3. Re-record and diff.
 
-An empty diff proves behavioural equivalence. Any intended change appears as an
-explicit, reviewable line.
+An empty diff means **no path currently on disk changed its ignore decision**.
+It does *not* prove the two rule sets are equivalent: they can agree on every
+extant path and diverge the moment a new dataset version, a deeper nesting
+level, or an unseen filename appears. Naming it "equivalence" would overstate
+what it checks.
 
-This is exposed as `science boundary sync --verify-equivalence`, not as a
-one-off script: any `sync` that replaces existing hand-curated rules should be
-able to prove it changed no ignore decision. `boundary init` invokes it before
-writing its proposal.
+It is therefore `science boundary sync --verify-current-tree`, and it is
+supplemented by **generated probes** covering the shapes that do not exist yet.
+`git check-ignore --no-index` evaluates hypothetical paths, so probes need no
+files on disk — verified:
+
+```
+data/external/NEW/9.9/datapackage.json     visible
+data/external/a/b/c/d/datapackage.json     visible
+data/external/NEW/big.parquet              IGNORED
+```
+
+For each declared root the harness emits probes for: a file directly under the
+root, the same file nested three levels deeper, one probe per `tracked:` glob at
+both depth 1 and depth 3, a dotfile, and a payload-extension file. Old and new
+rule sets must agree on every probe.
+
+Together the two passes cover the extant tree exactly and the future tree
+structurally. Neither is a proof of total equivalence, and the spec should not
+claim one; the residual risk is a filename shape no probe anticipates, which the
+universal `boundary.tracked-ignored` check catches after the fact.
 
 ### Retiring the conflicting convention
 
@@ -289,9 +386,17 @@ Required, or the declaration becomes a fourth opinion rather than the authority:
   resolve the deferred-follow-ups paragraph.
 - `docs/audits/downstream-project-conventions/synthesis.md` §7.5 — annotate as
   superseded.
-- `data_audit.py` — make the walk gitignore-aware. That single change takes MM30
-  from 51,073 violations to roughly 6,000, and the command is redocumented as
-  advisory discovery rather than enforcement.
+- `data_audit.py` — re-scope the walk. The noise is not "ignored files" as a
+  class; it is ignored files that are **also outside every declared root**
+  (`.venv`, `node_modules`, `.snakemake`, `.opencode` — roughly 45,000 of MM30's
+  51,073). Pruning all ignored paths would be wrong: a `stranded_record` sitting
+  inside an ignored payload root is precisely what the audit exists to find.
+
+  New predicate: **skip a path if it is ignored *and* lies outside every
+  declared root; always inspect paths inside a declared root.** For a project
+  with no declaration this degenerates to auditing tracked files only, which is
+  a defensible floor and is documented as such. The command stays advisory
+  discovery, blocks nothing, and keeps its `classify()`-driven quadrants.
 
 ### Testing
 
@@ -300,6 +405,21 @@ Required, or the declaration becomes a fourth opinion rather than the authority:
   `git check-ignore` that a nested descriptor is genuinely visible. String
   comparison of generated text would pass even if the negations silently failed,
   which is the entire trap.
+- **Bulk-staging test, not just `check-ignore`.** For every generated `tracked:`
+  glob, assert `git add .` actually stages the file. `check-ignore` and
+  traversal disagree for file-level negations under an excluded parent, so a
+  `check-ignore`-only assertion would pass on a layout that stages nothing.
+- Nested-root rejection: `data` payload + `data/external` manifest fails at load
+  with a clear message, and the broken `/data/` + negation output is never
+  generated.
+- Path validation: absolute, `..`, `.`, trailing `/`, embedded newline, glob
+  metacharacter, duplicate path, and `tracked:` on a `payload` root each raise.
+- `boundary.ineffective-negation` fires on a file-level negation beneath an
+  excluded parent and stays quiet on the directory-level form.
+- `boundary.ignored-undeclared` fires on an unmanaged project ignore, and is
+  silenced by both remedies (declaring the root, and `unmanaged_allow`).
+- Probe generation: probes are evaluated with `--no-index` against paths that do
+  not exist, and a rule-set change that only affects unseen depths is caught.
 - Integration: a temporary repository containing a tracked-and-ignored file
   produces the ERROR; a clean repository passes.
 - Regression pinning the `!`-negation false-positive filter.
@@ -317,7 +437,10 @@ Required, or the declaration becomes a fourth opinion rather than the authority:
 - No changes to worktree hydration or the commons data root.
 - No `derived` storage class.
 - Nested `.gitignore` files are evaluated but not managed.
-- The global excludes file is diagnosed but never rewritten.
+- The global excludes file is diagnosed but never rewritten. Since a project
+  `.gitignore` outranks it, the remediation science *can* offer is a
+  directory-level negation in the managed block; editing the user's global file
+  stays a human decision, because it affects every repository on the machine.
 
 ## Relationship to `atoms`
 
