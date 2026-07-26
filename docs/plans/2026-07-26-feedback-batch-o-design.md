@@ -99,10 +99,18 @@ document the form:
 - `docs/conventions/annotation-tokens.md` documents the form under a new
   "Payload" subsection, beside the existing lexical-scope rules.
 
-**Certification.** Counts rise fleet-wide. Marker findings are `WARN`
-(`unresolved_markers.py:52` hardcodes `Severity.WARN`), so no project's
-`validate` exit code can change — but this must be *measured*, not asserted:
-run the check across the fleet before and after and record both tallies.
+**Certification — measured across all 14 registered projects with markers.**
+538 hits after the fix against 235 before: **303 markers were invisible**, a
+**2.3x** undercount fleet-wide. `multiple-myeloma` cross-checks exactly
+(224 − 110 payload-form = 114, the figure `main`'s binary reports). The change
+is purely additive; no project loses a hit.
+
+Exit codes cannot move, and this was verified rather than assumed:
+`unresolved_markers` appears in **no** tier of the `--fail-on` gate ladder
+(`validate/gates.py`), and none of the three reporting projects sets
+`code_gate:` in `science.yaml`. Marker findings are `WARN`
+(`unresolved_markers.py:52`), and `validate/cli.py:161` exits nonzero only on
+`result.errors or result.gated`.
 
 **RED first.** A test asserting a `[UNVERIFIED: reason]` line yields one hit
 must fail against current `main` (today it yields zero).
@@ -165,6 +173,33 @@ starts reporting positions.
 **RED first.** A line carrying an inline-code span followed by a
 hardware-prefixed number must classify wrongly against current `main`.
 
+**Certification — the prediction below was WRONG, corrected here.** The design
+first asserted that T0-2 and T0-3 would *reduce* findings. Measured over 80
+files of `post-acute-infection`:
+
+| | findings | mis-pointing columns |
+|---|---|---|
+| before | 15 | **3** |
+| after | **16** | **0** |
+
+Columns are fully corrected, but the count went **up by one**, not down. The
+delta is a single previously-*suppressed* finding, and the suppression was an
+accident rather than a judgement: an inline-code span wrapped across a line
+break, and deleting the (mis-parsed) span on the following line spliced two
+unrelated tokens into `0045accepted_validation`, which the claim regex's
+trailing `(?![A-Za-z0-9_.,])` lookahead then rejected. Blanking preserves the
+gap, so the number is seen again.
+
+Two honest consequences:
+
+- The instrument was *hiding* a claim, so surfacing it is the correct direction
+  for an honesty check — but "this change only removes false positives" was not
+  true and should not be claimed.
+- **Line-wrapped inline-code spans are a pre-existing limitation, flagged not
+  fixed.** `_INLINE_CODE_RE` is applied per line, so a span crossing a newline
+  is invisible to it. Both the old and new code mis-handle that construct; this
+  change neither introduces nor repairs it.
+
 ### T0-3 — `fb-2026-07-26-008`: the canonical-ID masker is case-brittle
 
 **Report:** the canonical-ID masker is lowercase-only, so sentence-initial
@@ -203,8 +238,9 @@ lesson recorded from the toolkit-convergence work). **That widening is flagged,
 not silently performed**: enumerating the registry changes which references the
 short-form lint skips, which needs its own corpus certification.
 
-**Certification.** Both changes *reduce* findings (more spans masked). Measure
-the fleet delta and confirm the drop is confined to genuine canonical IDs.
+**Certification.** Both changes mask more spans. Measured jointly with T0-2
+above — see that item's certification table for the combined corpus result, and
+for why the naive "this only reduces findings" expectation did not hold.
 
 ---
 
