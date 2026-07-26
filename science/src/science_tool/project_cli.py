@@ -6,9 +6,35 @@ from typing import Any
 
 import click
 
+from science_model.frontmatter import project_config_path
+
 from science_tool.entities import list_entities
 from science_tool.output import OUTPUT_FORMATS, emit, emit_query_rows
 from science_tool.project_artifacts.cli import artifacts_group as _artifacts_group
+
+
+def _require_project_root(project_root: Path) -> Path:
+    """Resolve `--project-root` and fail if it is not a project.
+
+    `--project-root` defaults to `.`, so running one of these commands from a
+    subdirectory silently pointed it at a directory holding no entities. The
+    reader then reported a well-formed negative — `unresolved` for nine valid
+    id-exact refs, `{"n_topics": 0, "note": "no topics"}` — which is
+    indistinguishable from a real answer and gets copied into reports as fact
+    (fb-2026-07-25-008).
+
+    No upward search: an implicit walk-up makes the answer depend on the
+    invocation directory in a way the caller cannot see, and `--project-root`
+    already exists for callers who mean a different root. Mirrors
+    `validate/context.py`, which already fails this way.
+    """
+    resolved = project_root.resolve()
+    if not project_config_path(resolved).is_file():
+        raise click.ClickException(
+            f"{resolved} is not a Science project — no science.yaml. "
+            "Run from the project root, or pass --project-root / set SCIENCE_PROJECT_ROOT."
+        )
+    return resolved
 
 
 @click.group("project")
@@ -51,6 +77,7 @@ def project_topic_coverage(project_root: Path, output_format: str, output_path: 
     from science_tool.budget.sink import BoundedSink
     from science_tool.topic_coverage import MalformedTopicError, compute_topic_coverage
 
+    project_root = _require_project_root(project_root)
     try:
         cov = compute_topic_coverage(project_root)
     except MalformedTopicError as exc:
@@ -134,6 +161,7 @@ def project_resolve_refs(project_root: Path, queries: tuple[str, ...], output_fo
     """Resolve free-string refs to canonical entity ids (id-slug + title matching)."""
     from science_tool.resolve_refs import build_ref_index, load_index_rows
 
+    project_root = _require_project_root(project_root)
     index = build_ref_index(load_index_rows(project_root))
     results = [index.resolve(q) for q in queries]
 
@@ -314,7 +342,7 @@ def project_index(output_format: str, project_root: Path, output_path: Path | No
     from science_tool.budget.registry import lookup
     from science_tool.budget.sink import BoundedSink
 
-    project_root = project_root.resolve()
+    project_root = _require_project_root(project_root)
 
     # Resolve entities through the canonical project-sources loader.
     rows: list[dict[str, str]] = []
