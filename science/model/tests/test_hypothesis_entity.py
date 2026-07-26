@@ -60,7 +60,6 @@ _ADMITTED_BY_GENERATION = {
     generation: admitted_field_names(profile)
     for generation, profile in _PROFILE_BY_GENERATION.items()
 }
-_ADMITTED = _ADMITTED_BY_GENERATION[2]
 
 # Admitted by the schema, absent from the model, and CORRECT -- for exactly one reason: these two
 # are the P1 capability subsystem, whose readers re-parse RAW frontmatter and never go through the
@@ -75,7 +74,6 @@ _SHARED_BY_GENERATION = {
     generation: admitted & set(HypothesisEntity.model_fields)
     for generation, admitted in _ADMITTED_BY_GENERATION.items()
 }
-_SHARED_FIELDS = _SHARED_BY_GENERATION[2]
 
 # Model-only required fields. NOT frontmatter -- the loader stamps them -- so they never appear in a
 # schema payload, and every direct model construction here goes through `_model_payload` rather than
@@ -93,8 +91,8 @@ _LEGAL_ORIGIN = {"type": "literature", "ref": "paper:Smith2024"}
 _LEGAL_LENS = {"lens": "mechanism", "rationale": "r"}
 
 # Every value here is one the MODEL has an opinion about; the point is to make the schema hold the
-# same opinions. It must equal `_SHARED_FIELDS` exactly -- see
-# `test_the_BATTERY_is_EXACTLY_the_shared_surface`, which checks both directions.
+# same opinions. It must equal `_SHARED_BY_GENERATION[generation]` exactly, for every generation --
+# see `test_the_BATTERY_is_EXACTLY_the_shared_surface`, which checks both directions.
 _BATTERY: dict[str, list[Any]] = {
     "origins": [
         [42],
@@ -299,9 +297,16 @@ def test_every_field_the_schema_ADMITS_is_REPRESENTABLE_in_the_projection(genera
     assert not missing, f"schema admits {sorted(missing)}; the projection has no declared field for them"
 
 
-@pytest.mark.parametrize("generation", _GENERATIONS)
-@pytest.mark.parametrize("field", sorted(_SHARED_FIELDS))
-def test_the_schema_is_at_least_as_strict_as_the_projection(field: str, generation: int) -> None:
+# Paired, not crossed: the probe set is PER GENERATION because the shared surface is. Crossing
+# `_GENERATIONS` x a single frozen `field` list would run generation 3 against generation 2's
+# shared surface (or vice versa) -- exactly the coupling `test_the_BATTERY_is_EXACTLY_the_shared_surface`
+# already refuses to make, since it compares the battery to `_SHARED_BY_GENERATION[generation]`, not
+# to one fixed set.
+@pytest.mark.parametrize(
+    "generation,field",
+    sorted((g, f) for g, shared in _SHARED_BY_GENERATION.items() for f in shared),
+)
+def test_the_schema_is_at_least_as_strict_as_the_projection(generation: int, field: str) -> None:
     """D3 point 4, half two — and the one that actually bites.
 
     **No payload the schema accepts may be rejected by the model.** If one is, the model is the real
@@ -331,9 +336,13 @@ def test_the_schema_is_at_least_as_strict_as_the_projection(field: str, generati
     )
 
 
-@pytest.mark.parametrize("generation", _GENERATIONS)
-@pytest.mark.parametrize("field", sorted(_SHARED_FIELDS))
-def test_every_value_the_schema_ADMITS_SURVIVES_the_projection(field: str, generation: int) -> None:
+# Paired, not crossed -- same reason as the test above: the shared surface is per generation, so
+# the probes it drives are too.
+@pytest.mark.parametrize(
+    "generation,field",
+    sorted((g, f) for g, shared in _SHARED_BY_GENERATION.items() for f in shared),
+)
+def test_every_value_the_schema_ADMITS_SURVIVES_the_projection(generation: int, field: str) -> None:
     """D3 point 4, half three — the half that "the model accepted it" cannot see.
 
     Acceptance and preservation are DIFFERENT properties, and a NESTED `extra="forbid"` submodel is
