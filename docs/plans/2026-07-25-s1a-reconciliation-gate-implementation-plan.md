@@ -2,6 +2,19 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
+> **2026-07-26 correction note:** the final whole-branch review found four factual defects in this
+> plan, all discovered during execution and repaired here so the document matches what actually
+> happened rather than reading as authored-correct: Task 2 Steps 8–9 named a `composition_rule`
+> enum value (`"conjunctive_extra"`) that appears in no probe battery and a fallback field
+> (`status`) that cannot work because it is unrestricted, corrected to `"evidence_union"` with the
+> `status` note replaced by the reason it fails; Task 3 Step 4's expected outcome claimed both
+> `test_value_reconciliation.py` tests fail from an unearned `VALUE_RECONCILED_KINDS` claim, but
+> only one reads that name; Task 4 Step 3 told the implementer to comment out `PaperEntity.doi`,
+> which raises `PydanticUserError` at import time because `doi` is named in a `field_validator`
+> decorator, corrected to `year`; and Task 4's manifest carried two UNHELD notes since found false
+> and repaired in commit `e023b6df` (the `version` `Reader`'s mapping, and the `sources`
+> `PendingRuling`'s false universal), now brought in line with the shipped file.
+
 **Goal:** Generalize the schema↔model reconciliation that today covers one kind into a gate that covers every kind with a schema, and fix the one composition derivation all of it depends on.
 
 **Architecture:** One shared derivation (`admitted_field_names`) moves into `science_model`, replacing a copy that lives in a test and fixing a sibling reader that ignores `false` subschemas. On top of it, two guards: a **field-declaration gate** in the tool suite (every schema-admitted field is declared on the projection, modulo a frozen generation-keyed manifest of 31 known gaps), and **value-reconciliation coverage** in the model suite (the existing probe battery is parametrized over every profile of its kind, so coverage is established by running, never by claiming two schemas equivalent).
@@ -184,7 +197,7 @@ in the commit message.
 - [ ] **Step 9: Commit**
 
 ```bash
-cd /mnt/ssd/Dropbox/science/.worktrees/reconciliation-gate && git branch --show-current  # must print reconciliation-gate
+cd ~/d/science/.worktrees/reconciliation-gate && git branch --show-current  # must print reconciliation-gate
 git add science/model/src/science_model/entity_schema/introspection.py \
         science/model/src/science_model/entity_schema/__init__.py \
         science/model/tests/test_entity_schema_merge.py
@@ -392,7 +405,7 @@ the two battery tests). Confirm from the output that generation-3 cases actually
 
 - [ ] **Step 8: Prove the gen-3 parametrization can fail**
 
-Edit `science/model/src/science_model/schemas/mixin-hypothesis-2.0.json` only — append `"conjunctive_extra"` to `composition_rule`'s `enum` array.
+Edit `science/model/src/science_model/schemas/mixin-hypothesis-2.0.json` only — append `"evidence_union"` to `composition_rule`'s `enum` array. (`evidence_union` is already a `_BATTERY["composition_rule"]` probe value, and `Entity._validate_composition_rule` rejects it via `RESERVED_COMPOSITION_RULES` — so widening the schema's enum to admit it makes the schema admit a value the model rejects, which is exactly what `test_the_schema_is_at_least_as_strict_as_the_projection` exists to catch.)
 
 ```bash
 cd science/model && uv run --frozen pytest tests/test_hypothesis_entity.py -k "at_least_as_strict and composition_rule" -v
@@ -413,7 +426,7 @@ run against. Revert and confirm both pass.
 - [ ] **Step 10: Commit**
 
 ```bash
-cd /mnt/ssd/Dropbox/science/.worktrees/reconciliation-gate && git branch --show-current  # must print reconciliation-gate
+cd ~/d/science/.worktrees/reconciliation-gate && git branch --show-current  # must print reconciliation-gate
 git add science/model/tests/test_hypothesis_entity.py
 git commit -m "test(schema): run the hypothesis battery against every generation
 
@@ -541,13 +554,15 @@ Expected: `test_pending_profiles_is_exactly_the_underived_remainder` FAILS with
 Temporarily change `VALUE_RECONCILED_KINDS` to `frozenset({"hypothesis", "dataset"})`.
 
 Expected: `test_pending_profiles_is_exactly_the_underived_remainder` FAILS with
-`stale: [(2, 'dataset'), (3, 'dataset')]`, and `test_the_reconciled_profiles_are_the_complement`
-FAILS too. Revert and confirm PASS. **Record both outcomes in the commit message.**
+`stale: [(2, 'dataset'), (3, 'dataset')]`. `test_the_reconciled_profiles_are_the_complement`
+does NOT fail from this mutation — it reads only `PENDING_PROFILES` (a hand-frozen literal) and
+`_profiles()`, never `VALUE_RECONCILED_KINDS` or anything derived from it, so it cannot see this
+change. Revert and confirm the first test PASSES. **Record both outcomes in the commit message.**
 
 - [ ] **Step 5: Commit**
 
 ```bash
-cd /mnt/ssd/Dropbox/science/.worktrees/reconciliation-gate && git branch --show-current  # must print reconciliation-gate
+cd ~/d/science/.worktrees/reconciliation-gate && git branch --show-current  # must print reconciliation-gate
 git add science/model/tests/test_value_reconciliation.py
 git commit -m "test(schema): ratchet which profiles have a probe battery
 
@@ -706,7 +721,13 @@ for _kind in _COMMONS_FOUR:
     )
     UNHELD[(_kind, "version")] = (
         _BOTH,
-        Reader("science_tool.commons.dataset_lifecycle", "_validate_entity_frontmatter", "entity frontmatter"),
+        Reader(
+            "science_tool.validate.checks.commons_owner_collision",
+            "check_commons_owner_collision",
+            "record.frontmatter.get('version'), where record is the commons canonical "
+            "(any of dataset/paper/theme/topic) resolved by CommonsQuery.show for the id "
+            "of whatever project entity is being checked -- kind-agnostic by construction",
+        ),
     )
     UNHELD[(_kind, "contributors")] = (
         _BOTH,
@@ -721,8 +742,11 @@ for _kind in ("paper", "theme", "topic"):
     UNHELD[(_kind, "sources")] = (
         _BOTH,
         PendingRuling(
-            "the only keyed `sources` reads are datasets_register._proxy_source_datasets (a nested "
-            "identity_contract.assembly.proxy key) and the dataset-only promote_dataset hint"
+            "keyed `sources` reads exist (commons.catalog's catalog file, annotation.prose_health's "
+            "manifest, skills_lint's skill frontmatter, tooling_dependency's uv config, "
+            "identity_context's nested identity_contract.assembly.proxy key, and "
+            "graph.store.queries/causal.export_*'s provenance-derived row dicts), but none reads a "
+            "paper/theme/topic entity frontmatter `sources` -- no reader of that value exists"
         ),
     )
 
@@ -832,13 +856,16 @@ Expected: PASS — 10 profile cases, 17 reader cases, and 2 standalone tests.
 - [ ] **Step 3: Prove it catches a new gap**
 
 In `science/model/src/science_model/entities.py`, temporarily comment out a declared field on
-`PaperEntity` (pick one the paper mixin declares, e.g. `doi`).
+`PaperEntity` (pick one the paper mixin declares, e.g. `year` — NOT `doi`: `doi` is named in a
+`field_validator` decorator on the same class, so removing its field assignment raises
+`PydanticUserError` at import time instead of exercising the gate; `year` is referenced by no
+validator).
 
 ```bash
 cd science && uv run --frozen pytest tests/test_kind_reconciliation.py -k "declared_on_the_projection" -v
 ```
 
-Expected: both `paper` cases FAIL with `undeclared gap ['doi']`. Restore and confirm PASS.
+Expected: both `paper` cases FAIL with `undeclared gap ['year']`. Restore and confirm PASS.
 
 - [ ] **Step 4: Prove it catches a stale exemption**
 
@@ -875,7 +902,7 @@ Expected: the `paper-paper_kind` case FAILS. Revert and confirm PASS.
 - [ ] **Step 7: Commit**
 
 ```bash
-cd /mnt/ssd/Dropbox/science/.worktrees/reconciliation-gate && git branch --show-current  # must print reconciliation-gate
+cd ~/d/science/.worktrees/reconciliation-gate && git branch --show-current  # must print reconciliation-gate
 git add science/tests/test_kind_reconciliation.py
 git commit -m "test(schema): gate that every admitted field is declared on its projection
 
@@ -927,7 +954,7 @@ Every mutation proof in Tasks 1-4 edits a source or schema file and reverts it. 
 survived:
 
 ```bash
-cd /mnt/ssd/Dropbox/science/.worktrees/reconciliation-gate && git status --porcelain
+cd ~/d/science/.worktrees/reconciliation-gate && git status --porcelain
 ```
 
 Expected: empty. A stray uncommitted schema edit from a mutation proof would be a silently
@@ -987,7 +1014,9 @@ worktree at `d9e79f91`:
 
 **The one thing not pre-validated** is Task 2 Steps 8 and 9, the paired gen-2/gen-3 mutation
 proofs. They require editing a shipped schema file, which was out of scope for a read-only
-investigation. If `composition_rule`'s enum turns out not to discriminate the way those steps
-expect, use `status` instead — its enum is asserted against `EntityKind.statuses` by
-`test_the_status_vocabulary_is_not_a_SECOND_authority`, so a widening there fails loudly in two
-places at once.
+investigation. `composition_rule` does discriminate the way those steps expect, using
+`"evidence_union"` — already a `_BATTERY` value, and reserved (rejected by the model via
+`RESERVED_COMPOSITION_RULES`), so widening either mixin's enum to admit it produces exactly the
+"schema admits it, model rejects it" case the mutation proof needs. `status` is NOT a usable
+fallback: `HypothesisEntity.status` is an unrestricted `str | None`, so no schema-side enum
+widening on it can ever make the model the stricter side — the model already accepts anything.
