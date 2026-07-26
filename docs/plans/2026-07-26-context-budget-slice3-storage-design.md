@@ -13,9 +13,9 @@ silently truncated at the host's file-read cap. `active.md` is removed outright
 (no dual-read compatibility layer). `active/` holds **open** tasks only; any
 terminal (`done`/`retired`) tasks still sitting in `active.md` are routed to the
 monthly done ledger **by the migrator itself, in the same transaction** (see §3)
-— there is no separate archive-first step, because the shipped toolkit's
-`tasks archive` reads the split layout and can no longer read a legacy
-`active.md`. Closed tasks stay as monthly ledgers under `tasks/done/YYYY-MM.md`;
+— there is no separate archive step; the now-redundant `tasks archive` command is
+retired (decision 3), since the split world can never leave a terminal task in
+`active/`. Closed tasks stay as monthly ledgers under `tasks/done/YYYY-MM.md`;
 `tasks/archive.md` (historical prose aliases) is unchanged.
 
 ## Why split rather than shrink
@@ -40,6 +40,29 @@ cap would move it *into* the expensive band; splitting avoids the band entirely.
    respecting per-repo (Dropbox) branch volatility and avoiding a cross-repo
    transaction. The roster is DERIVED from the sibling set at run time, never
    hard-coded.
+3. **Retire `tasks archive`.** In the split world a terminal task can never sit
+   in `active/`: `complete`/`retire` move it to a `done/` ledger immediately,
+   `edit` refuses to terminalize an active task (§2), and `parse_task_file`
+   rejects a terminal status in `active/*.md` (§1). So `tasks archive`'s only job
+   — sweeping terminal tasks that accumulated in the aggregate `active.md` — has
+   no reachable input, and its `science health` archive-lag check
+   (`count_archivable`) can never be non-zero. The one-time routing of legacy
+   terminal tasks out of `active.md` is absorbed by the migrator (§3). Therefore
+   the `tasks archive` command, `tasks_archive.{plan_archive,apply_archive,
+   count_archivable}`, and the health archive-lag check
+   (`graph/health_checks/archive_lag.py`, which calls `count_archivable`) are
+   **removed**. But the module also holds reusable **ledger primitives** other
+   code depends on — `_destination_for`, `_read_destination` (a done-ledger reader
+   used by Slice-2's `_read_since_candidates`, `tasks.py:788`), and the
+   preamble/block split — plus the pure ledger-append/dedup computation. These are
+   **relocated** to a neutral home (a small `tasks_ledger` module, or into
+   `tasks.py`) that both `_read_since_candidates` and the migrator import; nothing
+   is lost. (Note: the unrelated **entity** archiver — `archive_plan.plan_archive`/
+   `apply_archive`, `entities_inventory_cli.py` — is a namesake and is NOT
+   touched.) This is the explicit resolution of "archive has no legal state
+   containing work": remove the dead sweep, keep the primitives, rather than
+   making the command a legacy-only gate exemption that would merely duplicate the
+   migrator.)
 
 ## Design
 
@@ -155,17 +178,16 @@ mutation, and by the migrator (see §3):
   - **Nominal identity = `id` equality.** This is what "the same task id" means
     for uniqueness (§1a) and for locating a task. It does NOT license a
     skip/delete.
-  - **Migration / archive dedup = STRUCTURAL equality (all `Task` fields
-    equal).** `plan_ledger_appends` (§3) treats a terminal task already present
-    in a ledger as already-archived **only if the two records are fully equal**;
-    an `id` match with *any* differing field is a **conflict → REFUSE**, never a
-    silent skip. This tightens the existing `apply_archive`, which today skips a
-    destination-local duplicate id regardless of content
-    (`tasks_archive.py:248`; `test_apply_skips_duplicate_id_in_destination`
-    asserts that silent skip) — a latent silent-data-drop. The plan therefore
-    **changes `apply_archive`'s duplicate handling to structural-equality-or-
-    conflict and updates that test** (a conscious behavior change, aligned with
-    "fail early / no silent fallbacks").
+  - **Migration dedup = STRUCTURAL equality (all `Task` fields equal).**
+    `plan_ledger_appends` (§3) treats a terminal task already present in a ledger
+    as already-archived **only if the two records are fully equal**; an `id` match
+    with *any* differing field is a **conflict → REFUSE**, never a silent skip.
+    (The retired `apply_archive` did the opposite — a destination-local duplicate
+    id was skipped regardless of content, `tasks_archive.py:248`, a latent
+    silent-data-drop; that whole module and its
+    `test_apply_skips_duplicate_id_in_destination` are removed with decision 3,
+    so there is no behavior to preserve — `plan_ledger_appends` is the sole
+    remaining dedup and it fails closed.)
   - **Move-recovery equivalence (`_move_task_to_done`, §2) = same `id`, ledger
     status equals the *requested target status*, and equality on every
     *transition-stable* field** — i.e. all fields except `status`, `completed`,
@@ -182,8 +204,15 @@ mutation, and by the migrator (see §3):
     legitimately changes `completed`/suffix) but far stronger than `(id, created)`.
 - Slug derivation reuses `entities.derive_slug(title)` (lowercase, hyphenate,
   word-boundary truncate). `id` is the stable identity; the slug is cosmetic. A
-  title change on `tasks edit` re-derives the slug and renames the file (old file
-  removed, new written, same `id`).
+  title change on `tasks edit` re-derives the slug and renames the file. The
+  rename is **atomic**: write the new (round-trip-verified) content to the
+  *existing* path, then `os.replace(old_path, new_path)` (a single POSIX rename
+  syscall). This never leaves a two-file window — which would otherwise trip the
+  unique-id read error below — and never zero files. A crash leaves exactly one
+  file: either the old-slug path with new content (rename not yet run; slug stale
+  but the id resolves and a later edit reconciles it) or the new-slug path.
+  Tested with a crash-between-write-and-replace case (exactly one file present,
+  id resolves, no data loss).
 
 ### 1b. Storage-state gate (fail loudly on non-split layouts)
 
@@ -195,21 +224,24 @@ So a single classifier gates every normal command:
 
 `_tasks_storage_state(tasks_dir) -> StorageState`:
 
-The journal's presence (not the layout) is the authority on whether a migration
-is in flight — a half-written `active/` beside `active.md` with **no** journal is
-NOT a resumable migration:
+The journal's presence (not mere layout) is the authority on whether a migration
+is in flight, and **"`active/` present" means it contains ≥1 `*.md` file** — an
+empty `active/` directory (a leftover `mkdir`, carrying no work) is treated as
+absent for classification:
 
-- **EMPTY** — no `active.md`, no `active/`, no journal (fresh project). Treated as
-  a writable split: readers return `[]`, `add` creates `active/`.
-- **SPLIT** — `active/` present, no `active.md`, no journal. The normal operating
-  state.
-- **LEGACY** — `active.md` present, `active/` absent, no journal. Pre-migration.
+- **EMPTY** — no `active.md`, no `active/*.md`, no journal (fresh project).
+  Treated as a writable split: readers return `[]`, `add` creates `active/`.
+- **SPLIT** — `active/*.md` present, no `active.md`, no journal. The normal
+  operating state.
+- **LEGACY** — `active.md` present, no `active/*.md` (dir absent **or empty**), no
+  journal. Pre-migration and apply-safe (an empty `active/` does not block or
+  conflict — the migrator's plan refuses only a *non-empty* `active/`).
 - **MIGRATING** — the migration journal (`.science/task-storage-migration.journal`)
   exists (whatever the layout). An interrupted apply/resume.
-- **CONFLICT** — both `active.md` and `active/` present but **no journal**. Not a
-  migration state — `active/` was created outside the migrator (e.g. a partial
-  hand copy). Unsafe to auto-resume (no journal to replay) and unsafe to
-  `--apply` (a non-empty `active/` would be clobbered).
+- **CONFLICT** — both `active.md` and **≥1 `active/*.md`** present but **no
+  journal**. Not a migration state — `active/` was populated outside the migrator
+  (e.g. a partial hand copy). Unsafe to auto-resume (no journal to replay) and
+  unsafe to `--apply` (the non-empty `active/` would be clobbered).
 
 `_read_active` and every mutator call `_require_split(tasks_dir)` first:
 
@@ -329,18 +361,17 @@ The lever for the ~14 readers is to centralize on one read entry point.
   re-acquires would hang. The contract:
   - **Top-level operations acquire the lock once:** `add_task`,
     `append_task_note`, `edit_task`, `complete_task`, `retire_task`,
-    `defer_task`, `block_task`, `unblock_task`, `tasks fix-blockers` apply
-    (`tasks_cli.py:372`), and `tasks archive` (its plan **and** apply/revalidation
-    share **one** lock window — `tasks_cli.py:444`/`:419`).
+    `defer_task`, `block_task`, `unblock_task`, and `tasks fix-blockers` apply
+    (`tasks_cli.py:372`). (`tasks archive` is retired — decision 3.)
   - **Internal helpers require the lock already held, and never re-acquire:**
-    `_move_task_to_done`, `write_task_file`/`delete_task_file`, the exported
-    `write_task_location` (used by note/edit — `tasks.py:463`), and
-    `apply_archive` (invoked by the `tasks archive` command that already holds the
-    lock). Every one of these is either made a private require-held helper or
-    documents/asserts "lock must be held by caller" (a `lock_held` guard, or
-    restructuring so the lock always wraps the top-level), rather than opening the
-    sentinel again. The require-held set is exhaustive: **no writer** of an
-    `active/` file or a `done/` ledger acquires the lock itself.
+    `_move_task_to_done`, `write_task_file`/`delete_task_file`, and the exported
+    `write_task_location` (used by note/edit — `tasks.py:463`). Each is either
+    made a private require-held helper or documents/asserts "lock must be held by
+    caller" (a `lock_held` guard, or restructuring so the lock always wraps the
+    top-level), rather than opening the sentinel again. The require-held set is
+    exhaustive: **no writer** of an `active/` file or a `done/` ledger acquires
+    the lock itself. The migrator's `plan_ledger_appends`/ledger writes run inside
+    the migrator's own single lock window.
   - **The migrator's apply and resume each acquire the lock once** for the whole
     operation.
   - **Interactive `fix-blockers` does NOT hold the lock across its prompt loop.**
@@ -363,7 +394,7 @@ The lever for the ~14 readers is to centralize on one read entry point.
   `graph/health_checks/legacy_task_type.py`,
   `graph/health_checks/lingering_tags.py`, `refs.py`,
   `validate/checks/cross_references.py`, `validate/checks/project_readme.py`,
-  `validate/checks/tasks.py`, `validate/_helpers.py`, `tasks_archive.py`,
+  `validate/checks/tasks.py`, `validate/_helpers.py`,
   `correspondence/probe.py` — are each pointed at the centralized read
   (`_read_active` / `_task_search_paths` / `known_task_ids`) rather than
   `tasks_dir / "active.md"` directly. Where a check specifically asserts
@@ -376,32 +407,26 @@ pattern of `datasets/capability_migration.py`:
 
 - **`active/` holds OPEN tasks only — terminal tasks are routed to the done
   ledger in the same transaction (NOT refused, NOT split).** `tasks/active.md`
-  can legitimately still contain `done`/`retired` tasks that have not been
-  archived yet (e.g. `meta/tasks/active.md` currently holds `t089` and `t093`,
-  both `done`). An earlier revision had the migrator *refuse* and tell the user
-  to run `science tasks archive --apply` first — but the shipped toolkit repoints
-  `tasks archive` at the split `active/` layout (§2), so on a still-legacy
-  project `tasks archive` reads an empty `active/` and cannot touch the terminal
-  tasks in `active.md`: that instruction is unrunnable. Instead the migrator
-  **partitions the parsed `active.md` into open and terminal tasks and, in the
+  can legitimately still contain `done`/`retired` tasks that were never archived
+  (e.g. `meta/tasks/active.md` currently holds `t089` and `t093`, both `done`).
+  The migrator is the sole one-time router for these legacy terminal tasks — there
+  is no separate `tasks archive` pre-step (that command is retired, decision 3).
+  The migrator **partitions the parsed `active.md` into open and terminal tasks
+  and, in the
   same transaction, writes open → `tasks/active/tNNN-slug.md` and appends
   terminal → `tasks/done/YYYY-MM.md`**. The partition is over the **known** status
   sets — open `{proposed, active, blocked, deferred}` vs terminal `{done,
   retired}`; an **unknown** status is neither, so the migrator **refuses** it
   (listing the offending id/status) rather than mis-partitioning it as open (which
   would then fail `parse_task_file`'s open-status check on the very next read —
-  §1). It does NOT re-implement archiving, but it
-  cannot call `apply_archive` either: that function *writes* (and rewrites
-  `active.md`) and skips a destination-local duplicate id silently regardless of
-  content (`tasks_archive.py:213,248,265`), whereas the migrator needs a **pure**
-  computation of the ledger post-images to journal *before* any write. So the fix
-  is a small **extraction**: a pure helper — call it
+  §1). Terminal routing uses a **pure** helper (migrated from the retired
+  `tasks_archive` — decision 3) — call it
   `plan_ledger_appends(terminal_tasks, done_ledgers, *, today) -> (postimages, conflicts)`
-  — that computes each destination's full post-image (month via
+  — that computes each destination's full post-image (month via the relocated
   `_destination_for`, `today` passed explicitly and journalled) and returns
-  conflicts instead of silently skipping. Both `apply_archive` (its
-  transaction owner writes the result + rewrites `active.md`) and the migrator
-  (journals the post-images, then writes) call this one helper. The equality
+  conflicts rather than silently skipping a same-id destination duplicate (the
+  behavior the old `apply_archive` had). The migrator journals the post-images,
+  then writes; nothing else writes ledgers on this path. The equality
   invariant splits accordingly: after migration the `active/` set equals the
   source's OPEN tasks and every terminal source task appears once in a `done/`
   ledger.
@@ -416,9 +441,9 @@ pattern of `datasets/capability_migration.py`:
   more than one ledger, is a conflict → refuse.
 - **Plan (dry-run default):** parse `tasks/active.md`; partition into open and
   terminal tasks; compute the target per-task file for each open task and the
-  done-ledger destination for each terminal task (via
-  `tasks_archive._destination_for`, passing an **explicit `today`** so the month
-  choice for undated terminals is fixed once and journalled — never re-derived on
+  done-ledger destination for each terminal task (via the relocated
+  `_destination_for`, passing an **explicit `today`** so the month choice for
+  undated terminals is fixed once and journalled — never re-derived on
   resume); report what would be written. Refuse if `tasks/active/` already exists
   and is non-empty (already migrated) or if `tasks/active.md` is absent (nothing
   to do). **Collision & identity checks (all must pass before any write):** every
@@ -470,18 +495,38 @@ pattern of `datasets/capability_migration.py`:
 
 ### 4. Done-ledger DSL, storage adapter & docs
 
-- **The done-ledger DSL must round-trip every `Task` field.** Done ledgers keep
-  the `## [tNNN]` block format (a Non-goal is splitting them), but the current
-  `render_task`/`_parse_task_block` (`tasks.py:295,164`) **omit `project`,
-  `artifacts`, and `findings`** — fields the split frontmatter format admits (§1).
-  A terminal task carrying any of them, moved active→done (on `done`/`retire`,
-  archive, or migration), would render/reparse those fields to `""`/`[]`/`[]`,
-  making the §1a **structural-equality** dedup falsely report a conflict on an
-  idempotent replay. So the ledger DSL is extended to emit and parse all three
-  (emitted only when non-default, parsed when present), so `render_task ∘
-  _parse_task_block` is lossless for the full `Task`. Tested with non-default
-  `project`/`artifacts`/`findings` values driven through `done`, `retire`,
-  `tasks archive`, and `migrate-storage`.
+- **The done-ledger DSL must round-trip every `Task` field, reversibly.** Done
+  ledgers keep the `## [tNNN]` block format (a Non-goal is splitting them), but
+  the current `render_task`/`_parse_task_block` (`tasks.py:295,164`) **omit
+  `project`, `artifacts`, and `findings`** — fields the split frontmatter format
+  admits (§1). A terminal task carrying any of them, moved active→done (on
+  `done`/`retire` or migration), would render/reparse those fields to
+  `""`/`[]`/`[]`, making the §1a **structural-equality** dedup falsely report a
+  conflict on an idempotent replay. So the ledger DSL emits and parses all three
+  (emitted only when non-default, parsed when present).
+- **Reversible list/scalar grammar.** `Task` fields are arbitrary strings, but the
+  current list syntax comma-splits (`_parse_list_value`, `tasks.py:60`) so an
+  artifact `"report, revised.md"` reparses as two items, and a value with a
+  newline or `]` is likewise unrepresentable. List fields (`aspects`, `related`,
+  `blocked_by`, `artifacts`, `findings`) are therefore rendered as **JSON arrays**
+  (`- artifacts: ["report, revised.md"]`) which round-trip any string; the parser
+  reads the JSON-array form and, for backward compatibility with **existing**
+  on-disk ledgers, still accepts a bare `[a, b]` body as comma-split items
+  (durable-format tolerance, not a code compat layer). A scalar field carrying a
+  newline is JSON-encoded likewise. This is belt-and-suspenders with the upgraded
+  round-trip verifier below — the verifier is the backstop that makes a
+  non-representable value fail the write rather than corrupt silently.
+- **Reject duplicate ledger keys; verify every field.** `_parse_task_block`
+  currently overwrites duplicate metadata keys last-wins (`tasks.py:145`), so a
+  contradictory ledger block (`- status:` twice) parses cleanly and could satisfy
+  structural dedup against the wrong value — it must **reject duplicate metadata
+  keys** (fail early), mirroring the frontmatter strict-YAML rule (§1). And
+  `_verify_round_trip` today compares only ids and descriptions
+  (`tasks.py:227-239`); it is **upgraded to compare every `Task` field**, using
+  the **same canonical-description normalization** the §1a structural predicate
+  uses, so a mangled list/scalar aborts the write. Tested with non-default
+  `project`/`artifacts`/`findings`, comma/newline/quote-bearing values, and a
+  duplicate-key block — driven through `done`, `retire`, and `migrate-storage`.
 - `graph/storage_adapters/task.py`: `discover()` already `rglob`s
   `tasks/**/*.md` (skipping `archive.md`), so it will find per-task files; update
   `load_raw` / the parse call to use `parse_task_file` for files under
@@ -497,6 +542,10 @@ pattern of `datasets/capability_migration.py`:
   (those docs still point agents at `science tasks list`, not at reading files);
   the content guard `test_no_raw_task_file_reads_in_docs.py` allow-list is
   updated for any changed legit line.
+- Archive-retirement docs: any user-guide / command-reference / help text that
+  mentions `science tasks archive` or the `science health` archive-lag metric is
+  updated to reflect the retirement (decision 3). The implementation plan greps
+  the tree for `tasks archive` / `count_archivable` and updates every hit.
 
 ## Non-goals
 
@@ -538,8 +587,8 @@ pattern of `datasets/capability_migration.py`:
   is REJECTED (no materialized task).
 - Done-ledger DSL completeness: a task with non-default `project`, `artifacts`,
   and `findings` round-trips losslessly through `render_task`/`_parse_task_block`,
-  and through `done`, `retire`, `tasks archive`, and `migrate-storage` (structural
-  equality holds across the active→done boundary — no false conflict on replay).
+  and through `done`, `retire`, and `migrate-storage` (structural equality holds
+  across the active→done boundary — no false conflict on replay).
 - Required persisted keys: a file missing `created` (or `status`/`priority`/
   `aspects`/`id`/`title`) is REJECTED naming the key — it does NOT silently
   acquire `date.today()` / `proposed` / `P2`; a file with all required keys and
@@ -577,11 +626,10 @@ pattern of `datasets/capability_migration.py`:
   path and remove the active copy.
 - `fix-blockers` done-collision: a selected id that lands in `done/` during the
   interactive prompt is rejected by the locked recheck (abort, no divergent write).
-- Predicate separation: `(id, created)` alone does NOT accept — the archive
-  fixture's `t002`/`2026-03-01`/"Done in March" vs ledger "Already archived" is a
-  CONFLICT (migration/archive dedup), and `apply_archive` refactored onto
-  `plan_ledger_appends` now REFUSES it instead of silently skipping
-  (`test_apply_skips_duplicate_id_in_destination` updated to assert the refusal).
+- Predicate separation: `(id, created)` alone does NOT accept — two records
+  sharing `t002`/`2026-03-01` but differing in title/body are a CONFLICT under
+  `plan_ledger_appends`' structural-equality dedup (migration), REFUSED rather
+  than silently skipped.
 - `edit --status done|retired` on an **active** task is REFUSED with the
   use-`done`/`retire` message (no terminal task left in `active/`); a
   non-terminal `edit --status` still succeeds in place; the existing
@@ -589,19 +637,28 @@ pattern of `datasets/capability_migration.py`:
 - Lock discipline: `complete_task`/`retire_task` complete without deadlock (the
   top-level acquires once; `_move_task_to_done` runs lock-held and does not
   re-acquire); a mutator invoked while another holds the lock serializes rather
-  than corrupting; `tasks archive` runs its plan and apply under one lock window;
-  no `active/`/`done/` writer (`write_task_location`, `apply_archive`, per-file
+  than corrupting; no `active/`/`done/` writer (`write_task_location`, per-file
   helpers) acquires the lock itself.
 - `fix-blockers` optimistic recheck: the prompt loop runs without the lock; a
   concurrent write that changes the active set between the pre-prompt read and the
   post-prompt write aborts the write with the re-run message (no clobber); an
   unchanged set writes normally.
-- Slug derivation + rename-on-title-change (file renamed, id stable, no orphan).
+- Slug derivation + rename-on-title-change (file renamed, id stable, no orphan);
+  atomic rename via `os.replace` leaves exactly one file on a
+  crash-between-write-and-replace (old-slug path with new content OR new-slug
+  path — never two files, never zero), so the unique-id read guard is not tripped.
 - Read path: `_read_active` over a `tasks/active/` dir returns the same task set
   a DSL `active.md` would have.
-- Every mutator (`add`/`edit`/`note`/`done`/`defer`/`retire`/`block`/`unblock`/
-  `archive`) writes/updates/deletes the correct per-task file and leaves the
-  round-trip clean.
+- Every mutator (`add`/`edit`/`note`/`done`/`defer`/`retire`/`block`/`unblock`)
+  writes/updates/deletes the correct per-task file and leaves the round-trip
+  clean.
+- Archive retirement: the `tasks archive` command and the `science health`
+  archive-lag check are gone (invoking `tasks archive` errors as an unknown
+  command; health no longer emits archive-lag counts); no remaining code imports
+  `tasks_archive.plan_archive`/`apply_archive`/`count_archivable`.
+- Primitive relocation: after moving `_read_destination`/`_destination_for` to
+  their neutral home, Slice-2's `--since` (`_read_since_candidates`) still returns
+  the same rows (its existing `test_tasks_since.py` suite stays green).
 - Archived-task edit/note: a `tasks edit`/`tasks note` on a task living in
   `done/YYYY-MM.md` rewrites that ledger in place and creates NO `tasks/active/`
   file.
@@ -622,9 +679,7 @@ pattern of `datasets/capability_migration.py`:
   writing; a terminal task already present in **any** `done/*.md` and
   **structurally equal** yields no new append (store-wide dedup); an id present
   with any differing field, or an id in two ledgers, is reported as a conflict
-  (not silently skipped); `apply_archive` refactored onto the helper preserves its
-  idempotent no-op on a byte-identical re-run (existing idempotency test stays
-  green) while the differing-content case now refuses.
+  (not silently skipped).
 - Store-wide migrator dedup: an undated terminal source task already appended to
   *last* month's ledger, with the migration computing *this* month, is NOT
   duplicated — the plan refuses or accepts the existing occurrence per the
@@ -642,8 +697,14 @@ pattern of `datasets/capability_migration.py`:
 - Worked example: `science/meta` migrates with a single `migrate-storage
   --apply`; `t089`/`t093` land in a `done/` ledger (not `active/`), and
   post-migration `science tasks list` is unchanged.
+- Empty `active/` semantics: an empty `active/` dir beside `active.md` (no
+  journal) classifies as LEGACY, not CONFLICT — normal commands emit the
+  migrate-storage instruction and `migrate-storage --apply` proceeds (the plan
+  refuses only a *non-empty* `active/`); a `active/` with ≥1 `*.md` beside
+  `active.md` (no journal) classifies as CONFLICT.
 - Adapter: graph build over a split `tasks/active/` yields the same task nodes.
-- The full validate/health/refs/curate/big-picture readers work over the split
-  layout (their existing tests, re-pointed fixtures).
+- The full validate/refs/curate/big-picture readers work over the split layout
+  (their existing tests, re-pointed fixtures); `science health` no longer runs the
+  archive-lag check.
 - `science/meta` migrates clean and its `science tasks list` is unchanged
   post-migration.
