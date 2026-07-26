@@ -195,14 +195,32 @@ _SHORT_FORM_KIND_MAP: dict[str, str] = {
 }
 _SHORT_FORM_RE = re.compile(r"\b([qQhHtTdDiI])(\d{1,4})\b")
 # Canonical form check: `<kind>:<short>` should NOT be flagged.
-_CANONICAL_PREFIX_RE = re.compile(r"\b(question|hypothesis|task|discussion|interpretation):")
+#
+# IGNORECASE because capitalisation here is a sentence-position artefact: a
+# sentence-initial `Hypothesis:0007-h01` is the same reference as a mid-sentence
+# `hypothesis:0007-h01`, and matching only the latter re-flagged the embedded
+# short form (fb-2026-07-26-008).
+#
+# The five-kind enumeration is a separate, KNOWN gap — a guard that lists its
+# scope has a hole by construction, and this one lists five of roughly fifty
+# kinds. Widening it to the registered vocabulary changes which references the
+# short-form lint skips, so it needs its own corpus certification and is
+# deliberately NOT bundled into a case fix.
+_CANONICAL_PREFIX_RE = re.compile(
+    r"\b(question|hypothesis|task|discussion|interpretation):", re.IGNORECASE
+)
 # Task-list heading shape: `## [t088] Title`. Don't flag the bracketed ID
 # inside such a header — it IS the canonical form for that file convention.
 _TASK_HEADING_RE = re.compile(r"^\s*##+\s*\[[a-zA-Z]\d+\]")
 # `[[h006-regime-sequence]]` wiki-links are the toolchain's linking convention;
 # their inner text (e.g. `h006`) is a resolvable reference, not a bare short form.
 _WIKILINK_SPAN_RE = re.compile(r"\[\[[^\]\n]*\]\]")
-_CANONICAL_ID_SPAN_RE = re.compile(r"\b[a-z][a-z0-9_-]*:[A-Za-z0-9][A-Za-z0-9_.-]*\b")
+# The kind prefix is matched case-insensitively: an all-lowercase pattern masked
+# `hypothesis:0011` but not a sentence-initial `Hypothesis:0011`, leaking its
+# digits as a numeric claim (fb-2026-07-26-008). This does not widen the
+# pattern's CLASS — it already admitted any lowercase word before the colon — it
+# removes a positional artefact.
+_CANONICAL_ID_SPAN_RE = re.compile(r"\b[A-Za-z][A-Za-z0-9_-]*:[A-Za-z0-9][A-Za-z0-9_.-]*\b")
 _CELL_LINE_CONTEXT_RE = re.compile(r"\bcell[-\s]?lines?\b", re.IGNORECASE)
 _KNOWN_CELL_LINE_SHORT_FORMS: frozenset[str] = frozenset({"H929", "H1112", "H1634"})
 _BIOMED_TIMEPOINT_CONTEXT_RE = re.compile(

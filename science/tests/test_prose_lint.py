@@ -244,6 +244,16 @@ class TestShortFormIds:
         path = _write(tmp_path, "See report:0017-q93-h01-synthesis for the generated artifact.\n")
         assert detect_short_form_ids(path) == []
 
+    def test_no_flag_embedded_short_form_inside_sentence_initial_canonical_id(self, tmp_path):
+        """Same case defect at the second site (fb-2026-07-26-008).
+
+        `_CANONICAL_PREFIX_RE` is used to skip references that are already
+        canonical; being lowercase-only, it failed to skip a sentence-initial one
+        and re-flagged the embedded short form.
+        """
+        path = _write(tmp_path, "Hypothesis:0007-h01-synthesis is the generated artifact.\n")
+        assert detect_short_form_ids(path) == []
+
 
 class TestShortFormIdsResolver:
     def test_resolver_skips_resolvable_token(self, tmp_path):
@@ -564,6 +574,20 @@ class TestNumericAnchor:
         path = _write(
             tmp_path,
             "See hypothesis:0007-empirical-fidelity-alignment and report:0017-q93-h01-synthesis.\n",
+        )
+        assert detect_numeric_anchor(path, anchor_patterns=[]) == []
+
+    def test_no_flag_numeric_segments_inside_sentence_initial_canonical_ids(self, tmp_path):
+        """Capitalisation is a sentence-position artefact, not a semantic one.
+
+        fb-2026-07-26-008: the canonical-ID masker required an all-lowercase kind
+        prefix, so `hypothesis:0011` was masked and `Hypothesis:0011` leaked its
+        digits as a numeric claim -- the lint's verdict turned on whether the
+        reference happened to begin a sentence.
+        """
+        path = _write(
+            tmp_path,
+            "Hypothesis:0011 predicts a rebound, unlike hypothesis:0012 downstream.\n",
         )
         assert detect_numeric_anchor(path, anchor_patterns=[]) == []
 
