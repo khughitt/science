@@ -121,6 +121,12 @@ BUDGETS: dict[str, CommandBudget] = {
     "peers list": CommandBudget(max_chars=30_000, shape=PayloadShape.REPORT),
     "refs check": CommandBudget(max_chars=30_000, shape=PayloadShape.REPORT),
     "research-package validate": CommandBudget(max_chars=30_000, shape=PayloadShape.REPORT),
+    "project topic-coverage": CommandBudget(max_chars=30_000, shape=PayloadShape.REPORT),
+    "sync rebuild": CommandBudget(max_chars=30_000, shape=PayloadShape.REPORT),
+    "sync run": CommandBudget(max_chars=30_000, shape=PayloadShape.REPORT),
+    "sync status": CommandBudget(max_chars=30_000, shape=PayloadShape.REPORT),
+    "tasks summary": CommandBudget(max_chars=30_000, shape=PayloadShape.REPORT),
+    "wander": CommandBudget(max_chars=30_000, shape=PayloadShape.REPORT),
 }
 
 EXEMPTIONS: dict[str, str] = {
@@ -234,10 +240,6 @@ EXEMPTIONS.update(dict.fromkeys(RETIREMENTS, "fixed retired-command error"))
 DEFERRED: dict[str, DeferredCommand] = {
     # Growable but small on the audited project -- the case that has no truthful
     # exemption. Populated further by Task 13 Step 3.
-    "tasks summary": DeferredCommand(
-        "one output member per distinct task type and group value",
-        "1b",
-    ),
     "graph belief-basis": DeferredCommand(
         "compare mode emits one MOVED row per changed pre-existing entity",
         "1b",
@@ -285,7 +287,6 @@ DEFERRED.update(
         "belief profile": DeferredCommand("one row per belief-bearing entity", "1b"),
         "markers scan": DeferredCommand("one row per marker hit and token", "1b"),
         "search": DeferredCommand("one row per matching project record", "1b"),
-        "wander": DeferredCommand("one output member per generated walk item", "1b"),
     }
 )
 DEFERRED.update(
@@ -468,10 +469,7 @@ DEFERRED.update(
             "delegated process event, project entity, reference, topic, or finding",
             "1b",
         )
-        for path in (
-            "project topic-coverage",
-            "project verify",
-        )
+        for path in ("project verify",)
     }
 )
 DEFERRED.update(
@@ -483,16 +481,6 @@ DEFERRED.update(
             "skills coverage",
             "skills sources check",
             "skills sources list",
-        )
-    }
-)
-DEFERRED.update(
-    {
-        path: DeferredCommand("one output member per registered project, drift warning, or rebuild action", "1b")
-        for path in (
-            "sync rebuild",
-            "sync run",
-            "sync status",
         )
     }
 )

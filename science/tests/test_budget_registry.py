@@ -67,13 +67,18 @@ def test_a_growable_but_small_command_can_be_deferred() -> None:
     assert entry.growth_reason.strip()
 
 
-def test_tasks_summary_is_deferred_because_distinct_keys_make_it_grow() -> None:
-    """Each arbitrary task type/group value adds a member to both output formats."""
+def test_tasks_summary_is_budgeted_with_a_bespoke_projector() -> None:
+    """Each arbitrary task type/group value used to make tasks summary's report grow
+    unboundedly. Slice 1b-3 batch W4c wired it via a bespoke projector
+    (`tasks_summary_projection.py`) because it carries four independently growable
+    breakdown mappings (by_status, by_type, by_priority, by_group) at once -- more than
+    the shared single-list helper can cap.
+    """
     assert "tasks summary" not in EXEMPTIONS
-    entry = DEFERRED["tasks summary"]
-    assert entry.target_slice == "1b"
-    assert "type" in entry.growth_reason
-    assert "group" in entry.growth_reason
+    assert "tasks summary" not in DEFERRED
+    budget = lookup("tasks summary")
+    assert isinstance(budget, CommandBudget)
+    assert budget.shape is PayloadShape.REPORT
 
 
 def test_the_three_tables_are_mutually_disjoint() -> None:

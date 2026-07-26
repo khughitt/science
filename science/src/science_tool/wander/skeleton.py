@@ -95,6 +95,26 @@ def _render_entity_block(bundle: ContextBundle, signals: StubSignals) -> list[st
     return out
 
 
+def build_json_payload(
+    *,
+    walk_id: str,
+    walk_date: date,
+    seed: int | None,
+    n: int,
+    bundles_with_signals: list[BundleWithSignals],
+) -> dict:
+    """Return the JSON-serializable payload dict, split out from `render_json` so the CLI
+    can project the growable `bundles` list before serializing (context-budget REPORT
+    recipe) rather than only ever having a pre-serialized string to hand the sink."""
+    return {
+        "walk_id": walk_id,
+        "date": walk_date.isoformat(),
+        "seed": seed,
+        "n": n,
+        "bundles": [_bundle_to_dict(b, s) for b, s in bundles_with_signals],
+    }
+
+
 def render_json(
     *,
     walk_id: str,
@@ -103,13 +123,9 @@ def render_json(
     n: int,
     bundles_with_signals: list[BundleWithSignals],
 ) -> str:
-    payload = {
-        "walk_id": walk_id,
-        "date": walk_date.isoformat(),
-        "seed": seed,
-        "n": n,
-        "bundles": [_bundle_to_dict(b, s) for b, s in bundles_with_signals],
-    }
+    payload = build_json_payload(
+        walk_id=walk_id, walk_date=walk_date, seed=seed, n=n, bundles_with_signals=bundles_with_signals
+    )
     return json.dumps(payload, indent=2, sort_keys=True, default=str)
 
 

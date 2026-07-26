@@ -22,9 +22,9 @@ from science_tool.budget.registry import BUDGETS, DEFERRED, EXEMPTIONS
 from science_tool.cli import main
 
 EXPECTED_CLASSIFICATION_COUNTS = {
-    "budgeted": 61,
+    "budgeted": 67,
     "exempt": 111,
-    "deferred": 107,
+    "deferred": 101,
 }
 
 
@@ -102,7 +102,20 @@ def test_classification_partition_has_the_audited_cardinality() -> None:
     dag validate, peers list, and research-package validate fit the shared
     summary+one-list `project_single_list_report` helper; inquiry validate was
     restructured from a bare JSON list into a summary+one-list `results` payload to fit
-    the same helper. The live partition is therefore 61/111/107 = 279.
+    the same helper. Batch W4c then wired 6 of its 7 candidate REPORT commands (sync
+    run/rebuild/status, tasks summary, wander, project topic-coverage), moving them from
+    deferred to budgeted; sync run/rebuild/status and project topic-coverage fit the
+    shared summary+one-list `project_single_list_report` helper (drift_warnings, pruned,
+    projects, and topics respectively), while tasks summary needed a bespoke projector
+    (`tasks_summary_projection.py`) for its four independently growable breakdown
+    mappings (by_status, by_type, by_priority, by_group). `commons promote dataset` was
+    DROPPED from the batch and stays deferred: its shared `_promote_kind_cmd`
+    implementation is a multi-branch narrative of `click.echo` calls with no existing
+    JSON payload, and the AST sink-ownership guard requires `BoundedSink` construction
+    inside the registered command's own callback -- retrofitting a structured payload
+    across five early-return branches of a side-effecting (git-committing) promote
+    workflow is a bigger, riskier change than this wiring batch, so it is left for a
+    dedicated follow-up. The live partition is therefore 67/111/101 = 279.
     """
     actual = {
         "budgeted": len(BUDGETS),

@@ -829,19 +829,41 @@ def tasks_show(task_id: str, output_format: str) -> None:
 
 @tasks_group.command("summary")
 @click.option("--format", "output_format", type=click.Choice(OUTPUT_FORMATS), default="table", show_default=True)
-def tasks_summary(output_format: str) -> None:
+@click.option(
+    "--output",
+    "output_path",
+    type=click.Path(path_type=Path),
+    default=None,
+    help="Write the complete, unbudgeted summary to PATH instead of stdout.",
+)
+def tasks_summary(output_format: str, output_path: Path | None) -> None:
     """Print summary counts by status, type, priority, and group."""
     from collections import Counter
 
+    from science_tool.budget.control import bounded_control_notice
+    from science_tool.budget.invocation import build_complete_via, hint_for
+    from science_tool.budget.registry import lookup
+    from science_tool.budget.sink import BoundedSink
     from science_tool.tasks import parse_tasks, warn_invalid_statuses
+    from science_tool.tasks_summary_projection import project_tasks_summary
+
+    complete_via = build_complete_via(click.get_current_context(), output_hint=hint_for("tasks-summary", output_format))
+    sink = BoundedSink(
+        lookup("tasks summary"), output_path=output_path, command_path="tasks summary", complete_via=complete_via
+    )
+    control_notice = (
+        bounded_control_notice(f"wrote the complete task summary to {output_path}")
+        if output_path is not None
+        else None
+    )
 
     active = parse_tasks(DEFAULT_TASKS_DIR / "active.md")
     if not active:
-        emit(
-            output_format=output_format,
-            payload={"total": 0, "by_status": {}, "by_type": {}, "by_priority": {}, "by_group": {}},
-            render_text=lambda: click.echo("No active tasks."),
-        )
+        full = {"total": 0, "by_status": {}, "by_type": {}, "by_priority": {}, "by_group": {}}
+        emit(output_format=output_format, payload=full, render_text=lambda: sink.echo("No active tasks."), sink=sink)
+        sink.flush()
+        if control_notice is not None:
+            click.echo(control_notice)
         return
 
     warn_invalid_statuses(active)
@@ -851,23 +873,32 @@ def tasks_summary(output_format: str) -> None:
     by_priority = Counter(t.priority for t in active)
     by_group = Counter(t.group for t in active if t.group)
 
-    def _render() -> None:
-        click.echo(f"Total: {len(active)}")
-        click.echo("By status:   " + ", ".join(f"{k}: {v}" for k, v in sorted(by_status.items())))
-        click.echo("By type:     " + ", ".join(f"{k}: {v}" for k, v in sorted(by_type.items())))
-        click.echo("By priority: " + ", ".join(f"{k}: {v}" for k, v in sorted(by_priority.items())))
-        if by_group:
-            click.echo("By group:    " + ", ".join(f"{k}: {v}" for k, v in sorted(by_group.items())))
+    full = {
+        "total": len(active),
+        "by_status": dict(sorted(by_status.items())),
+        "by_type": dict(sorted(by_type.items())),
+        "by_priority": dict(sorted(by_priority.items())),
+        "by_group": dict(sorted(by_group.items())),
+    }
+    displayed = full if output_path is not None else project_tasks_summary(full)
 
-    emit(
-        output_format=output_format,
-        payload={
-            "total": len(active),
-            "by_status": dict(sorted(by_status.items())),
-            "by_type": dict(sorted(by_type.items())),
-            "by_priority": dict(sorted(by_priority.items())),
-            "by_group": dict(sorted(by_group.items())),
-        },
-        render_text=_render,
-        sort_keys=True,
-    )
+    def _render() -> None:
+        sink.echo(f"Total: {displayed['total']}")
+        sink.echo("By status:   " + ", ".join(f"{k}: {v}" for k, v in displayed["by_status"].items()))
+        sink.echo("By type:     " + ", ".join(f"{k}: {v}" for k, v in displayed["by_type"].items()))
+        sink.echo("By priority: " + ", ".join(f"{k}: {v}" for k, v in displayed["by_priority"].items()))
+        if displayed["by_group"]:
+            sink.echo("By group:    " + ", ".join(f"{k}: {v}" for k, v in displayed["by_group"].items()))
+        omitted = {
+            key: displayed[f"{key}_omitted"]
+            for key in ("by_status", "by_type", "by_priority", "by_group")
+            if displayed.get(f"{key}_omitted", 0)
+        }
+        if omitted:
+            sink.echo(f"omitted: {omitted}")
+            sink.echo(f"  complete output:  {complete_via}")
+
+    emit(output_format=output_format, payload=displayed, render_text=_render, sink=sink, sort_keys=True)
+    sink.flush()
+    if control_notice is not None:
+        click.echo(control_notice)

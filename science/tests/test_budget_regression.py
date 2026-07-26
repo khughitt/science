@@ -998,3 +998,111 @@ def test_peers_list_output_file_is_complete(peers_list_overflow_project: Path, t
     payload = json.loads(target.read_text())
     assert len(payload["peers"]) == 50
     assert "truncation" not in payload
+
+
+@pytest.fixture
+def sync_status_overflow_config(tmp_path: Path) -> Path:
+    """50 recorded per-project sync states -> 50 growable `projects` list rows."""
+    from datetime import datetime, timedelta
+
+    from science_tool.registry.state import ProjectSyncState, SyncState, save_sync_state
+
+    config_path = tmp_path / "config.yaml"
+    config_path.write_text("sync:\n  stale_after_days: 7\n", encoding="utf-8")
+    state = SyncState(
+        last_sync=datetime.now() - timedelta(days=1),
+        projects={
+            f"proj-{i:03d}": ProjectSyncState(
+                last_synced=datetime.now(),
+                entity_count=i,
+                entity_hash=f"{i:04d}" + "a" * 60,
+            )
+            for i in range(50)
+        },
+    )
+    save_sync_state(state, tmp_path / "sync_state.yaml")
+    return config_path
+
+
+def test_sync_status_stdout_stays_within_its_ceiling_and_reports_truncation(
+    sync_status_overflow_config: Path,
+) -> None:
+    result = _invoke(["sync", "status", "--config", str(sync_status_overflow_config)])
+    assert result.exit_code == 0, result.output
+    ceiling = BUDGETS["sync status"].max_chars
+    assert visible_len(result.output) <= ceiling
+    assert "showing 40 of 50 projects" in result.output
+    assert "complete output:" in result.output
+
+    js = _invoke(["sync", "status", "--config", str(sync_status_overflow_config), "--format", "json"])
+    payload = json.loads(js.output)
+    assert len(payload["projects"]) == 40
+    assert payload["truncation"]["total"] == 50
+    assert payload["truncation"]["omitted"] == 10
+
+
+def test_sync_status_output_file_is_complete(sync_status_overflow_config: Path, tmp_path: Path) -> None:
+    target = tmp_path / "status.json"
+    result = _invoke(
+        ["sync", "status", "--config", str(sync_status_overflow_config), "--format", "json", "--output", str(target)]
+    )
+    assert result.exit_code == 0, result.output
+    assert result.output.count("\n") == 1
+    assert "wrote the complete sync status to" in result.output
+
+    payload = json.loads(target.read_text())
+    assert len(payload["projects"]) == 50
+    assert "truncation" not in payload
+
+
+@pytest.fixture
+def tasks_summary_overflow_project(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
+    """45 active tasks, each in a distinct group -> 45 growable `by_group` members.
+
+    Status and priority are held constant so only `by_group` overflows the 40-item cap,
+    proving the bespoke projector caps each breakdown independently.
+    """
+    tasks_dir = tmp_path / "tasks"
+    tasks_dir.mkdir()
+    body = "\n".join(
+        f"""## [t{i:03d}] Task {i}
+- priority: P2
+- status: proposed
+- group: group-{i:03d}
+- created: 2026-01-01
+"""
+        for i in range(45)
+    )
+    (tasks_dir / "active.md").write_text(body, encoding="utf-8")
+    monkeypatch.chdir(tmp_path)
+    return tmp_path
+
+
+def test_tasks_summary_stdout_stays_within_its_ceiling_and_reports_truncation(
+    tasks_summary_overflow_project: Path,
+) -> None:
+    result = _invoke(["tasks", "summary"])
+    assert result.exit_code == 0, result.output
+    ceiling = BUDGETS["tasks summary"].max_chars
+    assert visible_len(result.output) <= ceiling
+    assert "omitted: {'by_group': 5}" in result.output
+    assert "complete output:" in result.output
+
+    js = _invoke(["tasks", "summary", "--format", "json"])
+    payload = json.loads(js.output)
+    assert len(payload["by_group"]) == 40
+    assert payload["by_group_omitted"] == 5
+    assert "by_status_omitted" not in payload
+    assert payload["total"] == 45
+
+
+def test_tasks_summary_output_file_is_complete(tasks_summary_overflow_project: Path, tmp_path: Path) -> None:
+    target = tmp_path / "summary.json"
+    result = _invoke(["tasks", "summary", "--format", "json", "--output", str(target)])
+    assert result.exit_code == 0, result.output
+    assert result.output.count("\n") == 1
+    assert "wrote the complete task summary to" in result.output
+
+    payload = json.loads(target.read_text())
+    assert len(payload["by_group"]) == 45
+    assert "by_group_omitted" not in payload
