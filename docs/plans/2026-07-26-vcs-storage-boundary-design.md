@@ -196,13 +196,25 @@ rejected, a `payload` root can safely emit the terse anchored form.
 - `tracked:` is valid **only** on `class: manifest`; supplying it on `payload`
   is an error rather than a silent no-op
 
-`tracked:` and `unmanaged_allow` grammar. Both become git patterns, so both need
-a closed grammar rather than pass-through. Each entry must be a non-empty
-relative POSIX glob. Reject: newlines and control characters, absolute paths,
-any `..` segment, a leading `!` (negation is the generator's job, never the
-declaration's), a leading `#` (comment syntax), a trailing `/` (these match
-files, not directories), a trailing backslash or other dangling escape, and
-duplicates within a list.
+`tracked:` grammar. These become git patterns AND must be evaluated by the
+checker, so the grammar is the subset both engines provably share: letters,
+digits, `.`, `_`, `-`, `/`, `*`, `?`. Reject newlines and control characters,
+absolute paths, any `..` segment, a leading `!` (negation is the generator's
+job), a leading `#`, a trailing `/` (these match files, not directories),
+backslashes, character classes, `**`, and duplicates.
+
+`**` and character classes are excluded deliberately. git's `foo/**/bar.json`
+matches `foo/bar.json`; `PurePosixPath.match`, which the checker uses, returns
+False — and probe generation cannot synthesise a witness for `[ab].json`.
+Admitting syntax the checker evaluates differently from git would let the
+generator emit a working rule that `unreachable-tracked` silently never checks.
+
+`unmanaged_allow` grammar is **not** the same, because its entries are matched
+against `.gitignore` rule *text* by equality rather than compiled as patterns. A
+leading `/` (anchored) and a trailing `/` (directory) are both legal and are the
+shapes actually written — `/data/raw/`, `.venv/`. What is rejected is text that
+cannot be a rule: empty, control characters, a comment, a negation (allowing a
+negation is meaningless — it ignores nothing), or surrounding whitespace.
 
 An **empty `tracked:` list is an error**. A `manifest` root that tracks nothing
 is mechanically a `payload` root, and silently accepting it would leave two
@@ -349,6 +361,18 @@ three MM30 drift classes on the day each appeared.
 `boundary.declaration-conflict` is what makes the declaration *the* authority
 rather than merely *an* authority. Without it, a hand-added rule below the
 managed block silently re-opens per-case adjudication.
+
+Its predicate is that an unmanaged rule **matches** a path under a declared
+root — not that it wins. That distinction is load-bearing. `check-ignore`
+reports only the last matching pattern, and the managed block is spliced *after*
+the hand-written region, so a managed rule always wins and a winner-based
+implementation could never report a conflict at all. The unmanaged rules are
+therefore evaluated in isolation: a scratch repository containing only the
+governed `.gitignore` files, with managed-block lines blanked rather than
+deleted so reported line numbers still match the real file, global excludes
+disabled, and no index. Any hit there is by construction an unmanaged-rule
+match, with nested-`.gitignore` scoping preserved because the files keep their
+relative locations — and git's own pattern engine does all the matching.
 
 `boundary.ignored-undeclared` closes the complementary hole. `declaration-conflict`
 only inspects paths *beneath a declared root*, so without this check a project
