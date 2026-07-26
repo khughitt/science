@@ -56,11 +56,19 @@ def test_a_baseline_inside_the_project_is_refused_on_write(tmp_path: Path):
 
 
 def test_a_baseline_inside_the_project_is_refused_on_read(tmp_path: Path):
+    """A genuinely valid baseline, merely placed inside the project, must still be
+    refused by the containment guard -- not by schema validation. Writing it outside
+    the project first and copying its (valid) text inward means the only way this
+    test can pass is the containment check firing."""
     project = tmp_path / "project"
     (project / "sub").mkdir(parents=True)
+    outside = tmp_path / "outside.json"
+    write_baseline(outside, _baseline(), project_root=project)
+
     inside = project / "sub" / "b.json"
-    inside.write_text("{}", encoding="utf-8")
-    with pytest.raises(BaselineError):
+    inside.write_text(outside.read_text(encoding="utf-8"), encoding="utf-8")
+
+    with pytest.raises(BaselineError, match="inside the project root"):
         read_baseline(inside, project_root=project)
 
 
