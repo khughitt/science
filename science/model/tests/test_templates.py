@@ -348,3 +348,38 @@ def test_hypothesis_id_has_no_legacy_h_prefix_placeholder() -> None:
     assert frontmatter["id"] == "hypothesis:2026-05-03-example"
     assert "h{{nn}}" not in text
     assert not _RAW_PLACEHOLDER_RE.search(text), _RAW_PLACEHOLDER_RE.search(text).group(0)
+
+
+def test_origins_scaffold_shows_the_record_shape() -> None:
+    """The `origins:` scaffold must show the dict form it actually requires.
+
+    fb-2026-07-26-002: the comment read "known originators (user | assistant |
+    literature)" above `origins: []`, so the natural completion was a bare ref
+    like `[literature]`. `OriginRecord` is extra="forbid" with a required
+    `type:`, so a bare string fails core schema validation, the entity is dropped
+    from the source load, and every health check needing sources reports "could
+    not run" -- roughly nine unrelated errors from one malformed list item.
+
+    The scaffold is the only place the author sees before making the mistake.
+    """
+    roots = [
+        Path(__file__).parents[3] / "templates",
+        Path(__file__).parents[1] / "src" / "science_model" / "templates",
+    ]
+    checked = 0
+    for root in roots:
+        for name in ("theme.md", "question.md", "hypothesis.md", "background-topic.md"):
+            path = root / name
+            if not path.is_file():
+                continue
+            checked += 1
+            text = path.read_text(encoding="utf-8")
+            assert "origins:" in text, f"{path} lost its origins scaffold"
+            guidance = "\n".join(
+                line for line in text.splitlines() if line.startswith("#") and "origin" in line.lower()
+            )
+            assert "type:" in guidance, (
+                f"{path} documents origins without showing the required `type:` key; "
+                "a bare ref cascades into ~9 'could not run' errors"
+            )
+    assert checked >= 7, f"expected root + packaged copies, checked only {checked}"
