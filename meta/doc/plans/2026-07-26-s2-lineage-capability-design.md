@@ -452,6 +452,12 @@ it **exactly**. Four of this design's rulings necessarily break it:
 | `story` | add `"superseded"` |
 | `validation-report` | add a new entry — it is absent today, having declared no vocabulary |
 
+**A second oracle in the same file also breaks.** Giving `validation-report` a `default_status`
+(mirroring `report`, so a closed vocabulary is not left without a default) adds an entry to
+`FROZEN_DEFAULT_STATUS`, which `test_default_status_equals_prior_literal` asserts by exact equality.
+This was found by running the change, not by reading — neither the design review nor the file list
+predicted it.
+
 This is an **intentional re-freeze against a written ruling**, and it is called out here precisely
 so it cannot happen quietly. That oracle exists to catch *unintended* vocabulary drift; editing it
 to match a change nobody ruled on would be tuning the instrument to silence the check. Every edit
