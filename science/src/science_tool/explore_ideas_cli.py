@@ -44,6 +44,21 @@ def _apply_truncation(full: dict[str, Any], displayed: dict[str, Any], complete_
     }
 
 
+def _echo_decision_notes(sink: BoundedSink, displayed: dict[str, Any]) -> None:
+    """Print the triage rationale each block recorded.
+
+    A bare `decision: drop` token loses why the block was rejected -- a considered
+    rejection and an oversight read identically to a later reader. Notes are
+    printed together rather than beside their own decision bucket, so scanning
+    the reasoning does not mean scanning four lists.
+    """
+    for item in displayed.get("decision_notes", []):
+        sink.echo(f"  note {item['candidate_id']}: {item['note']}")
+    omitted = displayed.get("decision_notes_omitted")
+    if omitted:
+        sink.echo(f"  ({omitted} further decision note(s) omitted)")
+
+
 def _echo_apply_truncation_footer(sink: BoundedSink, displayed: dict[str, Any]) -> None:
     truncation = displayed.get("truncation")
     if not truncation:
@@ -141,6 +156,7 @@ def explore_ideas_apply(
                     sink.echo(f"  apply manually ({item['proposed_kind']}): {item['candidate_id']}")
                 for fold in displayed["folds"]:
                     sink.echo(f"  fold manually: {fold['candidate_id']} -> {', '.join(fold['targets'])}")
+                _echo_decision_notes(sink, displayed)
                 _echo_apply_truncation_footer(sink, displayed)
 
             emit(output_format=output_format, payload=displayed, render_text=_render_check, sink=sink)
@@ -182,6 +198,7 @@ def explore_ideas_apply(
             sink.echo(f"  fold manually: {fold['candidate_id']} -> {', '.join(fold['targets'])}")
         for item in displayed["failures"]:
             sink.echo(f"  FAILED {item['candidate_id']}: {item['error']}")
+        _echo_decision_notes(sink, displayed)
         for created in displayed["created"]:
             for warning in created["warnings"]:
                 sink.echo(f"WARNING: {warning}")
@@ -348,6 +365,14 @@ def explore_ideas_resolve_anchors(from_value: str, output_format: str, output_pa
             f"{counts['unresolved']} unresolved, "
             f"{counts['mismatch']} mismatch"
         )
+        # The identity headline, stated separately from the status breakdown:
+        # the run that prompted this confirmed 2 of 49 anchors, a fact the
+        # per-status tally alone does not put in front of the reader.
+        total_anchors = counts["verified"] + counts["unverified"]
+        sink.echo(
+            f"identity: {counts['verified']} of {total_anchors} verified against a real record; "
+            f"{counts['unverified']} unverified (model-asserted, nothing confirms them)"
+        )
         for row in displayed["anchors"]:
             label = f"{row['candidate_id']}[{row['anchor_index']}]"
             if row["status"] == "resolved":
@@ -381,3 +406,79 @@ def explore_ideas_backfill_lens_views(from_value: str) -> None:
     for entity_id, n in touched:
         click.echo(f"  {entity_id}: +{n} lens_view(s)")
     click.echo(f"backfilled {sum(n for _, n in touched)} view(s) across {len(touched)} entit(ies)")
+
+
+@explore_ideas_group.command("seed-coverage")
+@click.option(
+    "--project-root",
+    default=".",
+    show_default=True,
+    envvar="SCIENCE_PROJECT_ROOT",
+    type=click.Path(path_type=Path, file_okay=False, dir_okay=True),
+)
+@click.option("--format", "output_format", type=click.Choice(["text", "json"]), default="text", show_default=True)
+@click.option(
+    "--output",
+    "output_path",
+    type=click.Path(path_type=Path),
+    default=None,
+    help="Write the complete, unbudgeted diagnostic to PATH instead of stdout.",
+)
+def explore_ideas_seed_coverage(project_root: Path, output_format: str, output_path: Path | None) -> None:
+    """Report how representative the Phase-1 brief seed is, and where its scope came from."""
+    from science_tool.budget.control import bounded_control_notice
+    from science_tool.budget.invocation import build_complete_via, hint_for
+    from science_tool.budget.projection import project_single_list_report
+    from science_tool.budget.registry import lookup
+    from science_tool.budget.sink import BoundedSink
+    from science_tool.explore_ideas_seed import SCOPE_DECLARED, compute_seed_coverage
+    from science_tool.topic_coverage import MalformedTopicError
+
+    try:
+        seed = compute_seed_coverage(project_root)
+    except MalformedTopicError as exc:
+        raise click.ClickException(str(exc)) from exc
+
+    complete_via = build_complete_via(
+        click.get_current_context(), output_hint=hint_for("explore-ideas-seed-coverage", output_format)
+    )
+    sink = BoundedSink(
+        lookup("explore-ideas seed-coverage"),
+        output_path=output_path,
+        command_path="explore-ideas seed-coverage",
+        complete_via=complete_via,
+    )
+    control_notice = (
+        bounded_control_notice(f"wrote the complete seed-coverage diagnostic to {output_path}")
+        if output_path is not None
+        else None
+    )
+
+    full: dict[str, Any] = seed.to_dict()
+    displayed = full if output_path is not None else project_single_list_report(full, "topics", 40)
+
+    def _render() -> None:
+        if displayed["n_topics"] == 0:
+            sink.echo("topics: 0 (no topics)")
+        else:
+            warn = "  ⚠ stub-dominated" if displayed["stub_dominated"] else ""
+            sink.echo(
+                f"topics: {displayed['n_topics']} (substantive {displayed['n_substantive']}, "
+                f"stubs {displayed['n_topics'] - displayed['n_substantive']}) — "
+                f"stub_ratio {displayed['stub_ratio']:.2f}{warn}"
+            )
+        sink.echo(f"scope_source: {displayed['scope_source']}")
+        for source in displayed["brief_sources"]:
+            if source["source"] == SCOPE_DECLARED:
+                layout = "" if source["layout"] == "canonical" else f" [{source['layout']} layout, unmigrated]"
+                sink.echo(f"  {source['name']}: {source['path']}{layout}")
+            else:
+                sink.echo(f"  {source['name']}: absent — the brief cannot cite a declared boundary")
+        if displayed.get("topics_omitted", 0):
+            sink.echo(f"  showing {len(displayed['topics'])} of {len(full['topics'])} topics")
+            sink.echo(f"  complete output:  {complete_via}")
+
+    emit(output_format=output_format, payload=displayed, render_text=_render, sink=sink)
+    sink.flush()
+    if control_notice is not None:
+        click.echo(control_notice)

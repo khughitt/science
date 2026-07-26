@@ -22,7 +22,7 @@ from science_tool.budget.registry import BUDGETS, DEFERRED, EXEMPTIONS
 from science_tool.cli import main
 
 EXPECTED_CLASSIFICATION_COUNTS = {
-    "budgeted": 68,
+    "budgeted": 69,
     "exempt": 119,
     "deferred": 95,
 }
@@ -131,7 +131,12 @@ def test_classification_partition_has_the_audited_cardinality() -> None:
 
     The autonomy supervisor then added two deferred leaves: `autonomy start` emits one
     fixed summary record, and `autonomy finish` emits one row per basis delta, gate
-    denial, and commit-mark issue. The live partition is therefore 68/118/95 = 281.
+    denial, and commit-mark issue. That took the partition to 68/118/95 = 281.
+
+    Batch R then added `explore-ideas seed-coverage` (fb-2026-07-25-004), BUDGETED
+    rather than exempt: it carries the same per-topic `topics` list as `project
+    topic-coverage`, so it grows with the project's topic count. The live partition is
+    therefore 69/119/95 = 283.
     """
     actual = {
         "budgeted": len(BUDGETS),

@@ -148,7 +148,8 @@ Parse the user input. Two modes, selected by the presence of `--apply`.
   project (equivalent to `--center`, by name rather than id).
 - `--lens <name>` — repeatable; restrict to specific lenses. Default: all
   six lenses (see the table in Phase 2).
-- `--n <k>` — target candidates per lens (default 5).
+- `--n <k>` — **ceiling** on candidates per lens (default 5), not a quota. A
+  lens returns fewer when it has fewer strong ideas.
 - `--commit` — auto-commit the written report.
 
 `--center`/`--topic` accept **topics only** in v1. If the value resolves to a
@@ -181,39 +182,53 @@ If `--apply` is present in the user input: **Apply mode** — skip straight to
 
 ## Generate — Phase 1: Frame
 
-Assemble a **blind domain brief**. Read **only** the following, in order,
-skipping any that are absent:
+Assemble a **blind domain brief**. Run the seed diagnostic **first** — it
+resolves the scope boundary for you and tells you where it came from:
+
+```bash
+uv run science explore-ideas seed-coverage --format json
+```
+
+Then read, in order:
 
 1. `science.yaml` — used **fully**: fold `summary`, `tags`, `aspects`,
    `data_sources`, and `ontologies` into the brief as scope terms (not just the
    project domain). These are self-declared scope, not claims.
-2. `specs/research-question.md`
-3. `specs/scope-boundaries.md`
-4. `entities/topics/` — use **all topic titles for breadth** (the subject areas
+2. The `research-question` and `scope-boundaries` documents at the paths
+   `brief_sources[]` reports — **do not guess these paths**. Specs are
+   canonicalized to `entities/specs/NNNN-slug.md` by
+   `science entity migrate-specs`, so in a migrated project the legacy
+   `specs/scope-boundaries.md` is gone while the boundary itself is very much
+   present. Reading the legacy path directly is how the scope boundary went
+   unread fleet-wide (fb-2026-07-25-004).
+3. `entities/topics/` — use **all topic titles for breadth** (the subject areas
    the project cares about, even where the body is an uncurated stub) plus the
    bodies of **substantive** topics for depth. Do not let a few fleshed-out
    topics become the whole brief.
 
-Read **only** the two named `specs/` files above — never glob `specs/*.md`, and
-do **not** read `entities/hypotheses/`, `entities/questions/`, or
-`entities/papers/` in this phase. They are deliberately excluded: the project's
-existing epistemic framing and paper set must not leak into the brief the lens
-agents receive; that framing is exactly what this pass is trying to get outside
-of. (Broadening the brief means adding *scope/method* signals, never claims.)
+Read **only** the two spec documents the diagnostic names — never glob
+`specs/*.md` or `entities/specs/*.md`, and do **not** read
+`entities/hypotheses/`, `entities/questions/`, or `entities/papers/` in this
+phase. They are deliberately excluded: the project's existing epistemic framing
+and paper set must not leak into the brief the lens agents receive; that framing
+is exactly what this pass is trying to get outside of. (Broadening the brief
+means adding *scope/method* signals, never claims.)
 
-**Measure seed representativeness.** Run:
+`seed-coverage` is a non-blind diagnostic; it is **for the report only and is
+never passed to the Phase-2 agents**. When `stub_dominated` is true, the
+`topics/` seed is thin/skewed — lean harder on the blindness-safe breadth
+sources (all topic titles, `science.yaml` tags/`data_sources`) so the brief
+still reflects the project's real scope rather than collapsing onto the handful
+of curated topics. Carry the returned
+`n_topics`/`n_substantive`/`stub_ratio`/`stub_dominated`/`scope_source` into
+Phase 4.
 
-```bash
-uv run science project topic-coverage --format json
-```
-
-This is a non-blind diagnostic computed by you (the orchestrator); it is **for
-the report only and is never passed to the Phase-2 agents**. When
-`stub_dominated` is true, the `topics/` seed is thin/skewed — lean harder on the
-blindness-safe breadth sources (all topic titles, `science.yaml`
-tags/`data_sources`) so the brief still reflects the project's real scope rather
-than collapsing onto the handful of curated topics. Carry the returned
-`n_topics`/`n_substantive`/`stub_ratio`/`stub_dominated` into Phase 4.
+**When `scope_source` is `absent`**, no boundary document exists anywhere. You
+may still infer scope from `science.yaml` and `AGENTS.md` — but record
+`scope_source: inferred` in the report, not `absent`, and state in one line what
+you inferred it from. `out-of-scope` novelty calls made against an inferred
+boundary are your reconstruction, not the project's declaration, and the report
+must not let a reader mistake one for the other.
 
 If `--center <topic-id>` or `--topic <name>` was given, resolve it against
 `entities/topics/` and fold that topic's subject terms into the brief so
@@ -238,7 +253,13 @@ so this inline text is its whole world):
 
 - the domain brief from Phase 1
 - the lens name and its frame, from this table
-- `n` (from `--n`, default 5)
+- `n` (from `--n`, default 5), passed as a **ceiling**: tell the agent to
+  return *up to* `n` candidates and to return fewer, with a stated reason, when
+  the lens has fewer strong ideas. A per-lens quota manufactures filler — every
+  lens returned exactly 5 in the run that prompted this, and both candidates
+  later dropped as true-but-inert came from the lens that plainly had the least
+  to say (fb-2026-07-25-005). A short return is a signal about the lens, not a
+  failure.
 - any `--center`/`--topic` focus
 
 | Lens | Frame |
@@ -250,21 +271,45 @@ so this inline text is its whole world):
 | `analogy` | cross-disciplinary analogy — how an adjacent field would frame it |
 | `temporal` | temporal/longitudinal/dynamics dimension |
 
-Collect each agent's JSON array of candidates. Do not deduplicate or judge
-novelty here — that is Phase 3's job, run with full visibility this phase
-deliberately lacks.
+Each agent returns a JSON object: `{lens, lens_note, candidates[]}`. Pool the
+`candidates` and keep every `lens_note` — it is the lens-productivity signal,
+and it goes into the Phase-4 report header beside `seed_coverage`. Do not
+deduplicate or judge novelty here — that is Phase 3's job, run with full
+visibility this phase deliberately lacks.
+
+A lens returning 2 candidates when `n` was 5 has told you something about the
+brief. Record it; do not re-dispatch the lens to fill the gap.
 
 ## Generate — Phase 3: Classify (full visibility)
 
-Only now load the existing epistemic surface:
+Only now load the existing surface. This is where blindness ends and the
+orchestrator (you) compares the pooled candidates from Phase 2 against what the
+project already has.
+
+**Two surfaces, and they are not the same set.**
+
+*The judging surface (wide)* — everything the project already holds, which is
+what novelty must be measured against:
 
 ```bash
-uv run science project index --format json
+uv run science project index --format json     # questions + hypotheses
+uv run science entity list --format json       # every other kind, too
+uv run science tasks list --format json        # queued work
 ```
 
-plus `entities/topics/`. This is where blindness ends and the orchestrator
-(you) compares the pooled candidates from Phase 2 against what the project
-already has.
+plus `entities/topics/` and `core/decisions.md`. Judging against questions and
+hypotheses alone is how a pass calls a candidate `novel` that an existing
+command, skill, or queued task already covers — three such calls in the run that
+prompted this (fb-2026-07-25-001), each caught only by manual inspection.
+
+*The relation surface (narrow)* — `related_existing` targets **question and
+hypothesis ids only**, unchanged (see below). Apply hard-validates against
+exactly those two kinds.
+
+A candidate may therefore be judged `already-covered` against a task, a topic,
+or a non-epistemic entity **while carrying an empty `related_existing`**. That
+is correct, not an omission: name what covers it in the candidate's prose. Do
+not widen `related_existing` to make the two surfaces match.
 
 1. **Slug pre-pass (deterministic, cheap).** Slugify each candidate's
    title and compare against slugified existing entity ids/titles. An
@@ -276,7 +321,10 @@ already has.
    - `novel` — no existing entity covers it.
    - `sharpens-existing` — a sharper/edge variant of an existing entity.
    - `already-covered` — an existing entity already asks this.
-   - `out-of-scope` — falls outside `specs/scope-boundaries.md`.
+   - `out-of-scope` — falls outside the scope boundary Phase 1 resolved. When
+     `scope_source` is not `declared`, you are judging against an inferred
+     boundary; say so in the candidate's prose rather than presenting the call
+     as a check against the project's own declaration.
    When title-level information from the index is insufficient to tell,
    **read the referenced source files** before deciding. Set
    `related_existing` for `sharpens-existing` and `already-covered`, then
@@ -318,6 +366,15 @@ already has.
    - otherwise leave `ref` null — ambiguous and unresolved anchors stay raw
      citations and contribute no literature origin.
 
+   **Copy each row's `verification` into its anchor, always.** The resolver
+   consults `entities/papers/` and `papers/references.bib` and nothing else, so
+   an anchor that matches neither has had its identity confirmed by nothing —
+   47 of 49 anchors in the run that prompted this (fb-2026-07-25-006). A null
+   `ref` alone does not say that; a reader sees a DOI, a title, an author and a
+   year and reasonably reads a validated reference. `verification: verified`
+   and a non-null `ref` are set together or not at all — apply rejects a block
+   carrying one without the other, in either direction.
+
    **Anchor metadata is model-generated — treat it as unverified.** The lens
    agents emit DOIs/authors/titles from search, and a valid-looking DOI can
    point at a real but unrelated paper. The resolver guards against the worst
@@ -334,13 +391,25 @@ already has.
    `predates:` anchor's date flows into its independent literature origin.
    Finalize each candidate's `origin_plan` from the resolution per the
    origin-plan rules in Phase 4 below.
-4. **Convergence detection.** If candidates from two or more lenses
-   independently describe the same idea, tag them internally with a shared
-   `convergence_group: <id>` so Phase 4 knows to merge them into one block.
-   Convergent lenses are **not** collapsed to one: keep the whole idea as a
-   single block carrying multiple `lens_views`. `convergence_group` (if used)
-   is an internal Phase-3 classification aid only; Phase 4 emits exactly one
-   block per apply unit.
+4. **Convergence and cluster detection.** Two relations, at different
+   strengths — a single high bar merges nothing when candidates are *related*
+   but not *identical*, which is how three candidates describing one mechanism
+   on three axes shipped as three near-duplicate blocks (fb-2026-07-25-003).
+
+   - `convergence_group: <id>` — candidates from two or more lenses
+     **independently describe the same idea**. Phase 4 emits **one** block
+     carrying multiple `lens_views`. Convergent lenses are not collapsed to
+     one; the whole idea is one block.
+   - `cluster_group: <id>` — candidates describe **different ideas on one
+     mechanism, theme, or axis**. This does *not* decide the block count.
+
+   For every `cluster_group`, Phase 4 MUST state explicitly whether it emits one
+   block or N, and why. Naming a cluster in the report summary without acting on
+   it is the failure this exists to prevent: the reader is told the candidates
+   overlap and left to do the merge by hand.
+
+   Both fields are internal Phase-3 classification aids; Phase 4 emits exactly
+   one block per apply unit.
 
 ## Generate — Phase 4: Report
 
@@ -362,7 +431,25 @@ seed_coverage:
   n_substantive: 3
   stub_ratio: 0.92
   stub_dominated: true   # brief was stub-dominated; treat novelty calls as made against a thin seed
+  scope_source: declared # declared | inferred | absent
+  scope_path: entities/specs/0037-scope-boundaries.md   # omit when not declared
+lens_yield:
+  - lens: mechanism
+    n_returned: 5
+    note: rich mechanistic literature; ceiling reached
+  - lens: population
+    n_returned: 2
+    note: brief declares a single cohort, so subgroup framings had little to bite on
 ```
+
+`lens_yield` carries one row per dispatched lens, from each agent's `lens_note`.
+A lens that returned fewer than `--n` is reporting on the brief, not failing.
+
+`scope_source` is copied from `seed-coverage` when it reports `declared` or, on
+`absent`, set to `inferred` if you reconstructed scope from `science.yaml` /
+`AGENTS.md` (say from what, in one line) — or left `absent` if you did not. It
+is the provenance of the single most anchoring-relevant input to a blind pass,
+and `out-of-scope` calls are only as good as it is.
 
 Present candidates **neutrally** — never rank or group in a way that
 privileges one source or lens over another:
@@ -400,9 +487,11 @@ literature_anchors:
     date: 2021-06-15
     note: relevant mechanism review
     ref: null
+    verification: unverified
 novelty_bucket: novel
 related_existing: []
 decision: defer
+decision_note: null
 origin_plan:
   origins:
     - type: assistant
@@ -473,6 +562,15 @@ origin_plan:
 
 Never set `decision: applied` yourself — it is written only by Apply mode
 (below), as write-back.
+
+**`decision_note` (optional) records *why*.** The decision itself is a bare
+token, so a considered rejection and an oversight read identically to anyone
+opening the report later — eight candidates were dropped for materially
+different reasons in the run that prompted this, and every reason lived only in
+the conversation (fb-2026-07-25-007). Write one whenever the reason is not
+obvious from the block: inert, badly individuated, absorbed into another block,
+out of scope for a stated reason. Apply echoes every note in its summary. A
+`keep` rarely needs one — the block is its own justification.
 
 **Origin-plan finalization rules** (apply these while assembling each
 block in Phase 3→4):

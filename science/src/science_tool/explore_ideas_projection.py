@@ -3,9 +3,12 @@ apply/check-only report independently. Lives beside the command, not in budget/,
 budgeting mechanism stays free of domain knowledge (mirrors prose_lint_projection.py).
 
 The payload carries several independently growable lists at once (``created``/``to_create``,
-``skipped_applied``, ``skipped_other``, ``manual``, ``folds``, ``failures``): the single-list
-helper (``budget.projection.project_single_list_report``) would leave every list but the one
-it names unbounded, so each is capped here and its own ``<key>_omitted`` recorded.
+``skipped_applied``, ``skipped_other``, ``manual``, ``folds``, ``failures``, ``decision_notes``):
+the single-list helper (``budget.projection.project_single_list_report``) would leave every list
+but the one it names unbounded, so each is capped here and its own ``<key>_omitted`` recorded.
+
+Every list the apply/check payload grows must be listed in ``_GROWABLE_LIST_KEYS``; a key added
+to the payload but not here is silently unbounded.
 """
 
 from __future__ import annotations
@@ -24,6 +27,7 @@ _GROWABLE_LIST_KEYS = (
     "manual",
     "folds",
     "failures",
+    "decision_notes",
 )
 
 
