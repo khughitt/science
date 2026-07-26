@@ -41,6 +41,13 @@ def _write_done(path: Path, *tasks: Task) -> Path:
     return path
 
 
+def _write_active_text(tasks_dir: Path, filename: str, text: str) -> Path:
+    path = tasks_dir / "active" / filename
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(text, encoding="utf-8")
+    return path
+
+
 def test_read_active_parses_split_files_in_task_id_order(tmp_path: Path) -> None:
     tasks_dir = tmp_path / "tasks"
     _write_active(tasks_dir, _task("t010", title="Ten"))
@@ -137,3 +144,56 @@ def test_id_scans_include_active_frontmatter_and_done_headers_without_parsing_bo
 
     assert task_module.known_task_ids(tasks_dir) == {"t040", "t050"}
     assert task_module.next_task_id(tasks_dir) == "t051"
+
+
+def test_id_scans_use_yaml_semantics_for_quoted_and_commented_active_ids(
+    tmp_path: Path,
+) -> None:
+    tasks_dir = tmp_path / "tasks"
+    _write_active_text(tasks_dir, "quoted.md", '---\nid: "t040"\n---\n\nbody\n')
+    _write_active_text(tasks_dir, "commented.md", "---\nid: t050 # reserved\n---\n\nbody\n")
+
+    assert task_module.known_task_ids(tasks_dir) == {"t040", "t050"}
+    assert task_module.next_task_id(tasks_dir) == "t051"
+
+
+@pytest.mark.parametrize("scanner", ["known", "next"])
+@pytest.mark.parametrize(
+    ("frontmatter", "message"),
+    [
+        ("id: [", "invalid YAML frontmatter"),
+        ("- id: t001", "frontmatter must be a mapping"),
+        ("id: t001\nid: t002", "duplicate"),
+        ("defaults: &defaults\n  id: t001\n<<: *defaults", "merge"),
+        ("title: Missing ID", "missing required key: id"),
+        ("id: 1", "id must be a string"),
+        ("id: t01", "non-canonical task id"),
+    ],
+    ids=[
+        "malformed",
+        "non-mapping",
+        "duplicate",
+        "merge",
+        "missing-id",
+        "non-string-id",
+        "noncanonical-id",
+    ],
+)
+def test_active_id_scans_fail_on_invalid_frontmatter(
+    tmp_path: Path,
+    scanner: str,
+    frontmatter: str,
+    message: str,
+) -> None:
+    tasks_dir = tmp_path / "tasks"
+    _write_active_text(
+        tasks_dir,
+        "candidate.md",
+        f"---\n{frontmatter}\n---\n\nbody\n",
+    )
+
+    with pytest.raises(ValueError, match=message):
+        if scanner == "known":
+            task_module.known_task_ids(tasks_dir)
+        else:
+            task_module.next_task_id(tasks_dir)

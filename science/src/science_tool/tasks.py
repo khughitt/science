@@ -79,7 +79,6 @@ class TaskIntegrityError(ValueError):
 
 _TASK_ID_PATTERN = r"t[0-9]{3,}"
 _HEADER_RE = re.compile(rf"^##\s+\[({_TASK_ID_PATTERN})\]\s+(.+)$")
-_FRONTMATTER_ID_RE = re.compile(rf"^id:\s*({_TASK_ID_PATTERN})\s*$")
 _ANY_TASK_HEADER_RE = re.compile(r"^##\s+\[([^\]]+)\]\s+(.+)$")
 _FIELD_RE = re.compile(r"^-\s+([\w-]+):\s*(.*)$")
 _LIST_RE = re.compile(r"^\[(.+)\]$")
@@ -322,9 +321,8 @@ def _split_frontmatter_text(text: str) -> tuple[str, str]:
     return "", text
 
 
-def parse_task_file(path: Path) -> Task:
-    """Parse one canonical open-task file with strict identity validation."""
-    text = path.read_text(encoding="utf-8")
+def _load_task_frontmatter(text: str, *, path: Path) -> tuple[dict[str, object], str]:
+    """Load strict YAML frontmatter and body from one file-text snapshot."""
     frontmatter_text, body = _split_frontmatter_text(text)
 
     try:
@@ -338,10 +336,31 @@ def parse_task_file(path: Path) -> Task:
         )
 
     try:
-        loaded = yaml.safe_load(frontmatter_text) or {}
+        loaded = yaml.safe_load(frontmatter_text)
     except yaml.YAMLError as exc:
         raise ValueError(f"{path}: invalid YAML frontmatter: {exc}") from exc
-    data = loaded if isinstance(loaded, dict) else {}
+    if loaded is None:
+        return {}, body
+    if not isinstance(loaded, dict):
+        raise ValueError(f"{path}: frontmatter must be a mapping")
+    return loaded, body
+
+
+def _task_id_from_frontmatter(data: dict[str, object], *, path: Path) -> str:
+    if "id" not in data:
+        raise ValueError(f"{path}: missing required key: id")
+    task_id = data["id"]
+    if not isinstance(task_id, str):
+        raise ValueError(f"{path}: id must be a string")
+    if not re.fullmatch(_TASK_ID_PATTERN, task_id):
+        raise ValueError(f"{path}: non-canonical task id {task_id!r}")
+    return task_id
+
+
+def parse_task_file(path: Path) -> Task:
+    """Parse one canonical open-task file with strict identity validation."""
+    text = path.read_text(encoding="utf-8")
+    data, body = _load_task_frontmatter(text, path=path)
 
     unknown = set(data) - _KNOWN_KEYS
     if unknown:
@@ -351,9 +370,7 @@ def parse_task_file(path: Path) -> Task:
         if key not in data:
             raise ValueError(f"{path}: missing required key: {key}")
 
-    task_id = str(data["id"])
-    if not re.fullmatch(_TASK_ID_PATTERN, task_id):
-        raise ValueError(f"{path}: non-canonical task id {task_id!r}")
+    task_id = _task_id_from_frontmatter(data, path=path)
     if not path.name.startswith(f"{task_id}-") and path.name != f"{task_id}.md":
         raise ValueError(f"{path}: filename does not match id {task_id!r}")
 
@@ -619,20 +636,11 @@ def _strict_task_ids_in_text(text: str) -> list[str]:
     return ids
 
 
-def _strict_frontmatter_task_ids_in_text(text: str) -> list[str]:
-    frontmatter, _body = _split_frontmatter_text(text)
-    ids: list[str] = []
-    for line in frontmatter.splitlines():
-        match = _FRONTMATTER_ID_RE.match(line)
-        if match:
-            ids.append(match.group(1))
-    return ids
-
-
 def _strict_task_ids_in_path(path: Path) -> list[str]:
     text = path.read_text(encoding="utf-8")
     if path.parent.name == "active":
-        return _strict_frontmatter_task_ids_in_text(text)
+        data, _body = _load_task_frontmatter(text, path=path)
+        return [_task_id_from_frontmatter(data, path=path)]
     return _strict_task_ids_in_text(text)
 
 
