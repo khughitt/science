@@ -6,7 +6,7 @@ import re
 from datetime import date
 from pathlib import Path
 
-from science_tool.tasks import _HEADER_RE, Task, _parse_task_block, render_tasks
+from science_tool.tasks import _HEADER_RE, Task, _parse_task_block
 
 
 _HEADING_PREFIX_RE = re.compile(r"^##\s+\[", re.MULTILINE)
