@@ -1,6 +1,10 @@
 from __future__ import annotations
 
-from science_model.entity_schema import read_canonical_body_sections, read_effective_frontmatter_fields
+from science_model.entity_schema import (
+    admitted_field_names,
+    read_canonical_body_sections,
+    read_effective_frontmatter_fields,
+)
 from science_model.entity_schema.merge import MergePolicy, read_merge_policy
 from science_model.entity_schema.profile import parse_profile
 
@@ -114,3 +118,32 @@ def test_read_effective_frontmatter_fields_intersects_composed_schema_constraint
             "domain",
         ]
     }
+
+
+def test_admitted_field_names_excludes_what_a_later_component_forbids() -> None:
+    # Composition is ORDERED: base 2.0 declares `tags`, the hypothesis mixin sets it to
+    # `false`, and the composed profile therefore does not admit it. Deriving this from the
+    # mixin ALONE is how `description` hid for four drafts -- it is declared by the BASE,
+    # forbidden by nothing, and was on no model.
+    admitted = admitted_field_names(parse_profile("science-entity-base/2.0+hypothesis/1.0"))
+
+    assert "tags" not in admitted  # base declares it; the mixin forbids it
+    assert "phase" not in admitted  # mixin-only, forbidden
+    assert "description" in admitted  # base declares it; nothing forbids it
+    assert "verdict" in admitted  # the mixin declares it
+
+
+def test_effective_frontmatter_fields_omit_a_base_field_the_mixin_forbids() -> None:
+    # `read_merge_policy` reads a `false` subschema as FORBIDDEN. This reader skipped it as
+    # "not a dict", so a base field the mixin removed stayed in the output and
+    # `science entity fields hypothesis` advertised six commons fields the kind rejects.
+    keys = {
+        field.key
+        for field in read_effective_frontmatter_fields(
+            parse_profile("science-entity-base/2.0+hypothesis/1.0")
+        )
+    }
+
+    assert keys.isdisjoint({"contributors", "licenses", "schema_profile", "sources", "tags", "version"})
+    assert "phase" not in keys
+    assert "description" in keys  # the fix must not over-remove

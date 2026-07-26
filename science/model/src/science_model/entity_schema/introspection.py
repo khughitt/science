@@ -44,6 +44,16 @@ def read_effective_frontmatter_fields(
     for schema in schemas:
         properties = schema.get("properties") or {}
         for key, spec in properties.items():
+            if spec is False:
+                # A `false` subschema FORBIDS the property. The old guard skipped it as "not a
+                # dict", leaving a base field the mixin removed in the output -- so
+                # `science entity fields hypothesis` advertised six commons fields the kind
+                # rejects. `read_merge_policy` already reads `false` as FORBIDDEN; this is the
+                # same fact, finally read the same way by the other reader.
+                specs_by_field.pop(key, None)
+                if key in field_order:
+                    field_order.remove(key)
+                continue
             if not isinstance(spec, dict):
                 continue
             if key not in specs_by_field:
@@ -60,6 +70,29 @@ def read_effective_frontmatter_fields(
         )
         for key in field_order
     ]
+
+
+def admitted_field_names(
+    profile: ProfileString, loader: SchemaLoader | None = None
+) -> frozenset[str]:
+    """Every field name the COMPOSED profile admits.
+
+    Composition is ORDERED: a later component's `false` subschema REMOVES a field an earlier
+    one declared, so this cannot be computed from the mixin alone. `description` is declared by
+    entity-base 2.0, forbidden by nothing, and hid for four drafts behind exactly that mistake.
+
+    A `false` value means the property is forbidden outright, which is why it is discarded here
+    rather than recorded -- the same reading `read_merge_policy` gives it.
+    """
+    loader = loader or SchemaLoader()
+    names: set[str] = set()
+    for component in _iter_components(profile):
+        for key, spec in (loader.load(component).get("properties") or {}).items():
+            if spec is False:
+                names.discard(key)
+            else:
+                names.add(key)
+    return frozenset(names)
 
 
 def _effective_constraints(specs: list[dict[str, Any]]) -> dict[str, Any]:
