@@ -1,5 +1,6 @@
 """Canonical per-open-task Markdown file format."""
 
+import json
 from datetime import date
 from pathlib import Path
 
@@ -196,6 +197,65 @@ def test_rejects_non_single_line_title(tmp_path: Path, title: str) -> None:
 
     with pytest.raises(ValueError, match="title"):
         task_module.parse_task_file(path)
+
+
+@pytest.mark.parametrize(
+    "boundary",
+    [
+        "\n",
+        "\r",
+        "\v",
+        "\f",
+        "\x1c",
+        "\x1d",
+        "\x1e",
+        "\x85",
+        "\u2028",
+        "\u2029",
+    ],
+    ids=[
+        "lf",
+        "cr",
+        "vertical-tab",
+        "form-feed",
+        "file-separator",
+        "group-separator",
+        "record-separator",
+        "nel",
+        "line-separator",
+        "paragraph-separator",
+    ],
+)
+def test_rejects_every_title_line_boundary(
+    tmp_path: Path,
+    boundary: str,
+) -> None:
+    path = _write(
+        tmp_path / "t042-x.md",
+        _task_text(title=json.dumps(f"left{boundary}right")),
+    )
+
+    with pytest.raises(ValueError, match="title") as excinfo:
+        task_module.parse_task_file(path)
+
+    assert str(path) in str(excinfo.value)
+
+
+@pytest.mark.parametrize(
+    "title",
+    ["", "   ", "\t", " leading", "trailing "],
+    ids=["empty", "spaces-only", "tab-only", "leading-space", "trailing-space"],
+)
+def test_rejects_empty_or_edge_whitespace_title(tmp_path: Path, title: str) -> None:
+    path = _write(
+        tmp_path / "t042-x.md",
+        _task_text(title=json.dumps(title)),
+    )
+
+    with pytest.raises(ValueError, match="title") as excinfo:
+        task_module.parse_task_file(path)
+
+    assert str(path) in str(excinfo.value)
 
 
 def test_round_trip_verifier_rejects_field_mismatch(tmp_path: Path) -> None:

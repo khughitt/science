@@ -196,23 +196,63 @@ def test_edit_refuses_to_terminalize_an_active_task(tmp_path: Path, status: str)
     assert active.read_bytes() == before
 
 
-@pytest.mark.parametrize("title", ["two\nlines", "bare ] bracket"])
+@pytest.mark.parametrize(
+    "title",
+    [
+        "",
+        "   ",
+        "\t",
+        " leading",
+        "trailing ",
+        "two\nlines",
+        "bare ] bracket",
+    ],
+    ids=[
+        "empty",
+        "spaces-only",
+        "tab-only",
+        "leading-space",
+        "trailing-space",
+        "newline",
+        "closing-bracket",
+    ],
+)
 def test_add_rejects_unsafe_title_without_creating_a_task(tmp_path: Path, title: str) -> None:
     tasks_dir = tmp_path / "tasks"
 
-    with pytest.raises(ValueError, match=r"title must be single-line and contain no '\]'"):
+    with pytest.raises(ValueError, match="task title"):
         task_module.add_task(tmp_path, tasks_dir, title, "P1")
 
     assert not (tasks_dir / "active").exists()
 
 
-@pytest.mark.parametrize("title", ["two\nlines", "bare ] bracket"])
+@pytest.mark.parametrize(
+    "title",
+    [
+        "",
+        "   ",
+        "\t",
+        " leading",
+        "trailing ",
+        "two\nlines",
+        "bare ] bracket",
+    ],
+    ids=[
+        "empty",
+        "spaces-only",
+        "tab-only",
+        "leading-space",
+        "trailing-space",
+        "newline",
+        "closing-bracket",
+    ],
+)
 def test_edit_rejects_unsafe_title_without_changing_the_task(tmp_path: Path, title: str) -> None:
     tasks_dir = tmp_path / "tasks"
     active = _write_active(tasks_dir, _task("t001"))
     before = active.read_bytes()
 
-    with pytest.raises(ValueError, match=r"title must be single-line and contain no '\]'"):
+    with pytest.raises(ValueError, match="task title"):
         task_module.edit_task(tmp_path, tasks_dir, "t001", title=title)
 
     assert active.read_bytes() == before
@@ -262,6 +302,50 @@ def test_archived_edit_rewrites_ledger_in_place_without_creating_active_file(
     assert task_module.parse_tasks(ledger) == [task]
     assert ledger.name == "2026-06.md"
     assert not (tasks_dir / "active").exists()
+
+
+def test_archived_note_atomic_write_failure_preserves_original_ledger(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    tasks_dir = tmp_path / "tasks"
+    ledger = _write_done(
+        tasks_dir / "done" / "2026-06.md",
+        _task("t001", status="done"),
+    )
+    before = ledger.read_bytes()
+
+    def fail_before_replace(_path: Path, _text: str) -> None:
+        raise OSError("simulated atomic write failure")
+
+    monkeypatch.setattr(task_module, "atomic_write_text", fail_before_replace)
+
+    with pytest.raises(OSError, match="simulated atomic write failure"):
+        task_module.append_task_note(tasks_dir, "t001", "Should not land.")
+
+    assert ledger.read_bytes() == before
+
+
+def test_archived_edit_atomic_write_failure_preserves_original_ledger(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    tasks_dir = tmp_path / "tasks"
+    ledger = _write_done(
+        tasks_dir / "done" / "2026-06.md",
+        _task("t001", status="done"),
+    )
+    before = ledger.read_bytes()
+
+    def fail_before_replace(_path: Path, _text: str) -> None:
+        raise OSError("simulated atomic write failure")
+
+    monkeypatch.setattr(task_module, "atomic_write_text", fail_before_replace)
+
+    with pytest.raises(OSError, match="simulated atomic write failure"):
+        task_module.edit_task(tmp_path, tasks_dir, "t001", priority="P2")
+
+    assert ledger.read_bytes() == before
 
 
 CrashDuplicateMutation = Callable[[Path, Path], object]

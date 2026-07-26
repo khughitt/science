@@ -193,8 +193,16 @@ def _parse_task_header(line: str, *, path: Path | None = None) -> tuple[str, str
 
 def _validate_task_title(title: str) -> None:
     """Reject titles that cannot be represented safely in either task format."""
-    if any(char in title for char in _SPLITLINES_BOUNDARIES) or "]" in title:
-        raise ValueError("task title must be single-line and contain no ']'")
+    if (
+        not title
+        or title != title.strip()
+        or any(char in title for char in _SPLITLINES_BOUNDARIES)
+        or "]" in title
+    ):
+        raise ValueError(
+            "task title must be non-empty, have no leading or trailing whitespace, "
+            "be single-line, and contain no ']'"
+        )
 
 
 class TaskAspectValidationError(ValueError):
@@ -394,8 +402,10 @@ def parse_task_file(path: Path) -> Task:
         raise ValueError(f"{path}: filename does not match id {task_id!r}")
 
     title = str(data["title"])
-    if "\n" in title or "]" in title:
-        raise ValueError(f"{path}: title must be single-line and contain no ']'")
+    try:
+        _validate_task_title(title)
+    except ValueError as exc:
+        raise ValueError(f"{path}: {exc}") from exc
 
     if str(data["status"]) not in _OPEN_STATUSES:
         raise ValueError(
@@ -881,7 +891,7 @@ def write_task_location(location: TaskLocation) -> None:
     location.path.parent.mkdir(parents=True, exist_ok=True)
     text = _render_task_file(location.path, location.tasks)
     _verify_round_trip(text, location.tasks, path=location.path)
-    location.path.write_text(text)
+    atomic_write_text(location.path, text)
 
 
 def _format_note(note_date: date, note: str) -> str:
