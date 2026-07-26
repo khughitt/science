@@ -530,7 +530,13 @@ def test_graph_validate_passes_on_fresh_graph() -> None:
         assert result.exit_code == 0
 
         payload = json.loads(result.output)
-        assert all(row["status"] == "pass" for row in payload["rows"])
+        rows = {row["check"]: row for row in payload["rows"]}
+        assert not [row for row in payload["rows"] if row["status"] == "fail"]
+        # A fresh graph has no causal edges, so acyclicity is unchecked, not
+        # satisfied. `pass` there would assert "the causal graph is acyclic"
+        # about a graph that does not exist (fb-2026-07-19-001).
+        assert rows["causal_acyclicity"]["status"] == "skip"
+        assert all(row["status"] == "pass" for row in payload["rows"] if row["check"] != "causal_acyclicity")
 
 
 def test_graph_validate_fails_when_claim_lacks_provenance() -> None:

@@ -60,11 +60,13 @@ from .identity import (
     shorten_uri,
 )
 from .inquiry import (
+    CausalEdgeResolution,
     get_inquiry,
     resolve_inquiry,
     list_inquiries,
     list_inquiries_dataset,
     render_inquiry_doc,
+    resolve_causal_edges,
     validate_inquiry,
     validate_inquiry_dataset,
 )
@@ -144,6 +146,7 @@ __all__ = [
     "BIOLINK_NS",
     "CITO_NS",
     "CURIE_PREFIXES",
+    "CausalEdgeResolution",
     "ClaimSummaryData",
     "DCTERMS_NS",
     "DEFAULT_GRAPH_PATH",
@@ -200,6 +203,7 @@ __all__ = [
     "query_uncertainty",
     "read_graph_stats",
     "render_inquiry_doc",
+    "resolve_causal_edges",
     "save_graph_dataset",
     "shorten_uri",
     "validate_graph",
