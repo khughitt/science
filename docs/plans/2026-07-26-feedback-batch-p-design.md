@@ -178,3 +178,54 @@ Every fix is certified against the fleet baseline above, not against assertion:
    task states become mostly `done` and that `COMPLETE` becomes reachable.
    **A prediction in a design doc is a claim; it is recorded here so it can be
    contradicted by measurement** — see Batch O, where exactly that happened.
+
+### Measured result
+
+**The `-013` prediction held.** After the task-resolution fix alone,
+natural-systems' task states moved from `81 missing / 98 active` to
+`150 done / 28 active / 1 unknown` — **zero missing** — and `COMPLETE`
+adjudications rose 7 → 23. The 70 states that moved `active` → `done` are the
+second half of the same defect: any mention of an id anywhere in `active.md`,
+including inside another task's `related:` list, used to read as ACTIVE.
+
+Fleet warnings across the two changes, which push in opposite directions:
+
+| stage | natural-systems | protein-landscape | health/meta | total |
+|---|---|---|---|---|
+| baseline | 2 | 6 | 1 | **9** |
+| after `-013` (task resolution) | 11 | 6 | 1 | **18** |
+| after `-015`/`-014` (declared regions) | 2 | 1 | 0 | **3** |
+
+The count returning to roughly where it started conceals a full substitution of
+content. Plans probed at all fell 103 → 20 in natural-systems (only those that
+declare deliverables), and:
+
+- Both verified false positives are gone. `0037` and `0097` no longer appear.
+- Both surviving natural-systems warnings are **new, and true**.
+  `0068-t251-hh-fit-workflow-plan.md` claims `active`; all seven paths under its
+  `## Workflow Outputs` heading exist on disk and both cited tasks resolve
+  `done`. That finding was unreachable before, because `COMPLETE` was.
+
+So the screen speaks about a fifth as many plans and is right when it does — the
+trade D3 was chosen for, confirmed by measurement rather than asserted.
+
+### Two things the fixes exposed
+
+- **The acceptance guard held a second copy of the signature version.**
+  `validate/acceptance.py` hardcoded `v1:` in its matcher, so bumping the
+  signature would have left a guard that kept honouring stale entries — the
+  version would have been decorative. It now derives the pattern from
+  `SIGNATURE_VERSION`, and a test asserts a v1 token is rejected.
+- **`-014` has no consumer in the fleet.** The verified retirement plan
+  (`0018-a5-guide-unification.md`) has no deliverables-shaped heading at all, so
+  D3 already silences it. Polarity is shipped because silence is not a fix for
+  "scored exactly backwards" — it only stops the wrong answer. A retirement plan
+  can now declare `## Retirement targets` and be screened correctly, which is
+  the difference between unscoreable and scoreable.
+
+### Pre-existing failures, not absorbed
+
+`tests/validate/` followed by `tests/test_correspondence_drift_health_integration.py`
+fails two tests through an ordering interaction that empties the validation
+findings list. **Verified identical on `main`** at `e4fbc201`; both modules pass
+in isolation. Not this branch's regression and not fixed here.
