@@ -14,6 +14,7 @@ from pathlib import Path, PurePosixPath
 
 from science_model.tasks import TaskStatus
 
+from science_tool.correspondence.extract import Deliverable, Polarity
 from science_tool.tasks import task_status_index
 
 
@@ -35,16 +36,33 @@ class Probe:
     target: str
     result: ProbeResult
     detail: str
+    polarity: Polarity = Polarity.CREATE
 
 
-def probe_path(worktree: Path, rel: str) -> Probe:
+def probe_path(worktree: Path, deliverable: Deliverable) -> Probe:
+    """Probe one declared deliverable.
+
+    `PRESENT` means "the plan's claim about this path holds", not "the file
+    exists": for a `REMOVE` deliverable the exit criterion is that the target is
+    gone, so its result is inverted. Without that, a retirement plan is scored
+    exactly backwards -- the more of it that has succeeded, the less complete it
+    reads (fb-2026-07-26-014).
+    """
+    rel = deliverable.path
     pure = PurePosixPath(rel)
     if pure.is_absolute() or ".." in pure.parts:
         return Probe(rel, ProbeResult.UNKNOWN, f"{rel}: outside the project, unprobeable")
     target = worktree / rel
-    if target.exists():
-        return Probe(rel, ProbeResult.PRESENT, f"{rel}: exists at {target}")
-    return Probe(rel, ProbeResult.ABSENT, f"{rel}: not found at {target}")
+    exists = target.exists()
+    if deliverable.polarity is Polarity.REMOVE:
+        if exists:
+            detail = f"{rel}: declared for removal, still at {target}"
+            return Probe(rel, ProbeResult.ABSENT, detail, Polarity.REMOVE)
+        detail = f"{rel}: declared for removal, gone from {target}"
+        return Probe(rel, ProbeResult.PRESENT, detail, Polarity.REMOVE)
+    if exists:
+        return Probe(rel, ProbeResult.PRESENT, f"{rel}: exists at {target}", Polarity.CREATE)
+    return Probe(rel, ProbeResult.ABSENT, f"{rel}: not found at {target}", Polarity.CREATE)
 
 
 def _state_for(status: str | None) -> TaskState:

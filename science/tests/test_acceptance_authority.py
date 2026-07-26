@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from science_tool.correspondence.signature import SIGNATURE_VERSION
 from science_tool.validate.acceptance import (
     EVIDENCE_SCOPED_RULES,
     entry_is_evidence_scoped,
@@ -10,7 +11,7 @@ from science_tool.validate.acceptance import (
 )
 from science_tool.validate.result import Result, Severity
 
-_SIG = "v1:" + "a" * 64                       # the bare hash token (NOT scoped on its own)
+_SIG = f"{SIGNATURE_VERSION}:" + "a" * 64                       # the bare hash token (NOT scoped on its own)
 _LABELED = f"evidence-signature: {_SIG}"       # the complete labeled token that IS scoped
 
 
@@ -76,7 +77,7 @@ def test_scoped_entry_with_absolute_path_does_not_suppress():
 def test_stale_signature_entry_does_not_suppress():
     entry = {
         "rule": "plan.correspondence-drift", "path": "entities/plans/0001-x.md",
-        "reason": "was accepted", "message_contains": "evidence-signature: v1:" + "b" * 64,
+        "reason": "was accepted", "message_contains": f"evidence-signature: {SIGNATURE_VERSION}:" + "b" * 64,
     }
     assert not entry_suppresses(
         entry, rule="plan.correspondence-drift", severity="warn",
@@ -86,7 +87,7 @@ def test_stale_signature_entry_does_not_suppress():
 
 def test_entry_is_evidence_scoped_requires_the_exact_token_spelling():
     assert not entry_is_evidence_scoped({"message_contains": "evidence-signature:"})    # label, no hash
-    assert not entry_is_evidence_scoped({"message_contains": "v1:short"})               # malformed hash
+    assert not entry_is_evidence_scoped({"message_contains": f"{SIGNATURE_VERSION}:short"})               # malformed hash
     assert not entry_is_evidence_scoped({"message_contains": _SIG})                     # hash, no label
     assert not entry_is_evidence_scoped({"message_contains": f"evidence-signature:{_SIG}"})    # no space
     assert not entry_is_evidence_scoped({"message_contains": f"evidence-signature:  {_SIG}"})  # two spaces
@@ -140,6 +141,14 @@ def test_filter_keeps_drift_for_a_stale_signature_entry(tmp_path: Path):
     _drift_manifest(
         tmp_path,
         '    - rule: "plan.correspondence-drift"\n      path: "entities/plans/0001-x.md"\n'
-        '      reason: "stale"\n      message_contains: "evidence-signature: v1:' + "b" * 64 + '"\n',
+        '      reason: "stale"\n      message_contains: "evidence-signature: ' + SIGNATURE_VERSION + ':' + "b" * 64 + '"\n',
     )
     assert filter_accepted_warnings(tmp_path, [_drift_warn()]) == [_drift_warn()]
+
+
+def test_a_previous_version_signature_is_not_evidence_scoped():
+    """The version exists so a bump INVALIDATES old acceptances rather than silently
+    honouring them. A guard that repeated the literal would keep matching v1 forever."""
+    stale = "evidence-signature: v1:" + "c" * 64
+    assert not entry_is_evidence_scoped({"message_contains": stale})
+    assert SIGNATURE_VERSION != "v1", "update this test's stale token when the version bumps"

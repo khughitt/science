@@ -2,9 +2,10 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from science_tool.correspondence.signature import SIGNATURE_VERSION
 from science_tool.graph.health import _partition_accepted_validation_findings
 
-_SIG = "v1:" + "a" * 64
+_SIG = f"{SIGNATURE_VERSION}:" + "a" * 64
 
 
 def _finding(rule: str, path: str, message: str) -> dict:

@@ -1,5 +1,6 @@
 from pathlib import Path
 
+from science_tool.correspondence.extract import Deliverable, Polarity
 from science_tool.correspondence.probe import (
     ProbeResult,
     TaskState,
@@ -8,34 +9,42 @@ from science_tool.correspondence.probe import (
 )
 
 
+def _create(path: str) -> Deliverable:
+    return Deliverable(path=path, polarity=Polarity.CREATE)
+
+
+def _remove(path: str) -> Deliverable:
+    return Deliverable(path=path, polarity=Polarity.REMOVE)
+
+
 def test_present_when_file_exists(tmp_path: Path):
     (tmp_path / "src").mkdir()
     (tmp_path / "src" / "a.py").write_text("x")
-    assert probe_path(tmp_path, "src/a.py").result is ProbeResult.PRESENT
+    assert probe_path(tmp_path, _create("src/a.py")).result is ProbeResult.PRESENT
 
 
 def test_absent_when_file_missing(tmp_path: Path):
-    assert probe_path(tmp_path, "src/a.py").result is ProbeResult.ABSENT
+    assert probe_path(tmp_path, _create("src/a.py")).result is ProbeResult.ABSENT
 
 
 def test_unknown_for_escaping_path(tmp_path: Path):
     """`../` cannot be evidence about this project -- it is not absent, it is unprobeable."""
-    assert probe_path(tmp_path, "../secrets.py").result is ProbeResult.UNKNOWN
+    assert probe_path(tmp_path, _create("../secrets.py")).result is ProbeResult.UNKNOWN
 
 
 def test_unknown_for_absolute_path(tmp_path: Path):
-    assert probe_path(tmp_path, "/etc/passwd").result is ProbeResult.UNKNOWN
+    assert probe_path(tmp_path, _create("/etc/passwd")).result is ProbeResult.UNKNOWN
 
 
 def test_probe_records_what_was_tested(tmp_path: Path):
-    probe = probe_path(tmp_path, "src/a.py")
+    probe = probe_path(tmp_path, _create("src/a.py"))
     assert probe.target == "src/a.py"
     assert "src/a.py" in probe.detail
 
 
 def test_directory_counts_as_present(tmp_path: Path):
     (tmp_path / "src" / "pkg").mkdir(parents=True)
-    assert probe_path(tmp_path, "src/pkg").result is ProbeResult.PRESENT
+    assert probe_path(tmp_path, _create("src/pkg")).result is ProbeResult.PRESENT
 
 
 def _block(task_id: str, status: str) -> str:
@@ -152,3 +161,29 @@ def test_status_line_in_a_description_is_not_read_as_a_field(tmp_path: Path):
         "Notes below:\n- status: done\n"
     )
     assert resolve_task(tmp_path, "t302") is TaskState.ACTIVE
+
+
+# --- fb-2026-07-26-014: a removal deliverable is scored in the direction it is measured ---
+
+
+def test_a_removal_target_that_is_gone_satisfies_the_plan(tmp_path: Path):
+    """`absent` IS the exit criterion for a retirement plan; scoring it as
+    unbuilt read such a plan exactly backwards."""
+    probe = probe_path(tmp_path, _remove("src/old.ts"))
+    assert probe.result is ProbeResult.PRESENT
+    assert probe.polarity is Polarity.REMOVE
+
+
+def test_a_removal_target_still_on_disk_does_not_satisfy_the_plan(tmp_path: Path):
+    (tmp_path / "src").mkdir()
+    (tmp_path / "src" / "old.ts").write_text("x")
+    assert probe_path(tmp_path, _remove("src/old.ts")).result is ProbeResult.ABSENT
+
+
+def test_a_removal_probe_names_its_polarity_in_the_evidence_line(tmp_path: Path):
+    assert "declared for removal" in probe_path(tmp_path, _remove("src/old.ts")).detail
+
+
+def test_an_unprobeable_removal_target_is_still_unknown(tmp_path: Path):
+    """Polarity cannot rescue a path the instrument could not test."""
+    assert probe_path(tmp_path, _remove("../outside.py")).result is ProbeResult.UNKNOWN

@@ -2,11 +2,12 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from science_tool.correspondence.signature import SIGNATURE_VERSION
 from science_tool.validate.checks.accepted_validation import check_accepted_validation
 from science_tool.validate.context import ValidateContext
 from science_tool.validate.gates import cumulative_rules
 
-_SIG = "v1:" + "a" * 64
+_SIG = f"{SIGNATURE_VERSION}:" + "a" * 64
 
 
 def _ctx(root: Path, manifest_health: str) -> ValidateContext:
