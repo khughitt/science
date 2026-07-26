@@ -6,6 +6,7 @@ The Task model is defined in science-model and re-exported here for convenience.
 from __future__ import annotations
 
 import fcntl
+import json
 import re
 import sys
 from contextlib import contextmanager
@@ -55,21 +56,78 @@ _MARKDOWN_HEADING_RE = re.compile(r"^(#{1,3})\s+.+$")
 _NOTES_HEADING_RE = re.compile(r"^###\s+Notes\s*$")
 _LOCAL_PARENT_RE = re.compile(r"^task:t[0-9]{3,}$")
 _TASK_HEADING_PREFIX_RE = re.compile(r"^##\s+\[", re.MULTILINE)
+_KNOWN_DSL_FIELDS = frozenset(
+    {
+        "type",
+        "priority",
+        "status",
+        "parent",
+        "aspects",
+        "related",
+        "blocked-by",
+        "group",
+        "created",
+        "completed",
+        "project",
+        "artifacts",
+        "findings",
+    }
+)
 
 
-def _parse_list_value(raw: str) -> list[str]:
-    """Parse a bracketed, comma-separated list value like '[t001, t002]'."""
-    m = _LIST_RE.match(raw.strip())
-    if not m:
+def _render_list_value(items: list[str]) -> str:
+    """Render a list as a JSON array so every string round-trips."""
+    return json.dumps(items, ensure_ascii=False)
+
+
+def _parse_list_value(raw: str, *, field: str = "list") -> list[str]:
+    """Parse a JSON array, tolerating legacy bare bracketed lists."""
+    raw = raw.strip()
+    if not raw:
         return []
-    return [item.strip() for item in m.group(1).split(",") if item.strip()]
+    if raw.startswith("["):
+        try:
+            parsed = json.loads(raw)
+        except json.JSONDecodeError:
+            m = _LIST_RE.match(raw)
+            if not m or '"' in m.group(1) or "\\" in m.group(1):
+                raise ValueError(f"malformed {field} list value: {raw!r}") from None
+            return [item.strip() for item in m.group(1).split(",") if item.strip()]
+        if not isinstance(parsed, list) or any(not isinstance(item, str) for item in parsed):
+            raise ValueError(f"{field} list must be a JSON array of strings: {raw!r}")
+        return parsed
+    raise ValueError(f"malformed {field} list value (expected '[...]'): {raw!r}")
+
+
+def _render_scalar(value: str) -> str:
+    """Render a scalar reversibly while keeping ordinary values readable."""
+    if value != value.strip() or "\n" in value or '"' in value:
+        return json.dumps(value, ensure_ascii=False)
+    return value
+
+
+def _parse_scalar(raw: str) -> str:
+    """Parse a scalar emitted by :func:`_render_scalar`."""
+    if raw.startswith('"'):
+        try:
+            decoded = json.loads(raw)
+        except json.JSONDecodeError as exc:
+            raise ValueError(f"malformed quoted scalar: {raw!r}") from exc
+        if not isinstance(decoded, str):
+            raise ValueError(f"scalar must decode to a string: {raw!r}")
+        return decoded
+    return raw
 
 
 def _parse_task_header(line: str, *, path: Path | None = None) -> tuple[str, str]:
     """Parse and validate a task header line."""
     match = _HEADER_RE.match(line)
     if match:
-        return match.group(1), match.group(2).strip()
+        task_id, title = match.group(1), match.group(2).strip()
+        if "]" in title:
+            where = f" in {path}" if path is not None else ""
+            raise ValueError(f"task {task_id} title may not contain ']'{where}")
+        return task_id, title
 
     loose = _ANY_TASK_HEADER_RE.match(line)
     if loose:
@@ -142,7 +200,13 @@ def _parse_task_block(lines: list[str], *, path: Path | None = None) -> Task:
         fm = _FIELD_RE.match(line)
         if fm:
             seen_field = True
-            fields[fm.group(1)] = fm.group(2).strip()
+            key = fm.group(1)
+            where = f" in {path}" if path is not None else ""
+            if key in fields:
+                raise ValueError(f"duplicate metadata key {key!r} for task {task_id}{where}")
+            if key not in _KNOWN_DSL_FIELDS:
+                raise ValueError(f"unknown metadata key {key!r} for task {task_id}{where}")
+            fields[key] = fm.group(2).strip()
             desc_start = i + 1
         elif line.strip() == "":
             if not seen_field:
@@ -164,16 +228,19 @@ def _parse_task_block(lines: list[str], *, path: Path | None = None) -> Task:
     return Task(
         id=task_id,
         title=title,
-        type=fields.get("type", ""),
-        aspects=_parse_list_value(fields.get("aspects", "")),
+        type=_parse_scalar(fields.get("type", "")),
+        aspects=_parse_list_value(fields.get("aspects", ""), field="aspects"),
         priority=fields.get("priority", ""),
         status=fields.get("status", ""),
         created=created,
         description=description,
-        related=_parse_list_value(fields.get("related", "")),
-        parent=_parse_parent(fields.get("parent", ""), task_id=task_id),
-        blocked_by=_parse_list_value(fields.get("blocked-by", "")),
-        group=fields.get("group", ""),
+        related=_parse_list_value(fields.get("related", ""), field="related"),
+        parent=_parse_parent(_parse_scalar(fields.get("parent", "")), task_id=task_id),
+        blocked_by=_parse_list_value(fields.get("blocked-by", ""), field="blocked-by"),
+        group=_parse_scalar(fields.get("group", "")),
+        project=_parse_scalar(fields.get("project", "")),
+        artifacts=_parse_list_value(fields.get("artifacts", ""), field="artifacts"),
+        findings=_parse_list_value(fields.get("findings", ""), field="findings"),
         completed=completed,
     )
 
@@ -208,11 +275,21 @@ def parse_tasks(path: Path) -> list[Task]:
     return _parse_tasks_text(path.read_text(), path=path)
 
 
-def _verify_round_trip(text: str, expected: list[Task], *, path: Path) -> None:
+def _canonical_description(text: str) -> str:
+    return text.strip()
+
+
+def _tasks_equal(a: Task, b: Task) -> bool:
+    return a.model_copy(update={"description": _canonical_description(a.description)}) == b.model_copy(
+        update={"description": _canonical_description(b.description)}
+    )
+
+
+def _verify_round_trip(text: str, expected: list[Task], *, path: Path | None) -> None:
     """Guard against silent task-file corruption / data loss.
 
     Re-parse the text we are about to persist and confirm it yields exactly the
-    tasks it was rendered from (same ids, same descriptions). The common failure
+    tasks it was rendered from (all fields). The common failure
     is a description line starting with ``## [`` (a task-header shape) which the
     parser would split into a phantom block on the next read.
     """
@@ -232,11 +309,10 @@ def _verify_round_trip(text: str, expected: list[Task], *, path: Path) -> None:
             f"(expected {want}, got {got}); aborting to avoid data loss."
         )
     for original, parsed in zip(expected, reparsed):
-        if original.description.strip() != parsed.description.strip():
+        if not _tasks_equal(original, parsed):
             raise TaskIntegrityError(
-                f"refusing to write {path}: description of task {original.id} does "
-                f"not round-trip; a body line is being read as task structure. "
-                f"Aborting to avoid data loss."
+                f"refusing to write {path}: task {original.id} does not round-trip "
+                f"(a field is being mangled by the DSL grammar); aborting to avoid data loss."
             )
 
 
@@ -296,23 +372,26 @@ def render_task(task: Task) -> str:
     """Render a single task to markdown."""
     lines = [f"## [{task.id}] {task.title}"]
     if task.type:
-        lines.append(f"- type: {task.type}")
+        lines.append(f"- type: {_render_scalar(task.type)}")
     lines.append(f"- priority: {task.priority}")
     lines.append(f"- status: {task.status}")
     if task.parent:
-        lines.append(f"- parent: {task.parent}")
+        lines.append(f"- parent: {_render_scalar(task.parent)}")
+    if task.project:
+        lines.append(f"- project: {_render_scalar(task.project)}")
     # aspects is a validate-required field, so emit it even when empty
     # (a task added without --aspects must still be validate-clean).
-    items = ", ".join(task.aspects)
-    lines.append(f"- aspects: [{items}]")
+    lines.append(f"- aspects: {_render_list_value(task.aspects)}")
     if task.related:
-        items = ", ".join(task.related)
-        lines.append(f"- related: [{items}]")
+        lines.append(f"- related: {_render_list_value(task.related)}")
     if task.blocked_by:
-        items = ", ".join(task.blocked_by)
-        lines.append(f"- blocked-by: [{items}]")
+        lines.append(f"- blocked-by: {_render_list_value(task.blocked_by)}")
     if task.group:
-        lines.append(f"- group: {task.group}")
+        lines.append(f"- group: {_render_scalar(task.group)}")
+    if task.artifacts:
+        lines.append(f"- artifacts: {_render_list_value(task.artifacts)}")
+    if task.findings:
+        lines.append(f"- findings: {_render_list_value(task.findings)}")
     lines.append(f"- created: {task.created.isoformat()}")
     if task.completed is not None:
         lines.append(f"- completed: {task.completed.isoformat()}")
