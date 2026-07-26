@@ -5,7 +5,7 @@ description: Structured critical discussion for a hypothesis, question, topic, o
 # Discuss
 
 Run a structured discussion on `$ARGUMENTS`.
-If no argument is provided, sample a discussion focus from `entities/questions/`, `entities/hypotheses/`, or active tasks in `tasks/active.md`.
+If no argument is provided, sample a discussion focus from `entities/questions/`, `entities/hypotheses/`, or active tasks (`science tasks list --status active`).
 
 ## Setup
 
@@ -19,7 +19,7 @@ Additionally:
    - `entities/topics/`
    - `entities/hypotheses/`
    - `entities/questions/`
-   - `tasks/active.md`
+   - Active tasks (`science tasks list --status active`)
 
 ## Discussion Modes
 

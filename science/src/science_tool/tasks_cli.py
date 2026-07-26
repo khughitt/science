@@ -617,6 +617,12 @@ def tasks_note(task_id: str, note: str, note_date_raw: str | None) -> None:
 @click.option("--group", default=None, help="Filter by group (exact match)")
 @click.option("--aspect", "aspects", multiple=True, help="Filter by aspect (repeatable)")
 @click.option("--all", "show_all", is_flag=True, default=False, help="Include all task statuses")
+@click.option(
+    "--since",
+    "since_raw",
+    default=None,
+    help="Only show tasks closed on or after this date (YYYY-MM-DD). Requires closed statuses.",
+)
 @click.option("--format", "output_format", default="table", type=click.Choice(OUTPUT_FORMATS))
 @click.option(
     "--output",
@@ -632,10 +638,13 @@ def tasks_list(
     group: str | None,
     aspects: tuple[str, ...],
     show_all: bool,
+    since_raw: str | None,
     output_format: str,
     output_path: Path | None,
 ) -> None:
     """List tasks. Active and blocked tasks are shown by default; use --all for every status."""
+    from datetime import date
+
     from science_model.tasks import Task
 
     from science_tool.budget.invocation import build_complete_via, hint_for
@@ -643,11 +652,22 @@ def tasks_list(
     from science_tool.budget.projection import project_rows
     from science_tool.budget.registry import lookup
     from science_tool.budget.sink import BoundedSink
-    from science_tool.tasks import list_tasks, parse_tasks_for_cli
+    from science_tool.tasks import _CLOSED_STATUS_VALUES, list_tasks, parse_tasks_for_cli
     from science_tool.tasks_display import render_tasks_table, sort_tasks
     from science_tool.tasks_readiness import make_project_resolver
 
     WORKING_SET = ("active", "blocked")
+
+    since: date | None = None
+    if since_raw is not None:
+        try:
+            since = date.fromisoformat(since_raw)
+        except ValueError as exc:
+            raise click.ClickException("Date must use YYYY-MM-DD") from exc
+        if status is not None and status not in _CLOSED_STATUS_VALUES:
+            raise click.UsageError(
+                "--since only applies to closed tasks; use --status done, --status retired, or --all"
+            )
 
     # Surface legacy-untyped-blocker warnings on stderr.
     _, warnings = parse_tasks_for_cli(DEFAULT_TASKS_DIR / "active.md")
@@ -663,8 +683,9 @@ def tasks_list(
         group=group,
         aspects=list(aspects) or None,
         include_done=show_all,
+        since=since,
     )
-    if status is None and not show_all:
+    if status is None and not show_all and since is None:
         matched = [task for task in matched if task.status in WORKING_SET]
     matched = sort_tasks(matched)
 
@@ -743,14 +764,18 @@ def tasks_list(
             applied_filters["group"] = group
         if aspects:
             applied_filters["aspects"] = list(aspects)
-        if not show_all and status is None:
+        if not show_all and status is None and since is None:
             applied_filters["only_status"] = list(WORKING_SET)
         meta = {
-            "active_total": active_total,
             "returned_count": len(rows),
             "sort_order": "status_rank,id",
             "applied_filters": applied_filters,
         }
+        # active_total counts only tasks/active.md and is meaningless for a
+        # --since query, whose rows come from the archive union — omit it
+        # rather than ship a "curated vs full" ratio that doesn't apply.
+        if since is None:
+            meta["active_total"] = active_total
         emit_query_rows(
             output_format=output_format,
             title="Tasks",

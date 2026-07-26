@@ -743,9 +743,56 @@ def warn_invalid_statuses(tasks: list[Task]) -> None:
             )
 
 
+def warn_missing_completed(n: int) -> None:
+    """Print a stderr note for closed tasks excluded from `--since` results.
+
+    A closed task with no ``completed:`` date is never guessed into the
+    window -- it is dropped and its count is surfaced here instead.
+    """
+    if n > 0:
+        print(
+            f"WARNING: {n} closed task(s) have no 'completed' date and were "
+            "excluded from --since results",
+            file=sys.stderr,
+        )
+
+
 # Statuses that represent closed tasks (excluded from default listing)
 _CLOSED_STATUSES = {TaskStatus.DONE, TaskStatus.RETIRED}
 _CLOSED_STATUS_VALUES = {TaskStatus.DONE.value, TaskStatus.RETIRED.value}
+
+
+def _since_window_months(since: date, today: date) -> list[str]:
+    """Enumerate 'YYYY-MM' strings from `since`'s month to `today`'s month, inclusive."""
+    months: list[str] = []
+    year, month = since.year, since.month
+    while (year, month) <= (today.year, today.month):
+        months.append(f"{year:04d}-{month:02d}")
+        if month == 12:
+            year, month = year + 1, 1
+        else:
+            month += 1
+    return months
+
+
+def _read_since_candidates(tasks_dir: Path, since: date) -> list[Task]:
+    """Active tasks unioned with archive months in `[since, today]`.
+
+    Month-file selection is only a read optimization; the row predicate in
+    `list_tasks` is the authoritative membership test. Archive files may be
+    missing for any month in the window -- that is not an error. When a task
+    id appears in both active.md and an archive month (not expected in a
+    well-formed repo), the archive copy wins, since it is the durable record
+    for closed tasks.
+    """
+    from science_tool.tasks_archive import _read_destination
+
+    by_id: dict[str, Task] = {t.id: t for t in _read_active(tasks_dir)}
+    for month in _since_window_months(since, date.today()):
+        _preamble, archive_tasks = _read_destination(tasks_dir / "done" / f"{month}.md")
+        for t in archive_tasks:
+            by_id[t.id] = t
+    return list(by_id.values())
 
 
 def list_tasks(
@@ -757,13 +804,23 @@ def list_tasks(
     group: str | None = None,
     aspects: list[str] | None = None,
     include_done: bool = False,
+    since: date | None = None,
 ) -> list[Task]:
     """Filter active tasks by optional criteria.
 
     By default, done and retired tasks are excluded. Pass ``include_done=True``
     or filter by a specific ``status`` to include them.
+
+    ``since`` queries closed tasks by completion date instead: it also reads
+    `tasks/done/YYYY-MM.md` archive months overlapping `[since, today]`, and
+    (after the other filters below) keeps only tasks with
+    ``completed is not None and completed >= since``. Closed tasks with no
+    ``completed:`` date are excluded and counted via `warn_missing_completed`
+    rather than guessed. When ``since`` is set, closed tasks participate by
+    default (the `include_done`/default-hiding behavior below is bypassed --
+    ``since`` is itself the closed-task selector).
     """
-    tasks = _read_active(tasks_dir)
+    tasks = _read_since_candidates(tasks_dir, since) if since is not None else _read_active(tasks_dir)
 
     warn_invalid_statuses(tasks)
 
@@ -771,7 +828,7 @@ def list_tasks(
         tasks = [t for t in tasks if t.priority == priority]
     if status is not None:
         tasks = [t for t in tasks if t.status == status]
-    elif not include_done:
+    elif not include_done and since is None:
         tasks = [t for t in tasks if t.status not in _CLOSED_STATUSES]
     if related is not None:
         tasks = [t for t in tasks if any(related in r for r in t.related)]
@@ -793,6 +850,15 @@ def list_tasks(
                 resolve_entity_aspects(t.aspects or None, project_aspects),
                 filter_set,
             )
+        ]
+
+    if since is not None:
+        missing = sum(1 for t in tasks if t.status in _CLOSED_STATUSES and t.completed is None)
+        warn_missing_completed(missing)
+        tasks = [
+            t
+            for t in tasks
+            if t.status in _CLOSED_STATUSES and t.completed is not None and t.completed >= since
         ]
 
     return tasks

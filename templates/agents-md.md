@@ -85,8 +85,9 @@ uv run --with-editable ~/d/science/science <command>
   The bare `uv run science ...` form requires the project's root
   `pyproject.toml` to list `science` as a dev dependency (see the
   create-project / import-project commands). If that fails, run
-  `uv run science health` — it surfaces missing scaffold pieces
-  with concrete fix commands.
+  `uv run science health --severity error` — scoped to errors, it
+  surfaces missing scaffold pieces with concrete fix commands; add
+  `--output PATH` to write the complete report.
 - <other bullets — how tasks are run, where commits go, etc.>
 
 ## Design docs and plans

@@ -526,7 +526,7 @@ the compiled graph and revision metadata from authored sources.
 
 ### Step 6: Suggest next steps
 
-1. **Track plan tasks:** For each task in the plan that doesn't have a corresponding entry in `tasks/active.md`, offer to create one via `science tasks add`. Implementation tasks buried in plan docs should be surfaced as trackable tasks.
+1. **Track plan tasks:** For each task in the plan that isn't tracked in the task queue (`science tasks list --all`), offer to create one via `science tasks add`. Implementation tasks buried in plan docs should be surfaced as trackable tasks.
 2. If no pre-registration exists for the target hypothesis, suggest: `science-pre-register` — to formalize expectations before running the analysis
 3. `science-review-pipeline <slug>` — get critical review before implementation
 4. Execute the plan using `superpowers:executing-plans`
