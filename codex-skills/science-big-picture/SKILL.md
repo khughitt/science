@@ -304,6 +304,14 @@ After the dispatch phase completes, read back each just-written per-hypothesis f
 Write the `report_kind: synthesis-rollup` entity under `entities/synthesis/`
 with this structure:
 
+The rollup prose is linted by `numeric-anchor` like every other artifact this
+command writes, and this command regenerates its output wholesale — so any
+warning the prose earns comes back on every run. Follow the same numeric-prose
+discipline the sub-agents do (see the "Numeric prose discipline" section of
+`agents/hypothesis-synthesizer.md`): bind figures to a resolvable anchor, use
+canonical `kind:id` reference form, and mark a genuinely unsourceable number
+with `[UNVERIFIED: <reason>]` rather than leaving it bare.
+
 The frontmatter follows the canonical synthesis shape documented in `templates/synthesis.md`. All three artifacts produced by this command (per-hypothesis files, emergent threads, and the project rollup) share `kind: synthesis` and differ by `report_kind`. `science validate` warns when any `kind: synthesis` file omits `report_kind`, and applies per-kind field requirements: `synthesis-rollup` must carry `synthesized_from`; `hypothesis-synthesis` must carry `hypothesis` and `provenance_coverage`; `emergent-threads` must carry `orphan_question_count`, `orphan_interpretation_count`, and `orphan_ids`.
 
 Frontmatter:

@@ -71,6 +71,28 @@ Every question, interpretation, or topic mentioned MUST be cited by its canonica
 
 If the resolver output shows zero orphans, say so explicitly — do not invent content to fill the section. Empty sections are valid output.
 
+## Numeric prose discipline
+
+Your output is linted by `numeric-anchor`, so every regeneration re-creates any
+warning your prose earns. Two habits keep the report clean without weakening it:
+
+- **Bind every number to a resolvable anchor.** A figure that carries a claim
+  needs a citation, an entity reference, or a `numeric_claims:` binding in the
+  same paragraph — `n = 412 (cite:Smith2024)`, not a bare `412`. If a number is
+  worth writing, its source is worth naming.
+- **Use canonical `kind:id` reference form**, e.g. `hypothesis:0011`, never a
+  bare `0011` or a short form. Canonical references are recognized as
+  identifiers and are not read as quantities.
+
+When a figure genuinely has no reachable source, mark it rather than leaving it
+bare: `[UNVERIFIED: not in the abstract]`. That is an honest flag the tally
+counts, not a lint failure to be avoided — see
+`docs/conventions/annotation-tokens.md`.
+
+Round numbers that are structural rather than evidential (section counts, list
+lengths you computed yourself) are fine unbound; the discipline is about figures
+a reader could mistake for findings.
+
 ## When you are done
 
 Write the file. Report back with:
