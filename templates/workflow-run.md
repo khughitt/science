@@ -6,7 +6,6 @@ status: "complete"
 workflow: "workflow:<slug>"          # materializes the sci:executes edge
 manifest_path: "results/<workflow>/<slug>/datapackage.yaml"  # read by `science qa-audit`
 config_snapshot: "results/<workflow>/<slug>/config.yaml"  # required: parameters_digest is its sha256
-supersedes: []                       # ["workflow-run:<prior-slug>"] when re-run with changed params
 # What you assert about how this run executed. Authored, and complete on its own:
 # a run validates before it has ever been registered.
 execution:
@@ -51,7 +50,6 @@ What this run produced and why it was executed.
 
 - **Tests:** `question:<id>`, `hypothesis:<id>`
 - **Tasks:** `task:<id>`
-- **Supersedes:** `workflow-run:<slug>` (if applicable)
 
 ## Key Results
 

@@ -8,11 +8,9 @@ from science_tool.cli import main
 from science_tool.qa_audit.audit import audit_workflows, render_markdown
 
 
-def _run(dirpath: Path, slug, workflow, manifest_path, supersedes=None):
+def _run(dirpath: Path, slug, workflow, manifest_path):
     fm = ["---", f'id: "workflow-run:{slug}"', 'kind: "workflow-run"',
           f'workflow: "{workflow}"', f'manifest_path: "{manifest_path}"']
-    if supersedes:
-        fm.append(f'supersedes: ["workflow-run:{supersedes}"]')
     fm += ["---", "", "body"]
     (dirpath / f"{slug}.md").write_text("\n".join(fm))
 

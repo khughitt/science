@@ -4,8 +4,8 @@ The graph reads supersession/amendment from a `relations:` entry with the predic
 from a top-level `supersedes:`/`amends:` key. Such a key looks authoritative and produces
 ZERO triples, silently -- and big-picture then derives a wrong `provenance_coverage`.
 
-`workflow-run.supersedes` is the ONE legitimate top-level use (read by qa_audit/runs.py:47),
-so the exception is that exact (kind, key) PAIR -- not a blanket pass for the kind.
+S2 retired `workflow-run.supersedes`; there is no legitimate top-level use, so this check has
+no exemptions.
 """
 
 from __future__ import annotations
@@ -74,14 +74,16 @@ def test_relations_form_is_accepted(tmp_path: Path) -> None:
     assert _results(tmp_path) == []
 
 
-def test_supersedes_on_workflow_run_is_accepted(tmp_path: Path) -> None:
-    """The (workflow-run, supersedes) pair is a REAL field read by qa_audit/runs.py:47."""
+def test_supersedes_on_workflow_run_is_an_error(tmp_path: Path) -> None:
+    """S2 retired the field: it materialized no triple and no consumer read it."""
     _entity(
         tmp_path, "workflow-runs/0001-x.md",
         entity_id="workflow-run:0001-x", kind="workflow-run",
         extra="supersedes: workflow-run:0000-y\n",
     )
-    assert _results(tmp_path) == []
+    results = _results(tmp_path)
+    assert [r.severity for r in results] == [Severity.ERROR]
+    assert "workflow-run:0001-x" in results[0].message
 
 
 def test_amends_on_workflow_run_is_an_error(tmp_path: Path) -> None:
@@ -97,9 +99,7 @@ def test_amends_on_workflow_run_is_an_error(tmp_path: Path) -> None:
 
 
 def test_malformed_non_string_kind_still_flags_and_does_not_crash(tmp_path: Path) -> None:
-    """A list/mapping `kind` is UNHASHABLE; an unguarded `(kind, key)` frozenset lookup would
-    raise, and the runner would abort the whole check (skipping later entities). The key must
-    still receive its rule, and the check must not error out."""
+    """A list/mapping `kind` must still receive its rule, and the check must not error out."""
     _entity(
         tmp_path, "interpretations/0001-x.md",
         entity_id="interpretation:0001-x", kind="[oops]",  # YAML flow sequence -> unhashable list

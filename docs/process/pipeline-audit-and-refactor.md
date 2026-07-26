@@ -235,8 +235,8 @@ This playbook scores three related disciplines during the sweep, but keeps them 
   their authored inputs; specified below.
 - **Process iteration** — validates the *process*, not a table or the rule graph: did the analysis
   iterate (QC / clustering / parameters) in response to QA flags, or run once and record the result
-  as truth? Scored during the sweep with `science qa-audit`, which reads each workflow's
-  `workflow-run` / `sci:supersedes` chain and its QA dispositions and reports two verdicts —
+  as truth? Scored during the sweep with `science qa-audit`, which counts the runs recorded for
+  each workflow and reads their QA dispositions and reports two verdicts —
   an *iteration* axis (QA-RESPONSIVE / RE-RAN-UNRELATED / SINGLE-RUN) and a *QA-engagement* axis
   (NO-QA / NO-FLAGS / RESPONDED / IGNORED / PARTIAL). The headline advisory is the
   SINGLE-RUN × IGNORED workflow. Advisory only — it never fails the build. QA **breadth/coverage**

@@ -72,8 +72,10 @@ From `tasks/active.md`, show:
 - **Hypothesis / question status** — use the project index from setup (one-line summary per hypothesis/question). Read individual files only when deeper context is needed.
 
 #### Workflow Runs
-- Scan `results/` for `datapackage.json` manifests.
-- Report: recent runs (last 7 days), superseded runs, runs with status `draft`.
+- List workflow-run entities with `science entity list workflow-run --format json`; read result
+  details from each run's `manifest_path` manifest.
+- Report: recent runs (last 7 days) and runs with status `failed`
+  (`science entity list workflow-run --status failed --format json`).
 - Flag any workflow-run that has no corresponding interpretation document.
 
 **Fallback when no manifests exist.** Some projects have rich results without `datapackage.json` files. If `find results/ -name datapackage.json` returns nothing:
@@ -207,8 +209,8 @@ reflection, and recommend `/science:post-mortem` for each:
   values that leaked before the freeze point;
 - a **gate failure** or an `inconclusive-for-protocol` verdict (a check that
   stopped an analysis);
-- a **discarded / superseded / `draft` workflow run** (already surfaced under
-  Workflow Runs above) with no interpretation and no post-mortem.
+- a workflow run with status `failed` (already surfaced under Workflow Runs above)
+  with no interpretation and no post-mortem.
 
 A failure is *reflected* when a feedback entry references it. Cross-check the
 project's feedback with `science feedback list --project <project-id> --format json`

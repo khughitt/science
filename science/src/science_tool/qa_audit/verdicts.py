@@ -30,7 +30,7 @@ def engagement_verdict(*, has_report: bool, flags: list[FlagDisposition]) -> str
 
 
 def iteration_verdict(*, chain_depth: int, flags: list[FlagDisposition]) -> str:
-    """QA-RESPONSIVE requires BOTH a supersedes re-run (chain_depth >= 2) AND a
+    """QA-RESPONSIVE requires BOTH more than one recorded run (chain_depth >= 2) AND a
     flag `addressed` with a non-empty `change`. A change without a re-run stays
     SINGLE-RUN here (and RESPONDED on the engagement axis)."""
     has_qa_change = any(f.disposition == "addressed" and f.change for f in flags)

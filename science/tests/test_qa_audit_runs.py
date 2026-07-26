@@ -3,7 +3,7 @@ from pathlib import Path
 from science_tool.qa_audit.runs import chain_depth, load_runs
 
 
-def _run(dirpath: Path, slug, workflow, supersedes=None, manifest_path="results/x/datapackage.yaml"):
+def _run(dirpath: Path, slug, workflow, manifest_path="results/x/datapackage.yaml"):
     fm = [
         "---",
         f'id: "workflow-run:{slug}"',
@@ -11,8 +11,6 @@ def _run(dirpath: Path, slug, workflow, supersedes=None, manifest_path="results/
         f'workflow: "{workflow}"',
         f'manifest_path: "{manifest_path}"',
     ]
-    if supersedes:
-        fm.append(f'supersedes: ["workflow-run:{supersedes}"]')
     fm += ["---", "", "body"]
     (dirpath / f"{slug}.md").write_text("\n".join(fm))
 
@@ -32,10 +30,10 @@ def test_missing_manifest_path_marks_error(tmp_path):
     assert runs[0].error is not None
 
 
-def test_chain_depth_counts_supersession(tmp_path):
+def test_chain_depth_counts_runs_for_the_workflow(tmp_path):
     _run(tmp_path, "r1", "wf-a")
-    _run(tmp_path, "r2", "wf-a", supersedes="r1")
-    _run(tmp_path, "r3", "wf-a", supersedes="r2")
+    _run(tmp_path, "r2", "wf-a")
+    _run(tmp_path, "r3", "wf-a")
     runs = load_runs(tmp_path)
     assert chain_depth(runs, "wf-a") == 3
 

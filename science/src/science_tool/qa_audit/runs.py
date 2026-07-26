@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from pathlib import Path
 
 from science_tool.markdown_utils import frontmatter_span
@@ -11,16 +11,7 @@ class RunRecord:
     run_id: str
     workflow: str
     manifest_path: str
-    supersedes: list[str] = field(default_factory=list)
     error: str | None = None
-
-
-def _as_list(value) -> list[str]:
-    if value is None:
-        return []
-    if isinstance(value, str):
-        return [value]
-    return [str(v) for v in value]
 
 
 def load_runs(runs_dir: Path) -> list[RunRecord]:
@@ -44,12 +35,15 @@ def load_runs(runs_dir: Path) -> list[RunRecord]:
             run_id=run_id,
             workflow=str(workflow or ""),
             manifest_path=str(manifest_path or ""),
-            supersedes=_as_list(fm.get("supersedes")),
             error=error,
         ))
     return records
 
 
 def chain_depth(runs: list[RunRecord], workflow: str) -> int:
-    """Number of runs recorded for the workflow (its supersession chain); 1 == single run."""
+    """Number of runs recorded for the workflow; 1 == single run.
+
+    Counts runs — it does NOT follow a supersession chain. The top-level `supersedes:` field it
+    once loaded was retired in S2: nothing consumed it.
+    """
     return sum(1 for r in runs if r.workflow == workflow)
