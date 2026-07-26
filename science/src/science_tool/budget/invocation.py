@@ -26,8 +26,14 @@ def hint_for(stem: str, output_format: str) -> str:
     return f"{stem}.{'json' if output_format == 'json' else 'txt'}"
 
 
-def build_complete_via(ctx: click.Context, *, output_hint: str) -> str:
-    """Return ``<command path> <caller-selected options> --output <hint>``, shell-safe.
+def build_complete_via(
+    ctx: click.Context,
+    *,
+    output_hint: str,
+    escape_flag: str = "--output",
+    skip_params: frozenset[str] = _OUTPUT_PARAMS,
+) -> str:
+    """Return ``<command path> <caller-selected options> <escape_flag> <hint>``, shell-safe.
 
     Values are quoted with ``shlex.join``: the caller's shell already protected a path or
     filter containing spaces, and reconstructing the command by naive joining would strip
@@ -37,6 +43,13 @@ def build_complete_via(ctx: click.Context, *, output_hint: str) -> str:
     entire invocation is passed through ``shlex.join``. This preserves an unusual root
     ``prog_name`` containing whitespace or shell metacharacters without collapsing the
     ordinary command hierarchy into one token.
+
+    ``escape_flag``/``skip_params`` default to the ordinary ``--output``/``output_path``
+    contract every other budgeted command uses. A command whose own ``--output`` already
+    means something else (``research-package build``'s required package directory) must
+    override both: skipping only its distinctly-named escape param, so the real
+    ``--output <dir>`` value survives the reconstruction, and naming that escape with its
+    own flag rather than colliding with ``--output``.
     """
     command_tokens: list[str] = []
     current: click.Context | None = ctx
@@ -52,7 +65,7 @@ def build_complete_via(ctx: click.Context, *, output_hint: str) -> str:
     params_by_name = {param.name: param for param in ctx.command.params}
 
     for name, value in ctx.params.items():
-        if name in _OUTPUT_PARAMS:
+        if name in skip_params:
             continue
         param = params_by_name.get(name)
         if param is None or not isinstance(param, click.Option):
@@ -70,5 +83,5 @@ def build_complete_via(ctx: click.Context, *, output_hint: str) -> str:
         else:
             tokens.extend([flag, str(value)])
 
-    tokens.extend(["--output", output_hint])
+    tokens.extend([escape_flag, output_hint])
     return shlex.join(tokens)

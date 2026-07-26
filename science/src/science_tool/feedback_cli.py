@@ -13,6 +13,10 @@ _FB_CATEGORIES = VALID_CATEGORIES
 _FB_STATUSES = VALID_STATUSES
 _FB_CONCERNS = VALID_CONCERNS
 
+# `find_similar_open` scans the whole open backlog; without a cap, a project with many
+# open entries would turn this O(1) create confirmation into an O(backlog) one.
+_SIMILAR_NEIGHBORS_DISPLAY_LIMIT = 5
+
 
 @click.group("feedback")
 def feedback_group() -> None:
@@ -128,8 +132,12 @@ def feedback_add(
     )
     if neighbors:
         click.echo("Possible similar open entries (not merged):")
-        for neighbor in neighbors:
+        shown = neighbors[:_SIMILAR_NEIGHBORS_DISPLAY_LIMIT]
+        for neighbor in shown:
             click.echo(f"  - {neighbor.id} [{neighbor.target}] {neighbor.summary}")
+        remaining = len(neighbors) - len(shown)
+        if remaining > 0:
+            click.echo(f"  ... and {remaining} more; run `science feedback report` to review")
         click.echo("Merge with: science feedback add ... --merge-into <id>  (or link via feedback update --related)")
 
 
@@ -439,8 +447,19 @@ def feedback_report(status: str | None, project: str | None, concern: str | None
 @feedback_group.command("targets")
 @click.option("--status", default="open", help="Filter by status (omit for 'open'; use 'all' for all statuses)")
 @click.option("--format", "output_format", default="table", type=click.Choice(OUTPUT_FORMATS))
-def feedback_targets(status: str | None, output_format: str) -> None:
+@click.option(
+    "--output",
+    "output_path",
+    type=click.Path(path_type=Path),
+    default=None,
+    help="Write the complete, unbudgeted payload to PATH instead of stdout.",
+)
+def feedback_targets(status: str | None, output_format: str, output_path: Path | None) -> None:
     """List existing feedback targets so filers reuse a spelling instead of minting a new one."""
+    from science_tool.budget.control import bounded_control_notice
+    from science_tool.budget.invocation import build_complete_via, hint_for
+    from science_tool.budget.registry import lookup
+    from science_tool.budget.sink import BoundedSink
     from science_tool.feedback import list_targets
 
     if status == "all":
@@ -454,12 +473,29 @@ def feedback_targets(status: str | None, output_format: str) -> None:
         ("count", "Entries"),
         ("total_recurrence", "Recur"),
     ]
-    emit_query_rows(output_format=output_format, title="Feedback Targets", columns=columns, rows=rows)
+    complete_via = build_complete_via(click.get_current_context(), output_hint=hint_for("feedback-targets", output_format))
+    control_notice = (
+        bounded_control_notice(f"wrote {len(rows)} rows to {output_path}") if output_path is not None else None
+    )
+    sink = BoundedSink(
+        lookup("feedback targets"), output_path=output_path, command_path="feedback targets", complete_via=complete_via
+    )
+    emit_query_rows(output_format=output_format, title="Feedback Targets", columns=columns, rows=rows, sink=sink)
+    sink.flush()
+    if control_notice is not None:
+        click.echo(control_notice)
 
 
 @feedback_group.command("regression-candidates")
 @click.option("--format", "output_format", default="table", type=click.Choice(OUTPUT_FORMATS))
-def feedback_regression_candidates(output_format: str) -> None:
+@click.option(
+    "--output",
+    "output_path",
+    type=click.Path(path_type=Path),
+    default=None,
+    help="Write the complete, unbudgeted payload to PATH instead of stdout.",
+)
+def feedback_regression_candidates(output_format: str, output_path: Path | None) -> None:
     """List open 'positive' entries as regression-test candidates.
 
     A positive records a validated property but has no consumption path of its
@@ -482,7 +518,30 @@ def feedback_regression_candidates(output_format: str) -> None:
         ("suggested_next_test_target", "Scaffold into"),
         ("summary", "Summary"),
     ]
-    emit_query_rows(output_format=output_format, title="Feedback Regression Candidates", columns=columns, rows=rows)
+
+    from science_tool.budget.control import bounded_control_notice
+    from science_tool.budget.invocation import build_complete_via, hint_for
+    from science_tool.budget.registry import lookup
+    from science_tool.budget.sink import BoundedSink
+
+    complete_via = build_complete_via(
+        click.get_current_context(), output_hint=hint_for("feedback-regression-candidates", output_format)
+    )
+    control_notice = (
+        bounded_control_notice(f"wrote {len(rows)} rows to {output_path}") if output_path is not None else None
+    )
+    sink = BoundedSink(
+        lookup("feedback regression-candidates"),
+        output_path=output_path,
+        command_path="feedback regression-candidates",
+        complete_via=complete_via,
+    )
+    emit_query_rows(
+        output_format=output_format, title="Feedback Regression Candidates", columns=columns, rows=rows, sink=sink
+    )
+    sink.flush()
+    if control_notice is not None:
+        click.echo(control_notice)
 
 
 @feedback_group.command("show")

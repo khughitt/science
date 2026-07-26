@@ -10,8 +10,9 @@ from science_tool.graph.attention import (
     weighted_sample_without_replacement,
 )
 from science_tool.graph.trig import load_trig_dataset_preserving_literals
+from science_tool.output import emit
 from science_tool.wander.context import assemble_bundle
-from science_tool.wander.skeleton import render_json, render_markdown_skeleton
+from science_tool.wander.skeleton import build_json_payload, render_markdown_skeleton
 from science_tool.wander.stub_smell import compute_stub_signals
 
 WANDER_FORMATS: tuple[str, ...] = ("markdown", "json")
@@ -39,10 +40,15 @@ WANDER_FORMATS: tuple[str, ...] = ("markdown", "json")
 )
 @click.option(
     "--out",
-    "out_path",
+    "--output",
+    "output_path",
     type=click.Path(path_type=Path),
     default=None,
-    help="Output file (markdown). Defaults to doc/meta/walks/walk-<id>.md.",
+    help=(
+        "Output file. For --format markdown, the walk skeleton path (defaults to "
+        "doc/meta/walks/walk-<id>.md; --out is a kept alias). For --format json, write the "
+        "complete, unbudgeted bundle report to PATH instead of stdout."
+    ),
 )
 @click.option(
     "--today",
@@ -64,7 +70,7 @@ def wander_command(
     epsilon: float,
     graph_path: Path,
     output_format: str,
-    out_path: Path | None,
+    output_path: Path | None,
     today: datetime | None,
     repo_root: Path,
 ) -> None:
@@ -93,9 +99,46 @@ def wander_command(
     bundles_with_signals = [(b, compute_stub_signals(b, today=walk_date)) for b in bundles]
 
     if output_format == "json":
-        click.echo(
-            render_json(walk_id=walk_id, walk_date=walk_date, seed=seed, n=n, bundles_with_signals=bundles_with_signals)
+        from science_tool.budget.control import bounded_control_notice
+        from science_tool.budget.invocation import build_complete_via, hint_for
+        from science_tool.budget.projection import project_single_list_report
+        from science_tool.budget.registry import lookup
+        from science_tool.budget.sink import BoundedSink
+
+        complete_via = build_complete_via(click.get_current_context(), output_hint=hint_for("wander", output_format))
+        sink = BoundedSink(
+            lookup("wander"), output_path=output_path, command_path="wander", complete_via=complete_via
         )
+        control_notice = (
+            bounded_control_notice(f"wrote the complete walk bundle report to {output_path}")
+            if output_path is not None
+            else None
+        )
+        full = build_json_payload(
+            walk_id=walk_id, walk_date=walk_date, seed=seed, n=n, bundles_with_signals=bundles_with_signals
+        )
+        displayed = full if output_path is not None else project_single_list_report(full, "bundles", 40)
+        if output_path is None and displayed.get("bundles_omitted", 0):
+            displayed = {
+                **displayed,
+                "truncation": {
+                    "omitted": displayed["bundles_omitted"],
+                    "total": len(full["bundles"]),
+                    "complete_via": complete_via,
+                },
+            }
+
+        emit(
+            output_format=output_format,
+            payload=displayed,
+            render_text=lambda: None,
+            sort_keys=True,
+            default=str,
+            sink=sink,
+        )
+        sink.flush()
+        if control_notice is not None:
+            click.echo(control_notice)
         return
 
     text = render_markdown_skeleton(
@@ -105,7 +148,7 @@ def wander_command(
         n=n,
         bundles_with_signals=bundles_with_signals,
     )
-    target = out_path or Path("doc/meta/walks") / f"walk-{walk_id}.md"
+    target = output_path or Path("doc/meta/walks") / f"walk-{walk_id}.md"
     target.parent.mkdir(parents=True, exist_ok=True)
     target.write_text(text)
     click.echo(str(target))

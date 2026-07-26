@@ -25,7 +25,7 @@ from science_tool.entities import (
     list_entities,
     parse_origin_spec,
 )
-from science_tool.output import emit, emit_query_rows
+from science_tool.output import emit, emit_query_rows, summarize_preexisting_warnings
 from science_tool.styles import (
     entity_table_renderers,
     get_console,
@@ -181,9 +181,20 @@ def _print_entity_refs_field(console: Any, label: str, refs: object) -> None:
     console.print(line)
 
 
-def emit_entity_warnings(warnings: list[str]) -> None:
-    for warning in warnings:
+def emit_entity_warnings(warnings: list[str], *, show_preexisting: bool = False) -> None:
+    """Print an entity write's warnings, summarizing pre-existing audit failures.
+
+    Central lever for every entity-write command (`entity create/edit/note`, and the
+    six typed-entity `create` commands): `result.warnings` mixes this write's own
+    findings with whole-corpus pre-existing audit failures surfaced as a side effect.
+    Printing the latter in full would make an O(1) write confirmation grow with
+    project size, so they collapse into one summary note by default.
+    """
+    to_print, note = summarize_preexisting_warnings(warnings, show_preexisting=show_preexisting)
+    for warning in to_print:
         click.echo(f"WARNING: {warning}")
+    if note is not None:
+        click.echo(note)
 
 
 def _frontmatter_string_list(value: object) -> list[str]:

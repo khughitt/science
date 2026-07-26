@@ -155,7 +155,9 @@ the synthesis (synthesizer), then report back.
    the user's hints; build `<citekey>` = `<FirstAuthorLastName><Year>` (e.g. `Kelly1982`),
    suffixing on collision.
 3. **Split.** Run `uv run science book-split <pdf> --json`.
-   - On success, use the manifest.
+   - On success, use the manifest under the `chapters` key. A `truncation` sibling key
+     means the book has more chapters than fit the bounded view; pass `--output PATH`
+     to get the complete manifest.
    - On a non-zero exit mentioning "no outline", read the ToC pages yourself
      (`Read` with `pages=` over the front matter, ~first 15-20 pp) and build the manifest by
      hand: a list of `{n, title, start_page, end_page, level, part}`.

@@ -4,7 +4,7 @@ import json
 
 import pytest
 
-from science_tool.output import emit, emit_query_rows
+from science_tool.output import emit, emit_query_rows, summarize_preexisting_warnings
 
 PAYLOAD = {"b": "x", "a": [1, 2], "u": "café"}
 
@@ -43,3 +43,32 @@ def test_emit_query_rows_json_unchanged(capsys) -> None:
     )
     expected = json.dumps({"format": "json", "rows": rows, "meta": {"total": 2}}, indent=2)
     assert capsys.readouterr().out == expected + "\n"
+
+
+class TestSummarizePreexistingWarnings:
+    """`summarize_preexisting_warnings` -- the write-audit-leak lever (slice 1b-3 WL).
+
+    A write's own warnings must never be truncated; only pre-existing whole-corpus
+    audit warnings, prefixed `pre-existing audit failure:`, collapse by default.
+    """
+
+    def test_no_preexisting_warnings_pass_through_unchanged(self) -> None:
+        warnings = ["own warning one", "own warning two"]
+        kept, note = summarize_preexisting_warnings(warnings, show_preexisting=False)
+        assert kept == warnings
+        assert note is None
+
+    def test_own_warnings_are_never_truncated_regardless_of_preexisting_count(self) -> None:
+        own = [f"own warning {i}" for i in range(3)]
+        preexisting = [f"pre-existing audit failure: check {i} on source:{i}: detail" for i in range(500)]
+        kept, note = summarize_preexisting_warnings(preexisting + own, show_preexisting=False)
+        assert kept == own  # every own warning present, none dropped
+        assert note is not None
+        assert "500 pre-existing project audit warning" in note
+        assert "--show-preexisting" in note
+
+    def test_show_preexisting_lists_everything_in_original_order(self) -> None:
+        warnings = ["pre-existing audit failure: a", "own b", "pre-existing audit failure: c"]
+        kept, note = summarize_preexisting_warnings(warnings, show_preexisting=True)
+        assert kept == warnings
+        assert note is None

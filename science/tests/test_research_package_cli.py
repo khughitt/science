@@ -115,7 +115,7 @@ class TestResearchPackageValidate:
 
         assert result.exit_code == 0, result.output
         payload = json.loads(result.output)
-        assert payload[0]["ok"] is True
+        assert payload["results"][0]["ok"] is True
 
     def test_validate_invalid_package(self, runner: CliRunner, tmp_path: Path) -> None:
         pkg_dir = tmp_path / "pkg"

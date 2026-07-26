@@ -35,8 +35,20 @@ project_group.add_command(_artifacts_group)
     default="text",
     show_default=True,
 )
-def project_topic_coverage(project_root: Path, output_format: str) -> None:
+@click.option(
+    "--output",
+    "output_path",
+    type=click.Path(path_type=Path),
+    default=None,
+    help="Write the complete, unbudgeted coverage report to PATH instead of stdout.",
+)
+def project_topic_coverage(project_root: Path, output_format: str, output_path: Path | None) -> None:
     """Report how much of entities/topics/ is curated (substantive vs. stub)."""
+    from science_tool.budget.control import bounded_control_notice
+    from science_tool.budget.invocation import build_complete_via, hint_for
+    from science_tool.budget.projection import project_single_list_report
+    from science_tool.budget.registry import lookup
+    from science_tool.budget.sink import BoundedSink
     from science_tool.topic_coverage import MalformedTopicError, compute_topic_coverage
 
     try:
@@ -44,21 +56,55 @@ def project_topic_coverage(project_root: Path, output_format: str) -> None:
     except MalformedTopicError as exc:
         raise click.ClickException(str(exc)) from exc
 
-    def _render() -> None:
-        if cov.n_topics == 0:
-            click.echo("topics: 0 (no topics)")
-            return
-        warn = "  ⚠ stub-dominated" if cov.stub_dominated else ""
-        click.echo(
-            f"topics: {cov.n_topics} (substantive {cov.n_substantive}, "
-            f"stubs {cov.n_topics - cov.n_substantive}) — stub_ratio {cov.stub_ratio:.2f}{warn}"
-        )
-        if cov.stub_dominated:
-            for r in cov.topics:
-                if not r.substantive:
-                    click.echo(f"  stub: {r.id}")
+    complete_via = build_complete_via(
+        click.get_current_context(), output_hint=hint_for("project-topic-coverage", output_format)
+    )
+    sink = BoundedSink(
+        lookup("project topic-coverage"),
+        output_path=output_path,
+        command_path="project topic-coverage",
+        complete_via=complete_via,
+    )
+    control_notice = (
+        bounded_control_notice(f"wrote the complete topic-coverage report to {output_path}")
+        if output_path is not None
+        else None
+    )
 
-    emit(output_format=output_format, payload=cov.to_dict(), render_text=_render)
+    full = cov.to_dict()
+    displayed = full if output_path is not None else project_single_list_report(full, "topics", 40)
+    if output_path is None and displayed.get("topics_omitted", 0):
+        displayed = {
+            **displayed,
+            "truncation": {
+                "omitted": displayed["topics_omitted"],
+                "total": len(full["topics"]),
+                "complete_via": complete_via,
+            },
+        }
+
+    def _render() -> None:
+        if displayed["n_topics"] == 0:
+            sink.echo("topics: 0 (no topics)")
+            return
+        warn = "  ⚠ stub-dominated" if displayed["stub_dominated"] else ""
+        sink.echo(
+            f"topics: {displayed['n_topics']} (substantive {displayed['n_substantive']}, "
+            f"stubs {displayed['n_topics'] - displayed['n_substantive']}) — "
+            f"stub_ratio {displayed['stub_ratio']:.2f}{warn}"
+        )
+        if displayed["stub_dominated"]:
+            for r in displayed["topics"]:
+                if not r["substantive"]:
+                    sink.echo(f"  stub: {r['id']}")
+        if displayed.get("topics_omitted", 0):
+            sink.echo(f"  showing {len(displayed['topics'])} of {len(full['topics'])} topics")
+            sink.echo(f"    complete output:  {complete_via}")
+
+    emit(output_format=output_format, payload=displayed, render_text=_render, sink=sink)
+    sink.flush()
+    if control_notice is not None:
+        click.echo(control_notice)
 
 
 @project_group.command("resolve-refs")
@@ -254,8 +300,20 @@ def _render_verify_human(result: Any) -> None:
     show_default=True,
     type=click.Path(path_type=Path, file_okay=False, dir_okay=True),
 )
-def project_index(output_format: str, project_root: Path) -> None:
+@click.option(
+    "--output",
+    "output_path",
+    type=click.Path(path_type=Path),
+    default=None,
+    help="Write the complete, unbudgeted payload to PATH instead of stdout.",
+)
+def project_index(output_format: str, project_root: Path, output_path: Path | None) -> None:
     """Produce a compact index of questions and hypotheses for this project."""
+    from science_tool.budget.control import bounded_control_notice
+    from science_tool.budget.invocation import build_complete_via, hint_for
+    from science_tool.budget.registry import lookup
+    from science_tool.budget.sink import BoundedSink
+
     project_root = project_root.resolve()
 
     # Resolve entities through the canonical project-sources loader.
@@ -272,6 +330,13 @@ def project_index(output_format: str, project_root: Path) -> None:
                 }
             )
 
+    complete_via = build_complete_via(click.get_current_context(), output_hint=hint_for("project-index", output_format))
+    control_notice = (
+        bounded_control_notice(f"wrote {len(rows)} rows to {output_path}") if output_path is not None else None
+    )
+    sink = BoundedSink(
+        lookup("project index"), output_path=output_path, command_path="project index", complete_via=complete_via
+    )
     emit_query_rows(
         output_format=output_format,
         title="Project Index",
@@ -283,4 +348,8 @@ def project_index(output_format: str, project_root: Path) -> None:
             ("status", "Status"),
         ],
         rows=rows,
+        sink=sink,
     )
+    sink.flush()
+    if control_notice is not None:
+        click.echo(control_notice)

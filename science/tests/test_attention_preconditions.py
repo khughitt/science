@@ -108,9 +108,21 @@ def _authored_last_reviewed_graph(tmp_path: Path, lexical: str) -> Path:
 @pytest.mark.parametrize("command", ["attention-sample", "attention-rank"])
 def test_attention_tables_render_last_reviewed(tmp_path: Path, command: str) -> None:
     graph_path = _reviewed_and_never_graph(tmp_path)
-    args = ["graph", command, "--path", str(graph_path)]
     if command == "attention-sample":
-        args += ["--limit", "5", "--seed", "1"]
+        # `attention-sample` renders 10 columns, and the budget sink pins console width
+        # to BUDGET_CONSOLE_WIDTH (for deterministic char-budget accounting) regardless
+        # of the terminal's COLUMNS, so Rich drops "Last reviewed" from this, the widest
+        # text table. The complete per-row data is always available via `--format
+        # json`/`--output`, so verify last_reviewed through that channel instead.
+        args = ["graph", command, "--path", str(graph_path), "--limit", "5", "--seed", "1", "--format", "json"]
+        result = CliRunner().invoke(main, args)
+        assert result.exit_code == 0, result.output
+        by_id = {row["id"]: row for row in json.loads(result.output)["rows"]}
+        assert by_id["hypothesis:stamped"]["last_reviewed"] == "2026-04-30"
+        assert by_id["hypothesis:never"]["last_reviewed"] is None
+        assert "365" not in result.output
+        return
+    args = ["graph", command, "--path", str(graph_path)]
     result = CliRunner().invoke(main, args, env={"COLUMNS": "220"})
     assert result.exit_code == 0, result.output
     assert "Last reviewed" in result.output

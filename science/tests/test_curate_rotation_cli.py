@@ -41,7 +41,7 @@ def test_rotation_json_shape(tmp_path: Path, monkeypatch) -> None:
     assert payload["meta"] == {
         "pool_size": 3,
         "budget": 3,
-        "displayed": 3,
+        "returned_count": 3,
         "coverage_rounds": 1,
         "graph_source": "absent",
     }
@@ -61,7 +61,7 @@ def test_rotation_all_shows_full_queue_but_budgets_prefix(tmp_path: Path, monkey
     payload = json.loads(result.output)
     assert payload["meta"]["pool_size"] == 30
     assert payload["meta"]["budget"] < 30
-    assert payload["meta"]["displayed"] == 30  # --all shows every row
+    assert payload["meta"]["returned_count"] == 30  # --all shows every row
     rows = payload["rows"]
     assert len(rows) == 30
     selected = [row for row in rows if row["selected"]]
@@ -75,7 +75,7 @@ def test_rotation_default_displays_only_budget(tmp_path: Path, monkeypatch) -> N
     assert result.exit_code == 0, result.output
     payload = json.loads(result.output)
     assert len(payload["rows"]) == payload["meta"]["budget"]
-    assert payload["meta"]["displayed"] == payload["meta"]["budget"]
+    assert payload["meta"]["returned_count"] == payload["meta"]["budget"]
 
 
 def test_rotation_table_renders_never(tmp_path: Path, monkeypatch) -> None:

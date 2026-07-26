@@ -5,7 +5,9 @@ from __future__ import annotations
 import difflib
 import sys as _sys
 import tempfile
+from collections.abc import Callable
 from pathlib import Path
+from typing import Any
 
 import click
 
@@ -14,7 +16,7 @@ from science_tool.dag.init import init_dag
 from science_tool.dag.number import number_all, number_one
 from science_tool.dag.paths import DagPaths, load_dag_paths
 from science_tool.dag.render import render_all
-from science_tool.dag.validate import ValidationFinding, ValidationReport, validate_project
+from science_tool.dag.validate import validate_project
 from science_tool.data_root import project_config_path
 from science_tool.output import emit
 
@@ -28,16 +30,17 @@ def _wants_json(*, as_json: bool, output_format: str) -> bool:
     return as_json or output_format == "json"
 
 
-def _validation_finding_blocks(finding: ValidationFinding, *, strict: bool) -> bool:
-    return finding.severity == "error" or (strict and finding.severity == "strict_error")
+def _validation_finding_blocks(finding: dict[str, Any], *, strict: bool) -> bool:
+    return finding["severity"] == "error" or (strict and finding["severity"] == "strict_error")
 
 
-def _print_validation_findings(report: ValidationReport, *, strict: bool) -> None:
-    for finding in report.findings:
+def _print_validation_findings(findings: list[dict[str, Any]], *, strict: bool, echo: Callable[[str], None]) -> None:
+    for finding in findings:
         prefix = "ERROR" if _validation_finding_blocks(finding, strict=strict) else "warn"
-        loc = finding.location or ""
-        where = f"{finding.dag}#{finding.edge_id}" if finding.edge_id else finding.dag or "<project>"
-        click.echo(f"{prefix}: [{finding.rule}] {where} ({loc}): {finding.message}")
+        loc = finding.get("location") or ""
+        edge_id = finding.get("edge_id")
+        where = f"{finding['dag']}#{edge_id}" if edge_id else finding.get("dag") or "<project>"
+        echo(f"{prefix}: [{finding['rule']}] {where} ({loc}): {finding['message']}")
 
 
 # ---------------------------------------------------------------------------
@@ -180,6 +183,13 @@ def number_cmd(slug: str | None, project_path: Path | None) -> None:
     type=click.Path(file_okay=False, path_type=Path),
     help="Project root (default: current working directory).",
 )
+@click.option(
+    "--output",
+    "output_path",
+    type=click.Path(path_type=Path),
+    default=None,
+    help="Write the complete, unbudgeted audit report to PATH instead of stdout.",
+)
 @click.pass_context
 def audit_cmd(
     ctx: click.Context,
@@ -188,8 +198,15 @@ def audit_cmd(
     as_json: bool,
     output_format: str,
     project_path: Path | None,
+    output_path: Path | None,
 ) -> None:
     """Run DAG audit (validate + re-render proposition-backed DAGs)."""
+    from science_tool.budget.control import bounded_control_notice
+    from science_tool.budget.invocation import build_complete_via, hint_for
+    from science_tool.budget.registry import lookup
+    from science_tool.budget.sink import BoundedSink
+    from science_tool.dag.audit_projection import project_dag_audit
+
     project = (project_path or Path.cwd()).resolve()
     try:
         paths = load_dag_paths(project)
@@ -201,21 +218,50 @@ def audit_cmd(
     except RuntimeError as exc:
         raise click.ClickException(str(exc)) from exc
 
-    def _render() -> None:
-        if audit.validation.ok:
-            click.echo("DAG audit OK.")
-        else:
-            _print_validation_findings(audit.validation, strict=strict)
-        if fix and audit.mutations:
-            click.echo(f"\nApplied {len(audit.mutations)} mutation(s):")
-            for mutation in audit.mutations:
-                click.echo(f"  [{mutation.kind}] {mutation.description}")
-
-    emit(
-        output_format="json" if _wants_json(as_json=as_json, output_format=output_format) else output_format,
-        payload=audit.to_json(),
-        render_text=_render,
+    effective_format = "json" if _wants_json(as_json=as_json, output_format=output_format) else output_format
+    complete_via = build_complete_via(click.get_current_context(), output_hint=hint_for("dag-audit", effective_format))
+    sink = BoundedSink(
+        lookup("dag audit"), output_path=output_path, command_path="dag audit", complete_via=complete_via
     )
+    control_notice = (
+        bounded_control_notice(f"wrote the complete audit report to {output_path}")
+        if output_path is not None
+        else None
+    )
+
+    full = audit.to_json()
+    displayed = full if output_path is not None else project_dag_audit(full)
+    findings_omitted = displayed["validation"].get("findings_omitted", 0)
+    mutations_omitted = displayed.get("mutations_omitted", 0)
+    if output_path is None and (findings_omitted or mutations_omitted):
+        truncation: dict[str, Any] = {"complete_via": complete_via}
+        if findings_omitted:
+            truncation["findings"] = {"omitted": findings_omitted, "total": len(full["validation"]["findings"])}
+        if mutations_omitted:
+            truncation["mutations"] = {"omitted": mutations_omitted, "total": len(full["mutations"])}
+        displayed = {**displayed, "truncation": truncation}
+
+    def _render() -> None:
+        if full["validation"]["ok"]:
+            sink.echo("DAG audit OK.")
+        else:
+            shown_findings = displayed["validation"]["findings"]
+            _print_validation_findings(shown_findings, strict=strict, echo=sink.echo)
+            if findings_omitted:
+                sink.echo(f"showing {len(shown_findings)} of {findings_omitted + len(shown_findings)} findings")
+                sink.echo(f"  complete output:  {complete_via}")
+        if fix and full["mutations"]:
+            sink.echo(f"\nApplied {len(full['mutations'])} mutation(s):")
+            for mutation in displayed["mutations"]:
+                sink.echo(f"  [{mutation['kind']}] {mutation['description']}")
+            if mutations_omitted:
+                sink.echo(f"showing {len(displayed['mutations'])} of {len(full['mutations'])} mutations")
+                sink.echo(f"  complete output:  {complete_via}")
+
+    emit(output_format=effective_format, payload=displayed, render_text=_render, sink=sink)
+    sink.flush()
+    if control_notice is not None:
+        click.echo(control_notice)
 
     ctx.exit(1 if audit.has_findings else 0)
 
@@ -291,14 +337,28 @@ def init_cmd(slug: str, label: str | None, project_path: Path | None) -> None:
     type=click.Path(file_okay=False, path_type=Path),
     help="Project root (default: current working directory).",
 )
+@click.option(
+    "--output",
+    "output_path",
+    type=click.Path(path_type=Path),
+    default=None,
+    help="Write the complete, unbudgeted validation report to PATH instead of stdout.",
+)
 def validate_cmd(
     strict: bool,
     slug: str | None,
     as_json: bool,
     output_format: str,
     project_path: Path | None,
+    output_path: Path | None,
 ) -> None:
     """Validate DOT topology against compiled relational propositions."""
+    from science_tool.budget.control import bounded_control_notice
+    from science_tool.budget.invocation import build_complete_via, hint_for
+    from science_tool.budget.projection import project_single_list_report
+    from science_tool.budget.registry import lookup
+    from science_tool.budget.sink import BoundedSink
+
     project = (project_path or Path.cwd()).resolve()
     try:
         paths = load_dag_paths(project)
@@ -316,18 +376,41 @@ def validate_cmd(
 
     report = validate_project(paths, strict=strict)
 
-    def _render() -> None:
-        if report.ok:
-            click.echo("dag validate: OK")
-        else:
-            _print_validation_findings(report, strict=strict)
-
-    emit(
-        output_format="json" if _wants_json(as_json=as_json, output_format=output_format) else output_format,
-        payload=report.to_json(),
-        render_text=_render,
-        sort_keys=True,
+    effective_format = "json" if _wants_json(as_json=as_json, output_format=output_format) else output_format
+    complete_via = build_complete_via(
+        click.get_current_context(), output_hint=hint_for("dag-validate", effective_format)
     )
+    sink = BoundedSink(
+        lookup("dag validate"), output_path=output_path, command_path="dag validate", complete_via=complete_via
+    )
+    control_notice = (
+        bounded_control_notice(f"wrote the complete dag validate report to {output_path}")
+        if output_path is not None
+        else None
+    )
+
+    full = report.to_json()
+    displayed = full if output_path is not None else project_single_list_report(full, "findings", 40)
+    findings_omitted = displayed.get("findings_omitted", 0)
+    if output_path is None and findings_omitted:
+        displayed = {
+            **displayed,
+            "truncation": {"omitted": findings_omitted, "total": len(full["findings"]), "complete_via": complete_via},
+        }
+
+    def _render() -> None:
+        if full["ok"]:
+            sink.echo("dag validate: OK")
+        else:
+            _print_validation_findings(displayed["findings"], strict=strict, echo=sink.echo)
+        if findings_omitted:
+            sink.echo(f"showing {len(displayed['findings'])} of {len(full['findings'])} findings")
+            sink.echo(f"  complete output:  {complete_via}")
+
+    emit(output_format=effective_format, payload=displayed, render_text=_render, sink=sink, sort_keys=True)
+    sink.flush()
+    if control_notice is not None:
+        click.echo(control_notice)
 
     _sys.exit(0 if report.ok else 1)
 

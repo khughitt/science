@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import pytest
 import yaml
 from click.testing import CliRunner
 
@@ -327,6 +328,54 @@ def test_dataset_link_is_idempotent(tmp_path: Path) -> None:
     text = target.read_text(encoding="utf-8")
     assert text.count("dataset:my-set") == 1
     assert "already linked dataset:my-set -> hypothesis:h" in res.output
+
+
+def _monkeypatch_many_preexisting_audit_failures(monkeypatch: pytest.MonkeyPatch, count: int) -> None:
+    """Fake a large, unrelated pre-existing audit-failure backlog for `dataset add`.
+
+    Same shape used by the entity-write regression tests (`test_entities_cli.py`,
+    `test_entity_import_cli.py`): `dataset add` -> `add_dataset` -> `_validate_prospective_write`
+    all live in `science_tool.entities`, so patching its `audit_project_sources` name bounds
+    every write path that surfaces these warnings.
+    """
+    from science_tool.instruments import ValidationVerdict
+
+    rows = [
+        {
+            "check": "unresolved_reference",
+            "status": "fail",
+            "source": f"question:{i:04d}-existing",
+            "field": "related",
+            "target": f"hypothesis:{i:04d}-missing",
+            "details": "pre-existing missing hypothesis",
+        }
+        for i in range(count)
+    ]
+
+    def fake_audit_project_sources(sources: object) -> ValidationVerdict[dict[str, str]]:
+        return ValidationVerdict.from_has_failures(rows, True)
+
+    monkeypatch.setattr("science_tool.entities.audit_project_sources", fake_audit_project_sources)
+
+
+def test_add_summarizes_many_preexisting_warnings(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    _monkeypatch_many_preexisting_audit_failures(monkeypatch, 400)
+
+    res = _add(tmp_path, "my-set", "--title", "My Set")
+
+    assert res.exit_code == 0, res.output
+    assert "created dataset:my-set" in res.output
+    assert "pre-existing audit failure:" not in res.output
+    assert "400 pre-existing project audit warning" in res.output
+
+
+def test_add_show_preexisting_lists_them(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    _monkeypatch_many_preexisting_audit_failures(monkeypatch, 5)
+
+    res = _add(tmp_path, "my-set", "--title", "My Set", "--show-preexisting")
+
+    assert res.exit_code == 0, res.output
+    assert res.output.count("pre-existing audit failure:") == 5
 
 
 def test_dataset_link_rejects_non_question_hypothesis_target(tmp_path: Path) -> None:

@@ -57,7 +57,7 @@ def test_cli_accepts_format_json(tmp_path):
     )
 
     assert result.exit_code == 0, result.output
-    rows = json.loads(result.output)
+    rows = json.loads(result.output)["rows"]
     assert rows[0]["workflow"] == "wf-a"
     assert rows[0]["engagement"] == "IGNORED"
 
