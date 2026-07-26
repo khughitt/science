@@ -430,9 +430,21 @@ deleted, not documented — applies directly. It is removed, not re-labelled:
 Removing the exemption means the materialization check will now ERROR on a `workflow-run` carrying
 `supersedes:`. That is the intended behaviour and affects no existing entity.
 
-**The live-surface sweep is complete.** Every file under `docs/`, `skills/`, `commands/`,
+- `commands/next-steps.md` — **two** lines instruct agents to look for workflow-run states S2 makes
+  unreachable: line 76 (`#### Workflow Runs`) reports "superseded runs, runs with status `draft`",
+  and line 210 (**Unreflected failures**) names "a discarded / superseded / `draft` workflow run",
+  back-referencing line 76. Only `superseded` is S2's doing. `discarded` and `draft` were *already*
+  unreachable: `workflow-run` declares the closed vocabulary `["running", "complete", "failed"]`
+  (`core.py:568-578`). All three are corrected against that vocabulary, because leaving a
+  known-false state name inside a sentence being rewritten is not defensible. `codex-skills/
+  science-next-steps/SKILL.md` is the generated mirror and is **regenerated**, never hand-edited —
+  `test_committed_codex_skills_match_fresh_generation` fails otherwise.
+
+**The live-surface sweep found three files, and its first pass found two.** `commands/next-steps.md`
+was missed and surfaced in review — a reminder that this sweep is exactly the kind of enumeration
+whose holes are invisible from inside it. Every file under `docs/`, `skills/`, `commands/`,
 `templates/`, `references/` and `agents/` mentioning both `workflow-run` and supersession was
-checked; the two above are the only *live guidance*. The remaining matches are about other kinds
+checked; the three above are the only *live guidance*. The remaining matches are about other kinds
 (`interpretation`, `dataset`, `spec`) or are dated design and plan documents — including
 `docs/plans/2026-07-15-non-materializing-fields-plan.md:20`, which records the exemption being
 introduced, and `docs/plans/2026-07-12-d4-status-vocabulary-audit.md:47`, which references

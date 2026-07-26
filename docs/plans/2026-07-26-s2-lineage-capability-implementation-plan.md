@@ -38,6 +38,7 @@ Design: [`meta/doc/plans/2026-07-26-s2-lineage-capability-design.md`](../../meta
 | `science/src/science_tool/qa_audit/runs.py`, `verdicts.py` | drop the dead `supersedes` field; correct two docstrings |
 | `science/src/science_tool/validate/checks/materialization.py` | remove the one-entry legit-reader exemption |
 | `templates/workflow-run.md`, `docs/process/pipeline-audit-and-refactor.md` | user-facing guidance for the retired field |
+| `commands/next-steps.md` → `codex-skills/science-next-steps/SKILL.md` | live agent guidance naming unreachable workflow-run states; the mirror is regenerated, never hand-edited |
 
 ---
 
@@ -298,6 +299,7 @@ oracles are re-frozen to match those rulings, not to silence the check."
 - Modify: `science/tests/validate/test_checks_materialization.py:135-155`
 - Delete: `science/tests/test_consolidation_candidates.py::test_lineage_reports_kind_lacking_superseded_vocab`
 - Modify: `science/tests/test_consolidation_mark_superseded.py:298`
+- Modify: `science/tests/test_decision_material.py:96-98` (comment only)
 - Test: `science/model/tests/test_supersedable_gate.py`
 
 **Interfaces:**
@@ -578,18 +580,30 @@ from science_tool.supersede_plan import derive_supersede_plan
 
 Signatures confirmed against the source: `derive_supersede_plan(project_root: Path, material: SupersessionDecisionMaterial, *, selection: SupersedeSelection, preview_date: str) -> SupersedePlan`; `SupersedePlan.preview_report: SupersedePreviewReport` carries `to_mark: list[str]` and `skipped_kinds: list[SkippedKind]`, and `SkippedKind` has `id: str` and `kind: str` — attributes, not dict keys.
 
-- [ ] **Step 10: Run both suites**
+- [ ] **Step 10: Correct the invalid-fixture explanation**
+
+`science/tests/test_decision_material.py:96-98` builds the `invalid` fixture — a `workflow-run` authoring `sci:supersedes` at an `interpretation` — and explains it as "an illegal kind pair (`workflow-run` may only supersede `workflow-run`)". After Step 3 that sentence is false: `workflow-run` is not a `sci:supersedes` endpoint in *either* position, so the edge is refused on the source kind, not on the pairing. The fixture stays — it is still a valid inadmissible-relation fixture and the test around it still passes — but the explanation must say why:
+
+```python
+    # invalid: an authored relation `materialize` refuses outright. After S2 `workflow-run` is not a
+    # `sci:supersedes` endpoint in EITHER position, so this is refused on the source kind -- not,
+    # as it once was, for pairing a workflow-run with the wrong target.
+```
+
+This is a comment-only edit: run `cd science && uv run --frozen pytest tests/test_decision_material.py -q` and expect it green, unchanged.
+
+- [ ] **Step 11: Run both suites**
 
 Run: `cd science/model && uv run --frozen pytest -q` then `cd science && uv run --frozen pytest -q` (allow ~3 min).
 Expected: both green.
 
-- [ ] **Step 11: Prove the gates can fail (mutation proofs 3 and 4)**
+- [ ] **Step 12: Prove the gates can fail (mutation proofs 3 and 4)**
 
 Mutation 3: temporarily remove `"decision"` from `_SELF_SUPERSEDING_KINDS`. Expected: `test_the_supersedes_TARGETS_agree_with_the_declaration` FAILS naming `decision` on the "supersedable but never an admissible target" side, and `test_every_supersedable_kind_can_author_the_CANONICAL_edge[decision]` FAILS. **Revert.**
 
 Mutation 4: temporarily append `"workflow-run"` to the `supersedes` `source_kinds` only. Expected: `test_the_flat_endpoint_lists_agree_with_the_pairs[supersedes]` FAILS naming `workflow-run` as listed-only. **Revert**, and confirm green.
 
-- [ ] **Step 12: Commit**
+- [ ] **Step 13: Commit**
 
 ```bash
 git add science/model/src/science_model/profiles/core.py \
@@ -598,7 +612,8 @@ git add science/model/src/science_model/profiles/core.py \
         science/tests/test_graph_materialize.py \
         science/tests/validate/test_checks_materialization.py \
         science/tests/test_consolidation_candidates.py \
-        science/tests/test_consolidation_mark_superseded.py
+        science/tests/test_consolidation_mark_superseded.py \
+        science/tests/test_decision_material.py
 git commit -m "feat(profile): gate supersedes endpoints against lineage capability
 
 Ten kinds gain self-pairs, workflow-run is removed, and the flat endpoint
@@ -675,7 +690,10 @@ def test_the_frozen_policy_equals_the_profile_declaration(tmp_path: Path) -> Non
 
 - [ ] **Step 2: Run the tests to verify the driver fails**
 
-Run: `cd science && uv run --frozen pytest tests/test_decision_material.py::test_material_carries_supported_kinds_and_digest_covers_the_policy tests/test_consolidation_mark_superseded.py -k "newly_supersedable or frozen_policy" -q`
+Run: `cd science && uv run --frozen pytest \
+        tests/test_decision_material.py::test_material_carries_supported_kinds_and_digest_covers_the_policy \
+        tests/test_consolidation_mark_superseded.py::test_a_newly_supersedable_kind_is_actually_stamped \
+        tests/test_consolidation_mark_superseded.py::test_the_frozen_policy_equals_the_profile_declaration -q`
 Expected: the digest test FAILS (`before != after` is false — the patched authority is not consulted). The two new tests PASS already; they are regressions guarding the change, not drivers of it.
 
 - [ ] **Step 3: Add the tool-side lookup**
@@ -728,7 +746,10 @@ In `consolidation.py`, the `mark_superseded` return docs at `:799` define these 
 
 - [ ] **Step 6: Run the driver to verify it now passes**
 
-Run: `cd science && uv run --frozen pytest tests/test_decision_material.py::test_material_carries_supported_kinds_and_digest_covers_the_policy tests/test_consolidation_mark_superseded.py -k "newly_supersedable or frozen_policy" -q`
+Run: `cd science && uv run --frozen pytest \
+        tests/test_decision_material.py::test_material_carries_supported_kinds_and_digest_covers_the_policy \
+        tests/test_consolidation_mark_superseded.py::test_a_newly_supersedable_kind_is_actually_stamped \
+        tests/test_consolidation_mark_superseded.py::test_the_frozen_policy_equals_the_profile_declaration -q`
 Expected: PASS. The patched `DECLARED_SUPERSEDABLE` now reaches the policy, so the digest moves.
 
 - [ ] **Step 7: Fix the remaining decision-material test**
@@ -782,6 +803,8 @@ callers, so repointing it would have left the declaration owning nothing."
 - Modify: `science/tests/validate/test_checks_materialization.py:77`
 - Modify: `science/tests/test_qa_audit_runs.py`, `science/tests/test_qa_audit_audit.py`
 - Modify: `docs/process/pipeline-audit-and-refactor.md:238`
+- Modify: `commands/next-steps.md:76` and `:210`
+- Regenerate: `codex-skills/science-next-steps/SKILL.md` (generated mirror — never hand-edited)
 
 The field sustains nothing: `RunRecord.supersedes` is written and never read; `chain_depth` counts runs per workflow and follows no link; no entity in any project authors the key.
 
@@ -834,6 +857,8 @@ In `science/src/science_tool/qa_audit/runs.py`, remove `supersedes` from the `Ru
 from dataclasses import dataclass
 ```
 
+**Delete `_as_list` (lines 18-23) in the same step.** `supersedes=_as_list(fm.get("supersedes"))` at line 47 is its only caller; it is module-private and imported nowhere else, so removing the field strands it. (The identically named helpers in `migrate_specs.py` and `datasets/schema.py` are separate module-private functions — leave both alone.)
+
 Then correct `chain_depth`'s docstring:
 
 ```python
@@ -860,27 +885,62 @@ In `templates/workflow-run.md`, delete the `supersedes: []` frontmatter line (li
 
 In `docs/process/pipeline-audit-and-refactor.md:238`, the playbook says `science qa-audit` "reads each workflow's `workflow-run` / `sci:supersedes` chain". That relation is now rejected for `workflow-run`, and the sentence was already wrong about the mechanism. Replace the clause with: `which counts the runs recorded for each workflow and reads their QA dispositions`.
 
-- [ ] **Step 8: Run both suites, lint and types**
+- [ ] **Step 8: Correct the live agent guidance and regenerate the Codex mirror**
+
+`commands/next-steps.md` tells agents to look for workflow-run states that S2 makes unreachable. Two lines, not one:
+
+- **Line 76**, under `#### Workflow Runs`: "Report: recent runs (last 7 days), superseded runs, runs with status `draft`."
+- **Line 210**, under **Unreflected failures**: "a **discarded / superseded / `draft` workflow run** (already surfaced under Workflow Runs above)…" — this line back-references line 76, so correcting one without the other leaves a dangling pointer.
+
+`superseded` is what S2 removes: `workflow-run` loses the `sci:supersedes` endpoint (Task 3) and the top-level field (this task), and it never declared a `superseded` status. **`discarded` and `draft` are independently unreachable** and were already so before S2 — `workflow-run` declares a closed vocabulary, `statuses=["running", "complete", "failed"]` with `default_status="running"` (`core.py:568-578`). That is a pre-existing defect, not one this change creates, but both tokens sit inside sentences this step is rewriting, and leaving a known-false state name in a line being edited is not defensible. Correct all three against the declared vocabulary.
+
+Line 76 becomes:
+
+```markdown
+- Report: recent runs (last 7 days) and runs with status `failed`.
+```
+
+Line 210 becomes:
+
+```markdown
+- a workflow run with status `failed` (already surfaced under Workflow Runs above)
+  with no interpretation and no post-mortem.
+```
+
+Leave line 194 alone — `sci:supersedes` plus `status: superseded` on a *conclusion* is exactly the supersedable path S2 keeps. Leave line 81 alone: it is about analysis bundles superseded by filename, not entity lineage.
+
+Then regenerate the mirror. `codex-skills/` is a git-tracked generated tree; `test_committed_codex_skills_match_fresh_generation` (`science/tests/test_codex_skills.py:799`) fails if the committed output drifts from a fresh run, so this is not optional:
+
+```bash
+cd science && uv run --frozen python ../scripts/generate_codex_skills.py
+```
+
+Expected: `codex-skills/science-next-steps/SKILL.md` picks up both corrections (its copies sit at `:195` and `:329`). Do not hand-edit the mirror.
+
+- [ ] **Step 9: Run both suites, lint and types**
 
 Run: `cd science/model && uv run --frozen pytest -q`, then `cd science && uv run --frozen pytest -q` (allow ~3 min), then `cd science && uv run ruff check && uv run pyright`.
 Expected: all green.
 
-- [ ] **Step 9: Verify the live-surface sweep is complete**
+- [ ] **Step 10: Verify the live-surface sweep is complete**
 
 From the repository root:
 
 ```bash
 rg -n "supersedes" templates/workflow-run.md docs/process/pipeline-audit-and-refactor.md
+rg -n -i "superseded|discarded|draft" commands/next-steps.md codex-skills/science-next-steps/SKILL.md
 ```
-Expected: no matches.
+Expected: the first command reports no matches. The second reports only the conclusion-supersession guidance (`commands/next-steps.md:194` and its mirror) and the analysis-bundle line — no `workflow-run` state.
 
 Do **not** edit the dated design and plan documents under `docs/plans/` that mention the exemption — `2026-07-15-non-materializing-fields-plan.md:20` and `2026-07-12-d4-status-vocabulary-audit.md:47`. They are historical records of completed work; rewriting them would falsify the record of why the exemption existed.
 
-- [ ] **Step 10: Commit**
+- [ ] **Step 11: Commit**
 
 ```bash
 git add templates/workflow-run.md \
         docs/process/pipeline-audit-and-refactor.md \
+        commands/next-steps.md \
+        codex-skills/science-next-steps/SKILL.md \
         science/src/science_tool/qa_audit/runs.py \
         science/src/science_tool/qa_audit/verdicts.py \
         science/src/science_tool/validate/checks/materialization.py \
