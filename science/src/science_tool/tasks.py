@@ -785,7 +785,7 @@ def _read_since_candidates(tasks_dir: Path, since: date) -> list[Task]:
     well-formed repo), the archive copy wins, since it is the durable record
     for closed tasks.
     """
-    from science_tool.tasks_archive import _read_destination
+    from science_tool.tasks_ledger import _read_destination
 
     by_id: dict[str, Task] = {t.id: t for t in _read_active(tasks_dir)}
     for month in _since_window_months(since, date.today()):
