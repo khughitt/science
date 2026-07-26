@@ -3,10 +3,13 @@ from __future__ import annotations
 import subprocess
 from pathlib import Path
 
+import pytest
+
 from science_tool.boundary.config import BoundaryConfig
 from science_tool.boundary.generate import (
     MANAGED_BEGIN,
     MANAGED_END,
+    ManagedBlockError,
     extract_managed_block,
     render_managed_block,
     splice_managed_block,
@@ -92,6 +95,35 @@ def test_extract_roundtrip():
     text = splice_managed_block("head\n", "B\n")
     assert extract_managed_block(text) == "B\n"
     assert extract_managed_block("no markers\n") is None
+
+
+@pytest.mark.parametrize(
+    ("text", "problem"),
+    [
+        (f"handwritten before\n{MANAGED_BEGIN}\nhandwritten after\n", "unmatched BEGIN"),
+        (f"handwritten before\n{MANAGED_END}\nhandwritten after\n", "unmatched END"),
+        (f"handwritten before\n{MANAGED_END}\n{MANAGED_BEGIN}\nhandwritten after\n", "reversed"),
+        (
+            f"handwritten before\n{MANAGED_BEGIN}\nfirst\n{MANAGED_BEGIN}\n{MANAGED_END}\nhandwritten after\n",
+            "duplicate BEGIN",
+        ),
+        (
+            f"handwritten before\n{MANAGED_BEGIN}\n{MANAGED_END}\nsecond\n{MANAGED_END}\nhandwritten after\n",
+            "duplicate END",
+        ),
+        (
+            f"handwritten before\n{MANAGED_BEGIN}\none\n{MANAGED_END}\n"
+            f"handwritten middle\n{MANAGED_BEGIN}\ntwo\n{MANAGED_END}\nhandwritten after\n",
+            "multiple blocks",
+        ),
+    ],
+)
+def test_malformed_managed_markers_never_consume_handwritten_content(text: str, problem: str):
+    """Neither reader nor writer may select a partial block from malformed text."""
+    with pytest.raises(ManagedBlockError, match=problem):
+        extract_managed_block(text)
+    with pytest.raises(ManagedBlockError, match=problem):
+        splice_managed_block(text, "replacement\n")
 
 
 def test_manifest_descriptor_is_really_visible_to_git(tmp_path: Path):
