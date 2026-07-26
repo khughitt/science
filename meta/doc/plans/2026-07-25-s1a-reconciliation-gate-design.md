@@ -47,19 +47,26 @@ Verified: all 20 typed models and `Entity` itself are `extra="allow"`.
 A schema-admitted field the model does not declare is therefore **no longer
 dropped at `model_validate`**. It survives in `model_extra`. Three present-tense
 statements in `science/model/tests/test_hypothesis_entity.py` still assert the
-old failure mode (lines 8, 284–285, 327), and one comment there claims the
-capability-field readers "re-parse RAW frontmatter and never go through the model
-at all" — `skills_coverage/evidence.py:70,78` reads them from `model_extra`.
-That prose is stale and S1a corrects it.
+old failure mode (lines 8, 284–285, 327). **Only those three sentences are stale.**
+
+The same file's comment that the two capability fields' readers "re-parse RAW
+frontmatter and never go through the model at all" is **correct and stays**. An
+earlier draft of this design called it stale on the strength of
+`skills_coverage/evidence.py:70,78` — but that loop opens with
+`if entity.kind != "dataset": continue`, so it reads *dataset* capability fields
+and never touches hypothesis `required_capabilities`. The hypothesis readers are
+`dataset_prioritize.target_coverage`, which takes its frontmatter from
+`_iter_entity_frontmatter` — a raw re-parse, exactly as the comment says.
 
 ### 1.3 `undeclared_key` does not cover these gaps
 
 An earlier draft of this design claimed the graph audit's `undeclared_key`
-diagnostic surfaces undeclared fields. It does not, for two reasons documented at
-`science/src/science_tool/graph/migrate.py:140-152`: it fires only for
+diagnostic surfaces undeclared fields. It does not, for two independently located reasons: the reference-field filter at
+`science/src/science_tool/graph/migrate.py:153-155` restricts it to
 `REFERENCE_FIELD_NAMES` — `{audits, blocked_by, chain, method, proposition_refs,
-workflow}`, 6 fields — and the caller suppresses it for strict-schema kinds. The
-intersection of those 6 with the 13 fields in this design's manifest is **empty**.
+workflow}`, 6 fields — and strict-kind suppression is a separate gate in
+`_audit_entity` at `migrate.py:578` (`if entity.kind not in strict_schema_kinds`).
+The intersection of those 6 fields with the 13 in this design's manifest is **empty**.
 
 The accurate statement is: **preserved and untyped; unwired unless a named raw
 reader exists.** No general diagnostic covers it.
@@ -71,10 +78,14 @@ field)` gaps** across the two live generations. Today the two generations happen
 to produce identical gap sets per kind, which is exactly why a pair-keyed
 manifest would look correct and silently exempt the same gap in a generation 4.
 
-The generations are not interchangeable: `mixin-hypothesis-1.0` (gen 2) and
-`mixin-hypothesis-2.0` (gen 3) differ on `required_capabilities`, whose items
-`$ref` moves from `capability_map` to `data_product_capability`. A battery
-authored against gen 2 does not cover gen 3.
+The generations are not interchangeable in principle: `mixin-hypothesis-1.0`
+(gen 2) and `mixin-hypothesis-2.0` (gen 3) differ on `required_capabilities`,
+whose items `$ref` moves from `capability_map` to `data_product_capability`.
+
+They happen to be interchangeable in fact, today, for every field a battery could
+cover — and §3.6 makes that a *derived* statement rather than an assumption.
+`required_capabilities` is itself an unheld gap on both generations, so it is not
+on the shared surface a battery reconciles.
 
 ---
 
@@ -169,23 +180,39 @@ Two reason forms:
   resolves each by adding the model field, forbidding it in the mixin, or
   producing a reader.
 
-Initial classification — **9 `Reader`, 22 `PendingRuling`** per `(kind, field)`,
-each present in both generations:
+A `Reader` claim is **necessary but not sufficient**, and the audit below shows
+why the human half cannot be dropped: `datasets_register._proxy_source_datasets`
+performs `proxy.get("sources")` and would satisfy any AST check for a keyed read
+of `sources` — while actually reading a nested key inside
+`identity_contract.assembly.proxy`, nothing to do with the entity's `sources`
+field. Each `Reader` entry therefore names the mapping as well as the symbol, and
+the reason string must identify it as *this kind's* frontmatter or `model_extra`.
+
+Classification after a full audit of all 31 pairs — **16 `Reader`,
+15 `PendingRuling`**, each present in both generations:
 
 | Field | Kinds | Reason |
 |---|---|---|
-| `required_capabilities` | hypothesis | `Reader` — `dataset_prioritize` reads `target_fm["required_capabilities"]` |
-| `capability_scope` | hypothesis | `Reader` — `validate.checks.dataset_capabilities` reads `fm["capability_scope"]` |
-| `provided_capabilities` | dataset | `Reader` — `skills_coverage.evidence` reads it from `model_extra` |
-| `runtime_state` | dataset | `Reader` — `dataset_prioritize` reads `row["runtime_state"]` |
-| `paper_kind` | paper | `Reader` — `validate.checks.document_structure` reads `ctx.frontmatter(path)["paper_kind"]` |
-| `tags` | dataset, paper, theme, topic | `Reader` — `entities_inventory` reads `data["tags"]` |
-| `contributors`, `licenses`, `schema_profile`, `sources`, `version` | dataset, paper, theme, topic | `PendingRuling` — commons record fields. `hypothesis` **forbids** all five; the other four mixins are silent. Which is right is S1b's ruling. |
-| `arxiv`, `pmcid` | paper | `PendingRuling` — `paper_fetch` handles same-named keys, but from a fetched API record, not entity frontmatter. Not a reader. |
+| `required_capabilities` | hypothesis | `Reader` — `dataset_prioritize.target_coverage`, `target_fm["required_capabilities"]`, where `target_fm` comes from `_iter_entity_frontmatter` gated on `_is_qh` |
+| `capability_scope` | hypothesis | `Reader` — same function, same raw frontmatter |
+| `provided_capabilities` | dataset | `Reader` — `skills_coverage.evidence`, `model_extra`, inside `if entity.kind != "dataset": continue` |
+| `paper_kind` | paper | `Reader` — `validate.checks.document_structure`, `ctx.frontmatter(path)["paper_kind"]` |
+| `tags` | dataset, paper, theme, topic | `Reader` — `commons.registry`, `record.frontmatter["tags"]` |
+| `schema_profile` | dataset, paper, theme, topic | `Reader` — `EntityValidator.validate`, `entity["schema_profile"]`; also `commons.adapter` |
+| `version` | dataset, paper, theme, topic | `Reader` — `commons.dataset_lifecycle` and `commons.overlay`, `frontmatter["version"]` |
+| `contributors`, `licenses` | dataset, paper, theme, topic | `PendingRuling` — **no keyed read exists anywhere** in either package |
+| `sources` | dataset, paper, theme, topic | `PendingRuling` — the only `sources` reads are the nested `assembly.proxy.sources` key above |
+| `runtime_state` | dataset | `PendingRuling` — `datasets.semantics.runtime_state_for(fm)` **derives** it from `dataset_class_for` / `has_runtime_artifact` / `_access`; the `row["runtime_state"]` reads consume that derived output, and `commons.promote:533` is a write |
+| `arxiv` | paper | `PendingRuling` — `skills_lint.sources._build_record` reads `raw["arxiv"]` from the skills source registry, not entity frontmatter |
+| `pmcid` | paper | `PendingRuling` — `paper_fetch` reads it from a fetched API record |
+
+Three entries in an earlier draft were wrong and are corrected here: `runtime_state`
+and `tags` were mis-cited as readers (the first derived, the second reading project
+`science.yaml`), and `schema_profile`/`version` were filed as debt despite having
+real readers. The count moved 9/22 → 16/15.
 
 A claimed `Reader` that fails its AST check at implementation time becomes a
-`PendingRuling`. The gate adjudicates its own manifest; this table is the
-starting classification, not an assertion that all nine will survive.
+`PendingRuling`. The gate adjudicates its own manifest.
 
 ### 3.4 Composition self-check
 
@@ -208,44 +235,70 @@ misread exactly this — counting `false` schemas as declared and reporting "17
 fields the model never heard of." The check makes that misreading unrepeatable
 instead of merely documented.
 
-### 3.5 Status partition
+### 3.5 Value-reconciliation status is derived, not declared
 
 Field-declaration coverage and value coverage are different depths, and
 conflating them is how "reconciled" comes to mean two things.
 
 §3.2 is unconditional: **every** derived profile is field-gated, with no opt-out.
-The status mapping therefore records only the *value* depth on top of it.
+What remains is value depth, and it is **derivable** — so declaring it per profile
+would restate membership, which is exactly what §3.3's rule forbids.
 
-`VALUE_RECONCILIATION: dict[tuple[int, str], Status]` — a **total** mapping over
-the derived `PROFILES`, with `Status` one of exactly two values:
+The unit of value reconciliation is not a profile and not a kind-field. It is:
 
-- `RECONCILED` — the deep battery of §3.6 also applies. Today exactly
-  `{(2, "hypothesis")}`.
-- `PENDING` — the exact remainder: the other 9 profiles, including
-  **`(3, "hypothesis")`**, whose `required_capabilities` schema differs materially
-  from the gen-2 form the battery was written against.
+```
+(kind, field, contract_hash)     # contract_hash = hash of the composed subschema for that field
+```
 
-The gate asserts the mapping's key set equals `PROFILES` exactly. A newly
-declared mixin or generation has no status and fails until classified.
+A battery entry encodes judgments about one *field contract*. If two generations
+compose byte-identical subschemas for a field, one battery entry covers both; if
+they diverge, the entry covers only the generation it was written against and the
+other must be re-authored. Nothing is assumed either way — the hash decides.
 
-The hand-written part declares **classification**; membership is derived. That is
-the program's own rule — a hand-written declaration is appropriate when it
-records a non-derivable judgment and its domain is checked exactly against a
-derived set.
+A profile is then `RECONCILED` iff every field on its shared surface has a
+batteried contract, and `PENDING` otherwise. Derived, not declared.
+
+Measured today: across the 10 profiles there are **208 profile-fields** but only
+**104 distinct `(kind, field, contract)` units**, because **zero** shared fields
+differ between generations 2 and 3. Consequently `(3, "hypothesis")` is
+`RECONCILED` *by derivation* — the existing gen-2 battery covers every one of its
+27 shared contracts. An earlier draft declared it `PENDING` on the strength of
+`required_capabilities`, which is an unheld gap on both generations and therefore
+not on the shared surface at all.
+
+The frozen part is a **ratchet on the derived result**: `PENDING_PROFILES` must
+equal the derived pending set exactly, so coverage cannot silently move in either
+direction. Today that is 8 profiles — the dataset, paper, theme, and topic
+profiles at both generations.
 
 ### 3.6 What the battery is, and where it stays
 
 The deep properties — *the schema is at least as strict as the projection* and
-*every admitted value survives the projection* — need per-field probe values.
-They cannot be derived: each probe encodes a judgment about what the schema ought
-to refuse. Authoring them for all 5 kinds is ~104 fields, of which hypothesis
-covers 27, leaving ~77.
+*every admitted value survives the projection* — need per-field probe values. They
+cannot be derived: each probe encodes a judgment about what the schema ought to
+refuse.
 
-**S1a authors none of them.** `test_hypothesis_entity.py` keeps its battery and
-its own equality ratchet; S1a changes only its stale prose and repoints its
-composition derivation at §2's shared helper. The other 9 profiles are marked
-`PENDING`, which is a declaration in code rather than an absence, and is S1b's
-queue.
+The arithmetic, using §3.5's unit:
+
+| | |
+|---|---|
+| Profile-fields across the 10 profiles | **208** |
+| Distinct `(kind, field, contract)` units | **104** |
+| Units covered by the existing hypothesis battery | **27** |
+| **Units remaining for S1b** | **77** |
+
+The gap between 208 and 104 is entirely the cross-generation equivalence rule; the
+gap between 181 (naive profile-fields minus hypothesis gen 2) and 77 is the same
+rule stated the other way. **An earlier draft quoted 77 without the rule**, which
+made the queue contradict a status mapping that treated generations as
+independent. The rule is now the thing that produces both numbers, and it is
+computed rather than asserted — if a future generation changes one field's
+subschema, that field's unit count rises and the queue grows on its own.
+
+**S1a authors none of the 77.** `test_hypothesis_entity.py` keeps its battery and
+its own equality ratchet; S1a changes only its three stale sentences and repoints
+its composition derivation at §2's shared helper. The 8 pending profiles are a
+derived result under a ratchet, which is S1b's queue.
 
 ---
 
@@ -282,10 +335,11 @@ Mutation proofs, each run and recorded:
 | Delete a declared field from `PaperEntity` | §3.2 for `(*, paper)` |
 | Remove one `UNHELD` entry | §3.2, "undeclared gap" |
 | Add a spurious `UNHELD` entry | §3.2, "stale exemption" |
-| Clone generation 3's mixin table into a generation 4 | §3.2 and §3.5 — proves the manifest is generation-keyed, not pair-keyed |
+| Clone generation 3's mixin table into a generation 4 | §3.2 — proves the manifest is generation-keyed, not pair-keyed |
 | Flip one hypothesis `false` property to `{}` | §3.4 |
 | Point a `Reader` at a symbol that does not read the field | the AST reader check |
-| Add a 6th mixin without a status | §3.5 |
+| Register a 6th mixin | §3.2 (no manifest entries) and §3.5 (derived-pending set grows) |
+| Alter one shared field's subschema in the gen-3 mixin only | §3.5 — its unit count rises to 2, `(3, "hypothesis")` derives to `PENDING`, the ratchet fires. **This is the proof that cross-generation equivalence is computed, not assumed.** |
 | Revert the `introspection.py` boolean fix | §3.4, via the shared derivation |
 
 ---
