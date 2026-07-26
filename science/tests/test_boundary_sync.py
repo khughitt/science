@@ -114,6 +114,257 @@ def test_verify_restores_on_exception(tmp_path: Path, monkeypatch):
 
 
 @pytest.mark.parametrize("operation", [sync, verify_current_tree])
+def test_root_gitignore_swap_before_atomic_replace_preserves_outside_target(tmp_path: Path, monkeypatch, operation):
+    from science_tool.boundary.gitio import BoundaryGitError
+    import science_tool.boundary.sync as sync_mod
+
+    repo = _repo(tmp_path, DECL)
+    gitignore = repo / ".gitignore"
+    outside = tmp_path / "outside-ignore"
+    original = b"outside/\n"
+    outside.write_bytes(original)
+
+    def swap_to_symlink(path: Path):
+        path.unlink()
+        path.symlink_to(outside)
+
+    monkeypatch.setattr(sync_mod, "_before_atomic_replace", swap_to_symlink)
+    with pytest.raises(BoundaryGitError, match="symlink"):
+        operation(repo)
+
+    assert gitignore.is_symlink()
+    assert outside.read_bytes() == original
+
+
+def test_verify_preserves_concurrent_edit_instead_of_restoring_over_it(tmp_path: Path, monkeypatch):
+    from science_tool.boundary.gitio import BoundaryGitError
+    import science_tool.boundary.sync as sync_mod
+
+    repo = _repo(tmp_path, DECL)
+    concurrent = b"concurrent\n"
+    calls = 0
+
+    def edit_after_install(_root: Path, paths: list[str]) -> dict[str, bool]:
+        nonlocal calls
+        calls += 1
+        if calls == 2:
+            (repo / ".gitignore").write_bytes(concurrent)
+        return {path: False for path in paths}
+
+    monkeypatch.setattr(sync_mod, "_probe_decisions", edit_after_install)
+    with pytest.raises(BoundaryGitError, match="changed during verification"):
+        verify_current_tree(repo)
+
+    assert (repo / ".gitignore").read_bytes() == concurrent
+
+
+def test_verify_preserves_same_byte_candidate_replacement(tmp_path: Path, monkeypatch):
+    from science_tool.boundary.gitio import BoundaryGitError
+    import science_tool.boundary.sync as sync_mod
+
+    repo = _repo(tmp_path, DECL)
+    replacement_inode = 0
+
+    def replace_candidate(path: Path):
+        nonlocal replacement_inode
+        replacement = path.with_name("concurrent-ignore")
+        replacement.write_bytes(path.read_bytes())
+        os.replace(replacement, path)
+        replacement_inode = path.stat().st_ino
+
+    monkeypatch.setattr(sync_mod, "_after_atomic_replace", replace_candidate)
+    with pytest.raises(BoundaryGitError, match="candidate installation"):
+        verify_current_tree(repo)
+
+    assert (repo / ".gitignore").stat().st_ino == replacement_inode
+
+
+def test_staging_cleanup_preserves_replaced_temp_name(tmp_path: Path, monkeypatch):
+    import science_tool.boundary.sync as sync_mod
+
+    repo = _repo(tmp_path, DECL)
+    replacement = b"concurrent temp\n"
+    staged_path: Path | None = None
+
+    def abort_replace(_path: Path):
+        raise RuntimeError("abort")
+
+    def replace_staged(path: Path):
+        nonlocal staged_path
+        path.unlink()
+        path.write_bytes(replacement)
+        staged_path = path
+
+    monkeypatch.setattr(sync_mod, "_before_atomic_replace", abort_replace)
+    monkeypatch.setattr(sync_mod, "_before_staged_cleanup", replace_staged)
+    with pytest.raises(RuntimeError, match="abort"):
+        sync(repo)
+
+    assert staged_path is not None
+    assert staged_path.read_bytes() == replacement
+
+
+def test_staging_cleanup_removes_unchanged_temp_on_pre_replace_failure(tmp_path: Path, monkeypatch):
+    import science_tool.boundary.sync as sync_mod
+
+    repo = _repo(tmp_path, DECL)
+
+    def abort_replace(_path: Path):
+        raise RuntimeError("abort")
+
+    monkeypatch.setattr(sync_mod, "_before_atomic_replace", abort_replace)
+    with pytest.raises(RuntimeError, match="abort"):
+        sync(repo)
+
+    assert not list(repo.glob(".science-boundary-*.tmp"))
+
+
+def test_verify_preserves_symlink_swapped_during_absent_file_cleanup(tmp_path: Path, monkeypatch):
+    from science_tool.boundary.gitio import BoundaryGitError
+    import science_tool.boundary.sync as sync_mod
+
+    repo = _repo(tmp_path, DECL)
+    gitignore = repo / ".gitignore"
+    gitignore.unlink()
+    subprocess.run(["git", "-C", str(repo), "rm", "-q", "--cached", ".gitignore"], check=True)
+    subprocess.run(["git", "-C", str(repo), "commit", "-qm", "drop"], check=True)
+    outside = tmp_path / "outside-ignore"
+    outside.write_bytes(b"outside\n")
+    replacements = 0
+    probes = 0
+
+    def swap_on_restore(path: Path):
+        nonlocal replacements
+        replacements += 1
+        if replacements == 2:
+            path.unlink()
+            path.symlink_to(outside)
+
+    def fail_after_install(*_a, **_k):
+        nonlocal probes
+        probes += 1
+        if probes == 2:
+            raise RuntimeError("probe failure")
+        return {}
+
+    monkeypatch.setattr(sync_mod, "_before_atomic_replace", swap_on_restore)
+    monkeypatch.setattr(sync_mod, "_probe_decisions", fail_after_install)
+    with pytest.raises(BoundaryGitError, match="symlink"):
+        verify_current_tree(repo)
+
+    assert gitignore.is_symlink()
+    assert outside.read_bytes() == b"outside\n"
+
+
+def test_verify_restores_when_candidate_git_probe_fails(tmp_path: Path, monkeypatch):
+    from science_tool.boundary.gitio import BoundaryGitError
+    import science_tool.boundary.sync as sync_mod
+
+    repo = _repo(tmp_path, DECL)
+    before = (repo / ".gitignore").read_bytes()
+    real_run = sync_mod.subprocess.run
+    probes = 0
+
+    class _Failed:
+        returncode = 128
+        stdout = b""
+        stderr = b"fatal: injected failure"
+
+    def fail_second_probe(args, **kwargs):
+        nonlocal probes
+        if "check-ignore" in args:
+            probes += 1
+            if probes == 2:
+                return _Failed()
+        return real_run(args, **kwargs)
+
+    monkeypatch.setattr(sync_mod.subprocess, "run", fail_second_probe)
+    with pytest.raises(BoundaryGitError, match="check-ignore failed"):
+        verify_current_tree(repo)
+
+    assert probes == 2
+    assert (repo / ".gitignore").read_bytes() == before
+
+
+@pytest.mark.parametrize(
+    ("stdout", "problem"),
+    [
+        (b"data/external/probe.bin", "terminate"),
+        (b"\0", "empty"),
+        (b"outside/probe.bin\0", "unexpected"),
+    ],
+)
+def test_probe_decisions_rejects_malformed_git_output(tmp_path: Path, monkeypatch, stdout: bytes, problem: str):
+    from science_tool.boundary.gitio import BoundaryGitError
+    import science_tool.boundary.sync as sync_mod
+
+    repo = _repo(tmp_path, DECL)
+
+    class _Result:
+        returncode = 0
+        stderr = b""
+
+        def __init__(self, output: bytes):
+            self.stdout = output
+
+    monkeypatch.setattr(sync_mod.subprocess, "run", lambda *_a, **_k: _Result(stdout))
+    with pytest.raises(BoundaryGitError, match=problem):
+        sync_mod._probe_decisions(repo, ["data/external/probe.bin"])
+
+
+@pytest.mark.parametrize(
+    ("returncode", "stdout", "problem"),
+    [
+        (1, b"data/external/probe.bin\0", "return code 1"),
+        (0, b"", "return code 0"),
+    ],
+)
+def test_probe_decisions_rejects_impossible_git_return_output_pairs(
+    tmp_path: Path,
+    monkeypatch,
+    returncode: int,
+    stdout: bytes,
+    problem: str,
+):
+    from science_tool.boundary.gitio import BoundaryGitError
+    import science_tool.boundary.sync as sync_mod
+
+    repo = _repo(tmp_path, DECL)
+
+    class _Result:
+        stderr = b""
+
+        def __init__(self, code: int, output: bytes):
+            self.returncode = code
+            self.stdout = output
+
+    monkeypatch.setattr(sync_mod.subprocess, "run", lambda *_a, **_k: _Result(returncode, stdout))
+    with pytest.raises(BoundaryGitError, match=problem):
+        sync_mod._probe_decisions(repo, ["data/external/probe.bin"])
+
+
+def test_verify_deduplicates_real_paths_and_probes(tmp_path: Path, monkeypatch):
+    import science_tool.boundary.sync as sync_mod
+
+    repo = _repo(tmp_path, DECL)
+    path = repo / "data/external/probe.bin"
+    path.parent.mkdir(parents=True)
+    path.write_bytes(b"x")
+    calls: list[list[str]] = []
+
+    def decisions(_root: Path, paths: list[str]) -> dict[str, bool]:
+        calls.append(paths)
+        return {item: False for item in paths}
+
+    monkeypatch.setattr(sync_mod, "_probe_decisions", decisions)
+    verify_current_tree(repo)
+
+    assert len(calls) == 2
+    assert all(paths == sorted(paths) for paths in calls)
+    assert all(paths.count("data/external/probe.bin") == 1 for paths in calls)
+
+
+@pytest.mark.parametrize("operation", [sync, verify_current_tree])
 def test_root_gitignore_symlink_is_rejected_without_following(tmp_path: Path, operation):
     from science_tool.boundary.gitio import BoundaryGitError
 
