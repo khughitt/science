@@ -32,19 +32,56 @@ skills_group.add_command(coverage_command)
 @skills_group.command(name="lint")
 @click.option("--root", type=click.Path(exists=True, file_okay=False), default="skills")
 @click.option("--format", "fmt", type=click.Choice(["text", "json"]), default="text")
-def lint_cmd(root: str, fmt: str) -> None:
+@click.option(
+    "--output",
+    "output_path",
+    type=click.Path(path_type=Path),
+    default=None,
+    help="Write the complete, unbudgeted report to PATH instead of stdout.",
+)
+def lint_cmd(root: str, fmt: str, output_path: Path | None) -> None:
     """Lint the skills/ tree for structural conformance."""
+    from science_tool.budget.control import bounded_control_notice
+    from science_tool.budget.invocation import build_complete_via, hint_for
+    from science_tool.budget.projection import project_rows
+    from science_tool.budget.registry import lookup
+    from science_tool.budget.sink import BoundedSink
+
     issues = check_skills(Path(root))
 
-    def _render() -> None:
-        for issue in issues:
-            click.echo(_format_text_issue(issue))
-
-    emit(
-        output_format=fmt,
-        payload={"issues": [issue.to_json() for issue in issues]},
-        render_text=_render,
+    sink = BoundedSink(
+        lookup("skills lint"),
+        output_path=output_path,
+        command_path="skills lint",
+        complete_via=build_complete_via(click.get_current_context(), output_hint=hint_for("skills-lint", fmt)),
     )
+    control_notice = (
+        bounded_control_notice(f"wrote {len(issues)} issues to {output_path}") if output_path is not None else None
+    )
+
+    projected = project_rows(issues, sink.max_rows)
+    displayed_issues = projected.rows
+    payload: dict[str, object] = {"issues": [issue.to_json() for issue in displayed_issues]}
+    if projected.truncated:
+        payload["truncation"] = {
+            "omitted": projected.omitted,
+            "total": projected.total,
+            "complete_via": sink.complete_via,
+        }
+
+    def _render() -> None:
+        for issue in displayed_issues:
+            sink.echo(_format_text_issue(issue))
+        if projected.truncated:
+            sink.echo(f"showing {len(displayed_issues)} of {projected.total} issues")
+            sink.echo(f"  complete output:  {sink.complete_via}")
+
+    emit(output_format=fmt, payload=payload, render_text=_render, sink=sink)
+    sink.flush()
+    if control_notice is not None:
+        click.echo(control_notice)
+
+    # Exit reflects the FULL issue list, never the projected display.
     if _has_error(issues):
         raise click.exceptions.Exit(1)
 

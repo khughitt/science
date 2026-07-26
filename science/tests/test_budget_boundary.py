@@ -22,9 +22,9 @@ from science_tool.budget.registry import BUDGETS, DEFERRED, EXEMPTIONS
 from science_tool.cli import main
 
 EXPECTED_CLASSIFICATION_COUNTS = {
-    "budgeted": 34,
+    "budgeted": 41,
     "exempt": 111,
-    "deferred": 134,
+    "deferred": 127,
 }
 
 
@@ -75,8 +75,10 @@ def test_classification_partition_has_the_audited_cardinality() -> None:
     rehoming-debt, uncertainty), moving them from deferred to budgeted. Batch W1b then
     wired 9 more ROWS-via-emit-query-rows commands (datasets files/search/validate,
     entity rotation, feedback regression-candidates/targets, inquiry list, project
-    index, tasks archive), moving them from deferred to budgeted. The live partition
-    is therefore 34/111/134 = 279.
+    index, tasks archive), moving them from deferred to budgeted. Batch W2 then wired 7
+    more ROWS-via-emit commands (annotate promote, big-picture resolve-questions,
+    book-split, dataset reconcile-links, qa-audit, skills lint, tasks blockers), moving
+    them from deferred to budgeted. The live partition is therefore 41/111/127 = 279.
     """
     actual = {
         "budgeted": len(BUDGETS),

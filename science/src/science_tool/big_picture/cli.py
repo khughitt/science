@@ -36,18 +36,89 @@ def big_picture_group() -> None:
     show_default=True,
     help="Path to the project root (containing specs/, doc/, science.yaml).",
 )
-def resolve_questions_cmd(project_root: Path) -> None:
-    """Emit question→hypothesis resolver output as JSON."""
+@click.option(
+    "--format",
+    "output_format",
+    type=click.Choice(["table", "json"]),
+    default="json",
+    show_default=True,
+    help="Output format.",
+)
+@click.option(
+    "--output",
+    "output_path",
+    type=click.Path(path_type=Path),
+    default=None,
+    help="Write the complete, unbudgeted report to PATH instead of stdout.",
+)
+def resolve_questions_cmd(project_root: Path, output_format: str, output_path: Path | None) -> None:
+    """Emit question→hypothesis resolver output.
+
+    Successful results are enveloped under ``questions`` (mirroring the empty-result
+    shape below) so a ``truncation`` sibling key can never collide with a question id.
+    """
+    from science_tool.budget.control import bounded_control_notice
+    from science_tool.budget.invocation import build_complete_via, hint_for
+    from science_tool.budget.projection import project_rows
+    from science_tool.budget.registry import lookup
+    from science_tool.budget.sink import BoundedSink
+
+    sink = BoundedSink(
+        lookup("big-picture resolve-questions"),
+        output_path=output_path,
+        command_path="big-picture resolve-questions",
+        complete_via=build_complete_via(
+            click.get_current_context(), output_hint=hint_for("resolve-questions", output_format)
+        ),
+    )
+    control_notice = (
+        bounded_control_notice(f"wrote the complete resolver report to {output_path}")
+        if output_path is not None
+        else None
+    )
+
     results = resolve_questions(project_root)
     if not results:
-        payload = {
+        payload: dict[str, object] = {
             "status": "empty",
             "reason": "no question entities found",
             "questions": {},
         }
-    else:
-        payload = {qid: asdict(out) for qid, out in results.items()}
-    emit(output_format="json", payload=payload, render_text=lambda: None, sort_keys=True)
+
+        def _render_empty() -> None:
+            sink.echo("no question entities found")
+
+        emit(output_format=output_format, payload=payload, render_text=_render_empty, sink=sink, sort_keys=True)
+        sink.flush()
+        if control_notice is not None:
+            click.echo(control_notice)
+        return
+
+    rows = sorted(results.items())
+    projected = project_rows(rows, sink.max_rows)
+    displayed = projected.rows
+
+    payload = {"questions": {qid: asdict(out) for qid, out in displayed}}
+    if projected.truncated:
+        payload["truncation"] = {
+            "omitted": projected.omitted,
+            "total": projected.total,
+            "complete_via": sink.complete_via,
+        }
+
+    def _render_table() -> None:
+        for qid, out in displayed:
+            primary = out.primary_hypothesis or "-"
+            hyps = ", ".join(h.id for h in out.hypotheses) or "-"
+            sink.echo(f"{qid}: primary={primary} hypotheses=[{hyps}]")
+        if projected.truncated:
+            sink.echo(f"showing {len(displayed)} of {projected.total} questions")
+            sink.echo(f"  complete output:  {sink.complete_via}")
+
+    emit(output_format=output_format, payload=payload, render_text=_render_table, sink=sink, sort_keys=True)
+    sink.flush()
+    if control_notice is not None:
+        click.echo(control_notice)
 
 
 @big_picture_group.command("synthesis-path")

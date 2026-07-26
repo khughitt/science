@@ -94,6 +94,13 @@ BUDGETS: dict[str, CommandBudget] = {
     "inquiry list": CommandBudget(max_chars=20_000, shape=PayloadShape.ROWS, max_rows=40),
     "project index": CommandBudget(max_chars=20_000, shape=PayloadShape.ROWS, max_rows=40),
     "tasks archive": CommandBudget(max_chars=20_000, shape=PayloadShape.ROWS, max_rows=40),
+    "annotate promote": CommandBudget(max_chars=20_000, shape=PayloadShape.ROWS, max_rows=40),
+    "big-picture resolve-questions": CommandBudget(max_chars=20_000, shape=PayloadShape.ROWS, max_rows=40),
+    "book-split": CommandBudget(max_chars=20_000, shape=PayloadShape.ROWS, max_rows=40),
+    "dataset reconcile-links": CommandBudget(max_chars=20_000, shape=PayloadShape.ROWS, max_rows=40),
+    "qa-audit": CommandBudget(max_chars=20_000, shape=PayloadShape.ROWS, max_rows=40),
+    "skills lint": CommandBudget(max_chars=20_000, shape=PayloadShape.ROWS, max_rows=40),
+    "tasks blockers": CommandBudget(max_chars=20_000, shape=PayloadShape.ROWS, max_rows=40),
 }
 
 EXEMPTIONS: dict[str, str] = {
@@ -243,7 +250,6 @@ DEFERRED.update(
             "annotate list",
             "annotate plan-proposition-reconciliation",
             "annotate plan-prose-promotions",
-            "annotate promote",
             "annotate reconcile-propositions",
             "annotate record-proposition-reconciliation-decisions",
             "annotate resynthesis-draft-context",
@@ -259,9 +265,7 @@ DEFERRED.update(
 DEFERRED.update(
     {
         "belief profile": DeferredCommand("one row per belief-bearing entity", "1b"),
-        "book-split": DeferredCommand("one row per detected chapter", "1b"),
         "markers scan": DeferredCommand("one row per marker hit and token", "1b"),
-        "qa-audit": DeferredCommand("one row per audited workflow", "1b"),
         "search": DeferredCommand("one row per matching project record", "1b"),
         "wander": DeferredCommand("one output member per generated walk item", "1b"),
     }
@@ -285,7 +289,6 @@ DEFERRED.update(
         for path in (
             "big-picture cluster-digests",
             "big-picture knowledge-gaps",
-            "big-picture resolve-questions",
             "big-picture validate",
         )
     }
@@ -333,7 +336,6 @@ DEFERRED.update(
             "dataset identity resolve",
             "dataset list",
             "dataset prioritize",
-            "dataset reconcile-links",
             "dataset register-run",
             "dataset stochasticity",
             "dataset verify-access",
@@ -493,7 +495,6 @@ DEFERRED.update(
         )
         for path in (
             "skills coverage",
-            "skills lint",
             "skills sources check",
             "skills sources list",
         )
@@ -513,10 +514,7 @@ DEFERRED.update(
 DEFERRED.update(
     {
         path: DeferredCommand("one output member per blocker, task preview row, or blocker repair", "1b")
-        for path in (
-            "tasks blockers",
-            "tasks fix-blockers",
-        )
+        for path in ("tasks fix-blockers",)
     }
 )
 DEFERRED.update(

@@ -396,3 +396,100 @@ def test_project_index_output_file_is_complete_and_stdout_is_a_control_notice(pr
     assert len(payload["rows"]) == 301
     assert sum(row["kind"] == "question" for row in payload["rows"]) == 300
     assert sum(row["kind"] == "hypothesis" for row in payload["rows"]) == 1
+
+
+@pytest.fixture
+def tasks_blockers_overflow_project(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
+    """One task blocked by 50 refs to nonexistent entities -> 50 unresolved blocker rows.
+
+    An unresolved ref costs one cheap dict lookup (`ReadinessResolver.resolve_ref`), so
+    this needs no entity fixtures at all.
+    """
+    (tmp_path / "science.yaml").write_text("id: demo\nname: demo\n")
+    tasks_dir = tmp_path / "tasks"
+    tasks_dir.mkdir()
+    refs = ", ".join(f"dataset:missing-{i:03d}" for i in range(50))
+    (tasks_dir / "active.md").write_text(
+        "## [t001] Task blocked by many unresolved refs\n"
+        "- priority: P2\n"
+        "- status: blocked\n"
+        f"- blocked-by: [{refs}]\n"
+        "- created: 2026-01-01\n\n"
+        "Body.\n"
+    )
+    monkeypatch.chdir(tmp_path)
+    return tmp_path
+
+
+def test_tasks_blockers_stdout_stays_within_its_ceiling_and_reports_truncation(
+    tasks_blockers_overflow_project: Path,
+) -> None:
+    result = _invoke(["tasks", "blockers", "t001"])
+    assert result.exit_code == 0, result.output
+    ceiling = BUDGETS["tasks blockers"].max_chars
+    assert visible_len(result.output) <= ceiling
+    assert "showing 40 of 50 blockers" in result.output
+    assert "complete output:" in result.output
+
+    js = _invoke(["tasks", "blockers", "t001", "--format", "json"])
+    payload = json.loads(js.output)
+    assert len(payload["blockers"]) == 40
+    assert payload["truncation"]["total"] == 50
+    assert payload["truncation"]["omitted"] == 10
+
+
+def test_tasks_blockers_output_file_is_complete(tasks_blockers_overflow_project: Path) -> None:
+    target = tasks_blockers_overflow_project / "blockers.json"
+    result = _invoke(["tasks", "blockers", "t001", "--format", "json", "--output", str(target)])
+    assert result.exit_code == 0, result.output
+    assert result.output.count("\n") == 1
+    assert "wrote 50 blockers to" in result.output
+
+    payload = json.loads(target.read_text())
+    assert len(payload["blockers"]) == 50
+    assert {row["ref"] for row in payload["blockers"]} == {f"dataset:missing-{i:03d}" for i in range(50)}
+    assert "truncation" not in payload
+
+
+@pytest.fixture
+def skills_lint_overflow_root(tmp_path: Path) -> Path:
+    """50 skill leaves with no frontmatter block -> well over 40 lint issues.
+
+    Each file trips `missing-frontmatter` plus follow-on checks (companion skills,
+    halt-on, provenance) that all key off the same absent frontmatter block.
+    """
+    root = tmp_path / "skills"
+    root.mkdir()
+    for i in range(50):
+        (root / f"leaf{i:03d}.md").write_text("no frontmatter here\n")
+    return root
+
+
+def test_skills_lint_stdout_stays_within_its_ceiling_and_reports_truncation(
+    skills_lint_overflow_root: Path,
+) -> None:
+    result = _invoke(["skills", "lint", "--root", str(skills_lint_overflow_root)])
+    assert result.exit_code == 1, result.output  # exit code from the FULL issue list
+    ceiling = BUDGETS["skills lint"].max_chars
+    assert visible_len(result.output) <= ceiling
+    assert "showing 40 of" in result.output
+    assert "complete output:" in result.output
+
+    js = _invoke(["skills", "lint", "--root", str(skills_lint_overflow_root), "--format", "json"])
+    payload = json.loads(js.output)
+    assert len(payload["issues"]) == 40
+    assert payload["truncation"]["total"] > 40
+
+
+def test_skills_lint_output_file_is_complete(skills_lint_overflow_root: Path, tmp_path: Path) -> None:
+    target = tmp_path / "lint.json"
+    result = _invoke(
+        ["skills", "lint", "--root", str(skills_lint_overflow_root), "--format", "json", "--output", str(target)]
+    )
+    assert result.exit_code == 1, result.output  # exit code from the FULL issue list, even on the file-sink path
+    assert result.output.count("\n") == 1
+    assert "wrote " in result.output and " issues to" in result.output
+
+    payload = json.loads(target.read_text())
+    assert len(payload["issues"]) > 40
+    assert "truncation" not in payload

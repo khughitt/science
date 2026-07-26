@@ -26,13 +26,15 @@ def test_resolve_questions_emits_json() -> None:
     )
     assert result.exit_code == 0, result.output
     payload = json.loads(result.output)
-    assert "question:q01-direct-to-h1" in payload
-    q04 = payload["question:q04-cross-cutting"]
+    questions = payload["questions"]
+    assert "question:q01-direct-to-h1" in questions
+    q04 = questions["question:q04-cross-cutting"]
     assert {h["id"] for h in q04["hypotheses"]} == {
         "hypothesis:h1-alpha",
         "hypothesis:h2-beta",
     }
-    assert payload["question:q05-orphan"]["primary_hypothesis"] is None
+    assert questions["question:q05-orphan"]["primary_hypothesis"] is None
+    assert "truncation" not in payload
 
 
 def test_resolve_questions_empty_output_reports_status(tmp_path: Path) -> None:

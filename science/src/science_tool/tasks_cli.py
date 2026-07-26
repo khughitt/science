@@ -179,8 +179,20 @@ def _missing_project_entity_lookup(_ref: str) -> object | None:
 @tasks_group.command("blockers")
 @click.argument("task_id")
 @click.option("--format", "fmt", type=click.Choice(["table", "json"]), default="table")
-def tasks_blockers(task_id: str, fmt: str) -> None:
+@click.option(
+    "--output",
+    "output_path",
+    type=click.Path(path_type=Path),
+    default=None,
+    help="Write the complete, unbudgeted report to PATH instead of stdout.",
+)
+def tasks_blockers(task_id: str, fmt: str, output_path: Path | None) -> None:
     """Show per-blocker readiness for a task."""
+    from science_tool.budget.control import bounded_control_notice
+    from science_tool.budget.invocation import build_complete_via, hint_for
+    from science_tool.budget.projection import project_rows
+    from science_tool.budget.registry import lookup
+    from science_tool.budget.sink import BoundedSink
     from science_tool.tasks import _find_task, _read_active
     from science_tool.tasks_readiness import make_project_resolver
 
@@ -208,16 +220,42 @@ def tasks_blockers(task_id: str, fmt: str) -> None:
             }
         )
 
+    sink = BoundedSink(
+        lookup("tasks blockers"),
+        output_path=output_path,
+        command_path="tasks blockers",
+        complete_via=build_complete_via(click.get_current_context(), output_hint=hint_for("tasks-blockers", fmt)),
+    )
+    control_notice = (
+        bounded_control_notice(f"wrote {len(rows)} blockers to {output_path}") if output_path is not None else None
+    )
+
+    projected = project_rows(rows, sink.max_rows)
+    displayed_rows = projected.rows
+    payload: dict[str, object] = {"task_id": task.id, "blockers": displayed_rows}
+    if projected.truncated:
+        payload["truncation"] = {
+            "omitted": projected.omitted,
+            "total": projected.total,
+            "complete_via": sink.complete_via,
+        }
+
     def _render() -> None:
-        click.echo(f"Blockers for [{task.id}] {task.title}:")
-        for row in rows:
+        sink.echo(f"Blockers for [{task.id}] {task.title}:")
+        for row in displayed_rows:
             marker = "✓" if row["ready"] else "·"
             line = f"  {marker} {row['ref']:40s}  {row['state']}"
             if row["detail"]:
                 line += f"  ({row['detail']})"
-            click.echo(line)
+            sink.echo(line)
+        if projected.truncated:
+            sink.echo(f"showing {len(displayed_rows)} of {projected.total} blockers")
+            sink.echo(f"  complete output:  {sink.complete_via}")
 
-    emit(output_format=fmt, payload={"task_id": task.id, "blockers": rows}, render_text=_render)
+    emit(output_format=fmt, payload=payload, render_text=_render, sink=sink)
+    sink.flush()
+    if control_notice is not None:
+        click.echo(control_notice)
 
 
 @tasks_group.command("fix-blockers")

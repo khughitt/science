@@ -549,26 +549,67 @@ def dataset_link(dataset_ref: str, target_ref: str, project_root: Path | None) -
     type=click.Path(path_type=Path, file_okay=False, dir_okay=True),
     help="Project root (defaults to SCIENCE_PROJECT_ROOT env var or cwd)",
 )
-def dataset_reconcile_links(fix: bool, output_format: str, project_root: Path | None) -> None:
+@click.option(
+    "--output",
+    "output_path",
+    type=click.Path(path_type=Path),
+    default=None,
+    help="Write the complete, unbudgeted report to PATH instead of stdout.",
+)
+def dataset_reconcile_links(fix: bool, output_format: str, project_root: Path | None, output_path: Path | None) -> None:
     """Report or fix Q/H free-text datasets: entries that resolve to dataset ids."""
+    from science_tool.budget.control import bounded_control_notice
+    from science_tool.budget.invocation import build_complete_via, hint_for
+    from science_tool.budget.projection import project_rows
+    from science_tool.budget.registry import lookup
+    from science_tool.budget.sink import BoundedSink
     from science_tool.datasets_catalog import reconcile_dataset_links
 
     root = project_root.resolve() if project_root else _project_root_from_env()
     rows = unwrap_instrument(reconcile_dataset_links(root, fix=fix), what="dataset reconcile-links")
 
+    sink = BoundedSink(
+        lookup("dataset reconcile-links"),
+        output_path=output_path,
+        command_path="dataset reconcile-links",
+        complete_via=build_complete_via(
+            click.get_current_context(), output_hint=hint_for("dataset-reconcile-links", output_format)
+        ),
+    )
+    control_notice = (
+        bounded_control_notice(f"wrote {len(rows)} rows to {output_path}") if output_path is not None else None
+    )
+
+    projected = project_rows(rows, sink.max_rows)
+    displayed_rows = projected.rows
+    payload: dict[str, object] = {"rows": displayed_rows}
+    if projected.truncated:
+        payload["truncation"] = {
+            "omitted": projected.omitted,
+            "total": projected.total,
+            "complete_via": sink.complete_via,
+        }
+
     def _render() -> None:
-        if rows:
-            for row in rows:
+        if displayed_rows:
+            for row in displayed_rows:
                 action = "fixed" if fix else "would fix"
-                click.echo(
+                sink.echo(
                     f"{action}: {row['file']} {row['entity_id']} datasets entry "
                     f"{row['entry']!r} -> {row['resolved_dataset']} ({row['reason']})"
                 )
         else:
-            click.echo("no resolvable free-text dataset links")
+            sink.echo("no resolvable free-text dataset links")
+        if projected.truncated:
+            sink.echo(f"showing {len(displayed_rows)} of {projected.total} rows")
+            sink.echo(f"  complete output:  {sink.complete_via}")
 
-    emit(output_format=output_format, payload={"rows": rows}, render_text=_render)
+    emit(output_format=output_format, payload=payload, render_text=_render, sink=sink)
+    sink.flush()
+    if control_notice is not None:
+        click.echo(control_notice)
 
+    # Exit reflects the FULL result, never the projected display.
     if rows and not fix:
         raise click.exceptions.Exit(1)
 

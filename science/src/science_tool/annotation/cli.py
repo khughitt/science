@@ -2465,8 +2465,21 @@ def extract_cmd(
     help="Edited candidates.json with curator overrides (use with --apply).",
 )
 @click.option("--format", "fmt", type=click.Choice(("table", "json")), default="table")
+@click.option(
+    "--output",
+    "output_path",
+    type=click.Path(path_type=Path),
+    default=None,
+    help="Write the complete, unbudgeted report to PATH instead of stdout.",
+)
 def promote_cmd(
-    source_md: Path, root: Path | None, paper_ref: str | None, do_apply: bool, input_path: Path | None, fmt: str
+    source_md: Path,
+    root: Path | None,
+    paper_ref: str | None,
+    do_apply: bool,
+    input_path: Path | None,
+    fmt: str,
+    output_path: Path | None,
 ) -> None:
     """Promote statement annotations (proposition/question/hypothesis) into entities (mint-or-link)."""
     from science_tool.annotation.io import sidecar_for_markdown
@@ -2486,9 +2499,26 @@ def promote_cmd(
         TextSourceAdapterError,
         resolve_adapter,
     )
+    from science_tool.budget.control import bounded_control_notice
+    from science_tool.budget.invocation import build_complete_via, hint_for
+    from science_tool.budget.projection import project_rows
+    from science_tool.budget.registry import lookup
+    from science_tool.budget.sink import BoundedSink
 
     if input_path is not None and not do_apply:
         raise click.ClickException("--input requires --apply (curator overrides only apply when writing)")
+
+    sink = BoundedSink(
+        lookup("annotate promote"),
+        output_path=output_path,
+        command_path="annotate promote",
+        complete_via=build_complete_via(click.get_current_context(), output_hint=hint_for("annotate-promote", fmt)),
+    )
+    control_notice = (
+        bounded_control_notice(f"wrote the complete promotion report to {output_path}")
+        if output_path is not None
+        else None
+    )
 
     project_root = (root or Path.cwd()).resolve()
     if paper_ref is None:
@@ -2535,17 +2565,29 @@ def promote_cmd(
     ]
 
     if not do_apply:
+        projected = project_rows(rows, sink.max_rows)
+        displayed_rows = projected.rows
+
+        payload: dict[str, object] = {"candidates": displayed_rows, "skipped": dict(skipped)}
+        if projected.truncated:
+            payload["truncation"] = {
+                "omitted": projected.omitted,
+                "total": projected.total,
+                "complete_via": sink.complete_via,
+            }
 
         def _render_plan() -> None:
-            for r in rows:
-                click.echo(f"{r['kind']:11} {r['decision']:9} {r['slug'] or '-':40} {r['annotation']}  {r['claim']}")
-            click.echo(f"skipped: {dict(skipped) or 'none'}")
+            for r in displayed_rows:
+                sink.echo(f"{r['kind']:11} {r['decision']:9} {r['slug'] or '-':40} {r['annotation']}  {r['claim']}")
+            sink.echo(f"skipped: {dict(skipped) or 'none'}")
+            if projected.truncated:
+                sink.echo(f"showing {len(displayed_rows)} of {projected.total} candidates")
+                sink.echo(f"  complete output:  {sink.complete_via}")
 
-        emit(
-            output_format=fmt,
-            payload={"candidates": rows, "skipped": dict(skipped)},
-            render_text=_render_plan,
-        )
+        emit(output_format=fmt, payload=payload, render_text=_render_plan, sink=sink)
+        sink.flush()
+        if control_notice is not None:
+            click.echo(control_notice)
         return
 
     try:
@@ -2553,22 +2595,35 @@ def promote_cmd(
     except PromotionApplyError as exc:
         raise click.ClickException(str(exc)) from exc
 
+    written_projected = project_rows(report.written_paths, sink.max_rows)
+    displayed_written = written_projected.rows
+
+    payload = {
+        "minted": report.minted,
+        "linked": report.linked,
+        "skipped": dict(report.skipped) | dict(skipped),
+        "written": displayed_written,
+    }
+    if written_projected.truncated:
+        payload["truncation"] = {
+            "omitted": written_projected.omitted,
+            "total": written_projected.total,
+            "complete_via": sink.complete_via,
+        }
+
     def _render_apply() -> None:
-        click.echo(
+        sink.echo(
             f"annotate promote: {report.minted} minted, {report.linked} linked, "
             f"skipped {dict(report.skipped) | dict(skipped)}"
         )
+        if written_projected.truncated:
+            sink.echo(f"showing {len(displayed_written)} of {written_projected.total} written paths")
+            sink.echo(f"  complete output:  {sink.complete_via}")
 
-    emit(
-        output_format=fmt,
-        payload={
-            "minted": report.minted,
-            "linked": report.linked,
-            "skipped": dict(report.skipped) | dict(skipped),
-            "written": report.written_paths,
-        },
-        render_text=_render_apply,
-    )
+    emit(output_format=fmt, payload=payload, render_text=_render_apply, sink=sink)
+    sink.flush()
+    if control_notice is not None:
+        click.echo(control_notice)
 
 
 @annotate_group.command("synthesize")
