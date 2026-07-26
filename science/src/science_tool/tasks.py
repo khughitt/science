@@ -79,6 +79,7 @@ class TaskIntegrityError(ValueError):
 
 _TASK_ID_PATTERN = r"t[0-9]{3,}"
 _HEADER_RE = re.compile(rf"^##\s+\[({_TASK_ID_PATTERN})\]\s+(.+)$")
+_FRONTMATTER_ID_RE = re.compile(rf"^id:\s*({_TASK_ID_PATTERN})\s*$")
 _ANY_TASK_HEADER_RE = re.compile(r"^##\s+\[([^\]]+)\]\s+(.+)$")
 _FIELD_RE = re.compile(r"^-\s+([\w-]+):\s*(.*)$")
 _LIST_RE = re.compile(r"^\[(.+)\]$")
@@ -525,7 +526,7 @@ def find_dangling_task_refs(tasks_dir: Path) -> dict[str, list[str]]:
     known = known_task_ids(tasks_dir)
     dangling: dict[str, list[str]] = {}
     for path in _task_search_paths(tasks_dir):
-        for task in parse_tasks(path):
+        for task in _parse_path_tasks(path):
             bad: list[str] = []
             for ref in [*task.blocked_by, task.parent]:
                 if not ref:
@@ -618,6 +619,23 @@ def _strict_task_ids_in_text(text: str) -> list[str]:
     return ids
 
 
+def _strict_frontmatter_task_ids_in_text(text: str) -> list[str]:
+    frontmatter, _body = _split_frontmatter_text(text)
+    ids: list[str] = []
+    for line in frontmatter.splitlines():
+        match = _FRONTMATTER_ID_RE.match(line)
+        if match:
+            ids.append(match.group(1))
+    return ids
+
+
+def _strict_task_ids_in_path(path: Path) -> list[str]:
+    text = path.read_text(encoding="utf-8")
+    if path.parent.name == "active":
+        return _strict_frontmatter_task_ids_in_text(text)
+    return _strict_task_ids_in_text(text)
+
+
 @contextmanager
 def _task_allocation_lock(tasks_dir: Path) -> Iterator[None]:
     """Serialize ID allocation + active.md writes across concurrent processes.
@@ -638,25 +656,41 @@ def _task_allocation_lock(tasks_dir: Path) -> Iterator[None]:
 
 
 def next_task_id(tasks_dir: Path) -> str:
-    """Determine the next task ID by scanning active.md and done/ directory."""
+    """Determine the next task ID by scanning active/ and done/."""
     max_num = 0
 
-    active = tasks_dir / "active.md"
-    if active.is_file():
-        for task_id in _strict_task_ids_in_text(active.read_text()):
-            max_num = max(max_num, int(task_id[1:]))
+    active = _active_dir(tasks_dir)
+    if active.is_dir():
+        for path in active.glob("*.md"):
+            for task_id in _strict_task_ids_in_path(path):
+                max_num = max(max_num, int(task_id[1:]))
 
     done_dir = tasks_dir / "done"
     if done_dir.is_dir():
-        for f in done_dir.glob("*.md"):
-            for task_id in _strict_task_ids_in_text(f.read_text()):
+        for path in done_dir.glob("*.md"):
+            for task_id in _strict_task_ids_in_path(path):
                 max_num = max(max_num, int(task_id[1:]))
 
     return f"t{max_num + 1:03d}"
 
 
-def _read_active(tasks_dir: Path) -> list[Task]:
-    return parse_tasks(tasks_dir / "active.md")
+def _parse_path_tasks(path: Path) -> list[Task]:
+    """Parse one task search path according to its storage format."""
+    if path.parent.name == "active":
+        return [parse_task_file(path)]
+    return parse_tasks(path)
+
+
+def _read_active(tasks_dir: Path, *, require_split: bool = False) -> list[Task]:
+    active = _active_dir(tasks_dir)
+    if not active.is_dir():
+        return []
+    tasks = [parse_task_file(path) for path in sorted(active.glob("*.md"))]
+    task_ids = [task.id for task in tasks]
+    duplicates = {task_id for task_id in task_ids if task_ids.count(task_id) > 1}
+    if duplicates:
+        raise ValueError(f"duplicate task ids in {active}: {sorted(duplicates)}")
+    return sorted(tasks, key=lambda task: task.id)
 
 
 def _task_file_preamble(path: Path) -> str:
@@ -693,7 +727,7 @@ class TaskLocation:
 
 
 def _task_search_paths(tasks_dir: Path) -> list[Path]:
-    paths = [tasks_dir / "active.md"]
+    paths = sorted(_active_dir(tasks_dir).glob("*.md"))
     done_dir = tasks_dir / "done"
     if done_dir.is_dir():
         paths.extend(sorted(done_dir.glob("*.md"), reverse=True))
@@ -701,45 +735,43 @@ def _task_search_paths(tasks_dir: Path) -> list[Path]:
 
 
 def known_task_ids(tasks_dir: Path) -> set[str]:
-    """Every valid task id (tNNN) declared as a header in active.md and done/*.md.
+    """Every valid task id (tNNN) declared in active/*.md and done/*.md.
 
-    A header-only scan (not full parse): a field-level problem in one task block
-    must not crash callers that only need the set of declared ids. `_HEADER_RE`
-    matches only valid tNNN headers and exposes the id as group 1; check_tasks
-    owns reporting malformed task blocks.
+    An ID-only scan (not full parse): a field-level problem in one task must not
+    crash callers that only need the set of declared ids. Active files provide
+    IDs in frontmatter; done ledgers provide them in task headers.
     """
     ids: set[str] = set()
     for path in _task_search_paths(tasks_dir):
         if not path.is_file():
             continue
-        for line in path.read_text(encoding="utf-8").splitlines():
-            match = _HEADER_RE.match(line)
-            if match:
-                ids.add(match.group(1))
+        ids.update(_strict_task_ids_in_path(path))
     return ids
 
 
 def _find_matches(tasks_dir: Path, task_id: str) -> list[TaskLocation]:
     matches: list[TaskLocation] = []
     for path in _task_search_paths(tasks_dir):
-        tasks = parse_tasks(path)
+        tasks = _parse_path_tasks(path)
         for task in tasks:
             if task.id == task_id:
                 matches.append(TaskLocation(path=path, task=task, tasks=tasks))
-                break
     return matches
 
 
 def find_task_location(tasks_dir: Path, task_id: str) -> TaskLocation:
-    """Find a task in active.md or done/*.md, preferring active then newest archives."""
+    """Find the unique occurrence of a task in active/*.md or done/*.md."""
     matches = _find_matches(tasks_dir, task_id)
     if not matches:
         searched = ", ".join(str(path) for path in _task_search_paths(tasks_dir))
-        msg = f"Task {task_id} not found in tasks/active.md or tasks/done/*.md (searched: {searched})"
+        msg = (
+            f"Task {task_id} not found in tasks/active/*.md or tasks/done/*.md "
+            f"(searched: {searched})"
+        )
         raise KeyError(msg)
     if len(matches) > 1:
         locations = ", ".join(str(match.path) for match in matches)
-        print(f"WARNING: duplicate task id {task_id} found in {locations}; using {matches[0].path}", file=sys.stderr)
+        raise ValueError(f"duplicate task id {task_id} found in {locations}")
     return matches[0]
 
 
