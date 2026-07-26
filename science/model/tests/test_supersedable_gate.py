@@ -56,6 +56,31 @@ def test_the_supersedes_TARGETS_agree_with_the_declaration() -> None:
     )
 
 
+def test_the_supersedes_pairs_are_exactly_the_ruling() -> None:
+    # This population is intentionally HAND-AUTHORED here, rather than read from core.py: the
+    # endpoint rule is twelve self-only pairs plus the conclusion-level Cartesian ruling. Deriving
+    # either half from production would make this check agree with an illegal cross-pair.
+    conclusion_kinds = {
+        "interpretation",
+        "finding",
+        "discussion",
+        "report",
+        "validation-report",
+        "story",
+    }
+    self_superseding = SUPERSEDABLE_KINDS - conclusion_kinds
+    expected_pairs = {(kind, kind) for kind in self_superseding} | {
+        (source_kind, target_kind)
+        for source_kind in conclusion_kinds
+        for target_kind in conclusion_kinds
+    }
+    actual_pairs = {(pair.source_kind, pair.target_kind) for pair in _supersedes().allowed_kind_pairs}
+    assert actual_pairs == expected_pairs, (
+        f"unexpected pairs: {sorted(actual_pairs - expected_pairs)}; "
+        f"missing pairs: {sorted(expected_pairs - actual_pairs)}"
+    )
+
+
 @pytest.mark.parametrize("kind", sorted(SUPERSEDABLE_KINDS))
 def test_every_supersedable_kind_can_author_the_CANONICAL_edge(kind: str) -> None:
     # Asked through the AUTHORITATIVE helper. `source_kinds & target_kinds` is NOT the admission
