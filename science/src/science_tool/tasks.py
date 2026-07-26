@@ -436,6 +436,41 @@ def known_task_ids(tasks_dir: Path) -> set[str]:
     return ids
 
 
+def task_status_index(tasks_dir: Path) -> dict[str, str]:
+    """Map every declared task id to its `status:` field, across active.md and done/*.md.
+
+    A header-plus-field-block scan rather than a full parse, for the reason
+    `known_task_ids` documents: a field-level problem in one task block must not
+    crash a caller that only needs the index.
+
+    Only the contiguous run of `- key: value` lines immediately after a header
+    counts as fields, matching `_parse_task_block`, so a `- status: done` line
+    written inside a description is description and not a record.
+
+    Search-path order decides precedence for a duplicated id (active first, then
+    newest archive), the same order `find_task_location` prefers.
+    """
+    statuses: dict[str, str] = {}
+    for path in _task_search_paths(tasks_dir):
+        if not path.is_file():
+            continue
+        task_id: str | None = None
+        for line in path.read_text(encoding="utf-8").splitlines():
+            header = _HEADER_RE.match(line)
+            if header:
+                task_id = header.group(1)
+                continue
+            if task_id is None:
+                continue
+            field = _FIELD_RE.match(line)
+            if not field:
+                task_id = None  # the field block ended; the rest is description
+                continue
+            if field.group(1) == "status":
+                statuses.setdefault(task_id, field.group(2).strip())
+    return statuses
+
+
 def _find_matches(tasks_dir: Path, task_id: str) -> list[TaskLocation]:
     matches: list[TaskLocation] = []
     for path in _task_search_paths(tasks_dir):

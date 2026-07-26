@@ -807,3 +807,40 @@ def _parse_entity_date(value: str) -> Any:
         return date.fromisoformat(value)
     except ValueError as exc:
         raise click.ClickException(f"Invalid date: {value}") from exc
+
+
+@entity_group.command("kinds")
+@click.option("--format", "output_format", type=click.Choice(OUTPUT_FORMATS), default="table", show_default=True)
+def entity_kinds(output_format: str) -> None:
+    """List every entity kind this project accepts, shipped and project-local.
+
+    The kind vocabulary has to be nameable outside the toolkit -- a commitlint
+    `type-enum`, a docs table, a completion script -- and with no way to ask for
+    it, each consumer transcribes the list and it goes stale as kinds are added.
+    `--format json` makes those configs generated rather than hand-maintained.
+    """
+    from science_tool.entity_kind_vocabulary import project_kind_vocabulary  # noqa: PLC0415
+
+    rows = [
+        {
+            "kind": row.name,
+            "origin": row.origin,
+            "prefix": row.canonical_prefix,
+            "home": row.home,
+            "statuses": ", ".join(row.statuses),
+        }
+        for row in project_kind_vocabulary(Path.cwd())
+    ]
+    emit_query_rows(
+        output_format=output_format,
+        title="Entity kinds",
+        columns=[
+            ("kind", "Kind"),
+            ("origin", "Origin"),
+            ("prefix", "Prefix"),
+            ("home", "Home"),
+            ("statuses", "Statuses"),
+        ],
+        rows=rows,
+        meta={"kinds": len(rows), "names": [row["kind"] for row in rows]},
+    )

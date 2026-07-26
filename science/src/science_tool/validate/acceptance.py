@@ -6,16 +6,21 @@ from typing import Any
 
 import yaml
 
+from science_tool.correspondence.signature import SIGNATURE_VERSION
 from science_tool.data_root import project_config_path
 from science_tool.validate.result import Result, Severity
 
 EVIDENCE_SCOPED_RULES: frozenset[str] = frozenset({"plan.correspondence-drift"})
 
-# The EXACT emitted token — one literal ": " separator, no `\s*`. A bare `v1:<hex>`, a
-# bare `evidence-signature:` prefix, or a variant-whitespace spelling (`:v1:`, two spaces,
+# The EXACT emitted token — one literal ": " separator, no `\s*`. A bare `<version>:<hex>`,
+# a bare `evidence-signature:` prefix, or a variant-whitespace spelling (`:v2:`, two spaces,
 # a newline) is NOT evidence-scoped: it would pass a lax guard yet never substring-match the
 # literal the check emits (`evidence-signature: {signature}`), so it must not qualify (§5.5).
-_SIGNATURE_RE = re.compile(r"\bevidence-signature: v1:[0-9a-f]{64}\b")
+#
+# The version is READ from the signature module, never repeated here: a hardcoded copy is a
+# second place the version lives, and it would keep honouring stale entries after a bump.
+SIGNATURE_TOKEN_SPEC = f"evidence-signature: {SIGNATURE_VERSION}:<64-hex>"
+_SIGNATURE_RE = re.compile(rf"\bevidence-signature: {SIGNATURE_VERSION}:[0-9a-f]{{64}}\b")
 
 
 def accepted_validation_entries(project_root: Path) -> list[dict[str, Any]]:

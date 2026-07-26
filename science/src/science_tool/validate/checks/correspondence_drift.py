@@ -13,7 +13,13 @@ from pathlib import Path
 
 from science_tool.correspondence.adjudicate import Adjudicated, adjudicate
 from science_tool.correspondence.extract import extract_deliverables, extract_task_refs
-from science_tool.correspondence.probe import Probe, ProbeResult, TaskState, probe_path, resolve_task
+from science_tool.correspondence.probe import (
+    Probe,
+    ProbeResult,
+    TaskState,
+    probe_path,
+    resolve_tasks,
+)
 from science_tool.correspondence.signature import evidence_signature
 from science_tool.entity_scan import iter_entity_markdown
 from science_tool.validate.checks import Check
@@ -41,12 +47,15 @@ def _drift_result(
     )
     tasks_text = ", ".join(f"{ref}={state.value}" for ref, state in task_states) or "none"
     message = (
-        f"{entity_id}: status {claimed!r} under-claims progress "
-        f"(adjudicated {adjudicated.value!r}). "
-        f"present: {_names(probes, ProbeResult.PRESENT)}; "
-        f"absent: {_names(probes, ProbeResult.ABSENT)}; tasks: {tasks_text}. "
-        f"Fix the status to {adjudicated.value!r}, or accept with an evidence-scoped "
-        f"health.accepted_validation entry. evidence-signature: {signature}"
+        f"{entity_id}: status {claimed!r} is below the adjudicated floor "
+        f"{adjudicated.value!r}. "
+        f"claim holds: {_names(probes, ProbeResult.PRESENT)}; "
+        f"claim does not hold: {_names(probes, ProbeResult.ABSENT)}; tasks: {tasks_text}. "
+        f"The true status is at least {adjudicated.value!r} and may be higher -- "
+        f"`adjudicate()` classifies, it does not estimate, and {Adjudicated.ACTIVE.value!r} is "
+        f"its catch-all branch. Verify against the deliverables before setting a status, or "
+        f"accept with an evidence-scoped health.accepted_validation entry. "
+        f"evidence-signature: {signature}"
     )
     return Result(Severity.WARN, rel_path, None, message, rule, None)
 
@@ -72,7 +81,7 @@ def check_correspondence_drift(ctx: ValidateContext) -> Iterator[Result]:
         if not deliverables:
             continue  # nothing probeable -> indeterminate -> silent
         probes = [probe_path(ctx.project_root, d) for d in deliverables]
-        task_states = [(t, resolve_task(ctx.project_root, t)) for t in extract_task_refs(ctx.body(path))]
+        task_states = resolve_tasks(ctx.project_root, extract_task_refs(ctx.body(path)))
         adjudicated = adjudicate(
             [p.result for p in probes],
             [state for _ref, state in task_states],

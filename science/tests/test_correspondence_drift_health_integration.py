@@ -16,7 +16,7 @@ def _project(root: Path, accepted: str) -> None:
     plan = root / "entities" / "plans" / "0001-x.md"
     plan.parent.mkdir(parents=True, exist_ok=True)
     plan.write_text(
-        '---\nid: "plan:0001-x"\nkind: plan\ntitle: "T"\nstatus: "draft"\n---\n\nBuilds `src/a.py`.\n',
+        '---\nid: "plan:0001-x"\nkind: plan\ntitle: "T"\nstatus: "draft"\n---\n\n## Deliverables\n\nBuilds `src/a.py`.\n',
         encoding="utf-8",
     )
 
@@ -44,7 +44,7 @@ def test_valid_signature_entry_suppresses_drift_in_health(tmp_path: Path):
     _project(tmp_path, "")
     first = build_health_report(tmp_path, checks={"validate"})
     drift = next(f for f in first["validation"] if f.get("rule") == _DRIFT)
-    token = re.search(r"evidence-signature: (v1:[0-9a-f]{64})", drift["message"]).group(1)
+    token = re.search(r"evidence-signature: (v2:[0-9a-f]{64})", drift["message"]).group(1)
 
     # Phase 2: accept it with the complete labeled signature + project-relative path.
     _project(

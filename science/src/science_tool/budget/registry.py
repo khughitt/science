@@ -207,6 +207,7 @@ EXEMPTIONS.update({
     "discussions create": "Echoes exactly one 'Created <id> at <path>' line plus the created entity's own validation warnings (emit_entity_warnings)",
     "discussions show": "Renders one entity's fixed field set (id, kind, title, status, path, related refs, source_refs, body)",
     "doi lookup": "hardcoded <=6-key metadata dict for one DOI (doi/title/publisher/source/issued/url), not a per-record list",
+    "entity kinds": "one row per DECLARED kind -- the shipped profiles plus the project's own local manifest -- so it grows with the vocabulary, never with how many entities exist",
     "entity sections": "rows come from the kind's fixed template/schema, not per-entity project data",
     "entity show": "fixed field set for the one entity resolved by ref; related/source_refs are that entity's own authored lists",
     "evidence-lines create": "Echoes exactly one 'Created <id> at <path>' line plus the created entity's own validation warnings",

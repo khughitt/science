@@ -11,6 +11,7 @@ from pathlib import Path
 
 from science_tool.data_root import PROJECT_CONFIG_FILENAME
 from science_tool.validate.acceptance import (
+    SIGNATURE_TOKEN_SPEC,
     EVIDENCE_SCOPED_RULES,
     accepted_validation_entries,
     entry_is_well_scoped,
@@ -32,7 +33,7 @@ def check_accepted_validation(ctx: ValidateContext) -> Iterator[Result]:
                 Path(PROJECT_CONFIG_FILENAME),
                 None,
                 f"accepted_validation entry for {rule!r} (path={entry.get('path')!r}) must be "
-                f"evidence-scoped: message_contains needs a complete 'evidence-signature: v1:<64-hex>' "
+                f"evidence-scoped: message_contains needs a complete '{SIGNATURE_TOKEN_SPEC}' "
                 f"token AND path must name one non-empty, project-relative plan, else it would blind "
                 f"that rule even after the plan's deliverables change.",
                 _RULE,

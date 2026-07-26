@@ -7,10 +7,19 @@ from science_tool.validate.context import ValidateContext
 from science_tool.validate.gates import cumulative_rules
 
 
-def _plan(root: Path, rel: str, *, entity_id: str, status: str, body: str) -> None:
+def _plan(root: Path, rel: str, *, entity_id: str, status: str, body: str, section: str = "Deliverables") -> None:
+    """Write a plan whose `body` sits inside a declared deliverables region.
+
+    Deliverables are read from a declaration, never harvested from the whole
+    body (fb-2026-07-26-015), so a fixture that means to declare one has to say so.
+    """
     p = root / "entities" / "plans" / rel
     p.parent.mkdir(parents=True, exist_ok=True)
-    p.write_text(f'---\nid: "{entity_id}"\nkind: plan\ntitle: "T"\nstatus: "{status}"\n---\n\n{body}\n', encoding="utf-8")
+    p.write_text(
+        f'---\nid: "{entity_id}"\nkind: plan\ntitle: "T"\nstatus: "{status}"\n---\n\n'
+        f"## {section}\n\n{body}\n",
+        encoding="utf-8",
+    )
 
 
 def _run(root: Path):
@@ -32,7 +41,7 @@ def test_draft_with_present_deliverable_fires_under_claim(tmp_path: Path):
     assert r.severity.value == "warn"
     assert not r.path.is_absolute()  # project-relative
     assert "plan:0001" in r.message and "draft" in r.message and "complete" in r.message
-    assert "evidence-signature: v1:" in r.message
+    assert "evidence-signature: v2:" in r.message
 
 
 def test_draft_with_partial_deliverables_fires_as_active(tmp_path: Path):
@@ -114,3 +123,82 @@ def test_non_plan_kind_is_ignored(tmp_path: Path):
 
 def test_rule_is_never_gated(tmp_path: Path):
     assert "plan.correspondence-drift" not in cumulative_rules("hygiene")
+
+
+# --- fb-2026-07-26-015: deliverables are declared, not harvested ---
+
+
+def test_paths_cited_outside_a_declared_region_are_not_evidence(tmp_path: Path):
+    """0037-provenance-schema-integration-plan: an honest `draft` whose PRESENT
+    paths were its recommended reading order, not its deliverables."""
+    (tmp_path / "src").mkdir()
+    (tmp_path / "src" / "a.py").write_text("x = 1\n", encoding="utf-8")
+    p = tmp_path / "entities" / "plans" / "0037-x.md"
+    p.parent.mkdir(parents=True)
+    p.write_text(
+        '---\nid: "plan:0037"\nkind: plan\ntitle: "T"\nstatus: "draft"\n---\n\n'
+        "## Recommended reading order\n\nRead `src/a.py`.\n\n"
+        "## Suggested deliverables\n\nA migration note.\n",
+        encoding="utf-8",
+    )
+    assert not _run(tmp_path)
+
+
+def test_a_plan_with_no_declared_region_is_silent(tmp_path: Path):
+    """0097-meta-model-v0-3-consolidation: no deliverables section at all."""
+    (tmp_path / "src").mkdir()
+    (tmp_path / "src" / "a.py").write_text("x = 1\n", encoding="utf-8")
+    p = tmp_path / "entities" / "plans" / "0097-x.md"
+    p.parent.mkdir(parents=True)
+    p.write_text(
+        '---\nid: "plan:0097"\nkind: plan\ntitle: "T"\nstatus: "draft"\n---\n\n'
+        "## Background\n\nExtends `src/a.py`.\n",
+        encoding="utf-8",
+    )
+    assert not _run(tmp_path)
+
+
+# --- fb-2026-07-26-014: a retirement plan is scored in its own direction ---
+
+
+def test_a_retirement_plan_whose_targets_are_gone_adjudicates_complete(tmp_path: Path):
+    """0018-a5-guide-unification probed 5 present / 21 absent and adjudicated
+    ACTIVE while every one of its named retirement targets was already deleted."""
+    _plan(
+        tmp_path,
+        "0018-x.md",
+        entity_id="plan:0018",
+        status="draft",
+        body="- `src/guide/ChapterPage.tsx`\n- `scripts/generate-guide-data.ts`\n",
+        section="Retirement targets",
+    )
+    results = _run(tmp_path)
+    assert len(results) == 1
+    assert "'complete'" in results[0].message
+
+
+def test_a_retirement_plan_whose_targets_remain_is_silent(tmp_path: Path):
+    (tmp_path / "src").mkdir()
+    (tmp_path / "src" / "old.ts").write_text("x\n", encoding="utf-8")
+    _plan(
+        tmp_path,
+        "0019-x.md",
+        entity_id="plan:0019",
+        status="draft",
+        body="- `src/old.ts`\n",
+        section="Deliverables to remove",
+    )
+    assert not _run(tmp_path)
+
+
+# --- fb-2026-07-26-016: the remediation states a floor, not an estimate ---
+
+
+def test_remediation_states_a_floor_and_does_not_instruct_a_bulk_edit(tmp_path: Path):
+    (tmp_path / "src").mkdir()
+    (tmp_path / "src" / "a.py").write_text("x = 1\n", encoding="utf-8")
+    _plan(tmp_path, "0020-x.md", entity_id="plan:0020", status="draft", body="Builds `src/a.py`.")
+    message = _run(tmp_path)[0].message
+    assert "is below the adjudicated floor" in message
+    assert "at least" in message
+    assert "Fix the status to" not in message

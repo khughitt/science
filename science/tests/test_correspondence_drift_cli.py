@@ -59,7 +59,7 @@ def _clean_project(root: Path) -> None:
 def _add_stale_plan(root: Path) -> None:
     (root / "entities" / "plans" / "0001-x.md").write_text(
         '---\nid: "plan:0001-x"\nkind: plan\ntitle: "T"\nstatus: "draft"\n'
-        'created: 2026-07-18\nupdated: 2026-07-18\n---\n\nBuilds `src/a.py`.\n',
+        'created: 2026-07-18\nupdated: 2026-07-18\n---\n\n## Deliverables\n\nBuilds `src/a.py`.\n',
         encoding="utf-8",
     )
 
