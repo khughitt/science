@@ -9,13 +9,16 @@ import fcntl
 import json
 import re
 import sys
+import tempfile
 from contextlib import contextmanager
 from dataclasses import dataclass
 from datetime import date
 from pathlib import Path
 from typing import Iterator
 
+import yaml
 from science_model.tasks import Task, TaskCreate, TaskStatus, TaskUpdate
+from science_tool.markdown_utils import frontmatter_span, reject_duplicate_and_merge_keys
 
 __all__ = [
     "Task",
@@ -28,13 +31,36 @@ __all__ = [
     "append_task_note",
     "find_dangling_task_refs",
     "find_task_location",
+    "parse_task_file",
     "parse_tasks_for_cli",
+    "render_task_file",
     "retire_task",
     "validate_task_aspects",
     "write_task_location",
 ]
 
 _VALID_STATUSES = {s.value for s in TaskStatus}
+_REQUIRED_KEYS = ("id", "title", "status", "priority", "aspects", "created")
+_KNOWN_KEYS = frozenset(
+    {
+        "id",
+        "project",
+        "title",
+        "type",
+        "aspects",
+        "priority",
+        "status",
+        "blocked_by",
+        "related",
+        "parent",
+        "group",
+        "artifacts",
+        "findings",
+        "created",
+        "completed",
+    }
+)
+_OPEN_STATUSES = frozenset({"proposed", "active", "blocked", "deferred"})
 
 
 class TaskIntegrityError(ValueError):
@@ -280,6 +306,59 @@ def parse_tasks(path: Path) -> list[Task]:
     return _parse_tasks_text(path.read_text(), path=path)
 
 
+def _split_frontmatter_text(text: str) -> tuple[str, str]:
+    """Return raw YAML frontmatter and Markdown body from a fenced document."""
+    lines = text.splitlines(keepends=True)
+    if not lines or lines[0].strip() != "---":
+        return "", text
+    for index, line in enumerate(lines[1:], start=1):
+        if line.strip() == "---":
+            return "".join(lines[1:index]), "".join(lines[index + 1 :])
+    return "", text
+
+
+def parse_task_file(path: Path) -> Task:
+    """Parse one canonical open-task file with strict identity validation."""
+    text = path.read_text(encoding="utf-8")
+    frontmatter_text, body = _split_frontmatter_text(text)
+
+    try:
+        node = yaml.compose(frontmatter_text)
+    except yaml.YAMLError as exc:
+        raise ValueError(f"{path}: invalid YAML frontmatter: {exc}") from exc
+    if node is not None:
+        reject_duplicate_and_merge_keys(
+            node,
+            on_error=lambda message: ValueError(f"{path}: {message}"),
+        )
+
+    data, _ = frontmatter_span(path)
+    unknown = set(data) - _KNOWN_KEYS
+    if unknown:
+        raise ValueError(f"{path}: unknown frontmatter key(s): {sorted(unknown)}")
+
+    for key in _REQUIRED_KEYS:
+        if key not in data:
+            raise ValueError(f"{path}: missing required key: {key}")
+
+    task_id = str(data["id"])
+    if not re.fullmatch(_TASK_ID_PATTERN, task_id):
+        raise ValueError(f"{path}: non-canonical task id {task_id!r}")
+    if not path.name.startswith(f"{task_id}-") and path.name != f"{task_id}.md":
+        raise ValueError(f"{path}: filename does not match id {task_id!r}")
+
+    title = str(data["title"])
+    if "\n" in title or "]" in title:
+        raise ValueError(f"{path}: title must be single-line and contain no ']'")
+
+    if str(data["status"]) not in _OPEN_STATUSES:
+        raise ValueError(
+            f"{path}: status {data['status']!r} not open; active/ holds open tasks only"
+        )
+
+    return Task(**data, description=body.strip())
+
+
 def _canonical_description(text: str) -> str:
     return text.strip()
 
@@ -319,6 +398,26 @@ def _verify_round_trip(text: str, expected: list[Task], *, path: Path | None) ->
                 f"refusing to write {path}: task {original.id} does not round-trip "
                 f"(a field is being mangled by the DSL grammar); aborting to avoid data loss."
             )
+
+
+def _verify_task_file_round_trip(text: str, task: Task, path: Path) -> None:
+    """Refuse a per-task file whose rendered text does not fully re-parse."""
+    with tempfile.TemporaryDirectory() as temporary_directory:
+        candidate = Path(temporary_directory) / path.name
+        candidate.write_text(text, encoding="utf-8")
+        try:
+            reparsed = parse_task_file(candidate)
+        except (OSError, ValueError) as exc:
+            raise TaskIntegrityError(
+                f"refusing to write {path}: rendered task file failed round-trip "
+                f"parsing ({exc})"
+            ) from exc
+
+    if not _tasks_equal(reparsed, task):
+        raise TaskIntegrityError(
+            f"refusing to write {path}: task {task.id} does not round-trip "
+            f"(a field changed during serialization)"
+        )
 
 
 def _task_ref_number(ref: str) -> str | None:
@@ -403,6 +502,19 @@ def render_task(task: Task) -> str:
     lines.append("")
     lines.append(task.description)
     return "\n".join(lines) + "\n"
+
+
+def render_task_file(task: Task) -> str:
+    """Render one task as full YAML frontmatter followed by its description."""
+    frontmatter = task.model_dump(mode="json")
+    del frontmatter["description"]
+    rendered_frontmatter = yaml.safe_dump(
+        frontmatter,
+        sort_keys=False,
+        allow_unicode=True,
+        default_flow_style=False,
+    )
+    return f"---\n{rendered_frontmatter}---\n\n{task.description}"
 
 
 def render_tasks(tasks: list[Task]) -> str:
