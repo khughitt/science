@@ -202,7 +202,10 @@ not widen `related_existing` to make the two surfaces match.
    - `novel` — no existing entity covers it.
    - `sharpens-existing` — a sharper/edge variant of an existing entity.
    - `already-covered` — an existing entity already asks this.
-   - `out-of-scope` — falls outside `specs/scope-boundaries.md`.
+   - `out-of-scope` — falls outside the scope boundary Phase 1 resolved. When
+     `scope_source` is not `declared`, you are judging against an inferred
+     boundary; say so in the candidate's prose rather than presenting the call
+     as a check against the project's own declaration.
    When title-level information from the index is insufficient to tell,
    **read the referenced source files** before deciding. Set
    `related_existing` for `sharpens-existing` and `already-covered`, then
