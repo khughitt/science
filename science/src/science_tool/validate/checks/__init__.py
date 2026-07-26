@@ -82,6 +82,7 @@ CANONICAL_CHECK_MODULES = (
     "materialization",
     "correspondence_drift",
     "accepted_validation",
+    "autonomous_runs",
 )
 
 

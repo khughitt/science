@@ -13,8 +13,14 @@ from science_tool.qa_audit.audit import audit_workflows, render_markdown
               show_default=True, help="Directory of authored workflow-run entities.")
 @click.option("--repo-root", type=click.Path(path_type=Path), default=Path("."), show_default=True,
               help="Repo root used to resolve each run's manifest_path.")
-@click.option("--out", "out_path", type=click.Path(path_type=Path), default=None,
-              help="Optional file to write the markdown report to.")
+@click.option(
+    "--out",
+    "--output",
+    "output_path",
+    type=click.Path(path_type=Path),
+    default=None,
+    help="Write the complete, unbudgeted report to PATH instead of stdout (--out is a kept alias).",
+)
 @click.option(
     "--format",
     "output_format",
@@ -27,7 +33,7 @@ from science_tool.qa_audit.audit import audit_workflows, render_markdown
 def qa_audit_command(
     runs_dir: Path,
     repo_root: Path,
-    out_path: Path | None,
+    output_path: Path | None,
     output_format: str,
     as_json: bool,
 ) -> None:
@@ -35,16 +41,45 @@ def qa_audit_command(
 
     Always exits 0 — this never gates a build or `science validate`.
     """
+    from science_tool.budget.control import bounded_control_notice
+    from science_tool.budget.invocation import build_complete_via, hint_for
+    from science_tool.budget.projection import project_rows
+    from science_tool.budget.registry import lookup
+    from science_tool.budget.sink import BoundedSink
+
     if not runs_dir.exists():
         raise click.ClickException(f"runs dir not found: {runs_dir}")
     rows = audit_workflows(runs_dir=runs_dir, repo_root=repo_root)
 
-    def _render() -> None:
-        md = render_markdown(rows)
-        click.echo(md, nl=False)
-        if out_path is not None:
-            out_path.parent.mkdir(parents=True, exist_ok=True)
-            out_path.write_text(md, encoding="utf-8")
-
     effective_format = "json" if (as_json or output_format == "json") else output_format
-    emit(output_format=effective_format, payload=rows, render_text=_render, sort_keys=True)
+    sink = BoundedSink(
+        lookup("qa-audit"),
+        output_path=output_path,
+        command_path="qa-audit",
+        complete_via=build_complete_via(click.get_current_context(), output_hint=hint_for("qa-audit", effective_format)),
+    )
+    control_notice = (
+        bounded_control_notice(f"wrote {len(rows)} rows to {output_path}") if output_path is not None else None
+    )
+
+    projected = project_rows(rows, sink.max_rows)
+    displayed_rows = projected.rows
+    payload: dict[str, object] = {"rows": displayed_rows}
+    if projected.truncated:
+        payload["truncation"] = {
+            "omitted": projected.omitted,
+            "total": projected.total,
+            "complete_via": sink.complete_via,
+        }
+
+    def _render() -> None:
+        md = render_markdown(displayed_rows)
+        sink.write(md)
+        if projected.truncated:
+            sink.echo(f"showing {len(displayed_rows)} of {projected.total} rows")
+            sink.echo(f"  complete output:  {sink.complete_via}")
+
+    emit(output_format=effective_format, payload=payload, render_text=_render, sink=sink, sort_keys=True)
+    sink.flush()
+    if control_notice is not None:
+        click.echo(control_notice)

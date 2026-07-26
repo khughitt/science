@@ -43,6 +43,13 @@ def entity_group() -> None:
 @click.option("--with", "with_sections", multiple=True, help="Include optional template section key (repeatable)")
 @click.option("--without", "without_sections", multiple=True, help="Drop required template section key (repeatable)")
 @click.option("--no-hints", is_flag=True, help="Strip authored HTML hint comments from the rendered shell")
+@click.option(
+    "--show-preexisting",
+    "show_preexisting",
+    is_flag=True,
+    default=False,
+    help="List pre-existing project audit failures individually instead of summarizing them",
+)
 def entity_create(
     kind: str,
     title: str,
@@ -55,6 +62,7 @@ def entity_create(
     with_sections: tuple[str, ...],
     without_sections: tuple[str, ...],
     no_hints: bool,
+    show_preexisting: bool,
 ) -> None:
     """Create a source-authored entity markdown file."""
 
@@ -76,7 +84,7 @@ def entity_create(
     except EntityCommandError as exc:
         raise click.ClickException(str(exc)) from exc
     click.echo(f"Created {result.entity_id} at {result.path.relative_to(Path.cwd())}")
-    emit_entity_warnings(result.warnings)
+    emit_entity_warnings(result.warnings, show_preexisting=show_preexisting)
 
 
 @entity_group.command("show")
@@ -121,6 +129,13 @@ def entity_show(ref: str, output_format: str) -> None:
 @click.option("--related", "related_refs", multiple=True, help="Related entity reference (repeatable)")
 @click.option("--source-ref", "source_refs", multiple=True, help="Source reference (repeatable)")
 @click.option("--updated")
+@click.option(
+    "--show-preexisting",
+    "show_preexisting",
+    is_flag=True,
+    default=False,
+    help="List pre-existing project audit failures individually instead of summarizing them",
+)
 def entity_edit(
     ref: str,
     title: str | None,
@@ -131,6 +146,7 @@ def entity_edit(
     related_refs: tuple[str, ...],
     source_refs: tuple[str, ...],
     updated: str | None,
+    show_preexisting: bool,
 ) -> None:
     """Edit source-authored entity metadata.
 
@@ -155,14 +171,21 @@ def entity_edit(
     except EntityCommandError as exc:
         raise click.ClickException(str(exc)) from exc
     click.echo(f"Updated {result.entity_id} at {result.path.relative_to(Path.cwd())}")
-    emit_entity_warnings(result.warnings)
+    emit_entity_warnings(result.warnings, show_preexisting=show_preexisting)
 
 
 @entity_group.command("note")
 @click.argument("ref")
 @click.argument("note")
 @click.option("--date", "note_date")
-def entity_note(ref: str, note: str, note_date: str | None) -> None:
+@click.option(
+    "--show-preexisting",
+    "show_preexisting",
+    is_flag=True,
+    default=False,
+    help="List pre-existing project audit failures individually instead of summarizing them",
+)
+def entity_note(ref: str, note: str, note_date: str | None, show_preexisting: bool) -> None:
     """Append a dated note to a source-authored entity."""
 
     from datetime import date as _date
@@ -174,7 +197,7 @@ def entity_note(ref: str, note: str, note_date: str | None) -> None:
         raise click.ClickException(str(exc)) from exc
     display_date = (date_value or _date.today()).isoformat()
     click.echo(f"Added note to {result.entity_id} ({display_date})")
-    emit_entity_warnings(result.warnings)
+    emit_entity_warnings(result.warnings, show_preexisting=show_preexisting)
 
 
 @entity_group.command("remove")
@@ -205,6 +228,13 @@ def entity_remove(target: str, apply_changes: bool) -> None:
     help="Include archived (relocated) entities from the archive index.",
 )
 @click.option("--format", "output_format", type=click.Choice(OUTPUT_FORMATS), default="table", show_default=True)
+@click.option(
+    "--output",
+    "output_path",
+    type=click.Path(path_type=Path),
+    default=None,
+    help="Write the complete, unbudgeted payload to PATH instead of stdout.",
+)
 def entity_list(
     kind_arg: str | None,
     kind: str | None,
@@ -213,8 +243,13 @@ def entity_list(
     include_hidden: bool,
     include_archived: bool,
     output_format: str,
+    output_path: Path | None,
 ) -> None:
     """List source-authored entities."""
+    from science_tool.budget.control import bounded_control_notice
+    from science_tool.budget.invocation import build_complete_via, hint_for
+    from science_tool.budget.registry import lookup
+    from science_tool.budget.sink import BoundedSink
 
     if kind_arg is not None:
         if kind is not None and kind != kind_arg:
@@ -231,13 +266,29 @@ def entity_list(
         )
     except EntityCommandError as exc:
         raise click.ClickException(str(exc)) from exc
+    complete_via = build_complete_via(click.get_current_context(), output_hint=hint_for("entities", output_format))
+    control_notice = (
+        bounded_control_notice(f"wrote {len(rows)} entities to {output_path}")
+        if output_path is not None
+        else None
+    )
+    sink = BoundedSink(
+        lookup("entity list"),
+        output_path=output_path,
+        command_path="entity list",
+        complete_via=complete_via,
+    )
     emit_query_rows(
         output_format=output_format,
         title="Entities",
         columns=[("id", "ID"), ("kind", "Kind"), ("status", "Status"), ("title", "Title"), ("path", "Path")],
         rows=rows,
         renderers=entity_table_renderers(),
+        sink=sink,
     )
+    sink.flush()
+    if control_notice is not None:
+        click.echo(control_notice)
 
 
 @entity_group.command("field-inventory")
@@ -606,18 +657,45 @@ def entity_review(ref: str, note: str | None) -> None:
     default="table",
     show_default=True,
 )
-def entity_needs_review(output_format: str) -> None:
+@click.option(
+    "--output",
+    "output_path",
+    type=click.Path(path_type=Path),
+    default=None,
+    help="Write the complete, unbudgeted payload to PATH instead of stdout.",
+)
+def entity_needs_review(output_format: str, output_path: Path | None) -> None:
     """List epistemic entities flagged needs-review or stale by the materialized graph."""
+    from science_tool.budget.control import bounded_control_notice
+    from science_tool.budget.invocation import build_complete_via, hint_for
+    from science_tool.budget.registry import lookup
+    from science_tool.budget.sink import BoundedSink
     from science_tool.entity_review import list_needs_review
     from science_tool.output import emit_query_rows
 
     rows = list_needs_review(Path.cwd())
+    complete_via = build_complete_via(click.get_current_context(), output_hint=hint_for("needs-review", output_format))
+    control_notice = (
+        bounded_control_notice(f"wrote {len(rows)} flagged entities to {output_path}")
+        if output_path is not None
+        else None
+    )
+    sink = BoundedSink(
+        lookup("entity needs-review"),
+        output_path=output_path,
+        command_path="entity needs-review",
+        complete_via=complete_via,
+    )
     emit_query_rows(
         output_format=output_format,
         title="Entities needing review",
         columns=[("state", "State"), ("kind", "Kind"), ("id", "ID")],
         rows=rows,
+        sink=sink,
     )
+    sink.flush()
+    if control_notice is not None:
+        click.echo(control_notice)
 
 
 @entity_group.command("rotation")
@@ -629,7 +707,14 @@ def entity_needs_review(output_format: str) -> None:
     help="Show the whole ranked queue, not just this sweep's budget.",
 )
 @click.option("--format", "output_format", type=click.Choice(OUTPUT_FORMATS), default="table", show_default=True)
-def entity_rotation(show_all: bool, output_format: str) -> None:
+@click.option(
+    "--output",
+    "output_path",
+    type=click.Path(path_type=Path),
+    default=None,
+    help="Write the complete, unbudgeted payload to PATH instead of stdout.",
+)
+def entity_rotation(show_all: bool, output_format: str, output_path: Path | None) -> None:
     """Rank the reviewable corpus least-recently-reviewed first, printing this sweep's budget.
 
     Advisory and stateless: it reviews nothing. Review a listed entity with
@@ -640,6 +725,10 @@ def entity_rotation(show_all: bool, output_format: str) -> None:
     """
     from datetime import date
 
+    from science_tool.budget.control import bounded_control_notice
+    from science_tool.budget.invocation import build_complete_via, hint_for
+    from science_tool.budget.registry import lookup
+    from science_tool.budget.sink import BoundedSink
     from science_tool.curate.rotation import RotationError, select_rotation
 
     try:
@@ -657,6 +746,13 @@ def entity_rotation(show_all: bool, output_format: str) -> None:
     def _selected(value: object, _row: object) -> str:
         return "✓" if value else ""
 
+    complete_via = build_complete_via(click.get_current_context(), output_hint=hint_for("entity-rotation", output_format))
+    control_notice = (
+        bounded_control_notice(f"wrote {len(shown)} rows to {output_path}") if output_path is not None else None
+    )
+    sink = BoundedSink(
+        lookup("entity rotation"), output_path=output_path, command_path="entity rotation", complete_via=complete_via
+    )
     emit_query_rows(
         output_format=output_format,
         title=title,
@@ -672,12 +768,16 @@ def entity_rotation(show_all: bool, output_format: str) -> None:
         meta={
             "pool_size": result.pool_size,
             "budget": result.budget,
-            "displayed": len(shown),
+            "returned_count": len(shown),
             "coverage_rounds": result.coverage_rounds,
             "graph_source": result.graph_source,
         },
         renderers={"last_reviewed": _never, "age_days": _never, "selected": _selected},
+        sink=sink,
     )
+    sink.flush()
+    if control_notice is not None:
+        click.echo(control_notice)
 
 
 def _emit_entity_removal_plan(plan: EntityRemovalPlan, *, applied: bool) -> None:

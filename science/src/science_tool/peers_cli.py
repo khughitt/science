@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from pathlib import Path
 from typing import TypedDict
 
@@ -46,18 +47,55 @@ def peers_group() -> None:
     type=click.Path(file_okay=False, dir_okay=True, path_type=Path),
 )
 @click.option("--format", "fmt", type=click.Choice(["table", "json"]), default="table", show_default=True)
-def peers_list(project_root: Path, fmt: str) -> None:
+@click.option(
+    "--output",
+    "output_path",
+    type=click.Path(path_type=Path),
+    default=None,
+    help="Write the complete, unbudgeted peer list to PATH instead of stdout.",
+)
+def peers_list(project_root: Path, fmt: str, output_path: Path | None) -> None:
     """List declared peers and their status."""
+    from science_tool.budget.control import bounded_control_notice
+    from science_tool.budget.invocation import build_complete_via, hint_for
+    from science_tool.budget.projection import project_single_list_report
+    from science_tool.budget.registry import lookup
+    from science_tool.budget.sink import BoundedSink
+
     cfg = load_project_config(project_root)
     rows = _peer_rows(project_root, cfg)
 
-    def _render() -> None:
-        if not rows:
-            click.echo("no peers declared")
-            return
-        _emit_table(rows)
+    complete_via = build_complete_via(click.get_current_context(), output_hint=hint_for("peers-list", fmt))
+    sink = BoundedSink(
+        lookup("peers list"), output_path=output_path, command_path="peers list", complete_via=complete_via
+    )
+    control_notice = (
+        bounded_control_notice(f"wrote the complete peer list to {output_path}") if output_path is not None else None
+    )
 
-    emit(output_format=fmt, payload={"project_id": cfg.id, "peers": rows}, render_text=_render)
+    full = {"project_id": cfg.id, "peers": rows}
+    displayed = full if output_path is not None else project_single_list_report(full, "peers", 40)
+    peers_omitted = displayed.get("peers_omitted", 0)
+    if output_path is None and peers_omitted:
+        displayed = {
+            **displayed,
+            "truncation": {"omitted": peers_omitted, "total": len(rows), "complete_via": complete_via},
+        }
+
+    def _render() -> None:
+        displayed_peers = displayed["peers"]
+        if not displayed_peers:
+            sink.echo("no peers declared")
+            return
+        _emit_table(displayed_peers, echo=sink.echo)
+        if peers_omitted:
+            sink.echo(f"showing {len(displayed_peers)} of {len(rows)} peers")
+            sink.echo(f"  complete output:  {complete_via}")
+
+    emit(output_format=fmt, payload=displayed, render_text=_render, sink=sink)
+    sink.flush()
+    if control_notice is not None:
+        click.echo(control_notice)
 
 
 @peers_group.command("check")
@@ -204,10 +242,10 @@ def _check_issue_row(issue: PeerIssue) -> PeerCheckIssueRow:
     }
 
 
-def _emit_table(rows: list[PeerRow]) -> None:
+def _emit_table(rows: list[PeerRow], *, echo: Callable[[str], None] = click.echo) -> None:
     headers = ("PEER", "PATH", "STATUS")
     peer_width = max(len(headers[0]), *(len(row["id"]) for row in rows))
     path_width = max(len(headers[1]), *(len(row["path"]) for row in rows))
-    click.echo(f"{headers[0]:<{peer_width}}  {headers[1]:<{path_width}}  {headers[2]}")
+    echo(f"{headers[0]:<{peer_width}}  {headers[1]:<{path_width}}  {headers[2]}")
     for row in rows:
-        click.echo(f"{row['id']:<{peer_width}}  {row['path']:<{path_width}}  {row['status']}")
+        echo(f"{row['id']:<{peer_width}}  {row['path']:<{path_width}}  {row['status']}")

@@ -8,7 +8,7 @@ from typing import cast
 import click
 
 from science_tool.datasets_identity import identity_group as dataset_identity_group
-from science_tool.output import emit, unwrap_instrument
+from science_tool.output import OUTPUT_FORMATS, emit, summarize_preexisting_warnings, unwrap_instrument
 
 
 def _project_root_from_env() -> Path:
@@ -130,6 +130,13 @@ def dataset_list(
 @click.option("--format", "output_format", default="table", type=click.Choice(["table", "json"]))
 @click.option("--explain", is_flag=True, help="Show the per-row scoring reason")
 @click.option("--project-root", default=None, type=click.Path(path_type=Path, file_okay=False, dir_okay=True))
+@click.option(
+    "--output",
+    "output_path",
+    type=click.Path(path_type=Path),
+    default=None,
+    help="Write the complete, unbudgeted report to PATH instead of stdout.",
+)
 def dataset_prioritize(
     origin: str | None,
     status: str | None,
@@ -143,8 +150,14 @@ def dataset_prioritize(
     output_format: str,
     explain: bool,
     project_root: Path | None,
+    output_path: Path | None,
 ) -> None:
     """Rank dataset entities by accessibility-weighted, graph-aware usefulness."""
+    from science_tool.budget.control import bounded_control_notice
+    from science_tool.budget.invocation import build_complete_via, hint_for
+    from science_tool.budget.projection import project_single_list_report
+    from science_tool.budget.registry import lookup
+    from science_tool.budget.sink import BoundedSink
     from science_tool.dataset_prioritize import excluded_summary, prioritize, target_coverage
     from science_tool.datasets.semantics import RuntimeState
     from science_tool.entities import graph_is_stale
@@ -193,41 +206,80 @@ def dataset_prioritize(
         runtime_state=runtime_state_filter,
     )
 
+    sink = BoundedSink(
+        lookup("dataset prioritize"),
+        output_path=output_path,
+        command_path="dataset prioritize",
+        complete_via=build_complete_via(
+            click.get_current_context(), output_hint=hint_for("dataset-prioritize", output_format)
+        ),
+    )
+    control_notice = (
+        bounded_control_notice(f"wrote the complete prioritization report to {output_path}")
+        if output_path is not None
+        else None
+    )
+
     if coverage:
         coverage_rows = target_coverage(rows, root)
+        full = {"rows": coverage_rows, "excluded_summary": summary}
+        displayed = full if output_path is not None else project_single_list_report(full, "rows", 40)
+        if output_path is None and displayed.get("rows_omitted", 0):
+            displayed = {
+                **displayed,
+                "truncation": {
+                    "omitted": displayed["rows_omitted"],
+                    "total": len(full["rows"]),
+                    "complete_via": sink.complete_via,
+                },
+            }
 
         def _render_coverage() -> None:
-            if not coverage_rows:
-                click.echo("No question or hypothesis entities found.")
+            displayed_rows = displayed["rows"]
+            if not displayed_rows:
+                sink.echo("No question or hypothesis entities found.")
                 return
-            from rich.console import Console
             from rich.table import Table
 
             table = Table(show_header=True, header_style="bold")
             for c in ["target", "coverage", "gap-reason", "datasets"]:
                 table.add_column(c, overflow="fold", no_wrap=False)
-            for r in coverage_rows:
+            for r in displayed_rows:
                 table.add_row(
                     str(r["target"]),
                     str(r["coverage_state"]),
                     str(r["gap_reason"]),
                     ", ".join(r["datasets"]) if r["datasets"] else "-",
                 )
-            Console(width=200).print(table)
+            sink.console.print(table)
+            if displayed.get("rows_omitted", 0):
+                sink.echo(f"showing {len(displayed_rows)} of {len(full['rows'])} rows")
+                sink.echo(f"  complete output:  {sink.complete_via}")
 
-        emit(
-            output_format=output_format,
-            payload={"rows": coverage_rows, "excluded_summary": summary},
-            render_text=_render_coverage,
-        )
+        emit(output_format=output_format, payload=displayed, render_text=_render_coverage, sink=sink)
+        sink.flush()
+        if control_notice is not None:
+            click.echo(control_notice)
         return
 
+    full = {"rows": rows, "excluded_summary": summary}
+    displayed = full if output_path is not None else project_single_list_report(full, "rows", 40)
+    if output_path is None and displayed.get("rows_omitted", 0):
+        displayed = {
+            **displayed,
+            "truncation": {
+                "omitted": displayed["rows_omitted"],
+                "total": len(full["rows"]),
+                "complete_via": sink.complete_via,
+            },
+        }
+
     def _render_rows() -> None:
-        if not rows:
-            click.echo("No matching dataset entities.")
+        displayed_rows = displayed["rows"]
+        if not displayed_rows:
+            sink.echo("No matching dataset entities.")
             return
 
-        from rich.console import Console
         from rich.table import Table
 
         table = Table(show_header=True, header_style="bold")
@@ -236,7 +288,7 @@ def dataset_prioritize(
             cols.append("reason")
         for c in cols:
             table.add_column(c, overflow="fold", no_wrap=False)
-        for i, r in enumerate(rows, 1):
+        for i, r in enumerate(displayed_rows, 1):
             cells = [
                 str(i),
                 r["id"],
@@ -249,16 +301,22 @@ def dataset_prioritize(
             if explain:
                 cells.append(r["top_reason"])
             table.add_row(*cells)
-        Console(width=200).print(table)
+        sink.console.print(table)
         if any(summary.values()):
-            click.echo(
+            sink.echo(
                 "Excluded by default: "
                 f"{summary['gated']} gated deposits, {summary['reference']} reference datasets, "
                 f"{summary['pointer']} pointer records. Use --include-gated, --include-reference, "
                 "or --include-pointer to inspect them."
             )
+        if displayed.get("rows_omitted", 0):
+            sink.echo(f"showing {len(displayed_rows)} of {len(full['rows'])} rows")
+            sink.echo(f"  complete output:  {sink.complete_via}")
 
-    emit(output_format=output_format, payload={"rows": rows, "excluded_summary": summary}, render_text=_render_rows)
+    emit(output_format=output_format, payload=displayed, render_text=_render_rows, sink=sink)
+    sink.flush()
+    if control_notice is not None:
+        click.echo(control_notice)
 
 
 @dataset_group.command("capability-pairs")
@@ -341,6 +399,13 @@ def dataset_capability_pairs(project_root: Path | None, commons_root: Path | Non
 @click.option("--gene-namespace", default=None, help="Gene identifier namespace to declare.")
 @click.option("--protein-namespace", default=None, help="Protein identifier namespace to declare.")
 @click.option(
+    "--show-preexisting",
+    "show_preexisting",
+    is_flag=True,
+    default=False,
+    help="List pre-existing project audit failures individually instead of summarizing them",
+)
+@click.option(
     "--project-root",
     default=None,
     type=click.Path(path_type=Path, file_okay=False, dir_okay=True),
@@ -361,6 +426,7 @@ def dataset_add(
     assembly: str | None,
     gene_namespace: str | None,
     protein_namespace: str | None,
+    show_preexisting: bool,
     project_root: Path | None,
 ) -> None:
     """Author a candidate external dataset entity under entities/datasets/."""
@@ -396,8 +462,11 @@ def dataset_add(
     except (EntityCommandError, IdentityAuthoringError) as exc:
         click.echo(str(exc), err=True)
         raise click.exceptions.Exit(1)
-    for w in warnings:
+    to_print, note = summarize_preexisting_warnings(warnings, show_preexisting=show_preexisting)
+    for w in to_print:
         click.echo(f"warning: {w}", err=True)
+    if note is not None:
+        click.echo(note, err=True)
     click.echo(f"created {entity_id} -> {dest.relative_to(root)}")
 
 
@@ -501,17 +570,11 @@ def dataset_verify_access(
     # pre-existing, unrelated project audit warnings (fb-2026-06-28-015).
     click.echo(f"{entity_id} -> access={state} (weight {weight:g}), runtime={runtime_state}")
 
-    preexisting = [w for w in warnings if w.startswith("pre-existing audit failure:")]
-    for w in warnings:
-        if w in preexisting and not show_preexisting:
-            continue
+    to_print, preexisting_note = summarize_preexisting_warnings(warnings, show_preexisting=show_preexisting)
+    for w in to_print:
         click.echo(f"warning: {w}", err=True)
-    if preexisting and not show_preexisting:
-        click.echo(
-            f"note: {len(preexisting)} pre-existing project audit warning(s) unrelated to this "
-            "dataset (run `science validate`, or --show-preexisting to list here)",
-            err=True,
-        )
+    if preexisting_note is not None:
+        click.echo(preexisting_note, err=True)
 
 
 @dataset_group.command("link")
@@ -549,26 +612,67 @@ def dataset_link(dataset_ref: str, target_ref: str, project_root: Path | None) -
     type=click.Path(path_type=Path, file_okay=False, dir_okay=True),
     help="Project root (defaults to SCIENCE_PROJECT_ROOT env var or cwd)",
 )
-def dataset_reconcile_links(fix: bool, output_format: str, project_root: Path | None) -> None:
+@click.option(
+    "--output",
+    "output_path",
+    type=click.Path(path_type=Path),
+    default=None,
+    help="Write the complete, unbudgeted report to PATH instead of stdout.",
+)
+def dataset_reconcile_links(fix: bool, output_format: str, project_root: Path | None, output_path: Path | None) -> None:
     """Report or fix Q/H free-text datasets: entries that resolve to dataset ids."""
+    from science_tool.budget.control import bounded_control_notice
+    from science_tool.budget.invocation import build_complete_via, hint_for
+    from science_tool.budget.projection import project_rows
+    from science_tool.budget.registry import lookup
+    from science_tool.budget.sink import BoundedSink
     from science_tool.datasets_catalog import reconcile_dataset_links
 
     root = project_root.resolve() if project_root else _project_root_from_env()
     rows = unwrap_instrument(reconcile_dataset_links(root, fix=fix), what="dataset reconcile-links")
 
+    sink = BoundedSink(
+        lookup("dataset reconcile-links"),
+        output_path=output_path,
+        command_path="dataset reconcile-links",
+        complete_via=build_complete_via(
+            click.get_current_context(), output_hint=hint_for("dataset-reconcile-links", output_format)
+        ),
+    )
+    control_notice = (
+        bounded_control_notice(f"wrote {len(rows)} rows to {output_path}") if output_path is not None else None
+    )
+
+    projected = project_rows(rows, sink.max_rows)
+    displayed_rows = projected.rows
+    payload: dict[str, object] = {"rows": displayed_rows}
+    if projected.truncated:
+        payload["truncation"] = {
+            "omitted": projected.omitted,
+            "total": projected.total,
+            "complete_via": sink.complete_via,
+        }
+
     def _render() -> None:
-        if rows:
-            for row in rows:
+        if displayed_rows:
+            for row in displayed_rows:
                 action = "fixed" if fix else "would fix"
-                click.echo(
+                sink.echo(
                     f"{action}: {row['file']} {row['entity_id']} datasets entry "
                     f"{row['entry']!r} -> {row['resolved_dataset']} ({row['reason']})"
                 )
         else:
-            click.echo("no resolvable free-text dataset links")
+            sink.echo("no resolvable free-text dataset links")
+        if projected.truncated:
+            sink.echo(f"showing {len(displayed_rows)} of {projected.total} rows")
+            sink.echo(f"  complete output:  {sink.complete_via}")
 
-    emit(output_format=output_format, payload={"rows": rows}, render_text=_render)
+    emit(output_format=output_format, payload=payload, render_text=_render, sink=sink)
+    sink.flush()
+    if control_notice is not None:
+        click.echo(control_notice)
 
+    # Exit reflects the FULL result, never the projected display.
     if rows and not fix:
         raise click.exceptions.Exit(1)
 
@@ -629,12 +733,27 @@ def dataset_consumers(ref: str, project_root: Path | None) -> None:
     type=click.Path(path_type=Path, file_okay=False, dir_okay=True),
     help="Project root (defaults to SCIENCE_PROJECT_ROOT env var or cwd)",
 )
-def dataset_register_run(workflow_run_id: str, project_root: Path | None) -> None:
+@click.option("--format", "output_format", type=click.Choice(OUTPUT_FORMATS), default="table", show_default=True)
+@click.option(
+    "--output",
+    "output_path",
+    type=click.Path(path_type=Path),
+    default=None,
+    help="Write the complete, unbudgeted report to PATH instead of stdout.",
+)
+def dataset_register_run(
+    workflow_run_id: str, project_root: Path | None, output_format: str, output_path: Path | None
+) -> None:
     """Register derived datasets for a completed workflow run.
 
     Writes per-output datapackage.yaml files, creates derived dataset entities,
     and updates symmetric edges (produces/consumed_by).
     """
+    from science_tool.budget.control import bounded_control_notice
+    from science_tool.budget.invocation import build_complete_via, hint_for
+    from science_tool.budget.projection import project_rows
+    from science_tool.budget.registry import lookup
+    from science_tool.budget.sink import BoundedSink
     from science_tool.datasets_register import (
         FingerprintCaptureError,
         persist_run_fingerprint,
@@ -644,29 +763,75 @@ def dataset_register_run(workflow_run_id: str, project_root: Path | None) -> Non
         write_symmetric_edges,
     )
 
+    sink = BoundedSink(
+        lookup("dataset register-run"),
+        output_path=output_path,
+        command_path="dataset register-run",
+        complete_via=build_complete_via(
+            click.get_current_context(), output_hint=hint_for("dataset-register-run", output_format)
+        ),
+    )
+    control_notice = (
+        bounded_control_notice(f"wrote the complete register-run report to {output_path}")
+        if output_path is not None
+        else None
+    )
+
     root = project_root.resolve() if project_root else _project_root_from_env()
     try:
         preflight_register_run_identity(root, workflow_run_id)
         fingerprint = persist_run_fingerprint(root, workflow_run_id)
-        click.echo(f"captured fingerprint {fingerprint.fingerprint_policy} for {workflow_run_id}")
         dp_paths = write_per_output_datapackages(root, workflow_run_id)
     except (FileNotFoundError, ValueError, FingerprintCaptureError) as exc:
         click.echo(str(exc), err=True)
         raise click.exceptions.Exit(1)
-    for p in dp_paths:
-        click.echo(f"wrote {p}")
 
     try:
         entities = write_derived_dataset_entities(root, workflow_run_id)
     except (FileNotFoundError, ValueError) as exc:
         click.echo(str(exc), err=True)
         raise click.exceptions.Exit(1)
-    for path, ds_id in entities:
-        click.echo(f"entity {ds_id} -> {path}")
 
     dataset_ids = [ds_id for _, ds_id in entities]
     write_symmetric_edges(root, workflow_run_id, dataset_ids)
-    click.echo(f"register-run complete: {len(dp_paths)} outputs, {len(entities)} entities")
+
+    # One combined row list, in the order previously echoed (datapackages, then
+    # entities) -- a single growable payload rather than two independently
+    # truncatable halves of the same run.
+    rows: list[dict[str, str]] = [{"kind": "datapackage", "path": str(p)} for p in dp_paths]
+    rows.extend({"kind": "entity", "id": ds_id, "path": str(path)} for path, ds_id in entities)
+
+    projected = project_rows(rows, sink.max_rows)
+    displayed = projected.rows
+    payload: dict[str, object] = {
+        "fingerprint_policy": fingerprint.fingerprint_policy,
+        "outputs": len(dp_paths),
+        "entities": len(entities),
+        "rows": displayed,
+    }
+    if projected.truncated:
+        payload["truncation"] = {
+            "omitted": projected.omitted,
+            "total": projected.total,
+            "complete_via": sink.complete_via,
+        }
+
+    def _render() -> None:
+        sink.echo(f"captured fingerprint {fingerprint.fingerprint_policy} for {workflow_run_id}")
+        for row in displayed:
+            if row["kind"] == "datapackage":
+                sink.echo(f"wrote {row['path']}")
+            else:
+                sink.echo(f"entity {row['id']} -> {row['path']}")
+        if projected.truncated:
+            sink.echo(f"showing {len(displayed)} of {projected.total} rows")
+            sink.echo(f"  complete output:  {sink.complete_via}")
+        sink.echo(f"register-run complete: {len(dp_paths)} outputs, {len(entities)} entities")
+
+    emit(output_format=output_format, payload=payload, render_text=_render, sink=sink)
+    sink.flush()
+    if control_notice is not None:
+        click.echo(control_notice)
 
 
 @dataset_group.command("stochasticity")

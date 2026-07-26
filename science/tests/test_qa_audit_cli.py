@@ -39,5 +39,6 @@ def test_cli_json_output(tmp_path):
         ["--runs-dir", str(tmp_path / "entities" / "workflow-runs"), "--repo-root", str(tmp_path), "--json"],
     )
     assert result.exit_code == 0
-    rows = json.loads(result.output)
-    assert rows[0]["workflow"] == "wf-a"
+    payload = json.loads(result.output)
+    assert payload["rows"][0]["workflow"] == "wf-a"
+    assert "truncation" not in payload

@@ -35,10 +35,6 @@ from science_tool.output import OUTPUT_FORMATS, emit, emit_query_rows, unwrap_in
 from science_tool.prose import scan_prose
 
 
-def _retired_writer(command: str, forward_path: str) -> click.ClickException:
-    return click.ClickException(f"{command} is retired. {forward_path}, then run `science graph build`.")
-
-
 @click.group("graph")
 def graph_group() -> None:
     """Knowledge graph commands."""
@@ -169,10 +165,23 @@ def graph_propagate_freshness(project_root: Path, output_format: str) -> None:
     show_default=True,
     type=click.Path(path_type=Path, file_okay=False, dir_okay=True),
 )
-def graph_audit(output_format: str, project_root: Path) -> None:
+@click.option(
+    "--output", "output_path", type=click.Path(path_type=Path), default=None,
+    help="Write the complete, unbudgeted payload to PATH instead of stdout.",
+)
+def graph_audit(output_format: str, project_root: Path, output_path: Path | None) -> None:
     """Audit canonical source references before graph materialization."""
+    from science_tool.budget.control import bounded_control_notice
+    from science_tool.budget.invocation import build_complete_via, hint_for
+    from science_tool.budget.registry import lookup
+    from science_tool.budget.sink import BoundedSink
 
     rows, has_failures = unwrap_verdict(materialization_audit(project_root), what="graph audit")
+    complete_via = build_complete_via(click.get_current_context(), output_hint=hint_for("graph-audit", output_format))
+    control_notice = (
+        bounded_control_notice(f"wrote {len(rows)} rows to {output_path}") if output_path is not None else None
+    )
+    sink = BoundedSink(lookup("graph audit"), output_path=output_path, command_path="graph audit", complete_via=complete_via)
     emit_query_rows(
         output_format=output_format,
         title="Graph Source Audit",
@@ -185,28 +194,13 @@ def graph_audit(output_format: str, project_root: Path) -> None:
             ("details", "Details"),
         ],
         rows=rows,
+        sink=sink,
     )
+    sink.flush()
+    if control_notice is not None:
+        click.echo(control_notice)
     if has_failures:
         raise click.exceptions.Exit(1)
-
-
-@graph_group.command("migrate-addresses")
-@click.option("--apply", is_flag=True, default=False, help="Write changes to disk (default is dry-run).")
-@click.option(
-    "--path", "graph_path", default=str(DEFAULT_GRAPH_PATH), show_default=True, type=click.Path(path_type=Path)
-)
-def graph_migrate_addresses(apply: bool, graph_path: Path) -> None:
-    """Flip anti-canonical sci:addresses edges to the canonical direction.
-
-    The CORE_PROFILE declares `addresses` with source=question, target=proposition,
-    so the canonical RDF triple is `?question sci:addresses ?proposition`. Earlier
-    workflows produced the reversed direction (`?proposition sci:addresses ?question`),
-    which made `question-summary` undercount. This command rewrites those triples
-    in place. Triples already in the canonical direction are left untouched.
-
-    Dry-run by default; pass --apply to write.
-    """
-    raise _retired_writer("graph migrate-addresses", "Address direction is canonical at build")
 
 
 @graph_group.command("stats")
@@ -260,26 +254,33 @@ def graph_validate(output_format: str, graph_path: Path) -> None:
 @click.option(
     "--path", "graph_path", default=str(DEFAULT_GRAPH_PATH), show_default=True, type=click.Path(path_type=Path)
 )
-def graph_diff(mode: str, output_format: str, graph_path: Path) -> None:
+@click.option(
+    "--output", "output_path", type=click.Path(path_type=Path), default=None,
+    help="Write the complete, unbudgeted payload to PATH instead of stdout.",
+)
+def graph_diff(mode: str, output_format: str, graph_path: Path, output_path: Path | None) -> None:
     """Show files that are stale relative to graph revision metadata."""
+    from science_tool.budget.control import bounded_control_notice
+    from science_tool.budget.invocation import build_complete_via, hint_for
+    from science_tool.budget.registry import lookup
+    from science_tool.budget.sink import BoundedSink
 
     rows = unwrap_instrument(diff_graph_inputs(graph_path=graph_path, mode=mode), what="graph diff")
+    complete_via = build_complete_via(click.get_current_context(), output_hint=hint_for("graph-diff", output_format))
+    control_notice = (
+        bounded_control_notice(f"wrote {len(rows)} rows to {output_path}") if output_path is not None else None
+    )
+    sink = BoundedSink(lookup("graph diff"), output_path=output_path, command_path="graph diff", complete_via=complete_via)
     emit_query_rows(
         output_format=output_format,
         title="Graph Diff",
         columns=[("path", "Path"), ("status", "Status"), ("reason", "Reason")],
         rows=rows,
+        sink=sink,
     )
-
-
-@graph_group.command("stamp-revision")
-@click.option(
-    "--path", "graph_path", default=str(DEFAULT_GRAPH_PATH), show_default=True, type=click.Path(path_type=Path)
-)
-def graph_stamp_revision(graph_path: Path) -> None:
-    """Update graph revision metadata to reflect current project state."""
-
-    raise _retired_writer("graph stamp-revision", "The compiler stamps revisions")
+    sink.flush()
+    if control_notice is not None:
+        click.echo(control_notice)
 
 
 @graph_group.command("predicates")
@@ -425,18 +426,35 @@ def graph_coverage(limit: int, output_format: str, graph_path: Path) -> None:
 @click.option(
     "--path", "graph_path", default=str(DEFAULT_GRAPH_PATH), show_default=True, type=click.Path(path_type=Path)
 )
-def graph_gaps(center: str, hops: int, limit: int, output_format: str, graph_path: Path) -> None:
+@click.option(
+    "--output", "output_path", type=click.Path(path_type=Path), default=None,
+    help="Write the complete, unbudgeted payload to PATH instead of stdout.",
+)
+def graph_gaps(center: str, hops: int, limit: int, output_format: str, graph_path: Path, output_path: Path | None) -> None:
     """Show structural and evidential fragility in a neighborhood around a graph target."""
+    from science_tool.budget.control import bounded_control_notice
+    from science_tool.budget.invocation import build_complete_via, hint_for
+    from science_tool.budget.registry import lookup
+    from science_tool.budget.sink import BoundedSink
 
     rows = unwrap_instrument(
         query_gaps(graph_path=graph_path, center=center, hops=hops, limit=limit), what="graph gaps"
     )
+    complete_via = build_complete_via(click.get_current_context(), output_hint=hint_for("graph-gaps", output_format))
+    control_notice = (
+        bounded_control_notice(f"wrote {len(rows)} rows to {output_path}") if output_path is not None else None
+    )
+    sink = BoundedSink(lookup("graph gaps"), output_path=output_path, command_path="graph gaps", complete_via=complete_via)
     emit_query_rows(
         output_format=output_format,
         title="Graph Gaps",
         columns=[("entity", "Entity"), ("label", "Label"), ("issues", "Issues")],
         rows=rows,
+        sink=sink,
     )
+    sink.flush()
+    if control_notice is not None:
+        click.echo(control_notice)
 
 
 @graph_group.command("uncertainty")
@@ -445,10 +463,27 @@ def graph_gaps(center: str, hops: int, limit: int, output_format: str, graph_pat
 @click.option(
     "--path", "graph_path", default=str(DEFAULT_GRAPH_PATH), show_default=True, type=click.Path(path_type=Path)
 )
-def graph_uncertainty(top: int, output_format: str, graph_path: Path) -> None:
+@click.option(
+    "--output", "output_path", type=click.Path(path_type=Path), default=None,
+    help="Write the complete, unbudgeted payload to PATH instead of stdout.",
+)
+def graph_uncertainty(top: int, output_format: str, graph_path: Path, output_path: Path | None) -> None:
     """Show claims and hypotheses ranked by derived uncertainty signals from support/dispute structure."""
+    from science_tool.budget.control import bounded_control_notice
+    from science_tool.budget.invocation import build_complete_via, hint_for
+    from science_tool.budget.registry import lookup
+    from science_tool.budget.sink import BoundedSink
 
     rows = unwrap_instrument(query_uncertainty(graph_path=graph_path, top=top), what="graph uncertainty")
+    complete_via = build_complete_via(
+        click.get_current_context(), output_hint=hint_for("graph-uncertainty", output_format)
+    )
+    control_notice = (
+        bounded_control_notice(f"wrote {len(rows)} rows to {output_path}") if output_path is not None else None
+    )
+    sink = BoundedSink(
+        lookup("graph uncertainty"), output_path=output_path, command_path="graph uncertainty", complete_via=complete_via
+    )
     emit_query_rows(
         output_format=output_format,
         title="Graph Uncertainty",
@@ -460,7 +495,11 @@ def graph_uncertainty(top: int, output_format: str, graph_path: Path) -> None:
             ("confidence", "Confidence"),
         ],
         rows=rows,
+        sink=sink,
     )
+    sink.flush()
+    if control_notice is not None:
+        click.echo(control_notice)
 
 
 @graph_group.command("dashboard-summary")
@@ -469,10 +508,30 @@ def graph_uncertainty(top: int, output_format: str, graph_path: Path) -> None:
 @click.option(
     "--path", "graph_path", default=str(DEFAULT_GRAPH_PATH), show_default=True, type=click.Path(path_type=Path)
 )
-def graph_dashboard_summary(top: int, output_format: str, graph_path: Path) -> None:
+@click.option(
+    "--output", "output_path", type=click.Path(path_type=Path), default=None,
+    help="Write the complete, unbudgeted payload to PATH instead of stdout.",
+)
+def graph_dashboard_summary(top: int, output_format: str, graph_path: Path, output_path: Path | None) -> None:
     """Show claim-centric dashboard summaries for evidence mix, empirical support, and risk."""
+    from science_tool.budget.control import bounded_control_notice
+    from science_tool.budget.invocation import build_complete_via, hint_for
+    from science_tool.budget.registry import lookup
+    from science_tool.budget.sink import BoundedSink
 
     rows = unwrap_instrument(query_dashboard_summary(graph_path=graph_path, top=top), what="graph dashboard")
+    complete_via = build_complete_via(
+        click.get_current_context(), output_hint=hint_for("graph-dashboard-summary", output_format)
+    )
+    control_notice = (
+        bounded_control_notice(f"wrote {len(rows)} rows to {output_path}") if output_path is not None else None
+    )
+    sink = BoundedSink(
+        lookup("graph dashboard-summary"),
+        output_path=output_path,
+        command_path="graph dashboard-summary",
+        complete_via=complete_via,
+    )
     emit_query_rows(
         output_format=output_format,
         title="Graph Dashboard Summary",
@@ -498,7 +557,11 @@ def graph_dashboard_summary(top: int, output_format: str, graph_path: Path) -> N
             ("bridge_hypotheses", "Bridge Hypotheses"),
         ],
         rows=rows,
+        sink=sink,
     )
+    sink.flush()
+    if control_notice is not None:
+        click.echo(control_notice)
 
 
 @graph_group.command("neighborhood-summary")
@@ -508,11 +571,33 @@ def graph_dashboard_summary(top: int, output_format: str, graph_path: Path) -> N
 @click.option(
     "--path", "graph_path", default=str(DEFAULT_GRAPH_PATH), show_default=True, type=click.Path(path_type=Path)
 )
-def graph_neighborhood_summary(top: int, hops: int, output_format: str, graph_path: Path) -> None:
+@click.option(
+    "--output", "output_path", type=click.Path(path_type=Path), default=None,
+    help="Write the complete, unbudgeted payload to PATH instead of stdout.",
+)
+def graph_neighborhood_summary(
+    top: int, hops: int, output_format: str, graph_path: Path, output_path: Path | None
+) -> None:
     """Show claim-centered neighborhood risk summaries for local uncertainty prioritization."""
+    from science_tool.budget.control import bounded_control_notice
+    from science_tool.budget.invocation import build_complete_via, hint_for
+    from science_tool.budget.registry import lookup
+    from science_tool.budget.sink import BoundedSink
 
     rows = unwrap_instrument(
         query_neighborhood_summary(graph_path=graph_path, top=top, hops=hops), what="graph neighborhood-summary"
+    )
+    complete_via = build_complete_via(
+        click.get_current_context(), output_hint=hint_for("graph-neighborhood-summary", output_format)
+    )
+    control_notice = (
+        bounded_control_notice(f"wrote {len(rows)} rows to {output_path}") if output_path is not None else None
+    )
+    sink = BoundedSink(
+        lookup("graph neighborhood-summary"),
+        output_path=output_path,
+        command_path="graph neighborhood-summary",
+        complete_via=complete_via,
     )
     emit_query_rows(
         output_format=output_format,
@@ -529,7 +614,11 @@ def graph_neighborhood_summary(top: int, hops: int, output_format: str, graph_pa
             ("structural_fragility", "Structure"),
         ],
         rows=rows,
+        sink=sink,
     )
+    sink.flush()
+    if control_notice is not None:
+        click.echo(control_notice)
 
 
 @graph_group.command("question-summary")
@@ -538,10 +627,30 @@ def graph_neighborhood_summary(top: int, hops: int, output_format: str, graph_pa
 @click.option(
     "--path", "graph_path", default=str(DEFAULT_GRAPH_PATH), show_default=True, type=click.Path(path_type=Path)
 )
-def graph_question_summary(top: int | None, output_format: str, graph_path: Path) -> None:
+@click.option(
+    "--output", "output_path", type=click.Path(path_type=Path), default=None,
+    help="Write the complete, unbudgeted payload to PATH instead of stdout.",
+)
+def graph_question_summary(top: int | None, output_format: str, graph_path: Path, output_path: Path | None) -> None:
     """Show question-level rollups derived from claim and neighborhood summaries."""
+    from science_tool.budget.control import bounded_control_notice
+    from science_tool.budget.invocation import build_complete_via, hint_for
+    from science_tool.budget.registry import lookup
+    from science_tool.budget.sink import BoundedSink
 
     rows = unwrap_instrument(query_question_summary(graph_path=graph_path, top=top), what="graph question-summary")
+    complete_via = build_complete_via(
+        click.get_current_context(), output_hint=hint_for("graph-question-summary", output_format)
+    )
+    control_notice = (
+        bounded_control_notice(f"wrote {len(rows)} rows to {output_path}") if output_path is not None else None
+    )
+    sink = BoundedSink(
+        lookup("graph question-summary"),
+        output_path=output_path,
+        command_path="graph question-summary",
+        complete_via=complete_via,
+    )
     emit_query_rows(
         output_format=output_format,
         title="Graph Question Summary",
@@ -557,7 +666,11 @@ def graph_question_summary(top: int | None, output_format: str, graph_path: Path
             ("no_empirical_claim_count", "No Empirical"),
         ],
         rows=rows,
+        sink=sink,
     )
+    sink.flush()
+    if control_notice is not None:
+        click.echo(control_notice)
 
 
 @graph_group.command("inquiry-summary")
@@ -566,10 +679,30 @@ def graph_question_summary(top: int | None, output_format: str, graph_path: Path
 @click.option(
     "--path", "graph_path", default=str(DEFAULT_GRAPH_PATH), show_default=True, type=click.Path(path_type=Path)
 )
-def graph_inquiry_summary(top: int, output_format: str, graph_path: Path) -> None:
+@click.option(
+    "--output", "output_path", type=click.Path(path_type=Path), default=None,
+    help="Write the complete, unbudgeted payload to PATH instead of stdout.",
+)
+def graph_inquiry_summary(top: int, output_format: str, graph_path: Path, output_path: Path | None) -> None:
     """Show inquiry-level rollups derived from explicit claim backing and claim summaries."""
+    from science_tool.budget.control import bounded_control_notice
+    from science_tool.budget.invocation import build_complete_via, hint_for
+    from science_tool.budget.registry import lookup
+    from science_tool.budget.sink import BoundedSink
 
     rows = unwrap_instrument(query_inquiry_summary(graph_path=graph_path, top=top), what="graph inquiry-summary")
+    complete_via = build_complete_via(
+        click.get_current_context(), output_hint=hint_for("graph-inquiry-summary", output_format)
+    )
+    control_notice = (
+        bounded_control_notice(f"wrote {len(rows)} rows to {output_path}") if output_path is not None else None
+    )
+    sink = BoundedSink(
+        lookup("graph inquiry-summary"),
+        output_path=output_path,
+        command_path="graph inquiry-summary",
+        complete_via=complete_via,
+    )
     emit_query_rows(
         output_format=output_format,
         title="Graph Inquiry Summary",
@@ -588,7 +721,11 @@ def graph_inquiry_summary(top: int, output_format: str, graph_path: Path) -> Non
             ("status", "Status"),
         ],
         rows=rows,
+        sink=sink,
     )
+    sink.flush()
+    if control_notice is not None:
+        click.echo(control_notice)
 
 
 @graph_group.command("rehoming-debt")
@@ -596,7 +733,11 @@ def graph_inquiry_summary(top: int, output_format: str, graph_path: Path) -> Non
 @click.option(
     "--path", "graph_path", default=str(DEFAULT_GRAPH_PATH), show_default=True, type=click.Path(path_type=Path)
 )
-def graph_rehoming_debt(output_format: str, graph_path: Path) -> None:
+@click.option(
+    "--output", "output_path", type=click.Path(path_type=Path), default=None,
+    help="Write the complete, unbudgeted payload to PATH instead of stdout.",
+)
+def graph_rehoming_debt(output_format: str, graph_path: Path, output_path: Path | None) -> None:
     """Open questions still attached to a CLOSED hypothesis (a terminal `status`).
 
     Closing a hypothesis does not close its questions -- it UNHOUSES them. They are dropped
@@ -604,10 +745,26 @@ def graph_rehoming_debt(output_format: str, graph_path: Path) -> None:
     VISIBLE debt would become an INVISIBLE one. Retirement creates work; this is where that
     work shows up (fb-2026-07-11-005).
     """
+    from science_tool.budget.control import bounded_control_notice
+    from science_tool.budget.invocation import build_complete_via, hint_for
+    from science_tool.budget.registry import lookup
+    from science_tool.budget.sink import BoundedSink
     from science_tool.graph.attention import list_rehoming_debt
 
     result = list_rehoming_debt(graph_path)
     rows = unwrap_instrument(result, what="graph rehoming-debt")
+    complete_via = build_complete_via(
+        click.get_current_context(), output_hint=hint_for("graph-rehoming-debt", output_format)
+    )
+    control_notice = (
+        bounded_control_notice(f"wrote {len(rows)} rows to {output_path}") if output_path is not None else None
+    )
+    sink = BoundedSink(
+        lookup("graph rehoming-debt"),
+        output_path=output_path,
+        command_path="graph rehoming-debt",
+        complete_via=complete_via,
+    )
     emit_query_rows(
         output_format=output_format,
         title="Re-homing debt (open questions on terminal hypotheses)",
@@ -617,7 +774,11 @@ def graph_rehoming_debt(output_format: str, graph_path: Path) -> None:
             ("question_status", "Status"),
         ],
         rows=rows,
+        sink=sink,
     )
+    sink.flush()
+    if control_notice is not None:
+        click.echo(control_notice)
 
 
 @graph_group.command("attention-sample")
@@ -634,6 +795,10 @@ def graph_rehoming_debt(output_format: str, graph_path: Path) -> None:
 @click.option(
     "--path", "graph_path", default=str(DEFAULT_GRAPH_PATH), show_default=True, type=click.Path(path_type=Path)
 )
+@click.option(
+    "--output", "output_path", type=click.Path(path_type=Path), default=None,
+    help="Write the complete, unbudgeted payload to PATH instead of stdout.",
+)
 def graph_attention_sample(
     limit: int,
     seed: int | None,
@@ -642,8 +807,13 @@ def graph_attention_sample(
     output_format: str,
     reason_aware: bool,
     graph_path: Path,
+    output_path: Path | None,
 ) -> None:
     """Sample epistemic entities by graph-derived attention weight."""
+    from science_tool.budget.control import bounded_control_notice
+    from science_tool.budget.invocation import build_complete_via, hint_for
+    from science_tool.budget.registry import lookup
+    from science_tool.budget.sink import BoundedSink
     from science_tool.graph.attention import query_attention_sample
 
     if limit < 0:
@@ -670,6 +840,18 @@ def graph_attention_sample(
             }
             for row in rows
         ]
+    complete_via = build_complete_via(
+        click.get_current_context(), output_hint=hint_for("graph-attention-sample", output_format)
+    )
+    control_notice = (
+        bounded_control_notice(f"wrote {len(rows)} rows to {output_path}") if output_path is not None else None
+    )
+    sink = BoundedSink(
+        lookup("graph attention-sample"),
+        output_path=output_path,
+        command_path="graph attention-sample",
+        complete_via=complete_via,
+    )
     emit_query_rows(
         output_format=output_format,
         title="Graph Attention Sample",
@@ -686,7 +868,11 @@ def graph_attention_sample(
             ("label", "Label"),
         ],
         rows=table_rows,
+        sink=sink,
     )
+    sink.flush()
+    if control_notice is not None:
+        click.echo(control_notice)
 
 
 @graph_group.command("attention-rank")
@@ -697,14 +883,23 @@ def graph_attention_sample(
 @click.option(
     "--path", "graph_path", default=str(DEFAULT_GRAPH_PATH), show_default=True, type=click.Path(path_type=Path)
 )
+@click.option(
+    "--output", "output_path", type=click.Path(path_type=Path), default=None,
+    help="Write the complete, unbudgeted payload to PATH instead of stdout.",
+)
 def graph_attention_rank(
     limit: int | None,
     kinds: tuple[str, ...],
     epsilon: float,
     output_format: str,
     graph_path: Path,
+    output_path: Path | None,
 ) -> None:
     """Rank epistemic entities by graph-derived attention weight (deterministic)."""
+    from science_tool.budget.control import bounded_control_notice
+    from science_tool.budget.invocation import build_complete_via, hint_for
+    from science_tool.budget.registry import lookup
+    from science_tool.budget.sink import BoundedSink
     from science_tool.graph.attention import query_attention_ranked
 
     if limit is not None and limit < 0:
@@ -724,6 +919,18 @@ def graph_attention_rank(
     table_rows = rows
     if output_format == "table":
         table_rows = [{**row, "last_reviewed": row["last_reviewed"] or "never"} for row in rows]
+    complete_via = build_complete_via(
+        click.get_current_context(), output_hint=hint_for("graph-attention-rank", output_format)
+    )
+    control_notice = (
+        bounded_control_notice(f"wrote {len(rows)} rows to {output_path}") if output_path is not None else None
+    )
+    sink = BoundedSink(
+        lookup("graph attention-rank"),
+        output_path=output_path,
+        command_path="graph attention-rank",
+        complete_via=complete_via,
+    )
     emit_query_rows(
         output_format=output_format,
         title="Attention ranking",
@@ -736,7 +943,11 @@ def graph_attention_rank(
             ("open_question_debt", "Q-Debt"),
         ],
         rows=table_rows,
+        sink=sink,
     )
+    sink.flush()
+    if control_notice is not None:
+        click.echo(control_notice)
 
 
 @graph_group.command("project-summary")
@@ -819,17 +1030,6 @@ def graph_export_json(overlays: tuple[str, ...], graph_path: Path) -> None:
     emit(output_format="json", payload=payload.model_dump(mode="json"), render_text=lambda: None, sort_keys=True)
 
 
-@graph_group.command("import")
-@click.argument("snapshot_path", required=False, type=click.Path(path_type=Path))
-@click.option(
-    "--path", "graph_path", default=str(DEFAULT_GRAPH_PATH), show_default=True, type=click.Path(path_type=Path)
-)
-def graph_import(snapshot_path: Path | None, graph_path: Path) -> None:
-    """Import a Turtle snapshot into the knowledge graph."""
-
-    raise _retired_writer("graph import", "Raw-triple import is retired; author the source records")
-
-
 @graph_group.command("scan-prose")
 @click.argument("directory", type=click.Path(exists=True, file_okay=False, path_type=Path))
 @click.option("--format", "output_format", type=click.Choice(OUTPUT_FORMATS), default="table", show_default=True)
@@ -857,393 +1057,6 @@ def graph_scan_prose(directory: Path, output_format: str) -> None:
         ],
         rows=rows,
     )
-
-@graph_group.group("add")
-def graph_add() -> None:
-    """Add graph entities and edges."""
-
-
-@graph_add.command("concept")
-@click.argument("label", required=False)
-@click.option("--type", "concept_type", default=None)
-@click.option("--ontology-id", default=None)
-@click.option("--note", default=None, help="skos:note annotation")
-@click.option("--definition", default=None, help="skos:definition annotation")
-@click.option("--property", "properties", type=(str, str), multiple=True, help="KEY VALUE property pair (repeatable)")
-@click.option("--status", default=None, help="Project status")
-@click.option("--source", default=None, help="Provenance source reference (paper:doi_... or file path)")
-@click.option(
-    "--path", "graph_path", default=str(DEFAULT_GRAPH_PATH), show_default=True, type=click.Path(path_type=Path)
-)
-def graph_add_concept(
-    label: str | None,
-    concept_type: str | None,
-    ontology_id: str | None,
-    note: str | None,
-    definition: str | None,
-    properties: tuple[tuple[str, str], ...],
-    status: str | None,
-    source: str | None,
-    graph_path: Path,
-) -> None:
-    """Add a concept node to the knowledge graph."""
-
-    raise _retired_writer(
-        "graph add concept",
-        "Run `science entity create concept <title>` (or edit entities/concepts/<slug>.md)",
-    )
-
-
-@graph_add.command("article")
-@click.argument("doi")
-@click.option(
-    "--path", "graph_path", default=str(DEFAULT_GRAPH_PATH), show_default=True, type=click.Path(path_type=Path)
-)
-def add_article_cmd(doi: str, graph_path: Path) -> None:
-    """Add an external literature reference by DOI."""
-    raise _retired_writer(
-        "graph add article",
-        "Run `science entity create paper <title> --id <citekey>` "
-        "(or edit entities/papers/<citekey>.md with a doi: field)",
-    )
-
-
-@graph_add.command("proposition")
-@click.argument("text", required=False)
-@click.option("--source", help="Provenance reference")
-@click.option("--confidence", type=float, default=None)
-@click.option("--evidence-type", default=None)
-@click.option("--id", "proposition_id", default=None, help="Custom proposition ID slug")
-@click.option("--subject", default=None, help="Structured S-P-O: subject entity")
-@click.option("--predicate", default=None, help="Structured S-P-O: predicate")
-@click.option("--object", "obj", default=None, help="Structured S-P-O: object entity")
-@click.option("--compositional-status", default=None)
-@click.option("--compositional-method", default=None, help="Normalization or per-cell method used")
-@click.option("--compositional-note", default=None, help="Brief note on compositional robustness outcome")
-@click.option("--platform-pattern", default=None, help="Summary label for platform heterogeneity")
-@click.option("--dataset-effect", "dataset_effect_entries", multiple=True, help="Per-dataset effect as DATASET=VALUE")
-@click.option(
-    "--evidence-line",
-    "evidence_line_entries",
-    multiple=True,
-    help='Evidence-line JSON, e.g. {"source":"t133","kind":"internal_correlation","datasets":["MMRF"]}',
-)
-@click.option("--statistical-support", default=None)
-@click.option("--mechanistic-support", default=None)
-@click.option("--replication-scope", default=None)
-@click.option("--claim-status", default=None)
-@click.option("--pre-registration", "pre_registration_refs", multiple=True, help="Linked pre-registration ref")
-@click.option(
-    "--interaction-term",
-    "interaction_term_entries",
-    multiple=True,
-    help='Interaction-term JSON, e.g. {"modifier":"concept/kras","effect":"amplifies","note":"..."}',
-)
-@click.option("--bridge-between", "bridge_between_refs", multiple=True, help="Hypothesis ref bridged by this claim")
-@click.option(
-    "--bridge-role",
-    "bridge_role",
-    default="core",
-    show_default=True,
-    help="Membership role for --bridge-between frames",
-)
-@click.option(
-    "--path", "graph_path", default=str(DEFAULT_GRAPH_PATH), show_default=True, type=click.Path(path_type=Path)
-)
-def add_proposition_cmd(
-    text: str | None,
-    source: str | None,
-    confidence: float | None,
-    evidence_type: str | None,
-    proposition_id: str | None,
-    subject: str | None,
-    predicate: str | None,
-    obj: str | None,
-    compositional_status: str | None,
-    compositional_method: str | None,
-    compositional_note: str | None,
-    platform_pattern: str | None,
-    dataset_effect_entries: tuple[str, ...],
-    evidence_line_entries: tuple[str, ...],
-    statistical_support: str | None,
-    mechanistic_support: str | None,
-    replication_scope: str | None,
-    claim_status: str | None,
-    pre_registration_refs: tuple[str, ...],
-    interaction_term_entries: tuple[str, ...],
-    bridge_between_refs: tuple[str, ...],
-    bridge_role: str,
-    graph_path: Path,
-) -> None:
-    """Add a proposition to the knowledge graph."""
-    raise _retired_writer("graph add proposition", "Run `science propositions create <title>`")
-
-
-@graph_add.command("observation")
-@click.argument("description", required=False)
-@click.option("--data-source", help="Reference to data-package or dataset")
-@click.option("--metric", default=None)
-@click.option("--value", default=None)
-@click.option("--uncertainty", default=None)
-@click.option("--conditions", default=None)
-@click.option("--id", "observation_id", default=None)
-@click.option(
-    "--path", "graph_path", default=str(DEFAULT_GRAPH_PATH), show_default=True, type=click.Path(path_type=Path)
-)
-def add_observation_cmd(
-    description: str | None,
-    data_source: str | None,
-    metric: str | None,
-    value: str | None,
-    uncertainty: str | None,
-    conditions: str | None,
-    observation_id: str | None,
-    graph_path: Path,
-) -> None:
-    """Add an observation — a concrete empirical fact anchored to data."""
-    raise _retired_writer("graph add observation", "Run `science entity create observation <title>`")
-
-
-@graph_add.command("evidence")
-@click.argument("source_entity", required=False)
-@click.argument("target_entity", required=False)
-@click.option("--stance")
-@click.option("--strength", default=None)
-@click.option("--caveats", default=None)
-@click.option("--method", "evidence_method", default=None)
-@click.option(
-    "--independence",
-    default=None,
-    help="Independence of evidence source from validation target",
-)
-@click.option(
-    "--path", "graph_path", default=str(DEFAULT_GRAPH_PATH), show_default=True, type=click.Path(path_type=Path)
-)
-def add_evidence_cmd(
-    source_entity: str | None,
-    target_entity: str | None,
-    stance: str | None,
-    strength: str | None,
-    caveats: str | None,
-    evidence_method: str | None,
-    independence: str | None,
-    graph_path: Path,
-) -> None:
-    """Add an evidence edge (supports/disputes) between entities."""
-    raise _retired_writer(
-        "graph add evidence",
-        "Run `science evidence-lines create --target <ref> --stance <supports|disputes>`",
-    )
-
-
-@graph_add.command("hypothesis")
-@click.argument("hypothesis_id", required=False)
-@click.option("--text")
-@click.option("--source")
-@click.option("--status", default=None, help="Project status")
-@click.option(
-    "--path", "graph_path", default=str(DEFAULT_GRAPH_PATH), show_default=True, type=click.Path(path_type=Path)
-)
-def graph_add_hypothesis(
-    hypothesis_id: str | None, text: str | None, source: str | None, status: str | None, graph_path: Path
-) -> None:
-    """Add a hypothesis with provenance."""
-
-    raise _retired_writer("graph add hypothesis", "Run `science hypotheses create <title>`")
-
-
-@graph_add.command("question")
-@click.argument("question_id", required=False)
-@click.option("--text")
-@click.option("--source")
-@click.option("--maturity", default="open", show_default=True)
-@click.option("--status", default=None, help="Project status")
-@click.option("--related", "related_refs", multiple=True, help="Related entity reference (repeatable)")
-@click.option(
-    "--path", "graph_path", default=str(DEFAULT_GRAPH_PATH), show_default=True, type=click.Path(path_type=Path)
-)
-def graph_add_question(
-    question_id: str | None,
-    text: str | None,
-    source: str | None,
-    maturity: str,
-    status: str | None,
-    related_refs: tuple[str, ...],
-    graph_path: Path,
-) -> None:
-    """Add an open question with provenance."""
-
-    raise _retired_writer("graph add question", "Run `science questions create <title>`")
-
-
-@graph_add.command("edge")
-@click.argument("subject", required=False)
-@click.argument("predicate", required=False)
-@click.argument("object", required=False)
-@click.option("--graph", "graph_layer", default="graph/knowledge", show_default=True)
-@click.option("--claim", "claim_refs", multiple=True, help="Supporting proposition reference (repeatable)")
-@click.option(
-    "--path", "graph_path", default=str(DEFAULT_GRAPH_PATH), show_default=True, type=click.Path(path_type=Path)
-)
-def graph_add_edge(
-    subject: str | None,
-    predicate: str | None,
-    object: str | None,
-    graph_layer: str,
-    claim_refs: tuple[str, ...],
-    graph_path: Path,
-) -> None:
-    """Add an arbitrary edge to a selected named graph layer."""
-
-    raise _retired_writer(
-        "graph add edge",
-        (
-            "Author the relation in `relations.yaml` (or `relations:` frontmatter) with the target graph_layer; "
-            "claim-cited edges use inquiry flow_edges"
-        ),
-    )
-
-
-@graph_add.command("finding")
-@click.argument("summary", required=False)
-@click.option("--confidence")
-@click.option("--proposition", "propositions", multiple=True, help="Proposition ref(s)")
-@click.option("--observation", "observations", multiple=True, help="Observation ref(s)")
-@click.option("--source", help="data-package or workflow-run that produced the observations")
-@click.option("--id", "finding_id", default=None, help="Custom finding ID slug")
-@click.option(
-    "--path", "graph_path", default=str(DEFAULT_GRAPH_PATH), show_default=True, type=click.Path(path_type=Path)
-)
-def add_finding_cmd(
-    summary: str | None,
-    confidence: str | None,
-    propositions: tuple[str, ...],
-    observations: tuple[str, ...],
-    source: str,
-    finding_id: str | None,
-    graph_path: Path,
-) -> None:
-    """Add a finding — propositions grounded by observations."""
-    raise _retired_writer("graph add finding", "Run `science entity create finding <title>`")
-
-
-@graph_add.command("interpretation")
-@click.argument("summary", required=False)
-@click.option("--finding", "findings", multiple=True, help="Finding ref(s)")
-@click.option("--context", "interp_context", default=None, help="What prompted this analysis")
-@click.option("--prior", default=None, help="Previous interpretation ref (provenance chain)")
-@click.option("--id", "interpretation_id", default=None, help="Custom interpretation ID slug")
-@click.option(
-    "--path", "graph_path", default=str(DEFAULT_GRAPH_PATH), show_default=True, type=click.Path(path_type=Path)
-)
-def add_interpretation_cmd(
-    summary: str | None,
-    findings: tuple[str, ...],
-    interp_context: str | None,
-    prior: str | None,
-    interpretation_id: str | None,
-    graph_path: Path,
-) -> None:
-    """Add an interpretation — one analysis session's narrative and findings."""
-    raise _retired_writer("graph add interpretation", "Run `science interpretations create <title>`")
-
-
-@graph_add.command("discussion")
-@click.argument("summary", required=False)
-@click.option("--proposition", "propositions", multiple=True, help="Proposition ref(s)")
-@click.option("--context", "disc_context", default=None, help="What prompted this discussion")
-@click.option("--prior", default=None, help="Previous discussion ref (provenance chain)")
-@click.option("--id", "discussion_id", default=None, help="Custom discussion ID slug")
-@click.option(
-    "--path", "graph_path", default=str(DEFAULT_GRAPH_PATH), show_default=True, type=click.Path(path_type=Path)
-)
-def add_discussion_cmd(
-    summary: str | None,
-    propositions: tuple[str, ...],
-    disc_context: str | None,
-    prior: str | None,
-    discussion_id: str | None,
-    graph_path: Path,
-) -> None:
-    """Add a discussion — theoretical reasoning producing propositions."""
-    raise _retired_writer("graph add discussion", "Run `science discussions create <title>`")
-
-
-@graph_add.command("falsification")
-@click.option("--predicted", required=True, help="Prediction made before analysis")
-@click.option("--source-of-prediction", required=True, help="Origin of the falsified prediction")
-@click.option("--observed", required=True, help="Observed result that contradicted the prediction")
-@click.option("--decision", required=True, help="Decision taken after the falsification")
-@click.option("--proposition", "proposition_ref", required=True, help="Proposition ref that was falsified")
-@click.option("--supersedes-claim", default=None, help="Optional superseded claim ref")
-@click.option("--id", "falsification_id", default=None, help="Custom falsification ID slug")
-@click.option(
-    "--path", "graph_path", default=str(DEFAULT_GRAPH_PATH), show_default=True, type=click.Path(path_type=Path)
-)
-def add_falsification_cmd(
-    predicted: str,
-    source_of_prediction: str,
-    observed: str,
-    decision: str,
-    proposition_ref: str,
-    supersedes_claim: str | None,
-    falsification_id: str | None,
-    graph_path: Path,
-) -> None:
-    """Add a falsification record linked to a proposition."""
-    raise _retired_writer(
-        "graph add falsification",
-        "Run `science entity create falsification <title>` (set falsifies: to the proposition ref)",
-    )
-
-
-@graph_add.command("story")
-@click.argument("title")
-@click.option("--summary", required=True, help="Brief summary of the narrative arc")
-@click.option("--about", required=True, help="Question or hypothesis this story is about")
-@click.option("--interpretation", "interpretations", multiple=True, required=True, help="Interpretation ref(s)")
-@click.option("--status", default="draft", type=click.Choice(["draft", "developing", "mature"]))
-@click.option("--id", "story_id", default=None, help="Custom story ID slug")
-@click.option(
-    "--path", "graph_path", default=str(DEFAULT_GRAPH_PATH), show_default=True, type=click.Path(path_type=Path)
-)
-def add_story_cmd(
-    title: str,
-    summary: str,
-    about: str,
-    interpretations: tuple[str, ...],
-    status: str,
-    story_id: str | None,
-    graph_path: Path,
-) -> None:
-    """Add a story — a narrative arc around a question or hypothesis."""
-    raise _retired_writer(
-        "graph add story",
-        "Run `science entity create story <title>` (author synthesizes/organizedBy edges in relations.yaml)",
-    )
-
-
-@graph_add.command("mechanism")
-@click.argument("title", required=False)
-@click.option("--summary", help="Brief explanatory summary")
-@click.option("--participant", "participants", multiple=True, help="Participant ref(s)")
-@click.option("--proposition", "propositions", multiple=True, help="Mechanism proposition ref(s)")
-@click.option("--status", default="draft", help="Mechanism status")
-@click.option("--id", "mechanism_id", default=None, help="Custom mechanism ID slug")
-@click.option(
-    "--path", "graph_path", default=str(DEFAULT_GRAPH_PATH), show_default=True, type=click.Path(path_type=Path)
-)
-def add_mechanism_cmd(
-    title: str | None,
-    summary: str | None,
-    participants: tuple[str, ...],
-    propositions: tuple[str, ...],
-    status: str,
-    mechanism_id: str | None,
-    graph_path: Path,
-) -> None:
-    """Add a mechanism over existing typed entities and proposition refs."""
-    raise _retired_writer("graph add mechanism", "Run `science entity create mechanism <title>`")
 
 
 @graph_group.command("belief-basis")

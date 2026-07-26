@@ -342,8 +342,11 @@ def test_rollback_after_first_of_two_entity_writes_restores_surface(tmp_path: Pa
 def test_crlf_body_normalized_identically_across_preview_applyplan_and_legacy(tmp_path: Path) -> None:
     # I4 / design §9: characterize body normalization across the THREE writer routes -- preview
     # (plan_supersede), saved-plan apply (apply_supersede_plan), and legacy apply
-    # (mark_superseded(apply=True)). A CRLF + leading-blank-line body is folded to the writer's normal
-    # form identically by all three. NOT a preservation claim -- the CRLF/leading blanks are removed.
+    # (mark_superseded(apply=True)). A CRLF body is folded to the writer's normal form identically by
+    # all three. NOT a full preservation claim -- CRLF is normalized to LF, because `_render_markdown`
+    # emits LF fences and an LF frontmatter block regardless, so preserving it would only produce a
+    # file with mixed endings. The blank line after the closing fence IS preserved: it is authored
+    # body content, and dropping it put an unrequested diff in every `entity edit`.
     def seed(root: Path) -> None:
         (root / "science.yaml").write_text("name: t\n", encoding="utf-8")
         d = root / "entities" / "interpretations"
@@ -368,7 +371,8 @@ def test_crlf_body_normalized_identically_across_preview_applyplan_and_legacy(tm
     mark_superseded(root_l, ids=None, apply=True)
     legacy_body = (root_l / rel).read_text(encoding="utf-8").split("---\n", 2)[2]   # legacy apply route
     assert preview_body == applied_body == legacy_body                    # identical normal form
-    assert "\r" not in applied_body and not applied_body.startswith("\n")  # CRLF + leading blank removed
+    assert "\r" not in applied_body                                       # CRLF normalized to LF
+    assert applied_body == "\nbody line\n"                                # blank line after fence kept
 
 
 def test_apply_supersede_refuses_project_root_mismatch(tmp_path: Path) -> None:

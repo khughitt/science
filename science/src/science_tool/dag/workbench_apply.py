@@ -244,7 +244,16 @@ def _generated_frontmatter(entity: WorkbenchEntity, *, created: str, updated: st
 
 
 def _render_entity_text_from_frontmatter(frontmatter: dict[str, object], body: str) -> str:
-    return "---\n" + yaml.safe_dump(frontmatter, sort_keys=False, allow_unicode=False) + "---\n" + body
+    # allow_unicode + wide: this is a read-modify-write, so an escaping/folding dumper rewrites
+    # authored fields the edit never touched. Same rule as `entities._dump_frontmatter`.
+    dumped = yaml.safe_dump(
+        frontmatter,
+        sort_keys=False,
+        allow_unicode=True,
+        default_flow_style=False,
+        width=10_000,
+    )
+    return "---\n" + dumped + "---\n" + body
 
 
 def _workbench_frontmatter_keys(entity: WorkbenchEntity) -> frozenset[str]:

@@ -743,7 +743,17 @@ def find_entity(project_root: Path, ref: str) -> EntityLocation:
         if entity["id"] != entity_id:
             continue
         path = entity["path"]
-        frontmatter, body = _parse_markdown_file(path)
+        # Body WITHOUT the `.lstrip("\n")` `_parse_markdown_file` applies. Every writer that consumes
+        # an `EntityLocation` (`_prepare_write`, `append_entity_note`, `entity_review`, `consolidate`)
+        # renders it straight back as `"---\n" + frontmatter + "---\n" + body`, so a stripped leading
+        # newline is not a parse detail -- it deletes the blank line after the closing fence on every
+        # edit, in a diff the author never asked for.
+        #
+        # `read_text` (universal newlines), NOT the `newline=""` reader: line endings stay normalized
+        # to LF the way they always were. Preserving CRLF here would only half-preserve it, since
+        # `_render_markdown` emits LF fences and a freshly-dumped LF frontmatter block regardless --
+        # the file would come back with mixed endings, which is worse than either whole answer.
+        frontmatter, body = split_frontmatter(path.read_text(encoding="utf-8"))
         kind = str(frontmatter.get("kind") or entity_id.split(":", 1)[0])
         return EntityLocation(
             entity_id=entity_id,
@@ -1723,7 +1733,25 @@ def append_note_to_body(body: str, note_line: str) -> str:
 
 
 def _dump_frontmatter(frontmatter: dict[str, object]) -> str:
-    return yaml.safe_dump(frontmatter, sort_keys=False, allow_unicode=False)
+    """Serialize entity frontmatter without mangling the fields it is not editing.
+
+    Every authored write in this module is a READ-MODIFY-WRITE: the whole frontmatter mapping is
+    parsed, one or two keys are changed, and the mapping is dumped back. So any lossy dumper option
+    is not a formatting preference -- it rewrites fields the caller never touched.
+
+    `allow_unicode=False` escaped every non-ASCII character, and the default `width=80` then folded
+    the over-long escaped scalar across lines. A `science entity edit --status` on a title containing
+    an em-dash produced `title: "t166 \\u2014 Stage-transition edges \\u2014 Implementation\\  \\ Plan"`
+    -- unreadable, and a diff on a line the edit had nothing to do with. Over a bulk lifecycle sweep
+    that is one line of intended change per file buried in a file of title churn.
+    """
+    return yaml.safe_dump(
+        frontmatter,
+        sort_keys=False,
+        allow_unicode=True,
+        default_flow_style=False,
+        width=10_000,
+    )
 
 
 def _render_markdown(frontmatter: dict[str, object], body: str) -> str:

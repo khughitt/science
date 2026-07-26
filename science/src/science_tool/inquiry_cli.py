@@ -2,8 +2,12 @@
 from __future__ import annotations
 
 from pathlib import Path
+from typing import TYPE_CHECKING, Any
 
 import click
+
+if TYPE_CHECKING:
+    from science_tool.budget.sink import BoundedSink
 
 from science_tool.causal.export_chirho import export_chirho_script
 from science_tool.causal.export_pgmpy import export_pgmpy_script
@@ -20,12 +24,6 @@ from science_tool.output import OUTPUT_FORMATS, emit, emit_query_rows, unwrap_in
 @click.group("inquiry")
 def inquiry_group() -> None:
     """Inquiry subgraph commands."""
-
-
-def _retired_mutator(slug: str) -> click.ClickException:
-    return click.ClickException(
-        f"Inquiry graph mutation is retired. Edit entities/patches/{slug}.md and run `science graph build`."
-    )
 
 
 def _ref_from_uri(value: str) -> str:
@@ -209,82 +207,25 @@ def inquiry_import(slug, project_root, graph_path, force):
     click.echo(f"Imported inquiry/{slug} -> {dest}")
 
 
-@inquiry_group.command("add-node")
-@click.argument("slug")
-@click.argument("entity")
-@click.option("--role", required=False, type=click.Choice(["BoundaryIn", "BoundaryOut"]), default=None)
-@click.option(
-    "--path", "graph_path", default=str(DEFAULT_GRAPH_PATH), show_default=True, type=click.Path(path_type=Path)
-)
-def inquiry_add_node(slug: str, entity: str, role: str | None, graph_path: Path) -> None:
-    """Add a node to an inquiry, optionally with a boundary role."""
-    raise _retired_mutator(slug)
-
-
-@inquiry_group.command("add-edge")
-@click.argument("slug")
-@click.argument("subject")
-@click.argument("predicate")
-@click.argument("object", metavar="OBJECT")
-@click.option("--claim", "claim_refs", multiple=True, help="Supporting proposition reference (repeatable)")
-@click.option(
-    "--path", "graph_path", default=str(DEFAULT_GRAPH_PATH), show_default=True, type=click.Path(path_type=Path)
-)
-def inquiry_add_edge(
-    slug: str,
-    subject: str,
-    predicate: str,
-    object: str,
-    claim_refs: tuple[str, ...],
-    graph_path: Path,
-) -> None:
-    """Add an edge within an inquiry subgraph."""
-    raise _retired_mutator(slug)
-
-
-@inquiry_group.command("add-assumption")
-@click.argument("slug")
-@click.argument("label")
-@click.option("--source", required=True, help="Evidence source (e.g. paper:doi_...)")
-@click.option(
-    "--path", "graph_path", default=str(DEFAULT_GRAPH_PATH), show_default=True, type=click.Path(path_type=Path)
-)
-def inquiry_add_assumption(slug: str, label: str, source: str, graph_path: Path) -> None:
-    """Add an assumption to an inquiry with provenance."""
-    raise _retired_mutator(slug)
-
-
-@inquiry_group.command("add-transformation")
-@click.argument("slug")
-@click.argument("label")
-@click.option("--tool", default="", help="Tool or library name")
-@click.option(
-    "--path", "graph_path", default=str(DEFAULT_GRAPH_PATH), show_default=True, type=click.Path(path_type=Path)
-)
-def inquiry_add_transformation(slug: str, label: str, tool: str, graph_path: Path) -> None:
-    """Add a transformation step to an inquiry."""
-    raise _retired_mutator(slug)
-
-
-@inquiry_group.command("set-estimand")
-@click.argument("slug")
-@click.option("--treatment", required=True, help="Treatment variable (e.g. concept/drug)")
-@click.option("--outcome", required=True, help="Outcome variable (e.g. concept/recovery)")
-@click.option(
-    "--path", "graph_path", default=str(DEFAULT_GRAPH_PATH), show_default=True, type=click.Path(path_type=Path)
-)
-def inquiry_set_estimand(slug: str, treatment: str, outcome: str, graph_path: Path) -> None:
-    """Set treatment and outcome variables for a causal inquiry."""
-    raise _retired_mutator(slug)
-
-
 @inquiry_group.command("list")
 @click.option("--format", "output_format", type=click.Choice(OUTPUT_FORMATS), default="table", show_default=True)
 @click.option(
     "--path", "graph_path", default=str(DEFAULT_GRAPH_PATH), show_default=True, type=click.Path(path_type=Path)
 )
-def inquiry_list(output_format: str, graph_path: Path) -> None:
+@click.option(
+    "--output",
+    "output_path",
+    type=click.Path(path_type=Path),
+    default=None,
+    help="Write the complete, unbudgeted payload to PATH instead of stdout.",
+)
+def inquiry_list(output_format: str, graph_path: Path, output_path: Path | None) -> None:
     """List all inquiries."""
+    from science_tool.budget.control import bounded_control_notice
+    from science_tool.budget.invocation import build_complete_via, hint_for
+    from science_tool.budget.registry import lookup
+    from science_tool.budget.sink import BoundedSink
+
     rows = unwrap_instrument(list_inquiries(graph_path), what="inquiry list")
     if not rows:
         if output_format == "json":
@@ -292,6 +233,13 @@ def inquiry_list(output_format: str, graph_path: Path) -> None:
         else:
             click.echo("No inquiries found.")
         return
+    complete_via = build_complete_via(click.get_current_context(), output_hint=hint_for("inquiry-list", output_format))
+    control_notice = (
+        bounded_control_notice(f"wrote {len(rows)} rows to {output_path}") if output_path is not None else None
+    )
+    sink = BoundedSink(
+        lookup("inquiry list"), output_path=output_path, command_path="inquiry list", complete_via=complete_via
+    )
     emit_query_rows(
         output_format=output_format,
         title="Inquiries",
@@ -304,7 +252,37 @@ def inquiry_list(output_format: str, graph_path: Path) -> None:
             ("created", "Created"),
         ],
         rows=rows,
+        sink=sink,
     )
+    sink.flush()
+    if control_notice is not None:
+        click.echo(control_notice)
+
+
+def _inquiry_show_truncation(full: dict[str, Any], displayed: dict[str, Any], complete_via: str) -> dict[str, Any] | None:
+    """Aggregate the per-list ``<key>_omitted`` markers `project_inquiry_show` left.
+
+    Several lists can each be truncated in the same run, so this collects all of them into
+    one ``truncation`` block rather than the single-list-report ``omitted``/``total`` pair.
+    """
+    omitted = {key[: -len("_omitted")]: displayed[key] for key in displayed if key.endswith("_omitted")}
+    if not omitted:
+        return None
+    return {
+        "omitted": omitted,
+        "total": {key: len(full[key]) for key in omitted},
+        "complete_via": complete_via,
+    }
+
+
+def _echo_inquiry_show_truncation_footer(sink: BoundedSink, displayed: dict[str, Any]) -> None:
+    truncation = displayed.get("truncation")
+    if not truncation:
+        return
+    for key, omitted in truncation["omitted"].items():
+        total = truncation["total"][key]
+        sink.echo(f"showing {total - omitted} of {total} {key}")
+    sink.echo(f"  complete output:  {truncation['complete_via']}")
 
 
 @inquiry_group.command("show")
@@ -313,43 +291,77 @@ def inquiry_list(output_format: str, graph_path: Path) -> None:
 @click.option(
     "--path", "graph_path", default=str(DEFAULT_GRAPH_PATH), show_default=True, type=click.Path(path_type=Path)
 )
-def inquiry_show(slug: str, output_format: str, graph_path: Path) -> None:
+@click.option(
+    "--output",
+    "output_path",
+    type=click.Path(path_type=Path),
+    default=None,
+    help="Write the complete, unbudgeted inquiry record to PATH instead of stdout.",
+)
+def inquiry_show(slug: str, output_format: str, graph_path: Path, output_path: Path | None) -> None:
     """Show details of an inquiry."""
+    from science_tool.budget.control import bounded_control_notice
+    from science_tool.budget.invocation import build_complete_via, hint_for
+    from science_tool.budget.registry import lookup
+    from science_tool.budget.sink import BoundedSink
+    from science_tool.inquiry_show_projection import project_inquiry_show
+
     try:
         info = get_inquiry(graph_path, slug)
     except ValueError as e:
         raise click.ClickException(str(e))
 
+    complete_via = build_complete_via(click.get_current_context(), output_hint=hint_for("inquiry-show", output_format))
+    sink = BoundedSink(
+        lookup("inquiry show"), output_path=output_path, command_path="inquiry show", complete_via=complete_via
+    )
+    control_notice = (
+        bounded_control_notice(f"wrote the complete inquiry record to {output_path}")
+        if output_path is not None
+        else None
+    )
+
+    full: dict[str, Any] = dict(info)
+    displayed = full if output_path is not None else project_inquiry_show(full)
+    if output_path is None:
+        truncation = _inquiry_show_truncation(full, displayed, complete_via)
+        if truncation is not None:
+            displayed = {**displayed, "truncation": truncation}
+
     def _render() -> None:
-        click.echo(f"Inquiry: {info['label']}")
-        click.echo(f"  Slug: {info['slug']}")
-        click.echo(f"  Type: {info['inquiry_type']}")
-        click.echo(f"  Status: {info['status']}")
-        click.echo(f"  Target: {info['target']}")
-        click.echo(f"  Created: {info['created']}")
-        if info.get("description"):
-            click.echo(f"  Description: {info['description']}")
-        related = info.get("related") or []
-        if related:
-            click.echo(f"  Related: {len(related)} entit{'y' if len(related) == 1 else 'ies'}")
-            for n in related:
-                click.echo(f"    - {shorten_uri(n)}")
-        click.echo(f"  Boundary In: {len(info['boundary_in'])} node(s)")
-        for n in info["boundary_in"]:
-            click.echo(f"    - {shorten_uri(n)}")
-        click.echo(f"  Boundary Out: {len(info['boundary_out'])} node(s)")
-        for n in info["boundary_out"]:
-            click.echo(f"    - {shorten_uri(n)}")
-        click.echo(f"  Edges: {len(info['edges'])}")
-        for edge in info["edges"]:
+        sink.echo(f"Inquiry: {full['label']}")
+        sink.echo(f"  Slug: {full['slug']}")
+        sink.echo(f"  Type: {full['inquiry_type']}")
+        sink.echo(f"  Status: {full['status']}")
+        sink.echo(f"  Target: {full['target']}")
+        sink.echo(f"  Created: {full['created']}")
+        if full.get("description"):
+            sink.echo(f"  Description: {full['description']}")
+        related_full = full.get("related") or []
+        if related_full:
+            sink.echo(f"  Related: {len(related_full)} entit{'y' if len(related_full) == 1 else 'ies'}")
+            for n in displayed.get("related") or []:
+                sink.echo(f"    - {shorten_uri(n)}")
+        sink.echo(f"  Boundary In: {len(full['boundary_in'])} node(s)")
+        for n in displayed["boundary_in"]:
+            sink.echo(f"    - {shorten_uri(n)}")
+        sink.echo(f"  Boundary Out: {len(full['boundary_out'])} node(s)")
+        for n in displayed["boundary_out"]:
+            sink.echo(f"    - {shorten_uri(n)}")
+        sink.echo(f"  Edges: {len(full['edges'])}")
+        for edge in displayed["edges"]:
             line = f"    {shorten_uri(edge['subject'])} --[{shorten_uri(edge['predicate'])}]--> {shorten_uri(edge['object'])}"
             claims = edge.get("claims")
             if claims:
                 claims = ", ".join(shorten_uri(claim) for claim in claims)
                 line = f"{line} [{claims}]"
-            click.echo(line)
+            sink.echo(line)
+        _echo_inquiry_show_truncation_footer(sink, displayed)
 
-    emit(output_format=output_format, payload=info, render_text=_render, default=str)
+    emit(output_format=output_format, payload=displayed, render_text=_render, default=str, sink=sink)
+    sink.flush()
+    if control_notice is not None:
+        click.echo(control_notice)
 
 
 @inquiry_group.command("validate")
@@ -358,16 +370,59 @@ def inquiry_show(slug: str, output_format: str, graph_path: Path) -> None:
 @click.option(
     "--path", "graph_path", default=str(DEFAULT_GRAPH_PATH), show_default=True, type=click.Path(path_type=Path)
 )
-def inquiry_validate(slug: str, output_format: str, graph_path: Path) -> None:
+@click.option(
+    "--output",
+    "output_path",
+    type=click.Path(path_type=Path),
+    default=None,
+    help="Write the complete, unbudgeted validation report to PATH instead of stdout.",
+)
+def inquiry_validate(slug: str, output_format: str, graph_path: Path, output_path: Path | None) -> None:
     """Validate an inquiry subgraph."""
+    from science_tool.budget.control import bounded_control_notice
+    from science_tool.budget.invocation import build_complete_via, hint_for
+    from science_tool.budget.projection import project_single_list_report
+    from science_tool.budget.registry import lookup
+    from science_tool.budget.sink import BoundedSink
+
     results = unwrap_instrument(validate_inquiry(graph_path, slug), what="inquiry validate")
 
-    def _render() -> None:
-        for r in results:
-            icon = "PASS" if r["status"] == "pass" else "FAIL" if r["status"] == "fail" else "WARN"
-            click.echo(f"  [{icon}] {r['check']}: {r['message']}")
+    complete_via = build_complete_via(
+        click.get_current_context(), output_hint=hint_for("inquiry-validate", output_format)
+    )
+    sink = BoundedSink(
+        lookup("inquiry validate"), output_path=output_path, command_path="inquiry validate", complete_via=complete_via
+    )
+    control_notice = (
+        bounded_control_notice(f"wrote the complete validation report to {output_path}")
+        if output_path is not None
+        else None
+    )
 
-    emit(output_format=output_format, payload=results, render_text=_render)
+    full = {
+        "summary": {"checks": len(results), "failed": sum(1 for r in results if r["status"] == "fail")},
+        "results": results,
+    }
+    displayed = full if output_path is not None else project_single_list_report(full, "results", 40)
+    results_omitted = displayed.get("results_omitted", 0)
+    if output_path is None and results_omitted:
+        displayed = {
+            **displayed,
+            "truncation": {"omitted": results_omitted, "total": len(full["results"]), "complete_via": complete_via},
+        }
+
+    def _render() -> None:
+        for r in displayed["results"]:
+            icon = "PASS" if r["status"] == "pass" else "FAIL" if r["status"] == "fail" else "WARN"
+            sink.echo(f"  [{icon}] {r['check']}: {r['message']}")
+        if results_omitted:
+            sink.echo(f"showing {len(displayed['results'])} of {len(full['results'])} results")
+            sink.echo(f"  complete output:  {complete_via}")
+
+    emit(output_format=output_format, payload=displayed, render_text=_render, sink=sink)
+    sink.flush()
+    if control_notice is not None:
+        click.echo(control_notice)
 
     if any(r["status"] == "fail" for r in results):
         raise click.exceptions.Exit(1)
@@ -381,16 +436,29 @@ def inquiry_validate(slug: str, output_format: str, graph_path: Path) -> None:
 )
 def inquiry_export_pgmpy(slug: str, output_path: Path | None, graph_path: Path) -> None:
     """Export a causal inquiry as a pgmpy scaffold script."""
+    from science_tool.budget.control import bounded_control_notice
+    from science_tool.budget.invocation import build_complete_via
+    from science_tool.budget.registry import lookup
+    from science_tool.budget.sink import BoundedSink
+
     try:
         script = export_pgmpy_script(graph_path, slug)
     except ValueError as e:
         raise click.ClickException(str(e))
 
-    if output_path:
-        output_path.write_text(script, encoding="utf-8")
-        click.echo(f"Wrote pgmpy script to {output_path}")
-    else:
-        click.echo(script)
+    sink = BoundedSink(
+        lookup("inquiry export-pgmpy"),
+        output_path=output_path,
+        command_path="inquiry export-pgmpy",
+        complete_via=build_complete_via(click.get_current_context(), output_hint="export-pgmpy.py"),
+    )
+    control_notice = (
+        bounded_control_notice(f"wrote the pgmpy script to {output_path}") if output_path is not None else None
+    )
+    sink.write(script)
+    sink.flush()
+    if control_notice is not None:
+        click.echo(control_notice)
 
 
 @inquiry_group.command("export-chirho")

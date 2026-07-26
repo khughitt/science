@@ -19,7 +19,7 @@ This chapter is a command-family map, not an exhaustive reference. Use
 | Migration-only | Exists to move old project state into the current model. |
 | Exploratory | Useful for experiments or manual diagnostics; avoid as normal durable authoring. |
 | Legacy | Kept for compatibility or cleanup; avoid in new workflows. |
-| Retired | No longer executes; use the replacement source-authoring or build-from-source path. |
+| Retired | No longer executes and is unlisted in `--help`; invoking one names the replacement source-authoring or build-from-source path. |
 
 ## Write Classes
 
@@ -57,6 +57,7 @@ knowledge, and generated-write commands for materialization or reports.
 | `belief` | Derived-state | Generated-write / Read-only | Belief snapshots and derived belief profiles. |
 | `inquiry` | Canonical / specialized | Source-write / Read-only | Source-first inquiry patch profiles and causal inquiry exports. |
 | `patch` | Derived-state | Read-only | Explain or check derived patch membership. |
+| `autonomy` | Derived-state | Mixed | Open and close unattended runs (`start` / `finish`) and decide whether a run's recorded `base..head` range stayed inside its tier's default-deny write surface (`path-gate`). `finish` writes the attested run record; the baseline it reads lives outside the repository. |
 | `validate`, `health`, `refs`, `prose`, `markers`, `search` | Canonical | Mixed | Project health, references, prose linting, annotation-token checks, and archive-index search. |
 | `tasks` | Canonical | Source-write / Read-only | Project task lifecycle. `tasks fix-blockers` is migration-oriented. |
 | `feedback`, `telemetry` | Specialized | Source-write / Read-only | Agent feedback records and local operational telemetry. |

@@ -1411,6 +1411,94 @@ def test_cli_apply_json_stays_valid_with_warnings(monkeypatch: pytest.MonkeyPatc
         assert payload["created"][0]["warnings"] == ["w!"]
 
 
+def _monkeypatch_many_preexisting_audit_failures(monkeypatch: pytest.MonkeyPatch, count: int) -> None:
+    """Fake a large, unrelated pre-existing audit-failure backlog for `explore-ideas apply`.
+
+    Same shape as `test_dataset_add_cli.py` / `test_entities_cli.py`: `create_entity`'s
+    `_validate_prospective_write` call lives in `science_tool.entities`, so patching its
+    `audit_project_sources` name surfaces the same pre-existing warnings on every entity
+    `apply_report` creates in this run -- reproducing the O(created x preexisting) explosion
+    the projector must collapse.
+    """
+    from science_tool.instruments import ValidationVerdict
+
+    rows = [
+        {
+            "check": "unresolved_reference",
+            "status": "fail",
+            "source": f"question:{i:04d}-existing",
+            "field": "related",
+            "target": f"hypothesis:{i:04d}-missing",
+            "details": "pre-existing missing hypothesis",
+        }
+        for i in range(count)
+    ]
+
+    def fake_audit_project_sources(sources: object) -> ValidationVerdict[dict[str, str]]:
+        return ValidationVerdict.from_has_failures(rows, True)
+
+    monkeypatch.setattr("science_tool.entities.audit_project_sources", fake_audit_project_sources)
+
+
+def test_cli_apply_summarizes_many_preexisting_warnings(monkeypatch: pytest.MonkeyPatch) -> None:
+    runner = CliRunner()
+    with runner.isolated_filesystem(temp_dir="/tmp"):
+        root = Path.cwd()
+        seed_project(root)
+        _write_fixture(root)
+        _monkeypatch_many_preexisting_audit_failures(monkeypatch, 400)
+
+        result = runner.invoke(
+            main,
+            ["explore-ideas", "apply", "--from", "explore-2026-07-04", "--model-id", "m"],
+        )
+
+        assert result.exit_code == 0, result.output
+        assert "2 created" in result.output
+        assert "pre-existing audit failure:" not in result.output
+        # One summary note per created entity (2 entities in the fixture).
+        assert result.output.count("400 pre-existing project audit warning") == 2
+
+
+def test_cli_apply_json_summarizes_many_preexisting_warnings(monkeypatch: pytest.MonkeyPatch) -> None:
+    runner = CliRunner()
+    with runner.isolated_filesystem(temp_dir="/tmp"):
+        root = Path.cwd()
+        seed_project(root)
+        _write_fixture(root)
+        _monkeypatch_many_preexisting_audit_failures(monkeypatch, 400)
+
+        result = runner.invoke(
+            main,
+            ["explore-ideas", "apply", "--from", "explore-2026-07-04", "--model-id", "m", "--format", "json"],
+        )
+
+        assert result.exit_code == 0, result.output
+        payload = json.loads(result.output)
+        assert len(payload["created"]) == 2
+        for created in payload["created"]:
+            assert created["warnings"] == []
+            assert "400 pre-existing project audit warning" in created["preexisting_warnings_note"]
+
+
+def test_cli_apply_show_preexisting_lists_them(monkeypatch: pytest.MonkeyPatch) -> None:
+    runner = CliRunner()
+    with runner.isolated_filesystem(temp_dir="/tmp"):
+        root = Path.cwd()
+        seed_project(root)
+        _write_fixture(root)
+        _monkeypatch_many_preexisting_audit_failures(monkeypatch, 5)
+
+        result = runner.invoke(
+            main,
+            ["explore-ideas", "apply", "--from", "explore-2026-07-04", "--model-id", "m", "--show-preexisting"],
+        )
+
+        assert result.exit_code == 0, result.output
+        # 5 pre-existing warnings x 2 created entities, listed in full.
+        assert result.output.count("pre-existing audit failure:") == 10
+
+
 def test_cli_explore_ideas_gaps_text() -> None:
     runner = CliRunner()
     with runner.isolated_filesystem(temp_dir="/tmp"):

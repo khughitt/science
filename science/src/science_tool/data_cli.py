@@ -84,7 +84,7 @@ def data_audit_command(
     output_path: Path | None,
 ) -> None:
     """Report (and optionally fix) data/results/entities boundary violations."""
-    from science_tool.budget.invocation import build_complete_via
+    from science_tool.budget.invocation import build_complete_via, hint_for
     from science_tool.budget.control import bounded_control_notice
     from science_tool.budget.registry import lookup
     from science_tool.budget.sink import BoundedSink
@@ -108,7 +108,7 @@ def data_audit_command(
         output_path=output_path,
         command_path="data audit",
         complete_via=build_complete_via(
-            click.get_current_context(), output_hint="audit.json"
+            click.get_current_context(), output_hint=hint_for("audit", output_format)
         ),
     )
     control_notice = (

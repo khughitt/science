@@ -179,8 +179,20 @@ def _missing_project_entity_lookup(_ref: str) -> object | None:
 @tasks_group.command("blockers")
 @click.argument("task_id")
 @click.option("--format", "fmt", type=click.Choice(["table", "json"]), default="table")
-def tasks_blockers(task_id: str, fmt: str) -> None:
+@click.option(
+    "--output",
+    "output_path",
+    type=click.Path(path_type=Path),
+    default=None,
+    help="Write the complete, unbudgeted report to PATH instead of stdout.",
+)
+def tasks_blockers(task_id: str, fmt: str, output_path: Path | None) -> None:
     """Show per-blocker readiness for a task."""
+    from science_tool.budget.control import bounded_control_notice
+    from science_tool.budget.invocation import build_complete_via, hint_for
+    from science_tool.budget.projection import project_rows
+    from science_tool.budget.registry import lookup
+    from science_tool.budget.sink import BoundedSink
     from science_tool.tasks import _find_task, _read_active
     from science_tool.tasks_readiness import make_project_resolver
 
@@ -208,38 +220,126 @@ def tasks_blockers(task_id: str, fmt: str) -> None:
             }
         )
 
+    sink = BoundedSink(
+        lookup("tasks blockers"),
+        output_path=output_path,
+        command_path="tasks blockers",
+        complete_via=build_complete_via(click.get_current_context(), output_hint=hint_for("tasks-blockers", fmt)),
+    )
+    control_notice = (
+        bounded_control_notice(f"wrote {len(rows)} blockers to {output_path}") if output_path is not None else None
+    )
+
+    projected = project_rows(rows, sink.max_rows)
+    displayed_rows = projected.rows
+    payload: dict[str, object] = {"task_id": task.id, "blockers": displayed_rows}
+    if projected.truncated:
+        payload["truncation"] = {
+            "omitted": projected.omitted,
+            "total": projected.total,
+            "complete_via": sink.complete_via,
+        }
+
     def _render() -> None:
-        click.echo(f"Blockers for [{task.id}] {task.title}:")
-        for row in rows:
+        sink.echo(f"Blockers for [{task.id}] {task.title}:")
+        for row in displayed_rows:
             marker = "✓" if row["ready"] else "·"
             line = f"  {marker} {row['ref']:40s}  {row['state']}"
             if row["detail"]:
                 line += f"  ({row['detail']})"
-            click.echo(line)
+            sink.echo(line)
+        if projected.truncated:
+            sink.echo(f"showing {len(displayed_rows)} of {projected.total} blockers")
+            sink.echo(f"  complete output:  {sink.complete_via}")
 
-    emit(output_format=fmt, payload={"task_id": task.id, "blockers": rows}, render_text=_render)
+    emit(output_format=fmt, payload=payload, render_text=_render, sink=sink)
+    sink.flush()
+    if control_notice is not None:
+        click.echo(control_notice)
 
 
 @tasks_group.command("fix-blockers")
 @click.option("--dry-run", is_flag=True, help="List legacy untyped blockers without modifying any files")
-def tasks_fix_blockers(dry_run: bool) -> None:
-    """Interactive sweep to retype legacy untyped blockers."""
+@click.option(
+    "--format",
+    "output_format",
+    type=click.Choice(OUTPUT_FORMATS),
+    default="table",
+    show_default=True,
+    help="Output format for the --dry-run report. The live retyping sweep always prompts interactively.",
+)
+@click.option(
+    "--output",
+    "output_path",
+    type=click.Path(path_type=Path),
+    default=None,
+    help="With --dry-run, write the complete, unbudgeted report to PATH instead of stdout.",
+)
+def tasks_fix_blockers(dry_run: bool, output_format: str, output_path: Path | None) -> None:
+    """Interactive sweep to retype legacy untyped blockers.
+
+    ``--dry-run`` is a bounded report (bounded stdout, ``--output`` escape). The live
+    retyping sweep prompts interactively per blocker and cannot be buffered without
+    hiding each prompt from the person it is asking -- so ``--format``/``--output``
+    are refused without ``--dry-run``.
+    """
+    from science_tool.budget.control import bounded_control_notice
+    from science_tool.budget.invocation import build_complete_via, hint_for
+    from science_tool.budget.projection import project_rows
+    from science_tool.budget.registry import lookup
+    from science_tool.budget.sink import BoundedSink
     from science_tool.tasks import (
         _write_active,
         parse_tasks_for_cli,
     )
     from science_tool.tasks_blockers import is_typed_ref
 
+    if not dry_run and (output_path is not None or output_format != "table"):
+        raise click.UsageError("--format/--output require --dry-run (the live sweep prompts interactively)")
+
+    sink = BoundedSink(
+        lookup("tasks fix-blockers"),
+        output_path=output_path,
+        command_path="tasks fix-blockers",
+        complete_via=build_complete_via(
+            click.get_current_context(), output_hint=hint_for("tasks-fix-blockers", output_format)
+        ),
+    )
+    control_notice = (
+        bounded_control_notice(f"wrote the complete legacy-blocker report to {output_path}")
+        if output_path is not None
+        else None
+    )
+
     tasks_path = DEFAULT_TASKS_DIR / "active.md"
     tasks_, warnings = parse_tasks_for_cli(tasks_path)
-    if not warnings:
-        click.echo("No legacy untyped blockers found.")
-        return
 
-    if dry_run:
-        click.echo("Legacy untyped blockers (dry-run):")
-        for w in warnings:
-            click.echo(f"  {w}")
+    if not warnings or dry_run:
+        projected = project_rows(warnings, sink.max_rows)
+        displayed = projected.rows
+        payload: dict[str, object] = {"legacy_blockers": displayed}
+        if projected.truncated:
+            payload["truncation"] = {
+                "omitted": projected.omitted,
+                "total": projected.total,
+                "complete_via": sink.complete_via,
+            }
+
+        def _render() -> None:
+            if not warnings:
+                sink.echo("No legacy untyped blockers found.")
+                return
+            sink.echo("Legacy untyped blockers (dry-run):")
+            for w in displayed:
+                sink.echo(f"  {w}")
+            if projected.truncated:
+                sink.echo(f"showing {len(displayed)} of {projected.total} legacy blocker(s)")
+                sink.echo(f"  complete output:  {sink.complete_via}")
+
+        emit(output_format=output_format, payload=payload, render_text=_render, sink=sink)
+        sink.flush()
+        if control_notice is not None:
+            click.echo(control_notice)
         return
 
     changed = False
@@ -309,12 +409,23 @@ def tasks_unblock(task_id: str) -> None:
     show_default=True,
     type=click.Path(path_type=Path, file_okay=False, dir_okay=True),
 )
-def tasks_archive(do_apply: bool, check: bool, output_format: str, tasks_dir: Path) -> None:
+@click.option(
+    "--output",
+    "output_path",
+    type=click.Path(path_type=Path),
+    default=None,
+    help="Write the complete, unbudgeted payload to PATH instead of stdout.",
+)
+def tasks_archive(do_apply: bool, check: bool, output_format: str, tasks_dir: Path, output_path: Path | None) -> None:
     """Move done/retired tasks from active.md to done/YYYY-MM.md.
 
     Default is dry-run: prints the planned moves without touching disk.
     Pass --apply to perform the writes (idempotent on re-run).
     """
+    from science_tool.budget.control import bounded_control_notice
+    from science_tool.budget.invocation import build_complete_via, hint_for
+    from science_tool.budget.registry import lookup
+    from science_tool.budget.sink import BoundedSink
     from science_tool.tasks_archive import apply_archive, count_archivable, plan_archive
 
     if check:
@@ -342,6 +453,13 @@ def tasks_archive(do_apply: bool, check: bool, output_format: str, tasks_dir: Pa
         for entry in plan.entries
     ]
 
+    complete_via = build_complete_via(click.get_current_context(), output_hint=hint_for("tasks-archive", output_format))
+    control_notice = (
+        bounded_control_notice(f"wrote {len(rows)} rows to {output_path}") if output_path is not None else None
+    )
+    sink = BoundedSink(
+        lookup("tasks archive"), output_path=output_path, command_path="tasks archive", complete_via=complete_via
+    )
     emit_query_rows(
         output_format=output_format,
         title="Tasks Archive Plan",
@@ -352,7 +470,11 @@ def tasks_archive(do_apply: bool, check: bool, output_format: str, tasks_dir: Pa
             ("missing_completed", "Missing completed:"),
         ],
         rows=rows,
+        sink=sink,
     )
+    sink.flush()
+    if control_notice is not None:
+        click.echo(control_notice)
 
     for entry in plan.entries:
         if entry.missing_completed:
@@ -495,6 +617,12 @@ def tasks_note(task_id: str, note: str, note_date_raw: str | None) -> None:
 @click.option("--group", default=None, help="Filter by group (exact match)")
 @click.option("--aspect", "aspects", multiple=True, help="Filter by aspect (repeatable)")
 @click.option("--all", "show_all", is_flag=True, default=False, help="Include all task statuses")
+@click.option(
+    "--since",
+    "since_raw",
+    default=None,
+    help="Only show tasks closed on or after this date (YYYY-MM-DD). Requires closed statuses.",
+)
 @click.option("--format", "output_format", default="table", type=click.Choice(OUTPUT_FORMATS))
 @click.option(
     "--output",
@@ -510,22 +638,36 @@ def tasks_list(
     group: str | None,
     aspects: tuple[str, ...],
     show_all: bool,
+    since_raw: str | None,
     output_format: str,
     output_path: Path | None,
 ) -> None:
     """List tasks. Active and blocked tasks are shown by default; use --all for every status."""
+    from datetime import date
+
     from science_model.tasks import Task
 
-    from science_tool.budget.invocation import build_complete_via
+    from science_tool.budget.invocation import build_complete_via, hint_for
     from science_tool.budget.control import bounded_control_notice
     from science_tool.budget.projection import project_rows
     from science_tool.budget.registry import lookup
     from science_tool.budget.sink import BoundedSink
-    from science_tool.tasks import list_tasks, parse_tasks_for_cli
+    from science_tool.tasks import _CLOSED_STATUS_VALUES, list_tasks, parse_tasks_for_cli
     from science_tool.tasks_display import render_tasks_table, sort_tasks
     from science_tool.tasks_readiness import make_project_resolver
 
     WORKING_SET = ("active", "blocked")
+
+    since: date | None = None
+    if since_raw is not None:
+        try:
+            since = date.fromisoformat(since_raw)
+        except ValueError as exc:
+            raise click.ClickException("Date must use YYYY-MM-DD") from exc
+        if status is not None and status not in _CLOSED_STATUS_VALUES:
+            raise click.UsageError(
+                "--since only applies to closed tasks; use --status done, --status retired, or --all"
+            )
 
     # Surface legacy-untyped-blocker warnings on stderr.
     _, warnings = parse_tasks_for_cli(DEFAULT_TASKS_DIR / "active.md")
@@ -541,12 +683,13 @@ def tasks_list(
         group=group,
         aspects=list(aspects) or None,
         include_done=show_all,
+        since=since,
     )
-    if status is None and not show_all:
+    if status is None and not show_all and since is None:
         matched = [task for task in matched if task.status in WORKING_SET]
     matched = sort_tasks(matched)
 
-    complete_via = build_complete_via(click.get_current_context(), output_hint="tasks.json")
+    complete_via = build_complete_via(click.get_current_context(), output_hint=hint_for("tasks", output_format))
     control_notice = (
         bounded_control_notice(f"wrote {len(matched)} tasks to {output_path}")
         if output_path is not None
@@ -621,14 +764,18 @@ def tasks_list(
             applied_filters["group"] = group
         if aspects:
             applied_filters["aspects"] = list(aspects)
-        if not show_all and status is None:
+        if not show_all and status is None and since is None:
             applied_filters["only_status"] = list(WORKING_SET)
         meta = {
-            "active_total": active_total,
             "returned_count": len(rows),
             "sort_order": "status_rank,id",
             "applied_filters": applied_filters,
         }
+        # active_total counts only tasks/active.md and is meaningless for a
+        # --since query, whose rows come from the archive union — omit it
+        # rather than ship a "curated vs full" ratio that doesn't apply.
+        if since is None:
+            meta["active_total"] = active_total
         emit_query_rows(
             output_format=output_format,
             title="Tasks",
@@ -707,19 +854,41 @@ def tasks_show(task_id: str, output_format: str) -> None:
 
 @tasks_group.command("summary")
 @click.option("--format", "output_format", type=click.Choice(OUTPUT_FORMATS), default="table", show_default=True)
-def tasks_summary(output_format: str) -> None:
+@click.option(
+    "--output",
+    "output_path",
+    type=click.Path(path_type=Path),
+    default=None,
+    help="Write the complete, unbudgeted summary to PATH instead of stdout.",
+)
+def tasks_summary(output_format: str, output_path: Path | None) -> None:
     """Print summary counts by status, type, priority, and group."""
     from collections import Counter
 
+    from science_tool.budget.control import bounded_control_notice
+    from science_tool.budget.invocation import build_complete_via, hint_for
+    from science_tool.budget.registry import lookup
+    from science_tool.budget.sink import BoundedSink
     from science_tool.tasks import parse_tasks, warn_invalid_statuses
+    from science_tool.tasks_summary_projection import project_tasks_summary
+
+    complete_via = build_complete_via(click.get_current_context(), output_hint=hint_for("tasks-summary", output_format))
+    sink = BoundedSink(
+        lookup("tasks summary"), output_path=output_path, command_path="tasks summary", complete_via=complete_via
+    )
+    control_notice = (
+        bounded_control_notice(f"wrote the complete task summary to {output_path}")
+        if output_path is not None
+        else None
+    )
 
     active = parse_tasks(DEFAULT_TASKS_DIR / "active.md")
     if not active:
-        emit(
-            output_format=output_format,
-            payload={"total": 0, "by_status": {}, "by_type": {}, "by_priority": {}, "by_group": {}},
-            render_text=lambda: click.echo("No active tasks."),
-        )
+        full = {"total": 0, "by_status": {}, "by_type": {}, "by_priority": {}, "by_group": {}}
+        emit(output_format=output_format, payload=full, render_text=lambda: sink.echo("No active tasks."), sink=sink)
+        sink.flush()
+        if control_notice is not None:
+            click.echo(control_notice)
         return
 
     warn_invalid_statuses(active)
@@ -729,23 +898,32 @@ def tasks_summary(output_format: str) -> None:
     by_priority = Counter(t.priority for t in active)
     by_group = Counter(t.group for t in active if t.group)
 
-    def _render() -> None:
-        click.echo(f"Total: {len(active)}")
-        click.echo("By status:   " + ", ".join(f"{k}: {v}" for k, v in sorted(by_status.items())))
-        click.echo("By type:     " + ", ".join(f"{k}: {v}" for k, v in sorted(by_type.items())))
-        click.echo("By priority: " + ", ".join(f"{k}: {v}" for k, v in sorted(by_priority.items())))
-        if by_group:
-            click.echo("By group:    " + ", ".join(f"{k}: {v}" for k, v in sorted(by_group.items())))
+    full = {
+        "total": len(active),
+        "by_status": dict(sorted(by_status.items())),
+        "by_type": dict(sorted(by_type.items())),
+        "by_priority": dict(sorted(by_priority.items())),
+        "by_group": dict(sorted(by_group.items())),
+    }
+    displayed = full if output_path is not None else project_tasks_summary(full)
 
-    emit(
-        output_format=output_format,
-        payload={
-            "total": len(active),
-            "by_status": dict(sorted(by_status.items())),
-            "by_type": dict(sorted(by_type.items())),
-            "by_priority": dict(sorted(by_priority.items())),
-            "by_group": dict(sorted(by_group.items())),
-        },
-        render_text=_render,
-        sort_keys=True,
-    )
+    def _render() -> None:
+        sink.echo(f"Total: {displayed['total']}")
+        sink.echo("By status:   " + ", ".join(f"{k}: {v}" for k, v in displayed["by_status"].items()))
+        sink.echo("By type:     " + ", ".join(f"{k}: {v}" for k, v in displayed["by_type"].items()))
+        sink.echo("By priority: " + ", ".join(f"{k}: {v}" for k, v in displayed["by_priority"].items()))
+        if displayed["by_group"]:
+            sink.echo("By group:    " + ", ".join(f"{k}: {v}" for k, v in displayed["by_group"].items()))
+        omitted = {
+            key: displayed[f"{key}_omitted"]
+            for key in ("by_status", "by_type", "by_priority", "by_group")
+            if displayed.get(f"{key}_omitted", 0)
+        }
+        if omitted:
+            sink.echo(f"omitted: {omitted}")
+            sink.echo(f"  complete output:  {complete_via}")
+
+    emit(output_format=output_format, payload=displayed, render_text=_render, sink=sink, sort_keys=True)
+    sink.flush()
+    if control_notice is not None:
+        click.echo(control_notice)

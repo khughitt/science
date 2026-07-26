@@ -5,6 +5,7 @@ import os
 import re
 from pathlib import Path
 
+import pytest
 import yaml
 from _fixtures.entity_helpers import seed_project, write_markdown_entity
 from click.testing import CliRunner
@@ -353,6 +354,157 @@ def test_entity_create_with_unresolved_related_prints_warning() -> None:
         assert "WARNING" in result.output
 
 
+def _monkeypatch_many_preexisting_audit_failures(
+    monkeypatch: pytest.MonkeyPatch, count: int, *, own_forward_ref_entity_id: str | None = None
+) -> None:
+    """Make every prospective-write audit report `count` unrelated baseline failures.
+
+    Mirrors `test_create_entity_reports_preexisting_audit_failures_as_warnings` in
+    `test_entities.py`, scaled up to prove the write-audit-leak fix (slice 1b-3 WL)
+    keeps a write command's stdout O(1) regardless of how large the pre-existing,
+    unrelated failure set is.
+
+    `own_forward_ref_entity_id`, when given, adds ONE extra unresolved-reference row
+    attributed to that entity id -- but only once the prospective corpus actually
+    contains it (i.e. on the second, post-write audit call, not the baseline one) --
+    so a test can prove the write's OWN new warning still prints in full alongside a
+    large pre-existing set.
+    """
+    from science_tool.instruments import ValidationVerdict
+
+    preexisting_rows = [
+        {
+            "check": "unresolved_reference",
+            "status": "fail",
+            "source": f"question:{i:04d}-existing",
+            "field": "related",
+            "target": f"hypothesis:{i:04d}-missing",
+            "details": "pre-existing missing hypothesis",
+        }
+        for i in range(count)
+    ]
+
+    def fake_audit_project_sources(sources: object) -> ValidationVerdict[dict[str, str]]:
+        rows = list(preexisting_rows)
+        entity_ids = {getattr(entity, "id", None) for entity in getattr(sources, "entities", [])}
+        if own_forward_ref_entity_id is not None and own_forward_ref_entity_id in entity_ids:
+            rows.append(
+                {
+                    "check": "unresolved_reference",
+                    "status": "fail",
+                    "source": own_forward_ref_entity_id,
+                    "field": "related",
+                    "target": "hypothesis:h01",
+                    "details": "forward reference not yet resolved",
+                }
+            )
+        return ValidationVerdict.from_has_failures(rows, True)
+
+    monkeypatch.setattr("science_tool.entities.audit_project_sources", fake_audit_project_sources)
+
+
+def test_entity_create_summarizes_many_preexisting_warnings(monkeypatch: pytest.MonkeyPatch) -> None:
+    runner = CliRunner()
+    with runner.isolated_filesystem():
+        root = Path.cwd()
+        seed_project(root)
+        _monkeypatch_many_preexisting_audit_failures(monkeypatch, 500)
+
+        result = runner.invoke(main, ["entity", "create", "question", "New Question"])
+
+        assert result.exit_code == 0, result.output
+        assert "pre-existing audit failure:" not in result.output
+        assert "500 pre-existing project audit warning" in result.output
+        # O(1): a handful of fixed lines, not one line per pre-existing failure.
+        assert result.output.count("\n") < 10
+
+
+def test_entity_create_show_preexisting_lists_them(monkeypatch: pytest.MonkeyPatch) -> None:
+    runner = CliRunner()
+    with runner.isolated_filesystem():
+        root = Path.cwd()
+        seed_project(root)
+        _monkeypatch_many_preexisting_audit_failures(monkeypatch, 5)
+
+        result = runner.invoke(main, ["entity", "create", "question", "New Question", "--show-preexisting"])
+
+        assert result.exit_code == 0, result.output
+        assert result.output.count("pre-existing audit failure:") == 5
+
+
+def test_entity_create_never_summarizes_its_own_new_warning(monkeypatch: pytest.MonkeyPatch) -> None:
+    """A write's own new warning must survive even alongside many pre-existing ones."""
+    runner = CliRunner()
+    with runner.isolated_filesystem():
+        root = Path.cwd()
+        seed_project(root)
+        write_markdown_entity(
+            root,
+            "entities/questions/0001-existing.md",
+            {"id": "question:0001-existing", "kind": "question", "title": "Existing", "status": "open"},
+        )
+        _monkeypatch_many_preexisting_audit_failures(
+            monkeypatch, 200, own_forward_ref_entity_id="question:0002-new-question"
+        )
+
+        result = runner.invoke(main, ["entity", "create", "question", "New Question", "--related", "hypothesis:h01"])
+
+        assert result.exit_code == 0, result.output
+        assert "WARNING" in result.output  # the write's own forward-reference warning
+        assert "pre-existing audit failure:" not in result.output
+        assert "200 pre-existing project audit warning" in result.output
+
+
+def test_entity_edit_summarizes_many_preexisting_warnings(monkeypatch: pytest.MonkeyPatch) -> None:
+    runner = CliRunner()
+    with runner.isolated_filesystem():
+        root = Path.cwd()
+        seed_project(root)
+        write_markdown_entity(
+            root,
+            "entities/questions/0001-existing.md",
+            {"id": "question:0001-existing", "kind": "question", "title": "Existing", "status": "open"},
+        )
+        _monkeypatch_many_preexisting_audit_failures(monkeypatch, 300)
+
+        result = runner.invoke(main, ["entity", "edit", "0001-existing", "--title", "Renamed"])
+
+        assert result.exit_code == 0, result.output
+        assert "pre-existing audit failure:" not in result.output
+        assert "300 pre-existing project audit warning" in result.output
+
+        result_shown = runner.invoke(
+            main, ["entity", "edit", "0001-existing", "--title", "Renamed Again", "--show-preexisting"]
+        )
+        assert result_shown.exit_code == 0, result_shown.output
+        assert result_shown.output.count("pre-existing audit failure:") == 300
+
+
+def test_entity_note_summarizes_many_preexisting_warnings(monkeypatch: pytest.MonkeyPatch) -> None:
+    runner = CliRunner()
+    with runner.isolated_filesystem():
+        root = Path.cwd()
+        seed_project(root)
+        write_markdown_entity(
+            root,
+            "entities/questions/0001-existing.md",
+            {"id": "question:0001-existing", "kind": "question", "title": "Existing", "status": "open"},
+        )
+        _monkeypatch_many_preexisting_audit_failures(monkeypatch, 300)
+
+        result = runner.invoke(main, ["entity", "note", "0001-existing", "a note"])
+
+        assert result.exit_code == 0, result.output
+        assert "pre-existing audit failure:" not in result.output
+        assert "300 pre-existing project audit warning" in result.output
+
+        result_shown = runner.invoke(
+            main, ["entity", "note", "0001-existing", "another note", "--show-preexisting"]
+        )
+        assert result_shown.exit_code == 0, result_shown.output
+        assert result_shown.output.count("pre-existing audit failure:") == 300
+
+
 def test_entity_show_finds_source_entity_by_shorthand() -> None:
     runner = CliRunner()
     with runner.isolated_filesystem():
@@ -514,6 +666,43 @@ def test_entity_edit_adds_related_without_replacing_existing() -> None:
         text = path.read_text(encoding="utf-8")
         assert "hypothesis:h01" in text
         assert "hypothesis:h02" in text
+
+
+def test_entity_edit_leaves_untouched_frontmatter_and_body_byte_identical() -> None:
+    """An authored edit rewrites ONLY the fields it was given.
+
+    `entity edit` is a read-modify-write over the whole frontmatter mapping, so a lossy dumper is
+    not a formatting preference -- it rewrites authored fields the caller never named. Three
+    regressions, all on one `--updated`: `allow_unicode=False` escaped the em-dash, the default
+    `width=80` then folded the over-long escaped scalar across lines, and `find_entity` returned a
+    `.lstrip("\\n")`-ed body that deleted the blank line after the closing fence.
+    """
+    runner = CliRunner()
+    with runner.isolated_filesystem():
+        root = Path.cwd()
+        seed_project(root)
+        path = root / "entities/questions/0001-alpha.md"
+        path.parent.mkdir(parents=True, exist_ok=True)
+        original = (
+            "---\n"
+            "id: question:0001-alpha\n"
+            "kind: question\n"
+            "title: t166 — Stage-transition Bayesian edges — Implementation Plan\n"
+            "status: open\n"
+            "updated: '2026-04-01'\n"
+            "---\n"
+            "\n"
+            "# Alpha\n"
+            "\n"
+            "Body — kept verbatim.\n"
+        )
+        path.write_text(original, encoding="utf-8")
+
+        result = runner.invoke(main, ["entity", "edit", "q1", "--updated", "2026-05-01"])
+
+        assert result.exit_code == 0, result.output
+        text = path.read_text(encoding="utf-8")
+        assert text == original.replace("updated: '2026-04-01'", "updated: '2026-05-01'"), text
 
 
 def test_entity_note_adds_dated_note() -> None:

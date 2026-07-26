@@ -81,9 +81,26 @@ def question_show(ref: str, output_format: str) -> None:
 @click.option("--status")
 @click.option("--related")
 @click.option("--format", "output_format", type=click.Choice(OUTPUT_FORMATS), default="table", show_default=True)
-def question_list(status: str | None, related: str | None, output_format: str) -> None:
+@click.option(
+    "--output",
+    "output_path",
+    type=click.Path(path_type=Path),
+    default=None,
+    help="Write the complete, unbudgeted payload to PATH instead of stdout.",
+)
+def question_list(status: str | None, related: str | None, output_format: str, output_path: Path | None) -> None:
     """List source-authored questions."""
-    list_typed_entities("question", status, related, output_format)
+    from science_tool.budget.invocation import build_complete_via, hint_for
+    from science_tool.budget.registry import lookup
+    from science_tool.budget.sink import BoundedSink
+
+    sink = BoundedSink(
+        lookup("questions list"),
+        output_path=output_path,
+        command_path="questions list",
+        complete_via=build_complete_via(click.get_current_context(), output_hint=hint_for("questions", output_format)),
+    )
+    list_typed_entities("question", status, related, output_format, sink=sink)
 
 
 def _split_csv(value: str | None) -> list[str]:

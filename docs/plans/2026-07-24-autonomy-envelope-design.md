@@ -1,10 +1,21 @@
 # Autonomy Envelope (Autonomous Research, slice S1) — Design
 
-> **Status:** design / spec, revised after review. Slice S1 of the autonomous-research
-> program. S1 ships **no autonomous agent**: it is the contract, verified by tests, that
-> the first one will run inside. Downstream slices (S2 recurrence, S3 task eligibility,
-> S4 telemetry→estimates, S5 harness, S6 multi-agent design→plan, S7 context management)
-> all consume this contract and are out of scope here.
+> **Status:** implemented. Slice S1 of the autonomous-research program, shipped as four
+> plans — A (belief-basis guard), B (run record), C (path gate + perturbation alarm), and
+> D (supervisor lifecycle, quarantine, `validate` wiring). S1 ships **no autonomous
+> agent**: it is the contract, verified by tests, that the first one will run inside.
+> Downstream slices (S2 recurrence, S3 task eligibility, S4 telemetry→estimates, S5
+> harness, S6 multi-agent design→plan, S7 context management) all consume this contract
+> and are out of scope here.
+>
+> **One gap S1 did not close.** `autonomous_run` on an entity is still not an attested
+> per-entity binding. `finish` verifies that the run's *commits* carry the run's own
+> trailer over the recorded range, but it does not check that each entity's
+> `autonomous_run` value names the run that actually wrote that file — so an actor can
+> still attribute its work to an unrelated prior run. The commit range remains the only
+> authoritative binding (§0). Closing this means having the supervisor stamp
+> `autonomous_run` itself, or verifying every value it finds against the recorded
+> `base_commit..head_commit` range; it is deferred, not solved.
 
 ## Motivation
 
@@ -232,9 +243,10 @@ record could ever explain.
 
 > **Not yet an attested binding (Plan B ships the field only).** Materialization checks
 > that the run a value names *exists*; it does not check that this run wrote this file. An
-> actor can therefore still attribute its work to an unrelated prior run. Plan D must close
-> this by having the supervisor stamp `autonomous_run` itself, or by verifying every value
-> it finds against the run's own recorded `base_commit..head_commit` range. Until then the
+> actor can therefore still attribute its work to an unrelated prior run. This is the gap
+> the status line at the top of this document records as unclosed by S1; closing it means
+> having the supervisor stamp `autonomous_run` itself, or verifying every value it finds
+> against the run's own recorded `base_commit..head_commit` range. Until then the
 > field is a convenience for humans reading the corpus, and the commit range remains the
 > only authoritative binding (§0).
 
@@ -276,6 +288,26 @@ The dependency-file denial is **defense in depth, not the primary control**. The
 is §0: the gate runs from a supervisor-owned pinned installation, so worktree toolchain edits
 cannot reach the code that judges the run. Without that property, denying these files would be
 load-bearing and still incomplete.
+
+> **Revised during implementation (Plan C).** Four rulings the design did not settle:
+>
+> 1. **The seed allowlist is `paper` / `book` / `talk` bibliographic fields only** —
+>    `venue`, `pmid`, `publisher`, `isbn`, `duration_minutes` (which materialize no
+>    triple at all) plus `year` and `url` on `paper`/`book` (which materialize to
+>    `dcterms:date` and `dcat:downloadURL` in `graph/knowledge`, and are read by no
+>    evidence unit and no target closure). Every entry is covered by a Layer 3 case,
+>    enforced by a ratchet test that fails when an entry has none.
+> 2. **`aliases` is denied.** It feeds reference resolution (`graph/sources.py:787-793`),
+>    so an alias can re-point a reference and move the target closure. `doi` is denied
+>    too, as identity-adjacent — accepted overbreadth per §4.
+> 3. **`task` fields cannot be gated at all.** `task` has no markdown home
+>    (`CORE_PROFILE`: `home=None`), so it has no frontmatter file for a path-and-field
+>    gate to decide over. Extending the gate to structured sources is a separate design
+>    conversation.
+> 4. **Entity kind is derived from the path, never from the file's own `kind:`
+>    frontmatter**, and renames are extracted as deletion-plus-addition (`--no-renames`).
+>    An actor that could choose its own kind could choose its own allowlist; a
+>    similarity-scored rename would hide the addition half.
 
 ### 5. Layered enforcement
 
@@ -352,6 +384,38 @@ rather than clean.
 
 Escalation reuses the existing `science feedback` surface rather than inventing a second
 channel; feedback already has a triage program behind it.
+
+> **Revised during implementation (Plan D).** Seven rulings the design did not settle:
+>
+> 1. **The record is written only at `finish`.** `AutonomousRunRecord` has no in-flight
+>    shape, so `start` writes no record at all. A supervisor that dies mid-run leaves an
+>    unattested branch, which is the intended failure direction.
+> 2. **The baseline lives outside the repository.** `runs/` accepts only flat `*.md`
+>    records, so the before-capture cannot go there — and it must not go anywhere in the
+>    worktree, because the actor writes that tree. Both commands refuse a baseline path
+>    inside the project root.
+> 3. **`finish` re-materializes before capturing.** `graph.trig` is derived and
+>    actor-controlled; without this, a run that edited entities and never rebuilt would
+>    be judged against a stale graph and pass. This closes the gap Plan A recorded.
+> 4. **Gate externality is enforced two ways** — the running toolkit revision must match
+>    the one the baseline recorded, and the executing `science_tool` must not resolve
+>    inside the project root. Either check alone leaves the other open.
+> 5. **The `validate` check verifies integrity and coverage, not the comparison.** It
+>    confirms that every autonomous commit — on every branch, since a quarantined run
+>    keeps its own — has a record, and that every record's commits are reachable, without
+>    rebuilding the graph. Re-deriving each historical run's basis would make `validate`
+>    runtime grow without bound at the cadence this design targets. The authoritative
+>    comparison stays in `finish`, where the pinned installation and the baseline both
+>    live.
+> 6. **Both commands refuse a working tree that is not the commit they name.** The path
+>    gate reads `base..head` from history; the belief basis is captured from the tree.
+>    Nothing else makes those the same state, and an uncommitted change that the gate
+>    forbids but the basis does not notice would otherwise finish `clean`. A dirty tree
+>    is `unwired`.
+> 7. **The judging toolkit must be a pinned checkout, not merely the right revision.**
+>    `git rev-parse HEAD` is unchanged by uncommitted edits, so a dirty supervisor
+>    install would attest a revision that does not describe the code that rendered the
+>    verdict. `finish` refuses it.
 
 ## Testing
 

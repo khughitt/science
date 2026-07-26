@@ -26,9 +26,9 @@ records. Do not treat `<meta-home>` files as the durable task queue. Convert
 recommendations into `science tasks add ...` only after user acceptance.
 Accepted work belongs in `science tasks ...` and `tasks/active.md`.
 
-Additionally, read (skip any that don't exist):
-1. `tasks/active.md`
-2. Recent completed tasks: scan `tasks/done/` for the most recent file
+Additionally, gather (skip any source that doesn't exist):
+1. Run `science tasks list --status active` (or `--all`) for the active task queue.
+2. Recent completed tasks: run `science tasks list --status done --since <window-start>`.
 3. **Hypothesis and question status:** run `science project index --format json` to get a compact index of all hypotheses and questions with their titles and statuses. Only read individual files when you need full detail (e.g., to assess evidence quality for a specific hypothesis).
 4. `specs/scope-boundaries.md` — project scope
 5. `entities/topics/` or equivalent topic coverage files in the doc directory
@@ -57,7 +57,7 @@ If a prior analysis exists from 1-3 days ago, default to full mode but reference
 ### 1. Recent Progress
 
 Summarize what's been accomplished recently by combining:
-- Recently completed tasks from `tasks/done/`
+- Recently completed tasks (`science tasks list --status done --since <window-start>`)
 - Recent git commits
 
 Group by theme (research, development, documentation) rather than listing chronologically.
@@ -65,7 +65,7 @@ Keep to 5-8 bullet points maximum.
 
 ### 2. Current State
 
-From `tasks/active.md`, show:
+From `science tasks list` output, show:
 - **P0 tasks** (critical path) — full detail
 - **P1 tasks** (active work) — title and status
 - **Blocked tasks** — what's blocking them
@@ -114,7 +114,7 @@ This longitudinal view makes progress visible and highlights both forward moment
 
 ### 3c. Task Tracking Gaps
 
-Scan pipeline plans in `entities/plans/` for implementation tasks that are not tracked in `tasks/active.md`. Surface any development work buried in plan documents that should be trackable tasks.
+Scan pipeline plans in `entities/plans/` for implementation tasks that are not tracked in the task queue (`science tasks list --all`). Surface any development work buried in plan documents that should be trackable tasks.
 
 Scan active analysis-facing tasks and inquiries for linked `plan:<stem>` analysis
 plans (`entities/plans/*-analysis-plan.md` with `plan_kind: analysis-plan`). If
@@ -144,7 +144,7 @@ If status is `locally_modified` or `missing`, point at the corresponding verb (`
 
 ### 3c-bis. Stale Task Status Detection (mandatory)
 
-Before recommending next actions, audit task status against on-disk evidence. For each task in `tasks/active.md` with status `proposed`, `blocked`, or `in_progress`, check whether the work appears already done by scanning for any of:
+Before recommending next actions, audit task status against on-disk evidence. For each task returned by `science tasks list --status proposed`, `--status blocked`, or `--status active` (or `science tasks list --all` to gather them together), check whether the work appears already done by scanning for any of:
 
 - a result file under `results/` whose path or `datapackage.json` references the task ID
 - a doc under `entities/interpretations/`, `entities/findings/`, `entities/reports/`, or `entities/discussions/` whose frontmatter `source_refs` includes the task ID
@@ -157,9 +157,9 @@ For each match, surface the task in a short `### Status Drift` table:
 |---|---|---|---|
 | t075 | proposed | results/2026-04-09-t075/datapackage.json | mark `done` and write interpretation |
 
-**Also scan recent completions, not just `active.md`.** Work shipped in done files lives in `tasks/done/<YYYY-MM>.md`, not `active.md`; derive the recent-progress window first: use the date of the prior `next-steps` analysis when one exists, otherwise use the explicit lookback window for this run. Then scan every `tasks/done/YYYY-MM.md` file whose month intersects that window, including prior-month files when the window crosses a month boundary. Do not stop at the current month file or assume the prior month is irrelevant just because it is large. For each done-file row whose `completed:` date falls inside the window, treat those rows as recent progress, not status drift. Without this, recently-shipped work is invisible: a run can wrongly conclude "no movement" or a "stalled program" when tasks in fact completed during the window.
+**Also check recent completions, not just the active queue.** Work shipped in done files lives in `tasks/done/<YYYY-MM>.md`, not `active.md`; derive the recent-progress window first: use the date of the prior `next-steps` analysis when one exists, otherwise use the explicit lookback window for this run. Then run `science tasks list --status done --since <window-start>` — under the hood this will scan every `tasks/done/YYYY-MM.md` file whose month intersects that window, including prior-month files when the window crosses a month boundary, so you don't need to open the archive files yourself. Do not stop at the current month file or assume the prior month is irrelevant just because it is large. For each returned row whose `completed:` date falls inside the window, treat those rows as recent progress, not status drift. Without this, recently-shipped work is invisible: a run can wrongly conclude "no movement" or a "stalled program" when tasks in fact completed during the window.
 
-**Cross-check the prior `next-steps` doc.** Read the previous `<meta-home>/*next-steps-*.md` and check each recommendation it made against subsequent commits and `tasks/done/` entries. A recommendation that has since shipped is a "recommendation shipped" win to record — the cross-check detects positive follow-through, not only stalls.
+**Cross-check the prior `next-steps` doc.** Read the previous `<meta-home>/*next-steps-*.md` and check each recommendation it made against subsequent commits and recently-closed tasks (`science tasks list --status done --since <window-start>`). A recommendation that has since shipped is a "recommendation shipped" win to record — the cross-check detects positive follow-through, not only stalls.
 
 This detection is mandatory — a `next-steps` run that does not perform it must say so explicitly. Drift between code and task status is one of the most consistent failure modes; finding it once during analysis avoids re-litigating the same recommendations across sessions.
 

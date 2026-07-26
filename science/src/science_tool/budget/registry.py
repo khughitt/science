@@ -16,12 +16,20 @@ to be small today -- ``tasks archive`` emits one row per archivable task
 exempt would assert something false. Every non-budgeted command therefore carries a
 justification string either way: ``EXEMPTIONS`` says why it cannot grow, ``DEFERRED``
 says what makes it grow.
+
+A command's OWN output growing with project size is not the only way it can leak: seven
+write/action commands were reclassified ``DEFERRED`` -> ``EXEMPTIONS`` once a *side
+channel* -- whole-corpus pre-existing audit warnings, or an uncapped near-duplicate scan
+-- was bounded instead (slice 1b-3 write-audit-leak fix), so growability has to be
+checked through every channel a command echoes, not just its primary payload.
 """
 
 from __future__ import annotations
 
 from dataclasses import dataclass
 from enum import StrEnum
+
+from science_tool.cli_retirement import RETIREMENTS
 
 
 class PayloadShape(StrEnum):
@@ -62,6 +70,70 @@ BUDGETS: dict[str, CommandBudget] = {
     "health": CommandBudget(max_chars=30_000, shape=PayloadShape.REPORT),
     "entities inventory": CommandBudget(max_chars=20_000, shape=PayloadShape.DOCUMENT),
     "data audit": CommandBudget(max_chars=20_000, shape=PayloadShape.DOCUMENT),
+    "entity list": CommandBudget(max_chars=20_000, shape=PayloadShape.ROWS, max_rows=40),
+    "feedback list": CommandBudget(max_chars=20_000, shape=PayloadShape.ROWS, max_rows=20),
+    "questions list": CommandBudget(max_chars=20_000, shape=PayloadShape.ROWS, max_rows=40),
+    "interpretations list": CommandBudget(max_chars=20_000, shape=PayloadShape.ROWS, max_rows=40),
+    "discussions list": CommandBudget(max_chars=20_000, shape=PayloadShape.ROWS, max_rows=40),
+    "entity needs-review": CommandBudget(max_chars=20_000, shape=PayloadShape.ROWS, max_rows=40),
+    "curate inventory": CommandBudget(max_chars=20_000, shape=PayloadShape.DOCUMENT),
+    "prose lint": CommandBudget(max_chars=30_000, shape=PayloadShape.REPORT),
+    "curate consolidation-candidates": CommandBudget(max_chars=30_000, shape=PayloadShape.REPORT),
+    "validate": CommandBudget(max_chars=30_000, shape=PayloadShape.REPORT),
+    "graph attention-rank": CommandBudget(max_chars=20_000, shape=PayloadShape.ROWS, max_rows=40),
+    "graph attention-sample": CommandBudget(max_chars=20_000, shape=PayloadShape.ROWS, max_rows=40),
+    "graph audit": CommandBudget(max_chars=20_000, shape=PayloadShape.ROWS, max_rows=40),
+    "graph dashboard-summary": CommandBudget(max_chars=20_000, shape=PayloadShape.ROWS, max_rows=40),
+    "graph diff": CommandBudget(max_chars=20_000, shape=PayloadShape.ROWS, max_rows=40),
+    "graph gaps": CommandBudget(max_chars=20_000, shape=PayloadShape.ROWS, max_rows=40),
+    "graph inquiry-summary": CommandBudget(max_chars=20_000, shape=PayloadShape.ROWS, max_rows=40),
+    "graph neighborhood-summary": CommandBudget(max_chars=20_000, shape=PayloadShape.ROWS, max_rows=40),
+    "graph question-summary": CommandBudget(max_chars=20_000, shape=PayloadShape.ROWS, max_rows=40),
+    "graph rehoming-debt": CommandBudget(max_chars=20_000, shape=PayloadShape.ROWS, max_rows=40),
+    "graph uncertainty": CommandBudget(max_chars=20_000, shape=PayloadShape.ROWS, max_rows=40),
+    "datasets files": CommandBudget(max_chars=20_000, shape=PayloadShape.ROWS, max_rows=40),
+    "datasets search": CommandBudget(max_chars=20_000, shape=PayloadShape.ROWS, max_rows=40),
+    "datasets validate": CommandBudget(max_chars=20_000, shape=PayloadShape.ROWS, max_rows=40),
+    "entity rotation": CommandBudget(max_chars=20_000, shape=PayloadShape.ROWS, max_rows=40),
+    "feedback regression-candidates": CommandBudget(max_chars=20_000, shape=PayloadShape.ROWS, max_rows=40),
+    "feedback targets": CommandBudget(max_chars=20_000, shape=PayloadShape.ROWS, max_rows=40),
+    "inquiry list": CommandBudget(max_chars=20_000, shape=PayloadShape.ROWS, max_rows=40),
+    "inquiry export-pgmpy": CommandBudget(max_chars=20_000, shape=PayloadShape.DOCUMENT),
+    "project index": CommandBudget(max_chars=20_000, shape=PayloadShape.ROWS, max_rows=40),
+    "tasks archive": CommandBudget(max_chars=20_000, shape=PayloadShape.ROWS, max_rows=40),
+    "annotate promote": CommandBudget(max_chars=20_000, shape=PayloadShape.ROWS, max_rows=40),
+    "big-picture resolve-questions": CommandBudget(max_chars=20_000, shape=PayloadShape.ROWS, max_rows=40),
+    "book-split": CommandBudget(max_chars=20_000, shape=PayloadShape.ROWS, max_rows=40),
+    "dataset reconcile-links": CommandBudget(max_chars=20_000, shape=PayloadShape.ROWS, max_rows=40),
+    "qa-audit": CommandBudget(max_chars=20_000, shape=PayloadShape.ROWS, max_rows=40),
+    "skills lint": CommandBudget(max_chars=20_000, shape=PayloadShape.ROWS, max_rows=40),
+    "tasks blockers": CommandBudget(max_chars=20_000, shape=PayloadShape.ROWS, max_rows=40),
+    "annotate list": CommandBudget(max_chars=20_000, shape=PayloadShape.ROWS, max_rows=40),
+    "big-picture validate": CommandBudget(max_chars=20_000, shape=PayloadShape.ROWS, max_rows=40),
+    "dataset register-run": CommandBudget(max_chars=20_000, shape=PayloadShape.ROWS, max_rows=40),
+    "datasets download": CommandBudget(max_chars=20_000, shape=PayloadShape.ROWS, max_rows=40),
+    "research-package build": CommandBudget(max_chars=20_000, shape=PayloadShape.ROWS, max_rows=40),
+    "sync projects": CommandBudget(max_chars=20_000, shape=PayloadShape.ROWS, max_rows=40),
+    "tasks fix-blockers": CommandBudget(max_chars=20_000, shape=PayloadShape.ROWS, max_rows=40),
+    "annotate synthesize": CommandBudget(max_chars=30_000, shape=PayloadShape.REPORT),
+    "benchmark list": CommandBudget(max_chars=30_000, shape=PayloadShape.REPORT),
+    "dataset prioritize": CommandBudget(max_chars=30_000, shape=PayloadShape.REPORT),
+    "explore-ideas apply": CommandBudget(max_chars=30_000, shape=PayloadShape.REPORT),
+    "explore-ideas gaps": CommandBudget(max_chars=30_000, shape=PayloadShape.REPORT),
+    "explore-ideas resolve-anchors": CommandBudget(max_chars=30_000, shape=PayloadShape.REPORT),
+    "dag audit": CommandBudget(max_chars=30_000, shape=PayloadShape.REPORT),
+    "dag validate": CommandBudget(max_chars=30_000, shape=PayloadShape.REPORT),
+    "inquiry show": CommandBudget(max_chars=30_000, shape=PayloadShape.REPORT),
+    "inquiry validate": CommandBudget(max_chars=30_000, shape=PayloadShape.REPORT),
+    "peers list": CommandBudget(max_chars=30_000, shape=PayloadShape.REPORT),
+    "refs check": CommandBudget(max_chars=30_000, shape=PayloadShape.REPORT),
+    "research-package validate": CommandBudget(max_chars=30_000, shape=PayloadShape.REPORT),
+    "project topic-coverage": CommandBudget(max_chars=30_000, shape=PayloadShape.REPORT),
+    "sync rebuild": CommandBudget(max_chars=30_000, shape=PayloadShape.REPORT),
+    "sync run": CommandBudget(max_chars=30_000, shape=PayloadShape.REPORT),
+    "sync status": CommandBudget(max_chars=30_000, shape=PayloadShape.REPORT),
+    "tasks summary": CommandBudget(max_chars=30_000, shape=PayloadShape.REPORT),
+    "wander": CommandBudget(max_chars=30_000, shape=PayloadShape.REPORT),
 }
 
 EXEMPTIONS: dict[str, str] = {
@@ -86,32 +158,10 @@ EXEMPTIONS: dict[str, str] = {
     "entity review": "single review result",
     "feedback scaffold-test": "three fixed guidance lines for one scaffold",
     "feedback update": "single update confirmation",
-    "graph add article": "fixed retired-command error",
-    "graph add concept": "fixed retired-command error",
-    "graph add discussion": "fixed retired-command error",
-    "graph add edge": "fixed retired-command error",
-    "graph add evidence": "fixed retired-command error",
-    "graph add falsification": "fixed retired-command error",
-    "graph add finding": "fixed retired-command error",
-    "graph add hypothesis": "fixed retired-command error",
-    "graph add interpretation": "fixed retired-command error",
-    "graph add mechanism": "fixed retired-command error",
-    "graph add observation": "fixed retired-command error",
-    "graph add proposition": "fixed retired-command error",
-    "graph add question": "fixed retired-command error",
-    "graph add story": "fixed retired-command error",
-    "graph import": "fixed retired-command error",
     "graph init": "at most three fixed initialization guidance lines",
-    "graph migrate-addresses": "fixed retired-command error",
     "graph stats": "measured 341 chars on 2026-07-24; fixed-shape summary",
-    "graph stamp-revision": "fixed retired-command error",
-    "inquiry add-assumption": "fixed retired-command error",
-    "inquiry add-edge": "fixed retired-command error",
-    "inquiry add-node": "fixed retired-command error",
-    "inquiry add-transformation": "fixed retired-command error",
     "inquiry import": "single imported-inquiry path",
     "inquiry init": "single scaffold path",
-    "inquiry set-estimand": "fixed retired-command error",
     "labnote export": "single export-path and warning-count summary",
     "paper persist-source": "single persisted-source path",
     "peers show": "five fixed fields for one peer",
@@ -134,27 +184,103 @@ EXEMPTIONS: dict[str, str] = {
     "telemetry status": "measured 366 chars on 2026-07-24; fixed-shape summary",
 }
 
+# Reclassified from DEFERRED by the 2026-07-25 slice 1b-3 audit
+# (docs/plans/2026-07-25-context-budget-1b3-audit.md): fixed-shape output that
+# cannot grow with project size.
+EXEMPTIONS.update({
+    "annotate ack": "single-annotation-ID status mutation (open->ack)",
+    "annotate dismiss": "single-annotation-ID status mutation (open->dismissed) via the shared _crud_invoke helper",
+    "annotate extract": "single-paper extraction; fixed counts (written/skipped-by-reason/grounding_dropped) plus a note, no per-item loop",
+    "annotate fix": "single-annotation-ID status mutation (open->fixed) via the shared _crud_invoke helper",
+    "annotate promote-prose-decomposition": "promotes exactly one --unit (required, singular)",
+    "annotate pubtator": "single-paper (identifier) PubTator seeding",
+    "annotate stats": "aggregated counts by_status/by_source/by_type",
+    "benchmark gap-calibration": "output is O(number of --project flags supplied), not project size; each yields one top-10-capped calibration summary",
+    "commons dataset build": "Prints exactly one line: `snakemake exited {exit_code}`",
+    "commons member-payload": "Resolves exactly one promoted virtual member (member_id) to its payload",
+    "commons reference-graph resolve-member": "Resolves one (registry_id, member_key) pair to at most one GraphMemberMatch (or an 'unresolved' status record)",
+    "commons show": "Prints exactly one entity by canonical id (optionally merged with one named project's overlay)",
+    "dataset reconcile": "diffs at most 3 fixed cached fields between one dataset entity's frontmatter and its one datapackage.yaml",
+    "dataset show": "fixed ~8-10 field block for the one resolved dataset entity, plus that entity's own body",
+    "datasets hydrate-worktree": "iterates a hardcoded 3-tuple of data dirs (raw/processed/external); always three rows regardless of project size",
+    "datasets sources": "enumerates the fixed code-defined set of packaged adapters; grows only when the toolkit ships a new adapter",
+    "discussions create": "Echoes exactly one 'Created <id> at <path>' line plus the created entity's own validation warnings (emit_entity_warnings)",
+    "discussions show": "Renders one entity's fixed field set (id, kind, title, status, path, related refs, source_refs, body)",
+    "doi lookup": "hardcoded <=6-key metadata dict for one DOI (doi/title/publisher/source/issued/url), not a per-record list",
+    "entity sections": "rows come from the kind's fixed template/schema, not per-entity project data",
+    "entity show": "fixed field set for the one entity resolved by ref; related/source_refs are that entity's own authored lists",
+    "evidence-lines create": "Echoes exactly one 'Created <id> at <path>' line plus the created entity's own validation warnings",
+    "evidence-lines show": "Renders one entity's fixed field set",
+    "graph build": "a handful of fixed confirmation lines plus ontology-suggestion lines bounded by the code-shipped ontology registry",
+    "graph predicates": "returns the code-defined PREDICATE_REGISTRY verbatim; its docstring states it is not an instrument",
+    "graph project-summary": "InstrumentResult with exactly one row -- a single project-wide rollup",
+    "graph validate": "a fixed set of ~6 structural check rows (parseable_trig, provenance_completeness, etc.), not one per violation",
+    "hypotheses create": "Echoes exactly one 'Created <id> at <path>' line plus the created entity's own validation warnings",
+    "hypotheses show": "Renders one entity's fixed field set",
+    "interpretations create": "Echoes exactly one 'Created <id> at <path>' line plus the created entity's own validation warnings",
+    "interpretations show": "Renders one entity's fixed field set",
+    "paper-fetch": "one FetchResult record for a single paper; tiers/errors bounded by the fixed fetch-strategy algorithm, not project size",
+    "project artifacts diff": "Unified diff between ONE named artifact's canonical and installed bytes",
+    "project artifacts exec": "os.execv() replaces the current process with the canonical artifact's own binary",
+    "project artifacts list": "One line per artifact TYPE in the toolkit's static registry.yaml (currently exactly 1: validate.sh)",
+    "project artifacts update": "Fixed confirmation for ONE named artifact update: from-version -> to-version, commit status, backup path",
+    "project resolve-refs": "Output is one line per --query argument the CALLER supplies (a repeatable option), not per record in the project",
+    "propositions create": "Echoes exactly one 'Created <id> at <path>' line plus the created entity's own validation warnings",
+    "propositions show": "Renders one entity's fixed field set",
+    "questions create": "Echoes exactly one 'Created <id> at <path>' line plus the created entity's own validation warnings",
+    "questions show": "Renders one entity's fixed field set",
+    "tasks block": "single task-state-change confirmation: one line naming the task and echoing back the user-supplied --by refs joined with commas",
+    "tasks show": "renders one task's fixed fields plus that task's own readiness list -- O(1) in project size",
+    "verdict parse": "parses exactly ONE named file argument into a single ParseResult document",
+})
+
+# Reclassified from DEFERRED by the 2026-07-26 slice 1b-3 write-audit-leak fix
+# (docs/plans/2026-07-25-context-budget-1b3-audit.md, Write-audit-leak section): these
+# write/action commands were growable only through a side channel -- pre-existing
+# whole-corpus project-audit warnings (`_validate_prospective_write(s)`) or, for
+# `feedback add`, an uncapped near-duplicate scan of the whole open backlog -- not
+# through their own confirmation output. `emit_entity_warnings`/
+# `summarize_preexisting_warnings` (science_tool.output) now summarize the former by
+# default (`--show-preexisting` lists it); `feedback add` caps the latter to the top
+# `_SIMILAR_NEIGHBORS_DISPLAY_LIMIT` neighbors plus a count. Both make the classification
+# true rather than assumed.
+EXEMPTIONS.update({
+    "dataset add": "O(1) write confirmation; pre-existing audit warnings summarized by default (--show-preexisting to list)",
+    "dataset verify-access": "O(1) write confirmation; pre-existing audit warnings summarized by default (--show-preexisting to list)",
+    "entities import": "O(1) write confirmation; pre-existing audit warnings summarized by default (--show-preexisting to list)",
+    "entity create": "O(1) write confirmation; pre-existing audit warnings summarized by default (--show-preexisting to list)",
+    "entity edit": "O(1) write confirmation; pre-existing audit warnings summarized by default (--show-preexisting to list)",
+    "entity note": "O(1) write confirmation; pre-existing audit warnings summarized by default (--show-preexisting to list)",
+    "feedback add": "O(1) create confirmation; near-duplicate scan capped to top-K + count",
+})
+
+# Retired commands are exempt by construction: cli_retirement.RETIREMENTS owns which
+# commands are retired, and a fixed error string cannot grow with project size. Listing
+# them here as well would make this a second place the retired set could be edited.
+#
+# Deliberately RETIREMENTS only, not RETIRED_GROUPS: test_budget_boundary asserts that
+# every classified path is live, where "live" comes from _leaf_commands -- which recurses
+# through groups and yields only non-groups. An entry for `graph add` would fail as a
+# table naming a command absent from the CLI tree.
+EXEMPTIONS.update(dict.fromkeys(RETIREMENTS, "fixed retired-command error"))
+
 DEFERRED: dict[str, DeferredCommand] = {
-    # Measured over budget on 2026-07-24; wiring scheduled for slice 1b.
-    "entity list": DeferredCommand("one row per entity", "1b", 1_706_994),
-    "curate inventory": DeferredCommand("one record per entity", "1b", 683_657),
-    "prose lint": DeferredCommand("one row per prose finding", "1b", 550_226),
-    "questions list": DeferredCommand("one row per question", "1b", 113_076),
-    "validate": DeferredCommand("one row per validation finding", "1b", 109_466),
-    "interpretations list": DeferredCommand("one row per interpretation", "1b", 97_281),
-    "curate consolidation-candidates": DeferredCommand("one row per candidate cluster", "1b", 71_553),
-    "entity needs-review": DeferredCommand("one row per flagged entity", "1b", 59_697),
-    "feedback list": DeferredCommand("one row per feedback item", "1b", 44_307),
-    "discussions list": DeferredCommand("one row per discussion", "1b", 30_780),
     # Growable but small on the audited project -- the case that has no truthful
     # exemption. Populated further by Task 13 Step 3.
-    "tasks archive": DeferredCommand("one row per archivable task", "1b"),
-    "tasks summary": DeferredCommand(
-        "one output member per distinct task type and group value",
-        "1b",
-    ),
     "graph belief-basis": DeferredCommand(
         "compare mode emits one MOVED row per changed pre-existing entity",
+        "1b",
+    ),
+    "autonomy path-gate": DeferredCommand(
+        "one output member per denial, which grows with the run's change set",
+        "1b",
+    ),
+    "autonomy start": DeferredCommand(
+        "one fixed summary record per invocation",
+        "1b",
+    ),
+    "autonomy finish": DeferredCommand(
+        "one output member per basis delta, gate denial, and commit-mark issue",
         "1b",
     ),
 }
@@ -167,7 +293,6 @@ DEFERRED.update(
             "1b",
         )
         for path in (
-            "annotate ack",
             "annotate apply-proposition-reconciliation",
             "annotate apply-proposition-resynthesis",
             "annotate apply-prose-promotion-plan",
@@ -176,24 +301,15 @@ DEFERRED.update(
             "annotate build-prose-health",
             "annotate check-prose-decomposition",
             "annotate cross-paper-evidence",
-            "annotate dismiss",
-            "annotate extract",
-            "annotate fix",
             "annotate ground-prose-decomposition",
             "annotate ingest-prose-decomposition",
             "annotate lift-tokens",
-            "annotate list",
             "annotate plan-proposition-reconciliation",
             "annotate plan-prose-promotions",
-            "annotate promote",
-            "annotate promote-prose-decomposition",
-            "annotate pubtator",
             "annotate reconcile-propositions",
             "annotate record-proposition-reconciliation-decisions",
             "annotate resynthesis-draft-context",
             "annotate scaffold-proposition-resynthesis",
-            "annotate stats",
-            "annotate synthesize",
             "annotate validate-proposition-reconciliation",
             "annotate validate-proposition-resynthesis",
             "annotate validate-prose-decomposition-artifact",
@@ -204,23 +320,16 @@ DEFERRED.update(
 DEFERRED.update(
     {
         "belief profile": DeferredCommand("one row per belief-bearing entity", "1b"),
-        "book-split": DeferredCommand("one row per detected chapter", "1b"),
-        "doi lookup": DeferredCommand("one row per returned DOI metadata field", "1b"),
         "markers scan": DeferredCommand("one row per marker hit and token", "1b"),
-        "paper-fetch": DeferredCommand("variable-length source and acquisition metadata", "1b"),
-        "qa-audit": DeferredCommand("one row per audited workflow", "1b"),
         "search": DeferredCommand("one row per matching project record", "1b"),
-        "wander": DeferredCommand("one output member per generated walk item", "1b"),
     }
 )
 DEFERRED.update(
     {
         path: DeferredCommand("one row per benchmark, test, gap, candidate, or calibration bucket", "1b")
         for path in (
-            "benchmark gap-calibration",
             "benchmark gaps",
             "benchmark hint-candidates",
-            "benchmark list",
             "benchmark opportunities",
             "benchmark test-triage",
             "benchmark tests",
@@ -233,8 +342,6 @@ DEFERRED.update(
         for path in (
             "big-picture cluster-digests",
             "big-picture knowledge-gaps",
-            "big-picture resolve-questions",
-            "big-picture validate",
         )
     }
 )
@@ -246,20 +353,16 @@ DEFERRED.update(
             "1b",
         )
         for path in (
-            "commons dataset build",
             "commons dataset status",
             "commons dataset validate",
             "commons find",
             "commons index rebuild",
             "commons inventory",
             "commons list",
-            "commons member-payload",
             "commons promote dataset",
             "commons promote paper",
             "commons promote theme",
             "commons promote topic",
-            "commons reference-graph resolve-member",
-            "commons show",
             "commons validate",
         )
     }
@@ -269,8 +372,6 @@ DEFERRED.update(
         path: DeferredCommand("one output member per DAG finding, mutation, changed path, or diff line", "1b")
         for path in (
             "dag apply-workbench",
-            "dag audit",
-            "dag validate",
             "dag workbench",
         )
     }
@@ -279,18 +380,11 @@ DEFERRED.update(
     {
         path: DeferredCommand("one output member per dataset, consumer, capability, link, resource, run, or warning", "1b")
         for path in (
-            "dataset add",
             "dataset capability-pairs",
             "dataset consumers",
             "dataset identity resolve",
             "dataset list",
-            "dataset prioritize",
-            "dataset reconcile",
-            "dataset reconcile-links",
-            "dataset register-run",
-            "dataset show",
             "dataset stochasticity",
-            "dataset verify-access",
         )
     }
 )
@@ -298,14 +392,8 @@ DEFERRED.update(
     {
         path: DeferredCommand("one output member per external dataset, file, resource, schema field, QA result, or adapter", "1b")
         for path in (
-            "datasets download",
-            "datasets files",
-            "datasets hydrate-worktree",
             "datasets infer-schema",
             "datasets qa",
-            "datasets search",
-            "datasets sources",
-            "datasets validate",
         )
     }
 )
@@ -313,21 +401,9 @@ DEFERRED.update(
     {
         path: DeferredCommand("one output member per typed entity reference warning, field, or body element", "1b")
         for path in (
-            "discussions create",
-            "discussions show",
-            "evidence-lines create",
             "evidence-lines list",
-            "evidence-lines show",
-            "hypotheses create",
             "hypotheses list",
-            "hypotheses show",
-            "interpretations create",
-            "interpretations show",
-            "propositions create",
             "propositions list",
-            "propositions show",
-            "questions create",
-            "questions show",
         )
     }
 )
@@ -340,7 +416,6 @@ DEFERRED.update(
             "entities consolidate apply",
             "entities consolidate scaffold",
             "entities generate-decisions",
-            "entities import",
             "entities mark-superseded",
             "entities unarchive",
         )
@@ -350,17 +425,11 @@ DEFERRED.update(
     {
         path: DeferredCommand("one output member per entity, field, relation, warning, migration action, or body element", "1b")
         for path in (
-            "entity create",
-            "entity edit",
             "entity field-inventory",
             "entity migrate-hypothesis",
             "entity migrate-specs",
             "entity neighbors",
-            "entity note",
             "entity remove",
-            "entity rotation",
-            "entity sections",
-            "entity show",
             "entity status-inventory",
         )
     }
@@ -368,23 +437,15 @@ DEFERRED.update(
 DEFERRED.update(
     {
         path: DeferredCommand("one output member per idea candidate, lens view, gap, anchor, or apply action", "1b")
-        for path in (
-            "explore-ideas apply",
-            "explore-ideas backfill-lens-views",
-            "explore-ideas gaps",
-            "explore-ideas resolve-anchors",
-        )
+        for path in ("explore-ideas backfill-lens-views",)
     }
 )
 DEFERRED.update(
     {
         path: DeferredCommand("one output member per feedback entry, target, neighbor, cluster, or occurrence", "1b")
         for path in (
-            "feedback add",
-            "feedback regression-candidates",
             "feedback report",
             "feedback show",
-            "feedback targets",
             "feedback triage",
         )
     }
@@ -393,29 +454,14 @@ DEFERRED.update(
     {
         path: DeferredCommand("one output member per graph entity, edge, finding, summary row, or DOT statement", "1b")
         for path in (
-            "graph attention-rank",
-            "graph attention-sample",
-            "graph audit",
-            "graph build",
             "graph claims",
             "graph coverage",
             "graph cross-impact",
-            "graph dashboard-summary",
-            "graph diff",
             "graph evidence",
             "graph export-json",
-            "graph gaps",
-            "graph inquiry-summary",
             "graph neighborhood",
-            "graph neighborhood-summary",
-            "graph predicates",
-            "graph project-summary",
             "graph propagate-freshness",
-            "graph question-summary",
-            "graph rehoming-debt",
             "graph scan-prose",
-            "graph uncertainty",
-            "graph validate",
             "graph viz",
         )
     }
@@ -423,13 +469,7 @@ DEFERRED.update(
 DEFERRED.update(
     {
         path: DeferredCommand("one output member per inquiry, node, edge, validation check, or generated script line", "1b")
-        for path in (
-            "inquiry export-chirho",
-            "inquiry export-pgmpy",
-            "inquiry list",
-            "inquiry show",
-            "inquiry validate",
-        )
+        for path in ("inquiry export-chirho",)
     }
 )
 DEFERRED.update(
@@ -444,10 +484,7 @@ DEFERRED.update(
 DEFERRED.update(
     {
         path: DeferredCommand("one output member per peer or peer validation issue", "1b")
-        for path in (
-            "peers check",
-            "peers list",
-        )
+        for path in ("peers check",)
     }
 )
 DEFERRED.update(
@@ -457,31 +494,7 @@ DEFERRED.update(
             "delegated process event, project entity, reference, topic, or finding",
             "1b",
         )
-        for path in (
-            "project artifacts diff",
-            "project artifacts exec",
-            "project artifacts list",
-            "project artifacts update",
-            "project index",
-            "project resolve-refs",
-            "project topic-coverage",
-            "project verify",
-        )
-    }
-)
-DEFERRED.update(
-    {
-        path: DeferredCommand("one output member per package, package validation finding, or build error", "1b")
-        for path in (
-            "research-package build",
-            "research-package validate",
-        )
-    }
-)
-DEFERRED.update(
-    {
-        path: DeferredCommand("one output member per reference problem or unresolved marker", "1b")
-        for path in ("refs check",)
+        for path in ("project verify",)
     }
 )
 DEFERRED.update(
@@ -491,31 +504,8 @@ DEFERRED.update(
         )
         for path in (
             "skills coverage",
-            "skills lint",
             "skills sources check",
             "skills sources list",
-        )
-    }
-)
-DEFERRED.update(
-    {
-        path: DeferredCommand("one output member per registered project, drift warning, or rebuild action", "1b")
-        for path in (
-            "sync projects",
-            "sync rebuild",
-            "sync run",
-            "sync status",
-        )
-    }
-)
-DEFERRED.update(
-    {
-        path: DeferredCommand("one output member per blocker, task preview row, or blocker repair", "1b")
-        for path in (
-            "tasks block",
-            "tasks blockers",
-            "tasks fix-blockers",
-            "tasks show",
         )
     }
 )
@@ -531,10 +521,7 @@ DEFERRED.update(
 DEFERRED.update(
     {
         path: DeferredCommand("one output member per parsed verdict token, claim, interpretation, warning, or rollup group", "1b")
-        for path in (
-            "verdict parse",
-            "verdict rollup",
-        )
+        for path in ("verdict rollup",)
     }
 )
 

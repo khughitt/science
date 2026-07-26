@@ -5,8 +5,12 @@ from __future__ import annotations
 import sys
 from dataclasses import asdict
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 import click
+
+if TYPE_CHECKING:
+    from science_tool.budget.sink import BoundedSink
 
 from science_tool.bibliography import load_bib_author_surnames
 from science_tool.data_root import project_config_path
@@ -37,8 +41,21 @@ def prose_group() -> None:
     help="Run only the named check(s). Defaults to all.",
 )
 @click.option("--strict", is_flag=True, help="Promote info-severity issues to warn; exit non-zero on any issue.")
-def lint_cmd(root: Path, fmt: str, checks: tuple[str, ...], strict: bool) -> None:
+@click.option(
+    "--output",
+    "output_path",
+    type=click.Path(path_type=Path),
+    default=None,
+    help="Write the complete, unbudgeted report to PATH instead of stdout.",
+)
+def lint_cmd(root: Path, fmt: str, checks: tuple[str, ...], strict: bool, output_path: Path | None) -> None:
     """Run prose-quality lints across the project's doc/ and entities/ trees."""
+    from science_tool.budget.control import bounded_control_notice
+    from science_tool.budget.invocation import build_complete_via, hint_for
+    from science_tool.budget.registry import lookup
+    from science_tool.budget.sink import BoundedSink
+    from science_tool.prose_lint_projection import project_prose_lint
+
     selected = list(checks) if checks else None
     anchor_patterns = list(DEFAULT_ANCHOR_PATTERNS)
     additional_anchor_patterns: list[str] = []
@@ -106,18 +123,34 @@ def lint_cmd(root: Path, fmt: str, checks: tuple[str, ...], strict: bool) -> Non
         "coverage": result.get("coverage", {}),
     }
 
-    emit(output_format=fmt, payload=payload, render_text=lambda: _render_table(result, root))
+    sink = BoundedSink(
+        lookup("prose lint"),
+        output_path=output_path,
+        command_path="prose lint",
+        complete_via=build_complete_via(click.get_current_context(), output_hint=hint_for("prose-lint", fmt)),
+    )
+    control_notice = (
+        bounded_control_notice(f"wrote the complete prose-lint report to {output_path}")
+        if output_path is not None
+        else None
+    )
+    displayed = payload if output_path is not None else project_prose_lint(payload)
+    emit(output_format=fmt, payload=displayed, render_text=lambda: _render_table(displayed, sink), sink=sink)
+    sink.flush()
+    if control_notice is not None:
+        click.echo(control_notice)
 
-    # Mirrors `science markers scan`: only --strict + issues fails the run.
+    # Mirrors `science markers scan`: only --strict + issues fails the run. Uses the FULL
+    # result, never the projected display.
     if strict and result["hits"]:
         sys.exit(1)
 
 
-def _render_table(result: dict, root: Path) -> None:
-    hits = result["hits"]
-    numeric_coverage = (result.get("coverage") or {}).get("numeric-verification")
+def _render_table(payload: dict, sink: BoundedSink) -> None:
+    hits = payload["hits"]
+    numeric_coverage = (payload.get("coverage") or {}).get("numeric-verification")
     if numeric_coverage:
-        click.echo(
+        sink.echo(
             "numeric-verification: "
             f"{numeric_coverage.get('verified', 0)} verified, "
             f"{numeric_coverage.get('unverifiable', 0)} unverifiable, "
@@ -126,17 +159,20 @@ def _render_table(result: dict, root: Path) -> None:
         )
     if not hits:
         if not numeric_coverage:
-            click.echo("prose lint: no issues found.")
+            sink.echo("prose lint: no issues found.")
         return
-    by_file: dict[Path, list] = {}
-    for hit in result["hits"]:
-        by_file.setdefault(hit.file, []).append(hit)
+    by_file: dict[str, list] = {}
+    for hit in hits:
+        by_file.setdefault(hit["file"], []).append(hit)
     for path in sorted(by_file):
-        rel = path.relative_to(root)
-        click.echo(f"\n{rel}")
-        for hit in sorted(by_file[path], key=lambda h: (h.line, h.col)):
-            tag = f"({hit.severity})"
-            click.echo(f"  {hit.line}:{hit.col} [{hit.check}] {tag} {hit.message}")
-    click.echo("\nSummary:")
-    for check, count in sorted(result["counts"].items()):
-        click.echo(f"  {check}: {count}")
+        sink.echo(f"\n{path}")
+        for hit in sorted(by_file[path], key=lambda h: (h["line"], h["col"])):
+            sink.echo(f"  {hit['line']}:{hit['col']} [{hit['check']}] ({hit['severity']}) {hit['message']}")
+    sink.echo("\nSummary:")
+    for check, count in sorted(payload["counts"].items()):
+        sink.echo(f"  {check}: {count}")
+    omitted = payload.get("hits_omitted", 0)
+    if omitted:
+        shown = len(hits)
+        sink.echo(f"\nshowing {shown} of {shown + omitted} hits")
+        sink.echo(f"  complete output:  {sink.complete_via}")

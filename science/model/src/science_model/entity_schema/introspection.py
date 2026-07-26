@@ -39,17 +39,34 @@ def read_effective_frontmatter_fields(
         for field in schema.get("required", []) or []
         if isinstance(field, str)
     }
+    # Composition is `allOf` (validator.py `_compose`), not a sequence applied in order: a `false`
+    # subschema in ANY component forbids the property regardless of which component comes first or
+    # last. So the forbidden set must be collected across ALL components before it is applied, not
+    # discarded-and-re-added per component as a running total -- a later component that re-declares
+    # a name an earlier one forbade must NOT resurrect it.
+    forbidden: set[str] = set()
     specs_by_field: dict[str, list[dict[str, Any]]] = {}
     field_order: list[str] = []
     for schema in schemas:
         properties = schema.get("properties") or {}
         for key, spec in properties.items():
+            if spec is False:
+                # A `false` subschema FORBIDS the property. The old guard skipped it as "not a
+                # dict", leaving a base field the mixin removed in the output -- so
+                # `science entity fields hypothesis` advertised six commons fields the kind
+                # rejects. `read_merge_policy` already reads `false` as FORBIDDEN; this is the
+                # same fact, finally read the same way by the other reader.
+                forbidden.add(key)
+                continue
             if not isinstance(spec, dict):
                 continue
             if key not in specs_by_field:
                 field_order.append(key)
                 specs_by_field[key] = []
             specs_by_field[key].append(spec)
+
+    specs_by_field = {key: specs for key, specs in specs_by_field.items() if key not in forbidden}
+    field_order = [key for key in field_order if key not in forbidden]
 
     return [
         FrontmatterField(
@@ -60,6 +77,35 @@ def read_effective_frontmatter_fields(
         )
         for key in field_order
     ]
+
+
+def admitted_field_names(
+    profile: ProfileString, loader: SchemaLoader | None = None
+) -> frozenset[str]:
+    """Every field name the COMPOSED profile admits.
+
+    Composition is `allOf` (validator.py `_compose` builds `{"allOf": parts}`), so a `false`
+    subschema in ANY component forbids the property no matter where that component sits in the
+    list -- order is irrelevant to what the validator actually enforces. This cannot be computed
+    from the mixin alone either way: the base contributes fields nothing forbids, and skipping it
+    is how `description` hid for four drafts -- it is declared by entity-base 2.0, forbidden by
+    nothing, and no mixin-only derivation could see it.
+
+    A `false` value means the property is forbidden outright, which is why it is excluded here
+    rather than recorded -- the same reading `read_merge_policy` gives it. The forbidden set is
+    collected across every component before it is applied, so a component that re-declares a name
+    an earlier component forbade cannot resurrect it.
+    """
+    loader = loader or SchemaLoader()
+    names: set[str] = set()
+    forbidden: set[str] = set()
+    for component in _iter_components(profile):
+        for key, spec in (loader.load(component).get("properties") or {}).items():
+            if spec is False:
+                forbidden.add(key)
+            else:
+                names.add(key)
+    return frozenset(names - forbidden)
 
 
 def _effective_constraints(specs: list[dict[str, Any]]) -> dict[str, Any]:

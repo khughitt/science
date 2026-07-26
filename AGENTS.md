@@ -45,6 +45,14 @@ cd science/model && uv run --frozen pytest
 Default pytest runs exclude the `snapshot` and `real_projects` markers; opt in
 explicitly with `-m snapshot` or `-m real_projects` when you need them.
 
+The full suite (~10k tests) takes ~2-3 min — longer than the default 120s command
+timeout. When you dispatch a subagent to verify a change, have it run a scoped
+selection (the affected test modules plus any guards), not the whole suite: a
+foreground full run times out, auto-backgrounds, and a subagent that yields waiting on
+it will not reliably resume. Reserve the full-suite run for the top-level agent, or pass
+an explicit long `timeout`. Never run two suites concurrently in the same worktree — they
+race on shared test-output paths.
+
 Lint / types (from `science/`):
 
 ```bash

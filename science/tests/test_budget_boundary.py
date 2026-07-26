@@ -22,9 +22,9 @@ from science_tool.budget.registry import BUDGETS, DEFERRED, EXEMPTIONS
 from science_tool.cli import main
 
 EXPECTED_CLASSIFICATION_COUNTS = {
-    "budgeted": 4,
-    "exempt": 67,
-    "deferred": 207,
+    "budgeted": 68,
+    "exempt": 118,
+    "deferred": 95,
 }
 
 
@@ -61,8 +61,77 @@ def test_classification_partition_has_the_audited_cardinality() -> None:
     keys are unbounded. The post-merge belief-basis command adds one deferred leaf
     because compare mode emits one row per changed entity. The skills coverage
     command adds one deferred leaf because its report grows with registered projects,
-    occurrences, diagnostics, candidates, and skipped projects. The live partition is
-    therefore 4/67/207 = 278.
+    occurrences, diagnostics, candidates, and skipped projects. Slice 1b-1 then wired
+    six ROWS offenders (entity list, feedback list, questions/interpretations/
+    discussions list, entity needs-review), moving them from deferred to budgeted. The
+    autonomy path-gate command adds one deferred leaf because it emits one row per
+    denial, which grows with the run's change set. Slice 1b-2 then wired curate
+    inventory (DOCUMENT), prose lint (REPORT), curate consolidation-candidates
+    (REPORT), and validate (REPORT), moving four more deferred leaves to budgeted. The
+    2026-07-25 slice 1b-3 audit then reclassified 44 commands from deferred to exempt
+    (fixed-shape output), leaving 154 deferred. Slice 1b-3 batch W1a then wired the 11
+    graph ROWS summary commands (attention-rank, attention-sample, audit, dashboard-
+    summary, diff, gaps, inquiry-summary, neighborhood-summary, question-summary,
+    rehoming-debt, uncertainty), moving them from deferred to budgeted. Batch W1b then
+    wired 9 more ROWS-via-emit-query-rows commands (datasets files/search/validate,
+    entity rotation, feedback regression-candidates/targets, inquiry list, project
+    index, tasks archive), moving them from deferred to budgeted. Batch W2 then wired 7
+    more ROWS-via-emit commands (annotate promote, big-picture resolve-questions,
+    book-split, dataset reconcile-links, qa-audit, skills lint, tasks blockers), moving
+    them from deferred to budgeted. Batch W3 then wired 7 of its 8 candidate ROWS-via-
+    echo commands (annotate list, big-picture validate, dataset register-run, datasets
+    download, research-package build, sync projects, tasks fix-blockers), moving them
+    from deferred to budgeted; `feedback add` was DROPPED from the batch and stays
+    deferred -- its only growable output is `find_similar_open`'s whole-open-backlog
+    fuzzy-duplicate scan, a write-audit-leak shape (a corpus-wide side dump triggered
+    by, but not scaling with, the write), scheduled for the separate write-leak plan
+    rather than forced into ROWS projection. Batch W4a then wired the first 6 REPORT
+    commands (annotate synthesize, benchmark list, dataset prioritize, explore-ideas
+    apply/gaps/resolve-anchors), moving them from deferred to budgeted; explore-ideas
+    apply needed a bespoke multi-list projector (`explore_ideas_projection.py`) because
+    its payload carries several independently growable lists (created/to_create,
+    skipped_applied, skipped_other, manual, folds, failures) at once, while the other
+    five fit the shared summary+one-list `project_single_list_report` helper. Batch W4b
+    then wired 7 more REPORT commands (dag audit/validate, inquiry show/validate, peers
+    list, refs check, research-package validate), moving them from deferred to budgeted.
+    dag audit needed a bespoke projector (`dag/audit_projection.py`) for its two
+    independently growable lists (validation.findings, nested; mutations, top-level);
+    inquiry show needed one (`inquiry_show_projection.py`) for four independently
+    growable lists (related, boundary_in, boundary_out, edges); refs check needed one
+    (`refs_projection.py`) for its two independently growable lists (broken, markers).
+    dag validate, peers list, and research-package validate fit the shared
+    summary+one-list `project_single_list_report` helper; inquiry validate was
+    restructured from a bare JSON list into a summary+one-list `results` payload to fit
+    the same helper. Batch W4c then wired 6 of its 7 candidate REPORT commands (sync
+    run/rebuild/status, tasks summary, wander, project topic-coverage), moving them from
+    deferred to budgeted; sync run/rebuild/status and project topic-coverage fit the
+    shared summary+one-list `project_single_list_report` helper (drift_warnings, pruned,
+    projects, and topics respectively), while tasks summary needed a bespoke projector
+    (`tasks_summary_projection.py`) for its four independently growable breakdown
+    mappings (by_status, by_type, by_priority, by_group). `commons promote dataset` was
+    DROPPED from the batch and stays deferred: its shared `_promote_kind_cmd`
+    implementation is a multi-branch narrative of `click.echo` calls with no existing
+    JSON payload, and the AST sink-ownership guard requires `BoundedSink` construction
+    inside the registered command's own callback -- retrofitting a structured payload
+    across five early-return branches of a side-effecting (git-committing) promote
+    workflow is a bigger, riskier change than this wiring batch, so it is left for a
+    dedicated follow-up. Batch W5 then wired the final DOCUMENT command, `inquiry
+    export-pgmpy`, routing its generated script through a `BoundedSink` that refuses
+    past budget on stdout and writes the complete script to `--output`; `inquiry
+    export-chirho` was left deferred (unwired). The write-audit-leak fix then closed
+    the side channel `feedback add` was dropped from W3 for, and generalized the
+    `dataset verify-access` precedent (fb-2026-06-28-015) to the rest of the entity/
+    dataset write surface: `emit_entity_warnings`/`summarize_preexisting_warnings`
+    (science_tool.output) now summarize -- rather than dump -- pre-existing whole-
+    corpus audit warnings by default on `entity create/edit/note`, `entities import`,
+    and `dataset add/verify-access` (each gaining `--show-preexisting` to list them),
+    while `feedback add` caps its near-duplicate scan to the top
+    `_SIMILAR_NEIGHBORS_DISPLAY_LIMIT` entries plus a count; this moved all 7 from
+    deferred to exempt, taking the partition to 68/118/93 = 279.
+
+    The autonomy supervisor then added two deferred leaves: `autonomy start` emits one
+    fixed summary record, and `autonomy finish` emits one row per basis delta, gate
+    denial, and commit-mark issue. The live partition is therefore 68/118/95 = 281.
     """
     actual = {
         "budgeted": len(BUDGETS),
