@@ -443,6 +443,9 @@ class TestTasksList:
             data = json.loads(result.output)
             ids = {row["id"] for row in data["rows"]}
             assert ids == {"t002"}
+            # --since queries every status, so the working-set-only marker
+            # must not be present in the applied-filters meta.
+            assert "only_status" not in data["meta"]["applied_filters"]
 
     def test_list_since_respects_output_sink(self, runner: CliRunner, tmp_path: Path) -> None:
         from datetime import date

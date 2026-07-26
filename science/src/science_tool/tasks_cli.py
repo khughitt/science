@@ -652,12 +652,11 @@ def tasks_list(
     from science_tool.budget.projection import project_rows
     from science_tool.budget.registry import lookup
     from science_tool.budget.sink import BoundedSink
-    from science_tool.tasks import list_tasks, parse_tasks_for_cli
+    from science_tool.tasks import _CLOSED_STATUS_VALUES, list_tasks, parse_tasks_for_cli
     from science_tool.tasks_display import render_tasks_table, sort_tasks
     from science_tool.tasks_readiness import make_project_resolver
 
     WORKING_SET = ("active", "blocked")
-    TERMINAL_STATUSES = ("done", "retired")
 
     since: date | None = None
     if since_raw is not None:
@@ -665,7 +664,7 @@ def tasks_list(
             since = date.fromisoformat(since_raw)
         except ValueError as exc:
             raise click.ClickException("Date must use YYYY-MM-DD") from exc
-        if status is not None and status not in TERMINAL_STATUSES:
+        if status is not None and status not in _CLOSED_STATUS_VALUES:
             raise click.UsageError(
                 "--since only applies to closed tasks; use --status done, --status retired, or --all"
             )
