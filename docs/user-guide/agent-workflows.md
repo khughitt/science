@@ -95,6 +95,29 @@ Both commands require the working tree to *be* the commit they name — no uncom
 edits, no untracked files. The path gate reads committed history while the belief basis
 is captured from the tree; a change sitting in neither is judged by neither.
 
+**Every commit the actor makes has to be marked, or the run quarantines.** `finish` walks
+`base_commit..head_commit` and requires two things of *each* commit in it:
+
+- a `Science-Run: <run-id>` trailer, whose value is the full run id `start` reported —
+  `run:` prefix included, and the same id on every commit in the range;
+- an author of `<agent-role> <agent@science.local>` — the role you passed to
+  `--agent`, and that exact mailbox. The committer is not inspected; the author is.
+
+So a run opened with `--agent curation-sweep` commits like this:
+
+```bash
+git commit -m "docs: refresh venue
+
+Science-Run: run:2026-07-25-curation-sweep-a3f1" \
+    --author "curation-sweep <agent@science.local>"
+```
+
+An unmarked commit, one naming a different run, or one authored by anybody else is a
+commit the run did not account for landing inside its own range — reported as a
+commit-mark issue and quarantined. Marks are never *evidence*, though: a process that can
+write commits can write any trailer and any author, so a matching mark proves nothing on
+its own. The authoritative binding is the supervisor-recorded range.
+
 `finish` re-materializes the graph, recaptures the basis, compares it against the
 baseline, runs the path gate over the recorded range, verifies the commit marks, and
 writes the attested record to `runs/<slug>.md`, where the slug is the run id without its
