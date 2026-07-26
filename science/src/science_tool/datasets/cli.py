@@ -8,7 +8,7 @@ from typing import cast
 import click
 
 from science_tool.datasets_identity import identity_group as dataset_identity_group
-from science_tool.output import emit, unwrap_instrument
+from science_tool.output import OUTPUT_FORMATS, emit, unwrap_instrument
 
 
 def _project_root_from_env() -> Path:
@@ -670,12 +670,27 @@ def dataset_consumers(ref: str, project_root: Path | None) -> None:
     type=click.Path(path_type=Path, file_okay=False, dir_okay=True),
     help="Project root (defaults to SCIENCE_PROJECT_ROOT env var or cwd)",
 )
-def dataset_register_run(workflow_run_id: str, project_root: Path | None) -> None:
+@click.option("--format", "output_format", type=click.Choice(OUTPUT_FORMATS), default="table", show_default=True)
+@click.option(
+    "--output",
+    "output_path",
+    type=click.Path(path_type=Path),
+    default=None,
+    help="Write the complete, unbudgeted report to PATH instead of stdout.",
+)
+def dataset_register_run(
+    workflow_run_id: str, project_root: Path | None, output_format: str, output_path: Path | None
+) -> None:
     """Register derived datasets for a completed workflow run.
 
     Writes per-output datapackage.yaml files, creates derived dataset entities,
     and updates symmetric edges (produces/consumed_by).
     """
+    from science_tool.budget.control import bounded_control_notice
+    from science_tool.budget.invocation import build_complete_via, hint_for
+    from science_tool.budget.projection import project_rows
+    from science_tool.budget.registry import lookup
+    from science_tool.budget.sink import BoundedSink
     from science_tool.datasets_register import (
         FingerprintCaptureError,
         persist_run_fingerprint,
@@ -685,29 +700,75 @@ def dataset_register_run(workflow_run_id: str, project_root: Path | None) -> Non
         write_symmetric_edges,
     )
 
+    sink = BoundedSink(
+        lookup("dataset register-run"),
+        output_path=output_path,
+        command_path="dataset register-run",
+        complete_via=build_complete_via(
+            click.get_current_context(), output_hint=hint_for("dataset-register-run", output_format)
+        ),
+    )
+    control_notice = (
+        bounded_control_notice(f"wrote the complete register-run report to {output_path}")
+        if output_path is not None
+        else None
+    )
+
     root = project_root.resolve() if project_root else _project_root_from_env()
     try:
         preflight_register_run_identity(root, workflow_run_id)
         fingerprint = persist_run_fingerprint(root, workflow_run_id)
-        click.echo(f"captured fingerprint {fingerprint.fingerprint_policy} for {workflow_run_id}")
         dp_paths = write_per_output_datapackages(root, workflow_run_id)
     except (FileNotFoundError, ValueError, FingerprintCaptureError) as exc:
         click.echo(str(exc), err=True)
         raise click.exceptions.Exit(1)
-    for p in dp_paths:
-        click.echo(f"wrote {p}")
 
     try:
         entities = write_derived_dataset_entities(root, workflow_run_id)
     except (FileNotFoundError, ValueError) as exc:
         click.echo(str(exc), err=True)
         raise click.exceptions.Exit(1)
-    for path, ds_id in entities:
-        click.echo(f"entity {ds_id} -> {path}")
 
     dataset_ids = [ds_id for _, ds_id in entities]
     write_symmetric_edges(root, workflow_run_id, dataset_ids)
-    click.echo(f"register-run complete: {len(dp_paths)} outputs, {len(entities)} entities")
+
+    # One combined row list, in the order previously echoed (datapackages, then
+    # entities) -- a single growable payload rather than two independently
+    # truncatable halves of the same run.
+    rows: list[dict[str, str]] = [{"kind": "datapackage", "path": str(p)} for p in dp_paths]
+    rows.extend({"kind": "entity", "id": ds_id, "path": str(path)} for path, ds_id in entities)
+
+    projected = project_rows(rows, sink.max_rows)
+    displayed = projected.rows
+    payload: dict[str, object] = {
+        "fingerprint_policy": fingerprint.fingerprint_policy,
+        "outputs": len(dp_paths),
+        "entities": len(entities),
+        "rows": displayed,
+    }
+    if projected.truncated:
+        payload["truncation"] = {
+            "omitted": projected.omitted,
+            "total": projected.total,
+            "complete_via": sink.complete_via,
+        }
+
+    def _render() -> None:
+        sink.echo(f"captured fingerprint {fingerprint.fingerprint_policy} for {workflow_run_id}")
+        for row in displayed:
+            if row["kind"] == "datapackage":
+                sink.echo(f"wrote {row['path']}")
+            else:
+                sink.echo(f"entity {row['id']} -> {row['path']}")
+        if projected.truncated:
+            sink.echo(f"showing {len(displayed)} of {projected.total} rows")
+            sink.echo(f"  complete output:  {sink.complete_via}")
+        sink.echo(f"register-run complete: {len(dp_paths)} outputs, {len(entities)} entities")
+
+    emit(output_format=output_format, payload=payload, render_text=_render, sink=sink)
+    sink.flush()
+    if control_notice is not None:
+        click.echo(control_notice)
 
 
 @dataset_group.command("stochasticity")

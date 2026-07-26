@@ -136,11 +136,82 @@ def validate_cmd(
     type=click.Path(path_type=Path),
     help="Output package directory",
 )
-def build_cmd(results: Path, config: Path, output: Path) -> None:
+@click.option(
+    "--format",
+    "output_format",
+    type=click.Choice(OUTPUT_FORMATS),
+    default="table",
+    show_default=True,
+    help="Output format for the build report (distinct from --output, the built package directory).",
+)
+@click.option(
+    "--report-output",
+    "report_output_path",
+    type=click.Path(path_type=Path),
+    default=None,
+    help=(
+        "Write the complete, unbudgeted build report to PATH instead of stdout. Distinct from "
+        "--output, which is the required built-package directory."
+    ),
+)
+def build_cmd(
+    results: Path, config: Path, output: Path, output_format: str, report_output_path: Path | None
+) -> None:
     """Assemble a research package from workflow results."""
+    from science_tool.budget.control import bounded_control_notice
+    from science_tool.budget.invocation import build_complete_via, hint_for
+    from science_tool.budget.projection import project_rows
+    from science_tool.budget.registry import lookup
+    from science_tool.budget.sink import BoundedSink
+
+    sink = BoundedSink(
+        lookup("research-package build"),
+        output_path=report_output_path,
+        command_path="research-package build",
+        # This command's own `--output` is the required package directory, not the
+        # report escape -- override the defaults so the reconstruction preserves the
+        # real `--output <dir>` value and names the escape `--report-output` instead
+        # of colliding with it.
+        complete_via=build_complete_via(
+            click.get_current_context(),
+            output_hint=hint_for("research-package-build", output_format),
+            escape_flag="--report-output",
+            skip_params=frozenset({"report_output_path"}),
+        ),
+    )
+    control_notice = (
+        bounded_control_notice(f"wrote the complete build report to {report_output_path}")
+        if report_output_path is not None
+        else None
+    )
+
     errors = build_research_package(results, config, output)
+
+    projected = project_rows(errors, sink.max_rows)
+    displayed = projected.rows
+    payload: dict[str, object] = {"package_dir": str(output), "errors": displayed}
+    if projected.truncated:
+        payload["truncation"] = {
+            "omitted": projected.omitted,
+            "total": projected.total,
+            "complete_via": sink.complete_via,
+        }
+
+    def _render() -> None:
+        if displayed:
+            for e in displayed:
+                sink.echo(f"  \u2717 {e}")
+            if projected.truncated:
+                sink.echo(f"showing {len(displayed)} of {projected.total} error(s)")
+                sink.echo(f"  complete output:  {sink.complete_via}")
+        else:
+            sink.echo(f"Built research package at {output}")
+
+    emit(output_format=output_format, payload=payload, render_text=_render, sink=sink)
+    sink.flush()
+    if control_notice is not None:
+        click.echo(control_notice)
+
+    # Exit reflects the FULL error list, never the projected display.
     if errors:
-        for e in errors:
-            click.echo(f"  \u2717 {e}", err=True)
         raise SystemExit(1)
-    click.echo(f"Built research package at {output}")

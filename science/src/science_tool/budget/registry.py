@@ -101,6 +101,13 @@ BUDGETS: dict[str, CommandBudget] = {
     "qa-audit": CommandBudget(max_chars=20_000, shape=PayloadShape.ROWS, max_rows=40),
     "skills lint": CommandBudget(max_chars=20_000, shape=PayloadShape.ROWS, max_rows=40),
     "tasks blockers": CommandBudget(max_chars=20_000, shape=PayloadShape.ROWS, max_rows=40),
+    "annotate list": CommandBudget(max_chars=20_000, shape=PayloadShape.ROWS, max_rows=40),
+    "big-picture validate": CommandBudget(max_chars=20_000, shape=PayloadShape.ROWS, max_rows=40),
+    "dataset register-run": CommandBudget(max_chars=20_000, shape=PayloadShape.ROWS, max_rows=40),
+    "datasets download": CommandBudget(max_chars=20_000, shape=PayloadShape.ROWS, max_rows=40),
+    "research-package build": CommandBudget(max_chars=20_000, shape=PayloadShape.ROWS, max_rows=40),
+    "sync projects": CommandBudget(max_chars=20_000, shape=PayloadShape.ROWS, max_rows=40),
+    "tasks fix-blockers": CommandBudget(max_chars=20_000, shape=PayloadShape.ROWS, max_rows=40),
 }
 
 EXEMPTIONS: dict[str, str] = {
@@ -247,7 +254,6 @@ DEFERRED.update(
             "annotate ground-prose-decomposition",
             "annotate ingest-prose-decomposition",
             "annotate lift-tokens",
-            "annotate list",
             "annotate plan-proposition-reconciliation",
             "annotate plan-prose-promotions",
             "annotate reconcile-propositions",
@@ -289,7 +295,6 @@ DEFERRED.update(
         for path in (
             "big-picture cluster-digests",
             "big-picture knowledge-gaps",
-            "big-picture validate",
         )
     }
 )
@@ -336,7 +341,6 @@ DEFERRED.update(
             "dataset identity resolve",
             "dataset list",
             "dataset prioritize",
-            "dataset register-run",
             "dataset stochasticity",
             "dataset verify-access",
         )
@@ -346,7 +350,6 @@ DEFERRED.update(
     {
         path: DeferredCommand("one output member per external dataset, file, resource, schema field, QA result, or adapter", "1b")
         for path in (
-            "datasets download",
             "datasets infer-schema",
             "datasets qa",
         )
@@ -476,10 +479,7 @@ DEFERRED.update(
 DEFERRED.update(
     {
         path: DeferredCommand("one output member per package, package validation finding, or build error", "1b")
-        for path in (
-            "research-package build",
-            "research-package validate",
-        )
+        for path in ("research-package validate",)
     }
 )
 DEFERRED.update(
@@ -504,17 +504,10 @@ DEFERRED.update(
     {
         path: DeferredCommand("one output member per registered project, drift warning, or rebuild action", "1b")
         for path in (
-            "sync projects",
             "sync rebuild",
             "sync run",
             "sync status",
         )
-    }
-)
-DEFERRED.update(
-    {
-        path: DeferredCommand("one output member per blocker, task preview row, or blocker repair", "1b")
-        for path in ("tasks fix-blockers",)
     }
 )
 DEFERRED.update(

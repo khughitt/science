@@ -493,3 +493,298 @@ def test_skills_lint_output_file_is_complete(skills_lint_overflow_root: Path, tm
     payload = json.loads(target.read_text())
     assert len(payload["issues"]) > 40
     assert "truncation" not in payload
+
+
+@pytest.fixture
+def annotate_list_overflow_root(tmp_path: Path) -> Path:
+    """50 open annotations in one sidecar -> 50 growable list rows."""
+    from datetime import datetime, timezone
+
+    from science_tool.annotation.io import write_sidecar
+    from science_tool.annotation.model import (
+        Annotation,
+        Motivation,
+        Sidecar,
+        SpecificResource,
+        Status,
+        TextQuoteSelector,
+        TextualBody,
+    )
+
+    anns = tuple(
+        Annotation(
+            id=f"a-{i:03d}",
+            target=SpecificResource(
+                source="x.md",
+                selector=TextQuoteSelector(exact="A short sample sentence.", prefix="Before. ", suffix=" After."),
+            ),
+            bodies=(TextualBody(value="m"),),
+            motivation=Motivation.CLASSIFYING,
+            annotation_type="bare-author-year",
+            source="lint:foo-v1",
+            status=Status.OPEN,
+            creator="t",
+            created=datetime(2026, 5, 11, tzinfo=timezone.utc),
+            content_hash="sha256:d",
+            match_text="m",
+        )
+        for i in range(50)
+    )
+    write_sidecar(tmp_path / "a.anno.trig", Sidecar(annotations=anns))
+    return tmp_path
+
+
+def test_annotate_list_stdout_stays_within_its_ceiling_and_reports_truncation(
+    annotate_list_overflow_root: Path,
+) -> None:
+    result = _invoke(["annotate", "list", "--root", str(annotate_list_overflow_root)])
+    assert result.exit_code == 0, result.output
+    ceiling = BUDGETS["annotate list"].max_chars
+    assert visible_len(result.output) <= ceiling
+    assert "showing 40 of 50 annotation(s)" in result.output
+    assert "complete output:" in result.output
+
+    js = _invoke(["annotate", "list", "--root", str(annotate_list_overflow_root), "--format", "json"])
+    payload = json.loads(js.output)
+    assert len(payload["annotations"]) == 40
+    assert payload["summary"]["total_annotations"] == 50
+    assert payload["truncation"]["total"] == 50
+    assert payload["truncation"]["omitted"] == 10
+
+
+def test_annotate_list_output_file_is_complete(annotate_list_overflow_root: Path) -> None:
+    target = annotate_list_overflow_root / "annotations.json"
+    result = _invoke(
+        [
+            "annotate",
+            "list",
+            "--root",
+            str(annotate_list_overflow_root),
+            "--format",
+            "json",
+            "--output",
+            str(target),
+        ]
+    )
+    assert result.exit_code == 0, result.output
+    assert result.output.count("\n") == 1
+    assert "wrote 50 annotation(s) to" in result.output
+
+    payload = json.loads(target.read_text())
+    assert len(payload["annotations"]) == 50
+    assert {row["id"] for row in payload["annotations"]} == {f"a-{i:03d}" for i in range(50)}
+    assert "truncation" not in payload
+
+
+@pytest.fixture
+def sync_projects_overflow_config(tmp_path: Path) -> Path:
+    """50 registered projects -> 50 growable list rows.
+
+    `ensure_registered` resolves the project path but never requires it to exist,
+    so this needs no per-project directory fixtures.
+    """
+    from science_tool.registry.config import ensure_registered
+
+    config_path = tmp_path / "config.yaml"
+    for i in range(50):
+        ensure_registered(tmp_path / f"proj-{i:03d}", f"proj-{i:03d}", config_path)
+    return config_path
+
+
+def test_sync_projects_stdout_stays_within_its_ceiling_and_reports_truncation(
+    sync_projects_overflow_config: Path,
+) -> None:
+    result = _invoke(["sync", "projects", "--config", str(sync_projects_overflow_config)])
+    assert result.exit_code == 0, result.output
+    ceiling = BUDGETS["sync projects"].max_chars
+    assert visible_len(result.output) <= ceiling
+    assert "showing 40 of 50 project(s)" in result.output
+    assert "complete output:" in result.output
+
+    js = _invoke(["sync", "projects", "--config", str(sync_projects_overflow_config), "--format", "json"])
+    payload = json.loads(js.output)
+    assert len(payload["projects"]) == 40
+    assert payload["truncation"]["total"] == 50
+
+
+def test_sync_projects_output_file_is_complete(sync_projects_overflow_config: Path, tmp_path: Path) -> None:
+    target = tmp_path / "projects.json"
+    result = _invoke(
+        [
+            "sync",
+            "projects",
+            "--config",
+            str(sync_projects_overflow_config),
+            "--format",
+            "json",
+            "--output",
+            str(target),
+        ]
+    )
+    assert result.exit_code == 0, result.output
+    assert result.output.count("\n") == 1
+    assert "wrote 50 projects to" in result.output
+
+    payload = json.loads(target.read_text())
+    assert len(payload["projects"]) == 50
+    assert {row["name"] for row in payload["projects"]} == {f"proj-{i:03d}" for i in range(50)}
+    assert "truncation" not in payload
+
+
+@pytest.fixture
+def big_picture_validate_overflow_project(tmp_path: Path) -> Path:
+    """One known entity + 50 synthesis files, each with one dangling reference.
+
+    `validate_synthesis_file` refuses (unwired) when the project has no known IDs at
+    all -- one real question entity keeps reference validation wired while the 50
+    synthesis files each cite a distinct, never-registered interpretation.
+    """
+    (tmp_path / "entities" / "questions").mkdir(parents=True)
+    (tmp_path / "entities" / "questions" / "q1.md").write_text(
+        '---\nid: "question:q1"\nkind: "question"\ntitle: "Q1"\n---\n\nBody.\n', encoding="utf-8"
+    )
+    synth_dir = tmp_path / "entities" / "synthesis"
+    synth_dir.mkdir(parents=True)
+    for i in range(50):
+        (synth_dir / f"{i:03d}.md").write_text(
+            f'---\nid: "synthesis:{i:03d}"\n---\n\nSee interpretation:i{i:03d}-fake for details.\n',
+            encoding="utf-8",
+        )
+    return tmp_path
+
+
+def test_big_picture_validate_stdout_stays_within_its_ceiling_and_reports_truncation(
+    big_picture_validate_overflow_project: Path,
+) -> None:
+    result = _invoke(["big-picture", "validate", "--project-root", str(big_picture_validate_overflow_project)])
+    assert result.exit_code == 1, result.output  # exit code from the FULL issue list
+    ceiling = BUDGETS["big-picture validate"].max_chars
+    assert visible_len(result.output) <= ceiling
+    assert "showing 40 of 50 issue(s)" in result.output
+    assert "complete output:" in result.output
+
+    js = _invoke(
+        ["big-picture", "validate", "--project-root", str(big_picture_validate_overflow_project), "--format", "json"]
+    )
+    assert js.exit_code == 1, js.output
+    payload = json.loads(js.output)
+    assert len(payload["issues"]) == 40
+    assert payload["truncation"]["total"] == 50
+
+
+def test_big_picture_validate_output_file_is_complete(
+    big_picture_validate_overflow_project: Path, tmp_path: Path
+) -> None:
+    target = tmp_path / "validate.json"
+    result = _invoke(
+        [
+            "big-picture",
+            "validate",
+            "--project-root",
+            str(big_picture_validate_overflow_project),
+            "--format",
+            "json",
+            "--output",
+            str(target),
+        ]
+    )
+    assert result.exit_code == 1, result.output  # exit code from the FULL issue list, even on the file-sink path
+    assert result.output.count("\n") == 1
+    assert "wrote the complete validation report to" in result.output
+
+    payload = json.loads(target.read_text())
+    assert len(payload["issues"]) == 50
+    assert "truncation" not in payload
+
+
+@pytest.fixture
+def research_package_build_overflow_config(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> tuple[Path, Path]:
+    """A workflow config + 50 cells each citing a distinct unknown resource.
+
+    `validate_package`'s cell loop yields one error per bad cell, scaling with the
+    package's own cells.json rather than any pre-existing corpus. `cells_file`
+    resolves relative to CWD, so this chdirs into tmp_path.
+    """
+    (tmp_path / "results").mkdir()
+    config_path = tmp_path / "config.yaml"
+    config_path.write_text("title: Test\nworkflow_name: wf\n", encoding="utf-8")
+    cells = [{"type": "data-table", "resource": f"missing-{i:03d}"} for i in range(50)]
+    (tmp_path / "cells.json").write_text(json.dumps(cells), encoding="utf-8")
+    monkeypatch.chdir(tmp_path)
+    return tmp_path, config_path
+
+
+def test_research_package_build_stdout_stays_within_its_ceiling_and_reports_truncation(
+    research_package_build_overflow_config: tuple[Path, Path],
+) -> None:
+    tmp_path, config_path = research_package_build_overflow_config
+    result = _invoke(
+        [
+            "research-package",
+            "build",
+            "--results",
+            str(tmp_path / "results"),
+            "--config",
+            str(config_path),
+            "--output",
+            str(tmp_path / "out1"),
+        ]
+    )
+    assert result.exit_code == 1, result.output  # exit code from the FULL error list
+    ceiling = BUDGETS["research-package build"].max_chars
+    assert visible_len(result.output) <= ceiling
+    assert "showing 40 of 50 error(s)" in result.output
+    # The reconstructed escape must preserve the real, required package-directory
+    # --output value, not the report-escape hint that collides with its flag name.
+    assert f"--output {tmp_path / 'out1'}" in result.output
+    assert "--report-output research-package-build.txt" in result.output
+
+    js = _invoke(
+        [
+            "research-package",
+            "build",
+            "--results",
+            str(tmp_path / "results"),
+            "--config",
+            str(config_path),
+            "--output",
+            str(tmp_path / "out2"),
+            "--format",
+            "json",
+        ]
+    )
+    assert js.exit_code == 1, js.output
+    payload = json.loads(js.output)
+    assert len(payload["errors"]) == 40
+    assert payload["truncation"]["total"] == 50
+
+
+def test_research_package_build_report_output_file_is_complete(
+    research_package_build_overflow_config: tuple[Path, Path],
+) -> None:
+    tmp_path, config_path = research_package_build_overflow_config
+    target = tmp_path / "build-report.json"
+    result = _invoke(
+        [
+            "research-package",
+            "build",
+            "--results",
+            str(tmp_path / "results"),
+            "--config",
+            str(config_path),
+            "--output",
+            str(tmp_path / "out3"),
+            "--format",
+            "json",
+            "--report-output",
+            str(target),
+        ]
+    )
+    assert result.exit_code == 1, result.output  # exit code from the FULL error list, even on the file-sink path
+    assert result.output.count("\n") == 1
+    assert "wrote the complete build report to" in result.output
+    assert (tmp_path / "out3" / "datapackage.json").exists()  # the real --output build still ran
+
+    payload = json.loads(target.read_text())
+    assert len(payload["errors"]) == 50
+    assert "truncation" not in payload

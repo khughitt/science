@@ -22,9 +22,9 @@ from science_tool.budget.registry import BUDGETS, DEFERRED, EXEMPTIONS
 from science_tool.cli import main
 
 EXPECTED_CLASSIFICATION_COUNTS = {
-    "budgeted": 41,
+    "budgeted": 48,
     "exempt": 111,
-    "deferred": 127,
+    "deferred": 120,
 }
 
 
@@ -78,7 +78,15 @@ def test_classification_partition_has_the_audited_cardinality() -> None:
     index, tasks archive), moving them from deferred to budgeted. Batch W2 then wired 7
     more ROWS-via-emit commands (annotate promote, big-picture resolve-questions,
     book-split, dataset reconcile-links, qa-audit, skills lint, tasks blockers), moving
-    them from deferred to budgeted. The live partition is therefore 41/111/127 = 279.
+    them from deferred to budgeted. Batch W3 then wired 7 of its 8 candidate ROWS-via-
+    echo commands (annotate list, big-picture validate, dataset register-run, datasets
+    download, research-package build, sync projects, tasks fix-blockers), moving them
+    from deferred to budgeted; `feedback add` was DROPPED from the batch and stays
+    deferred -- its only growable output is `find_similar_open`'s whole-open-backlog
+    fuzzy-duplicate scan, a write-audit-leak shape (a corpus-wide side dump triggered
+    by, but not scaling with, the write), scheduled for the separate write-leak plan
+    rather than forced into ROWS projection. The live partition is therefore
+    48/111/120 = 279.
     """
     actual = {
         "budgeted": len(BUDGETS),

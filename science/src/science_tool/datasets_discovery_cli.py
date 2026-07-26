@@ -217,9 +217,30 @@ def _resolve_cli_data_root(project_root: Path | None) -> Path:
     help="Project root for resolving the configured data root.",
 )
 @click.option("--dest", "dest_dir", default=None, show_default="resolved data root / raw", type=click.Path(path_type=Path))
-def datasets_download(source_id: str, file_pattern: str | None, project_root: Path | None, dest_dir: Path | None) -> None:
+@click.option("--format", "output_format", type=click.Choice(OUTPUT_FORMATS), default="table", show_default=True)
+@click.option(
+    "--output",
+    "output_path",
+    type=click.Path(path_type=Path),
+    default=None,
+    help="Write the complete, unbudgeted payload to PATH instead of stdout.",
+)
+def datasets_download(
+    source_id: str,
+    file_pattern: str | None,
+    project_root: Path | None,
+    dest_dir: Path | None,
+    output_format: str,
+    output_path: Path | None,
+) -> None:
     """Download dataset files. Use SOURCE:ID format."""
     import fnmatch
+
+    from science_tool.budget.control import bounded_control_notice
+    from science_tool.budget.invocation import build_complete_via, hint_for
+    from science_tool.budget.projection import project_rows
+    from science_tool.budget.registry import lookup
+    from science_tool.budget.sink import BoundedSink
 
     source, _, dataset_id = source_id.partition(":")
     if not dataset_id:
@@ -228,20 +249,77 @@ def datasets_download(source_id: str, file_pattern: str | None, project_root: Pa
         dest_dir = _resolve_cli_data_root(project_root) / "raw"
     adapter = get_adapter(source)
     file_list = adapter.files(dataset_id)
+
+    sink = BoundedSink(
+        lookup("datasets download"),
+        output_path=output_path,
+        command_path="datasets download",
+        complete_via=build_complete_via(
+            click.get_current_context(), output_hint=hint_for("datasets-download", output_format)
+        ),
+    )
+    control_notice = (
+        bounded_control_notice(f"wrote the complete download report to {output_path}")
+        if output_path is not None
+        else None
+    )
+
     if not file_list:
-        click.echo("No files found.")
+
+        def _render_no_files() -> None:
+            sink.echo("No files found.")
+
+        emit(output_format=output_format, payload={"downloaded": []}, render_text=_render_no_files, sink=sink)
+        sink.flush()
+        if control_notice is not None:
+            click.echo(control_notice)
         return
 
     if file_pattern:
         file_list = [f for f in file_list if fnmatch.fnmatch(f.filename, file_pattern)]
         if not file_list:
-            click.echo(f"No files matching pattern: {file_pattern}")
+
+            def _render_no_match() -> None:
+                sink.echo(f"No files matching pattern: {file_pattern}")
+
+            emit(
+                output_format=output_format,
+                payload={"downloaded": [], "pattern": file_pattern},
+                render_text=_render_no_match,
+                sink=sink,
+            )
+            sink.flush()
+            if control_notice is not None:
+                click.echo(control_notice)
             return
 
+    downloaded: list[dict[str, str]] = []
     for fi in file_list:
-        click.echo(f"Downloading {fi.filename}...")
         path = adapter.download(fi, dest_dir)
-        click.echo(f"  Saved to {path}")
+        downloaded.append({"filename": fi.filename, "path": str(path)})
+
+    projected = project_rows(downloaded, sink.max_rows)
+    displayed = projected.rows
+    payload: dict[str, object] = {"downloaded": displayed}
+    if projected.truncated:
+        payload["truncation"] = {
+            "omitted": projected.omitted,
+            "total": projected.total,
+            "complete_via": sink.complete_via,
+        }
+
+    def _render() -> None:
+        for row in displayed:
+            sink.echo(f"Downloading {row['filename']}...")
+            sink.echo(f"  Saved to {row['path']}")
+        if projected.truncated:
+            sink.echo(f"showing {len(displayed)} of {projected.total} downloaded file(s)")
+            sink.echo(f"  complete output:  {sink.complete_via}")
+
+    emit(output_format=output_format, payload=payload, render_text=_render, sink=sink)
+    sink.flush()
+    if control_notice is not None:
+        click.echo(control_notice)
 
 
 @datasets_group.command("validate")

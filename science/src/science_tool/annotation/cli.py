@@ -13,9 +13,12 @@ import subprocess
 from collections.abc import Mapping
 from datetime import date, datetime, timezone
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import click
+
+if TYPE_CHECKING:
+    from science_tool.budget.sink import BoundedSink
 
 from science_tool.annotation import crud, query
 from science_tool.annotation.audit import audit_file, merge_planned
@@ -1950,6 +1953,13 @@ def _scope_to_sidecars(
     type=click.Choice(("table", "json")),
     default="table",
 )
+@click.option(
+    "--output",
+    "output_path",
+    type=click.Path(path_type=Path),
+    default=None,
+    help="Write the complete, unbudgeted payload to PATH instead of stdout.",
+)
 def list_cmd(
     path: Path | None,
     root_path: Path | None,
@@ -1957,11 +1967,24 @@ def list_cmd(
     sources_opt: tuple[str, ...],
     since_ref: str | None,
     fmt: str,
+    output_path: Path | None,
 ) -> None:
     """List annotations matching filters."""
+    from science_tool.budget.control import bounded_control_notice
+    from science_tool.budget.invocation import build_complete_via, hint_for
+    from science_tool.budget.projection import project_rows
+    from science_tool.budget.registry import lookup
+    from science_tool.budget.sink import BoundedSink
+
     if path is not None and root_path is not None:
         raise click.ClickException("--root and PATH are mutually exclusive")
 
+    sink = BoundedSink(
+        lookup("annotate list"),
+        output_path=output_path,
+        command_path="annotate list",
+        complete_via=build_complete_via(click.get_current_context(), output_hint=hint_for("annotate-list", fmt)),
+    )
     try:
         effective_root, sidecars = _scope_to_sidecars(root_path, path)
     except query.SidecarParseError as exc:
@@ -1993,9 +2016,17 @@ def list_cmd(
         )
     )
 
+    control_notice = (
+        bounded_control_notice(f"wrote {len(rows)} annotation(s) to {output_path}")
+        if output_path is not None
+        else None
+    )
+
     sidecar_count = len(sidecars)
+    projected = project_rows(rows, sink.max_rows)
+    displayed_rows = projected.rows
     items = []
-    for sidecar_path, ann in rows:
+    for sidecar_path, ann in displayed_rows:
         sel = ann.target.selector
         items.append(
             {
@@ -2013,36 +2044,52 @@ def list_cmd(
                 "bodies": [_body_json(b) for b in ann.bodies],
             }
         )
-    payload = {
+    payload: dict[str, object] = {
         "summary": {
             "total_annotations": len(rows),
             "total_sidecars": sidecar_count,
         },
         "annotations": items,
     }
+    if projected.truncated:
+        payload["truncation"] = {
+            "omitted": projected.omitted,
+            "total": projected.total,
+            "complete_via": sink.complete_via,
+        }
 
-    emit(
-        output_format=fmt,
-        payload=payload,
-        render_text=lambda: _emit_list_table(rows, effective_root, sidecar_count),
-    )
+    def _render() -> None:
+        _emit_list_table(displayed_rows, effective_root, sidecar_count, len(rows), sink=sink)
+        if projected.truncated:
+            sink.echo(f"showing {len(displayed_rows)} of {projected.total} annotation(s)")
+            sink.echo(f"  complete output:  {sink.complete_via}")
+
+    emit(output_format=fmt, payload=payload, render_text=_render, sink=sink)
+    sink.flush()
+    if control_notice is not None:
+        click.echo(control_notice)
 
 
 def _emit_list_table(
     rows: list[tuple[Path, Annotation]],
     root: Path,
     sidecar_count: int,
+    total_count: int,
+    *,
+    sink: BoundedSink,
 ) -> None:
-    if not rows:
-        click.echo(f"annotate list: 0 annotation(s) across {sidecar_count} sidecar(s)")
+    """Render ``rows`` (already projected) but always summarize ``total_count`` -- the
+    FULL result -- so a truncated view never understates how many annotations exist."""
+    if not total_count:
+        sink.echo(f"annotate list: 0 annotation(s) across {sidecar_count} sidecar(s)")
         return
     for sidecar_path, ann in rows:
         qualified = f"{query.entity_relpath_for_sidecar(sidecar_path, root)}:{ann.id}"
         preview = ann.target.selector.exact
         if len(preview) > 60:
             preview = preview[:60] + "…"
-        click.echo(f"  {qualified}  {ann.status.value:<10}  {ann.source}  {ann.annotation_type}  {preview!r}")
-    click.echo(f"\nannotate list: {len(rows)} annotation(s) across {sidecar_count} sidecar(s)")
+        sink.echo(f"  {qualified}  {ann.status.value:<10}  {ann.source}  {ann.annotation_type}  {preview!r}")
+    sink.echo(f"\nannotate list: {total_count} annotation(s) across {sidecar_count} sidecar(s)")
 
 
 def _body_json(body: Body) -> dict[str, str]:

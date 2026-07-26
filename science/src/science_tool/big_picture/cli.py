@@ -20,7 +20,7 @@ from science_tool.big_picture.validator import (
     validate_rollup_file,
     validate_synthesis_file,
 )
-from science_tool.output import emit
+from science_tool.output import OUTPUT_FORMATS, emit
 
 
 @click.group("big-picture")
@@ -162,7 +162,22 @@ def synthesis_path_cmd(hypothesis_id: str, project_root: Path) -> None:
         "against --project-root."
     ),
 )
-def validate_cmd(project_root: Path, staged: Path | None) -> None:
+@click.option(
+    "--format",
+    "output_format",
+    type=click.Choice(OUTPUT_FORMATS),
+    default="table",
+    show_default=True,
+    help="Output format.",
+)
+@click.option(
+    "--output",
+    "output_path",
+    type=click.Path(path_type=Path),
+    default=None,
+    help="Write the complete, unbudgeted report to PATH instead of stdout.",
+)
+def validate_cmd(project_root: Path, staged: Path | None, output_format: str, output_path: Path | None) -> None:
     """Validate generated big-picture synthesis files in this project.
 
     With ``--staged``, validate files in a staging directory BEFORE they are reconciled
@@ -173,6 +188,26 @@ def validate_cmd(project_root: Path, staged: Path | None) -> None:
     The known-ID corpus always comes from ``--project-root``: staged files are checked
     against the real project, which is the whole point.
     """
+    from science_tool.budget.control import bounded_control_notice
+    from science_tool.budget.invocation import build_complete_via, hint_for
+    from science_tool.budget.projection import project_rows
+    from science_tool.budget.registry import lookup
+    from science_tool.budget.sink import BoundedSink
+
+    sink = BoundedSink(
+        lookup("big-picture validate"),
+        output_path=output_path,
+        command_path="big-picture validate",
+        complete_via=build_complete_via(
+            click.get_current_context(), output_hint=hint_for("big-picture-validate", output_format)
+        ),
+    )
+    control_notice = (
+        bounded_control_notice(f"wrote the complete validation report to {output_path}")
+        if output_path is not None
+        else None
+    )
+
     # v3 canonical layout: synthesis artifacts are `synthesis` entities under
     # entities/synthesis/. The rollup is identified by its report_kind rather
     # than a fixed filename; per-hypothesis and emergent-threads files are
@@ -193,8 +228,30 @@ def validate_cmd(project_root: Path, staged: Path | None) -> None:
             else:
                 issues.extend(result.rows)
 
-    for issue in issues:
-        click.echo(f"[{issue.kind}] {issue.path.name}: {issue.message}")
+    projected = project_rows(issues, sink.max_rows)
+    displayed = projected.rows
+    payload: dict[str, object] = {
+        "issues": [{"kind": issue.kind, "path": str(issue.path), "message": issue.message} for issue in displayed],
+    }
+    if projected.truncated:
+        payload["truncation"] = {
+            "omitted": projected.omitted,
+            "total": projected.total,
+            "complete_via": sink.complete_via,
+        }
+
+    def _render() -> None:
+        for issue in displayed:
+            sink.echo(f"[{issue.kind}] {issue.path.name}: {issue.message}")
+        if projected.truncated:
+            sink.echo(f"showing {len(displayed)} of {projected.total} issue(s)")
+            sink.echo(f"  complete output:  {sink.complete_via}")
+
+    emit(output_format=output_format, payload=payload, render_text=_render, sink=sink)
+    sink.flush()
+    if control_notice is not None:
+        click.echo(control_notice)
+
     for path, reason in unchecked:
         click.echo(f"[not-checked] {path.name}: {reason}", err=True)
 

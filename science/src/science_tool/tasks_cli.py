@@ -260,24 +260,86 @@ def tasks_blockers(task_id: str, fmt: str, output_path: Path | None) -> None:
 
 @tasks_group.command("fix-blockers")
 @click.option("--dry-run", is_flag=True, help="List legacy untyped blockers without modifying any files")
-def tasks_fix_blockers(dry_run: bool) -> None:
-    """Interactive sweep to retype legacy untyped blockers."""
+@click.option(
+    "--format",
+    "output_format",
+    type=click.Choice(OUTPUT_FORMATS),
+    default="table",
+    show_default=True,
+    help="Output format for the --dry-run report. The live retyping sweep always prompts interactively.",
+)
+@click.option(
+    "--output",
+    "output_path",
+    type=click.Path(path_type=Path),
+    default=None,
+    help="With --dry-run, write the complete, unbudgeted report to PATH instead of stdout.",
+)
+def tasks_fix_blockers(dry_run: bool, output_format: str, output_path: Path | None) -> None:
+    """Interactive sweep to retype legacy untyped blockers.
+
+    ``--dry-run`` is a bounded report (bounded stdout, ``--output`` escape). The live
+    retyping sweep prompts interactively per blocker and cannot be buffered without
+    hiding each prompt from the person it is asking -- so ``--format``/``--output``
+    are refused without ``--dry-run``.
+    """
+    from science_tool.budget.control import bounded_control_notice
+    from science_tool.budget.invocation import build_complete_via, hint_for
+    from science_tool.budget.projection import project_rows
+    from science_tool.budget.registry import lookup
+    from science_tool.budget.sink import BoundedSink
     from science_tool.tasks import (
         _write_active,
         parse_tasks_for_cli,
     )
     from science_tool.tasks_blockers import is_typed_ref
 
+    if not dry_run and (output_path is not None or output_format != "table"):
+        raise click.UsageError("--format/--output require --dry-run (the live sweep prompts interactively)")
+
+    sink = BoundedSink(
+        lookup("tasks fix-blockers"),
+        output_path=output_path,
+        command_path="tasks fix-blockers",
+        complete_via=build_complete_via(
+            click.get_current_context(), output_hint=hint_for("tasks-fix-blockers", output_format)
+        ),
+    )
+    control_notice = (
+        bounded_control_notice(f"wrote the complete legacy-blocker report to {output_path}")
+        if output_path is not None
+        else None
+    )
+
     tasks_path = DEFAULT_TASKS_DIR / "active.md"
     tasks_, warnings = parse_tasks_for_cli(tasks_path)
-    if not warnings:
-        click.echo("No legacy untyped blockers found.")
-        return
 
-    if dry_run:
-        click.echo("Legacy untyped blockers (dry-run):")
-        for w in warnings:
-            click.echo(f"  {w}")
+    if not warnings or dry_run:
+        projected = project_rows(warnings, sink.max_rows)
+        displayed = projected.rows
+        payload: dict[str, object] = {"legacy_blockers": displayed}
+        if projected.truncated:
+            payload["truncation"] = {
+                "omitted": projected.omitted,
+                "total": projected.total,
+                "complete_via": sink.complete_via,
+            }
+
+        def _render() -> None:
+            if not warnings:
+                sink.echo("No legacy untyped blockers found.")
+                return
+            sink.echo("Legacy untyped blockers (dry-run):")
+            for w in displayed:
+                sink.echo(f"  {w}")
+            if projected.truncated:
+                sink.echo(f"showing {len(displayed)} of {projected.total} legacy blocker(s)")
+                sink.echo(f"  complete output:  {sink.complete_via}")
+
+        emit(output_format=output_format, payload=payload, render_text=_render, sink=sink)
+        sink.flush()
+        if control_notice is not None:
+            click.echo(control_notice)
         return
 
     changed = False
