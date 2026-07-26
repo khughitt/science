@@ -198,14 +198,17 @@ rejected, a `payload` root can safely emit the terse anchored form.
 
 `tracked:` grammar. These become git patterns AND must be evaluated by the
 checker, so the grammar is the subset both engines provably share: **literals
-(including non-ASCII) and `*`**. Reject newlines and control characters,
-absolute paths, a leading `!` (negation is the generator's job), a leading `#`,
-a trailing `/` (these match files, not directories), leading or trailing
-whitespace, empty / `.` / `..` path segments, `**`, `?`, character classes,
-backslashes, and duplicates.
+(including non-ASCII), leading whitespace, and `*`**. Reject newlines and
+control characters, absolute paths, a leading `!` (negation is the generator's
+job), a leading `#`, a trailing `/` (these match files, not directories),
+**trailing** whitespace, empty / `.` / `..` path segments, `**`, `?`, character
+classes, backslashes, and duplicates.
 
-Every exclusion is a case where the two engines disagree, each reproduced
-against real git:
+Exclusions fall into two groups, and conflating them overstates the case:
+
+**Engine divergences** — the exclusion is forced, because admitting syntax the
+checker evaluates differently from git would let the generator emit a *working*
+git rule that `unreachable-tracked` silently never verifies:
 
 | Construct | git | `PurePosixPath.match` (the checker) |
 |---|---|---|
@@ -213,13 +216,18 @@ against real git:
 | `?.json` vs `é.json` | `?` is one **byte**, so no match | `?` is one **character**, so matches |
 | `foo//bar.json`, `foo/./bar.json` | rule does not fire | segments normalised away, matches |
 | `a.json ` (trailing space) | whitespace stripped from the pattern | significant |
-| `[ab].json` | matches | matches, but probe generation cannot synthesise a witness |
 
-Admitting syntax the checker evaluates differently from git would let the
-generator emit a *working* git rule that `unreachable-tracked` silently never
-verifies — the precise false negative that check exists to prevent. Literals and
-`*` are byte-for-byte identical in both, including across `*` matching leading
-dots, so they are admitted without restriction.
+**One probe restriction** — `[ab].json` is matched *identically* by both
+engines. It is excluded because probe generation cannot synthesise a witness
+filename for a character class, so `boundary check --probe` could not verify the
+emitted rule. Listing it as a divergence, as an earlier draft did, misstated the
+reason.
+
+Everything else is admitted: literals (including non-ASCII), `*`, and **leading**
+whitespace are byte-for-byte identical in both engines, `*` matches leading dots
+in both, and `!/root/**/ lead.json` really does re-include and stage
+` lead.json`. Each row above and each admitted construct is pinned by a test
+that runs *both* engines, so a claim of divergence cannot survive being wrong.
 
 `unmanaged_allow` grammar is **not** the same, because its entries are matched
 against `.gitignore` rule *text* by equality rather than compiled as patterns. A
@@ -318,10 +326,43 @@ All six are mechanical. No heuristic participates in enforcement.
 | `boundary.generated-drift` | declared only | ERROR | managed block ≠ regenerated block |
 | `boundary.declaration-conflict` | declared only | ERROR | an unmanaged rule matches a path under a declared root |
 | `boundary.unreachable-tracked` | declared only | ERROR | an extant file matching a `tracked:` glob is absent from the git-visibility oracle |
-| `boundary.ignored-undeclared` | declared only | WARN | an unmanaged rule ignores a project path with no declared root and no allowlist entry |
-| `boundary.unanchored-pattern` | all projects | WARN | bare directory-name pattern with no leading `/`, in the unmanaged region |
+| `boundary.ignored-undeclared` | declared only | WARN | an unmanaged **exclude** ignores a project path with no declared root and no allowlist entry |
+| `boundary.unanchored-pattern` | all projects | WARN | bare directory-name **exclude**, no leading `/`, in the unmanaged region, not allowlisted |
 
 Two universal checks, four declaration-derived; four ERROR, two WARN.
+
+#### Sign awareness
+
+`unmanaged_rules` returns negations as well as excludes, and the three
+rule-text checks need them differently. `declaration-conflict` **records** a
+negation: a hand-written pin under a declared root is the per-case exception the
+declaration abolishes, and nothing ignore-oriented would otherwise find it. The
+other two **skip** negations, because their predicates are simply false of one —
+a `!` rule ignores nothing, so it cannot swallow tracked source and cannot
+ignore undeclared material. The point is not merely cosmetic: `unmanaged_allow`
+rejects `!` patterns by construction, so a finding raised against a negation
+could never be silenced.
+
+#### "Universal" means every project, not zero configuration
+
+`unanchored-pattern` runs for declared, undeclared and broken-declaration
+projects alike — that is what makes it universal. It nonetheless reads the
+allowlist, falling back to the built-in default when there is no usable
+declaration.
+
+It has to. Six of the rules in the shipped scaffold (`.venv/`, `__pycache__/`,
+`.mypy_cache/`, `.ipynb_checkpoints/`, `*.egg-info/`, `.worktrees/`) are bare
+directory names, so a freshly created project emitted six warnings on day one
+and then reported itself clean. Anchoring them would be the wrong remedy: a
+nested `inc/shiny/.venv/` must still be ignored, so depth-independence is the
+*intended* behaviour for tool droppings, and the project has already said so by
+listing them. Warning about a rule the project explicitly sanctioned, with
+advice that would break it, is noise that trains people to ignore the check.
+
+This is not the built-in-judgement problem returning. The exemption is keyed on
+the project's own declaration, not on what a pattern *looks like*; the default
+allowlist is simply the scaffold's list, coupled in one place. MM30's bare
+`archive` — the case that motivated the check — is not in it and still fires.
 
 #### Source universe
 
@@ -607,10 +648,26 @@ Required, or the declaration becomes a fourth opinion rather than the authority:
   implementation back onto `check-ignore`.
 - `tracked:` and `unmanaged_allow` grammar: newline, control character, absolute
   path, empty / `.` / `..` segment, leading `!`, leading `#`, trailing `/`,
-  surrounding whitespace, backslash, `?`, character class, `**`, duplicate, and
-  empty/omitted `tracked:` on a `manifest` root each raise. Each divergence case
-  in the grammar table above carries a test that asserts the *matcher's* answer
-  alongside the rejection, so the reason for the exclusion cannot be lost.
+  trailing whitespace, backslash, `?`, character class, `**`, duplicate, and
+  empty/omitted `tracked:` on a `manifest` root each raise.
+- Grammar exclusions are *earned*, not asserted. Every divergent construct and
+  every admitted construct is driven through **both** engines for real — the
+  matcher, and a throwaway git repository carrying the actual generated rule —
+  so a divergence claim that is wrong fails the suite instead of surviving as a
+  comment. Leading whitespace was found to be non-divergent exactly this way.
+- Adoption contract: a freshly scaffolded project, with the scaffold's own
+  `.gitignore`, produces **zero** findings. Six of its rules are bare directory
+  names, so this is a real regression risk, not a formality.
+- Sign awareness: a negation is reported by `declaration-conflict` inside a
+  declared root, and by neither `unanchored-pattern` nor `ignored-undeclared`
+  outside one.
+- Rule sources: a symlinked `.gitignore` contributes nothing (git applies no
+  rules from one), a tracked-but-deleted one contributes nothing, and an
+  unreadable one raises rather than reading as empty.
+- Environment fidelity: `core.ignoreCase` is inherited by the isolated
+  evaluation, with both the case-folding and case-sensitive directions pinned.
+- Non-UTF-8 tolerance: a byte-valued `.gitignore` pattern and a non-UTF-8
+  filename are both handled, since git handles both.
 - Conflict detection defeats both shadowing mechanisms: a rule hidden by the
   managed block, a rule hidden by a later hand-written negation, and a standalone
   hand-written negation are each reported; a single rule matching many paths is
