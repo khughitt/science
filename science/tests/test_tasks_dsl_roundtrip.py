@@ -1,4 +1,5 @@
 from datetime import date
+import json
 
 import pytest
 from science_model.tasks import Task
@@ -62,6 +63,34 @@ def test_scalar_with_newline_roundtrips():
     got = _roundtrip(t)
     assert got.group == "line1\nline2"
     assert got.project == 'has "quote"'
+
+
+@pytest.mark.parametrize(
+    "boundary",
+    ["\n", "\r", "\v", "\f", "\x1c", "\x1d", "\x1e", "\x85", "\u2028", "\u2029"],
+)
+def test_scalar_splitlines_boundary_roundtrips(boundary: str):
+    value = f"before{boundary}after"
+    task = Task(id="t019", title="x", status="done", created=date(2026, 3, 1), group=value)
+
+    rendered = render_task(task)
+
+    assert f"- group: {json.dumps(value, ensure_ascii=True)}" in rendered
+    assert _roundtrip(task).group == value
+
+
+@pytest.mark.parametrize(
+    "boundary",
+    ["\n", "\r", "\v", "\f", "\x1c", "\x1d", "\x1e", "\x85", "\u2028", "\u2029"],
+)
+def test_list_splitlines_boundary_roundtrips(boundary: str):
+    value = f"before{boundary}after"
+    task = Task(id="t020", title="x", status="done", created=date(2026, 3, 1), artifacts=[value])
+
+    rendered = render_task(task)
+
+    assert f"- artifacts: {json.dumps([value], ensure_ascii=True)}" in rendered
+    assert _roundtrip(task).artifacts == [value]
 
 
 def test_parse_list_rejects_malformed():

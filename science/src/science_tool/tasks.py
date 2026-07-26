@@ -56,6 +56,7 @@ _MARKDOWN_HEADING_RE = re.compile(r"^(#{1,3})\s+.+$")
 _NOTES_HEADING_RE = re.compile(r"^###\s+Notes\s*$")
 _LOCAL_PARENT_RE = re.compile(r"^task:t[0-9]{3,}$")
 _TASK_HEADING_PREFIX_RE = re.compile(r"^##\s+\[", re.MULTILINE)
+_SPLITLINES_BOUNDARIES = "\n\r\v\f\x1c\x1d\x1e\x85\u2028\u2029"
 _KNOWN_DSL_FIELDS = frozenset(
     {
         "type",
@@ -77,7 +78,7 @@ _KNOWN_DSL_FIELDS = frozenset(
 
 def _render_list_value(items: list[str]) -> str:
     """Render a list as a JSON array so every string round-trips."""
-    return json.dumps(items, ensure_ascii=False)
+    return json.dumps(items, ensure_ascii=True)
 
 
 def _parse_list_value(raw: str, *, field: str = "list") -> list[str]:
@@ -101,8 +102,12 @@ def _parse_list_value(raw: str, *, field: str = "list") -> list[str]:
 
 def _render_scalar(value: str) -> str:
     """Render a scalar reversibly while keeping ordinary values readable."""
-    if value != value.strip() or "\n" in value or '"' in value:
-        return json.dumps(value, ensure_ascii=False)
+    if (
+        value != value.strip()
+        or any(char in value for char in _SPLITLINES_BOUNDARIES)
+        or '"' in value
+    ):
+        return json.dumps(value, ensure_ascii=True)
     return value
 
 
