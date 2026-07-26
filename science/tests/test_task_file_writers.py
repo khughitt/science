@@ -83,6 +83,46 @@ def test_delete_task_file_rejects_missing_task(tmp_path: Path) -> None:
         task_module.delete_task_file(tmp_path / "tasks", "t042")
 
 
+@pytest.mark.parametrize("task_id", ["*", "../victim", "t1"])
+def test_find_active_file_rejects_noncanonical_id_before_path_lookup(
+    tmp_path: Path,
+    task_id: str,
+) -> None:
+    tasks_dir = tmp_path / "tasks"
+    active = tasks_dir / "active"
+    active.mkdir(parents=True)
+    unrelated = active / "t042-unrelated.md"
+    sentinel = tasks_dir / "victim.md"
+    unrelated.write_text("unrelated", encoding="utf-8")
+    sentinel.write_text("sentinel", encoding="utf-8")
+
+    with pytest.raises(ValueError, match="canonical task id"):
+        task_module._find_active_file(tasks_dir, task_id)
+
+    assert unrelated.read_text(encoding="utf-8") == "unrelated"
+    assert sentinel.read_text(encoding="utf-8") == "sentinel"
+
+
+@pytest.mark.parametrize("task_id", ["*", "../victim", "t1"])
+def test_delete_task_file_rejects_noncanonical_id_without_mutation(
+    tmp_path: Path,
+    task_id: str,
+) -> None:
+    tasks_dir = tmp_path / "tasks"
+    active = tasks_dir / "active"
+    active.mkdir(parents=True)
+    unrelated = active / "t042-unrelated.md"
+    sentinel = tasks_dir / "victim.md"
+    unrelated.write_text("unrelated", encoding="utf-8")
+    sentinel.write_text("sentinel", encoding="utf-8")
+
+    with pytest.raises(ValueError, match="canonical task id"):
+        task_module.delete_task_file(tasks_dir, task_id)
+
+    assert unrelated.read_text(encoding="utf-8") == "unrelated"
+    assert sentinel.read_text(encoding="utf-8") == "sentinel"
+
+
 def test_unsluggable_title_uses_id_only_filename(tmp_path: Path) -> None:
     tasks_dir = tmp_path / "tasks"
     task = _task(title="!!!")

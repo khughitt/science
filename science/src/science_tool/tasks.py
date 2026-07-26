@@ -444,6 +444,8 @@ def _find_active_file(tasks_dir: Path, task_id: str) -> Path | None:
     Mutation callers must hold ``_task_allocation_lock``; this helper never
     acquires it.
     """
+    if re.fullmatch(_TASK_ID_PATTERN, task_id) is None:
+        raise ValueError(f"non-canonical task id {task_id!r}; expected tNNN")
     active = _active_dir(tasks_dir)
     matches = sorted(active.glob(f"{task_id}-*.md"))
     slugless = active / f"{task_id}.md"
