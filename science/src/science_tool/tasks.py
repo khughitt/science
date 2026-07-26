@@ -191,6 +191,12 @@ def _parse_task_header(line: str, *, path: Path | None = None) -> tuple[str, str
     raise ValueError(f"Invalid task header{where}: {line}")
 
 
+def _validate_task_title(title: str) -> None:
+    """Reject titles that cannot be represented safely in either task format."""
+    if any(char in title for char in _SPLITLINES_BOUNDARIES) or "]" in title:
+        raise ValueError("task title must be single-line and contain no ']'")
+
+
 class TaskAspectValidationError(ValueError):
     """Raised when task-scoped aspects are malformed."""
 
@@ -867,7 +873,11 @@ def find_task_location(
 
 
 def write_task_location(location: TaskLocation) -> None:
-    """Rewrite the markdown file that owns a task location."""
+    """Rewrite the ledger that owns a task location.
+
+    The caller must hold ``_task_allocation_lock``; this helper does not acquire
+    the lock itself.
+    """
     location.path.parent.mkdir(parents=True, exist_ok=True)
     text = _render_task_file(location.path, location.tasks)
     _verify_round_trip(text, location.tasks, path=location.path)
@@ -916,12 +926,17 @@ def _append_note_to_description(description: str, note_line: str) -> str:
 
 
 def append_task_note(tasks_dir: Path, task_id: str, note: str, note_date: date | None = None) -> Task:
-    """Append a dated journal note to a task in active.md or done/*.md."""
-    location = find_task_location(tasks_dir, task_id)
-    task = location.task
-    line = _format_note(note_date or date.today(), note)
-    task.description = _append_note_to_description(task.description, line)
-    write_task_location(location)
+    """Append a dated journal note to an active task file or done ledger."""
+    with _task_allocation_lock(tasks_dir):
+        _require_split(tasks_dir)
+        location = find_task_location(tasks_dir, task_id, require_split=False)
+        task = location.task
+        line = _format_note(note_date or date.today(), note)
+        task.description = _append_note_to_description(task.description, line)
+        if location.path.parent == _active_dir(tasks_dir):
+            write_task_file(tasks_dir, task)
+        else:
+            write_task_location(location)
     return task
 
 
@@ -929,7 +944,7 @@ def _find_task(tasks: list[Task], task_id: str) -> Task:
     for t in tasks:
         if t.id == task_id:
             return t
-    msg = f"Task {task_id} not found in active.md"
+    msg = f"Task {task_id} not found in tasks/active/*.md"
     raise KeyError(msg)
 
 
@@ -947,11 +962,13 @@ def add_task(
     *,
     force: bool = False,
 ) -> Task:
-    """Create a task with status 'proposed', auto-assign ID, write to active.md."""
+    """Create a proposed task in its own active file."""
     from science_tool.tasks_blockers import validate_blocker_refs  # noqa: PLC0415
 
-    validated_blockers = validate_blocker_refs(project_root, blocked_by, force=force) if blocked_by else []
     with _task_allocation_lock(tasks_dir):
+        _require_split(tasks_dir)
+        _validate_task_title(title)
+        validated_blockers = validate_blocker_refs(project_root, blocked_by, force=force) if blocked_by else []
         task_id = next_task_id(tasks_dir)
         task = Task(
             id=task_id,
@@ -966,9 +983,7 @@ def add_task(
             group=group,
             description=description,
         )
-        tasks = _read_active(tasks_dir)
-        tasks.append(task)
-        _write_active(tasks_dir, tasks)
+        write_task_file(tasks_dir, task)
     return task
 
 
@@ -1020,49 +1035,51 @@ def _move_task_to_done(tasks_dir: Path, task: Task, *, target_status: str) -> No
 
 
 def complete_task(tasks_dir: Path, task_id: str, note: str | None = None) -> Task:
-    """Mark task done, add completion date, move from active.md to done/YYYY-MM.md."""
-    tasks = _read_active(tasks_dir)
-    task = _find_task(tasks, task_id)
+    """Mark an active task done and move it to the monthly ledger."""
+    with _task_allocation_lock(tasks_dir):
+        _require_split(tasks_dir)
+        tasks = _read_active(tasks_dir, require_split=False)
+        task = _find_task(tasks, task_id)
 
-    task.status = "done"
-    task.completed = date.today()
-    if note:
-        task.description = f"{task.description}\n\n{note}".strip()
+        task.status = "done"
+        task.completed = date.today()
+        if note:
+            task.description = f"{task.description}\n\n{note}".strip()
 
-    remaining = [t for t in tasks if t.id != task_id]
-    done_dir = tasks_dir / "done"
-    done_path = done_dir / f"{date.today().strftime('%Y-%m')}.md"
-    _move_task_to_done(tasks_dir, remaining, done_path, task)
+        _move_task_to_done(tasks_dir, task, target_status="done")
     return task
 
 
 def defer_task(tasks_dir: Path, task_id: str, reason: str | None = None) -> Task:
     """Set status to 'deferred', append reason to description."""
-    tasks = _read_active(tasks_dir)
-    task = _find_task(tasks, task_id)
+    with _task_allocation_lock(tasks_dir):
+        _require_split(tasks_dir)
+        location = find_task_location(tasks_dir, task_id, require_split=False)
+        if location.path.parent != _active_dir(tasks_dir):
+            raise KeyError(f"Task {task_id} not found in tasks/active/*.md")
+        task = location.task
 
-    task.status = "deferred"
-    if reason:
-        task.description = f"{task.description}\n\n{reason}".strip()
+        task.status = "deferred"
+        if reason:
+            task.description = f"{task.description}\n\n{reason}".strip()
 
-    _write_active(tasks_dir, tasks)
+        write_task_file(tasks_dir, task)
     return task
 
 
 def retire_task(tasks_dir: Path, task_id: str, reason: str | None = None) -> Task:
     """Set status to 'retired', append reason. Moves to done/ archive like complete_task."""
-    tasks = _read_active(tasks_dir)
-    task = _find_task(tasks, task_id)
+    with _task_allocation_lock(tasks_dir):
+        _require_split(tasks_dir)
+        tasks = _read_active(tasks_dir, require_split=False)
+        task = _find_task(tasks, task_id)
 
-    task.status = "retired"
-    task.completed = date.today()
-    if reason:
-        task.description = f"{task.description}\n\n**Retired:** {reason}".strip()
+        task.status = "retired"
+        task.completed = date.today()
+        if reason:
+            task.description = f"{task.description}\n\n**Retired:** {reason}".strip()
 
-    remaining = [t for t in tasks if t.id != task_id]
-    done_dir = tasks_dir / "done"
-    done_path = done_dir / f"{date.today().strftime('%Y-%m')}.md"
-    _move_task_to_done(tasks_dir, remaining, done_path, task)
+        _move_task_to_done(tasks_dir, task, target_status="retired")
     return task
 
 
@@ -1077,28 +1094,36 @@ def block_task(
     """Add typed blockers to a task, set status to 'blocked'."""
     from science_tool.tasks_blockers import validate_blocker_refs  # noqa: PLC0415
 
-    validated = validate_blocker_refs(project_root, blocked_by, force=force)
-    tasks = _read_active(tasks_dir)
-    task = _find_task(tasks, task_id)
+    with _task_allocation_lock(tasks_dir):
+        _require_split(tasks_dir)
+        validated = validate_blocker_refs(project_root, blocked_by, force=force)
+        location = find_task_location(tasks_dir, task_id, require_split=False)
+        if location.path.parent != _active_dir(tasks_dir):
+            raise KeyError(f"Task {task_id} not found in tasks/active/*.md")
+        task = location.task
 
-    task.status = "blocked"
-    for ref in validated:
-        if ref not in task.blocked_by:
-            task.blocked_by.append(ref)
+        task.status = "blocked"
+        for ref in validated:
+            if ref not in task.blocked_by:
+                task.blocked_by.append(ref)
 
-    _write_active(tasks_dir, tasks)
+        write_task_file(tasks_dir, task)
     return task
 
 
 def unblock_task(tasks_dir: Path, task_id: str) -> Task:
     """Clear blocked_by list, set status to 'active'."""
-    tasks = _read_active(tasks_dir)
-    task = _find_task(tasks, task_id)
+    with _task_allocation_lock(tasks_dir):
+        _require_split(tasks_dir)
+        location = find_task_location(tasks_dir, task_id, require_split=False)
+        if location.path.parent != _active_dir(tasks_dir):
+            raise KeyError(f"Task {task_id} not found in tasks/active/*.md")
+        task = location.task
 
-    task.status = "active"
-    task.blocked_by = []
+        task.status = "active"
+        task.blocked_by = []
 
-    _write_active(tasks_dir, tasks)
+        write_task_file(tasks_dir, task)
     return task
 
 
@@ -1120,44 +1145,52 @@ def edit_task(
     """Update specified fields on a task."""
     from science_tool.tasks_blockers import validate_blocker_refs  # noqa: PLC0415
 
-    location = find_task_location(tasks_dir, task_id)
-    task = location.task
+    with _task_allocation_lock(tasks_dir):
+        _require_split(tasks_dir)
+        location = find_task_location(tasks_dir, task_id, require_split=False)
+        task = location.task
+        is_active = location.path.parent == _active_dir(tasks_dir)
 
-    if location.path != tasks_dir / "active.md" and status is not None and status not in _CLOSED_STATUS_VALUES:
-        msg = f"Cannot set archived task {task_id} to non-closed status '{status}'"
-        raise ValueError(msg)
+        if is_active and status in _CLOSED_STATUS_VALUES:
+            raise ValueError("use science tasks done/retire to close a task")
+        if not is_active and status is not None and status not in _CLOSED_STATUS_VALUES:
+            msg = f"Cannot set archived task {task_id} to non-closed status '{status}'"
+            raise ValueError(msg)
+        if title is not None:
+            _validate_task_title(title)
+            task.title = title
+        if description is not None:
+            task.description = description
+        if priority is not None:
+            task.priority = priority
+        if status is not None:
+            task.status = status
+        if aspects is not None:
+            task.aspects = aspects
+        if related is not None:
+            # --related REPLACES the list (deduped, order-preserving) rather than
+            # accumulating -- appending gave no way to remove a stale ref, and a bare
+            # non-canonical short id silently entered the list and later failed graph
+            # validation (fb-2026-07-07-001).
+            deduped: list[str] = []
+            for ref in related:
+                if ":" not in ref or not ref.split(":", 1)[1]:
+                    raise ValueError(
+                        f"related ref {ref!r} is not canonical; use a '<kind>:<id>' ref "
+                        "(e.g. 'hypothesis:h01', 'task:t010')"
+                    )
+                if ref not in deduped:
+                    deduped.append(ref)
+            task.related = deduped
+        if blocked_by is not None:
+            task.blocked_by = validate_blocker_refs(project_root, blocked_by, force=force)
+        if group is not None:
+            task.group = group
 
-    if title is not None:
-        task.title = title
-    if description is not None:
-        task.description = description
-    if priority is not None:
-        task.priority = priority
-    if status is not None:
-        task.status = status
-    if aspects is not None:
-        task.aspects = aspects
-    if related is not None:
-        # --related REPLACES the list (deduped, order-preserving) rather than
-        # accumulating -- appending gave no way to remove a stale ref, and a bare
-        # non-canonical short id silently entered the list and later failed graph
-        # validation (fb-2026-07-07-001).
-        deduped: list[str] = []
-        for ref in related:
-            if ":" not in ref or not ref.split(":", 1)[1]:
-                raise ValueError(
-                    f"related ref {ref!r} is not canonical; use a '<kind>:<id>' ref "
-                    "(e.g. 'hypothesis:h01', 'task:t010')"
-                )
-            if ref not in deduped:
-                deduped.append(ref)
-        task.related = deduped
-    if blocked_by is not None:
-        task.blocked_by = validate_blocker_refs(project_root, blocked_by, force=force)
-    if group is not None:
-        task.group = group
-
-    write_task_location(location)
+        if is_active:
+            write_task_file(tasks_dir, task)
+        else:
+            write_task_location(location)
     return task
 
 

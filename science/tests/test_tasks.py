@@ -7,6 +7,7 @@ from pathlib import Path
 
 import pytest
 
+from science_tool import tasks as task_module
 from science_tool.tasks import (
     Task,
     add_task,
@@ -33,6 +34,27 @@ def _write(path: Path, content: str) -> Path:
     return path
 
 
+def _write_active_task(tasks_dir: Path, task: Task) -> Path:
+    path = tasks_dir / "active" / f"{task.id}.md"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(task_module.render_task_file(task), encoding="utf-8")
+    return path
+
+
+def _write_split_active(tasks_dir: Path, content: str) -> list[Path]:
+    return [_write_active_task(tasks_dir, task) for task in task_module._parse_tasks_text(content)]
+
+
+def _read_split_active(tasks_dir: Path) -> list[Task]:
+    return task_module._read_active(tasks_dir)
+
+
+def _active_file(tasks_dir: Path, task_id: str) -> Path:
+    matches = list((tasks_dir / "active").glob(f"{task_id}*.md"))
+    assert len(matches) == 1
+    return matches[0]
+
+
 def _concurrent_add_worker(args: tuple[Path, Path, int]) -> str:
     # Module-level so ProcessPoolExecutor can pickle it.
     project_root, tasks_dir, i = args
@@ -48,13 +70,12 @@ def test_concurrent_add_task_allocates_unique_ids(tmp_path: Path) -> None:
 
     tasks_dir = tmp_path / "tasks"
     tasks_dir.mkdir()
-    (tasks_dir / "active.md").write_text("")
     n = 8
     args = [(tmp_path, tasks_dir, i) for i in range(n)]
     with concurrent.futures.ProcessPoolExecutor(max_workers=n) as ex:
         ids = list(ex.map(_concurrent_add_worker, args))
     assert len(set(ids)) == n, f"duplicate task ids allocated: {sorted(ids)}"
-    assert len(known_task_ids(tasks_dir)) == n, "concurrent writes lost tasks from active.md"
+    assert len(known_task_ids(tasks_dir)) == n, "concurrent writes lost per-file tasks"
 
 
 SINGLE_TASK = """\
@@ -115,7 +136,7 @@ def test_render_and_parse_task_without_tags(tmp_path: Path) -> None:
     tasks_dir.mkdir()
     t = add_task(tmp_path, tasks_dir, "Test task", "P1", task_type="dev", related=["topic:umap"])
     assert "- tags:" not in render_task(t)
-    tasks = parse_tasks(tasks_dir / "active.md")
+    tasks = _read_split_active(tasks_dir)
     assert tasks[0].related == ["topic:umap"]
 
 
@@ -420,15 +441,14 @@ Body.
         parse_tasks(f)
 
 
-def test_add_task_omits_parent_by_default(tmp_path: Path) -> None:
+def test_add_task_defaults_parent_to_empty(tmp_path: Path) -> None:
     tasks_dir = tmp_path / "tasks"
     tasks_dir.mkdir()
 
     task = add_task(tmp_path, tasks_dir, "Temporary smoke task", "P3", task_type="dev")
-    rendered = (tasks_dir / "active.md").read_text(encoding="utf-8")
 
     assert task.id == "t001"
-    assert "- parent:" not in rendered
+    assert task_module.parse_task_file(_active_file(tasks_dir, task.id)).parent == ""
 
 
 def test_next_task_id_empty_dir(tmp_path: Path) -> None:
@@ -440,8 +460,8 @@ def test_next_task_id_empty_dir(tmp_path: Path) -> None:
 def test_next_task_id_considers_active(tmp_path: Path) -> None:
     tasks_dir = tmp_path / "tasks"
     tasks_dir.mkdir()
-    _write(
-        tasks_dir / "active.md",
+    _write_split_active(
+        tasks_dir,
         """\
 ## [t003] Some task
 - type: dev
@@ -460,8 +480,8 @@ def test_next_task_id_considers_done_dir(tmp_path: Path) -> None:
     tasks_dir.mkdir()
     done_dir = tasks_dir / "done"
     done_dir.mkdir()
-    _write(
-        tasks_dir / "active.md",
+    _write_split_active(
+        tasks_dir,
         """\
 ## [t002] Active task
 - type: dev
@@ -488,28 +508,26 @@ Done desc.
     assert next_task_id(tasks_dir) == "t006"
 
 
-def test_next_task_id_ignores_invalid_suffix_header(tmp_path: Path) -> None:
+def test_next_task_id_ignores_task_shaped_heading_in_active_body(tmp_path: Path) -> None:
     tasks_dir = tmp_path / "tasks"
     tasks_dir.mkdir()
-    _write(
-        tasks_dir / "active.md",
-        """\
-## [t009] Valid task
-- type: dev
-- priority: P2
-- status: proposed
-- created: 2026-05-05
-
+    _write_active_task(
+        tasks_dir,
+        Task(
+            id="t009",
+            title="Valid task",
+            type="dev",
+            priority="P2",
+            status="proposed",
+            aspects=[],
+            created=date(2026, 5, 5),
+            description="""\
 Body.
 
 ## [t010b] Invalid suffix task
-- type: dev
-- priority: P2
-- status: proposed
-- created: 2026-05-05
 
-Body.
-""",
+Body.""",
+        ),
     )
 
     assert next_task_id(tasks_dir) == "t010"
@@ -521,11 +539,11 @@ Body.
 
 
 def _make_tasks_dir(tmp_path: Path) -> Path:
-    """Create a tasks_dir with an active.md containing one task."""
+    """Create a tasks_dir with one per-file active task."""
     tasks_dir = tmp_path / "tasks"
     tasks_dir.mkdir()
-    _write(
-        tasks_dir / "active.md",
+    _write_split_active(
+        tasks_dir,
         """\
 ## [t001] Existing task
 - type: dev
@@ -539,9 +557,6 @@ Existing description.
     return tasks_dir
 
 
-PREAMBLE = "<!-- Task queue. Use /science:tasks to manage. -->\n\n"
-
-
 class TestAddTask:
     def test_add_creates_task_in_active(self, tmp_path: Path) -> None:
         tasks_dir = tmp_path / "tasks"
@@ -553,8 +568,7 @@ class TestAddTask:
         assert t.priority == "P2"
         assert t.status == "proposed"
         assert t.created == date.today()
-        # Verify it was written to active.md
-        tasks = parse_tasks(tasks_dir / "active.md")
+        tasks = _read_split_active(tasks_dir)
         assert len(tasks) == 1
         assert tasks[0].id == "t001"
 
@@ -562,7 +576,7 @@ class TestAddTask:
         tasks_dir = _make_tasks_dir(tmp_path)
         t = add_task(tmp_path, tasks_dir, title="Second task", task_type="dev", priority="P1")
         assert t.id == "t002"
-        tasks = parse_tasks(tasks_dir / "active.md")
+        tasks = _read_split_active(tasks_dir)
         assert len(tasks) == 2
         assert tasks[1].id == "t002"
 
@@ -584,14 +598,14 @@ class TestAddTask:
         assert t.blocked_by == ["task:t001"]
         assert t.description == "Some notes."
 
-    def test_add_preserves_active_preamble(self, tmp_path: Path) -> None:
+    def test_add_preserves_existing_active_file(self, tmp_path: Path) -> None:
         tasks_dir = _make_tasks_dir(tmp_path)
-        active = tasks_dir / "active.md"
-        active.write_text(PREAMBLE + active.read_text(encoding="utf-8"), encoding="utf-8")
+        active = _active_file(tasks_dir, "t001")
+        before = active.read_bytes()
 
         add_task(tmp_path, tasks_dir, title="Second task", task_type="dev", priority="P1")
 
-        assert active.read_text(encoding="utf-8").startswith(PREAMBLE)
+        assert active.read_bytes() == before
 
 
 class TestCompleteTask:
@@ -600,9 +614,7 @@ class TestCompleteTask:
         t = complete_task(tasks_dir, "t001")
         assert t.status == "done"
         assert t.completed == date.today()
-        # active.md should be empty
-        active_tasks = parse_tasks(tasks_dir / "active.md")
-        assert len(active_tasks) == 0
+        assert _read_split_active(tasks_dir) == []
         # done file should have the task
         done_path = tasks_dir / "done" / f"{date.today().strftime('%Y-%m')}.md"
         done_tasks = parse_tasks(done_path)
@@ -616,17 +628,28 @@ class TestCompleteTask:
 
     def test_complete_not_found_raises(self, tmp_path: Path) -> None:
         tasks_dir = _make_tasks_dir(tmp_path)
-        with pytest.raises(KeyError):
+        with pytest.raises(KeyError, match=r"tasks/active/\*\.md"):
             complete_task(tasks_dir, "t999")
 
-    def test_complete_preserves_active_preamble(self, tmp_path: Path) -> None:
+    def test_complete_preserves_other_active_file(self, tmp_path: Path) -> None:
         tasks_dir = _make_tasks_dir(tmp_path)
-        active = tasks_dir / "active.md"
-        active.write_text(PREAMBLE + active.read_text(encoding="utf-8"), encoding="utf-8")
+        other = _write_active_task(
+            tasks_dir,
+            Task(
+                id="t002",
+                title="Other task",
+                priority="P2",
+                status="active",
+                aspects=[],
+                created=date(2026, 3, 2),
+                description="Other.",
+            ),
+        )
+        before = other.read_bytes()
 
         complete_task(tasks_dir, "t001")
 
-        assert active.read_text(encoding="utf-8") == PREAMBLE
+        assert other.read_bytes() == before
 
 
 class TestDeferTask:
@@ -634,7 +657,7 @@ class TestDeferTask:
         tasks_dir = _make_tasks_dir(tmp_path)
         t = defer_task(tasks_dir, "t001")
         assert t.status == "deferred"
-        tasks = parse_tasks(tasks_dir / "active.md")
+        tasks = _read_split_active(tasks_dir)
         assert tasks[0].status == "deferred"
 
     def test_defer_with_reason(self, tmp_path: Path) -> None:
@@ -642,14 +665,12 @@ class TestDeferTask:
         t = defer_task(tasks_dir, "t001", reason="Waiting on data.")
         assert "Waiting on data." in t.description
 
-    def test_defer_preserves_active_preamble(self, tmp_path: Path) -> None:
+    def test_defer_keeps_exactly_one_active_file(self, tmp_path: Path) -> None:
         tasks_dir = _make_tasks_dir(tmp_path)
-        active = tasks_dir / "active.md"
-        active.write_text(PREAMBLE + active.read_text(encoding="utf-8"), encoding="utf-8")
 
         defer_task(tasks_dir, "t001", reason="Waiting on data.")
 
-        assert active.read_text(encoding="utf-8").startswith(PREAMBLE)
+        assert len(list((tasks_dir / "active").glob("t001*.md"))) == 1
 
 
 class TestBlockTask:
@@ -658,7 +679,7 @@ class TestBlockTask:
         t = block_task(tmp_path, tasks_dir, "t001", blocked_by=["task:t002"], force=True)
         assert t.status == "blocked"
         assert "task:t002" in t.blocked_by
-        tasks = parse_tasks(tasks_dir / "active.md")
+        tasks = _read_split_active(tasks_dir)
         assert tasks[0].status == "blocked"
         assert "task:t002" in tasks[0].blocked_by
 
@@ -684,14 +705,21 @@ class TestEditTask:
         tasks_dir = _make_tasks_dir(tmp_path)
         t = edit_task(tmp_path, tasks_dir, "t001", priority="P3")
         assert t.priority == "P3"
-        tasks = parse_tasks(tasks_dir / "active.md")
+        tasks = _read_split_active(tasks_dir)
         assert tasks[0].priority == "P3"
 
     def test_edit_multiple_fields(self, tmp_path: Path) -> None:
         tasks_dir = _make_tasks_dir(tmp_path)
-        t = edit_task(tmp_path, tasks_dir, "t001", priority="P2", status="todo", aspects=["hypothesis-testing"])
+        t = edit_task(
+            tmp_path,
+            tasks_dir,
+            "t001",
+            priority="P2",
+            status="deferred",
+            aspects=["hypothesis-testing"],
+        )
         assert t.priority == "P2"
-        assert t.status == "todo"
+        assert t.status == "deferred"
         assert t.aspects == ["hypothesis-testing"]
 
     def test_edit_related(self, tmp_path: Path) -> None:
@@ -719,33 +747,29 @@ class TestEditTask:
         with pytest.raises(KeyError):
             edit_task(tmp_path, tasks_dir, "t999", priority="P3")
 
-    def test_edit_preserves_active_preamble(self, tmp_path: Path) -> None:
+    def test_edit_keeps_exactly_one_active_file(self, tmp_path: Path) -> None:
         tasks_dir = _make_tasks_dir(tmp_path)
-        active = tasks_dir / "active.md"
-        active.write_text(PREAMBLE + active.read_text(encoding="utf-8"), encoding="utf-8")
 
         edit_task(tmp_path, tasks_dir, "t001", priority="P3")
 
-        assert active.read_text(encoding="utf-8").startswith(PREAMBLE)
+        assert len(list((tasks_dir / "active").glob("t001*.md"))) == 1
 
 
-class TestRetireTaskPreamble:
-    def test_retire_preserves_active_preamble(self, tmp_path: Path) -> None:
+class TestRetireTaskFiles:
+    def test_retire_removes_the_active_file(self, tmp_path: Path) -> None:
         tasks_dir = _make_tasks_dir(tmp_path)
-        active = tasks_dir / "active.md"
-        active.write_text(PREAMBLE + active.read_text(encoding="utf-8"), encoding="utf-8")
 
         retire_task(tasks_dir, "t001", reason="Out of scope.")
 
-        assert active.read_text(encoding="utf-8") == PREAMBLE
+        assert not list((tasks_dir / "active").glob("t001*.md"))
 
 
 class TestTaskLocation:
     def _setup_active_and_done(self, tmp_path: Path) -> Path:
         tasks_dir = tmp_path / "tasks"
         tasks_dir.mkdir()
-        _write(
-            tasks_dir / "active.md",
+        _write_split_active(
+            tasks_dir,
             """\
 ## [t001] Active copy
 - priority: P1
@@ -758,7 +782,7 @@ Active description.
         _write(
             tasks_dir / "done" / "2026-03.md",
             """\
-## [t002] Older archived task
+## [t003] Older archived task
 - priority: P2
 - status: done
 - created: 2026-03-01
@@ -786,7 +810,7 @@ Newer archive.
 
         location = find_task_location(tasks_dir, "t001")
 
-        assert location.path == tasks_dir / "active.md"
+        assert location.path == tasks_dir / "active" / "t001.md"
         assert location.task.title == "Active copy"
 
     def test_find_task_location_searches_archives_newest_first(self, tmp_path: Path) -> None:
@@ -797,7 +821,7 @@ Newer archive.
         assert location.path == tasks_dir / "done" / "2026-04.md"
         assert location.task.title == "Newer archived task"
 
-    def test_find_task_location_active_wins_duplicate(self, tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
+    def test_find_task_location_rejects_active_done_duplicate(self, tmp_path: Path) -> None:
         tasks_dir = self._setup_active_and_done(tmp_path)
         _write(
             tasks_dir / "done" / "2026-05.md",
@@ -812,13 +836,8 @@ Duplicate.
 """,
         )
 
-        location = find_task_location(tasks_dir, "t001")
-
-        captured = capsys.readouterr()
-        assert location.path == tasks_dir / "active.md"
-        assert "WARNING: duplicate task id t001 found in" in captured.err
-        assert "active.md" in captured.err
-        assert "2026-05.md" in captured.err
+        with pytest.raises(ValueError, match="duplicate task id t001"):
+            find_task_location(tasks_dir, "t001")
 
     def test_find_task_location_missing_lists_searched_files(self, tmp_path: Path) -> None:
         tasks_dir = self._setup_active_and_done(tmp_path)
@@ -828,7 +847,7 @@ Duplicate.
 
         message = str(excinfo.value)
         assert "Task t999 not found" in message
-        assert "active.md" in message
+        assert "active/t001.md" in message
         assert "2026-03.md" in message
         assert "2026-04.md" in message
 
@@ -862,8 +881,8 @@ Duplicate.
     def test_append_task_note_empty_description_starts_with_notes(self, tmp_path: Path) -> None:
         tasks_dir = tmp_path / "tasks"
         tasks_dir.mkdir()
-        _write(
-            tasks_dir / "active.md",
+        _write_split_active(
+            tasks_dir,
             """\
 ## [t001] Empty description
 - priority: P1
@@ -880,8 +899,8 @@ Duplicate.
     def test_append_task_note_appends_to_existing_notes_section(self, tmp_path: Path) -> None:
         tasks_dir = tmp_path / "tasks"
         tasks_dir.mkdir()
-        _write(
-            tasks_dir / "active.md",
+        _write_split_active(
+            tasks_dir,
             """\
 ## [t001] Has notes
 - priority: P1
@@ -903,8 +922,8 @@ Body.
     def test_append_task_note_inserts_before_following_equal_heading(self, tmp_path: Path) -> None:
         tasks_dir = tmp_path / "tasks"
         tasks_dir.mkdir()
-        _write(
-            tasks_dir / "active.md",
+        _write_split_active(
+            tasks_dir,
             """\
 ## [t001] Has trailing heading
 - priority: P1
@@ -961,8 +980,8 @@ Body.
     def test_append_task_note_roundtrip_preserves_other_tasks(self, tmp_path: Path) -> None:
         tasks_dir = tmp_path / "tasks"
         tasks_dir.mkdir()
-        _write(
-            tasks_dir / "active.md",
+        _write_split_active(
+            tasks_dir,
             """\
 ## [t001] First
 - priority: P1
@@ -979,10 +998,10 @@ First body.
 Second body.
 """,
         )
-        before = parse_tasks(tasks_dir / "active.md")
+        before = _read_split_active(tasks_dir)
 
         append_task_note(tasks_dir, "t001", "Only first changes.", note_date=date(2026, 4, 28))
-        after = parse_tasks(tasks_dir / "active.md")
+        after = _read_split_active(tasks_dir)
 
         assert after[1] == before[1]
         assert after[0].title == before[0].title
@@ -997,8 +1016,8 @@ class TestListTasks:
         )
         tasks_dir = tmp_path / "tasks"
         tasks_dir.mkdir()
-        _write(
-            tasks_dir / "active.md",
+        _write_split_active(
+            tasks_dir,
             """\
 ## [t001] Dev task
 - priority: P1
@@ -1112,7 +1131,14 @@ class TestDoneHiding:
     def _setup(self, tmp_path: Path) -> Path:
         tasks_dir = tmp_path / "tasks"
         tasks_dir.mkdir()
-        _write(tasks_dir / "active.md", MIXED_STATUS_TASKS)
+        tasks = task_module._parse_tasks_text(MIXED_STATUS_TASKS)
+        for task in tasks:
+            if task.status in {"proposed", "active", "blocked", "deferred"}:
+                _write_active_task(tasks_dir, task)
+        _write(
+            tasks_dir / "done" / "2026-03.md",
+            render_tasks([task for task in tasks if task.status in {"done", "retired"}]),
+        )
         return tasks_dir
 
     def test_default_hides_done_and_retired(self, tmp_path: Path) -> None:
@@ -1121,20 +1147,20 @@ class TestDoneHiding:
         ids = {t.id for t in result}
         assert ids == {"t001", "t004"}
 
-    def test_include_done_shows_all(self, tmp_path: Path) -> None:
+    def test_since_shows_terminal_tasks(self, tmp_path: Path) -> None:
         tasks_dir = self._setup(tmp_path)
-        result = list_tasks(tasks_dir, include_done=True)
-        assert len(result) == 4
+        result = list_tasks(tasks_dir, include_done=True, since=date(2026, 3, 1))
+        assert {task.id for task in result} == {"t002", "t003"}
 
     def test_status_filter_done_returns_done(self, tmp_path: Path) -> None:
         tasks_dir = self._setup(tmp_path)
-        result = list_tasks(tasks_dir, status="done")
+        result = list_tasks(tasks_dir, status="done", since=date(2026, 3, 1))
         assert len(result) == 1
         assert result[0].id == "t002"
 
     def test_status_filter_retired_returns_retired(self, tmp_path: Path) -> None:
         tasks_dir = self._setup(tmp_path)
-        result = list_tasks(tasks_dir, status="retired")
+        result = list_tasks(tasks_dir, status="retired", since=date(2026, 3, 1))
         assert len(result) == 1
         assert result[0].id == "t003"
 
@@ -1162,19 +1188,16 @@ class TestInvalidStatusWarning:
 
 
 class TestTagsAndGroups:
-    def test_legacy_tags_silently_dropped(self, tmp_path: Path) -> None:
-        """After parse-time merge removal, `- tags:` in task markdown is silently ignored."""
+    def test_legacy_tags_are_rejected_as_unknown_metadata(self, tmp_path: Path) -> None:
         f = _write(tmp_path / "active.md", TAGGED_TASK)
-        tasks = parse_tasks(f)
-        assert len(tasks) == 1
-        t = tasks[0]
-        assert "topic:lens-system" not in t.related
-        assert "topic:umap" not in t.related
-        assert "meta:lens-system" not in t.related
-        assert t.group == "visualization"
+        with pytest.raises(ValueError, match="unknown metadata key 'tags'"):
+            parse_tasks(f)
 
     def test_roundtrip_without_tags(self, tmp_path: Path) -> None:
-        f = _write(tmp_path / "active.md", TAGGED_TASK)
+        f = _write(
+            tmp_path / "active.md",
+            TAGGED_TASK.replace("- tags: [lens-system, umap]\n", ""),
+        )
         tasks1 = parse_tasks(f)
         rendered = render_tasks(tasks1)
         assert "- tags:" not in rendered
@@ -1212,7 +1235,7 @@ class TestTagsAndGroups:
         )
         assert t.related == ["topic:symmetry", "topic:umap"]
         assert t.group == "lens-system"
-        tasks = parse_tasks(tasks_dir / "active.md")
+        tasks = _read_split_active(tasks_dir)
         assert tasks[0].related == ["topic:symmetry", "topic:umap"]
         assert tasks[0].group == "lens-system"
 
@@ -1288,9 +1311,7 @@ class TestRetireTask:
         t = retire_task(tasks_dir, "t001")
         assert t.status == "retired"
         assert t.completed == date.today()
-        # active.md should be empty
-        active_tasks = parse_tasks(tasks_dir / "active.md")
-        assert len(active_tasks) == 0
+        assert _read_split_active(tasks_dir) == []
         # done file should have the task
         done_path = tasks_dir / "done" / f"{date.today().strftime('%Y-%m')}.md"
         done_tasks = parse_tasks(done_path)
@@ -1322,7 +1343,7 @@ def test_render_task_emits_aspects_when_nonempty() -> None:
         created=date(2026, 4, 19),
     )
     rendered = render_task(t)
-    assert "- aspects: [hypothesis-testing, computational-analysis]" in rendered
+    assert '- aspects: ["hypothesis-testing", "computational-analysis"]' in rendered
 
 
 def test_render_task_emits_empty_aspects_field() -> None:
@@ -1344,9 +1365,7 @@ def test_render_task_emits_empty_aspects_field() -> None:
 
 
 def test_add_task_with_aspects(tmp_path) -> None:
-    from science_tool.tasks import add_task, parse_tasks
-
-    (tmp_path / "active.md").write_text("")
+    from science_tool.tasks import add_task
 
     task = add_task(
         project_root=tmp_path,
@@ -1358,20 +1377,19 @@ def test_add_task_with_aspects(tmp_path) -> None:
     assert task.aspects == ["hypothesis-testing"]
     assert task.type == ""
 
-    reread = parse_tasks(tmp_path / "active.md")
+    reread = _read_split_active(tmp_path)
     assert reread[0].aspects == ["hypothesis-testing"]
 
 
 def test_add_task_without_aspects_writes_empty_aspects_line(tmp_path) -> None:
-    # Without --aspects the task must still carry '- aspects: []' so the next
+    # Without --aspects the task must still carry 'aspects: []' so the next
     # 'science validate' passes (feedback fb-2026-05-30-005).
     from science_tool.tasks import add_task
 
-    (tmp_path / "active.md").write_text("")
-    add_task(project_root=tmp_path, tasks_dir=tmp_path, title="Test", priority="P2")
+    task = add_task(project_root=tmp_path, tasks_dir=tmp_path, title="Test", priority="P2")
 
-    body = (tmp_path / "active.md").read_text()
-    assert "- aspects: []" in body
+    body = _active_file(tmp_path, task.id).read_text()
+    assert "aspects: []" in body
 
 
 # ---------------------------------------------------------------------------
@@ -1511,26 +1529,24 @@ Body 101.
 """
 
 
-def test_edit_task_rejects_self_corrupting_description(tmp_path: Path) -> None:
-    """A description line starting with '## [tNNN]' makes the file unparseable on
-    the next read. The write must be refused (not silently corrupt the file)."""
-    from science_tool.tasks import TaskIntegrityError
-
+def test_edit_task_active_file_allows_task_shaped_description_heading(tmp_path: Path) -> None:
+    """Per-task frontmatter files do not parse task-shaped body headings as siblings."""
     tasks_dir = tmp_path / "tasks"
-    _write(tasks_dir / "active.md", _TWO_TASKS)
-    before = (tasks_dir / "active.md").read_text()
+    _write_split_active(tasks_dir, _TWO_TASKS)
+    other = _active_file(tasks_dir, "t101")
+    other_before = other.read_bytes()
+    description = "Intro line.\n## [t453] a quoted task header\nmore"
 
-    with pytest.raises(TaskIntegrityError):
-        edit_task(
-            project_root=tmp_path,
-            tasks_dir=tasks_dir,
-            task_id="t100",
-            description="Intro line.\n## [t453] a quoted task header\nmore",
-        )
+    task = edit_task(
+        project_root=tmp_path,
+        tasks_dir=tasks_dir,
+        task_id="t100",
+        description=description,
+    )
 
-    # File left intact and still parses to the original two tasks.
-    assert (tasks_dir / "active.md").read_text() == before
-    assert [t.id for t in parse_tasks(tasks_dir / "active.md")] == ["t100", "t101"]
+    assert task.description == description
+    assert task_module.parse_task_file(_active_file(tasks_dir, "t100")).description == description
+    assert other.read_bytes() == other_before
 
 
 def test_complete_task_is_atomic_when_note_would_corrupt(tmp_path: Path) -> None:
@@ -1539,15 +1555,15 @@ def test_complete_task_is_atomic_when_note_would_corrupt(tmp_path: Path) -> None
     from science_tool.tasks import TaskIntegrityError
 
     tasks_dir = tmp_path / "tasks"
-    _write(tasks_dir / "active.md", _TWO_TASKS)
-    before = (tasks_dir / "active.md").read_text()
+    _write_split_active(tasks_dir, _TWO_TASKS)
+    before = {path.name: path.read_bytes() for path in (tasks_dir / "active").glob("*.md")}
 
     with pytest.raises(TaskIntegrityError):
         complete_task(tasks_dir, "t101", note="## [t999] looks like a header")
 
-    # active.md untouched; done file not created with a corrupt entry.
-    assert (tasks_dir / "active.md").read_text() == before
-    assert [t.id for t in parse_tasks(tasks_dir / "active.md")] == ["t100", "t101"]
+    after = {path.name: path.read_bytes() for path in (tasks_dir / "active").glob("*.md")}
+    assert after == before
+    assert [task.id for task in _read_split_active(tasks_dir)] == ["t100", "t101"]
 
 
 def test_find_dangling_task_refs_flags_unresolved_blocker(tmp_path: Path) -> None:
@@ -1556,8 +1572,8 @@ def test_find_dangling_task_refs_flags_unresolved_blocker(tmp_path: Path) -> Non
     from science_tool.tasks import find_dangling_task_refs
 
     tasks_dir = tmp_path / "tasks"
-    _write(
-        tasks_dir / "active.md",
+    _write_split_active(
+        tasks_dir,
         """\
 ## [t200] Only task
 - type: research
