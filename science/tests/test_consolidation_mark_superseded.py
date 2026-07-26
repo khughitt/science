@@ -7,13 +7,14 @@ acyclicity scan, the reconciliation) is exercised on `interpretation`, which has
 `superseded` and been an admitted `sci:supersedes` endpoint all along — so leg 3 could be certified
 without changing what any existing file means.
 
-`hypothesis` could not be tested here AT ALL until its descriptor declared a `superseded` terminal:
-`DECLARED_SUPERSEDABLE` follows that declaration, so every hypothesis member was routed to
-`skipped_kinds` and nothing was written. A hypothesis apply-test would not have failed loudly — it
-would have reported `to_mark == []`, written nothing, and gone **green over an operation that did
-nothing**. That is why the hypothesis tests at the bottom of this file arrive with the descriptor
-that makes them executable, and not one task earlier. *A test belongs in the task where its subject
-exists.*
+`hypothesis` could not be tested here AT ALL until its descriptor declared both a `superseded`
+terminal and `supersedable=True`. The former makes the eventual writer's status valid; the latter
+alone enters `DECLARED_SUPERSEDABLE`, the auto-stamping policy map. Historically, before the
+descriptor acquired those requirements, every hypothesis member was routed to `skipped_kinds` and
+nothing was written. A hypothesis apply-test would not have failed loudly — it would have reported
+`to_mark == []`, written nothing, and gone **green over an operation that did nothing**. That is
+why the hypothesis tests at the bottom of this file arrive with the descriptor that makes them
+executable, and not one task earlier. *A test belongs in the task where its subject exists.*
 """
 
 from __future__ import annotations
@@ -1171,10 +1172,10 @@ def test_the_frozen_policy_equals_the_profile_declaration(tmp_path: Path) -> Non
 # ---------------------------------------------------------------------------------------------
 # hypothesis — EXECUTABLE for the first time
 #
-# Every test above runs on `interpretation`, and not by preference: `DECLARED_SUPERSEDABLE` was False
-# for `hypothesis` until its descriptor declared a `superseded` terminal, so `mark_superseded` routed
-# every hypothesis to `skipped_kinds` and wrote nothing. There was no hypothesis apply-test to write.
-# These three are the D4 triangle closed, on the kind the whole arc is about.
+# The original D4 cases in this section exercise `interpretation`, and not by preference: hypothesis
+# became executable only when its descriptor declared both the `superseded` terminal and
+# `supersedable=True`. The status makes the write valid; `DECLARED_SUPERSEDABLE` follows only the
+# capability. These three are the D4 triangle closed, on the kind the whole arc is about.
 # ---------------------------------------------------------------------------------------------
 
 
