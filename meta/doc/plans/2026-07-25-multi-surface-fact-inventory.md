@@ -5,6 +5,14 @@
 **Method:** Every quantity below was produced by running code against the shipped profiles and
 models. Where a claim is argued rather than measured it is marked **(judgment)**.
 
+
+> **Counts re-derived 2026-07-25 against `d9e79f91`** while designing S1a. The declared-kind
+> count is **50**, not the 53 this document originally used, and three derived figures were
+> wrong independently of that: typed bindings are **20** (not 17), kinds with no `home` are
+> **14** (not 17), and kinds with an open status set are **16** (not 19). All figures below
+> are corrected. See [`2026-07-25-s1a-reconciliation-gate-design.md`](2026-07-25-s1a-reconciliation-gate-design.md) §1.1
+> for the full partition.
+
 ## Why this exists
 
 Science grew by solving real problems as they arrived. Each solution needed some fact about the
@@ -28,11 +36,11 @@ kinds. Fixing that (`6cb39f23`) prompted this audit.
 
 | # | Fact | Surfaces | Status |
 |---|---|---|---|
-| F1 | What fields may a kind carry? | 3 | reconciled for **1 of 53** kinds; schema covers 5 |
+| F1 | What fields may a kind carry? | 3 | reconciled for **1 of 50** kinds; schema covers 5 (so 1 of 5 *possible*) |
 | F2 | Can this kind be superseded? | 4 | one direction **ratcheted**; the reverse is unguarded |
 | F3 | Lineage, amendment, identity, archive | 7 fields | **not one fact** — needs a taxonomy |
 | F4 | What state is an entity in? | 5 axes | D1/D2 **enforced** by schema for hypothesis |
-| F5 | Where does a kind's files live? | 3 | 36/53 declare a home |
+| F5 | Where does a kind's files live? | 3 | 36/50 declare a home |
 | F6 | How is an entity named? | 8 | no divergence measured |
 | F7 | How is a link authored? | 6 | redundancy; divergence **not** measured |
 | F8 | How good is a claim? | 5+ | projections already computed at render time |
@@ -45,9 +53,9 @@ kinds. Fixing that (`6cb39f23`) prompted this audit.
 
 | Surface | Kinds covered | What it declares |
 |---|---|---|
-| `EntityKind` descriptor | **53 / 53** | 15 metadata fields. **No field schema.** |
-| Pydantic classes | **17 / 53** have a subclass | field types, on a 67-field base |
-| JSON Schema mixins | **5 / 53** (dataset, hypothesis, paper, theme, topic) | versioned fields, `allOf`, conditional invariants |
+| `EntityKind` descriptor | **50 / 50** | 15 metadata fields. **No field schema.** |
+| Pydantic classes | **20 / 50** have an explicit binding | field types, on a 67-field base |
+| JSON Schema mixins | **5 / 50** (dataset, hypothesis, paper, theme, topic) | versioned fields, `allOf`, conditional invariants |
 
 **Rev 1 got the divergence badly wrong.** It reported "17 fields the Pydantic model has never
 heard of." Measured correctly, the hypothesis mixin's 39 `properties` keys are:
@@ -75,8 +83,8 @@ about: *"Deriving this from the mixin ALONE is how `description` hid for four dr
 `dataset`, `paper`, `theme`, `topic` have schema tests that do **not** reference `model_fields`
 — they test the schema, not schema↔model agreement. So:
 
-- schema mixins: **5 / 53** kinds
-- schema↔model reconciliation: **1 / 53** kinds
+- schema mixins: **5 / 50** kinds
+- schema↔model reconciliation: **1 / 50** kinds — but only **5** kinds have two authorities to reconcile
 
 That is a strong pattern applied narrowly, which is a much better starting position than a
 missing mechanism.
@@ -127,7 +135,7 @@ specified.**
 Five axes are in use: `status`, `phase`, `verdict`, `disposition`, `role`. (Rev 1 said "four"
 while listing five.)
 
-`EntityKind` declares one (`statuses`): 34/53 kinds declare a vocabulary, **19 have an open set**.
+`EntityKind` declares one (`statuses`): 34/50 kinds declare a vocabulary, **16 have an open set**.
 23 distinct status tokens exist corpus-wide.
 
 **But the other axes are not undeclared drift — for hypothesis they are explicitly forbidden.**
@@ -140,7 +148,7 @@ schemas at all.
 
 ### F5 — Where does a kind's files live?
 
-`EntityKind.home` covers **36/53** kinds; 17 declare none; one (`research-question`) declares a
+`EntityKind.home` covers **36/50** kinds; 14 declare none; one (`research-question`) declares a
 home that is a *file*, not a directory. `paths.py` carries an `entities_dir` default and the
 `directory_structure` check has its own view. No divergence measured between them. **(judgment:
 worth an audit, not yet a finding)**

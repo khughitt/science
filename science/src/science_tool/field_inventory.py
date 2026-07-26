@@ -7,10 +7,12 @@ the graph loader builds. Two facts make that distinction load-bearing:
   ``profile``, ``aliases`` and ``content_preview`` *before* Pydantic ever sees a record.
   Inventorying that dict would declare six fields no author has ever written — and closing a
   schema around them would then reject every real file.
-- ``Entity`` declares no ``model_config``, so it is ``extra="ignore"``: every *undeclared*
-  authored key is silently dropped at ``model_validate``. So the parsed entity — and every
-  consumer downstream of ``load_project_sources``, including ``entities_inventory`` — is
-  structurally blind to exactly the keys this instrument exists to find.
+- ``Entity`` is ``extra="allow"`` (D3.3): every *undeclared* authored key survives
+  ``model_validate`` as an untyped extra, so the parsed entity is not blind to it in the sense of
+  losing the value. It is blind in the sense this instrument targets: an untyped extra has no
+  declared field, no schema constraint, and no graph predicate, so ``entities_inventory`` and
+  every other consumer downstream of ``load_project_sources`` still cannot tell a core field from
+  a project extension from typo debt without exactly this inventory.
 
 This is the P0 "declare or delete" instrument (design §8). Its output must be adjudicated —
 core / project-extension / rename-migrate / derived-delete — **before** any schema is closed

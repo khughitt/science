@@ -16,6 +16,7 @@ from science_model.entity_schema.loader import (
 )
 from science_model.entity_schema.introspection import (
     FrontmatterField,
+    admitted_field_names,
     read_effective_frontmatter_fields,
 )
 from science_model.entity_schema.merge import (
@@ -70,6 +71,7 @@ __all__ = [
     "SchemaLoader",
     "SchemaNotFoundError",
     "SharedEntity",
+    "admitted_field_names",
     "check_resolution",
     "default_profile_for_kind",
     "filename_for",

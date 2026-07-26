@@ -44,8 +44,9 @@ def test_ignores_other_kinds(tmp_path: Path) -> None:
 
 
 def test_counts_keys_undeclared_on_the_pydantic_model(tmp_path: Path) -> None:
-    """The whole point: `Entity` is `extra="ignore"`, so these keys are invisible to every
-    consumer that goes through `load_project_sources`. The inventory must see them anyway."""
+    """The whole point: `Entity` is `extra="allow"`, so these keys survive as untyped extras --
+    not declared, not schema-constrained, not a graph predicate -- invisible in that sense to
+    every consumer that goes through `load_project_sources`. The inventory must see them anyway."""
     _write(
         tmp_path,
         "0001-a",
