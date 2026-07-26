@@ -129,33 +129,30 @@ def test_empty_list_supersedes_is_an_error(tmp_path: Path) -> None:
     assert [r.severity for r in _results(tmp_path)] == [Severity.ERROR]
 
 
-# The remediation must be one the graph will actually accept. `sci:supersedes` admits only
-# workflow-run, hypothesis, spec, and the 6 conclusion kinds as source endpoints; the 12 kinds
-# the RelationKind comment calls "frozen debt" (plan, decision, inquiry, mechanism, method,
-# observation, pre-registration, proposition, synthesis, theme, topic, workflow-step) are flagged
-# by this check but CANNOT author the edge -- materialize raises RelationRejection("illegal-kind-pair").
-# Prescribing the relations: form to them sent the author to a dead end whose only exit was
+# The remediation must be one the graph will actually accept. After S2, every kind that can reach
+# `superseded` can author a `sci:supersedes` edge; the remaining 32 non-supersedable kinds cannot.
+# Prescribing the relations: form to them would send an author to a dead end whose only exit was
 # deleting the authored lineage.
 
 
 def test_inadmissible_kind_is_not_told_to_author_the_relation(tmp_path: Path) -> None:
-    """`plan` cannot be a `sci:supersedes` source, so the relations: form must NOT be prescribed."""
+    """`question` cannot be a `sci:supersedes` source, so the relations: form must NOT be prescribed."""
     _entity(
-        tmp_path, "plans/0001-x.md",
-        entity_id="plan:0001-x", kind="plan",
-        extra="supersedes: plan:0000-y\n",
+        tmp_path, "questions/0001-x.md",
+        entity_id="question:0001-x", kind="question",
+        extra="supersedes: question:0000-y\n",
     )
     results = _results(tmp_path)
     assert [r.severity for r in results] == [Severity.ERROR]
     msg = results[0].message
-    assert "plan:0001-x" in msg
+    assert "question:0001-x" in msg
     assert "top-level 'supersedes:'" in msg
     # The dead-end prescription must be gone...
     assert "relations:" not in msg
     assert "<target-id>" not in msg
     # ...replaced by the reason it cannot be authored at all.
     assert "cannot" in msg
-    assert "plan" in msg
+    assert "question" in msg
     assert results[0].rule == "non-materializing-field"
 
 

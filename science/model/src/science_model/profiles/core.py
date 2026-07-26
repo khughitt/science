@@ -24,6 +24,28 @@ _CONCLUSION_KIND_PAIRS = [
     for target_kind in _CONCLUSION_KINDS
 ]
 
+# Kinds that supersede only themselves. Deliberately SEPARATE from `_CONCLUSION_KINDS`, which is
+# shared with `amends`: adding these there would silently grant ten kinds cross-kind AMENDMENT
+# admissibility that no ruling covers.
+_SELF_SUPERSEDING_KINDS = [
+    "hypothesis",
+    "spec",
+    "decision",
+    "inquiry",
+    "mechanism",
+    "method",
+    "plan",
+    "proposition",
+    "synthesis",
+    "theme",
+    "topic",
+    "workflow-step",
+]
+
+_SELF_SUPERSEDING_PAIRS = [
+    RelationEndpointPair(source_kind=kind, target_kind=kind) for kind in _SELF_SUPERSEDING_KINDS
+]
+
 CORE_PROFILE = ProfileManifest(
     name="core",
     imports=[],
@@ -780,32 +802,23 @@ CORE_PROFILE = ProfileManifest(
         RelationKind(
             name="supersedes",
             predicate="sci:supersedes",
-            # LEG 2 of the D4 supersedable gate. `hypothesis` declares a `superseded` terminal
-            # (Task 8) and is auto-stamped by `mark_superseded` -- but it was not an admissible
-            # endpoint here, so authoring the canonical edge raised ValueError in materialize. The
-            # vocabulary and the relation model disagreed, and the terminal was a dead letter.
-            #
-            # WORKFLOW-RUN AND HYPOTHESIS are fully wired here (each a repairable endpoint); `spec`
-            # joins them via the line below. Twelve other kinds are half-wired the same way (decision, inquiry,
-            # mechanism, method, observation, plan, pre-registration, proposition, synthesis, theme,
-            # topic, workflow-step). They are this arc's DECLARED, FROZEN DEBT -- ratcheted by
-            # test_every_supersedable_kind_can_author_the_CANONICAL_edge, which forbids the set
-            # growing while allowing any of them to be repaired. Widening them here would be scope
-            # this task did not certify.
-            # `spec` is fully wired here (spec -> spec) as part of S3a -- it is NOT frozen debt.
-            source_kinds=["workflow-run", "hypothesis", "spec", *_CONCLUSION_KINDS],
-            target_kinds=["workflow-run", "hypothesis", "spec", *_CONCLUSION_KINDS],
+            # Endpoints are gated against `EntityKind.supersedable` (S2): every target kind must
+            # be able to reach the `superseded` state, and every supersedable kind must be some
+            # pair's target. `test_supersedable_gate.py` asserts both directions exactly, so there
+            # is no half-wired debt left to freeze.
+            source_kinds=[*_SELF_SUPERSEDING_KINDS, *_CONCLUSION_KINDS],
+            target_kinds=[*_SELF_SUPERSEDING_KINDS, *_CONCLUSION_KINDS],
             allowed_kind_pairs=[
-                RelationEndpointPair(source_kind="workflow-run", target_kind="workflow-run"),
-                RelationEndpointPair(source_kind="hypothesis", target_kind="hypothesis"),
-                RelationEndpointPair(source_kind="spec", target_kind="spec"),
+                *_SELF_SUPERSEDING_PAIRS,
                 *_CONCLUSION_KIND_PAIRS,
             ],
             layer="layer/core",
             description=(
-                "A newer entity replaces an older entity as canonical. Valid "
-                "for workflow-run replacement, hypothesis replacement, spec "
-                "replacement, and conclusion-level replacement."
+                "A newer entity replaces an older entity as canonical. Valid for "
+                "self-replacement of hypothesis, spec, decision, inquiry, mechanism, "
+                "method, plan, proposition, synthesis, theme, topic and workflow-step, "
+                "and for conclusion-level replacement among interpretation, finding, "
+                "discussion, report, validation-report and story."
             ),
         ),
         RelationKind(

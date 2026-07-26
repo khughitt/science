@@ -94,8 +94,9 @@ def _seed_rich(root: Path) -> None:
                   {"id": "interpretation:i-unbacked", "kind": "interpretation",
                    "status": "superseded", "superseded_by": "interpretation:i-phantom"})
 
-    # invalid: an authored relation `materialize` refuses outright -- an illegal kind pair
-    # (`workflow-run` may only supersede `workflow-run`).
+    # invalid: an authored relation `materialize` refuses outright. After S2 `workflow-run` is not a
+    # `sci:supersedes` endpoint in EITHER position, so this is refused on the source kind -- not,
+    # as it once was, for pairing a workflow-run with the wrong target.
     _write_entity(root, "interpretations", "i-w1",
                   {"id": "interpretation:i-w1", "kind": "interpretation", "status": "active"})
     _write_entity(root, "workflow-runs", "wr-1",

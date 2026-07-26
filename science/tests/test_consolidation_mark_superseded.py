@@ -35,6 +35,7 @@ from science_tool.consolidation import (
     SupersededChain,
     SupersessionError,
     SupersessionInputs,
+    build_decision_material,
     build_supersedes_graph,
     load_supersession_inputs,
     mark_superseded,
@@ -45,6 +46,8 @@ from science_tool.graph.materialize import AdmittedRelation
 from science_tool.graph.reference_resolution import ReferenceResolver
 from science_tool.graph.relation_audit import RelationAudit, RelationDefect
 from science_tool.graph.sources import SourceRelation
+from science_tool.plan_common import AllSupersessionMembers
+from science_tool.supersede_plan import derive_supersede_plan
 
 
 def _write(root: Path, kind_dir: str, name: str, fm: dict) -> Path:
@@ -295,21 +298,33 @@ def test_report_flags_non_linear_chain_and_skips_it(tmp_path: Path) -> None:
     }
 
 
-def test_member_whose_kind_lacks_superseded_vocab_is_skipped_not_crashed(tmp_path: Path) -> None:
+def test_member_omitted_from_the_frozen_policy_is_skipped_not_crashed(tmp_path: Path) -> None:
+    # The fixture is a NORMALLY SUPERSEDABLE kind held out of its material's `supported_kinds` --
+    # not a "kind lacking the vocabulary", which after S2 cannot be an admitted member at all.
+    # Reachable only from stale or hand-built material, so it is built through the material path
+    # rather than by hand-constructing a graph: the point is that inconsistent material SURVIVES
+    # `build_supersedes_graph_from_material` and is then skipped, and a hand-built graph would
+    # bypass that step entirely.
     _seed(tmp_path)
-    # workflow-run is a supersedes endpoint but declares NO status vocabulary. The member must be
-    # reported under skipped_kinds, never crash. (`hypothesis` took this same route until the
-    # descriptor gave it a `superseded` terminal; it now stamps, and the tests at the bottom of this
-    # file are the ones that could not exist while it was skipped.)
-    _write(tmp_path, "workflow-runs", "wr-old", {"id": "workflow-run:wr-old", "kind": "workflow-run"})
-    _write(tmp_path, "workflow-runs", "wr-new", {"id": "workflow-run:wr-new", "kind": "workflow-run",
-                                                 "relations": [_supersedes("workflow-run:wr-old")]})
+    _write(tmp_path, "interpretations", "i-old", {"id": "interpretation:i-old", "kind": "interpretation"})
+    _write(tmp_path, "interpretations", "i-new", {"id": "interpretation:i-new", "kind": "interpretation",
+                                                  "relations": [_supersedes("interpretation:i-old")]})
 
-    report = mark_superseded(tmp_path, apply=False)
+    material = build_decision_material(tmp_path)
+    assert "interpretation" in material.supported_kinds  # the fixture is meaningful only if so
+    narrowed = material.model_copy(
+        update={"supported_kinds": [k for k in material.supported_kinds if k != "interpretation"]}
+    )
 
-    assert report["to_mark"] == []
-    assert {entry["id"] for entry in report["skipped_kinds"]} == {"workflow-run:wr-old"}
-    assert report["skipped_kinds"][0]["kind"] == "workflow-run"
+    plan = derive_supersede_plan(
+        tmp_path,
+        narrowed,
+        selection=AllSupersessionMembers(kind="all"),
+        preview_date="2026-07-26",
+    )
+
+    assert plan.preview_report.to_mark == []
+    assert {entry.id for entry in plan.preview_report.skipped_kinds} == {"interpretation:i-old"}
 
 
 def test_apply_sets_superseded_status_on_members(tmp_path: Path) -> None:

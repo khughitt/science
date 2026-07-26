@@ -1,21 +1,15 @@
-"""The D4 supersedable gate — DERIVED from the profile, and executed.
+"""Lineage capability: ONE declaration, and the surfaces that must agree with it.
 
-```
-supersedable  ⇔  the schema admits `superseded`
-              ⇔  the lineage RelationKind admits the kind as an endpoint
-              ⇔  the supersession operation handles the kind
-```
+`EntityKind.supersedable` answers "can an entity of this kind be replaced as canonical by a newer
+one?" It is DECLARED per kind, never inferred. The status vocabulary, the `sci:supersedes` endpoint
+list, and the auto-stamping policy are all gated against it by EXACT equality in both directions --
+so a stale exemption fails as loudly as a new gap.
 
-D5 shipped a `superseded` terminal for `hypothesis` with **none** of the three legs wired: the mixin
-did not admit `relations:` (so the canonical edge could not be authored at all),
-`sci:supersedes` did not admit `hypothesis` as an endpoint (so authoring it anyway raised
-`ValueError` in `materialize`), and `mark_superseded` wrote `status` and no lineage.
-
-**A gate stated in prose is not a gate.** The design named three half-wired kinds
-(`topic`/`decision`/`theme`). Executed against `CORE_PROFILE`, the real number is **twelve** — which
-is the only reason we know it, and the reason the population below is *derived* rather than listed.
-
-The schema leg is tested in `test_mixin_hypothesis.py`, beside the mixin it constrains.
+This file used to carry a SUBSET ratchet over `_KNOWN_HALF_WIRED`, a frozen allowlist of twelve
+half-wired kinds. That ratchet was right while the debt existed -- exact equality would have made
+repairing any one of the twelve fail the suite. S2 rules all fifteen affected kinds, so there is no
+debt left to freeze and the assertions became equalities. Restoring a subset assertion here would
+re-open the hole by construction.
 """
 
 from __future__ import annotations
@@ -27,64 +21,8 @@ from science_model.profiles.local import LOCAL_PROFILE
 from science_model.profiles.schema import EntityKind, RelationKind
 from science_model.relations import relation_allows_kinds  # THE authoritative admission rule
 
-# The twelve kinds that declare `superseded` while `sci:supersedes` forbids them as endpoints.
-# A SHRINKING allowlist of known-broken kinds -- never a list of what to CHECK. The population is
-# DERIVED below; freezing the scope instead of the debt is how a guard grows a hole by construction.
-_KNOWN_HALF_WIRED: frozenset[str] = frozenset(
-    {
-        "decision",
-        "inquiry",
-        "mechanism",
-        "method",
-        "observation",
-        "plan",
-        "pre-registration",
-        "proposition",
-        "synthesis",
-        "theme",
-        "topic",
-        "workflow-step",
-    }
-)
-
-
 def _supersedes() -> RelationKind:
     return next(r for r in CORE_PROFILE.relation_kinds if r.name == "supersedes")
-
-
-def test_every_supersedable_kind_can_author_the_CANONICAL_edge() -> None:
-    # THE GATE. A kind that declares `superseded` and is auto-stamped by `mark_superseded`, but is
-    # forbidden as a `sci:supersedes` endpoint, raises ValueError in materialize the moment anyone
-    # authors the edge the tool itself calls canonical. The vocabulary and the relation model
-    # disagree, and until this test existed, nothing noticed.
-    #
-    # ASK THE AUTHORITATIVE HELPER. `source_kinds & target_kinds` is NOT the admission rule: when
-    # `allowed_kind_pairs` is present it is the authoritative non-Cartesian allow-list and the flat
-    # lists do not decide (`relations.py:19-33`). For `supersedes` the two happen to agree on
-    # self-pairs today -- which is how a check on the wrong field would have kept agreeing right up
-    # until it didn't.
-    declares = {k.name for k in CORE_PROFILE.entity_kinds if "superseded" in (k.statuses or [])}
-    relation = _supersedes()
-    broken = {k for k in declares if not relation_allows_kinds(relation, k, k)}
-
-    # SUBSET, not equality. This is a ratchet on a DEBT: it must forbid the set GROWING while
-    # letting any of the twelve be repaired. Exact equality would make fixing `topic` -- a strict
-    # improvement -- fail the suite, which is a guard that punishes the thing it exists to cause.
-    assert broken <= _KNOWN_HALF_WIRED, f"newly half-wired: {sorted(broken - _KNOWN_HALF_WIRED)}"
-
-
-def test_hypothesis_is_a_supersedes_ENDPOINT() -> None:
-    # DIRECT, and non-vacuous: `hypothesis` is absent from `declares` until Task 8 adds `superseded`
-    # to its descriptor, so the derived gate above CANNOT SEE IT YET. Without this test, leg 2 would
-    # be certified by a gate that skips it -- and Task 8 would then add the status to a kind whose
-    # relation model still forbids the edge, taking the half-wired count from twelve to thirteen.
-    assert relation_allows_kinds(_supersedes(), "hypothesis", "hypothesis")
-
-
-def test_spec_is_a_supersedes_ENDPOINT() -> None:
-    # `spec` declares a `superseded` terminal (same lifecycle vocabulary as `plan`), so it must be an
-    # admissible `sci:supersedes` endpoint or the derived gate above reports it newly half-wired.
-    assert relation_allows_kinds(_supersedes(), "spec", "spec")
 
 
 def test_supersedes_description_names_spec_replacement() -> None:
@@ -104,6 +42,47 @@ SUPERSEDABLE_KINDS: frozenset[str] = frozenset(
         "synthesis", "theme", "topic", "validation-report", "workflow-step",
     }
 )
+
+
+def test_the_supersedes_TARGETS_agree_with_the_declaration() -> None:
+    # The OBJECT is the thing superseded, so it must be able to reach the state. The SUBJECT is the
+    # replacement and is deliberately NOT gated -- a non-supersedable kind replacing a supersedable
+    # one is legitimate.
+    targets = {pair.target_kind for pair in _supersedes().allowed_kind_pairs}
+    supersedable = {k.name for k in SHIPPED_KINDS if k.supersedable}
+    assert targets == supersedable, (
+        f"admissible target but not supersedable: {sorted(targets - supersedable)}; "
+        f"supersedable but never an admissible target: {sorted(supersedable - targets)}"
+    )
+
+
+@pytest.mark.parametrize("kind", sorted(SUPERSEDABLE_KINDS))
+def test_every_supersedable_kind_can_author_the_CANONICAL_edge(kind: str) -> None:
+    # Asked through the AUTHORITATIVE helper. `source_kinds & target_kinds` is NOT the admission
+    # rule when `allowed_kind_pairs` is present -- the pairs are a non-Cartesian allow-list, and a
+    # check on the flat lists would keep agreeing right up until it didn't.
+    assert relation_allows_kinds(_supersedes(), kind, kind)
+
+
+@pytest.mark.parametrize(
+    "relation", [r for r in CORE_PROFILE.relation_kinds if r.allowed_kind_pairs], ids=lambda r: r.name
+)
+def test_the_flat_endpoint_lists_agree_with_the_pairs(relation: RelationKind) -> None:
+    # `allowed_kind_pairs` decides admission, but `source_kinds`/`target_kinds` remain the fallback
+    # rule for relations declaring no pairs -- and agents read them. Editing only the pairs leaves
+    # the flat projections contradicting the surface that decides.
+    sources = {pair.source_kind for pair in relation.allowed_kind_pairs}
+    targets = {pair.target_kind for pair in relation.allowed_kind_pairs}
+    assert set(relation.source_kinds or ()) == sources, (
+        f"{relation.name} source_kinds disagrees with its pairs: "
+        f"listed only: {sorted(set(relation.source_kinds or ()) - sources)}; "
+        f"paired only: {sorted(sources - set(relation.source_kinds or ()))}"
+    )
+    assert set(relation.target_kinds or ()) == targets, (
+        f"{relation.name} target_kinds disagrees with its pairs: "
+        f"listed only: {sorted(set(relation.target_kinds or ()) - targets)}; "
+        f"paired only: {sorted(targets - set(relation.target_kinds or ()))}"
+    )
 
 
 @pytest.mark.parametrize("kind", SHIPPED_KINDS, ids=lambda k: k.name)
