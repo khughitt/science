@@ -124,7 +124,7 @@ root `--version` probe is the permanent bootstrap surface; do not replace it wit
 a preflight subcommand, which an older CLI could not recognize either.
 
 Search literature for the user input.
-If no argument is provided, derive candidate search foci from `specs/research-question.md` and `entities/questions/`, then ask the user to confirm the focus.
+If no argument is provided, derive candidate search foci from the `research-question` spec (`science project spec-path --slug research-question`) and `entities/questions/`, then ask the user to confirm the focus.
 
 ## Setup
 
@@ -136,8 +136,10 @@ Additionally:
    - `skills/literature/sources/pubmed.md`
 2. Read `.ai/templates/paper.md` first; if not found, read `templates/paper.md`.
 3. Read project context:
-   - `specs/research-question.md`
-   - `specs/scope-boundaries.md`
+   - the `research-question` spec — resolve with `science project spec-path --slug research-question`
+   - the `scope-boundaries` spec — resolve with `science project spec-path --slug scope-boundaries`
+     (both resolve the canonical `entities/specs/` layout first, then legacy `specs/`, and exit
+     non-zero when the document exists in neither — do not treat a failed lookup as "no declared scope")
    - `entities/questions/`
    - `entities/hypotheses/`
    - `entities/papers/`

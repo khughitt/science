@@ -255,7 +255,7 @@ Route the top obtainable datasets to `/science:plan-pipeline` for per-dataset do
 
 **Authorization precondition — access-verified is NOT authorized-to-analyze.** Before
 any handoff, check the project's scope gate: `core/decisions.md` (or the profile's
-`scope-boundaries` spec) for a decision that authorizes computational work. If the
+`scope-boundaries` spec, located with `science project spec-path --slug scope-boundaries`) for a decision that authorizes computational work. If the
 project has a scope gate and the dataset falls **outside** the authorized pilot/scope,
 do **not** hand off — this is the expected terminal state **ready-but-unauthorized**:
 the dataset is catalogued and access-verified, but analyzing it needs a new scope

@@ -151,7 +151,8 @@ paths and statuses consistently.
 For projects without `peers:`, proceed directly with the per-project status
 flow below.
 
-1. Read `specs/research-question.md`.
+1. Read the `research-question` spec — locate it with
+   `science project spec-path --slug research-question` rather than assuming a path.
 2. Read `science.yaml`.
 3. If present, read `docs/user-guide/epistemic-model.md`.
 
@@ -161,7 +162,7 @@ Keep output under ~100 lines.
 
 ### 1. Project Identity
 
-From `science.yaml` and `specs/research-question.md`:
+From `science.yaml` and the `research-question` spec:
 - project name and status
 - research question
 - tags

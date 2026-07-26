@@ -59,7 +59,7 @@ Also read (whichever exist):
 - `entities/inquiries/<slug>.md` — prose-first or legacy inquiry document, if present
 - `entities/plans/<stem>.md` and its `related:` entities — plan document (plan target)
 - `entities/plans/*<slug>*` — implementation plan (if exists)
-- `specs/scope-boundaries.md` — project scope
+- Project scope — resolve the path with `science project spec-path --slug scope-boundaries`, then read it
 
 **Sub-plan handling:** If the plan being reviewed is a sub-plan of a larger inquiry (e.g., Tasks 2-3 of a broader inquiry), the inquiry-level validation may pass trivially. In this case:
 - Apply the rubric dimensions to the plan's internal consistency, not just the parent inquiry's structure.
@@ -219,7 +219,7 @@ in the plan):
 
 #### Dimension 7: Scope Check
 
-- Does the inquiry stay within `specs/scope-boundaries.md`?
+- Does the inquiry stay within the project's `scope-boundaries` spec (`science project spec-path --slug scope-boundaries`)?
 - Are there scope-creep risks?
 
 **Scoring:** PASS (in scope), WARN (borderline), FAIL (out of scope)

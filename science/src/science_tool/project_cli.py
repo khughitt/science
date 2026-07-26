@@ -11,6 +11,7 @@ from science_model.frontmatter import project_config_path
 from science_tool.entities import list_entities
 from science_tool.output import OUTPUT_FORMATS, emit, emit_query_rows
 from science_tool.project_artifacts.cli import artifacts_group as _artifacts_group
+from science_tool.spec_paths import CANONICAL_SPECS_DIR, LEGACY_SPECS_DIR
 
 
 def _require_project_root(project_root: Path) -> Path:
@@ -175,6 +176,54 @@ def project_resolve_refs(project_root: Path, queries: tuple[str, ...], output_fo
                 click.echo(f"{r.query} -> unresolved")
 
     emit(output_format=output_format, payload=[r.to_dict() for r in results], render_text=_render)
+
+
+@project_group.command("spec-path")
+@click.option(
+    "--project-root",
+    default=".",
+    show_default=True,
+    envvar="SCIENCE_PROJECT_ROOT",
+    type=click.Path(path_type=Path, file_okay=False, dir_okay=True),
+    help="Project root to resolve the spec against.",
+)
+@click.option("--slug", required=True, help="Spec slug, e.g. 'scope-boundaries' or 'research-question'.")
+@click.option(
+    "--format",
+    "output_format",
+    type=click.Choice(["text", "json"]),
+    default="text",
+    show_default=True,
+)
+def project_spec_path(project_root: Path, slug: str, output_format: str) -> None:
+    """Resolve a spec document's path across the canonical and legacy layouts.
+
+    Commands that read `scope-boundaries` or `research-question` must call this
+    rather than naming a path. `science entity migrate-specs` moves specs to
+    `entities/specs/NNNN-<slug>.md` while `create-project` still scaffolds
+    `specs/<slug>.md`, so a hardcoded path reads nothing on half the fleet and
+    reports no difference between "absent" and "somewhere else"
+    (fb-2026-07-26-020).
+
+    Exits non-zero when the document exists in neither layout, so a caller
+    cannot mistake a failed lookup for a project that declared nothing.
+    """
+    from science_tool.spec_paths import resolve_spec
+
+    root = _require_project_root(project_root)
+    location = resolve_spec(root, slug)
+    if not location.found:
+        raise click.ClickException(
+            f"no spec {slug!r} in {root} — looked in "
+            f"{'/'.join(CANONICAL_SPECS_DIR)}/ (canonical) and {'/'.join(LEGACY_SPECS_DIR)}/ (legacy). "
+            "If the project declares this elsewhere, move it under entities/specs/ "
+            "(see 'science entity migrate-specs')."
+        )
+
+    def _render() -> None:
+        click.echo(location.path)
+
+    emit(output_format=output_format, payload=location.to_dict(), render_text=_render)
 
 
 @project_group.command("serialize")

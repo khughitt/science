@@ -149,7 +149,7 @@ Additionally, gather (skip any source that doesn't exist):
 1. Run `science tasks list --status active` (or `--all`) for the active task queue.
 2. Recent completed tasks: run `science tasks list --status done --since <window-start>`.
 3. **Hypothesis and question status:** run `science project index --format json` to get a compact index of all hypotheses and questions with their titles and statuses. Only read individual files when you need full detail (e.g., to assess evidence quality for a specific hypothesis).
-4. `specs/scope-boundaries.md` — project scope
+4. Project scope — resolve the path with `science project spec-path --slug scope-boundaries`, then read it
 5. `entities/topics/` or equivalent topic coverage files in the doc directory
 6. `entities/papers/` — paper coverage
 7. `<meta-home>/*next-steps-*.md` — prior next-steps analyses (most recent)
