@@ -12,6 +12,9 @@ vehicles: []  # the data this pre-reg freezes; each entry needs BOTH a path and 
               # A path alone freezes nothing. `science validate` fails closed on a vehicle
               # that is gitignored, untracked, or whose content has drifted from its hash.
               # Leave empty ONLY in data-gated mode (see the Vehicle-Admissibility Gate).
+              # Declaring vehicles here also anchors this document's numeric claims for
+              # `numeric-anchor` — it is the pre-registration's provenance field, so do
+              # NOT duplicate the paths into `source_refs:`.
 created: "{{YYYY-MM-DD}}"
 updated: "{{YYYY-MM-DD}}"
 _template:
