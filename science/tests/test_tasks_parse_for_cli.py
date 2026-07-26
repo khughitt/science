@@ -16,10 +16,15 @@ def _write_active(tmp_path: Path, body: str) -> Path:
     return path
 
 
-def _write_split_active(tasks_dir: Path, *, blocked_by: list[str]) -> Path:
+def _write_split_active(
+    tasks_dir: Path,
+    *,
+    task_id: str,
+    blocked_by: list[str],
+) -> Path:
     task = Task(
-        id="t001",
-        title="Old task",
+        id=task_id,
+        title=f"Task {task_id}",
         type="dev",
         priority="P2",
         status="blocked",
@@ -28,8 +33,8 @@ def _write_split_active(tasks_dir: Path, *, blocked_by: list[str]) -> Path:
         created=date(2026, 5, 1),
         description="Body.",
     )
-    path = tasks_dir / "active" / "t001-old-task.md"
-    path.parent.mkdir(parents=True)
+    path = tasks_dir / "active" / f"{task_id}-task.md"
+    path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(task_module.render_task_file(task), encoding="utf-8")
     return path
 
@@ -54,11 +59,14 @@ def test_parse_tasks_does_not_emit_warnings(tmp_path: Path):
 
 def test_parse_tasks_for_cli_warns_about_untyped_blockers(tmp_path: Path):
     tasks_dir = tmp_path / "tasks"
-    _write_split_active(tasks_dir, blocked_by=["some-old-string", "dataset:foo"])
+    _write_split_active(tasks_dir, task_id="t002", blocked_by=["some-old-string", "dataset:foo"])
+    _write_split_active(tasks_dir, task_id="t001", blocked_by=["dataset:foo"])
 
     tasks, warnings = parse_tasks_for_cli(tasks_dir)
 
-    assert len(tasks) == 1
+    assert [task.id for task in tasks] == ["t001", "t002"]
+    assert all("t001" not in warning for warning in warnings)
+    assert all("t002" in warning for warning in warnings)
     assert any("some-old-string" in w for w in warnings)
     # Properly typed refs do NOT generate warnings.
     assert not any("dataset:foo" in w for w in warnings)
@@ -66,7 +74,11 @@ def test_parse_tasks_for_cli_warns_about_untyped_blockers(tmp_path: Path):
 
 def test_parse_tasks_for_cli_no_warnings_when_all_typed(tmp_path: Path):
     tasks_dir = tmp_path / "tasks"
-    _write_split_active(tasks_dir, blocked_by=["dataset:foo", "task:t002"])
+    _write_split_active(
+        tasks_dir,
+        task_id="t001",
+        blocked_by=["dataset:foo", "task:t002"],
+    )
 
     tasks, warnings = parse_tasks_for_cli(tasks_dir)
 

@@ -11,6 +11,7 @@ from science_tool.commons.frontmatter import raw_frontmatter
 from science_tool.entity_scan import iter_entity_markdown
 from science_tool.graph.storage_adapters.datapackage import DatapackageAdapter
 from science_tool.graph.storage_adapters.markdown import MarkdownAdapter
+from science_tool.tasks import _TASK_ID_PATTERN
 
 if TYPE_CHECKING:
     from science_tool.validate.context import ValidateContext
@@ -92,7 +93,7 @@ def _task_id(ref: str) -> str | None:
         candidate = ref[len("task:") :]
     else:
         candidate = ref
-    if re.fullmatch(r"t\d{3,}", candidate) is None:
+    if re.fullmatch(_TASK_ID_PATTERN, candidate) is None:
         return None
     return candidate
 

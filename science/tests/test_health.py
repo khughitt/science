@@ -403,6 +403,38 @@ class TestCollectLingeringTags:
         assert results[0]["file"].endswith("tasks/active/t001-task.md")
         assert results[0]["values"] == ["foo", "bar"]
 
+    def test_ignores_task_dsl_tags_bullet_in_active_description(self, tmp_path: Path) -> None:
+        from science_tool.graph.health_checks.lingering_tags import collect_lingering_tags
+
+        task_path = _write_split_task(tmp_path)
+        task_path.write_text(
+            task_path.read_text(encoding="utf-8") + "\n- tags: [body-example]\n",
+            encoding="utf-8",
+        )
+
+        assert collect_lingering_tags(tmp_path).rows == []
+
+    def test_finds_task_dsl_tags_in_done_ledger(self, tmp_path: Path) -> None:
+        from science_tool.graph.health_checks.lingering_tags import collect_lingering_tags
+
+        done = tmp_path / "tasks" / "done" / "2026-07.md"
+        done.parent.mkdir(parents=True)
+        done.write_text(
+            "## [t002] Done task\n"
+            "- priority: P1\n"
+            "- status: done\n"
+            "- aspects: []\n"
+            "- tags: [foo, bar]\n"
+            "- created: 2026-07-01\n"
+            "- completed: 2026-07-02\n\n"
+            "Done.\n",
+            encoding="utf-8",
+        )
+
+        assert collect_lingering_tags(tmp_path).rows == [
+            {"file": "tasks/done/2026-07.md", "values": ["foo", "bar"]}
+        ]
+
 
 class TestBuildHealthReport:
     def test_aggregates_all_checks(self, tmp_path: Path) -> None:
@@ -1039,37 +1071,23 @@ health:
             "missing_completed": 0,
         }
 
-    def test_archive_lag_counts_done_and_retired(self, tmp_path: Path) -> None:
+    def test_archive_lag_counts_done_and_retired(
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
         from science_tool.graph.health import build_health_report
 
         (tmp_path / "science.yaml").write_text("name: test\n")
         tasks_dir = tmp_path / "tasks"
-        tasks_dir.mkdir(parents=True)
-        (tasks_dir / "active.md").write_text(
-            """\
-## [t001] Done task
-- priority: P1
-- status: done
-- created: 2026-03-01
-- completed: 2026-03-15
-
-Done.
-
-## [t002] Retired task
-- priority: P2
-- status: retired
-- created: 2026-03-20
-- completed: 2026-04-02
-
-Retired.
-
-## [t003] Proposed task
-- priority: P3
-- status: proposed
-- created: 2026-04-10
-
-Proposed.
-"""
+        (tasks_dir / "active").mkdir(parents=True)
+        monkeypatch.setattr(
+            "science_tool.tasks_archive.count_archivable",
+            lambda _tasks_dir: {
+                "done_in_active": 1,
+                "retired_in_active": 1,
+                "missing_completed": 0,
+            },
         )
         report = build_health_report(tmp_path)
         assert report["archive_lag"] == {
@@ -1078,7 +1096,11 @@ Proposed.
             "missing_completed": 0,
         }
 
-    def test_archive_lag_total_and_total_issues_match_cli_recomputation(self, tmp_path: Path) -> None:
+    def test_archive_lag_total_and_total_issues_match_cli_recomputation(
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
         """Characterization test (t-phase4 Task 6, fixed up per owner ruling).
 
         Before Task 6, `health_command` in cli.py redundantly recomputed the
@@ -1102,25 +1124,14 @@ Proposed.
 
         (tmp_path / "science.yaml").write_text("name: test\n", encoding="utf-8")
         tasks_dir = tmp_path / "tasks"
-        tasks_dir.mkdir(parents=True)
-        (tasks_dir / "active.md").write_text(
-            """\
-## [t001] Done task
-- priority: P1
-- status: done
-- created: 2026-03-01
-- completed: 2026-03-15
-
-Done.
-
-## [t002] Retired task
-- priority: P2
-- status: retired
-- created: 2026-03-20
-- completed: 2026-04-02
-
-Retired.
-"""
+        (tasks_dir / "active").mkdir(parents=True)
+        monkeypatch.setattr(
+            "science_tool.tasks_archive.count_archivable",
+            lambda _tasks_dir: {
+                "done_in_active": 1,
+                "retired_in_active": 1,
+                "missing_completed": 0,
+            },
         )
         spec = tmp_path / "entities" / "hypotheses"
         spec.mkdir(parents=True)
@@ -1745,6 +1756,32 @@ def test_health_flags_legacy_task_type_field(tmp_path) -> None:
     assert findings[0]["task_id"] == "t001"
     assert findings[0]["legacy_type"] == "research"
     assert findings[0]["source_file"] == "tasks/active/t001-legacy.md"
+
+
+def test_health_flags_legacy_task_type_field_in_done_ledger(tmp_path: Path) -> None:
+    from science_tool.graph.health_checks.legacy_task_type import collect_legacy_task_type
+
+    done = tmp_path / "tasks" / "done" / "2026-07.md"
+    done.parent.mkdir(parents=True)
+    done.write_text(
+        "## [t002] Archived legacy task\n"
+        "- type: research\n"
+        "- priority: P1\n"
+        "- status: done\n"
+        "- aspects: []\n"
+        "- created: 2026-07-01\n"
+        "- completed: 2026-07-02\n\n"
+        "Done.\n",
+        encoding="utf-8",
+    )
+
+    assert collect_legacy_task_type(tmp_path).rows == [
+        {
+            "task_id": "t002",
+            "legacy_type": "research",
+            "source_file": "tasks/done/2026-07.md",
+        }
+    ]
 
 
 def test_health_flags_invalid_entity_aspects(tmp_path) -> None:

@@ -360,6 +360,7 @@ class TestTasksList:
 
     def test_list_all_shows_non_working_active_statuses(self, runner: CliRunner) -> None:
         with runner.isolated_filesystem():
+            today = date.today()
             _write_active_task(Path(), task_id="t001", title="Proposed task", task_type="dev")
             _write_active_task(
                 Path(),
@@ -370,34 +371,65 @@ class TestTasksList:
                 task_type="dev",
                 created=date(2026, 3, 2),
             )
+            done = Path("tasks/done") / f"{today:%Y-%m}.md"
+            done.parent.mkdir()
+            done.write_text(
+                "## [t003] Archived task\n"
+                "- priority: P1\n"
+                "- status: done\n"
+                "- aspects: []\n"
+                f"- created: {today.isoformat()}\n"
+                f"- completed: {today.isoformat()}\n\n"
+                "Archived.\n",
+                encoding="utf-8",
+            )
             result = runner.invoke(main, ["tasks", "list", "--all"])
             assert result.exit_code == 0
             assert "Proposed task" in result.output
             assert "Deferred task" in result.output
+            assert "Archived task" not in result.output
 
-    def test_list_status_done_filter_is_empty_for_split_active_store(self, runner: CliRunner) -> None:
+    @pytest.mark.parametrize("status", ["done", "retired"])
+    def test_list_closed_status_requires_since(self, runner: CliRunner, status: str) -> None:
         with runner.isolated_filesystem():
             _write_active_task(Path(), task_id="t001", title="Open task", task_type="dev")
-            result = runner.invoke(main, ["tasks", "list", "--status", "done"])
-            assert result.exit_code == 0
-            assert "Open task" not in result.output
+            result = runner.invoke(main, ["tasks", "list", "--status", status])
+            assert result.exit_code != 0
+            assert f"--status {status}" in result.output
+            assert "--since YYYY-MM-DD" in result.output
 
-    def test_list_reports_duplicate_active_task_ids_without_traceback(self, runner: CliRunner) -> None:
+    def test_list_reports_duplicate_active_and_done_task_sources_without_traceback(
+        self,
+        runner: CliRunner,
+    ) -> None:
+        today = date.today()
         with runner.isolated_filesystem():
-            first = _write_active_task(
+            _write_active_task(
                 Path(),
                 task_id="t001",
                 title="Active task",
-                created=date(2026, 5, 7),
+                created=today,
                 description="Active.",
             )
-            duplicate = first.with_name("t001-duplicate.md")
-            duplicate.write_bytes(first.read_bytes())
+            done = Path("tasks/done") / f"{today:%Y-%m}.md"
+            done.parent.mkdir()
+            done.write_text(
+                "## [t001] Done task\n"
+                "- priority: P1\n"
+                "- status: done\n"
+                "- aspects: []\n"
+                f"- created: {today.isoformat()}\n"
+                f"- completed: {today.isoformat()}\n\n"
+                "Done.\n",
+                encoding="utf-8",
+            )
 
-            result = runner.invoke(main, ["tasks", "list"])
+            result = runner.invoke(
+                main,
+                ["tasks", "list", "--since", today.isoformat()],
+            )
             assert result.exit_code != 0
-            assert "duplicate task ids" in result.output
-            assert "t001" in result.output
+            assert "entity 'task:t001' produced by multiple sources" in result.output
             assert "Traceback" not in result.output
 
     def test_list_json_format(self, runner: CliRunner) -> None:
@@ -480,6 +512,21 @@ class TestTasksList:
             # active_total counts only active/ and is meaningless for a
             # --since query spanning the archive -- it must be omitted.
             assert "active_total" not in data["meta"]
+
+            status_result = runner.invoke(
+                main,
+                [
+                    "tasks",
+                    "list",
+                    "--status",
+                    "done",
+                    "--since",
+                    since.isoformat(),
+                ],
+            )
+            assert status_result.exit_code == 0, status_result.output
+            assert "Closed after since" in status_result.output
+            assert "Still open" not in status_result.output
 
     def test_list_since_respects_output_sink(self, runner: CliRunner, tmp_path: Path) -> None:
         from datetime import date
@@ -844,9 +891,9 @@ def _write_dp(tmp_path: Path, slug: str) -> None:
     )
 
 
-def _write_split_legacy_blocker(tmp_path: Path) -> Path:
+def _write_split_legacy_blocker(tmp_path: Path, *, task_id: str = "t001") -> Path:
     task = Task(
-        id="t001",
+        id=task_id,
         title="Old",
         type="dev",
         priority="P2",
@@ -856,7 +903,7 @@ def _write_split_legacy_blocker(tmp_path: Path) -> Path:
         created=date(2026, 5, 1),
         description="Body.",
     )
-    path = tmp_path / "tasks" / "active" / "t001-old.md"
+    path = tmp_path / "tasks" / "active" / f"{task_id}-old.md"
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(task_module.render_task_file(task), encoding="utf-8")
     return path
@@ -1241,9 +1288,19 @@ def test_tasks_summary_accepts_format_json(tmp_path, monkeypatch):
 def test_tasks_list_warns_about_legacy_blockers_in_split_layout(tmp_path, monkeypatch):
     monkeypatch.chdir(tmp_path)
     seed_project(tmp_path)
-    _write_split_legacy_blocker(tmp_path)
+    _write_active_task(
+        tmp_path,
+        task_id="t001",
+        title="Clean",
+        status="active",
+        blocked_by=["dataset:foo"],
+    )
+    _write_split_legacy_blocker(tmp_path, task_id="t002")
 
     result = CliRunner().invoke(main, ["tasks", "list"])
 
     assert result.exit_code == 0, result.output
-    assert "WARNING: task t001: legacy untyped blocker 'old-string'" in result.output
+    assert "t001" in result.output
+    assert "t002" in result.output
+    assert "WARNING: task t002: legacy untyped blocker 'old-string'" in result.stderr
+    assert "task t001:" not in result.stderr

@@ -92,13 +92,14 @@ def collect_lingering_tags(project_root: Path) -> InstrumentResult[LingeringTags
                     "values": _parse_list_body(match.group("body")),
                 }
             )
-        for match in _TASK_TAGS_RE.finditer(text):
-            results.append(
-                {
-                    "file": str(task_file.relative_to(project_root)),
-                    "values": _parse_list_body(match.group("body")),
-                }
-            )
+        if task_file.parent.name == "done":
+            for match in _TASK_TAGS_RE.finditer(text):
+                results.append(
+                    {
+                        "file": str(task_file.relative_to(project_root)),
+                        "values": _parse_list_body(match.group("body")),
+                    }
+                )
 
     return InstrumentResult.from_rows(results)
 

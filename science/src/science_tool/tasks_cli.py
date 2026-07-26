@@ -660,7 +660,13 @@ def tasks_note(task_id: str, note: str, note_date_raw: str | None) -> None:
 @click.option("--related", default=None)
 @click.option("--group", default=None, help="Filter by group (exact match)")
 @click.option("--aspect", "aspects", multiple=True, help="Filter by aspect (repeatable)")
-@click.option("--all", "show_all", is_flag=True, default=False, help="Include all task statuses")
+@click.option(
+    "--all",
+    "show_all",
+    is_flag=True,
+    default=False,
+    help="Include all statuses in the active store (does not read done ledgers)",
+)
 @click.option(
     "--since",
     "since_raw",
@@ -686,7 +692,7 @@ def tasks_list(
     output_format: str,
     output_path: Path | None,
 ) -> None:
-    """List tasks. Active and blocked tasks are shown by default; use --all for every status."""
+    """List tasks from the active store; use --since for bounded closed-task reads."""
     from datetime import date
 
     from science_model.tasks import Task
@@ -712,6 +718,10 @@ def tasks_list(
             raise click.UsageError(
                 "--since only applies to closed tasks; use --status done, --status retired, or --all"
             )
+    elif status in _CLOSED_STATUS_VALUES:
+        raise click.UsageError(
+            f"--status {status} requires --since YYYY-MM-DD to bound done-ledger reads"
+        )
 
     try:
         matched = list_tasks(
@@ -729,7 +739,7 @@ def tasks_list(
         raise click.ClickException(str(exc)) from exc
 
     # Surface legacy-untyped-blocker warnings on stderr.
-    _, warnings = parse_tasks_for_cli(DEFAULT_TASKS_DIR)
+    _, warnings = parse_tasks_for_cli(DEFAULT_TASKS_DIR, require_split=False)
     for w in warnings:
         click.echo(f"WARNING: {w}", err=True)
 

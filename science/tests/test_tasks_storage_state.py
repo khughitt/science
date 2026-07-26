@@ -44,6 +44,16 @@ def _write_split_marker(tasks_dir: Path) -> None:
     (active / "t001-task.md").write_text("---\nid: t001\n---\n", encoding="utf-8")
 
 
+def _make_gated_state(tasks_dir: Path, state: task_module.StorageState) -> None:
+    _write_legacy(tasks_dir)
+    if state in {task_module.StorageState.MIGRATING, task_module.StorageState.CONFLICT}:
+        _write_split_marker(tasks_dir)
+    if state is task_module.StorageState.MIGRATING:
+        journal = tasks_dir / ".science" / "task-storage-migration.journal"
+        journal.parent.mkdir()
+        journal.touch()
+
+
 @pytest.mark.parametrize("make_empty_dir", [False, True], ids=["absent-active-dir", "empty-active-dir"])
 def test_empty_store_allows_split_commands(tmp_path: Path, make_empty_dir: bool) -> None:
     tasks_dir = tmp_path / "tasks"
@@ -136,6 +146,81 @@ def test_find_task_location_gates_before_done_lookup_but_allows_explicit_bypass(
     location = task_module.find_task_location(tasks_dir, "t002", require_split=False)
     assert location.task.id == "t002"
     assert location.path == done
+
+
+@pytest.mark.parametrize(
+    "state",
+    [
+        task_module.StorageState.LEGACY,
+        task_module.StorageState.MIGRATING,
+        task_module.StorageState.CONFLICT,
+    ],
+)
+@pytest.mark.parametrize("reader", ["search_paths", "known_ids", "next_id"])
+def test_id_and_path_read_boundaries_gate_non_split_stores(
+    tmp_path: Path,
+    state: task_module.StorageState,
+    reader: str,
+) -> None:
+    tasks_dir = tmp_path / "tasks"
+    _make_gated_state(tasks_dir, state)
+
+    with pytest.raises(ValueError):
+        if reader == "search_paths":
+            task_module._task_search_paths(tasks_dir)
+        elif reader == "known_ids":
+            task_module.known_task_ids(tasks_dir)
+        else:
+            task_module.next_task_id(tasks_dir)
+
+
+def test_id_and_path_read_boundaries_allow_explicit_migration_bypass(tmp_path: Path) -> None:
+    tasks_dir = tmp_path / "tasks"
+    _make_gated_state(tasks_dir, task_module.StorageState.CONFLICT)
+
+    assert [path.name for path in task_module._task_search_paths(tasks_dir, require_split=False)] == [
+        "t001-task.md"
+    ]
+    assert task_module.known_task_ids(tasks_dir, require_split=False) == {"t001"}
+    assert task_module.next_task_id(tasks_dir, require_split=False) == "t002"
+
+
+@pytest.mark.parametrize(
+    "state",
+    [
+        task_module.StorageState.LEGACY,
+        task_module.StorageState.MIGRATING,
+        task_module.StorageState.CONFLICT,
+    ],
+)
+@pytest.mark.parametrize("consumer", ["curate_inventory", "dag_refs", "health"])
+def test_named_task_consumers_fail_on_non_split_stores(
+    tmp_path: Path,
+    state: task_module.StorageState,
+    consumer: str,
+) -> None:
+    tasks_dir = tmp_path / "tasks"
+    _make_gated_state(tasks_dir, state)
+
+    with pytest.raises(ValueError):
+        if consumer == "curate_inventory":
+            from science_tool.curate.inventory import collect_inventory
+
+            collect_inventory(tmp_path)
+        elif consumer == "dag_refs":
+            from science_tool.dag.refs import validate_ref_entry
+            from science_tool.dag.schema import RefEntry
+
+            entry = RefEntry.model_validate(
+                {"task": "t001", "description": "legacy task ref"}
+            )
+            validate_ref_entry(entry, tmp_path)
+        else:
+            from science_tool.graph.health_checks.lingering_tags import (
+                collect_lingering_tags,
+            )
+
+            collect_lingering_tags(tmp_path)
 
 
 def test_since_candidate_read_is_explicitly_gate_exempt(tmp_path: Path) -> None:

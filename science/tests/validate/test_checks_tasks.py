@@ -1,9 +1,10 @@
 from __future__ import annotations
 
 import importlib
-import re
 from collections.abc import Iterable
 from pathlib import Path
+
+import pytest
 
 from science_tool.validate import Result, Severity, ValidateContext
 from science_tool.validate.checks import CANONICAL_CHECKS, clear_checks_for_tests
@@ -38,21 +39,29 @@ def _messages(results: Iterable[Result], severity: Severity | None = None) -> li
     return [result.message for result in results if severity is None or result.severity is severity]
 
 
-def _write_active(root: Path, text: str) -> None:
+def _write_active(
+    root: Path,
+    frontmatter: str,
+    *,
+    filename: str = "t001-task.md",
+) -> Path:
     active_dir = root / "tasks" / "active"
     active_dir.mkdir(parents=True, exist_ok=True)
-    blocks = re.split(r"(?=^##\s+\[)", text, flags=re.MULTILINE)
-    for index, block in enumerate(candidate for candidate in blocks if candidate.strip()):
-        heading, *body = block.splitlines()
-        match = re.match(r"^##\s+\[([^\]]+)\]\s+(.+)$", heading)
-        assert match is not None
-        task_id, title = match.groups()
-        fields = "\n".join(line[2:] if line.startswith("- ") else line for line in body)
-        path = active_dir / f"{task_id}-{index}.md"
-        path.write_text(
-            f"---\nid: {task_id}\ntitle: {title}\n{fields}\n---\n",
-            encoding="utf-8",
-        )
+    path = active_dir / filename
+    path.write_text(f"---\n{frontmatter.rstrip()}\n---\n\nBody.\n", encoding="utf-8")
+    return path
+
+
+def _valid_frontmatter(task_id: str, *, extra: str = "") -> str:
+    text = (
+        f"id: {task_id}\n"
+        "title: Demo\n"
+        "status: active\n"
+        "priority: P1\n"
+        "aspects: [software-development]\n"
+        "created: 2026-01-01"
+    )
+    return f"{text}\n{extra}" if extra else text
 
 
 def _valid_task(task_id: str, *, extra: str = "") -> str:
@@ -80,7 +89,7 @@ def test_missing_active_file_warns_and_stops(tmp_path: Path) -> None:
 def test_empty_active_directory_reports_exists_and_no_tasks(tmp_path: Path) -> None:
     from science_tool.validate.checks.tasks import check_tasks
 
-    _write_active(tmp_path, "")
+    (tmp_path / "tasks" / "active").mkdir(parents=True)
 
     assert _messages(check_tasks(_ctx(tmp_path))) == [
         "tasks/active/ exists",
@@ -91,7 +100,8 @@ def test_empty_active_directory_reports_exists_and_no_tasks(tmp_path: Path) -> N
 def test_active_and_done_task_blocks_count_together(tmp_path: Path) -> None:
     from science_tool.validate.checks.tasks import check_tasks
 
-    _write_active(tmp_path, "\n\n".join([_valid_task("t001"), _valid_task("t002")]))
+    _write_active(tmp_path, _valid_frontmatter("t001"), filename="t001-first.md")
+    _write_active(tmp_path, _valid_frontmatter("t002"), filename="t002-second.md")
     done = tmp_path / "tasks" / "done"
     done.mkdir()
     done.joinpath("2026-01.md").write_text(_valid_task("t003"), encoding="utf-8")
@@ -102,39 +112,30 @@ def test_active_and_done_task_blocks_count_together(tmp_path: Path) -> None:
     ]
 
 
-def test_invalid_header_id_errors_and_is_not_counted(tmp_path: Path) -> None:
+def test_noncanonical_active_id_errors_and_is_not_counted(tmp_path: Path) -> None:
+    from science_tool.validate.checks.tasks import check_tasks
+
+    _write_active(tmp_path, _valid_frontmatter("t01.fragment"), filename="t01.fragment-task.md")
+    _write_active(tmp_path, _valid_frontmatter("t001"), filename="t001-valid.md")
+
+    results = list(check_tasks(_ctx(tmp_path)))
+
+    assert len(_messages(results, Severity.ERROR)) == 1
+    assert "non-canonical task id 't01.fragment'" in _messages(results, Severity.ERROR)[0]
+    assert "  1 task(s) validated" in _messages(results, Severity.INFO)
+
+
+def test_missing_title_reports_canonical_parser_error(tmp_path: Path) -> None:
     from science_tool.validate.checks.tasks import check_tasks
 
     _write_active(
         tmp_path,
-        "\n\n".join(
-            [
-                "## [t01.fragment] Fragment\n- aspects: [software-development]",
-                _valid_task("t001"),
-            ]
-        ),
+        "id: t001\nstatus: active\npriority: P1\naspects: []\ncreated: 2026-01-01",
     )
 
-    results = list(check_tasks(_ctx(tmp_path)))
-
-    assert _messages(results, Severity.ERROR) == [
-        "Invalid task id 't01.fragment' in tasks/active/t01.fragment-0.md: task ids must match tNNN. "
-        "Use parent: task:t001 for fragments or subtasks."
-    ]
-    assert "  1 task(s) validated" in _messages(results, Severity.INFO)
-
-
-def test_missing_required_fields_emit_all_errors(tmp_path: Path) -> None:
-    from science_tool.validate.checks.tasks import check_tasks
-
-    _write_active(tmp_path, "## [t001] Missing fields\n")
-
-    assert _messages(check_tasks(_ctx(tmp_path)), Severity.ERROR) == [
-        "task t001 missing required field: aspects",
-        "task t001 missing required field: priority",
-        "task t001 missing required field: status",
-        "task t001 missing required field: created",
-    ]
+    errors = _messages(check_tasks(_ctx(tmp_path)), Severity.ERROR)
+    assert len(errors) == 1
+    assert "missing required key: title" in errors[0]
 
 
 def test_task_added_without_aspects_validates_clean(tmp_path: Path) -> None:
@@ -155,7 +156,7 @@ def test_task_added_without_aspects_validates_clean(tmp_path: Path) -> None:
 def test_duplicate_ids_across_active_and_done_emit_bash_parity_message(tmp_path: Path) -> None:
     from science_tool.validate.checks.tasks import check_tasks
 
-    _write_active(tmp_path, _valid_task("t001"))
+    _write_active(tmp_path, _valid_frontmatter("t001"))
     done = tmp_path / "tasks" / "done"
     done.mkdir()
     done.joinpath("2026-01.md").write_text(_valid_task("t001"), encoding="utf-8")
@@ -166,7 +167,7 @@ def test_duplicate_ids_across_active_and_done_emit_bash_parity_message(tmp_path:
 def test_invalid_parent_emits_exact_error(tmp_path: Path) -> None:
     from science_tool.validate.checks.tasks import check_tasks
 
-    _write_active(tmp_path, _valid_task("t001", extra="- parent: t002"))
+    _write_active(tmp_path, _valid_frontmatter("t001", extra="parent: t002"))
 
     assert "task t001 parent must be local task ref like task:t001" in _messages(
         check_tasks(_ctx(tmp_path)), Severity.ERROR
@@ -178,29 +179,98 @@ def test_task_refs_validate_declared_stale_invalid_and_typed_refs(tmp_path: Path
 
     _write_active(
         tmp_path,
-        "\n\n".join(
-            [
-                _valid_task(
-                    "t001",
-                    extra="\n".join(
-                        [
-                            "- related: [task:t002, t999, paper:t888]",
-                            "- blocked-by: t123a",
-                            "- blocked_by: note:t777",
-                            "- parent: task:t555",
-                        ]
-                    ),
-                ),
-                _valid_task("t002"),
-            ]
+        _valid_frontmatter(
+            "t001",
+            extra="\n".join(
+                [
+                    "related: [task:t002, t999, paper:t888]",
+                    "blocked_by: [t123a, note:t777]",
+                    "parent: task:t555",
+                ]
+            ),
         ),
+        filename="t001-refs.md",
     )
+    _write_active(tmp_path, _valid_frontmatter("t002"), filename="t002-target.md")
 
     assert _messages(check_tasks(_ctx(tmp_path)), Severity.ERROR) == [
-        "stale task ref 't999' in tasks/active/t001-0.md",
-        "stale or invalid task ref 't123a' in tasks/active/t001-0.md",
-        "stale task ref 't555' in tasks/active/t001-0.md",
+        "stale task ref 't999' in tasks/active/t001-refs.md",
+        "stale or invalid task ref 't123a' in tasks/active/t001-refs.md",
+        "stale task ref 't555' in tasks/active/t001-refs.md",
     ]
+
+
+@pytest.mark.parametrize(
+    ("frontmatter", "filename", "message"),
+    [
+        (
+            _valid_frontmatter("t001", extra="blocked-by: [task:t002]"),
+            "t001-task.md",
+            "unknown frontmatter key(s): ['blocked-by']",
+        ),
+        (
+            _valid_frontmatter("t001", extra="mystery: value"),
+            "t001-task.md",
+            "unknown frontmatter key(s): ['mystery']",
+        ),
+        (
+            _valid_frontmatter("t001"),
+            "t002-wrong.md",
+            "filename does not match id 't001'",
+        ),
+        (
+            _valid_frontmatter("t001").replace("status: active", "status: done"),
+            "t001-task.md",
+            "status 'done' not open",
+        ),
+        (
+            _valid_frontmatter("t001").replace("status: active", "status: mystery"),
+            "t001-task.md",
+            "status 'mystery' not open",
+        ),
+        (
+            _valid_frontmatter("t001").replace("title: Demo", "title: Bad]"),
+            "t001-task.md",
+            "task title must be",
+        ),
+        (
+            _valid_frontmatter("t001") + "\nid: t002",
+            "t001-task.md",
+            "duplicate",
+        ),
+        (
+            "defaults: &defaults\n"
+            "  id: t001\n"
+            "<<: *defaults\n"
+            "title: Demo\nstatus: active\npriority: P1\naspects: []\ncreated: 2026-01-01",
+            "t001-task.md",
+            "merge",
+        ),
+    ],
+    ids=[
+        "forbidden-blocked-by",
+        "unknown-key",
+        "filename-id-mismatch",
+        "terminal-status",
+        "unknown-status",
+        "invalid-title",
+        "duplicate-key",
+        "merge-key",
+    ],
+)
+def test_active_files_use_canonical_parser(
+    tmp_path: Path,
+    frontmatter: str,
+    filename: str,
+    message: str,
+) -> None:
+    from science_tool.validate.checks.tasks import check_tasks
+
+    _write_active(tmp_path, frontmatter, filename=filename)
+
+    errors = _messages(check_tasks(_ctx(tmp_path)), Severity.ERROR)
+    assert len(errors) == 1
+    assert message in errors[0]
 
 
 def test_loader_registry_includes_tasks_after_graph() -> None:

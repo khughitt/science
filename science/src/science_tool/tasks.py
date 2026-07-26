@@ -631,9 +631,10 @@ def find_dangling_task_refs(tasks_dir: Path) -> dict[str, list[str]]:
     `blocked-by: [task:tNNN]` (or `parent:`) is reported here so the problem is
     caught at the task layer rather than only at `graph build`.
     """
-    known = known_task_ids(tasks_dir)
+    _require_split(tasks_dir)
+    known = known_task_ids(tasks_dir, require_split=False)
     dangling: dict[str, list[str]] = {}
-    for path in _task_search_paths(tasks_dir):
+    for path in _task_search_paths(tasks_dir, require_split=False):
         for task in _parse_path_tasks(path):
             bad: list[str] = []
             for ref in [*task.blocked_by, task.parent]:
@@ -647,7 +648,11 @@ def find_dangling_task_refs(tasks_dir: Path) -> dict[str, list[str]]:
     return dangling
 
 
-def parse_tasks_for_cli(tasks_dir: Path) -> tuple[list[Task], list[str]]:
+def parse_tasks_for_cli(
+    tasks_dir: Path,
+    *,
+    require_split: bool = True,
+) -> tuple[list[Task], list[str]]:
     """Parse tasks AND surface user-facing warnings.
 
     Detects legacy untyped blocker refs and returns them as warning strings.
@@ -657,7 +662,7 @@ def parse_tasks_for_cli(tasks_dir: Path) -> tuple[list[Task], list[str]]:
     # tasks_blockers -> entities -> graph -> tasks
     from science_tool.tasks_blockers import is_typed_ref  # noqa: PLC0415
 
-    tasks = _read_active(tasks_dir)
+    tasks = _read_active(tasks_dir, require_split=require_split)
     warnings: list[str] = []
     for task in tasks:
         for ref in task.blocked_by:
@@ -753,8 +758,10 @@ def _task_allocation_lock(tasks_dir: Path) -> Iterator[None]:
             fcntl.flock(lock_file.fileno(), fcntl.LOCK_UN)
 
 
-def next_task_id(tasks_dir: Path) -> str:
+def next_task_id(tasks_dir: Path, *, require_split: bool = True) -> str:
     """Determine the next task ID by scanning active/ and done/."""
+    if require_split:
+        _require_split(tasks_dir)
     max_num = 0
 
     active = _active_dir(tasks_dir)
@@ -826,7 +833,9 @@ class TaskLocation:
     tasks: list[Task]
 
 
-def _task_search_paths(tasks_dir: Path) -> list[Path]:
+def _task_search_paths(tasks_dir: Path, *, require_split: bool = True) -> list[Path]:
+    if require_split:
+        _require_split(tasks_dir)
     paths = sorted(_active_dir(tasks_dir).glob("*.md"))
     done_dir = tasks_dir / "done"
     if done_dir.is_dir():
@@ -834,24 +843,31 @@ def _task_search_paths(tasks_dir: Path) -> list[Path]:
     return paths
 
 
-def known_task_ids(tasks_dir: Path) -> set[str]:
+def known_task_ids(tasks_dir: Path, *, require_split: bool = True) -> set[str]:
     """Every valid task id (tNNN) declared in active/*.md and done/*.md.
 
     An ID-only scan (not full parse): a field-level problem in one task must not
     crash callers that only need the set of declared ids. Active files provide
     IDs in frontmatter; done ledgers provide them in task headers.
     """
+    if require_split:
+        _require_split(tasks_dir)
     ids: set[str] = set()
-    for path in _task_search_paths(tasks_dir):
+    for path in _task_search_paths(tasks_dir, require_split=False):
         if not path.is_file():
             continue
         ids.update(_strict_task_ids_in_path(path))
     return ids
 
 
-def _find_matches(tasks_dir: Path, task_id: str) -> list[TaskLocation]:
+def _find_matches(
+    tasks_dir: Path,
+    task_id: str,
+    *,
+    require_split: bool = True,
+) -> list[TaskLocation]:
     matches: list[TaskLocation] = []
-    for path in _task_search_paths(tasks_dir):
+    for path in _task_search_paths(tasks_dir, require_split=require_split):
         tasks = _parse_path_tasks(path)
         for task in tasks:
             if task.id == task_id:
@@ -866,11 +882,12 @@ def find_task_location(
     require_split: bool = True,
 ) -> TaskLocation:
     """Find the unique occurrence of a task in active/*.md or done/*.md."""
-    if require_split:
-        _require_split(tasks_dir)
-    matches = _find_matches(tasks_dir, task_id)
+    matches = _find_matches(tasks_dir, task_id, require_split=require_split)
     if not matches:
-        searched = ", ".join(str(path) for path in _task_search_paths(tasks_dir))
+        searched = ", ".join(
+            str(path)
+            for path in _task_search_paths(tasks_dir, require_split=False)
+        )
         msg = (
             f"Task {task_id} not found in tasks/active/*.md or tasks/done/*.md "
             f"(searched: {searched})"
@@ -979,7 +996,7 @@ def add_task(
         _require_split(tasks_dir)
         _validate_task_title(title)
         validated_blockers = validate_blocker_refs(project_root, blocked_by, force=force) if blocked_by else []
-        task_id = next_task_id(tasks_dir)
+        task_id = next_task_id(tasks_dir, require_split=False)
         task = Task(
             id=task_id,
             title=title,
@@ -1007,7 +1024,7 @@ def _move_task_to_done(tasks_dir: Path, task: Task, *, target_status: str) -> No
 
     done_dir = tasks_dir / "done"
     occurrences: list[tuple[Path, Task]] = []
-    for path in _task_search_paths(tasks_dir):
+    for path in _task_search_paths(tasks_dir, require_split=False):
         if path.parent != done_dir or not path.is_file():
             continue
         _preamble, ledger_tasks = _read_destination(path)
@@ -1252,10 +1269,8 @@ def _read_since_candidates(tasks_dir: Path, since: date) -> list[Task]:
 
     Month-file selection is only a read optimization; the row predicate in
     `list_tasks` is the authoritative membership test. Archive files may be
-    missing for any month in the window -- that is not an error. When a task
-    id appears in both active.md and an archive month (not expected in a
-    well-formed repo), the archive copy wins, since it is the durable record
-    for closed tasks.
+    missing for any month in the window -- that is not an error. Duplicate
+    task IDs across active files and selected done ledgers are rejected.
     """
     from science_tool.tasks_ledger import _read_destination
 
@@ -1265,6 +1280,10 @@ def _read_since_candidates(tasks_dir: Path, since: date) -> list[Task]:
     for month in _since_window_months(since, date.today()):
         _preamble, archive_tasks = _read_destination(tasks_dir / "done" / f"{month}.md")
         for t in archive_tasks:
+            if t.id in by_id:
+                raise ValueError(
+                    f"entity 'task:{t.id}' produced by multiple sources"
+                )
             by_id[t.id] = t
     return list(by_id.values())
 
@@ -1282,8 +1301,9 @@ def list_tasks(
 ) -> list[Task]:
     """Filter active tasks by optional criteria.
 
-    By default, done and retired tasks are excluded. Pass ``include_done=True``
-    or filter by a specific ``status`` to include them.
+    By default, done and retired statuses are excluded from the active store.
+    ``include_done=True`` includes every status present in that active store;
+    it does not read done ledgers.
 
     ``since`` queries closed tasks by completion date instead: it also reads
     `tasks/done/YYYY-MM.md` archive months overlapping `[since, today]`, and

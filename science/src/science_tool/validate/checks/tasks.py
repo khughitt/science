@@ -174,6 +174,14 @@ def _display_path(project_root: Path, path: Path) -> str:
         return path.as_posix()
 
 
+def _display_parser_error(project_root: Path, path: Path, exc: Exception) -> str:
+    return str(exc).replace(
+        str(path),
+        _display_path(project_root, path),
+        1,
+    )
+
+
 def _split_list_value(raw: object) -> list[str]:
     if isinstance(raw, list):
         return [str(item).strip() for item in raw if str(item).strip()]
@@ -187,7 +195,7 @@ def _split_list_value(raw: object) -> list[str]:
 
 @Check(section="task queue...", order=18)
 def check_tasks(ctx: ValidateContext) -> Iterator[Result]:
-    from science_tool.tasks import _load_task_frontmatter, _task_search_paths
+    from science_tool.tasks import _task_search_paths, parse_task_file, parse_tasks
 
     tasks_dir = ctx.project_root / "tasks"
     active_dir = tasks_dir / "active"
@@ -203,27 +211,32 @@ def check_tasks(ctx: ValidateContext) -> Iterator[Result]:
     for path in _task_search_paths(tasks_dir):
         if path.parent.name == "active":
             try:
-                fields, _body = _load_task_frontmatter(ctx.read_text_cached(path), path=path)
-            except ValueError as exc:
-                yield _result(Severity.ERROR, str(exc))
-                continue
-            task_id = fields.get("id")
-            if not isinstance(task_id, str) or HEADER_VALID.fullmatch(f"## [{task_id}] task") is None:
+                task = parse_task_file(path)
+            except (OSError, ValueError) as exc:
                 yield _result(
                     Severity.ERROR,
-                    f"Invalid task id '{task_id}' in {_display_path(ctx.project_root, path)}: "
-                    "task ids must match tNNN. Use parent: task:t001 for fragments or subtasks.",
+                    _display_parser_error(ctx.project_root, path, exc),
                 )
                 continue
+            fields = task.model_dump(mode="python")
             blocks.append(
                 _TaskBlock(
                     path=_display_path(ctx.project_root, path),
                     line=1,
-                    task_id=task_id,
+                    task_id=task.id,
                     fields=fields,
                 )
             )
-            declared.add(task_id)
+            declared.add(task.id)
+            continue
+
+        try:
+            parse_tasks(path)
+        except (OSError, ValueError) as exc:
+            yield _result(
+                Severity.ERROR,
+                _display_parser_error(ctx.project_root, path, exc),
+            )
             continue
 
         current: _TaskBlock | None = None
