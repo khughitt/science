@@ -124,6 +124,56 @@ EXEMPTIONS: dict[str, str] = {
     "telemetry status": "measured 366 chars on 2026-07-24; fixed-shape summary",
 }
 
+# Reclassified from DEFERRED by the 2026-07-25 slice 1b-3 audit
+# (docs/plans/2026-07-25-context-budget-1b3-audit.md): fixed-shape output that
+# cannot grow with project size.
+EXEMPTIONS.update({
+    "annotate ack": "single-annotation-ID status mutation (open->ack)",
+    "annotate dismiss": "single-annotation-ID status mutation (open->dismissed) via the shared _crud_invoke helper",
+    "annotate extract": "single-paper extraction; fixed counts (written/skipped-by-reason/grounding_dropped) plus a note, no per-item loop",
+    "annotate fix": "single-annotation-ID status mutation (open->fixed) via the shared _crud_invoke helper",
+    "annotate promote-prose-decomposition": "promotes exactly one --unit (required, singular)",
+    "annotate pubtator": "single-paper (identifier) PubTator seeding",
+    "annotate stats": "aggregated counts by_status/by_source/by_type",
+    "benchmark gap-calibration": "output is O(number of --project flags supplied), not project size; each yields one top-10-capped calibration summary",
+    "commons dataset build": "Prints exactly one line: `snakemake exited {exit_code}`",
+    "commons member-payload": "Resolves exactly one promoted virtual member (member_id) to its payload",
+    "commons reference-graph resolve-member": "Resolves one (registry_id, member_key) pair to at most one GraphMemberMatch (or an 'unresolved' status record)",
+    "commons show": "Prints exactly one entity by canonical id (optionally merged with one named project's overlay)",
+    "dataset reconcile": "diffs at most 3 fixed cached fields between one dataset entity's frontmatter and its one datapackage.yaml",
+    "dataset show": "fixed ~8-10 field block for the one resolved dataset entity, plus that entity's own body",
+    "datasets hydrate-worktree": "iterates a hardcoded 3-tuple of data dirs (raw/processed/external); always three rows regardless of project size",
+    "datasets sources": "enumerates the fixed code-defined set of packaged adapters; grows only when the toolkit ships a new adapter",
+    "discussions create": "Echoes exactly one 'Created <id> at <path>' line plus the created entity's own validation warnings (emit_entity_warnings)",
+    "discussions show": "Renders one entity's fixed field set (id, kind, title, status, path, related refs, source_refs, body)",
+    "doi lookup": "hardcoded <=6-key metadata dict for one DOI (doi/title/publisher/source/issued/url), not a per-record list",
+    "entity sections": "rows come from the kind's fixed template/schema, not per-entity project data",
+    "entity show": "fixed field set for the one entity resolved by ref; related/source_refs are that entity's own authored lists",
+    "evidence-lines create": "Echoes exactly one 'Created <id> at <path>' line plus the created entity's own validation warnings",
+    "evidence-lines show": "Renders one entity's fixed field set",
+    "graph build": "a handful of fixed confirmation lines plus ontology-suggestion lines bounded by the code-shipped ontology registry",
+    "graph predicates": "returns the code-defined PREDICATE_REGISTRY verbatim; its docstring states it is not an instrument",
+    "graph project-summary": "InstrumentResult with exactly one row -- a single project-wide rollup",
+    "graph validate": "a fixed set of ~6 structural check rows (parseable_trig, provenance_completeness, etc.), not one per violation",
+    "hypotheses create": "Echoes exactly one 'Created <id> at <path>' line plus the created entity's own validation warnings",
+    "hypotheses show": "Renders one entity's fixed field set",
+    "interpretations create": "Echoes exactly one 'Created <id> at <path>' line plus the created entity's own validation warnings",
+    "interpretations show": "Renders one entity's fixed field set",
+    "paper-fetch": "one FetchResult record for a single paper; tiers/errors bounded by the fixed fetch-strategy algorithm, not project size",
+    "project artifacts diff": "Unified diff between ONE named artifact's canonical and installed bytes",
+    "project artifacts exec": "os.execv() replaces the current process with the canonical artifact's own binary",
+    "project artifacts list": "One line per artifact TYPE in the toolkit's static registry.yaml (currently exactly 1: validate.sh)",
+    "project artifacts update": "Fixed confirmation for ONE named artifact update: from-version -> to-version, commit status, backup path",
+    "project resolve-refs": "Output is one line per --query argument the CALLER supplies (a repeatable option), not per record in the project",
+    "propositions create": "Echoes exactly one 'Created <id> at <path>' line plus the created entity's own validation warnings",
+    "propositions show": "Renders one entity's fixed field set",
+    "questions create": "Echoes exactly one 'Created <id> at <path>' line plus the created entity's own validation warnings",
+    "questions show": "Renders one entity's fixed field set",
+    "tasks block": "single task-state-change confirmation: one line naming the task and echoing back the user-supplied --by refs joined with commas",
+    "tasks show": "renders one task's fixed fields plus that task's own readiness list -- O(1) in project size",
+    "verdict parse": "parses exactly ONE named file argument into a single ParseResult document",
+})
+
 # Retired commands are exempt by construction: cli_retirement.RETIREMENTS owns which
 # commands are retired, and a fixed error string cannot grow with project size. Listing
 # them here as well would make this a second place the retired set could be edited.
@@ -160,7 +210,6 @@ DEFERRED.update(
             "1b",
         )
         for path in (
-            "annotate ack",
             "annotate apply-proposition-reconciliation",
             "annotate apply-proposition-resynthesis",
             "annotate apply-prose-promotion-plan",
@@ -169,9 +218,6 @@ DEFERRED.update(
             "annotate build-prose-health",
             "annotate check-prose-decomposition",
             "annotate cross-paper-evidence",
-            "annotate dismiss",
-            "annotate extract",
-            "annotate fix",
             "annotate ground-prose-decomposition",
             "annotate ingest-prose-decomposition",
             "annotate lift-tokens",
@@ -179,13 +225,10 @@ DEFERRED.update(
             "annotate plan-proposition-reconciliation",
             "annotate plan-prose-promotions",
             "annotate promote",
-            "annotate promote-prose-decomposition",
-            "annotate pubtator",
             "annotate reconcile-propositions",
             "annotate record-proposition-reconciliation-decisions",
             "annotate resynthesis-draft-context",
             "annotate scaffold-proposition-resynthesis",
-            "annotate stats",
             "annotate synthesize",
             "annotate validate-proposition-reconciliation",
             "annotate validate-proposition-resynthesis",
@@ -198,9 +241,7 @@ DEFERRED.update(
     {
         "belief profile": DeferredCommand("one row per belief-bearing entity", "1b"),
         "book-split": DeferredCommand("one row per detected chapter", "1b"),
-        "doi lookup": DeferredCommand("one row per returned DOI metadata field", "1b"),
         "markers scan": DeferredCommand("one row per marker hit and token", "1b"),
-        "paper-fetch": DeferredCommand("variable-length source and acquisition metadata", "1b"),
         "qa-audit": DeferredCommand("one row per audited workflow", "1b"),
         "search": DeferredCommand("one row per matching project record", "1b"),
         "wander": DeferredCommand("one output member per generated walk item", "1b"),
@@ -210,7 +251,6 @@ DEFERRED.update(
     {
         path: DeferredCommand("one row per benchmark, test, gap, candidate, or calibration bucket", "1b")
         for path in (
-            "benchmark gap-calibration",
             "benchmark gaps",
             "benchmark hint-candidates",
             "benchmark list",
@@ -239,20 +279,16 @@ DEFERRED.update(
             "1b",
         )
         for path in (
-            "commons dataset build",
             "commons dataset status",
             "commons dataset validate",
             "commons find",
             "commons index rebuild",
             "commons inventory",
             "commons list",
-            "commons member-payload",
             "commons promote dataset",
             "commons promote paper",
             "commons promote theme",
             "commons promote topic",
-            "commons reference-graph resolve-member",
-            "commons show",
             "commons validate",
         )
     }
@@ -278,10 +314,8 @@ DEFERRED.update(
             "dataset identity resolve",
             "dataset list",
             "dataset prioritize",
-            "dataset reconcile",
             "dataset reconcile-links",
             "dataset register-run",
-            "dataset show",
             "dataset stochasticity",
             "dataset verify-access",
         )
@@ -293,11 +327,9 @@ DEFERRED.update(
         for path in (
             "datasets download",
             "datasets files",
-            "datasets hydrate-worktree",
             "datasets infer-schema",
             "datasets qa",
             "datasets search",
-            "datasets sources",
             "datasets validate",
         )
     }
@@ -306,21 +338,9 @@ DEFERRED.update(
     {
         path: DeferredCommand("one output member per typed entity reference warning, field, or body element", "1b")
         for path in (
-            "discussions create",
-            "discussions show",
-            "evidence-lines create",
             "evidence-lines list",
-            "evidence-lines show",
-            "hypotheses create",
             "hypotheses list",
-            "hypotheses show",
-            "interpretations create",
-            "interpretations show",
-            "propositions create",
             "propositions list",
-            "propositions show",
-            "questions create",
-            "questions show",
         )
     }
 )
@@ -352,8 +372,6 @@ DEFERRED.update(
             "entity note",
             "entity remove",
             "entity rotation",
-            "entity sections",
-            "entity show",
             "entity status-inventory",
         )
     }
@@ -389,7 +407,6 @@ DEFERRED.update(
             "graph attention-rank",
             "graph attention-sample",
             "graph audit",
-            "graph build",
             "graph claims",
             "graph coverage",
             "graph cross-impact",
@@ -401,14 +418,11 @@ DEFERRED.update(
             "graph inquiry-summary",
             "graph neighborhood",
             "graph neighborhood-summary",
-            "graph predicates",
-            "graph project-summary",
             "graph propagate-freshness",
             "graph question-summary",
             "graph rehoming-debt",
             "graph scan-prose",
             "graph uncertainty",
-            "graph validate",
             "graph viz",
         )
     }
@@ -451,12 +465,7 @@ DEFERRED.update(
             "1b",
         )
         for path in (
-            "project artifacts diff",
-            "project artifacts exec",
-            "project artifacts list",
-            "project artifacts update",
             "project index",
-            "project resolve-refs",
             "project topic-coverage",
             "project verify",
         )
@@ -505,10 +514,8 @@ DEFERRED.update(
     {
         path: DeferredCommand("one output member per blocker, task preview row, or blocker repair", "1b")
         for path in (
-            "tasks block",
             "tasks blockers",
             "tasks fix-blockers",
-            "tasks show",
         )
     }
 )
@@ -524,10 +531,7 @@ DEFERRED.update(
 DEFERRED.update(
     {
         path: DeferredCommand("one output member per parsed verdict token, claim, interpretation, warning, or rollup group", "1b")
-        for path in (
-            "verdict parse",
-            "verdict rollup",
-        )
+        for path in ("verdict rollup",)
     }
 )
 

@@ -23,8 +23,8 @@ from science_tool.cli import main
 
 EXPECTED_CLASSIFICATION_COUNTS = {
     "budgeted": 14,
-    "exempt": 67,
-    "deferred": 198,
+    "exempt": 111,
+    "deferred": 154,
 }
 
 
@@ -68,7 +68,9 @@ def test_classification_partition_has_the_audited_cardinality() -> None:
     denial, which grows with the run's change set. Slice 1b-2 then wired curate
     inventory (DOCUMENT), prose lint (REPORT), curate consolidation-candidates
     (REPORT), and validate (REPORT), moving four more deferred leaves to budgeted. The
-    live partition is therefore 14/67/198 = 279.
+    2026-07-25 slice 1b-3 audit then reclassified 44 commands from deferred to exempt
+    (fixed-shape output), leaving 154 deferred. The live partition is therefore
+    14/111/154 = 279.
     """
     actual = {
         "budgeted": len(BUDGETS),
