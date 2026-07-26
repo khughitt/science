@@ -1097,9 +1097,8 @@ def test_reverse_gap_kind_is_stamped_on_apply(
 Run:
 
 ```bash
-cd science
-uv run --frozen pytest \
-  tests/test_consolidation_mark_superseded.py::test_reverse_gap_kind_is_stamped_on_apply -vv
+(cd science && uv run --frozen pytest \
+  tests/test_consolidation_mark_superseded.py::test_reverse_gap_kind_is_stamped_on_apply -vv)
 ```
 
 Expected: exit 1. The `story` case passes. The `validation-report` case fails during apply with:
@@ -1144,9 +1143,8 @@ Do not add a fallback in `find_entity` and do not special-case validation report
 Run:
 
 ```bash
-cd science
-uv run --frozen pytest \
-  tests/test_consolidation_mark_superseded.py::test_reverse_gap_kind_is_stamped_on_apply -vv
+(cd science && uv run --frozen pytest \
+  tests/test_consolidation_mark_superseded.py::test_reverse_gap_kind_is_stamped_on_apply -vv)
 ```
 
 Expected: exit 0:
@@ -1165,9 +1163,8 @@ would leave apply untested.
 Before changing `FROZEN_MARKDOWN_POLICIES`, run:
 
 ```bash
-cd science
-uv run --frozen pytest \
-  tests/test_kind_map_equivalence.py::test_markdown_policies_equal_prior_literal -vv
+(cd science && uv run --frozen pytest \
+  tests/test_kind_map_equivalence.py::test_markdown_policies_equal_prior_literal -vv)
 ```
 
 Expected: exit 1, with exactly one extra live item:
@@ -1220,9 +1217,8 @@ oracle.
 Run:
 
 ```bash
-cd science
-uv run --frozen pytest \
-  tests/test_kind_map_equivalence.py::test_markdown_policies_equal_prior_literal -vv
+(cd science && uv run --frozen pytest \
+  tests/test_kind_map_equivalence.py::test_markdown_policies_equal_prior_literal -vv)
 ```
 
 Expected: exit 0, `1 passed`.
@@ -1312,10 +1308,9 @@ relation_kinds: []
 Run:
 
 ```bash
-cd science
-uv run --frozen pytest \
+(cd science && uv run --frozen pytest \
   tests/test_decision_material.py::test_project_local_kind_is_neither_supported_nor_admitted_for_supersession \
-  -vv
+  -vv)
 ```
 
 Expected: exit 0, `1 passed`. This is a regression for existing inertness, not the production driver;
@@ -1355,10 +1350,9 @@ The first mutation admits the local endpoint through the core relation descripto
 it in the frozen auto-stamping policy. Run:
 
 ```bash
-cd science
-uv run --frozen pytest \
+(cd science && uv run --frozen pytest \
   tests/test_decision_material.py::test_project_local_kind_is_neither_supported_nor_admitted_for_supersession \
-  -vv
+  -vv)
 ```
 
 Expected: exit 1 at the first operation-level assertion:
@@ -1396,10 +1390,9 @@ DECLARED_SUPERSEDABLE: dict[str, bool] = {ek.name: bool(ek.supersedable) for ek 
 Run:
 
 ```bash
-cd science
-uv run --frozen pytest \
+(cd science && uv run --frozen pytest \
   tests/test_decision_material.py::test_project_local_kind_is_neither_supported_nor_admitted_for_supersession \
-  -vv
+  -vv)
 ```
 
 Expected: exit 0, `1 passed`.
@@ -1484,23 +1477,22 @@ This is prose-only. Top-level `amends:` was already rejected unconditionally aft
 Run:
 
 ```bash
-cd science
-uv run --frozen pytest \
+(cd science && uv run --frozen pytest \
   tests/test_consolidation_mark_superseded.py::test_reverse_gap_kind_is_stamped_on_apply \
   tests/test_decision_material.py::test_project_local_kind_is_neither_supported_nor_admitted_for_supersession \
   tests/test_kind_map_equivalence.py::test_markdown_policies_equal_prior_literal \
   tests/validate/test_checks_materialization.py::test_amends_on_workflow_run_is_an_error \
-  -q
+  -q)
 ```
 
 Expected: exit 0, `5 passed` (the parameterized apply test contributes two cases).
 
 - [ ] **Step 13: Run the executable write-path parity/end-state check**
 
-From `science/`, run:
+From the repository root, run:
 
 ```bash
-uv run --frozen python -c "
+(cd science && uv run --frozen python -c "
 from science_model.profiles import CORE_PROFILE
 from science_model.profiles.local import LOCAL_PROFILE
 from science_tool.entities import _BUILTIN_MARKDOWN_POLICIES
@@ -1527,7 +1519,7 @@ for label, passed in checks.items():
 print('missing     ', missing)
 if not all(checks.values()):
     raise SystemExit('S2 end-state parity failed')
-"
+")
 ```
 
 Expected: exit 0:
@@ -1552,30 +1544,26 @@ final check the pre-review plan lacked.
 Run each command only after the previous one exits:
 
 ```bash
-cd science/model
-uv run --frozen pytest -q
+(cd science/model && uv run --frozen pytest -q)
 ```
 
 Expected: exit 0, `1448 passed`.
 
 ```bash
-cd science
-uv run --frozen pytest -q
+(cd science && uv run --frozen pytest -q)
 ```
 
 Expected: exit 0, `10698 passed, 7 skipped, 8 deselected`. Existing third-party deprecation warnings
 may still be summarized.
 
 ```bash
-cd science
-uv run ruff check
+(cd science && uv run ruff check)
 ```
 
 Expected: exit 0, `All checks passed!`.
 
 ```bash
-cd science
-uv run pyright
+(cd science && uv run pyright)
 ```
 
 Expected: exit 0, `0 errors, 0 warnings, 0 informations`.
@@ -1615,13 +1603,12 @@ mutation edits must be absent from the staged diff.
 After Task 6, from a clean tree on the branch, first run the focused runtime/oracle regressions:
 
 ```bash
-cd science
-uv run --frozen pytest \
+(cd science && uv run --frozen pytest \
   tests/test_consolidation_mark_superseded.py::test_reverse_gap_kind_is_stamped_on_apply \
   tests/test_decision_material.py::test_project_local_kind_is_neither_supported_nor_admitted_for_supersession \
   tests/test_kind_map_equivalence.py::test_markdown_policies_equal_prior_literal \
   tests/validate/test_checks_materialization.py::test_amends_on_workflow_run_is_an_error \
-  -q
+  -q)
 ```
 
 Expected: exit 0, `5 passed`.
@@ -1629,17 +1616,10 @@ Expected: exit 0, `5 passed`.
 Then run the full suites serially, followed by lint and types:
 
 ```bash
-cd science/model
-uv run --frozen pytest -q
-
-cd science
-uv run --frozen pytest -q
-
-cd science
-uv run ruff check
-
-cd science
-uv run pyright
+(cd science/model && uv run --frozen pytest -q)
+(cd science && uv run --frozen pytest -q)
+(cd science && uv run ruff check)
+(cd science && uv run pyright)
 ```
 
 Expected: both suites, Ruff, and Pyright exit 0. Never run the two pytest suites concurrently.
@@ -1647,8 +1627,7 @@ Expected: both suites, Ruff, and Pyright exit 0. Never run the two pytest suites
 Finally confirm the complete end state, including the descriptor-derived write policy:
 
 ```bash
-cd science
-uv run --frozen python -c "
+(cd science && uv run --frozen python -c "
 from science_model.profiles import CORE_PROFILE
 from science_model.profiles.local import LOCAL_PROFILE
 from science_tool.entities import _BUILTIN_MARKDOWN_POLICIES
@@ -1675,7 +1654,7 @@ for label, passed in checks.items():
 print('missing     ', missing)
 if not all(checks.values()):
     raise SystemExit('S2 end-state parity failed')
-"
+")
 ```
 
 Expected:
