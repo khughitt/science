@@ -61,14 +61,18 @@ This task only adds data. No surface consumes it yet, so both suites must stay g
 
 `_KNOWN_HALF_WIRED` and `test_every_supersedable_kind_can_author_the_CANONICAL_edge` must survive Tasks 1 and 2 — they are the *only* endpoint guard until Task 3 installs the exact gate, and deleting them here would leave two intermediate commits with no endpoint coverage at all. Task 3 removes them at the moment it replaces them. The module docstring is likewise rewritten in Task 3, not here.
 
-Add these imports and constants beside the existing ones, then the two tests:
+The file already imports `CORE_PROFILE` (from `science_model.profiles.core`), `RelationKind`, and `relation_allows_kinds`, and already defines `_supersedes()`. **Do not re-import or redefine any of them** — a second `CORE_PROFILE` import under a different module path is a redefinition Ruff fails on (F811), and Task 3 needs the existing helper intact.
+
+Add only what is genuinely new — extend the existing `science_model.profiles.schema` import rather than writing a second one:
 
 ```python
+# EXTEND the existing line: `from science_model.profiles.schema import RelationKind`
+from science_model.profiles.schema import EntityKind, RelationKind
+
+# NEW imports
 import pytest
 
-from science_model.profiles import CORE_PROFILE
 from science_model.profiles.local import LOCAL_PROFILE
-from science_model.profiles.schema import EntityKind
 
 SHIPPED_KINDS: tuple[EntityKind, ...] = (*CORE_PROFILE.entity_kinds, *LOCAL_PROFILE.entity_kinds)
 
@@ -304,17 +308,9 @@ oracles are re-frozen to match those rulings, not to silence the check."
 
 - [ ] **Step 1: Write the failing tests**
 
-Append to `science/model/tests/test_supersedable_gate.py`:
+Append to `science/model/tests/test_supersedable_gate.py`. **Add no imports and no helper.** `RelationKind`, `relation_allows_kinds`, `CORE_PROFILE`, `pytest`, and `_supersedes()` are all already in the file — `_supersedes()` survives this task because `test_supersedes_description_names_spec_replacement` (kept, below) still calls it. Re-declaring any of them is an F811 redefinition:
 
 ```python
-from science_model.profiles.schema import RelationKind
-from science_model.relations import relation_allows_kinds
-
-
-def _supersedes() -> RelationKind:
-    return next(r for r in CORE_PROFILE.relation_kinds if r.name == "supersedes")
-
-
 def test_the_supersedes_TARGETS_agree_with_the_declaration() -> None:
     # The OBJECT is the thing superseded, so it must be able to reach the state. The SUBJECT is the
     # replacement and is deliberately NOT gated -- a non-supersedable kind replacing a supersedable
@@ -619,8 +615,7 @@ are exact equalities in both directions."
 - Modify: `science/src/science_tool/kind_descriptors.py:51-54`
 - Modify: `science/src/science_tool/consolidation.py:101-111` (delete), `:640-650`, `:799`
 - Modify: `science/tests/test_decision_material.py:287` (the driver), `:311`
-- Modify: `science/tests/test_consolidation_mark_superseded.py:11`, `:1131` (prose references to the deleted helper)
-- Test: `science/tests/test_kind_reconciliation_lineage.py` (new)
+- Modify: `science/tests/test_consolidation_mark_superseded.py` — `:11` and `:1131` (prose references to the deleted helper), plus two new tests using the `_seed`/`_write`/`_supersedes` helpers already in the file
 
 **Interfaces:**
 - Consumes: `EntityKind.supersedable`.
@@ -635,39 +630,33 @@ The live policy is `supported_kinds`, serialized at `consolidation.py:648` and f
 The discriminating test already exists in skeleton form: `test_material_carries_supported_kinds_and_digest_covers_the_policy` in `science/tests/test_decision_material.py:287` injects a fake eligible kind and asserts the digest moves. Re-point its injection at the new authority — under the old implementation, patching `DECLARED_SUPERSEDABLE` has no effect on a policy built from `_STATUS_VALUES`, so the digest does not move and the test fails.
 
 ```python
-    extended = dict(c.DECLARED_SUPERSEDABLE)
+    from science_model.profiles import CORE_PROFILE
+    extended = {ek.name: ek.supersedable for ek in CORE_PROFILE.entity_kinds}
     extended["zzz-fake-kind"] = True  # a new auto-apply-eligible kind
-    monkeypatch.setattr(c, "DECLARED_SUPERSEDABLE", extended)
+    # Built from the PROFILE, and patched with `raising=False`, because this test must run RED:
+    # `DECLARED_SUPERSEDABLE` does not exist on the module until Step 3. Reading `c.DECLARED_SUPERSEDABLE`
+    # here -- or letting monkeypatch enforce the attribute -- would raise AttributeError during setup
+    # and the red run would never reach the digest assertion that is the actual driver.
+    monkeypatch.setattr(c, "DECLARED_SUPERSEDABLE", extended, raising=False)
 ```
 
 Update its comment to name `DECLARED_SUPERSEDABLE` as the policy source.
 
-Then create `science/tests/test_kind_reconciliation_lineage.py` with the *behavioural* half — a supersedable kind is actually stamped. This is what gives mutation proof 5 something to break beyond an equality:
+Then add the *behavioural* half — a supersedable kind is actually stamped. This is what gives mutation proof 5 something to break beyond an equality. It goes in `science/tests/test_consolidation_mark_superseded.py`, at the end of the interpretation section (immediately before the `# hypothesis — EXECUTABLE for the first time` banner), because `_seed`, `_write`, and `_supersedes` already live there — copying them into a new module would fork the fixture shape this file is the authority on. No new imports: `mark_superseded` and `CORE_PROFILE` are both already imported at the top.
 
 ```python
-"""The auto-stamping policy carried on the graph must follow the declaration.
-
-Tool-side, not model-side: `build_decision_material` lives in `science_tool`, and `science_model`
-must not import its consumer.
-"""
-
-from __future__ import annotations
-
-from pathlib import Path
-
-from science_model.profiles import CORE_PROFILE
-from science_tool.consolidation import build_decision_material, mark_superseded
-
-
 def test_a_newly_supersedable_kind_is_actually_stamped(tmp_path: Path) -> None:
     # `topic` gained its endpoint in Task 3 and has always declared the status. If the policy stops
     # following the declaration, this member silently stops being stamped -- which an equality
     # assertion over two currently-identical sets would not catch.
-    _seed_topic_supersession(tmp_path)  # see below
+    _seed(tmp_path)
+    _write(tmp_path, "topics", "t-old", {"id": "topic:t-old", "kind": "topic", "status": "active"})
+    _write(tmp_path, "topics", "t-new", {"id": "topic:t-new", "kind": "topic", "status": "active",
+                                         "relations": [_supersedes("topic:t-old")]})
 
     report = mark_superseded(tmp_path, apply=False)
 
-    assert "topic:t-old" in report["to_mark"]
+    assert report["to_mark"] == ["topic:t-old"]
     assert report["skipped_kinds"] == []
 
 
@@ -675,18 +664,19 @@ def test_the_frozen_policy_equals_the_profile_declaration(tmp_path: Path) -> Non
     # Regression, not the driver: compared against the PROFILE, reached independently of
     # `kind_descriptors`, because `supported_kinds` is BUILT from `DECLARED_SUPERSEDABLE` and
     # comparing it back to that map would be the identity function.
+    from science_tool.consolidation import build_decision_material
+
+    _seed(tmp_path)
     (tmp_path / "entities").mkdir()
     material = build_decision_material(tmp_path)
-    declared = sorted(k.name for k in CORE_PROFILE.entity_kinds if k.supersedable)
+    declared = sorted(ek.name for ek in CORE_PROFILE.entity_kinds if ek.supersedable)
     assert material.supported_kinds == declared
 ```
 
-Write `_seed_topic_supersession` to author two `topic` entities under `entities/topics/`, the newer carrying `relations: [{predicate: "sci:supersedes", target: "topic:t-old"}]`. Copy the fixture helpers from `science/tests/test_consolidation_mark_superseded.py` (`_seed`, `_write`, `_supersedes`) rather than inventing a new frontmatter shape.
-
 - [ ] **Step 2: Run the tests to verify the driver fails**
 
-Run: `cd science && uv run --frozen pytest tests/test_decision_material.py::test_material_carries_supported_kinds_and_digest_covers_the_policy tests/test_kind_reconciliation_lineage.py -q`
-Expected: the digest test FAILS (`before != after` is false — the patched authority is not consulted). The two new tests in `test_kind_reconciliation_lineage.py` PASS already; they are regressions guarding the change, not drivers of it.
+Run: `cd science && uv run --frozen pytest tests/test_decision_material.py::test_material_carries_supported_kinds_and_digest_covers_the_policy tests/test_consolidation_mark_superseded.py -k "newly_supersedable or frozen_policy" -q`
+Expected: the digest test FAILS (`before != after` is false — the patched authority is not consulted). The two new tests PASS already; they are regressions guarding the change, not drivers of it.
 
 - [ ] **Step 3: Add the tool-side lookup**
 
@@ -738,7 +728,7 @@ In `consolidation.py`, the `mark_superseded` return docs at `:799` define these 
 
 - [ ] **Step 6: Run the driver to verify it now passes**
 
-Run: `cd science && uv run --frozen pytest tests/test_decision_material.py::test_material_carries_supported_kinds_and_digest_covers_the_policy tests/test_kind_reconciliation_lineage.py -q`
+Run: `cd science && uv run --frozen pytest tests/test_decision_material.py::test_material_carries_supported_kinds_and_digest_covers_the_policy tests/test_consolidation_mark_superseded.py -k "newly_supersedable or frozen_policy" -q`
 Expected: PASS. The patched `DECLARED_SUPERSEDABLE` now reaches the policy, so the digest moves.
 
 - [ ] **Step 7: Fix the remaining decision-material test**
@@ -771,7 +761,6 @@ Do **not** use "revert line 648 to `_STATUS_VALUES`" as the mutation. After Task
 ```bash
 git add science/src/science_tool/kind_descriptors.py \
         science/src/science_tool/consolidation.py \
-        science/tests/test_kind_reconciliation_lineage.py \
         science/tests/test_decision_material.py \
         science/tests/test_consolidation_mark_superseded.py
 git commit -m "feat(consolidation): derive the auto-stamping policy from the declaration
