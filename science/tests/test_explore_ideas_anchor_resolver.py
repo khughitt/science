@@ -102,6 +102,10 @@ literature_anchors:
         "ambiguous": 0,
         "unresolved": 1,
         "mismatch": 0,
+        # The two `resolved` plus the one `already-resolved` matched real
+        # records; the unresolved one did not, so nothing confirms its identity.
+        "verified": 3,
+        "unverified": 1,
     }
 
 
@@ -139,6 +143,11 @@ literature_anchors:
         "ambiguous": 0,
         "unresolved": 0,
         "mismatch": 1,
+        # A mismatch is NOT a verified identity -- the DOI resolved, but to a
+        # different work than the anchor names. Counting it as verified would
+        # certify exactly the misattribution the mismatch check exists to catch.
+        "verified": 0,
+        "unverified": 1,
     }
 
 
@@ -205,6 +214,8 @@ literature_anchors:
         "ambiguous": 0,
         "unresolved": 0,
         "mismatch": 0,
+        "verified": 1,
+        "unverified": 0,
     }
 
 
@@ -331,6 +342,7 @@ literature_anchors:
             "candidate_id": "cand-a",
             "anchor_index": 0,
             "status": "resolved",
+            "verification": "verified",
             "resolved": "cite:Jones2021",
             "match_kind": "doi",
             "query": "10.2000/jones",
@@ -436,3 +448,91 @@ literature_anchors:
     assert result.exit_code == 0
     payload = json.loads(result.output)
     assert payload["anchors"][0]["anchor"]["date"] == "2021-06-15"
+
+
+def test_unresolved_anchor_is_reported_unverified(tmp_path: Path) -> None:
+    # fb-2026-07-25-006: the resolver checks anchors against the PROJECT corpus
+    # only. An anchor that matches nothing there has had its identity confirmed
+    # by nothing at all -- the reported run left 47 of 49 in that state, and a
+    # bare `ref: null` does not say so. The verdict is stated per anchor.
+    _seed_references(tmp_path)
+    _write_report(
+        tmp_path,
+        """```yaml
+candidate_id: cand-a
+decision: keep
+proposed_kind: question
+title: Candidate
+literature_anchors:
+  - doi: 10.9999/not-in-this-project
+    title: A plausible-looking title
+    first_author: Nobody
+    year: 2023
+```
+""",
+    )
+
+    row = resolve_anchors_report(tmp_path, "explore-2026-07-06").anchors[0]
+
+    assert row.status == "unresolved"
+    assert row.verification == "unverified"
+
+
+def test_ambiguous_anchor_is_not_verified(tmp_path: Path) -> None:
+    # Several candidate records is not a confirmed identity: the resolver did
+    # not pick one, so nothing has been established about which work the anchor
+    # names. Two paper entities sharing a title make the ambiguity real -- the
+    # bib duplicate in the shared fixture is deduped away by ref preference.
+    _seed_references(tmp_path)
+    for slug, entity_id in (("twin-a", "paper:TwinA"), ("twin-b", "paper:TwinB")):
+        write_markdown_entity(
+            tmp_path,
+            f"entities/papers/{slug}.md",
+            {"id": entity_id, "kind": "paper", "title": "Ambiguous shared title", "year": 2019},
+            "Paper body.\n",
+        )
+    _write_report(
+        tmp_path,
+        """```yaml
+candidate_id: cand-a
+decision: keep
+proposed_kind: question
+title: Candidate
+literature_anchors:
+  - title: Ambiguous shared title
+```
+""",
+    )
+
+    row = resolve_anchors_report(tmp_path, "explore-2026-07-06").anchors[0]
+
+    assert row.status == "ambiguous"
+    assert row.resolved is None
+    assert row.verification == "unverified"
+
+
+def test_resolve_anchors_text_output_states_the_identity_split(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    # The per-status tally buries the number that matters. The text surface
+    # states how many anchors were confirmed against a real record.
+    _seed_references(tmp_path)
+    _write_report(
+        tmp_path,
+        """```yaml
+candidate_id: cand-a
+decision: keep
+proposed_kind: question
+title: Candidate
+literature_anchors:
+  - doi: 10.2000/jones
+  - doi: 10.9999/nowhere
+  - doi: 10.9998/also-nowhere
+```
+""",
+    )
+
+    monkeypatch.chdir(tmp_path)
+    result = CliRunner().invoke(main, ["explore-ideas", "resolve-anchors", "--from", "explore-2026-07-06"])
+
+    assert result.exit_code == 0
+    assert "identity: 1 of 3 verified against a real record" in result.output
+    assert "2 unverified" in result.output

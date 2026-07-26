@@ -44,6 +44,21 @@ def _apply_truncation(full: dict[str, Any], displayed: dict[str, Any], complete_
     }
 
 
+def _echo_decision_notes(sink: BoundedSink, displayed: dict[str, Any]) -> None:
+    """Print the triage rationale each block recorded.
+
+    A bare `decision: drop` token loses why the block was rejected -- a considered
+    rejection and an oversight read identically to a later reader. Notes are
+    printed together rather than beside their own decision bucket, so scanning
+    the reasoning does not mean scanning four lists.
+    """
+    for item in displayed.get("decision_notes", []):
+        sink.echo(f"  note {item['candidate_id']}: {item['note']}")
+    omitted = displayed.get("decision_notes_omitted")
+    if omitted:
+        sink.echo(f"  ({omitted} further decision note(s) omitted)")
+
+
 def _echo_apply_truncation_footer(sink: BoundedSink, displayed: dict[str, Any]) -> None:
     truncation = displayed.get("truncation")
     if not truncation:
@@ -141,6 +156,7 @@ def explore_ideas_apply(
                     sink.echo(f"  apply manually ({item['proposed_kind']}): {item['candidate_id']}")
                 for fold in displayed["folds"]:
                     sink.echo(f"  fold manually: {fold['candidate_id']} -> {', '.join(fold['targets'])}")
+                _echo_decision_notes(sink, displayed)
                 _echo_apply_truncation_footer(sink, displayed)
 
             emit(output_format=output_format, payload=displayed, render_text=_render_check, sink=sink)
@@ -182,6 +198,7 @@ def explore_ideas_apply(
             sink.echo(f"  fold manually: {fold['candidate_id']} -> {', '.join(fold['targets'])}")
         for item in displayed["failures"]:
             sink.echo(f"  FAILED {item['candidate_id']}: {item['error']}")
+        _echo_decision_notes(sink, displayed)
         for created in displayed["created"]:
             for warning in created["warnings"]:
                 sink.echo(f"WARNING: {warning}")
@@ -347,6 +364,14 @@ def explore_ideas_resolve_anchors(from_value: str, output_format: str, output_pa
             f"{counts['ambiguous']} ambiguous, "
             f"{counts['unresolved']} unresolved, "
             f"{counts['mismatch']} mismatch"
+        )
+        # The identity headline, stated separately from the status breakdown:
+        # the run that prompted this confirmed 2 of 49 anchors, a fact the
+        # per-status tally alone does not put in front of the reader.
+        total_anchors = counts["verified"] + counts["unverified"]
+        sink.echo(
+            f"identity: {counts['verified']} of {total_anchors} verified against a real record; "
+            f"{counts['unverified']} unverified (model-asserted, nothing confirms them)"
         )
         for row in displayed["anchors"]:
             label = f"{row['candidate_id']}[{row['anchor_index']}]"

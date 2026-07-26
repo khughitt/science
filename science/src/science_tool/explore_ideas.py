@@ -27,6 +27,16 @@ from science_tool.resolve_refs import RefIndex, build_ref_index, load_index_rows
 
 _YAML_BLOCK_RE = re.compile(r"```yaml\r?\n(.*?)```", re.DOTALL)
 _VALID_DECISIONS = {"keep", "drop", "defer", "applied", "fold"}
+
+#: An anchor whose identifier matched a real record in `entities/papers/` or
+#: `papers/references.bib`.
+VERIFICATION_VERIFIED = "verified"
+#: An anchor whose identity nothing has confirmed. The resolver checks only the
+#: project corpus, so this covers every model-asserted DOI/title/year that no
+#: local record corroborates -- the common case, and the one a reader is most
+#: likely to mistake for a validated reference.
+VERIFICATION_UNVERIFIED = "unverified"
+VALID_VERIFICATIONS = {VERIFICATION_VERIFIED, VERIFICATION_UNVERIFIED}
 _ROUTABLE_KINDS = {"question", "hypothesis", "topic", "theme"}
 _MANUAL_KINDS: set[str] = set()
 _VALID_KINDS = _ROUTABLE_KINDS | _MANUAL_KINDS
@@ -85,6 +95,11 @@ class ReportPlan:
     skipped_other: list[str]
     manual: list[tuple[str, str]]
     folds: list[FoldPlan] = field(default_factory=list)
+    #: ``(candidate_id, decision_note)`` for every block carrying one, in report
+    #: order. Kept beside the per-decision lists rather than inside them: the
+    #: note explains a triage call for ANY decision, and a reader wants them
+    #: together, not scattered across four buckets.
+    decision_notes: list[tuple[str, str]] = field(default_factory=list)
 
 
 @dataclass(frozen=True)
@@ -105,10 +120,14 @@ class ApplyResult:
     manual: list[tuple[str, str]]
     failures: list[tuple[str, str]]
     folds: list[FoldPlan] = field(default_factory=list)
+    decision_notes: list[tuple[str, str]] = field(default_factory=list)
 
     def to_dict(self) -> dict[str, object]:
         return {
             "report": str(self.report),
+            "decision_notes": [
+                {"candidate_id": candidate_id, "note": note} for candidate_id, note in self.decision_notes
+            ],
             "created": [
                 {
                     "candidate_id": created.candidate_id,
@@ -135,10 +154,14 @@ class ApplyCheckResult:
     skipped_other: list[str]
     manual: list[tuple[str, str]]
     folds: list[FoldPlan] = field(default_factory=list)
+    decision_notes: list[tuple[str, str]] = field(default_factory=list)
 
     def to_dict(self) -> dict[str, object]:
         return {
             "report": str(self.report),
+            "decision_notes": [
+                {"candidate_id": candidate_id, "note": note} for candidate_id, note in self.decision_notes
+            ],
             "to_create": [
                 {
                     "candidate_id": plan.candidate_id,
@@ -257,11 +280,27 @@ class AnchorResolution:
     #: with the record its identifier resolved to. ``None`` otherwise.
     detail: str | None = None
 
+    @property
+    def verification(self) -> str:
+        """Whether this anchor's *identity* was confirmed against a real record.
+
+        The resolver only ever consults `entities/papers/` and
+        `papers/references.bib`. An anchor that matches neither has still been
+        checked -- against the project corpus -- but its DOI, title, author and
+        year remain exactly what a lens agent asserted, and nothing has
+        confirmed they name a real work. Reported per anchor so a block cannot
+        present 47 model-generated identifiers in the same shape as the 2 that
+        resolved: a null `ref` says "no local record", which a reader is free to
+        misread as "not needed". `unverified` says what is actually true.
+        """
+        return VERIFICATION_VERIFIED if self.status in {"resolved", "already-resolved"} else VERIFICATION_UNVERIFIED
+
     def to_dict(self) -> dict[str, object]:
         return {
             "candidate_id": self.candidate_id,
             "anchor_index": self.anchor_index,
             "status": self.status,
+            "verification": self.verification,
             "resolved": self.resolved,
             "match_kind": self.match_kind,
             "query": self.query,
@@ -283,6 +322,12 @@ class AnchorResolveResult:
             key = "already_resolved" if anchor.status == "already-resolved" else anchor.status
             if key in counts:
                 counts[key] += 1
+        # Carried beside the per-status tally so the headline number a reader
+        # sees is how many anchors had their identity confirmed -- 2 of 49 in
+        # the run that prompted this -- rather than a status breakdown that
+        # buries it.
+        counts[VERIFICATION_VERIFIED] = sum(1 for a in self.anchors if a.verification == VERIFICATION_VERIFIED)
+        counts[VERIFICATION_UNVERIFIED] = sum(1 for a in self.anchors if a.verification == VERIFICATION_UNVERIFIED)
         return counts
 
     def to_dict(self) -> dict[str, object]:
@@ -739,6 +784,27 @@ def build_create_plan(candidate_id: str, data: dict, model_id: str, *, ref_index
         note = anchor.get("note")
         if note is not None and not isinstance(note, str):
             raise ApplyValidationError(f"{candidate_id}: anchor 'note' must be a string")
+        verification = anchor.get("verification")
+        if verification is not None and verification not in VALID_VERIFICATIONS:
+            raise ApplyValidationError(
+                f"{candidate_id}: anchor 'verification' must be one of "
+                f"{', '.join(sorted(VALID_VERIFICATIONS))} (got {verification!r})"
+            )
+        # `verified` and a non-null `ref` are the same fact seen twice: the
+        # resolver sets both together or neither. Either half alone means the
+        # block was hand-edited into a state resolve-anchors cannot produce, and
+        # a `verification` that does not track the ref is worse than none --
+        # it launders an unchecked identifier as a confirmed one.
+        if ref is not None and verification == VERIFICATION_UNVERIFIED:
+            raise ApplyValidationError(
+                f"{candidate_id}: anchor has a resolved 'ref' but is marked "
+                f"{VERIFICATION_UNVERIFIED!r}; re-run resolve-anchors"
+            )
+        if ref is None and verification == VERIFICATION_VERIFIED:
+            raise ApplyValidationError(
+                f"{candidate_id}: anchor is marked {VERIFICATION_VERIFIED!r} but carries no 'ref'; "
+                f"nothing confirmed it, so re-run resolve-anchors"
+            )
         if ref is None:
             continue
         if not isinstance(ref, str):
@@ -837,9 +903,17 @@ def plan_report(blocks: list[CandidateBlock], model_id: str, *, ref_index: RefIn
     skipped_other: list[str] = []
     manual: list[tuple[str, str]] = []
     folds: list[FoldPlan] = []
+    decision_notes: list[tuple[str, str]] = []
     errors: list[str] = []
 
     for block in blocks:
+        note = block.data.get("decision_note")
+        if note is not None:
+            if not isinstance(note, str) or not note.strip():
+                errors.append(f"{block.candidate_id}: 'decision_note' must be a non-empty string when present")
+                continue
+            decision_notes.append((block.candidate_id, note.strip()))
+
         decision = block.data.get("decision")
         if decision not in _VALID_DECISIONS:
             errors.append(f"{block.candidate_id}: unknown decision {decision!r}")
@@ -890,6 +964,7 @@ def plan_report(blocks: list[CandidateBlock], model_id: str, *, ref_index: RefIn
         skipped_other=skipped_other,
         manual=manual,
         folds=folds,
+        decision_notes=decision_notes,
     )
 
 
@@ -1019,6 +1094,7 @@ def apply_report(project_root: Path, from_value: str, model_id: str, today: date
         manual=plan.manual,
         folds=plan.folds,
         failures=failures,
+        decision_notes=plan.decision_notes,
     )
 
 
@@ -1034,6 +1110,7 @@ def check_report(project_root: Path, from_value: str, model_id: str) -> ApplyChe
         skipped_other=plan.skipped_other,
         manual=plan.manual,
         folds=plan.folds,
+        decision_notes=plan.decision_notes,
     )
 
 
@@ -1135,6 +1212,23 @@ def _unresolved_anchor_count(data: dict) -> int:
     return count
 
 
+def _unmarked_anchor_count(data: dict) -> int:
+    """Identifier-bearing anchors carrying no ``verification`` verdict.
+
+    An anchor the resolver could not confirm is indistinguishable, on the page,
+    from one it confirmed -- both simply lack a ``ref``. Counting the unmarked
+    ones lets `gaps` say so instead of leaving the reader to assume.
+    """
+    anchors = data.get("literature_anchors") or []
+    if not isinstance(anchors, list):
+        return 0
+    return sum(
+        1
+        for anchor in anchors
+        if isinstance(anchor, dict) and _anchor_has_identifier(anchor) and not anchor.get("verification")
+    )
+
+
 def _candidate_has_lens_views(data: dict) -> bool:
     if data.get("lens_views"):
         return True
@@ -1163,6 +1257,24 @@ def _entity_gap_items(block: CandidateBlock, frontmatter: dict, body: str, repor
                 severity="warn",
                 message=f"{unresolved} literature {plural} unresolved",
                 suggested_action=f"Run science explore-ideas resolve-anchors --from {report_path}",
+            )
+        )
+
+    unmarked = _unmarked_anchor_count(block.data)
+    if unmarked:
+        plural = "anchor carries" if unmarked == 1 else "anchors carry"
+        gaps.append(
+            GapItem(
+                code="unmarked_anchors",
+                severity="warn",
+                message=(
+                    f"{unmarked} literature {plural} no 'verification' verdict, so a reader "
+                    f"cannot tell a confirmed reference from a model-generated identifier"
+                ),
+                suggested_action=(
+                    f"Run science explore-ideas resolve-anchors --from {report_path} and copy each row's "
+                    f"'verification' into its anchor."
+                ),
             )
         )
 

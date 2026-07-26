@@ -667,6 +667,7 @@ literature_anchors:
     first_author: Chen
     year: 2022
     note: supports the feedback-loop framing
+    verification: verified
     ref: cite:chen2022
 novelty_bucket: novel
 related_existing: []
@@ -692,6 +693,7 @@ literature_anchors:
     year: 2015
     date: 2015-03-12
     note: "predates: independently reasoned convergence"
+    verification: verified
     ref: cite:okafor2015
 novelty_bucket: novel
 related_existing: []
@@ -870,6 +872,7 @@ def test_apply_report_to_dict_shape(tmp_path: Path) -> None:
 
     assert payload == {
         "report": str(report),
+        "decision_notes": [],
         "created": [
             {
                 "candidate_id": c.candidate_id,
@@ -1087,6 +1090,7 @@ def test_check_report_to_dict_shape(tmp_path: Path) -> None:
 
     assert payload == {
         "report": str(report),
+        "decision_notes": [],
         "to_create": [
             {
                 "candidate_id": "cand-mechanism-vagal-cytokine-loop",
@@ -1921,3 +1925,103 @@ def test_cli_apply_nonzero_on_failure(monkeypatch: pytest.MonkeyPatch) -> None:
         result = runner.invoke(main, ["explore-ideas", "apply", "--from", "explore-2026-07-04", "--model-id", "m"])
         assert result.exit_code != 0
         assert "1 failed" in result.output or "FAILED" in result.output
+
+
+def test_build_plan_rejects_unknown_verification_value() -> None:
+    with pytest.raises(ApplyValidationError, match="verification"):
+        build_create_plan(
+            "cand-q",
+            _keep_question(literature_anchors=[{"ref": "cite:a", "verification": "probably"}]),
+            "opus",
+        )
+
+
+def test_build_plan_rejects_resolved_ref_marked_unverified() -> None:
+    # The resolver sets `ref` and `verification: verified` together. A block
+    # carrying a ref while claiming the identity is unconfirmed was hand-edited
+    # into a state resolve-anchors cannot produce.
+    with pytest.raises(ApplyValidationError, match="marked 'unverified'"):
+        build_create_plan(
+            "cand-q",
+            _keep_question(literature_anchors=[{"ref": "cite:a", "verification": "unverified"}]),
+            "opus",
+        )
+
+
+def test_build_plan_rejects_verified_claim_without_a_ref() -> None:
+    # The symmetric half: nothing can be verified without having resolved to a
+    # record, so `verified` with no ref launders an unchecked identifier.
+    with pytest.raises(ApplyValidationError, match="carries no 'ref'"):
+        build_create_plan(
+            "cand-q",
+            _keep_question(literature_anchors=[{"ref": None, "verification": "verified"}]),
+            "opus",
+        )
+
+
+def test_build_plan_accepts_unverified_anchor_without_a_ref() -> None:
+    # The common and correct case: a model-asserted identifier that resolved to
+    # nothing, honestly marked. It contributes no source_ref.
+    data = _keep_question(
+        literature_anchors=[{"doi": "10.9999/nowhere", "ref": None, "verification": "unverified"}]
+    )
+    plan = build_create_plan("cand-q", data, "opus")
+    assert plan.source_refs == []
+
+
+def test_gaps_flags_anchors_carrying_no_verification_verdict(tmp_path: Path) -> None:
+    # fb-2026-07-25-006: an unmarked anchor is indistinguishable on the page
+    # from a confirmed one -- both merely lack a ref.
+    from science_tool.explore_ideas import _unmarked_anchor_count
+
+    assert _unmarked_anchor_count({"literature_anchors": [{"doi": "10.1/x"}]}) == 1
+    assert _unmarked_anchor_count({"literature_anchors": [{"doi": "10.1/x", "verification": "unverified"}]}) == 0
+    # An anchor with no identifier at all is not something resolve-anchors ever
+    # reports on, so demanding a verdict for it would be unactionable noise.
+    assert _unmarked_anchor_count({"literature_anchors": [{"note": "no identifier"}]}) == 0
+
+
+def test_plan_report_collects_decision_notes(tmp_path: Path) -> None:
+    # fb-2026-07-25-007: `decision: drop` is a bare token, so the reason a
+    # candidate was rejected survived only in the conversation.
+    seed_project(tmp_path)
+    report = tmp_path / "doc" / "explorations" / "explore-2026-07-04.md"
+    report.parent.mkdir(parents=True)
+    report.write_text(
+        _FIXTURE.replace(
+            "decision: drop",
+            "decision: drop\ndecision_note: absorbed into the vagal-tone block; not independently individuated",
+        ),
+        encoding="utf-8",
+    )
+
+    result = check_report(tmp_path, "explore-2026-07-04", "test-model")
+
+    assert result.decision_notes == [
+        ("cand-contrarian-null-effect", "absorbed into the vagal-tone block; not independently individuated")
+    ]
+    assert result.to_dict()["decision_notes"] == [
+        {
+            "candidate_id": "cand-contrarian-null-effect",
+            "note": "absorbed into the vagal-tone block; not independently individuated",
+        }
+    ]
+
+
+def test_plan_report_rejects_empty_decision_note() -> None:
+    from science_tool.explore_ideas import CandidateBlock, plan_report
+
+    block = CandidateBlock(candidate_id="cand-x", data={**_keep_question(), "decision_note": "   "})
+    with pytest.raises(ApplyValidationError, match="decision_note"):
+        plan_report([block], "opus")
+
+
+def test_decision_notes_are_capped_by_the_apply_projection() -> None:
+    # Every growable list in the payload must be capped; a key added to the
+    # payload but not to _GROWABLE_LIST_KEYS is silently unbounded.
+    from science_tool.explore_ideas_projection import project_explore_ideas_apply
+
+    payload = {"decision_notes": [{"candidate_id": f"c{i}", "note": "n"} for i in range(50)]}
+    projected = project_explore_ideas_apply(payload, cap=40)
+    assert len(projected["decision_notes"]) == 40
+    assert projected["decision_notes_omitted"] == 10
