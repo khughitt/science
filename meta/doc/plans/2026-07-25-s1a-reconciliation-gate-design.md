@@ -188,8 +188,8 @@ of `sources` — while actually reading a nested key inside
 field. Each `Reader` entry therefore names the mapping as well as the symbol, and
 the reason string must identify it as *this kind's* frontmatter or `model_extra`.
 
-Classification after a full audit of all 31 pairs — **16 `Reader`,
-15 `PendingRuling`**, each present in both generations:
+Classification after a full audit of all 31 pairs — **17 `Reader`,
+14 `PendingRuling`**, each present in both generations:
 
 | Field | Kinds | Reason |
 |---|---|---|
@@ -200,16 +200,19 @@ Classification after a full audit of all 31 pairs — **16 `Reader`,
 | `tags` | dataset, paper, theme, topic | `Reader` — `commons.registry`, `record.frontmatter["tags"]` |
 | `schema_profile` | dataset, paper, theme, topic | `Reader` — `EntityValidator.validate`, `entity["schema_profile"]`; also `commons.adapter` |
 | `version` | dataset, paper, theme, topic | `Reader` — `commons.dataset_lifecycle` and `commons.overlay`, `frontmatter["version"]` |
+| `sources` | dataset | `Reader` — `commons.promote_dataset._dataset_recipe_source_hint` reads `canonical_fields["sources"]`, called from `commons.promote:761` with the merged dataset entity fields |
 | `contributors`, `licenses` | dataset, paper, theme, topic | `PendingRuling` — **no keyed read exists anywhere** in either package |
-| `sources` | dataset, paper, theme, topic | `PendingRuling` — the only `sources` reads are the nested `assembly.proxy.sources` key above |
+| `sources` | paper, theme, topic | `PendingRuling` — for these three the only `sources` reads are the nested `assembly.proxy.sources` key above |
 | `runtime_state` | dataset | `PendingRuling` — `datasets.semantics.runtime_state_for(fm)` **derives** it from `dataset_class_for` / `has_runtime_artifact` / `_access`; the `row["runtime_state"]` reads consume that derived output, and `commons.promote:533` is a write |
 | `arxiv` | paper | `PendingRuling` — `skills_lint.sources._build_record` reads `raw["arxiv"]` from the skills source registry, not entity frontmatter |
 | `pmcid` | paper | `PendingRuling` — `paper_fetch` reads it from a fetched API record |
 
-Three entries in an earlier draft were wrong and are corrected here: `runtime_state`
+Four entries in earlier drafts were wrong and are corrected here: `runtime_state`
 and `tags` were mis-cited as readers (the first derived, the second reading project
-`science.yaml`), and `schema_profile`/`version` were filed as debt despite having
-real readers. The count moved 9/22 → 16/15.
+`science.yaml`); `schema_profile` and `version` were filed as debt despite having
+real readers; and `sources` was filed as debt for all four kinds when **dataset**
+has a real reader. The count moved 9/22 → 16/15 → **17/14**, and every move came
+from re-reading the call site rather than the field name.
 
 A claimed `Reader` that fails its AST check at implementation time becomes a
 `PendingRuling`. The gate adjudicates its own manifest.
@@ -235,41 +238,61 @@ misread exactly this — counting `false` schemas as declared and reporting "17
 fields the model never heard of." The check makes that misreading unrepeatable
 instead of merely documented.
 
-### 3.5 Value-reconciliation status is derived, not declared
+### 3.5 Value reconciliation is *run*, not claimed
 
-Field-declaration coverage and value coverage are different depths, and
-conflating them is how "reconciled" comes to mean two things.
+Field-declaration coverage and value coverage are different depths, and conflating
+them is how "reconciled" comes to mean two things.
 
 §3.2 is unconditional: **every** derived profile is field-gated, with no opt-out.
-What remains is value depth, and it is **derivable** — so declaring it per profile
-would restate membership, which is exactly what §3.3's rule forbids.
+What remains is value depth.
 
-The unit of value reconciliation is not a profile and not a kind-field. It is:
+**Structural hashing is rejected.** An earlier draft proposed a
+`(kind, field, contract_hash)` unit, hashing "the composed subschema for that
+field," and treating equal hashes as equal contracts. That is unsound as stated,
+for three separate reasons in this very schema:
 
-```
-(kind, field, contract_hash)     # contract_hash = hash of the composed subschema for that field
-```
+- **A property is not the contract.** `mixin-hypothesis-1.0.json:49` declares
+  `origins` as `{"type": "array", "items": {"$ref": "#/$defs/origin_record"}}`.
+  Every real constraint — `additionalProperties: false`, `required: ["type"]`, the
+  ref-format pattern — lives in `$defs/origin_record` at line 139. Hashing
+  `properties["origins"]` sees none of it.
+- **Root-level rules govern fields.** `status` is constrained by the root `allOf`
+  `if`/`then` chain beginning at line 88 (`complete ⇒ verdict`,
+  `retired ⇒ closure_basis`). None of that is under `properties["status"]`.
+- **Hashing the whole schema is worse.** It makes a `$comment` edit, or a change to
+  an *unheld* field, invalidate every contract in the kind.
 
-A battery entry encodes judgments about one *field contract*. If two generations
-compose byte-identical subschemas for a field, one battery entry covers both; if
-they diverge, the entry covers only the generation it was written against and the
-other must be re-authored. Nothing is assumed either way — the hash decides.
+Making hashing sound would require defining canonicalization, transitive `$ref`
+closure, root-dependency attribution, and an annotation-exclusion list — four
+new judgments, each a place to be quietly wrong.
 
-A profile is then `RECONCILED` iff every field on its shared surface has a
-batteried contract, and `PENDING` otherwise. Derived, not declared.
+**The battery already answers the question by running.** So the rule is:
 
-Measured today: across the 10 profiles there are **208 profile-fields** but only
-**104 distinct `(kind, field, contract)` units**, because **zero** shared fields
-differ between generations 2 and 3. Consequently `(3, "hypothesis")` is
-`RECONCILED` *by derivation* — the existing gen-2 battery covers every one of its
-27 shared contracts. An earlier draft declared it `PENDING` on the strength of
-`required_capabilities`, which is an unheld gap on both generations and therefore
-not on the shared surface at all.
+> A battery is authored once per `(kind, field)` and **parametrized over every
+> profile of that kind**. A profile is `RECONCILED` iff every field on its shared
+> surface has a battery entry *and* that entry's assertions — including the
+> anti-tautology assertion — pass against that profile. Coverage is established by
+> execution, never by an equivalence claim.
 
-The frozen part is a **ratchet on the derived result**: `PENDING_PROFILES` must
-equal the derived pending set exactly, so coverage cannot silently move in either
-direction. Today that is 8 profiles — the dataset, paper, theme, and topic
-profiles at both generations.
+This also removes the self-comparison hazard the hash design carried. There is no
+"batteried set" derived from the current schema, so there is nothing that drifts
+when the schema moves. The frozen artifact is the battery's **probe values** —
+hand-authored, already held to the shared surface by
+`test_the_BATTERY_is_EXACTLY_the_shared_surface`'s two-directional equality — and
+the schema is the thing they are run against. Values vs schema, never schema vs
+schema.
+
+**Measured on the real battery:** its 27 fields and 108 probe values, run against
+`default_profile_for_kind("hypothesis", generation=3)`, return **verdicts
+identical to generation 2 on every probe**, and no field becomes vacuous. So
+`(3, "hypothesis")` is `RECONCILED` — not because a hash matched, but because the
+battery ran there and held. If a future generation loosens a field, the strictness
+assertion or the anti-tautology assertion fires on that generation specifically,
+and it says which probe and why.
+
+The ratchet is on the derived result: `PENDING_PROFILES` must equal the derived
+pending set exactly, so coverage cannot move silently in either direction. Today
+that is 8 profiles — dataset, paper, theme, and topic at both generations.
 
 ### 3.6 What the battery is, and where it stays
 
@@ -283,22 +306,21 @@ The arithmetic, using §3.5's unit:
 | | |
 |---|---|
 | Profile-fields across the 10 profiles | **208** |
-| Distinct `(kind, field, contract)` units | **104** |
+| Authoring units — distinct `(kind, field)` pairs | **104** (25 + 27 + 20 + 17 + 15) |
 | Units covered by the existing hypothesis battery | **27** |
 | **Units remaining for S1b** | **77** |
 
-The gap between 208 and 104 is entirely the cross-generation equivalence rule; the
-gap between 181 (naive profile-fields minus hypothesis gen 2) and 77 is the same
-rule stated the other way. **An earlier draft quoted 77 without the rule**, which
-made the queue contradict a status mapping that treated generations as
-independent. The rule is now the thing that produces both numbers, and it is
-computed rather than asserted — if a future generation changes one field's
-subschema, that field's unit count rises and the queue grows on its own.
+208 is 104 × 2 because both generations present the same shared surface for every
+kind. The authoring unit is the pair; the *proof* is per profile, which is why 208
+never becomes the queue. An earlier draft quoted 77 with no rule connecting it to a
+generation-scoped design, and a later one derived it from contract hashes; it now
+falls out of "author per pair, run per profile" with nothing left to define.
 
 **S1a authors none of the 77.** `test_hypothesis_entity.py` keeps its battery and
-its own equality ratchet; S1a changes only its three stale sentences and repoints
-its composition derivation at §2's shared helper. The 8 pending profiles are a
-derived result under a ratchet, which is S1b's queue.
+its own equality ratchet; S1a changes only its three stale sentences, repoints its
+composition derivation at §2's shared helper, and parametrizes it over both
+hypothesis profiles. The 8 pending profiles are a derived result under a ratchet,
+and are S1b's queue.
 
 ---
 
@@ -339,7 +361,9 @@ Mutation proofs, each run and recorded:
 | Flip one hypothesis `false` property to `{}` | §3.4 |
 | Point a `Reader` at a symbol that does not read the field | the AST reader check |
 | Register a 6th mixin | §3.2 (no manifest entries) and §3.5 (derived-pending set grows) |
-| Alter one shared field's subschema in the gen-3 mixin only | §3.5 — its unit count rises to 2, `(3, "hypothesis")` derives to `PENDING`, the ratchet fires. **This is the proof that cross-generation equivalence is computed, not assumed.** |
+| Loosen one shared field in the **gen-3** mixin only (e.g. widen `composition_rule`'s enum) | the battery's strictness or anti-tautology assertion, **on the gen-3 parametrization only** — proving coverage is established per profile by execution, not inherited by an equivalence claim |
+| Loosen the same field in the **gen-2** mixin — the battery's own reference schema | the same assertions on the gen-2 parametrization. **This is the proof there is no frozen reference contract to drift against**: the battery's probe values are the fixed artifact, and both generations are things they are run against |
+| Tighten a mixin so a probe the battery expects the schema to accept is refused | the anti-tautology assertion cannot mask it — the strictness assertion is directional, so a schema that refuses more still passes, and `test_the_BATTERY_is_EXACTLY_the_shared_surface` catches the field leaving the shared surface |
 | Revert the `introspection.py` boolean fix | §3.4, via the shared derivation |
 
 ---
