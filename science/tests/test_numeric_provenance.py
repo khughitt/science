@@ -241,6 +241,71 @@ def test_interpretation_artifact_existence_checked(tmp_path):
     assert all(c.resolution_status == "unresolved" for c in bad_cands)
 
 
+_VEHICLES = 'kind: pre-registration\nvehicles:\n- path: results/qap.json\n  sha256: "{}"'.format("0" * 64)
+
+
+def test_prereg_vehicle_path_anchors(tmp_path):
+    """fb-2026-07-26-018: `vehicles:` is a pre-registration's provenance field.
+
+    It is what `templates/pre-registration.md` declares and what
+    `check:prereg.vehicle-undeclared` requires, so it must anchor. Its entries
+    are mappings, which the string-only field reader cannot see — before this,
+    a pre-registration could not declare entity-scope provenance at all.
+    """
+    idx = build_resolution_index(_project(tmp_path))
+    path = _doc(tmp_path, "Of 29,646 row pairs, 24,186 admit a trade.\n", frontmatter=_VEHICLES)
+    cands = entity_source_candidates(build_document_context(path), idx, _CFG)
+    assert [(c.reference, c.field_or_line, c.resolution_status) for c in cands] == [
+        ("results/qap.json", "vehicles", "resolved")
+    ]
+
+
+def test_prereg_vehicle_existence_is_checked(tmp_path):
+    """A declared-but-absent vehicle is surfaced unresolved, never silently dropped."""
+    idx = build_resolution_index(_project(tmp_path))
+    fm = 'kind: pre-registration\nvehicles:\n- path: results/invented.json\n  sha256: "{}"'.format("0" * 64)
+    cands = entity_source_candidates(build_document_context(_doc(tmp_path, "7.94\n", fm)), idx, _CFG)
+    assert any(c.reference == "results/invented.json" for c in cands)
+    assert all(c.resolution_status == "unresolved" for c in cands)
+
+
+def test_malformed_vehicle_entries_yield_nothing(tmp_path):
+    """A bare string or a mapping with no usable `path` is not a reference.
+
+    Guessing here would let an unfreezable vehicle anchor a document's numbers.
+    """
+    idx = build_resolution_index(_project(tmp_path))
+    fm = "kind: pre-registration\nvehicles:\n- results/qap.json\n- sha256: deadbeef\n- path: '   '"
+    assert entity_source_candidates(build_document_context(_doc(tmp_path, "7.94\n", fm)), idx, _CFG) == ()
+
+
+def test_vehicles_on_a_non_prereg_are_not_read(tmp_path):
+    """`vehicles:` is scoped to the kind whose contract defines it."""
+    idx = build_resolution_index(_project(tmp_path))
+    fm = _VEHICLES.replace("kind: pre-registration", "kind: interpretation")
+    assert entity_source_candidates(build_document_context(_doc(tmp_path, "7.94\n", fm)), idx, _CFG) == ()
+
+
+def test_prereg_vehicle_anchors_by_id_prefix_without_a_kind(tmp_path):
+    idx = build_resolution_index(_project(tmp_path))
+    fm = _VEHICLES.replace("kind: pre-registration", "id: pre-registration:0026-fixed-margin")
+    cands = entity_source_candidates(build_document_context(_doc(tmp_path, "7.94\n", fm)), idx, _CFG)
+    assert [c.reference for c in cands] == ["results/qap.json"]
+
+
+def test_prereg_vehicle_clears_the_documents_numeric_claims(tmp_path):
+    """End to end: the declaration actually suppresses the findings it should."""
+    idx = build_resolution_index(_project(tmp_path))
+    body = "Of 29,646 row pairs, 24,186 admit at least one valid trade.\n"
+    unanchored = assess_numeric_claims(
+        build_document_context(_doc(tmp_path, body, "kind: pre-registration")), idx, _CFG)
+    assert [a for a in unanchored if isinstance(a, Unanchored)]
+
+    anchored = assess_numeric_claims(
+        build_document_context(_doc(tmp_path, body, _VEHICLES)), idx, _CFG)
+    assert anchored and all(isinstance(a, Anchored) for a in anchored)
+
+
 def test_related_is_excluded(tmp_path):
     idx = build_resolution_index(_project(tmp_path))
     path = _doc(tmp_path, "Value 7.94.\n", frontmatter="kind: interpretation\nrelated:\n  - task:t064")

@@ -385,6 +385,26 @@ def _as_refs(value: object) -> list[str]:
     return []
 
 
+def _vehicle_paths(value: object) -> list[str]:
+    """Extract the `path` of each well-formed `vehicles:` entry, in order.
+
+    A vehicle is a `{path, sha256}` mapping. Only `path` is a reference; the
+    hash is verified elsewhere. Malformed entries — a bare string, a mapping
+    with no usable `path` — yield nothing rather than a guess, so an
+    unfreezable vehicle never anchors anything.
+    """
+    if not isinstance(value, list):
+        return []
+    out: list[str] = []
+    for entry in value:
+        if not isinstance(entry, dict):
+            continue
+        path = entry.get("path")
+        if isinstance(path, str) and path.strip():
+            out.append(path.strip())
+    return out
+
+
 def _is_papers_path(path: Path) -> bool:
     parts = path.parts
     return any(left == "entities" and right == "papers" for left, right in zip(parts, parts[1:]))
@@ -398,8 +418,9 @@ def entity_source_candidates(
     Entity-scoped candidates come from exactly: (1) frontmatter fields listed
     in `config.provenance_fields`; (2) paper-note identity (`source_refs` plus
     doi/pmid/url/bibkey); (3) interpretation identity (`artifact`/`artifacts`);
-    (4) an owning task named in the title. `related` is deliberately never
-    read — it holds topical links, not sources (finding 2).
+    (4) pre-registration identity (`vehicles[].path`); (5) an owning task named
+    in the title. `related` is deliberately never read — it holds topical links,
+    not sources (finding 2).
     """
     fm = document.frontmatter
     out: list[SourceCandidate] = []
@@ -430,6 +451,18 @@ def entity_source_candidates(
         for field in ("artifact", "artifacts"):
             for ref in _as_refs(fm.get(field)):
                 add(ref, field)
+
+    # A pre-registration's provenance field is `vehicles:`, not `source_refs`:
+    # that is what `templates/pre-registration.md` declares and what
+    # `check:prereg.vehicle-undeclared` requires. Its entries are
+    # `{path, sha256}` mappings, so `_as_refs` — which reads strings — cannot
+    # see them, and until this block existed a pre-registration could not
+    # declare entity-scope provenance at all (fb-2026-07-26-018). Reading
+    # `path` here also makes the anchor stronger than a bare string ref: the
+    # same entry is content-addressed and hash-verified by the vehicle check.
+    if str(fm.get("kind")) == "pre-registration" or str(fm.get("id", "")).startswith("pre-registration:"):
+        for ref in _vehicle_paths(fm.get("vehicles")):
+            add(ref, "vehicles")
 
     if document.title:
         m = _TITLE_TASK_RE.search(document.title)

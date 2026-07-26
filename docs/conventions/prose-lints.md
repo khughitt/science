@@ -104,8 +104,18 @@ exactly one of **four outcomes** — a discriminated assessment, not a boolean p
   two scopes:
   - *entity scope* — a frontmatter provenance field (`source_refs`,
     `task_links`, `input`), paper identity (`doi`/`pmid`/`url`/`bibkey`),
-    interpretation `artifact`/`artifacts`, or an owning `tNNN` named in the
+    interpretation `artifact`/`artifacts`, pre-registration `vehicles[].path`,
+    or an owning `tNNN` named in the
     title — covers every claim in the document.
+
+    A pre-registration declares its provenance as `vehicles:`, not
+    `source_refs:` — that is what the template ships and what
+    `check:prereg.vehicle-undeclared` requires. Only the `path` of each entry
+    is read as a reference; a malformed entry (a bare string, or a mapping with
+    no usable `path`) contributes nothing, so an unfreezable vehicle cannot
+    anchor anything. The `sha256` is verified by the vehicle check, which is
+    what makes this the strongest anchor available: it is content-addressed,
+    and `science validate` fails closed when the named file drifts.
   - *local scope* — a resolvable reference in the **same paragraph** covers
     only that paragraph: `task:tNNN`, `[@citekey]`, `cite:key`, or a
     **provenance-bearing typed entity-ref** (interpretation, report, synthesis,

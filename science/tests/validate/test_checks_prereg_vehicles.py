@@ -57,8 +57,17 @@ def _write_prereg(
     status: str = "committed",
     vehicles: str = "",
     body: str = "",
+    committed: str = "",
+    amendments: int | None = None,
 ) -> None:
     frontmatter = ["---", "kind: pre-registration", f"status: {status}"]
+    if committed:
+        frontmatter.append(f"committed: '{committed}'")
+    if amendments is not None:
+        frontmatter.append("amendments:" if amendments else "amendments: []")
+        for n in range(amendments):
+            frontmatter.append(f"- date: '2026-07-1{n}'")
+            frontmatter.append(f"  reason: correction {n}")
     if vehicles:
         frontmatter.append(vehicles)
     frontmatter.append("---")
@@ -182,6 +191,85 @@ def test_uncommitted_prereg_declaring_no_vehicle_is_silent(project: Path) -> Non
     _write_prereg(project, status="active")
 
     assert list(check_prereg_vehicles(_ctx(project))) == []
+
+
+def test_amendment_record_freezes_a_prereg_whose_status_says_active(project: Path) -> None:
+    """fb-2026-07-26-019: `status` alone under-reports, because it defaults to `active`.
+
+    `default_status` for this kind is `active` while the template displays
+    `status: "committed"`, so a tool-created pre-registration lands on `active`
+    and stays there unless the author edits it at sign-off. An amendment record
+    settles the question regardless: amending presupposes having committed.
+    """
+    _write_prereg(project, status="active", committed="2026-07-11", amendments=2)
+
+    results = list(check_prereg_vehicles(_ctx(project)))
+
+    assert _rules(results) == ["prereg.vehicle-undeclared"]
+    assert results[0].severity.value == "warn"
+    assert "records 2 amendments" in results[0].message
+
+
+def test_a_single_amendment_is_reported_in_the_singular(project: Path) -> None:
+    _write_prereg(project, status="active", amendments=1)
+
+    results = list(check_prereg_vehicles(_ctx(project)))
+
+    assert "records 1 amendment," in results[0].message
+
+
+def test_a_committed_date_alone_does_not_freeze(project: Path) -> None:
+    """`committed:` discriminates nothing — the template emits it unconditionally.
+
+    Every pre-registration in the surveyed corpus (34 of 34) carried one,
+    including genuine drafts, so reading it as a freeze signal would fire on
+    the whole population.
+    """
+    _write_prereg(project, status="active", committed="2026-07-11")
+
+    assert list(check_prereg_vehicles(_ctx(project))) == []
+
+
+def test_an_empty_amendments_list_does_not_freeze(project: Path) -> None:
+    """The scaffolded field is not itself evidence of a commitment."""
+    _write_prereg(project, status="active", amendments=0)
+
+    assert list(check_prereg_vehicles(_ctx(project))) == []
+
+
+def test_an_amended_prereg_that_declares_its_vehicle_is_silent(project: Path) -> None:
+    """Widening the freeze predicate must not fire on a document that complied."""
+    vehicle = _write_vehicle(project, "inputs/graph-export.json")
+    _git(project, "add", "inputs/graph-export.json")
+    _git(project, "commit", "-qm", "add vehicle")
+    _write_prereg(
+        project,
+        status="active",
+        amendments=3,
+        vehicles=_vehicle_block("inputs/graph-export.json", _sha256(vehicle)),
+    )
+
+    assert list(check_prereg_vehicles(_ctx(project))) == []
+
+
+def test_a_data_gated_prereg_stays_silent_however_it_was_frozen(project: Path) -> None:
+    """The data-gated escape must survive the widened predicate."""
+    _write_prereg(
+        project,
+        status="active",
+        amendments=2,
+        body="## Vehicle-Admissibility Gate (data-gated mode)\n",
+    )
+
+    assert list(check_prereg_vehicles(_ctx(project))) == []
+
+
+def test_the_message_names_status_when_status_is_what_froze_it(project: Path) -> None:
+    _write_prereg(project, status="amended")
+
+    results = list(check_prereg_vehicles(_ctx(project)))
+
+    assert "status is 'amended'" in results[0].message
 
 
 def test_vehicles_outside_a_git_repository_are_reported_unverifiable(tmp_path: Path) -> None:
