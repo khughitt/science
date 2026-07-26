@@ -516,6 +516,43 @@ def test_entity_edit_adds_related_without_replacing_existing() -> None:
         assert "hypothesis:h02" in text
 
 
+def test_entity_edit_leaves_untouched_frontmatter_and_body_byte_identical() -> None:
+    """An authored edit rewrites ONLY the fields it was given.
+
+    `entity edit` is a read-modify-write over the whole frontmatter mapping, so a lossy dumper is
+    not a formatting preference -- it rewrites authored fields the caller never named. Three
+    regressions, all on one `--updated`: `allow_unicode=False` escaped the em-dash, the default
+    `width=80` then folded the over-long escaped scalar across lines, and `find_entity` returned a
+    `.lstrip("\\n")`-ed body that deleted the blank line after the closing fence.
+    """
+    runner = CliRunner()
+    with runner.isolated_filesystem():
+        root = Path.cwd()
+        seed_project(root)
+        path = root / "entities/questions/0001-alpha.md"
+        path.parent.mkdir(parents=True, exist_ok=True)
+        original = (
+            "---\n"
+            "id: question:0001-alpha\n"
+            "kind: question\n"
+            "title: t166 — Stage-transition Bayesian edges — Implementation Plan\n"
+            "status: open\n"
+            "updated: '2026-04-01'\n"
+            "---\n"
+            "\n"
+            "# Alpha\n"
+            "\n"
+            "Body — kept verbatim.\n"
+        )
+        path.write_text(original, encoding="utf-8")
+
+        result = runner.invoke(main, ["entity", "edit", "q1", "--updated", "2026-05-01"])
+
+        assert result.exit_code == 0, result.output
+        text = path.read_text(encoding="utf-8")
+        assert text == original.replace("updated: '2026-04-01'", "updated: '2026-05-01'"), text
+
+
 def test_entity_note_adds_dated_note() -> None:
     runner = CliRunner()
     with runner.isolated_filesystem():

@@ -132,12 +132,15 @@ def _emitter_functions() -> list[tuple[str, str]]:
 # (rel_path, function_name) -> reason. Genuinely-divergent legacy emitters =
 # the format-normalization worklist. Filled in Step 2 from the Step-1 report.
 _ALLOWED_EMITTERS: dict[tuple[str, str], str] = {
-    # --- byte-preservation: allow_unicode=False core-entity format; folds onto
-    #     render_frontmatter only in the future format-normalization phase.
-    ("src/science_tool/entities.py", "_render_markdown"): "pending-normalization: allow_unicode=False core-entity renderer",
-    ("src/science_tool/entities.py", "build_entity_markdown"): "pending-normalization: allow_unicode=False core-entity renderer",
-    ("src/science_tool/entities.py", "_merge_extra_frontmatter"): "pending-normalization: allow_unicode=False core-entity renderer",
-    ("src/science_tool/dag/workbench_apply.py", "_render_entity_text_from_frontmatter"): "pending-normalization: allow_unicode=False entity update on RMW path",
+    # --- byte-preservation: core-entity format. These now share the canonical dumper kwargs
+    #     (allow_unicode, default_flow_style=False, width=10_000) -- the lossy ones were rewriting
+    #     authored fields on every read-modify-write. What still diverges is force-quoting: the
+    #     canonical block double-quotes created/updated/version, and adopting that here is a
+    #     corpus-wide byte change, so it stays for the format-normalization phase.
+    ("src/science_tool/entities.py", "_render_markdown"): "pending-normalization: no created/updated force-quoting",
+    ("src/science_tool/entities.py", "build_entity_markdown"): "pending-normalization: no created/updated force-quoting",
+    ("src/science_tool/entities.py", "_merge_extra_frontmatter"): "pending-normalization: no created/updated force-quoting",
+    ("src/science_tool/dag/workbench_apply.py", "_render_entity_text_from_frontmatter"): "pending-normalization: no created/updated force-quoting on RMW path",
     # --- structural: fence spacing / body handling differ from canonical.
     ("src/science_tool/annotation/source_text.py", "render_source_md"): "structural: ---\\n\\n spacing + passage-offset fixpoint loop",
     ("src/science_tool/graph/decision_log.py", "render_owner_file"): "structural: ---\\n\\n spacing + rstrip body",
