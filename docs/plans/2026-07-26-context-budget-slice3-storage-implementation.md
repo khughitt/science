@@ -47,7 +47,7 @@ Implements spec §1 "Strict YAML … via a neutral helper". Standalone; unblocks
 **Files:**
 - Modify: `science/src/science_tool/markdown_utils.py`
 - Modify: `science/src/science_tool/graph/autonomous_runs.py:24-59`
-- Test: `science/tests/test_markdown_utils.py` (add), `science/tests/graph/test_autonomous_runs.py` (existing — must stay green)
+- Test: `science/tests/test_markdown_utils.py` (add), `science/tests/test_autonomous_runs.py` (existing — must stay green)
 
 **Interfaces:**
 - Produces: `markdown_utils.StrictYAMLError(ValueError)`; `markdown_utils.reject_duplicate_and_merge_keys(node: yaml.Node, *, on_error: Callable[[str], Exception] = StrictYAMLError) -> None` (recursive; raises `on_error(msg)` on a duplicate key or a `tag:yaml.org,2002:merge` node).
@@ -157,7 +157,7 @@ def _reject_duplicate_and_merge_keys(node: yaml.Node, path: Path) -> None:
 
 - [ ] **Step 5: Run both test modules**
 
-Run: `cd science && uv run --frozen pytest tests/test_markdown_utils.py tests/graph/test_autonomous_runs.py -q`
+Run: `cd science && uv run --frozen pytest tests/test_markdown_utils.py tests/test_autonomous_runs.py -q`
 Expected: PASS (new helper tests + unchanged run-record strict-YAML tests).
 
 - [ ] **Step 6: Commit** — `git commit -m "refactor(yaml): extract neutral strict-YAML key checker into markdown_utils"`
@@ -230,7 +230,7 @@ Implements spec §4 "done-ledger DSL", "Reversible list/scalar grammar", "Reject
 - Test: `science/tests/test_tasks_dsl_roundtrip.py` (add)
 
 **Interfaces:**
-- Produces: `_render_list_value(items: list[str]) -> str` (JSON array), `_parse_list_value` (reads JSON array; tolerant of bare `[a, b]`); `render_task`/`_parse_task_block` cover `project`/`artifacts`/`findings`; `_verify_round_trip` compares all `Task` fields.
+- Produces: `_render_list_value`/`_parse_list_value` (JSON array; tolerant of legacy bare `[a,b]`; **raises** on malformed/non-string, no silent `[]`); `_render_scalar`/`_parse_scalar` (reversible single-line scalar, JSON-quoted when it carries newline/quote/edge-space); `render_task`/`_parse_task_block` cover `project`/`artifacts`/`findings` and reject duplicate+unknown keys; `_canonical_description`/`_tasks_equal`; `_verify_round_trip` compares **all** `Task` fields.
 - Consumes: `Task`.
 
 - [ ] **Step 1: Write failing tests** `science/tests/test_tasks_dsl_roundtrip.py`:
@@ -294,12 +294,32 @@ def test_rejects_newline_in_title_via_header():
         _parse_task_block(["## [t014] a ] b", "- created: 2026-03-01", "", "x"])
 
 
-def test_verify_round_trip_flags_full_field_mismatch():
-    # A renderer that dropped artifacts must be caught by the verifier.
+def test_scalar_with_newline_roundtrips():
+    t = Task(id="t016", title="x", status="done", created=date(2026, 3, 1),
+             completed=date(2026, 3, 2), group="line1\nline2", project='has "quote"')
+    got = _roundtrip(t)
+    assert got.group == "line1\nline2"
+    assert got.project == 'has "quote"'
+
+
+def test_parse_list_rejects_malformed():
+    block = [
+        "## [t017] x", "- status: done", "- created: 2026-03-01",
+        "- artifacts: [oops", "", "body",
+    ]
+    with pytest.raises(ValueError):
+        _parse_task_block(block)
+
+
+def test_verify_round_trip_actually_flags_a_dropped_field():
+    # Induce a real mismatch: the rendered text carries artifacts=["a.md"],
+    # but `expected` claims an extra member -> reparse != expected -> must raise.
     good = Task(id="t015", title="x", status="done", created=date(2026, 3, 1),
                 completed=date(2026, 3, 2), artifacts=["a.md"])
     text = render_tasks([good])
-    _verify_round_trip(text, [good], path=None)  # passes when lossless
+    expected = good.model_copy(update={"artifacts": ["a.md", "EXTRA"]})
+    with pytest.raises(TaskIntegrityError):
+        _verify_round_trip(text, [expected], path=None)
 ```
 
 - [ ] **Step 2: Run, verify failure** — `cd science && uv run --frozen pytest tests/test_tasks_dsl_roundtrip.py -q` → FAIL.
@@ -313,41 +333,77 @@ def _render_list_value(items: list[str]) -> str:
     # JSON array round-trips any string (commas, brackets, quotes, newlines).
     return json.dumps(items, ensure_ascii=False)
 
-def _parse_list_value(raw: str) -> list[str]:
+def _parse_list_value(raw: str, *, field: str = "list") -> list[str]:
     """Parse a list value. Prefers JSON-array form; tolerates the legacy bare
-    `[a, b]` (comma-split) form for existing on-disk ledgers."""
+    `[a, b]` (comma-split) form for existing on-disk ledgers. Fails loudly on
+    malformed syntax and on non-string members (no silent `[]`)."""
     raw = raw.strip()
     if not raw:
         return []
-    try:
-        parsed = json.loads(raw)
-    except json.JSONDecodeError:
-        parsed = None
-    if isinstance(parsed, list):
-        return [str(item) for item in parsed]
-    m = _LIST_RE.match(raw)  # legacy bare "[a, b]"
-    if not m:
-        return []
-    return [item.strip() for item in m.group(1).split(",") if item.strip()]
+    if raw.startswith("["):
+        try:
+            parsed = json.loads(raw)
+        except json.JSONDecodeError:
+            # Legacy bare "[a, b]" only (no quotes/commas inside items):
+            m = _LIST_RE.match(raw)
+            if not m:
+                raise ValueError(f"malformed {field} list value: {raw!r}")
+            return [item.strip() for item in m.group(1).split(",") if item.strip()]
+        if not isinstance(parsed, list) or any(not isinstance(x, str) for x in parsed):
+            raise ValueError(f"{field} list must be a JSON array of strings: {raw!r}")
+        return parsed
+    raise ValueError(f"malformed {field} list value (expected '[...]'): {raw!r}")
+
+
+def _render_scalar(value: str) -> str:
+    """Reversibly render a single-line scalar; JSON-quote if it carries a
+    newline, a quote, or leading/trailing space that a raw line would lose."""
+    if value != value.strip() or "\n" in value or '"' in value:
+        return json.dumps(value, ensure_ascii=False)
+    return value
+
+
+def _parse_scalar(raw: str) -> str:
+    """Inverse of `_render_scalar`: JSON-decode a quoted scalar, else raw."""
+    if raw.startswith('"'):
+        try:
+            decoded = json.loads(raw)
+        except json.JSONDecodeError as exc:
+            raise ValueError(f"malformed quoted scalar: {raw!r}") from exc
+        if not isinstance(decoded, str):
+            raise ValueError(f"scalar must decode to a string: {raw!r}")
+        return decoded
+    return raw
 ```
 
-- [ ] **Step 4: Emit all fields in `render_task`** — after the existing lines, emit `project`, `artifacts`, `findings` when non-default, and switch list fields to `_render_list_value`:
+- [ ] **Step 4: Emit all fields in `render_task`** — scalar fields via `_render_scalar` (reversible), list fields via `_render_list_value`, adding `project`/`artifacts`/`findings` when non-default:
 
 ```python
+    if task.type:
+        lines.append(f"- type: {_render_scalar(task.type)}")
+    lines.append(f"- priority: {task.priority}")   # constrained value, no encode
+    lines.append(f"- status: {task.status}")
+    if task.parent:
+        lines.append(f"- parent: {_render_scalar(task.parent)}")
     if task.project:
-        lines.append(f"- project: {task.project}")
+        lines.append(f"- project: {_render_scalar(task.project)}")
     # aspects always emitted (validate-required):
     lines.append(f"- aspects: {_render_list_value(task.aspects)}")
     if task.related:
         lines.append(f"- related: {_render_list_value(task.related)}")
     if task.blocked_by:
         lines.append(f"- blocked-by: {_render_list_value(task.blocked_by)}")
+    if task.group:
+        lines.append(f"- group: {_render_scalar(task.group)}")
     if task.artifacts:
         lines.append(f"- artifacts: {_render_list_value(task.artifacts)}")
     if task.findings:
         lines.append(f"- findings: {_render_list_value(task.findings)}")
+    lines.append(f"- created: {task.created.isoformat()}")
+    if task.completed is not None:
+        lines.append(f"- completed: {task.completed.isoformat()}")
 ```
-(Replace the existing `aspects`/`related`/`blocked-by` emission with the `_render_list_value` forms; keep field ordering stable.)
+(Replace the existing scalar/list emission; keep field ordering stable and unchanged where possible so existing done ledgers re-render identically.)
 
 - [ ] **Step 5: `_parse_task_block` — reject duplicate + unknown keys, read new fields.** Define the known set and enforce it in the field loop:
 
@@ -367,7 +423,7 @@ In the loop replacing `fields[fm.group(1)] = ...`:
                 raise ValueError(f"unknown metadata key {key!r} for task {task_id}{where}")
             fields[key] = fm.group(2).strip()
 ```
-Then pass `project=fields.get("project", "")`, `artifacts=_parse_list_value(fields.get("artifacts", ""))`, `findings=_parse_list_value(fields.get("findings", ""))` into the `Task(...)`.
+Then build the `Task(...)` with the reversible decoders: scalar fields via `_parse_scalar` (`type=_parse_scalar(fields.get("type",""))`, `parent=_parse_parent(_parse_scalar(fields.get("parent","")), task_id=task_id)`, `project=_parse_scalar(fields.get("project",""))`, `group=_parse_scalar(fields.get("group",""))`) and list fields via `_parse_list_value` with the field name for error messages (`aspects=_parse_list_value(fields.get("aspects",""), field="aspects")`, and likewise `related`, `blocked-by`→`blocked_by`, `artifacts`, `findings`).
 
 - [ ] **Step 6: Single-line title guard in `_parse_task_header`.** After a successful match, reject a `]`-bearing title residue (the header regex already forbids newlines): if `"]" in title:` raise `ValueError(f"task {task_id} title may not contain ']'{where}")`.
 
@@ -566,7 +622,7 @@ def test_title_change_renames_atomically(tmp_path, monkeypatch):
 
 - [ ] **Step 2: Run, verify failure.**
 
-- [ ] **Step 3: Implement.** Slug via `derive_slug(task.title)` with a fallback (`try: slug = derive_slug(title) except EntityCommandError: slug = "task"`), target = `active/{id}-{slug}.md`.
+- [ ] **Step 3: Implement.** Slug policy (deliberate, not a silent generic fallback — Global Constraint "no silent fallbacks"): `_slug_for(title)` returns `derive_slug(title)` normally, and on `EntityCommandError` (an un-sluggable title, e.g. all-punctuation) returns `None` → the filename is the **slugless** `active/{id}.md`. `id` alone is the identity; `_find_active_file` already globs both `{id}-*.md` and `{id}.md`, so the slugless name is unambiguous. Add a test asserting an un-sluggable title produces exactly `t{NNN}.md` (not `t{NNN}-task.md`, not a raise). Target = `active/{id}-{slug}.md` when a slug exists, else `active/{id}.md`.
 ```python
 def write_task_file(tasks_dir: Path, task: Task) -> None:
     active = _active_dir(tasks_dir)
@@ -574,7 +630,8 @@ def write_task_file(tasks_dir: Path, task: Task) -> None:
     text = render_task_file(task)
     _verify_task_file_round_trip(text, task, path=active / f"{task.id}.md")
     existing = _find_active_file(tasks_dir, task.id)  # raises on >=2 matches
-    target = active / f"{task.id}-{_slug_for(task.title)}.md"
+    slug = _slug_for(task.title)  # None for an un-sluggable title
+    target = active / (f"{task.id}-{slug}.md" if slug else f"{task.id}.md")
     if existing is None:
         atomic_write_text(target, text)
         return
@@ -607,13 +664,22 @@ Implements spec §2 read centralization + §1a unique-id + §2 "crash-duplicate 
 - Produces: `_read_active(tasks_dir)` reads `active/*.md` sorted by id; `_task_search_paths` returns per-file active paths + `done/*.md`; `find_task_location` raises on **any** id with >1 occurrence across search paths; `next_task_id`/`known_task_ids` scan the split layout.
 - Consumes: `parse_task_file`, `_active_dir`.
 
-- [ ] **Step 1: Write failing tests** — `_read_active` over an `active/` dir returns the same set an aggregate `active.md` would; duplicate id across two active files → read error; `find_task_location` raises on active+done duplication and on two-done-ledger duplication and on dup-blocks-in-one-ledger; `next_task_id` reflects max across `active/*.md` + `done/*.md`.
+- [ ] **Step 1: Write failing tests** — `_read_active` over an `active/` dir returns the same set an aggregate `active.md` would; duplicate id across two active files → read error; `find_task_location` raises on active+done duplication and on two-done-ledger duplication and on dup-blocks-in-one-ledger; `find_dangling_task_refs` over a split layout **sees active per-file tasks** (a dangling ref in an `active/*.md` task is reported — it must NOT be silently skipped by feeding a frontmatter file to the DSL parser); `next_task_id` reflects max across `active/*.md` + `done/*.md`.
 
 - [ ] **Step 2: Run, verify failure.**
 
-- [ ] **Step 3: Implement.**
+- [ ] **Step 3: Implement a format-aware per-path parser** so no caller feeds a frontmatter file to the DSL parser (`find_dangling_task_refs:260` and `_find_matches:439` today call `parse_tasks(path)`, DSL-only):
 ```python
-def _read_active(tasks_dir: Path) -> list[Task]:
+def _parse_path_tasks(path: Path) -> list[Task]:
+    """Parse a task file by format: frontmatter for tasks/active/*.md, DSL for
+    done ledgers. The single per-path reader every search-path consumer uses."""
+    if path.parent.name == "active":
+        return [parse_task_file(path)]
+    return parse_tasks(path)  # done/*.md DSL ledger
+
+def _read_active(tasks_dir: Path, *, require_split: bool = True) -> list[Task]:
+    if require_split:
+        _require_split(tasks_dir)  # wired in Task 7
     active = _active_dir(tasks_dir)
     if not active.is_dir():
         return []
@@ -624,11 +690,12 @@ def _read_active(tasks_dir: Path) -> list[Task]:
         raise ValueError(f"duplicate task ids in {active}: {sorted(dupes)}")
     return sorted(tasks, key=lambda t: t.id)
 ```
-`_task_search_paths` = `sorted(active.glob("*.md"))` + `sorted(done.glob("*.md"), reverse=True)`. `find_task_location` collects **all** matches across paths and raises when `len(matches) > 1` (message naming the locations) — the round-3/6 multi-occurrence rule; single match returned. `next_task_id`/`known_task_ids` iterate `_task_search_paths` (parse_task_file for active files, `_HEADER_RE`/`_parse_task_block` header scan for done ledgers). Keep `next_task_id` a header/id scan (no full parse) so a malformed body cannot block allocation.
+(The `require_split` param is introduced here but `_require_split` itself lands in Task 7 — in this task, `_read_active` takes the param and Task 7 fills the call; sequence the commits so Task 6's tests use `require_split=False` until Task 7. Simpler: land the param + a no-op `_require_split` stub in Task 6 and the real classifier in Task 7. Pick one and note it.)
+`_task_search_paths` = `sorted(active.glob("*.md"))` + `sorted(done.glob("*.md"), reverse=True)`. `find_task_location`/`_find_matches` use `_parse_path_tasks(path)` (not `parse_tasks`), collect **all** matches across paths, and raise when `len(matches) > 1` (message naming the locations). `find_dangling_task_refs` iterates `_task_search_paths` via `_parse_path_tasks`. `next_task_id`/`known_task_ids` stay id/header scans (no full body parse) so a malformed body cannot block allocation — for active files the id is in the frontmatter, so scan the frontmatter `id:` line (or `parse_task_file` guarded), for done files the `_HEADER_RE` line.
 
-- [ ] **Step 4: Run** — `pytest tests/test_tasks_read_layer.py -q` → PASS.
+- [ ] **Step 4: Run** — `cd science && uv run --frozen pytest tests/test_tasks_read_layer.py -q` → PASS.
 
-- [ ] **Step 5: Commit** — `git commit -m "feat(tasks): centralized split-layout read + multi-occurrence lookup guard"`
+- [ ] **Step 5: Commit** — `git commit -m "feat(tasks): centralized split-layout read + format-aware multi-occurrence lookup"`
 
 ---
 
@@ -641,18 +708,18 @@ Implements spec §1b.
 - Test: `science/tests/test_tasks_storage_state.py` (add)
 
 **Interfaces:**
-- Produces: `StorageState` enum `{EMPTY, SPLIT, LEGACY, MIGRATING, CONFLICT}`; `_tasks_storage_state(tasks_dir) -> StorageState`; `_require_split(tasks_dir)` (raises actionable messages per state, exempt to the migrator); `_MIGRATION_JOURNAL = tasks_dir/".science"/"task-storage-migration.journal"` path helper.
+- Produces: `StorageState` enum `{EMPTY, SPLIT, LEGACY, MIGRATING, CONFLICT}`; `_tasks_storage_state(tasks_dir) -> StorageState`; `_require_split(tasks_dir)` (raises actionable messages per state, exempt to the migrator); `_MIGRATION_JOURNAL = tasks_dir/".science"/"task-storage-migration.journal"` path helper; `find_task_location(tasks_dir, task_id, *, require_split=True)` gains the gate param.
 - Consumes: `_active_dir`.
 
-- [ ] **Step 1: Write failing tests** — one per state: EMPTY/SPLIT proceed; LEGACY (active.md, no active/*.md) → `_require_split` raises "run migrate-storage --apply"; **empty `active/` dir beside active.md → LEGACY** (not CONFLICT); MIGRATING (journal present) → "run --resume"; CONFLICT (active.md + ≥1 active/*.md, no journal) → manual message.
+- [ ] **Step 1: Write failing tests** — one per state: EMPTY/SPLIT proceed; LEGACY (active.md, no active/*.md) → `_require_split` raises "run migrate-storage --apply"; **empty `active/` dir beside active.md → LEGACY** (not CONFLICT); MIGRATING (journal present) → "run --resume"; CONFLICT (active.md + ≥1 active/*.md, no journal) → manual message. Plus **entry-point coverage**: `tasks show <id>` and `tasks list`/`summary`/`edit` on a LEGACY store all surface the migration message (not "not found" / not a done task) — i.e. `find_task_location` is gated too, not only `_read_active`.
 
 - [ ] **Step 2: Run, verify failure.**
 
 - [ ] **Step 3: Implement** classifier (journal presence first; then layout with "`active/` present" ≡ "≥1 `*.md`") and `_require_split` with the three exact messages from spec §1b.
 
-- [ ] **Step 4: Wire the gate** into `_read_active` (call `_require_split` at entry) — but the migrator and `_read_since_candidates`/read-only checks must bypass. Introduce `_read_active(tasks_dir, *, require_split: bool = True)`; the migrator and internal recovery call with `require_split=False`. (Every mutator, Task 9, relies on the default.)
+- [ ] **Step 4: Wire the gate at BOTH normal read entry points** — `_read_active` (the `require_split` param introduced in Task 6, now calling the real classifier) **and** `find_task_location` (which `tasks show`/`edit`/`note` enter through — `tasks_cli.py:813`). Both take `require_split: bool = True` and call `_require_split` at entry; the migrator, `_move_task_to_done` recovery, and `_read_since_candidates`/read-only health checks pass `require_split=False`. Replace Task 6's `_require_split` stub with the classifier here. (Every mutator, Task 9, relies on the default `True`.)
 
-- [ ] **Step 5: Run** — `pytest tests/test_tasks_storage_state.py -q` → PASS.
+- [ ] **Step 5: Run** — `cd science && uv run --frozen pytest tests/test_tasks_storage_state.py -q` → PASS.
 
 - [ ] **Step 6: Commit** — `git commit -m "feat(tasks): storage-state gate fails loudly on unmigrated/conflicting layouts"`
 
@@ -749,7 +816,7 @@ Implements spec §2 "tasks_cli direct-active.md callers" (summary + list warning
 
 - [ ] **Step 3:** Replace every `tasks_dir / "active.md"` read (grep: `grep -rn '"active.md"\|/ "active.md"' src/science_tool`) with the centralized helper. Where a check asserts a *file* fact, re-express it against the directory.
 
-- [ ] **Step 4: Run** — `pytest tests/test_tasks_cli.py tests/validate tests/graph tests/test_refs.py -q` (scoped to touched modules) → PASS.
+- [ ] **Step 4: Run** — `cd science && uv run --frozen pytest tests/test_tasks_cli.py tests/test_big_picture_validator.py tests/test_curate*.py tests/test_correspondence_drift_health_integration.py tests/test_refs.py tests/test_validate*.py -q` (scoped to the modules this task touches) → PASS.
 
 - [ ] **Step 5: Commit** — `git commit -m "refactor(tasks): re-point all task readers to the centralized split-layout read"`
 
@@ -764,16 +831,16 @@ Implements spec §3 terminal routing + store-wide dedup (structural equality).
 - Test: `science/tests/test_plan_ledger_appends.py` (add)
 
 **Interfaces:**
-- Produces: `plan_ledger_appends(terminal_tasks: list[Task], done_ledgers: dict[Path, list[Task]], *, today: date) -> tuple[dict[Path, str], list[str]]` — returns `{dest_path: full_post_image_text}` and a list of conflict ids. Pure (no I/O).
-- Consumes: `_destination_for`, `render_tasks`, `_tasks_equal`.
+- Produces: `plan_ledger_appends(terminal_tasks: list[Task], done_ledgers: dict[Path, tuple[str, list[Task]]], *, today: date) -> tuple[dict[Path, str], list[str]]` — `done_ledgers` maps each `done/*.md` path to its `(preamble, tasks)` as returned by `_read_destination`; returns `{dest_path: full_post_image_text}` and a list of conflict ids. Pure (no I/O). **The post-image preserves the destination's existing preamble** (`preamble + render_tasks(existing + appended)`).
+- Consumes: `_destination_for`, `_read_destination` (its `(preamble, tasks)` shape), `render_tasks`, `_tasks_equal`.
 
-- [ ] **Step 1: Write failing tests** — a terminal task absent everywhere → appended to its `_destination_for` month; a **structurally-equal** existing occurrence → no new append; an id present with any differing field → conflict; an id in **two** ledgers → conflict; undated terminal uses the explicit `today`.
+- [ ] **Step 1: Write failing tests** — a terminal task absent everywhere → appended to its `_destination_for` month; a **structurally-equal** existing occurrence → no new append; an id present with any differing field → conflict; an id in **two** ledgers → conflict; undated terminal uses the explicit `today`; **a destination ledger with introductory prose keeps that preamble byte-for-byte in the post-image** (append does not strip it).
 
 - [ ] **Step 2: Run, verify failure.**
 
-- [ ] **Step 3: Implement** — index every `done_ledgers` task by id (collecting counts); for each terminal task: if id appears 0× → add to its destination's append set; if 1× and `_tasks_equal` → skip; if 1× and not equal, or ≥2× → conflict. Build each touched destination's post-image via `render_tasks(existing + appended)`; return post-images + conflicts. No writes.
+- [ ] **Step 3: Implement** — index every ledger's tasks by id across all `done_ledgers` values (collecting counts). For each terminal task: 0× → add to its destination's append set; 1× and `_tasks_equal` → skip; 1× and not equal, or ≥2× → conflict. For each touched destination build the post-image as `preamble + render_tasks(existing_tasks + appended)` where `(preamble, existing_tasks) = done_ledgers.get(dest, ("", []))`; return post-images + conflicts. No writes.
 
-- [ ] **Step 4: Run** — `pytest tests/test_plan_ledger_appends.py -q` → PASS.
+- [ ] **Step 4: Run** — `cd science && uv run --frozen pytest tests/test_plan_ledger_appends.py -q` → PASS.
 
 - [ ] **Step 5: Commit** — `git commit -m "feat(tasks): pure store-wide ledger-append planner with structural-equality dedup"`
 
@@ -784,28 +851,36 @@ Implements spec §3 terminal routing + store-wide dedup (structural equality).
 Implements spec §3 (whole section) + §1b mode validity.
 
 **Files:**
-- Modify: `science/src/science_tool/tasks_cli.py` (add `migrate-storage`), `science/src/science_tool/tasks_ledger.py` or a new `tasks_migrate.py` for the transaction core
+- Create: `science/src/science_tool/tasks_migrate.py` (transaction core: `plan_migration`/`apply_migration`/`resume_migration`, `MigrationPlan` dataclass, journal I/O)
+- Modify: `science/src/science_tool/tasks_cli.py` (add the `migrate-storage` Click command with the full option surface + `BoundedSink`), the **budget registry** module that defines `BUDGETS`/`hint_for` (add a `tasks-migrate-storage` entry; grep `def hint_for`/`BUDGETS =` under `src/science_tool/budget/` to locate the exact file — the same one Slice 2 registered `tasks-list`/`tasks-summary` in)
 - Test: `science/tests/test_migrate_storage.py` (add)
 
 **Interfaces:**
-- Produces: `plan_migration(tasks_dir, *, today) -> MigrationPlan`; `apply_migration(tasks_dir, *, today)`; `resume_migration(tasks_dir)`; journal at `.science/task-storage-migration.journal`.
-- Consumes: `_tasks_storage_state`, `_parse_tasks_text`(aggregate `active.md`), `plan_ledger_appends`, `render_task_file`, `_task_allocation_lock`, `_destination_for`.
+- Produces: `plan_migration(tasks_dir, *, today) -> MigrationPlan` (holds open post-images, ledger post-images, and refusal reasons); `apply_migration(tasks_dir, *, today)`; `resume_migration(tasks_dir)`; journal at `.science/task-storage-migration.journal`. CLI: `science tasks migrate-storage [--apply|--resume] [--tasks-dir PATH] [--format FMT] [--output PATH]`.
+- Consumes: `_tasks_storage_state`, `_parse_tasks_text`(aggregate `active.md`), `plan_ledger_appends` (fed `{p: _read_destination(p) for p in done/*.md}`), `render_task_file`, `_task_allocation_lock`, `_destination_for`, `BoundedSink`/`build_complete_via`/`hint_for` (budget).
 
 - [ ] **Step 1: Write failing tests** (the §Testing migrator bullets) — dry-run report; duplicate source id → refuse (offenders listed); colliding/existing open target → refuse; **unknown source status → refuse**; mixed open+terminal → open to `active/`, terminal to `done/` in one apply, `active.md` removed; store-wide dedup (undated terminal already in last month → not duplicated); source-hash safety (apply re-confirms pre-image; resume refuses on changed still-present `active.md`); resume states (absent→write, exact→accept, different→refuse+retain, crash-after-delete→clear); mode validity by state (`--apply` only LEGACY, `--resume` only MIGRATING).
 
 - [ ] **Step 2: Run, verify failure.**
 
-- [ ] **Step 3: Implement plan** — parse aggregate `active.md` (`_parse_tasks_text`); partition into open/terminal over the known status sets, **refuse unknown status**; canonical-id + unique-source-id + unique/absent open-target-path checks; `plan_ledger_appends` over all `done/*.md` for terminal conflicts; refuse if `active/` non-empty or `active.md` absent. Build the post-image set: open → `render_task_file` at `active/{id}-{slug}.md`; terminal → the ledger post-images from `plan_ledger_appends` (with explicit `today`).
+- [ ] **Step 3: Implement plan** — parse aggregate `active.md` (`_parse_tasks_text`); partition into open/terminal over the known status sets, **refuse unknown status**; canonical-id + unique-source-id + unique/absent open-target-path checks; build `done_ledgers = {p: _read_destination(p) for p in sorted((tasks_dir/"done").glob("*.md"))}` and call `plan_ledger_appends(terminal, done_ledgers, today=today)` for terminal conflicts; refuse if `active/` non-empty or `active.md` absent. Build the post-image set: open → `render_task_file` at `active/{id}-{slug}.md` (slug policy from Task 5); terminal → the ledger post-images from `plan_ledger_appends` (with explicit `today`).
 
 - [ ] **Step 4: Implement apply** — under `_task_allocation_lock`: journal pre-image hash of `active.md` + all post-images (path+content); write all `active/` files + ledger post-images; re-confirm `active.md` hash == pre-image (else refuse + retain journal); delete `active.md` last, confirm gone; clear journal.
 
 - [ ] **Step 5: Implement resume** — under the lock: if `active.md` present, its hash must equal the journalled pre-image (else refuse+retain); for each journalled post-image classify absent→write / exact→accept / different→refuse+retain; once all exact (and source-hash ok or `active.md` gone) delete `active.md` if present and clear journal.
 
-- [ ] **Step 6: Wire the Click command** — `tasks migrate-storage [--apply|--resume]`; default dry-run prints the plan; `--apply` valid only in LEGACY, `--resume` only in MIGRATING (else the state-specific refusal from §1b). Add a `BoundedSink` for its output per the budget convention.
+- [ ] **Step 6: Wire the Click command with the full option surface.** `tasks migrate-storage`:
+  - `--apply` / `--resume` flags (mutually exclusive; neither = dry-run plan);
+  - `--tasks-dir PATH` (default `DEFAULT_TASKS_DIR`, `path_type=Path, file_okay=False` — mirrors `tasks archive`'s old option so Task 17 can target `../meta/tasks`);
+  - `--format {table,json}` (`OUTPUT_FORMATS`) and `--output PATH` (write the complete, unbudgeted plan to a file);
+  - state-gated modes: `--apply` valid only in LEGACY, `--resume` only in MIGRATING, else the exact state-specific refusal from §1b;
+  - route the dry-run plan through a `BoundedSink` (`lookup("tasks-migrate-storage")`, `build_complete_via(..., hint_for("tasks-migrate-storage", output_format))`) so stdout is budgeted and `--output` is complete — same pattern as Slice 2's `tasks list`/`summary`.
+- [ ] **Step 7: Register the budget entry** — add `tasks-migrate-storage` to `BUDGETS` and `hint_for` in the budget registry module (the one Slice 2 used); a missing entry makes `lookup(...)` fail.
+- [ ] **Step 8: Completeness tests** — add to `test_migrate_storage.py`: a dry-run over a many-task LEGACY store truncates stdout to the budget with the "complete output" pointer, while `--output PATH` writes the **full** plan (row count == source task count); `--format json` emits valid JSON.
 
-- [ ] **Step 7: Run** — `pytest tests/test_migrate_storage.py -q` → PASS.
+- [ ] **Step 9: Run** — `cd science && uv run --frozen pytest tests/test_migrate_storage.py -q` → PASS.
 
-- [ ] **Step 8: Commit** — `git commit -m "feat(tasks): transactional migrate-storage command (plan/apply/resume, journalled)"`
+- [ ] **Step 10: Commit** — `git commit -m "feat(tasks): transactional migrate-storage command (plan/apply/resume, journalled)"`
 
 ---
 
@@ -816,7 +891,7 @@ Implements spec §Decision-3 + §4 "Archive-lag health-report removal — the fu
 **Files:**
 - Delete: `science/src/science_tool/graph/health_checks/archive_lag.py`
 - Modify: `tasks_cli.py` (remove `tasks archive` command `:392-…`), `tasks_archive.py` (remove `plan_archive`/`apply_archive`/`count_archivable`; keep nothing that's now unused → delete the module if empty), `graph/health_checks/__init__.py:12,40`, `graph/health_cli.py:88,168-169,229-230`, `graph/health_projection.py:47,68,335-336`, `graph/health_count.py:8,62`, `instruments.py:56`, budget registry (`tasks-archive` entry)
-- Test: `science/tests/graph/test_health*.py` (regenerate snapshots), delete `test_tasks_archive.py` archive-sweep tests
+- Test: `science/tests/test_health*.py` (top-level — `test_health.py`, `test_health_projection.py`, `test_health_count_issues.py`, `test_health_cli_budget.py`, `test_health_checks_package.py`, etc.; regenerate snapshots), delete `test_tasks_archive.py`
 - **Docs:** deferred to Task 16
 
 **Interfaces:** removal only.
@@ -827,7 +902,7 @@ Implements spec §Decision-3 + §4 "Archive-lag health-report removal — the fu
 
 - [ ] **Step 3: Remove** every enumerated surface. Confirm `tasks_ledger` still holds the primitives Task 2 relocated (do not delete those). If `tasks_archive.py` is now empty, delete it and drop its imports; else leave only what's still referenced (should be nothing → delete).
 
-- [ ] **Step 4: Run** — `cd science && uv run --frozen pytest tests/graph -q -k "health"` and `uv run --frozen pytest tests/test_tasks_cli.py -q`; regenerate snapshots (`-m snapshot` where applicable) → PASS. Then `uv run ruff check && uv run pyright` (import removals often surface here).
+- [ ] **Step 4: Run** — `cd science && uv run --frozen pytest tests/test_health.py tests/test_health_projection.py tests/test_health_count_issues.py tests/test_health_cli_budget.py tests/test_health_checks_package.py tests/test_tasks_cli.py -q`; regenerate snapshots (`-m snapshot` where applicable) → PASS. Then `uv run ruff check && uv run pyright` (import removals often surface here).
 
 - [ ] **Step 5: Commit** — `git commit -m "refactor(tasks): retire tasks archive command and archive-lag health surface"`
 
@@ -839,7 +914,7 @@ Implements spec §4 adapter bullet.
 
 **Files:**
 - Modify: `science/src/science_tool/graph/storage_adapters/task.py`
-- Test: `science/tests/graph/test_storage_adapters_task.py` (or existing adapter test)
+- Test: `science/tests/test_storage_adapters/test_task.py` (existing)
 
 **Interfaces:**
 - Consumes: `parse_task_file` (for `tasks/active/*.md`), existing DSL `_parse_task_block` (for `tasks/done/*.md`).
@@ -850,7 +925,7 @@ Implements spec §4 adapter bullet.
 
 - [ ] **Step 3: Implement** — in `discover()`/`load_raw`, route files under `tasks/active/` through `parse_task_file` and `tasks/done/*.md` through the DSL parser (skip `archive.md`).
 
-- [ ] **Step 4: Run** — `pytest tests/graph/test_storage_adapters_task.py -q` → PASS.
+- [ ] **Step 4: Run** — `cd science && uv run --frozen pytest tests/test_storage_adapters/test_task.py -q` → PASS.
 
 - [ ] **Step 5: Commit** — `git commit -m "feat(graph): task storage adapter parses per-task active files"`
 
@@ -904,8 +979,9 @@ Implements spec §3 worked example + decision 2.
 ## Self-Review (author)
 
 - **Spec coverage:** §1 → Tasks 3,4; §1a → Tasks 4,5,6,8; §1b → Task 7; §2 → Tasks 6,8,9,10,11; §3 → Tasks 12,13; §4 → Tasks 3,14,15,16; decisions 1/2/3 → Tasks 4/17/(2,14). Every §Testing bullet maps to a task's tests.
-- **Type consistency:** `_tasks_equal`/`_canonical_description` (Task 3) reused by the predicates (Tasks 8,12); `plan_ledger_appends` signature identical in Tasks 12 and 13; `_read_active(require_split=)` introduced in Task 7 and used in Task 9.
-- **Ordering:** serialization primitives (1–5) precede the read/write layer (6–9), which precedes CLI/readers (10–11), the migrator (12–13), retirement (14), adapter/docs/meta (15–17). `tasks_archive` stays importable until Task 14 so the tree is green throughout.
+- **Type consistency:** `_tasks_equal`/`_canonical_description` (Task 3) reused by the predicates (Tasks 8,12); `plan_ledger_appends(done_ledgers: dict[Path, tuple[str, list[Task]]])` signature identical in Tasks 12 and 13; `_read_active(require_split=)`/`find_task_location(require_split=)` introduced in Tasks 6/7 and used in Task 9; `_parse_path_tasks` (Task 6) is the single format-aware per-path reader for every search-path consumer.
+- **Ordering:** serialization primitives (1–5) precede the read/write layer (6–9), which precedes CLI/readers (10–11), the migrator (12–13), retirement (14), adapter/docs/meta (15–17). `tasks_archive` stays importable until Task 14.
+- **Green-tree honesty (revised per review):** the full suite is NOT green after every intermediate commit. Task 6 flips `_read_active`/the search-path helpers to the split layout, so pre-existing task/reader suites that build `active.md` fixtures start failing at Task 6 and are progressively migrated to `active/` fixtures **as each owning task touches them** — the task-mutator suites in Task 9, the CLI/reader suites in Tasks 10–11, the health/archive suites in Task 14. Each task keeps **its own touched tests** green (the SDD contract); the **full** suite returns to green at Task 14 and is verified by the top-level Final Validation run. Do not claim per-commit full-suite green — the SDD controller runs scoped selections per task, the full suite only at the end.
 
 ## Execution Handoff
 
