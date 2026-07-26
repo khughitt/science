@@ -119,7 +119,13 @@ for _kind in _COMMONS_FOUR:
     )
     UNHELD[(_kind, "version")] = (
         _BOTH,
-        Reader("science_tool.commons.dataset_lifecycle", "_validate_entity_frontmatter", "entity frontmatter"),
+        Reader(
+            "science_tool.validate.checks.commons_owner_collision",
+            "check_commons_owner_collision",
+            "record.frontmatter.get('version'), where record is the commons canonical "
+            "(any of dataset/paper/theme/topic) resolved by CommonsQuery.show for the id "
+            "of whatever project entity is being checked -- kind-agnostic by construction",
+        ),
     )
     UNHELD[(_kind, "contributors")] = (
         _BOTH,
@@ -134,8 +140,11 @@ for _kind in ("paper", "theme", "topic"):
     UNHELD[(_kind, "sources")] = (
         _BOTH,
         PendingRuling(
-            "the only keyed `sources` reads are datasets_register._proxy_source_datasets (a nested "
-            "identity_contract.assembly.proxy key) and the dataset-only promote_dataset hint"
+            "keyed `sources` reads exist (commons.catalog's catalog file, annotation.prose_health's "
+            "manifest, skills_lint's skill frontmatter, tooling_dependency's uv config, "
+            "identity_context's nested identity_contract.assembly.proxy key, and "
+            "graph.store.queries/causal.export_*'s provenance-derived row dicts), but none reads a "
+            "paper/theme/topic entity frontmatter `sources` -- no reader of that value exists"
         ),
     )
 
