@@ -574,3 +574,22 @@ mappings:
   # [pai]
   - match: {stratification: "sex", trigger: "sars-cov-2"}
     out_of_scope: {disposition: drop, rationale: "facet-only / non-molecular: no molecular assay names a data-product (descriptive facets only)"}
+  # [pan-disease]
+  - match: {assay: "germline-variant", modality: "gwas"}
+    data_product: data-product:gwas-summary-statistics
+    qualifiers: {}
+  # [pan-disease]
+  - match: {assay: "germline-variant", modality: "cnv"}
+    data_product: data-product:copy-number
+    qualifiers: {}
+  # [pan-disease]
+  - match: {assay: "metabolomics"}
+    data_product: data-product:metabolomics
+    qualifiers: {}
+  # [pan-disease]
+  - match: {assay: "metabolomics", modality: "nmr"}
+    data_product: data-product:metabolomics
+    qualifiers: {technology: "nmr"}
+  # [pan-disease]
+  - match: {assay: "translation", modality: "ribo-seq"}
+    out_of_scope: {disposition: drop, rationale: "translation-level measurement (ribosome profiling): no canonical data-product term in the molecular catalog; dropped pending a translation data-product"}
