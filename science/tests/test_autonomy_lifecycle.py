@@ -451,6 +451,69 @@ def test_a_gate_extraction_failure_is_unwired(project: Path, baseline_path: Path
     assert "could not read the change set" in outcome.reason
 
 
+def test_a_project_root_that_is_not_a_repository_is_unwired_not_a_traceback(
+    project: Path, baseline_path: Path, tmp_path: Path
+):
+    """Global Constraint 3: every condition that prevents a verdict yields `unwired`.
+
+    `assert_repository_is_at` asks git through `extract._git`, which fails CLOSED on any
+    non-zero exit -- so a `project_root` git cannot read raises `ExtractError`, not
+    `RepositoryStateError`. Catching only the latter would let it escape `finish_run`
+    entirely, contradicting its own "never raises for an expected condition".
+
+    The baseline is opened against the real project so the run's IDENTITY is known; only
+    the tree being judged is unreadable. That is the identity-known unwired shape, so an
+    attestation IS written -- with no `basis_digest`.
+    """
+    baseline = _start(project, baseline_path)
+    not_a_repo = tmp_path / "not-a-repo"
+    not_a_repo.mkdir()
+
+    outcome = finish_run(
+        not_a_repo, baseline_path=baseline_path, head=baseline.base_commit,
+        ended=datetime(2026, 7, 25, 9, 30, tzinfo=UTC), tokens=100, wall_clock_seconds=1800.0,
+    )
+    assert outcome.disposition is RunDisposition.UNWIRED, outcome.reason
+    assert outcome.record is not None and outcome.record.basis_digest is None
+    assert "rev-parse" in outcome.reason
+
+
+def test_an_unreadable_range_in_verify_marks_is_unwired(project: Path, baseline_path: Path, monkeypatch: pytest.MonkeyPatch):
+    """The second escape route. `verify_marks` reads `base..head` through the same
+    fail-closed `_git`, and a range whose marks cannot be read is not a range whose marks
+    are fine."""
+    from science_tool.autonomy.extract import ExtractError
+
+    baseline = _start(project, baseline_path)
+    paper = project / "entities" / "papers" / "x.md"
+    paper.write_text(paper.read_text(encoding="utf-8").replace("venue: Nature", "venue: Science"), encoding="utf-8")
+    _commit_as_agent(project, "docs: refresh venue", baseline.run_id)
+
+    def _boom(*a, **k):
+        raise ExtractError("could not read the commit range")
+
+    monkeypatch.setattr(lifecycle_module, "verify_marks", _boom)
+
+    outcome = _finish(project, baseline_path)
+    assert outcome.disposition is RunDisposition.UNWIRED, outcome.reason
+    assert outcome.record is not None and outcome.record.basis_digest is None
+    assert "could not read the commit range" in outcome.reason
+
+
+def test_start_against_a_non_repository_raises_ExtractError(tmp_path: Path, baseline_path: Path):
+    """`start_run` RAISES rather than dispositioning, deliberately: there is no run yet to
+    attest to, so there is nothing to be `unwired` about. This pins WHICH exception, so
+    the command layer knows exactly what its error boundary must catch."""
+    from science_tool.autonomy.extract import ExtractError
+
+    not_a_repo = tmp_path / "not-a-repo"
+    not_a_repo.mkdir()
+
+    with pytest.raises(ExtractError):
+        _start(not_a_repo, baseline_path)
+    assert not baseline_path.exists()
+
+
 def test_a_record_that_cannot_be_written_never_reports_clean(project: Path, baseline_path: Path):
     """`write_run_record` refuses to overwrite. A second `finish` on an already-attested
     run must surface that, not silently re-report the verdict it cannot record."""

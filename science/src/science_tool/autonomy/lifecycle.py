@@ -206,7 +206,11 @@ def finish_run(
 
     try:
         assert_repository_is_at(project_root, head)
-    except RepositoryStateError as exc:
+    # `ExtractError` too: `assert_repository_is_at` asks git, and `_git` fails closed on
+    # any non-zero exit or OSError -- a `project_root` that is not a repository at all
+    # arrives here. Global Constraint 3 makes every condition that prevents a verdict
+    # `unwired`, so this must return rather than raise out of `finish_run`.
+    except (RepositoryStateError, ExtractError) as exc:
         return _unwired(str(exc))
 
     try:
@@ -227,9 +231,15 @@ def finish_run(
     except (ExtractError, GateInputError) as exc:
         return _unwired(f"could not evaluate the path gate: {exc}")
 
-    mark_issues = verify_marks(
-        project_root, baseline.base_commit, head, run_id=baseline.run_id, agent=baseline.agent
-    )
+    try:
+        mark_issues = verify_marks(
+            project_root, baseline.base_commit, head, run_id=baseline.run_id, agent=baseline.agent
+        )
+    # `verify_marks` reads `base..head` through the same fail-closed `_git`. A range git
+    # cannot read is a range whose marks are unknown, which is not the same as a range
+    # whose marks are fine.
+    except ExtractError as exc:
+        return _unwired(f"could not verify the run's commit marks: {exc}")
 
     if deltas or verdict.denials or mark_issues:
         return _finalize(
