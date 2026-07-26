@@ -22,9 +22,9 @@ from science_tool.budget.registry import BUDGETS, DEFERRED, EXEMPTIONS
 from science_tool.cli import main
 
 EXPECTED_CLASSIFICATION_COUNTS = {
-    "budgeted": 14,
+    "budgeted": 25,
     "exempt": 111,
-    "deferred": 154,
+    "deferred": 143,
 }
 
 
@@ -69,8 +69,11 @@ def test_classification_partition_has_the_audited_cardinality() -> None:
     inventory (DOCUMENT), prose lint (REPORT), curate consolidation-candidates
     (REPORT), and validate (REPORT), moving four more deferred leaves to budgeted. The
     2026-07-25 slice 1b-3 audit then reclassified 44 commands from deferred to exempt
-    (fixed-shape output), leaving 154 deferred. The live partition is therefore
-    14/111/154 = 279.
+    (fixed-shape output), leaving 154 deferred. Slice 1b-3 batch W1a then wired the 11
+    graph ROWS summary commands (attention-rank, attention-sample, audit, dashboard-
+    summary, diff, gaps, inquiry-summary, neighborhood-summary, question-summary,
+    rehoming-debt, uncertainty), moving them from deferred to budgeted. The live
+    partition is therefore 25/111/143 = 279.
     """
     actual = {
         "budgeted": len(BUDGETS),

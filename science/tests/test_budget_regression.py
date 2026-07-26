@@ -274,3 +274,62 @@ def test_file_success_control_notices_are_single_line_and_bounded(
     assert result.exit_code in {0, 1}, result.output
     assert result.output.count("\n") == 1
     assert visible_len(result.output.rstrip("\n")) <= CONTROL_NOTICE_MAX_CHARS
+
+
+@pytest.fixture
+def graph_audit_overflow_project(tmp_path: Path) -> Path:
+    """50 questions, each with one unresolved `related` target -> 50 audit fail rows.
+
+    `graph audit` runs the audit-only compiler phase (`materialization_audit` ->
+    `_compile(stop_after="audit")`), which never gates on failures, so an entity's
+    markdown alone (no `graph.trig`) is enough to exercise it -- unlike commands
+    that read a materialized graph.
+    """
+    from _fixtures.entity_helpers import seed_project, write_markdown_entity
+
+    seed_project(tmp_path)
+    for i in range(50):
+        write_markdown_entity(
+            tmp_path,
+            f"entities/questions/q{i:03d}.md",
+            {
+                "id": f"question:q{i:03d}",
+                "kind": "question",
+                "title": f"Question {i}",
+                "related": [f"hypothesis:missing-{i:03d}"],
+            },
+        )
+    return tmp_path
+
+
+def test_graph_audit_stdout_stays_within_its_ceiling(graph_audit_overflow_project: Path) -> None:
+    result = _invoke(["graph", "audit", "--project-root", str(graph_audit_overflow_project)])
+    assert result.exit_code == 1, result.output  # exit code from the FULL (unprojected) verdict
+    ceiling = BUDGETS["graph audit"].max_chars
+    assert visible_len(result.output) <= ceiling
+
+
+def test_graph_audit_output_file_is_complete_and_stdout_is_a_control_notice(
+    graph_audit_overflow_project: Path,
+) -> None:
+    target = graph_audit_overflow_project / "audit.json"
+    result = _invoke(
+        [
+            "graph",
+            "audit",
+            "--project-root",
+            str(graph_audit_overflow_project),
+            "--format",
+            "json",
+            "--output",
+            str(target),
+        ]
+    )
+    assert result.exit_code == 1, result.output  # exit code from the FULL verdict, even on the file-sink path
+    assert result.output.count("\n") == 1
+    assert "wrote 50 rows to" in result.output
+
+    payload = json.loads(target.read_text())
+    assert len(payload["rows"]) == 50
+    assert {row["check"] for row in payload["rows"]} == {"unresolved_reference"}
+    assert "truncation" not in payload

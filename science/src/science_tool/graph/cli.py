@@ -165,10 +165,23 @@ def graph_propagate_freshness(project_root: Path, output_format: str) -> None:
     show_default=True,
     type=click.Path(path_type=Path, file_okay=False, dir_okay=True),
 )
-def graph_audit(output_format: str, project_root: Path) -> None:
+@click.option(
+    "--output", "output_path", type=click.Path(path_type=Path), default=None,
+    help="Write the complete, unbudgeted payload to PATH instead of stdout.",
+)
+def graph_audit(output_format: str, project_root: Path, output_path: Path | None) -> None:
     """Audit canonical source references before graph materialization."""
+    from science_tool.budget.control import bounded_control_notice
+    from science_tool.budget.invocation import build_complete_via, hint_for
+    from science_tool.budget.registry import lookup
+    from science_tool.budget.sink import BoundedSink
 
     rows, has_failures = unwrap_verdict(materialization_audit(project_root), what="graph audit")
+    complete_via = build_complete_via(click.get_current_context(), output_hint=hint_for("graph-audit", output_format))
+    control_notice = (
+        bounded_control_notice(f"wrote {len(rows)} rows to {output_path}") if output_path is not None else None
+    )
+    sink = BoundedSink(lookup("graph audit"), output_path=output_path, command_path="graph audit", complete_via=complete_via)
     emit_query_rows(
         output_format=output_format,
         title="Graph Source Audit",
@@ -181,7 +194,11 @@ def graph_audit(output_format: str, project_root: Path) -> None:
             ("details", "Details"),
         ],
         rows=rows,
+        sink=sink,
     )
+    sink.flush()
+    if control_notice is not None:
+        click.echo(control_notice)
     if has_failures:
         raise click.exceptions.Exit(1)
 
@@ -237,16 +254,33 @@ def graph_validate(output_format: str, graph_path: Path) -> None:
 @click.option(
     "--path", "graph_path", default=str(DEFAULT_GRAPH_PATH), show_default=True, type=click.Path(path_type=Path)
 )
-def graph_diff(mode: str, output_format: str, graph_path: Path) -> None:
+@click.option(
+    "--output", "output_path", type=click.Path(path_type=Path), default=None,
+    help="Write the complete, unbudgeted payload to PATH instead of stdout.",
+)
+def graph_diff(mode: str, output_format: str, graph_path: Path, output_path: Path | None) -> None:
     """Show files that are stale relative to graph revision metadata."""
+    from science_tool.budget.control import bounded_control_notice
+    from science_tool.budget.invocation import build_complete_via, hint_for
+    from science_tool.budget.registry import lookup
+    from science_tool.budget.sink import BoundedSink
 
     rows = unwrap_instrument(diff_graph_inputs(graph_path=graph_path, mode=mode), what="graph diff")
+    complete_via = build_complete_via(click.get_current_context(), output_hint=hint_for("graph-diff", output_format))
+    control_notice = (
+        bounded_control_notice(f"wrote {len(rows)} rows to {output_path}") if output_path is not None else None
+    )
+    sink = BoundedSink(lookup("graph diff"), output_path=output_path, command_path="graph diff", complete_via=complete_via)
     emit_query_rows(
         output_format=output_format,
         title="Graph Diff",
         columns=[("path", "Path"), ("status", "Status"), ("reason", "Reason")],
         rows=rows,
+        sink=sink,
     )
+    sink.flush()
+    if control_notice is not None:
+        click.echo(control_notice)
 
 
 @graph_group.command("predicates")
@@ -392,18 +426,35 @@ def graph_coverage(limit: int, output_format: str, graph_path: Path) -> None:
 @click.option(
     "--path", "graph_path", default=str(DEFAULT_GRAPH_PATH), show_default=True, type=click.Path(path_type=Path)
 )
-def graph_gaps(center: str, hops: int, limit: int, output_format: str, graph_path: Path) -> None:
+@click.option(
+    "--output", "output_path", type=click.Path(path_type=Path), default=None,
+    help="Write the complete, unbudgeted payload to PATH instead of stdout.",
+)
+def graph_gaps(center: str, hops: int, limit: int, output_format: str, graph_path: Path, output_path: Path | None) -> None:
     """Show structural and evidential fragility in a neighborhood around a graph target."""
+    from science_tool.budget.control import bounded_control_notice
+    from science_tool.budget.invocation import build_complete_via, hint_for
+    from science_tool.budget.registry import lookup
+    from science_tool.budget.sink import BoundedSink
 
     rows = unwrap_instrument(
         query_gaps(graph_path=graph_path, center=center, hops=hops, limit=limit), what="graph gaps"
     )
+    complete_via = build_complete_via(click.get_current_context(), output_hint=hint_for("graph-gaps", output_format))
+    control_notice = (
+        bounded_control_notice(f"wrote {len(rows)} rows to {output_path}") if output_path is not None else None
+    )
+    sink = BoundedSink(lookup("graph gaps"), output_path=output_path, command_path="graph gaps", complete_via=complete_via)
     emit_query_rows(
         output_format=output_format,
         title="Graph Gaps",
         columns=[("entity", "Entity"), ("label", "Label"), ("issues", "Issues")],
         rows=rows,
+        sink=sink,
     )
+    sink.flush()
+    if control_notice is not None:
+        click.echo(control_notice)
 
 
 @graph_group.command("uncertainty")
@@ -412,10 +463,27 @@ def graph_gaps(center: str, hops: int, limit: int, output_format: str, graph_pat
 @click.option(
     "--path", "graph_path", default=str(DEFAULT_GRAPH_PATH), show_default=True, type=click.Path(path_type=Path)
 )
-def graph_uncertainty(top: int, output_format: str, graph_path: Path) -> None:
+@click.option(
+    "--output", "output_path", type=click.Path(path_type=Path), default=None,
+    help="Write the complete, unbudgeted payload to PATH instead of stdout.",
+)
+def graph_uncertainty(top: int, output_format: str, graph_path: Path, output_path: Path | None) -> None:
     """Show claims and hypotheses ranked by derived uncertainty signals from support/dispute structure."""
+    from science_tool.budget.control import bounded_control_notice
+    from science_tool.budget.invocation import build_complete_via, hint_for
+    from science_tool.budget.registry import lookup
+    from science_tool.budget.sink import BoundedSink
 
     rows = unwrap_instrument(query_uncertainty(graph_path=graph_path, top=top), what="graph uncertainty")
+    complete_via = build_complete_via(
+        click.get_current_context(), output_hint=hint_for("graph-uncertainty", output_format)
+    )
+    control_notice = (
+        bounded_control_notice(f"wrote {len(rows)} rows to {output_path}") if output_path is not None else None
+    )
+    sink = BoundedSink(
+        lookup("graph uncertainty"), output_path=output_path, command_path="graph uncertainty", complete_via=complete_via
+    )
     emit_query_rows(
         output_format=output_format,
         title="Graph Uncertainty",
@@ -427,7 +495,11 @@ def graph_uncertainty(top: int, output_format: str, graph_path: Path) -> None:
             ("confidence", "Confidence"),
         ],
         rows=rows,
+        sink=sink,
     )
+    sink.flush()
+    if control_notice is not None:
+        click.echo(control_notice)
 
 
 @graph_group.command("dashboard-summary")
@@ -436,10 +508,30 @@ def graph_uncertainty(top: int, output_format: str, graph_path: Path) -> None:
 @click.option(
     "--path", "graph_path", default=str(DEFAULT_GRAPH_PATH), show_default=True, type=click.Path(path_type=Path)
 )
-def graph_dashboard_summary(top: int, output_format: str, graph_path: Path) -> None:
+@click.option(
+    "--output", "output_path", type=click.Path(path_type=Path), default=None,
+    help="Write the complete, unbudgeted payload to PATH instead of stdout.",
+)
+def graph_dashboard_summary(top: int, output_format: str, graph_path: Path, output_path: Path | None) -> None:
     """Show claim-centric dashboard summaries for evidence mix, empirical support, and risk."""
+    from science_tool.budget.control import bounded_control_notice
+    from science_tool.budget.invocation import build_complete_via, hint_for
+    from science_tool.budget.registry import lookup
+    from science_tool.budget.sink import BoundedSink
 
     rows = unwrap_instrument(query_dashboard_summary(graph_path=graph_path, top=top), what="graph dashboard")
+    complete_via = build_complete_via(
+        click.get_current_context(), output_hint=hint_for("graph-dashboard-summary", output_format)
+    )
+    control_notice = (
+        bounded_control_notice(f"wrote {len(rows)} rows to {output_path}") if output_path is not None else None
+    )
+    sink = BoundedSink(
+        lookup("graph dashboard-summary"),
+        output_path=output_path,
+        command_path="graph dashboard-summary",
+        complete_via=complete_via,
+    )
     emit_query_rows(
         output_format=output_format,
         title="Graph Dashboard Summary",
@@ -465,7 +557,11 @@ def graph_dashboard_summary(top: int, output_format: str, graph_path: Path) -> N
             ("bridge_hypotheses", "Bridge Hypotheses"),
         ],
         rows=rows,
+        sink=sink,
     )
+    sink.flush()
+    if control_notice is not None:
+        click.echo(control_notice)
 
 
 @graph_group.command("neighborhood-summary")
@@ -475,11 +571,33 @@ def graph_dashboard_summary(top: int, output_format: str, graph_path: Path) -> N
 @click.option(
     "--path", "graph_path", default=str(DEFAULT_GRAPH_PATH), show_default=True, type=click.Path(path_type=Path)
 )
-def graph_neighborhood_summary(top: int, hops: int, output_format: str, graph_path: Path) -> None:
+@click.option(
+    "--output", "output_path", type=click.Path(path_type=Path), default=None,
+    help="Write the complete, unbudgeted payload to PATH instead of stdout.",
+)
+def graph_neighborhood_summary(
+    top: int, hops: int, output_format: str, graph_path: Path, output_path: Path | None
+) -> None:
     """Show claim-centered neighborhood risk summaries for local uncertainty prioritization."""
+    from science_tool.budget.control import bounded_control_notice
+    from science_tool.budget.invocation import build_complete_via, hint_for
+    from science_tool.budget.registry import lookup
+    from science_tool.budget.sink import BoundedSink
 
     rows = unwrap_instrument(
         query_neighborhood_summary(graph_path=graph_path, top=top, hops=hops), what="graph neighborhood-summary"
+    )
+    complete_via = build_complete_via(
+        click.get_current_context(), output_hint=hint_for("graph-neighborhood-summary", output_format)
+    )
+    control_notice = (
+        bounded_control_notice(f"wrote {len(rows)} rows to {output_path}") if output_path is not None else None
+    )
+    sink = BoundedSink(
+        lookup("graph neighborhood-summary"),
+        output_path=output_path,
+        command_path="graph neighborhood-summary",
+        complete_via=complete_via,
     )
     emit_query_rows(
         output_format=output_format,
@@ -496,7 +614,11 @@ def graph_neighborhood_summary(top: int, hops: int, output_format: str, graph_pa
             ("structural_fragility", "Structure"),
         ],
         rows=rows,
+        sink=sink,
     )
+    sink.flush()
+    if control_notice is not None:
+        click.echo(control_notice)
 
 
 @graph_group.command("question-summary")
@@ -505,10 +627,30 @@ def graph_neighborhood_summary(top: int, hops: int, output_format: str, graph_pa
 @click.option(
     "--path", "graph_path", default=str(DEFAULT_GRAPH_PATH), show_default=True, type=click.Path(path_type=Path)
 )
-def graph_question_summary(top: int | None, output_format: str, graph_path: Path) -> None:
+@click.option(
+    "--output", "output_path", type=click.Path(path_type=Path), default=None,
+    help="Write the complete, unbudgeted payload to PATH instead of stdout.",
+)
+def graph_question_summary(top: int | None, output_format: str, graph_path: Path, output_path: Path | None) -> None:
     """Show question-level rollups derived from claim and neighborhood summaries."""
+    from science_tool.budget.control import bounded_control_notice
+    from science_tool.budget.invocation import build_complete_via, hint_for
+    from science_tool.budget.registry import lookup
+    from science_tool.budget.sink import BoundedSink
 
     rows = unwrap_instrument(query_question_summary(graph_path=graph_path, top=top), what="graph question-summary")
+    complete_via = build_complete_via(
+        click.get_current_context(), output_hint=hint_for("graph-question-summary", output_format)
+    )
+    control_notice = (
+        bounded_control_notice(f"wrote {len(rows)} rows to {output_path}") if output_path is not None else None
+    )
+    sink = BoundedSink(
+        lookup("graph question-summary"),
+        output_path=output_path,
+        command_path="graph question-summary",
+        complete_via=complete_via,
+    )
     emit_query_rows(
         output_format=output_format,
         title="Graph Question Summary",
@@ -524,7 +666,11 @@ def graph_question_summary(top: int | None, output_format: str, graph_path: Path
             ("no_empirical_claim_count", "No Empirical"),
         ],
         rows=rows,
+        sink=sink,
     )
+    sink.flush()
+    if control_notice is not None:
+        click.echo(control_notice)
 
 
 @graph_group.command("inquiry-summary")
@@ -533,10 +679,30 @@ def graph_question_summary(top: int | None, output_format: str, graph_path: Path
 @click.option(
     "--path", "graph_path", default=str(DEFAULT_GRAPH_PATH), show_default=True, type=click.Path(path_type=Path)
 )
-def graph_inquiry_summary(top: int, output_format: str, graph_path: Path) -> None:
+@click.option(
+    "--output", "output_path", type=click.Path(path_type=Path), default=None,
+    help="Write the complete, unbudgeted payload to PATH instead of stdout.",
+)
+def graph_inquiry_summary(top: int, output_format: str, graph_path: Path, output_path: Path | None) -> None:
     """Show inquiry-level rollups derived from explicit claim backing and claim summaries."""
+    from science_tool.budget.control import bounded_control_notice
+    from science_tool.budget.invocation import build_complete_via, hint_for
+    from science_tool.budget.registry import lookup
+    from science_tool.budget.sink import BoundedSink
 
     rows = unwrap_instrument(query_inquiry_summary(graph_path=graph_path, top=top), what="graph inquiry-summary")
+    complete_via = build_complete_via(
+        click.get_current_context(), output_hint=hint_for("graph-inquiry-summary", output_format)
+    )
+    control_notice = (
+        bounded_control_notice(f"wrote {len(rows)} rows to {output_path}") if output_path is not None else None
+    )
+    sink = BoundedSink(
+        lookup("graph inquiry-summary"),
+        output_path=output_path,
+        command_path="graph inquiry-summary",
+        complete_via=complete_via,
+    )
     emit_query_rows(
         output_format=output_format,
         title="Graph Inquiry Summary",
@@ -555,7 +721,11 @@ def graph_inquiry_summary(top: int, output_format: str, graph_path: Path) -> Non
             ("status", "Status"),
         ],
         rows=rows,
+        sink=sink,
     )
+    sink.flush()
+    if control_notice is not None:
+        click.echo(control_notice)
 
 
 @graph_group.command("rehoming-debt")
@@ -563,7 +733,11 @@ def graph_inquiry_summary(top: int, output_format: str, graph_path: Path) -> Non
 @click.option(
     "--path", "graph_path", default=str(DEFAULT_GRAPH_PATH), show_default=True, type=click.Path(path_type=Path)
 )
-def graph_rehoming_debt(output_format: str, graph_path: Path) -> None:
+@click.option(
+    "--output", "output_path", type=click.Path(path_type=Path), default=None,
+    help="Write the complete, unbudgeted payload to PATH instead of stdout.",
+)
+def graph_rehoming_debt(output_format: str, graph_path: Path, output_path: Path | None) -> None:
     """Open questions still attached to a CLOSED hypothesis (a terminal `status`).
 
     Closing a hypothesis does not close its questions -- it UNHOUSES them. They are dropped
@@ -571,10 +745,26 @@ def graph_rehoming_debt(output_format: str, graph_path: Path) -> None:
     VISIBLE debt would become an INVISIBLE one. Retirement creates work; this is where that
     work shows up (fb-2026-07-11-005).
     """
+    from science_tool.budget.control import bounded_control_notice
+    from science_tool.budget.invocation import build_complete_via, hint_for
+    from science_tool.budget.registry import lookup
+    from science_tool.budget.sink import BoundedSink
     from science_tool.graph.attention import list_rehoming_debt
 
     result = list_rehoming_debt(graph_path)
     rows = unwrap_instrument(result, what="graph rehoming-debt")
+    complete_via = build_complete_via(
+        click.get_current_context(), output_hint=hint_for("graph-rehoming-debt", output_format)
+    )
+    control_notice = (
+        bounded_control_notice(f"wrote {len(rows)} rows to {output_path}") if output_path is not None else None
+    )
+    sink = BoundedSink(
+        lookup("graph rehoming-debt"),
+        output_path=output_path,
+        command_path="graph rehoming-debt",
+        complete_via=complete_via,
+    )
     emit_query_rows(
         output_format=output_format,
         title="Re-homing debt (open questions on terminal hypotheses)",
@@ -584,7 +774,11 @@ def graph_rehoming_debt(output_format: str, graph_path: Path) -> None:
             ("question_status", "Status"),
         ],
         rows=rows,
+        sink=sink,
     )
+    sink.flush()
+    if control_notice is not None:
+        click.echo(control_notice)
 
 
 @graph_group.command("attention-sample")
@@ -601,6 +795,10 @@ def graph_rehoming_debt(output_format: str, graph_path: Path) -> None:
 @click.option(
     "--path", "graph_path", default=str(DEFAULT_GRAPH_PATH), show_default=True, type=click.Path(path_type=Path)
 )
+@click.option(
+    "--output", "output_path", type=click.Path(path_type=Path), default=None,
+    help="Write the complete, unbudgeted payload to PATH instead of stdout.",
+)
 def graph_attention_sample(
     limit: int,
     seed: int | None,
@@ -609,8 +807,13 @@ def graph_attention_sample(
     output_format: str,
     reason_aware: bool,
     graph_path: Path,
+    output_path: Path | None,
 ) -> None:
     """Sample epistemic entities by graph-derived attention weight."""
+    from science_tool.budget.control import bounded_control_notice
+    from science_tool.budget.invocation import build_complete_via, hint_for
+    from science_tool.budget.registry import lookup
+    from science_tool.budget.sink import BoundedSink
     from science_tool.graph.attention import query_attention_sample
 
     if limit < 0:
@@ -637,6 +840,18 @@ def graph_attention_sample(
             }
             for row in rows
         ]
+    complete_via = build_complete_via(
+        click.get_current_context(), output_hint=hint_for("graph-attention-sample", output_format)
+    )
+    control_notice = (
+        bounded_control_notice(f"wrote {len(rows)} rows to {output_path}") if output_path is not None else None
+    )
+    sink = BoundedSink(
+        lookup("graph attention-sample"),
+        output_path=output_path,
+        command_path="graph attention-sample",
+        complete_via=complete_via,
+    )
     emit_query_rows(
         output_format=output_format,
         title="Graph Attention Sample",
@@ -653,7 +868,11 @@ def graph_attention_sample(
             ("label", "Label"),
         ],
         rows=table_rows,
+        sink=sink,
     )
+    sink.flush()
+    if control_notice is not None:
+        click.echo(control_notice)
 
 
 @graph_group.command("attention-rank")
@@ -664,14 +883,23 @@ def graph_attention_sample(
 @click.option(
     "--path", "graph_path", default=str(DEFAULT_GRAPH_PATH), show_default=True, type=click.Path(path_type=Path)
 )
+@click.option(
+    "--output", "output_path", type=click.Path(path_type=Path), default=None,
+    help="Write the complete, unbudgeted payload to PATH instead of stdout.",
+)
 def graph_attention_rank(
     limit: int | None,
     kinds: tuple[str, ...],
     epsilon: float,
     output_format: str,
     graph_path: Path,
+    output_path: Path | None,
 ) -> None:
     """Rank epistemic entities by graph-derived attention weight (deterministic)."""
+    from science_tool.budget.control import bounded_control_notice
+    from science_tool.budget.invocation import build_complete_via, hint_for
+    from science_tool.budget.registry import lookup
+    from science_tool.budget.sink import BoundedSink
     from science_tool.graph.attention import query_attention_ranked
 
     if limit is not None and limit < 0:
@@ -691,6 +919,18 @@ def graph_attention_rank(
     table_rows = rows
     if output_format == "table":
         table_rows = [{**row, "last_reviewed": row["last_reviewed"] or "never"} for row in rows]
+    complete_via = build_complete_via(
+        click.get_current_context(), output_hint=hint_for("graph-attention-rank", output_format)
+    )
+    control_notice = (
+        bounded_control_notice(f"wrote {len(rows)} rows to {output_path}") if output_path is not None else None
+    )
+    sink = BoundedSink(
+        lookup("graph attention-rank"),
+        output_path=output_path,
+        command_path="graph attention-rank",
+        complete_via=complete_via,
+    )
     emit_query_rows(
         output_format=output_format,
         title="Attention ranking",
@@ -703,7 +943,11 @@ def graph_attention_rank(
             ("open_question_debt", "Q-Debt"),
         ],
         rows=table_rows,
+        sink=sink,
     )
+    sink.flush()
+    if control_notice is not None:
+        click.echo(control_notice)
 
 
 @graph_group.command("project-summary")

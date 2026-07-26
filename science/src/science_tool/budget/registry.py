@@ -74,6 +74,17 @@ BUDGETS: dict[str, CommandBudget] = {
     "prose lint": CommandBudget(max_chars=30_000, shape=PayloadShape.REPORT),
     "curate consolidation-candidates": CommandBudget(max_chars=30_000, shape=PayloadShape.REPORT),
     "validate": CommandBudget(max_chars=30_000, shape=PayloadShape.REPORT),
+    "graph attention-rank": CommandBudget(max_chars=20_000, shape=PayloadShape.ROWS, max_rows=40),
+    "graph attention-sample": CommandBudget(max_chars=20_000, shape=PayloadShape.ROWS, max_rows=40),
+    "graph audit": CommandBudget(max_chars=20_000, shape=PayloadShape.ROWS, max_rows=40),
+    "graph dashboard-summary": CommandBudget(max_chars=20_000, shape=PayloadShape.ROWS, max_rows=40),
+    "graph diff": CommandBudget(max_chars=20_000, shape=PayloadShape.ROWS, max_rows=40),
+    "graph gaps": CommandBudget(max_chars=20_000, shape=PayloadShape.ROWS, max_rows=40),
+    "graph inquiry-summary": CommandBudget(max_chars=20_000, shape=PayloadShape.ROWS, max_rows=40),
+    "graph neighborhood-summary": CommandBudget(max_chars=20_000, shape=PayloadShape.ROWS, max_rows=40),
+    "graph question-summary": CommandBudget(max_chars=20_000, shape=PayloadShape.ROWS, max_rows=40),
+    "graph rehoming-debt": CommandBudget(max_chars=20_000, shape=PayloadShape.ROWS, max_rows=40),
+    "graph uncertainty": CommandBudget(max_chars=20_000, shape=PayloadShape.ROWS, max_rows=40),
 }
 
 EXEMPTIONS: dict[str, str] = {
@@ -404,25 +415,14 @@ DEFERRED.update(
     {
         path: DeferredCommand("one output member per graph entity, edge, finding, summary row, or DOT statement", "1b")
         for path in (
-            "graph attention-rank",
-            "graph attention-sample",
-            "graph audit",
             "graph claims",
             "graph coverage",
             "graph cross-impact",
-            "graph dashboard-summary",
-            "graph diff",
             "graph evidence",
             "graph export-json",
-            "graph gaps",
-            "graph inquiry-summary",
             "graph neighborhood",
-            "graph neighborhood-summary",
             "graph propagate-freshness",
-            "graph question-summary",
-            "graph rehoming-debt",
             "graph scan-prose",
-            "graph uncertainty",
             "graph viz",
         )
     }
