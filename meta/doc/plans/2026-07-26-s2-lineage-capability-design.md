@@ -184,6 +184,11 @@ all ten cross-kind amendment admissibility that nothing in this design ruled on.
 - `workflow-run` — "Concrete execution of a workflow producing durable outputs." A re-run produces a
   new record; it does not replace an execution that genuinely happened.
 
+  This ruling has a second half. `workflow-run` also carries a **top-level `supersedes:` field**,
+  recommended by its template and specially exempted from the non-materializing-field check. Left
+  alone, the repository would answer this question both ways. That field is retired — see
+  "`workflow-run`'s top-level `supersedes:` is retired" under Files.
+
 ### Already wired (6)
 
 `discussion`, `finding`, `hypothesis`, `interpretation`, `report`, `spec` declare `superseded` *and*
@@ -214,6 +219,8 @@ later is a one-line declaration change plus its endpoint pairs — the gate will
   `status: superseded`. Both removals are free.
 - The only `sci:supersedes` occurrences in authored entity files are template boilerplate in
   `interpretation` scaffolds, not authored edges.
+- None of the 4 `workflow-run` entities carries a top-level `supersedes:` key, so retiring that
+  field is also a zero-migration change.
 
 Downstream consumers pin the toolkit revision in `uv.lock`, so no compatibility layer is written.
 
@@ -297,10 +304,74 @@ assertion actually reads.
   `relation_allows_kinds(supersedes, "workflow-run", "workflow-run")`, which this design makes
   false; revise it to assert the *absence* of that pair, and extend the pair coverage to the ten
   new self-pairs.
-- `science/tests/test_decision_material.py` — re-point the `_supports_superseded` monkeypatch
-  (line 311) at `DECLARED_SUPERSEDABLE`, preserving the negative control.
-- `science/tests/test_consolidation_mark_superseded.py` — prose references to
-  `_supports_superseded` only.
+- `science/tests/test_decision_material.py` — **two** changes, not one. Line 311's
+  `_supports_superseded` monkeypatch is re-pointed at `DECLARED_SUPERSEDABLE`, preserving the
+  negative control. Line 287's digest test injects a fake auto-apply-eligible kind by patching
+  `_STATUS_VALUES` and asserts the digest moves; once `supported_kinds` derives from
+  `DECLARED_SUPERSEDABLE` that patch is inert and the assertion fails. It must inject into
+  `DECLARED_SUPERSEDABLE` instead, with its comment updated to name the new authority.
+
+### Three tests exercise a state S2 eliminates
+
+Removing `workflow-run` from the endpoint pairs invalidates three executable tests that use it
+precisely *because* it is the admitted-but-unstampable kind:
+
+| test | what it asserts | disposition |
+|---|---|---|
+| `test_consolidation_candidates.py:62` `test_lineage_reports_kind_lacking_superseded_vocab` | the read-only detector still reports a lineage whose kind cannot be stamped | rebuild on a manually constructed graph, or delete |
+| `test_consolidation_mark_superseded.py:298` `test_member_whose_kind_lacks_superseded_vocab_is_skipped_not_crashed` | such a member lands in `skipped_kinds` rather than crashing | same |
+| `test_graph_materialize.py:1109` `test_materialize_graph_preserves_workflow_run_supersedes` | the edge materializes | invert into a **rejection** test, or move to a retained endpoint kind |
+
+This surfaces a property worth stating plainly: **after S2, `skipped_kinds` is unreachable through
+the shipped profile.** Property 3 makes "admitted endpoint whose kind lacks the vocabulary" a
+contradiction, so the skip path can only be reached by a project-local kind or a hand-built graph.
+The behaviour must still be covered — a project-local kind can genuinely reach it — but it can no
+longer be demonstrated with a shipped kind, and a test that quietly swaps in another shipped kind
+would be re-testing an impossible state.
+
+### `workflow-run`'s top-level `supersedes:` is retired
+
+Ruling `workflow-run` non-supersedable would otherwise leave the repository answering "can workflow
+runs supersede?" **both ways**: `sci:supersedes` would reject the edge, while
+`templates/workflow-run.md:9` still tells authors to write
+`supersedes: []  # ["workflow-run:<prior-slug>"] when re-run with changed params`, and
+`materialization.py:50` exempts that key from the check that errors on every other
+non-materializing field.
+
+Measured, the field sustains nothing:
+
+- **No reader.** `qa_audit/runs.py:47` loads it into `RunRecord.supersedes`, and **nothing consumes
+  that attribute** — it is the only occurrence in the package. The exemption's stated
+  justification, "read by `qa_audit/runs.py:47` for the QA-audit chain," is false in its operative
+  half.
+- **No chain.** `chain_depth` is `sum(1 for r in runs if r.workflow == workflow)` — it counts runs
+  per workflow and never follows a `supersedes` link. Both its own docstring ("its supersession
+  chain") and `verdicts.py:33` ("a supersedes re-run") describe behaviour the function does not
+  have.
+- **No authors.** None of the 4 `workflow-run` entities across all seven projects carries the key.
+
+So it is precisely the dead non-materializing field `fb-2026-07-11-017` exists to flag, kept alive
+by a one-entry exemption whose reason does not hold. The program's own rule — compat projections get
+deleted, not documented — applies directly. It is removed, not re-labelled:
+
+- `templates/workflow-run.md` — delete the `supersedes:` line.
+- `science/src/science_tool/qa_audit/runs.py` — drop `supersedes` from `RunRecord` and from the
+  loader; correct `chain_depth`'s docstring to say it counts runs recorded for the workflow.
+- `science/src/science_tool/qa_audit/verdicts.py` — correct the `iteration_verdict` docstring,
+  which currently calls `chain_depth >= 2` "a supersedes re-run."
+- `science/src/science_tool/validate/checks/materialization.py` — remove the
+  `("workflow-run", "supersedes")` entry. It is the **only** member of `_LEGIT_TOP_LEVEL`, so the
+  set and the filtering it drives are removed with it; a future key with a genuine reader can
+  reintroduce the mechanism together with the reader that justifies it. The docstring paragraph at
+  lines 13-19 explaining the exemption goes too.
+- `science/tests/test_qa_audit_runs.py` — remove the `supersedes` fixture argument, and rename
+  `test_chain_depth_counts_supersession`. That test authors `supersedes:` on two of three runs and
+  asserts `chain_depth == 3`, which the function returns whether or not those keys exist: it is
+  tautological with respect to its own name and must be renamed to what it actually asserts.
+- `science/tests/test_qa_audit_audit.py` — remove the same fixture argument.
+
+Removing the exemption means the materialization check will now ERROR on a `workflow-run` carrying
+`supersedes:`. That is the intended behaviour and affects no existing entity.
 
 ### The frozen status oracle must be re-frozen, deliberately
 
