@@ -1,11 +1,49 @@
 """Shared markdown lexical helpers."""
 from pathlib import Path
 
+import pytest
+import yaml
+
 from science_tool.markdown_utils import (
+    StrictYAMLError,
     frontmatter_line_numbers,
     is_fence_line,
+    reject_duplicate_and_merge_keys,
     strip_inline_code,
 )
+
+
+def _node(text: str) -> yaml.Node:
+    return yaml.compose(text)
+
+
+def test_rejects_duplicate_key():
+    with pytest.raises(StrictYAMLError, match="duplicate key 'priority'"):
+        reject_duplicate_and_merge_keys(_node("priority: P1\npriority: P2\n"))
+
+
+def test_rejects_yaml_equivalent_duplicate_keys():
+    # yes/true resolve to the same bool; text differs, constructed key does not.
+    with pytest.raises(StrictYAMLError):
+        reject_duplicate_and_merge_keys(_node("yes: 1\ntrue: 2\n"))
+
+
+def test_rejects_merge_key():
+    text = "base: &b {a: 1}\nchild:\n  <<: *b\n"
+    with pytest.raises(StrictYAMLError, match="merge"):
+        reject_duplicate_and_merge_keys(_node(text))
+
+
+def test_accepts_clean_nested_mapping():
+    reject_duplicate_and_merge_keys(_node("a: 1\nb:\n  c: 2\n  d: [1, 2]\n"))
+
+
+def test_custom_on_error_type():
+    class Boom(ValueError):
+        ...
+
+    with pytest.raises(Boom):
+        reject_duplicate_and_merge_keys(_node("x: 1\nx: 2\n"), on_error=Boom)
 
 
 def test_strip_inline_code_removes_backticked_spans() -> None:

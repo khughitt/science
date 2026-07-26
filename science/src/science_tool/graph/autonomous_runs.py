@@ -17,46 +17,16 @@ from science_model.autonomous_runs import RUN_ID_PREFIX, AutonomousRunRecord, Ru
 import yaml
 
 from science_tool.graph.store import PROJECT_NS, SCI_NS
+from science_tool.markdown_utils import reject_duplicate_and_merge_keys
 
 RUNS_DIRNAME = "runs"
 
 
 def _reject_duplicate_and_merge_keys(node: yaml.Node, path: Path) -> None:
-    """Refuse duplicate keys and YAML merge keys anywhere in the document.
-
-    Recursive, unlike `skill_loads._reject_duplicate_keys`: a run record nests
-    `policy_identity` and `budget`, and a duplicate inside either is exactly as
-    silent as one at the top level.
-
-    Operates on the NODE tree from `yaml.compose` while still seeing what `safe_load`
-    would collapse to last-wins. Keys are constructed via `loader.construct_object`
-    below, so this does build Python objects for keys -- the safety property is not
-    "no objects built", it is that `SafeLoader`'s constructor refuses any unsafe tag
-    (e.g. `!!python/object`), so an unsafe key can never reach `construct_object` intact.
-    """
-    if isinstance(node, yaml.MappingNode):
-        seen: set[object] = set()
-        # `construct_object`, not `key_node.value`: `.value` is the raw scalar TEXT, so
-        # `yes:` and `true:` read as different keys while `yaml.safe_load` resolves both to
-        # `True` and collapses them last-wins. Comparing the constructed objects catches the
-        # YAML-equivalent pairs (`yes`/`true`, `1`/`1.0`, `null`/`~`) that the text does not.
-        loader = yaml.SafeLoader("")
-        try:
-            for key_node, value_node in node.value:
-                if key_node.tag == "tag:yaml.org,2002:merge":
-                    raise RunRecordError(
-                        f"{path}: YAML merge keys are not allowed in a run record"
-                    )
-                key = loader.construct_object(key_node, deep=True)
-                if key in seen:
-                    raise RunRecordError(f"{path}: duplicate key {key!r} in run record")
-                seen.add(key)
-                _reject_duplicate_and_merge_keys(value_node, path)
-        finally:
-            loader.dispose()
-    elif isinstance(node, yaml.SequenceNode):
-        for item in node.value:
-            _reject_duplicate_and_merge_keys(item, path)
+    reject_duplicate_and_merge_keys(
+        node,
+        on_error=lambda msg: RunRecordError(f"{path}: {msg} in run record"),
+    )
 
 
 def _parse_run_record_frontmatter(path: Path) -> dict[str, object]:
