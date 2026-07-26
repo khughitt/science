@@ -18,7 +18,8 @@
 - **Every git invocation that supports `-z` MUST use it.** Newline-delimited output is wrong for paths containing newlines, which are legal in git and are a real input to a boundary tool.
 - Validate checks register via `@Check(section=..., order=...)` from `science_tool.validate.checks` and yield `Result(severity, path, line, message, rule, task)` from `science_tool.validate.result`.
 - Tests build a context with `ValidateContext.from_project_root(root, strict=False, verbose=False)` (`validate/context.py:43`). There is no `build_context` helper. The fixture must contain a `science.yaml`, or construction raises `ValidateContextError`.
-- `git check-ignore --no-index --stdin -z -v` emits **four** NUL-terminated fields per record in the order `source, line, pattern, path` (verified). A `!`-prefixed pattern means the path is **not** ignored and must be filtered.
+- `git check-ignore --no-index --stdin -z -v` emits **four** NUL-terminated fields per record in the order `source, line, pattern, path` (verified). A `!`-prefixed pattern means the path is **not** ignored: it must be **filtered** where the question is "is this file ignored?" (`tracked_ignored`), and **recorded** where the question is "does an unmanaged rule mention this root?" (`matching_unmanaged_rules`). Filtering it in both places is what made a hand-written pin invisible.
+- **`check-ignore` reports the last matching pattern only.** Any check whose predicate is "a rule *matches*" must defeat that — by isolation (the managed block is spliced *after* the hand-written region, so a managed rule always wins) and by peeling (among unmanaged rules the last match still wins, and a `!` winner hides the rule beneath it).
 - Check rule names are exactly: `boundary.tracked-ignored`, `boundary.unanchored-pattern`, `boundary.generated-drift`, `boundary.declaration-conflict`, `boundary.unreachable-tracked`, `boundary.ignored-undeclared`, plus `boundary.invalid-declaration` for a malformed `boundary:` block.
 - **Nothing fails open.** Every git helper declares the return codes it accepts and raises `BoundaryGitError` on anything else. A malformed `boundary:` block is reported as `boundary.invalid-declaration` (ERROR), never silently downgraded to "undeclared" — that would disable four checks precisely when the config is broken.
 - **No check may use text prefixes to decide whether a rule targets a declared root.** Git pattern semantics (wildcards, nested-`.gitignore` scoping) are git's to evaluate; ask git.
@@ -151,14 +152,22 @@ def test_sibling_roots_allowed():
 
 @pytest.mark.parametrize(
     "bad",
-    ["/abs", "..", "a/", "", "!x", "#x", "a\nb", "a\\", "a\\b", "[ab].json", "foo/**/bar.json", "a b"],
+    ["/abs", "..", "a/", "", "!x", "#x", "a\nb", "a\\", "a\\b", "[ab].json", "foo/**/bar.json", "a.json "],
 )
 def test_tracked_glob_grammar(bad):
     with pytest.raises(ValidationError):
         _cfg(roots=[{"path": "data/external", "class": "manifest", "tracked": [bad]}])
 
 
-@pytest.mark.parametrize("good", ["datapackage.json", "*.qa.json", "schemas/*.json", "run-?.json"])
+def test_interior_space_is_legal_but_trailing_space_is_not():
+    """git strips trailing whitespace from a pattern unless it is escaped, so a
+    trailing space means the emitted rule is not the declared glob. An interior
+    space is a plain literal to both engines."""
+    cfg = _cfg(roots=[{"path": "d", "class": "manifest", "tracked": ["read me.json"]}])
+    assert cfg.roots[0].tracked == ("read me.json",)
+
+
+@pytest.mark.parametrize("good", ["datapackage.json", "*.qa.json", "schemas/*.json", "données.json"])
 def test_tracked_glob_admits_the_proven_subset(good):
     cfg = _cfg(roots=[{"path": "d", "class": "manifest", "tracked": [good]}])
     assert cfg.roots[0].tracked == (good,)
@@ -173,6 +182,30 @@ def test_double_star_is_rejected_because_the_matcher_disagrees_with_git():
     assert PurePosixPath("foo/bar.json").match("foo/**/bar.json") is False
     with pytest.raises(ValidationError, match=r"\*\*"):
         _cfg(roots=[{"path": "d", "class": "manifest", "tracked": ["foo/**/bar.json"]}])
+
+
+def test_question_mark_is_rejected_because_it_is_byte_oriented_in_git():
+    """git's `?` matches one BYTE; PurePosixPath's matches one CHARACTER. For
+    `?.json` vs `é.json` (two UTF-8 bytes) the matcher says tracked and git
+    leaves the file ignored -- the exact silent false negative
+    unreachable-tracked exists to prevent. Verified against real git."""
+    from pathlib import PurePosixPath
+
+    assert PurePosixPath("é.json").match("?.json") is True  # git: no match
+    with pytest.raises(ValidationError, match=r"\?"):
+        _cfg(roots=[{"path": "d", "class": "manifest", "tracked": ["run-?.json"]}])
+
+
+@pytest.mark.parametrize("bad", ["foo//bar.json", "foo/./bar.json", "./a.json"])
+def test_non_normalised_segments_rejected(bad):
+    """PurePosixPath normalises `//` and `.` away and matches; git's generated
+    negation does not, so the file stays ignored while the checker calls it
+    reachable. Verified against real git."""
+    from pathlib import PurePosixPath
+
+    assert PurePosixPath("foo/bar.json").match("foo//bar.json") is True  # git: no match
+    with pytest.raises(ValidationError, match="segment"):
+        _cfg(roots=[{"path": "d", "class": "manifest", "tracked": [bad]}])
 
 
 def test_duplicate_tracked_rejected():
@@ -282,42 +315,54 @@ class BoundaryRoot(BaseModel):
     @classmethod
     def _check_tracked(cls, value: tuple[str, ...]) -> tuple[str, ...]:
         for glob in value:
-            if not glob:
-                raise ValueError("tracked glob must not be empty")
-            _reject_control(glob, "tracked glob")
-            if glob.startswith("/"):
-                raise ValueError(f"tracked glob must be relative to its root: {glob!r}")
+            # Shares the path rules: non-empty, no control characters, not
+            # absolute, no trailing '/', and no empty / '.' / '..' segment. The
+            # segment rule matters more here than for a path -- PurePosixPath
+            # normalises `foo//bar.json` and `foo/./bar.json` away and matches,
+            # while git's generated negation does not fire at all.
+            _validate_relative(glob, "tracked glob")
             if glob.startswith("!"):
                 raise ValueError(f"tracked glob must not start with '!'; negation is the generator's job: {glob!r}")
             if glob.startswith("#"):
                 raise ValueError(f"tracked glob must not start with '#': {glob!r}")
-            if glob.endswith("/"):
-                raise ValueError(f"tracked glob matches files, not directories: {glob!r}")
-            if glob.endswith("\\"):
-                raise ValueError(f"tracked glob must not end with a dangling escape: {glob!r}")
-            if ".." in glob.split("/"):
-                raise ValueError(f"tracked glob must not contain '..': {glob!r}")
-            # PROVEN SHARED SUBSET. The checker matches with
-            # PurePosixPath.match, which agrees with git for literals, `*` and
-            # `?` (neither crosses `/` in either engine) and for multi-segment
-            # globs like `schemas/*.json`. It does NOT agree on `**`
-            # (git's `foo/**/bar.json` matches `foo/bar.json`;
-            # PurePosixPath.match returns False), and probe generation cannot
-            # synthesise a witness for a character class. Admitting syntax the
-            # checker cannot evaluate would let the generator emit a working git
-            # rule that unreachable-tracked silently never checks -- so the
-            # grammar is restricted to what both engines provably share.
-            illegal = set(glob) - set(
-                "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789._-/*?"
-            )
-            if illegal:
+            if glob != glob.strip():
                 raise ValueError(
-                    f"tracked glob may only use letters, digits, '.', '_', '-', '/', '*' and '?'; "
-                    f"got {''.join(sorted(illegal))!r} in {glob!r}. '**', character classes and "
-                    f"escapes are not admitted because the checker cannot evaluate them identically to git."
+                    f"tracked glob must not have leading or trailing whitespace: {glob!r}. "
+                    f"git strips trailing whitespace from an unescaped pattern, so the emitted "
+                    f"rule would not be the declared glob."
                 )
+            # PROVEN SHARED SUBSET. The checker matches with
+            # PurePosixPath.match; the generator emits `!/root/**/<glob>` and git
+            # matches that. Every construct admitted here must mean the SAME
+            # thing to both, because a construct they read differently lets the
+            # generator emit a WORKING git rule that unreachable-tracked silently
+            # never verifies -- the precise false negative this check exists to
+            # prevent. Each exclusion below was reproduced against real git:
+            #
+            #   `**`  git's `foo/**/bar.json` matches `foo/bar.json`;
+            #         PurePosixPath.match returns False.
+            #   `?`   git's `?` matches one BYTE, PurePosixPath's one CHARACTER,
+            #         so `?.json` vs `é.json` disagrees.
+            #   `[]`  a character class has no synthesisable probe witness.
+            #   `\`   escapes are honoured by git and not by the matcher.
+            #
+            # (Empty and `.` segments are the same class of divergence and are
+            # rejected by _validate_relative above.)
+            #
+            # Literals (including non-ASCII) and `*` are byte-for-byte identical
+            # in both engines, and dotfiles are matched by `*` in both, so those
+            # are admitted without restriction.
             if "**" in glob:
                 raise ValueError(f"tracked glob must not use '**'; a bare '*' already spans one segment: {glob!r}")
+            illegal = set(glob) & set("?[]\\")
+            if illegal:
+                raise ValueError(
+                    f"tracked glob must not use {''.join(sorted(illegal))!r} in {glob!r}. "
+                    f"'?' is byte-oriented in git and character-oriented in the checker, "
+                    f"character classes have no probe witness, and escapes are honoured only "
+                    f"by git -- all three would make the checker disagree with git silently. "
+                    f"Literals and '*' are admitted."
+                )
         if len(set(value)) != len(value):
             raise ValueError("duplicate tracked glob")
         return value
@@ -710,7 +755,7 @@ Defines the **source universe** split from the design: rule-text reads only trac
 
 **Interfaces:**
 - Consumes: nothing from earlier tasks.
-- Produces: `IgnoreHit(path: str, source: str, line: int, pattern: str)`, `IgnoreRule(source: str, line: int, pattern: str)`, `visible_paths(project_root: Path) -> set[str]`, `tracked_ignored(project_root: Path) -> list[IgnoreHit]`, `governed_ignore_files(project_root: Path) -> list[str]`, `unmanaged_rules(project_root: Path, managed_body: str | None) -> list[IgnoreRule]`.
+- Produces: `IgnoreHit(path: str, source: str, line: int, pattern: str)`, `IgnoreRule(source: str, line: int, pattern: str)`, `BoundaryGitError`, `visible_paths(project_root: Path) -> set[str]`, `tracked_ignored(project_root: Path) -> list[IgnoreHit]`, `governed_ignore_files(project_root: Path) -> list[str]`, `unmanaged_rules(project_root: Path) -> list[IgnoreRule]`, `matching_unmanaged_rules(project_root: Path, paths: list[str]) -> dict[str, list[IgnoreRule]]`.
 
 **Semantics fixed here** (each has a test below):
 
@@ -719,7 +764,9 @@ Defines the **source universe** split from the design: rule-text reads only trac
 | Output framing | Every git call uses `-z`; parse on `\0`. |
 | Symlinks | Never followed. `visible_paths` reports the link itself; the walk (Task 4) does not descend into a symlinked directory. |
 | Nested repositories | A submodule or nested `.git` is opaque: git reports the gitlink path only, and we never recurse into it. |
-| Rule sources | `governed_ignore_files` returns only `.gitignore` files that are **tracked**; `.git/info/exclude` and `core.excludesFile` are excluded. |
+| Rule sources | `governed_ignore_files` returns only `.gitignore` files that are **tracked and present on disk**; `.git/info/exclude` and `core.excludesFile` are excluded. |
+| Unreadable source | Raises `BoundaryGitError`. An unreadable rule file is not an empty one. |
+| Rule attribution | `matching_unmanaged_rules` reports every unmanaged rule that **matches** a path — never just the winner — including negations, via isolation plus peeling. |
 | Ordering | All returned lists are sorted by `(source, line)` or `path` so output is stable. |
 
 - [ ] **Step 1: Write the failing tests**
@@ -889,7 +936,7 @@ def test_matching_rules_use_git_semantics_for_wildcards(tmp_path: Path):
     _write(repo, ".gitignore", "*.parquet\n")
     subprocess.run(["git", "-C", str(repo), "add", ".gitignore"], check=True)
     hits = matching_unmanaged_rules(repo, ["data/external/ds/part.parquet"])
-    assert hits["data/external/ds/part.parquet"].pattern == "*.parquet"
+    assert [r.pattern for r in hits["data/external/ds/part.parquet"]] == ["*.parquet"]
 
 
 def test_matching_rules_respect_nested_gitignore_scope(tmp_path: Path):
@@ -899,7 +946,7 @@ def test_matching_rules_respect_nested_gitignore_scope(tmp_path: Path):
     subprocess.run(["git", "-C", str(repo), "add", "inc/.gitignore"], check=True)
     hits = matching_unmanaged_rules(repo, ["data/raw/x.csv", "inc/data/raw/y.csv"])
     assert "data/raw/x.csv" not in hits
-    assert hits["inc/data/raw/y.csv"].source == "inc/.gitignore"
+    assert hits["inc/data/raw/y.csv"][0].source == "inc/.gitignore"
 
 
 def test_matching_rules_see_past_a_later_managed_rule(tmp_path: Path):
@@ -914,8 +961,8 @@ def test_matching_rules_see_past_a_later_managed_rule(tmp_path: Path):
     # Real resolution: the managed rule wins.
     assert tracked_ignored(repo) == []  # nothing tracked yet
     hits = matching_unmanaged_rules(repo, [target])
-    assert hits[target].pattern == "*.parquet"
-    assert hits[target].line == 1, "managed lines are blanked, so line numbers still match"
+    assert [r.pattern for r in hits[target]] == ["*.parquet"]
+    assert hits[target][0].line == 1, "managed lines are blanked, so line numbers still match"
 
 
 def test_matching_rules_report_a_duplicate_shadowed_by_the_managed_block(tmp_path: Path):
@@ -925,7 +972,61 @@ def test_matching_rules_report_a_duplicate_shadowed_by_the_managed_block(tmp_pat
     _write(repo, ".gitignore", splice_managed_block("/data/raw/\n", "/data/raw/\n"))
     subprocess.run(["git", "-C", str(repo), "add", ".gitignore"], check=True)
     hits = matching_unmanaged_rules(repo, ["data/raw/x.csv"])
-    assert hits["data/raw/x.csv"].line == 1
+    assert hits["data/raw/x.csv"][0].line == 1
+
+
+def test_matching_rules_see_past_an_unmanaged_negation(tmp_path: Path):
+    """Isolation alone is not enough: among unmanaged rules the last match still
+    wins, and git reports the NEGATION here. Peeling is what surfaces the ignore
+    rule underneath it. Both lines are reported -- the negation is itself an
+    unauthorised per-case exception."""
+    repo = _repo(tmp_path)
+    _write(repo, ".gitignore", "/data/raw/**\n!/data/raw/**\n")
+    subprocess.run(["git", "-C", str(repo), "add", ".gitignore"], check=True)
+    hits = matching_unmanaged_rules(repo, ["data/raw/x.csv"])
+    assert [(r.line, r.pattern) for r in hits["data/raw/x.csv"]] == [
+        (1, "/data/raw/**"),
+        (2, "!/data/raw/**"),
+    ]
+
+
+def test_matching_rules_report_a_standalone_negation(tmp_path: Path):
+    """A lone `!` rule ignores nothing, so no ignore-rule search would find it --
+    but pinning one file out of a declared payload root by hand is exactly the
+    per-case exception the declaration replaces."""
+    repo = _repo(tmp_path)
+    _write(repo, ".gitignore", "!/data/raw/keep.csv\n")
+    subprocess.run(["git", "-C", str(repo), "add", ".gitignore"], check=True)
+    hits = matching_unmanaged_rules(repo, ["data/raw/keep.csv", "data/raw/other.csv"])
+    assert [r.pattern for r in hits["data/raw/keep.csv"]] == ["!/data/raw/keep.csv"]
+    assert "data/raw/other.csv" not in hits
+
+
+def test_matching_rules_attribute_one_rule_to_every_path_it_matches(tmp_path: Path):
+    """Peeling blanks a rule only AFTER the whole round is recorded; blanking
+    mid-round would drop every path after the first."""
+    repo = _repo(tmp_path)
+    _write(repo, ".gitignore", "*.parquet\n")
+    subprocess.run(["git", "-C", str(repo), "add", ".gitignore"], check=True)
+    paths = ["data/external/a.parquet", "data/external/b.parquet", "data/external/c.parquet"]
+    hits = matching_unmanaged_rules(repo, paths)
+    assert sorted(hits) == sorted(paths)
+
+
+def test_matching_rules_terminate_when_nothing_matches(tmp_path: Path):
+    repo = _repo(tmp_path)
+    _write(repo, ".gitignore", "/unrelated/\n")
+    subprocess.run(["git", "-C", str(repo), "add", ".gitignore"], check=True)
+    assert matching_unmanaged_rules(repo, ["data/external/a.parquet"]) == {}
+
+
+def test_governed_ignore_files_skip_a_tracked_but_deleted_file(tmp_path: Path):
+    """`ls-files` still lists it; it governs nothing."""
+    repo = _repo(tmp_path)
+    _write(repo, "inc/.gitignore", "build/\n")
+    subprocess.run(["git", "-C", str(repo), "add", "inc/.gitignore"], check=True)
+    (repo / "inc" / ".gitignore").unlink()
+    assert governed_ignore_files(repo) == []
 
 
 def test_unmanaged_rules_from_nested_file_carry_their_source(tmp_path: Path):
@@ -1013,6 +1114,32 @@ def _git(project_root: Path, *args: str, stdin: bytes | None = None, ok: tuple[i
     return proc.stdout
 
 
+def _git_plain(*args: str) -> None:
+    """A git call with no project root -- scratch `init` and `config`.
+
+    Same fail-closed contract as `_git`: a scratch repo that silently failed to
+    initialise would make every conflict check report clean.
+    """
+    proc = subprocess.run(["git", *args], capture_output=True, check=False)
+    if proc.returncode != 0:
+        detail = proc.stderr.decode("utf-8", "replace").strip()
+        raise BoundaryGitError(f"git {' '.join(args)} failed ({proc.returncode}): {detail}")
+
+
+def _read_governed(project_root: Path, rel: str) -> str:
+    """Read a governed `.gitignore`, failing closed.
+
+    An unreadable rule source is not an empty one. Swallowing `OSError` here
+    would silently drop every rule in that file from `unmanaged_rules` and from
+    conflict detection -- the file would be governed on paper and ungoverned in
+    fact.
+    """
+    try:
+        return (project_root / rel).read_text(encoding="utf-8")
+    except OSError as exc:
+        raise BoundaryGitError(f"cannot read governed ignore file {rel}: {exc}") from exc
+
+
 def _split_z(payload: bytes) -> list[str]:
     return [chunk.decode("utf-8", "surrogateescape") for chunk in payload.split(b"\0") if chunk]
 
@@ -1053,9 +1180,18 @@ def tracked_ignored(project_root: Path) -> list[IgnoreHit]:
 
 
 def governed_ignore_files(project_root: Path) -> list[str]:
-    """Tracked, in-worktree `.gitignore` files -- the shareable rule surface."""
+    """Tracked AND present `.gitignore` files -- the shareable rule surface.
+
+    `git ls-files` lists index entries, including a file deleted from the
+    worktree but not yet staged as removed. Such a file governs nothing, yet an
+    earlier draft let it satisfy `unmanaged_allow` source validation -- an
+    allowlist entry could name a source that no longer exists and be accepted.
+    Requiring the file to be present on disk keeps "governed" and "in effect"
+    the same set.
+    """
     tracked = _split_z(_git(project_root, "ls-files", "-z"))
-    return sorted(p for p in tracked if p == ".gitignore" or p.endswith("/.gitignore"))
+    named = (p for p in tracked if p == ".gitignore" or p.endswith("/.gitignore"))
+    return sorted(p for p in named if (project_root / p).is_file())
 
 
 def unmanaged_rules(project_root: Path) -> list[IgnoreRule]:
@@ -1070,10 +1206,7 @@ def unmanaged_rules(project_root: Path) -> list[IgnoreRule]:
 
     rules: list[IgnoreRule] = []
     for rel in governed_ignore_files(project_root):
-        try:
-            text = (project_root / rel).read_text(encoding="utf-8")
-        except OSError:
-            continue
+        text = _read_governed(project_root, rel)
         inside = False
         for number, raw in enumerate(text.splitlines(), start=1):
             line = raw.strip()
@@ -1089,22 +1222,46 @@ def unmanaged_rules(project_root: Path) -> list[IgnoreRule]:
     return sorted(rules, key=lambda r: (r.source, r.line))
 
 
-def matching_unmanaged_rules(project_root: Path, paths: list[str]) -> dict[str, IgnoreRule]:
-    """For each path, an unmanaged rule that MATCHES it -- winner or not.
+def matching_unmanaged_rules(project_root: Path, paths: list[str]) -> dict[str, list[IgnoreRule]]:
+    """EVERY unmanaged rule that matches each path -- winner or not, sign or not.
 
-    `check-ignore` reports only the LAST matching pattern, and the managed block
-    is spliced AFTER the hand-written region, so a managed rule always wins and
-    an unmanaged rule beneath a declared root would never be reported. That made
-    an earlier draft structurally unable to detect the conflicts it existed for.
+    Two distinct winner-takes-all failures had to be designed out here, both
+    reproduced against real git:
 
-    So the unmanaged rules are evaluated IN ISOLATION: a scratch repository is
-    built containing only the governed `.gitignore` files with every managed-block
-    line BLANKED (not deleted, so reported line numbers still match the real
-    file), global excludes disabled, and no index. Any hit there is by
-    construction an unmanaged-rule match, with nested-`.gitignore` scoping
-    preserved because the files keep their relative locations.
+    1. `check-ignore` reports only the LAST matching pattern, and the managed
+       block is spliced AFTER the hand-written region, so a managed rule always
+       wins and an unmanaged rule beneath a declared root is never reported.
+    2. Even among unmanaged rules alone the last match wins, and a `!` winner
+       used to be discarded as a false positive. With
 
-    This uses git's own pattern engine throughout -- no reimplementation.
+           /data/raw/**
+           !/data/raw/**
+
+       git reports the negation, the negation is dropped, and NO conflict is
+       reported -- while a standalone unmanaged negation aimed at a declared
+       root, which is precisely the per-case exception this design exists to
+       abolish, is likewise invisible.
+
+    So this reports MATCHES, never winners, in two layers:
+
+    * ISOLATION removes managed-vs-unmanaged shadowing. A scratch repository is
+      built containing only the governed `.gitignore` files with every
+      managed-block line BLANKED (not deleted, so reported line numbers still
+      match the real file), global excludes disabled, and no index. Nested
+      `.gitignore` scoping survives because the files keep their relative
+      locations.
+    * PEELING removes unmanaged-vs-unmanaged shadowing. Each round records the
+      reported rule for every path, then blanks those rule lines and asks again,
+      until a round reports nothing new. Blanking a `!` winner lets the rule it
+      shadowed surface on the next round. Each round blanks at least one line,
+      so the loop is bounded by the number of unmanaged rules; in practice it
+      converges in one or two rounds because most rules match nothing.
+
+    A negation is recorded as a match on purpose. `!/data/raw/keep.csv` under a
+    declared root is an unauthorised per-case exception even when some other
+    rule renders it inert -- flagging the text is the point.
+
+    git's own pattern engine does all the matching; nothing is reimplemented.
     """
     from science_tool.boundary.generate import MANAGED_BEGIN, MANAGED_END
 
@@ -1114,47 +1271,78 @@ def matching_unmanaged_rules(project_root: Path, paths: list[str]) -> dict[str, 
     if not governed:
         return {}
 
+    # Managed-block lines start blanked; peeled lines are added as we go.
+    blanked: dict[str, set[int]] = {}
+    sources: dict[str, list[str]] = {}
+    for rel in governed:
+        text = _read_governed(project_root, rel)
+        lines = text.splitlines()
+        sources[rel] = lines
+        managed = set()
+        inside = False
+        for number, raw in enumerate(lines, start=1):
+            if MANAGED_BEGIN in raw:
+                inside = True
+                managed.add(number)
+                continue
+            if MANAGED_END in raw:
+                inside = False
+                managed.add(number)
+                continue
+            if inside:
+                managed.add(number)
+        blanked[rel] = managed
+
+    matches: dict[str, list[IgnoreRule]] = {}
+    payload = "\0".join(paths).encode("utf-8", "surrogateescape") + b"\0"
+
     with tempfile.TemporaryDirectory() as tmp:
         scratch = Path(tmp) / "scratch"
         scratch.mkdir()
-        subprocess.run(["git", "init", "-q", str(scratch)], check=True)
+        _git_plain("init", "-q", str(scratch))
         empty = Path(tmp) / "empty-excludes"
         empty.write_text("")
-        subprocess.run(
-            ["git", "-C", str(scratch), "config", "core.excludesFile", str(empty)], check=True
-        )
-        for rel in governed:
-            try:
-                text = (project_root / rel).read_text(encoding="utf-8")
-            except OSError:
-                continue
-            kept: list[str] = []
-            inside = False
-            for raw in text.splitlines():
-                if MANAGED_BEGIN in raw:
-                    inside = True
-                    kept.append("")
-                    continue
-                if MANAGED_END in raw:
-                    inside = False
-                    kept.append("")
-                    continue
-                kept.append("" if inside else raw)
-            target = scratch / rel
-            target.parent.mkdir(parents=True, exist_ok=True)
-            target.write_text("\n".join(kept) + "\n", encoding="utf-8")
+        _git_plain("-C", str(scratch), "config", "core.excludesFile", str(empty))
 
-        payload = "\0".join(paths).encode("utf-8", "surrogateescape") + b"\0"
-        raw_out = _git(scratch, "check-ignore", "--no-index", "--stdin", "-z", "-v",
-                       stdin=payload, ok=(0, 1))
+        while True:
+            for rel, lines in sources.items():
+                rendered = [
+                    "" if number in blanked[rel] else raw
+                    for number, raw in enumerate(lines, start=1)
+                ]
+                target = scratch / rel
+                target.parent.mkdir(parents=True, exist_ok=True)
+                target.write_text("\n".join(rendered) + "\n", encoding="utf-8")
 
-    fields = raw_out.split(b"\0")
-    matches: dict[str, IgnoreRule] = {}
-    for i in range(0, len(fields) - 3, 4):
-        source, line, pattern, path = (f.decode("utf-8", "surrogateescape") for f in fields[i : i + 4])
-        if not path or pattern.startswith("!"):
-            continue
-        matches[path] = IgnoreRule(source=source, line=int(line or 0), pattern=pattern)
+            raw_out = _git(
+                scratch, "check-ignore", "--no-index", "--stdin", "-z", "-v",
+                stdin=payload, ok=(0, 1),
+            )
+            fields = raw_out.split(b"\0")
+            # Record the WHOLE round before blanking anything. Blanking inside
+            # this loop would drop the second and later paths matched by the same
+            # rule in the same round -- they would see it already blanked.
+            newly: set[tuple[str, int]] = set()
+            for i in range(0, len(fields) - 3, 4):
+                source, line, pattern, path = (
+                    f.decode("utf-8", "surrogateescape") for f in fields[i : i + 4]
+                )
+                if not path or source not in blanked:
+                    continue
+                number = int(line or 0)
+                if number in blanked[source]:
+                    continue
+                matches.setdefault(path, []).append(
+                    IgnoreRule(source=source, line=number, pattern=pattern)
+                )
+                newly.add((source, number))
+            if not newly:
+                break
+            for source, number in newly:
+                blanked[source].add(number)
+
+    for hits in matches.values():
+        hits.sort(key=lambda r: (r.source, r.line))
     return matches
 ```
 
@@ -1192,7 +1380,8 @@ git commit -m "feat(boundary): git introspection layer with an explicit source u
 | Symlinked directories | Not descended into | Prevents cycles and escaping the root; a symlinked tree is not *in* the repo |
 | Symlinked files | Reported if the name matches | Git tracks the link itself |
 | Symlinked root | Not traversed at all | `followlinks=False` does not protect the top directory, so a symlinked root would escape the repo |
-| Nested repositories | A directory containing `.git` as **file or directory** is pruned | Submodules and linked worktrees use the file form; git treats both as opaque gitlinks |
+| Nested repositories | A directory containing `.git` as **file or directory** is pruned. Only the **project root** is exempt — not the supplied `base` | Submodules and linked worktrees use the file form; git treats both as opaque gitlinks. Exempting `base` would traverse a submodule declared as a root in full |
+| The `.git` marker itself | Excluded from **filenames** as well as directory names | In a linked worktree the root's `.git` is a file, not a directory |
 | Glob matching | Right-anchored against the path **relative to the root** | Mirrors the generated `!/root/**/<glob>` rule, so multi-segment globs like `schemas/*.json` work |
 | Pruning | Skip `.git` | Bounded by the benchmark, not by prefix analysis |
 | Ordering | Sorted | Stable findings |
@@ -1277,6 +1466,32 @@ def test_nested_repository_file_form_is_pruned(tmp_path: Path):
     assert manifest_candidates(tmp_path, _root()) == ["data/external/own/datapackage.json"]
 
 
+def test_declared_root_that_is_itself_a_nested_repo_is_pruned(tmp_path: Path):
+    """The exemption from pruning belongs to the PROJECT ROOT alone. Exempting
+    the supplied `base` traversed a submodule declared as a root in full."""
+    _mk(tmp_path, "data/external/.git", "gitdir: /elsewhere/.git/modules/external\n")
+    _mk(tmp_path, "data/external/datapackage.json")
+    assert manifest_candidates(tmp_path, _root()) == []
+
+
+def test_project_root_git_file_is_not_reported(tmp_path: Path):
+    """A linked worktree's root `.git` is a FILE, and filtering only directory
+    names returned it as a repository file."""
+    from science_tool.boundary.walk import iter_repo_files
+
+    _mk(tmp_path, ".git", "gitdir: /elsewhere/.git/worktrees/wt\n")
+    _mk(tmp_path, "README.md")
+    assert iter_repo_files(tmp_path) == ["README.md"]
+
+
+def test_project_root_git_directory_is_not_reported(tmp_path: Path):
+    from science_tool.boundary.walk import iter_repo_files
+
+    _mk(tmp_path, ".git/HEAD", "ref: refs/heads/main\n")
+    _mk(tmp_path, "README.md")
+    assert iter_repo_files(tmp_path) == ["README.md"]
+
+
 def test_symlinked_root_is_not_traversed(tmp_path: Path):
     _mk(tmp_path, "outside/a/datapackage.json")
     (tmp_path / "data").mkdir()
@@ -1343,9 +1558,10 @@ CONFLICT_BUDGET_SECONDS = 5.0
 
 
 def test_conflict_detection_stays_within_budget(big_tree: Path):
-    """The conflict algorithm feeds EVERY extant path under a declared root to
-    one check-ignore call and builds a scratch repo. Uncapped by design (a
-    sampled ERROR check would be probabilistic), so it needs its own budget.
+    """The conflict algorithm feeds EVERY extant path under a declared root to a
+    check-ignore call per peeling round, over a scratch repo. Uncapped by design
+    (a sampled ERROR check would be probabilistic) and round count is data
+    dependent, so it needs its own budget rather than the walk's.
     """
     import subprocess
 
@@ -1364,6 +1580,29 @@ def test_conflict_detection_stays_within_budget(big_tree: Path):
     assert len(subjects) >= FILE_COUNT, "every extant path must be fed in, not a sample"
     assert hits, "the wildcard rule must be detected"
     assert elapsed < CONFLICT_BUDGET_SECONDS, f"conflict pass took {elapsed:.2f}s over {FILE_COUNT} files"
+
+
+def test_conflict_detection_worst_case_peeling_stays_within_budget(big_tree: Path):
+    """Peeling runs one check-ignore per round and blanks at least one rule per
+    round, so rounds are bounded by the number of MATCHING unmanaged rules. This
+    pins the worst realistic case -- every rule matching -- rather than assuming
+    the one-round happy path holds."""
+    import subprocess
+
+    from science_tool.boundary.gitio import matching_unmanaged_rules
+    from science_tool.validate.checks.boundary import _conflict_subjects
+
+    subprocess.run(["git", "init", "-q", str(big_tree)], check=True)
+    rules = "\n".join(f"*.parquet\n!/data/external/ds/{shard:03d}/**" for shard in range(20))
+    (big_tree / ".gitignore").write_text(rules + "\n")
+    subprocess.run(["git", "-C", str(big_tree), "add", "-f", ".gitignore"], check=True)
+
+    start = time.perf_counter()
+    hits = matching_unmanaged_rules(big_tree, _conflict_subjects(big_tree, "data/external"))
+    elapsed = time.perf_counter() - start
+
+    assert hits
+    assert elapsed < CONFLICT_BUDGET_SECONDS, f"peeling took {elapsed:.2f}s over 40 rules"
 ```
 
 - [ ] **Step 2: Run tests to verify they fail**
@@ -1430,11 +1669,18 @@ def iter_repo_files(project_root: Path, base: Path | None = None) -> list[str]:
     found: list[str] = []
     for dirpath, dirnames, filenames in os.walk(top, followlinks=False):
         current = Path(dirpath)
-        if current != top and _is_nested_repo(current):
+        # Only the PROJECT ROOT is exempt from nested-repo pruning, not every
+        # supplied `base`. An earlier draft exempted `top`, so a declared root
+        # that is itself a submodule or linked worktree was traversed in full --
+        # precisely the case pruning exists for.
+        if current != project_root and _is_nested_repo(current):
             dirnames[:] = []
             continue
         dirnames[:] = sorted(d for d in dirnames if d != ".git" and not (current / d).is_symlink())
-        for name in sorted(filenames):
+        # `.git` must be dropped from FILENAMES too. In a linked worktree the
+        # project root's `.git` is a file, so filtering directory names alone
+        # returned it as a repository file.
+        for name in sorted(n for n in filenames if n != ".git"):
             found.append((current / name).relative_to(project_root).as_posix())
     return sorted(found)
 
@@ -1462,6 +1708,18 @@ Run the perf test with timing shown and note the measured figure in the commit b
 ```bash
 cd science && uv run --frozen pytest tests/test_boundary_walk_perf.py -v -s
 ```
+
+Reference figures from a prototype of the same algorithm over the same 5000-file
+shape, so a large regression is recognisable rather than merely under budget:
+
+| Case | Rounds | Measured |
+|---|---|---|
+| Conflict pass, 1 matching rule | 2 | 0.07 s |
+| Conflict pass, 40 rules all matching | 21 | 0.76 s |
+
+If either lands near its budget rather than near these figures, the peeling loop
+is re-running more rounds than the rule count justifies — investigate before
+raising the budget.
 
 - [ ] **Step 6: Commit**
 
@@ -1511,9 +1769,13 @@ def _repo(tmp_path: Path, boundary: dict | None = None) -> Path:
     return tmp_path
 
 
-def _rules(root: Path) -> list[str]:
+def _results(root: Path) -> list:
     ctx = ValidateContext.from_project_root(root, strict=False, verbose=False)
-    return [r.rule for r in check_boundary(ctx)]
+    return list(check_boundary(ctx))
+
+
+def _rules(root: Path) -> list[str]:
+    return [r.rule for r in _results(root)]
 
 
 def test_tracked_ignored_fires_without_any_declaration(tmp_path: Path):
@@ -1607,6 +1869,38 @@ def test_allowlist_cannot_excuse_a_conflict(tmp_path: Path):
     assert "boundary.declaration-conflict" in _rules(repo)
 
 
+def test_declaration_conflict_catches_a_hand_written_pin(tmp_path: Path):
+    """A `!` rule pinning one file out of a declared payload root IS the per-case
+    exception the declaration replaces. It ignores nothing, so no ignore-rule
+    search finds it -- only reporting matches rather than winners does."""
+    decl = {"roots": [{"path": "data/raw", "class": "payload"}]}
+    repo = _repo(tmp_path, decl)
+    cfg = BoundaryConfig.model_validate(decl)
+    (repo / "data/raw").mkdir(parents=True)
+    (repo / "data/raw/keep.csv").write_text("x")
+    (repo / ".gitignore").write_text(
+        splice_managed_block("!/data/raw/keep.csv\n", render_managed_block(cfg))
+    )
+    subprocess.run(["git", "-C", str(repo), "add", ".gitignore"], check=True)
+    assert "boundary.declaration-conflict" in _rules(repo)
+
+
+def test_declaration_conflict_sees_a_rule_shadowed_by_a_hand_written_negation(tmp_path: Path):
+    """Among unmanaged rules the LAST match still wins, and git reports the
+    negation here. Peeling is what surfaces the ignore rule underneath."""
+    decl = {"roots": [{"path": "data/raw", "class": "payload"}]}
+    repo = _repo(tmp_path, decl)
+    cfg = BoundaryConfig.model_validate(decl)
+    (repo / "data/raw").mkdir(parents=True)
+    (repo / "data/raw/x.csv").write_text("x")
+    (repo / ".gitignore").write_text(
+        splice_managed_block("/data/raw/**\n!/data/raw/**\n", render_managed_block(cfg))
+    )
+    subprocess.run(["git", "-C", str(repo), "add", ".gitignore"], check=True)
+    findings = [r for r in _results(repo) if r.rule == "boundary.declaration-conflict"]
+    assert sorted(f.line for f in findings) == [1, 2], "both rules must be reported, not just the winner"
+
+
 def test_duplicate_of_a_generated_line_is_a_conflict(tmp_path: Path):
     decl = {"roots": [{"path": "data/raw", "class": "payload"}]}
     repo = _repo(tmp_path, decl)
@@ -1622,6 +1916,25 @@ def test_invalid_declaration_is_an_error_not_silence(tmp_path: Path):
                                        "tracked": ["datapackage.json"]}]})
     rules = _rules(repo)
     assert "boundary.invalid-declaration" in rules
+
+
+def test_universal_checks_survive_an_invalid_declaration(tmp_path: Path):
+    """Both universal checks run BEFORE the declaration is loaded. Running them
+    after the early return made them universal in name only -- and a broken
+    declaration is exactly when an unanchored rule is most likely to be lurking."""
+    repo = _repo(tmp_path, {"roots": [{"path": "data", "class": "payload"},
+                                      {"path": "data/external", "class": "manifest",
+                                       "tracked": ["datapackage.json"]}]})
+    (repo / ".gitignore").write_text("archive\n")
+    (repo / "data").mkdir()
+    (repo / "data/big.csv").write_text("x")
+    subprocess.run(["git", "-C", str(repo), "add", "-f", ".gitignore", "data/big.csv"], check=True)
+    (repo / ".gitignore").write_text("archive\n/data/\n")
+    subprocess.run(["git", "-C", str(repo), "add", ".gitignore"], check=True)
+    rules = _rules(repo)
+    assert "boundary.invalid-declaration" in rules
+    assert "boundary.unanchored-pattern" in rules
+    assert "boundary.tracked-ignored" in rules
 
 
 def test_ignored_undeclared_warns_and_allowlist_silences_it(tmp_path: Path):
@@ -1724,7 +2037,6 @@ See docs/plans/2026-07-26-vcs-storage-boundary-design.md.
 
 from __future__ import annotations
 
-import os
 from collections.abc import Iterator
 from pathlib import Path
 
@@ -1737,7 +2049,7 @@ from science_tool.boundary.gitio import (
     visible_paths,
     matching_unmanaged_rules,
 )
-from science_tool.boundary.walk import manifest_candidates
+from science_tool.boundary.walk import iter_repo_files, manifest_candidates
 from science_tool.project_config import load_project_config
 from science_tool.validate.checks import Check
 from science_tool.validate.context import ValidateContext
@@ -1758,8 +2070,9 @@ def _conflict_subjects(project_root: Path, root_path: str) -> list[str]:
 
     NOT sampled. An earlier draft capped this at 500 paths, which made an ERROR
     check probabilistic -- a scoped rule affecting the 501st file was silently
-    missed. All paths go into ONE NUL-framed check-ignore call, so the cost is a
-    single subprocess regardless of tree size; the benchmark below bounds it.
+    missed. All paths go into one NUL-framed check-ignore call per peeling round,
+    so the cost is a couple of subprocesses regardless of tree size; the
+    benchmark below bounds it.
     """
     base = project_root / root_path
     probes = [
@@ -1799,28 +2112,13 @@ def check_boundary(ctx: ValidateContext) -> Iterator[Result]:
             task=None,
         )
 
-    try:
-        cfg = load_project_config(root).boundary
-    except Exception as exc:  # noqa: BLE001
-        # NEVER downgrade a broken declaration to "undeclared": that would
-        # disable four checks exactly when the configuration is wrong.
-        yield Result(
-            severity=Severity.ERROR,
-            path=Path("science.yaml"),
-            line=None,
-            message=f"boundary declaration is invalid and no boundary check can run: {exc}",
-            rule="boundary.invalid-declaration",
-            task=None,
-        )
-        return
-
-    gitignore_text = ""
-    if (root / GITIGNORE).is_file():
-        gitignore_text = (root / GITIGNORE).read_text(encoding="utf-8")
-    managed_body = extract_managed_block(gitignore_text)
-
     # ---- universal: unanchored-pattern ----------------------------------
-    for rule in unmanaged_rules(root):
+    # BEFORE the declaration load, not after. Both universal checks must survive
+    # a broken `boundary:` block; running this one after the early return made it
+    # universal in name only, and an invalid declaration is exactly when an
+    # unanchored rule is most likely to be lurking.
+    all_unmanaged = unmanaged_rules(root)
+    for rule in all_unmanaged:
         if _is_unanchored_dir_pattern(rule.pattern):
             yield Result(
                 severity=Severity.WARN,
@@ -1835,9 +2133,30 @@ def check_boundary(ctx: ValidateContext) -> Iterator[Result]:
                 task=None,
             )
 
+    # ---- declaration load, after BOTH universal checks -------------------
+    try:
+        cfg = load_project_config(root).boundary
+    except Exception as exc:  # noqa: BLE001
+        # NEVER downgrade a broken declaration to "undeclared": that would
+        # disable four checks exactly when the configuration is wrong.
+        yield Result(
+            severity=Severity.ERROR,
+            path=Path("science.yaml"),
+            line=None,
+            message=f"boundary declaration is invalid, so no declared-root check can run: {exc}",
+            rule="boundary.invalid-declaration",
+            task=None,
+        )
+        return
+
     if cfg is None or not cfg.roots:
         # Implicit-versioned semantics begin at enrollment.
         return
+
+    gitignore_text = ""
+    if (root / GITIGNORE).is_file():
+        gitignore_text = (root / GITIGNORE).read_text(encoding="utf-8")
+    managed_body = extract_managed_block(gitignore_text)
 
     declared = [r.path for r in cfg.roots]
     allowed = {(a.source, a.pattern) for a in cfg.unmanaged_allow}
@@ -1877,11 +2196,10 @@ def check_boundary(ctx: ValidateContext) -> Iterator[Result]:
                 task=None,
             )
 
-    all_unmanaged = unmanaged_rules(root)
     by_location = {(r.source, r.line): r for r in all_unmanaged}
 
     # ---- declared: declaration-conflict ---------------------------------
-    # Ask GIT which rule governs each declared root. Text prefix comparison
+    # Ask GIT which rules match each declared root. Text prefix comparison
     # cannot: `*.parquet` affects data/external without naming it, and
     # `data/raw` inside inc/.gitignore scopes to inc/, not the repo root.
     # NOTE the ordering -- the allowlist is deliberately NOT consulted here. It
@@ -1890,26 +2208,29 @@ def check_boundary(ctx: ValidateContext) -> Iterator[Result]:
     conflicted: set[tuple[str, int]] = set()
     for declared_root in declared:
         subjects = _conflict_subjects(root, declared_root)
-        for probe, owner in matching_unmanaged_rules(root, subjects).items():
-            key = (owner.source, owner.line)
-            if key not in by_location or key in conflicted:
-                continue  # already reported
-            conflicted.add(key)
-            yield Result(
-                severity=Severity.ERROR,
-                path=Path(owner.source),
-                line=owner.line,
-                message=(
-                    f"hand-written rule {owner.pattern!r} governs {probe} inside declared root "
-                    f"{declared_root!r}. The declaration in science.yaml is the single authority "
-                    f"for that root; a rule outside the managed block re-opens per-case "
-                    f"adjudication. (Detected by evaluating the unmanaged rules in isolation "
-                    f"under git's own engine, so wildcards and nested .gitignore scoping are "
-                    f"accounted for and a rule shadowed by the managed block is still reported.)"
-                ),
-                rule="boundary.declaration-conflict",
-                task=None,
-            )
+        for probe, owners in sorted(matching_unmanaged_rules(root, subjects).items()):
+            for owner in owners:
+                key = (owner.source, owner.line)
+                if key not in by_location or key in conflicted:
+                    continue  # already reported
+                conflicted.add(key)
+                yield Result(
+                    severity=Severity.ERROR,
+                    path=Path(owner.source),
+                    line=owner.line,
+                    message=(
+                        f"hand-written rule {owner.pattern!r} matches {probe} inside declared "
+                        f"root {declared_root!r}. The declaration in science.yaml is the single "
+                        f"authority for that root; a rule outside the managed block re-opens "
+                        f"per-case adjudication. (Detected by evaluating the unmanaged rules in "
+                        f"isolation under git's own engine and peeling away each reported rule, "
+                        f"so wildcards and nested .gitignore scoping are accounted for and a rule "
+                        f"shadowed by the managed block, or by another hand-written rule, is "
+                        f"still reported.)"
+                    ),
+                    rule="boundary.declaration-conflict",
+                    task=None,
+                )
 
     # ---- declared: ignored-undeclared -----------------------------------
     for rule in all_unmanaged:
@@ -2216,7 +2537,11 @@ def has_drift(project_root: Path) -> bool:
 def _probe_decisions(project_root: Path, probes: list[str]) -> dict[str, bool]:
     if not probes:
         return {}
-    payload = "\0".join(probes).encode() + b"\0"
+    # `surrogateescape`, matching the decode on the way back out. A legal git
+    # filename need not be valid UTF-8; `iter_repo_files` surfaces those bytes as
+    # surrogates, and a plain `.encode()` raises UnicodeEncodeError on them --
+    # crashing verification on a tree git itself handles fine.
+    payload = "\0".join(probes).encode("utf-8", "surrogateescape") + b"\0"
     proc = subprocess.run(
         ["git", "-C", str(project_root), "check-ignore", "--no-index", "--stdin", "-z"],
         input=payload,
@@ -2230,11 +2555,17 @@ def _probe_decisions(project_root: Path, probes: list[str]) -> dict[str, bool]:
 
 
 def _assert_clean(project_root: Path) -> None:
+    # Fail closed like every other git helper. Treating a nonzero status as
+    # "clean" would let verification proceed to rewrite a .gitignore whose state
+    # it could not read -- the one situation where the restore matters most.
     proc = subprocess.run(
         ["git", "-C", str(project_root), "status", "--porcelain", "-z", "--", GITIGNORE],
         capture_output=True,
         check=False,
     )
+    if proc.returncode != 0:
+        detail = proc.stderr.decode("utf-8", "replace").strip()
+        raise BoundaryGitError(f"git status failed ({proc.returncode}) before verification: {detail}")
     if proc.stdout.strip():
         raise BoundaryDirtyError(
             f"{GITIGNORE} has uncommitted changes; commit or stash before verifying so a "
@@ -2466,6 +2797,10 @@ def propose_declaration(project_root: Path) -> dict:
         try:
             size = (project_root / path).stat().st_size
         except OSError:
+            # NOT the fail-open pattern removed elsewhere. This is a file that
+            # vanished between the walk and the stat; skipping one candidate
+            # weakens a suggestion, whereas swallowing an unreadable RULE SOURCE
+            # would silently drop governance. Rule sources raise; races skip.
             continue
         top = "/".join(path.parts[:2]) if len(path.parts) > 2 else path.parts[0]
         if path.name in _RECORD_NAMES:
@@ -2726,7 +3061,7 @@ def audit_project(
         try:
             size = abs_path.stat().st_size
         except OSError:
-            continue
+            continue  # vanished mid-walk; see the note in the discovery walk
         cls = classify(rel, size, policy)
         loc = location(rel, data_dirs)
         is_tracked = posix in tracked
@@ -3154,6 +3489,8 @@ git add -A && git commit -m "chore(boundary): full-suite verification" || echo "
 
 **No heuristic survives in enforcement.** An earlier draft carried `_is_tooling_shaped` to keep `ignored-undeclared` quiet on `.venv/`-style rules. It was deleted: the default `unmanaged_allow` already silences those by exact match *before* the heuristic could run, so its only remaining effect was to broaden silence to undeclared patterns like `.private-data/` and `*.pdf` — precisely the material the check exists to surface. `DEFAULT_UNMANAGED_ALLOW` is now kept byte-identical to the scaffolded `.gitignore` in `create-project.md`, which is what keeps a fresh project quiet without any shape guessing.
 
-**Conflict detection is match-based, not winner-based.** `check-ignore` reports only the last matching pattern, and the managed block is spliced *after* the hand-written region — so a managed rule always wins and a naive implementation could never report the conflicts it exists for. Unmanaged rules are therefore evaluated in isolation in a scratch repository (managed lines blanked to preserve line numbers, global excludes disabled), which makes the predicate "an unmanaged rule *matches* a path under a declared root", matching the design, while still using git's own pattern engine end to end.
+**Conflict detection is match-based, not winner-based.** `check-ignore` reports only the last matching pattern, and two separate things shadow the rule that must be seen. The managed block is spliced *after* the hand-written region, so a managed rule always wins — defeated by **isolation** (a scratch repository holding only the governed `.gitignore` files, managed lines blanked to preserve line numbers, global excludes disabled). Among unmanaged rules the last match still wins, and a `!` winner reports the path as un-ignored — defeated by **peeling** (record the reported rule for every path, blank those lines, ask again, until a round reports nothing new; bounded because each round blanks at least one line). Negations are recorded rather than filtered, because a hand-written pin beneath a declared root is exactly the per-case exception the declaration abolishes. The predicate is therefore "an unmanaged rule *matches* a path under a declared root", matching the design, while git's own pattern engine does all the matching end to end.
+
+**Grammar exclusions are divergence-driven, not taste-driven.** Every construct `tracked:` rejects (`**`, `?`, character classes, backslashes, empty/`.` segments, surrounding whitespace) is one where `PurePosixPath.match` and git disagree, each reproduced against real git and pinned by a test that asserts *both* engines' answers. Admitting one would let the generator emit a working git rule that `unreachable-tracked` silently never verifies.
 
 **Nothing is sampled.** All extant paths under a declared root go into one NUL-framed `check-ignore` call. An earlier draft capped this at 500, which made an ERROR check probabilistic and filesystem-order dependent.

@@ -197,17 +197,29 @@ rejected, a `payload` root can safely emit the terse anchored form.
   is an error rather than a silent no-op
 
 `tracked:` grammar. These become git patterns AND must be evaluated by the
-checker, so the grammar is the subset both engines provably share: letters,
-digits, `.`, `_`, `-`, `/`, `*`, `?`. Reject newlines and control characters,
-absolute paths, any `..` segment, a leading `!` (negation is the generator's
-job), a leading `#`, a trailing `/` (these match files, not directories),
-backslashes, character classes, `**`, and duplicates.
+checker, so the grammar is the subset both engines provably share: **literals
+(including non-ASCII) and `*`**. Reject newlines and control characters,
+absolute paths, a leading `!` (negation is the generator's job), a leading `#`,
+a trailing `/` (these match files, not directories), leading or trailing
+whitespace, empty / `.` / `..` path segments, `**`, `?`, character classes,
+backslashes, and duplicates.
 
-`**` and character classes are excluded deliberately. git's `foo/**/bar.json`
-matches `foo/bar.json`; `PurePosixPath.match`, which the checker uses, returns
-False — and probe generation cannot synthesise a witness for `[ab].json`.
+Every exclusion is a case where the two engines disagree, each reproduced
+against real git:
+
+| Construct | git | `PurePosixPath.match` (the checker) |
+|---|---|---|
+| `foo/**/bar.json` vs `foo/bar.json` | matches | does not |
+| `?.json` vs `é.json` | `?` is one **byte**, so no match | `?` is one **character**, so matches |
+| `foo//bar.json`, `foo/./bar.json` | rule does not fire | segments normalised away, matches |
+| `a.json ` (trailing space) | whitespace stripped from the pattern | significant |
+| `[ab].json` | matches | matches, but probe generation cannot synthesise a witness |
+
 Admitting syntax the checker evaluates differently from git would let the
-generator emit a working rule that `unreachable-tracked` silently never checks.
+generator emit a *working* git rule that `unreachable-tracked` silently never
+verifies — the precise false negative that check exists to prevent. Literals and
+`*` are byte-for-byte identical in both, including across `*` matching leading
+dots, so they are admitted without restriction.
 
 `unmanaged_allow` grammar is **not** the same, because its entries are matched
 against `.gitignore` rule *text* by equality rather than compiled as patterns. A
@@ -363,16 +375,36 @@ rather than merely *an* authority. Without it, a hand-added rule below the
 managed block silently re-opens per-case adjudication.
 
 Its predicate is that an unmanaged rule **matches** a path under a declared
-root — not that it wins. That distinction is load-bearing. `check-ignore`
-reports only the last matching pattern, and the managed block is spliced *after*
+root — not that it wins, and regardless of sign. That distinction is
+load-bearing twice over, because `check-ignore` reports only the last matching
+pattern and two different things can shadow the rule you need to see.
+
+*Managed rules shadow unmanaged ones.* The managed block is spliced **after**
 the hand-written region, so a managed rule always wins and a winner-based
 implementation could never report a conflict at all. The unmanaged rules are
-therefore evaluated in isolation: a scratch repository containing only the
+therefore evaluated **in isolation**: a scratch repository containing only the
 governed `.gitignore` files, with managed-block lines blanked rather than
 deleted so reported line numbers still match the real file, global excludes
-disabled, and no index. Any hit there is by construction an unmanaged-rule
-match, with nested-`.gitignore` scoping preserved because the files keep their
-relative locations — and git's own pattern engine does all the matching.
+disabled, and no index. Nested-`.gitignore` scoping survives because the files
+keep their relative locations.
+
+*Unmanaged rules shadow each other.* Isolation alone still leaves a last-match
+winner among the hand-written rules, and a `!` winner reports the path as **not
+ignored**. Given `/data/raw/**` followed by `!/data/raw/**`, git names the
+negation and the underlying rule is never seen. So isolation is paired with
+**peeling**: each round records the rule reported for every path, blanks those
+lines, and asks again, until a round reports nothing new. Each round blanks at
+least one line, so the loop is bounded by the number of unmanaged rules and
+converges in one or two rounds in practice.
+
+A negation is recorded as a match rather than discarded as a false positive.
+`!/data/raw/keep.csv` beneath a declared payload root ignores nothing, so no
+ignore-oriented search would ever surface it — yet pinning one file out of a
+declared root by hand is precisely the per-case exception this design abolishes.
+Flagging the text is the point.
+
+Throughout, git's own pattern engine does all the matching; nothing is
+reimplemented.
 
 `boundary.ignored-undeclared` closes the complementary hole. `declaration-conflict`
 only inspects paths *beneath a declared root*, so without this check a project
@@ -574,8 +606,15 @@ Required, or the declaration becomes a fourth opinion rather than the authority:
   `--no-index` on an already-tracked path — so nobody "simplifies" the
   implementation back onto `check-ignore`.
 - `tracked:` and `unmanaged_allow` grammar: newline, control character, absolute
-  path, `..`, leading `!`, leading `#`, trailing `/`, dangling escape, duplicate,
-  and empty/omitted `tracked:` on a `manifest` root each raise.
+  path, empty / `.` / `..` segment, leading `!`, leading `#`, trailing `/`,
+  surrounding whitespace, backslash, `?`, character class, `**`, duplicate, and
+  empty/omitted `tracked:` on a `manifest` root each raise. Each divergence case
+  in the grammar table above carries a test that asserts the *matcher's* answer
+  alongside the rejection, so the reason for the exclusion cannot be lost.
+- Conflict detection defeats both shadowing mechanisms: a rule hidden by the
+  managed block, a rule hidden by a later hand-written negation, and a standalone
+  hand-written negation are each reported; a single rule matching many paths is
+  attributed to all of them; and a tree with no matching rule terminates.
 - Allowlist source-scoping: identical pattern text in the root and in a nested
   `.gitignore` produces two findings; a root-scoped allow entry silences only
   the root one. A `source` outside the governed universe raises.
