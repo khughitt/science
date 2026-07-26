@@ -343,12 +343,13 @@ def test_apply_sets_superseded_status_on_members(tmp_path: Path) -> None:
 
 
 @pytest.mark.parametrize(
-    ("kind", "kind_dir", "old_name", "new_name"),
+    ("kind", "kind_dir", "starting_status", "old_name", "new_name"),
     [
-        pytest.param("story", "stories", "old-story", "new-story", id="story"),
+        pytest.param("story", "stories", "draft", "old-story", "new-story", id="story"),
         pytest.param(
             "validation-report",
             "validation-reports",
+            "active",
             "0001-old",
             "0002-new",
             id="validation-report",
@@ -359,6 +360,7 @@ def test_reverse_gap_kind_is_stamped_on_apply(
     tmp_path: Path,
     kind: str,
     kind_dir: str,
+    starting_status: str,
     old_name: str,
     new_name: str,
 ) -> None:
@@ -369,7 +371,7 @@ def test_reverse_gap_kind_is_stamped_on_apply(
         tmp_path,
         kind_dir,
         old_name,
-        {"id": old_id, "kind": kind, "status": "active"},
+        {"id": old_id, "kind": kind, "status": starting_status},
     )
     _write(
         tmp_path,
@@ -378,7 +380,7 @@ def test_reverse_gap_kind_is_stamped_on_apply(
         {
             "id": new_id,
             "kind": kind,
-            "status": "active",
+            "status": starting_status,
             "relations": [_supersedes(old_id)],
         },
     )

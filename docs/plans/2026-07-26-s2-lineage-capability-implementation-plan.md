@@ -4,7 +4,7 @@
 
 **Goal:** Declare per kind whether it can be superseded, and make the status vocabulary, the relation endpoint list, and the auto-stamping policy all derive from that one declaration.
 
-**Architecture:** `EntityKind` gains a `supersedable: bool` field, declared explicitly on all 53 shipped kinds. Three surfaces that currently infer lineage capability from each other are gated against it by exact equality in both directions. Fifteen kinds are re-ruled so both existing gaps close, and `workflow-run`'s dead top-level `supersedes:` field is retired.
+**Architecture:** `EntityKind` gains a `supersedable: bool` field, declared explicitly on all 53 shipped kinds. Three surfaces that currently infer lineage capability from each other are gated against it by exact equality in both directions. Fifteen kinds are re-ruled so both existing gaps close, `workflow-run`'s dead top-level `supersedes:` field is retired, and a post-review correction makes every supersedable shipped kind reachable through the descriptor-derived Markdown write policy.
 
 **Tech Stack:** Python 3, Pydantic v2, pytest, uv.
 
@@ -20,6 +20,7 @@ Design: [`meta/doc/plans/2026-07-26-s2-lineage-capability-design.md`](../../meta
 - **Composition over inheritance; explicit over defensive; fail early instead of silent fallbacks. No "legacy"/"compatibility" layers. No `Unified` prefix.**
 - **Use `~/d/` or relative paths in docs and code**, never `/home/keith/` or `/mnt/ssd/Dropbox/`.
 - **The 18 supersedable kinds, exactly:** `decision`, `discussion`, `finding`, `hypothesis`, `inquiry`, `interpretation`, `mechanism`, `method`, `plan`, `proposition`, `report`, `spec`, `story`, `synthesis`, `theme`, `topic`, `validation-report`, `workflow-step`. Every other kind — 32 in core, 3 in local — is `supersedable=False`.
+- **Every supersedable shipped kind is writable.** Its descriptor must supply both `home` and `strategy`, so it appears in `_BUILTIN_MARKDOWN_POLICIES`; a dry-run member in `to_mark` must never disappear at the apply lookup boundary.
 - **Do not add the ten newly-supersedable kinds to `_CONCLUSION_KINDS`.** That list is shared with the `amends` relation; widening it would silently grant cross-kind amendment admissibility this design did not rule on. They are **self-pairs**.
 - **A stale exemption must fail as loudly as a new gap.** Every gate assertion in this plan is exact equality in both directions, with a failure message naming each side.
 
@@ -30,13 +31,20 @@ Design: [`meta/doc/plans/2026-07-26-s2-lineage-capability-design.md`](../../meta
 | File | Responsibility in this change |
 |---|---|
 | `science/model/src/science_model/profiles/schema.py` | declares the `supersedable` field on `EntityKind` |
-| `science/model/src/science_model/profiles/core.py` | the 50 core declarations, the 4 status rulings, the `supersedes` endpoint rulings |
+| `science/model/src/science_model/profiles/core.py` | the 50 core declarations, the 4 status rulings, the `supersedes` endpoint rulings, and the validation-report Markdown write policy |
 | `science/model/src/science_model/profiles/local.py` | the 3 local-profile declarations |
 | `science/model/tests/test_supersedable_gate.py` | the gate — all five properties; rewritten from a subset ratchet to exact equality |
+| `meta/doc/plans/2026-07-26-s2-lineage-capability-design.md` | the authored validation-report write-path ruling and the actual project-local inertness guarantees |
 | `science/src/science_tool/kind_descriptors.py` | `DECLARED_SUPERSEDABLE`, the tool-side lookup mirroring `DECLARED_STATUSES` |
+| `science/src/science_tool/entities.py` | descriptor-derived built-in Markdown policies and the shared entity lookup/write boundary; unchanged, but guarded by Task 6 parity |
 | `science/src/science_tool/consolidation.py` | the auto-stamping policy derives from the declaration |
+| `science/src/science_tool/graph/materialize.py` | core-profile relation resolution and endpoint admission; unchanged authority exercised by the local-kind regression |
+| `science/tests/test_kind_map_equivalence.py` | frozen status/default/Markdown-policy oracles, re-frozen only against written rulings |
+| `science/tests/test_consolidation_mark_superseded.py` | real apply-level coverage for both reverse-gap kinds |
+| `science/tests/test_decision_material.py` | direct project-local exclusion from both supported policy and core relation admission |
 | `science/src/science_tool/qa_audit/runs.py`, `verdicts.py` | drop the dead `supersedes` field; correct two docstrings |
 | `science/src/science_tool/validate/checks/materialization.py` | remove the one-entry legit-reader exemption |
+| `science/tests/validate/test_checks_materialization.py` | validator behavior and unconditional top-level `amends:` rationale |
 | `templates/workflow-run.md`, `docs/process/pipeline-audit-and-refactor.md` | user-facing guidance for the retired field |
 | `commands/next-steps.md` → `codex-skills/science-next-steps/SKILL.md` | live agent guidance naming unreachable workflow-run states; the mirror is regenerated, never hand-edited |
 
@@ -972,41 +980,718 @@ authored the key, so this is a zero-migration change."
 
 ---
 
-## Verification
+### Task 6: Close the validation-report write path and pin project-local inertness
 
-After Task 5, from a clean tree on the branch:
+This is an explicit **post-review correction**. Task 2 remains the historical status-only
+intermediate: it makes `validation-report` supersedable in the model but does not make it writable.
+After Task 5, that omission is observable: dry-run admits a validation-report chain and places its
+old member in `to_mark`, while apply cannot find the member because the descriptor-derived Markdown
+policy omits every kind whose `home` or `strategy` is unset. This task closes that runtime gap and
+adds the missing end-state guard.
 
-```bash
-cd science/model && uv run --frozen pytest -q
-cd science && uv run --frozen pytest -q      # ~3 min; run AFTER the model suite, never concurrently
-cd science && uv run ruff check && uv run pyright
+**Files:**
+- Modify: `science/model/src/science_model/profiles/core.py` (the
+  validation-report `EntityKind` block; `_SELF_SUPERSEDING_KINDS` only during the
+  uncommitted mutation proof)
+- Modify: `meta/doc/plans/2026-07-26-s2-lineage-capability-design.md` (the project-local guarantee
+  paragraph and the validation-report write-path ruling)
+- Modify: `docs/plans/2026-07-26-s2-lineage-capability-implementation-plan.md` (Task 4 rationale,
+  File Structure, this correction task, and final Verification)
+- Modify: `science/src/science_tool/kind_descriptors.py` (`DECLARED_SUPERSEDABLE` rationale; one
+  uncommitted mutation line during the proof)
+- Read: `science/src/science_tool/entities.py:58-62`, `:365-370`, `:694-744`
+  (`_BUILTIN_MARKDOWN_POLICIES`, policy resolution, and entity lookup)
+- Read: `science/src/science_tool/graph/materialize.py:1908-1948`
+  (core relation lookup and authored endpoint admission)
+- Modify: `science/tests/test_kind_map_equivalence.py` (`FROZEN_MARKDOWN_POLICIES`)
+- Test: `science/tests/test_consolidation_mark_superseded.py`
+  (`test_reverse_gap_kind_is_stamped_on_apply`)
+- Test: `science/tests/test_decision_material.py`
+  (`test_project_local_kind_is_neither_supported_nor_admitted_for_supersession`)
+- Modify: `science/tests/validate/test_checks_materialization.py`
+  (`test_amends_on_workflow_run_is_an_error` prose only)
+
+**Interfaces:**
+- Consumes: `EntityKind.home: str | None`, `EntityKind.strategy: str | None`, and
+  `EntityKind.supersedable: bool` from Tasks 1–2.
+- Consumes: `_BUILTIN_MARKDOWN_POLICIES: dict[str, EntityPathPolicy]` from
+  `science_tool.entities`; the map contains a shipped descriptor only when both `home` and
+  `strategy` are non-null.
+- Consumes: `mark_superseded(project_root: Path, *, ids: frozenset[str] | None = None,
+  apply: bool) -> dict[str, Any]`; the regression reaches its real graph admission, disposition,
+  prepare, shared writer, and disk commit path.
+- Consumes: `build_decision_material(project_root: Path) -> SupersessionDecisionMaterial` and the
+  core `supersedes` `RelationKind` endpoint pairs.
+- Produces: `validation-report` maps to
+  `EntityPathPolicy(Path("entities/validation-reports"), "numeric")`.
+- Produces: the executable end-state invariant
+  `{k.name for k in SHIPPED_KINDS if k.supersedable} <=
+  set(_BUILTIN_MARKDOWN_POLICIES)`.
+
+- [ ] **Step 1: Add the apply-level regression before changing the descriptor**
+
+In `science/tests/test_consolidation_mark_superseded.py`, immediately after
+`test_apply_sets_superseded_status_on_members`, add this complete test. `pytest`, `Path`,
+`read_frontmatter`, `_seed`, `_write`, `_supersedes`, and `mark_superseded` already exist in this
+module; add no duplicate imports or helpers.
+
+The starting status is part of the parameterization because the two closed vocabularies differ:
+`story` starts at `draft`, while `validation-report` starts at `active`.
+
+```python
+@pytest.mark.parametrize(
+    ("kind", "kind_dir", "starting_status", "old_name", "new_name"),
+    [
+        pytest.param("story", "stories", "draft", "old-story", "new-story", id="story"),
+        pytest.param(
+            "validation-report",
+            "validation-reports",
+            "active",
+            "0001-old",
+            "0002-new",
+            id="validation-report",
+        ),
+    ],
+)
+def test_reverse_gap_kind_is_stamped_on_apply(
+    tmp_path: Path,
+    kind: str,
+    kind_dir: str,
+    starting_status: str,
+    old_name: str,
+    new_name: str,
+) -> None:
+    _seed(tmp_path)
+    old_id = f"{kind}:{old_name}"
+    new_id = f"{kind}:{new_name}"
+    old_path = _write(
+        tmp_path,
+        kind_dir,
+        old_name,
+        {"id": old_id, "kind": kind, "status": starting_status},
+    )
+    _write(
+        tmp_path,
+        kind_dir,
+        new_name,
+        {
+            "id": new_id,
+            "kind": kind,
+            "status": starting_status,
+            "relations": [_supersedes(old_id)],
+        },
+    )
+
+    report = mark_superseded(tmp_path, apply=True)
+    frontmatter = read_frontmatter(old_path)
+
+    assert report["applied"] == [old_id]
+    assert report["skipped_kinds"] == []
+    assert frontmatter is not None
+    assert frontmatter["status"] == "superseded"
+    assert frontmatter["superseded_by"] == new_id
 ```
 
-Then confirm the end state:
+- [ ] **Step 2: Run the apply regression and capture the real RED**
+
+Run:
 
 ```bash
-cd science && uv run --frozen python -c "
+cd science
+uv run --frozen pytest \
+  tests/test_consolidation_mark_superseded.py::test_reverse_gap_kind_is_stamped_on_apply -vv
+```
+
+Expected: exit 1. The `story` case passes. The `validation-report` case fails during apply with:
+
+```text
+1 failed, 1 passed
+science_tool.entities.EntityCommandError:
+Entity not found: validation-report:0001-old
+```
+
+The failure must come from `find_entity`/`resolve_entity_ref`; a collection error, an invalid
+starting status, an empty `to_mark`, or a mocked lookup is the wrong RED.
+
+- [ ] **Step 3: Add the complete validation-report write descriptor**
+
+Replace the post-Task-2 validation-report block in
+`science/model/src/science_model/profiles/core.py` with:
+
+```python
+        EntityKind(
+            name="validation-report",
+            canonical_prefix="validation-report",
+            layer="layer/core",
+            description="Report validating an analysis, model, or pipeline result.",
+            entity_class=EntityClass.EPISTEMIC,
+            curation_scope=CurationScope.EPISTEMIC,
+            category=KindCategory.AUTHORED_CORE,
+            home="entities/validation-reports",
+            strategy="numeric",
+            default_status="active",
+            statuses=["draft", "active", "complete", "superseded", "retired", "archived"],
+            supersedable=True,
+        ),
+```
+
+`report` is the complete comparator: it also uses a plural Markdown home and numeric identity.
+Do not add a fallback in `find_entity` and do not special-case validation reports in
+`consolidation.py`; the descriptor is the missing authority.
+
+- [ ] **Step 4: Re-run the apply regression for GREEN**
+
+Run:
+
+```bash
+cd science
+uv run --frozen pytest \
+  tests/test_consolidation_mark_superseded.py::test_reverse_gap_kind_is_stamped_on_apply -vv
+```
+
+Expected: exit 0:
+
+```text
+story              PASSED
+validation-report  PASSED
+2 passed
+```
+
+Both cases must assert the committed `status` and derived `superseded_by`; checking only `to_mark`
+would leave apply untested.
+
+- [ ] **Step 5: Prove the frozen Markdown-policy oracle detects the descriptor change**
+
+Before changing `FROZEN_MARKDOWN_POLICIES`, run:
+
+```bash
+cd science
+uv run --frozen pytest \
+  tests/test_kind_map_equivalence.py::test_markdown_policies_equal_prior_literal -vv
+```
+
+Expected: exit 1, with exactly one extra live item:
+
+```text
+validation-report: EntityPathPolicy(
+    root=PosixPath("entities/validation-reports"),
+    strategy="numeric",
+)
+```
+
+If the test passes before re-freezing, stop: the oracle is not observing the descriptor-derived
+policy.
+
+- [ ] **Step 6: Write the ruling, then deliberately re-freeze the policy**
+
+In `meta/doc/plans/2026-07-26-s2-lineage-capability-design.md`, immediately after the
+validation-report item under “Gain the status (2)”, add:
+
+```markdown
+#### Validation-report write-path ruling
+
+The capability is operational, not read-only: once `validation-report` is admitted and appears in
+`supported_kinds`, `mark_superseded --apply` must be able to locate and rewrite the report it placed
+in `to_mark`. Therefore `validation-report` also follows the established report-like Markdown
+contract: `home="entities/validation-reports"` and `strategy="numeric"`, parallel to `report`'s
+plural home and numeric strategy. Leaving both fields unset produces a split authority: the graph
+scanner can discover and admit an authored chain, but the descriptor-derived write policy cannot
+find the target. Adding this policy deliberately re-freezes `FROZEN_MARKDOWN_POLICIES`; it repairs
+the S2 write path rather than weakening the oracle.
+```
+
+Then insert this exact entry after `report` in `FROZEN_MARKDOWN_POLICIES` in
+`science/tests/test_kind_map_equivalence.py`:
+
+```python
+    # ☠️ DELIBERATE S2 RE-FREEZE. The validation-report ruling makes its supersedable capability
+    # operational: the apply writer must find the entity that dry-run placed in `to_mark`. It uses
+    # the report-like plural home and numeric strategy; this fixes that write-path gap rather than
+    # accepting unexplained descriptor drift.
+    "validation-report": EntityPathPolicy(Path("entities/validation-reports"), "numeric"),
+```
+
+This is the only permitted Markdown-policy re-freeze in the task. Its commit body must cite the
+written ruling and say that the edit fixes the discovered write-path gap rather than silencing the
+oracle.
+
+- [ ] **Step 7: Re-run the frozen oracle for GREEN**
+
+Run:
+
+```bash
+cd science
+uv run --frozen pytest \
+  tests/test_kind_map_equivalence.py::test_markdown_policies_equal_prior_literal -vv
+```
+
+Expected: exit 0, `1 passed`.
+
+- [ ] **Step 8: Add the direct project-local inertness regression**
+
+In `science/tests/test_decision_material.py`, add `import pytest` beside the existing third-party
+imports:
+
+```python
+import pytest
+import yaml
+```
+
+Then add this complete test immediately after
+`test_material_carries_supported_kinds_and_digest_covers_the_policy`:
+
+```python
+def test_project_local_kind_is_neither_supported_nor_admitted_for_supersession(
+    tmp_path: Path,
+) -> None:
+    from science_tool.consolidation import SupersessionError, mark_superseded
+
+    (tmp_path / "science.yaml").write_text(
+        "name: local-inertness\nknowledge_profiles:\n  local: local\n",
+        encoding="utf-8",
+    )
+    manifest = tmp_path / "knowledge" / "sources" / "local" / "manifest.yaml"
+    manifest.parent.mkdir(parents=True)
+    manifest.write_text(
+        """\
+name: local-inertness
+imports:
+  - core
+strictness: typed-extension
+entity_kinds:
+  - name: project-note
+    canonical_prefix: project-note
+    layer: layer/local
+    description: Project-local note.
+    home: entities/project-notes
+    strategy: numeric
+    default_status: active
+    statuses: [active, superseded]
+    supersedable: true
+relation_kinds: []
+""",
+        encoding="utf-8",
+    )
+    _write_entity(
+        tmp_path,
+        "project-notes",
+        "0001-old",
+        {"id": "project-note:0001-old", "kind": "project-note", "status": "active"},
+    )
+    _write_entity(
+        tmp_path,
+        "project-notes",
+        "0002-new",
+        {
+            "id": "project-note:0002-new",
+            "kind": "project-note",
+            "status": "active",
+            "relations": [_supersedes_edge("project-note:0001-old")],
+        },
+    )
+    old_path = tmp_path / "entities" / "project-notes" / "0001-old.md"
+    new_path = tmp_path / "entities" / "project-notes" / "0002-new.md"
+    before = {path: path.read_bytes() for path in (old_path, new_path)}
+
+    material = build_decision_material(tmp_path)
+    report = mark_superseded(tmp_path, apply=False)
+
+    # This is the discriminating operation-level assertion: reaching `to_mark` would require both
+    # core relation admission and entry into the frozen auto-stamping policy.
+    assert report["to_mark"] == []
+    assert "project-note" not in material.supported_kinds
+    assert material.admitted_supersedes == []
+    assert [defect.code for defect in material.defects] == ["illegal-kind-pair"]
+    assert [defect["code"] for defect in report["invalid_relations"]] == ["illegal-kind-pair"]
+
+    with pytest.raises(SupersessionError, match="invalid authored relation endpoint"):
+        mark_superseded(tmp_path, apply=True)
+    assert {path: path.read_bytes() for path in (old_path, new_path)} == before
+```
+
+Run:
+
+```bash
+cd science
+uv run --frozen pytest \
+  tests/test_decision_material.py::test_project_local_kind_is_neither_supported_nor_admitted_for_supersession \
+  -vv
+```
+
+Expected: exit 0, `1 passed`. This is a regression for existing inertness, not the production driver;
+Step 9 proves that it discriminates the forbidden behavior.
+
+- [ ] **Step 9: Run the two-authority project-local mutation proof and revert it**
+
+Temporarily replace `_SELF_SUPERSEDING_KINDS` in
+`science/model/src/science_model/profiles/core.py` with this mutated list:
+
+```python
+_SELF_SUPERSEDING_KINDS = [
+    "hypothesis",
+    "spec",
+    "decision",
+    "inquiry",
+    "mechanism",
+    "method",
+    "plan",
+    "proposition",
+    "synthesis",
+    "theme",
+    "topic",
+    "workflow-step",
+    "project-note",
+]
+```
+
+Temporarily add this line immediately after the `DECLARED_SUPERSEDABLE` comprehension in
+`science/src/science_tool/kind_descriptors.py`:
+
+```python
+DECLARED_SUPERSEDABLE["project-note"] = True
+```
+
+The first mutation admits the local endpoint through the core relation descriptor. The second puts
+it in the frozen auto-stamping policy. Run:
+
+```bash
+cd science
+uv run --frozen pytest \
+  tests/test_decision_material.py::test_project_local_kind_is_neither_supported_nor_admitted_for_supersession \
+  -vv
+```
+
+Expected: exit 1 at the first operation-level assertion:
+
+```text
+assert report["to_mark"] == []
+E assert ["project-note:0001-old"] == []
+```
+
+Now restore the complete production list:
+
+```python
+_SELF_SUPERSEDING_KINDS = [
+    "hypothesis",
+    "spec",
+    "decision",
+    "inquiry",
+    "mechanism",
+    "method",
+    "plan",
+    "proposition",
+    "synthesis",
+    "theme",
+    "topic",
+    "workflow-step",
+]
+```
+
+and restore the map to the comprehension alone:
+
+```python
+DECLARED_SUPERSEDABLE: dict[str, bool] = {ek.name: bool(ek.supersedable) for ek in KIND_DESCRIPTORS}
+```
+
+Run:
+
+```bash
+cd science
+uv run --frozen pytest \
+  tests/test_decision_material.py::test_project_local_kind_is_neither_supported_nor_admitted_for_supersession \
+  -vv
+```
+
+Expected: exit 0, `1 passed`.
+
+Finally run this residue sweep from the repository root:
+
+```bash
+rg -n '"project-note"|DECLARED_SUPERSEDABLE\["project-note"\]' \
+  science/model/src/science_model/profiles/core.py \
+  science/src/science_tool/kind_descriptors.py
+```
+
+Expected: no matches, exit 1. Do not commit either mutation.
+
+- [ ] **Step 10: Correct all three false project-local safety rationales**
+
+In `science/src/science_tool/kind_descriptors.py`, replace the comment above the map with:
+
+```python
+#: Kind -> whether it may be superseded (S2). Built over `KIND_DESCRIPTORS` -- the SHIPPED
+#: profiles only -- exactly like `DECLARED_STATUSES`. That population is load-bearing: a kind
+#: declared in a project manifest is ABSENT here and cannot enter the frozen `supported_kinds`
+#: policy. Authored `sci:supersedes` admission independently resolves against the core relation
+#: descriptor, so a project-local endpoint pair is refused. The writer itself supports
+#: project-local status vocabularies; inertness does not depend on a write-time failure.
+DECLARED_SUPERSEDABLE: dict[str, bool] = {ek.name: bool(ek.supersedable) for ek in KIND_DESCRIPTORS}
+```
+
+In `meta/doc/plans/2026-07-26-s2-lineage-capability-design.md`, replace the project-local guarantee
+paragraph under “The three derived surfaces” with:
+
+```markdown
+`DECLARED_SUPERSEDABLE` is built in `kind_descriptors.py` from `KIND_DESCRIPTORS`, mirroring
+`DECLARED_STATUSES` exactly. That shape is load-bearing, not cosmetic: `KIND_DESCRIPTORS` covers the
+shipped profiles only, so a kind declared in a project manifest is **absent** from the map and
+cannot enter the frozen `supported_kinds` policy. Independently, authored `sci:supersedes`
+admission resolves against the core profile's relation descriptor, whose endpoint pairs contain
+shipped kinds only, so a project-local pair is refused before disposition. Those are the two
+guarantees that keep project-local kinds inert. The write boundary is not one of them:
+`_validate_status` resolves project-local vocabularies explicitly and can write a valid local
+status.
+```
+
+The third stale copy is Task 4 Step 3 in this implementation plan. Its final code block must be
+exactly:
+
+```python
+#: Kind -> whether it may be superseded (S2). Built over `KIND_DESCRIPTORS` -- the SHIPPED
+#: profiles only -- exactly like `DECLARED_STATUSES`. That population is load-bearing: a kind
+#: declared in a project manifest is ABSENT here and cannot enter the frozen `supported_kinds`
+#: policy. Authored `sci:supersedes` admission independently resolves against the core relation
+#: descriptor, so a project-local endpoint pair is refused. The writer itself supports
+#: project-local status vocabularies; inertness does not depend on a write-time failure.
+DECLARED_SUPERSEDABLE: dict[str, bool] = {ek.name: bool(ek.supersedable) for ek in KIND_DESCRIPTORS}
+```
+
+The safety claim must not mention `_validate_status` raising `KeyError`; that function explicitly
+loads project-local vocabularies.
+
+- [ ] **Step 11: Correct the stale validator-test rationale without changing behavior**
+
+In `science/tests/validate/test_checks_materialization.py`, replace the complete workflow-run
+`amends` test with:
+
+```python
+def test_amends_on_workflow_run_is_an_error(tmp_path: Path) -> None:
+    """Top-level `amends:` is independently and unconditionally rejected; there are no exemptions."""
+    _entity(
+        tmp_path, "workflow-runs/0001-x.md",
+        entity_id="workflow-run:0001-x", kind="workflow-run",
+        extra="amends: workflow-run:0000-y\n",
+    )
+    results = _results(tmp_path)
+    assert [r.severity for r in results] == [Severity.ERROR]
+    assert "sci:amends" in results[0].message
+```
+
+This is prose-only. Top-level `amends:` was already rejected unconditionally after Task 5.
+
+- [ ] **Step 12: Run every focused post-review regression together**
+
+Run:
+
+```bash
+cd science
+uv run --frozen pytest \
+  tests/test_consolidation_mark_superseded.py::test_reverse_gap_kind_is_stamped_on_apply \
+  tests/test_decision_material.py::test_project_local_kind_is_neither_supported_nor_admitted_for_supersession \
+  tests/test_kind_map_equivalence.py::test_markdown_policies_equal_prior_literal \
+  tests/validate/test_checks_materialization.py::test_amends_on_workflow_run_is_an_error \
+  -q
+```
+
+Expected: exit 0, `5 passed` (the parameterized apply test contributes two cases).
+
+- [ ] **Step 13: Run the executable write-path parity/end-state check**
+
+From `science/`, run:
+
+```bash
+uv run --frozen python -c "
 from science_model.profiles import CORE_PROFILE
 from science_model.profiles.local import LOCAL_PROFILE
+from science_tool.entities import _BUILTIN_MARKDOWN_POLICIES
 from science_tool.kind_descriptors import DECLARED_SUPERSEDABLE
 kinds = [*CORE_PROFILE.entity_kinds, *LOCAL_PROFILE.entity_kinds]
 sup = {k.name for k in kinds if k.supersedable}
 vocab = {k.name for k in kinds if 'superseded' in (k.statuses or ())}
 rel = next(r for r in CORE_PROFILE.relation_kinds if r.name == 'supersedes')
+sources = {p.source_kind for p in rel.allowed_kind_pairs}
 targets = {p.target_kind for p in rel.allowed_kind_pairs}
 policy = {k for k, v in DECLARED_SUPERSEDABLE.items() if v}
+missing = sorted(sup - set(_BUILTIN_MARKDOWN_POLICIES))
+checks = {
+    'vocabulary': vocab == sup,
+    'endpoints': targets == sup,
+    'policy': policy == sup,
+    'write paths': not missing,
+    'flat sources': set(rel.source_kinds) == sources,
+    'flat targets': set(rel.target_kinds) == targets,
+}
 print('declared    ', len(sup))
-print('vocabulary  ', vocab == sup)
-print('endpoints   ', targets == sup)
-print('policy      ', policy == sup)
-print('flat lists  ', set(rel.source_kinds) == {p.source_kind for p in rel.allowed_kind_pairs})
+for label, passed in checks.items():
+    print(f'{label:12} {passed}')
+print('missing     ', missing)
+if not all(checks.values()):
+    raise SystemExit('S2 end-state parity failed')
 "
 ```
+
+Expected: exit 0:
+
+```text
+declared     18
+vocabulary   True
+endpoints    True
+policy       True
+write paths  True
+flat sources True
+flat targets True
+missing      []
+```
+
+Deleting either validation-report layout field makes `_BUILTIN_MARKDOWN_POLICIES` omit the kind,
+prints `write paths  False` and `missing      ['validation-report']`, and exits nonzero. This is the
+final check the pre-review plan lacked.
+
+- [ ] **Step 14: Run full verification serially**
+
+Run each command only after the previous one exits:
+
+```bash
+cd science/model
+uv run --frozen pytest -q
+```
+
+Expected: exit 0, `1448 passed`.
+
+```bash
+cd science
+uv run --frozen pytest -q
+```
+
+Expected: exit 0, `10698 passed, 7 skipped, 8 deselected`. Existing third-party deprecation warnings
+may still be summarized.
+
+```bash
+cd science
+uv run ruff check
+```
+
+Expected: exit 0, `All checks passed!`.
+
+```bash
+cd science
+uv run pyright
+```
+
+Expected: exit 0, `0 errors, 0 warnings, 0 informations`.
+
+From the repository root:
+
+```bash
+git diff --check
+```
+
+Expected: exit 0 with no output.
+
+- [ ] **Step 15: Commit the post-review correction**
+
+```bash
+git add meta/doc/plans/2026-07-26-s2-lineage-capability-design.md \
+        docs/plans/2026-07-26-s2-lineage-capability-implementation-plan.md \
+        science/model/src/science_model/profiles/core.py \
+        science/src/science_tool/kind_descriptors.py \
+        science/tests/test_consolidation_mark_superseded.py \
+        science/tests/test_decision_material.py \
+        science/tests/test_kind_map_equivalence.py \
+        science/tests/validate/test_checks_materialization.py
+git commit \
+  -m 'fix(consolidation): make validation reports writable' \
+  -m 'Apply the written S2 validation-report write-path ruling with the report-like Markdown home and numeric strategy.' \
+  -m 'Re-freeze FROZEN_MARKDOWN_POLICIES to close the reproduced dry-run/apply lookup gap, not to silence unexplained oracle drift.'
+```
+
+Expected: a conventional commit with no attribution trailer. The two temporary project-local
+mutation edits must be absent from the staged diff.
+
+---
+
+## Verification
+
+After Task 6, from a clean tree on the branch, first run the focused runtime/oracle regressions:
+
+```bash
+cd science
+uv run --frozen pytest \
+  tests/test_consolidation_mark_superseded.py::test_reverse_gap_kind_is_stamped_on_apply \
+  tests/test_decision_material.py::test_project_local_kind_is_neither_supported_nor_admitted_for_supersession \
+  tests/test_kind_map_equivalence.py::test_markdown_policies_equal_prior_literal \
+  tests/validate/test_checks_materialization.py::test_amends_on_workflow_run_is_an_error \
+  -q
+```
+
+Expected: exit 0, `5 passed`.
+
+Then run the full suites serially, followed by lint and types:
+
+```bash
+cd science/model
+uv run --frozen pytest -q
+
+cd science
+uv run --frozen pytest -q
+
+cd science
+uv run ruff check
+
+cd science
+uv run pyright
+```
+
+Expected: both suites, Ruff, and Pyright exit 0. Never run the two pytest suites concurrently.
+
+Finally confirm the complete end state, including the descriptor-derived write policy:
+
+```bash
+cd science
+uv run --frozen python -c "
+from science_model.profiles import CORE_PROFILE
+from science_model.profiles.local import LOCAL_PROFILE
+from science_tool.entities import _BUILTIN_MARKDOWN_POLICIES
+from science_tool.kind_descriptors import DECLARED_SUPERSEDABLE
+kinds = [*CORE_PROFILE.entity_kinds, *LOCAL_PROFILE.entity_kinds]
+sup = {k.name for k in kinds if k.supersedable}
+vocab = {k.name for k in kinds if 'superseded' in (k.statuses or ())}
+rel = next(r for r in CORE_PROFILE.relation_kinds if r.name == 'supersedes')
+sources = {p.source_kind for p in rel.allowed_kind_pairs}
+targets = {p.target_kind for p in rel.allowed_kind_pairs}
+policy = {k for k, v in DECLARED_SUPERSEDABLE.items() if v}
+missing = sorted(sup - set(_BUILTIN_MARKDOWN_POLICIES))
+checks = {
+    'vocabulary': vocab == sup,
+    'endpoints': targets == sup,
+    'policy': policy == sup,
+    'write paths': not missing,
+    'flat sources': set(rel.source_kinds) == sources,
+    'flat targets': set(rel.target_kinds) == targets,
+}
+print('declared    ', len(sup))
+for label, passed in checks.items():
+    print(f'{label:12} {passed}')
+print('missing     ', missing)
+if not all(checks.values()):
+    raise SystemExit('S2 end-state parity failed')
+"
+```
+
 Expected:
+
 ```
 declared     18
 vocabulary   True
 endpoints    True
 policy       True
-flat lists   True
+write paths  True
+flat sources True
+flat targets True
+missing      []
 ```
+
+The command must exit nonzero if any printed invariant is false. In particular, removing
+`validation-report.home` or `.strategy` must print
+`missing      ['validation-report']` and fail, so this plan cannot report a successful end state
+while preserving the dry-run/apply gap.
