@@ -245,9 +245,11 @@ Five properties, each executable:
    `allowed_kind_pairs`, `set(source_kinds)` equals the pairs' source union and `set(target_kinds)`
    equals the target union. Universal over the profile, not scoped to `supersedes`.
 5. **Stamping agrees.** The policy actually carried on the graph matches the declaration:
-   `build_decision_material(project_root).supported_kinds` equals the sorted supersedable set, and
-   `_disposition_report` skips a member whose kind is absent from `graph.supported_kinds`. Asserted
-   against the live policy path, never against the deleted helper.
+   `build_decision_material(project_root).supported_kinds` equals the sorted supersedable set, and a
+   member whose kind is **omitted from its material's frozen policy** is skipped. Note the fixture is
+   a normally supersedable kind held out of the policy — *not* a "non-supersedable kind", which after
+   S2 cannot be an admitted member at all. Asserted against the live policy path, never against the
+   deleted helper.
 
 ### Anti-tautology
 
@@ -277,6 +279,12 @@ not committed:
 | 4 | append `"workflow-run"` to `supersedes.source_kinds` only | fails, naming the source-union mismatch |
 | 5 | drop `topic` from the set built at `consolidation.py:648` | fails twice: the material no longer equals the declaration, and a `topic` member stops being stamped |
 
+The public `mark_superseded` return documentation (`consolidation.py:799`) defines `skipped_kinds`
+as "members whose kind does not declare `superseded`" and `to_mark` as excluding "members whose kind
+can't carry the status". Both describe the eliminated semantics. They are rewritten to describe
+**policy disagreement** — a member whose kind is absent from the graph's frozen `supported_kinds` —
+along with the affected test names and comments, which currently read `..._kind_lacks_superseded_vocab...`.
+
 Mutation 5 is deliberately *not* "revert line 648 to `_STATUS_VALUES`". Once the rulings land,
 property 2 forces the two sources equal, so that mutation produces an identical set and proves
 nothing — an inert probe of exactly the kind S1a shipped. The mutation must remove a kind the
@@ -297,7 +305,9 @@ assertion actually reads.
 - `science/model/src/science_model/profiles/local.py` — 3 declarations.
 - `science/src/science_tool/kind_descriptors.py` — add `DECLARED_SUPERSEDABLE`.
 - `science/src/science_tool/consolidation.py` — build `supported_kinds` (line 648) from
-  `DECLARED_SUPERSEDABLE`; **delete** `_supports_superseded` and the comments describing it.
+  `DECLARED_SUPERSEDABLE`; **delete** `_supports_superseded` and the comments describing it;
+  rewrite the `mark_superseded` return documentation at line 799 (`to_mark`, `skipped_kinds`) to
+  describe policy disagreement rather than status capability.
 - `science/model/tests/test_supersedable_gate.py` — rewritten; `_KNOWN_HALF_WIRED` deleted.
 - `science/tests/test_kind_map_equivalence.py` — re-freeze `FROZEN_STATUS_VALUES` (see below).
 - `science/model/tests/test_profile_manifests.py` — `line 99` asserts
@@ -318,8 +328,8 @@ precisely *because* it is the admitted-but-unstampable kind:
 
 | test | what it asserts | disposition |
 |---|---|---|
-| `test_consolidation_candidates.py:62` `test_lineage_reports_kind_lacking_superseded_vocab` | the read-only detector still reports a lineage whose kind cannot be stamped | rebuild on a manually constructed graph, or delete |
-| `test_consolidation_mark_superseded.py:298` `test_member_whose_kind_lacks_superseded_vocab_is_skipped_not_crashed` | such a member lands in `skipped_kinds` rather than crashing | same |
+| `test_consolidation_candidates.py:62` `test_lineage_reports_kind_lacking_superseded_vocab` | the read-only detector still reports a lineage whose kind cannot be stamped | **delete** — see below |
+| `test_consolidation_mark_superseded.py:298` `test_member_whose_kind_lacks_superseded_vocab_is_skipped_not_crashed` | such a member lands in `skipped_kinds` rather than crashing | rebuild through the **material** path (see below) |
 | `test_graph_materialize.py:1109` `test_materialize_graph_preserves_workflow_run_supersedes` | the edge materializes | invert into a **rejection** test, or move to a retained endpoint kind |
 
 #### `skipped_kinds` after S2: retained, and reachable from exactly one direction
@@ -339,10 +349,25 @@ reads the authenticated `graph.supported_kinds` rather than a live module value.
 
 **Ruling: the skip behaviour is retained**, because deleting it would make `_disposition_report`
 assume its graph's policy always covers every member — the assumption that stale material violates.
-The two tests above are therefore **rebuilt to construct that graph directly** (a `SupersedesGraph`
-whose `supported_kinds` omits a member's kind), not deleted and not re-pointed at another shipped
-kind, which would be asserting an impossible state. That is the precise boundary to test: reachable
-from material, unreachable from authored input.
+
+**The regression must go through the material path, not around it.** Hand-building a
+`SupersedesGraph` whose `supported_kinds` omits a member's kind proves only that
+`_disposition_report` branches on that field. It does not prove the reachable case, which requires
+inconsistent material to *survive* `build_supersedes_graph_from_material` in the first place. So the
+test constructs an inconsistent `SupersessionDecisionMaterial` — admitted edges whose object kind is
+absent from its `supported_kinds` — rebuilds through `build_supersedes_graph_from_material`, and
+asserts the skip through **`derive_supersede_plan`** (`supersede_plan.py:145`), which is the actual
+consumer: it builds the graph from material and calls `_disposition_report` with no filesystem read.
+That covers the boundary end to end — reachable from material, unreachable from authored input.
+
+**The consolidation-candidates test is deleted, not rebuilt.** It cannot cover this boundary:
+`detect_consolidation_candidates` (`consolidation_candidates.py:292`) always loads authored input
+and builds a live graph — it never consumes saved material — and `_lineage_section` reads only
+`graph.linear` / `graph.non_linear`, never `supported_kinds`. So it never exercised the skip path
+even today; what it actually asserted is that the read-only detector reports a chain regardless of
+stampability. After S2 no shipped kind can be admitted-but-unstampable, so that assertion is no
+longer distinguishable from the ordinary lineage test sitting directly above it, and retasking it
+would mean keeping a duplicate under a name that describes a state the profile forbids.
 
 ### `workflow-run`'s top-level `supersedes:` is retired
 
@@ -397,8 +422,22 @@ deleted, not documented — applies directly. It is removed, not re-labelled:
   enumerates the twelve half-wired kinds as the reason for the kind-aware remediation, is rewritten
   — after S2 that set is empty and the remediation's population is the 32 non-supersedable kinds.
 
+- `docs/process/pipeline-audit-and-refactor.md` — line 238 tells readers `science qa-audit` "reads
+  each workflow's `workflow-run` / `sci:supersedes` chain." After S2 that relation is rejected for
+  `workflow-run`, and the sentence was already wrong about the mechanism: `qa-audit` counts runs
+  recorded per workflow and follows no chain. Corrected to describe what it does.
+
 Removing the exemption means the materialization check will now ERROR on a `workflow-run` carrying
 `supersedes:`. That is the intended behaviour and affects no existing entity.
+
+**The live-surface sweep is complete.** Every file under `docs/`, `skills/`, `commands/`,
+`templates/`, `references/` and `agents/` mentioning both `workflow-run` and supersession was
+checked; the two above are the only *live guidance*. The remaining matches are about other kinds
+(`interpretation`, `dataset`, `spec`) or are dated design and plan documents — including
+`docs/plans/2026-07-15-non-materializing-fields-plan.md:20`, which records the exemption being
+introduced, and `docs/plans/2026-07-12-d4-status-vocabulary-audit.md:47`, which references
+`_supports_superseded`. Those are historical records of completed work and are **left untouched**;
+rewriting them would falsify the record of why the exemption existed.
 
 ### The frozen status oracle must be re-frozen, deliberately
 
