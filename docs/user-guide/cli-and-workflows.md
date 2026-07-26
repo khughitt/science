@@ -57,7 +57,7 @@ knowledge, and generated-write commands for materialization or reports.
 | `belief` | Derived-state | Generated-write / Read-only | Belief snapshots and derived belief profiles. |
 | `inquiry` | Canonical / specialized | Source-write / Read-only | Source-first inquiry patch profiles and causal inquiry exports. |
 | `patch` | Derived-state | Read-only | Explain or check derived patch membership. |
-| `autonomy` | Derived-state | Read-only | Decide whether an autonomous run's recorded `base..head` range stayed inside its tier's default-deny write surface. Reads git and the frozen policy; writes nothing. |
+| `autonomy` | Derived-state | Mixed | Open and close unattended runs (`start` / `finish`) and decide whether a run's recorded `base..head` range stayed inside its tier's default-deny write surface (`path-gate`). `finish` writes the attested run record; the baseline it reads lives outside the repository. |
 | `validate`, `health`, `refs`, `prose`, `markers`, `search` | Canonical | Mixed | Project health, references, prose linting, annotation-token checks, and archive-index search. |
 | `tasks` | Canonical | Source-write / Read-only | Project task lifecycle. `tasks fix-blockers` is migration-oriented. |
 | `feedback`, `telemetry` | Specialized | Source-write / Read-only | Agent feedback records and local operational telemetry. |

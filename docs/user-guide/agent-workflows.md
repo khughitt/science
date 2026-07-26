@@ -69,3 +69,82 @@ field comes off the list.
 The gate is one of four layers. It is syntactic and complete by construction, but it
 does not prove belief-neutrality — `science graph belief-basis` does that, and it is
 authoritative precisely because it does not depend on this allowlist being correct.
+
+## Running an unattended run
+
+An unattended run is bracketed by two supervisor commands. Nothing between them is part
+of Science: the actor is driven by whatever harness you use.
+
+```bash
+science autonomy start --agent curation-sweep --model <model> \
+    --short-id a3f1 --baseline-out ~/supervisor-state/a3f1.json
+
+#  ... the actor works on auto/<run-id> ...
+
+science autonomy finish --baseline ~/supervisor-state/a3f1.json \
+    --head "$(git rev-parse HEAD)" --tokens 12000 --wall-clock-seconds 900
+```
+
+`start` captures the belief basis and writes a **baseline**. It writes no run record: a
+supervisor that dies mid-run leaves no attestation, so its branch reads as unattested
+rather than clean. The baseline must live **outside the repository** — both commands
+refuse a path inside the project root, because the actor's whole job is writing that
+tree, and a baseline it can reach is a baseline it can rewrite.
+
+Both commands require the working tree to *be* the commit they name — no uncommitted
+edits, no untracked files. The path gate reads committed history while the belief basis
+is captured from the tree; a change sitting in neither is judged by neither.
+
+**Every commit the actor makes has to be marked, or the run quarantines.** `finish` walks
+`base_commit..head_commit` and requires two things of *each* commit in it:
+
+- a `Science-Run: <run-id>` trailer, whose value is the full run id `start` reported —
+  `run:` prefix included, and the same id on every commit in the range;
+- an author of `<agent-role> <agent@science.local>` — the role you passed to
+  `--agent`, and that exact mailbox. The committer is not inspected; the author is.
+
+So a run opened with `--agent curation-sweep` commits like this:
+
+```bash
+git commit -m "docs: refresh venue
+
+Science-Run: run:2026-07-25-curation-sweep-a3f1" \
+    --author "curation-sweep <agent@science.local>"
+```
+
+An unmarked commit, one naming a different run, or one authored by anybody else is a
+commit the run did not account for landing inside its own range — reported as a
+commit-mark issue and quarantined. Marks are never *evidence*, though: a process that can
+write commits can write any trailer and any author, so a matching mark proves nothing on
+its own. The authoritative binding is the supervisor-recorded range.
+
+`finish` re-materializes the graph, recaptures the basis, compares it against the
+baseline, runs the path gate over the recorded range, verifies the commit marks, and
+writes the attested record to `runs/<slug>.md`, where the slug is the run id without its
+`run:` prefix. The re-materialization is not optional: `graph.trig` is derived state the
+actor controls, so a run that edited entities and never rebuilt would otherwise be judged
+against a stale graph. It also means `finish` leaves `graph.trig` rebuilt in the tree,
+and a run is finished exactly once — the record is never rewritten.
+
+Three dispositions, and the exit codes match:
+
+| Disposition | Exit | Meaning |
+|---|---|---|
+| `clean` | 0 | Eligible to merge. |
+| `quarantined` | 1 | The branch is held intact and a `science feedback` item is filed naming the entity and the delta. |
+| `unwired` | 2 | No verdict could be rendered — an unreadable baseline, a dirty tree, a failed rebuild, an uncomputable basis, or a toolkit that moved under the run. Blocked: a guard that cannot see must not report clean. |
+
+A click usage error on `finish` — a mistyped flag, say — also exits `2`, which a
+supervising harness reads the same as `unwired`. That's safe, since no run record is
+written in that case, but a harness author should know the exit code alone does not
+distinguish the two.
+
+**Nothing is discarded on quarantine.** The branch and its commits stay exactly as the
+run left them, so a human triages with the entity and the delta in hand. The first
+violations will mostly be design discoveries — a sweep that legitimately needs something
+the gate forbids — and destroying the evidence destroys the signal.
+
+`science validate` carries an `autonomous-runs` check so the same violations are
+catchable by anyone, independent of the run harness. It verifies record integrity and
+coverage — every autonomous commit across every branch has a record, every record's
+commits are reachable — without rebuilding the graph or re-deriving any historical basis.

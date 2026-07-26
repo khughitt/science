@@ -275,6 +275,14 @@ DEFERRED: dict[str, DeferredCommand] = {
         "one output member per denial, which grows with the run's change set",
         "1b",
     ),
+    "autonomy start": DeferredCommand(
+        "one fixed summary record per invocation",
+        "1b",
+    ),
+    "autonomy finish": DeferredCommand(
+        "one output member per basis delta, gate denial, and commit-mark issue",
+        "1b",
+    ),
 }
 
 DEFERRED.update(

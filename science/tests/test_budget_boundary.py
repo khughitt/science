@@ -24,7 +24,7 @@ from science_tool.cli import main
 EXPECTED_CLASSIFICATION_COUNTS = {
     "budgeted": 68,
     "exempt": 118,
-    "deferred": 93,
+    "deferred": 95,
 }
 
 
@@ -127,7 +127,11 @@ def test_classification_partition_has_the_audited_cardinality() -> None:
     and `dataset add/verify-access` (each gaining `--show-preexisting` to list them),
     while `feedback add` caps its near-duplicate scan to the top
     `_SIMILAR_NEIGHBORS_DISPLAY_LIMIT` entries plus a count; this moved all 7 from
-    deferred to exempt. The live partition is therefore 68/118/93 = 279.
+    deferred to exempt, taking the partition to 68/118/93 = 279.
+
+    The autonomy supervisor then added two deferred leaves: `autonomy start` emits one
+    fixed summary record, and `autonomy finish` emits one row per basis delta, gate
+    denial, and commit-mark issue. The live partition is therefore 68/118/95 = 281.
     """
     actual = {
         "budgeted": len(BUDGETS),

@@ -7,7 +7,6 @@ instability design §6 rejects -- so `...` must never appear here.
 
 from __future__ import annotations
 
-import subprocess
 from collections.abc import Mapping
 from pathlib import Path
 
@@ -23,6 +22,7 @@ from science_tool.autonomy.changes import (
     UNACCOUNTED_CHANGE_FIELD,
     entity_kind_for_path,
 )
+from science_tool.autonomy.git import GitError, run_git
 
 _STATUS_TO_CHANGE_TYPE = {"A": ChangeType.ADDED, "D": ChangeType.DELETED, "M": ChangeType.MODIFIED}
 
@@ -36,17 +36,17 @@ class ExtractError(ValueError):
 
 
 def _git(repo_root: Path, *args: str) -> bytes:
-    """Run one git command with replacement objects disabled.
+    """Run one hardened git command, failing closed on anything but a clean exit.
 
-    `--no-replace-objects` prevents repository-local replacement refs from making a
-    changed commit appear to have the same tree as its base.
+    The argv -- `--no-replace-objects` and the config hardening that keeps the actor's
+    `.git/config` from executing code during our own reads -- lives in `autonomy.git`.
+    This wrapper adds only the discipline this module needs: an unreadable range is
+    uncomputable, never empty.
     """
     try:
-        result = subprocess.run(
-            ["git", "--no-replace-objects", "-C", str(repo_root), *args], capture_output=True
-        )
-    except (OSError, ValueError) as exc:
-        raise ExtractError(f"could not execute git {' '.join(args)} in {repo_root}: {exc}") from exc
+        result = run_git(repo_root, *args)
+    except GitError as exc:
+        raise ExtractError(str(exc)) from exc
     if result.returncode != 0:
         message = result.stderr.decode("utf-8", "replace").strip()
         raise ExtractError(f"git {' '.join(args)} failed in {repo_root}: {message}")

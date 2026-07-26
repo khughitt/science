@@ -227,3 +227,12 @@ def test_a_wired_run_still_requires_its_basis_digest(disposition: str) -> None:
         AutonomousRunRecord.model_validate(
             _payload(disposition=disposition, basis_digest=None)
         )
+
+
+def test_validate_run_identity_matches_the_records_own_rules():
+    from science_model.autonomous_runs import RunRecordError, validate_run_identity
+
+    validate_run_identity(agent="curation-sweep", short_id="a3f1")  # does not raise
+    for agent, short_id in (("Curation_Sweep", "a3f1"), ("curation-sweep", "a3"), ("", "a3f1")):
+        with pytest.raises(RunRecordError):
+            validate_run_identity(agent=agent, short_id=short_id)

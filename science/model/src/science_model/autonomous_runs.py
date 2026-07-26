@@ -226,3 +226,18 @@ class AutonomousRunRecord(BaseModel):
         expected_branch = f"auto/{slug}"
         if self.branch != expected_branch:
             raise ValueError(f"branch must be {expected_branch!r}, got {self.branch!r}")
+
+
+def validate_run_identity(*, agent: str, short_id: str) -> None:
+    """Refuse an agent slug or short id that could not appear in a run id.
+
+    `AutonomousRunRecord._validate_identity` applies the same two rules, but only once a
+    finished record exists. `science autonomy start` needs them before it captures
+    anything: an identity that cannot be finalized must not open a run.
+    """
+    if not _AGENT_RE.fullmatch(agent):
+        raise RunRecordError(f"agent must be a kebab-case slug, got {agent!r}")
+    if not _SHORT_ID_RE.fullmatch(short_id):
+        raise RunRecordError(
+            f"run id short suffix must be at least 4 lowercase alphanumerics, got {short_id!r}"
+        )
