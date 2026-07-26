@@ -81,6 +81,8 @@ def _scope_project(args: list[str], project: Path) -> list[str]:
         ("health", ["health"]),
         ("health", ["health", "--format", "json"]),
         ("health", ["health", "--severity", "all"]),
+        ("project index", ["project", "index"]),
+        ("project index", ["project", "index", "--format", "json"]),
     ],
 )
 def test_command_stays_within_its_ceiling(project: Path, command_path: str, args: list[str]) -> None:
@@ -333,3 +335,64 @@ def test_graph_audit_output_file_is_complete_and_stdout_is_a_control_notice(
     assert len(payload["rows"]) == 50
     assert {row["check"] for row in payload["rows"]} == {"unresolved_reference"}
     assert "truncation" not in payload
+
+
+ARCHIVABLE_TASKS = "\n".join(
+    f"""## [t{i + 500:03d}] Archivable task {i} with a deliberately long title to exercise wrapping behaviour
+- priority: P2
+- status: done
+- created: 2026-01-01
+- completed: 2026-01-02
+
+Body paragraph for archivable task {i}, long enough to matter multiplied by the backlog size.
+"""
+    for i in range(60)
+)
+
+
+@pytest.fixture
+def tasks_archive_overflow_project(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
+    """60 already-`done` tasks, each with a `completed:` date -> 60 archivable rows.
+
+    No `missing_completed` warnings and no parse errors, so stdout is either the
+    projected table/JSON or (with --output) a single control-notice line.
+    """
+    tasks_dir = tmp_path / "tasks"
+    tasks_dir.mkdir()
+    (tasks_dir / "active.md").write_text(ARCHIVABLE_TASKS)
+    monkeypatch.chdir(tmp_path)
+    return tmp_path
+
+
+def test_tasks_archive_stdout_stays_within_its_ceiling(tasks_archive_overflow_project: Path) -> None:
+    result = _invoke(["tasks", "archive"])
+    assert result.exit_code == 0, result.output
+    ceiling = BUDGETS["tasks archive"].max_chars
+    assert visible_len(result.output) <= ceiling
+
+
+def test_tasks_archive_output_file_is_complete_and_stdout_is_a_control_notice(
+    tasks_archive_overflow_project: Path,
+) -> None:
+    target = tasks_archive_overflow_project / "archive.json"
+    result = _invoke(["tasks", "archive", "--format", "json", "--output", str(target)])
+    assert result.exit_code == 0, result.output
+    assert result.output.count("\n") == 1
+    assert "wrote 60 rows to" in result.output
+
+    payload = json.loads(target.read_text())
+    assert len(payload["rows"]) == 60
+    assert {row["id"] for row in payload["rows"]} == {f"t{i + 500:03d}" for i in range(60)}
+
+
+def test_project_index_output_file_is_complete_and_stdout_is_a_control_notice(project: Path) -> None:
+    target = project / "index.json"
+    result = _invoke(["project", "index", "--format", "json", "--output", str(target)])
+    assert result.exit_code == 0, result.output
+    assert result.output.count("\n") == 1
+    assert "wrote 301 rows to" in result.output
+
+    payload = json.loads(target.read_text())
+    assert len(payload["rows"]) == 301
+    assert sum(row["kind"] == "question" for row in payload["rows"]) == 300
+    assert sum(row["kind"] == "hypothesis" for row in payload["rows"]) == 1

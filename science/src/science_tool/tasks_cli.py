@@ -309,12 +309,23 @@ def tasks_unblock(task_id: str) -> None:
     show_default=True,
     type=click.Path(path_type=Path, file_okay=False, dir_okay=True),
 )
-def tasks_archive(do_apply: bool, check: bool, output_format: str, tasks_dir: Path) -> None:
+@click.option(
+    "--output",
+    "output_path",
+    type=click.Path(path_type=Path),
+    default=None,
+    help="Write the complete, unbudgeted payload to PATH instead of stdout.",
+)
+def tasks_archive(do_apply: bool, check: bool, output_format: str, tasks_dir: Path, output_path: Path | None) -> None:
     """Move done/retired tasks from active.md to done/YYYY-MM.md.
 
     Default is dry-run: prints the planned moves without touching disk.
     Pass --apply to perform the writes (idempotent on re-run).
     """
+    from science_tool.budget.control import bounded_control_notice
+    from science_tool.budget.invocation import build_complete_via, hint_for
+    from science_tool.budget.registry import lookup
+    from science_tool.budget.sink import BoundedSink
     from science_tool.tasks_archive import apply_archive, count_archivable, plan_archive
 
     if check:
@@ -342,6 +353,13 @@ def tasks_archive(do_apply: bool, check: bool, output_format: str, tasks_dir: Pa
         for entry in plan.entries
     ]
 
+    complete_via = build_complete_via(click.get_current_context(), output_hint=hint_for("tasks-archive", output_format))
+    control_notice = (
+        bounded_control_notice(f"wrote {len(rows)} rows to {output_path}") if output_path is not None else None
+    )
+    sink = BoundedSink(
+        lookup("tasks archive"), output_path=output_path, command_path="tasks archive", complete_via=complete_via
+    )
     emit_query_rows(
         output_format=output_format,
         title="Tasks Archive Plan",
@@ -352,7 +370,11 @@ def tasks_archive(do_apply: bool, check: bool, output_format: str, tasks_dir: Pa
             ("missing_completed", "Missing completed:"),
         ],
         rows=rows,
+        sink=sink,
     )
+    sink.flush()
+    if control_notice is not None:
+        click.echo(control_notice)
 
     for entry in plan.entries:
         if entry.missing_completed:

@@ -684,7 +684,14 @@ def entity_needs_review(output_format: str, output_path: Path | None) -> None:
     help="Show the whole ranked queue, not just this sweep's budget.",
 )
 @click.option("--format", "output_format", type=click.Choice(OUTPUT_FORMATS), default="table", show_default=True)
-def entity_rotation(show_all: bool, output_format: str) -> None:
+@click.option(
+    "--output",
+    "output_path",
+    type=click.Path(path_type=Path),
+    default=None,
+    help="Write the complete, unbudgeted payload to PATH instead of stdout.",
+)
+def entity_rotation(show_all: bool, output_format: str, output_path: Path | None) -> None:
     """Rank the reviewable corpus least-recently-reviewed first, printing this sweep's budget.
 
     Advisory and stateless: it reviews nothing. Review a listed entity with
@@ -695,6 +702,10 @@ def entity_rotation(show_all: bool, output_format: str) -> None:
     """
     from datetime import date
 
+    from science_tool.budget.control import bounded_control_notice
+    from science_tool.budget.invocation import build_complete_via, hint_for
+    from science_tool.budget.registry import lookup
+    from science_tool.budget.sink import BoundedSink
     from science_tool.curate.rotation import RotationError, select_rotation
 
     try:
@@ -712,6 +723,13 @@ def entity_rotation(show_all: bool, output_format: str) -> None:
     def _selected(value: object, _row: object) -> str:
         return "✓" if value else ""
 
+    complete_via = build_complete_via(click.get_current_context(), output_hint=hint_for("entity-rotation", output_format))
+    control_notice = (
+        bounded_control_notice(f"wrote {len(shown)} rows to {output_path}") if output_path is not None else None
+    )
+    sink = BoundedSink(
+        lookup("entity rotation"), output_path=output_path, command_path="entity rotation", complete_via=complete_via
+    )
     emit_query_rows(
         output_format=output_format,
         title=title,
@@ -732,7 +750,11 @@ def entity_rotation(show_all: bool, output_format: str) -> None:
             "graph_source": result.graph_source,
         },
         renderers={"last_reviewed": _never, "age_days": _never, "selected": _selected},
+        sink=sink,
     )
+    sink.flush()
+    if control_notice is not None:
+        click.echo(control_notice)
 
 
 def _emit_entity_removal_plan(plan: EntityRemovalPlan, *, applied: bool) -> None:

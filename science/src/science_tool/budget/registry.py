@@ -85,6 +85,15 @@ BUDGETS: dict[str, CommandBudget] = {
     "graph question-summary": CommandBudget(max_chars=20_000, shape=PayloadShape.ROWS, max_rows=40),
     "graph rehoming-debt": CommandBudget(max_chars=20_000, shape=PayloadShape.ROWS, max_rows=40),
     "graph uncertainty": CommandBudget(max_chars=20_000, shape=PayloadShape.ROWS, max_rows=40),
+    "datasets files": CommandBudget(max_chars=20_000, shape=PayloadShape.ROWS, max_rows=40),
+    "datasets search": CommandBudget(max_chars=20_000, shape=PayloadShape.ROWS, max_rows=40),
+    "datasets validate": CommandBudget(max_chars=20_000, shape=PayloadShape.ROWS, max_rows=40),
+    "entity rotation": CommandBudget(max_chars=20_000, shape=PayloadShape.ROWS, max_rows=40),
+    "feedback regression-candidates": CommandBudget(max_chars=20_000, shape=PayloadShape.ROWS, max_rows=40),
+    "feedback targets": CommandBudget(max_chars=20_000, shape=PayloadShape.ROWS, max_rows=40),
+    "inquiry list": CommandBudget(max_chars=20_000, shape=PayloadShape.ROWS, max_rows=40),
+    "project index": CommandBudget(max_chars=20_000, shape=PayloadShape.ROWS, max_rows=40),
+    "tasks archive": CommandBudget(max_chars=20_000, shape=PayloadShape.ROWS, max_rows=40),
 }
 
 EXEMPTIONS: dict[str, str] = {
@@ -198,7 +207,6 @@ EXEMPTIONS.update(dict.fromkeys(RETIREMENTS, "fixed retired-command error"))
 DEFERRED: dict[str, DeferredCommand] = {
     # Growable but small on the audited project -- the case that has no truthful
     # exemption. Populated further by Task 13 Step 3.
-    "tasks archive": DeferredCommand("one row per archivable task", "1b"),
     "tasks summary": DeferredCommand(
         "one output member per distinct task type and group value",
         "1b",
@@ -337,11 +345,8 @@ DEFERRED.update(
         path: DeferredCommand("one output member per external dataset, file, resource, schema field, QA result, or adapter", "1b")
         for path in (
             "datasets download",
-            "datasets files",
             "datasets infer-schema",
             "datasets qa",
-            "datasets search",
-            "datasets validate",
         )
     }
 )
@@ -382,7 +387,6 @@ DEFERRED.update(
             "entity neighbors",
             "entity note",
             "entity remove",
-            "entity rotation",
             "entity status-inventory",
         )
     }
@@ -403,10 +407,8 @@ DEFERRED.update(
         path: DeferredCommand("one output member per feedback entry, target, neighbor, cluster, or occurrence", "1b")
         for path in (
             "feedback add",
-            "feedback regression-candidates",
             "feedback report",
             "feedback show",
-            "feedback targets",
             "feedback triage",
         )
     }
@@ -433,7 +435,6 @@ DEFERRED.update(
         for path in (
             "inquiry export-chirho",
             "inquiry export-pgmpy",
-            "inquiry list",
             "inquiry show",
             "inquiry validate",
         )
@@ -465,7 +466,6 @@ DEFERRED.update(
             "1b",
         )
         for path in (
-            "project index",
             "project topic-coverage",
             "project verify",
         )

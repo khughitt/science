@@ -208,8 +208,20 @@ def inquiry_import(slug, project_root, graph_path, force):
 @click.option(
     "--path", "graph_path", default=str(DEFAULT_GRAPH_PATH), show_default=True, type=click.Path(path_type=Path)
 )
-def inquiry_list(output_format: str, graph_path: Path) -> None:
+@click.option(
+    "--output",
+    "output_path",
+    type=click.Path(path_type=Path),
+    default=None,
+    help="Write the complete, unbudgeted payload to PATH instead of stdout.",
+)
+def inquiry_list(output_format: str, graph_path: Path, output_path: Path | None) -> None:
     """List all inquiries."""
+    from science_tool.budget.control import bounded_control_notice
+    from science_tool.budget.invocation import build_complete_via, hint_for
+    from science_tool.budget.registry import lookup
+    from science_tool.budget.sink import BoundedSink
+
     rows = unwrap_instrument(list_inquiries(graph_path), what="inquiry list")
     if not rows:
         if output_format == "json":
@@ -217,6 +229,13 @@ def inquiry_list(output_format: str, graph_path: Path) -> None:
         else:
             click.echo("No inquiries found.")
         return
+    complete_via = build_complete_via(click.get_current_context(), output_hint=hint_for("inquiry-list", output_format))
+    control_notice = (
+        bounded_control_notice(f"wrote {len(rows)} rows to {output_path}") if output_path is not None else None
+    )
+    sink = BoundedSink(
+        lookup("inquiry list"), output_path=output_path, command_path="inquiry list", complete_via=complete_via
+    )
     emit_query_rows(
         output_format=output_format,
         title="Inquiries",
@@ -229,7 +248,11 @@ def inquiry_list(output_format: str, graph_path: Path) -> None:
             ("created", "Created"),
         ],
         rows=rows,
+        sink=sink,
     )
+    sink.flush()
+    if control_notice is not None:
+        click.echo(control_notice)
 
 
 @inquiry_group.command("show")

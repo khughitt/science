@@ -56,12 +56,13 @@ def test_every_deferred_entry_states_what_makes_it_grow() -> None:
 
 
 def test_a_growable_but_small_command_can_be_deferred() -> None:
-    """tasks archive emits one row per archivable task but measures tiny.
+    """autonomy path-gate emits one row per denial but measures tiny on most runs.
 
-    It is not exempt (its output grows) and has no over-threshold measurement, so the
-    taxonomy must still have a truthful home for it.
+    It is not exempt (its output grows with the run's change set) and has no
+    over-threshold measurement, so the taxonomy must still have a truthful home for it.
+    Slice 1b-3 batch W1b wired the original example here (tasks archive) into BUDGETS.
     """
-    entry = DEFERRED["tasks archive"]
+    entry = DEFERRED["autonomy path-gate"]
     assert entry.measured_chars is None
     assert entry.growth_reason.strip()
 

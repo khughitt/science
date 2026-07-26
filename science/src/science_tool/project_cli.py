@@ -254,8 +254,20 @@ def _render_verify_human(result: Any) -> None:
     show_default=True,
     type=click.Path(path_type=Path, file_okay=False, dir_okay=True),
 )
-def project_index(output_format: str, project_root: Path) -> None:
+@click.option(
+    "--output",
+    "output_path",
+    type=click.Path(path_type=Path),
+    default=None,
+    help="Write the complete, unbudgeted payload to PATH instead of stdout.",
+)
+def project_index(output_format: str, project_root: Path, output_path: Path | None) -> None:
     """Produce a compact index of questions and hypotheses for this project."""
+    from science_tool.budget.control import bounded_control_notice
+    from science_tool.budget.invocation import build_complete_via, hint_for
+    from science_tool.budget.registry import lookup
+    from science_tool.budget.sink import BoundedSink
+
     project_root = project_root.resolve()
 
     # Resolve entities through the canonical project-sources loader.
@@ -272,6 +284,13 @@ def project_index(output_format: str, project_root: Path) -> None:
                 }
             )
 
+    complete_via = build_complete_via(click.get_current_context(), output_hint=hint_for("project-index", output_format))
+    control_notice = (
+        bounded_control_notice(f"wrote {len(rows)} rows to {output_path}") if output_path is not None else None
+    )
+    sink = BoundedSink(
+        lookup("project index"), output_path=output_path, command_path="project index", complete_via=complete_via
+    )
     emit_query_rows(
         output_format=output_format,
         title="Project Index",
@@ -283,4 +302,8 @@ def project_index(output_format: str, project_root: Path) -> None:
             ("status", "Status"),
         ],
         rows=rows,
+        sink=sink,
     )
+    sink.flush()
+    if control_notice is not None:
+        click.echo(control_notice)

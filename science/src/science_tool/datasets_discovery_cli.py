@@ -39,7 +39,16 @@ def datasets_sources() -> None:
 @click.option("--source", default=None, help="Comma-separated list of sources (e.g. zenodo,geo)")
 @click.option("--max", "max_results", default=20, show_default=True, help="Max results per source")
 @click.option("--format", "output_format", type=click.Choice(OUTPUT_FORMATS), default="table", show_default=True)
-def datasets_search(query: str, source: str | None, max_results: int, output_format: str) -> None:
+@click.option(
+    "--output",
+    "output_path",
+    type=click.Path(path_type=Path),
+    default=None,
+    help="Write the complete, unbudgeted payload to PATH instead of stdout.",
+)
+def datasets_search(
+    query: str, source: str | None, max_results: int, output_format: str, output_path: Path | None
+) -> None:
     """Search for datasets across repositories."""
     sources = source.split(",") if source else None
     results = search_all(
@@ -67,6 +76,18 @@ def datasets_search(query: str, source: str | None, max_results: int, output_for
         for r in results
     ]
 
+    from science_tool.budget.control import bounded_control_notice
+    from science_tool.budget.invocation import build_complete_via, hint_for
+    from science_tool.budget.registry import lookup
+    from science_tool.budget.sink import BoundedSink
+
+    complete_via = build_complete_via(click.get_current_context(), output_hint=hint_for("datasets-search", output_format))
+    control_notice = (
+        bounded_control_notice(f"wrote {len(rows)} rows to {output_path}") if output_path is not None else None
+    )
+    sink = BoundedSink(
+        lookup("datasets search"), output_path=output_path, command_path="datasets search", complete_via=complete_via
+    )
     emit_query_rows(
         output_format=output_format,
         title=f"Dataset Search: {query}",
@@ -81,7 +102,11 @@ def datasets_search(query: str, source: str | None, max_results: int, output_for
             ("doi", "DOI"),
         ],
         rows=rows,
+        sink=sink,
     )
+    sink.flush()
+    if control_notice is not None:
+        click.echo(control_notice)
 
 
 @datasets_group.command("metadata")
@@ -123,7 +148,14 @@ def datasets_metadata(source_id: str, output_format: str) -> None:
 @datasets_group.command("files")
 @click.argument("source_id", metavar="SOURCE:ID")
 @click.option("--format", "output_format", type=click.Choice(OUTPUT_FORMATS), default="table", show_default=True)
-def datasets_files(source_id: str, output_format: str) -> None:
+@click.option(
+    "--output",
+    "output_path",
+    type=click.Path(path_type=Path),
+    default=None,
+    help="Write the complete, unbudgeted payload to PATH instead of stdout.",
+)
+def datasets_files(source_id: str, output_format: str, output_path: Path | None) -> None:
     """List downloadable files in a dataset. Use SOURCE:ID format."""
     source, _, dataset_id = source_id.partition(":")
     if not dataset_id:
@@ -144,12 +176,28 @@ def datasets_files(source_id: str, output_format: str) -> None:
         for f in file_list
     ]
 
+    from science_tool.budget.control import bounded_control_notice
+    from science_tool.budget.invocation import build_complete_via, hint_for
+    from science_tool.budget.registry import lookup
+    from science_tool.budget.sink import BoundedSink
+
+    complete_via = build_complete_via(click.get_current_context(), output_hint=hint_for("datasets-files", output_format))
+    control_notice = (
+        bounded_control_notice(f"wrote {len(rows)} rows to {output_path}") if output_path is not None else None
+    )
+    sink = BoundedSink(
+        lookup("datasets files"), output_path=output_path, command_path="datasets files", complete_via=complete_via
+    )
     emit_query_rows(
         output_format=output_format,
         title="Files",
         columns=[("filename", "Filename"), ("format", "Format"), ("size", "Size"), ("checksum", "Checksum")],
         rows=rows,
+        sink=sink,
     )
+    sink.flush()
+    if control_notice is not None:
+        click.echo(control_notice)
 
 
 def _resolve_cli_data_root(project_root: Path | None) -> Path:
@@ -205,17 +253,43 @@ def datasets_download(source_id: str, file_pattern: str | None, project_root: Pa
 )
 @click.option("--path", "data_path", default=None, show_default="resolved data root", type=click.Path(path_type=Path))
 @click.option("--format", "output_format", type=click.Choice(OUTPUT_FORMATS), default="table", show_default=True)
-def datasets_validate(project_root: Path | None, data_path: Path | None, output_format: str) -> None:
+@click.option(
+    "--output",
+    "output_path",
+    type=click.Path(path_type=Path),
+    default=None,
+    help="Write the complete, unbudgeted payload to PATH instead of stdout.",
+)
+def datasets_validate(
+    project_root: Path | None, data_path: Path | None, output_format: str, output_path: Path | None
+) -> None:
     """Validate Frictionless Data Packages in raw/ and processed/ directories."""
     if data_path is None:
         data_path = _resolve_cli_data_root(project_root)
     results = validate_path(data_path)
+
+    from science_tool.budget.control import bounded_control_notice
+    from science_tool.budget.invocation import build_complete_via, hint_for
+    from science_tool.budget.registry import lookup
+    from science_tool.budget.sink import BoundedSink
+
+    complete_via = build_complete_via(click.get_current_context(), output_hint=hint_for("datasets-validate", output_format))
+    control_notice = (
+        bounded_control_notice(f"wrote {len(results)} rows to {output_path}") if output_path is not None else None
+    )
+    sink = BoundedSink(
+        lookup("datasets validate"), output_path=output_path, command_path="datasets validate", complete_via=complete_via
+    )
     emit_query_rows(
         output_format=output_format,
         title="Data Validation",
         columns=[("check", "Check"), ("status", "Status"), ("details", "Details")],
         rows=results,
+        sink=sink,
     )
+    sink.flush()
+    if control_notice is not None:
+        click.echo(control_notice)
     if any(r["status"] == "fail" for r in results):
         raise click.exceptions.Exit(1)
 
