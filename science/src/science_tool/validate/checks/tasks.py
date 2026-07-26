@@ -195,9 +195,15 @@ def _split_list_value(raw: object) -> list[str]:
 
 @Check(section="task queue...", order=18)
 def check_tasks(ctx: ValidateContext) -> Iterator[Result]:
-    from science_tool.tasks import _task_search_paths, parse_task_file, parse_tasks
+    from science_tool.tasks import (
+        _require_split,
+        _task_search_paths,
+        parse_task_file,
+        parse_tasks,
+    )
 
     tasks_dir = ctx.project_root / "tasks"
+    _require_split(tasks_dir)
     active_dir = tasks_dir / "active"
     if not active_dir.is_dir():
         yield _result(Severity.WARN, "tasks/active/ not found (use /science:tasks to create)")
@@ -208,7 +214,7 @@ def check_tasks(ctx: ValidateContext) -> Iterator[Result]:
     declared: set[str] = set()
     blocks: list[_TaskBlock] = []
 
-    for path in _task_search_paths(tasks_dir):
+    for path in _task_search_paths(tasks_dir, require_split=False):
         if path.parent.name == "active":
             try:
                 task = parse_task_file(path)
@@ -268,9 +274,16 @@ def check_tasks(ctx: ValidateContext) -> Iterator[Result]:
                     current.fields[field_match.group(1)] = field_match.group(2).strip()
 
     for task_id in sorted(declared):
-        count = sum(1 for block in blocks if block.task_id == task_id)
-        if count > 1:
-            yield _result(Severity.ERROR, f"duplicate task IDs in active/: {task_id}")
+        locations = [
+            f"{block.path}:{block.line}"
+            for block in blocks
+            if block.task_id == task_id
+        ]
+        if len(locations) > 1:
+            yield _result(
+                Severity.ERROR,
+                f"duplicate task ID {task_id} found in {', '.join(locations)}",
+            )
 
     for block in blocks:
         yield from _validate_block(block, declared)

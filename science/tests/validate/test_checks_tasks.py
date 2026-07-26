@@ -77,6 +77,18 @@ def _valid_task(task_id: str, *, extra: str = "") -> str:
     return "\n".join(lines)
 
 
+def _write_non_split_state(root: Path, state: str) -> None:
+    tasks_dir = root / "tasks"
+    tasks_dir.mkdir(parents=True, exist_ok=True)
+    (tasks_dir / "active.md").write_text(_valid_task("t001"), encoding="utf-8")
+    if state in {"migrating", "conflict"}:
+        _write_active(root, _valid_frontmatter("t002"), filename="t002-split.md")
+    if state == "migrating":
+        journal = tasks_dir / ".science" / "task-storage-migration.journal"
+        journal.parent.mkdir()
+        journal.touch()
+
+
 def test_missing_active_file_warns_and_stops(tmp_path: Path) -> None:
     from science_tool.validate.checks.tasks import check_tasks
 
@@ -95,6 +107,42 @@ def test_empty_active_directory_reports_exists_and_no_tasks(tmp_path: Path) -> N
         "tasks/active/ exists",
         "  no tasks in active/",
     ]
+
+
+@pytest.mark.parametrize(
+    ("state", "message"),
+    [
+        (
+            "legacy",
+            "tasks/active.md predates the storage split; "
+            "run `science tasks migrate-storage --apply`.",
+        ),
+        (
+            "migrating",
+            "an interrupted storage migration is in progress; "
+            "run `science tasks migrate-storage --resume`.",
+        ),
+        (
+            "conflict",
+            "both tasks/active.md and tasks/active/ exist with no migration journal; "
+            "inspect and remove one by hand — this is not an auto-resumable migration.",
+        ),
+    ],
+)
+def test_check_tasks_gates_non_split_store_before_any_result(
+    tmp_path: Path,
+    state: str,
+    message: str,
+) -> None:
+    from science_tool.validate.checks.tasks import check_tasks
+
+    _write_non_split_state(tmp_path, state)
+    results = check_tasks(_ctx(tmp_path))
+
+    with pytest.raises(ValueError) as excinfo:
+        next(results)
+
+    assert str(excinfo.value) == message
 
 
 def test_active_and_done_task_blocks_count_together(tmp_path: Path) -> None:
@@ -153,7 +201,7 @@ def test_task_added_without_aspects_validates_clean(tmp_path: Path) -> None:
     assert _messages(check_tasks(_ctx(tmp_path)), Severity.ERROR) == []
 
 
-def test_duplicate_ids_across_active_and_done_emit_bash_parity_message(tmp_path: Path) -> None:
+def test_duplicate_ids_across_active_and_done_name_both_locations(tmp_path: Path) -> None:
     from science_tool.validate.checks.tasks import check_tasks
 
     _write_active(tmp_path, _valid_frontmatter("t001"))
@@ -161,7 +209,26 @@ def test_duplicate_ids_across_active_and_done_emit_bash_parity_message(tmp_path:
     done.mkdir()
     done.joinpath("2026-01.md").write_text(_valid_task("t001"), encoding="utf-8")
 
-    assert _messages(check_tasks(_ctx(tmp_path)), Severity.ERROR) == ["duplicate task IDs in active/: t001"]
+    assert _messages(check_tasks(_ctx(tmp_path)), Severity.ERROR) == [
+        "duplicate task ID t001 found in "
+        "tasks/active/t001-task.md:1, tasks/done/2026-01.md:1"
+    ]
+
+
+def test_malformed_done_ledger_dsl_surfaces_as_validation_error(tmp_path: Path) -> None:
+    from science_tool.validate.checks.tasks import check_tasks
+
+    (tmp_path / "tasks" / "active").mkdir(parents=True)
+    done = tmp_path / "tasks" / "done"
+    done.mkdir()
+    done.joinpath("2026-01.md").write_text(
+        _valid_task("t001", extra="- unexpected: value"),
+        encoding="utf-8",
+    )
+
+    assert _messages(check_tasks(_ctx(tmp_path)), Severity.ERROR) == [
+        "unknown metadata key 'unexpected' for task t001 in tasks/done/2026-01.md"
+    ]
 
 
 def test_invalid_parent_emits_exact_error(tmp_path: Path) -> None:
