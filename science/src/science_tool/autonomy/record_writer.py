@@ -12,12 +12,12 @@ import os
 from datetime import date
 from pathlib import Path
 
-import yaml
 from science_model.autonomous_runs import (
     RUN_ID_PREFIX,
     AutonomousRunRecord,
     validate_run_identity,
 )
+from science_model.frontmatter import render_frontmatter
 
 from science_tool.graph.autonomous_runs import RUNS_DIRNAME
 
@@ -62,14 +62,14 @@ def write_run_record(project_root: Path, record: AutonomousRunRecord) -> Path:
     # sort_keys=False keeps the model's declaration order, which reads as the design's
     # table. default_flow_style=False keeps nested blocks (policy_identity, budget)
     # expanded, so a human reviewing an attestation sees one field per line.
-    block = yaml.safe_dump(payload, sort_keys=False, default_flow_style=False, allow_unicode=True)
+    text = render_frontmatter(payload, "")
     try:
         runs_dir.mkdir(parents=True, exist_ok=True)
         descriptor = os.open(
             path, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o644
         )
         with os.fdopen(descriptor, "w", encoding="utf-8") as handle:
-            handle.write(f"---\n{block}---\n")
+            handle.write(text)
     except FileExistsError as exc:
         # O_EXCL also fires on a symlink at the final component, which is why the message
         # names both readings rather than asserting the file already holds a record.
