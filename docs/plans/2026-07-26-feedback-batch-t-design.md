@@ -6,8 +6,18 @@ Successor to [Batch S](2026-07-26-feedback-batch-s-design.md). Branch
 ## The fact
 
 **A measurement taken at a different execution geometry than the one it
-authorizes is not evidence about that geometry — and it errs optimistic,
-because the convenient geometry is the fast one.**
+authorizes is not evidence about that geometry.**
+
+The mismatch itself has no guaranteed direction. A compile-dominated pilot or
+an undersized batch with poor amortization overstates per-unit cost; a batched
+benchmark charged to a sequential workload understates it. What makes the error
+in *these* filings uniformly optimistic is not the mismatch but **favorable
+probe selection** — taking the max over a sweep, benchmarking the convenient
+batch size, extrapolating from the fast part of the run. The mismatch destroys
+the authorization; the selection supplies the bias.
+
+Stating it as "errs optimistic" would be the same defect the batch is about:
+a directional claim inferred from a sample chosen by which incidents got filed.
 
 Batch S's theme was an instrument that cannot see its input reporting a clean
 result. This is its cost-side twin: a gate measured somewhere other than where
@@ -104,19 +114,63 @@ mirror regenerated.
 into `skills/pipelines/` — it is the same fact. `skills/pipelines/SKILL.md`
 gains a routing pointer so a pipelines-context agent reaches it.
 
-### D2 — template: a Cost Gate section, in both copies, with a drift guard
+### D2 — template: a Cost Gate section, with its renderer descriptor
 
-`## Cost Gate (execution geometry)` in `templates/pre-registration.md`,
-structured as a table whose every row names its measurement domain — mirroring
-the Estimator Certification Gate rather than inventing a shape.
+`## Cost Gate (execution geometry)` in `templates/pre-registration.md` and its
+packaged copy, structured as a table whose every row names its measurement
+domain — mirroring the Estimator Certification Gate rather than inventing a
+shape.
 
-The two template copies (`templates/pre-registration.md` and
-`science/model/src/science_model/templates/pre-registration.md`, **the packaged
-shadow being what renders**) are byte-identical today, and nothing enforces
-that. `test_command_docs.py` asserts content in both by listing them in pairs
-(lines 1220/1221, 1232/1233, 1248/1249, 1269/1270) — so a section added to one
-and missed in the other passes every existing guard. This batch edits both, so
-it leaves behind an identical-copy guard.
+**A heading alone breaks the renderer.** `_render_body` indexes
+`metadata_by_name[parsed.name]` for every parsed section *before* testing
+inclusion (`templates.py:277`), so a `##` heading with no `_template.sections`
+descriptor raises `KeyError` unconditionally — no flag combination avoids it.
+The section therefore ships with:
+
+```yaml
+- { key: cost-gate, name: "Cost Gate (execution geometry)", required: false }
+```
+
+**`required: false`**, matching the other three conditional gates
+(`calibration-gate`, `execution-readiness-gate`, `vehicle-admissibility-gate`).
+Requiredness interacts with D3: `required: true` would put the marker in every
+newly rendered pre-registration, so a marker-presence check would pass
+universally on sight. What makes the gate obligatory is the substantive
+antecedent — declaring a sampling schedule — not the renderer default.
+
+**The identical-copy guard already exists.**
+`test_templates.py:208` parametrizes over `MIGRATED_KINDS` and byte-compares
+root against packaged; `test_packaged_templates_are_exactly_the_migrated_kinds`
+keeps that coverage complete. `pre-registration` is migrated. An earlier draft
+of this design claimed the guard was missing and proposed adding one — wrong,
+and the duplicate is not built. The real hole is D0.
+
+### D0 — the pre-registration template does not render today
+
+Discovered while checking D2's renderer contract, and it **blocks this batch**:
+slice 2 edits a template that is already broken.
+
+```
+Renderer.render("pre-registration") -> KeyError
+  'Training-Side Confound Gate (signature / model-transfer feasibility)'
+```
+
+`b8667272` (2026-07-22, Batch J remainder) added that section to the template
+body and never added its `sections:` descriptor. **`science` has been unable to
+render a new pre-registration for four days.** 1 of 19 migrated kinds is
+affected; the other 18 render clean.
+
+Nothing caught it, and the reason is the recorded lesson: **a guard that lists
+its scope has a hole by construction.** `MIGRATED_KINDS` is parametrized over
+the byte-compare test only. The render tests are hand-picked per kind
+(`evidence-line`, one other), so the kind that broke was simply not on the
+list. The two copies match perfectly — and both are unrenderable. A guard
+comparing the wrong property is this batch's own theme, arrived at from the
+toolkit side.
+
+Fix: add the missing descriptor, and parametrize a render smoke test over
+`MIGRATED_KINDS` so the scope cannot be listed. Verified red-before/green-after
+against the pre-fix template.
 
 ### D3 — the check: substitute the one that can fail
 
@@ -146,9 +200,35 @@ The substitute has material:
 | `0032` t878 subset-substructure | 7 matches | yes |
 | `0034` arXiv skeleton suppression | 45 matches; the incident | yes |
 
-**Trigger:** a frozen pre-registration whose body declares a sampling schedule
-and carries no `## Cost Gate` section. Modeled on `prereg.vehicle-undeclared`
-— antecedent in the body, escape hatch a section marker.
+**Trigger — content, not heading.** An earlier draft suppressed the finding
+whenever `## Cost Gate` was present, which would let a blank or placeholder
+gate pass. That is a gate that cannot fail, discharging an obligation it never
+tested — precisely the defect this batch exists to close, reproduced in the
+instrument built to close it.
+
+The rule fires when a **frozen** pre-registration **declares a sampling
+schedule** and does not carry a Cost Gate whose two load-bearing rows are
+filled:
+
+| row | what it must state |
+|---|---|
+| **Target geometry** | the geometry that will execute — batch size, call pattern, sequencing, concurrency |
+| **Calibration domain** | the substrate and geometry the schedule or benchmark was actually measured on |
+
+"Filled" is checkable: the template writes fill-ins as `<angle-bracket>`
+placeholders, so a value cell matching `^<.*>$`, or empty, is unfilled. Two
+distinguishable messages under the one rule:
+
+- section absent — *declares a sampling schedule but no Cost Gate*
+- section present, row unfilled — *Cost Gate present but `Calibration domain`
+  is still a placeholder*
+
+The remaining rows (statistic and repeats, steady-state treatment, transfer
+EXECUTED-or-CONDITIONAL) carry the Group A doctrine and are **not** part of the
+trigger. They are guidance the leaf teaches; only the two rows above are facts
+whose absence is mechanically decidable. Widening the trigger to rows that
+require judgement would manufacture findings the check cannot actually
+adjudicate.
 
 **Severity WARN, ungated**, following the `vehicle-undeclared` precedent
 recorded at `validate/gates.py:82`: an ERROR would be an uncertified instrument
@@ -173,10 +253,17 @@ different thing from a gap.
 
 ## Slices
 
-1. **Doctrine leaf** — `cost-gate-certification.md` + INDEX + SKILL.md Leaves
-   row + `pipelines/SKILL.md` pointer + codex mirror. Covers Groups A and B.
-2. **Template gate** — `## Cost Gate` in both copies + the identical-copy
-   drift guard + the `estimator-certification.md` step-3 link.
+0. **Unbreak the renderer** (D0) — the missing `training-side-confound-gate`
+   descriptor, plus a render smoke test parametrized over `MIGRATED_KINDS`.
+   Ships first and stands alone: it is a live four-day-old break, independent
+   of whether the rest of this batch lands.
+1. **Doctrine leaf** — `cost-gate-certification.md` + INDEX row + SKILL.md
+   Leaves row + `pipelines/SKILL.md` pointer + codex mirror. Covers Groups A
+   and B.
+2. **Template gate** — `## Cost Gate` in both copies **with its
+   `sections:` descriptor** + the `estimator-certification.md` step-3 link.
+   Slice 0's parametrized render test is what proves this one didn't repeat
+   `b8667272`.
 3. **Check** — `prereg.schedule-calibration-domain` in
    `validate/checks/prereg_vehicles.py`'s neighbourhood, with `_frozen_because`
    extracted to a shared helper (two checks now need it — the Batch S shared-
