@@ -13,7 +13,7 @@ Slice 0 (D0) already shipped standalone — `a3611ed2`, merged `c6a57e70`.
 
 ## Global Constraints
 
-- Work from `/mnt/ssd/Dropbox/science/.worktrees/feedback-batch-t`. **Use
+- Work from `~/d/science/.worktrees/feedback-batch-t`. **Use
   absolute paths in every command** — the shell cwd silently resets between
   calls in this environment.
 - Tests: `cd science && uv run --frozen pytest` (~2–3 min, exceeds the default
@@ -33,14 +33,23 @@ Slice 0 (D0) already shipped standalone — `a3611ed2`, merged `c6a57e70`.
 
 ## Hazards this plan defends against
 
-1. **`CANONICAL_CHECK_MODULES` is an explicit tuple.** A new check module not
-   added to it never runs, and every unit test still passes. Task 5 asserts
-   registration end-to-end, not just the function in isolation.
-2. **A heading with no `_template.sections` descriptor breaks the renderer
+1. **`CANONICAL_CHECK_MODULES` is an explicit tuple**, and the obvious guard
+   against forgetting it does not work. A plain end-to-end test passes without
+   the tuple entry, because the unit tests import the module and `@Check` fires
+   on import. Task 5 uses the order-robust clear/evict/reload fixture, and
+   Step 3a observes it failing before trusting it.
+2. **An unbounded antecedent selects the whole corpus and looks like success.**
+   The first draft's schedule regex matched **34 of 34** natural-systems
+   pre-registrations — `thin ` inside "within", `ess` inside "unless". Tokens
+   are word-bounded, and test 8 is the corpus-derived regression.
+3. **A heading with no `_template.sections` descriptor breaks the renderer
    unconditionally** — this is what D0 repaired. Task 3 adds both together and
    the D0 guard proves it.
-3. **A fixture that writes the reader's own convention cannot falsify the
-   reader.** Task 6 certifies against the four real projects, not fixtures.
+4. **Deleting a row must not be cheaper than filling it.** Absent, empty, and
+   placeholder are one verdict, with a test each.
+5. **A fixture that writes the reader's own convention cannot falsify the
+   reader.** Task 6 certifies against the four real projects, not fixtures, and
+   has explicit authority to send the check back to code.
 
 ## File structure
 
@@ -141,21 +150,18 @@ Add to the `skills/study-design/SKILL.md` Leaves table:
   routing line so a pipelines-context agent reaches it — a pointer only; the
   XLA/contention doctrine lives in the leaf and is not copied.
 
-- [ ] **Step 4: Regenerate the codex mirror.** There is no CLI:
+- [ ] **Step 4: Regenerate the codex mirror** with the repo's own wrapper — it
+  resolves the repo root from its own location, so it cannot be pointed at the
+  wrong tree:
 
 ```bash
-cd /mnt/ssd/Dropbox/science/.worktrees/feedback-batch-t/science && uv run --frozen python -c "
-from pathlib import Path
-from science_tool import codex_skills
-root = Path('/mnt/ssd/Dropbox/science/.worktrees/feedback-batch-t')
-codex_skills.generate_codex_skills(root, root / 'codex-skills')
-"
+cd ~/d/science/.worktrees/feedback-batch-t/science && uv run --frozen python ../scripts/generate_codex_skills.py
 ```
 
 - [ ] **Step 5: Verify.**
 
 ```bash
-cd /mnt/ssd/Dropbox/science/.worktrees/feedback-batch-t/science && uv run --frozen pytest tests/skills_lint tests/test_skill_inventory.py tests/test_codex_skills.py -q
+cd ~/d/science/.worktrees/feedback-batch-t/science && uv run --frozen pytest tests/skills_lint tests/test_skill_inventory.py tests/test_codex_skills.py -q
 ```
 Expected: PASS. A missing INDEX row fails
 `test_registry_rejects_orphan_skill`; a stale mirror fails the codex drift
@@ -192,7 +198,7 @@ Split out so Task 3 and Task 5 do not both edit `prereg_vehicles.py`.
 - [ ] **Step 3: Verify no behavior change.**
 
 ```bash
-cd /mnt/ssd/Dropbox/science/.worktrees/feedback-batch-t/science && uv run --frozen pytest tests/validate/test_checks_prereg_vehicles.py -q
+cd ~/d/science/.worktrees/feedback-batch-t/science && uv run --frozen pytest tests/validate/test_checks_prereg_vehicles.py -q
 ```
 Expected: PASS, unchanged count. A pure move must not alter one result.
 
@@ -259,7 +265,7 @@ universally.
 - [ ] **Step 3: Sync the packaged copy and verify it renders.**
 
 ```bash
-cd /mnt/ssd/Dropbox/science/.worktrees/feedback-batch-t && cp templates/pre-registration.md science/model/src/science_model/templates/pre-registration.md
+cd ~/d/science/.worktrees/feedback-batch-t && cp templates/pre-registration.md science/model/src/science_model/templates/pre-registration.md
 cd science/model && uv run --frozen pytest tests/test_templates.py -q
 ```
 Expected: PASS. `test_every_migrated_template_renders` (from D0) is what proves
@@ -269,7 +275,7 @@ proves both copies moved together.
 - [ ] **Step 4: Confirm opt-in rendering.**
 
 ```bash
-cd /mnt/ssd/Dropbox/science/.worktrees/feedback-batch-t/science/model && uv run --frozen python -c "
+cd ~/d/science/.worktrees/feedback-batch-t/science/model && uv run --frozen python -c "
 from science_model.templates import Renderer
 from datetime import date
 f={'entity_id':'pre-registration:0001-x','kind':'pre-registration','title':'T','status':'committed','created':'2026-07-27','updated':'2026-07-27','related':[],'nn':'01','slug':'x','local_part':'0001-x'}
@@ -296,7 +302,7 @@ print('opt-in confirmed')
 Write these RED before any implementation. Model the fixtures on
 `tests/validate/test_checks_prereg_vehicles.py`.
 
-- [ ] **Step 1: Write the tests.** Six cases, each a frozen pre-registration
+- [ ] **Step 1: Write the tests.** Nine cases, each a frozen pre-registration
   (`status: committed`) under `entities/pre-registrations/`:
 
 1. `test_schedule_without_cost_gate_warns` — body declares a schedule
@@ -309,23 +315,37 @@ Write these RED before any implementation. Model the fixtures on
    heading.
 3. `test_cost_gate_with_placeholder_target_geometry_warns` — same for the other
    load-bearing row.
-4. `test_filled_cost_gate_passes` — both rows filled with prose. Expect no
+4. `test_cost_gate_with_absent_calibration_domain_row_warns` — gate present,
+   `Target geometry` filled, and the `Calibration domain` row **deleted
+   entirely**. Expect a WARN. Without this, deleting a row is a cheaper way to
+   pass than filling it.
+5. `test_cost_gate_with_empty_calibration_domain_cell_warns` — the row is
+   present with an empty value cell. Expect a WARN.
+6. `test_filled_cost_gate_passes` — both rows filled with prose. Expect no
    results.
-5. `test_no_schedule_declared_emits_nothing` — no schedule terms, no gate.
+7. `test_no_schedule_declared_emits_nothing` — no schedule terms, no gate.
    Expect no results — the antecedent must gate the rule.
-6. `test_unfrozen_pre_registration_emits_nothing` — schedule declared, no gate,
+8. `test_ordinary_prose_does_not_trip_the_antecedent` — a frozen
+   pre-registration with **no** schedule whose body contains "within",
+   "unless", "process", and "assess", and no Cost Gate. Expect no results.
+   This is the corpus-derived regression: the unbounded draft matched 34 of 34
+   natural-systems pre-registrations on exactly these substrings.
+9. `test_unfrozen_pre_registration_emits_nothing` — schedule declared, no gate,
    but `status: draft` and no `amendments:`. Expect no results: the obligation
    attaches at freeze, matching `prereg.vehicle-undeclared`.
 
 - [ ] **Step 2: Run them RED.**
 
 ```bash
-cd /mnt/ssd/Dropbox/science/.worktrees/feedback-batch-t/science && uv run --frozen pytest tests/validate/test_checks_prereg_schedule.py -q
+cd ~/d/science/.worktrees/feedback-batch-t/science && uv run --frozen pytest tests/validate/test_checks_prereg_schedule.py -q
 ```
-Expected: all 6 FAIL on import (`prereg_schedule` does not exist).
+Expected: all 9 FAIL on import (`prereg_schedule` does not exist).
 
-- [ ] **Step 3: Commit the red tests** —
-  `test(validate): schedule-calibration-domain expectations`
+- [ ] **Step 3: Record the red run — do NOT commit yet.** Save the failure
+  output as evidence for the results doc. Committing tests that cannot import
+  their module would leave the branch in a state where `pytest` cannot even
+  collect, so tests and implementation land together in Task 5's commit. The
+  red run is the evidence; the separate commit is not.
 
 ---
 
@@ -347,39 +367,91 @@ Expected: all 6 FAIL on import (`prereg_schedule` does not exist).
     `resolve_path_policy("pre-registration").root`
   - skip unless `frontmatter["kind"] == "pre-registration"`
   - skip unless `frozen_because(frontmatter)` is not None
-  - skip unless the body declares a schedule — a module-level compiled regex
-    over `burn-in`, `burn in`, `thinning`, `thin `, `R_hat`, `R-hat`, `ESS`.
-    Keep the pattern as a named constant with a comment that it is a **prose
-    heuristic**, which is why the rule is WARN and ungated.
+  - skip unless the body declares a schedule. **The tokens must be
+    word-bounded and case-sensitive where the token is an acronym:**
+
+```python
+# Word-bounded on purpose. An earlier draft used bare `thin ` and a
+# case-insensitive `ESS`; measured against the natural-systems corpus that
+# matched 34 of 34 pre-registrations -- `thin ` inside "within", `ess` inside
+# "unless"/"process"/"assess". An antecedent that selects the whole corpus is
+# exactly as uninformative as one that selects none of it, and it looks like a
+# success. This pattern selects 5 of 34, the documents that genuinely declare a
+# schedule. It remains a PROSE HEURISTIC, which is why the rule is WARN and
+# ungated.
+_SCHEDULE_TOKENS = re.compile(r"\bburn[- ]in\b|\bthinning\b|\bR[_-]?hat\b|\bESS\b")
+```
+
   - locate the `## Cost Gate` section; if absent → WARN, message
     *"declares a sampling schedule but carries no Cost Gate; the schedule's
     calibration domain is undeclared"*
-  - if present, parse its table rows; for `Target geometry` and
-    `Calibration domain`, treat a value cell that is empty or matches
-    `^<.*>$` as unfilled → WARN naming the specific row
+  - if present, parse its table rows. **A row is unfilled in three distinct
+    ways, and all three must be treated alike** — otherwise deleting a row is a
+    cheaper way to pass than filling it:
+
+    | state | example | verdict |
+    |---|---|---|
+    | **absent** | the `Calibration domain` row is not in the table | unfilled |
+    | **empty** | `\| Calibration domain \| \| ... \|` | unfilled |
+    | **placeholder** | `\| Calibration domain \| <the substrate...> \| ... \|` | unfilled |
+
+    Placeholder detection strips the cell before matching `^<.*>$`, so
+    surrounding whitespace does not defeat it. Any of the three → WARN naming
+    the specific row and its state.
   - the other rows are doctrine, never part of the trigger (design D3)
 
 - [ ] **Step 2: Register the module.** Add `"prereg_schedule"` to
   `CANONICAL_CHECK_MODULES` in `validate/checks/__init__.py`, immediately after
   `"prereg_vehicles"`.
 
-- [ ] **Step 3: Add the registration test.** Unit tests that call the function
-  directly cannot catch a missing tuple entry. Add:
+- [ ] **Step 3: Add the registration test — order-robust, or it proves
+  nothing.** A naive end-to-end test does NOT catch a missing tuple entry:
+  the unit tests above import `prereg_schedule`, which fires `@Check` as an
+  import side effect, so the registry already holds the check by the time the
+  end-to-end test runs. It would pass with `CANONICAL_CHECK_MODULES` untouched.
+
+  Use the pattern documented at
+  `tests/validate/test_checks_dataset_capabilities.py:14`, whose docstring
+  carries a ☠️ on this exact hazard — `@Check` fires only on **first** import,
+  so the registry must be cleared, the module evicted from `sys.modules`, and
+  the real loader invoked:
 
 ```python
-def test_check_is_registered_and_runs_end_to_end(tmp_path: Path) -> None:
-    """A check module absent from CANONICAL_CHECK_MODULES never runs, and every
-    unit test above still passes. This asserts the wiring, not the logic."""
+@pytest.fixture
+def prereg_schedule_registered() -> Generator[None]:
+    """Re-register `prereg_schedule` through the real loader, then RESTORE the registry.
+
+    Without the `sys.modules.pop`, `_load_canonical_checks()` re-imports an
+    already-imported module -- a no-op, because `@Check` fires only on first
+    import -- and the test passes whether or not the module is in
+    CANONICAL_CHECK_MODULES. Teardown reloads every canonical module, because a
+    cleared registry is PERMANENT for the session and every later `runner.run`
+    would otherwise iterate a near-empty check list and silently report nothing.
+    """
+    checks.clear_checks_for_tests()
+    sys.modules.pop("science_tool.validate.checks.prereg_schedule", None)
+    checks._load_canonical_checks()
+    yield
+    checks.clear_checks_for_tests()
+    for module_name in CANONICAL_CHECK_MODULES:
+        importlib.reload(importlib.import_module(f"science_tool.validate.checks.{module_name}"))
 ```
 
-It must build a project with the offending pre-registration, run the full
-check pipeline the CLI uses (not `check_prereg_schedule` directly), and assert
-`prereg.schedule-calibration-domain` appears in the results.
+  The test uses that fixture, builds a project holding the offending
+  pre-registration, runs the pipeline the CLI runs (never
+  `check_prereg_schedule` directly), and asserts
+  `prereg.schedule-calibration-domain` appears.
+
+- [ ] **Step 3a: Prove the registration test can fail.** Temporarily remove
+  `"prereg_schedule"` from `CANONICAL_CHECK_MODULES`, run only the registration
+  test, and confirm it FAILS. Restore the entry and confirm it passes. A
+  registration test that has never been observed to fail is exactly the
+  cannot-fail gate this batch exists to eliminate.
 
 - [ ] **Step 4: Run GREEN.**
 
 ```bash
-cd /mnt/ssd/Dropbox/science/.worktrees/feedback-batch-t/science && uv run --frozen pytest tests/validate/test_checks_prereg_schedule.py tests/validate/test_checks_prereg_vehicles.py -q
+cd ~/d/science/.worktrees/feedback-batch-t/science && uv run --frozen pytest tests/validate/test_checks_prereg_schedule.py tests/validate/test_checks_prereg_vehicles.py -q
 ```
 Expected: all PASS.
 
@@ -387,7 +459,7 @@ Expected: all PASS.
   `validate/gates.py`. Add nothing there. Verify:
 
 ```bash
-cd /mnt/ssd/Dropbox/science/.worktrees/feedback-batch-t/science && uv run --frozen pytest tests/validate -q
+cd ~/d/science/.worktrees/feedback-batch-t/science && uv run --frozen pytest tests/validate -q
 ```
 Expected: PASS, including the snapshot tests — the fixture project declares no
 sampling schedule, so no snapshot changes. **If a snapshot does change, stop
@@ -403,14 +475,33 @@ somewhere unintended.
 This is the task that decides whether the check ships as written. **Do not skip
 it, and do not tune the check to produce a pleasing count.**
 
-- [ ] **Step 1: Run against all four projects that hold pre-registrations.**
+- [ ] **Step 1: Run against all four projects that hold pre-registrations,
+  keeping the paths and messages.** A bare count is not a certification
+  artifact — adjudicating `0025` requires reading which document produced which
+  message, and `grep -c` discards exactly that. Emit JSON to a file and select
+  by exact rule:
 
 ```bash
+cd ~/d/science/.worktrees/feedback-batch-t/science
 for p in ~/d/natural-systems ~/d/3d-attention-bias ~/d/protein-landscape ~/d/seq-feats; do
-  echo "=== $p"
-  cd /mnt/ssd/Dropbox/science/.worktrees/feedback-batch-t/science && uv run --frozen science validate --project-root "$p" --format json 2>/dev/null | grep -c "schedule-calibration-domain"
+  uv run --frozen science validate --project-root "$p" --format json \
+    --output "/tmp/batch-t-$(basename $p).json"
 done
+uv run --frozen python - <<'PY'
+import json, glob
+for path in sorted(glob.glob("/tmp/batch-t-*.json")):
+    payload = json.load(open(path))
+    hits = [r for r in payload["results"]
+            if r.get("rule") == "prereg.schedule-calibration-domain"]
+    print(f"=== {path}: {len(hits)}")
+    for r in hits:
+        print(f"  {r.get('path')}\n    {r.get('message')}")
+PY
 ```
+
+  Select on `r["rule"] == "..."`, never a substring match over rendered output
+  — a rule name that appears inside another rule's message would inflate the
+  count, which is the same measurement error this batch is about.
 
 - [ ] **Step 2: Read every finding.** Expected from the design's survey: 5 in
   natural-systems (`0007`, `0025`, `0026`, `0032`, `0034`), 0 in the other
@@ -418,11 +509,33 @@ done
 
 - [ ] **Step 3: Adjudicate `0025` explicitly.** It reports achieved ESS per θ
   (1607–3392 of 10,000) on its own substrate — the calibration evidence the
-  check asks for, expressed as a table rather than a Cost Gate section. If
-  reading it confirms the finding is substantively wrong, **refine the
-  antecedent and say so in the results doc.** Do not leave a known false
-  positive standing, and do not silently widen the escape hatch to make one
-  document pass.
+  check asks for, expressed as a table rather than a Cost Gate section. Read it
+  and rule: is the finding substantively right or wrong?
+
+  **If it is wrong, this is a code change and follows the code loop, not a
+  prose edit:**
+
+  1. **Stop certifying.** Do not continue reading the remaining findings with
+     an instrument you have already judged defective.
+  2. **Write a corpus-derived regression test first** — a fixture reproducing
+     `0025`'s shape (a schedule plus achieved diagnostics, no Cost Gate),
+     asserting no finding. Run it RED.
+  3. **Refine minimally.** Widen the escape hatch only by the narrow mechanical
+     property that distinguishes `0025` — reported achieved diagnostics for
+     this document's own substrate. Nothing broader.
+  4. **Re-verify in full**: Task 5's tests, then `tests/validate`, then all
+     four projects again from Step 1. A refinement that fixes `0025` and
+     silences `0034` has broken the check.
+  5. **Commit the code change separately** —
+     `fix(validate): narrow schedule-calibration-domain to undeclared calibration`
+     — so the refinement is reviewable apart from the certification record.
+  6. **Then resume** certification from Step 2.
+
+  **If no narrow mechanical property distinguishes `0025`, stop and revise the
+  design.** Do not hand-tune the antecedent to fit one document; that is
+  tuning the instrument to the answer, and it is the failure this batch exists
+  to close. A check that needs a special case per document is a check whose
+  antecedent is wrong.
 
 - [ ] **Step 4: Record the certification domain.** The results doc states
   plainly: one project, one method family. natural-systems does MCMC; the other
@@ -438,9 +551,9 @@ done
 - [ ] **Step 1: Full verification.**
 
 ```bash
-cd /mnt/ssd/Dropbox/science/.worktrees/feedback-batch-t/science && uv run --frozen pytest
-cd /mnt/ssd/Dropbox/science/.worktrees/feedback-batch-t/science/model && uv run --frozen pytest
-cd /mnt/ssd/Dropbox/science/.worktrees/feedback-batch-t/science && uv run --frozen ruff check && uv run --frozen pyright
+cd ~/d/science/.worktrees/feedback-batch-t/science && uv run --frozen pytest
+cd ~/d/science/.worktrees/feedback-batch-t/science/model && uv run --frozen pytest
+cd ~/d/science/.worktrees/feedback-batch-t/science && uv run --frozen ruff check && uv run --frozen pyright
 ```
 Run the science suite with an explicit long timeout (it exceeds 120 s).
 
