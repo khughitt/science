@@ -39,6 +39,7 @@ CANONICAL_CHECK_MODULES = (
     "discussions",
     "prereg",
     "prereg_vehicles",
+    "prereg_schedule",
     "hypothesis_comparisons",
     "bias_audits",
     "notes",
