@@ -159,7 +159,7 @@ class FindingRule(BaseModel):
             severity=severity,
             qualifiers=qualifiers,
             message=message,
-            evidence=evidence or [],
+            evidence=tuple(evidence or ()),
         )
         if finding.severity not in self.severities:
             raise RuleDeclarationError(
