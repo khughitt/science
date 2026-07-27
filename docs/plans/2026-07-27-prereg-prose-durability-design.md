@@ -286,8 +286,15 @@ lint, not in this validation rule.
 
 **Cohort: every Science project on disk that holds pre-registrations, derived by
 discovery rather than by a hand-written list.** Enumerating `science.yaml` under
-`~/d` (excluding `.worktrees`, `templates`, `tests`) finds 25 projects, of which
-**11** have a non-empty `entities/pre-registrations/`. All 11 are measured.
+`~/d` (excluding `.worktrees`, `templates`, `tests`) finds **22 canonical
+projects**, of which **11** have a non-empty `entities/pre-registrations/`. All
+11 are measured.
+
+The enumeration must not follow *nested* symlinks. `~/d/r/cbioportal` and
+`~/d/r/mm30` are aliases of `cancer/data-sources/cbioportal` and
+`cancer/cancer-types/multiple-myeloma`, and `~/d/cancer/science/meta` is a third
+alias, so a link-following walk reports 25 projects and a 13-row cohort for the
+same 11 real ones — inflating every total by counting two projects twice.
 
 The derivation matters. An earlier draft of this section hand-listed four
 projects and recorded `multiple-myeloma` as a zero row at path

@@ -1194,34 +1194,57 @@ One block, so `CERT_DIR` is in scope throughout — a fresh agent shell does not
 carry a variable between fenced blocks.
 
 ```bash
-set -uo pipefail
+set -euo pipefail
 CERT_DIR=/tmp/prose-path-nondurable-cert
 rm -rf "$CERT_DIR"
 mkdir -p "$CERT_DIR"
 
-# Every Science project on disk, then narrow to those holding pre-registrations.
-find -L ~/d -maxdepth 5 -name science.yaml \
+# `-H` follows ONLY the command-line `~/d` symlink, not nested ones. `-L` also
+# descends alias trees and double-counts the same project: `~/d/r/cbioportal` ->
+# `cancer/data-sources/cbioportal` and `~/d/r/mm30` ->
+# `cancer/cancer-types/multiple-myeloma`. With `-L` this yields 25 projects and a
+# 13-row cohort for the same 11 real ones, inflating every total.
+find -H ~/d -maxdepth 5 -name science.yaml \
      -not -path "*/.worktrees/*" -not -path "*/templates/*" -not -path "*/tests/*" \
      -printf '%h\n' | sort > "$CERT_DIR/all-projects.txt"
 
+# No `2>/dev/null` on the inner find: a real failure must surface, not be
+# mistaken for "this project has no pre-registrations". The directory test is
+# what handles the ordinary absent case.
 : > "$CERT_DIR/cohort.tsv"
 while IFS= read -r root; do
-  count=$(find "$root/entities/pre-registrations" -maxdepth 1 -name '*.md' 2>/dev/null | wc -l)
-  [ "$count" -gt 0 ] && printf '%s\t%s\n' "$count" "$root" >> "$CERT_DIR/cohort.tsv"
+  [ -d "$root/entities/pre-registrations" ] || continue
+  count=$(find "$root/entities/pre-registrations" -maxdepth 1 -name '*.md' | wc -l)
+  # An explicit `if`, not `[ ... ] && printf`: under `set -e` a false test as the
+  # last statement in the loop body would abort the whole discovery pass.
+  if [ "$count" -gt 0 ]; then
+    printf '%s\t%s\n' "$count" "$root" >> "$CERT_DIR/cohort.tsv"
+  fi
 done < "$CERT_DIR/all-projects.txt"
 
+echo "projects discovered: $(wc -l < "$CERT_DIR/all-projects.txt")"
 echo "cohort:"; cat "$CERT_DIR/cohort.tsv"
 
+cohort_rows=$(wc -l < "$CERT_DIR/cohort.tsv")
+if [ "$cohort_rows" -ne 11 ]; then
+  echo "FATAL: cohort has $cohort_rows rows, expected 11. The project layout has" >&2
+  echo "changed since this plan was written; the design's table needs remeasuring," >&2
+  echo "not reinterpreting. Do not proceed." >&2
+  exit 1
+fi
+
 # `science validate` exits 1 when a report CONTAINS error findings, having
-# written the JSON successfully. That is a normal outcome for several projects,
-# so a bare `set -e` would abort certification on a valid report. Tolerate a
-# non-zero exit ONLY when a non-empty report was written; a missing or empty
-# report is fatal.
+# written the JSON successfully -- a normal outcome for several projects. Run it
+# as an `if` condition so `set -e` does not abort on that expected non-zero, and
+# treat only a missing or empty report as fatal.
 while IFS=$'\t' read -r count root; do
-  slug=$(printf '%s' "$root" | sed "s|$HOME/d/||; s|/|__|g")
+  slug=$(printf '%s' "$root" | sed "s|^$HOME/d/||; s|/|__|g")
   out="$CERT_DIR/$slug.json"
-  uv run --frozen science validate --project-root "$root" --format json --output "$out"
-  rc=$?
+  if uv run --frozen science validate --project-root "$root" --format json --output "$out"; then
+    rc=0
+  else
+    rc=$?
+  fi
   if [ ! -s "$out" ]; then
     echo "FATAL: $root exited $rc and wrote no usable report at $out" >&2
     exit 1
@@ -1229,13 +1252,21 @@ while IFS=$'\t' read -r count root; do
   printf 'ok  rc=%-3s %5s pre-regs  %s\n' "$rc" "$count" "$slug"
 done < "$CERT_DIR/cohort.tsv"
 
-echo "reports written: $(ls -1 "$CERT_DIR"/*.json | wc -l)"
+reports=$(find "$CERT_DIR" -maxdepth 1 -name '*.json' | wc -l)
+if [ "$reports" -ne 11 ]; then
+  echo "FATAL: $reports reports written, expected 11" >&2
+  exit 1
+fi
+echo "reports written: $reports"
 ```
 
-Expected: **11 cohort rows**, 11 reports, no `FATAL`. Several projects will show
-`rc=1`; that is expected and is not a certification failure. If the cohort count
-is not 11, stop — the project layout has changed since this plan was written and
-the design's table needs remeasuring, not reinterpreting.
+Expected output: `projects discovered: 22`, **11 cohort rows** totalling 144
+pre-registrations, 11 reports, no `FATAL`. Several projects will print `rc=1`;
+that is expected and is not a certification failure — it means the project has
+error-severity findings from other rules.
+
+The block asserts the cohort size rather than only printing it, so a layout
+change halts certification instead of silently recertifying a different corpus.
 
 - [ ] **Step 3: Measure findings AND pre-registration totals**
 
