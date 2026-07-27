@@ -150,8 +150,11 @@ continues to warn.
 
 The human authorized a transparent owning-project amendment. In the isolated
 natural-systems worktree on branch `fix/prereg-0025-cost-gate`, commit
-`621c7ca81` (`pre-registration: backfill 0025 cost gate`) changes only
+`d4112f545` (`pre-registration: backfill 0025 cost gate`) changes only
 `entities/pre-registrations/0025-tractability-filter-confound.md`.
+It is rebased onto owning-project commit `f733755b`, which added the
+content-addressed vehicle as post-execution Amendment 3; the Cost Gate backfill
+is the distinct post-execution Amendment 4.
 
 The amendment:
 
@@ -207,7 +210,7 @@ amended   4 [0007,       0026, 0032, 0034]
 ```
 
 The unamended source was the untouched natural-systems main checkout; the
-amended source was the isolated worktree at commit `621c7ca81`.
+amended source was the isolated worktree at commit `d4112f545`.
 
 ### Re-verification and final measured findings
 
