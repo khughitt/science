@@ -1,6 +1,6 @@
 # Finding Convergence — Design
 
-> **Status:** design, revision 5 — **approved for implementation planning**. **Spec 1 of
+> **Status:** design, revision 6 — **approved for implementation planning**. **Spec 1 of
 > three** in the autonomous-audit program,
 > and a prerequisite for the autonomy envelope's S5 harness slice. **Spec 1 ships no
 > agent** and adds no autonomy: it converges the deterministic audit surface onto one
@@ -13,7 +13,7 @@
 > promotion to task) are out of scope here and consume this contract.
 >
 > **Revision 2** closed seven contract gaps found in review of revision 1: arrival-order
-> dependence in `FindingRecord` (§4), an unserializable `rule` field and an unfrozen
+> dependence in `AuditFindingRecord` (§4), an unserializable `rule` field and an unfrozen
 > fingerprint (§1, §3), the missing producer enumeration (§9), an incomplete acceptance
 > migration contract (§10), an unspecified output schema (§11), an overbroad
 > producer-completeness claim (§Grounding, §6), and a lifecycle left open (§4, §8).
@@ -37,6 +37,21 @@
 > review identity (§Testing), the evidence union named fields without freezing their wire
 > types (§1), and the pre-migration acceptance key did not define absent `severity` or
 > `message_contains`, both of which the matcher treats as wildcards (§10).
+>
+> **Revision 6 renames the two persisted types.** `Finding` → **`AuditFinding`**,
+> `FindingRecord` → **`AuditFindingRecord`**, and `doc_kind: finding-record` →
+> **`doc_kind: audit-case`**. `EntityKind.FINDING` is a live epistemic kind meaning
+> "propositions grounded by observations", and a type spelled `Finding` beside it is the
+> same hazard the autonomy envelope removed when it renamed `run_ref` to `autonomous_run`
+> — "a provenance field spelled `run_ref` beside a belief-bearing field spelled `run_refs`
+> is a one-character path across the belief boundary".
+>
+> **Field names and auxiliary types are unchanged.** `finding_id` stays: it is named in
+> the frozen acceptance schema (§10), so renaming it would be a contract change, not a
+> clarification. `FindingRule`, `FindingSection`, `FindingSubject`, `Occurrence`,
+> `Transition`, `Review`, `ReportedFinding`, and `AcceptedFinding` also stay — none of
+> them collides with an entity kind, and the two renamed types are the ones that persist
+> to disk.
 
 ## Motivation
 
@@ -61,7 +76,7 @@ workaround for the absence of durable identity. Structured findings retire it.
 
 ## The rulings
 
-> **R1 — Scope.** Spec 1 converges every deterministic issue emitter onto `Finding`. It
+> **R1 — Scope.** Spec 1 converges every deterministic issue emitter onto `AuditFinding`. It
 > does not converge every diagnostic value: measurements remain metrics, and inability
 > to run remains instrument state.
 >
@@ -98,7 +113,7 @@ currently derives issues from coverage metrics and from archive lag (§Grounding
 Verified against the tree at `8db7aad9`.
 
 - **`InstrumentResult` is already generic.** `class InstrumentResult(BaseModel, Generic[RowT])`
-  (`instruments.py:73`), so `InstrumentResult[Finding]` is well-formed and the uniform
+  (`instruments.py:73`), so `InstrumentResult[AuditFinding]` is well-formed and the uniform
   channel needs no new machinery.
 
 - **A partial migration is already in flight, and its tolerance branch is why it
@@ -216,7 +231,7 @@ Verified against the tree at `8db7aad9`.
 
 ## Design
 
-### 1. `Finding` — the shared emitted payload
+### 1. `AuditFinding` — the shared emitted payload
 
 An immutable payload emitted identically by deterministic checks, validation modules,
 `data_audit`, and (in Spec 2) agentic lenses. It is what a producer *says* on one
@@ -371,10 +386,10 @@ not equal `slug(record.rule_id)`, or whose filename digest does not equal
 its own immutable fields, is a **load error** — never a silent repair or rename. A renamed
 or hand-edited case file must fail loudly rather than acquire a new identity.
 
-### 4. `FindingRecord` — the canonical stored case
+### 4. `AuditFindingRecord` — the canonical stored case
 
-`FindingRecord` carries immutable identity fields plus append-only history. **It does not
-store a canonical payload.** Revision 1 stored "the `Finding` as first emitted", which
+`AuditFindingRecord` carries immutable identity fields plus append-only history. **It does not
+store a canonical payload.** Revision 1 stored "the `AuditFinding` as first emitted", which
 made the record arrival-order dependent: the first producer to arrive — later, possibly
 an agent — would own the message and evidence forever, subsequent observations would be
 discarded, and a severity change would have no defined effect.
@@ -485,7 +500,7 @@ the precedent to copy.
 ### 5. Storage and placement
 
 Canonical cases are typed project-state documents under `doc/audits/cases/`, with
-frontmatter carrying `doc_kind: finding-record` and `finding_id: …`, and **never** an
+frontmatter carrying `doc_kind: audit-case` and `finding_id: …`, and **never** an
 entity `kind:` or `id:`. Prose in the body is supporting context only.
 
 Three placement constraints, each with a verified cause:
@@ -580,7 +595,7 @@ guard must be derived from the filesystem, never from a list — per the rule
 
 ### 7. Remediation — capability, not instruction
 
-> `Finding` carries no executable fix command and no authoritative proposed mutation.
+> `AuditFinding` carries no executable fix command and no authoritative proposed mutation.
 > The rule registry may declare a trusted remediator. Acting on a finding re-runs that
 > producer against current state and recomputes the plan.
 
@@ -595,7 +610,7 @@ stale derived state.
 
 ```
 producer (check | validation | data_audit | Spec 2 lens)
-    ↓ emits shared Finding
+    ↓ emits shared AuditFinding
 one gated report path                     ← the only surface an untrusted actor writes
     ↓ science findings ingest <report>    ← trusted; validates, fingerprints, upserts
 canonical FindingRecord under doc/audits/cases/
@@ -872,7 +887,7 @@ class AuditReport(TypedDict):
     meta: ReportMeta                 # timings, duration, producers_run
 ```
 
-- **Findings are enveloped with their producer.** A bare `Finding` cannot populate an
+- **Findings are enveloped with their producer.** A bare `AuditFinding` cannot populate an
   occurrence's required `producer_id`, and rule ownership cannot supply it either, because
   multiple producers must be able to emit the same rule — that is the premise of
   cross-producer dedup. `ingestion_ref` and `generated_at` are **report-level and
