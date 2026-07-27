@@ -1,4 +1,4 @@
-"""TaskAdapter — wraps the existing task DSL parser and emits TaskEntity raw records."""
+"""TaskAdapter — parses strict YAML active-task files and DSL done ledgers."""
 
 from __future__ import annotations
 
@@ -9,7 +9,7 @@ from science_model.source_ref import SourceRef
 from science_model.tasks import Task
 
 from science_tool.graph.storage_adapters.base import StorageAdapter
-from science_tool.tasks import parse_task_file, parse_tasks
+from science_tool.tasks import _require_split, parse_task_file, parse_tasks
 
 
 def _parse_task_path(path: Path) -> list[Task]:
@@ -30,6 +30,7 @@ class TaskAdapter(StorageAdapter):
     def discover(self, project_root: Path) -> list[SourceRef]:
         self._tasks_by_path.clear()
         tasks_dir = project_root / "tasks"
+        _require_split(tasks_dir)
         if not tasks_dir.is_dir():
             return []
         refs: list[SourceRef] = []

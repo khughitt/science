@@ -11,7 +11,22 @@ from science_model.tasks import Task
 import science_tool.graph.storage_adapters.task as task_module
 from science_tool.graph.sources import load_project_sources
 from science_tool.graph.storage_adapters.task import TaskAdapter
-from science_tool.tasks import parse_tasks, render_task_file, render_tasks
+from science_tool.tasks import StorageState, parse_tasks, render_task_file, render_tasks
+
+_STORAGE_STATE_ERRORS = {
+    StorageState.LEGACY: (
+        "tasks/active.md predates the storage split; "
+        "run `science tasks migrate-storage --apply`."
+    ),
+    StorageState.MIGRATING: (
+        "an interrupted storage migration is in progress; "
+        "run `science tasks migrate-storage --resume`."
+    ),
+    StorageState.CONFLICT: (
+        "both tasks/active.md and tasks/active/ exist with no migration journal; "
+        "inspect and remove one by hand — this is not an auto-resumable migration."
+    ),
+}
 
 
 def _write_active_task(tasks_dir: Path, task: Task, *, slug: str = "task") -> Path:
@@ -40,8 +55,33 @@ def _task_node_fields(task: Task) -> dict[str, object]:
     }
 
 
+def _write_gated_storage_state(tasks_dir: Path, state: StorageState) -> None:
+    tasks_dir.mkdir(parents=True)
+    (tasks_dir / "active.md").write_text(
+        "this malformed legacy content must not be parsed\n",
+        encoding="utf-8",
+    )
+    if state in {StorageState.MIGRATING, StorageState.CONFLICT}:
+        active_dir = tasks_dir / "active"
+        active_dir.mkdir()
+        (active_dir / "t001-malformed.md").write_text(
+            "this malformed split content must not be parsed\n",
+            encoding="utf-8",
+        )
+    if state is StorageState.MIGRATING:
+        journal = tasks_dir / ".science" / "task-storage-migration.journal"
+        journal.parent.mkdir()
+        journal.touch()
+
+
 def test_adapter_name() -> None:
     assert TaskAdapter().name == "task"
+
+
+def test_module_docstring_describes_split_task_formats() -> None:
+    assert task_module.__doc__ is not None
+    assert "strict YAML active-task files" in task_module.__doc__
+    assert "DSL done ledgers" in task_module.__doc__
 
 
 def test_split_active_and_done_files_build_equivalent_task_nodes(tmp_path: Path) -> None:
@@ -167,7 +207,11 @@ def test_load_raw_produces_task_entity_shape(tmp_path: Path) -> None:
     assert raw["content"] == "Body prose."
 
 
-def test_returns_empty_when_no_tasks_dir(tmp_path: Path) -> None:
+@pytest.mark.parametrize("create_tasks_dir", [False, True])
+def test_returns_empty_for_empty_storage(tmp_path: Path, create_tasks_dir: bool) -> None:
+    if create_tasks_dir:
+        (tmp_path / "tasks").mkdir()
+
     assert TaskAdapter().discover(tmp_path) == []
 
 
@@ -216,19 +260,37 @@ def test_discover_ignores_historical_alias_archive(tmp_path: Path) -> None:
     assert len(refs) == 1
 
 
-def test_discover_does_not_read_legacy_active_file(tmp_path: Path) -> None:
-    tasks_dir = tmp_path / "tasks"
-    tasks_dir.mkdir()
-    (tasks_dir / "active.md").write_text(
-        "## [t001] T01\n"
-        "- type: research\n"
-        "- priority: P1\n"
-        "- status: active\n"
-        "- created: 2026-04-20\n\n",
+@pytest.mark.parametrize(
+    "state",
+    [StorageState.LEGACY, StorageState.MIGRATING, StorageState.CONFLICT],
+)
+def test_discover_rejects_gated_storage_state(tmp_path: Path, state: StorageState) -> None:
+    _write_gated_storage_state(tmp_path / "tasks", state)
+
+    with pytest.raises(ValueError) as excinfo:
+        TaskAdapter().discover(tmp_path)
+
+    assert str(excinfo.value) == _STORAGE_STATE_ERRORS[state]
+
+
+@pytest.mark.parametrize(
+    "state",
+    [StorageState.LEGACY, StorageState.MIGRATING, StorageState.CONFLICT],
+)
+def test_load_project_sources_propagates_task_storage_state_error(
+    tmp_path: Path,
+    state: StorageState,
+) -> None:
+    (tmp_path / "science.yaml").write_text(
+        "name: task-project\nknowledge_profiles: {local: local}\n",
         encoding="utf-8",
     )
+    _write_gated_storage_state(tmp_path / "tasks", state)
 
-    assert TaskAdapter().discover(tmp_path) == []
+    with pytest.raises(ValueError) as excinfo:
+        load_project_sources(tmp_path, include_commons=False)
+
+    assert str(excinfo.value) == _STORAGE_STATE_ERRORS[state]
 
 
 def test_load_raw_uses_discovered_tasks(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
