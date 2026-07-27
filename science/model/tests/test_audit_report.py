@@ -1,0 +1,211 @@
+import pytest
+from pydantic import ValidationError
+
+from science_model.audit.finding import AuditFinding
+from science_model.audit.report import (
+    REPORT_SCHEMA_VERSION,
+    AuditReport,
+    ReportedFinding,
+)
+from science_model.audit.subjects import EntitySubject
+
+
+def _finding(ref="dataset:a", rule="dataset.stale-review") -> AuditFinding:
+    return AuditFinding(
+        rule_id=rule,
+        subject=EntitySubject(ref=ref),
+        severity="warn",
+        qualifiers={},
+        message="m",
+        evidence=[],
+    )
+
+
+def _report(**overrides) -> AuditReport:
+    base = dict(
+        schema_version=REPORT_SCHEMA_VERSION,
+        fingerprint_version=1,
+        ingestion_ref="run:2026-07-27-curation-sweep-a3f1",
+        generated_at="2026-07-27T12:00:00+00:00",
+        findings=[ReportedFinding(producer_id="dataset_anomalies", finding=_finding())],
+        accepted=[],
+        metrics={},
+        unwired=[],
+        totals={
+            "findings_total": 1,
+            "findings_by_severity": {"warn": 1},
+            "accepted_total": 0,
+            "unwired_total": 0,
+        },
+        meta={
+            "producers_run": ["dataset_anomalies"],
+            "total_duration_seconds": 0.5,
+            "timings": [],
+        },
+    )
+    return AuditReport(**{**base, **overrides})
+
+
+def test_a_finding_is_enveloped_with_its_producer():
+    assert _report().findings[0].producer_id == "dataset_anomalies"
+
+
+def test_bare_finding_without_producer_is_refused():
+    with pytest.raises(ValidationError):
+        _report(findings=[_finding()])
+
+
+def test_ingestion_ref_and_generated_at_are_required():
+    with pytest.raises(ValidationError):
+        _report(ingestion_ref=None)
+    with pytest.raises(ValidationError):
+        _report(generated_at=None)
+
+
+def test_unknown_schema_version_is_refused():
+    with pytest.raises(ValidationError):
+        _report(schema_version=99)
+
+
+def test_the_report_does_not_try_to_dedup_by_identity():
+    # Identity is a fingerprint over the rule's DECLARED identity qualifiers, which
+    # this module cannot compute -- it does not know the registry. Enforcing the
+    # one-per-(producer, finding_id) rule here would have to key on the whole payload,
+    # which passes two observations with identical identity and different prose.
+    # Ingestion enforces it instead; see test_findings_ingest.py.
+    dup = ReportedFinding(producer_id="p", finding=_finding())
+    report = _report(
+        findings=[dup, dup],
+        totals={
+            "findings_total": 2,
+            "findings_by_severity": {"warn": 2},
+            "accepted_total": 0,
+            "unwired_total": 0,
+        },
+    )
+    assert len(report.findings) == 2
+
+
+def test_two_producers_may_emit_the_same_finding():
+    finding = _finding()
+    report = _report(
+        findings=[
+            ReportedFinding(producer_id="p1", finding=finding),
+            ReportedFinding(producer_id="p2", finding=finding),
+        ],
+        totals={
+            "findings_total": 2,
+            "findings_by_severity": {"warn": 2},
+            "accepted_total": 0,
+            "unwired_total": 0,
+        },
+    )
+    assert len(report.findings) == 2
+
+
+def test_accepted_findings_carry_provenance_and_an_acceptance_key():
+    from science_model.audit.report import AcceptedFinding
+
+    report = _report(
+        accepted=[
+            AcceptedFinding(
+                producer_id="p",
+                finding=_finding(),
+                acceptance_key="b" * 32,
+                reason="known and accepted",
+            )
+        ],
+        totals={
+            "findings_total": 1,
+            "findings_by_severity": {"warn": 1},
+            "accepted_total": 1,
+            "unwired_total": 0,
+        },
+    )
+    assert report.accepted[0].acceptance_key == "b" * 32
+
+
+def test_totals_must_agree_with_the_channels():
+    with pytest.raises(ValidationError):
+        _report(
+            totals={
+                "findings_total": 7,
+                "findings_by_severity": {"warn": 7},
+                "accepted_total": 0,
+                "unwired_total": 0,
+            }
+        )
+
+
+def test_findings_by_severity_must_agree_with_the_unsuppressed_channel():
+    # The scalar total is right; the breakdown is not. A check on the total alone
+    # would pass this.
+    with pytest.raises(ValidationError, match="findings_by_severity"):
+        _report(
+            totals={
+                "findings_total": 1,
+                "findings_by_severity": {"error": 1},
+                "accepted_total": 0,
+                "unwired_total": 0,
+            }
+        )
+    with pytest.raises(ValidationError, match="findings_by_severity"):
+        _report(
+            totals={
+                "findings_total": 1,
+                "findings_by_severity": {"warn": 1, "error": 0},
+                "accepted_total": 0,
+                "unwired_total": 0,
+            }
+        )
+
+
+def test_generated_at_must_be_iso_8601():
+    with pytest.raises(ValidationError, match="ISO-8601"):
+        _report(generated_at="last Tuesday")
+    with pytest.raises(ValidationError, match="ISO-8601"):
+        _report(generated_at="2026-13-45T99:00:00")
+
+
+def test_the_wire_form_refuses_the_nul_the_stored_hashes_refuse():
+    """The report is where these strings ENTER, so it is where they are refused.
+
+    Ingestion copies `ingestion_ref` and `producer_id` straight onto an `Occurrence`,
+    which joins them with `\\0` into an idempotency key. Refusing only at the stored
+    model would let a report validate and then blow up mid-write as a `ValidationError`
+    -- outside ingestion's declared `IngestError` channel, and after the walk.
+    """
+    with pytest.raises(ValidationError, match="NUL"):
+        _report(ingestion_ref="run:a\0b")
+    with pytest.raises(ValidationError, match="NUL"):
+        ReportedFinding(producer_id="p\0q", finding=_finding())
+
+
+def test_the_finding_ceiling_applies_across_both_channels():
+    from science_model.audit.report import MAX_REPORT_FINDINGS, AcceptedFinding
+
+    half = MAX_REPORT_FINDINGS // 2
+    findings = [
+        ReportedFinding(producer_id="p", finding=_finding(ref=f"dataset:{i}"))
+        for i in range(half + 1)
+    ]
+    accepted = [
+        AcceptedFinding(
+            producer_id="p",
+            finding=_finding(ref=f"dataset:acc-{i}"),
+            acceptance_key="b" * 32,
+            reason="known",
+        )
+        for i in range(half + 1)
+    ]
+    with pytest.raises(ValidationError, match="ceiling"):
+        _report(
+            findings=findings,
+            accepted=accepted,
+            totals={
+                "findings_total": len(findings),
+                "findings_by_severity": {"warn": len(findings)},
+                "accepted_total": len(accepted),
+                "unwired_total": 0,
+            },
+        )
