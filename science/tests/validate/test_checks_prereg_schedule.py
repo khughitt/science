@@ -93,6 +93,31 @@ def _cost_gate(
     return "\n".join(rows)
 
 
+def _completed_power_calibration() -> str:
+    """The generic structure used by natural-systems pre-registration:0025."""
+    return """\
+## Outcome — EXECUTED 2026-07-11
+
+The registered analysis was scored once.
+
+## Power — an empirical curve
+
+Power is simulated on the same permutation substrate used by the analysis.
+
+**MCMC diagnostics.** Per target: four chains, overdispersed starts, and
+burn-in. Power uncertainty is computed from effective, not raw, sample size.
+
+| target effect | 0.30 | 0.50 | 0.75 |
+|---|---|---|---|
+| **power** (alpha=0.01) | 0.309 | **0.845** | 1.000 |
+| 95% CI | plus/minus .016 | **[.831, .860]** | — |
+| acceptance | .806 | .669 | .479 |
+| ESS (of 10,000) | 3392 | 2349 | 1607 |
+
+> **The design has at least 80% power at the target (0.845, CI [.831, .860]).**
+"""
+
+
 def _results(root: Path) -> list[Result]:
     return list(check_prereg_schedule(_ctx(root)))
 
@@ -114,22 +139,108 @@ def test_schedule_without_cost_gate_warns(project: Path) -> None:
 
 def test_schedule_with_achieved_ess_table_passes_without_cost_gate(project: Path) -> None:
     """Corpus case 0025 reports calibration on its own completed power runs."""
+    _write_prereg(project, body=_completed_power_calibration())
+
+    assert _results(project) == []
+
+
+def test_prospective_numeric_ess_table_without_cost_gate_warns(project: Path) -> None:
     _write_prereg(
         project,
         body="""\
-Four chains use overdispersed starts and burn-in before retained draws.
+Four chains will use overdispersed starts and burn-in.
 
-**MCMC diagnostics.** Power carries Monte Carlo uncertainty computed on the
-effective sample size, not the raw draw count.
+## Power — planned calibration
 
-| target effect | 0.30 | 0.50 | 0.75 |
-|---|---|---|---|
-| acceptance | .806 | .669 | .479 |
-| ESS (of 10,000) | 3392 | 2349 | 1607 |
+**MCMC diagnostics.** The planned acceptance and ESS targets are:
+
+| target effect | 0.50 |
+|---|---|
+| **power** (alpha=0.01) | 0.80 |
+| 95% CI | [.78, .82] |
+| acceptance | .70 |
+| ESS (of 10,000) | 400 |
+
+> **The design has at least 80% power at the target (0.80, CI [.78, .82]).**
 """,
     )
 
-    assert _results(project) == []
+    result = _assert_schedule_warning(_results(project))
+
+    assert "Cost Gate" in result.message
+
+
+def test_failed_numeric_ess_table_without_cost_gate_warns(project: Path) -> None:
+    _write_prereg(
+        project,
+        body="""\
+## Outcome — EXECUTED 2026-07-24
+
+The calibration run completed.
+
+## Power — an empirical curve
+
+**MCMC diagnostics.** Four chains used overdispersed starts and burn-in.
+
+| target effect | 0.50 |
+|---|---|
+| **power** (alpha=0.01) | 0.81 |
+| 95% CI | [.62, 1.00] |
+| acceptance | .008 |
+| ESS (of 2,048) | 88 |
+
+> **The design has at least 80% power at the target (0.81, CI [.62, 1.00]).**
+
+Mixing failed; the schedule is not calibrated.
+""",
+    )
+
+    result = _assert_schedule_warning(_results(project))
+
+    assert "Cost Gate" in result.message
+
+
+def test_unrelated_numeric_ess_table_without_cost_gate_warns(project: Path) -> None:
+    _write_prereg(
+        project,
+        body="""\
+## Outcome — EXECUTED 2026-07-11
+
+The registered analysis was scored once after its burn-in.
+
+## Prior study
+
+**MCMC diagnostics.** A different experiment reported:
+
+| target effect | 0.50 |
+|---|---|
+| **power** (alpha=0.01) | 0.845 |
+| 95% CI | [.831, .860] |
+| acceptance | .669 |
+| ESS (of 10,000) | 2349 |
+
+> **The design has at least 80% power at the target (0.845, CI [.831, .860]).**
+""",
+    )
+
+    result = _assert_schedule_warning(_results(project))
+
+    assert "Cost Gate" in result.message
+
+
+def test_achieved_diagnostics_do_not_hide_malformed_cost_gate(project: Path) -> None:
+    body = "\n".join(
+        [
+            _completed_power_calibration(),
+            _cost_gate(calibration_domain=""),
+        ]
+    )
+    _write_prereg(project, body=body)
+
+    result = _assert_schedule_warning(_results(project))
+
+    assert "Calibration domain" in result.message
+    assert "empty" in result.message
 
 
 @pytest.mark.parametrize("row", ["Target geometry", "Calibration domain"])

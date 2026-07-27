@@ -27,13 +27,32 @@ from science_tool.validate.result import Result, Severity
 # schedule. It remains a PROSE HEURISTIC, which is why the rule is WARN and
 # ungated.
 _SCHEDULE_TOKENS = re.compile(r"\bburn[- ]in\b|\bthinning\b|\bR[_-]?hat\b|\bESS\b")
-# A completed same-document calibration can predate the Cost Gate convention.
-# Keep this escape hatch narrow: a prospective ESS threshold, or prose reporting
-# a failed ESS, is not calibration evidence. The numeric `ESS (of N)` table row
-# records achieved effective sample sizes against the actual draw count.
-_ACHIEVED_ESS_ROW = re.compile(
+_EXECUTED_OUTCOME_HEADING = re.compile(
+    r"^## Outcome\b[^\n]*\bEXECUTED\b",
+    re.MULTILINE,
+)
+_POWER_HEADING = re.compile(r"^## Power\b[^\n]*$", re.MULTILINE)
+_MCMC_DIAGNOSTICS = re.compile(r"^\*\*MCMC diagnostics\b[^\n]*\*\*", re.MULTILINE)
+_POWER_RESULT_ROW = re.compile(
+    r"^\|[ \t]*\*\*power\*\*[^|\n]*\|[ \t]*(?:\*\*)?(?:0?\.\d+|1(?:\.0+)?)\b",
+    re.MULTILINE,
+)
+_POWER_CI_RESULT_ROW = re.compile(r"^\|[ \t]*95% CI[ \t]*\|[^|\n]*\d", re.MULTILINE)
+_ACCEPTANCE_RESULT_ROW = re.compile(
+    r"^\|[ \t]*acceptance[ \t]*\|[^|\n]*\d",
+    re.MULTILINE,
+)
+_ESS_RESULT_ROW = re.compile(
     r"^\|[ \t]*(?:\*\*)?ESS \(of [1-9][\d,]*\)(?:\*\*)?[ \t]*\|[ \t]*\d",
     re.MULTILINE,
+)
+_ACHIEVED_POWER_CONCLUSION = re.compile(
+    r"^>[ \t]*\*\*The design has\b[^\n]*\bpower\b[^\n]*\bCI\b",
+    re.MULTILINE,
+)
+_FAILED_CALIBRATION = re.compile(
+    r"\b(?:mixing|calibration|schedule)\s+(?:failed|fails)\b|\bnot calibrated\b",
+    re.IGNORECASE,
 )
 _COST_GATE_HEADING = re.compile(
     r"^## Cost Gate \(execution geometry\)[ \t]*$",
@@ -49,13 +68,35 @@ def _warn(relative: str, message: str) -> Result:
     return Result(Severity.WARN, Path(relative), None, message, _RULE, None)
 
 
-def _cost_gate_section(body: str) -> str | None:
-    heading = _COST_GATE_HEADING.search(body)
+def _section(body: str, heading_pattern: re.Pattern[str]) -> str | None:
+    heading = heading_pattern.search(body)
     if heading is None:
         return None
     following = body[heading.end() :]
     next_section = _NEXT_SECTION.search(following)
     return following[: next_section.start()] if next_section is not None else following
+
+
+def _cost_gate_section(body: str) -> str | None:
+    return _section(body, _COST_GATE_HEADING)
+
+
+def _reports_completed_power_calibration(body: str) -> bool:
+    """Recognize the complete pre-Cost-Gate power-calibration record shape."""
+    if _EXECUTED_OUTCOME_HEADING.search(body) is None:
+        return False
+    power_section = _section(body, _POWER_HEADING)
+    if power_section is None or _FAILED_CALIBRATION.search(power_section) is not None:
+        return False
+    required_evidence = (
+        _MCMC_DIAGNOSTICS,
+        _POWER_RESULT_ROW,
+        _POWER_CI_RESULT_ROW,
+        _ACCEPTANCE_RESULT_ROW,
+        _ESS_RESULT_ROW,
+        _ACHIEVED_POWER_CONCLUSION,
+    )
+    return all(pattern.search(power_section) is not None for pattern in required_evidence)
 
 
 def _table_rows(section: str) -> dict[str, str]:
@@ -95,25 +136,24 @@ def check_prereg_schedule(ctx: ValidateContext) -> Iterator[Result]:
         body = ctx.body(path)
         if _SCHEDULE_TOKENS.search(body) is None:
             continue
-        if _ACHIEVED_ESS_ROW.search(body) is not None:
-            continue
 
         relative = path.relative_to(ctx.project_root).as_posix()
         section = _cost_gate_section(body)
-        if section is None:
-            yield _warn(
-                relative,
-                f"{relative} declares a sampling schedule but carries no Cost Gate; "
-                "the schedule's calibration domain is undeclared",
-            )
+        if section is not None:
+            rows = _table_rows(section)
+            for row in _REQUIRED_ROWS:
+                state = _unfilled_state(rows, row)
+                if state is not None:
+                    yield _warn(
+                        relative,
+                        f"{relative} declares a sampling schedule but its Cost Gate row "
+                        f"'{row}' is {state}; fill the row before freezing the schedule",
+                    )
             continue
-
-        rows = _table_rows(section)
-        for row in _REQUIRED_ROWS:
-            state = _unfilled_state(rows, row)
-            if state is not None:
-                yield _warn(
-                    relative,
-                    f"{relative} declares a sampling schedule but its Cost Gate row "
-                    f"'{row}' is {state}; fill the row before freezing the schedule",
-                )
+        if _reports_completed_power_calibration(body):
+            continue
+        yield _warn(
+            relative,
+            f"{relative} declares a sampling schedule but carries no Cost Gate; "
+            "the schedule's calibration domain is undeclared",
+        )
