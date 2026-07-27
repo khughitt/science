@@ -521,6 +521,161 @@ def test_apply_refuses_live_tail_after_invalid_angle_destination_without_writing
     assert not (tasks_dir / JOURNAL).exists()
 
 
+@pytest.mark.parametrize(
+    "base_destination",
+    ["https://example.test", "/root.md", "#anchor"],
+)
+@pytest.mark.parametrize(
+    ("kind", "unclosed_parenthesis"),
+    [
+        ("inline", ""),
+        ("inline", "("),
+        ("reference", "("),
+    ],
+)
+def test_apply_refuses_inner_link_in_unterminated_ordinary_destination_without_writing(
+    tmp_path: Path,
+    base_destination: str,
+    kind: str,
+    unclosed_parenthesis: str,
+) -> None:
+    migrate = _migrate_module()
+    tasks_dir = tmp_path / "tasks"
+    destination = (
+        f"{base_destination}{unclosed_parenthesis}"
+        "[inner](unterminated-relative.md)"
+    )
+    description = (
+        f"[outer]({destination}"
+        if kind == "inline"
+        else f"[ref]: {destination}\n"
+    )
+    source = _write_legacy(
+        tasks_dir,
+        [_task("t001", "Unterminated ordinary destination", description=description)],
+    )
+    before = source.read_bytes()
+
+    with pytest.raises(
+        migrate.MigrationRefused,
+        match=r"t001.*relative Markdown destination.*unterminated-relative\.md",
+    ) as exc_info:
+        migrate.apply_migration(tasks_dir, today=TODAY)
+
+    assert base_destination not in str(exc_info.value)
+    assert source.read_bytes() == before
+    assert not (tasks_dir / "active").exists()
+    assert not (tasks_dir / "done").exists()
+    assert not (tasks_dir / JOURNAL).exists()
+
+
+@pytest.mark.parametrize("kind", ["inline", "reference"])
+@pytest.mark.parametrize(
+    "base_destination",
+    ["https://example.test", "/root.md", "#anchor"],
+)
+def test_plan_allows_complete_exempt_destination_with_link_like_text_without_writing(
+    tmp_path: Path,
+    kind: str,
+    base_destination: str,
+) -> None:
+    migrate = _migrate_module()
+    tasks_dir = tmp_path / "tasks"
+    destination = f"{base_destination}[literal](hidden.md)"
+    description = (
+        f"[outer]({destination})"
+        if kind == "inline"
+        else f"[ref]: {destination}\n"
+    )
+    source = _write_legacy(
+        tasks_dir,
+        [_task("t001", "Complete ordinary destination", description=description)],
+    )
+    before = source.read_bytes()
+
+    plan = migrate.plan_migration(tasks_dir, today=TODAY)
+
+    assert plan.refusals == []
+    assert source.read_bytes() == before
+    assert not (tasks_dir / "active").exists()
+    assert not (tasks_dir / "done").exists()
+    assert not (tasks_dir / JOURNAL).exists()
+
+
+@pytest.mark.parametrize("kind", ["inline", "reference"])
+@pytest.mark.parametrize(
+    "base_destination",
+    ["https://example.test", "/root.md", "#anchor"],
+)
+def test_apply_refuses_inner_link_in_incomplete_angle_destination_without_writing(
+    tmp_path: Path,
+    kind: str,
+    base_destination: str,
+) -> None:
+    migrate = _migrate_module()
+    tasks_dir = tmp_path / "tasks"
+    destination = f"{base_destination}[inner](angle-end-relative.md)"
+    description = (
+        f"[outer](<{destination}"
+        if kind == "inline"
+        else f"[ref]: <{destination}\n"
+    )
+    source = _write_legacy(
+        tasks_dir,
+        [_task("t001", "Incomplete angle destination", description=description)],
+    )
+    before = source.read_bytes()
+
+    with pytest.raises(
+        migrate.MigrationRefused,
+        match=r"t001.*relative Markdown destination.*angle-end-relative\.md",
+    ) as exc_info:
+        migrate.apply_migration(tasks_dir, today=TODAY)
+
+    assert base_destination not in str(exc_info.value)
+    assert source.read_bytes() == before
+    assert not (tasks_dir / "active").exists()
+    assert not (tasks_dir / "done").exists()
+    assert not (tasks_dir / JOURNAL).exists()
+
+
+@pytest.mark.parametrize(
+    "destination",
+    [
+        " ",
+        " /root.md",
+        " #anchor",
+        " https://example.test",
+    ],
+)
+def test_apply_treats_space_prefixed_angle_destination_as_relative_without_writing(
+    tmp_path: Path,
+    destination: str,
+) -> None:
+    migrate = _migrate_module()
+    tasks_dir = tmp_path / "tasks"
+    source = _write_legacy(
+        tasks_dir,
+        [
+            _task(
+                "t001",
+                "Exact angle destination",
+                description=f"[outer](<{destination}>)",
+            )
+        ],
+    )
+    before = source.read_bytes()
+
+    with pytest.raises(migrate.MigrationRefused) as exc_info:
+        migrate.apply_migration(tasks_dir, today=TODAY)
+
+    assert repr(destination) in str(exc_info.value)
+    assert source.read_bytes() == before
+    assert not (tasks_dir / "active").exists()
+    assert not (tasks_dir / "done").exists()
+    assert not (tasks_dir / JOURNAL).exists()
+
+
 @pytest.mark.parametrize(("title_open", "title_close"), [('"', '"'), ("(", ")")])
 @pytest.mark.parametrize(
     "outer_destination",

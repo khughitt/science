@@ -44,7 +44,7 @@ _ESCAPABLE_PUNCTUATION = frozenset(string.punctuation)
 @dataclass(frozen=True)
 class _ParsedDestination:
     destination: str | None
-    resume: int
+    suppress_until: int | None
 
 
 @dataclass(frozen=True)
@@ -281,7 +281,7 @@ def _angle_destination(
             cursor = _after_escape(cursor, stop)
             continue
         if character == ">":
-            return text[start + 1 : cursor].strip(), cursor + 1, True
+            return text[start + 1 : cursor], cursor + 1, True
         if (
             character == "<"
             or _line_ending_width(text, cursor, stop)
@@ -290,7 +290,7 @@ def _angle_destination(
         ):
             break
         cursor += 1
-    return text[start + 1 : cursor].strip(), cursor, False
+    return text[start + 1 : cursor], cursor, False
 
 
 def _title_end(text: str, start: int, stop: int) -> int | None:
@@ -434,7 +434,7 @@ def _inline_destination(
             close = _inline_close_after_destination(text, after_destination, stop)
             if close is not None:
                 return _ParsedDestination(destination or None, close)
-        return _ParsedDestination(destination or None, after_destination)
+        return _ParsedDestination(destination or None, None)
 
     destination_start = cursor
     depth = 0
@@ -449,11 +449,8 @@ def _inline_destination(
                 return None
             if depth == 0:
                 close = _inline_close_after_destination(text, cursor, stop)
-                return _ParsedDestination(
-                    destination,
-                    close if close is not None else cursor,
-                )
-            return _ParsedDestination(destination, cursor)
+                return _ParsedDestination(destination, close)
+            return _ParsedDestination(destination, None)
         if character == "(":
             depth += 1
             cursor += 1
@@ -472,7 +469,7 @@ def _inline_destination(
         cursor += 1
 
     destination = text[destination_start:cursor]
-    return _ParsedDestination(destination, cursor) if destination else None
+    return _ParsedDestination(destination, None) if destination else None
 
 
 def _reference_destination(
@@ -498,7 +495,7 @@ def _reference_destination(
         next_cursor = (
             _reference_resume_offset(text, after_destination, line_end)
             if complete
-            else after_destination
+            else None
         )
         return _ParsedDestination(destination or None, next_cursor)
 
@@ -527,7 +524,9 @@ def _reference_destination(
         return None
     return _ParsedDestination(
         destination,
-        _reference_resume_offset(text, cursor, line_end),
+        _reference_resume_offset(text, cursor, line_end)
+        if depth == 0
+        else None,
     )
 
 
@@ -552,12 +551,14 @@ def iter_markdown_destinations(text: str) -> Iterator[str]:
     syntactically closed double-quoted, single-quoted, or parenthesized title
     followed by whitespace; parentheses inside the last form must be escaped.
     Label openers remain scan territory, while parsed destination and valid-title
-    ranges are skipped. Inline component whitespace is horizontal plus at most
-    one line ending, titles may span nonblank lines, and valid empty/omitted
-    destinations still suppress their syntax and title. Continuation-line
+    ranges are skipped. Incomplete or malformed destination syntax yields a
+    safely readable destination prefix for fail-closed classification but does
+    not suppress paired inner label openers. Inline component whitespace is
+    horizontal plus at most one line ending, titles may span nonblank lines, and
+    valid empty/omitted destinations still suppress their syntax and title.
+    Angle destination interiors are returned byte-for-byte; surrounding
+    component whitespace remains outside the angle brackets. Continuation-line
     reference titles, autolinks, and raw HTML are outside this interface.
-    Malformed live syntax yields any safely readable destination prefix so
-    callers can fail closed.
     """
     for span_start, span_stop in prose_spans(text):
         bracket_pairs, reference_openers = _bracket_pairs(
@@ -594,10 +595,11 @@ def iter_markdown_destinations(text: str) -> Iterator[str]:
                 continue
             if parsed.destination is not None:
                 yield parsed.destination
-            suppressed_ranges[after_label] = max(
-                suppressed_ranges.get(after_label, after_label + 1),
-                parsed.resume,
-            )
+            if parsed.suppress_until is not None:
+                suppressed_ranges[after_label] = max(
+                    suppressed_ranges.get(after_label, after_label + 1),
+                    parsed.suppress_until,
+                )
             # Labels remain active scan territory: in CommonMark an inner link
             # makes an enclosing link opener inactive, and the migration gate
             # must still see that inner destination. The registered range begins

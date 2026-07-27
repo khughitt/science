@@ -262,6 +262,115 @@ def test_invalid_angle_destination_exposes_live_tail(kind: str) -> None:
     ]
 
 
+@pytest.mark.parametrize(
+    "base_destination",
+    ["https://example.test", "/root.md", "#anchor"],
+)
+@pytest.mark.parametrize("unclosed_parenthesis", ["", "("])
+def test_unterminated_inline_ordinary_destination_exposes_inner_link(
+    base_destination: str,
+    unclosed_parenthesis: str,
+) -> None:
+    destination = (
+        f"{base_destination}{unclosed_parenthesis}"
+        "[inner](unterminated-relative.md)"
+    )
+    text = f"[outer]({destination}"
+
+    assert list(markdown_scan.iter_markdown_destinations(text)) == [
+        destination,
+        "unterminated-relative.md",
+    ]
+
+
+@pytest.mark.parametrize(
+    "base_destination",
+    ["https://example.test", "/root.md", "#anchor"],
+)
+def test_invalid_reference_ordinary_destination_exposes_inner_link(
+    base_destination: str,
+) -> None:
+    destination = f"{base_destination}([inner](reference-relative.md)"
+    text = f"[ref]: {destination}\n"
+
+    assert list(markdown_scan.iter_markdown_destinations(text)) == [
+        destination,
+        "reference-relative.md",
+    ]
+
+
+@pytest.mark.parametrize("kind", ["inline", "reference"])
+@pytest.mark.parametrize(
+    "base_destination",
+    ["https://example.test", "/root.md", "#anchor"],
+)
+def test_complete_ordinary_destination_suppresses_link_like_text(
+    kind: str,
+    base_destination: str,
+) -> None:
+    destination = f"{base_destination}[literal](hidden.md)"
+    text = (
+        f"[outer]({destination})"
+        if kind == "inline"
+        else f"[ref]: {destination}\n"
+    )
+
+    assert list(markdown_scan.iter_markdown_destinations(text)) == [destination]
+
+
+@pytest.mark.parametrize("kind", ["inline", "reference"])
+@pytest.mark.parametrize(
+    "base_destination",
+    ["https://example.test", "/root.md", "#anchor"],
+)
+def test_incomplete_angle_destination_exposes_inner_link(
+    kind: str,
+    base_destination: str,
+) -> None:
+    destination = f"{base_destination}[inner](angle-end-relative.md)"
+    text = (
+        f"[outer](<{destination}"
+        if kind == "inline"
+        else f"[ref]: <{destination}\n"
+    )
+
+    assert list(markdown_scan.iter_markdown_destinations(text)) == [
+        destination,
+        "angle-end-relative.md",
+    ]
+
+
+@pytest.mark.parametrize(
+    "destination",
+    [
+        " ",
+        " /root.md",
+        " #anchor",
+        " https://example.test",
+        "relative.md ",
+    ],
+)
+def test_angle_destination_preserves_exact_interior(destination: str) -> None:
+    text = f"[outer](<{destination}>)"
+
+    assert list(markdown_scan.iter_markdown_destinations(text)) == [destination]
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        '[outer]( <https://example.test> "title [literal](hidden.md)")',
+        '[ref]:   <https://example.test>   "title [literal](hidden.md)"\n',
+    ],
+)
+def test_whitespace_outside_angle_destination_remains_component_separator(
+    text: str,
+) -> None:
+    assert list(markdown_scan.iter_markdown_destinations(text)) == [
+        "https://example.test",
+    ]
+
+
 @pytest.mark.parametrize("separator", ["\x01", "\\\n"])
 def test_control_or_backslash_newline_terminates_ordinary_destination(
     separator: str,
@@ -421,6 +530,32 @@ def test_many_invalid_destination_tails_preserve_linear_work() -> None:
     assert destinations[1::2] == [
         f"relative-{index}.md" for index in range(64)
     ]
+    assert text.indexed_reads <= 10 * len(text)
+
+
+@pytest.mark.parametrize("kind", ["inline", "reference"])
+@pytest.mark.parametrize("destination_open", ["https://example.test(", "<https://example.test"])
+def test_nested_links_in_unterminated_destinations_preserve_linear_work(
+    kind: str,
+    destination_open: str,
+) -> None:
+    inner_destinations = [f"relative-{index}.md" for index in range(64)]
+    destination = destination_open + "".join(
+        f"[inner]({inner_destination})"
+        for inner_destination in inner_destinations
+    )
+    value = (
+        f"[outer]({destination}"
+        if kind == "inline"
+        else f"[ref]: {destination}"
+    )
+    text = _CountingText(value)
+
+    destinations = list(markdown_scan.iter_markdown_destinations(text))
+
+    expected_outer = destination.removeprefix("<")
+    assert destinations[0] == expected_outer
+    assert destinations[1:] == inner_destinations
     assert text.indexed_reads <= 10 * len(text)
 
 
