@@ -1036,20 +1036,50 @@ def _copy_support_tree(
         if source.suffix != ".md":
             shutil.copy2(source, target)
             continue
+        rewritten = _rewrite_methodology_references(
+            source.read_text(encoding="utf-8"),
+            source,
+            target,
+            skill_dir,
+            {},
+            repo_root,
+            skill_owners,
+            dependencies,
+            bundled,
+        )
         target.write_text(
-            _rewrite_methodology_references(
-                source.read_text(encoding="utf-8"),
-                source,
-                target,
-                skill_dir,
-                {},
-                repo_root,
-                skill_owners,
-                dependencies,
-                bundled,
-            ),
+            _rewrite_support_skill_references(rewritten, dependencies),
             encoding="utf-8",
         )
+
+
+def _rewrite_support_skill_references(
+    text: str,
+    dependencies: set[str],
+) -> str:
+    replacements = (
+        (
+            "`scientific-writing`",
+            "`science-scientific-writing` skill",
+            {"science-scientific-writing"},
+        ),
+        (
+            "`${CLAUDE_PLUGIN_ROOT}/skills/INDEX.md`",
+            "the support package's `references/methodology-index.md`",
+            set(),
+        ),
+        (
+            "`literature/`/`epistemics/` leaves",
+            "`science-literature`/`science-epistemics` skills",
+            {"science-literature", "science-epistemics"},
+        ),
+    )
+    for source, replacement, targets in replacements:
+        if source not in text:
+            continue
+        text = text.replace(source, replacement)
+        dependencies.update(targets)
+    return text
 
 
 def _write_methodology_index(

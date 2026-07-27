@@ -230,6 +230,39 @@ def test_support_methodology_index_lists_every_generated_methodology_skill(
     assert index == f"{expected}\n"
 
 
+def test_support_role_prompts_use_generated_methodology_skill_names(
+    generated: GenerationResult,
+) -> None:
+    support = generated.skill_paths["science-command-preamble"].parent
+    for role_prompt in sorted((support / "references" / "role-prompts").glob("*.md")):
+        text = role_prompt.read_text(encoding="utf-8")
+        assert "`science-scientific-writing` skill" in text
+        assert "`science-literature`/`science-epistemics` skills" in text
+        assert "the support package's `references/methodology-index.md`" in text
+        assert "Skills: `scientific-writing`" not in text
+        assert "`literature/`" not in text
+        assert "`epistemics/`" not in text
+
+
+def test_support_role_prompt_rewrite_records_methodology_dependencies() -> None:
+    dependencies: set[str] = set()
+    rewritten = agent_assets._rewrite_support_skill_references(
+        (
+            "Skills: `scientific-writing`; read "
+            "`${CLAUDE_PLUGIN_ROOT}/skills/INDEX.md` and load "
+            "`literature/`/`epistemics/` leaves."
+        ),
+        dependencies,
+    )
+
+    assert "${CLAUDE_PLUGIN_ROOT}" not in rewritten
+    assert dependencies == {
+        "science-epistemics",
+        "science-literature",
+        "science-scientific-writing",
+    }
+
+
 @pytest.mark.parametrize(
     ("skill_name", "resource"),
     (
@@ -304,6 +337,7 @@ def test_generated_skill_markdown_links_are_package_portable(
             text = markdown.read_text(encoding="utf-8")
             if name in methodology_and_support:
                 assert "/science:" not in text, f"{name}/{relative}"
+                assert "${CLAUDE_PLUGIN_ROOT}" not in text, f"{name}/{relative}"
             for raw in re.findall(r"]\(([^)]+)\)", text):
                 target = raw.split("#", 1)[0]
                 if not target or target.startswith("/") or re.match(r"^[a-z]+:", target):
