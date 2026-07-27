@@ -112,6 +112,26 @@ def test_schedule_without_cost_gate_warns(project: Path) -> None:
     assert "Cost Gate" in result.message
 
 
+def test_schedule_with_achieved_ess_table_passes_without_cost_gate(project: Path) -> None:
+    """Corpus case 0025 reports calibration on its own completed power runs."""
+    _write_prereg(
+        project,
+        body="""\
+Four chains use overdispersed starts and burn-in before retained draws.
+
+**MCMC diagnostics.** Power carries Monte Carlo uncertainty computed on the
+effective sample size, not the raw draw count.
+
+| target effect | 0.30 | 0.50 | 0.75 |
+|---|---|---|---|
+| acceptance | .806 | .669 | .479 |
+| ESS (of 10,000) | 3392 | 2349 | 1607 |
+""",
+    )
+
+    assert _results(project) == []
+
+
 @pytest.mark.parametrize("row", ["Target geometry", "Calibration domain"])
 @pytest.mark.parametrize("state", ["absent", "empty", "placeholder"])
 def test_unfilled_required_row_warns(project: Path, row: str, state: str) -> None:

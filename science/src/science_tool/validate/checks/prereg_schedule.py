@@ -27,6 +27,14 @@ from science_tool.validate.result import Result, Severity
 # schedule. It remains a PROSE HEURISTIC, which is why the rule is WARN and
 # ungated.
 _SCHEDULE_TOKENS = re.compile(r"\bburn[- ]in\b|\bthinning\b|\bR[_-]?hat\b|\bESS\b")
+# A completed same-document calibration can predate the Cost Gate convention.
+# Keep this escape hatch narrow: a prospective ESS threshold, or prose reporting
+# a failed ESS, is not calibration evidence. The numeric `ESS (of N)` table row
+# records achieved effective sample sizes against the actual draw count.
+_ACHIEVED_ESS_ROW = re.compile(
+    r"^\|[ \t]*(?:\*\*)?ESS \(of [1-9][\d,]*\)(?:\*\*)?[ \t]*\|[ \t]*\d",
+    re.MULTILINE,
+)
 _COST_GATE_HEADING = re.compile(
     r"^## Cost Gate \(execution geometry\)[ \t]*$",
     re.MULTILINE,
@@ -86,6 +94,8 @@ def check_prereg_schedule(ctx: ValidateContext) -> Iterator[Result]:
             continue
         body = ctx.body(path)
         if _SCHEDULE_TOKENS.search(body) is None:
+            continue
+        if _ACHIEVED_ESS_ROW.search(body) is not None:
             continue
 
         relative = path.relative_to(ctx.project_root).as_posix()
