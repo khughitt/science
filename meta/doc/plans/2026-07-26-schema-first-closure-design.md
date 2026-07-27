@@ -613,12 +613,21 @@ entity.model_dump(mode="json", exclude_none=True, exclude_defaults=False)
 `exclude_none=True` is why the skeleton carries `title: ''`, `accessions: []`, `datapackage: ''`
 rather than `null` — `None` fields drop, but empty-string and empty-list defaults survive.
 
-**The defect is full-model serialization on the new-file path, not the flag.** Flipping
-`exclude_defaults` to `True` would be a different bug: it discards writer-owned values that
-happen to equal their default. `belief_eligible=False` is a *decision* the lift path makes
-deliberately (`workbench.py:285` — an empirical stub with no `dataset_usage` is staged
-ineligible), and it is indistinguishable from the default under `exclude_defaults=True`. The fix
-is an explicit writer-owned allowlist, not a dump-mode change.
+**The defect is full-model serialization on the new-file path, not the flag.**
+
+**CORRECTED 2026-07-27.** An earlier revision argued that `exclude_defaults=True` would discard
+`belief_eligible=False` as if it were a default. Measured, that is wrong twice over:
+`belief_eligible` defaults to **`True`**, so a deliberate `False` survives the flag untouched.
+
+The real reason the flag does not fix this is simpler and stronger. The skeleton fields are
+**required**, not defaulted: constructing `EvidenceLineEntity` without `project`,
+`ontology_terms`, `related`, `source_refs`, `content_preview` or `file_path` raises `Field
+required` for every one of them. A required field has no default to be excluded *by*, so
+`exclude_defaults=True` emits them regardless — it would still write the skeleton. The lift path
+must keep supplying them for in-memory construction; what must change is what gets **persisted**.
+
+The fix is therefore an explicit writer-owned allowlist, and it has to be: no dump-mode flag can
+express "required for the model, not for the file."
 
 Updates already preserve existing frontmatter and overwrite only writer-owned keys.
 

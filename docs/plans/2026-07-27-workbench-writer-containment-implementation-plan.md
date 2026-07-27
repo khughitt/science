@@ -193,7 +193,7 @@ In `_proposition_for_row`, add to the `PropositionEntity(...)` call:
         title=_proposition_title(row),
 ```
 
-In `_evidence_line_for_stub`, replace the safe-empties block. Delete `title=""`, `project=""`, `ontology_terms=[]`, `related=[]`, `source_refs=[]`, `content_preview=""`, `file_path=""` and the comment above them, leaving:
+In `_evidence_line_for_stub`, change **only** the title. Every other field stays:
 
 ```python
     return EvidenceLineEntity(
@@ -201,6 +201,15 @@ In `_evidence_line_for_stub`, replace the safe-empties block. Delete `title=""`,
         kind="evidence-line",
         type=EntityType.EVIDENCE_LINE,
         title=_evidence_line_title(stub, target_id=target_id),
+        # These are REQUIRED by the model and must keep being supplied. They are not persisted --
+        # Task 3's owned-key allowlist is what keeps them out of the file. Deleting them here
+        # raises `Field required` for all six.
+        project="",
+        ontology_terms=[],
+        related=[],
+        source_refs=[],
+        content_preview="",
+        file_path="",
         stance=EvidenceStance(stub.stance) if stub.stance is not None else EvidenceStance.SUPPORTS,
         target=target_id,
         source=stub.source,
@@ -210,7 +219,16 @@ In `_evidence_line_for_stub`, replace the safe-empties block. Delete `title=""`,
     )
 ```
 
-The deleted fields all have model defaults, so construction still succeeds; they simply stop being *set*, which is what stops them being serialized once Task 3 lands. `content_preview`, `file_path` and `type` were already stripped as derived keys by `render_entity_text` and were never persisted anyway.
+Replace the old `# Base-required fields that have no value at lift time — safe empties (mirrors the
+minimal-construction pattern in the entity model tests)` comment with the one above. The old
+comment is the defect's own justification — it cites *test* practice as precedent for a production
+write — and the correction is not that the values are wrong in memory, but that **in-memory
+required is not the same as persisted**. That distinction is the whole of §5.1.
+
+**Verified, so the plan does not repeat an earlier error:** `project`, `ontology_terms`,
+`related`, `source_refs`, `content_preview` and `file_path` are all `required=True` with no
+default. An earlier revision of this plan deleted them, claiming they had defaults; constructing
+`EvidenceLineEntity` without them raises `Field required` for every one.
 
 - [ ] **Step 6: Run the tests to verify they pass**
 
@@ -225,9 +243,12 @@ Expected: green, **except** existing workbench tests that assert on rendered fro
 - [ ] **Step 8: Commit**
 
 ```bash
-# Add any existing test module Step 7 required repairing; `git status --short` names them.
+# Step 7 may have repaired existing modules that asserted `title: ''`. Run `git status --short`
+# and add every path it names; these are the ones most likely to appear.
 git add science/src/science_tool/dag/workbench.py \
-        science/tests/test_workbench_writer_containment.py
+        science/tests/test_workbench_writer_containment.py \
+        science/tests/test_workbench_compile.py \
+        science/tests/test_workbench_apply.py
 git commit -m "feat(workbench): derive entity titles at lift instead of persisting empties
 
 WorkbenchRow.subject/object gain min_length=1: they were plain str, so an empty
@@ -468,8 +489,8 @@ def test_created_entity_has_a_non_empty_title(tmp_path) -> None:
 
 def test_created_evidence_line_keeps_a_deliberate_false(tmp_path) -> None:
     # `belief_eligible=False` is a staging DECISION -- an empirical stub with no dataset_usage is
-    # staged ineligible -- not an unset default. This is the test that makes Mutation H in Task 5
-    # bite: exclude_defaults=True would silently drop it, and nothing else would notice.
+    # staged ineligible. It must survive the allowlist projection, because a stamped-ineligible
+    # line that serializes as eligible is a belief-affecting silent change.
     from science_model.reasoning import EvidenceType
 
     stub = EvidenceStub(stance="supports", evidence_type=EvidenceType.EMPIRICAL_DATA)
@@ -539,9 +560,11 @@ Shared by the two writers -- `workbench.compile_workbench` (create) and
 
 The owned sets are POSITIVE allowlists. `render_entity_text` full-dumps the model
 (`exclude_defaults=False`), which is what wrote `datapackage: ''` and `accessions: []` onto 391
-evidence lines; rendering from an allowlist is what stops it. Not `exclude_defaults=True`:
-`belief_eligible=False` is a deliberate staging decision and is indistinguishable from the
-default under that flag.
+evidence lines; rendering from an allowlist is what stops it.
+
+`exclude_defaults=True` would NOT stop it. The skeleton fields are **required** on the model, not
+defaulted -- a required field has no default to be excluded by -- so the flag emits them anyway.
+No dump-mode flag can express "required for the model, not for the file"; only an allowlist can.
 """
 
 from __future__ import annotations
@@ -724,19 +747,23 @@ Expected: failures confined to tests asserting on created-file frontmatter — `
 - [ ] **Step 9: Commit**
 
 ```bash
-# Step 8 may have repaired several existing test modules. Run `git status --short` and add
-# every one it names -- the list below is the minimum, not the whole set.
+# Step 8 repairs existing modules that asserted on created-file frontmatter. Run
+# `git status --short` and add every path it names; these four are the ones Step 8 predicts.
 git add science/src/science_tool/dag/entity_frontmatter.py \
         science/src/science_tool/dag/workbench_apply.py \
         science/src/science_tool/dag/workbench.py \
-        science/tests/test_workbench_writer_containment.py
+        science/tests/test_workbench_writer_containment.py \
+        science/tests/test_workbench_apply.py \
+        science/tests/test_workbench_compile.py \
+        science/tests/test_workbench_idempotent.py \
+        science/tests/test_workbench_compile_conformance.py
 git commit -m "feat(workbench): render new entity files from an owned allowlist
 
 Both create paths full-dumped the model, which is what wrote datapackage: ''
 and accessions: [] onto 391 evidence lines. They now emit the per-kind owned
 set plus title and status, which are create-only so an author's replacement
-survives the next apply. Not exclude_defaults=True: belief_eligible=False is a
-deliberate staging decision that flag would discard.
+survives the next apply. Not exclude_defaults=True: the skeleton fields are
+required rather than defaulted, so that flag emits them anyway.
 
 The owned sets and both renderers move to dag/entity_frontmatter.py: workbench_apply
 imports workbench, so neither could host code the other needs, and a second copy of
@@ -792,7 +819,6 @@ def test_update_of_an_empty_title_record_is_REJECTED(tmp_path) -> None:
 def test_the_apply_create_path_is_validated_too(tmp_path, monkeypatch) -> None:
     # Both create paths, not just the risky-looking one. Neutralize the title derivation and the
     # create path must refuse to plan a write rather than emit an empty-title file.
-    from science_tool.dag import workbench as wb
     from science_tool.dag.entity_frontmatter import PersistedShapeError
     from science_tool.dag.workbench_apply import _entity_edit
 
@@ -825,7 +851,7 @@ def test_the_COMPILE_path_is_validated_and_writes_nothing(tmp_path, monkeypatch)
 - [ ] **Step 2: Run the tests to verify they fail**
 
 Run: `cd science && uv run --frozen pytest tests/test_workbench_writer_containment.py -q`
-Expected: both FAIL — no validation runs at the boundary yet, so `_entity_edit` returns a plan instead of raising. If `test_the_create_path_is_validated_too` errors instead on the monkeypatch target, correct the target to wherever Task 1 placed `_proposition_title`; do not weaken the assertion.
+Expected: **all three FAIL** — `test_update_of_an_empty_title_record_is_REJECTED`, `test_the_apply_create_path_is_validated_too` and `test_the_COMPILE_path_is_validated_and_writes_nothing`. No validation runs at the boundary yet, so each returns or writes instead of raising, and the import of `PersistedShapeError` fails until Step 3 defines it. If the compile test errors on the monkeypatch target instead, correct it to wherever Task 1 placed `_proposition_title`; do not weaken the assertion.
 
 - [ ] **Step 3: Add the boundary check to the shared module**
 
@@ -951,18 +977,36 @@ Expected: `test_update_of_an_empty_title_record_is_REJECTED` FAILS. **Revert.**
 
 - [ ] **Step 7: Mutation G — the backfill temptation**
 
-In `entity_frontmatter.certify_persisted`, before validating, set `frontmatter["title"] = frontmatter.get("title") or entity.title` (the "backfill" implementation §5.4 rejects).
-Expected: `test_update_of_an_empty_title_record_is_REJECTED` FAILS — no exception raised. This mutation is listed separately from F because it is the *plausible* wrong answer: it looks helpful and it makes the suite green if the rejection test is missing. **Revert.**
+Implement the backfill for real — mutating the parsed mapping inside `certify_persisted` is **not** enough, because that mapping is discarded and the original invalid text is still what gets persisted. That would prove a validation bypass (Mutation F already does), not a silent migration. In `render_create` and in `_entity_edit`'s update branch, repair the rendered text before certifying:
+
+```python
+    frontmatter = yaml.safe_load(text.split("---\n", 2)[1]) or {}
+    if not str(frontmatter.get("title") or "").strip():
+        frontmatter["title"] = entity.title
+        text = render_from_frontmatter(frontmatter, body)
+```
+Expected: `test_update_of_an_empty_title_record_is_REJECTED` FAILS — no exception is raised **and the file is silently repaired**. This mutation is listed separately from F because it is the *plausible* wrong answer: it looks helpful, it produces a valid file, and it makes the suite green if the rejection test is missing. F proves the check runs; G proves the check must **refuse** rather than fix. **Revert.**
 
 - [ ] **Step 8: Mutation G2 — certification in the caller instead of the renderer**
 
 Move the `certify_persisted` call out of `render_create` and into `_entity_edit`'s create branch.
 Expected: `test_the_COMPILE_path_is_validated_and_writes_nothing` FAILS — `_entity_edit` is still covered, but the compile path is not. This is the mutation that proves *where* certification lives matters, not merely that it exists. **Revert.**
 
-- [ ] **Step 9: Mutation H — the exclude_defaults trap**
+- [ ] **Step 9: Mutation H — the `exclude_defaults` trap**
 
-Make `render_create` filter-free and thread `exclude_defaults=True` into `generated_frontmatter`'s `render_entity_text` call. (`render_entity_text` takes no such parameter, so this mutation also requires a temporary local variant — that friction is itself informative.)
-Expected: `test_created_proposition_carries_only_owned_keys` still fails (unowned keys leak), **and** `test_created_evidence_line_keeps_a_deliberate_false` fails — `belief_eligible: False` is gone from the rendered frontmatter. That second failure is the point: it demonstrates why the design chose an allowlist over the flag. **Revert.**
+Make `render_create` filter-free and thread `exclude_defaults=True` into `generated_frontmatter`'s
+`render_entity_text` call. (`render_entity_text` takes no such parameter, so this needs a temporary
+local variant — that friction is itself informative.)
+
+Expected: `test_created_evidence_line_carries_no_skeleton_fields` and
+`test_created_proposition_carries_only_owned_keys` **still FAIL**, naming leaked keys such as
+`project`, `ontology_terms`, `related` and `source_refs`. Those fields are *required* on the model,
+so `exclude_defaults` has no default to exclude them by and they are written regardless.
+
+This is the mutation's whole point: it shows the flag is not a cheaper substitute for the
+allowlist. **`test_created_evidence_line_keeps_a_deliberate_false` is expected to keep PASSING** —
+`belief_eligible` defaults to `True`, so a deliberate `False` survives the flag. An earlier
+revision of this plan predicted the opposite and was wrong. **Revert.**
 
 - [ ] **Step 10: Verify the tree is clean and both suites green**
 
@@ -1001,7 +1045,8 @@ from science_tool.dag.entity_frontmatter import (
     CREATE_ONLY_KEYS, EVIDENCE_LINE_OWNED_KEYS, PROPOSITION_OWNED_KEYS,
 )
 from science_tool.dag.workbench_apply import _entity_edit
-row = WorkbenchRow(subject="concept:a", predicate="affects", object="concept:b", patch="p")
+row = WorkbenchRow(subject="concept:a", predicate="affects", object="concept:b", patch="p",
+                   polarity="unsigned")  # `affects` is sign-meaningful; omitting this raises
 cases = [
     (_proposition_for_row(row), PROPOSITION_OWNED_KEYS),
     (_evidence_line_for_stub(EvidenceStub(stance="supports"), target_id="proposition:0001-x", index=0),
