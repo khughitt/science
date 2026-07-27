@@ -85,6 +85,17 @@ _TIER_RULES: dict[str, frozenset[str]] = {
             # It is a WARN with its own ratchet, to advance once the corpus is migrated.
             # `prereg.vehicle-unverifiable` is likewise ungated: it reports that durability could
             # not be checked, which is not itself a defect in the document.
+            #
+            # `prereg.prose-path-nondurable` is deliberately ABSENT from every tier, for two
+            # independent reasons. (1) It is advisory by construction: it proves that a frozen
+            # document names a path git will not preserve, NOT that the path is load-bearing.
+            # A pre-registration may legitimately name an ignored OUTPUT directory, so an ERROR
+            # would assert a contradiction the predicate does not establish. This reason does not
+            # expire when the corpus is clean. (2) Certification forbids it today anyway: 16
+            # findings across 6 of the 11 projects holding pre-registrations. A ratchet is
+            # therefore not merely deferred pending migration -- it would first require a
+            # narrower predicate that genuinely implies contradiction. See
+            # docs/plans/2026-07-27-prereg-prose-durability-design.md.
         }
     ),
 }

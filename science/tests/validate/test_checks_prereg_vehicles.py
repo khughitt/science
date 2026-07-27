@@ -300,6 +300,7 @@ def test_durability_failures_gate_the_build_but_undeclared_does_not() -> None:
     assert "prereg.vehicle-uncontent-addressed" in gated
     assert "prereg.vehicle-undeclared" not in gated
     assert "prereg.vehicle-unverifiable" not in gated
+    assert "prereg.prose-path-nondurable" not in gated
 
 
 def test_non_prereg_entities_are_ignored(project: Path) -> None:
