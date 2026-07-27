@@ -245,6 +245,65 @@ def test_no_arrival_order_dependence(tmp_path):
     assert _normalized(load_cases(a)[0]) == _normalized(load_cases(b)[0])
 
 
+def test_no_arrival_order_dependence_with_distinct_times_and_producers(tmp_path):
+    registry = build_registry(
+        [
+            FindingProducer(
+                producer_id="dataset_anomalies",
+                namespace="health_checks",
+                rules=(RULE,),
+                sections=(SECTION,),
+                metrics_schema=None,
+                remediators=frozenset(),
+            ),
+            FindingProducer(
+                producer_id="curation_lens",
+                namespace="health_checks",
+                rules=(),
+                sections=(),
+                metrics_schema=None,
+                remediators=frozenset(),
+            ),
+        ]
+    )
+    a = tmp_path / "a"
+    b = tmp_path / "b"
+    a.mkdir()
+    b.mkdir()
+    early = _report(
+        ingestion_ref="ing:early",
+        generated_at="2026-07-27T10:00:00+00:00",
+        findings=[
+            ReportedFinding(producer_id="curation_lens", finding=_finding())
+        ],
+    )
+    late = _report(
+        ingestion_ref="ing:late",
+        generated_at="2026-07-27T14:00:00+00:00",
+        findings=[
+            ReportedFinding(producer_id="dataset_anomalies", finding=_finding())
+        ],
+    )
+
+    ingest_report(a, early, registry)
+    ingest_report(a, late, registry)
+    ingest_report(b, late, registry)
+    ingest_report(b, early, registry)
+
+    first = load_cases(a)[0]
+    second = load_cases(b)[0]
+    assert _normalized(first) == _normalized(second)
+    assert first.transitions[0].at.isoformat() == "2026-07-27T10:00:00+00:00"
+    assert first.transitions[0].reason == "detected by curation_lens"
+    assert [
+        (occurrence.observed_at, occurrence.idempotency_key)
+        for occurrence in first.occurrences
+    ] == sorted(
+        (occurrence.observed_at, occurrence.idempotency_key)
+        for occurrence in first.occurrences
+    )
+
+
 def test_non_identity_qualifiers_survive_on_the_occurrence(tmp_path):
     report = _report(
         findings=[
@@ -403,6 +462,61 @@ def test_a_validation_failure_writes_nothing(tmp_path):
     assert load_cases(tmp_path) == []
 
 
+def _assert_forged_report_is_refused_without_mutation(tmp_path, report) -> None:
+    with pytest.raises(IngestError, match="not a valid audit report"):
+        ingest_report(tmp_path, report, REGISTRY)
+    assert not (tmp_path / "doc").exists()
+
+
+def test_ingest_revalidates_a_model_copy_with_a_forged_schema_version(tmp_path):
+    forged = _report().model_copy(update={"schema_version": 99})
+
+    _assert_forged_report_is_refused_without_mutation(tmp_path, forged)
+
+
+def test_ingest_revalidates_a_model_copy_with_forged_totals(tmp_path):
+    report = _report()
+    forged_totals = report.totals.model_copy(update={"findings_total": 0})
+    forged = report.model_copy(update={"totals": forged_totals})
+
+    _assert_forged_report_is_refused_without_mutation(tmp_path, forged)
+
+
+def test_ingest_revalidates_a_forged_report_count(tmp_path):
+    report = _report()
+    forged = report.model_copy(update={"findings": report.findings * 5001})
+
+    _assert_forged_report_is_refused_without_mutation(tmp_path, forged)
+
+
+def test_ingest_revalidates_nested_values_from_model_construct(tmp_path):
+    report = _report()
+    raw_finding = _finding().model_dump(mode="python")
+    raw_finding["severity"] = 7
+    forged_envelope = ReportedFinding.model_construct(
+        producer_id="dataset_anomalies",
+        finding=raw_finding,
+    )
+    raw_report = report.model_dump(mode="python")
+    raw_report["findings"] = [forged_envelope]
+    forged = AuditReport.model_construct(**raw_report)
+
+    _assert_forged_report_is_refused_without_mutation(tmp_path, forged)
+
+
+def test_ingest_snapshots_and_revalidates_mutable_report_lists(tmp_path):
+    report = _report()
+    findings_alias = report.findings
+    findings_alias.append(
+        ReportedFinding(
+            producer_id="dataset_anomalies",
+            finding=_finding(subject=EntitySubject(ref="dataset:b")),
+        )
+    )
+
+    _assert_forged_report_is_refused_without_mutation(tmp_path, report)
+
+
 def test_partial_failure_is_repaired_by_rerunning_the_same_report(tmp_path):
     # Simulate a crash after the first of two records is written, by writing the
     # first record alone and then re-ingesting the whole report.
@@ -426,10 +540,52 @@ def test_partial_failure_is_repaired_by_rerunning_the_same_report(tmp_path):
         assert len(record.occurrences) == 1
 
 
+def test_a_late_idempotency_conflict_writes_no_earlier_new_case(tmp_path):
+    ingest_report(tmp_path, _report(), REGISTRY)
+    new_then_conflicting = _report(
+        findings=[
+            ReportedFinding(
+                producer_id="dataset_anomalies",
+                finding=_finding(subject=EntitySubject(ref="dataset:b")),
+            ),
+            ReportedFinding(
+                producer_id="dataset_anomalies",
+                finding=_finding(message="DIFFERENT"),
+            ),
+        ]
+    )
+
+    with pytest.raises(IngestError, match="idempotency"):
+        ingest_report(tmp_path, new_then_conflicting, REGISTRY)
+
+    records = load_cases(tmp_path)
+    assert len(records) == 1
+    assert records[0].subject == EntitySubject(ref="dataset:a")
+
+
 def test_load_report_refuses_an_unknown_schema_version(tmp_path):
     path = tmp_path / "report.json"
     path.write_text(json.dumps({"schema_version": 99}), encoding="utf-8")
     with pytest.raises(IngestError, match="schema_version"):
+        load_report(tmp_path, path)
+
+
+def test_load_report_wraps_an_oversized_integer_parse_error(tmp_path):
+    path = tmp_path / "report.json"
+    path.write_text(
+        '{"schema_version": 2, "value": ' + ("9" * 5000) + "}",
+        encoding="utf-8",
+    )
+
+    with pytest.raises(IngestError, match="could not parse"):
+        load_report(tmp_path, path)
+
+
+def test_load_report_wraps_a_deep_nesting_parse_error(tmp_path):
+    path = tmp_path / "report.json"
+    path.write_text(("[" * 10000) + "0" + ("]" * 10000), encoding="utf-8")
+
+    with pytest.raises(IngestError, match="could not parse"):
         load_report(tmp_path, path)
 
 

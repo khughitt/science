@@ -23,6 +23,7 @@ from pathlib import Path
 from typing import Iterator
 
 from pydantic import BaseModel, ConfigDict, ValidationError
+from pydantic_core import PydanticSerializationError
 from science_model.audit import (
     REPORT_SCHEMA_VERSION,
     AuditFinding,
@@ -34,7 +35,10 @@ from science_model.audit import (
     finding_fingerprint,
     occurrence_key,
 )
-from science_model.audit.record import canonical_occurrence_content
+from science_model.audit.record import (
+    canonical_occurrence_content,
+    normalized_instant,
+)
 
 from science_tool.findings.paths import (
     PathSafetyError,
@@ -82,7 +86,9 @@ def load_report(project_root: Path, path: Path) -> AuditReport:
         raise IngestError(f"could not read {path}: {exc}") from exc
     try:
         raw = json.loads(text)
-    except json.JSONDecodeError as exc:
+    except (ValueError, RecursionError) as exc:
+        # JSONDecodeError is a ValueError. The broader base also covers CPython's
+        # bounded-integer refusal; excessive nesting raises RecursionError.
         raise IngestError(f"could not parse {path}: {exc}") from exc
     if not isinstance(raw, dict):
         raise IngestError(f"{path} is not a JSON object")
@@ -95,6 +101,22 @@ def load_report(project_root: Path, path: Path) -> AuditReport:
         return AuditReport.model_validate(raw)
     except ValidationError as exc:
         raise IngestError(f"{path} is not a valid audit report: {exc}") from exc
+
+
+def _snapshot_report(report: AuditReport) -> AuditReport:
+    """Revalidate a detached JSON-shaped snapshot at the write boundary.
+
+    `frozen=True` prevents attribute assignment, not mutation of nested lists, and
+    `model_copy(update=...)` / `model_construct(...)` deliberately bypass validation.
+    Calling `model_validate(report)` would also be insufficient because Pydantic may
+    return the already-constructed instance. A JSON dump followed by strict validation
+    both detaches mutable aliases and re-establishes every report invariant.
+    """
+    try:
+        payload = report.model_dump(mode="json", warnings="error")
+        return AuditReport.model_validate(payload, strict=True)
+    except (PydanticSerializationError, ValidationError) as exc:
+        raise IngestError(f"report is not a valid audit report: {exc}") from exc
 
 
 @contextmanager
@@ -246,6 +268,142 @@ def _assert_paths_are_safe(project_root: Path, finding: AuditFinding) -> None:
             raise IngestError(f"{finding.rule_id}: {exc}") from exc
 
 
+def _new_record(
+    item: _Planned,
+    report: AuditReport,
+    observed_at: datetime,
+    actor: str,
+) -> AuditFindingRecord:
+    occurrence = Occurrence(
+        idempotency_key=occurrence_key(
+            producer_id=item.producer_id,
+            ingestion_ref=report.ingestion_ref,
+            finding_id=item.finding_id,
+        ),
+        producer_id=item.producer_id,
+        ingestion_ref=report.ingestion_ref,
+        observed_at=observed_at,
+        severity=item.finding.severity,
+        message=item.finding.message,
+        qualifiers=dict(item.finding.qualifiers),
+        evidence=tuple(item.finding.evidence),
+        acceptance_key=item.acceptance_key,
+    )
+    return AuditFindingRecord(
+        finding_id=item.finding_id,
+        fingerprint_version=report.fingerprint_version,
+        rule_id=item.finding.rule_id,
+        subject=item.finding.subject,
+        identity_qualifiers=item.identity_qualifiers,
+        occurrences=(occurrence,),
+        transitions=(
+            _genesis_transition(occurrence, actor),
+        ),
+        status="proposed",
+    )
+
+
+def _occurrence_order(occurrence: Occurrence) -> tuple[str, str]:
+    return (
+        normalized_instant(occurrence.observed_at),
+        occurrence.idempotency_key,
+    )
+
+
+def _genesis_transition(occurrence: Occurrence, actor: str) -> Transition:
+    return Transition(
+        from_status=None,
+        to_status="proposed",
+        actor=actor,
+        at=occurrence.observed_at,
+        reason=f"detected by {occurrence.producer_id}",
+    )
+
+
+def _with_canonical_occurrences(
+    template: AuditFindingRecord,
+    occurrences: tuple[Occurrence, ...],
+    actor: str,
+) -> AuditFindingRecord:
+    ordered = tuple(sorted(occurrences, key=_occurrence_order))
+    return AuditFindingRecord.model_validate(
+        {
+            **template.model_dump(mode="python"),
+            "occurrences": ordered,
+            "transitions": (
+                _genesis_transition(ordered[0], actor),
+                *template.transitions[1:],
+            ),
+        }
+    )
+
+
+def _classify_writes(
+    store: CaseStore,
+    probes: list[AuditFindingRecord],
+    actor: str,
+) -> tuple[list[AuditFindingRecord], int, int, int]:
+    """Resolve every logical conflict before the first case write.
+
+    The lock is already held. Stored reads and idempotency decisions happen for every
+    target first; only the returned records may enter the I/O phase. Thus validation,
+    malformed stored cases, and content conflicts are zero-write failures, while a
+    later actual write failure may still leave earlier atomic records committed and is
+    recovered by retry.
+    """
+    grouped: dict[str, list[AuditFindingRecord]] = {}
+    for probe in probes:
+        grouped.setdefault(case_filename(probe), []).append(probe)
+
+    writes: list[AuditFindingRecord] = []
+    written = appended = skipped = 0
+    for name in sorted(grouped):
+        incoming_probes = grouped[name]
+        incoming = tuple(probe.occurrences[0] for probe in incoming_probes)
+        existing = store.read(name) if store.has(name) else None
+
+        if existing is None:
+            writes.append(
+                _with_canonical_occurrences(incoming_probes[0], incoming, actor)
+            )
+            written += 1
+            appended += len(incoming)
+            continue
+
+        stored = {
+            occurrence.idempotency_key: occurrence
+            for occurrence in existing.occurrences
+        }
+        additions: list[Occurrence] = []
+        for occurrence in incoming:
+            prior = stored.get(occurrence.idempotency_key)
+            if prior is None:
+                additions.append(occurrence)
+                continue
+            if canonical_occurrence_content(prior) != canonical_occurrence_content(
+                occurrence
+            ):
+                raise IngestError(
+                    f"idempotency conflict on {existing.finding_id}: key "
+                    f"{occurrence.idempotency_key} already exists with different "
+                    "observation content; identical keys must mean identical "
+                    "observations"
+                )
+            skipped += 1
+
+        if additions:
+            writes.append(
+                _with_canonical_occurrences(
+                    existing,
+                    (*existing.occurrences, *additions),
+                    actor,
+                )
+            )
+            appended += len(additions)
+
+    return writes, written, appended, skipped
+
+
 def ingest_report(
     project_root: Path,
     report: AuditReport,
@@ -253,81 +411,24 @@ def ingest_report(
     *,
     actor: str = "ingest",
 ) -> IngestOutcome:
+    report = _snapshot_report(report)
     planned = _plan(project_root, report, registry)
     observed_at = datetime.fromisoformat(report.generated_at)
     if observed_at.tzinfo is None:
         observed_at = observed_at.replace(tzinfo=UTC)
 
-    written = appended = skipped = 0
+    probes = [
+        _new_record(item, report, observed_at, actor)
+        for item in planned
+    ]
     with _locked_store(project_root) as store:
-        for item in planned:
-            occurrence = Occurrence(
-                idempotency_key=occurrence_key(
-                    producer_id=item.producer_id,
-                    ingestion_ref=report.ingestion_ref,
-                    finding_id=item.finding_id,
-                ),
-                producer_id=item.producer_id,
-                ingestion_ref=report.ingestion_ref,
-                observed_at=observed_at,
-                severity=item.finding.severity,
-                message=item.finding.message,
-                qualifiers=dict(item.finding.qualifiers),
-                evidence=tuple(item.finding.evidence),
-                acceptance_key=item.acceptance_key,
-            )
-            probe = AuditFindingRecord(
-                finding_id=item.finding_id,
-                fingerprint_version=report.fingerprint_version,
-                rule_id=item.finding.rule_id,
-                subject=item.finding.subject,
-                identity_qualifiers=item.identity_qualifiers,
-                occurrences=(occurrence,),
-                transitions=(
-                    Transition(
-                        from_status=None,
-                        to_status="proposed",
-                        actor=actor,
-                        at=observed_at,
-                        reason=f"detected by {item.producer_id}",
-                    ),
-                ),
-                status="proposed",
-            )
-            name = case_filename(probe)
-            # `store.has` is an `lstat` through the held descriptor: a DANGLING link is
-            # present under its own name, and treating it as absent would write
-            # straight through it. `store.read` below refuses it explicitly instead.
-            if not store.has(name):
-                store.write(probe)
-                written += 1
-                appended += 1
-                continue
-
-            try:
-                existing = store.read(name)
-            except CaseStorageError as exc:
-                raise IngestError(str(exc)) from exc
-
-            stored = {o.idempotency_key: o for o in existing.occurrences}
-            prior = stored.get(occurrence.idempotency_key)
-            if prior is not None:
-                if canonical_occurrence_content(
-                    prior
-                ) != canonical_occurrence_content(occurrence):
-                    raise IngestError(
-                        f"idempotency conflict on {item.finding_id}: key "
-                        f"{occurrence.idempotency_key} already exists with different "
-                        "observation content; identical keys must mean identical "
-                        "observations"
-                    )
-                skipped += 1
-                continue
-
-            # `with_occurrence`, not `model_copy(update=...)`: the latter bypasses every
-            # validator, so a malformed append would reach disk unchecked.
-            store.write(existing.with_occurrence(occurrence))
-            appended += 1
+        writes, written, appended, skipped = _classify_writes(
+            store,
+            probes,
+            actor,
+        )
+        for record in writes:
+            store.write(record)
 
     return IngestOutcome(
         records_written=written,
