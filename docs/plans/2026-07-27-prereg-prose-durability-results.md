@@ -258,4 +258,7 @@ touched.
 ## Filing
 
 `fb-2026-07-27-009` against `check:prereg.vehicle-undeclared`, filed before
-implementation. **Status: open — closed in Task 8, which rewrites this section.**
+implementation. **Status: addressed.** Resolution: "Shipped
+prereg.prose-path-nondurable (WARN, ungated): a frozen pre-registration naming
+a slash-containing repo-relative path in prose that git will not preserve is
+now reported."
