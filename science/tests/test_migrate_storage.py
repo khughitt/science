@@ -103,6 +103,15 @@ def _write_raw_legacy(tasks_dir: Path, text: str) -> Path:
     return source
 
 
+def _recursive_incomplete_markdown(kind: str, *, depth: int = 64) -> str:
+    value = "relative.md"
+    for _ in range(depth):
+        value = f"[inner]({value}"
+    if kind == "angle":
+        return f"[outer](<https://example.test{value}"
+    return f"[outer](https://example.test({value}"
+
+
 def _interrupt_before_first_postimage(
     tasks_dir: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -348,6 +357,45 @@ def test_apply_refuses_live_link_after_invalid_reference_tail_without_writing(
         migrate.apply_migration(tasks_dir, today=TODAY)
 
     assert first_destination not in str(exc_info.value)
+    assert source.read_bytes() == before
+    assert not (tasks_dir / "active").exists()
+    assert not (tasks_dir / "done").exists()
+    assert not (tasks_dir / JOURNAL).exists()
+
+
+@pytest.mark.parametrize(
+    "base_destination",
+    ["https://example.test", "/root.md", "#anchor"],
+)
+@pytest.mark.parametrize("kind", ["ordinary", "angle"])
+def test_apply_refuses_embedded_link_when_reference_tail_is_invalid_without_writing(
+    tmp_path: Path,
+    base_destination: str,
+    kind: str,
+) -> None:
+    migrate = _migrate_module()
+    tasks_dir = tmp_path / "tasks"
+    destination = f"{base_destination}[inner](relative.md)"
+    reference_destination = f"<{destination}>" if kind == "angle" else destination
+    source = _write_legacy(
+        tasks_dir,
+        [
+            _task(
+                "t001",
+                "Invalid whole reference",
+                description=f"[ref]: {reference_destination} invalid tail\n",
+            )
+        ],
+    )
+    before = source.read_bytes()
+
+    with pytest.raises(
+        migrate.MigrationRefused,
+        match=r"t001.*relative Markdown destination.*relative\.md",
+    ) as exc_info:
+        migrate.apply_migration(tasks_dir, today=TODAY)
+
+    assert destination not in str(exc_info.value)
     assert source.read_bytes() == before
     assert not (tasks_dir / "active").exists()
     assert not (tasks_dir / "done").exists()
@@ -670,6 +718,71 @@ def test_apply_treats_space_prefixed_angle_destination_as_relative_without_writi
         migrate.apply_migration(tasks_dir, today=TODAY)
 
     assert repr(destination) in str(exc_info.value)
+    assert source.read_bytes() == before
+    assert not (tasks_dir / "active").exists()
+    assert not (tasks_dir / "done").exists()
+    assert not (tasks_dir / JOURNAL).exists()
+
+
+@pytest.mark.parametrize("kind", ["ordinary", "angle"])
+def test_plan_refuses_destination_scan_budget_exhaustion_without_writing(
+    tmp_path: Path,
+    kind: str,
+) -> None:
+    migrate = _migrate_module()
+    tasks_dir = tmp_path / "tasks"
+    source = _write_legacy(
+        tasks_dir,
+        [
+            _task(
+                "t001",
+                "Recursive incomplete destinations",
+                description=_recursive_incomplete_markdown(kind),
+            )
+        ],
+    )
+    before = source.read_bytes()
+
+    plan = migrate.plan_migration(tasks_dir, today=TODAY)
+
+    assert plan.refusals == [
+        "task t001 Markdown destination scan exceeded its bounded-work limit; "
+        "simplify recursively nested or incomplete Markdown links before migration"
+    ]
+    assert source.read_bytes() == before
+    assert not (tasks_dir / "active").exists()
+    assert not (tasks_dir / "done").exists()
+    assert not (tasks_dir / JOURNAL).exists()
+
+
+@pytest.mark.parametrize("kind", ["ordinary", "angle"])
+def test_apply_refuses_destination_scan_budget_exhaustion_without_writing(
+    tmp_path: Path,
+    kind: str,
+) -> None:
+    migrate = _migrate_module()
+    tasks_dir = tmp_path / "tasks"
+    source = _write_legacy(
+        tasks_dir,
+        [
+            _task(
+                "t001",
+                "Recursive incomplete destinations",
+                description=_recursive_incomplete_markdown(kind),
+            )
+        ],
+    )
+    before = source.read_bytes()
+
+    with pytest.raises(
+        migrate.MigrationRefused,
+        match=(
+            r"task t001 Markdown destination scan exceeded its bounded-work limit; "
+            r"simplify recursively nested or incomplete Markdown links"
+        ),
+    ):
+        migrate.apply_migration(tasks_dir, today=TODAY)
+
     assert source.read_bytes() == before
     assert not (tasks_dir / "active").exists()
     assert not (tasks_dir / "done").exists()

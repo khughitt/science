@@ -18,6 +18,10 @@ from dataclasses import dataclass
 from datetime import date
 from pathlib import Path
 
+from science_tool.markdown_scan import (
+    iter_markdown_destinations,
+    MarkdownDestinationScanError,
+)
 from science_tool.tasks import (
     _ANY_TASK_HEADER_RE,
     _MIGRATION_JOURNAL,
@@ -39,7 +43,6 @@ from science_tool.tasks_ledger import (
     _read_destination,
     plan_ledger_appends,
 )
-from science_tool.markdown_scan import iter_markdown_destinations
 
 __all__ = [
     "MigrationEntry",
@@ -339,7 +342,15 @@ def plan_migration(tasks_dir: Path, *, today: date) -> MigrationPlan:
             refusals.append(f"task {task.id} has an invalid title: {exc}")
         else:
             valid_titles.add(index)
-        relative_destinations = _relative_markdown_destinations(task.description)
+        try:
+            relative_destinations = _relative_markdown_destinations(task.description)
+        except MarkdownDestinationScanError:
+            refusals.append(
+                f"task {task.id} Markdown destination scan exceeded its "
+                "bounded-work limit; simplify recursively nested or incomplete "
+                "Markdown links before migration"
+            )
+            continue
         if relative_destinations:
             rendered = ", ".join(repr(destination) for destination in relative_destinations)
             refusals.append(

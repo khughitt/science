@@ -39,12 +39,37 @@ _INLINE_CODE_RE = re.compile(r"(?P<ticks>`+)(?P<body>.+?)(?P=ticks)", re.DOTALL)
 _LIST_ITEM_RE = re.compile(r"^ {0,3}(?:[-*+]|\d{1,9}[.)])\s")
 _BLANK_RE = re.compile(r"^\s*$")
 _ESCAPABLE_PUNCTUATION = frozenset(string.punctuation)
+_DESTINATION_SCAN_WORK_FACTOR = 4
+
+
+class MarkdownDestinationScanError(RuntimeError):
+    """Destination parsing exceeded the documented per-span work bound."""
 
 
 @dataclass(frozen=True)
 class _ParsedDestination:
     destination: str | None
     suppress_until: int | None
+    examined_until: int
+
+
+@dataclass(frozen=True)
+class _ReferenceTail:
+    resume: int
+    valid: bool
+    examined_until: int
+
+
+@dataclass
+class _DestinationScanBudget:
+    remaining: int
+
+    def charge(self, start: int, stop: int) -> None:
+        self.remaining -= max(0, stop - start)
+        if self.remaining < 0:
+            raise MarkdownDestinationScanError(
+                "Markdown destination scan exceeded its bounded-work limit"
+            )
 
 
 @dataclass(frozen=True)
@@ -376,27 +401,37 @@ def _inline_close_after_destination(text: str, start: int, stop: int) -> int | N
     return cursor + 1 if cursor < stop and text[cursor] == ")" else None
 
 
-def _reference_resume_offset(
+def _reference_tail(
     text: str,
     destination_end: int,
     line_end: int,
-) -> int:
-    """Skip only whitespace or one valid attached title after a destination."""
+) -> _ReferenceTail:
+    """Validate the whole definition tail and return its safe resume boundary."""
     cursor = destination_end
     while cursor < line_end and text[cursor] in " \t":
         cursor += 1
     if cursor == line_end:
-        return line_end
+        return _ReferenceTail(line_end, True, line_end)
     if cursor == destination_end:
-        return destination_end
+        return _ReferenceTail(
+            destination_end,
+            False,
+            min(cursor + 1, line_end),
+        )
 
     title_end = _title_end(text, cursor, line_end)
     if title_end is None:
-        return destination_end
+        return _ReferenceTail(destination_end, False, line_end)
     cursor = title_end
     while cursor < line_end and text[cursor] in " \t":
         cursor += 1
-    return line_end if cursor == line_end else destination_end
+    if cursor == line_end:
+        return _ReferenceTail(line_end, True, line_end)
+    return _ReferenceTail(
+        destination_end,
+        False,
+        min(cursor + 1, line_end),
+    )
 
 
 def _inline_destination(
@@ -411,7 +446,7 @@ def _inline_destination(
     if cursor >= stop:
         return None
     if text[cursor] == ")":
-        return _ParsedDestination(None, cursor + 1)
+        return _ParsedDestination(None, cursor + 1, cursor + 1)
 
     if leading.consumed and text[cursor] in {'"', "'", "("}:
         title_end = _title_end(text, cursor, stop)
@@ -422,7 +457,11 @@ def _inline_destination(
                 and trailing.end < stop
                 and text[trailing.end] == ")"
             ):
-                return _ParsedDestination(None, trailing.end + 1)
+                return _ParsedDestination(
+                    None,
+                    trailing.end + 1,
+                    trailing.end + 1,
+                )
 
     if text[cursor] == "<":
         destination, after_destination, complete = _angle_destination(
@@ -433,8 +472,12 @@ def _inline_destination(
         if complete:
             close = _inline_close_after_destination(text, after_destination, stop)
             if close is not None:
-                return _ParsedDestination(destination or None, close)
-        return _ParsedDestination(destination or None, None)
+                return _ParsedDestination(destination or None, close, close)
+        return _ParsedDestination(
+            destination or None,
+            None,
+            stop if complete else after_destination,
+        )
 
     destination_start = cursor
     depth = 0
@@ -449,8 +492,12 @@ def _inline_destination(
                 return None
             if depth == 0:
                 close = _inline_close_after_destination(text, cursor, stop)
-                return _ParsedDestination(destination, close)
-            return _ParsedDestination(destination, None)
+                return _ParsedDestination(
+                    destination,
+                    close,
+                    close if close is not None else stop,
+                )
+            return _ParsedDestination(destination, None, cursor)
         if character == "(":
             depth += 1
             cursor += 1
@@ -459,9 +506,9 @@ def _inline_destination(
             if depth == 0:
                 destination = text[destination_start:cursor]
                 return (
-                    _ParsedDestination(destination, cursor + 1)
+                    _ParsedDestination(destination, cursor + 1, cursor + 1)
                     if destination
-                    else _ParsedDestination(None, cursor + 1)
+                    else _ParsedDestination(None, cursor + 1, cursor + 1)
                 )
             depth -= 1
             cursor += 1
@@ -469,7 +516,7 @@ def _inline_destination(
         cursor += 1
 
     destination = text[destination_start:cursor]
-    return _ParsedDestination(destination, None) if destination else None
+    return _ParsedDestination(destination, None, cursor) if destination else None
 
 
 def _reference_destination(
@@ -492,12 +539,18 @@ def _reference_destination(
             cursor,
             line_end,
         )
-        next_cursor = (
-            _reference_resume_offset(text, after_destination, line_end)
-            if complete
-            else None
+        if not complete:
+            return _ParsedDestination(
+                destination or None,
+                None,
+                after_destination,
+            )
+        tail = _reference_tail(text, after_destination, line_end)
+        return _ParsedDestination(
+            destination or None,
+            tail.resume if tail.valid else None,
+            tail.examined_until,
         )
-        return _ParsedDestination(destination or None, next_cursor)
 
     destination_start = cursor
     depth = 0
@@ -522,11 +575,13 @@ def _reference_destination(
     destination = text[destination_start:cursor]
     if not destination:
         return None
+    if depth != 0:
+        return _ParsedDestination(destination, None, cursor)
+    tail = _reference_tail(text, cursor, line_end)
     return _ParsedDestination(
         destination,
-        _reference_resume_offset(text, cursor, line_end)
-        if depth == 0
-        else None,
+        tail.resume if tail.valid else None,
+        tail.examined_until,
     )
 
 
@@ -559,12 +614,21 @@ def iter_markdown_destinations(text: str) -> Iterator[str]:
     Angle destination interiors are returned byte-for-byte; surrounding
     component whitespace remains outside the angle brackets. Continuation-line
     reference titles, autolinks, and raw HTML are outside this interface.
+
+    Cumulative destination ranges examined within one prose span are limited to
+    four times that span's length. Exceeding that bound raises
+    ``MarkdownDestinationScanError`` instead of silently stopping or yielding a
+    synthetic destination; callers that require a complete result must consume
+    the iterator under that exception boundary.
     """
     for span_start, span_stop in prose_spans(text):
         bracket_pairs, reference_openers = _bracket_pairs(
             text,
             span_start,
             span_stop,
+        )
+        budget = _DestinationScanBudget(
+            (span_stop - span_start) * _DESTINATION_SCAN_WORK_FACTOR
         )
         suppressed_ranges: dict[int, int] = {}
         cursor = span_start
@@ -593,6 +657,7 @@ def iter_markdown_destinations(text: str) -> Iterator[str]:
             if parsed is None:
                 cursor += 1
                 continue
+            budget.charge(after_label + 1, parsed.examined_until)
             if parsed.destination is not None:
                 yield parsed.destination
             if parsed.suppress_until is not None:

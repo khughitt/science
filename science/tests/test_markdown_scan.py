@@ -171,6 +171,25 @@ def test_invalid_reference_tail_does_not_hide_later_inline_destination(
 
 
 @pytest.mark.parametrize(
+    "base_destination",
+    ["https://example.test", "/root.md", "#anchor"],
+)
+@pytest.mark.parametrize("kind", ["ordinary", "angle"])
+def test_invalid_reference_tail_does_not_hide_link_inside_would_be_destination(
+    base_destination: str,
+    kind: str,
+) -> None:
+    destination = f"{base_destination}[inner](relative.md)"
+    reference_destination = f"<{destination}>" if kind == "angle" else destination
+    text = f"[ref]: {reference_destination} invalid tail\n"
+
+    assert list(markdown_scan.iter_markdown_destinations(text)) == [
+        destination,
+        "relative.md",
+    ]
+
+
+@pytest.mark.parametrize(
     "title",
     [
         '"title [literal](double-quoted.md)"',
@@ -498,6 +517,15 @@ class _CountingText(str):
         return super().__getitem__(key)  # type: ignore[call-overload]
 
 
+def _recursive_incomplete_destination(kind: str, *, depth: int = 64) -> str:
+    value = "relative.md"
+    for _ in range(depth):
+        value = f"[inner]({value}"
+    if kind == "angle":
+        return f"[outer](<https://example.test{value}"
+    return f"[outer](https://example.test({value}"
+
+
 def test_deeply_nested_non_link_brackets_have_linear_scanner_work() -> None:
     text = _CountingText("[" * 512 + "label" + "]" * 512)
 
@@ -531,6 +559,39 @@ def test_many_invalid_destination_tails_preserve_linear_work() -> None:
         f"relative-{index}.md" for index in range(64)
     ]
     assert text.indexed_reads <= 10 * len(text)
+
+
+@pytest.mark.parametrize("kind", ["ordinary", "angle"])
+def test_recursive_incomplete_destinations_raise_bounded_scan_error(
+    kind: str,
+) -> None:
+    text = _CountingText(_recursive_incomplete_destination(kind))
+
+    with pytest.raises(
+        markdown_scan.MarkdownDestinationScanError,
+        match="destination scan exceeded",
+    ):
+        list(markdown_scan.iter_markdown_destinations(text))
+
+    assert text.indexed_reads <= 12 * len(text)
+
+
+def test_destination_work_budget_allows_large_valid_ordinary_destination() -> None:
+    destination = "a" * 8192
+
+    assert list(
+        markdown_scan.iter_markdown_destinations(f"[outer]({destination})")
+    ) == [destination]
+
+
+def test_destination_work_budget_allows_many_sequential_valid_destinations() -> None:
+    destinations = [f"https://example.test/{index}" for index in range(256)]
+    text = " ".join(
+        f"[link]({destination})"
+        for destination in destinations
+    )
+
+    assert list(markdown_scan.iter_markdown_destinations(text)) == destinations
 
 
 @pytest.mark.parametrize("kind", ["inline", "reference"])
