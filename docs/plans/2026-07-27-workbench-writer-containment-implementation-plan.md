@@ -1,0 +1,971 @@
+# Workbench Writer Containment Implementation Plan
+
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+
+**Goal:** Stop the workbench lift path persisting entity files whose base-required fields are empty and whose frontmatter is a full-model skeleton dump.
+
+**Architecture:** Titles become deterministically generated at lift time instead of `""`. Both new-file writers emit an explicit per-kind allowlist instead of `model_dump(exclude_defaults=False)`. A separately named `validate_persisted_base_shape` runs on the final mapping of both the create and update paths, and an update targeting a pre-existing empty-title record is **rejected**.
+
+**Tech Stack:** Python 3.13, Pydantic v2, jsonschema, pytest, uv.
+
+Design: [`meta/doc/plans/2026-07-26-schema-first-closure-design.md`](../../meta/doc/plans/2026-07-26-schema-first-closure-design.md) §5, which is the umbrella over this plan and a second one. Read §5 before Task 1; every ruling here traces to it.
+
+This plan is **piece 1 of 3** and is independently mergeable. It does **not** backfill the 769 existing malformed records (piece 3) and does **not** close any kind's schema (piece 2).
+
+## Global Constraints
+
+- **Working directories.** CLI/tool work runs from `science/`; model work runs from `science/model/`. There is **no root `pyproject.toml`** — running `uv run` from the repo root is the most common orientation mistake here.
+- **Test commands.** `cd science && uv run --frozen pytest` and `cd science/model && uv run --frozen pytest`. Never run two suites concurrently in the same worktree — they race on shared test-output paths.
+- **The full `science/` suite takes ~2-3 min**, longer than the default 120s command timeout. Pass an explicit long timeout, or run a scoped selection.
+- **Lint/types**, from `science/`: `uv run ruff check` and `uv run pyright`. Pyright is configured once by `pyrightconfig.json` at the repo root and governs all three source trees.
+- **Conventional commits.** No AI-attribution trailer or footer on commits, PRs, or comments.
+- **Composition over inheritance; explicit over defensive; fail early instead of silent fallbacks. No "legacy"/"compatibility" layers. No `Unified` prefix.**
+- **Use `~/d/` or relative paths in docs and code**, never `/home/keith/` or `/mnt/ssd/Dropbox/`.
+- **The two derived title formats are rulings, not implementation choices.** They are frozen in Task 1 and mutation-tested in Task 5.
+- **`title` is create-only.** It must never enter a per-kind *update* key set; doing so would overwrite an author's replacement on the next apply.
+- **Do not weaken `EntityValidator.validate_as`.** It deliberately rejects base-only profiles. The new base-shape check is a *separate* named operation with a weaker, explicitly-stated contract.
+- **Do not backfill existing records.** Not in any step, not as a convenience.
+
+---
+
+## File Structure
+
+| File | Responsibility in this change |
+|---|---|
+| `science/src/science_tool/dag/workbench.py` | deterministic titles at lift; `min_length` on row inputs; stop emitting safe empties |
+| `science/src/science_tool/dag/entity_frontmatter.py` | **new** — the per-kind owned key sets and both renderers, shared by the two writers |
+| `science/src/science_tool/dag/workbench_apply.py` | create-path allowlist; base-shape validation on both paths |
+| `science/model/src/science_model/entity_schema/validator.py` | `validate_persisted_base_shape` — necessary, not sufficient |
+| `science/model/tests/test_persisted_base_shape.py` | the new operation's contract and its limits |
+| `science/tests/test_workbench_writer_containment.py` | the containment regressions and mutation proofs |
+
+---
+
+### Task 1: Generate deterministic titles at lift time
+
+**Files:**
+- Modify: `science/src/science_tool/dag/workbench.py:114-169` (`WorkbenchRow`), `:249-270` (`_proposition_for_row`), `:284-303` (`_evidence_line_for_stub`)
+- Test: `science/tests/test_workbench_writer_containment.py` (new)
+
+**Interfaces:**
+- Produces: `workbench._proposition_title(row) -> str` and `workbench._evidence_line_title(stub, target_id) -> str`. Task 5 mutation-tests both.
+- `WorkbenchRow.subject` and `.object` gain `min_length=1`.
+
+**Why `min_length` is needed.** An earlier design draft claimed the row model guarantees non-empty triples. It does not — verified, `WorkbenchRow(subject="", predicate="", object="", patch="p")` is **accepted**, because the fields are plain `str`. What actually protects the title today is the later `Predicate(row.predicate)` conversion, which raises `ValueError` on `""`. That leaves `subject` and `object` unguarded.
+
+- [ ] **Step 1: Write the failing tests**
+
+Create `science/tests/test_workbench_writer_containment.py`:
+
+```python
+"""Writer containment: what the workbench persists must satisfy the durable base contract.
+
+The boundary rule (design §5.1): empty fields may be acceptable while constructing an in-memory
+entity; they are NOT acceptable once persisted as authored source. `workbench.py` used to cite the
+entity-model tests' minimal-construction pattern as precedent for a production write.
+"""
+
+from __future__ import annotations
+
+import pytest
+from pydantic import ValidationError
+
+from science_tool.dag.workbench import (
+    EvidenceStub,
+    WorkbenchRow,
+    _evidence_line_for_stub,
+    _proposition_for_row,
+)
+
+
+def _row(**over) -> WorkbenchRow:
+    base = {"subject": "concept:a", "predicate": "affects", "object": "concept:b", "patch": "p"}
+    return WorkbenchRow(**{**base, **over})
+
+
+def test_proposition_title_is_the_triple() -> None:
+    # THE RULING (design §5.2). Deterministic generation, not a required input field: `WorkbenchRow`
+    # is extra="forbid" and carries no `title`, so requiring one would widen the authored-input
+    # contract. Changing this string is a behaviour change and must fail here.
+    prop = _proposition_for_row(_row())
+    assert prop.title == "concept:a affects concept:b"
+
+
+def test_evidence_line_title_uses_source_when_present() -> None:
+    stub = EvidenceStub(stance="supports", source="paper:Smith2025")
+    line = _evidence_line_for_stub(stub, target_id="proposition:0001-x", index=0)
+    assert line.title == "supports proposition:0001-x — paper:Smith2025"
+
+
+def test_evidence_line_title_falls_back_to_evidence_type() -> None:
+    stub = EvidenceStub(stance="disputes", evidence_type="literature_evidence")
+    line = _evidence_line_for_stub(stub, target_id="proposition:0001-x", index=0)
+    assert line.title == "disputes proposition:0001-x — literature_evidence"
+
+
+def test_evidence_line_title_without_qualifiers_is_still_non_empty() -> None:
+    # `target_id` is computed and always present, so the head alone satisfies minLength: 1 even
+    # when the stub carries no stance, source or evidence_type.
+    line = _evidence_line_for_stub(EvidenceStub(), target_id="proposition:0001-x", index=0)
+    assert line.title == "supports proposition:0001-x"
+
+
+def test_generated_titles_are_whitespace_collapsed() -> None:
+    prop = _proposition_for_row(_row(subject="concept:a  b", object="concept:c\td"))
+    assert prop.title == "concept:a b affects concept:c d"
+
+
+@pytest.mark.parametrize("field", ["subject", "object"])
+def test_empty_triple_terms_fail_at_PARSE_time(field: str) -> None:
+    # Not at title construction, and not at base validation. `predicate` is already protected by
+    # the `Predicate("")` conversion; subject and object were not protected by anything.
+    with pytest.raises(ValidationError):
+        _row(**{field: ""})
+```
+
+- [ ] **Step 2: Run the tests to verify they fail**
+
+Run: `cd science && uv run --frozen pytest tests/test_workbench_writer_containment.py -q`
+Expected: the four title tests FAIL with `assert '' == '...'` (title is `""` today); the two parametrized parse tests FAIL because `ValidationError` is not raised — an empty string is currently accepted.
+
+- [ ] **Step 3: Add `min_length` to the triple terms**
+
+In `science/src/science_tool/dag/workbench.py`, in `WorkbenchRow`:
+
+```python
+    # Core triple. `min_length=1`: these feed the derived proposition title, which must satisfy
+    # base 2.0's `minLength: 1`. `predicate` is separately protected by the `Predicate(...)`
+    # conversion; subject and object were protected by nothing, so an empty term reached the
+    # persisted title. Failing here names the row, not the rendered file.
+    subject: str = Field(min_length=1)
+    predicate: str
+    object: str = Field(min_length=1)
+```
+
+`Field` is already imported in this module.
+
+- [ ] **Step 4: Add the two title builders**
+
+Add above `_proposition_for_row`:
+
+```python
+def _collapse(text: str) -> str:
+    """Collapse all runs of whitespace to single spaces. Titles are durable authored source."""
+    return " ".join(text.split())
+
+
+def _proposition_title(row: WorkbenchRow) -> str:
+    """THE derived proposition title (design §5.2). Deterministic, not good prose.
+
+    Mechanical on purpose: it must be stable and reconstructible from the row. An author may
+    replace it afterwards, and the update path will preserve the replacement because `title` is
+    not in the per-kind workbench key set.
+    """
+    return _collapse(f"{row.subject} {row.predicate} {row.object}")
+
+
+def _evidence_line_title(stub: EvidenceStub, *, target_id: str) -> str:
+    """THE derived evidence-line title (design §5.2).
+
+    `target_id` is computed by the caller and always present, so the head alone is non-empty.
+    `stance` defaults to SUPPORTS at lift, matching the entity field's own default.
+    """
+    stance = stub.stance or "supports"
+    head = f"{stance} {target_id}"
+    tail = stub.source or (stub.evidence_type.value if stub.evidence_type else None)
+    return _collapse(f"{head} — {tail}" if tail else head)
+```
+
+- [ ] **Step 5: Use them at both lift sites**
+
+In `_proposition_for_row`, add to the `PropositionEntity(...)` call:
+
+```python
+        title=_proposition_title(row),
+```
+
+In `_evidence_line_for_stub`, replace the safe-empties block. Delete `title=""`, `project=""`, `ontology_terms=[]`, `related=[]`, `source_refs=[]`, `content_preview=""`, `file_path=""` and the comment above them, leaving:
+
+```python
+    return EvidenceLineEntity(
+        id=line_id,
+        kind="evidence-line",
+        type=EntityType.EVIDENCE_LINE,
+        title=_evidence_line_title(stub, target_id=target_id),
+        stance=EvidenceStance(stub.stance) if stub.stance is not None else EvidenceStance.SUPPORTS,
+        target=target_id,
+        source=stub.source,
+        evidence_type=stub.evidence_type,
+        quantitative_result=stub.quantitative_result,
+        belief_eligible=not is_staged_empirical,
+    )
+```
+
+The deleted fields all have model defaults, so construction still succeeds; they simply stop being *set*, which is what stops them being serialized once Task 3 lands. `content_preview`, `file_path` and `type` were already stripped as derived keys by `render_entity_text` and were never persisted anyway.
+
+- [ ] **Step 6: Run the tests to verify they pass**
+
+Run: `cd science && uv run --frozen pytest tests/test_workbench_writer_containment.py -q`
+Expected: PASS.
+
+- [ ] **Step 7: Run the tool suite**
+
+Run: `cd science && uv run --frozen pytest -q` (allow ~3 min).
+Expected: green, **except** existing workbench tests that assert on rendered frontmatter. Record every failure verbatim — Task 3 is where the rendered shape changes, so a failure here means a test asserted `title: ''`. Fix such a test by updating its expected title to the derived string; do **not** relax the assertion.
+
+- [ ] **Step 8: Commit**
+
+```bash
+git add science/src/science_tool/dag/workbench.py \
+        science/tests/test_workbench_writer_containment.py
+git commit -m "feat(workbench): derive entity titles at lift instead of persisting empties
+
+WorkbenchRow.subject/object gain min_length=1: they were plain str, so an empty
+term reached the persisted title, and only predicate was protected by its enum
+conversion. Titles are now deterministic from the triple and from
+stance/target/source, so the lift path no longer writes a base-required field
+as an empty string."
+```
+
+---
+
+### Task 2: `validate_persisted_base_shape`
+
+**Files:**
+- Modify: `science/model/src/science_model/entity_schema/validator.py`
+- Modify: `science/model/src/science_model/entity_schema/__init__.py` (export)
+- Test: `science/model/tests/test_persisted_base_shape.py` (new)
+
+**Interfaces:**
+- Produces: `EntityValidator.validate_persisted_base_shape(mapping: dict[str, Any]) -> None`, raising `EntityValidationError`. Task 4 calls it from both workbench write paths.
+
+**Why a separate operation.** `validate_as` deliberately refuses a base-only profile (`validator.py:51-55`) because passing the base is not proof that an entity satisfies its *kind* schema. Containment nevertheless lands before `proposition` and `evidence-line` have mixins, so it needs a check that is honest about being weaker rather than a loosened `validate_as`.
+
+- [ ] **Step 1: Write the failing test**
+
+Create `science/model/tests/test_persisted_base_shape.py`:
+
+```python
+"""`validate_persisted_base_shape` — necessary validation of durable source shape.
+
+NOT sufficient entity-schema validation. It exists because writer containment (design §5.5) must
+land before `proposition` and `evidence-line` have mixins, and a writer that persists source it
+never checked is the defect the whole programme is about.
+"""
+
+from __future__ import annotations
+
+import pytest
+
+from science_model.entity_schema import EntityValidationError, EntityValidator
+
+
+def _ok() -> dict:
+    return {
+        "id": "proposition:0001-x",
+        "kind": "proposition",
+        "title": "concept:a affects concept:b",
+        "created": "2026-07-27",
+        "updated": "2026-07-27",
+    }
+
+
+def test_a_well_formed_mapping_passes() -> None:
+    EntityValidator().validate_persisted_base_shape(_ok())
+
+
+def test_empty_title_is_refused() -> None:
+    # THE case this exists for: base 2.0 declares title {"type": "string", "minLength": 1} and
+    # requires it. 769 persisted records violate it today.
+    payload = _ok() | {"title": ""}
+    with pytest.raises(EntityValidationError, match="title"):
+        EntityValidator().validate_persisted_base_shape(payload)
+
+
+@pytest.mark.parametrize("missing", ["id", "kind", "title", "created", "updated"])
+def test_each_base_required_field_is_enforced(missing: str) -> None:
+    payload = _ok()
+    del payload[missing]
+    with pytest.raises(EntityValidationError, match=missing):
+        EntityValidator().validate_persisted_base_shape(payload)
+
+
+def test_unknown_keys_are_ALLOWED() -> None:
+    # The contract's stated limit. `unevaluatedProperties: false` is NOT applied: these kinds have
+    # no mixin, so closing here would reject every field the kind legitimately carries. Shadow-key
+    # refusal is piece 2's job, not this operation's.
+    EntityValidator().validate_persisted_base_shape(_ok() | {"stance": "supports"})
+
+
+def test_it_does_not_weaken_validate_as() -> None:
+    # `validate_as` must still refuse a base-only profile. If this ever passes, the separate
+    # operation has been folded back into the sufficient one and the distinction is lost.
+    from science_model.entity_schema.profile import ProfileComponent, ProfileString
+
+    base_only = ProfileString(
+        base=ProfileComponent(name="science-entity-base", version="2.0"), mixin=None, extensions=()
+    )
+    with pytest.raises(EntityValidationError, match="type mixin"):
+        EntityValidator().validate_as(_ok(), base_only)
+```
+
+- [ ] **Step 2: Run the test to verify it fails**
+
+Run: `cd science/model && uv run --frozen pytest tests/test_persisted_base_shape.py -q`
+Expected: collection succeeds; every test except `test_it_does_not_weaken_validate_as` fails with `AttributeError: 'EntityValidator' object has no attribute 'validate_persisted_base_shape'`. That last one passes already and is a guard, not a driver.
+
+- [ ] **Step 3: Implement the operation**
+
+In `science/model/src/science_model/entity_schema/validator.py`, add to `EntityValidator`:
+
+```python
+    def validate_persisted_base_shape(self, mapping: dict[str, Any]) -> None:
+        """Necessary validation of durable source shape, NOT sufficient entity-schema validation.
+
+        Checks the final frontmatter mapping — after titles and dates have been added — against
+        base 2.0 alone. It deliberately does NOT apply `unevaluatedProperties: false`: the kinds
+        this guards have no mixin yet, so closing here would reject every field they legitimately
+        carry. Refusing unknown keys is the closure programme's job.
+
+        Use it at a persistence boundary, where "this will become authored source" is true. Do not
+        use it as a substitute for `validate_as`, which is the sufficient check and which refuses
+        a base-only profile precisely so this distinction cannot blur.
+        """
+        schema = self._loader.load(ProfileComponent(name=BASE_NAME, version="2.0"))
+        validator = Draft202012Validator(
+            schema,
+            format_checker=Draft202012Validator.FORMAT_CHECKER,
+        )
+        errors = sorted(validator.iter_errors(mapping), key=lambda e: list(e.absolute_path))
+        if errors:
+            joined = "; ".join(_format_error(err) for err in errors)
+            raise EntityValidationError(
+                f"persisted entity does not satisfy the durable base shape: {joined}",
+                errors=errors,
+            )
+```
+
+Extend the existing profile import at the top of the file:
+
+```python
+from science_model.entity_schema.profile import (
+    BASE_NAME,
+    PROJECT_MIXIN_NAMES,
+    TYPE_MIXIN_NAMES,
+    ProfileComponent,
+    ProfileParseError,
+    ProfileString,
+    parse_profile,
+)
+```
+
+`validate_overlay` currently imports `ProfileComponent` inside the function body; leave that alone — narrowing it is unrelated churn.
+
+**On the `match=` strings.** The parametrized test matches the field name. A jsonschema `required` error message reads `'title' is a required property`, and `_format_error` prefixes the path, so the field name appears for both the missing-field and the `minLength` cases. Confirm this in Step 4 rather than assuming it; if a message does not contain the bare field name, fix the **test's** matcher to the observed text — do not reshape the error to satisfy a guess.
+
+- [ ] **Step 4: Run the test to verify it passes**
+
+Run: `cd science/model && uv run --frozen pytest tests/test_persisted_base_shape.py -q -v`
+Expected: PASS. Read the `-v` output and confirm each `match=` actually matched the intended error rather than an incidental substring.
+
+- [ ] **Step 5: Export it**
+
+In `science/model/src/science_model/entity_schema/__init__.py`, no new name is needed — `EntityValidator` and `EntityValidationError` are already exported and the operation is a method. Verify with:
+
+Run: `cd science/model && uv run --frozen python -c "from science_model.entity_schema import EntityValidator; print(EntityValidator.validate_persisted_base_shape.__doc__.splitlines()[0])"`
+Expected: prints the first docstring line.
+
+- [ ] **Step 6: Run the model suite**
+
+Run: `cd science/model && uv run --frozen pytest -q`
+Expected: green.
+
+- [ ] **Step 7: Commit**
+
+```bash
+git add science/model/src/science_model/entity_schema/validator.py \
+        science/model/tests/test_persisted_base_shape.py
+git commit -m "feat(entity-schema): add validate_persisted_base_shape
+
+A necessary check of durable source shape, explicitly not a sufficient
+entity-schema check. Writer containment must land before proposition and
+evidence-line have mixins, so it needs a base-only check that says what it is
+rather than a loosened validate_as -- which keeps refusing base-only profiles."
+```
+
+---
+
+### Task 3: Emit an allowlist on the create path
+
+**Files:**
+- Create: `science/src/science_tool/dag/entity_frontmatter.py`
+- Modify: `science/src/science_tool/dag/workbench_apply.py:34-87` (move the key sets out), `:234-286` (move the renderers out), `:289-304` (`_entity_edit` create branch)
+- Modify: `science/src/science_tool/dag/workbench.py:313-330` (`_write_entity_file`)
+- Test: `science/tests/test_workbench_writer_containment.py`
+
+**Interfaces:**
+- Consumes: the derived titles from Task 1.
+- Produces, all in `dag/entity_frontmatter.py`: `PROPOSITION_OWNED_KEYS`, `EVIDENCE_LINE_OWNED_KEYS`, `CREATE_ONLY_KEYS`, `owned_keys(kind)`, `generated_frontmatter(entity, *, created, updated)`, `render_from_frontmatter(frontmatter, body)`, `render_create(entity, *, body, created, updated)`.
+
+**There are TWO new-file writers, and both full-dump today.** `workbench_apply._entity_edit` renders with `render_entity_text` when the target does not exist (`:291`); `workbench._write_entity_file` (`:313`) delegates to `entities.write_entity_file`, which renders the same way, and is reached from `compile_workbench` at `:363` and `:374`. Both are live. Fixing only the first leaves the compile path emitting skeletons.
+
+**Why a new module rather than sharing directly.** `workbench_apply` already imports from `workbench` (`:18`), so putting the shared renderer in `workbench_apply` and calling it from `workbench` is a circular import; putting it in `workbench` puts frontmatter rendering inside the lift/compile module. A small third module both import is the only arrangement with one responsibility per file and no cycle — and it makes the duplication structurally impossible rather than merely absent today.
+
+- [ ] **Step 1: Write the failing test**
+
+Append to `science/tests/test_workbench_writer_containment.py`:
+
+```python
+_SKELETON_KEYS = frozenset({
+    "datapackage", "accessions", "parent_dataset", "license", "local_path", "xrefs", "siblings",
+    "consumed_by", "produced_by", "scope", "provisional", "pre_registered", "deprecated_ids",
+    "profile", "project",
+})
+
+
+def _created_frontmatter(tmp_path, entity) -> dict:
+    """Frontmatter of the file the CREATE path would write for `entity`."""
+    import yaml
+
+    from science_tool.dag.workbench_apply import _entity_edit
+
+    edit = _entity_edit(tmp_path, entity, as_of=date(2026, 7, 27))
+    return yaml.safe_load(edit.final_text.split("---\n", 2)[1])
+
+
+def test_created_proposition_carries_only_owned_keys(tmp_path) -> None:
+    from science_tool.dag.entity_frontmatter import CREATE_ONLY_KEYS, PROPOSITION_OWNED_KEYS
+
+    fm = _created_frontmatter(tmp_path, _proposition_for_row(_row()))
+    allowed = PROPOSITION_OWNED_KEYS | CREATE_ONLY_KEYS
+    assert set(fm) <= allowed, f"unowned keys persisted: {sorted(set(fm) - allowed)}"
+
+
+def test_created_evidence_line_carries_no_skeleton_fields(tmp_path) -> None:
+    # The 391-document uniform set from mm30. Each of these was written as an empty default.
+    line = _evidence_line_for_stub(
+        EvidenceStub(stance="supports", source="paper:S"), target_id="proposition:0001-x", index=0
+    )
+    fm = _created_frontmatter(tmp_path, line)
+    assert not (set(fm) & _SKELETON_KEYS), f"skeleton fields persisted: {sorted(set(fm) & _SKELETON_KEYS)}"
+
+
+def test_created_entity_has_a_non_empty_title(tmp_path) -> None:
+    fm = _created_frontmatter(tmp_path, _proposition_for_row(_row()))
+    assert fm["title"].strip()
+
+
+def test_title_is_CREATE_ONLY() -> None:
+    # Adding `title` to a per-kind update set would overwrite an author's replacement on the next
+    # apply and contradict design §5.2. The delta between create and update is exactly this.
+    from science_tool.dag.entity_frontmatter import (
+        CREATE_ONLY_KEYS,
+        EVIDENCE_LINE_OWNED_KEYS,
+        PROPOSITION_OWNED_KEYS,
+    )
+
+    assert CREATE_ONLY_KEYS == frozenset({"title", "status"})
+    for owned in (PROPOSITION_OWNED_KEYS, EVIDENCE_LINE_OWNED_KEYS):
+        assert "title" not in owned
+        assert "status" not in owned
+
+
+def test_update_preserves_an_authors_replacement_title(tmp_path) -> None:
+    # The reason title is create-only, proved behaviourally rather than by set arithmetic.
+    from science_tool.dag.workbench_apply import _entity_edit
+
+    entity = _proposition_for_row(_row())
+    first = _entity_edit(tmp_path, entity, as_of=date(2026, 7, 27))
+    first.path.parent.mkdir(parents=True, exist_ok=True)
+    first.path.write_text(first.final_text.replace(entity.title, "An author's real title"), encoding="utf-8")
+
+    second = _entity_edit(tmp_path, entity, as_of=date(2026, 7, 28))
+
+    assert "An author's real title" in second.final_text
+```
+
+Add `from datetime import date` to the module imports.
+
+- [ ] **Step 2: Run the tests to verify they fail**
+
+Run: `cd science && uv run --frozen pytest tests/test_workbench_writer_containment.py -q`
+Expected: `test_title_is_CREATE_ONLY` and the two create-path key tests fail with `ModuleNotFoundError: science_tool.dag.entity_frontmatter` — the module does not exist yet. `test_created_entity_has_a_non_empty_title` **passes already** (Task 1 supplied the title), and `test_update_preserves_an_authors_replacement_title` passes too: the update path is correct today and that test is a regression guarding it, not a driver.
+
+- [ ] **Step 3: Create the shared frontmatter module**
+
+Create `science/src/science_tool/dag/entity_frontmatter.py`. **Move** the four blocks named below out of `workbench_apply.py` rather than copying them — two copies of an owned-key set is the defect this module exists to prevent:
+
+```python
+"""Which frontmatter keys the workbench owns, and how it renders them.
+
+Shared by the two writers -- `workbench.compile_workbench` (create) and
+`workbench_apply._entity_edit` (create + update). It lives in its own module because
+`workbench_apply` imports `workbench`, so neither can host code the other needs.
+
+The owned sets are POSITIVE allowlists. `render_entity_text` full-dumps the model
+(`exclude_defaults=False`), which is what wrote `datapackage: ''` and `accessions: []` onto 391
+evidence lines; rendering from an allowlist is what stops it. Not `exclude_defaults=True`:
+`belief_eligible=False` is a deliberate staging decision and is indistinguishable from the
+default under that flag.
+"""
+
+from __future__ import annotations
+
+import yaml
+from science_model.entities import EvidenceLineEntity
+from science_model.propositions import PropositionEntity
+
+from science_tool.entities import render_entity_text
+
+WorkbenchEntity = PropositionEntity | EvidenceLineEntity
+
+
+class FrontmatterRenderError(ValueError):
+    """The entity's frontmatter could not be rendered."""
+
+
+RENDERER_DERIVED_KEYS: frozenset[str] = frozenset(
+    ("canonical_id", "content_preview", "content", "file_path", "type")
+)
+
+PROPOSITION_OWNED_KEYS: frozenset[str] = frozenset(
+    (
+        "id", "kind", "subject", "object", "predicate", "polarity",
+        "legacy_relation_label", "legacy_patch", "legacy_edge_id", "discusses",
+        "claim_layer", "identification_strength", "created", "updated",
+    )
+)
+
+EVIDENCE_LINE_OWNED_KEYS: frozenset[str] = frozenset(
+    (
+        "id", "kind", "stance", "target", "source", "evidence_type",
+        "quantitative_result", "belief_eligible", "created", "updated",
+    )
+)
+
+# Keys the workbench owns ONLY when it creates a file. `title` is derived at lift and is a
+# create-time default; on update the author's value wins, which is why it is absent from both
+# per-kind sets above. `status` is likewise seeded once and then owned by the author.
+CREATE_ONLY_KEYS: frozenset[str] = frozenset(("title", "status"))
+
+
+def owned_keys(kind: str) -> frozenset[str]:
+    if kind == "proposition":
+        return PROPOSITION_OWNED_KEYS
+    if kind == "evidence-line":
+        return EVIDENCE_LINE_OWNED_KEYS
+    raise FrontmatterRenderError(f"unsupported workbench entity kind: {kind}")
+
+
+def generated_frontmatter(entity: WorkbenchEntity, *, created: str, updated: str) -> dict[str, object]:
+    generated_text = render_entity_text(entity, body="", created=created, updated=updated)
+    try:
+        _prefix, frontmatter_text, _body = generated_text.split("---\n", 2)
+    except ValueError as exc:
+        raise FrontmatterRenderError(f"could not render entity frontmatter for {entity.id}") from exc
+    loaded = yaml.safe_load(frontmatter_text) or {}
+    if not isinstance(loaded, dict):
+        raise FrontmatterRenderError(f"could not render entity frontmatter for {entity.id}")
+    return loaded
+
+
+def render_from_frontmatter(frontmatter: dict[str, object], body: str) -> str:
+    # allow_unicode + wide: this is a read-modify-write, so an escaping/folding dumper rewrites
+    # authored fields the edit never touched. Same rule as `entities._dump_frontmatter`.
+    dumped = yaml.safe_dump(
+        frontmatter, sort_keys=False, allow_unicode=True, default_flow_style=False, width=10_000
+    )
+    return "---\n" + dumped + "---\n" + body
+
+
+def render_create(entity: WorkbenchEntity, *, body: str, created: str, updated: str) -> str:
+    """Render a NEW entity file from the owned allowlist plus the create-only keys."""
+    generated = generated_frontmatter(entity, created=created, updated=updated)
+    allowed = owned_keys(entity.kind) | CREATE_ONLY_KEYS
+    final = {key: value for key, value in generated.items() if key in allowed}
+    final["created"] = created
+    final["updated"] = updated
+    return render_from_frontmatter(final, body)
+```
+
+- [ ] **Step 4: Point `workbench_apply` at the module**
+
+In `workbench_apply.py`: delete `_RENDERER_DERIVED_FRONTMATTER_KEYS`, `_PROPOSITION_WORKBENCH_FRONTMATTER_KEYS`, `_EVIDENCE_LINE_WORKBENCH_FRONTMATTER_KEYS`, `_generated_frontmatter`, `_render_entity_text_from_frontmatter` and `_workbench_frontmatter_keys`, and import the replacements:
+
+```python
+from science_tool.dag.entity_frontmatter import (
+    CREATE_ONLY_KEYS,
+    RENDERER_DERIVED_KEYS,
+    WorkbenchEntity,
+    generated_frontmatter,
+    owned_keys,
+    render_create,
+    render_from_frontmatter,
+)
+```
+
+Delete the local `WorkbenchEntity = PropositionEntity | EvidenceLineEntity` alias (`:34`) in favour of the imported one, and update `_render_workbench_entity_update` to the new names:
+
+```python
+    final_frontmatter = {
+        key: value
+        for key, value in existing_frontmatter.items()
+        if key not in RENDERER_DERIVED_KEYS
+    }
+    generated = generated_frontmatter(entity, created=created, updated=updated)
+    for key in owned_keys(entity.kind):
+        if key in generated:
+            final_frontmatter[key] = generated[key]
+    final_frontmatter["created"] = created
+    final_frontmatter["updated"] = updated
+    return render_from_frontmatter(final_frontmatter, body)
+```
+
+`_workbench_frontmatter_keys` raised `WorkbenchApplyError` for an unsupported kind; `owned_keys` raises `FrontmatterRenderError`. If any test asserts the former, keep it passing by having `WorkbenchApplyError` subclass nothing new — instead catch and re-raise at the one call site that needs the old type. Check with `rg -n "unsupported workbench entity kind" science/tests` before deciding; if nothing asserts it, no shim is needed.
+
+Then `render_entity_text`, `PropositionEntity` and `EvidenceLineEntity` may become unused imports in `workbench_apply.py` — Ruff will say so. Remove whichever it flags.
+
+- [ ] **Step 5: Use the create renderer in `_entity_edit`**
+
+```python
+    if not path.exists():
+        body = workbench_entity_body(entity)
+        final_text = render_create(entity, body=body, created=today, updated=today)
+```
+
+- [ ] **Step 6: Fix the second create path**
+
+`workbench._write_entity_file` (`:313`) delegates to `entities.write_entity_file`, which full-dumps. Render through the shared module instead, keeping the existing `created`-preservation and atomic-write behaviour:
+
+```python
+def _write_entity_file(
+    entity: PropositionEntity | EvidenceLineEntity,
+    *,
+    project_root: Path,
+    as_of: date | None = None,
+) -> None:
+    """Workbench writer: owned-allowlist frontmatter, never a full model dump.
+
+    Deliberately NOT `entities.write_entity_file`, which renders the whole model and would
+    re-introduce the skeleton dump on the compile path even after `workbench_apply` was fixed.
+    Two create paths, one of them wrong, is exactly the shape this change removes.
+    """
+    from science_tool.dag.entity_frontmatter import render_create
+    from science_tool.entities import _atomic_replace_text, _parse_markdown_file, resolve_path_policy
+
+    today = (as_of or date.today()).isoformat()
+    assert entity.id is not None
+    local_part = entity.id.split(":", 1)[1]
+    dest = project_root / resolve_path_policy(entity.kind, project_root=project_root).root / f"{local_part}.md"
+
+    created = today
+    if dest.exists():
+        try:
+            existing_fm, _ = _parse_markdown_file(dest)
+            if existing_fm.get("created") is not None:
+                created = str(existing_fm["created"])
+        except (yaml.YAMLError, ValueError, OSError):
+            pass
+
+    text = render_create(entity, body=workbench_entity_body(entity), created=created, updated=today)
+    dest.parent.mkdir(parents=True, exist_ok=True)
+    _atomic_replace_text(dest, text)
+```
+
+**Verify the three imported helper names exist** in `science/src/science_tool/entities.py` before writing this — `_atomic_replace_text`, `_parse_markdown_file` and `resolve_path_policy` are all used by `write_entity_file` there, but confirm the exact spellings rather than trusting this snippet. If any is named differently, use the real name.
+
+Note this path renders `render_create` even when the file exists, because `compile_workbench` owns every key it writes for entities it just compiled. That is a deliberate difference from `_entity_edit`, whose update branch must preserve author-owned keys, and it is why the two are not merged.
+
+- [ ] **Step 7: Run the tests to verify they pass**
+
+Run: `cd science && uv run --frozen pytest tests/test_workbench_writer_containment.py -q`
+Expected: PASS.
+
+- [ ] **Step 8: Run the tool suite and fix rendered-shape expectations**
+
+Run: `cd science && uv run --frozen pytest -q` (allow ~3 min).
+Expected: failures confined to tests asserting on created-file frontmatter — `test_workbench_apply.py`, `test_workbench_compile.py`, `test_workbench_idempotent.py`, `test_workbench_compile_conformance.py` are the likely set. For each, the correct fix is to **drop the now-absent skeleton keys from the expectation** and add the derived title. A failure anywhere else is a real regression: stop and investigate rather than adjusting the test.
+
+- [ ] **Step 9: Commit**
+
+```bash
+git add science/src/science_tool/dag/entity_frontmatter.py \
+        science/src/science_tool/dag/workbench_apply.py \
+        science/src/science_tool/dag/workbench.py \
+        science/tests/test_workbench_writer_containment.py \
+        science/tests/test_workbench_apply.py \
+        science/tests/test_workbench_compile.py
+git commit -m "feat(workbench): render new entity files from an owned allowlist
+
+Both create paths full-dumped the model, which is what wrote datapackage: ''
+and accessions: [] onto 391 evidence lines. They now emit the per-kind owned
+set plus title and status, which are create-only so an author's replacement
+survives the next apply. Not exclude_defaults=True: belief_eligible=False is a
+deliberate staging decision that flag would discard.
+
+The owned sets and both renderers move to dag/entity_frontmatter.py: workbench_apply
+imports workbench, so neither could host code the other needs, and a second copy of
+an owned-key set is the defect this module prevents."
+```
+
+---
+
+### Task 4: Validate at the persistence boundary, and reject stale records
+
+**Files:**
+- Modify: `science/src/science_tool/dag/workbench_apply.py` (`_entity_edit`, both branches)
+- Test: `science/tests/test_workbench_writer_containment.py`
+
+**Interfaces:**
+- Consumes: `EntityValidator.validate_persisted_base_shape` from Task 2.
+
+**The ruling being implemented (design §5.4).** An update targeting one of the 769 pre-existing empty-title records **fails**, naming the record and the field. Not skipped, not backfilled. Skipping re-creates the defect being closed; backfilling turns an ordinary update into a silent migration of a record the author did not ask to touch, repairing the population piecemeal in an order set by whoever happened to edit what.
+
+**Accepted cost:** until piece 3 lands, a workbench apply touching any of the 432 evidence-line or 337 proposition records fails. That is a real regression for mm30 and an argument for sequencing piece 3 promptly, not for weakening the rule.
+
+- [ ] **Step 1: Write the failing tests**
+
+Append to `science/tests/test_workbench_writer_containment.py`:
+
+```python
+def test_update_of_an_empty_title_record_is_REJECTED(tmp_path) -> None:
+    # THE §5.4 ruling. Three implementations were plausible -- reject, skip validation, backfill --
+    # and only rejection is fail-early without silently migrating a record nobody asked to touch.
+    from science_tool.dag.workbench_apply import WorkbenchApplyError, _entity_edit
+
+    entity = _proposition_for_row(_row())
+    edit = _entity_edit(tmp_path, entity, as_of=date(2026, 7, 27))
+    edit.path.parent.mkdir(parents=True, exist_ok=True)
+    edit.path.write_text(
+        edit.final_text.replace(f"title: {entity.title}", "title: ''"), encoding="utf-8"
+    )
+
+    with pytest.raises(WorkbenchApplyError) as exc:
+        _entity_edit(tmp_path, entity, as_of=date(2026, 7, 28))
+
+    message = str(exc.value)
+    assert entity.id in message            # names the record
+    assert "title" in message              # names the field
+    assert edit.path.read_text(encoding="utf-8").count("title: ''") == 1  # and wrote nothing
+
+
+def test_the_create_path_is_validated_too(tmp_path, monkeypatch) -> None:
+    # Both paths, not just the risky-looking one. Neutralize the title derivation and the create
+    # path must refuse to plan a write rather than emit an empty-title file.
+    from science_tool.dag import workbench_apply
+
+    from science_tool.dag import workbench as wb
+
+    monkeypatch.setattr(wb, "_proposition_title", lambda row: "")
+    entity = _proposition_for_row(_row())
+    with pytest.raises(workbench_apply.WorkbenchApplyError, match="title"):
+        workbench_apply._entity_edit(tmp_path, entity, as_of=date(2026, 7, 27))
+```
+
+- [ ] **Step 2: Run the tests to verify they fail**
+
+Run: `cd science && uv run --frozen pytest tests/test_workbench_writer_containment.py -q`
+Expected: both FAIL — no validation runs at the boundary yet, so `_entity_edit` returns a plan instead of raising. If `test_the_create_path_is_validated_too` errors instead on the monkeypatch target, correct the target to wherever Task 1 placed `_proposition_title`; do not weaken the assertion.
+
+- [ ] **Step 3: Add the boundary check**
+
+In `workbench_apply.py`, add near `_render_entity_text_from_frontmatter`:
+
+```python
+def _certify_persisted(entity: WorkbenchEntity, text: str, *, path: Path) -> None:
+    """Refuse to plan a write whose result would not satisfy the durable base shape.
+
+    Runs on BOTH branches of `_entity_edit`. On create it catches a writer regression; on update
+    it catches a record that predates containment -- deliberately a REJECTION, not a backfill
+    (design §5.4): a workbench update must not silently migrate a record the author did not ask
+    to touch.
+    """
+    frontmatter = yaml.safe_load(text.split("---\n", 2)[1]) or {}
+    try:
+        EntityValidator().validate_persisted_base_shape(frontmatter)
+    except EntityValidationError as exc:
+        raise WorkbenchApplyError(
+            f"{path}: {entity.id} would not satisfy the durable base shape and was NOT written\n"
+            f"  {exc}\n"
+            f"  This record predates writer containment. Repair it directly; the workbench will "
+            f"not backfill it."
+        ) from exc
+```
+
+Import at the top of the module:
+
+```python
+from science_model.entity_schema import EntityValidationError, EntityValidator
+```
+
+- [ ] **Step 4: Call it on both branches**
+
+In `_entity_edit`, in the create branch immediately before constructing `PlannedWorkbenchEdit`:
+
+```python
+        _certify_persisted(entity, final_text, path=path)
+```
+
+and in the update branch, immediately before the final `return PlannedWorkbenchEdit(...)`:
+
+```python
+    _certify_persisted(entity, final_text, path=path)
+```
+
+Certify `final_text` — the text that would actually be written — not the intermediate `unchanged_timestamp_text`, which exists only to decide whether `updated` advances.
+
+- [ ] **Step 5: Run the tests to verify they pass**
+
+Run: `cd science && uv run --frozen pytest tests/test_workbench_writer_containment.py -q`
+Expected: PASS.
+
+- [ ] **Step 6: Run both suites, lint and types**
+
+Run: `cd science/model && uv run --frozen pytest -q`, then `cd science && uv run --frozen pytest -q` (allow ~3 min), then `cd science && uv run ruff check && uv run pyright`.
+Expected: all green. Any test that constructs a workbench entity fixture with an empty title now fails **correctly** — fix the fixture, not the boundary.
+
+- [ ] **Step 7: Commit**
+
+```bash
+git add science/src/science_tool/dag/workbench_apply.py \
+        science/tests/test_workbench_writer_containment.py
+git commit -m "feat(workbench): certify the persisted shape on both write paths
+
+An update targeting a pre-containment empty-title record is now rejected,
+naming the record and the field, rather than skipped or backfilled. Skipping
+would persist source the writer never checked; backfilling would turn an
+ordinary update into a silent migration of a record nobody asked to touch, and
+repair the population in whatever order people happened to edit it."
+```
+
+---
+
+### Task 5: Mutation proofs
+
+**Files:**
+- Test: `science/tests/test_workbench_writer_containment.py`
+
+Every guard in this plan must be shown to fail by a **named** test. A guard nobody has watched fail is a guard nobody has tested. Each mutation below is applied by hand, the expected failure observed, and then **reverted**.
+
+- [ ] **Step 1: Mutation A — the title format**
+
+Change `_proposition_title` to `f"{row.subject} {row.object}"` (drop the predicate).
+Run: `cd science && uv run --frozen pytest tests/test_workbench_writer_containment.py -q`
+Expected: `test_proposition_title_is_the_triple` FAILS. **Revert.**
+
+- [ ] **Step 2: Mutation B — the evidence-line qualifier**
+
+Change `_evidence_line_title` to ignore `stub.source`.
+Expected: `test_evidence_line_title_uses_source_when_present` FAILS. **Revert.**
+
+- [ ] **Step 3: Mutation C — the row guard**
+
+Remove `min_length=1` from `WorkbenchRow.subject`.
+Expected: `test_empty_triple_terms_fail_at_PARSE_time[subject]` FAILS. **Revert.**
+
+- [ ] **Step 4: Mutation D — title in the update set**
+
+Add `"title"` to `PROPOSITION_OWNED_KEYS` in `entity_frontmatter.py`.
+Expected: **two** failures — `test_title_is_CREATE_ONLY` (set arithmetic) and `test_update_preserves_an_authors_replacement_title` (behaviour). The second is the one that matters; the first alone would be an equality with no consequence attached. **Revert.**
+
+- [ ] **Step 5: Mutation E — the allowlist**
+
+In `entity_frontmatter.render_create`, return `render_from_frontmatter(generated, body)` (skip the allowlist filter).
+Expected: `test_created_evidence_line_carries_no_skeleton_fields` and `test_created_proposition_carries_only_owned_keys` FAIL, naming the leaked keys. **Revert.**
+
+- [ ] **Step 6: Mutation F — the rejection ruling**
+
+In `_certify_persisted`, replace the `raise` with `return` (the "skip validation" implementation §5.4 rejects).
+Expected: `test_update_of_an_empty_title_record_is_REJECTED` FAILS. **Revert.**
+
+- [ ] **Step 7: Mutation G — the backfill temptation**
+
+In `_certify_persisted`, before validating, set `frontmatter["title"] = frontmatter["title"] or entity.title` (the "backfill" implementation §5.4 rejects).
+Expected: `test_update_of_an_empty_title_record_is_REJECTED` FAILS — no exception raised. This mutation is listed separately from F because it is the *plausible* wrong answer: it looks helpful and it makes the suite green if the rejection test is missing. **Revert.**
+
+- [ ] **Step 8: Mutation H — the exclude_defaults trap**
+
+Make `render_create` filter-free and thread `exclude_defaults=True` into `generated_frontmatter`'s `render_entity_text` call. (`render_entity_text` takes no such parameter, so this mutation also requires a temporary local variant — that friction is itself informative.)
+Expected: the skeleton test passes but `test_created_proposition_carries_only_owned_keys` still fails, **and** a new failure appears wherever `belief_eligible=False` is asserted — demonstrating why the design chose an allowlist over the flag. If no existing test covers `belief_eligible=False` on a created evidence line, **add one** before reverting:
+
+```python
+def test_created_evidence_line_keeps_a_deliberate_false(tmp_path) -> None:
+    # `belief_eligible=False` is a staging DECISION (workbench.py: an empirical stub with no
+    # dataset_usage), not an unset default. exclude_defaults=True would silently drop it.
+    from science_model.propositions import EvidenceType
+
+    stub = EvidenceStub(stance="supports", evidence_type=EvidenceType.EMPIRICAL_DATA)
+    line = _evidence_line_for_stub(stub, target_id="proposition:0001-x", index=0)
+    assert line.belief_eligible is False
+    fm = _created_frontmatter(tmp_path, line)
+    assert fm["belief_eligible"] is False
+```
+
+**Revert** the mutation; **keep** the new test.
+
+- [ ] **Step 9: Verify the tree is clean and both suites green**
+
+Run: `git status --short` — expected: only `science/tests/test_workbench_writer_containment.py` modified (the test added in Step 8).
+Run: `cd science/model && uv run --frozen pytest -q`, then `cd science && uv run --frozen pytest -q` (allow ~3 min), then `cd science && uv run ruff check && uv run pyright`.
+Expected: all green.
+
+- [ ] **Step 10: Commit**
+
+```bash
+git add science/tests/test_workbench_writer_containment.py
+git commit -m "test(workbench): pin the deliberate-false case the allowlist protects
+
+Mutation H demonstrated that exclude_defaults=True would drop
+belief_eligible=False, which is a staging decision rather than an unset
+default. Every other mutation proof was observed and reverted."
+```
+
+---
+
+## Verification
+
+After Task 5, from a clean tree on the branch:
+
+```bash
+cd science/model && uv run --frozen pytest -q
+cd science && uv run --frozen pytest -q      # ~3 min; run AFTER the model suite, never concurrently
+cd science && uv run ruff check && uv run pyright
+```
+
+Then confirm the end state — no create path can emit a skeleton:
+
+```bash
+cd science && uv run --frozen python - <<'PY'
+from datetime import date
+from pathlib import Path
+from tempfile import TemporaryDirectory
+import yaml
+from science_tool.dag.workbench import EvidenceStub, WorkbenchRow, _evidence_line_for_stub, _proposition_for_row
+from science_tool.dag.entity_frontmatter import (
+    CREATE_ONLY_KEYS, EVIDENCE_LINE_OWNED_KEYS, PROPOSITION_OWNED_KEYS,
+)
+from science_tool.dag.workbench_apply import _entity_edit
+row = WorkbenchRow(subject="concept:a", predicate="affects", object="concept:b", patch="p")
+cases = [
+    (_proposition_for_row(row), PROPOSITION_OWNED_KEYS),
+    (_evidence_line_for_stub(EvidenceStub(stance="supports"), target_id="proposition:0001-x", index=0),
+     EVIDENCE_LINE_OWNED_KEYS),
+]
+with TemporaryDirectory() as d:
+    for entity, owned in cases:
+        fm = yaml.safe_load(_entity_edit(Path(d), entity, as_of=date(2026, 7, 27))
+                            .final_text.split("---\n", 2)[1])
+        extra = set(fm) - (owned | CREATE_ONLY_KEYS)
+        print(f"{entity.kind:14} title={fm['title']!r:46} unowned={sorted(extra)}")
+PY
+```
+
+Expected: both lines show a non-empty title and `unowned=[]`.
+
+## Out of scope
+
+- **Backfilling the 769 existing records.** Piece 3. This plan makes them *fail loudly* on update; it repairs none of them.
+- **Closing any kind's schema.** Piece 2. Nothing here touches `PROJECT_MIXIN_NAMES`, the generation matrix, or any mixin.
+- **`entities.render_entity_text` itself.** It is the general typed-entity renderer with callers far beyond the workbench. This plan routes the workbench's two create paths around it rather than changing its contract for everyone.
+- **The `legacy_relation_label` / `legacy_patch` / `legacy_edge_id` triple.** They are in `PROPOSITION_OWNED_KEYS` and stay there; deleting them is piece 3's corpus migration.
+- **`entities.write_entity_file`'s own full dump.** Task 3 routes the workbench around it; other callers are untouched and out of scope.
