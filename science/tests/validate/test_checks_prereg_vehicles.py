@@ -328,3 +328,32 @@ def test_every_declared_vehicle_is_reported(project: Path) -> None:
     assert _rules(results) == ["prereg.vehicle-gitignored", "prereg.vehicle-gitignored"]
     assert "build/a.json" in results[0].message
     assert "build/b.json" in results[1].message
+
+
+def test_git_query_maps_zero_to_true(project: Path) -> None:
+    from science_tool.validate.checks.prereg_vehicles import _git_query
+
+    project.joinpath(".gitignore").write_text("build/\n", encoding="utf-8")
+    _write_vehicle(project, "build/a.json")
+
+    assert _git_query(project, "check-ignore", "-q", "--", "build/a.json") is True
+
+
+def test_git_query_maps_one_to_false(project: Path) -> None:
+    from science_tool.validate.checks.prereg_vehicles import _git_query
+
+    _write_vehicle(project, "inputs/a.json")
+
+    assert _git_query(project, "check-ignore", "-q", "--", "inputs/a.json") is False
+
+
+def test_git_query_maps_any_other_exit_to_none(project: Path) -> None:
+    """A git failure is not a negative answer.
+
+    `_git_ok` returns False for exit 128, which would let an out-of-worktree
+    path or a broken repository be reported as non-durable.
+    """
+    from science_tool.validate.checks.prereg_vehicles import _git_query
+
+    assert _git_query(project, "check-ignore", "-q", "--", "../outside") is None
+    assert _git_query(project, "ls-files", "--error-unmatch", "--", "../outside") is None

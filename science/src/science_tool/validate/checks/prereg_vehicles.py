@@ -48,6 +48,24 @@ def _git_ok(root: Path, *args: str) -> bool:
     return completed.returncode == 0
 
 
+def _git_query(root: Path, *args: str) -> bool | None:
+    """git's answer, or None when git did not answer at all.
+
+    `_git_ok` above collapses every non-zero exit into False, which is right
+    for its two callers because they act only on a positive. It is WRONG for a
+    rule whose finding asserts that git demonstrably will not preserve a path:
+    `check-ignore` and `ls-files --error-unmatch` both exit 128 on failure (an
+    out-of-worktree path, a broken repository), and reading that as "no" would
+    manufacture findings out of errors.
+    """
+    completed = subprocess.run(["git", *args], cwd=root, capture_output=True)
+    if completed.returncode == 0:
+        return True
+    if completed.returncode == 1:
+        return False
+    return None
+
+
 def _is_ignored(root: Path, relative: str) -> bool:
     return _git_ok(root, "check-ignore", "-q", "--", relative)
 
