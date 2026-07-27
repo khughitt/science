@@ -830,12 +830,12 @@ def test_plan_analysis_is_integrated_with_neighbor_commands() -> None:
             assert expected in text
 
 
-def test_next_steps_scans_done_files_for_each_month_in_recent_window() -> None:
-    text = _read("commands/next-steps.md")
+def test_next_steps_queries_done_ledgers_for_each_month_in_recent_window() -> None:
+    text = _norm(_read("commands/next-steps.md"))
 
     assert "derive the recent-progress window first" in text
-    assert "scan every `tasks/done/YYYY-MM.md` file whose month intersects that window" in text
-    assert "Do not stop at the current month file" in text
+    assert "this scans every `tasks/done/YYYY-MM.md` ledger whose month intersects that window" in text
+    assert "Do not stop at the current month or assume" in text
     assert "treat those rows as recent progress, not status drift" in text
 
 
@@ -1347,7 +1347,7 @@ def test_next_steps_declares_recommendation_not_task_queue_boundary() -> None:
         "Convert recommendations into `science tasks add ...` only after user acceptance."
         in normalized
     )
-    assert "Accepted work belongs in `science tasks ...` and `tasks/active.md`." in normalized
+    assert "Accepted work belongs in `science tasks ...`; query it with `science tasks list`." in normalized
 
 
 def test_sketch_model_uses_source_first_inquiry_authoring() -> None:

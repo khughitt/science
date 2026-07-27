@@ -24,7 +24,7 @@ front, and use it for every read, scan, and write below.
 **Boundary with tasks.** A next-steps run produces recommendations, not task
 records. Do not treat `<meta-home>` files as the durable task queue. Convert
 recommendations into `science tasks add ...` only after user acceptance.
-Accepted work belongs in `science tasks ...` and `tasks/active.md`.
+Accepted work belongs in `science tasks ...`; query it with `science tasks list`.
 
 Additionally, gather (skip any source that doesn't exist):
 1. Run `science tasks list --status active` (or `--all`) for the active task queue.
@@ -122,12 +122,6 @@ none exists and the task is about running, validating, or pre-registering a data
 analysis, add a recommended next action to run `/science:plan-analysis`. Check
 `entities/plans/*-analysis-plan.md` before recommending a new one.
 
-**Archive lag.** Run `science health --format json` and inspect `archive_lag`. When `archive_lag.done_in_active` or `archive_lag.retired_in_active` is non-zero, add a Recommended Next Action:
-
-> Preview with `science tasks archive`, then run `science tasks archive --apply` to move the N done/retired entries from `tasks/active.md` to `tasks/done/YYYY-MM.md`.
-
-If `archive_lag.missing_completed` is non-zero, call those entries out separately so the user backfills `completed:` first — otherwise they route to the current month rather than the month they were actually closed.
-
 ### Managed artifact updates
 
 If `science health` shows any managed artifact with status `stale`, surface as a next-step:
@@ -157,7 +151,19 @@ For each match, surface the task in a short `### Status Drift` table:
 |---|---|---|---|
 | t075 | proposed | results/2026-04-09-t075/datapackage.json | mark `done` and write interpretation |
 
-**Also check recent completions, not just the active queue.** Work shipped in done files lives in `tasks/done/<YYYY-MM>.md`, not `active.md`; derive the recent-progress window first: use the date of the prior `next-steps` analysis when one exists, otherwise use the explicit lookback window for this run. Then run `science tasks list --status done --since <window-start>` — under the hood this will scan every `tasks/done/YYYY-MM.md` file whose month intersects that window, including prior-month files when the window crosses a month boundary, so you don't need to open the archive files yourself. Do not stop at the current month file or assume the prior month is irrelevant just because it is large. For each returned row whose `completed:` date falls inside the window, treat those rows as recent progress, not status drift. Without this, recently-shipped work is invisible: a run can wrongly conclude "no movement" or a "stalled program" when tasks in fact completed during the window.
+**Also check recent completions, not just the active queue.** Completed work is
+no longer part of the open-task set; derive the recent-progress window first:
+use the date of the prior `next-steps` analysis when one exists, otherwise use
+the explicit lookback window for this run. Then run `science tasks list --status
+done --since <window-start>` — under the hood this scans every
+`tasks/done/YYYY-MM.md` ledger whose month intersects that window, including
+prior-month ledgers when the window crosses a month boundary, so you don't need
+to open the ledger files yourself. Do not stop at the current month or assume
+the prior month is irrelevant just because it is large. For each returned row
+whose `completed:` date falls inside the window, treat those rows as recent
+progress, not status drift. Without this, recently-shipped work is invisible: a
+run can wrongly conclude "no movement" or a "stalled program" when tasks in fact
+completed during the window.
 
 **Cross-check the prior `next-steps` doc.** Read the previous `<meta-home>/*next-steps-*.md` and check each recommendation it made against subsequent commits and recently-closed tasks (`science tasks list --status done --since <window-start>`). A recommendation that has since shipped is a "recommendation shipped" win to record — the cross-check detects positive follow-through, not only stalls.
 

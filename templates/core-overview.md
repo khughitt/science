@@ -50,8 +50,8 @@ document. -->
 - what would count as progress
 - what would count as a stop / pivot signal
 
-These should match the active.md priorities. If they don't, one of them is
-out of date. -->
+These should match the priorities returned by `science tasks list`. If they
+don't, one of them is out of date. -->
 
 ## Domain context an outsider would miss
 
@@ -69,7 +69,7 @@ catch yourself explaining the same thing twice. -->
 ## Pointers
 
 - Research question: `specs/research-question.md`
-- Active tasks: `tasks/active.md`
+- Active tasks: `science tasks list` (`tasks/active/`, one file per open task)
 - Recent next-steps: `entities/meta/next-steps-*.md` (most recent)
 - Decisions log: `core/decisions.md`
 - Knowledge graph: `knowledge/graph.trig`

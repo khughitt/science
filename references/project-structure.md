@@ -21,8 +21,13 @@ This document describes the standard directory layouts for Science-managed proje
 
 Lightweight task management.
 
-- `active.md` — current task queue (structured entries with ID, type, priority, status, links)
-- `done/YYYY-MM.md` — completed tasks archived monthly
+- `tasks/active/` — one YAML-frontmatter file per open task
+- `tasks/done/YYYY-MM.md` — monthly ledgers for completed and retired tasks
+
+Use `science tasks list` and `science tasks show` to query the store. The
+per-task active layout keeps each working record small and complete; `done` and
+`retire` move terminal records straight to the monthly ledger, so there is no
+separate archive sweep.
 
 ### `specs/` — Research Scope
 

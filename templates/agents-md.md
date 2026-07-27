@@ -66,9 +66,10 @@ uv run --with-editable ~/d/science/science <command>
 
 ## Task execution
 
-- Tasks live in `tasks/active.md`, managed by `science tasks` (or
-  the `/science:tasks` slash command). Completed/retired tasks archive
-  to `tasks/done/YYYY-MM.md`.
+- Open work lives as one YAML-frontmatter file per open task under
+  `tasks/active/`, managed by `science tasks` (or the `/science:tasks` slash
+  command). `done` and `retire` move terminal records directly to
+  `tasks/done/YYYY-MM.md`; no separate archive step is needed.
 - **Do not use Claude Code's built-in `TaskCreate` / `TaskUpdate` /
   `TaskList` tools.** They create a parallel task store outside the
   repo, invisible to other agents and to fresh clones, and they fight
@@ -129,5 +130,5 @@ imperative rule. The "why" stays in core/decisions.md. -->
 
 - Decisions: `core/decisions.md`
 - Project overview: `core/overview.md`
-- Active tasks: `tasks/active.md`
+- Active tasks: `science tasks list` (`tasks/active/`, one file per open task)
 - Hypotheses: `entities/hypotheses/`

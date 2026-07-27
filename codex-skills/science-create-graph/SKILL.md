@@ -164,7 +164,8 @@ Build the graph from these upstream sources:
 
 - Typed markdown entities under `entities/` with YAML frontmatter (`id`,
   `kind`, `title`, `related`, `source_refs`, etc.)
-- Task files in `tasks/active.md` and `tasks/done/*.md`
+- Task records: one YAML-frontmatter file per open task under `tasks/active/`,
+  plus monthly done ledgers under `tasks/done/*.md`
 - Structured local extensions in:
   - `knowledge/sources/<local-profile>/external_refs.yaml`
   - `knowledge/sources/<local-profile>/relations.yaml`

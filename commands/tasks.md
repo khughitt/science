@@ -4,12 +4,14 @@ description: Manage research and development tasks — add, complete, defer, ret
 
 # Tasks
 
-Manage the project task queue in `tasks/active.md`.
+Manage the project task queue, stored as one YAML-frontmatter file per open task
+under `tasks/active/`.
 `$ARGUMENTS` specifies the action (add, done, defer, retire, list, show, summary) and any parameters.
 
 > **Do not use Claude Code's built-in `TaskCreate` / `TaskUpdate` /
 > `TaskList` tools** for science projects. The science task system is
-> the authoritative store: it lives in the repo (`tasks/active.md`),
+> the authoritative store: it lives in the repo (`tasks/active/` for open work,
+> `tasks/done/YYYY-MM.md` for terminal records),
 > survives clones, and integrates with the knowledge graph via
 > `--related`. The Claude-Code task tools maintain a parallel,
 > session-scoped store that is invisible to other agents and creates
@@ -28,7 +30,7 @@ Task IDs are flat local identifiers in the form `tNNN`: `t001`, `t016`, `t335`, 
 
 Bare `t123` always means a local task. `task:t123` is the canonical local task reference. Cross-project task and entity refs use namespace-first form: `natural-systems:task:t335`, `multiple-myeloma:hypothesis:h01`, `cbioportal:question:q006-ch-priority-gene-completeness`.
 
-`tasks/archive.md` is for historical task aliases only. Use the same `## [tNNN] Title` heading shape when old documents still cite a task ID that no longer belongs in `tasks/active.md` or `tasks/done/YYYY-MM.md`; include brief metadata such as `status: archived` and `replacement: task:tNNN` when there is a successor. Do not use it for current operational task history.
+`tasks/archive.md` is for historical task aliases only. Use the same `## [tNNN] Title` heading shape when old documents still cite a task ID that no longer belongs in `tasks/active/` or `tasks/done/YYYY-MM.md`; include brief metadata such as `status: archived` and `replacement: task:tNNN` when there is a successor. Do not use it for current operational task history.
 
 ## Actions
 
@@ -107,7 +109,7 @@ Show per-blocker readiness for a task. `--format json` for scripting.
 
 ### "fix-blockers"
 
-Interactive sweep to retype legacy untyped blockers in `tasks/active.md`.
+Interactive sweep to retype legacy untyped blockers across the active task store.
 `--dry-run` lists what would change without modifying files.
 
 ### "unblock <task_id>"

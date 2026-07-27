@@ -80,7 +80,7 @@ Use `.ai/templates/discussion.md` first, then `${CLAUDE_PLUGIN_ROOT}/templates/d
 2. **Existing question updates:** if the discussion changes the framing of an existing question, edit its body in place; for metadata, use `science entity edit <ref>` / `science entity edit <ref>`.
 3. Offer to create follow-up tasks via `science tasks add` with appropriate priority and related entities.
 4. **Hypothesis wording changes:** for metadata (status, related), use `science entity edit <ref> --status ...`. For body changes, edit the file in place.
-5. **Task reframing check:** Review whether the discussion reframes the meaning of any existing tasks. If a task's purpose or scope has changed, update its description in `tasks/active.md` to reflect the new framing.
+5. **Task reframing check:** Review whether the discussion reframes the meaning of any existing tasks. If a task's purpose or scope has changed, inspect it with `science tasks show <task-id>` and update it with `science tasks edit <task-id> --description "<new framing>"`.
 6. Commit: `git add -A && git commit -m "doc: discuss <slug> and update priorities"`
 7. **Actionable recommendations:** If the discussion produced a concrete, low-cost design change or implementation recommendation (something testable in under an hour), it should be flagged with `[actionable now]` in the Prioritized Follow-Ups table. Offer to implement it immediately rather than creating a task for later. This prevents useful small changes from being buried in discussion documents.
 

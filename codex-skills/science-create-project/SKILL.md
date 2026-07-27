@@ -200,7 +200,7 @@ Always create:
 │   ├── meta/
 │   └── plans/
 ├── tasks/
-│   └── active.md
+│   └── active/
 ├── specs/
 └── knowledge/
 ```
@@ -456,13 +456,13 @@ Do not put task-queue bookkeeping in `README.md`.
 
 For `software` projects, use `README.md` for high-level context and `entities/plans/` or `specs/` for more detailed planning when needed.
 
-### `tasks/active.md`
+### `tasks/active/`
 
-Create:
-
-```md
-<!-- Task queue. Use science-tasks to manage. -->
-```
+Create the directory, but do not create an aggregate queue file. `science tasks
+add` writes one YAML-frontmatter file per open task under `tasks/active/`;
+`science tasks done` and `science tasks retire` move terminal records directly
+to monthly `tasks/done/YYYY-MM.md` ledgers. Use `science tasks list` and
+`science tasks show` to inspect the queue.
 
 ### `specs/`
 

@@ -16,7 +16,7 @@ agents and humans to find.
 | `overlays/` | Project-local **overlays** — files carrying `overlay_of:` that borrow and extend a commons-canonical entity. One subdirectory per type (`overlays/datasets/`, `overlays/papers/`, `overlays/topics/`, `overlays/themes/`). |
 | `doc/` | Prose **only**: research notes, background, interpretations, reports, discussions, figures. No typed entity owners live here. |
 | `specs/` | Structured project specifications such as research questions, scope boundaries, requirements, and product/research planning notes. Not an entity owner root. |
-| `tasks/` | Active, blocked, deferred, retired, and completed work. |
+| `tasks/` | Operational work: one YAML-frontmatter file per open task under `tasks/active/`, with terminal records in monthly `tasks/done/YYYY-MM.md` ledgers. |
 | `results/` | Workflow-run records and data-package descriptors. A serialize **source root**, bundled into reproducibility archives. |
 | `runs/` | Supervisor-written **autonomous-run records**, one flat `<date>-<agent>-<short-id>.md` per finished unattended run. Not an entity root: run records materialize only into `graph/provenance` and never become belief bearers. Distinct from `results/`, which holds fingerprinted *workflow*-run records (compute reproducibility, not agent authority). |
 | `data/` | Gitignored **payload** bytes (datasets, large artifacts). The data-boundary payload root — not committed source. |
