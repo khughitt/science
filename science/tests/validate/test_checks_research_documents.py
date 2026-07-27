@@ -80,11 +80,11 @@ def test_project_readme_exists_info_and_legacy_section_warnings(tmp_path: Path) 
         (Severity.INFO, "README.md exists"),
         (
             Severity.WARN,
-            "README.md contains legacy task-queue section '## Current Priorities' — migrate tasks to tasks/active.md via /science:tasks",
+            "README.md contains legacy task-queue section '## Current Priorities' — migrate tasks to tasks/active/ via /science:tasks",
         ),
         (
             Severity.WARN,
-            "README.md contains legacy task-queue section '## Next Review Trigger' — migrate tasks to tasks/active.md via /science:tasks",
+            "README.md contains legacy task-queue section '## Next Review Trigger' — migrate tasks to tasks/active/ via /science:tasks",
         ),
     ]
 

@@ -667,12 +667,12 @@ def test_sync_mentions_scope_and_collision_warnings() -> None:
     assert "primary_external_id collision" in text
 
 
-def test_next_steps_skill_scans_done_files_for_each_month_in_recent_window() -> None:
-    text = _read_skill("science-next-steps")
+def test_next_steps_skill_queries_done_ledgers_for_each_month_in_recent_window() -> None:
+    text = _norm(_read_skill("science-next-steps"))
 
     assert "derive the recent-progress window first" in text
-    assert "scan every `tasks/done/YYYY-MM.md` file whose month intersects that window" in text
-    assert "Do not stop at the current month file" in text
+    assert "this scans every `tasks/done/YYYY-MM.md` ledger whose month intersects that window" in text
+    assert "Do not stop at the current month or assume" in text
     assert "treat those rows as recent progress, not status drift" in text
 
 

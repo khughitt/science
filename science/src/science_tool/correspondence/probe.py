@@ -82,9 +82,8 @@ def resolve_tasks(worktree: Path, task_ids: list[str]) -> list[tuple[str, TaskSt
     """Resolve every cited task id against the task ledgers, reading them once.
 
     The status field is the record, not the filename and not which file the
-    block sits in: `tasks_archive` routes terminal entries into
-    `tasks/done/YYYY-MM.md` month rollups, so a per-file glob resolves nothing
-    in any project on the shipped archive format (fb-2026-07-26-013).
+    block sits in. Terminal entries live in ``tasks/done/YYYY-MM.md`` rollups,
+    while open tasks live in YAML-frontmatter files under ``tasks/active/``.
     """
     index = task_status_index(worktree / "tasks")
     return [(task_id, _state_for(index.get(task_id))) for task_id in task_ids]

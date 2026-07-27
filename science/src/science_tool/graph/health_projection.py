@@ -44,7 +44,6 @@ COUNTS_AS_ISSUE_SECTIONS = frozenset({"managed_artifacts"})
 UNFILTERED_SECTIONS = frozenset(
     {
         "agent_context",
-        "archive_lag",
         "identity_policy",
         "invalid_entity_aspects",
         "layered_claims",
@@ -65,7 +64,7 @@ UNFILTERED_SECTIONS = frozenset(
 NESTED_FINDING_SECTIONS = frozenset({"cross_paper_evidence", "prose_epistemics"})
 
 # Registered non-row mappings that pass through projection after a shape check.
-MAPPING_SECTIONS = frozenset({"archive_lag", "layered_claims"})
+MAPPING_SECTIONS = frozenset({"layered_claims"})
 
 # Non-list sections that pass through untouched. This is an ALLOW-LIST, not a type test:
 # any other non-list key is refused. `coverage_gaps` is deliberately absent -- it is a local
@@ -332,11 +331,6 @@ def _validate_coverage_metric(
 
 def _validate_mapping_section(section: str, value: Mapping[str, Any]) -> None:
     path = f"health report section {section}"
-    if section == "archive_lag":
-        for key in ("done_in_active", "retired_in_active", "missing_completed"):
-            _validate_integer_field(value, key, path)
-        return
-
     for key in (
         "proposition_claim_layer_coverage",
         "causal_leaning_identification_coverage",

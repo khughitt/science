@@ -217,6 +217,48 @@ def test_task_command_docs_allow_task_scoped_aspects_without_project_declaration
     assert "project-wide aspect behavior" in text
 
 
+def test_big_picture_task_queries_apply_research_aspects_in_the_cli() -> None:
+    text = _read("commands/big-picture.md")
+    task_line = next(line for line in text.splitlines() if line.startswith("- `tasks`:"))
+
+    assert "one `--aspect <aspect>` option per member of `research_filter`" in text
+    assert "--all <research-aspect-flags> --related=<ref> --format json" in task_line
+    assert (
+        "--status done --since <task-window-start> <research-aspect-flags> "
+        "--related=<ref> --format json"
+        in task_line
+    )
+    assert (
+        "--status retired --since <task-window-start> <research-aspect-flags> "
+        "--related=<ref> --format json"
+        in task_line
+    )
+    assert "include entries whose resolved aspects intersect" not in task_line
+
+
+def test_create_graph_updates_task_refs_through_the_live_cli() -> None:
+    text = _read("commands/create-graph.md")
+    lines = text.splitlines()
+    start = next(index for index, line in enumerate(lines) if line.startswith("2. "))
+    end = next(index for index, line in enumerate(lines[start + 1 :], start + 1) if line.startswith("3. "))
+    step = "\n".join(lines[start:end])
+
+    assert "science tasks show <task-id>" in step
+    assert "science tasks edit <task-id>" in step
+    assert "non-empty replacement set" in step
+    assert "--related <canonical-id>" in step
+    assert "--blocked-by <canonical-id>" in step
+    assert "Omitting either repeated option leaves that field unchanged" in step
+    assert "--status blocked" in step
+    assert "science tasks unblock <task-id>" in step
+    assert "--clear-blockers" in step
+    assert "retaining its current status" in step
+    assert "cannot clear a non-empty `related` set to empty" in step
+    assert "Report that limitation" in step
+    assert "tasks/*.md" not in step
+    assert "`blocked-by:`" not in step
+
+
 def test_create_project_gitignore_excludes_transient_agent_artifacts() -> None:
     text = _read("commands/create-project.md")
 
@@ -837,12 +879,12 @@ def test_plan_analysis_is_integrated_with_neighbor_commands() -> None:
             assert expected in text
 
 
-def test_next_steps_scans_done_files_for_each_month_in_recent_window() -> None:
-    text = _read("commands/next-steps.md")
+def test_next_steps_queries_done_ledgers_for_each_month_in_recent_window() -> None:
+    text = _norm(_read("commands/next-steps.md"))
 
     assert "derive the recent-progress window first" in text
-    assert "scan every `tasks/done/YYYY-MM.md` file whose month intersects that window" in text
-    assert "Do not stop at the current month file" in text
+    assert "this scans every `tasks/done/YYYY-MM.md` ledger whose month intersects that window" in text
+    assert "Do not stop at the current month or assume" in text
     assert "treat those rows as recent progress, not status drift" in text
 
 
@@ -1344,8 +1386,11 @@ def test_next_steps_declares_recommendation_not_task_queue_boundary() -> None:
 
     assert "A next-steps run produces recommendations, not task records." in normalized
     assert "Do not treat `<meta-home>` files as the durable task queue." in normalized
-    assert "Convert recommendations into `science tasks add ...` only after user acceptance." in normalized
-    assert "Accepted work belongs in `science tasks ...` and `tasks/active.md`." in normalized
+    assert (
+        "Convert recommendations into `science tasks add ...` only after user acceptance."
+        in normalized
+    )
+    assert "Accepted work belongs in `science tasks ...`; query it with `science tasks list`." in normalized
 
 
 def test_sketch_model_uses_source_first_inquiry_authoring() -> None:

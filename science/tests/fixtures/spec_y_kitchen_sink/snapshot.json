@@ -175,7 +175,7 @@
     "added_by": null,
     "autonomous_run": null,
     "content_preview": "A test task.",
-    "file_path": "tasks/active.md",
+    "file_path": "tasks/active/t001-test-task.md",
     "confidence": null,
     "aliases": [
       "task:T001",

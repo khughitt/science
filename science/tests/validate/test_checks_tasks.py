@@ -4,6 +4,8 @@ import importlib
 from collections.abc import Iterable
 from pathlib import Path
 
+import pytest
+
 from science_tool.validate import Result, Severity, ValidateContext
 from science_tool.validate.checks import CANONICAL_CHECKS, clear_checks_for_tests
 
@@ -37,10 +39,29 @@ def _messages(results: Iterable[Result], severity: Severity | None = None) -> li
     return [result.message for result in results if severity is None or result.severity is severity]
 
 
-def _write_active(root: Path, text: str) -> None:
-    path = root / "tasks" / "active.md"
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(text, encoding="utf-8")
+def _write_active(
+    root: Path,
+    frontmatter: str,
+    *,
+    filename: str = "t001-task.md",
+) -> Path:
+    active_dir = root / "tasks" / "active"
+    active_dir.mkdir(parents=True, exist_ok=True)
+    path = active_dir / filename
+    path.write_text(f"---\n{frontmatter.rstrip()}\n---\n\nBody.\n", encoding="utf-8")
+    return path
+
+
+def _valid_frontmatter(task_id: str, *, extra: str = "") -> str:
+    text = (
+        f"id: {task_id}\n"
+        "title: Demo\n"
+        "status: active\n"
+        "priority: P1\n"
+        "aspects: [software-development]\n"
+        "created: 2026-01-01"
+    )
+    return f"{text}\n{extra}" if extra else text
 
 
 def _valid_task(task_id: str, *, extra: str = "") -> str:
@@ -56,73 +77,113 @@ def _valid_task(task_id: str, *, extra: str = "") -> str:
     return "\n".join(lines)
 
 
+def _write_non_split_state(root: Path, state: str) -> None:
+    tasks_dir = root / "tasks"
+    tasks_dir.mkdir(parents=True, exist_ok=True)
+    (tasks_dir / "active.md").write_text(_valid_task("t001"), encoding="utf-8")
+    if state in {"migrating", "conflict"}:
+        _write_active(root, _valid_frontmatter("t002"), filename="t002-split.md")
+    if state == "migrating":
+        journal = tasks_dir / ".science" / "task-storage-migration.journal"
+        journal.parent.mkdir()
+        journal.touch()
+
+
 def test_missing_active_file_warns_and_stops(tmp_path: Path) -> None:
     from science_tool.validate.checks.tasks import check_tasks
 
     results = list(check_tasks(_ctx(tmp_path)))
 
-    assert _messages(results) == ["tasks/active.md not found (use /science:tasks to create)"]
+    assert _messages(results) == ["tasks/active/ not found (use /science:tasks to create)"]
     assert [result.severity for result in results] == [Severity.WARN]
 
 
-def test_empty_active_file_reports_exists_and_no_tasks(tmp_path: Path) -> None:
+def test_empty_active_directory_reports_exists_and_no_tasks(tmp_path: Path) -> None:
     from science_tool.validate.checks.tasks import check_tasks
 
-    _write_active(tmp_path, "")
+    (tmp_path / "tasks" / "active").mkdir(parents=True)
 
     assert _messages(check_tasks(_ctx(tmp_path))) == [
-        "tasks/active.md exists",
-        "  no tasks in active.md",
+        "tasks/active/ exists",
+        "  no tasks in active/",
     ]
+
+
+@pytest.mark.parametrize(
+    ("state", "message"),
+    [
+        (
+            "legacy",
+            "tasks/active.md predates the storage split; "
+            "run `science tasks migrate-storage --apply`.",
+        ),
+        (
+            "migrating",
+            "an interrupted storage migration is in progress; "
+            "run `science tasks migrate-storage --resume`.",
+        ),
+        (
+            "conflict",
+            "both tasks/active.md and tasks/active/ exist with no migration journal; "
+            "inspect and remove one by hand — this is not an auto-resumable migration.",
+        ),
+    ],
+)
+def test_check_tasks_gates_non_split_store_before_any_result(
+    tmp_path: Path,
+    state: str,
+    message: str,
+) -> None:
+    from science_tool.validate.checks.tasks import check_tasks
+
+    _write_non_split_state(tmp_path, state)
+    results = check_tasks(_ctx(tmp_path))
+
+    with pytest.raises(ValueError) as excinfo:
+        next(results)
+
+    assert str(excinfo.value) == message
 
 
 def test_active_and_done_task_blocks_count_together(tmp_path: Path) -> None:
     from science_tool.validate.checks.tasks import check_tasks
 
-    _write_active(tmp_path, "\n\n".join([_valid_task("t001"), _valid_task("t002")]))
+    _write_active(tmp_path, _valid_frontmatter("t001"), filename="t001-first.md")
+    _write_active(tmp_path, _valid_frontmatter("t002"), filename="t002-second.md")
     done = tmp_path / "tasks" / "done"
     done.mkdir()
     done.joinpath("2026-01.md").write_text(_valid_task("t003"), encoding="utf-8")
 
     assert _messages(check_tasks(_ctx(tmp_path)), Severity.INFO) == [
-        "tasks/active.md exists",
+        "tasks/active/ exists",
         "  3 task(s) validated",
     ]
 
 
-def test_invalid_header_id_errors_and_is_not_counted(tmp_path: Path) -> None:
+def test_noncanonical_active_id_errors_and_is_not_counted(tmp_path: Path) -> None:
+    from science_tool.validate.checks.tasks import check_tasks
+
+    _write_active(tmp_path, _valid_frontmatter("t01.fragment"), filename="t01.fragment-task.md")
+    _write_active(tmp_path, _valid_frontmatter("t001"), filename="t001-valid.md")
+
+    results = list(check_tasks(_ctx(tmp_path)))
+
+    assert len(_messages(results, Severity.ERROR)) == 1
+    assert "non-canonical task id 't01.fragment'" in _messages(results, Severity.ERROR)[0]
+    assert "  1 task(s) validated" in _messages(results, Severity.INFO)
+
+
+def test_missing_title_reports_canonical_parser_error(tmp_path: Path) -> None:
     from science_tool.validate.checks.tasks import check_tasks
 
     _write_active(
         tmp_path,
-        "\n\n".join(
-            [
-                "## [t01.fragment] Fragment\n- aspects: [software-development]",
-                _valid_task("t001"),
-            ]
-        ),
+        "id: t001\nstatus: active\npriority: P1\naspects: []\ncreated: 2026-01-01",
     )
 
-    results = list(check_tasks(_ctx(tmp_path)))
-
-    assert _messages(results, Severity.ERROR) == [
-        "Invalid task id 't01.fragment' in tasks/active.md: task ids must match tNNN. "
-        "Use parent: task:t001 for fragments or subtasks."
-    ]
-    assert "  1 task(s) validated" in _messages(results, Severity.INFO)
-
-
-def test_missing_required_fields_emit_all_errors(tmp_path: Path) -> None:
-    from science_tool.validate.checks.tasks import check_tasks
-
-    _write_active(tmp_path, "## [t001] Missing fields\n")
-
-    assert _messages(check_tasks(_ctx(tmp_path)), Severity.ERROR) == [
-        "task t001 missing required field: aspects",
-        "task t001 missing required field: priority",
-        "task t001 missing required field: status",
-        "task t001 missing required field: created",
-    ]
+    errors = _messages(check_tasks(_ctx(tmp_path)), Severity.ERROR)
+    assert len(errors) == 1
+    assert "missing required key: title" in errors[0]
 
 
 def test_task_added_without_aspects_validates_clean(tmp_path: Path) -> None:
@@ -140,21 +201,40 @@ def test_task_added_without_aspects_validates_clean(tmp_path: Path) -> None:
     assert _messages(check_tasks(_ctx(tmp_path)), Severity.ERROR) == []
 
 
-def test_duplicate_ids_across_active_and_done_emit_bash_parity_message(tmp_path: Path) -> None:
+def test_duplicate_ids_across_active_and_done_name_both_locations(tmp_path: Path) -> None:
     from science_tool.validate.checks.tasks import check_tasks
 
-    _write_active(tmp_path, _valid_task("t001"))
+    _write_active(tmp_path, _valid_frontmatter("t001"))
     done = tmp_path / "tasks" / "done"
     done.mkdir()
     done.joinpath("2026-01.md").write_text(_valid_task("t001"), encoding="utf-8")
 
-    assert _messages(check_tasks(_ctx(tmp_path)), Severity.ERROR) == ["duplicate task IDs in active.md: t001"]
+    assert _messages(check_tasks(_ctx(tmp_path)), Severity.ERROR) == [
+        "duplicate task ID t001 found in "
+        "tasks/active/t001-task.md:1, tasks/done/2026-01.md:1"
+    ]
+
+
+def test_malformed_done_ledger_dsl_surfaces_as_validation_error(tmp_path: Path) -> None:
+    from science_tool.validate.checks.tasks import check_tasks
+
+    (tmp_path / "tasks" / "active").mkdir(parents=True)
+    done = tmp_path / "tasks" / "done"
+    done.mkdir()
+    done.joinpath("2026-01.md").write_text(
+        _valid_task("t001", extra="- unexpected: value"),
+        encoding="utf-8",
+    )
+
+    assert _messages(check_tasks(_ctx(tmp_path)), Severity.ERROR) == [
+        "unknown metadata key 'unexpected' for task t001 in tasks/done/2026-01.md"
+    ]
 
 
 def test_invalid_parent_emits_exact_error(tmp_path: Path) -> None:
     from science_tool.validate.checks.tasks import check_tasks
 
-    _write_active(tmp_path, _valid_task("t001", extra="- parent: t002"))
+    _write_active(tmp_path, _valid_frontmatter("t001", extra="parent: t002"))
 
     assert "task t001 parent must be local task ref like task:t001" in _messages(
         check_tasks(_ctx(tmp_path)), Severity.ERROR
@@ -166,29 +246,98 @@ def test_task_refs_validate_declared_stale_invalid_and_typed_refs(tmp_path: Path
 
     _write_active(
         tmp_path,
-        "\n\n".join(
-            [
-                _valid_task(
-                    "t001",
-                    extra="\n".join(
-                        [
-                            "- related: [task:t002, t999, paper:t888]",
-                            "- blocked-by: t123a",
-                            "- blocked_by: note:t777",
-                            "- parent: task:t555",
-                        ]
-                    ),
-                ),
-                _valid_task("t002"),
-            ]
+        _valid_frontmatter(
+            "t001",
+            extra="\n".join(
+                [
+                    "related: [task:t002, t999, paper:t888]",
+                    "blocked_by: [t123a, note:t777]",
+                    "parent: task:t555",
+                ]
+            ),
         ),
+        filename="t001-refs.md",
     )
+    _write_active(tmp_path, _valid_frontmatter("t002"), filename="t002-target.md")
 
     assert _messages(check_tasks(_ctx(tmp_path)), Severity.ERROR) == [
-        "stale task ref 't999' in tasks/active.md",
-        "stale or invalid task ref 't123a' in tasks/active.md",
-        "stale task ref 't555' in tasks/active.md",
+        "stale task ref 't999' in tasks/active/t001-refs.md",
+        "stale or invalid task ref 't123a' in tasks/active/t001-refs.md",
+        "stale task ref 't555' in tasks/active/t001-refs.md",
     ]
+
+
+@pytest.mark.parametrize(
+    ("frontmatter", "filename", "message"),
+    [
+        (
+            _valid_frontmatter("t001", extra="blocked-by: [task:t002]"),
+            "t001-task.md",
+            "unknown frontmatter key(s): ['blocked-by']",
+        ),
+        (
+            _valid_frontmatter("t001", extra="mystery: value"),
+            "t001-task.md",
+            "unknown frontmatter key(s): ['mystery']",
+        ),
+        (
+            _valid_frontmatter("t001"),
+            "t002-wrong.md",
+            "filename does not match id 't001'",
+        ),
+        (
+            _valid_frontmatter("t001").replace("status: active", "status: done"),
+            "t001-task.md",
+            "status 'done' not open",
+        ),
+        (
+            _valid_frontmatter("t001").replace("status: active", "status: mystery"),
+            "t001-task.md",
+            "status 'mystery' not open",
+        ),
+        (
+            _valid_frontmatter("t001").replace("title: Demo", "title: Bad]"),
+            "t001-task.md",
+            "task title must be",
+        ),
+        (
+            _valid_frontmatter("t001") + "\nid: t002",
+            "t001-task.md",
+            "duplicate",
+        ),
+        (
+            "defaults: &defaults\n"
+            "  id: t001\n"
+            "<<: *defaults\n"
+            "title: Demo\nstatus: active\npriority: P1\naspects: []\ncreated: 2026-01-01",
+            "t001-task.md",
+            "merge",
+        ),
+    ],
+    ids=[
+        "forbidden-blocked-by",
+        "unknown-key",
+        "filename-id-mismatch",
+        "terminal-status",
+        "unknown-status",
+        "invalid-title",
+        "duplicate-key",
+        "merge-key",
+    ],
+)
+def test_active_files_use_canonical_parser(
+    tmp_path: Path,
+    frontmatter: str,
+    filename: str,
+    message: str,
+) -> None:
+    from science_tool.validate.checks.tasks import check_tasks
+
+    _write_active(tmp_path, frontmatter, filename=filename)
+
+    errors = _messages(check_tasks(_ctx(tmp_path)), Severity.ERROR)
+    assert len(errors) == 1
+    assert message in errors[0]
 
 
 def test_loader_registry_includes_tasks_after_graph() -> None:

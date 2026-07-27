@@ -6,15 +6,22 @@ The Task model is defined in science-model and re-exported here for convenience.
 from __future__ import annotations
 
 import fcntl
+import json
+import os
 import re
 import sys
+import tempfile
 from contextlib import contextmanager
 from dataclasses import dataclass
 from datetime import date
+from enum import Enum
 from pathlib import Path
 from typing import Iterator
 
+import yaml
+from science_model.frontmatter import atomic_write_text
 from science_model.tasks import Task, TaskCreate, TaskStatus, TaskUpdate
+from science_tool.markdown_utils import reject_duplicate_and_merge_keys
 
 __all__ = [
     "Task",
@@ -24,16 +31,53 @@ __all__ = [
     "TaskLocation",
     "TaskStatus",
     "TaskUpdate",
+    "StorageState",
     "append_task_note",
+    "delete_task_file",
     "find_dangling_task_refs",
     "find_task_location",
+    "parse_task_file",
     "parse_tasks_for_cli",
+    "render_task_file",
     "retire_task",
     "validate_task_aspects",
+    "write_task_file",
     "write_task_location",
 ]
 
 _VALID_STATUSES = {s.value for s in TaskStatus}
+_REQUIRED_KEYS = ("id", "title", "status", "priority", "aspects", "created")
+_KNOWN_KEYS = frozenset(
+    {
+        "id",
+        "project",
+        "title",
+        "type",
+        "aspects",
+        "priority",
+        "status",
+        "blocked_by",
+        "related",
+        "parent",
+        "group",
+        "artifacts",
+        "findings",
+        "created",
+        "completed",
+    }
+)
+_OPEN_STATUSES = frozenset({"proposed", "active", "blocked", "deferred"})
+_MIGRATION_JOURNAL = Path(".science/task-storage-migration.journal")
+
+
+class StorageState(Enum):
+    """The authoritative task-storage layout state."""
+
+    EMPTY = "empty"
+    SPLIT = "split"
+    LEGACY = "legacy"
+    MIGRATING = "migrating"
+    CONFLICT = "conflict"
 
 
 class TaskIntegrityError(ValueError):
@@ -55,21 +99,83 @@ _MARKDOWN_HEADING_RE = re.compile(r"^(#{1,3})\s+.+$")
 _NOTES_HEADING_RE = re.compile(r"^###\s+Notes\s*$")
 _LOCAL_PARENT_RE = re.compile(r"^task:t[0-9]{3,}$")
 _TASK_HEADING_PREFIX_RE = re.compile(r"^##\s+\[", re.MULTILINE)
+_SPLITLINES_BOUNDARIES = "\n\r\v\f\x1c\x1d\x1e\x85\u2028\u2029"
+_KNOWN_DSL_FIELDS = frozenset(
+    {
+        "type",
+        "priority",
+        "status",
+        "parent",
+        "aspects",
+        "related",
+        "blocked-by",
+        "group",
+        "created",
+        "completed",
+        "project",
+        "artifacts",
+        "findings",
+    }
+)
 
 
-def _parse_list_value(raw: str) -> list[str]:
-    """Parse a bracketed, comma-separated list value like '[t001, t002]'."""
-    m = _LIST_RE.match(raw.strip())
-    if not m:
+def _render_list_value(items: list[str]) -> str:
+    """Render a list as a JSON array so every string round-trips."""
+    return json.dumps(items, ensure_ascii=True)
+
+
+def _parse_list_value(raw: str, *, field: str = "list") -> list[str]:
+    """Parse a JSON array, tolerating legacy bare bracketed lists."""
+    raw = raw.strip()
+    if not raw:
         return []
-    return [item.strip() for item in m.group(1).split(",") if item.strip()]
+    if raw.startswith("["):
+        try:
+            parsed = json.loads(raw)
+        except json.JSONDecodeError:
+            m = _LIST_RE.match(raw)
+            if not m or '"' in m.group(1) or "\\" in m.group(1):
+                raise ValueError(f"malformed {field} list value: {raw!r}") from None
+            return [item.strip() for item in m.group(1).split(",") if item.strip()]
+        if not isinstance(parsed, list) or any(not isinstance(item, str) for item in parsed):
+            raise ValueError(f"{field} list must be a JSON array of strings: {raw!r}")
+        return parsed
+    raise ValueError(f"malformed {field} list value (expected '[...]'): {raw!r}")
+
+
+def _render_scalar(value: str) -> str:
+    """Render a scalar reversibly while keeping ordinary values readable."""
+    if (
+        value != value.strip()
+        or any(char in value for char in _SPLITLINES_BOUNDARIES)
+        or '"' in value
+    ):
+        return json.dumps(value, ensure_ascii=True)
+    return value
+
+
+def _parse_scalar(raw: str) -> str:
+    """Parse a scalar emitted by :func:`_render_scalar`."""
+    if raw.startswith('"'):
+        try:
+            decoded = json.loads(raw)
+        except json.JSONDecodeError as exc:
+            raise ValueError(f"malformed quoted scalar: {raw!r}") from exc
+        if not isinstance(decoded, str):
+            raise ValueError(f"scalar must decode to a string: {raw!r}")
+        return decoded
+    return raw
 
 
 def _parse_task_header(line: str, *, path: Path | None = None) -> tuple[str, str]:
     """Parse and validate a task header line."""
     match = _HEADER_RE.match(line)
     if match:
-        return match.group(1), match.group(2).strip()
+        task_id, title = match.group(1), match.group(2).strip()
+        if "]" in title:
+            where = f" in {path}" if path is not None else ""
+            raise ValueError(f"task {task_id} title may not contain ']'{where}")
+        return task_id, title
 
     loose = _ANY_TASK_HEADER_RE.match(line)
     if loose:
@@ -83,6 +189,20 @@ def _parse_task_header(line: str, *, path: Path | None = None) -> tuple[str, str
 
     where = f" in {path}" if path is not None else ""
     raise ValueError(f"Invalid task header{where}: {line}")
+
+
+def _validate_task_title(title: str) -> None:
+    """Reject titles that cannot be represented safely in either task format."""
+    if (
+        not title
+        or title != title.strip()
+        or any(char in title for char in _SPLITLINES_BOUNDARIES)
+        or "]" in title
+    ):
+        raise ValueError(
+            "task title must be non-empty, have no leading or trailing whitespace, "
+            "be single-line, and contain no ']'"
+        )
 
 
 class TaskAspectValidationError(ValueError):
@@ -142,7 +262,13 @@ def _parse_task_block(lines: list[str], *, path: Path | None = None) -> Task:
         fm = _FIELD_RE.match(line)
         if fm:
             seen_field = True
-            fields[fm.group(1)] = fm.group(2).strip()
+            key = fm.group(1)
+            where = f" in {path}" if path is not None else ""
+            if key in fields:
+                raise ValueError(f"duplicate metadata key {key!r} for task {task_id}{where}")
+            if key not in _KNOWN_DSL_FIELDS:
+                raise ValueError(f"unknown metadata key {key!r} for task {task_id}{where}")
+            fields[key] = fm.group(2).strip()
             desc_start = i + 1
         elif line.strip() == "":
             if not seen_field:
@@ -164,16 +290,19 @@ def _parse_task_block(lines: list[str], *, path: Path | None = None) -> Task:
     return Task(
         id=task_id,
         title=title,
-        type=fields.get("type", ""),
-        aspects=_parse_list_value(fields.get("aspects", "")),
+        type=_parse_scalar(fields.get("type", "")),
+        aspects=_parse_list_value(fields.get("aspects", ""), field="aspects"),
         priority=fields.get("priority", ""),
         status=fields.get("status", ""),
         created=created,
         description=description,
-        related=_parse_list_value(fields.get("related", "")),
-        parent=_parse_parent(fields.get("parent", ""), task_id=task_id),
-        blocked_by=_parse_list_value(fields.get("blocked-by", "")),
-        group=fields.get("group", ""),
+        related=_parse_list_value(fields.get("related", ""), field="related"),
+        parent=_parse_parent(_parse_scalar(fields.get("parent", "")), task_id=task_id),
+        blocked_by=_parse_list_value(fields.get("blocked-by", ""), field="blocked-by"),
+        group=_parse_scalar(fields.get("group", "")),
+        project=_parse_scalar(fields.get("project", "")),
+        artifacts=_parse_list_value(fields.get("artifacts", ""), field="artifacts"),
+        findings=_parse_list_value(fields.get("findings", ""), field="findings"),
         completed=completed,
     )
 
@@ -208,11 +337,129 @@ def parse_tasks(path: Path) -> list[Task]:
     return _parse_tasks_text(path.read_text(), path=path)
 
 
-def _verify_round_trip(text: str, expected: list[Task], *, path: Path) -> None:
+def _split_frontmatter_text(text: str) -> tuple[str, str]:
+    """Return raw YAML frontmatter and Markdown body from a fenced document."""
+    lines = text.splitlines(keepends=True)
+    if not lines or lines[0].strip() != "---":
+        return "", text
+    for index, line in enumerate(lines[1:], start=1):
+        if line.strip() == "---":
+            return "".join(lines[1:index]), "".join(lines[index + 1 :])
+    return "", text
+
+
+def _load_task_frontmatter(text: str, *, path: Path) -> tuple[dict[str, object], str]:
+    """Load strict YAML frontmatter and body from one file-text snapshot."""
+    frontmatter_text, body = _split_frontmatter_text(text)
+
+    try:
+        node = yaml.compose(frontmatter_text)
+    except yaml.YAMLError as exc:
+        raise ValueError(f"{path}: invalid YAML frontmatter: {exc}") from exc
+    if node is not None:
+        reject_duplicate_and_merge_keys(
+            node,
+            on_error=lambda message: ValueError(f"{path}: {message}"),
+        )
+
+    try:
+        loaded = yaml.safe_load(frontmatter_text)
+    except yaml.YAMLError as exc:
+        raise ValueError(f"{path}: invalid YAML frontmatter: {exc}") from exc
+    if loaded is None:
+        return {}, body
+    if not isinstance(loaded, dict):
+        raise ValueError(f"{path}: frontmatter must be a mapping")
+    return loaded, body
+
+
+def _task_id_from_frontmatter(data: dict[str, object], *, path: Path) -> str:
+    if "id" not in data:
+        raise ValueError(f"{path}: missing required key: id")
+    task_id = data["id"]
+    if not isinstance(task_id, str):
+        raise ValueError(f"{path}: id must be a string")
+    if not re.fullmatch(_TASK_ID_PATTERN, task_id):
+        raise ValueError(f"{path}: non-canonical task id {task_id!r}")
+    return task_id
+
+
+def _validate_active_filename(path: Path, task_id: str) -> None:
+    """Require an active filename to carry the same canonical id as its task."""
+    if not path.name.startswith(f"{task_id}-") and path.name != f"{task_id}.md":
+        raise ValueError(f"{path}: filename does not match id {task_id!r}")
+
+
+def parse_task_file(path: Path) -> Task:
+    """Parse one canonical open-task file with strict identity validation."""
+    text = path.read_text(encoding="utf-8")
+    data, body = _load_task_frontmatter(text, path=path)
+
+    unknown = set(data) - _KNOWN_KEYS
+    if unknown:
+        raise ValueError(f"{path}: unknown frontmatter key(s): {sorted(unknown)}")
+
+    for key in _REQUIRED_KEYS:
+        if key not in data:
+            raise ValueError(f"{path}: missing required key: {key}")
+
+    task_id = _task_id_from_frontmatter(data, path=path)
+    _validate_active_filename(path, task_id)
+
+    title = str(data["title"])
+    try:
+        _validate_task_title(title)
+    except ValueError as exc:
+        raise ValueError(f"{path}: {exc}") from exc
+
+    if str(data["status"]) not in _OPEN_STATUSES:
+        raise ValueError(
+            f"{path}: status {data['status']!r} not open; active/ holds open tasks only"
+        )
+
+    return Task.model_validate({**data, "description": body.strip()})
+
+
+def _canonical_description(text: str) -> str:
+    return text.strip()
+
+
+def _tasks_equal(a: Task, b: Task) -> bool:
+    return a.model_copy(update={"description": _canonical_description(a.description)}) == b.model_copy(
+        update={"description": _canonical_description(b.description)}
+    )
+
+
+def _move_recovery_equivalent(
+    active: Task,
+    ledger: Task,
+    *,
+    target_status: str,
+) -> bool:
+    """Return whether ``ledger`` is the prior append for this terminal move."""
+    if active.id != ledger.id or ledger.status != target_status:
+        return False
+
+    ignored_transition_fields = {
+        "status": "",
+        "completed": None,
+        "description": "",
+    }
+    stable_fields_match = _tasks_equal(
+        active.model_copy(update=ignored_transition_fields),
+        ledger.model_copy(update=ignored_transition_fields),
+    )
+    description_extends_active = _canonical_description(ledger.description).startswith(
+        _canonical_description(active.description)
+    )
+    return stable_fields_match and description_extends_active
+
+
+def _verify_round_trip(text: str, expected: list[Task], *, path: Path | None) -> None:
     """Guard against silent task-file corruption / data loss.
 
     Re-parse the text we are about to persist and confirm it yields exactly the
-    tasks it was rendered from (same ids, same descriptions). The common failure
+    tasks it was rendered from (all fields). The common failure
     is a description line starting with ``## [`` (a task-header shape) which the
     parser would split into a phantom block on the next read.
     """
@@ -232,12 +479,151 @@ def _verify_round_trip(text: str, expected: list[Task], *, path: Path) -> None:
             f"(expected {want}, got {got}); aborting to avoid data loss."
         )
     for original, parsed in zip(expected, reparsed):
-        if original.description.strip() != parsed.description.strip():
+        if not _tasks_equal(original, parsed):
             raise TaskIntegrityError(
-                f"refusing to write {path}: description of task {original.id} does "
-                f"not round-trip; a body line is being read as task structure. "
-                f"Aborting to avoid data loss."
+                f"refusing to write {path}: task {original.id} does not round-trip "
+                f"(a field is being mangled by the DSL grammar); aborting to avoid data loss."
             )
+
+
+def _verify_task_file_round_trip(text: str, task: Task, path: Path) -> None:
+    """Refuse a per-task file whose rendered text does not fully re-parse."""
+    with tempfile.TemporaryDirectory() as temporary_directory:
+        candidate = Path(temporary_directory) / path.name
+        candidate.write_text(text, encoding="utf-8")
+        try:
+            reparsed = parse_task_file(candidate)
+        except (OSError, ValueError) as exc:
+            raise TaskIntegrityError(
+                f"refusing to write {path}: rendered task file failed round-trip "
+                f"parsing ({exc})"
+            ) from exc
+
+    if not _tasks_equal(reparsed, task):
+        raise TaskIntegrityError(
+            f"refusing to write {path}: task {task.id} does not round-trip "
+            f"(a field changed during serialization)"
+        )
+
+
+def _active_dir(tasks_dir: Path) -> Path:
+    """Return the canonical per-file open-task directory.
+
+    Mutation callers must hold ``_task_allocation_lock``; this helper never
+    acquires it.
+    """
+    return tasks_dir / "active"
+
+
+def _tasks_storage_state(tasks_dir: Path) -> StorageState:
+    """Classify task storage, treating a migration journal as authoritative."""
+    if (tasks_dir / _MIGRATION_JOURNAL).exists():
+        return StorageState.MIGRATING
+
+    has_legacy = (tasks_dir / "active.md").is_file()
+    has_split = any(path.is_file() for path in _active_dir(tasks_dir).glob("*.md"))
+    if has_legacy and has_split:
+        return StorageState.CONFLICT
+    if has_legacy:
+        return StorageState.LEGACY
+    if has_split:
+        return StorageState.SPLIT
+    return StorageState.EMPTY
+
+
+def _require_split(tasks_dir: Path) -> None:
+    """Allow normal commands only against empty or split task storage."""
+    state = _tasks_storage_state(tasks_dir)
+    if state in {StorageState.EMPTY, StorageState.SPLIT}:
+        return
+    if state is StorageState.LEGACY:
+        raise ValueError(
+            "tasks/active.md predates the storage split; "
+            "run `science tasks migrate-storage --apply`."
+        )
+    if state is StorageState.MIGRATING:
+        raise ValueError(
+            "an interrupted storage migration is in progress; "
+            "run `science tasks migrate-storage --resume`."
+        )
+    raise ValueError(
+        "both tasks/active.md and tasks/active/ exist with no migration journal; "
+        "inspect and remove one by hand — this is not an auto-resumable migration."
+    )
+
+
+def _find_active_file(tasks_dir: Path, task_id: str) -> Path | None:
+    """Find the unique active file for ``task_id``, refusing duplicates.
+
+    Mutation callers must hold ``_task_allocation_lock``; this helper never
+    acquires it.
+    """
+    if re.fullmatch(_TASK_ID_PATTERN, task_id) is None:
+        raise ValueError(f"non-canonical task id {task_id!r}; expected tNNN")
+    active = _active_dir(tasks_dir)
+    matches = sorted(active.glob(f"{task_id}-*.md"))
+    slugless = active / f"{task_id}.md"
+    if slugless.is_file():
+        matches.append(slugless)
+    if len(matches) > 1:
+        locations = ", ".join(str(path) for path in matches)
+        raise ValueError(f"duplicate active task files for {task_id}: {locations}")
+    active_index = _active_task_index(tasks_dir)
+    existing = active_index.get(task_id)
+    if existing is None:
+        return None
+    parse_task_file(existing)
+    return existing
+
+
+def _slug_for(title: str) -> str | None:
+    """Derive a task filename slug, deliberately choosing no slug if impossible."""
+    # Deferred to avoid tasks -> entities -> graph.sources -> tasks at import time.
+    from science_tool.entities import EntityCommandError, derive_slug  # noqa: PLC0415
+
+    try:
+        return derive_slug(title)
+    except EntityCommandError:
+        return None
+
+
+def write_task_file(tasks_dir: Path, task: Task) -> None:
+    """Atomically write one open task file.
+
+    The caller must hold ``_task_allocation_lock``; this helper does not acquire
+    the lock itself.
+    """
+    active = _active_dir(tasks_dir)
+    active.mkdir(parents=True, exist_ok=True)
+    text = render_task_file(task)
+    _verify_task_file_round_trip(text, task, path=active / f"{task.id}.md")
+    existing = _find_active_file(tasks_dir, task.id)
+    slug = _slug_for(task.title)
+    target = active / (f"{task.id}-{slug}.md" if slug else f"{task.id}.md")
+
+    if existing is None:
+        atomic_write_text(target, text)
+        return
+    if existing == target:
+        atomic_write_text(target, text)
+        return
+
+    atomic_write_text(existing, text)
+    if target.exists():
+        raise ValueError(f"rename target already exists: {target}")
+    os.replace(existing, target)
+
+
+def delete_task_file(tasks_dir: Path, task_id: str) -> None:
+    """Delete one active task file.
+
+    The caller must hold ``_task_allocation_lock``; this helper does not acquire
+    the lock itself.
+    """
+    existing = _find_active_file(tasks_dir, task_id)
+    if existing is None:
+        raise FileNotFoundError(f"active task file not found: {task_id}")
+    existing.unlink()
 
 
 def _task_ref_number(ref: str) -> str | None:
@@ -255,10 +641,11 @@ def find_dangling_task_refs(tasks_dir: Path) -> dict[str, list[str]]:
     `blocked-by: [task:tNNN]` (or `parent:`) is reported here so the problem is
     caught at the task layer rather than only at `graph build`.
     """
-    known = known_task_ids(tasks_dir)
+    _require_split(tasks_dir)
+    known = known_task_ids(tasks_dir, require_split=False)
     dangling: dict[str, list[str]] = {}
-    for path in _task_search_paths(tasks_dir):
-        for task in parse_tasks(path):
+    for path in _task_search_paths(tasks_dir, require_split=False):
+        for task in _parse_path_tasks(path):
             bad: list[str] = []
             for ref in [*task.blocked_by, task.parent]:
                 if not ref:
@@ -271,17 +658,21 @@ def find_dangling_task_refs(tasks_dir: Path) -> dict[str, list[str]]:
     return dangling
 
 
-def parse_tasks_for_cli(path: Path) -> tuple[list[Task], list[str]]:
+def parse_tasks_for_cli(
+    tasks_dir: Path,
+    *,
+    require_split: bool = True,
+) -> tuple[list[Task], list[str]]:
     """Parse tasks AND surface user-facing warnings.
 
     Detects legacy untyped blocker refs and returns them as warning strings.
-    Programmatic callers should prefer `parse_tasks` to avoid noise.
+    Programmatic callers should prefer `_read_active` to avoid noise.
     """
     # Deferred import to avoid a circular dependency:
     # tasks_blockers -> entities -> graph -> tasks
     from science_tool.tasks_blockers import is_typed_ref  # noqa: PLC0415
 
-    tasks = parse_tasks(path)
+    tasks = _read_active(tasks_dir, require_split=require_split)
     warnings: list[str] = []
     for task in tasks:
         for ref in task.blocked_by:
@@ -296,29 +687,48 @@ def render_task(task: Task) -> str:
     """Render a single task to markdown."""
     lines = [f"## [{task.id}] {task.title}"]
     if task.type:
-        lines.append(f"- type: {task.type}")
+        lines.append(f"- type: {_render_scalar(task.type)}")
     lines.append(f"- priority: {task.priority}")
     lines.append(f"- status: {task.status}")
     if task.parent:
-        lines.append(f"- parent: {task.parent}")
+        lines.append(f"- parent: {_render_scalar(task.parent)}")
+    if task.project:
+        lines.append(f"- project: {_render_scalar(task.project)}")
     # aspects is a validate-required field, so emit it even when empty
     # (a task added without --aspects must still be validate-clean).
-    items = ", ".join(task.aspects)
-    lines.append(f"- aspects: [{items}]")
+    lines.append(f"- aspects: {_render_list_value(task.aspects)}")
     if task.related:
-        items = ", ".join(task.related)
-        lines.append(f"- related: [{items}]")
+        lines.append(f"- related: {_render_list_value(task.related)}")
     if task.blocked_by:
-        items = ", ".join(task.blocked_by)
-        lines.append(f"- blocked-by: [{items}]")
+        lines.append(f"- blocked-by: {_render_list_value(task.blocked_by)}")
     if task.group:
-        lines.append(f"- group: {task.group}")
+        lines.append(f"- group: {_render_scalar(task.group)}")
+    if task.artifacts:
+        lines.append(f"- artifacts: {_render_list_value(task.artifacts)}")
+    if task.findings:
+        lines.append(f"- findings: {_render_list_value(task.findings)}")
     lines.append(f"- created: {task.created.isoformat()}")
     if task.completed is not None:
         lines.append(f"- completed: {task.completed.isoformat()}")
     lines.append("")
     lines.append(task.description)
     return "\n".join(lines) + "\n"
+
+
+def render_task_file(task: Task) -> str:
+    """Render one task as full YAML frontmatter followed by its description."""
+    frontmatter = task.model_dump(mode="json")
+    del frontmatter["description"]
+    rendered_frontmatter = yaml.safe_dump(
+        frontmatter,
+        sort_keys=False,
+        allow_unicode=True,
+        default_flow_style=False,
+    )
+    description = _canonical_description(task.description)
+    if not description:
+        return f"---\n{rendered_frontmatter}---\n"
+    return f"---\n{rendered_frontmatter}---\n\n{description}\n"
 
 
 def render_tasks(tasks: list[Task]) -> str:
@@ -335,18 +745,55 @@ def _strict_task_ids_in_text(text: str) -> list[str]:
     return ids
 
 
+def _strict_task_ids_in_path(path: Path) -> list[str]:
+    text = path.read_text(encoding="utf-8")
+    if path.parent.name == "active":
+        data, _body = _load_task_frontmatter(text, path=path)
+        task_id = _task_id_from_frontmatter(data, path=path)
+        _validate_active_filename(path, task_id)
+        return [task_id]
+    return _strict_task_ids_in_text(text)
+
+
+def _active_task_index(tasks_dir: Path) -> dict[str, Path]:
+    """Index active files by semantic id after validating store-wide identity."""
+    active = _active_dir(tasks_dir)
+    index: dict[str, Path] = {}
+    for path in sorted(active.glob("*.md")):
+        task_ids = _strict_task_ids_in_path(path)
+        for task_id in task_ids:
+            prior = index.get(task_id)
+            if prior is not None:
+                raise ValueError(
+                    f"duplicate task id {task_id} in active files: {prior}, {path}"
+                )
+            index[task_id] = path
+    return index
+
+
 @contextmanager
 def _task_allocation_lock(tasks_dir: Path) -> Iterator[None]:
-    """Serialize ID allocation + active.md writes across concurrent processes.
+    """Serialize all ``active/`` and ``done/`` writes across processes.
 
-    Without this, parallel `science tasks add` invocations each read the same max
-    ID and the same active.md, producing duplicate IDs and lost writes. An
-    exclusive advisory lock on a sentinel file makes the read-allocate-write
-    sequence atomic; the lock auto-releases if a holder crashes.
+    Acquire once at the top level and never re-acquire in a helper: ``flock``
+    deadlocks when the same process takes the lock through a second file
+    descriptor. The lock auto-releases if its holder crashes.
     """
+    if tasks_dir.is_symlink():
+        raise ValueError(f"{tasks_dir} is a symlink; refusing to create a task lock through it")
     tasks_dir.mkdir(parents=True, exist_ok=True)
     lock_path = tasks_dir / ".tasks.lock"
-    with open(lock_path, "w") as lock_file:
+    try:
+        descriptor = os.open(
+            lock_path,
+            os.O_WRONLY | os.O_CREAT | os.O_NOFOLLOW | os.O_CLOEXEC,
+            0o666,
+        )
+    except OSError as exc:
+        raise ValueError(
+            f"cannot safely open task allocation lock {lock_path}: {exc}"
+        ) from exc
+    with os.fdopen(descriptor, "w") as lock_file:
         fcntl.flock(lock_file.fileno(), fcntl.LOCK_EX)
         try:
             yield
@@ -354,26 +801,43 @@ def _task_allocation_lock(tasks_dir: Path) -> Iterator[None]:
             fcntl.flock(lock_file.fileno(), fcntl.LOCK_UN)
 
 
-def next_task_id(tasks_dir: Path) -> str:
-    """Determine the next task ID by scanning active.md and done/ directory."""
+def next_task_id(tasks_dir: Path, *, require_split: bool = True) -> str:
+    """Determine the next task ID by scanning active/ and done/."""
+    if require_split:
+        _require_split(tasks_dir)
     max_num = 0
 
-    active = tasks_dir / "active.md"
-    if active.is_file():
-        for task_id in _strict_task_ids_in_text(active.read_text()):
-            max_num = max(max_num, int(task_id[1:]))
+    for task_id in _active_task_index(tasks_dir):
+        max_num = max(max_num, int(task_id[1:]))
 
     done_dir = tasks_dir / "done"
     if done_dir.is_dir():
-        for f in done_dir.glob("*.md"):
-            for task_id in _strict_task_ids_in_text(f.read_text()):
+        for path in done_dir.glob("*.md"):
+            for task_id in _strict_task_ids_in_path(path):
                 max_num = max(max_num, int(task_id[1:]))
 
     return f"t{max_num + 1:03d}"
 
 
-def _read_active(tasks_dir: Path) -> list[Task]:
-    return parse_tasks(tasks_dir / "active.md")
+def _parse_path_tasks(path: Path) -> list[Task]:
+    """Parse one task search path according to its storage format."""
+    if path.parent.name == "active":
+        return [parse_task_file(path)]
+    return parse_tasks(path)
+
+
+def _read_active(tasks_dir: Path, *, require_split: bool = True) -> list[Task]:
+    if require_split:
+        _require_split(tasks_dir)
+    active = _active_dir(tasks_dir)
+    if not active.is_dir():
+        return []
+    tasks = [parse_task_file(path) for path in sorted(active.glob("*.md"))]
+    task_ids = [task.id for task in tasks]
+    duplicates = {task_id for task_id in task_ids if task_ids.count(task_id) > 1}
+    if duplicates:
+        raise ValueError(f"duplicate task ids in {active}: {sorted(duplicates)}")
+    return sorted(tasks, key=lambda task: task.id)
 
 
 def _task_file_preamble(path: Path) -> str:
@@ -392,14 +856,6 @@ def _render_task_file(path: Path, tasks: list[Task]) -> str:
     return preamble + rendered
 
 
-def _write_active(tasks_dir: Path, tasks: list[Task]) -> None:
-    tasks_dir.mkdir(parents=True, exist_ok=True)
-    active = tasks_dir / "active.md"
-    text = _render_task_file(active, tasks)
-    _verify_round_trip(text, tasks, path=active)
-    active.write_text(text)
-
-
 @dataclass(frozen=True)
 class TaskLocation:
     """A task plus the markdown file that currently owns it."""
@@ -409,98 +865,138 @@ class TaskLocation:
     tasks: list[Task]
 
 
-def _task_search_paths(tasks_dir: Path) -> list[Path]:
-    paths = [tasks_dir / "active.md"]
+def _task_search_paths(tasks_dir: Path, *, require_split: bool = True) -> list[Path]:
+    if require_split:
+        _require_split(tasks_dir)
+    paths = sorted(_active_dir(tasks_dir).glob("*.md"))
     done_dir = tasks_dir / "done"
     if done_dir.is_dir():
         paths.extend(sorted(done_dir.glob("*.md"), reverse=True))
     return paths
 
 
-def known_task_ids(tasks_dir: Path) -> set[str]:
-    """Every valid task id (tNNN) declared as a header in active.md and done/*.md.
+def known_task_ids(tasks_dir: Path, *, require_split: bool = True) -> set[str]:
+    """Every valid task id (tNNN) declared in active/*.md and done/*.md.
 
-    A header-only scan (not full parse): a field-level problem in one task block
-    must not crash callers that only need the set of declared ids. `_HEADER_RE`
-    matches only valid tNNN headers and exposes the id as group 1; check_tasks
-    owns reporting malformed task blocks.
+    An ID-only scan (not full parse): a field-level problem in one task must not
+    crash callers that only need the set of declared ids. Active files provide
+    IDs in frontmatter; done ledgers provide them in task headers.
     """
+    if require_split:
+        _require_split(tasks_dir)
     ids: set[str] = set()
-    for path in _task_search_paths(tasks_dir):
+    for path in _task_search_paths(tasks_dir, require_split=False):
         if not path.is_file():
             continue
-        for line in path.read_text(encoding="utf-8").splitlines():
-            match = _HEADER_RE.match(line)
-            if match:
-                ids.add(match.group(1))
+        ids.update(_strict_task_ids_in_path(path))
     return ids
 
 
-def task_status_index(tasks_dir: Path) -> dict[str, str]:
-    """Map every declared task id to its `status:` field, across active.md and done/*.md.
+def task_status_index(
+    tasks_dir: Path,
+    *,
+    require_split: bool = True,
+) -> dict[str, str]:
+    """Map every declared task id to its status across the split task store.
 
-    A header-plus-field-block scan rather than a full parse, for the reason
-    `known_task_ids` documents: a field-level problem in one task block must not
-    crash a caller that only needs the index.
-
-    Only the contiguous run of `- key: value` lines immediately after a header
-    counts as fields, matching `_parse_task_block`, so a `- status: done` line
-    written inside a description is description and not a record.
-
-    Search-path order decides precedence for a duplicated id (active first, then
-    newest archive), the same order `find_task_location` prefers.
+    Active files contribute their frontmatter ``id`` and ``status``. Done ledgers
+    use a header-plus-contiguous-field-block scan so a ``- status:`` line in a
+    description is not mistaken for record metadata. Missing status fields are
+    omitted. Any duplicate occurrence is rejected rather than assigned precedence.
     """
+    if require_split:
+        _require_split(tasks_dir)
+
     statuses: dict[str, str] = {}
-    for path in _task_search_paths(tasks_dir):
-        if not path.is_file():
-            continue
-        task_id: str | None = None
-        for line in path.read_text(encoding="utf-8").splitlines():
-            header = _HEADER_RE.match(line)
-            if header:
-                task_id = header.group(1)
-                continue
-            if task_id is None:
-                continue
-            field = _FIELD_RE.match(line)
-            if not field:
-                task_id = None  # the field block ended; the rest is description
-                continue
-            if field.group(1) == "status":
-                statuses.setdefault(task_id, field.group(2).strip())
+    occurrences: dict[str, Path] = {}
+
+    for task_id, path in _active_task_index(tasks_dir).items():
+        occurrences[task_id] = path
+        data, _body = _load_task_frontmatter(
+            path.read_text(encoding="utf-8"),
+            path=path,
+        )
+        status = data.get("status")
+        if isinstance(status, str):
+            statuses[task_id] = status
+
+    done_dir = tasks_dir / "done"
+    if done_dir.is_dir():
+        for path in sorted(done_dir.glob("*.md"), reverse=True):
+            task_id: str | None = None
+            for line in path.read_text(encoding="utf-8").splitlines():
+                header = _HEADER_RE.match(line)
+                if header:
+                    declared_id = header.group(1)
+                    prior = occurrences.get(declared_id)
+                    if prior is not None:
+                        raise ValueError(
+                            f"duplicate task id {declared_id} found in {prior}, {path}"
+                        )
+                    occurrences[declared_id] = path
+                    task_id = declared_id
+                    continue
+                if task_id is None:
+                    continue
+                field = _FIELD_RE.match(line)
+                if not field:
+                    task_id = None
+                    continue
+                if field.group(1) == "status":
+                    statuses[task_id] = field.group(2).strip()
+
     return statuses
 
 
-def _find_matches(tasks_dir: Path, task_id: str) -> list[TaskLocation]:
+def _find_matches(
+    tasks_dir: Path,
+    task_id: str,
+    *,
+    require_split: bool = True,
+) -> list[TaskLocation]:
     matches: list[TaskLocation] = []
-    for path in _task_search_paths(tasks_dir):
-        tasks = parse_tasks(path)
+    for path in _task_search_paths(tasks_dir, require_split=require_split):
+        tasks = _parse_path_tasks(path)
         for task in tasks:
             if task.id == task_id:
                 matches.append(TaskLocation(path=path, task=task, tasks=tasks))
-                break
     return matches
 
 
-def find_task_location(tasks_dir: Path, task_id: str) -> TaskLocation:
-    """Find a task in active.md or done/*.md, preferring active then newest archives."""
-    matches = _find_matches(tasks_dir, task_id)
+def find_task_location(
+    tasks_dir: Path,
+    task_id: str,
+    *,
+    require_split: bool = True,
+) -> TaskLocation:
+    """Find the unique occurrence of a task in active/*.md or done/*.md."""
+    matches = _find_matches(tasks_dir, task_id, require_split=require_split)
     if not matches:
-        searched = ", ".join(str(path) for path in _task_search_paths(tasks_dir))
-        msg = f"Task {task_id} not found in tasks/active.md or tasks/done/*.md (searched: {searched})"
+        searched = ", ".join(
+            str(path)
+            for path in _task_search_paths(tasks_dir, require_split=False)
+        )
+        msg = (
+            f"Task {task_id} not found in tasks/active/*.md or tasks/done/*.md "
+            f"(searched: {searched})"
+        )
         raise KeyError(msg)
     if len(matches) > 1:
         locations = ", ".join(str(match.path) for match in matches)
-        print(f"WARNING: duplicate task id {task_id} found in {locations}; using {matches[0].path}", file=sys.stderr)
+        raise ValueError(f"duplicate task id {task_id} found in {locations}")
     return matches[0]
 
 
 def write_task_location(location: TaskLocation) -> None:
-    """Rewrite the markdown file that owns a task location."""
+    """Rewrite the ledger that owns a task location.
+
+    The caller must hold ``_task_allocation_lock``; this helper does not acquire
+    the lock itself.
+    """
     location.path.parent.mkdir(parents=True, exist_ok=True)
     text = _render_task_file(location.path, location.tasks)
     _verify_round_trip(text, location.tasks, path=location.path)
-    location.path.write_text(text)
+    atomic_write_text(location.path, text)
 
 
 def _format_note(note_date: date, note: str) -> str:
@@ -545,12 +1041,17 @@ def _append_note_to_description(description: str, note_line: str) -> str:
 
 
 def append_task_note(tasks_dir: Path, task_id: str, note: str, note_date: date | None = None) -> Task:
-    """Append a dated journal note to a task in active.md or done/*.md."""
-    location = find_task_location(tasks_dir, task_id)
-    task = location.task
-    line = _format_note(note_date or date.today(), note)
-    task.description = _append_note_to_description(task.description, line)
-    write_task_location(location)
+    """Append a dated journal note to an active task file or done ledger."""
+    with _task_allocation_lock(tasks_dir):
+        _require_split(tasks_dir)
+        location = find_task_location(tasks_dir, task_id, require_split=False)
+        task = location.task
+        line = _format_note(note_date or date.today(), note)
+        task.description = _append_note_to_description(task.description, line)
+        if location.path.parent == _active_dir(tasks_dir):
+            write_task_file(tasks_dir, task)
+        else:
+            write_task_location(location)
     return task
 
 
@@ -558,7 +1059,7 @@ def _find_task(tasks: list[Task], task_id: str) -> Task:
     for t in tasks:
         if t.id == task_id:
             return t
-    msg = f"Task {task_id} not found in active.md"
+    msg = f"Task {task_id} not found in tasks/active/*.md"
     raise KeyError(msg)
 
 
@@ -576,12 +1077,14 @@ def add_task(
     *,
     force: bool = False,
 ) -> Task:
-    """Create a task with status 'proposed', auto-assign ID, write to active.md."""
+    """Create a proposed task in its own active file."""
     from science_tool.tasks_blockers import validate_blocker_refs  # noqa: PLC0415
 
-    validated_blockers = validate_blocker_refs(project_root, blocked_by, force=force) if blocked_by else []
     with _task_allocation_lock(tasks_dir):
-        task_id = next_task_id(tasks_dir)
+        _require_split(tasks_dir)
+        _validate_task_title(title)
+        validated_blockers = validate_blocker_refs(project_root, blocked_by, force=force) if blocked_by else []
+        task_id = next_task_id(tasks_dir, require_split=False)
         task = Task(
             id=task_id,
             title=title,
@@ -595,80 +1098,103 @@ def add_task(
             group=group,
             description=description,
         )
-        tasks = _read_active(tasks_dir)
-        tasks.append(task)
-        _write_active(tasks_dir, tasks)
+        write_task_file(tasks_dir, task)
     return task
 
 
-def _move_task_to_done(tasks_dir: Path, remaining: list[Task], done_path: Path, task: Task) -> None:
-    """Atomically move a task from active.md to a done archive.
+def _move_task_to_done(tasks_dir: Path, task: Task, *, target_status: str) -> None:
+    """Append a terminal task to its ledger, then delete its active file.
 
-    Both the new active.md and the new done file are rendered AND round-trip
-    verified before either is written, so a corrupting payload (or a parser
-    fragility) aborts the whole move instead of half-applying it and losing data.
+    The caller must already hold ``_task_allocation_lock``. This helper must
+    never acquire it again because a second ``flock`` file descriptor deadlocks.
     """
-    tasks_dir.mkdir(parents=True, exist_ok=True)
+    from science_tool.tasks_ledger import _destination_for, _read_destination  # noqa: PLC0415
+
+    done_dir = tasks_dir / "done"
+    occurrences: list[tuple[Path, Task]] = []
+    for path in _task_search_paths(tasks_dir, require_split=False):
+        if path.parent != done_dir or not path.is_file():
+            continue
+        _preamble, ledger_tasks = _read_destination(path)
+        occurrences.extend((path, ledger) for ledger in ledger_tasks if ledger.id == task.id)
+
+    if len(occurrences) > 1:
+        locations = ", ".join(str(path) for path, _ledger in occurrences)
+        raise ValueError(
+            f"multiple done-ledger occurrences for task {task.id}: {locations}"
+        )
+    if occurrences:
+        path, ledger = occurrences[0]
+        if not _move_recovery_equivalent(
+            task,
+            ledger,
+            target_status=target_status,
+        ):
+            raise ValueError(
+                f"conflicting done-ledger occurrence for task {task.id}: {path}"
+            )
+        delete_task_file(tasks_dir, task.id)
+        return
+
+    relative_destination, _missing_completed = _destination_for(task, date.today())
+    done_path = tasks_dir / relative_destination
     done_path.parent.mkdir(parents=True, exist_ok=True)
+    preamble, ledger_tasks = _read_destination(done_path)
+    ledger_tasks.append(task)
+    done_text = preamble + render_tasks(ledger_tasks)
+    _verify_round_trip(done_text, ledger_tasks, path=done_path)
 
-    active = tasks_dir / "active.md"
-    active_text = _render_task_file(active, remaining)
-    _verify_round_trip(active_text, remaining, path=active)
-
-    existing_done = parse_tasks(done_path)
-    existing_done.append(task)
-    done_text = render_tasks(existing_done)
-    _verify_round_trip(done_text, existing_done, path=done_path)
-
-    # Both renders verified — now commit both writes.
-    active.write_text(active_text)
-    done_path.write_text(done_text)
+    # Commit the recoverable side first: a retry can recognize this ledger entry.
+    atomic_write_text(done_path, done_text)
+    delete_task_file(tasks_dir, task.id)
 
 
 def complete_task(tasks_dir: Path, task_id: str, note: str | None = None) -> Task:
-    """Mark task done, add completion date, move from active.md to done/YYYY-MM.md."""
-    tasks = _read_active(tasks_dir)
-    task = _find_task(tasks, task_id)
+    """Mark an active task done and move it to the monthly ledger."""
+    with _task_allocation_lock(tasks_dir):
+        _require_split(tasks_dir)
+        tasks = _read_active(tasks_dir, require_split=False)
+        task = _find_task(tasks, task_id)
 
-    task.status = "done"
-    task.completed = date.today()
-    if note:
-        task.description = f"{task.description}\n\n{note}".strip()
+        task.status = "done"
+        task.completed = date.today()
+        if note:
+            task.description = f"{task.description}\n\n{note}".strip()
 
-    remaining = [t for t in tasks if t.id != task_id]
-    done_dir = tasks_dir / "done"
-    done_path = done_dir / f"{date.today().strftime('%Y-%m')}.md"
-    _move_task_to_done(tasks_dir, remaining, done_path, task)
+        _move_task_to_done(tasks_dir, task, target_status="done")
     return task
 
 
 def defer_task(tasks_dir: Path, task_id: str, reason: str | None = None) -> Task:
     """Set status to 'deferred', append reason to description."""
-    tasks = _read_active(tasks_dir)
-    task = _find_task(tasks, task_id)
+    with _task_allocation_lock(tasks_dir):
+        _require_split(tasks_dir)
+        location = find_task_location(tasks_dir, task_id, require_split=False)
+        if location.path.parent != _active_dir(tasks_dir):
+            raise KeyError(f"Task {task_id} not found in tasks/active/*.md")
+        task = location.task
 
-    task.status = "deferred"
-    if reason:
-        task.description = f"{task.description}\n\n{reason}".strip()
+        task.status = "deferred"
+        if reason:
+            task.description = f"{task.description}\n\n{reason}".strip()
 
-    _write_active(tasks_dir, tasks)
+        write_task_file(tasks_dir, task)
     return task
 
 
 def retire_task(tasks_dir: Path, task_id: str, reason: str | None = None) -> Task:
     """Set status to 'retired', append reason. Moves to done/ archive like complete_task."""
-    tasks = _read_active(tasks_dir)
-    task = _find_task(tasks, task_id)
+    with _task_allocation_lock(tasks_dir):
+        _require_split(tasks_dir)
+        tasks = _read_active(tasks_dir, require_split=False)
+        task = _find_task(tasks, task_id)
 
-    task.status = "retired"
-    task.completed = date.today()
-    if reason:
-        task.description = f"{task.description}\n\n**Retired:** {reason}".strip()
+        task.status = "retired"
+        task.completed = date.today()
+        if reason:
+            task.description = f"{task.description}\n\n**Retired:** {reason}".strip()
 
-    remaining = [t for t in tasks if t.id != task_id]
-    done_dir = tasks_dir / "done"
-    done_path = done_dir / f"{date.today().strftime('%Y-%m')}.md"
-    _move_task_to_done(tasks_dir, remaining, done_path, task)
+        _move_task_to_done(tasks_dir, task, target_status="retired")
     return task
 
 
@@ -683,28 +1209,36 @@ def block_task(
     """Add typed blockers to a task, set status to 'blocked'."""
     from science_tool.tasks_blockers import validate_blocker_refs  # noqa: PLC0415
 
-    validated = validate_blocker_refs(project_root, blocked_by, force=force)
-    tasks = _read_active(tasks_dir)
-    task = _find_task(tasks, task_id)
+    with _task_allocation_lock(tasks_dir):
+        _require_split(tasks_dir)
+        validated = validate_blocker_refs(project_root, blocked_by, force=force)
+        location = find_task_location(tasks_dir, task_id, require_split=False)
+        if location.path.parent != _active_dir(tasks_dir):
+            raise KeyError(f"Task {task_id} not found in tasks/active/*.md")
+        task = location.task
 
-    task.status = "blocked"
-    for ref in validated:
-        if ref not in task.blocked_by:
-            task.blocked_by.append(ref)
+        task.status = "blocked"
+        for ref in validated:
+            if ref not in task.blocked_by:
+                task.blocked_by.append(ref)
 
-    _write_active(tasks_dir, tasks)
+        write_task_file(tasks_dir, task)
     return task
 
 
 def unblock_task(tasks_dir: Path, task_id: str) -> Task:
     """Clear blocked_by list, set status to 'active'."""
-    tasks = _read_active(tasks_dir)
-    task = _find_task(tasks, task_id)
+    with _task_allocation_lock(tasks_dir):
+        _require_split(tasks_dir)
+        location = find_task_location(tasks_dir, task_id, require_split=False)
+        if location.path.parent != _active_dir(tasks_dir):
+            raise KeyError(f"Task {task_id} not found in tasks/active/*.md")
+        task = location.task
 
-    task.status = "active"
-    task.blocked_by = []
+        task.status = "active"
+        task.blocked_by = []
 
-    _write_active(tasks_dir, tasks)
+        write_task_file(tasks_dir, task)
     return task
 
 
@@ -726,44 +1260,52 @@ def edit_task(
     """Update specified fields on a task."""
     from science_tool.tasks_blockers import validate_blocker_refs  # noqa: PLC0415
 
-    location = find_task_location(tasks_dir, task_id)
-    task = location.task
+    with _task_allocation_lock(tasks_dir):
+        _require_split(tasks_dir)
+        location = find_task_location(tasks_dir, task_id, require_split=False)
+        task = location.task
+        is_active = location.path.parent == _active_dir(tasks_dir)
 
-    if location.path != tasks_dir / "active.md" and status is not None and status not in _CLOSED_STATUS_VALUES:
-        msg = f"Cannot set archived task {task_id} to non-closed status '{status}'"
-        raise ValueError(msg)
+        if is_active and status in _CLOSED_STATUS_VALUES:
+            raise ValueError("use science tasks done/retire to close a task")
+        if not is_active and status is not None and status not in _CLOSED_STATUS_VALUES:
+            msg = f"Cannot set archived task {task_id} to non-closed status '{status}'"
+            raise ValueError(msg)
+        if title is not None:
+            _validate_task_title(title)
+            task.title = title
+        if description is not None:
+            task.description = description
+        if priority is not None:
+            task.priority = priority
+        if status is not None:
+            task.status = status
+        if aspects is not None:
+            task.aspects = aspects
+        if related is not None:
+            # --related REPLACES the list (deduped, order-preserving) rather than
+            # accumulating -- appending gave no way to remove a stale ref, and a bare
+            # non-canonical short id silently entered the list and later failed graph
+            # validation (fb-2026-07-07-001).
+            deduped: list[str] = []
+            for ref in related:
+                if ":" not in ref or not ref.split(":", 1)[1]:
+                    raise ValueError(
+                        f"related ref {ref!r} is not canonical; use a '<kind>:<id>' ref "
+                        "(e.g. 'hypothesis:h01', 'task:t010')"
+                    )
+                if ref not in deduped:
+                    deduped.append(ref)
+            task.related = deduped
+        if blocked_by is not None:
+            task.blocked_by = validate_blocker_refs(project_root, blocked_by, force=force)
+        if group is not None:
+            task.group = group
 
-    if title is not None:
-        task.title = title
-    if description is not None:
-        task.description = description
-    if priority is not None:
-        task.priority = priority
-    if status is not None:
-        task.status = status
-    if aspects is not None:
-        task.aspects = aspects
-    if related is not None:
-        # --related REPLACES the list (deduped, order-preserving) rather than
-        # accumulating -- appending gave no way to remove a stale ref, and a bare
-        # non-canonical short id silently entered the list and later failed graph
-        # validation (fb-2026-07-07-001).
-        deduped: list[str] = []
-        for ref in related:
-            if ":" not in ref or not ref.split(":", 1)[1]:
-                raise ValueError(
-                    f"related ref {ref!r} is not canonical; use a '<kind>:<id>' ref "
-                    "(e.g. 'hypothesis:h01', 'task:t010')"
-                )
-            if ref not in deduped:
-                deduped.append(ref)
-        task.related = deduped
-    if blocked_by is not None:
-        task.blocked_by = validate_blocker_refs(project_root, blocked_by, force=force)
-    if group is not None:
-        task.group = group
-
-    write_task_location(location)
+        if is_active:
+            write_task_file(tasks_dir, task)
+        else:
+            write_task_location(location)
     return task
 
 
@@ -811,21 +1353,25 @@ def _since_window_months(since: date, today: date) -> list[str]:
 
 
 def _read_since_candidates(tasks_dir: Path, since: date) -> list[Task]:
-    """Active tasks unioned with archive months in `[since, today]`.
+    """Open tasks from ``active/`` unioned with done ledgers in ``[since, today]``.
 
     Month-file selection is only a read optimization; the row predicate in
-    `list_tasks` is the authoritative membership test. Archive files may be
-    missing for any month in the window -- that is not an error. When a task
-    id appears in both active.md and an archive month (not expected in a
-    well-formed repo), the archive copy wins, since it is the durable record
-    for closed tasks.
+    `list_tasks` is the authoritative membership test. Monthly done ledgers may be
+    missing for any month in the window -- that is not an error. Duplicate
+    task IDs across split active files and selected done ledgers are rejected.
     """
-    from science_tool.tasks_archive import _read_destination
+    from science_tool.tasks_ledger import _read_destination
 
-    by_id: dict[str, Task] = {t.id: t for t in _read_active(tasks_dir)}
+    by_id: dict[str, Task] = {
+        t.id: t for t in _read_active(tasks_dir, require_split=False)
+    }
     for month in _since_window_months(since, date.today()):
         _preamble, archive_tasks = _read_destination(tasks_dir / "done" / f"{month}.md")
         for t in archive_tasks:
+            if t.id in by_id:
+                raise ValueError(
+                    f"entity 'task:{t.id}' produced by multiple sources"
+                )
             by_id[t.id] = t
     return list(by_id.values())
 
@@ -843,8 +1389,9 @@ def list_tasks(
 ) -> list[Task]:
     """Filter active tasks by optional criteria.
 
-    By default, done and retired tasks are excluded. Pass ``include_done=True``
-    or filter by a specific ``status`` to include them.
+    By default, done and retired statuses are excluded from the active store.
+    ``include_done=True`` includes every status present in that active store;
+    it does not read done ledgers.
 
     ``since`` queries closed tasks by completion date instead: it also reads
     `tasks/done/YYYY-MM.md` archive months overlapping `[since, today]`, and
@@ -855,7 +1402,12 @@ def list_tasks(
     default (the `include_done`/default-hiding behavior below is bypassed --
     ``since`` is itself the closed-task selector).
     """
-    tasks = _read_since_candidates(tasks_dir, since) if since is not None else _read_active(tasks_dir)
+    _require_split(tasks_dir)
+    tasks = (
+        _read_since_candidates(tasks_dir, since)
+        if since is not None
+        else _read_active(tasks_dir, require_split=False)
+    )
 
     warn_invalid_statuses(tasks)
 

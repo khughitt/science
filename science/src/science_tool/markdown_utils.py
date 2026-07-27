@@ -7,6 +7,7 @@ versus "in code/documentation".
 
 from __future__ import annotations
 
+from collections.abc import Callable
 import re
 from pathlib import Path
 
@@ -22,6 +23,42 @@ class UnterminatedHtmlCommentError(ValueError):
     def __init__(self, offset: int) -> None:
         self.offset = offset
         super().__init__(f"unterminated HTML comment starting at character {offset}")
+
+
+class StrictYAMLError(ValueError):
+    """A YAML block violated strict-mode rules (duplicate or merge keys)."""
+
+
+def reject_duplicate_and_merge_keys(
+    node: yaml.Node,
+    *,
+    on_error: Callable[[str], Exception] = StrictYAMLError,
+) -> None:
+    """Refuse duplicate keys and YAML merge keys anywhere in the document.
+
+    Recursive: nested mappings are checked too. Operates on the NODE tree from
+    ``yaml.compose`` while still seeing what ``safe_load`` would collapse to
+    last-wins. Keys are constructed via a throwaway ``SafeLoader`` so
+    YAML-equivalent pairs (``yes``/``true``, ``1``/``1.0``) are caught, and an
+    unsafe key tag can never reach an object intact.
+    """
+    if isinstance(node, yaml.MappingNode):
+        seen: set[object] = set()
+        loader = yaml.SafeLoader("")
+        try:
+            for key_node, value_node in node.value:
+                if key_node.tag == "tag:yaml.org,2002:merge":
+                    raise on_error("YAML merge keys are not allowed")
+                key = loader.construct_object(key_node, deep=True)
+                if key in seen:
+                    raise on_error(f"duplicate key {key!r}")
+                seen.add(key)
+                reject_duplicate_and_merge_keys(value_node, on_error=on_error)
+        finally:
+            loader.dispose()
+    elif isinstance(node, yaml.SequenceNode):
+        for item in node.value:
+            reject_duplicate_and_merge_keys(item, on_error=on_error)
 
 
 def is_fence_line(line: str) -> bool:

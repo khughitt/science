@@ -260,12 +260,6 @@ Flag:
   unchanged review with `science entity review <target-ref>` or author a new
   conclusion linked by `sci:amends` / `sci:supersedes`. Do not describe the
   freshness state as a conclusion that the old standing is wrong.
-- **task archive lag**: when `science health --format json` shows non-zero
-  `archive_lag.done_in_active` or `archive_lag.retired_in_active`, surface it as:
-  > N done/retired task(s) still in `tasks/active.md`. Run `science tasks archive --apply`
-  > to move them to `tasks/done/YYYY-MM.md`.
-  If `archive_lag.missing_completed` is non-zero, call out that those entries need a
-  `completed:` date backfilled before archiving so they route to the correct month.
 - **unreflected failures**: scan for failure signatures with no linked reflection —
   a pre-registration deviation amendment, a gate failure or `inconclusive-for-protocol`
   verdict, or a discarded/superseded/`draft` run with no interpretation. A failure

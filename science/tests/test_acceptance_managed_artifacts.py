@@ -63,7 +63,7 @@ def _scaffold_software_project(project: Path) -> None:
     project.joinpath("CLAUDE.md").write_text("# Acceptance\n", encoding="utf-8")
     for d in ("doc", "specs", "tasks", "knowledge", "src", "entities"):
         project.joinpath(d).mkdir(exist_ok=True)
-    project.joinpath("tasks", "active.md").write_text("# active\n", encoding="utf-8")
+    project.joinpath("tasks", "active").mkdir(exist_ok=True)
 
 
 def _init_git(repo: Path) -> None:

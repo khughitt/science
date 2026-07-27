@@ -1,9 +1,9 @@
 """Canary coverage for mm30-shaped commons/project references.
 
 The fixture exercises four patterns: a hypothesis reference to a commons
-topic, an interpretation reference to a commons topic, a task DSL reference to
-a commons topic, and a project overlay for the same commons topic that is also
-referenced by a project entity.
+topic, an interpretation reference to a commons topic, a split-task
+frontmatter reference to a commons topic, and a project overlay for the same
+commons topic that is also referenced by a project entity.
 """
 
 from __future__ import annotations

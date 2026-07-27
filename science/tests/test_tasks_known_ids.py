@@ -1,13 +1,20 @@
 from pathlib import Path
 
+import pytest
+
 from science_tool.tasks import known_task_ids, task_status_index
 
 
 def test_collects_ids_from_active_and_done(tmp_path: Path) -> None:
     tasks = tmp_path / "tasks"
-    (tasks / "done").mkdir(parents=True)
-    (tasks / "active.md").write_text(
-        "## [t491] Active one\n- created: 2026-01-01\n\n## [t492] Active two\n- created: 2026-01-01\n",
+    (tasks / "active").mkdir(parents=True)
+    (tasks / "done").mkdir()
+    (tasks / "active" / "t491-one.md").write_text(
+        "---\nid: t491\n---\n",
+        encoding="utf-8",
+    )
+    (tasks / "active" / "t492-two.md").write_text(
+        "---\nid: t492\n---\n",
         encoding="utf-8",
     )
     (tasks / "done" / "2026-01.md").write_text(
@@ -23,10 +30,10 @@ def test_missing_tasks_dir_is_empty(tmp_path: Path) -> None:
 
 def test_ignores_invalid_headers(tmp_path: Path) -> None:
     tasks = tmp_path / "tasks"
-    tasks.mkdir()
-    # 'task-1' is not a valid tNNN id, so it must not be collected.
-    (tasks / "active.md").write_text(
-        "## [t491] Valid\n- created: 2026-01-01\n\n## [task-1] Invalid\n- created: 2026-01-01\n",
+    (tasks / "active").mkdir(parents=True)
+    # Body headings are not task declarations in active frontmatter files.
+    (tasks / "active" / "t491-valid.md").write_text(
+        "---\nid: t491\n---\n\n## [task-1] Invalid body heading\n",
         encoding="utf-8",
     )
     assert known_task_ids(tasks) == {"t491"}
@@ -38,8 +45,9 @@ def test_ignores_invalid_headers(tmp_path: Path) -> None:
 def test_status_index_reads_active_and_month_rollups(tmp_path: Path) -> None:
     tasks = tmp_path / "tasks"
     (tasks / "done").mkdir(parents=True)
-    (tasks / "active.md").write_text(
-        "## [t491] Active one\n- priority: P1\n- status: active\n- created: 2026-01-01\n",
+    (tasks / "active").mkdir()
+    (tasks / "active" / "t491-active-one.md").write_text(
+        "---\nid: t491\nstatus: active\n---\n",
         encoding="utf-8",
     )
     (tasks / "done" / "2026-01.md").write_text(
@@ -52,11 +60,11 @@ def test_status_index_reads_active_and_month_rollups(tmp_path: Path) -> None:
 
 
 def test_status_index_stops_at_the_end_of_the_field_block(tmp_path: Path) -> None:
-    """A `- status:` line in a description is description, not a second record."""
+    """A body `- status:` line does not override active frontmatter."""
     tasks = tmp_path / "tasks"
-    tasks.mkdir()
-    (tasks / "active.md").write_text(
-        "## [t491] One\n- status: active\n- created: 2026-01-01\n\n"
+    (tasks / "active").mkdir(parents=True)
+    (tasks / "active" / "t491-one.md").write_text(
+        "---\nid: t491\nstatus: active\n---\n\n"
         "Checklist:\n- status: done\n",
         encoding="utf-8",
     )
@@ -66,21 +74,27 @@ def test_status_index_stops_at_the_end_of_the_field_block(tmp_path: Path) -> Non
 def test_status_index_omits_a_task_declaring_no_status(tmp_path: Path) -> None:
     """Absent is not `active` -- callers decide what an undeclared status means."""
     tasks = tmp_path / "tasks"
-    tasks.mkdir()
-    (tasks / "active.md").write_text("## [t491] One\n- created: 2026-01-01\n", encoding="utf-8")
+    (tasks / "active").mkdir(parents=True)
+    (tasks / "active" / "t491-one.md").write_text(
+        "---\nid: t491\n---\n",
+        encoding="utf-8",
+    )
     assert task_status_index(tasks) == {}
 
 
-def test_status_index_prefers_active_for_a_duplicated_id(tmp_path: Path) -> None:
+def test_status_index_rejects_a_duplicated_id(tmp_path: Path) -> None:
     tasks = tmp_path / "tasks"
     (tasks / "done").mkdir(parents=True)
-    (tasks / "active.md").write_text(
-        "## [t491] One\n- status: active\n- created: 2026-01-01\n", encoding="utf-8"
+    (tasks / "active").mkdir()
+    (tasks / "active" / "t491-one.md").write_text(
+        "---\nid: t491\nstatus: active\n---\n",
+        encoding="utf-8",
     )
     (tasks / "done" / "2026-01.md").write_text(
         "## [t491] One\n- status: done\n- created: 2026-01-01\n", encoding="utf-8"
     )
-    assert task_status_index(tasks) == {"t491": "active"}
+    with pytest.raises(ValueError, match="duplicate task id t491"):
+        task_status_index(tasks)
 
 
 def test_status_index_missing_dir_is_empty(tmp_path: Path) -> None:

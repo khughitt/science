@@ -2,9 +2,10 @@
 
 from __future__ import annotations
 
+import hashlib
 from collections.abc import Callable
 from pathlib import Path
-from typing import Any, cast
+from typing import cast
 
 import click
 
@@ -176,6 +177,16 @@ def _missing_project_entity_lookup(_ref: str) -> object | None:
     return None
 
 
+def _active_source_hash(tasks_dir: Path) -> str:
+    """Hash active task filenames and bytes for an optimistic write recheck."""
+    digest = hashlib.sha256()
+    for path in sorted((tasks_dir / "active").glob("*.md")):
+        for part in (path.name.encode("utf-8"), path.read_bytes()):
+            digest.update(len(part).to_bytes(8, byteorder="big"))
+            digest.update(part)
+    return digest.hexdigest()
+
+
 @tasks_group.command("blockers")
 @click.argument("task_id")
 @click.option("--format", "fmt", type=click.Choice(["table", "json"]), default="table")
@@ -289,8 +300,11 @@ def tasks_fix_blockers(dry_run: bool, output_format: str, output_path: Path | No
     from science_tool.budget.registry import lookup
     from science_tool.budget.sink import BoundedSink
     from science_tool.tasks import (
-        _write_active,
-        parse_tasks_for_cli,
+        _read_active,
+        _require_split,
+        _task_allocation_lock,
+        find_task_location,
+        write_task_file,
     )
     from science_tool.tasks_blockers import is_typed_ref
 
@@ -311,8 +325,14 @@ def tasks_fix_blockers(dry_run: bool, output_format: str, output_path: Path | No
         else None
     )
 
-    tasks_path = DEFAULT_TASKS_DIR / "active.md"
-    tasks_, warnings = parse_tasks_for_cli(tasks_path)
+    source_hash = _active_source_hash(DEFAULT_TASKS_DIR)
+    tasks_ = _read_active(DEFAULT_TASKS_DIR)
+    warnings = [
+        f"task {task.id}: legacy untyped blocker {ref!r} — run 'science tasks fix-blockers' to retype"
+        for task in tasks_
+        for ref in task.blocked_by
+        if not is_typed_ref(ref)
+    ]
 
     if not warnings or dry_run:
         projected = project_rows(warnings, sink.max_rows)
@@ -342,8 +362,9 @@ def tasks_fix_blockers(dry_run: bool, output_format: str, output_path: Path | No
             click.echo(control_notice)
         return
 
-    changed = False
+    changed_tasks = []
     for task in tasks_:
+        original_blockers = task.blocked_by
         new_blockers: list[str] = []
         for ref in task.blocked_by:
             if is_typed_ref(ref):
@@ -359,18 +380,41 @@ def tasks_fix_blockers(dry_run: bool, output_format: str, output_path: Path | No
             if replacement == "!":
                 new_blockers.append(ref)
             elif replacement == "":
-                changed = True  # drop
+                pass  # drop
             else:
                 if not is_typed_ref(replacement):
                     click.echo(f"  ! {replacement!r} not a typed ref; keeping original")
                     new_blockers.append(ref)
                 else:
                     new_blockers.append(replacement)
-                    changed = True
         task.blocked_by = new_blockers
+        if new_blockers != original_blockers:
+            changed_tasks.append(task)
 
-    if changed and click.confirm("\nWrite changes to tasks/active.md?", default=True):
-        _write_active(DEFAULT_TASKS_DIR, tasks_)
+    if changed_tasks and click.confirm("\nWrite changes to active task files?", default=True):
+        with _task_allocation_lock(DEFAULT_TASKS_DIR):
+            _require_split(DEFAULT_TASKS_DIR)
+            _read_active(DEFAULT_TASKS_DIR, require_split=False)
+            if _active_source_hash(DEFAULT_TASKS_DIR) != source_hash:
+                raise click.ClickException("tasks changed under you; re-run fix-blockers")
+
+            try:
+                for task in changed_tasks:
+                    location = find_task_location(
+                        DEFAULT_TASKS_DIR,
+                        task.id,
+                        require_split=False,
+                    )
+                    if location.path.parent != DEFAULT_TASKS_DIR / "active":
+                        raise ValueError(
+                            f"task {task.id} is no longer an active task; "
+                            "re-run fix-blockers"
+                        )
+            except (KeyError, ValueError) as exc:
+                raise click.ClickException(str(exc)) from exc
+
+            for task in changed_tasks:
+                write_task_file(DEFAULT_TASKS_DIR, task)
         click.echo("Updated.")
     else:
         click.echo("No changes written.")
@@ -389,12 +433,14 @@ def tasks_unblock(task_id: str) -> None:
     click.echo(f"[{task.id}] unblocked → active")
 
 
-@tasks_group.command("archive")
-@click.option("--apply", "do_apply", is_flag=True, help="Write changes to disk (default is dry-run).")
+@tasks_group.command("migrate-storage")
+@click.option("--apply", "do_apply", is_flag=True, help="Apply the migration (default is dry-run).")
+@click.option("--resume", "do_resume", is_flag=True, help="Resume an interrupted migration from its journal.")
 @click.option(
-    "--check",
-    is_flag=True,
-    help="Print archivable counts and exit non-zero when lag is present (used by science health).",
+    "--tasks-dir",
+    default=DEFAULT_TASKS_DIR,
+    show_default=True,
+    type=click.Path(path_type=Path, file_okay=False, dir_okay=True),
 )
 @click.option(
     "--format",
@@ -404,107 +450,257 @@ def tasks_unblock(task_id: str) -> None:
     show_default=True,
 )
 @click.option(
-    "--tasks-dir",
-    default=DEFAULT_TASKS_DIR,
-    show_default=True,
-    type=click.Path(path_type=Path, file_okay=False, dir_okay=True),
-)
-@click.option(
     "--output",
     "output_path",
     type=click.Path(path_type=Path),
     default=None,
-    help="Write the complete, unbudgeted payload to PATH instead of stdout.",
+    help="Write the complete, unbudgeted migration plan to PATH.",
 )
-def tasks_archive(do_apply: bool, check: bool, output_format: str, tasks_dir: Path, output_path: Path | None) -> None:
-    """Move done/retired tasks from active.md to done/YYYY-MM.md.
+def tasks_migrate_storage(
+    do_apply: bool,
+    do_resume: bool,
+    tasks_dir: Path,
+    output_format: str,
+    output_path: Path | None,
+) -> None:
+    """Plan, apply, or resume the transactional split-storage migration."""
+    from contextlib import nullcontext
+    from datetime import date
 
-    Default is dry-run: prints the planned moves without touching disk.
-    Pass --apply to perform the writes (idempotent on re-run).
-    """
     from science_tool.budget.control import bounded_control_notice
     from science_tool.budget.invocation import build_complete_via, hint_for
     from science_tool.budget.registry import lookup
     from science_tool.budget.sink import BoundedSink
-    from science_tool.tasks_archive import apply_archive, count_archivable, plan_archive
+    from science_tool.tasks import _tasks_storage_state
+    from science_tool.tasks_migrate import (
+        MigrationPlan,
+        MigrationRefused,
+        apply_migration,
+        migration_mode_refusal,
+        plan_migration,
+        resume_migration,
+    )
 
-    if check:
-        counts = count_archivable(tasks_dir)
-        emit_query_rows(
-            output_format=output_format,
-            title="Tasks Archive Lag",
-            columns=[("metric", "Metric"), ("count", "Count")],
-            rows=[{"metric": k, "count": v} for k, v in counts.items()],
-        )
-        if any(counts.values()):
-            ctx = click.get_current_context()
-            ctx.exit(1)
-        return
+    if do_apply and do_resume:
+        raise click.UsageError("--apply and --resume are mutually exclusive")
 
-    plan = plan_archive(tasks_dir)
-
-    rows: list[dict[str, Any]] = [
-        {
-            "id": entry.task.id,
-            "status": entry.task.status,
-            "destination": str(entry.destination),
-            "missing_completed": entry.missing_completed,
+    if output_path is not None:
+        tasks_root = tasks_dir.resolve()
+        resolved_output = output_path.resolve()
+        protected_files = {
+            tasks_root / "active.md",
+            tasks_root / ".tasks.lock",
+            tasks_root / ".science" / "task-storage-migration.journal",
         }
-        for entry in plan.entries
-    ]
-
-    complete_via = build_complete_via(click.get_current_context(), output_hint=hint_for("tasks-archive", output_format))
-    control_notice = (
-        bounded_control_notice(f"wrote {len(rows)} rows to {output_path}") if output_path is not None else None
-    )
-    sink = BoundedSink(
-        lookup("tasks archive"), output_path=output_path, command_path="tasks archive", complete_via=complete_via
-    )
-    emit_query_rows(
-        output_format=output_format,
-        title="Tasks Archive Plan",
-        columns=[
-            ("id", "ID"),
-            ("status", "Status"),
-            ("destination", "Destination"),
-            ("missing_completed", "Missing completed:"),
-        ],
-        rows=rows,
-        sink=sink,
-    )
-    sink.flush()
-    if control_notice is not None:
-        click.echo(control_notice)
-
-    for entry in plan.entries:
-        if entry.missing_completed:
-            click.echo(
-                f"WARNING: [{entry.task.id}] has no `completed:` date; "
-                f"routed to current month {entry.destination.name}",
-                err=True,
+        protected_directories = (tasks_root / "active", tasks_root / "done")
+        if resolved_output in protected_files or any(
+            resolved_output.is_relative_to(directory)
+            for directory in protected_directories
+        ):
+            raise click.UsageError(
+                "--output overlaps transaction-owned task storage; choose a path "
+                "outside active.md, active/, done/, the journal, and .tasks.lock"
             )
 
-    for parse_error in plan.parse_errors:
-        click.echo(
-            f"WARNING: parse error in {parse_error.heading!r}: {parse_error.message}",
-            err=True,
+    sink = BoundedSink(
+        lookup("tasks migrate-storage"),
+        output_path=output_path,
+        command_path="tasks migrate-storage",
+        complete_via=build_complete_via(
+            click.get_current_context(),
+            output_hint=hint_for("tasks-migrate-storage", output_format),
+        ),
+    )
+
+    def _plan_rows(plan: MigrationPlan) -> list[dict[str, str]]:
+        return [
+            {
+                "id": entry.task.id,
+                "status": entry.task.status,
+                "destination": entry.destination.as_posix() if entry.destination is not None else "",
+                "action": entry.action,
+            }
+            for entry in plan.entries
+        ]
+
+    def _emit_rows(
+        rows: list[dict[str, str]],
+        *,
+        title: str,
+        mode: str,
+        summary: str,
+        source_count: int | None = None,
+    ) -> None:
+        emit_query_rows(
+            output_format=output_format,
+            title=title,
+            columns=[
+                ("id", "ID"),
+                ("status", "Status"),
+                ("destination", "Destination"),
+                ("action", "Action"),
+            ],
+            rows=rows,
+            meta={
+                "mode": mode,
+                "source_count": len(rows) if source_count is None else source_count,
+            },
+            sink=sink,
+        )
+        if output_format != "json":
+            sink.echo(summary)
+
+    def _flush_with_notice(row_count: int, *, noun: str) -> None:
+        sink.flush()
+        if output_path is not None:
+            click.echo(
+                bounded_control_notice(f"wrote {row_count} {noun} rows to {output_path}")
+            )
+
+    def _emit_mutation_summary(
+        *,
+        mode: str,
+        source_count: int,
+        written_count: int,
+        summary: str,
+    ) -> None:
+        emit(
+            output_format=output_format,
+            payload={
+                "format": "json",
+                "mode": mode,
+                "source_count": source_count,
+                "written_count": written_count,
+            },
+            render_text=lambda: sink.echo(summary),
+            sink=sink,
         )
 
-    if not do_apply:
-        if output_format != "json":
-            click.echo(f"Mode: dry-run — would move {len(plan.entries)} task(s)")
+    def _exit_with_refusal(exc: MigrationRefused, *, mode: str) -> None:
+        reasons = [line.strip() for line in str(exc).splitlines() if line.strip()]
+        rows = [
+            {
+                "id": "",
+                "status": "refusal",
+                "destination": "",
+                "action": reason,
+            }
+            for reason in reasons
+        ]
+        _emit_rows(
+            rows,
+            title="Task Storage Migration Refused",
+            mode=mode,
+            summary=f"Migration refused during {mode}; nothing further was written.",
+            source_count=0,
+        )
+        _flush_with_notice(len(rows), noun="migration-refusal")
+        click.get_current_context().exit(1)
+
+    if do_resume:
+        state_refusal = migration_mode_refusal(_tasks_storage_state(tasks_dir), "resume")
+        if state_refusal is not None:
+            raise click.ClickException(state_refusal)
+        try:
+            reservation = sink.reserve_output() if sink.is_file_sink else nullcontext()
+            with reservation:
+                result = resume_migration(tasks_dir)
+                summary = (
+                    "Resumed storage migration; "
+                    f"wrote {len(result.written)} missing post-image(s), "
+                    f"verified {len(result.entries)} total."
+                )
+                if sink.is_file_sink:
+                    rows = [
+                        {
+                            "id": "",
+                            "status": "",
+                            "destination": entry.destination.as_posix(),
+                            "action": entry.action,
+                        }
+                        for entry in result.entries
+                    ]
+                    _emit_rows(
+                        rows,
+                        title="Task Storage Migration Resume",
+                        mode="resumed",
+                        summary=summary,
+                    )
+                    _flush_with_notice(len(rows), noun="migration-resume")
+                else:
+                    _emit_mutation_summary(
+                        mode="resumed",
+                        source_count=len(result.entries),
+                        written_count=len(result.written),
+                        summary=summary,
+                    )
+                    _flush_with_notice(0, noun="migration-resume")
+        except MigrationRefused as exc:
+            _exit_with_refusal(exc, mode="resume")
         return
 
-    if plan.parse_errors:
-        raise click.ClickException(f"Refusing to apply: {len(plan.parse_errors)} parse error(s) in active.md")
+    if do_apply:
+        state_refusal = migration_mode_refusal(_tasks_storage_state(tasks_dir), "apply")
+        if state_refusal is not None:
+            raise click.ClickException(state_refusal)
+        try:
+            reservation = sink.reserve_output() if sink.is_file_sink else nullcontext()
+            with reservation:
+                plan = apply_migration(tasks_dir, today=date.today())
+                rows = _plan_rows(plan)
+                summary = f"Migrated {len(rows)} task(s)."
+                if sink.is_file_sink:
+                    _emit_rows(
+                        rows,
+                        title="Task Storage Migration Applied",
+                        mode="applied",
+                        summary=summary,
+                    )
+                    _flush_with_notice(len(rows), noun="migration-plan")
+                else:
+                    _emit_mutation_summary(
+                        mode="applied",
+                        source_count=len(rows),
+                        written_count=len(plan.post_images),
+                        summary=summary,
+                    )
+                    _flush_with_notice(0, noun="migration-plan")
+        except MigrationRefused as exc:
+            _exit_with_refusal(exc, mode="apply")
+        return
 
-    result = apply_archive(plan)
-    if output_format != "json":
-        click.echo(
-            f"Moved {len(result.moved)} task(s); "
-            f"{len(result.skipped_duplicates)} duplicate(s) skipped; "
-            f"wrote {len(result.destinations_written)} destination file(s)"
+    plan = plan_migration(tasks_dir, today=date.today())
+    if plan.refusals:
+        rows = [
+            {
+                "id": "",
+                "status": "refusal",
+                "destination": "",
+                "action": reason,
+            }
+            for reason in plan.refusals
+        ]
+        rows.extend(_plan_rows(plan))
+        _emit_rows(
+            rows,
+            title="Task Storage Migration Refused",
+            mode="refused",
+            summary=(
+                "Mode: dry-run — migration refused; "
+                f"{len(plan.refusals)} issue(s), nothing written."
+            ),
+            source_count=len(plan.entries),
         )
+        _flush_with_notice(len(rows), noun="migration-plan")
+        click.get_current_context().exit(1)
+    rows = _plan_rows(plan)
+    _emit_rows(
+        rows,
+        title="Task Storage Migration Plan",
+        mode="dry-run",
+        summary=f"Mode: dry-run — would migrate {len(rows)} task(s).",
+    )
+    _flush_with_notice(len(rows), noun="migration-plan")
 
 
 @tasks_group.command("edit")
@@ -616,7 +812,13 @@ def tasks_note(task_id: str, note: str, note_date_raw: str | None) -> None:
 @click.option("--related", default=None)
 @click.option("--group", default=None, help="Filter by group (exact match)")
 @click.option("--aspect", "aspects", multiple=True, help="Filter by aspect (repeatable)")
-@click.option("--all", "show_all", is_flag=True, default=False, help="Include all task statuses")
+@click.option(
+    "--all",
+    "show_all",
+    is_flag=True,
+    default=False,
+    help="Include all statuses in the active store (does not read done ledgers)",
+)
 @click.option(
     "--since",
     "since_raw",
@@ -642,7 +844,7 @@ def tasks_list(
     output_format: str,
     output_path: Path | None,
 ) -> None:
-    """List tasks. Active and blocked tasks are shown by default; use --all for every status."""
+    """List tasks from the active store; use --since for bounded closed-task reads."""
     from datetime import date
 
     from science_model.tasks import Task
@@ -668,23 +870,31 @@ def tasks_list(
             raise click.UsageError(
                 "--since only applies to closed tasks; use --status done, --status retired, or --all"
             )
+    elif status in _CLOSED_STATUS_VALUES:
+        raise click.UsageError(
+            f"--status {status} requires --since YYYY-MM-DD to bound done-ledger reads"
+        )
+
+    try:
+        matched = list_tasks(
+            DEFAULT_TASKS_DIR,
+            project_root=Path.cwd(),
+            priority=priority,
+            status=status,
+            related=related,
+            group=group,
+            aspects=list(aspects) or None,
+            include_done=show_all,
+            since=since,
+        )
+    except ValueError as exc:
+        raise click.ClickException(str(exc)) from exc
 
     # Surface legacy-untyped-blocker warnings on stderr.
-    _, warnings = parse_tasks_for_cli(DEFAULT_TASKS_DIR / "active.md")
+    _, warnings = parse_tasks_for_cli(DEFAULT_TASKS_DIR, require_split=False)
     for w in warnings:
         click.echo(f"WARNING: {w}", err=True)
 
-    matched = list_tasks(
-        DEFAULT_TASKS_DIR,
-        project_root=Path.cwd(),
-        priority=priority,
-        status=status,
-        related=related,
-        group=group,
-        aspects=list(aspects) or None,
-        include_done=show_all,
-        since=since,
-    )
     if status is None and not show_all and since is None:
         matched = [task for task in matched if task.status in WORKING_SET]
     matched = sort_tasks(matched)
@@ -747,12 +957,12 @@ def tasks_list(
             return row
 
         rows = [_row_with_readiness(t) for t in matched]
-        # Total count of active-file tasks before any filtering, so callers can
-        # tell whether they're looking at a curated view or the full list
-        # (fb-2026-05-01-006).
+        # Total count of open task files in tasks/active/ before filtering, so
+        # callers can tell whether they are seeing a curated view or the full
+        # open-task set (fb-2026-05-01-006).
         from science_tool.tasks import _read_active
 
-        active_total = len(_read_active(DEFAULT_TASKS_DIR))
+        active_total = len(_read_active(DEFAULT_TASKS_DIR, require_split=False))
         applied_filters: dict[str, object] = {}
         if priority is not None:
             applied_filters["priority"] = priority
@@ -771,9 +981,10 @@ def tasks_list(
             "sort_order": "status_rank,id",
             "applied_filters": applied_filters,
         }
-        # active_total counts only tasks/active.md and is meaningless for a
-        # --since query, whose rows come from the archive union — omit it
-        # rather than ship a "curated vs full" ratio that doesn't apply.
+        # active_total counts only open task files in tasks/active/. A --since
+        # candidate pool combines those open tasks with selected monthly done
+        # ledgers, but its final closed/date filter returns ledger rows only.
+        # Omit active_total rather than ship an invalid "curated vs full" ratio.
         if since is None:
             meta["active_total"] = active_total
         emit_query_rows(
@@ -811,7 +1022,7 @@ def tasks_show(task_id: str, output_format: str) -> None:
 
     try:
         location = find_task_location(DEFAULT_TASKS_DIR, task_id)
-    except KeyError as exc:
+    except (KeyError, ValueError) as exc:
         raise click.ClickException(str(exc)) from exc
     task = location.task
     try:
@@ -869,7 +1080,7 @@ def tasks_summary(output_format: str, output_path: Path | None) -> None:
     from science_tool.budget.invocation import build_complete_via, hint_for
     from science_tool.budget.registry import lookup
     from science_tool.budget.sink import BoundedSink
-    from science_tool.tasks import parse_tasks, warn_invalid_statuses
+    from science_tool.tasks import _read_active, warn_invalid_statuses
     from science_tool.tasks_summary_projection import project_tasks_summary
 
     complete_via = build_complete_via(click.get_current_context(), output_hint=hint_for("tasks-summary", output_format))
@@ -882,7 +1093,10 @@ def tasks_summary(output_format: str, output_path: Path | None) -> None:
         else None
     )
 
-    active = parse_tasks(DEFAULT_TASKS_DIR / "active.md")
+    try:
+        active = _read_active(DEFAULT_TASKS_DIR)
+    except ValueError as exc:
+        raise click.ClickException(str(exc)) from exc
     if not active:
         full = {"total": 0, "by_status": {}, "by_type": {}, "by_priority": {}, "by_group": {}}
         emit(output_format=output_format, payload=full, render_text=lambda: sink.echo("No active tasks."), sink=sink)

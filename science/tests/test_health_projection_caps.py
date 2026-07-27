@@ -59,7 +59,6 @@ def _natural_systems_shaped_report() -> dict[str, object]:
         "schema_invalid": [],
         "tooling_scaffold": [],
         "accepted_validation": [],
-        "archive_lag": {"done_in_active": 4, "retired_in_active": 0, "missing_completed": 1},
         "unwired_checks": [],
         "layered_claims": {
             "proposition_claim_layer_coverage": {
@@ -89,7 +88,7 @@ def _natural_systems_shaped_report() -> dict[str, object]:
             "sources": [],
             "findings": [],
         },
-        "total_issues": 364,
+        "total_issues": 363,
     }
 
 
@@ -105,20 +104,20 @@ def test_section_omitted_records_what_was_dropped() -> None:
 
 def test_total_issues_is_never_rewritten() -> None:
     projected = project_health_report(_natural_systems_shaped_report(), threshold="warn")
-    assert projected["total_issues"] == 364
+    assert projected["total_issues"] == 363
 
 
 def test_displayed_issues_uses_the_same_counting_rules_as_total() -> None:
     """displayed_issues must be count_issues(projected), not a raw row count.
 
     The fixture's single managed_artifacts row has counts_as_issue=False, so it must NOT
-    contribute; unresolved_refs and archive_lag must.
+    contribute; unresolved_refs must.
     """
     report = _natural_systems_shaped_report()
     projected = project_health_report(report, threshold="warn")
     assert projected["displayed_issues"] == count_issues(projected)
-    # 40 validation + 2 unresolved_refs + 1 archive_lag; managed_artifacts excluded.
-    assert projected["displayed_issues"] == SECTION_ROW_CAP + 3
+    # 40 validation + 2 unresolved_refs; managed_artifacts excluded.
+    assert projected["displayed_issues"] == SECTION_ROW_CAP + 2
 
 
 def test_displayed_never_exceeds_total() -> None:
@@ -130,7 +129,7 @@ def test_error_threshold_hides_warnings_but_reports_them_as_omitted() -> None:
     projected = project_health_report(_natural_systems_shaped_report(), threshold="error")
     assert projected["validation"] == []
     assert projected["section_omitted"]["validation"] == 361
-    assert projected["total_issues"] == 364
+    assert projected["total_issues"] == 363
 
 
 def test_unfiltered_sections_ignore_threshold_and_cap() -> None:
@@ -166,7 +165,7 @@ def test_nested_findings_are_projected_in_place() -> None:
         ],
         "propositions": [],
     }
-    report["total_issues"] = 464
+    report["total_issues"] = 463
     projected = project_health_report(report, threshold="error")
     assert len(projected["cross_paper_evidence"]["findings"]) == SECTION_ROW_CAP
     assert projected["cross_paper_evidence"]["status"] == "active"
@@ -250,22 +249,16 @@ def test_nested_sections_require_their_registered_shape(
         project_health_report(report, threshold="warn")
 
 
-@pytest.mark.parametrize("section", ["archive_lag", "layered_claims"])
-def test_registered_mapping_sections_reject_non_mappings(section: str) -> None:
+def test_registered_mapping_sections_reject_non_mappings() -> None:
     report = _natural_systems_shaped_report()
-    report[section] = []
-    with pytest.raises(TypeError, match=section):
+    report["layered_claims"] = []
+    with pytest.raises(TypeError, match="layered_claims"):
         project_health_report(report, threshold="warn")
 
 
 @pytest.mark.parametrize(
     ("section", "value"),
     [
-        ("archive_lag", {"done_in_active": 0, "retired_in_active": 0}),
-        (
-            "archive_lag",
-            {"done_in_active": "zero", "retired_in_active": 0, "missing_completed": 0},
-        ),
         (
             "layered_claims",
             {
@@ -352,7 +345,7 @@ def test_registered_scalars_still_pass_through() -> None:
 @pytest.mark.parametrize(
     ("section", "value"),
     [
-        ("total_issues", "364"),
+        ("total_issues", "363"),
         ("_meta", {"timings": []}),
         ("_meta", {"timings": {}, "total_duration_seconds": 0.5}),
     ],
@@ -498,7 +491,7 @@ def test_meta_timing_requires_name_and_duration() -> None:
         project_health_report(report, threshold="warn")
 
 
-@pytest.mark.parametrize("total_issues", [363, 365])
+@pytest.mark.parametrize("total_issues", [362, 364])
 def test_total_issues_must_equal_the_full_issue_count(total_issues: int) -> None:
     report = _natural_systems_shaped_report()
     report["total_issues"] = total_issues
@@ -510,11 +503,6 @@ def test_one_issue_cannot_claim_total_zero() -> None:
     report = _natural_systems_shaped_report()
     report["validation"] = [report["validation"][0]]
     report["unresolved_refs"] = []
-    report["archive_lag"] = {
-        "done_in_active": 0,
-        "retired_in_active": 0,
-        "missing_completed": 0,
-    }
     report["total_issues"] = 0
     with pytest.raises(ValueError, match=r"total_issues.*count_issues"):
         project_health_report(report, threshold="warn")

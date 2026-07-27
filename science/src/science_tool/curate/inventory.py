@@ -12,7 +12,7 @@ from science_model.frontmatter import parse_frontmatter
 
 from science_tool.curate.agents_md import AgentsMdDigestState, collect_agents_md_state
 from science_tool.entity_scan import iter_entity_markdown
-from science_tool.tasks import parse_tasks
+from science_tool.tasks import _parse_path_tasks, _task_search_paths
 
 ArtifactClass: TypeAlias = str
 
@@ -173,12 +173,7 @@ def _entity_artifact_class(frontmatter: dict[str, object]) -> str | None:
 
 
 def _collect_task_paths(project_root: Path) -> list[Path]:
-    paths: dict[Path, None] = {}
-    for pattern in ("tasks/active.md", "tasks/done/**/*.md"):
-        for path in project_root.glob(pattern):
-            if path.is_file():
-                paths[path] = None
-    return sorted(paths)
+    return _task_search_paths(project_root / "tasks")
 
 
 def _collect_knowledge_source_paths(project_root: Path) -> list[Path]:
@@ -229,7 +224,7 @@ def _has_provenance_edge(fm: dict) -> bool:
 
 def _record_tasks(project_root: Path, path: Path, today: date) -> list[InventoryArtifact]:
     records: list[InventoryArtifact] = []
-    for task in parse_tasks(path):
+    for task in _parse_path_tasks(path):
         records.append(
             InventoryArtifact(
                 path=f"{path.relative_to(project_root)}#{task.id}",

@@ -110,9 +110,9 @@ def test_build_inventory_metadata_without_science_yaml_uses_project_root_name(tm
 
 def test_build_inventory_preserves_task_dsl_type_in_data(tmp_path) -> None:
     project = tmp_path / "project"
-    (project / "tasks").mkdir(parents=True)
+    (project / "tasks" / "done").mkdir(parents=True)
     (project / "science.yaml").write_text("id: task-project\n", encoding="utf-8")
-    (project / "tasks" / "active.md").write_text(
+    (project / "tasks" / "done" / "2026-04.md").write_text(
         "## [t001] T01\n"
         "- type: research\n"
         "- priority: P1\n"

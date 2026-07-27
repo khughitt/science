@@ -194,6 +194,7 @@ from pathlib import Path
 from typing import Literal
 
 from science_tool.entity_scan import iter_entity_markdown
+from science_tool.tasks import known_task_ids
 from science_tool.validate.checks import Check
 from science_tool.validate.context import ValidateContext
 from science_tool.validate.result import Result, Severity
@@ -201,7 +202,6 @@ from science_tool.validate.result import Result, Severity
 QUOTE = "[\"']?"
 NOT_QUOTE = "[^\"'\n]+"
 FRONTMATTER = re.compile(r"^---\n(.*?)\n---", re.DOTALL)
-TASK_HEADER = re.compile(r"^##\s+\[(\w+)\]")
 
 LOCAL_KINDS = {
     "assumption",
@@ -278,23 +278,9 @@ def _extract_frontmatter(ctx: ValidateContext, path: Path) -> tuple[str | None, 
 
 def _load_task_ids(ctx: ValidateContext) -> set[str]:
     tasks_dir = ctx.project_root / "tasks"
-    task_ids: set[str] = set()
     if not tasks_dir.is_dir():
-        return task_ids
-
-    task_paths = [tasks_dir / "active.md"]
-    done_dir = tasks_dir / "done"
-    if done_dir.is_dir():
-        task_paths.extend(sorted(done_dir.glob("*.md")))
-
-    for path in task_paths:
-        if not path.is_file():
-            continue
-        for line in ctx.read_text_cached(path).splitlines():
-            match = TASK_HEADER.match(line)
-            if match:
-                task_ids.add(f"task:{match.group(1).lower()}")
-    return task_ids
+        return set()
+    return {f"task:{task_id}" for task_id in known_task_ids(tasks_dir)}
 
 
 def _load_project_ids(ctx: ValidateContext) -> set[str]:

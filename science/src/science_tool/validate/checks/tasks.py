@@ -160,7 +160,7 @@ class _TaskBlock:
     path: str
     line: int
     task_id: str
-    lines: list[str] = field(default_factory=list)
+    fields: dict[str, object] = field(default_factory=dict)
 
 
 def _result(severity: Severity, message: str) -> Result:
@@ -174,8 +174,20 @@ def _display_path(project_root: Path, path: Path) -> str:
         return path.as_posix()
 
 
-def _split_list_value(raw: str) -> list[str]:
-    value = raw.strip()
+def _display_parser_error(project_root: Path, path: Path, exc: Exception) -> str:
+    return str(exc).replace(
+        str(path),
+        _display_path(project_root, path),
+        1,
+    )
+
+
+def _split_list_value(raw: object) -> list[str]:
+    if isinstance(raw, list):
+        return [str(item).strip() for item in raw if str(item).strip()]
+    if raw is None:
+        return []
+    value = str(raw).strip()
     if value.startswith("[") and value.endswith("]"):
         return [item.strip() for item in value[1:-1].split(",") if item.strip()]
     return [value] if value else []
@@ -183,25 +195,56 @@ def _split_list_value(raw: str) -> list[str]:
 
 @Check(section="task queue...", order=18)
 def check_tasks(ctx: ValidateContext) -> Iterator[Result]:
+    from science_tool.tasks import (
+        _require_split,
+        _task_search_paths,
+        parse_task_file,
+        parse_tasks,
+    )
+
     tasks_dir = ctx.project_root / "tasks"
-    active_path = tasks_dir / "active.md"
-    if not active_path.is_file():
-        yield _result(Severity.WARN, "tasks/active.md not found (use /science:tasks to create)")
+    _require_split(tasks_dir)
+    active_dir = tasks_dir / "active"
+    if not active_dir.is_dir():
+        yield _result(Severity.WARN, "tasks/active/ not found (use /science:tasks to create)")
         return
 
-    yield _result(Severity.INFO, "tasks/active.md exists")
-
-    paths = [active_path]
-    done_dir = tasks_dir / "done"
-    if done_dir.is_dir():
-        paths.extend(sorted(done_dir.glob("*.md")))
+    yield _result(Severity.INFO, "tasks/active/ exists")
 
     declared: set[str] = set()
     blocks: list[_TaskBlock] = []
 
-    for path in paths:
-        if not path.is_file():
+    for path in _task_search_paths(tasks_dir, require_split=False):
+        if path.parent.name == "active":
+            try:
+                task = parse_task_file(path)
+            except (OSError, ValueError) as exc:
+                yield _result(
+                    Severity.ERROR,
+                    _display_parser_error(ctx.project_root, path, exc),
+                )
+                continue
+            fields = task.model_dump(mode="python")
+            blocks.append(
+                _TaskBlock(
+                    path=_display_path(ctx.project_root, path),
+                    line=1,
+                    task_id=task.id,
+                    fields=fields,
+                )
+            )
+            declared.add(task.id)
             continue
+
+        try:
+            parse_tasks(path)
+        except (OSError, ValueError) as exc:
+            yield _result(
+                Severity.ERROR,
+                _display_parser_error(ctx.project_root, path, exc),
+            )
+            continue
+
         current: _TaskBlock | None = None
         lines = ctx.read_text_cached(path).splitlines()
         for line_no, line in enumerate(lines, start=1):
@@ -226,12 +269,21 @@ def check_tasks(ctx: ValidateContext) -> Iterator[Result]:
                 declared.add(task_id)
                 continue
             if current is not None:
-                current.lines.append(line)
+                field_match = re.match(r"^-\s+([\w-]+):\s*(.*)$", line)
+                if field_match:
+                    current.fields[field_match.group(1)] = field_match.group(2).strip()
 
     for task_id in sorted(declared):
-        count = sum(1 for block in blocks if block.task_id == task_id)
-        if count > 1:
-            yield _result(Severity.ERROR, f"duplicate task IDs in active.md: {task_id}")
+        locations = [
+            f"{block.path}:{block.line}"
+            for block in blocks
+            if block.task_id == task_id
+        ]
+        if len(locations) > 1:
+            yield _result(
+                Severity.ERROR,
+                f"duplicate task ID {task_id} found in {', '.join(locations)}",
+            )
 
     for block in blocks:
         yield from _validate_block(block, declared)
@@ -239,27 +291,21 @@ def check_tasks(ctx: ValidateContext) -> Iterator[Result]:
     if blocks:
         yield _result(Severity.INFO, f"  {len(blocks)} task(s) validated")
     else:
-        yield _result(Severity.INFO, "  no tasks in active.md")
+        yield _result(Severity.INFO, "  no tasks in active/")
 
 
 def _validate_block(block: _TaskBlock, declared: set[str]) -> Iterator[Result]:
-    fields: dict[str, str] = {}
-    for line in block.lines:
-        match = re.match(r"^-\s+([\w-]+):\s*(.*)$", line)
-        if match:
-            fields[match.group(1)] = match.group(2).strip()
-
     for field_name in REQUIRED_FIELDS:
-        if field_name not in fields:
+        if field_name not in block.fields:
             yield _result(Severity.ERROR, f"task {block.task_id} missing required field: {field_name}")
 
-    parent = fields.get("parent", "")
-    if parent and not LOCAL_PARENT.match(parent):
+    parent = block.fields.get("parent", "")
+    if parent and (not isinstance(parent, str) or not LOCAL_PARENT.match(parent)):
         yield _result(Severity.ERROR, f"task {block.task_id} parent must be local task ref like task:t001")
 
     refs_to_check: list[str] = []
     for field_name in REF_FIELDS:
-        refs_to_check.extend(_split_list_value(fields.get(field_name, "")))
+        refs_to_check.extend(_split_list_value(block.fields.get(field_name, "")))
 
     for raw_ref in refs_to_check:
         if ":" in raw_ref:

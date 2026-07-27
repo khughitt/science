@@ -86,7 +86,6 @@ def health_command(
     from science_tool.budget.registry import lookup
     from science_tool.budget.sink import BoundedSink
     from science_tool.graph.health import build_health_report, list_health_checks
-    from science_tool.graph.health_checks.archive_lag import archive_lag_total
 
     sink = BoundedSink(
         lookup("health"),
@@ -166,8 +165,6 @@ def health_command(
                 click.echo(f"  total: {total_duration:.3f}s", err=True)
 
         layered_claims = displayed["layered_claims"]
-        archive_lag = displayed["archive_lag"]
-        lag_total = archive_lag_total(archive_lag)
 
         managed_artifacts = displayed.get("managed_artifacts") or []
         tooling_scaffold = displayed.get("tooling_scaffold") or []
@@ -222,17 +219,6 @@ def health_command(
             if accepted_validation:
                 sink.echo(f"Accepted validation warnings: {len(accepted_validation)}")
             return
-
-        if lag_total:
-            lag_table = Table(title="Tasks Archive Lag")
-            lag_table.add_column("Metric", style="bold")
-            lag_table.add_column("Count", justify="right")
-            for key in ("done_in_active", "retired_in_active", "missing_completed"):
-                lag_table.add_row(key, str(archive_lag[key]))
-            sink.console.print(lag_table)
-            sink.console.print(
-                "\n[bold]Next:[/bold] run [cyan]science tasks archive[/cyan] to preview, then [cyan]--apply[/cyan]."
-            )
 
         flagged_managed_artifacts = [f for f in managed_artifacts if f.get("counts_as_issue")]
         if flagged_managed_artifacts:

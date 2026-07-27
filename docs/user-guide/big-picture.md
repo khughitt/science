@@ -51,6 +51,13 @@ reusable canonical owners — shared datasets and reference graphs — and proje
 recognize peers and synchronize shared knowledge without flattening away local
 context.
 
+Open work follows the same small-record principle: `tasks/active/` stores one
+YAML-frontmatter file per open task. Completing or retiring a task moves it
+directly to a monthly `tasks/done/YYYY-MM.md` ledger. Keeping each open record
+small and complete avoids the truncation and repeated context cost of a large
+aggregate queue; use `science tasks list` and `science tasks show` to inspect
+task state through the bounded CLI surface.
+
 <figure class="sci-fig">
 --8<-- "figures/f3-patchwork.svg"
 <figcaption>A patchwork of epistemic neighborhoods across projects, over a shared commons.</figcaption>

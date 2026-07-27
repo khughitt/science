@@ -4,6 +4,7 @@ import pytest
 
 from science_tool.graph.health_projection import (
     COUNTS_AS_ISSUE_SECTIONS,
+    MAPPING_SECTIONS,
     SEVERITY_SECTIONS,
     UNFILTERED_SECTIONS,
     meets_threshold,
@@ -50,7 +51,6 @@ def test_section_classifications_are_exact() -> None:
     assert COUNTS_AS_ISSUE_SECTIONS == {"managed_artifacts"}
     assert UNFILTERED_SECTIONS == {
         "agent_context",
-        "archive_lag",
         "identity_policy",
         "invalid_entity_aspects",
         "layered_claims",
@@ -62,6 +62,10 @@ def test_section_classifications_are_exact() -> None:
         "accepted_validation",
         "unwired_checks",
     }
+
+
+def test_mapping_sections_are_exact() -> None:
+    assert MAPPING_SECTIONS == {"layered_claims"}
 
 
 @pytest.mark.parametrize(

@@ -1,32 +1,39 @@
 from __future__ import annotations
 
 import json
+from datetime import date
 from pathlib import Path
 
 from click.testing import CliRunner
+from science_model.tasks import Task
 
 from science_tool.budget.measure import visible_len
 from science_tool.budget.registry import BUDGETS
 from science_tool.cli import main
-
-TASKS = "\n".join(
-    f"""## [t{i:03d}] Task {i} with a deliberately long title to exercise wrapping
-- priority: P2
-- status: {"active" if i < 3 else "proposed"}
-- related: [question:q{i:04d}-a-long-question-slug, hypothesis:h{i:04d}-another-long-slug]
-- created: 2026-01-01
-
-Body for task {i}.
-"""
-    for i in range(200)
-)
+from science_tool.tasks import render_task_file
 
 
 def _project(root: Path) -> None:
     (root / "science.yaml").write_text("id: demo\nname: demo\n")
-    tasks_dir = root / "tasks"
-    tasks_dir.mkdir(parents=True, exist_ok=True)
-    (tasks_dir / "active.md").write_text(TASKS)
+    active_dir = root / "tasks" / "active"
+    active_dir.mkdir(parents=True, exist_ok=True)
+    for i in range(200):
+        task = Task(
+            id=f"t{i:03d}",
+            title=f"Task {i} with a deliberately long title to exercise wrapping",
+            priority="P2",
+            status="active" if i < 3 else "proposed",
+            related=[
+                f"question:q{i:04d}-a-long-question-slug",
+                f"hypothesis:h{i:04d}-another-long-slug",
+            ],
+            created=date(2026, 1, 1),
+            description=f"Body for task {i}.",
+        )
+        (active_dir / f"{task.id}-task-{i}.md").write_text(
+            render_task_file(task),
+            encoding="utf-8",
+        )
 
 
 def _invoke(args: list[str]):

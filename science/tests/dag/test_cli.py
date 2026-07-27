@@ -83,6 +83,18 @@ def _copy_minimal_fixture_with_propositions(source: Path, target: Path) -> Path:
     return target
 
 
+def _snapshot_task_store(project: Path) -> tuple[tuple[str, str, bytes], ...]:
+    tasks_dir = project / "tasks"
+    return tuple(
+        (
+            path.relative_to(tasks_dir).as_posix(),
+            "directory" if path.is_dir() else "file",
+            b"" if path.is_dir() else path.read_bytes(),
+        )
+        for path in sorted(tasks_dir.rglob("*"))
+    )
+
+
 def _build_project_without_propositions(tmp_path: Path) -> Path:
     project = tmp_path / "project"
     dag_dir = project / "doc/figures/dags"
@@ -240,14 +252,14 @@ def test_cli_dag_audit_fix_validation_failure_is_click_error(tmp_path: Path) -> 
 
 
 def test_cli_dag_audit_is_read_only_by_default(cli_audit_project: Path) -> None:
-    """dag audit without --fix must not mutate tasks/active.md."""
-    active_before = (cli_audit_project / "tasks/active.md").read_text()
+    """dag audit without --fix must not mutate the task store."""
+    tasks_before = _snapshot_task_store(cli_audit_project)
     runner = CliRunner()
     result = runner.invoke(main, ["dag", "audit", "--project", str(cli_audit_project), "--format", "json"])
     assert result.exit_code in (0, 1)
     payload = json.loads(result.stdout)
     assert "staleness" not in payload
-    assert (cli_audit_project / "tasks/active.md").read_text() == active_before
+    assert _snapshot_task_store(cli_audit_project) == tasks_before
 
 
 def test_cli_dag_init_scaffolds_new_dag(cli_project: Path) -> None:

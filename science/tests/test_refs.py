@@ -15,6 +15,13 @@ from science_tool.refs import check_refs
 from science_tool.refs_cli import refs_group
 
 
+def _write_active_task(root: Path, task_id: str, *, title: str = "Build pipeline") -> Path:
+    path = root / "tasks" / "active" / f"{task_id}-{title.lower().replace(' ', '-')}.md"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(f"---\nid: {task_id}\n---\n", encoding="utf-8")
+    return path
+
+
 def _scaffold(root: Path) -> None:
     """Create a minimal project scaffold for testing."""
     (root / "entities" / "hypotheses").mkdir(parents=True)
@@ -679,8 +686,7 @@ def test_cli_refs_check_type_filters_broken_refs() -> None:
     with runner.isolated_filesystem() as td:
         root = Path(td)
         _scaffold(root)
-        (root / "tasks").mkdir(parents=True, exist_ok=True)
-        (root / "tasks" / "active.md").write_text("## [t05] Build pipeline\n- status: proposed\n")
+        _write_active_task(root, "t005")
         (root / "doc" / "background" / "topics" / "test.md").write_text(
             "# Test\nH99 is broken, [@Nobody2099] is missing, and t99 is missing.\n",
             encoding="utf-8",
@@ -700,8 +706,7 @@ def test_cli_refs_check_by_value_groups_filtered_refs() -> None:
     with runner.isolated_filesystem() as td:
         root = Path(td)
         _scaffold(root)
-        (root / "tasks").mkdir(parents=True, exist_ok=True)
-        (root / "tasks" / "active.md").write_text("## [t05] Build pipeline\n- status: proposed\n")
+        _write_active_task(root, "t005")
         (root / "doc" / "background" / "topics" / "one.md").write_text(
             "# One\nMissing t99 appears twice: t99.\n",
             encoding="utf-8",
@@ -724,8 +729,7 @@ def test_cli_refs_check_json_by_value_groups_filtered_refs() -> None:
     with runner.isolated_filesystem() as td:
         root = Path(td)
         _scaffold(root)
-        (root / "tasks").mkdir(parents=True, exist_ok=True)
-        (root / "tasks" / "active.md").write_text("## [t05] Build pipeline\n- status: proposed\n")
+        _write_active_task(root, "t005")
         (root / "doc" / "background" / "topics" / "test.md").write_text(
             "# Test\nMissing t99 appears twice: t99. H99 is separate.\n",
             encoding="utf-8",
@@ -762,14 +766,13 @@ def test_external_url_links_ignored() -> None:
 
 
 def test_valid_task_ref() -> None:
-    """A doc citing t05 is fine when [t05] is declared in tasks/active.md."""
+    """A doc citing t005 is fine when t005 has a file in tasks/active/."""
     runner = CliRunner()
     with runner.isolated_filesystem() as td:
         root = Path(td)
         _scaffold(root)
-        (root / "tasks").mkdir(parents=True, exist_ok=True)
-        (root / "tasks" / "active.md").write_text("## [t05] Build pipeline\n- status: proposed\n")
-        (root / "doc" / "background" / "topics" / "pipeline.md").write_text("# Pipeline\nCompleted in t05.\n")
+        _write_active_task(root, "t005")
+        (root / "doc" / "background" / "topics" / "pipeline.md").write_text("# Pipeline\nCompleted in t005.\n")
         issues = check_refs(root)
         task_issues = [i for i in issues if i.ref_type == "task"]
         assert task_issues == []
@@ -781,8 +784,7 @@ def test_broken_task_ref() -> None:
     with runner.isolated_filesystem() as td:
         root = Path(td)
         _scaffold(root)
-        (root / "tasks").mkdir(parents=True, exist_ok=True)
-        (root / "tasks" / "active.md").write_text("## [t05] Build pipeline\n- status: proposed\n")
+        _write_active_task(root, "t005")
         (root / "doc" / "background" / "topics" / "pipeline.md").write_text(
             "# Pipeline\nDriven by t99 which does not exist.\n"
         )
@@ -801,8 +803,7 @@ def test_cross_project_scoped_task_ref_is_not_flagged_as_local() -> None:
     with runner.isolated_filesystem() as td:
         root = Path(td)
         _scaffold(root)
-        (root / "tasks").mkdir(parents=True, exist_ok=True)
-        (root / "tasks" / "active.md").write_text("## [t05] Build pipeline\n- status: proposed\n")
+        _write_active_task(root, "t005")
         (root / "doc" / "background" / "topics" / "x.md").write_text(
             "# X\nCross-walk the robust core (pan-disease:task:t99 output) here.\n"
         )
@@ -818,9 +819,8 @@ def test_task_ref_in_done_file_resolves() -> None:
         root = Path(td)
         _scaffold(root)
         (root / "tasks" / "done").mkdir(parents=True, exist_ok=True)
-        (root / "tasks" / "active.md").write_text("")
-        (root / "tasks" / "done" / "2026-04.md").write_text("## [t12] Completed work\n- status: done\n")
-        (root / "doc" / "background" / "topics" / "x.md").write_text("# X\nFollows t12.\n")
+        (root / "tasks" / "done" / "2026-04.md").write_text("## [t012] Completed work\n- status: done\n")
+        (root / "doc" / "background" / "topics" / "x.md").write_text("# X\nFollows t012.\n")
         issues = check_refs(root)
         task_issues = [i for i in issues if i.ref_type == "task"]
         assert task_issues == []
@@ -832,8 +832,7 @@ def test_task_ref_in_archive_file_resolves() -> None:
     with runner.isolated_filesystem() as td:
         root = Path(td)
         _scaffold(root)
-        (root / "tasks").mkdir(parents=True, exist_ok=True)
-        (root / "tasks" / "active.md").write_text("## [t05] Active task\n- status: active\n")
+        _write_active_task(root, "t005", title="Active task")
         (root / "tasks" / "archive.md").write_text(
             "# Historical task aliases\n\n"
             "## [t27] Diffusion ratio audit\n"
@@ -849,17 +848,14 @@ def test_task_ref_in_archive_file_resolves() -> None:
         assert task_issues == []
 
 
-def test_task_ref_resolves_when_declaration_is_not_first_header_in_tasks_file() -> None:
-    """Task declarations should be found throughout multi-entry task markdown files."""
+def test_task_ref_resolves_from_later_split_task_file() -> None:
     runner = CliRunner()
     with runner.isolated_filesystem() as td:
         root = Path(td)
         _scaffold(root)
-        (root / "tasks").mkdir(parents=True, exist_ok=True)
-        (root / "tasks" / "active.md").write_text(
-            "## [t05] Build pipeline\n- status: proposed\n\n## [t99] Later task\n- status: proposed\n"
-        )
-        (root / "doc" / "background" / "topics" / "pipeline.md").write_text("# Pipeline\nDriven by t99.\n")
+        _write_active_task(root, "t005")
+        _write_active_task(root, "t099", title="Later task")
+        (root / "doc" / "background" / "topics" / "pipeline.md").write_text("# Pipeline\nDriven by t099.\n")
 
         issues = check_refs(root)
         task_issues = [i for i in issues if i.ref_type == "task"]
@@ -1735,14 +1731,14 @@ class TestRefsScanRoots:
         )
         tasks_dir = tmp_path / "tasks"
         tasks_dir.mkdir()
-        (tasks_dir / "active.md").write_text(
+        (tasks_dir / "notes.md").write_text(
             "# Active\n\nReferences task:t999 (does not exist).\n",
             encoding="utf-8",
         )
         issues = check_refs(tmp_path, include_body=True)
         body_issues = [i for i in issues if i.ref_type == "body-entity-ref"]
         assert any(i.ref_value == "task:t999" for i in body_issues), (
-            f"Expected task:t999 issue from tasks/active.md; got {body_issues}"
+            f"Expected task:t999 issue from tasks/notes.md; got {body_issues}"
         )
 
     def test_root_markdown_scanned_when_dot_in_scan_roots(self, tmp_path):
@@ -1774,7 +1770,7 @@ class TestRefsScanRoots:
         )
         tasks_dir = tmp_path / "tasks"
         tasks_dir.mkdir()
-        (tasks_dir / "active.md").write_text(
+        (tasks_dir / "notes.md").write_text(
             "# Active\n\nReferences task:t999.\n",
             encoding="utf-8",
         )

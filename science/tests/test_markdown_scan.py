@@ -4,6 +4,9 @@ from __future__ import annotations
 
 import re
 
+import pytest
+
+from science_tool import markdown_scan
 from science_tool.markdown_scan import iter_prose_matches, prose_spans
 
 LINK = re.compile(r"\[(?P<text>[^\]]*)\]\((?P<target>[^)\s]+)\)")
@@ -112,6 +115,509 @@ def test_prose_spans_cover_prose_and_exclude_code() -> None:
     assert "code" not in joined
     assert "[x](./a.md)" in joined
     assert "b" in joined
+
+
+def test_markdown_destinations_support_complex_inline_links_and_images() -> None:
+    text = (
+        "See [outer [inner]](../docs/nested.md), "
+        r"[escaped \] label](../docs/escaped-label.md), and "
+        "[multi\nline](../docs/multiline.md).\n"
+        "![plot [preview]](images/plot(2).png) or "
+        r"[escaped parens](../docs/part\(one\).md)."
+    )
+
+    assert list(markdown_scan.iter_markdown_destinations(text)) == [
+        "../docs/nested.md",
+        "../docs/escaped-label.md",
+        "../docs/multiline.md",
+        "images/plot(2).png",
+        r"../docs/part\(one\).md",
+    ]
+
+
+def test_markdown_destinations_support_complex_reference_definitions() -> None:
+    text = (
+        "[nested [reference]]: ./nested-ref.md\n"
+        r"[escaped \] reference]: <../reference files/escaped.md>" "\n"
+    )
+
+    assert list(markdown_scan.iter_markdown_destinations(text)) == [
+        "./nested-ref.md",
+        "../reference files/escaped.md",
+    ]
+
+
+@pytest.mark.parametrize(
+    ("first_destination", "live_destination"),
+    [
+        ("https://example.test", "external-tail.md"),
+        ("/root.md", "root-tail.md"),
+        ("#anchor", "anchor-tail.md"),
+    ],
+)
+def test_invalid_reference_tail_does_not_hide_later_inline_destination(
+    first_destination: str,
+    live_destination: str,
+) -> None:
+    text = (
+        f"[ref]: {first_destination} trailing "
+        f"[live]({live_destination})\n"
+    )
+
+    assert list(markdown_scan.iter_markdown_destinations(text)) == [
+        first_destination,
+        live_destination,
+    ]
+
+
+@pytest.mark.parametrize(
+    "base_destination",
+    ["https://example.test", "/root.md", "#anchor"],
+)
+@pytest.mark.parametrize("kind", ["ordinary", "angle"])
+def test_invalid_reference_tail_does_not_hide_link_inside_would_be_destination(
+    base_destination: str,
+    kind: str,
+) -> None:
+    destination = f"{base_destination}[inner](relative.md)"
+    reference_destination = f"<{destination}>" if kind == "angle" else destination
+    text = f"[ref]: {reference_destination} invalid tail\n"
+
+    assert list(markdown_scan.iter_markdown_destinations(text)) == [
+        destination,
+        "relative.md",
+    ]
+
+
+@pytest.mark.parametrize(
+    "title",
+    [
+        '"title [literal](double-quoted.md)"',
+        "'title [literal](single-quoted.md)'",
+        r"(title \(escaped\) [literal]\(hidden.md\))",
+    ],
+)
+def test_valid_reference_title_hides_link_like_title_text(title: str) -> None:
+    text = f"[ref]: https://example.test {title}   \n"
+
+    assert list(markdown_scan.iter_markdown_destinations(text)) == [
+        "https://example.test",
+    ]
+
+
+def test_nested_parentheses_invalidate_reference_title_and_expose_inner_link() -> None:
+    text = (
+        "[ref]: https://example.test "
+        "(title [literal](parenthesized.md))\n"
+    )
+
+    assert list(markdown_scan.iter_markdown_destinations(text)) == [
+        "https://example.test",
+        "parenthesized.md",
+    ]
+
+
+@pytest.mark.parametrize("outer_prefix", ["", "!"])
+@pytest.mark.parametrize(
+    "outer_destination",
+    ["https://example.test", "/root.md", "#anchor"],
+)
+def test_nested_link_in_outer_label_is_scanned(
+    outer_prefix: str,
+    outer_destination: str,
+) -> None:
+    text = (
+        f"{outer_prefix}[outer [inner](nested.md)]"
+        f"({outer_destination})"
+    )
+
+    assert list(markdown_scan.iter_markdown_destinations(text)) == [
+        outer_destination,
+        "nested.md",
+    ]
+
+
+def test_nested_label_scan_excludes_outer_destination_and_valid_title() -> None:
+    outer_destination = "https://example.test/[destination](hidden.md)"
+    text = (
+        "[outer [inner](nested.md)]"
+        f"(<{outer_destination}> "
+        '"title [literal](hidden-title.md)")'
+    )
+
+    assert list(markdown_scan.iter_markdown_destinations(text)) == [
+        outer_destination,
+        "nested.md",
+    ]
+
+
+@pytest.mark.parametrize("kind", ["inline", "reference"])
+@pytest.mark.parametrize(
+    "base_destination",
+    ["https://example.test", "/root", "#anchor"],
+)
+def test_whitespace_inside_balanced_destination_exposes_live_tail(
+    kind: str,
+    base_destination: str,
+) -> None:
+    destination = f"{base_destination}(part"
+    tail = f"{destination} [live](relative.md))"
+    text = f"[outer]({tail})" if kind == "inline" else f"[ref]: {tail}"
+
+    assert list(markdown_scan.iter_markdown_destinations(text)) == [
+        destination,
+        "relative.md",
+    ]
+
+
+@pytest.mark.parametrize("kind", ["inline", "reference"])
+def test_invalid_angle_destination_exposes_live_tail(kind: str) -> None:
+    tail = "<https://example.test<bad [live](angle-relative.md)>"
+    text = f"[outer]({tail})" if kind == "inline" else f"[ref]: {tail}"
+
+    assert list(markdown_scan.iter_markdown_destinations(text)) == [
+        "https://example.test",
+        "angle-relative.md",
+    ]
+
+
+@pytest.mark.parametrize(
+    "base_destination",
+    ["https://example.test", "/root.md", "#anchor"],
+)
+@pytest.mark.parametrize("unclosed_parenthesis", ["", "("])
+def test_unterminated_inline_ordinary_destination_exposes_inner_link(
+    base_destination: str,
+    unclosed_parenthesis: str,
+) -> None:
+    destination = (
+        f"{base_destination}{unclosed_parenthesis}"
+        "[inner](unterminated-relative.md)"
+    )
+    text = f"[outer]({destination}"
+
+    assert list(markdown_scan.iter_markdown_destinations(text)) == [
+        destination,
+        "unterminated-relative.md",
+    ]
+
+
+@pytest.mark.parametrize(
+    "base_destination",
+    ["https://example.test", "/root.md", "#anchor"],
+)
+def test_invalid_reference_ordinary_destination_exposes_inner_link(
+    base_destination: str,
+) -> None:
+    destination = f"{base_destination}([inner](reference-relative.md)"
+    text = f"[ref]: {destination}\n"
+
+    assert list(markdown_scan.iter_markdown_destinations(text)) == [
+        destination,
+        "reference-relative.md",
+    ]
+
+
+@pytest.mark.parametrize("kind", ["inline", "reference"])
+@pytest.mark.parametrize(
+    "base_destination",
+    ["https://example.test", "/root.md", "#anchor"],
+)
+def test_complete_ordinary_destination_suppresses_link_like_text(
+    kind: str,
+    base_destination: str,
+) -> None:
+    destination = f"{base_destination}[literal](hidden.md)"
+    text = (
+        f"[outer]({destination})"
+        if kind == "inline"
+        else f"[ref]: {destination}\n"
+    )
+
+    assert list(markdown_scan.iter_markdown_destinations(text)) == [destination]
+
+
+@pytest.mark.parametrize("kind", ["inline", "reference"])
+@pytest.mark.parametrize(
+    "base_destination",
+    ["https://example.test", "/root.md", "#anchor"],
+)
+def test_incomplete_angle_destination_exposes_inner_link(
+    kind: str,
+    base_destination: str,
+) -> None:
+    destination = f"{base_destination}[inner](angle-end-relative.md)"
+    text = (
+        f"[outer](<{destination}"
+        if kind == "inline"
+        else f"[ref]: <{destination}\n"
+    )
+
+    assert list(markdown_scan.iter_markdown_destinations(text)) == [
+        destination,
+        "angle-end-relative.md",
+    ]
+
+
+@pytest.mark.parametrize(
+    "destination",
+    [
+        " ",
+        " /root.md",
+        " #anchor",
+        " https://example.test",
+        "relative.md ",
+    ],
+)
+def test_angle_destination_preserves_exact_interior(destination: str) -> None:
+    text = f"[outer](<{destination}>)"
+
+    assert list(markdown_scan.iter_markdown_destinations(text)) == [destination]
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        '[outer]( <https://example.test> "title [literal](hidden.md)")',
+        '[ref]:   <https://example.test>   "title [literal](hidden.md)"\n',
+    ],
+)
+def test_whitespace_outside_angle_destination_remains_component_separator(
+    text: str,
+) -> None:
+    assert list(markdown_scan.iter_markdown_destinations(text)) == [
+        "https://example.test",
+    ]
+
+
+@pytest.mark.parametrize("separator", ["\x01", "\\\n"])
+def test_control_or_backslash_newline_terminates_ordinary_destination(
+    separator: str,
+) -> None:
+    text = (
+        "[outer](https://example.test(part"
+        f"{separator}[live](control-relative.md)))"
+    )
+
+    assert list(markdown_scan.iter_markdown_destinations(text)) == [
+        "https://example.test(part" + ("\\" if separator.endswith("\n") else ""),
+        "control-relative.md",
+    ]
+
+
+def test_backslash_newline_terminates_angle_destination() -> None:
+    text = (
+        "[outer](<https://example.test\\\n"
+        "[live](angle-newline-relative.md)>)"
+    )
+
+    assert list(markdown_scan.iter_markdown_destinations(text)) == [
+        "https://example.test\\",
+        "angle-newline-relative.md",
+    ]
+
+
+@pytest.mark.parametrize(
+    ("title_open", "title_close"),
+    [('"', '"'), ("(", ")")],
+)
+@pytest.mark.parametrize(
+    "outer_destination",
+    ["https://example.test", "/root.md", "#anchor"],
+)
+def test_blank_line_in_inline_title_exposes_live_tail(
+    title_open: str,
+    title_close: str,
+    outer_destination: str,
+) -> None:
+    text = (
+        f"[outer]({outer_destination} {title_open}line one\n\n"
+        f"[live](multiline-relative.md){title_close})"
+    )
+
+    assert list(markdown_scan.iter_markdown_destinations(text)) == [
+        outer_destination,
+        "multiline-relative.md",
+    ]
+
+
+@pytest.mark.parametrize(
+    "title",
+    [
+        '"line one\n[literal](hidden.md)"',
+        "(line one\n[literal]\\(hidden.md\\))",
+    ],
+)
+def test_one_line_ending_between_inline_components_and_inside_title_is_valid(
+    title: str,
+) -> None:
+    text = f"[outer](\nhttps://example.test\n{title}\n)"
+
+    assert list(markdown_scan.iter_markdown_destinations(text)) == [
+        "https://example.test",
+    ]
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "[x]()",
+        '[x]( "title [literal](hidden.md)")',
+        '[x](<> "title [literal](hidden.md)")',
+    ],
+)
+def test_empty_or_omitted_inline_destination_suppresses_valid_title(text: str) -> None:
+    assert list(markdown_scan.iter_markdown_destinations(text)) == []
+
+
+def test_markdown_destinations_ignore_escaped_literals_and_code() -> None:
+    text = (
+        r"\[literal](escaped-literal.md)" "\n"
+        r"!\[literal image](escaped-image.png)" "\n"
+        r"\[literal reference]: escaped-reference.md" "\n"
+        "`[inline code](inline-code.md)`\n"
+        "```markdown\n"
+        "[fenced](fenced.md)\n"
+        "[fenced-ref]: fenced-ref.md\n"
+        "```\n"
+        "[live](live.md)\n"
+    )
+
+    assert list(markdown_scan.iter_markdown_destinations(text)) == ["live.md"]
+
+
+def test_markdown_destinations_fail_closed_on_unclosed_live_destination() -> None:
+    text = "[live](../ambiguous.md\n" r"\[literal](../escaped.md"
+
+    assert list(markdown_scan.iter_markdown_destinations(text)) == [
+        "../ambiguous.md",
+    ]
+
+
+def test_markdown_destination_prefix_never_crosses_a_code_mask() -> None:
+    text = "[ambiguous](../prefix\\`code`suffix.md)"
+
+    assert list(markdown_scan.iter_markdown_destinations(text)) == [
+        "../prefix\\",
+    ]
+
+
+def test_nested_inner_link_is_found_when_outer_bracket_group_is_not_a_link() -> None:
+    text = "[outer [inner](nested.md) suffix]"
+
+    assert list(markdown_scan.iter_markdown_destinations(text)) == ["nested.md"]
+
+
+class _CountingText(str):
+    indexed_reads = 0
+
+    def __getitem__(self, key: object) -> str:
+        if isinstance(key, int):
+            self.indexed_reads += 1
+        return super().__getitem__(key)  # type: ignore[call-overload]
+
+
+def _recursive_incomplete_destination(kind: str, *, depth: int = 64) -> str:
+    value = "relative.md"
+    for _ in range(depth):
+        value = f"[inner]({value}"
+    if kind == "angle":
+        return f"[outer](<https://example.test{value}"
+    return f"[outer](https://example.test({value}"
+
+
+def test_deeply_nested_non_link_brackets_have_linear_scanner_work() -> None:
+    text = _CountingText("[" * 512 + "label" + "]" * 512)
+
+    assert list(markdown_scan.iter_markdown_destinations(text)) == []
+    assert text.indexed_reads <= 4 * len(text)
+
+
+def test_deeply_nested_link_labels_preserve_linear_work_and_inner_detection() -> None:
+    value = "[inner](nested.md)"
+    for _ in range(128):
+        value = f"[outer {value}](https://example.test)"
+    text = _CountingText(value)
+
+    assert list(markdown_scan.iter_markdown_destinations(text)) == [
+        *(["https://example.test"] * 128),
+        "nested.md",
+    ]
+    assert text.indexed_reads <= 8 * len(text)
+
+
+def test_many_invalid_destination_tails_preserve_linear_work() -> None:
+    value = " ".join(
+        f"[outer](https://example.test(part [live](relative-{index}.md)))"
+        for index in range(64)
+    )
+    text = _CountingText(value)
+
+    destinations = list(markdown_scan.iter_markdown_destinations(text))
+
+    assert destinations[1::2] == [
+        f"relative-{index}.md" for index in range(64)
+    ]
+    assert text.indexed_reads <= 10 * len(text)
+
+
+@pytest.mark.parametrize("kind", ["ordinary", "angle"])
+def test_recursive_incomplete_destinations_raise_bounded_scan_error(
+    kind: str,
+) -> None:
+    text = _CountingText(_recursive_incomplete_destination(kind))
+
+    with pytest.raises(
+        markdown_scan.MarkdownDestinationScanError,
+        match="destination scan exceeded",
+    ):
+        list(markdown_scan.iter_markdown_destinations(text))
+
+    assert text.indexed_reads <= 12 * len(text)
+
+
+def test_destination_work_budget_allows_large_valid_ordinary_destination() -> None:
+    destination = "a" * 8192
+
+    assert list(
+        markdown_scan.iter_markdown_destinations(f"[outer]({destination})")
+    ) == [destination]
+
+
+def test_destination_work_budget_allows_many_sequential_valid_destinations() -> None:
+    destinations = [f"https://example.test/{index}" for index in range(256)]
+    text = " ".join(
+        f"[link]({destination})"
+        for destination in destinations
+    )
+
+    assert list(markdown_scan.iter_markdown_destinations(text)) == destinations
+
+
+@pytest.mark.parametrize("kind", ["inline", "reference"])
+@pytest.mark.parametrize("destination_open", ["https://example.test(", "<https://example.test"])
+def test_nested_links_in_unterminated_destinations_preserve_linear_work(
+    kind: str,
+    destination_open: str,
+) -> None:
+    inner_destinations = [f"relative-{index}.md" for index in range(64)]
+    destination = destination_open + "".join(
+        f"[inner]({inner_destination})"
+        for inner_destination in inner_destinations
+    )
+    value = (
+        f"[outer]({destination}"
+        if kind == "inline"
+        else f"[ref]: {destination}"
+    )
+    text = _CountingText(value)
+
+    destinations = list(markdown_scan.iter_markdown_destinations(text))
+
+    expected_outer = destination.removeprefix("<")
+    assert destinations[0] == expected_outer
+    assert destinations[1:] == inner_destinations
+    assert text.indexed_reads <= 10 * len(text)
 
 
 def test_scans_this_repositorys_own_plan_corpus() -> None:

@@ -1,6 +1,6 @@
 {
   "summary": {
-    "errors": 7,
+    "errors": 6,
     "warnings": 3,
     "infos": 0
   },
@@ -43,14 +43,6 @@
       "line": null,
       "message": "graph audit: unresolved_reference \u2014 report:overview related -> unknown-project:question:q01 (entities/reports/0001-overview.md references an unknown canonical entity (no local entity for unknown-project:question:q01; cross-project references to peer-project entities are not commons-promotable -- link them in prose rather than structured frontmatter, or check the ref's spelling))",
       "rule": "graph",
-      "task": null
-    },
-    {
-      "severity": "error",
-      "path": null,
-      "line": null,
-      "message": "task t001 missing required field: aspects",
-      "rule": "tasks",
       "task": null
     },
     {

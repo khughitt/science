@@ -11,6 +11,7 @@ from science_tool.commons.frontmatter import raw_frontmatter
 from science_tool.entity_scan import iter_entity_markdown
 from science_tool.graph.storage_adapters.datapackage import DatapackageAdapter
 from science_tool.graph.storage_adapters.markdown import MarkdownAdapter
+from science_tool.tasks import _TASK_ID_PATTERN
 
 if TYPE_CHECKING:
     from science_tool.validate.context import ValidateContext
@@ -68,11 +69,12 @@ def _resolve_task_reference(ctx: ValidateContext, ref: str) -> Path | None:
     if task_id is None:
         return None
 
-    heading_re = re.compile(rf"^##\s+\[{re.escape(task_id)}\](?:\s|$)", re.MULTILINE)
-    for path in _task_files(ctx.project_root):
-        if heading_re.search(ctx.read_text_cached(path)):
-            return path
-    return None
+    from science_tool.tasks import find_task_location
+
+    try:
+        return find_task_location(ctx.project_root / "tasks", task_id).path
+    except KeyError:
+        return None
 
 
 def _resolve_frontmatter_reference(ctx: ValidateContext, ref: str) -> Path | None:
@@ -91,21 +93,9 @@ def _task_id(ref: str) -> str | None:
         candidate = ref[len("task:") :]
     else:
         candidate = ref
-    if re.fullmatch(r"t\d{3,}", candidate) is None:
+    if re.fullmatch(_TASK_ID_PATTERN, candidate) is None:
         return None
     return candidate
-
-
-def _task_files(project_root: Path) -> list[Path]:
-    paths: list[Path] = []
-    active = project_root / "tasks" / "active.md"
-    if active.is_file():
-        paths.append(active)
-
-    done_dir = project_root / "tasks" / "done"
-    if done_dir.is_dir():
-        paths.extend(sorted(done_dir.glob("*.md")))
-    return paths
 
 
 def dataset_frontmatters(ctx: ValidateContext) -> list[dict[str, Any]]:

@@ -78,23 +78,28 @@ def collect_lingering_tags(project_root: Path) -> InstrumentResult[LingeringTags
                     }
                 )
 
-    tasks_dir = project_root / "tasks"
-    candidate_task_files: list[Path] = []
-    if (tasks_dir / "active.md").is_file():
-        candidate_task_files.append(tasks_dir / "active.md")
-    done_dir = tasks_dir / "done"
-    if done_dir.is_dir():
-        candidate_task_files.extend(sorted(done_dir.glob("*.md")))
+    from science_tool.tasks import _task_search_paths
+
+    candidate_task_files = _task_search_paths(project_root / "tasks")
 
     for task_file in candidate_task_files:
         text = task_file.read_text(encoding="utf-8")
-        for match in _TASK_TAGS_RE.finditer(text):
+        frontmatter_body = _extract_frontmatter_block(text)
+        for match in _FRONTMATTER_TAGS_RE.finditer(frontmatter_body):
             results.append(
                 {
                     "file": str(task_file.relative_to(project_root)),
                     "values": _parse_list_body(match.group("body")),
                 }
             )
+        if task_file.parent.name == "done":
+            for match in _TASK_TAGS_RE.finditer(text):
+                results.append(
+                    {
+                        "file": str(task_file.relative_to(project_root)),
+                        "values": _parse_list_body(match.group("body")),
+                    }
+                )
 
     return InstrumentResult.from_rows(results)
 

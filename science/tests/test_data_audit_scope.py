@@ -59,7 +59,8 @@ def test_missing_config_is_undeclared(tmp_path: Path):
     assert "keep.csv" in [violation.path for violation in audit_project(tmp_path)]
 
 
-def test_non_git_project_audits_all_paths(tmp_path: Path):
+def test_non_git_project_audits_all_paths(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+    monkeypatch.setattr("science_tool.data_audit._discover_git_root", lambda _root: None)
     (tmp_path / "science.yaml").write_text("name: D\nid: d\n")
     (tmp_path / "keep.csv").write_text("x")
     (tmp_path / ".venv").mkdir()

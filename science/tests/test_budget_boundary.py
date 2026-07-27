@@ -131,7 +131,9 @@ def test_classification_partition_has_the_audited_cardinality() -> None:
 
     The autonomy supervisor then added two deferred leaves: `autonomy start` emits one
     fixed summary record, and `autonomy finish` emits one row per basis delta, gate
-    denial, and commit-mark issue. That took the partition to 68/118/95 = 281.
+    denial, and commit-mark issue. The task-storage migrator adds one budgeted ROWS
+    leaf, then retiring `tasks archive` removes its former budgeted leaf. That leaves
+    the partition at 68/118/95 = 281.
 
     Batch R then added `explore-ideas seed-coverage` (fb-2026-07-25-004), BUDGETED
     rather than exempt: it carries the same per-topic `topics` list as `project

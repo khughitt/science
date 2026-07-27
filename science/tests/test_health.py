@@ -24,6 +24,37 @@ from science_tool.graph.health_checks.dataset_anomalies import check_dataset_ano
 _CREATED = datetime(2026, 6, 30, tzinfo=timezone.utc)
 
 
+def _write_split_task(
+    root: Path,
+    *,
+    task_id: str = "t001",
+    title: str = "Task",
+    task_type: str | None = None,
+    tags: list[str] | None = None,
+) -> Path:
+    path = root / "tasks" / "active" / f"{task_id}-{title.lower().replace(' ', '-')}.md"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    optional = ""
+    if task_type is not None:
+        optional += f"type: {task_type}\n"
+    if tags is not None:
+        optional += f"tags: [{', '.join(tags)}]\n"
+    path.write_text(
+        "---\n"
+        f"id: {task_id}\n"
+        f"title: {title}\n"
+        f"{optional}"
+        "priority: P1\n"
+        "status: proposed\n"
+        "aspects: []\n"
+        "created: 2026-04-13\n"
+        "---\n\n"
+        "Desc.\n",
+        encoding="utf-8",
+    )
+    return path
+
+
 def _write_cross_paper_manifest(root: Path) -> None:
     (root / "science.yaml").write_text("name: test\n", encoding="utf-8")
 
@@ -364,23 +395,45 @@ class TestCollectLingeringTags:
         from science_tool.graph.health_checks.lingering_tags import collect_lingering_tags
 
         (tmp_path / "science.yaml").write_text("name: test\n")
-        tasks_dir = tmp_path / "tasks"
-        tasks_dir.mkdir()
-        (tasks_dir / "active.md").write_text(
-            "## [t001] Task\n"
-            "- type: dev\n"
-            "- priority: P1\n"
-            "- status: active\n"
-            "- tags: [foo, bar]\n"
-            "- created: 2026-04-13\n"
-            "\nDesc.\n"
-        )
+        _write_split_task(tmp_path, tags=["foo", "bar"])
 
         results = collect_lingering_tags(tmp_path).rows
 
         assert len(results) == 1
-        assert results[0]["file"].endswith("active.md")
+        assert results[0]["file"].endswith("tasks/active/t001-task.md")
         assert results[0]["values"] == ["foo", "bar"]
+
+    def test_ignores_task_dsl_tags_bullet_in_active_description(self, tmp_path: Path) -> None:
+        from science_tool.graph.health_checks.lingering_tags import collect_lingering_tags
+
+        task_path = _write_split_task(tmp_path)
+        task_path.write_text(
+            task_path.read_text(encoding="utf-8") + "\n- tags: [body-example]\n",
+            encoding="utf-8",
+        )
+
+        assert collect_lingering_tags(tmp_path).rows == []
+
+    def test_finds_task_dsl_tags_in_done_ledger(self, tmp_path: Path) -> None:
+        from science_tool.graph.health_checks.lingering_tags import collect_lingering_tags
+
+        done = tmp_path / "tasks" / "done" / "2026-07.md"
+        done.parent.mkdir(parents=True)
+        done.write_text(
+            "## [t002] Done task\n"
+            "- priority: P1\n"
+            "- status: done\n"
+            "- aspects: []\n"
+            "- tags: [foo, bar]\n"
+            "- created: 2026-07-01\n"
+            "- completed: 2026-07-02\n\n"
+            "Done.\n",
+            encoding="utf-8",
+        )
+
+        assert collect_lingering_tags(tmp_path).rows == [
+            {"file": "tasks/done/2026-07.md", "values": ["foo", "bar"]}
+        ]
 
 
 class TestBuildHealthReport:
@@ -818,7 +871,7 @@ health:
         assert "load_project_sources" not in timing_names
         assert "unregistered_ref_kinds" not in timing_names
         assert "cross_paper_evidence" not in timing_names
-        assert "archive_lag" in timing_names
+        assert "archive_lag" not in timing_names
         assert report["unregistered_ref_kinds"] == []
 
     def test_reports_unregistered_reference_kinds_in_identity_fields(self, tmp_path: Path) -> None:
@@ -1005,175 +1058,12 @@ health:
 
         assert rows == []
 
-    def test_archive_lag_zero_when_active_md_missing(self, tmp_path: Path) -> None:
+    def test_build_health_report_omits_archive_lag(self, tmp_path: Path) -> None:
         from science_tool.graph.health import build_health_report
 
         (tmp_path / "science.yaml").write_text("name: test\n")
         report = build_health_report(tmp_path)
-        assert report["archive_lag"] == {
-            "done_in_active": 0,
-            "retired_in_active": 0,
-            "missing_completed": 0,
-        }
-
-    def test_archive_lag_counts_done_and_retired(self, tmp_path: Path) -> None:
-        from science_tool.graph.health import build_health_report
-
-        (tmp_path / "science.yaml").write_text("name: test\n")
-        tasks_dir = tmp_path / "tasks"
-        tasks_dir.mkdir(parents=True)
-        (tasks_dir / "active.md").write_text(
-            """\
-## [t001] Done task
-- priority: P1
-- status: done
-- created: 2026-03-01
-- completed: 2026-03-15
-
-Done.
-
-## [t002] Retired task
-- priority: P2
-- status: retired
-- created: 2026-03-20
-- completed: 2026-04-02
-
-Retired.
-
-## [t003] Proposed task
-- priority: P3
-- status: proposed
-- created: 2026-04-10
-
-Proposed.
-"""
-        )
-        report = build_health_report(tmp_path)
-        assert report["archive_lag"] == {
-            "done_in_active": 1,
-            "retired_in_active": 1,
-            "missing_completed": 0,
-        }
-
-    def test_archive_lag_total_and_total_issues_match_cli_recomputation(self, tmp_path: Path) -> None:
-        """Characterization test (t-phase4 Task 6, fixed up per owner ruling).
-
-        Before Task 6, `health_command` in cli.py redundantly recomputed the
-        archive-lag tally and `total_issues` from report fields instead of
-        sharing that logic with the service. Task 6 initially "fixed" this by
-        adding `archive_lag_total` as a new key on the report dict — but that
-        changed the `--format json` payload shape, violating the phase's
-        byte-identity constraint. The owner ruled byte-identity governs: the
-        report dict must keep its pre-Task-6 shape, and the shared tally lives
-        instead in the public `archive_lag_total()` helper, called by both the
-        service (internally) and the CLI (on `report["archive_lag"]`).
-
-        This test pins the CLI's OLD inline formulas (copied verbatim below)
-        and proves they agree with what the shared helper computes, so
-        routing both callers through `archive_lag_total()` is value-preserving
-        de-duplication, not new behavior — and that the report dict does NOT
-        carry a redundant `archive_lag_total` key.
-        """
-        from science_tool.graph.health import build_health_report
-        from science_tool.graph.health_checks.archive_lag import archive_lag_total
-
-        (tmp_path / "science.yaml").write_text("name: test\n", encoding="utf-8")
-        tasks_dir = tmp_path / "tasks"
-        tasks_dir.mkdir(parents=True)
-        (tasks_dir / "active.md").write_text(
-            """\
-## [t001] Done task
-- priority: P1
-- status: done
-- created: 2026-03-01
-- completed: 2026-03-15
-
-Done.
-
-## [t002] Retired task
-- priority: P2
-- status: retired
-- created: 2026-03-20
-- completed: 2026-04-02
-
-Retired.
-"""
-        )
-        spec = tmp_path / "entities" / "hypotheses"
-        spec.mkdir(parents=True)
-        (spec / "h01.md").write_text(
-            '---\nid: "hypothesis:h01"\nkind: "hypothesis"\ntitle: "H1"\n'
-            'status: "proposed"\nrelated: [topic:missing]\n'
-            'source_refs: []\ncreated: "2026-04-13"\n---\nBody.\n'
-        )
-
-        report = build_health_report(tmp_path)
-
-        # --- verbatim copy of the pre-extraction cli.py `health_command` formula ---
-        layered_claims = report["layered_claims"]
-        layered_claim_issue_count = len(layered_claims["migration_issues"]) + len(
-            layered_claims["rival_model_packets_missing_discriminating_predictions"]
-        )
-        coverage_gaps = 0
-        for metric in (
-            layered_claims["proposition_claim_layer_coverage"],
-            layered_claims["causal_leaning_identification_coverage"],
-        ):
-            if metric["denominator"] > 0 and metric["numerator"] < metric["denominator"]:
-                coverage_gaps += 1
-
-        archive_lag = report["archive_lag"]
-        old_archive_lag_total = (
-            archive_lag["done_in_active"] + archive_lag["retired_in_active"] + archive_lag["missing_completed"]
-        )
-
-        managed_artifacts = report.get("managed_artifacts") or []
-        managed_artifacts_issue_count = sum(1 for f in managed_artifacts if f.get("counts_as_issue"))
-
-        tooling_scaffold = report.get("tooling_scaffold") or []
-        agent_context = report.get("agent_context") or []
-        unregistered_ref_kinds = report.get("unregistered_ref_kinds") or []
-        entity_identity = report.get("entity_identity") or []
-        schema_invalid = report.get("schema_invalid") or []
-        validation = report.get("validation") or []
-        prose_epistemics = report.get("prose_epistemics") or {}
-        raw_prose_epistemics_findings = prose_epistemics.get("findings") if isinstance(prose_epistemics, dict) else None
-        prose_epistemics_findings = (
-            [row for row in raw_prose_epistemics_findings if isinstance(row, dict)]
-            if isinstance(raw_prose_epistemics_findings, list)
-            else []
-        )
-        cross_paper_evidence = report.get("cross_paper_evidence") or {}
-        raw_cross_paper_findings = cross_paper_evidence.get("findings") if isinstance(cross_paper_evidence, dict) else None
-        cross_paper_findings = (
-            [row for row in raw_cross_paper_findings if isinstance(row, dict)]
-            if isinstance(raw_cross_paper_findings, list)
-            else []
-        )
-
-        old_total_issues = (
-            len(report["unresolved_refs"])
-            + len(unregistered_ref_kinds)
-            + len(report["lingering_tags_lines"])
-            + len(report["identity_policy"])
-            + len(entity_identity)
-            + layered_claim_issue_count
-            + coverage_gaps
-            + len(report.get("dataset_anomalies") or [])
-            + len(schema_invalid)
-            + (1 if old_archive_lag_total else 0)
-            + managed_artifacts_issue_count
-            + len(tooling_scaffold)
-            + len(agent_context)
-            + len(validation)
-            + sum(1 for f in prose_epistemics_findings if f.get("counts_as_issue") is True)
-            + len(cross_paper_findings)
-        )
-        # --- end verbatim copy ---
-
-        assert "archive_lag_total" not in report
-        assert archive_lag_total(report["archive_lag"]) == old_archive_lag_total == 2
-        assert report["total_issues"] == old_total_issues
+        assert "archive_lag" not in report
 
 
 class TestHealthCLI:
@@ -1222,28 +1112,7 @@ class TestHealthCLI:
         assert report["unresolved_refs"][0]["target"] == "topic:missing"
 
     def test_json_output_key_set_is_pinned(self, tmp_path: Path) -> None:
-        """The report payload's key set is pinned; a new key must be a DELIBERATE act.
-
-        Two claims, from two different changes, live in this one assertion:
-
-        1. t-phase4 Task 6 (refactor neutrality). Task 6 originally added
-           `archive_lag_total` as a report key, which changed `science health
-           --format json` output — a violation of that phase's byte-identity
-           constraint, since a pure CLI extraction must not alter the payload.
-           The fix moved the tally into a standalone `archive_lag_total()`
-           helper. It must never come back as a field.
-
-        2. The InstrumentResult convergence (deliberate addition). `unwired_checks`
-           IS a new key, and is meant to be: a check that could not run must be
-           representable in the payload, or `science health --format json` goes on
-           reporting "no findings" for checks that never looked. This is a behavior
-           change, not a refactor, so it is allowed to move the key set — once,
-           on the record, here.
-
-        Budgeted stdout is deliberately a projected payload, so its two projection
-        metadata keys are also pinned here. Complete file output retains the original
-        unprojected key set.
-        """
+        """The projected report key set is pinned, including archive-lag retirement."""
         from click.testing import CliRunner
 
         from science_tool.cli import main
@@ -1255,7 +1124,6 @@ class TestHealthCLI:
 
         assert result.exit_code == 0, result.output
         report = json.loads(result.output)
-        assert "archive_lag_total" not in report
         assert set(report.keys()) == {
             "unresolved_refs",
             "unregistered_ref_kinds",
@@ -1269,14 +1137,13 @@ class TestHealthCLI:
             "invalid_entity_aspects",
             "dataset_anomalies",
             "schema_invalid",
-            "archive_lag",
             "managed_artifacts",
             "tooling_scaffold",
             "validation",
             "accepted_validation",
             "prose_epistemics",
             "total_issues",
-            # Deliberate addition (claim 2 above). NOT folded into total_issues: a check
+            # NOT folded into total_issues: a check
             # that could not run is not an issue found, and must not be counted as one.
             "unwired_checks",
             # Budget projection metadata: the complete report written by --output does
@@ -1549,7 +1416,7 @@ class TestHealthCLI:
         timing_names = [row["name"] for row in report["_meta"]["timings"]]
         assert "load_project_sources" not in timing_names
         assert "unregistered_ref_kinds" not in timing_names
-        assert "archive_lag" in timing_names
+        assert "archive_lag" not in timing_names
 
     def test_fast_rejects_explicit_check_selection(self, tmp_path: Path) -> None:
         from click.testing import CliRunner
@@ -1561,7 +1428,7 @@ class TestHealthCLI:
         runner = CliRunner()
         result = runner.invoke(
             main,
-            ["health", "--project-root", str(tmp_path), "--fast", "--check", "archive_lag"],
+            ["health", "--project-root", str(tmp_path), "--fast", "--check", "managed_artifacts"],
         )
 
         assert result.exit_code != 0
@@ -1716,14 +1583,38 @@ def test_health_flags_legacy_task_type_field(tmp_path) -> None:
     from science_tool.graph.health_checks.legacy_task_type import collect_legacy_task_type
 
     project_root = Path(tmp_path)
-    (project_root / "tasks").mkdir()
-    (project_root / "tasks" / "active.md").write_text(
-        "## [t001] Legacy\n- type: research\n- priority: P2\n- status: proposed\n- created: 2026-04-01\n\nBody.\n"
-    )
+    _write_split_task(project_root, title="Legacy", task_type="research")
     findings = collect_legacy_task_type(project_root).rows
     assert len(findings) == 1
     assert findings[0]["task_id"] == "t001"
     assert findings[0]["legacy_type"] == "research"
+    assert findings[0]["source_file"] == "tasks/active/t001-legacy.md"
+
+
+def test_health_flags_legacy_task_type_field_in_done_ledger(tmp_path: Path) -> None:
+    from science_tool.graph.health_checks.legacy_task_type import collect_legacy_task_type
+
+    done = tmp_path / "tasks" / "done" / "2026-07.md"
+    done.parent.mkdir(parents=True)
+    done.write_text(
+        "## [t002] Archived legacy task\n"
+        "- type: research\n"
+        "- priority: P1\n"
+        "- status: done\n"
+        "- aspects: []\n"
+        "- created: 2026-07-01\n"
+        "- completed: 2026-07-02\n\n"
+        "Done.\n",
+        encoding="utf-8",
+    )
+
+    assert collect_legacy_task_type(tmp_path).rows == [
+        {
+            "task_id": "t002",
+            "legacy_type": "research",
+            "source_file": "tasks/done/2026-07.md",
+        }
+    ]
 
 
 def test_health_flags_invalid_entity_aspects(tmp_path) -> None:
@@ -1748,10 +1639,7 @@ def test_build_health_report_includes_aspect_findings(tmp_path) -> None:
     from science_tool.graph.health import build_health_report
 
     project_root = Path(tmp_path)
-    (project_root / "tasks").mkdir()
-    (project_root / "tasks" / "active.md").write_text(
-        "## [t001] Legacy task\n- type: dev\n- priority: P2\n- status: proposed\n- created: 2026-04-01\n\nBody.\n"
-    )
+    _write_split_task(project_root, title="Legacy task", task_type="dev")
     (project_root / "entities" / "questions").mkdir(parents=True)
     (project_root / "science.yaml").write_text("name: demo\nprofile: research\naspects: [hypothesis-testing]\n")
     (project_root / "entities" / "questions" / "q01.md").write_text(

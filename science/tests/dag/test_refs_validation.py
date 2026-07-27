@@ -14,8 +14,9 @@ from science_tool.dag.schema import RefEntry
 @pytest.fixture
 def project_root(tmp_path: Path) -> Path:
     # Simulate research-profile project layout.
-    (tmp_path / "tasks").mkdir()
-    (tmp_path / "tasks/active.md").write_text("## [t001] Example\n## [t002] Another\n")
+    (tmp_path / "tasks/active").mkdir(parents=True)
+    (tmp_path / "tasks/active/t001-example.md").write_text("---\nid: t001\n---\n")
+    (tmp_path / "tasks/active/t002-another.md").write_text("---\nid: t002\n---\n")
     (tmp_path / "tasks/done").mkdir()
     (tmp_path / "tasks/done/2026-04.md").write_text("## [t204] Done task\n- completed: 2026-04-18\n")
     (tmp_path / "doc/interpretations").mkdir(parents=True)

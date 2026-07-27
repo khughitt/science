@@ -19,7 +19,6 @@ from science_tool.graph.health_checks import (
     context_sources,
 )
 from science_tool.graph.health_checks.agent_context import AgentContextFinding
-from science_tool.graph.health_checks.archive_lag import TaskArchiveLag
 from science_tool.graph.health_checks.cross_paper_evidence import CrossPaperEvidenceHealthReport
 from science_tool.graph.health_checks.entity_identity import EntityIdentityFinding
 from science_tool.graph.health_checks.identity_policy import IdentityPolicyFinding
@@ -82,7 +81,6 @@ class HealthReport(TypedDict):
     invalid_entity_aspects: list["InvalidEntityAspectsFinding"]
     dataset_anomalies: list[dict]
     schema_invalid: list[SchemaInvalidFinding]
-    archive_lag: TaskArchiveLag
     managed_artifacts: list[dict]
     tooling_scaffold: list[ToolingScaffoldFinding]
     validation: list[ValidationFinding]
@@ -307,7 +305,6 @@ def build_health_report(
         if row["warnings"] or row["todos"]
     ]
 
-    archive_lag = cast("TaskArchiveLag", check_results["archive_lag"])
     managed_artifacts = cast("list[dict]", check_results["managed_artifacts"])
     tooling_scaffold = cast("list[ToolingScaffoldFinding]", check_results["tooling_scaffold"])
     unresolved_refs = cast("list[UnresolvedRef]", check_results["unresolved_refs"])
@@ -361,7 +358,6 @@ def build_health_report(
         "invalid_entity_aspects": invalid_entity_aspects,
         "dataset_anomalies": dataset_anomalies,
         "schema_invalid": schema_invalid,
-        "archive_lag": cast("TaskArchiveLag", archive_lag),
         "managed_artifacts": cast("list[dict]", managed_artifacts),
         "tooling_scaffold": tooling_scaffold,
         "validation": validation,

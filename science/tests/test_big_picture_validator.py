@@ -254,19 +254,11 @@ provenance_coverage: "thin"
     )
 
 
-def test_collect_project_ids_harvests_aggregated_task_headings(tmp_path: Path) -> None:
-    (tmp_path / "tasks").mkdir()
-    (tmp_path / "tasks" / "active.md").write_text(
-        """# Task queue
-
-## [t082] PHF19 residualization
-type: research
-related: [question:q01]
-
-## [t091] Cross-dataset replication
-related: [question:q02]
-""",
-    )
+def test_collect_project_ids_harvests_split_active_and_done_task_ids(tmp_path: Path) -> None:
+    active = tmp_path / "tasks" / "active"
+    active.mkdir(parents=True)
+    (active / "t082-phf19-residualization.md").write_text("---\nid: t082\n---\n\nTask body.\n")
+    (active / "t091-cross-dataset-replication.md").write_text("---\nid: t091\n---\n\nTask body.\n")
     (tmp_path / "tasks" / "done").mkdir()
     (tmp_path / "tasks" / "done" / "2026-04.md").write_text(
         """## [t055] Longitudinal virtual FISH
@@ -282,11 +274,10 @@ More notes.
     assert {"task:t082", "task:t091", "task:t055", "task:t113"}.issubset(ids)
 
 
-def test_aggregated_tasks_unblock_reference_validation(tmp_path: Path) -> None:
-    (tmp_path / "tasks").mkdir()
-    (tmp_path / "tasks" / "active.md").write_text(
-        "## [t082] PHF19 residualization\n\nBody.\n",
-    )
+def test_split_tasks_unblock_reference_validation(tmp_path: Path) -> None:
+    active = tmp_path / "tasks" / "active"
+    active.mkdir(parents=True)
+    (active / "t082-phf19-residualization.md").write_text("---\nid: t082\n---\n\nBody.\n")
     synth = _write(
         tmp_path,
         "h1.md",

@@ -21,7 +21,7 @@ def collect_legacy_task_type(project_root: Path) -> InstrumentResult[LegacyTaskT
     ``unwired`` when there is no ``tasks/`` directory: no task file was read, so
     "no legacy task types" is a claim about a backlog that was never opened.
     """
-    from science_tool.tasks import parse_tasks
+    from science_tool.tasks import _parse_path_tasks, _task_search_paths
 
     tasks_dir = project_root / "tasks"
     if not tasks_dir.is_dir():
@@ -31,14 +31,8 @@ def collect_legacy_task_type(project_root: Path) -> InstrumentResult[LegacyTaskT
         )
 
     findings: list[LegacyTaskTypeFinding] = []
-    candidates = [tasks_dir / "active.md"]
-    done_dir = tasks_dir / "done"
-    if done_dir.is_dir():
-        candidates.extend(sorted(done_dir.glob("*.md")))
-    for path in candidates:
-        if not path.is_file():
-            continue
-        for task in parse_tasks(path):
+    for path in _task_search_paths(tasks_dir):
+        for task in _parse_path_tasks(path):
             if task.type:
                 findings.append(
                     LegacyTaskTypeFinding(

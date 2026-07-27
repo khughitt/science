@@ -27,7 +27,7 @@ def check_project_readme(ctx: ValidateContext) -> Iterator[Result]:
                 yield _result(
                     Severity.WARN,
                     "README.md",
-                    f"README.md contains legacy task-queue section '{section}' — migrate tasks to tasks/active.md via /science:tasks",
+                    f"README.md contains legacy task-queue section '{section}' — migrate tasks to tasks/active/ via /science:tasks",
                 )
         return
 
