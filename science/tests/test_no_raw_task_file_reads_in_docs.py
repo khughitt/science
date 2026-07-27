@@ -22,9 +22,10 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
 
-# Agent-facing surface only. docs/ (design/plan prose) and codex-skills/
-# (generated mirror of commands/) are intentionally excluded.
+# Agent-facing surface only. docs/ (design/plan prose) and skills/generated/
+# (generated distribution of commands and methodology) are intentionally excluded.
 _SCAN_DIRS = ("commands", "skills", "templates", "agents", "references")
+_GENERATED_SURFACE = ROOT / "skills" / "generated"
 
 # Broad catch: any mention of the CLI-owned task-file paths at all. Fails
 # closed — a brand new mention (legitimate or not) trips this and forces a
@@ -143,6 +144,8 @@ def test_no_raw_task_file_read_instructions_in_docs() -> None:
         if not base.is_dir():
             continue
         for md in sorted(base.rglob("*.md")):
+            if md.is_relative_to(_GENERATED_SURFACE):
+                continue
             relpath = md.relative_to(ROOT).as_posix()
             for lineno, line in enumerate(md.read_text(encoding="utf-8").splitlines(), start=1):
                 if _is_offender(relpath, line):

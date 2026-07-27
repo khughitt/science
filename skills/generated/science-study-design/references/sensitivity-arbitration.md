@@ -1,0 +1,138 @@
+---
+name: study-design-sensitivity-arbitration
+description: Use when an analysis includes multiple robustness checks, alternate operationalisations, filters, covariate sets, priors, models, or negative controls whose results could change interpretation.
+archetype: analysis-discipline
+sources: [baygent-skills]
+---
+
+# Sensitivity Arbitration
+
+Use when an analysis includes multiple robustness checks, alternate
+operationalisations, filters, covariate sets, priors, models, or negative
+controls whose results could change interpretation.
+
+Sensitivity analyses are not a menu. If the rule for interpreting disagreement
+is chosen after seeing outputs, the analysis becomes post-hoc story selection.
+
+## Pre-Commit the Arbitration Rule
+
+Before running verdict-bearing code, define:
+
+1. **Primary analysis.** The one result that carries the main verdict if no
+   pre-committed override fires.
+2. **Mandatory sensitivities.** Checks that must run for the verdict to stand.
+3. **Optional diagnostics.** Informative checks that do not change the verdict
+   unless a named threshold is crossed.
+4. **Override conditions.** Exact conditions that downgrade, reverse, or halt
+   the verdict.
+5. **Failure labels.** Names such as `batch_confounded`, `phase_confounded`,
+   `underpowered`, `model_inadequate`, or `not_reproducible`.
+
+## Sensitivity Types
+
+| Type | Example | Typical arbitration |
+|---|---|---|
+| Measurement | alternate gene set, entropy metric, panel definition | disagreement downgrades measurement confidence |
+| Model | Cox vs Weibull, Student-t vs Normal, prior sensitivity | diagnostics decide if primary model stands |
+| Covariate | adjusted vs unadjusted, direct vs total effect | disagreement changes estimand label |
+| Filter | low-depth exclusion, hypermutator exclusion | large shifts flag selection sensitivity |
+| Negative control | shuffled labels, irrelevant gene set | positive control failure halts or downgrades |
+| Replication | independent cohort or platform | failed replication limits scope |
+
+## Arbitration Patterns
+
+- **All-must-pass:** Use for high-stakes confirmatory claims. Any named failure
+  downgrades or halts.
+- **Primary plus veto:** Primary verdict stands unless a specific diagnostic
+  veto fires.
+- **Tiered verdicts:** Strong/supportive/fragile/null labels are assigned from
+  a rule table.
+- **Scope downgrade:** Primary result remains true only for a narrower cohort,
+  platform, or operationalisation.
+- **Estimand split:** Adjusted and unadjusted results answer different
+  questions; report both instead of forcing agreement.
+
+## Attribute Diagnostics to the Arm That Produced Them
+
+When a run fits a primary model and several sensitivity refits in one process,
+their diagnostics accumulate in a shared log. A pooled number — total
+divergences, worst Pareto-k across all refits, a single "did the sampler
+complain" line — does not belong to the primary fit. Read it per arm before you
+read it at all.
+
+- Record convergence diagnostics (R-hat, ESS, divergences, Pareto-k)
+  **separately for the primary fit and for each named sensitivity arm**, keyed to
+  the arm that emitted them.
+- A degenerate sensitivity arm (e.g. a single-group refit where a cross-group
+  hierarchy collapses to one level) is *expected* to sample worse. Its
+  divergences condemn that arm's reliability, not the primary verdict.
+- Before downgrading or halting on a diagnostic, confirm which arm produced it.
+  If the primary fit is clean and only a known-fragile arm is noisy, the verdict
+  stands and that arm is reported as least-reliable-by-construction.
+
+A frozen arbitration rule (above) plus per-arm diagnostic attribution is what
+lets a clean primary fit survive an alarming-looking aggregate log — without
+either ignoring the warning or being spooked into discarding a sound verdict.
+
+## Power-Scaling Prior/Likelihood Sensitivity (Bayesian)
+
+For a Bayesian primary analysis, make prior sensitivity a *pre-committed*
+diagnostic rather than an after-the-fact reassurance:
+
+- **Power-scale** the prior (and, separately, the likelihood) by raising it to a
+  power and re-weighting the existing posterior draws via PSIS — **no refit**.
+- Quantify the shift with the cumulative Jensen-Shannon (CJS) distance between the
+  base and power-scaled posteriors; a common flag is **CJS > 0.05**.
+- **Prior-dominated** (prior-scaling moves the posterior, likelihood-scaling does
+  not) means the data are not driving the conclusion — a verdict downgrade, decided
+  by the arbitration rule above, not chosen after seeing the number.
+- Attribute the diagnostic to the arm that produced it, as with any other
+  sensitivity (see "Attribute Diagnostics to the Arm That Produced Them").
+
+## Anti-Patterns
+
+- Running many sensitivities and emphasizing whichever agrees with the desired
+  story.
+- Calling a sensitivity "exploratory" after it contradicts the primary.
+- Averaging incompatible results without checking that they estimate the same
+  quantity.
+- Treating failed diagnostics as caveats while keeping an unchanged verdict.
+- Adding new sensitivities after seeing results without labeling them post-hoc.
+- Reading a pooled diagnostic (total divergences, worst Pareto-k across all
+  refits) as a verdict on the primary fit when it was a sensitivity arm that
+  misbehaved.
+
+## Decision Table Template
+
+```text
+Primary verdict:
+  strong_support if primary passes and all mandatory checks pass
+  supportive if primary passes and only non-veto diagnostics fail
+  fragile if primary passes but one measurement sensitivity disagrees
+  null if primary effect is absent and power floor is adequate
+  unresolved if power/model adequacy/data QA fail
+
+Vetoes:
+  batch_confounded if batch effect explains >= primary effect
+  model_inadequate if PPC/residual diagnostics fail named thresholds
+  non_replicating if independent replication has opposite sign with adequate power
+```
+
+Use project-specific labels, but keep the table explicit.
+
+## Reporting
+
+Include:
+
+- primary analysis ID,
+- complete sensitivity list,
+- thresholds and vetoes,
+- result of each sensitivity,
+- final verdict label produced mechanically by the rule,
+- post-hoc analyses clearly separated from pre-committed arbitration.
+
+## Companion Skills
+
+- [`power-floor-acknowledgement.md`](power-floor-acknowledgement.md) - determining whether a null sensitivity can arbitrate.
+- Load the `science-statistics` skill - diagnostics for model adequacy and grouped data.
+- Load the `science-statistics` skill - sensitivity rules for denominator, zero-handling, and basis choices.

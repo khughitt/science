@@ -1,0 +1,171 @@
+# Science Project Structure Reference
+
+This document describes the standard directory layouts for Science-managed projects.
+
+## Top-Level Files
+
+| File | Purpose | Updated By |
+|---|---|---|
+| `science.yaml` | Project manifest (profile, aspects, metadata, data sources, knowledge_profiles) | User + agent |
+| `.env` | API keys (gitignored) | User |
+| `.gitignore` | Git ignore rules | Agent on project creation |
+| `CLAUDE.md` | Single-line pointer to `AGENTS.md` | Agent on project creation |
+| `AGENTS.md` | Operational guide (tools, validation, conventions, managed load-bearing-constraints digest) | Agent during loops; digest section managed by `/science:curate` |
+| `pyproject.toml` | Root tool manifest for project-local Science tooling | Agent on project creation / import |
+| `README.md` | Canonical high-level project context and strategy | User + agent |
+| `validate.sh` | Structural validation script | Copied from plugin |
+
+## Directories
+
+### `tasks/` — Task Queue
+
+Lightweight task management.
+
+- `active.md` — current task queue (structured entries with ID, type, priority, status, links)
+- `done/YYYY-MM.md` — completed tasks archived monthly
+
+### `specs/` — Research Scope
+
+The "requirements" for the research project.
+
+- `research-question.md` — the overarching question
+- `scope-boundaries.md` — what's in/out of scope
+- `hypotheses/h01-*.md` — structured hypothesis documents
+
+### `doc/` — Project Documents
+
+The canonical root for Science-managed written output.
+
+- `background/topics/<topic-slug>.md` — background topic summaries
+- `background/papers/<citekey>.md` — structured paper summaries
+- `questions/<slug>.md` — structured open questions
+- `methods/<slug>.md` — method and tool notes
+- `datasets/<slug>.md` — dataset and accession notes
+- `searches/YYYY-MM-DD-<slug>.md` — literature search runs
+- `discussions/YYYY-MM-DD-<slug>.md` — structured discussion artifacts
+- `interpretations/YYYY-MM-DD-<slug>.md` — result interpretation documents
+- `meta/skill-feedback.md` — process reflection log
+- `reports/` — audits and structured reports
+- `plans/` — project plans and design docs; generated `*-plan-review.md` scratch files are gitignored unless promoted
+- `meta/next-steps-*.md` — gap analysis and prioritization scratch output (written by `/science:next-steps`; gitignored unless promoted)
+
+### `papers/` — Reference Management
+
+- `references.bib` — BibTeX database (the single source of truth for citations)
+- `pdfs/` — downloaded PDFs (gitignored)
+
+### `knowledge/` — Knowledge Graph Artifacts
+
+- `graph.trig` — RDF knowledge graph
+- Build scripts and export files
+
+### `models/` — Formal Models
+
+- `causal-dag.dot` — Graphviz DOT format
+- `causal-dag.json` — machine-readable format
+- `README.md` — model documentation
+
+### `data/` — Data (Frictionless Data Packages)
+
+- `raw/` — original, unmodified data + `datapackage.json`
+- `processed/` — cleaned, transformed data + `datapackage.json`
+- `README.md` — data overview
+
+### `code/` — Research Execution Artifacts
+
+- `workflows/` — Snakemake and other workflow definitions
+- `notebooks/*.py` — Marimo notebooks
+- `scripts/` — standalone analysis scripts
+- other execution assets as needed
+
+If a research project ships an installable Python package, keep the package in root `src/`
+and tests in root `tests/`. Do not nest the package under `code/`.
+
+### `core/` — Curated Project Orientation (optional)
+
+Short, human-edited orientation docs loaded at session start via `AGENTS.md`.
+Complement to dynamic outputs from `/science:status` and `/science:next-steps`:
+those tools regenerate every session; `core/` is the stable institutional
+knowledge an agent (or new collaborator) needs to be useful in five minutes.
+
+Recommended files (each capped at ~100-150 lines):
+
+- `core/overview.md` — what the project is, why it exists, current state, open
+  fronts. Avoid duplicating `science.yaml`/`README.md` content; include only the
+  judgment calls that the manifest can't capture.
+- `core/decisions.md` — load-bearing decisions and why they were made (chosen
+  approaches, rejected alternatives, hard constraints). Append-only; do not
+  rewrite history when a decision is superseded — record the supersession.
+
+`AGENTS.md` references `core/` via its Pointers section and carries a managed
+digest of load-bearing constraints between `<!-- BEGIN: load-bearing-constraints -->`
+and `<!-- END: load-bearing-constraints -->` markers. The digest is refreshed
+by `/science:curate` from `core/decisions.md` (active decisions only). AGENTS.md
+does **not** `@`-include `core/*.md` — those files routinely run into the
+hundreds of lines and would inflate every turn's context.
+
+### `.ai/` — Project-Specific AI Overrides
+
+- `prompts/` — optional project-specific prompt overrides/additions
+- `templates/` — optional project-specific template overrides/additions
+
+Framework defaults for prompts/templates are resolved from the Science framework at runtime.
+
+### `pyproject.toml` — Project-Local Tooling Manifest
+
+Use the root `pyproject.toml` as the home for project-local Science tooling, even for non-Python repos.
+If the project already has a root Python manifest, extend it instead of creating a second one.
+This is a tool-only manifest, not a signal that the project itself is a Python app.
+
+Minimum shape:
+
+```toml
+[project]
+name = "<project-slug>-sciences"
+version = "0.1.0"
+requires-python = ">=3.11"
+dependencies = []
+
+[dependency-groups]
+dev = ["science"]
+
+[tool.uv.sources]
+science = { git = "https://github.com/khughitt/science.git", subdirectory = "science" }
+```
+
+Resolve and install it with:
+
+```bash
+uv lock
+uv sync --frozen
+uv run --frozen science --version
+```
+
+Commit `uv.lock`; it records the exact Science Git revision selected for the
+project.
+
+### `archive/` — Optional Archived Material
+
+Accepted optional root for superseded material that should remain in-repo but is no longer active.
+
+### `aspects/` — Project Aspects (Plugin-Level)
+
+Composable mixins that adapt commands and templates to project characteristics.
+Defined in the Science plugin, not in individual projects.
+
+- `causal-modeling/causal-modeling.md` — causal inference, DAGs, structural models
+- `hypothesis-testing/hypothesis-testing.md` — formal hypothesis tracking and evaluation
+- `computational-analysis/computational-analysis.md` — exploratory analysis, benchmarks, pipelines
+- `software-development/software-development.md` — applications, tools, libraries
+
+Projects declare both profile and aspects in `science.yaml`:
+
+```yaml
+profile: research
+aspects:
+  - causal-modeling
+  - computational-analysis
+```
+
+`profile` selects the canonical layout. `aspects` remain explicit composable behavior mixins.
+See `references/science-yaml-schema.md` for the schema and each aspect file for what it contributes.

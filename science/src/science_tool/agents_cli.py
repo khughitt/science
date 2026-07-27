@@ -1,10 +1,4 @@
-"""CLI commands for multi-agent skill and command generation.
-
-Supports generating agent-compatible outputs for:
-- Codex (SKILL.md format, written to codex-skills/)
-- Crush (SKILL.md with user-invocable frontmatter)
-- OpenCode (SKILL.md for skills, .md with frontmatter for commands)
-"""
+"""CLI commands for generating and installing Science agent assets."""
 
 from __future__ import annotations
 
@@ -13,99 +7,42 @@ from pathlib import Path
 
 import click
 
-from science_tool.codex_skills import generate_agent_skills
+from science_tool.agent_assets import generate_agent_assets, validate_repo_root
 
 
 def _resolve_repo_root() -> Path:
     """Find the science toolkit repo root by walking up from CWD."""
     cwd = Path.cwd()
     for parent in [cwd, *cwd.parents]:
-        if (parent / "skills" / "INDEX.md").exists() and (parent / "commands").is_dir():
-            return parent
-    return cwd
+        try:
+            return validate_repo_root(parent)
+        except ValueError:
+            continue
+    raise ValueError(f"could not find a Science toolkit root from: {cwd}")
 
 
 @click.group(name="agents")
 def agents_group() -> None:
-    """Generate agent-compatible skills and commands for Crush, OpenCode, and Codex."""
+    """Generate and install Science agent assets."""
 
 
 @agents_group.command(name="generate")
-@click.option(
-    "--agent",
-    type=click.Choice(["codex", "crush", "opencode"]),
-    required=True,
-    help="Target agent to generate for.",
-)
-@click.option(
-    "--format",
-    "output_format",
-    type=click.Choice(["skill", "command"]),
-    default="skill",
-    help="Output format: 'skill' generates SKILL.md files, 'command' generates .md command files (OpenCode only).",
-)
-@click.option(
-    "--output-dir",
-    type=click.Path(path_type=Path),
-    default=None,
-    help="Output directory. Defaults to agent-specific location.",
-)
-@click.option(
-    "--repo-root",
-    type=click.Path(path_type=Path),
-    default=None,
-    help="Science toolkit repo root. Defaults to auto-detection.",
-)
-def generate_cmd(
-    *,
-    agent: str,
-    output_format: str,
-    output_dir: Path | None,
-    repo_root: Path | None,
-) -> None:
-    """Generate skills and commands for a specific agent.
-
-    Examples:
-
-        science agents generate --agent codex
-        science agents generate --agent crush
-        science agents generate --agent opencode --format command
-    """
-    if repo_root is None:
-        repo_root = _resolve_repo_root()
-
-    if output_dir is None:
-        output_dir = _default_output_dir(repo_root, agent, output_format)
-
-    # Validate format/agent combinations
-    if output_format == "command" and agent != "opencode":
-        click.echo(
-            "Warning: command format is only supported for OpenCode. Generating skills instead.",
-            err=True,
+@click.option("--repo-root", type=click.Path(path_type=Path), default=None)
+def generate_cmd(*, repo_root: Path | None) -> None:
+    """Generate the committed Science agent distributions."""
+    try:
+        root = validate_repo_root(repo_root or _resolve_repo_root())
+        result = generate_agent_assets(
+            root,
+            root / "skills" / "generated",
+            root / "commands" / "opencode",
         )
-        output_format = "skill"
-
-    generated = generate_agent_skills(
-        repo_root=repo_root,
-        output_root=output_dir,
-        agent=agent,
-        format=output_format,
+    except ValueError as error:
+        raise click.ClickException(str(error)) from error
+    click.echo(
+        f"Generated {len(result.skill_paths)} skills and "
+        f"{len(result.opencode_command_paths)} OpenCode commands"
     )
-
-    click.echo(f"Generated {len(generated)} items for {agent} in {output_dir}")
-
-
-def _default_output_dir(repo_root: Path, agent: str, output_format: str) -> Path:
-    """Return the default output directory for an agent/format combination."""
-    if agent == "codex":
-        return repo_root / "codex-skills"
-    if agent == "crush":
-        return repo_root / "crush-skills"
-    if agent == "opencode":
-        if output_format == "command":
-            return repo_root / "opencode-commands"
-        return repo_root / "opencode-skills"
-    return repo_root / f"{agent}-skills"
 
 
 @agents_group.command(name="install")

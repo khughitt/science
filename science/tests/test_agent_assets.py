@@ -5,6 +5,7 @@ from pathlib import Path
 
 import pytest
 import science_tool.agent_assets as agent_assets
+from click.testing import CliRunner
 
 from science_tool.agent_assets import (
     GenerationResult,
@@ -49,6 +50,14 @@ def _slice_between(text: str, start_marker: str, end_marker: str) -> str:
 
 def _norm(text: str) -> str:
     return " ".join(text.split())
+
+
+def _file_bytes(root: Path) -> dict[str, bytes]:
+    return {
+        path.relative_to(root).as_posix(): path.read_bytes()
+        for path in sorted(root.rglob("*"))
+        if path.is_file()
+    }
 
 
 def _frontmatter_name(path: Path) -> str:
@@ -612,7 +621,106 @@ def test_generate_agent_assets_emits_all_commands_support_and_methodology(
     generated_count = command_count + len(_methodology_names()) + 1
     assert len(generated.skill_paths) == generated_count
     assert len(list(skills_root.glob("science-*/SKILL.md"))) == generated_count
-    assert generated.opencode_command_paths == {}
+    assert len(generated.opencode_command_paths) == command_count
+
+
+def test_opencode_adapters_are_thin_and_namespaced(
+    generated: GenerationResult,
+) -> None:
+    expected = {
+        f"science-{path.stem}"
+        for path in sorted((ROOT / "commands").glob("*.md"))
+    }
+    assert set(generated.opencode_command_paths) == expected
+    for name, path in generated.opencode_command_paths.items():
+        text = path.read_text(encoding="utf-8")
+        assert path.name == f"{name}.md"
+        assert f"Load and execute the `{name}` skill" in text
+        assert "$ARGUMENTS" in text
+        assert "## Science Command Preamble" not in text
+
+
+def test_generation_prunes_stale_generated_skills_and_adapters(
+    tmp_path: Path,
+) -> None:
+    skills_output = tmp_path / "skills"
+    commands_output = tmp_path / "commands"
+    generate_agent_assets(ROOT, skills_output, commands_output)
+    stale_skill = skills_output / "science-stale" / "SKILL.md"
+    stale_skill.parent.mkdir()
+    stale_skill.write_text("# Stale\n", encoding="utf-8")
+    stale_adapter = commands_output / "science-stale.md"
+    stale_adapter.write_text("# Stale\n", encoding="utf-8")
+
+    generate_agent_assets(ROOT, skills_output, commands_output)
+
+    assert not stale_skill.parent.exists()
+    assert not stale_adapter.exists()
+
+
+@pytest.mark.parametrize("output_kind", ("skills", "commands"))
+def test_generation_rejects_undeclared_files_in_output_roots(
+    tmp_path: Path,
+    output_kind: str,
+) -> None:
+    skills_output = tmp_path / "skills"
+    commands_output = tmp_path / "commands"
+    generate_agent_assets(ROOT, skills_output, commands_output)
+    output_root = skills_output if output_kind == "skills" else commands_output
+    undeclared = output_root / "README.md"
+    undeclared.write_text("Static content\n", encoding="utf-8")
+
+    with pytest.raises(ValueError, match="undeclared generated output file"):
+        generate_agent_assets(ROOT, skills_output, commands_output)
+
+    assert undeclared.read_text(encoding="utf-8") == "Static content\n"
+
+
+def test_generated_distribution_index_is_neutral(
+    generated: GenerationResult,
+) -> None:
+    index = next(iter(generated.skill_paths.values())).parent.parent / "INDEX.md"
+    text = index.read_text(encoding="utf-8")
+    assert "## Command Skills" in text
+    assert "## Methodology Skills" in text
+    assert "## Support Skills" in text
+    assert "Agent Skill" in text
+    assert "Codex" not in text
+    assert "commands/status.md" in text
+    assert "skills/statistics/SKILL.md" in text
+    assert "references/command-preamble.md" in text
+
+
+def test_committed_agent_distributions_match_generation(
+    tmp_path: Path,
+) -> None:
+    generated_skills = tmp_path / "skills"
+    generated_commands = tmp_path / "commands"
+    generate_agent_assets(ROOT, generated_skills, generated_commands)
+
+    assert _file_bytes(generated_skills) == _file_bytes(ROOT / "skills" / "generated")
+    assert _file_bytes(generated_commands) == _file_bytes(ROOT / "commands" / "opencode")
+
+
+def test_agents_generate_cli_writes_both_distributions(tmp_path: Path) -> None:
+    from science_tool.agents_cli import agents_group
+
+    repo_root = tmp_path / "repo"
+    _write_minimal_generation_repo(
+        repo_root,
+        router_name="test",
+        command_name="demo",
+    )
+
+    result = CliRunner().invoke(
+        agents_group,
+        ["generate", "--repo-root", str(repo_root)],
+    )
+
+    assert result.exit_code == 0, result.output
+    assert result.output == "Generated 4 skills and 1 OpenCode commands\n"
+    assert (repo_root / "skills" / "generated" / "INDEX.md").is_file()
+    assert (repo_root / "commands" / "opencode" / "science-demo.md").is_file()
 
 
 def test_add_theme_skill_uses_schema_driven_entity_creation(skills_root: Path) -> None:

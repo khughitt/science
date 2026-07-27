@@ -1,0 +1,43 @@
+---
+id: "topic:{{slug}}"
+kind: "topic"
+title: "{{Title}}"
+status: "active"
+ontology_terms: []
+datasets: []                    # omit if not applicable to this topic
+source_refs: []                  # use cite:<bibkey> for bibliography refs; paper:<bibkey> for graph-visible paper notes
+# origins: known originators. Each entry is a RECORD, not a bare word:
+#   origins: [{type: literature, ref: paper:Smith2024}]
+# type is one of user | assistant | literature. A bare `[literature]` fails
+# schema validation, which drops the whole entity. Provenance only.
+origins: []
+related: []
+created: "{{YYYY-MM-DD}}"
+updated: "{{YYYY-MM-DD}}"
+---
+
+# {{Title}}
+
+## Summary
+
+<!-- 2-3 sentence overview of this topic and why it matters for the project -->
+
+## Key Concepts
+
+<!-- Define essential terms and frameworks. Be precise — these definitions may be referenced by other documents. -->
+
+## Current State of Knowledge
+
+<!-- What is well-established? What's the consensus view? Cite key references. -->
+
+## Controversies & Open Questions
+
+<!-- Where do experts disagree? What remains unknown? -->
+
+## Relevance to This Project
+
+<!-- How does this topic connect to our research question and hypotheses? Reference specific hypothesis IDs where applicable. -->
+
+## Key References
+
+<!-- Cite the most important 3-5 papers. Full entries must exist in papers/references.bib -->

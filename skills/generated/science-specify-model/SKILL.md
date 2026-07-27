@@ -1,0 +1,384 @@
+---
+name: science-specify-model
+description: "Formalize a research model with explicit claims, evidence provenance, and residual uncertainty. Use when the user wants to make a sketch rigorous, attach support/dispute to candidate relations, resolve unknowns, or formalize assumptions."
+user-invocable: true
+---
+
+# Specify a Research Model
+
+## Science Command Preamble
+
+Before executing any research command:
+
+1. **Resolve project profile:** Read `science.yaml` and identify the project's `profile`.
+   Use the canonical layout for that profile:
+   - `research` → `doc/`, `specs/`, `tasks/`, `knowledge/`, `papers/`, `models/`, `data/`, `code/`
+   - `software` → `doc/`, `specs/`, `tasks/`, `knowledge/`, plus native implementation roots such as `src/` and `tests/`
+2. Load the `science-command-preamble` skill. Use its
+   `references/role-prompts/research-assistant.md` role prompt and its aspect definitions.
+3. Load the `science-scientific-writing` skill. For research methodology, read the `science-command-preamble` skill's `references/methodology-index.md` and load the relevant generated methodology router skills (e.g. `literature-evaluation`, `literature-citation-discipline`, `epistemics-proposition-graph-reasoning`).
+4. Read project context from current entity roots:
+   - `entities/questions/` for active research questions.
+   - `entities/hypotheses/` for hypotheses.
+5. **Load project aspects:** Read `aspects` from `science.yaml` (default: empty list).
+   For each declared aspect, resolve the aspect file in this order:
+   1. the `science-command-preamble` skill's `references/aspects/<name>/<name>.md` — canonical Science aspects
+   2. `.ai/aspects/<name>.md` — project-local aspect override or addition
+
+   If neither path exists (the project declares an aspect that isn't shipped with
+   Science and has no project-local definition), do not block: log a single line
+   like `aspect "<name>" declared in science.yaml but no definition found —
+   proceeding without it` and continue. Suggest the user either (a) drop the
+   aspect from `science.yaml`, (b) author it under `.ai/aspects/<name>.md`, or
+   (c) align the name with one shipped under the `science-command-preamble` skill's `references/aspects/`.
+
+   When executing command steps, incorporate the additional sections, guidance,
+   and signal categories from loaded aspects. Aspect-contributed sections are
+   whole sections inserted at the placement indicated in each aspect file.
+6. **Check for missing aspects:** Scan for structural signals that suggest aspects
+   the project could benefit from but hasn't declared:
+
+   | Signal | Suggests |
+   |---|---|
+   | Files in `entities/hypotheses/` | `hypothesis-testing` |
+   | Files in `models/` (`.dot`, `.json` DAG files) | `causal-modeling` |
+   | Workflow files, notebooks, or benchmark scripts in `code/` | `computational-analysis` |
+   | Package manifests (`pyproject.toml`, `package.json`, `Cargo.toml`) at project root with project source code (not just tool dependencies) | `software-development` |
+
+   If a signal is detected and the corresponding aspect is not in the `aspects` list,
+   briefly note it to the user before proceeding:
+   > "This project has [signal] but the `[aspect]` aspect isn't enabled.
+   > This would add [brief description of what the aspect contributes].
+   > Want me to add it to `science.yaml`?"
+
+   If the user agrees, add the aspect to `science.yaml` and load the aspect file
+   before continuing. If they decline, proceed without it.
+
+   Only check once per command invocation — do not re-prompt for the same aspect
+   if the user has previously declined it in this session.
+7. **Resolve templates:** When a command says "Read `.ai/templates/<name>.md`",
+   check the project's `.ai/templates/` directory first. If not found, read from
+   `references/templates/<name>.md`. If neither exists, warn the
+   user and proceed without a template — the command's Writing section provides
+   sufficient structure.
+8. **Verify the project-local Science CLI:** Execute the top-level CLI
+   Compatibility Gate below before the command's first Science invocation. It
+   uses the consumer's frozen lock; do not route through a toolkit checkout or
+   another environment.
+
+## CLI Compatibility Gate
+
+```bash
+SCIENCE_REQUIRED_VERSION=0.3.0
+if output=$(uv run --frozen science --version 2>&1); then
+  SCIENCE_INSTALLED_VERSION=${output##* }
+elif uv run --frozen science --help >/dev/null 2>&1; then
+  # The CLI runs but has no --version option, so it predates the baseline.
+  # Decided by behavior, never by matching Click's version-dependent wording.
+  SCIENCE_INSTALLED_VERSION=
+else
+  # The CLI cannot run at all: missing/stale lock, Git fetch failure, import
+  # error. Report the real diagnosis; never advise moving the Science pin.
+  printf '%s\n' "$output" >&2
+  exit 1
+fi
+
+if ! SCIENCE_INSTALLED_VERSION="$SCIENCE_INSTALLED_VERSION" \
+     SCIENCE_REQUIRED_VERSION="$SCIENCE_REQUIRED_VERSION" \
+     uv run --no-project python - <<'PY'
+import os
+import re
+import sys
+
+def release(name: str) -> tuple[int, int, int] | None:
+    match = re.match(r"(\d+)\.(\d+)\.(\d+)", name)
+    return tuple(map(int, match.groups())) if match else None
+
+installed = release(os.environ["SCIENCE_INSTALLED_VERSION"])
+required = release(os.environ["SCIENCE_REQUIRED_VERSION"])
+sys.exit(0 if installed is not None and required is not None and installed >= required else 1)
+PY
+then
+  display=${SCIENCE_INSTALLED_VERSION:-unknown-or-pre-0.3.0}
+  echo "This Science agent command requires science >=$SCIENCE_REQUIRED_VERSION; found $display." >&2
+  echo "upgrade with: uv lock --upgrade-package science && uv sync --frozen" >&2
+  exit 1
+fi
+```
+
+After the gate succeeds, run the command through the consumer's project-local
+environment as `uv run science <command>`. Missing dependency, missing or stale
+lock, and Git fetch failures are surfaced directly and must be fixed in the
+consumer project.
+
+A CLI that answers `--help` but rejects `--version` predates the baseline;
+malformed successful output and a version below the floor are likewise
+compatibility failures, and all three stop with the upgrade command. A CLI that
+cannot run at all is an environment failure: its output is printed verbatim and
+must be fixed as reported.
+
+The `--help` probe is what separates those two classes. Do not substitute a match
+against Click's error text — its wording changed in Click 8.4, and `science`
+allows any `click>=8.1`, so a freshly locked consumer can emit either form. The
+root `--version` probe is the permanent bootstrap surface; do not replace it with
+a preflight subcommand, which an older CLI could not recognize either.
+
+> **Prerequisite:** Read `references/docs/user-guide/science-model.md`, `references/docs/user-guide/entities.md`, `references/docs/user-guide/graph-and-derived-state.md`, and `references/docs/plans/historical/2026-03-01-knowledge-graph-design.md` for model, entity, and graph semantics before starting.
+
+## Overview
+
+This command takes an inquiry from sketch to specified status.
+
+In the skeptical model:
+- variables get formal types
+- non-trivial scientific relations become explicit `proposition` records, preferably with subject-predicate-object structure
+- evidence lines update those propositions via support/dispute
+- uncertainty remains explicit unless the evidence base is genuinely strong
+
+The goal is not to convert every edge into a fact. The goal is to convert vague structure into explicit, reviewable propositions with provenance.
+
+## Tool Invocation
+
+All `science` commands below use:
+
+```bash
+uv run science <command>
+```
+
+## Rules
+
+- **MUST** read the existing inquiry, hypothesis, or target epistemic entity before modifying it
+- **MUST** assign formal types to all important variables
+- **MUST** identify which modeled relations are structural only and which represent uncertain scientific claims
+- **MUST** represent uncertain scientific relations as `proposition` entities
+- **MUST** attach provenance to authored propositions and evidence lines
+- **MUST** keep residual uncertainty visible when support is sparse, contested, or low-quality
+- **MUST** run the relevant validation path after specifying (`inquiry validate`, project DAG check, or graph build)
+- **SHOULD** identify confounders for directional or causal claims
+- **SHOULD** ask what would materially change belief in each key claim
+
+## Workflow
+
+### Step 0: Detect The Target Kind And DAG Representation
+
+the user input is not always an inquiry. Before Step 1, resolve what you were handed and how this
+project represents its model graph — otherwise `science inquiry show` errors (e.g. on a
+`hypothesis:` ref, which is not an inquiry).
+
+1. **Resolve the target kind.** If the ref is `inquiry:<slug>` (or a bare inquiry slug), proceed with
+   the inquiry/RDF-graph path (Step 1 onward). If it is a `hypothesis:` (or other epistemic kind), do
+   **not** run `science inquiry show` — read the entity file directly and treat *it* as the model to
+   specify.
+
+2. **Detect the DAG representation.** Some projects author the inquiry graph through the
+   source-first inquiry patch path (`entities/patches/<slug>.md` with `patch_type: inquiry`). Others author
+   per-hypothesis DAG topology in `doc/figures/dags/<id>.dot`, with semantics supplied by durable
+   `proposition:` and `evidence-line:` entities. Check the project for such a convention (look under
+   `doc/figures/dags/`, `README.md`, or the project's conventions) before assuming the inquiry patch path.
+
+3. **Route accordingly:**
+   - **Inquiry patch project** → Steps 1–6 as written, editing the source file and rebuilding before validation.
+   - **Hypothesis + file-based DAG project** → skip the `inquiry show/validate/add-edge` and
+     retired graph-writer steps (they don't map onto the file pair). Instead author/validate the
+     `.dot` topology and the durable `proposition` entities that back each DOT edge, then add
+     Step 4 evidence-line entities. Validate with the project's DAG check (e.g. `science dag
+     validate` / `science dag render` / `science big-picture`) rather than `inquiry validate`.
+   - **Hypothesis / epistemic entity with no DAG yet** → decompose the hypothesis into durable `proposition:` entities.
+     For each proposition, link each proposition back to the hypothesis with `related: ["hypothesis:<id>"]`.
+     Then add the proposition refs to the hypothesis's Proposition Bundle so the bundle is explicit and queryable.
+     Do not leave the decomposition only as prose inside the hypothesis file. If a DAG is later useful, build it
+     from those proposition records rather than replacing them.
+
+The proposition + evidence-line authoring (Steps 3–4) is representation-agnostic; only the
+structural-graph steps (1, 2, the inquiry source edit in 3, and 6's `inquiry validate`) are inquiry-specific.
+
+### Step 1: Load And Assess The Target
+
+*(Inquiry + RDF-graph path — see Step 0. For a hypothesis in a file-based DAG project, read the
+hypothesis file, `.dot` topology, and backing proposition/evidence-line entities instead. For a hypothesis with no DAG yet, read the
+hypothesis file and prepare the proposition bundle before adding any structural graph.)*
+
+If the user input contains an inquiry slug:
+
+```bash
+science inquiry show "<slug>" --format table
+science inquiry validate "<slug>" --format json
+```
+
+Identify:
+- variables lacking proper types
+- vague edges that should become explicit claims
+- unresolved unknowns
+- unsupported causal assumptions
+- places where the inquiry is structurally useful but epistemically fragile
+
+If no slug is provided, ask which inquiry, hypothesis, or epistemic target to specify.
+
+### Step 2: Specify Variables
+
+For each important variable:
+
+1. **Type**
+   - What kind of thing is this?
+   - Use the most specific reasonable type.
+
+2. **Observability**
+   - Is this observed, latent, or computed?
+
+3. **Provenance**
+   - Where does this variable definition come from?
+
+For inquiry-patch projects, record durable variable refs in
+`entities/patches/<slug>.md`. Make sure those refs resolve through source
+records or entity owners before rebuilding the graph from source. Use a more
+specific registered source kind when one exists; use
+`science entity create concept "<title>"` only for reusable project-local
+concepts that need a Markdown owner.
+
+`science graph add concept` is retired. Author durable concepts with
+`science entity create concept "<title>"` or by editing
+`entities/concepts/<slug>.md`, then run `science graph build`. Do not treat
+retired graph-writer output as an owner for variables, treatment/outcome refs,
+or unknowns.
+
+### Step 3: Convert Scientific Edges Into Explicit Propositions
+
+For each non-trivial scientific relation in the inquiry:
+
+1. Clarify the content of the proposition
+   - What exactly is being asserted?
+   - Is it `empirical_regularity`, `causal_effect`, `mechanistic_narrative`, or `structural_claim`?
+   - Is the observed evidence direct or proxy-mediated?
+
+2. Create a durable proposition
+
+```bash
+science propositions create "<clear proposition title>" \
+  --id "proposition:<id>" \
+  --source-ref "<ref>"
+```
+
+Then fill the proposition file with explicit subject-predicate-object structure
+in prose and, when useful, frontmatter fields such as the following.
+
+`concept:*` refs are acceptable here only when they already resolve through a
+source owner or lightweight term row.
+
+```yaml
+subject: "<existing-subject-ref>"
+predicate: "<predicate>"
+object: "<existing-object-ref>"
+claim_layer: "empirical_regularity|causal_effect|mechanistic_narrative|structural_claim"
+```
+
+3. Attach the proposition to the inquiry edge when the edge should remain in the model.
+
+Edit `entities/patches/<slug>.md` and add the proposition to the edge's
+`claim_refs:` list:
+
+```yaml
+flow_edges:
+  - subject: "<existing-subject-ref>"
+    predicate: feedsInto
+    object: "<existing-object-ref>"
+    claim_refs:
+      - "proposition:<id>"
+```
+
+Use direct structural edges without propositions only when the edge is organizational or procedural rather than epistemic.
+
+When the proposition is materially clearer with layered metadata, author it explicitly:
+- `claim_layer`
+- `identification_strength`
+- `proxy_directness`
+- `measurement_model`
+- `supports_scope` as a review hint only
+- `rival_model_packet` using optional `current_working_model`
+
+`proxy_directness:` must be one of `direct`, `indirect`, or `derived`. Do not write `proxy`; graph build rejects it.
+Use `direct` when the evidence observes the target construct itself, `indirect` for a measured proxy of the target construct,
+and `derived` for a computed or model-derived proxy. If `proxy_directness` is `indirect` or `derived`, include a
+`measurement_model` that explains what the proxy measures, the latent construct it stands in for, and known failure modes.
+
+### Step 4: Attach Support And Dispute
+
+For each important proposition, ask:
+- What currently supports it?
+- What currently disputes it?
+- What evidence is missing?
+- Does the support come from one independence group only?
+- Is any support actually a proxy that still needs a measurement model?
+
+When the project has concrete supporting or disputing evidence, represent it as evidence-line entities:
+
+```bash
+science entity create evidence-line "<supporting or disputing evidence line>" \
+  --id "evidence-line:<id>" \
+  --source-ref "<ref>" \
+  --related "proposition:<target>"
+```
+
+Then set `target: "proposition:<target>"`, `stance: "supports"` or `stance: "disputes"`, and fill in strength, method, independence, and caveats.
+
+Do not force a flat verdict when the evidence is mixed or weak.
+
+### Step 5: Resolve Unknowns And Assumptions
+
+For each `sci:Unknown` node:
+- resolve it to a real entity
+- justify why it remains unknown
+- or remove it if it no longer matters
+
+For each assumption:
+- note why the model currently relies on it
+- note what evidence or analysis would reduce that reliance
+
+### Step 6: Validate And Finalize
+
+```bash
+science graph build
+science inquiry validate "<slug>" --format json
+```
+
+Update the inquiry status to `specified` only when:
+- the model structure is coherent
+- the important claims are explicit
+- the main evidence links are recorded
+- major unknowns are either resolved or intentionally documented
+
+No separate revision-stamping command is needed; `science graph build` writes
+the compiled graph and its revision metadata from the authored sources.
+
+### Step 7: Suggest Next Steps
+
+1. `science-interpret-results` when new empirical results should update support/dispute
+2. `science-compare-hypotheses` when competing claim bundles need head-to-head evaluation
+3. `science-discuss` when a claim remains contested or structurally important but weakly evidenced
+
+## Important Notes
+
+- Specifying a model increases clarity, not certainty.
+- A proposition with one weak line of evidence is still fragile.
+- The main output of this command is a model whose uncertainty can be inspected, challenged, and improved.
+
+## Process Reflection
+
+Reflect on the **template** and **workflow** used above.
+
+If you have feedback (friction, gaps, suggestions, or things that worked well),
+report each item via:
+
+```bash
+science feedback add \
+  --target "command:specify-model" \
+  --category <friction|gap|guidance|suggestion|positive> \
+  --summary "<one-line summary>" \
+  --detail "<optional prose>"
+```
+
+Guidelines:
+- One entry per distinct issue (not one big dump)
+- If the same issue has occurred before, the tool will detect it and
+  increment recurrence automatically
+- Skip if everything worked smoothly — no feedback is valid feedback
+- For template-specific issues, use `--target "template:<name>"` instead

@@ -86,10 +86,22 @@ def generate_agent_assets(
     command_paths = sorted((repo_root / "commands").glob("*.md"))
     methodology_packages = _methodology_packages(repo_root)
     _validate_generated_skill_namespace(command_paths, methodology_packages)
+    expected_skill_names = {
+        *(command_to_skill_name(path) for path in command_paths),
+        *(package.name for package in methodology_packages),
+        COMMAND_SUPPORT_SKILL,
+    }
+    expected_adapter_names = {
+        command_to_skill_name(path) for path in command_paths
+    }
+    _prepare_output_roots(
+        skills_output_root,
+        expected_skill_names,
+        opencode_commands_output_root,
+        expected_adapter_names,
+    )
     skill_owners = _skill_owner_map(methodology_packages, repo_root)
     dependencies: dict[str, set[str]] = {}
-    skills_output_root.mkdir(parents=True, exist_ok=True)
-    opencode_commands_output_root.mkdir(parents=True, exist_ok=True)
 
     skill_paths = _generate_command_skills(
         repo_root,
@@ -118,10 +130,22 @@ def generate_agent_assets(
         skill_owners,
         support_dependencies,
     )
+    _write_distribution_index(
+        repo_root,
+        skills_output_root,
+        command_paths,
+        methodology_packages,
+    )
+    opencode_command_paths = _generate_opencode_adapters(
+        command_paths,
+        opencode_commands_output_root,
+        skill_paths,
+        dependencies,
+    )
     _validate_dependencies(dependencies, set(skill_paths))
     return GenerationResult(
         skill_paths=skill_paths,
-        opencode_command_paths={},
+        opencode_command_paths=opencode_command_paths,
     )
 
 
@@ -245,6 +269,66 @@ def _validate_output_root(
     raise ValueError(f"generated output inside canonical source tree: {resolved}")
 
 
+def _prepare_output_roots(
+    skills_output_root: Path,
+    expected_skill_names: set[str],
+    opencode_commands_output_root: Path,
+    expected_adapter_names: set[str],
+) -> None:
+    _validate_skills_output_entries(skills_output_root)
+    _validate_opencode_output_entries(opencode_commands_output_root)
+    skills_output_root.mkdir(parents=True, exist_ok=True)
+    opencode_commands_output_root.mkdir(parents=True, exist_ok=True)
+    for entry in skills_output_root.iterdir():
+        if (
+            entry.name.startswith("science-")
+            and entry.is_dir()
+            and entry.name not in expected_skill_names
+        ):
+            shutil.rmtree(entry)
+    for entry in opencode_commands_output_root.iterdir():
+        if (
+            entry.name.startswith("science-")
+            and entry.suffix == ".md"
+            and entry.is_file()
+            and entry.stem not in expected_adapter_names
+        ):
+            entry.unlink()
+
+
+def _validate_skills_output_entries(output_root: Path) -> None:
+    if not output_root.exists():
+        return
+    if not output_root.is_dir():
+        raise ValueError(f"generated output root is not a directory: {output_root}")
+    for entry in output_root.iterdir():
+        declared = (
+            entry.name == "INDEX.md"
+            and entry.is_file()
+            or entry.name.startswith("science-")
+            and entry.is_dir()
+            and not entry.is_symlink()
+        )
+        if not declared:
+            raise ValueError(f"undeclared generated output file: {entry}")
+
+
+def _validate_opencode_output_entries(output_root: Path) -> None:
+    if not output_root.exists():
+        return
+    if not output_root.is_dir():
+        raise ValueError(f"generated output root is not a directory: {output_root}")
+    for entry in output_root.iterdir():
+        declared = (
+            entry.name.startswith("science-")
+            and entry.suffix == ".md"
+            and entry.is_file()
+            and not entry.is_symlink()
+        )
+        if not declared:
+            raise ValueError(f"undeclared generated output file: {entry}")
+
+
 def _generate_command_skills(
     repo_root: Path,
     output_root: Path,
@@ -282,6 +366,45 @@ def _generate_command_skills(
         )
         generated[name] = skill_path
     return generated
+
+
+def _generate_opencode_adapters(
+    command_paths: list[Path],
+    output_root: Path,
+    skill_paths: Mapping[str, Path],
+    dependencies: dict[str, set[str]],
+) -> dict[str, Path]:
+    generated = {}
+    for command_path in command_paths:
+        name = command_to_skill_name(command_path)
+        if name not in skill_paths:
+            raise ValueError(
+                f"missing generated skill dependency for OpenCode adapter {name}: {name}"
+            )
+        _, description, _ = _parse_command(command_path)
+        path = output_root / f"{name}.md"
+        path.write_text(
+            _render_opencode_adapter(name, description),
+            encoding="utf-8",
+        )
+        dependencies[f"OpenCode adapter {name}"] = {name}
+        generated[name] = path
+    return generated
+
+
+def _render_opencode_adapter(name: str, description: str) -> str:
+    return "\n".join(
+        (
+            "---",
+            f"description: {description}",
+            "---",
+            "",
+            f"Load and execute the `{name}` skill using this input:",
+            "",
+            "$ARGUMENTS",
+            "",
+        )
+    )
 
 
 def _load_command_preamble(repo_root: Path) -> str:
@@ -1091,6 +1214,59 @@ def _write_methodology_index(
     path = skill_dir / "references" / "methodology-index.md"
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+
+
+def _write_distribution_index(
+    repo_root: Path,
+    output_root: Path,
+    command_paths: list[Path],
+    methodology_packages: tuple[MethodologyPackage, ...],
+) -> None:
+    command_rows = [
+        (
+            command_to_skill_name(path),
+            path.relative_to(repo_root).as_posix(),
+        )
+        for path in command_paths
+    ]
+    methodology_rows = [
+        (
+            package.name,
+            package.router_source.relative_to(repo_root).as_posix(),
+        )
+        for package in methodology_packages
+    ]
+    support_rows = [
+        (
+            COMMAND_SUPPORT_SKILL,
+            "references/command-preamble.md",
+        )
+    ]
+    lines = [
+        "# Generated Science Agent Skills",
+        "",
+        "Generated from canonical Science toolkit sources. Do not edit.",
+        "",
+    ]
+    for heading, rows in (
+        ("Command Skills", command_rows),
+        ("Methodology Skills", methodology_rows),
+        ("Support Skills", support_rows),
+    ):
+        lines.extend(
+            (
+                f"## {heading}",
+                "",
+                "| Agent Skill | Canonical Source |",
+                "| --- | --- |",
+            )
+        )
+        lines.extend(f"| `{name}` | `{source}` |" for name, source in rows)
+        lines.append("")
+    (output_root / "INDEX.md").write_text(
+        "\n".join(lines),
+        encoding="utf-8",
+    )
 
 
 def _replace_generated_directory(path: Path) -> None:
