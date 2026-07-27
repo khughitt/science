@@ -15,6 +15,7 @@ from science_tool.boundary.generate import (
 )
 from science_tool.validate.checks.boundary import check_boundary
 from science_tool.validate.context import ValidateContext
+from science_tool.validate.result import Severity
 
 
 def _repo(tmp_path: Path, boundary: dict | None = None) -> Path:
@@ -183,6 +184,41 @@ def test_no_drift_when_block_matches(tmp_path: Path):
     assert "boundary.generated-drift" not in _rules(repo)
 
 
+def test_correct_root_gitignore_must_be_a_tracked_governed_source(tmp_path: Path):
+    decl = {
+        "roots": [{"path": "data/raw", "class": "payload"}],
+        "unmanaged_allow": [],
+    }
+    repo = _repo(tmp_path, decl)
+    cfg = BoundaryConfig.model_validate(decl)
+    (repo / ".gitignore").write_text(
+        splice_managed_block("", render_managed_block(cfg)),
+        encoding="utf-8",
+    )
+    excludes = repo / ".git/root-excludes"
+    excludes.write_text("/.gitignore\n", encoding="utf-8")
+    subprocess.run(
+        ["git", "-C", str(repo), "config", "core.excludesFile", str(excludes)],
+        check=True,
+    )
+    (repo / "data/raw").mkdir(parents=True)
+    (repo / "data/raw/secret.bin").write_text("secret", encoding="utf-8")
+    subprocess.run(["git", "-C", str(repo), "add", "-A"], check=True)
+    indexed = subprocess.run(
+        ["git", "-C", str(repo), "ls-files", "-z"],
+        check=True,
+        capture_output=True,
+    ).stdout.split(b"\0")
+    assert b".gitignore" not in indexed
+    assert b"data/raw/secret.bin" not in indexed
+
+    findings = [result for result in _results(repo) if result.rule == "boundary.generated-drift"]
+
+    assert len(findings) == 1
+    assert findings[0].severity is Severity.ERROR
+    assert "tracked, present, regular" in findings[0].message
+
+
 def test_generated_drift_rejects_symlinked_root_gitignore_without_following(tmp_path: Path):
     decl = {"roots": [{"path": "data/raw", "class": "payload"}]}
     repo = _repo(tmp_path / "repo", decl)
@@ -208,6 +244,166 @@ def test_generated_drift_rejects_nonregular_root_gitignore(tmp_path: Path):
 
     assert len(findings) == 1
     assert "not a regular file" in findings[0].message
+
+
+def test_payload_index_invariant_catches_untracked_nested_negations(tmp_path: Path):
+    decl = {
+        "roots": [{"path": "data/raw", "class": "payload"}],
+        "unmanaged_allow": [],
+    }
+    repo = _repo(tmp_path, decl)
+    cfg = BoundaryConfig.model_validate(decl)
+    (repo / ".gitignore").write_text(
+        splice_managed_block("", render_managed_block(cfg)),
+        encoding="utf-8",
+    )
+    subprocess.run(["git", "-C", str(repo), "add", ".gitignore"], check=True)
+    (repo / ".git/info/exclude").write_text("/data/.gitignore\n", encoding="utf-8")
+    (repo / "data").mkdir()
+    (repo / "data/.gitignore").write_text("!raw/\n!raw/**\n", encoding="utf-8")
+    (repo / "data/raw").mkdir()
+    (repo / "data/raw/secret.bin").write_text("secret", encoding="utf-8")
+    subprocess.run(["git", "-C", str(repo), "add", "-A"], check=True)
+    indexed = subprocess.run(
+        ["git", "-C", str(repo), "ls-files", "-z"],
+        check=True,
+        capture_output=True,
+    ).stdout.split(b"\0")
+    assert b"data/raw/secret.bin" in indexed
+    assert b"data/.gitignore" not in indexed
+
+    findings = [result for result in _results(repo) if result.rule == "boundary.index-violation"]
+
+    assert [(finding.path.as_posix(), finding.severity) for finding in findings] == [
+        ("data/raw/secret.bin", Severity.ERROR)
+    ]
+
+
+def test_payload_index_invariant_catches_indexed_root_symlink(tmp_path: Path):
+    decl = {
+        "roots": [{"path": "data/raw", "class": "payload"}],
+        "unmanaged_allow": [],
+    }
+    repo = _repo(tmp_path, decl)
+    cfg = BoundaryConfig.model_validate(decl)
+    (repo / ".gitignore").write_text(
+        splice_managed_block("", render_managed_block(cfg)),
+        encoding="utf-8",
+    )
+    subprocess.run(["git", "-C", str(repo), "add", ".gitignore"], check=True)
+    outside = tmp_path.parent / f"{tmp_path.name}-outside"
+    outside.mkdir()
+    (repo / "data").mkdir()
+    (repo / "data/raw").symlink_to(outside, target_is_directory=True)
+    subprocess.run(["git", "-C", str(repo), "add", "-A"], check=True)
+    indexed = subprocess.run(
+        ["git", "-C", str(repo), "ls-files", "-z"],
+        check=True,
+        capture_output=True,
+    ).stdout.split(b"\0")
+    assert b"data/raw" in indexed
+
+    findings = [result for result in _results(repo) if result.rule == "boundary.index-violation"]
+
+    assert [(finding.path.as_posix(), finding.severity) for finding in findings] == [("data/raw", Severity.ERROR)]
+
+
+def test_manifest_index_invariant_catches_only_nonmatching_staged_path(tmp_path: Path):
+    decl = {
+        "roots": [
+            {
+                "path": "data/external",
+                "class": "manifest",
+                "tracked": ["datapackage.json"],
+            }
+        ],
+        "unmanaged_allow": [],
+    }
+    repo = _repo(tmp_path, decl)
+    cfg = BoundaryConfig.model_validate(decl)
+    (repo / ".gitignore").write_text(
+        splice_managed_block("", render_managed_block(cfg)),
+        encoding="utf-8",
+    )
+    subprocess.run(["git", "-C", str(repo), "add", ".gitignore"], check=True)
+    (repo / ".git/info/exclude").write_text("/data/.gitignore\n", encoding="utf-8")
+    (repo / "data").mkdir()
+    (repo / "data/.gitignore").write_text(
+        "!external/\n!external/**\n",
+        encoding="utf-8",
+    )
+    dataset = repo / "data/external/ds"
+    dataset.mkdir(parents=True)
+    (dataset / "datapackage.json").write_text("{}\n", encoding="utf-8")
+    (dataset / "part.parquet").write_text("payload", encoding="utf-8")
+    subprocess.run(["git", "-C", str(repo), "add", "-A"], check=True)
+    indexed = subprocess.run(
+        ["git", "-C", str(repo), "ls-files", "-z"],
+        check=True,
+        capture_output=True,
+    ).stdout.split(b"\0")
+    assert b"data/external/ds/datapackage.json" in indexed
+    assert b"data/external/ds/part.parquet" in indexed
+    assert b"data/.gitignore" not in indexed
+
+    findings = [result for result in _results(repo) if result.rule == "boundary.index-violation"]
+
+    assert [(finding.path.as_posix(), finding.severity) for finding in findings] == [
+        ("data/external/ds/part.parquet", Severity.ERROR)
+    ]
+
+
+def test_index_invariant_uses_effective_git_casefolding(tmp_path: Path):
+    decl = {
+        "roots": [
+            {"path": "Data/Raw", "class": "payload"},
+            {
+                "path": "Data/External",
+                "class": "manifest",
+                "tracked": ["DataPackage.json"],
+            },
+        ],
+        "unmanaged_allow": [],
+    }
+    repo = _repo(tmp_path, decl)
+    subprocess.run(
+        ["git", "-C", str(repo), "config", "core.ignoreCase", "true"],
+        check=True,
+    )
+    cfg = BoundaryConfig.model_validate(decl)
+    (repo / ".gitignore").write_text(
+        splice_managed_block("", render_managed_block(cfg)),
+        encoding="utf-8",
+    )
+    subprocess.run(["git", "-C", str(repo), "add", ".gitignore"], check=True)
+    (repo / ".git/info/exclude").write_text("/data/.gitignore\n", encoding="utf-8")
+    (repo / "data").mkdir()
+    (repo / "data/.gitignore").write_text(
+        "!raw/\n!raw/**\n!external/\n!external/**\n",
+        encoding="utf-8",
+    )
+    (repo / "data/raw").mkdir()
+    (repo / "data/raw/secret.bin").write_text("secret", encoding="utf-8")
+    dataset = repo / "data/external/ds"
+    dataset.mkdir(parents=True)
+    (dataset / "datapackage.json").write_text("{}\n", encoding="utf-8")
+    (dataset / "part.parquet").write_text("payload", encoding="utf-8")
+    subprocess.run(["git", "-C", str(repo), "add", "-A"], check=True)
+    indexed = subprocess.run(
+        ["git", "-C", str(repo), "ls-files", "-z"],
+        check=True,
+        capture_output=True,
+    ).stdout.split(b"\0")
+    assert b"data/raw/secret.bin" in indexed
+    assert b"data/external/ds/datapackage.json" in indexed
+    assert b"data/external/ds/part.parquet" in indexed
+
+    findings = [result for result in _results(repo) if result.rule == "boundary.index-violation"]
+
+    assert [(finding.path.as_posix(), finding.severity) for finding in findings] == [
+        ("data/external/ds/part.parquet", Severity.ERROR),
+        ("data/raw/secret.bin", Severity.ERROR),
+    ]
 
 
 def test_declaration_conflict_catches_a_bare_wildcard(tmp_path: Path):

@@ -48,6 +48,7 @@ _CONTROLLED_GIT_ENV = {
 }
 _ENFORCEMENT_CONTRACT = {
     ("boundary.tracked-ignored", Severity.ERROR),
+    ("boundary.index-violation", Severity.ERROR),
     ("boundary.generated-drift", Severity.ERROR),
     ("boundary.declaration-conflict", Severity.ERROR),
     ("boundary.unreachable-tracked", Severity.ERROR),
@@ -454,7 +455,7 @@ def test_acceptance_hostile_global_git_config_cannot_alter_fixture(tmp_path: Pat
     _git(repo, "commit", "-qm", "hermetic")
 
 
-def test_acceptance_pins_the_six_check_severity_contract(tmp_path: Path):
+def test_acceptance_pins_the_seven_check_severity_contract(tmp_path: Path):
     observed: set[tuple[str, Severity]] = set()
 
     drift = _mm30(tmp_path / "drift")

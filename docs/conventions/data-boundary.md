@@ -120,11 +120,15 @@ payload hashes in `manifest.json`; it does not include payload bytes. See
 ## Enforcement
 
 The boundary is declared in `science.yaml` under `boundary:` and generated into
-a managed block in `.gitignore` by `science boundary sync`. Six validate checks
+a managed block in `.gitignore` by `science boundary sync`. Seven validate checks
 enforce it — `boundary.tracked-ignored` and `boundary.unanchored-pattern` on
-every project, and `boundary.generated-drift`,
-`boundary.declaration-conflict`, `boundary.unreachable-tracked`,
-`boundary.ignored-undeclared` once a project declares roots. See
+every project. Once a project declares roots, `boundary.index-violation`
+ensures indexed paths obey their declared storage class, while
+`boundary.generated-drift`, `boundary.declaration-conflict`,
+`boundary.unreachable-tracked`, and `boundary.ignored-undeclared` enforce the
+generated and unmanaged-rule surfaces. `boundary.generated-drift` also
+requires the root `.gitignore` to be tracked, present, and regular so clones
+receive the managed block instead of relying on machine-local ignore state. See
 `docs/plans/2026-07-26-vcs-storage-boundary-design.md`.
 
 `science data audit` is advisory discovery, not enforcement. It classifies files

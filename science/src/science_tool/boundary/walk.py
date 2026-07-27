@@ -19,10 +19,16 @@ from pathlib import Path, PurePosixPath
 from science_tool.boundary.config import BoundaryRoot
 
 
-def _matches(rel_to_root: str, globs: tuple[str, ...]) -> bool:
+def matches_tracked_path(
+    rel_to_root: str,
+    globs: tuple[str, ...],
+    *,
+    case_sensitive: bool = True,
+) -> bool:
     """Match the path relative to the root, right-anchored, at any depth."""
-    candidate = PurePosixPath(rel_to_root)
-    return any(candidate.match(glob) for glob in globs)
+    candidate = PurePosixPath(rel_to_root if case_sensitive else rel_to_root.casefold())
+    patterns = globs if case_sensitive else tuple(glob.casefold() for glob in globs)
+    return any(candidate.match(glob) for glob in patterns)
 
 
 def _is_nested_repo(directory: Path) -> bool:
@@ -83,5 +89,5 @@ def manifest_candidates(project_root: Path, root: BoundaryRoot) -> list[str]:
     return [
         rel
         for rel in iter_repo_files(project_root, base)
-        if rel.startswith(prefix) and _matches(rel[len(prefix) :], root.tracked)
+        if rel.startswith(prefix) and matches_tracked_path(rel[len(prefix) :], root.tracked)
     ]

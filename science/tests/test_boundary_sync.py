@@ -10,7 +10,8 @@ import yaml
 
 from science_tool.boundary.config import BoundaryConfig
 from science_tool.boundary.probes import probe_paths
-from science_tool.boundary.sync import BoundaryDirtyError, sync, verify_current_tree
+from science_tool.boundary.generate import render_managed_block, splice_managed_block
+from science_tool.boundary.sync import BoundaryDirtyError, has_drift, sync, verify_current_tree
 
 
 def _repo(tmp_path: Path, boundary: dict, gitignore: str = "") -> Path:
@@ -65,6 +66,32 @@ def test_sync_uses_explicit_mode_when_gitignore_was_absent(tmp_path: Path):
     sync(repo)
 
     assert stat.S_IMODE((repo / ".gitignore").stat().st_mode) == 0o644
+
+
+def test_has_drift_when_correct_root_gitignore_is_not_tracked(tmp_path: Path):
+    cfg = BoundaryConfig.model_validate(DECL)
+    correct = splice_managed_block("", render_managed_block(cfg))
+    repo = _repo(tmp_path, DECL, gitignore=correct)
+    subprocess.run(
+        ["git", "-C", str(repo), "rm", "-q", "--cached", ".gitignore"],
+        check=True,
+    )
+    subprocess.run(["git", "-C", str(repo), "commit", "-qm", "drop ignore"], check=True)
+    excludes = repo / ".git/root-excludes"
+    excludes.write_text("/.gitignore\n", encoding="utf-8")
+    subprocess.run(
+        ["git", "-C", str(repo), "config", "core.excludesFile", str(excludes)],
+        check=True,
+    )
+    assert (
+        subprocess.run(
+            ["git", "-C", str(repo), "check-ignore", "-q", ".gitignore"],
+            check=False,
+        ).returncode
+        == 0
+    )
+
+    assert has_drift(repo)
 
 
 def test_verify_refuses_dirty_gitignore(tmp_path: Path):

@@ -159,6 +159,30 @@ def test_sync_check_flag_reports_drift_without_writing(tmp_path: Path):
     assert (repo / ".gitignore").read_text() == ""
 
 
+def test_sync_check_rejects_correct_but_untracked_root_gitignore(tmp_path: Path):
+    repo = _repo(tmp_path, DECL)
+    first = _invoke(repo, ("sync",))
+    assert first.exit_code == 0, first.output
+    excludes = repo / ".git/root-excludes"
+    excludes.write_text("/.gitignore\n", encoding="utf-8")
+    subprocess.run(
+        ["git", "-C", str(repo), "config", "core.excludesFile", str(excludes)],
+        check=True,
+    )
+    subprocess.run(["git", "-C", str(repo), "add", "-A"], check=True)
+    indexed = subprocess.run(
+        ["git", "-C", str(repo), "ls-files", "-z"],
+        check=True,
+        capture_output=True,
+    ).stdout.split(b"\0")
+    assert b".gitignore" not in indexed
+
+    result = _invoke(repo, ("sync", "--check"))
+
+    assert result.exit_code == 1
+    assert "not durably tracked" in result.output
+
+
 def test_sync_renders_unsafe_gitignore_failure(tmp_path: Path):
     repo = _repo(tmp_path, DECL)
     (repo / "ignore-target").write_text("")

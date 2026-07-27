@@ -277,6 +277,11 @@ def _ignore_case(project_root: Path) -> str | None:
     return value
 
 
+def git_ignores_case(project_root: Path) -> bool:
+    """Whether this worktree applies case-insensitive Git path semantics."""
+    return _ignore_case(project_root) == "true"
+
+
 def _split_z(payload: bytes) -> list[str]:
     """Decode a NUL-framed stream, rejecting truncation and empty records."""
     if not payload:
@@ -329,6 +334,11 @@ def visible_paths(project_root: Path) -> set[str]:
             )
         )
     )
+
+
+def indexed_paths(project_root: Path) -> list[str]:
+    """Sorted repository-relative paths present in Git's index."""
+    return sorted(set(_split_z(_git(project_root, "ls-files", "-z"))))
 
 
 def tracked_ignored(project_root: Path) -> list[IgnoreHit]:

@@ -1520,6 +1520,15 @@ def test_data_boundary_docs_separate_advisory_policy_from_enforcement() -> None:
     assert "size_threshold:" in policy
 
 
+def test_data_boundary_docs_include_the_declared_index_invariant() -> None:
+    text = _read("docs/conventions/data-boundary.md")
+
+    assert "Seven validate checks" in text
+    assert "`boundary.index-violation`" in text
+    assert "indexed paths obey their declared storage class" in _norm(text)
+    assert "root `.gitignore` to be tracked, present, and regular" in _norm(text)
+
+
 def test_agents_template_and_guide_document_import_interception_in_sequence() -> None:
     # Both surfaces must carry the full write-then-import sequence IN ORDER:
     # save-plan preview -> inspect the manual-hit list -> apply-plan under the

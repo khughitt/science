@@ -84,14 +84,23 @@ def check_command(project_root: Path) -> None:
 
 @boundary_group.command("sync")
 @_ROOT_OPTION
-@click.option("--check", "check_only", is_flag=True, help="Report drift; write nothing.")
+@click.option(
+    "--check",
+    "check_only",
+    is_flag=True,
+    help="Report managed-content or tracked-source drift; write nothing.",
+)
 @click.option("--verify-current-tree", "verify", is_flag=True, help="Diff ignore decisions; restore the original.")
 def sync_command(project_root: Path, check_only: bool, verify: bool) -> None:
     """Regenerate the managed .gitignore block from science.yaml."""
     try:
         if check_only:
             if has_drift(project_root):
-                click.echo("boundary: managed block is stale; run `science boundary sync`", err=True)
+                click.echo(
+                    "boundary: managed block is stale or root .gitignore is not durably tracked; "
+                    "run `science boundary sync`, then stage `.gitignore`",
+                    err=True,
+                )
                 sys.exit(1)
             click.echo("boundary: managed block is current")
             return

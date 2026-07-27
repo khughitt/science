@@ -1,6 +1,6 @@
 """VCS storage boundary checks.
 
-Two universal, four declaration-derived. All six are mechanical: no heuristic
+Two universal, five declaration-derived. All seven are mechanical: no heuristic
 classifier participates in enforcement, so a finding is always a genuine
 self-contradiction in the repository's own configuration.
 
@@ -41,7 +41,9 @@ from science_tool.boundary.generate import extract_managed_block, render_managed
 from science_tool.boundary.gitio import (
     BoundaryGitError,
     IgnoreRule,
+    git_ignores_case,
     governed_ignore_files,
+    indexed_paths,
     is_git_worktree,
     matching_unmanaged_rules,
     read_ignore_file,
@@ -49,7 +51,7 @@ from science_tool.boundary.gitio import (
     unmanaged_rules,
     visible_paths,
 )
-from science_tool.boundary.walk import iter_repo_files, manifest_candidates
+from science_tool.boundary.walk import iter_repo_files, manifest_candidates, matches_tracked_path
 from science_tool.data_root import PROJECT_CONFIG_FILENAME
 from science_tool.project_config import ProjectConfigError, load_project_config
 from science_tool.validate.checks import Check
@@ -216,6 +218,7 @@ def check_boundary(ctx: ValidateContext) -> Iterator[Result]:
     managed_body = extract_managed_block(gitignore_text) if gitignore_error is None else None
 
     declared = [r.path for r in cfg.roots]
+    governed = set(governed_ignore_files(root))
 
     # ---- declared: generated-drift --------------------------------------
     expected = render_managed_block(cfg)
@@ -243,9 +246,23 @@ def check_boundary(ctx: ValidateContext) -> Iterator[Result]:
             rule="boundary.generated-drift",
             task=None,
         )
+    elif GITIGNORE.as_posix() not in governed:
+        yield Result(
+            severity=Severity.ERROR,
+            path=GITIGNORE,
+            line=None,
+            message=(
+                "the root .gitignore has the current science-managed boundary block but "
+                "is not a tracked, present, regular ignore source. A clone would not "
+                "receive the generated boundary. Stage it explicitly with "
+                "`git add -f .gitignore` after reviewing any repository-level exclude "
+                "that prevented ordinary staging."
+            ),
+            rule="boundary.generated-drift",
+            task=None,
+        )
 
     # ---- declared: allowlist integrity ----------------------------------
-    governed = set(governed_ignore_files(root))
     for entry in cfg.unmanaged_allow:
         # Source membership is checked on its own. An earlier draft also required
         # the pattern to be non-default, which exempted
@@ -261,6 +278,56 @@ def check_boundary(ctx: ValidateContext) -> Iterator[Result]:
                     f"no-op rather than an excuse."
                 ),
                 rule="boundary.invalid-declaration",
+                task=None,
+            )
+
+    # ---- declared: index invariant --------------------------------------
+    # Ignore rules are only a mechanism for reaching the declaration's storage
+    # state. An untracked nested .gitignore or machine-local exclude can change
+    # the winning rule without appearing in the governed-source universe. The
+    # index is the durable fact, so validate it directly and independently of
+    # effective rule sign or source.
+    ignore_case = git_ignores_case(root)
+    for indexed in indexed_paths(root):
+        indexed_parts = indexed.split("/")
+        for declared_root in cfg.roots:
+            root_parts = declared_root.path.split("/")
+            if len(indexed_parts) < len(root_parts):
+                continue
+            indexed_prefix = indexed_parts[: len(root_parts)]
+            if ignore_case:
+                indexed_prefix = [part.casefold() for part in indexed_prefix]
+                root_parts = [part.casefold() for part in root_parts]
+            if indexed_prefix != root_parts:
+                continue
+            relative = "/".join(indexed_parts[len(root_parts) :])
+
+            if declared_root.storage_class is StorageClass.MANIFEST and relative:
+                if matches_tracked_path(
+                    relative,
+                    declared_root.tracked,
+                    case_sensitive=not ignore_case,
+                ):
+                    continue
+
+            if declared_root.storage_class is StorageClass.PAYLOAD:
+                detail = "payload roots permit no indexed path at or below the declared root"
+            else:
+                detail = (
+                    f"root-relative path {relative!r} does not match any declared tracked glob "
+                    f"{list(declared_root.tracked)!r}"
+                )
+            yield Result(
+                severity=Severity.ERROR,
+                path=Path(indexed),
+                line=None,
+                message=(
+                    f"{indexed!r} is indexed at or below {declared_root.storage_class.value} root "
+                    f"{declared_root.path!r}, but {detail}. Effective negations and untracked "
+                    "ignore sources cannot override science.yaml. Remove the path from the "
+                    "index with `git rm --cached -- <path>`."
+                ),
+                rule="boundary.index-violation",
                 task=None,
             )
 
