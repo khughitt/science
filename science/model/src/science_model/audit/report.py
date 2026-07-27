@@ -82,7 +82,7 @@ class AuditReport(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
 
     schema_version: Literal[2]
-    fingerprint_version: int
+    fingerprint_version: Literal[1]
     #: `HashComponent`: this becomes the `ingestion_ref` of every occurrence written.
     ingestion_ref: HashComponent = Field(min_length=1)
     #: ISO-8601, and validated as such HERE. Ingestion turns this into the

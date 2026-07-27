@@ -67,6 +67,34 @@ def test_unknown_schema_version_is_refused():
         _report(schema_version=99)
 
 
+def test_unknown_fingerprint_version_is_refused():
+    with pytest.raises(ValidationError):
+        _report(fingerprint_version=99)
+
+
+def test_report_support_types_are_exported_from_the_audit_package():
+    from science_model.audit import (
+        MAX_REPORT_FINDINGS,
+        ProducerMetrics,
+        ReportMeta,
+        ReportTotals,
+        UnwiredProducer,
+    )
+
+    assert MAX_REPORT_FINDINGS == 5000
+    assert [
+        ProducerMetrics.__name__,
+        UnwiredProducer.__name__,
+        ReportTotals.__name__,
+        ReportMeta.__name__,
+    ] == [
+        "ProducerMetrics",
+        "UnwiredProducer",
+        "ReportTotals",
+        "ReportMeta",
+    ]
+
+
 def test_the_report_does_not_try_to_dedup_by_identity():
     # Identity is a fingerprint over the rule's DECLARED identity qualifiers, which
     # this module cannot compute -- it does not know the registry. Enforcing the
