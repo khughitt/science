@@ -37,6 +37,7 @@ _template:
     - { key: calibration-gate, name: "Calibration Gate (in-run no-peeking threshold)", required: false }
     - { key: null-result-plan, name: "Null Result Plan", required: true }
     - { key: suspicious-unexpected-result-plan, name: "Suspicious/Unexpected Result Plan", required: true }
+    - { key: training-side-confound-gate, name: "Training-Side Confound Gate (signature / model-transfer feasibility)", required: false }
     - { key: known-limitations, name: "Known Limitations", required: true }
     - { key: metric-selection-rationale, name: "Metric Selection Rationale", required: true }
     - { key: exploratory-vs-confirmatory, name: "Exploratory vs. Confirmatory", required: true }
