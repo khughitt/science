@@ -517,6 +517,15 @@ def test_ingest_snapshots_and_revalidates_mutable_report_lists(tmp_path):
     _assert_forged_report_is_refused_without_mutation(tmp_path, report)
 
 
+def test_ingest_wraps_a_cyclic_mutation_during_report_snapshot(tmp_path):
+    report = _report()
+    cyclic: dict[str, object] = {}
+    cyclic["self"] = cyclic
+    report.meta.timings.append(cyclic)
+
+    _assert_forged_report_is_refused_without_mutation(tmp_path, report)
+
+
 def test_partial_failure_is_repaired_by_rerunning_the_same_report(tmp_path):
     # Simulate a crash after the first of two records is written, by writing the
     # first record alone and then re-ingesting the whole report.

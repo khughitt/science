@@ -115,7 +115,12 @@ def _snapshot_report(report: AuditReport) -> AuditReport:
     try:
         payload = report.model_dump(mode="json", warnings="error")
         return AuditReport.model_validate(payload, strict=True)
-    except (PydanticSerializationError, ValidationError) as exc:
+    except (
+        PydanticSerializationError,
+        ValidationError,
+        ValueError,
+        RecursionError,
+    ) as exc:
         raise IngestError(f"report is not a valid audit report: {exc}") from exc
 
 
