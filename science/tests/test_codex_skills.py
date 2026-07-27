@@ -36,9 +36,31 @@ def test_data_skills_document_configured_data_root() -> None:
     conventions = (ROOT / "skills/data-management/conventions.md").read_text(encoding="utf-8")
     snakemake = (ROOT / "skills/pipelines/snakemake.md").read_text(encoding="utf-8")
     for text in (conventions, snakemake):
+        normalized = _norm(text)
         assert "SCIENCE_DATA_ROOT" in text
         assert "data.root" in text
-        assert "Never commit files under the resolved data root" in text
+        assert "boundary:" in text
+        assert "manifest" in text
+        assert "payload bytes" in normalized
+        assert "untracked" in normalized
+        assert "Never commit files under the resolved data root" not in text
+
+    assert "data/processed" in snakemake
+    assert "class: payload" in snakemake
+    assert "every bulk-output root" in snakemake
+
+
+def test_generated_project_setup_skills_declare_boundary_not_data_negations(tmp_path: Path) -> None:
+    generated = generate_codex_skills(ROOT, tmp_path)
+
+    for name in ("science-create-project", "science-import-project"):
+        text = generated[name].read_text(encoding="utf-8")
+        assert "boundary:" in text
+        assert "science boundary sync" in text
+        assert "papers/pdfs/" not in text
+        assert "data/raw/*" not in text
+        assert "!data/raw/.gitkeep" not in text
+        assert "models/*" not in text
 
 
 def test_generate_codex_skills_rewrites_claude_specific_references(tmp_path: Path) -> None:

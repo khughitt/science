@@ -1467,6 +1467,10 @@ def test_create_project_docs_declare_data_payload_boundary() -> None:
     assert "science.yaml" in text
     assert "data.root" in text
     assert "`data/raw` maps to" in text
+    assert "other version-controlled provenance" in text
+    assert "payload bytes and" in text
+    assert "non-declared files remain untracked" in text
+    assert "non-version-controlled root" not in text
 
 
 def test_agents_template_and_guide_document_import_interception_in_sequence() -> None:

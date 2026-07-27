@@ -266,11 +266,11 @@ regenerable dumps in their own root and keep the source directory fully tracked.
 Where a descriptor genuinely belongs beside its payload, `manifest` expresses
 that once, uniformly, instead of per-dataset negations.
 
-Keep version-controlled provenance outside the configured data root. Prefer
-`provenance/` or `research/packages/` for lightweight manifests, QA reports,
-and small summary frames. Do not use `data/provenance/` when the project uses
-the default `./data` data root, because that puts committed provenance inside
-the non-version-controlled root.
+Keep other version-controlled provenance outside the configured data root.
+Prefer `provenance/` or `research/packages/` for lightweight manifests, QA
+reports, and small summary frames. Do not use `data/provenance/` when the
+project uses the default `./data` data root, because its payload bytes and
+non-declared files remain untracked.
 
 When a project configures an out-of-tree data root, document the same resolution
 order in local onboarding notes: `SCIENCE_DATA_ROOT`, then `science.yaml`
