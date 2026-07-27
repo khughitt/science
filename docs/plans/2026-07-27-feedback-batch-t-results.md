@@ -119,13 +119,33 @@ The finding is right.
 
 The root cause was that the antecedent treated every schedule token as
 prospective and could not recognize completed same-document calibration.
-Across all 46 measured pre-registrations, only `0025` has the narrow mechanical
-shape of a numeric markdown `ESS (of N)` row. Bare prospective thresholds such
-as `ESS >= 400` and failed prose reports such as `ESS = 8.6` do not have that
-shape.
+The first refinement, in `4c9511ea`, treated a numeric markdown
+`ESS (of N)` row as sufficient evidence. Review rejected that property: the
+same row can state a prospective target, report a failed run, or belong to an
+unrelated analysis, and the early skip could hide a malformed canonical Cost
+Gate.
 
-A fixture reproducing `0025`'s four-chain schedule plus acceptance/ESS table
-was added first. It asserted no finding without adding a Cost Gate. RED:
+The shipped property is a conjunction over one same-document record, not an
+ESS-row shortcut. A pre-Cost-Gate document is exempt only when all of these
+mechanical facts hold:
+
+1. an `## Outcome ... EXECUTED` heading records completed execution;
+2. a `## Power ...` section scopes the evidence to the schedule-bearing power
+   analysis;
+3. that section contains an explicit `MCMC diagnostics` declaration;
+4. the same section contains numeric result rows for power, 95% CI,
+   acceptance, and `ESS (of N)`;
+5. the section explicitly concludes that “The design has ... power ... CI”;
+6. the section does not say mixing/calibration/schedule failed or that it is
+   not calibrated.
+
+This recognizes `0025`'s explicit completed power-calibration record. It does
+not infer success from an ESS magnitude, and it remains a deliberately narrow
+prose heuristic. If a canonical Cost Gate is present, its required rows are
+always validated first; completed diagnostics cannot suppress a malformed
+gate.
+
+The original positive fixture was added first and failed RED:
 
 ```bash
 cd ~/d/science/.worktrees/feedback-batch-t/science
@@ -135,24 +155,29 @@ uv run --frozen pytest \
 ```
 
 The test failed with one
-`prereg.schedule-calibration-domain` warning, for the expected reason. The
-minimal implementation then exempted only a numeric table row matching
-`ESS (of N)` with an achieved value. The new test and the existing prospective
-schedule test both passed:
+`prereg.schedule-calibration-domain` warning, for the expected reason. After
+review found the row-only property unsafe, four negative regressions were added
+before the corrective implementation:
 
 ```bash
 uv run --frozen pytest \
-  tests/validate/test_checks_prereg_schedule.py::test_schedule_with_achieved_ess_table_passes_without_cost_gate \
-  tests/validate/test_checks_prereg_schedule.py::test_schedule_without_cost_gate_warns \
+  tests/validate/test_checks_prereg_schedule.py::test_prospective_numeric_ess_table_without_cost_gate_warns \
+  tests/validate/test_checks_prereg_schedule.py::test_failed_numeric_ess_table_without_cost_gate_warns \
+  tests/validate/test_checks_prereg_schedule.py::test_unrelated_numeric_ess_table_without_cost_gate_warns \
+  tests/validate/test_checks_prereg_schedule.py::test_achieved_diagnostics_do_not_hide_malformed_cost_gate \
   -q
 ```
 
-The refinement is commit `4c9511ea`:
-`fix(validate): narrow schedule-calibration-domain to undeclared calibration`.
+All four failed RED because the row-only implementation emitted no warning.
+The scoped conjunction and Cost-Gate-first ordering then made those four tests
+and the positive `0025`-shaped regression pass GREEN. The corrective commit is
+`d32adf98`:
+`fix(validate): require completed schedule calibration evidence`.
 
 ### Re-verification and final measured findings
 
-The required code and validator suites passed after the refinement:
+The required code, validator, lint, and type checks passed after the corrective
+refinement:
 
 ```bash
 cd ~/d/science/.worktrees/feedback-batch-t/science
@@ -163,11 +188,12 @@ uv run --frozen pytest tests/validate -q
 uv run --frozen ruff check \
   src/science_tool/validate/checks/prereg_schedule.py \
   tests/validate/test_checks_prereg_schedule.py
+uv run --frozen pyright
 ```
 
-Results: **34 focused tests passed**, **947 validator tests passed**, and focused
-ruff was clean. The validator suite emitted only the existing rdflib
-deprecation warnings.
+Results: **38 focused tests passed**, **951 validator tests passed**, focused
+ruff was clean, and pyright reported **0 errors, 0 warnings**. The validator
+suite emitted only the existing rdflib deprecation warnings.
 
 The exact four-project JSON command above was then rerun. Final counts:
 
