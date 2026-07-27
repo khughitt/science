@@ -89,6 +89,11 @@ class FindingRule(BaseModel):
             raise RuleDeclarationError(f"{self.id}: severities must not be empty")
         if not self.subject_types:
             raise RuleDeclarationError(f"{self.id}: subject_types must not be empty")
+        if self.qualifier_schema.model_config.get("extra") != "forbid":
+            raise RuleDeclarationError(
+                f"{self.id}: qualifier schema {self.qualifier_schema.__name__} must set "
+                "model_config extra='forbid'"
+            )
 
         hints = typing.get_type_hints(self.qualifier_schema)
         for name in self.identity_qualifiers:

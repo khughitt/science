@@ -83,6 +83,24 @@ def test_identity_qualifier_types_are_constrained_at_declaration():
         _rule(qualifier_schema=FloatQualifier, identity_qualifiers=("ratio",))
 
 
+def test_qualifier_schema_must_forbid_unknown_fields():
+    class IgnoredQualifier(BaseModel):
+        field: str
+
+    with pytest.raises(ValidationError, match="extra='forbid'"):
+        _rule(qualifier_schema=IgnoredQualifier)
+
+
+def test_bare_base_model_is_not_a_qualifier_schema():
+    with pytest.raises(ValidationError, match="extra='forbid'"):
+        _rule(
+            qualifier_schema=BaseModel,
+            identity_qualifiers=(),
+            remediation="none",
+            remediator=None,
+        )
+
+
 def test_rule_declaring_producer_remediation_needs_a_handler_name():
     with pytest.raises(ValidationError, match="requires a remediator name"):
         _rule(remediation="producer", remediator=None)
