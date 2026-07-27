@@ -18,6 +18,10 @@ from science_tool.data_policy import DataPolicy, DEFAULT_DATA_POLICY
 from science_tool.datasets.semantics import OrdinalReproClass
 
 
+class ProjectConfigError(ValueError):
+    """Raised when science.yaml is not a project-configuration mapping."""
+
+
 class ProjectRole(StrEnum):
     META = "meta"
     CANCER_TYPE = "cancer-type"
@@ -408,6 +412,8 @@ def load_project_config(project_root: Path) -> ProjectConfig:
     """Load and validate science.yaml at ``project_root``. Defaults id to dirname."""
     yaml_path = project_config_path(project_root)
     raw = yaml.safe_load(yaml_path.read_text(encoding="utf-8")) or {}
+    if not isinstance(raw, dict):
+        raise ProjectConfigError("science.yaml must contain a top-level mapping")
     if "id" not in raw or raw["id"] is None:
         raw["id"] = project_root.resolve().name
     return ProjectConfig.model_validate(raw)

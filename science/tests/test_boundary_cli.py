@@ -49,6 +49,10 @@ def _break_config(repo: Path, kind: str) -> None:
         config.write_text("name: [\n")
     elif kind == "invalid-schema":
         config.write_text("name: D\nid: d\nboundary: not-a-mapping\n")
+    elif kind == "top-level-list":
+        config.write_text("- name: D\n")
+    elif kind == "top-level-scalar":
+        config.write_text("D\n")
     elif kind == "missing":
         config.unlink()
     elif kind == "unreadable":
@@ -88,8 +92,26 @@ def test_check_renders_git_failure(tmp_path: Path):
     assert "boundary: git ls-files -z failed" in result.output
 
 
+def test_check_reports_tracked_ignored_before_deferred_config_error(tmp_path: Path):
+    repo = _repo(tmp_path, DECL)
+    (repo / "data").mkdir()
+    (repo / "data/x.csv").write_text("a")
+    subprocess.run(["git", "-C", str(repo), "add", "-f", "data/x.csv"], check=True)
+    (repo / ".gitignore").write_text("/data/\n")
+    _break_config(repo, "invalid-schema")
+    result = _invoke(repo, ("check",))
+    _assert_boundary_error(result)
+    assert "data/x.csv" in result.output
+    assert ".gitignore:1" in result.output
+    assert result.output.index("data/x.csv") < result.output.index("\nboundary:")
+    assert "vcs-boundary: clean" not in result.output
+
+
 @pytest.mark.parametrize("command", _COMMANDS)
-@pytest.mark.parametrize("kind", ("malformed-yaml", "invalid-schema", "missing", "unreadable"))
+@pytest.mark.parametrize(
+    "kind",
+    ("malformed-yaml", "invalid-schema", "top-level-list", "top-level-scalar", "missing", "unreadable"),
+)
 def test_commands_render_project_config_failures(tmp_path: Path, command: tuple[str, ...], kind: str):
     repo = _repo(tmp_path, DECL)
     _break_config(repo, kind)

@@ -15,6 +15,7 @@ from science_tool.boundary.generate import ManagedBlockError
 from science_tool.boundary.gitio import BoundaryGitError, tracked_ignored, unmanaged_rules
 from science_tool.boundary.init import propose_declaration
 from science_tool.boundary.sync import BoundaryDirtyError, has_drift, sync, verify_current_tree
+from science_tool.project_config import ProjectConfigError
 
 _ROOT_OPTION = click.option(
     "--project-root",
@@ -28,6 +29,7 @@ _BOUNDARY_COMMAND_ERRORS = (
     BoundaryGitError,
     ManagedBlockError,
     OSError,
+    ProjectConfigError,
     UnicodeDecodeError,
     ValidationError,
     yaml.YAMLError,
@@ -66,16 +68,17 @@ def check_command(project_root: Path) -> None:
         _exit_boundary_error(exc)
     for rule in warnings:
         click.echo(f"warn  {rule.source}:{rule.line}: unanchored pattern {rule.pattern!r}", err=True)
+    if hits:
+        click.echo(f"vcs-boundary: FAIL -- {len(hits)} tracked file(s) match an ignore rule:", err=True)
+        for hit in hits[:50]:
+            click.echo(f"  {hit.path}  ({hit.source}:{hit.line}: {hit.pattern})", err=True)
+        if len(hits) > 50:
+            click.echo(f"  ... and {len(hits) - 50} more", err=True)
     if _error is not None:
         _exit_boundary_error(_error)
     if not hits:
         click.echo("vcs-boundary: clean (no tracked file matches an ignore rule)")
         return
-    click.echo(f"vcs-boundary: FAIL -- {len(hits)} tracked file(s) match an ignore rule:", err=True)
-    for hit in hits[:50]:
-        click.echo(f"  {hit.path}  ({hit.source}:{hit.line}: {hit.pattern})", err=True)
-    if len(hits) > 50:
-        click.echo(f"  ... and {len(hits) - 50} more", err=True)
     sys.exit(1)
 
 

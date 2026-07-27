@@ -48,7 +48,7 @@ from science_tool.boundary.gitio import (
     visible_paths,
 )
 from science_tool.boundary.walk import iter_repo_files, manifest_candidates
-from science_tool.project_config import load_project_config
+from science_tool.project_config import ProjectConfigError, load_project_config
 from science_tool.validate.checks import Check
 from science_tool.validate.context import ValidateContext
 from science_tool.validate.result import Result, Severity
@@ -86,7 +86,7 @@ def load_boundary_state(
     defaults = {(".gitignore", p) for p in DEFAULT_UNMANAGED_ALLOW}
     try:
         cfg = load_project_config(project_root).boundary
-    except (OSError, UnicodeDecodeError, ValidationError, yaml.YAMLError) as exc:
+    except (OSError, UnicodeDecodeError, ProjectConfigError, ValidationError, yaml.YAMLError) as exc:
         return None, defaults, exc
     if cfg is None:
         return None, defaults, None

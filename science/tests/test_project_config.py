@@ -7,6 +7,7 @@ from science_model.skill_coverage import EnrollmentStatus
 from science_tool.project_config import (
     PlanReproducibilityPolicy,
     ProjectConfig,
+    ProjectConfigError,
     ProjectRole,
     ReproducibilityPolicyConfig,
     ReproducibilityWaiver,
@@ -18,6 +19,13 @@ from science_tool.project_config import (
     project_entity_schema_version,
     validated_entity_schema_version,
 )
+
+
+@pytest.mark.parametrize("contents", ("- name: p\n", "p\n", "1\n"))
+def test_load_project_config_rejects_non_mapping_yaml(tmp_path, contents):
+    (tmp_path / "science.yaml").write_text(contents, encoding="utf-8")
+    with pytest.raises(ProjectConfigError, match="top-level mapping"):
+        load_project_config(tmp_path)
 
 
 def test_project_entity_schema_version_reads_pin(tmp_path):
