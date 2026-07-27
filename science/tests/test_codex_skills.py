@@ -63,6 +63,36 @@ def test_generated_project_setup_skills_declare_boundary_not_data_negations(tmp_
         assert "models/*" not in text
 
 
+def test_generated_project_setup_skills_preserve_boundary_workflow_order(tmp_path: Path) -> None:
+    generated = generate_codex_skills(ROOT, tmp_path)
+
+    create_text = generated["science-create-project"].read_text(encoding="utf-8")
+    initialize_git = _slice_between(
+        create_text,
+        "## Step 4: Initialize Git",
+        "## Step 5: Verify",
+    )
+    assert "only when `science.yaml` declares one or more `boundary.roots` entries" in _norm(initialize_git)
+    assert (
+        initialize_git.index("git init")
+        < initialize_git.index("science boundary sync")
+        < initialize_git.index("git add -A")
+    )
+
+    import_text = generated["science-import-project"].read_text(encoding="utf-8")
+    update_ignore = _slice_between(
+        import_text,
+        "## Step 5: Update `.gitignore` If Needed",
+        "## Step 6: Verify",
+    )
+    assert "legacy `.gitignore` unchanged and committed" in update_ignore
+    assert (
+        update_ignore.index("science boundary sync --verify-current-tree")
+        < update_ignore.index("remove every existing hand-written")
+        < update_ignore.index("science boundary sync` to update")
+    )
+
+
 def test_generate_codex_skills_rewrites_claude_specific_references(tmp_path: Path) -> None:
     generated = generate_codex_skills(ROOT, tmp_path)
     status_skill = generated["science-status"]
@@ -111,7 +141,7 @@ def test_generate_prunes_orphaned_skill_dirs(tmp_path: Path) -> None:
 
     generate_codex_skills(ROOT, tmp_path)
 
-    assert not stale.exists()               # orphaned science-* dir removed
+    assert not stale.exists()  # orphaned science-* dir removed
     assert keep.read_text(encoding="utf-8") == "static"  # static file untouched
 
 
@@ -156,16 +186,14 @@ def test_generated_command_preamble_references_codex_companion_skills(tmp_path: 
     assert (
         "Load the `science-scientific-writing` Codex skill. For research methodology, read "
         "`../../skills/INDEX.md` and load the leaves relevant to the task (e.g. `literature-evaluation`, "
-        "`literature-citation-discipline`, `epistemics-proposition-graph-reasoning`)."
-        in text
+        "`literature-citation-discipline`, `epistemics-proposition-graph-reasoning`)." in text
     )
     assert "Load the `research-methodology` and `scientific-writing` skills." not in text
 
     short_form = generated["science-plan-pipeline"].read_text(encoding="utf-8")
     assert (
         "For research methodology, read `../../skills/INDEX.md` and load the relevant "
-        "`literature/`/`epistemics/` leaves."
-        in short_form
+        "`literature/`/`epistemics/` leaves." in short_form
     )
 
 
@@ -268,8 +296,8 @@ def test_catalog_datasets_generated_skill_warns_about_metadata_completion(tmp_pa
     assert "`unknown` is acceptable" in text
     assert "source_class: derived" in text
     assert "dataset_usage" in text
-    assert "role: \"upstream\"" in text
-    assert "role: \"training\"" in text
+    assert 'role: "upstream"' in text
+    assert 'role: "training"' in text
 
 
 def test_catalog_datasets_generated_skill_documents_dataset_link_helper(tmp_path: Path) -> None:
@@ -299,14 +327,14 @@ def test_committed_find_datasets_skill_routes_durable_records_through_dataset_li
     assert "--license" not in add_example
     assert "science dataset verify-access <slug>" in text
     assert "--method <retrieved|credential-confirmed|landing-confirmed|metadata-confirmed>" in text
-    assert "--source-url \"<landing-page-or-download-url>\"" in text
+    assert '--source-url "<landing-page-or-download-url>"' in text
     assert "science dataset link <dataset-ref> <question-or-hypothesis-ref>" in text
     assert "If a needed field is not yet exposed by the CLI" in text
     assert "Direct template authoring is a fallback" not in text
     assert "For each `Use now` or `Evaluate next` dataset, create a dataset note" not in text
     assert "--level <public|controlled|mixed>" not in text
     assert "--method <landing-confirmed|downloaded|manual-review>" not in text
-    assert "--source \"<landing-page-or-download-url>\"" not in text
+    assert '--source "<landing-page-or-download-url>"' not in text
     assert "--date <YYYY-MM-DD>" not in text
 
 
@@ -322,7 +350,9 @@ def test_generated_plan_pipeline_respects_project_plan_numbering_convention(tmp_
     generated = generate_codex_skills(ROOT, tmp_path)
     text = generated["science-plan-pipeline"].read_text(encoding="utf-8")
 
-    assert "Do not blindly use `YYYY-MM-DD-<slug>` in projects whose `entities/plans/` use numeric `NNNN-` stems" in text
+    assert (
+        "Do not blindly use `YYYY-MM-DD-<slug>` in projects whose `entities/plans/` use numeric `NNNN-` stems" in text
+    )
     assert "entities/plans/<NNNN>-<slug>.md" in text
 
 
@@ -333,7 +363,9 @@ def test_generated_plan_pipeline_keeps_core_decisions_out_of_related_refs(tmp_pa
 
     assert "Core-log decisions are not graph refs" in text
     assert "`entities/decision/*.md`" in text
-    assert "Do not put `decision:<id>` in `related:` for a decision that only exists in `core/decisions.md`" in normalized
+    assert (
+        "Do not put `decision:<id>` in `related:` for a decision that only exists in `core/decisions.md`" in normalized
+    )
     assert "it is not a resolvable entity kind" not in text
 
 
@@ -342,8 +374,8 @@ def test_generated_task_skills_use_aspects_for_task_creation(tmp_path: Path) -> 
     for skill_name in ("science-tasks", "science-review-tasks"):
         text = generated[skill_name].read_text(encoding="utf-8")
 
-        assert "tasks add \"<title>\" --type" not in text
-        assert "tasks add \"<title>\" --aspects=<aspect>" in text
+        assert 'tasks add "<title>" --type' not in text
+        assert 'tasks add "<title>" --aspects=<aspect>' in text
 
 
 def test_generated_tasks_skill_allows_task_scoped_aspects_without_project_declaration(
@@ -535,7 +567,7 @@ def test_generated_specify_model_skill_routes_hypotheses_to_proposition_bundles(
 
     assert "**Hypothesis / epistemic entity with no DAG yet**" in text
     assert "decompose the hypothesis into durable `proposition:` entities" in text
-    assert "link each proposition back to the hypothesis with `related: [\"hypothesis:<id>\"]`" in text
+    assert 'link each proposition back to the hypothesis with `related: ["hypothesis:<id>"]`' in text
     assert "add the proposition refs to the hypothesis's Proposition Bundle" in text
     assert "Do not leave the decomposition only as prose inside the hypothesis file." in text
 
@@ -569,8 +601,14 @@ def test_explore_ideas_skill_documents_first_run_friction_guardrails() -> None:
 
     assert "no `kind:`/entity frontmatter" in normalized
     assert "prose lint treats that directory as process-output space" in normalized
-    assert 'Omit unknown identifier fields rather than writing empty placeholders such as `doi: ""` or `doi: null`' in normalized
-    assert "anchors with no usable `ref`, `doi`, citekey, title, or `openalex_id` are ignored by the resolver" in normalized
+    assert (
+        'Omit unknown identifier fields rather than writing empty placeholders such as `doi: ""` or `doi: null`'
+        in normalized
+    )
+    assert (
+        "anchors with no usable `ref`, `doi`, citekey, title, or `openalex_id` are ignored by the resolver"
+        in normalized
+    )
 
 
 def test_explore_ideas_skill_documents_multi_lens_convergence_representation() -> None:
@@ -646,15 +684,11 @@ def test_task_inquiry_committed_skills_reflect_command_boundaries() -> None:
     add_hypothesis = _norm(_read_skill("science-add-hypothesis"))
 
     assert "A next-steps run produces recommendations, not task records." in next_steps
-    assert (
-        "Convert recommendations into `science tasks add ...` only after user acceptance."
-        in next_steps
-    )
+    assert "Convert recommendations into `science tasks add ...` only after user acceptance." in next_steps
     assert "`science graph add concept` is retired" in sketch_model
     assert "use source-authored concept owners or project-local patch prose" in sketch_model
     assert (
-        "If no supported durable source kind exists yet, describe the term in the inquiry patch prose"
-        in sketch_model
+        "If no supported durable source kind exists yet, describe the term in the inquiry patch prose" in sketch_model
     )
     assert "defer boundary roles or flow edges until a source owner is available" in sketch_model
     assert "Unknown markers may be used in sketch as temporary uncertainty markers" in sketch_model
@@ -663,15 +697,11 @@ def test_task_inquiry_committed_skills_reflect_command_boundaries() -> None:
     assert "the inquiry compiler mints those local nodes from the authored patch" in sketch_model
     assert "```bash\nscience graph add concept" not in sketch_model_raw
     assert "`science graph add concept` is retired." in specify_model
-    assert (
-        "For inquiry-patch projects, record durable variable refs in `entities/patches/<slug>.md`."
-        in specify_model
-    )
+    assert "For inquiry-patch projects, record durable variable refs in `entities/patches/<slug>.md`." in specify_model
     assert "Create first, then draft." in add_hypothesis
     assert (
         "`science hypotheses create` owns ID sequencing, frontmatter, file placement, "
-        "and prospective validation."
-        in add_hypothesis
+        "and prospective validation." in add_hypothesis
     )
 
 
@@ -688,7 +718,10 @@ def test_concept_ownership_committed_skills_reflect_command_boundaries() -> None
     assert "Keep weak ideas in prose when they do not need graph refs yet." in sketch_model
     assert "```bash\nscience graph add concept" not in sketch_model_raw
     assert "Make sure those refs resolve through source records or entity owners" in specify_model
-    assert "Do not treat retired graph-writer output as an owner for variables, treatment/outcome refs, or unknowns." in specify_model
+    assert (
+        "Do not treat retired graph-writer output as an owner for variables, treatment/outcome refs, or unknowns."
+        in specify_model
+    )
     assert "Transformation `validated_by` refs should point to existing validation artifacts" in plan_pipeline
     assert "Do not use `concept:<check>` as a placeholder for a validation record that does not exist." in plan_pipeline
     assert 'validated_by: "<existing-validation-ref>"' in plan_pipeline_raw
@@ -711,7 +744,10 @@ def test_generated_concept_ownership_skills_reflect_command_boundaries(
     assert "Keep weak ideas in prose when they do not need graph refs yet." in sketch_model
     assert "```bash\nscience graph add concept" not in sketch_model_raw
     assert "Make sure those refs resolve through source records or entity owners" in specify_model
-    assert "Do not treat retired graph-writer output as an owner for variables, treatment/outcome refs, or unknowns." in specify_model
+    assert (
+        "Do not treat retired graph-writer output as an owner for variables, treatment/outcome refs, or unknowns."
+        in specify_model
+    )
     assert "Transformation `validated_by` refs should point to existing validation artifacts" in plan_pipeline
     assert "Do not use `concept:<check>` as a placeholder for a validation record that does not exist." in plan_pipeline
     assert 'validated_by: "<existing-validation-ref>"' in plan_pipeline_raw
@@ -722,7 +758,10 @@ def test_concept_authoring_committed_skills_use_entity_owners() -> None:
     create_graph = _norm(_read_skill("science-create-graph"))
     health = _norm(_read_skill("science-health"))
 
-    assert 'Use `science entity create concept "<title>"` when a project-scoped concept needs a durable graph identity' in create_graph
+    assert (
+        'Use `science entity create concept "<title>"` when a project-scoped concept needs a durable graph identity'
+        in create_graph
+    )
     assert 'create a concept entity with `science entity create concept "<title>"`' in health
 
 
@@ -731,7 +770,10 @@ def test_concept_authoring_generated_skills_use_entity_owners(tmp_path: Path) ->
     create_graph = _norm(generated["science-create-graph"].read_text(encoding="utf-8"))
     health = _norm(generated["science-health"].read_text(encoding="utf-8"))
 
-    assert 'Use `science entity create concept "<title>"` when a project-scoped concept needs a durable graph identity' in create_graph
+    assert (
+        'Use `science entity create concept "<title>"` when a project-scoped concept needs a durable graph identity'
+        in create_graph
+    )
     assert 'create a concept entity with `science entity create concept "<title>"`' in health
 
 
@@ -791,8 +833,7 @@ def test_no_generated_skill_references_retired_user_docs() -> None:
             offenders.append(str(skill_md.relative_to(ROOT)))
 
     assert not offenders, (
-        "Generated codex-skills must be regenerated after user-guide doc migration. "
-        f"Offenders: {offenders}"
+        f"Generated codex-skills must be regenerated after user-guide doc migration. Offenders: {offenders}"
     )
 
 
@@ -823,9 +864,7 @@ def test_committed_codex_skills_match_fresh_generation(tmp_path: Path) -> None:
     generate_codex_skills(ROOT, generated_root)
 
     expected = {
-        path.relative_to(generated_root): path.read_bytes()
-        for path in generated_root.rglob("*")
-        if path.is_file()
+        path.relative_to(generated_root): path.read_bytes() for path in generated_root.rglob("*") if path.is_file()
     }
     actual = {
         path.relative_to(CODEX_SKILLS_ROOT): path.read_bytes()

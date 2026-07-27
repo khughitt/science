@@ -52,6 +52,16 @@ def test_duplicate_roots_rejected():
         _cfg(roots=[{"path": "data/raw", "class": "payload"}, {"path": "data/raw", "class": "payload"}])
 
 
+def test_casefold_equivalent_roots_rejected():
+    with pytest.raises(ValidationError, match="case-fold"):
+        _cfg(
+            roots=[
+                {"path": "Data", "class": "payload"},
+                {"path": "data", "class": "payload"},
+            ]
+        )
+
+
 def test_nested_roots_rejected():
     # /data/ would stop git descending and silently disable the child's negations.
     with pytest.raises(ValidationError, match="nested"):
@@ -59,6 +69,56 @@ def test_nested_roots_rejected():
             roots=[
                 {"path": "data", "class": "payload"},
                 {"path": "data/external", "class": "manifest", "tracked": ["datapackage.json"]},
+            ]
+        )
+
+
+def test_casefold_ancestor_roots_rejected():
+    with pytest.raises(ValidationError, match="case-fold"):
+        _cfg(
+            roots=[
+                {"path": "Data", "class": "payload"},
+                {
+                    "path": "data/external",
+                    "class": "manifest",
+                    "tracked": ["datapackage.json"],
+                },
+            ]
+        )
+
+
+def test_casefold_ancestor_rejection_matches_real_git(tmp_path: Path):
+    """With core.ignoreCase=true the payload parent prevents manifest traversal."""
+    repo = tmp_path / "repo"
+    descriptor = repo / "data/external/ds/datapackage.json"
+    descriptor.parent.mkdir(parents=True)
+    descriptor.write_text("{}\n", encoding="utf-8")
+    subprocess.run(["git", "init", "-q", str(repo)], check=True)
+    subprocess.run(
+        ["git", "-C", str(repo), "config", "core.ignoreCase", "true"],
+        check=True,
+    )
+    (repo / ".gitignore").write_text(
+        "/Data/\n/data/external/**\n!/data/external/**/\n!/data/external/**/datapackage.json\n",
+        encoding="utf-8",
+    )
+    subprocess.run(["git", "-C", str(repo), "add", "."], check=True)
+    staged = subprocess.run(
+        ["git", "-C", str(repo), "ls-files", "-z"],
+        check=True,
+        capture_output=True,
+    ).stdout.split(b"\0")
+
+    assert b"data/external/ds/datapackage.json" not in staged
+    with pytest.raises(ValidationError, match="case-fold"):
+        _cfg(
+            roots=[
+                {"path": "Data", "class": "payload"},
+                {
+                    "path": "data/external",
+                    "class": "manifest",
+                    "tracked": ["datapackage.json"],
+                },
             ]
         )
 

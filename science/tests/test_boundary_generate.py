@@ -97,6 +97,45 @@ def test_extract_roundtrip():
     assert extract_managed_block("no markers\n") is None
 
 
+def test_marker_substrings_are_handwritten_text():
+    """Marker words have no ownership meaning inside a physical line."""
+    original = f"prefix {MANAGED_BEGIN}\n{MANAGED_END} suffix\n"
+
+    assert extract_managed_block(original) is None
+    assert splice_managed_block(original, "managed\n").startswith(original)
+
+
+def test_markers_accept_only_a_terminal_cr_on_the_physical_line():
+    crlf = f"{MANAGED_BEGIN}\r\nbody\r\n{MANAGED_END}\r\n"
+    embedded_cr = f"{MANAGED_BEGIN}\rnot-a-marker\nbody\n{MANAGED_END}\rnot-a-marker\n"
+
+    assert extract_managed_block(crlf) == "body\r\n"
+    assert extract_managed_block(embedded_cr) is None
+
+
+def test_extract_preserves_leading_blank_lines_and_exact_body_bytes():
+    body = "\nraw-\udcff\r\n\n"
+    text = f"prefix\n{MANAGED_BEGIN}\n{body}{MANAGED_END}\nsuffix\n"
+
+    extracted = extract_managed_block(text)
+
+    assert extracted == body
+    assert extracted.encode("utf-8", "surrogateescape") == body.encode("utf-8", "surrogateescape")
+
+
+def test_splice_preserves_prefix_and_suffix_bytes_including_blank_lines():
+    prefix = "prefix-\udcff\r\n\n"
+    suffix = "\n\nsuffix-\udcfe\r\n"
+    original = f"{prefix}{MANAGED_BEGIN}\nold\r\n{MANAGED_END}\n{suffix}"
+
+    updated = splice_managed_block(original, "new\n")
+
+    assert updated.startswith(prefix)
+    assert updated.endswith(suffix)
+    assert updated.encode("utf-8", "surrogateescape").startswith(prefix.encode("utf-8", "surrogateescape"))
+    assert updated.encode("utf-8", "surrogateescape").endswith(suffix.encode("utf-8", "surrogateescape"))
+
+
 @pytest.mark.parametrize(
     ("text", "problem"),
     [

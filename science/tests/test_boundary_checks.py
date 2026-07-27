@@ -3,10 +3,16 @@ from __future__ import annotations
 import subprocess
 from pathlib import Path
 
+import pytest
 import yaml
 
 from science_tool.boundary.config import BoundaryConfig
-from science_tool.boundary.generate import render_managed_block, splice_managed_block
+from science_tool.boundary.generate import (
+    MANAGED_BEGIN,
+    MANAGED_END,
+    render_managed_block,
+    splice_managed_block,
+)
 from science_tool.validate.checks.boundary import check_boundary
 from science_tool.validate.context import ValidateContext
 
@@ -46,6 +52,56 @@ def test_clean_undeclared_project_is_silent(tmp_path: Path):
     # Implicit-versioned semantics begin at enrollment: no declaration, no
     # ignored-undeclared finding.
     assert _rules(repo) == []
+
+
+def test_nested_science_project_in_enclosing_worktree_is_checked(tmp_path: Path):
+    subprocess.run(["git", "init", "-q", str(tmp_path)], check=True)
+    nested = tmp_path / "projects/demo"
+    (nested / "data").mkdir(parents=True)
+    (nested / "science.yaml").write_text("name: Demo\nid: demo\n", encoding="utf-8")
+    (nested / "data/big.csv").write_text("x", encoding="utf-8")
+    (nested / ".gitignore").write_text("/data/\n", encoding="utf-8")
+    subprocess.run(
+        [
+            "git",
+            "-C",
+            str(tmp_path),
+            "add",
+            "-f",
+            "projects/demo/science.yaml",
+            "projects/demo/.gitignore",
+            "projects/demo/data/big.csv",
+        ],
+        check=True,
+    )
+
+    assert "boundary.tracked-ignored" in _rules(nested)
+
+
+def test_dangling_git_marker_fails_closed(tmp_path: Path):
+    from science_tool.boundary.gitio import BoundaryGitError
+
+    (tmp_path / "science.yaml").write_text("name: Demo\nid: demo\n", encoding="utf-8")
+    (tmp_path / ".git").symlink_to(tmp_path / "missing-gitdir", target_is_directory=True)
+
+    with pytest.raises(BoundaryGitError, match="repository discovery"):
+        _results(tmp_path)
+
+
+def test_corrupt_gitfile_marker_fails_closed(tmp_path: Path):
+    from science_tool.boundary.gitio import BoundaryGitError
+
+    (tmp_path / "science.yaml").write_text("name: Demo\nid: demo\n", encoding="utf-8")
+    (tmp_path / ".git").write_text("not a gitdir pointer\n", encoding="utf-8")
+
+    with pytest.raises(BoundaryGitError, match="repository discovery"):
+        _results(tmp_path)
+
+
+def test_genuine_nonrepository_is_skipped(tmp_path: Path):
+    (tmp_path / "science.yaml").write_text("name: Demo\nid: demo\n", encoding="utf-8")
+
+    assert _results(tmp_path) == []
 
 
 def test_unanchored_pattern_warns(tmp_path: Path):
@@ -127,6 +183,33 @@ def test_no_drift_when_block_matches(tmp_path: Path):
     assert "boundary.generated-drift" not in _rules(repo)
 
 
+def test_generated_drift_rejects_symlinked_root_gitignore_without_following(tmp_path: Path):
+    decl = {"roots": [{"path": "data/raw", "class": "payload"}]}
+    repo = _repo(tmp_path / "repo", decl)
+    expected = splice_managed_block("", render_managed_block(BoundaryConfig.model_validate(decl)))
+    outside = tmp_path / "outside-ignore"
+    outside.write_text(expected, encoding="utf-8")
+    (repo / ".gitignore").symlink_to(outside)
+    subprocess.run(["git", "-C", str(repo), "add", "-f", ".gitignore"], check=True)
+
+    findings = [result for result in _results(repo) if result.rule == "boundary.generated-drift"]
+
+    assert len(findings) == 1
+    assert "symlink" in findings[0].message
+    assert outside.read_text(encoding="utf-8") == expected
+
+
+def test_generated_drift_rejects_nonregular_root_gitignore(tmp_path: Path):
+    decl = {"roots": [{"path": "data/raw", "class": "payload"}]}
+    repo = _repo(tmp_path, decl)
+    (repo / ".gitignore").mkdir()
+
+    findings = [result for result in _results(repo) if result.rule == "boundary.generated-drift"]
+
+    assert len(findings) == 1
+    assert "not a regular file" in findings[0].message
+
+
 def test_declaration_conflict_catches_a_bare_wildcard(tmp_path: Path):
     """`*.parquet` names no root but governs paths inside one. Text prefix
     comparison misses this entirely; asking git does not."""
@@ -144,6 +227,55 @@ def test_declaration_conflict_catches_a_bare_wildcard(tmp_path: Path):
     (repo / ".gitignore").write_text(splice_managed_block("*.parquet\n", render_managed_block(cfg)))
     subprocess.run(["git", "-C", str(repo), "add", ".gitignore"], check=True)
     assert "boundary.declaration-conflict" in _rules(repo)
+
+
+def test_nested_marker_region_is_hand_owned_and_conflicts_with_declaration(tmp_path: Path):
+    """Only the root marker block is managed; nested files are wholly hand-owned."""
+    decl = {
+        "roots": [
+            {
+                "path": "inc/data",
+                "class": "manifest",
+                "tracked": ["datapackage.json"],
+            }
+        ]
+    }
+    repo = _repo(tmp_path, decl)
+    cfg = BoundaryConfig.model_validate(decl)
+    (repo / ".gitignore").write_text(splice_managed_block("", render_managed_block(cfg)))
+    (repo / "inc/data/ds").mkdir(parents=True)
+    (repo / "inc/data/ds/part.parquet").write_text("x", encoding="utf-8")
+    (repo / "inc/.gitignore").write_text(
+        f"{MANAGED_BEGIN}\n*.parquet\n{MANAGED_END}\n",
+        encoding="utf-8",
+    )
+    subprocess.run(
+        ["git", "-C", str(repo), "add", "-f", ".gitignore", "inc/.gitignore"],
+        check=True,
+    )
+
+    findings = [result for result in _results(repo) if result.rule == "boundary.declaration-conflict"]
+
+    assert [(finding.path.as_posix(), finding.line) for finding in findings] == [("inc/.gitignore", 2)]
+
+
+def test_exact_name_rule_conflicts_with_directory_symlink_leaf(tmp_path: Path):
+    decl = {"roots": [{"path": "data/raw", "class": "payload"}]}
+    repo = _repo(tmp_path, decl)
+    cfg = BoundaryConfig.model_validate(decl)
+    outside = tmp_path / "outside"
+    outside.mkdir()
+    (repo / "data/raw").mkdir(parents=True)
+    (repo / "data/raw/link").symlink_to(outside, target_is_directory=True)
+    (repo / ".gitignore").write_text(
+        splice_managed_block("/data/raw/link\n", render_managed_block(cfg)),
+        encoding="utf-8",
+    )
+    subprocess.run(["git", "-C", str(repo), "add", "-f", ".gitignore"], check=True)
+
+    findings = [result for result in _results(repo) if result.rule == "boundary.declaration-conflict"]
+
+    assert [(finding.path.as_posix(), finding.line) for finding in findings] == [(".gitignore", 1)]
 
 
 def test_declaration_conflict_catches_a_subdirectory_scoped_rule(tmp_path: Path):
@@ -309,6 +441,28 @@ def test_universal_checks_survive_an_invalid_declaration(tmp_path: Path):
     assert "boundary.tracked-ignored" in rules
 
 
+def test_explicit_null_boundary_is_invalid_while_universal_checks_run(tmp_path: Path):
+    repo = _repo(tmp_path)
+    (repo / "science.yaml").write_text(
+        "name: Demo\nid: demo\nboundary:\n",
+        encoding="utf-8",
+    )
+    (repo / ".gitignore").write_text("archive\n", encoding="utf-8")
+    (repo / "data").mkdir()
+    (repo / "data/big.csv").write_text("x", encoding="utf-8")
+    subprocess.run(
+        ["git", "-C", str(repo), "add", "-f", ".gitignore", "data/big.csv"],
+        check=True,
+    )
+    (repo / ".gitignore").write_text("archive\n/data/\n", encoding="utf-8")
+
+    rules = _rules(repo)
+
+    assert "boundary.invalid-declaration" in rules
+    assert "boundary.unanchored-pattern" in rules
+    assert "boundary.tracked-ignored" in rules
+
+
 def test_ignored_undeclared_warns_and_allowlist_silences_it(tmp_path: Path):
     decl = {"roots": [{"path": "data/raw", "class": "payload"}]}
     repo = _repo(tmp_path, decl)
@@ -378,6 +532,33 @@ def test_unreachable_tracked_quiet_on_correct_generation(tmp_path: Path):
     (repo / ".gitignore").write_text(splice_managed_block("", render_managed_block(cfg)))
     subprocess.run(["git", "-C", str(repo), "add", ".gitignore"], check=True)
     assert "boundary.unreachable-tracked" not in _rules(repo)
+
+
+def test_unreachable_tracked_checks_directory_symlink_leaf(tmp_path: Path):
+    decl = {
+        "roots": [
+            {
+                "path": "data/external",
+                "class": "manifest",
+                "tracked": ["datapackage.json"],
+            }
+        ]
+    }
+    repo = _repo(tmp_path, decl)
+    outside = tmp_path / "outside"
+    outside.mkdir()
+    (repo / "data/external").mkdir(parents=True)
+    (repo / "data/external/datapackage.json").symlink_to(
+        outside,
+        target_is_directory=True,
+    )
+    (repo / ".gitignore").write_text(
+        splice_managed_block("", "/data/external/\n"),
+        encoding="utf-8",
+    )
+    subprocess.run(["git", "-C", str(repo), "add", ".gitignore"], check=True)
+
+    assert "boundary.unreachable-tracked" in _rules(repo)
 
 
 def test_unreachable_tracked_catches_glob_negation_case(tmp_path: Path):

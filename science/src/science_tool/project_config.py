@@ -309,6 +309,17 @@ class ProjectConfig(BaseModel):
 
     @model_validator(mode="before")
     @classmethod
+    def _reject_null_boundary(cls, raw: Any) -> Any:
+        if isinstance(raw, dict) and "boundary" in raw and raw["boundary"] is None:
+            raise ValueError(
+                "science.yaml: boundary is present but null. An authored-but-empty declaration is "
+                "`boundary: {roots: []}`, not null -- null would collapse to the same state as "
+                "absence (undeclared), hiding a malformed declaration."
+            )
+        return raw
+
+    @model_validator(mode="before")
+    @classmethod
     def _validate_entity_schema_version(cls, raw: Any) -> Any:
         validated_entity_schema_version(raw)
         return raw
@@ -438,9 +449,7 @@ def project_entity_schema_version(project_root: Path) -> int | None:
     return validated_entity_schema_version(raw)
 
 
-def domain_enrollment(
-    config: ProjectConfig, domain: str
-) -> EnrollmentStatus | Literal["undeclared"]:
+def domain_enrollment(config: ProjectConfig, domain: str) -> EnrollmentStatus | Literal["undeclared"]:
     """Resolve a project's enrollment status for one coverage domain.
 
     Absence of the `skill_coverage` block, or of this domain key within it, is `undeclared` -- never
@@ -449,9 +458,7 @@ def domain_enrollment(
     `undeclared`.
     """
     if domain not in DOMAIN_KEYS:
-        raise ValueError(
-            f"unknown skill-coverage domain {domain!r}; known domains: {sorted(DOMAIN_KEYS)}"
-        )
+        raise ValueError(f"unknown skill-coverage domain {domain!r}; known domains: {sorted(DOMAIN_KEYS)}")
     if config.skill_coverage is None:
         return "undeclared"
     status = config.skill_coverage.domains.get(domain)

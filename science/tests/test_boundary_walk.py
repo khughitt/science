@@ -65,6 +65,14 @@ def test_does_not_descend_into_symlinked_directory(tmp_path: Path):
     assert manifest_candidates(tmp_path, _root()) == []
 
 
+def test_directory_target_symlink_is_an_opaque_repo_leaf(tmp_path: Path):
+    _mk(tmp_path, "outside/hidden.txt")
+    (tmp_path / "data/external").mkdir(parents=True)
+    (tmp_path / "data/external/link").symlink_to(tmp_path / "outside", target_is_directory=True)
+
+    assert walk.iter_repo_files(tmp_path, tmp_path / "data/external") == ["data/external/link"]
+
+
 def test_symlinked_file_is_reported(tmp_path: Path):
     target = _mk(tmp_path, "outside/datapackage.json")
     (tmp_path / "data/external/a").mkdir(parents=True)
@@ -92,6 +100,13 @@ def test_nested_repository_file_form_is_pruned(tmp_path: Path):
     _mk(tmp_path, "data/external/sub/datapackage.json")
     _mk(tmp_path, "data/external/own/datapackage.json")
     assert manifest_candidates(tmp_path, _root()) == ["data/external/own/datapackage.json"]
+
+
+def test_nested_repository_is_an_opaque_gitlink_leaf(tmp_path: Path):
+    _mk(tmp_path, "data/external/sub/.git", "gitdir: /elsewhere/.git/modules/sub\n")
+    _mk(tmp_path, "data/external/sub/inside.txt")
+
+    assert walk.iter_repo_files(tmp_path, tmp_path / "data/external") == ["data/external/sub"]
 
 
 def test_declared_root_that_is_itself_a_nested_repo_is_pruned(tmp_path: Path):

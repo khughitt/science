@@ -243,13 +243,22 @@ class BoundaryConfig(BaseModel):
     @model_validator(mode="after")
     def _check_roots(self) -> "BoundaryConfig":
         paths = [r.path for r in self.roots]
-        if len(set(paths)) != len(paths):
-            raise ValueError("duplicate root path")
-        for outer in paths:
-            for inner in paths:
-                if outer != inner and (inner + "/").startswith(outer + "/"):
+        seen_folded: dict[str, str] = {}
+        for path in paths:
+            folded = path.casefold()
+            if folded in seen_folded:
+                raise ValueError(
+                    f"duplicate root path under conservative Git case-folding: "
+                    f"{seen_folded[folded]!r} and {path!r} are case-fold-equivalent"
+                )
+            seen_folded[folded] = path
+        for outer_index, outer in enumerate(paths):
+            outer_folded = outer.casefold()
+            for inner_index, inner in enumerate(paths):
+                if outer_index != inner_index and (inner.casefold() + "/").startswith(outer_folded + "/"):
                     raise ValueError(
-                        f"nested roots are not supported: {outer!r} contains {inner!r}. "
+                        f"nested roots are not supported under conservative Git case-folding: "
+                        f"{outer!r} contains {inner!r}. "
                         f"An anchored exclude for {outer!r} stops git descending, silently "
                         f"disabling every negation {inner!r} would generate."
                     )

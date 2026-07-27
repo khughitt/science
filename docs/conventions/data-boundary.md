@@ -25,6 +25,46 @@ the corresponding managed `.gitignore` block. The declaration, not a
 hand-written ignore rule, is the authority. See
 [`docs/plans/2026-07-26-vcs-storage-boundary-design.md`](../plans/2026-07-26-vcs-storage-boundary-design.md).
 
+## Advisory `data_policy:` Overrides
+
+The version-control `boundary:` declaration above and the advisory
+`data_policy:` configuration serve different purposes. `data_policy:` tunes only
+the advisory classifier used by `science data audit`. It does not generate
+`.gitignore` rules, and no validate check consults it.
+
+The classifier labels paths as:
+
+- `record`: lightweight durable material that belongs in tracked source.
+- `payload`: large or regenerable material that belongs under ignored data
+  roots.
+- `flag`: ambiguous material that needs a human decision.
+
+The default is intentionally conservative. It recognizes record-like patterns
+such as datapackage descriptors, result reports, QA JSON, rubrics, worksheets,
+verdicts, labels, notes, and interpretations. It recognizes common payload
+extensions such as `.parquet`, `.feather`, `.pkl`, `.pdf`, `.npy`, `.npz`,
+archives, videos, and MATLAB files. Unknown small files are flagged; unknown
+large files are treated as payloads.
+
+Projects may override those heuristics in `science.yaml`:
+
+```yaml
+data_policy:
+  record_patterns:
+    - datapackage.json
+    - datapackage.yaml
+    - RESULTS*.md
+    - "**/qa/*.json"
+  payload_extensions:
+    - .parquet
+    - .feather
+    - .npy
+  size_threshold: 150000
+```
+
+Absent a `data_policy:` block, Science uses the framework default. Unknown keys
+inside `data_policy:` are invalid.
+
 ## Audit
 
 Run:

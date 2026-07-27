@@ -392,12 +392,17 @@ Ensure the project ignores:
 
 For project data, do not add a hand-written ignore rule. Run `science boundary
 init`, review its proposed roots, and declare the approved storage classes under
-`boundary:` in `science.yaml`. Before syncing, remove every existing
-hand-written `.gitignore` rule that affects a declared root; retain unrelated
-tooling, OS, and secret rules. Then run `science boundary sync --verify-current-tree`
-to review the ignore-decision changes, followed by
-`science boundary sync` to update the managed block. The declaration owns data
-storage.
+`boundary:` in `science.yaml`.
+
+Keep the legacy `.gitignore` unchanged and committed while checking the proposed
+declaration. Run `science boundary sync --verify-current-tree` first and review
+every reported ignore-decision change. This verification is transactional and
+refuses an uncommitted `.gitignore`, so do not rewrite the file before it runs.
+
+After accepting the verification result, remove every existing hand-written
+`.gitignore` rule that affects a declared root; retain unrelated tooling, OS,
+and secret rules. Then run `science boundary sync` to update the managed block.
+The declaration now owns data storage.
 
 ## Step 6: Verify
 

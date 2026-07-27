@@ -386,6 +386,14 @@ Only create `.ai/prompts/` or `.ai/templates/` when the project needs project-sp
 ```bash
 cd <project>
 git init
+```
+
+After `git init`, run the sync only when `science.yaml` declares one or more
+`boundary.roots` entries. This establishes the generated ignore rules before
+the first bulk stage:
+
+```bash
+science boundary sync
 git add -A
 git commit -m "Initialize Science project: <project name>"
 ```

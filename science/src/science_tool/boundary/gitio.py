@@ -49,9 +49,85 @@ class BoundaryGitError(Exception):
     """A git invocation failed in a way that must not be read as 'clean'."""
 
 
+def _nearest_git_marker(project_root: Path) -> Path | None:
+    """Find a `.git` marker at or above the project root without following it."""
+    current = project_root
+    while True:
+        marker = current / ".git"
+        try:
+            os.lstat(marker)
+        except FileNotFoundError:
+            pass
+        except OSError as exc:
+            raise BoundaryGitError(f"cannot inspect Git repository marker {marker}: {exc}") from exc
+        else:
+            return marker
+        if current.parent == current:
+            return None
+        current = current.parent
+
+
+def is_git_worktree(project_root: Path) -> bool:
+    """Discover Git from `project_root`, distinguishing absence from corruption."""
+    proc = subprocess.run(
+        ["git", "-C", str(project_root), "rev-parse", "--is-inside-work-tree"],
+        capture_output=True,
+        check=False,
+        env={**os.environ, "LC_ALL": "C"},
+    )
+    if proc.returncode == 0:
+        answer = proc.stdout.decode("utf-8", "replace").strip()
+        if answer == "true":
+            return True
+        raise BoundaryGitError(
+            f"Git repository discovery from {project_root} returned unexpected worktree state {answer!r}"
+        )
+
+    detail = proc.stderr.decode("utf-8", "replace").strip()
+    marker = _nearest_git_marker(project_root)
+    if marker is not None:
+        raise BoundaryGitError(
+            f"Git repository discovery from {project_root} failed with marker {marker}: "
+            f"git rev-parse exited {proc.returncode}: {detail}"
+        )
+    if proc.returncode == 128 and detail.startswith("fatal: not a git repository"):
+        return False
+    raise BoundaryGitError(
+        f"Git repository discovery from {project_root} failed (git rev-parse exited {proc.returncode}): {detail}"
+    )
+
+
 def read_ignore_file(path: Path) -> str:
-    """Read arbitrary rule bytes without universal-newline translation."""
-    return path.read_bytes().decode("utf-8", "surrogateescape")
+    """Read a regular ignore file through an identity-checked no-follow handle."""
+    try:
+        metadata = os.lstat(path)
+    except FileNotFoundError:
+        raise
+    except OSError as exc:
+        raise BoundaryGitError(f"cannot inspect ignore file {path}: {exc}") from exc
+    if stat.S_ISLNK(metadata.st_mode):
+        raise BoundaryGitError(f"cannot read ignore file {path}: source is a symlink")
+    if not stat.S_ISREG(metadata.st_mode):
+        raise BoundaryGitError(f"cannot read ignore file {path}: source is not a regular file")
+    if not hasattr(os, "O_NOFOLLOW"):
+        raise BoundaryGitError(f"cannot read ignore file {path}: platform lacks O_NOFOLLOW")
+
+    try:
+        descriptor = os.open(path, os.O_RDONLY | os.O_NOFOLLOW)
+    except OSError as exc:
+        raise BoundaryGitError(f"cannot read ignore file {path} without following symlinks: {exc}") from exc
+    try:
+        opened = os.fstat(descriptor)
+        if not stat.S_ISREG(opened.st_mode) or (opened.st_dev, opened.st_ino) != (metadata.st_dev, metadata.st_ino):
+            raise BoundaryGitError(f"cannot read ignore file {path}: source changed during safe read")
+        with os.fdopen(descriptor, "rb") as stream:
+            descriptor = -1
+            return stream.read().decode("utf-8", "surrogateescape")
+    except OSError as exc:
+        raise BoundaryGitError(f"cannot read ignore file {path}: {exc}") from exc
+    finally:
+        if descriptor != -1:
+            os.close(descriptor)
 
 
 def write_ignore_file(path: Path, text: str) -> None:
@@ -303,26 +379,15 @@ def governed_ignore_files(project_root: Path) -> list[str]:
 
 def unmanaged_rules(project_root: Path) -> list[IgnoreRule]:
     """Every hand-written rule in governed files, excluding the managed block."""
-    from science_tool.boundary.generate import (
-        MANAGED_BEGIN,
-        MANAGED_END,
-        extract_managed_block,
-    )
+    from science_tool.boundary.generate import managed_block_line_numbers
 
     rules: list[IgnoreRule] = []
     for rel in governed_ignore_files(project_root):
         text = _read_governed(project_root, rel)
-        extract_managed_block(text)
-        inside = False
+        managed_lines = managed_block_line_numbers(text) if rel == ".gitignore" else frozenset()
         for number, raw in enumerate(_physical_lines(text), start=1):
             line = strip_git_trailing_spaces(raw)
-            if MANAGED_BEGIN in raw:
-                inside = True
-                continue
-            if MANAGED_END in raw:
-                inside = False
-                continue
-            if inside or not line or line.startswith("#"):
+            if number in managed_lines or not line or line.startswith("#"):
                 continue
             rules.append(IgnoreRule(source=rel, line=number, pattern=line))
     return sorted(rules, key=lambda rule: (rule.source, rule.line))
@@ -338,11 +403,7 @@ def matching_unmanaged_rules(
     round then peels the winning unmanaged rules away so earlier shadowed rules
     can surface. Git remains the pattern-matching engine throughout.
     """
-    from science_tool.boundary.generate import (
-        MANAGED_BEGIN,
-        MANAGED_END,
-        extract_managed_block,
-    )
+    from science_tool.boundary.generate import managed_block_line_numbers
 
     if not paths:
         return {}
@@ -354,22 +415,9 @@ def matching_unmanaged_rules(
     sources: dict[str, list[str]] = {}
     for rel in governed:
         text = _read_governed(project_root, rel)
-        extract_managed_block(text)
         lines = _physical_lines(text)
         sources[rel] = lines
-        managed: set[int] = set()
-        inside = False
-        for number, raw in enumerate(lines, start=1):
-            if MANAGED_BEGIN in raw:
-                inside = True
-                managed.add(number)
-                continue
-            if MANAGED_END in raw:
-                inside = False
-                managed.add(number)
-                continue
-            if inside:
-                managed.add(number)
+        managed = set(managed_block_line_numbers(text)) if rel == ".gitignore" else set()
         initially_blanked[rel] = managed
 
     matches: dict[str, list[IgnoreRule]] = {}

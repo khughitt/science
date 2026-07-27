@@ -39,8 +39,10 @@ from science_tool.boundary.config import (
 )
 from science_tool.boundary.generate import extract_managed_block, render_managed_block
 from science_tool.boundary.gitio import (
+    BoundaryGitError,
     IgnoreRule,
     governed_ignore_files,
+    is_git_worktree,
     matching_unmanaged_rules,
     read_ignore_file,
     tracked_ignored,
@@ -130,7 +132,7 @@ def _conflict_subjects(project_root: Path, root_path: str) -> list[str]:
 @Check(section="version-control boundary", order=14)
 def check_boundary(ctx: ValidateContext) -> Iterator[Result]:
     root = ctx.project_root
-    if not (root / ".git").exists():
+    if not is_git_worktree(root):
         return
 
     # ---- universal: tracked-ignored -------------------------------------
@@ -203,16 +205,33 @@ def check_boundary(ctx: ValidateContext) -> Iterator[Result]:
         # Implicit-versioned semantics begin at enrollment.
         return
 
-    gitignore_text = ""
-    if (root / GITIGNORE).is_file():
+    gitignore_error: BoundaryGitError | None = None
+    try:
         gitignore_text = read_ignore_file(root / GITIGNORE)
-    managed_body = extract_managed_block(gitignore_text)
+    except FileNotFoundError:
+        gitignore_text = ""
+    except BoundaryGitError as exc:
+        gitignore_text = ""
+        gitignore_error = exc
+    managed_body = extract_managed_block(gitignore_text) if gitignore_error is None else None
 
     declared = [r.path for r in cfg.roots]
 
     # ---- declared: generated-drift --------------------------------------
     expected = render_managed_block(cfg)
-    if managed_body != expected:
+    if gitignore_error is not None:
+        yield Result(
+            severity=Severity.ERROR,
+            path=GITIGNORE,
+            line=None,
+            message=(
+                "cannot verify the science-managed boundary block because the root "
+                f".gitignore is unsafe to read: {gitignore_error}"
+            ),
+            rule="boundary.generated-drift",
+            task=None,
+        )
+    elif managed_body != expected:
         yield Result(
             severity=Severity.ERROR,
             path=GITIGNORE,
