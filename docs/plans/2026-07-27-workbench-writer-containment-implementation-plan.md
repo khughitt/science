@@ -584,8 +584,11 @@ No dump-mode flag can express "required for the model, not for the file"; only a
 
 from __future__ import annotations
 
+from pathlib import Path
+
 import yaml
 from science_model.entities import EvidenceLineEntity
+from science_model.frontmatter import split_frontmatter
 from science_model.propositions import PropositionEntity
 
 from science_tool.entities import render_entity_text
@@ -678,7 +681,7 @@ def read_existing_target(path: Path, entity: WorkbenchEntity) -> tuple[dict[str,
     try:
         with path.open("r", encoding="utf-8", newline="") as handle:
             current_text = handle.read()
-        frontmatter, body = _parse_existing_target_text(current_text)
+        frontmatter, body = split_frontmatter(current_text)
     except (OSError, ValueError, yaml.YAMLError) as exc:
         raise MalformedTargetError(f"malformed existing entity target {path}: {exc}") from exc
     if frontmatter.get("id") != expected_id or frontmatter.get("kind") != expected_kind:
@@ -732,9 +735,18 @@ from science_tool.dag.entity_frontmatter import (
 )
 ```
 
-Also delete `_render_workbench_entity_update` entirely — `render_update` replaces it — **move `_read_existing_target` (`:215`) and `_parse_existing_target_text` (`:211`) into the module** as `read_existing_target` (public, and now shared), and delete the local `WorkbenchEntity = PropositionEntity | EvidenceLineEntity` alias (`:34`) in favour of the imported one.
+Also delete `_render_workbench_entity_update` entirely — `render_update` replaces it — **move `_read_existing_target` (`:215`) into the module** as `read_existing_target` (public, and now shared). `_parse_existing_target_text` (`:211`) is a one-line wrapper around `split_frontmatter` whose only caller is the function being moved — **delete it** rather than moving it; the module calls `split_frontmatter` directly, and delete the local `WorkbenchEntity = PropositionEntity | EvidenceLineEntity` alias (`:34`) in favour of the imported one.
 
-`_read_existing_target` raised `WorkbenchApplyError`; `read_existing_target` raises `MalformedTargetError`. `_entity_edit`'s update branch must therefore catch and re-raise if any existing test asserts the old type — check with `rg -n "malformed existing entity target" science/tests` and decide from what it shows. Update the two `_render_workbench_entity_update(...)` call sites in `_entity_edit` to `render_update(...)`; the keyword arguments are identical.
+`_read_existing_target` raised `WorkbenchApplyError`; `read_existing_target` raises `MalformedTargetError`. **`_entity_edit` must catch and re-raise** — `test_workbench_apply.py:383`, `test_apply_workbench_rejects_malformed_existing_target_before_write`, catches `WorkbenchApplyError` explicitly and asserts on its message, so an uncaught `MalformedTargetError` fails it. In the update branch:
+
+```python
+    try:
+        frontmatter, body, current_text = read_existing_target(path, entity)
+    except MalformedTargetError as exc:
+        raise WorkbenchApplyError(str(exc)) from exc
+```
+
+The message text is preserved verbatim, so that test's `"malformed existing entity target" in str(exc)` assertion keeps holding. The compile path does **not** wrap: it has no `WorkbenchApplyError` contract, and `MalformedTargetError` is what its own inverted test asserts. Update the two `_render_workbench_entity_update(...)` call sites in `_entity_edit` to `render_update(...)`; the keyword arguments are identical.
 
 `_workbench_frontmatter_keys` raised `WorkbenchApplyError` for an unsupported kind; `owned_keys` raises `FrontmatterRenderError`. If any test asserts the former, keep it passing by having `WorkbenchApplyError` subclass nothing new — instead catch and re-raise at the one call site that needs the old type. Check with `rg -n "unsupported workbench entity kind" science/tests` before deciding; if nothing asserts it, no shim is needed.
 
@@ -840,6 +852,50 @@ def test_recompiling_preserves_an_authors_title_and_body(tmp_path) -> None:
     assert "Authored prose." in after
 ```
 
+```python
+@pytest.mark.parametrize(
+    "corruption",
+    [
+        pytest.param({"id": "question:wrong"}, id="wrong-id"),
+        pytest.param({"kind": "question"}, id="wrong-kind"),
+        pytest.param({"created": None}, id="missing-created"),
+    ],
+)
+def test_compile_refuses_a_PARSEABLE_but_inadmissible_destination(tmp_path, corruption) -> None:
+    # THE defect this admission rule exists for, and the one the two tests above CANNOT reach:
+    # a destination that parses fine but is not this entity's file, or has no dates.
+    # `render_update` overwrites id, kind, created and updated, so without `read_existing_target`
+    # running FIRST the file is repaired into validity and `certify_persisted` passes on a record
+    # that was never admissible. Malformed YAML does not prove this -- it raises during parsing
+    # even when the admission checks are skipped entirely.
+    import yaml
+
+    from science_tool.dag import workbench as wb
+    from science_tool.dag.entity_frontmatter import MalformedTargetError
+
+    (tmp_path / "science.yaml").write_text("name: t\n", encoding="utf-8")
+    workbench = wb.WorkbenchFile.model_validate(
+        {"patch": "p", "rows": [{"subject": "concept:a", "predicate": "affects",
+                                 "object": "concept:b", "patch": "p", "polarity": "unsigned"}]}
+    )
+    wb.compile_workbench(workbench, project_root=tmp_path, as_of=date(2026, 7, 27))
+
+    written = next((tmp_path / "entities").rglob("*.md"))
+    frontmatter, body = written.read_text(encoding="utf-8").split("---\n", 2)[1:]
+    corrupted = yaml.safe_load(frontmatter) | corruption
+    corrupted = {k: v for k, v in corrupted.items() if v is not None}  # None means "remove the key"
+    written.write_text(
+        "---\n" + yaml.safe_dump(corrupted, sort_keys=False, allow_unicode=True) + "---\n" + body,
+        encoding="utf-8",
+    )
+    before = written.read_bytes()
+
+    with pytest.raises(MalformedTargetError):
+        wb.compile_workbench(workbench, project_root=tmp_path, as_of=date(2026, 7, 28))
+
+    assert written.read_bytes() == before, "a refused destination was modified anyway"
+```
+
 - [ ] **Step 8: Run the tests to verify they pass**
 
 Run: `cd science && uv run --frozen pytest tests/test_workbench_writer_containment.py -q`
@@ -858,6 +914,8 @@ def test_malformed_existing_entity_is_REFUSED(tmp_path: Path) -> None:
     destroys an author's content exactly when something is already wrong with it -- and it
     disagreed with the apply path, which has always refused a malformed target.
     """
+    from science_tool.dag.entity_frontmatter import MalformedTargetError
+
     ...  # seeding unchanged from the original test, up to and including the malformed write
     prop_path.write_text("---\n: : bad yaml\n---\n", encoding="utf-8")
     before = prop_path.read_bytes()
@@ -1011,11 +1069,9 @@ def certify_persisted(entity: WorkbenchEntity, text: str, *, path: Path | None =
         ) from exc
 ```
 
-Imports to add at the top of the module:
+Import to add at the top of the module (`Path` is already there from Task 3):
 
 ```python
-from pathlib import Path
-
 from science_model.entity_schema import EntityValidationError, EntityValidator
 ```
 
@@ -1140,7 +1196,19 @@ allowlist. **`test_created_evidence_line_keeps_a_deliberate_false` is expected t
 `belief_eligible` defaults to `True`, so a deliberate `False` survives the flag. An earlier
 revision of this plan predicted the opposite and was wrong. **Revert.**
 
-- [ ] **Step 10: Mutation I — the format checker**
+- [ ] **Step 10: Mutation I2 — bypass the admission rule**
+
+In `workbench._write_entity_file`, replace the `read_existing_target(dest, entity)` call with a
+direct read: `existing_frontmatter, existing_body = split_frontmatter(dest.read_text(encoding="utf-8"))`,
+and pass `created=str(existing_frontmatter.get("created") or today)`.
+
+Expected: all three `test_compile_refuses_a_PARSEABLE_but_inadmissible_destination` cases FAIL — no
+exception is raised, because `render_update` overwrites `id`, `kind` and `created`, so the mapping
+`certify_persisted` sees is valid. `test_malformed_existing_entity_is_REFUSED` keeps PASSING under
+this mutation, since invalid YAML still raises during parsing — which is exactly why that test
+cannot stand in for this one. **Revert.**
+
+- [ ] **Step 11: Mutation I — the format checker**
 
 Remove `format_checker=Draft202012Validator.FORMAT_CHECKER` from `validate_persisted_base_shape`.
 Run: `cd science/model && uv run --frozen pytest tests/test_persisted_base_shape.py -q`
@@ -1149,9 +1217,9 @@ an annotation and `created="not-a-date"` produces zero errors. Every other test 
 green, which is exactly why this mutation is needed: without it the checker is load-bearing and
 untested. **Revert.**
 
-- [ ] **Step 11: Verify the tree is clean and both suites green**
+- [ ] **Step 12: Verify the tree is clean and both suites green**
 
-All ten mutations above (A–I, including G2) were reverted, and Task 5 adds no code — every test they exercise was written in Tasks 1–4.
+All eleven mutations above (A–I, including G2 and I2) were reverted, and Task 5 adds no code — every test they exercise was written in Tasks 1–4.
 
 Run: `git status --short`
 Expected: **empty**. Any remaining modification is an unreverted mutation; revert it before proceeding.
