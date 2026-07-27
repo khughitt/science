@@ -25,7 +25,9 @@ section, not silently assumed away.
 from __future__ import annotations
 
 import re
+import string
 from collections.abc import Iterator
+from dataclasses import dataclass
 
 _FENCE_RE = re.compile(r"^(?P<indent> *)(?P<fence>`{3,}|~{3,})(?P<info>[^\n]*)$")
 # An unbalanced single backtick in prose can pair, via this lazy `.+?` under
@@ -36,6 +38,20 @@ _FENCE_RE = re.compile(r"^(?P<indent> *)(?P<fence>`{3,}|~{3,})(?P<info>[^\n]*)$"
 _INLINE_CODE_RE = re.compile(r"(?P<ticks>`+)(?P<body>.+?)(?P=ticks)", re.DOTALL)
 _LIST_ITEM_RE = re.compile(r"^ {0,3}(?:[-*+]|\d{1,9}[.)])\s")
 _BLANK_RE = re.compile(r"^\s*$")
+_ESCAPABLE_PUNCTUATION = frozenset(string.punctuation)
+
+
+@dataclass(frozen=True)
+class _ParsedDestination:
+    destination: str | None
+    resume: int
+
+
+@dataclass(frozen=True)
+class _InlineWhitespace:
+    end: int
+    valid: bool
+    consumed: bool
 
 
 def _block_code_flags(text: str) -> list[bool]:
@@ -185,7 +201,7 @@ def _bracket_pairs(
             cursor += 1
             continue
 
-        if character == "\\":
+        if character == "\\" and _is_valid_escape(text, cursor, stop):
             escaped = True
             reference_indent = None
         elif character == "\n":
@@ -214,6 +230,44 @@ def _after_escape(index: int, stop: int) -> int:
     return min(index + 2, stop)
 
 
+def _is_valid_escape(text: str, index: int, stop: int) -> bool:
+    return index + 1 < stop and text[index + 1] in _ESCAPABLE_PUNCTUATION
+
+
+def _is_whitespace_or_control(character: str) -> bool:
+    return character.isspace() or ord(character) < 0x20 or ord(character) == 0x7F
+
+
+def _line_ending_width(text: str, index: int, stop: int) -> int:
+    if text[index] == "\n":
+        return 1
+    if text[index] != "\r":
+        return 0
+    return 2 if index + 1 < stop and text[index + 1] == "\n" else 1
+
+
+def _inline_whitespace(text: str, start: int, stop: int) -> _InlineWhitespace:
+    """Horizontal whitespace plus at most one CR/LF line ending."""
+    cursor = start
+    line_endings = 0
+    while cursor < stop:
+        character = text[cursor]
+        if character in " \t":
+            cursor += 1
+            continue
+        width = _line_ending_width(text, cursor, stop)
+        if width:
+            if line_endings:
+                return _InlineWhitespace(cursor, False, cursor > start)
+            line_endings += 1
+            cursor += width
+            continue
+        if _is_whitespace_or_control(character):
+            return _InlineWhitespace(cursor, False, cursor > start)
+        break
+    return _InlineWhitespace(cursor, True, cursor > start)
+
+
 def _angle_destination(
     text: str,
     start: int,
@@ -223,12 +277,17 @@ def _angle_destination(
     cursor = start + 1
     while cursor < stop:
         character = text[cursor]
-        if character == "\\":
+        if character == "\\" and _is_valid_escape(text, cursor, stop):
             cursor = _after_escape(cursor, stop)
             continue
         if character == ">":
             return text[start + 1 : cursor].strip(), cursor + 1, True
-        if character == "\n":
+        if (
+            character == "<"
+            or _line_ending_width(text, cursor, stop)
+            or (ord(character) < 0x20 and character != " ")
+            or ord(character) == 0x7F
+        ):
             break
         cursor += 1
     return text[start + 1 : cursor].strip(), cursor, False
@@ -238,29 +297,54 @@ def _title_end(text: str, start: int, stop: int) -> int | None:
     """Offset after one syntactically closed supported Markdown title."""
     delimiter = text[start]
     cursor = start
+    line_only_horizontal = False
     if delimiter in {'"', "'"}:
         cursor += 1
         while cursor < stop:
-            if text[cursor] == "\\":
+            if text[cursor] == "\\" and _is_valid_escape(text, cursor, stop):
                 cursor = _after_escape(cursor, stop)
+                line_only_horizontal = False
                 continue
             if text[cursor] == delimiter:
                 cursor += 1
                 break
+            width = _line_ending_width(text, cursor, stop)
+            if width:
+                if line_only_horizontal:
+                    return None
+                line_only_horizontal = True
+                cursor += width
+                continue
+            if _is_whitespace_or_control(text[cursor]) and text[cursor] not in " \t":
+                return None
+            if text[cursor] not in " \t":
+                line_only_horizontal = False
             cursor += 1
         else:
             return None
     elif delimiter == "(":
         cursor += 1
         while cursor < stop:
-            if text[cursor] == "\\":
+            if text[cursor] == "\\" and _is_valid_escape(text, cursor, stop):
                 cursor = _after_escape(cursor, stop)
+                line_only_horizontal = False
                 continue
             if text[cursor] == "(":
                 return None
             if text[cursor] == ")":
                 cursor += 1
                 break
+            width = _line_ending_width(text, cursor, stop)
+            if width:
+                if line_only_horizontal:
+                    return None
+                line_only_horizontal = True
+                cursor += width
+                continue
+            if _is_whitespace_or_control(text[cursor]) and text[cursor] not in " \t":
+                return None
+            if text[cursor] not in " \t":
+                line_only_horizontal = False
             cursor += 1
         else:
             return None
@@ -271,22 +355,24 @@ def _title_end(text: str, start: int, stop: int) -> int | None:
 
 def _inline_close_after_destination(text: str, start: int, stop: int) -> int | None:
     """Return the offset after an outer ``)`` following whitespace/title."""
-    cursor = start
-    while cursor < stop and text[cursor].isspace():
-        cursor += 1
+    whitespace = _inline_whitespace(text, start, stop)
+    if not whitespace.valid:
+        return None
+    cursor = whitespace.end
     if cursor >= stop:
         return None
     if text[cursor] == ")":
         return cursor + 1
-    if cursor == start:
+    if not whitespace.consumed:
         return None
 
     title_end = _title_end(text, cursor, stop)
     if title_end is None:
         return None
-    cursor = title_end
-    while cursor < stop and text[cursor].isspace():
-        cursor += 1
+    trailing = _inline_whitespace(text, title_end, stop)
+    if not trailing.valid:
+        return None
+    cursor = trailing.end
     return cursor + 1 if cursor < stop and text[cursor] == ")" else None
 
 
@@ -317,12 +403,26 @@ def _inline_destination(
     text: str,
     start: int,
     stop: int,
-) -> tuple[str, int] | None:
-    cursor = start
-    while cursor < stop and text[cursor].isspace():
-        cursor += 1
+) -> _ParsedDestination | None:
+    leading = _inline_whitespace(text, start, stop)
+    if not leading.valid:
+        return None
+    cursor = leading.end
     if cursor >= stop:
         return None
+    if text[cursor] == ")":
+        return _ParsedDestination(None, cursor + 1)
+
+    if leading.consumed and text[cursor] in {'"', "'", "("}:
+        title_end = _title_end(text, cursor, stop)
+        if title_end is not None:
+            trailing = _inline_whitespace(text, title_end, stop)
+            if (
+                trailing.valid
+                and trailing.end < stop
+                and text[trailing.end] == ")"
+            ):
+                return _ParsedDestination(None, trailing.end + 1)
 
     if text[cursor] == "<":
         destination, after_destination, complete = _angle_destination(
@@ -330,21 +430,30 @@ def _inline_destination(
             cursor,
             stop,
         )
-        if not destination:
-            return None
         if complete:
             close = _inline_close_after_destination(text, after_destination, stop)
             if close is not None:
-                return destination, close
-        return destination, after_destination
+                return _ParsedDestination(destination or None, close)
+        return _ParsedDestination(destination or None, after_destination)
 
     destination_start = cursor
     depth = 0
     while cursor < stop:
         character = text[cursor]
-        if character == "\\":
+        if character == "\\" and _is_valid_escape(text, cursor, stop):
             cursor = _after_escape(cursor, stop)
             continue
+        if _is_whitespace_or_control(character):
+            destination = text[destination_start:cursor]
+            if not destination:
+                return None
+            if depth == 0:
+                close = _inline_close_after_destination(text, cursor, stop)
+                return _ParsedDestination(
+                    destination,
+                    close if close is not None else cursor,
+                )
+            return _ParsedDestination(destination, cursor)
         if character == "(":
             depth += 1
             cursor += 1
@@ -352,27 +461,25 @@ def _inline_destination(
         if character == ")":
             if depth == 0:
                 destination = text[destination_start:cursor]
-                return (destination, cursor + 1) if destination else None
+                return (
+                    _ParsedDestination(destination, cursor + 1)
+                    if destination
+                    else _ParsedDestination(None, cursor + 1)
+                )
             depth -= 1
             cursor += 1
             continue
-        if character.isspace() and depth == 0:
-            destination = text[destination_start:cursor]
-            if not destination:
-                return None
-            close = _inline_close_after_destination(text, cursor, stop)
-            return destination, close if close is not None else cursor
         cursor += 1
 
     destination = text[destination_start:cursor]
-    return (destination, cursor) if destination else None
+    return _ParsedDestination(destination, cursor) if destination else None
 
 
 def _reference_destination(
     text: str,
     start: int,
     stop: int,
-) -> tuple[str, int] | None:
+) -> _ParsedDestination | None:
     cursor = start
     while cursor < stop and text[cursor] in " \t":
         cursor += 1
@@ -388,22 +495,22 @@ def _reference_destination(
             cursor,
             line_end,
         )
-        if not destination:
-            return None
         next_cursor = (
             _reference_resume_offset(text, after_destination, line_end)
             if complete
             else after_destination
         )
-        return destination, next_cursor
+        return _ParsedDestination(destination or None, next_cursor)
 
     destination_start = cursor
     depth = 0
     while cursor < line_end:
         character = text[cursor]
-        if character == "\\":
+        if character == "\\" and _is_valid_escape(text, cursor, line_end):
             cursor = _after_escape(cursor, line_end)
             continue
+        if _is_whitespace_or_control(character):
+            break
         if character == "(":
             depth += 1
             cursor += 1
@@ -414,13 +521,14 @@ def _reference_destination(
             depth -= 1
             cursor += 1
             continue
-        if character.isspace() and depth == 0:
-            break
         cursor += 1
     destination = text[destination_start:cursor]
     if not destination:
         return None
-    return destination, _reference_resume_offset(text, cursor, line_end)
+    return _ParsedDestination(
+        destination,
+        _reference_resume_offset(text, cursor, line_end),
+    )
 
 
 def iter_markdown_destinations(text: str) -> Iterator[str]:
@@ -433,17 +541,23 @@ def iter_markdown_destinations(text: str) -> Iterator[str]:
     It recognises inline links and images with balanced, escaped, or multiline
     labels; reference definitions indented by at most three spaces; angle
     destinations; and ordinary destinations with escaped or balanced
-    parentheses. Escaped opening brackets and every existing code mask are
-    literal and therefore ignored.
+    parentheses. Ordinary destinations stop at whitespace/control regardless of
+    parenthesis depth; angle destinations allow spaces but reject controls, line
+    endings, and unescaped ``<``. Only ASCII punctuation is backslash-escapable.
+    Escaped opening brackets and every existing code mask are literal and
+    therefore ignored.
 
     Reference uses are not resolved because their definition is scanned
     directly. A reference tail is consumed only when it is whitespace or one
     syntactically closed double-quoted, single-quoted, or parenthesized title
     followed by whitespace; parentheses inside the last form must be escaped.
     Label openers remain scan territory, while parsed destination and valid-title
-    ranges are skipped. Continuation-line reference titles, autolinks, and raw
-    HTML are outside this interface. Malformed live syntax yields any safely
-    readable destination prefix so callers can fail closed.
+    ranges are skipped. Inline component whitespace is horizontal plus at most
+    one line ending, titles may span nonblank lines, and valid empty/omitted
+    destinations still suppress their syntax and title. Continuation-line
+    reference titles, autolinks, and raw HTML are outside this interface.
+    Malformed live syntax yields any safely readable destination prefix so
+    callers can fail closed.
     """
     for span_start, span_stop in prose_spans(text):
         bracket_pairs, reference_openers = _bracket_pairs(
@@ -465,7 +579,7 @@ def iter_markdown_destinations(text: str) -> Iterator[str]:
                 continue
 
             after_label = end + 1
-            parsed: tuple[str, int] | None = None
+            parsed: _ParsedDestination | None = None
             if (
                 cursor in reference_openers
                 and after_label < span_stop
@@ -478,11 +592,11 @@ def iter_markdown_destinations(text: str) -> Iterator[str]:
             if parsed is None:
                 cursor += 1
                 continue
-            destination, next_cursor = parsed
-            yield destination
+            if parsed.destination is not None:
+                yield parsed.destination
             suppressed_ranges[after_label] = max(
                 suppressed_ranges.get(after_label, after_label + 1),
-                next_cursor,
+                parsed.resume,
             )
             # Labels remain active scan territory: in CommonMark an inner link
             # makes an enclosing link opener inactive, and the migration gate

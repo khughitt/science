@@ -462,6 +462,129 @@ def test_apply_refuses_nested_link_inside_exempt_outer_label_without_writing(
     assert not (tasks_dir / JOURNAL).exists()
 
 
+@pytest.mark.parametrize("kind", ["inline", "reference"])
+@pytest.mark.parametrize(
+    "base_destination",
+    ["https://example.test", "/root", "#anchor"],
+)
+def test_apply_refuses_live_tail_after_invalid_balanced_destination_without_writing(
+    tmp_path: Path,
+    kind: str,
+    base_destination: str,
+) -> None:
+    migrate = _migrate_module()
+    tasks_dir = tmp_path / "tasks"
+    tail = f"{base_destination}(part [live](relative.md))"
+    description = f"[outer]({tail})" if kind == "inline" else f"[ref]: {tail}"
+    source = _write_legacy(
+        tasks_dir,
+        [_task("t001", "Invalid destination", description=description)],
+    )
+    before = source.read_bytes()
+
+    with pytest.raises(
+        migrate.MigrationRefused,
+        match=r"t001.*relative Markdown destination.*relative\.md",
+    ):
+        migrate.apply_migration(tasks_dir, today=TODAY)
+
+    assert source.read_bytes() == before
+    assert not (tasks_dir / "active").exists()
+    assert not (tasks_dir / "done").exists()
+    assert not (tasks_dir / JOURNAL).exists()
+
+
+@pytest.mark.parametrize("kind", ["inline", "reference"])
+def test_apply_refuses_live_tail_after_invalid_angle_destination_without_writing(
+    tmp_path: Path,
+    kind: str,
+) -> None:
+    migrate = _migrate_module()
+    tasks_dir = tmp_path / "tasks"
+    tail = "<https://example.test<bad [live](angle-relative.md)>"
+    description = f"[outer]({tail})" if kind == "inline" else f"[ref]: {tail}"
+    source = _write_legacy(
+        tasks_dir,
+        [_task("t001", "Invalid angle destination", description=description)],
+    )
+    before = source.read_bytes()
+
+    with pytest.raises(
+        migrate.MigrationRefused,
+        match=r"t001.*relative Markdown destination.*angle-relative\.md",
+    ):
+        migrate.apply_migration(tasks_dir, today=TODAY)
+
+    assert source.read_bytes() == before
+    assert not (tasks_dir / "active").exists()
+    assert not (tasks_dir / "done").exists()
+    assert not (tasks_dir / JOURNAL).exists()
+
+
+@pytest.mark.parametrize(("title_open", "title_close"), [('"', '"'), ("(", ")")])
+@pytest.mark.parametrize(
+    "outer_destination",
+    ["https://example.test", "/root.md", "#anchor"],
+)
+def test_apply_refuses_live_link_after_blank_line_in_inline_title_without_writing(
+    tmp_path: Path,
+    title_open: str,
+    title_close: str,
+    outer_destination: str,
+) -> None:
+    migrate = _migrate_module()
+    tasks_dir = tmp_path / "tasks"
+    description = (
+        f"[outer]({outer_destination} {title_open}line one\n\n"
+        f"[live](multiline-relative.md){title_close})"
+    )
+    source = _write_legacy(
+        tasks_dir,
+        [_task("t001", "Invalid multiline title", description=description)],
+    )
+    before = source.read_bytes()
+
+    with pytest.raises(
+        migrate.MigrationRefused,
+        match=r"t001.*relative Markdown destination.*multiline-relative\.md",
+    ):
+        migrate.apply_migration(tasks_dir, today=TODAY)
+
+    assert source.read_bytes() == before
+    assert not (tasks_dir / "active").exists()
+    assert not (tasks_dir / "done").exists()
+    assert not (tasks_dir / JOURNAL).exists()
+
+
+@pytest.mark.parametrize(
+    "description",
+    [
+        "[x]()",
+        '[x]( "title [literal](hidden.md)")',
+        '[x](<> "title [literal](hidden.md)")',
+    ],
+)
+def test_plan_allows_empty_destination_with_valid_title_without_writing(
+    tmp_path: Path,
+    description: str,
+) -> None:
+    migrate = _migrate_module()
+    tasks_dir = tmp_path / "tasks"
+    source = _write_legacy(
+        tasks_dir,
+        [_task("t001", "Empty destination", description=description)],
+    )
+    before = source.read_bytes()
+
+    plan = migrate.plan_migration(tasks_dir, today=TODAY)
+
+    assert plan.refusals == []
+    assert source.read_bytes() == before
+    assert not (tasks_dir / "active").exists()
+    assert not (tasks_dir / "done").exists()
+    assert not (tasks_dir / JOURNAL).exists()
+
+
 @pytest.mark.parametrize("status", ["active", "done"])
 def test_apply_refuses_relative_markdown_destination_and_preserves_source(
     tmp_path: Path,

@@ -232,6 +232,116 @@ def test_nested_label_scan_excludes_outer_destination_and_valid_title() -> None:
     ]
 
 
+@pytest.mark.parametrize("kind", ["inline", "reference"])
+@pytest.mark.parametrize(
+    "base_destination",
+    ["https://example.test", "/root", "#anchor"],
+)
+def test_whitespace_inside_balanced_destination_exposes_live_tail(
+    kind: str,
+    base_destination: str,
+) -> None:
+    destination = f"{base_destination}(part"
+    tail = f"{destination} [live](relative.md))"
+    text = f"[outer]({tail})" if kind == "inline" else f"[ref]: {tail}"
+
+    assert list(markdown_scan.iter_markdown_destinations(text)) == [
+        destination,
+        "relative.md",
+    ]
+
+
+@pytest.mark.parametrize("kind", ["inline", "reference"])
+def test_invalid_angle_destination_exposes_live_tail(kind: str) -> None:
+    tail = "<https://example.test<bad [live](angle-relative.md)>"
+    text = f"[outer]({tail})" if kind == "inline" else f"[ref]: {tail}"
+
+    assert list(markdown_scan.iter_markdown_destinations(text)) == [
+        "https://example.test",
+        "angle-relative.md",
+    ]
+
+
+@pytest.mark.parametrize("separator", ["\x01", "\\\n"])
+def test_control_or_backslash_newline_terminates_ordinary_destination(
+    separator: str,
+) -> None:
+    text = (
+        "[outer](https://example.test(part"
+        f"{separator}[live](control-relative.md)))"
+    )
+
+    assert list(markdown_scan.iter_markdown_destinations(text)) == [
+        "https://example.test(part" + ("\\" if separator.endswith("\n") else ""),
+        "control-relative.md",
+    ]
+
+
+def test_backslash_newline_terminates_angle_destination() -> None:
+    text = (
+        "[outer](<https://example.test\\\n"
+        "[live](angle-newline-relative.md)>)"
+    )
+
+    assert list(markdown_scan.iter_markdown_destinations(text)) == [
+        "https://example.test\\",
+        "angle-newline-relative.md",
+    ]
+
+
+@pytest.mark.parametrize(
+    ("title_open", "title_close"),
+    [('"', '"'), ("(", ")")],
+)
+@pytest.mark.parametrize(
+    "outer_destination",
+    ["https://example.test", "/root.md", "#anchor"],
+)
+def test_blank_line_in_inline_title_exposes_live_tail(
+    title_open: str,
+    title_close: str,
+    outer_destination: str,
+) -> None:
+    text = (
+        f"[outer]({outer_destination} {title_open}line one\n\n"
+        f"[live](multiline-relative.md){title_close})"
+    )
+
+    assert list(markdown_scan.iter_markdown_destinations(text)) == [
+        outer_destination,
+        "multiline-relative.md",
+    ]
+
+
+@pytest.mark.parametrize(
+    "title",
+    [
+        '"line one\n[literal](hidden.md)"',
+        "(line one\n[literal]\\(hidden.md\\))",
+    ],
+)
+def test_one_line_ending_between_inline_components_and_inside_title_is_valid(
+    title: str,
+) -> None:
+    text = f"[outer](\nhttps://example.test\n{title}\n)"
+
+    assert list(markdown_scan.iter_markdown_destinations(text)) == [
+        "https://example.test",
+    ]
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "[x]()",
+        '[x]( "title [literal](hidden.md)")',
+        '[x](<> "title [literal](hidden.md)")',
+    ],
+)
+def test_empty_or_omitted_inline_destination_suppresses_valid_title(text: str) -> None:
+    assert list(markdown_scan.iter_markdown_destinations(text)) == []
+
+
 def test_markdown_destinations_ignore_escaped_literals_and_code() -> None:
     text = (
         r"\[literal](escaped-literal.md)" "\n"
@@ -297,6 +407,21 @@ def test_deeply_nested_link_labels_preserve_linear_work_and_inner_detection() ->
         "nested.md",
     ]
     assert text.indexed_reads <= 8 * len(text)
+
+
+def test_many_invalid_destination_tails_preserve_linear_work() -> None:
+    value = " ".join(
+        f"[outer](https://example.test(part [live](relative-{index}.md)))"
+        for index in range(64)
+    )
+    text = _CountingText(value)
+
+    destinations = list(markdown_scan.iter_markdown_destinations(text))
+
+    assert destinations[1::2] == [
+        f"relative-{index}.md" for index in range(64)
+    ]
+    assert text.indexed_reads <= 10 * len(text)
 
 
 def test_scans_this_repositorys_own_plan_corpus() -> None:
