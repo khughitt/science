@@ -262,3 +262,34 @@ implementation. **Status: addressed.** Resolution: "Shipped
 prereg.prose-path-nondurable (WARN, ungated): a frozen pre-registration naming
 a slash-containing repo-relative path in prose that git will not preserve is
 now reported."
+
+## Post-certification changes
+
+A final whole-branch review returned a set of fixes, applied after the
+certification run recorded above. Every one of them is output-neutral —
+docstrings, comments, prose documentation, and one refactor (`_prose_message`'s
+implicit `else` replaced with a dict lookup, proven output-identical by the
+full `test_checks_prereg_vehicles.py` suite passing unchanged) — so the
+measured **11 / 144 / 10 / 16** above remains an accurate record of what
+merges.
+
+One item from the review was **deliberately not fixed**: `_prose_message`'s
+remedy sentence says "Commit the file," although at least four of the sixteen
+certified findings (the `results/heldout-taxa-benchmark` family and others
+named as output locations, per the Findings table above) name directories, not
+files. Fixing it would change a user-visible message string after
+certification, which would make this document a record of something other
+than what ships. It is deferred, to be fixed together with a re-certification
+rather than folded into a branch whose entire premise is that its shipped
+output was measured.
+
+Two feedback entries were filed during the review, both `project: science`:
+
+- `fb-2026-07-27-010` (`check:prereg.vehicle-undeclared`) — `_is_tracked`
+  reads a git failure as "not tracked," producing a gated
+  `prereg.vehicle-untracked` ERROR from an undetermined answer. Pre-existing,
+  out of this branch's scope; the module's new `_git_query` tri-state helper
+  is the fix, unapplied to that caller.
+- `fb-2026-07-27-011` (`command:validate`) — the `text_default.txt`
+  reviewer-gating snapshot is stale on `main` (`68 → 69` included checks);
+  origin unidentified, pre-existing and unrelated to this branch.

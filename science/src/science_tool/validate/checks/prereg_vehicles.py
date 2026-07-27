@@ -70,12 +70,26 @@ def _git_ok(root: Path, *args: str) -> bool:
 def _git_query(root: Path, *args: str) -> bool | None:
     """git's answer, or None when git did not answer at all.
 
-    `_git_ok` above collapses every non-zero exit into False, which is right
-    for its two callers because they act only on a positive. It is WRONG for a
-    rule whose finding asserts that git demonstrably will not preserve a path:
-    `check-ignore` and `ls-files --error-unmatch` both exit 128 on failure (an
-    out-of-worktree path, a broken repository), and reading that as "no" would
-    manufacture findings out of errors.
+    `_git_ok` above collapses every non-zero exit into False. That is right
+    for `_is_ignored`, which is consumed positively (`if _is_ignored(...)` at
+    the declared-vehicle callsite): a git error reads as "not ignored", and
+    the check falls through to the tracked query rather than firing. It is
+    WRONG for `_is_tracked`, which is consumed NEGATIVELY (`if not
+    _is_tracked(...)`): there, `_git_ok`'s collapse turns a git error into
+    "not tracked", which fires the gated `prereg.vehicle-untracked` ERROR from
+    an undetermined answer rather than a real one. That is a known
+    pre-existing fail-open in `_is_tracked`, left unchanged here — this branch
+    deliberately scopes declared-vehicle rule changes out, so fixing it would
+    alter certified corpus behaviour outside this change's boundary. It is
+    filed separately (see the module's incident trail).
+
+    This function exists because the new prose rule cannot inherit either
+    caller's excuse: `check-ignore` and `ls-files --error-unmatch` both exit
+    128 on failure (an out-of-worktree path, a broken repository), and the
+    prose rule's finding asserts that git demonstrably will not preserve a
+    path. Reading a 128 as "no" would manufacture that assertion out of an
+    error, so the prose rule needs the tri-state answer below rather than
+    `_git_ok`'s collapse.
     """
     completed = subprocess.run(["git", *args], cwd=root, capture_output=True)
     if completed.returncode == 0:
@@ -153,6 +167,11 @@ def _normalize(token: str) -> str | None:
     * no `/` after normalization -- the design puts root-level paths out of
       scope, and the GRAMMAR CANNOT ENFORCE THAT: `./input.parquet` contains a
       `/` when it is matched and denotes a root-level path once normalized.
+
+    The `part != "."` filter below is belt-and-braces, not load-bearing:
+    `PurePosixPath` already collapses `.` segments on its own (`.parts` never
+    contains one), as stated above. The filter is kept anyway because removing
+    it is a behaviour-adjacent edit on a hot path for no measurable gain.
     """
     candidate = token.strip()
     if not candidate:
@@ -221,7 +240,7 @@ def _prose_message(relative: str, candidate: str, state: str) -> str:
     directory. So the loss language sits behind the author's "if", and the
     message never calls the path a substrate or a vehicle.
     """
-    state_text = "gitignored" if state == "ignored" else "not tracked by git"
+    state_text = {"ignored": "gitignored", "untracked": "not tracked by git"}[state]
     return (
         f"{relative} is frozen and names {candidate!r} in prose, which is {state_text}, "
         f"so git will not preserve it. If this document's claims depend on {candidate!r}, "
@@ -241,6 +260,21 @@ def _check_prose_paths(
     body: str,
     entries: list[Any],
 ) -> Iterator[Result]:
+    """Yield `prereg.prose-path-nondurable` for each non-durable path this document names in prose.
+
+    Two suppressions here are not self-evident from the code:
+
+    * A candidate already present in `entries` (a declared `vehicles[].path`,
+      after normalization) is skipped. That path is the declared-vehicle
+      rules' business; reporting it here too would mean one file, two rules.
+    * A candidate that does not resolve under the project root (`.exists()`
+      is False) is skipped rather than reported as, say, "destroyed" or
+      "renamed". Those are indistinguishable from "illustrative" or "a future
+      output path stated in advance" from outside the document, and this rule
+      refuses to guess. The honest consequence: once a non-durable path named
+      here has actually been lost, this rule goes quiet about it. It is a
+      hazard detector, never a loss detector.
+    """
     declared: set[str] = set()
     for entry in entries:
         if not isinstance(entry, dict) or not entry.get("path"):

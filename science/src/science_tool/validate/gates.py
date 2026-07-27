@@ -69,9 +69,9 @@ _TIER_RULES: dict[str, frozenset[str]] = {
             "hypothesis.unbacked-inverse",
             #
             # A pre-registration whose vehicle is not durable is not frozen (fb-2026-07-11-024).
-            # These four gate from the start, which is safe because the instrument was certified
+            # These five gate from the start, which is safe because the instrument was certified
             # against the corpus before being gated: the only projects holding pre-registrations
-            # produce ZERO findings on all four rules today, so gating them fails no existing
+            # produce ZERO findings on all five rules today, so gating them fails no existing
             # build. They are ungated only by a project that acquires the defect.
             "prereg.vehicle-gitignored",
             "prereg.vehicle-untracked",

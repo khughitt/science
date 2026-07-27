@@ -121,6 +121,14 @@ For each pre-registration whose `frozen_because(...)` is not `None`:
    (`<!-- … -->`). A transcript or command example that happens to contain an
    ignored path is illustration, not commitment; a commented-out path is body
    text but is not something the rendered document says at all.
+
+   **Known limitation, not closed here:** this rationale applies equally to
+   CommonMark's other code-block form — a 4-space-indented block — which
+   `_strip_fenced_blocks` does not handle. Verified: a 4-space-indented line
+   containing a backticked path IS mined as a candidate today. Measured
+   impact is zero — no natural-systems pre-registration has a 4-space-indented
+   line containing a backticked path — so this is recorded as a limitation
+   rather than fixed as a code change.
 4. **Extract inline code spans** with ``` `([^`\n]+)` ```, then accept a span
    only when its content, after stripping surrounding whitespace, matches the
    path grammar **in full**:
@@ -500,6 +508,12 @@ any document and the snapshots are expected to be byte-identical. A snapshot
 diff is therefore a signal that something unintended changed, not a routine
 regeneration — investigate it rather than running
 `science/scripts/update-validate-snapshots.py`.
+
+That expectation held for `json_default.json`, which this branch's own
+findings feed. It did **not** hold for `text_default.txt`, on a line
+unconnected to this rule (`68 → 69` included checks) — see the results
+document's own Snapshots section for the investigation showing that
+divergence is pre-existing on the branch base and unrelated to this change.
 
 ## Filing
 
