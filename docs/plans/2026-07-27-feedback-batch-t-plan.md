@@ -2,7 +2,8 @@
 
 > **For agentic workers:** implement task-by-task. Steps use checkbox (`- [ ]`) syntax.
 
-**Goal:** Close the five execution-geometry filings plus one positive, by
+**Goal:** Close the four execution-geometry gap filings, one guidance filing,
+and one positive, by
 shipping a cost-gate doctrine leaf, a pre-registration Cost Gate section, and
 one validate check that can actually fail.
 
@@ -578,10 +579,10 @@ Run the science suite with an explicit long timeout (it exceeds 120 s).
   corpus uptake), and every behavior change downstream consumers will see.
 
 - [ ] **Step 3: Close the filings** with detailed resolutions:
-  `fb-2026-07-13-001`, `fb-2026-07-13-002`, `fb-2026-07-12-014`,
-  `fb-2026-07-25-009`, `fb-2026-07-25-010` (gaps) and `fb-2026-07-25-011`
-  (positive — resolution records where the confirmed pattern is now written
-  down).
+  `fb-2026-07-13-001`, `fb-2026-07-13-002`, `fb-2026-07-25-009`, and
+  `fb-2026-07-25-010` (gaps); `fb-2026-07-12-014` (guidance); and
+  `fb-2026-07-25-011` (positive — resolution records where the confirmed
+  pattern is now written down).
 
 - [ ] **Step 4: Commit, then hand back for the merge decision.** Do not merge
   without confirmation.
@@ -589,7 +590,8 @@ Run the science suite with an explicit long timeout (it exceeds 120 s).
 ## Self-review
 
 - Every design ruling has a task: D1→T1, D2→T3, D3→T4/T5/T6, D4→T7 step 2.
-- All six filings are closed in T7 step 3, including the positive.
+- All six filings are closed in T7 step 3, including the guidance and positive
+  filings.
 - Types are consistent: `frozen_because` is defined in T2 and consumed in T5;
   section key `cost-gate` is defined in T3 and parsed in T5.
 - No task depends on an artifact a later task creates. T5 depends on T2 and T3;

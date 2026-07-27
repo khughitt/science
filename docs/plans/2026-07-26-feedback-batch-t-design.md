@@ -273,7 +273,7 @@ different thing from a gap.
    `validate/checks/prereg_vehicles.py`'s neighbourhood, with `_frozen_because`
    extracted to a shared helper (two checks now need it — the Batch S shared-
    resolver pattern), certified by reading all 5 natural-systems findings.
-4. **Close the filings** — 5 gaps + 1 positive.
+4. **Close the filings** — 4 gaps + 1 guidance + 1 positive.
 
 ## Exclusions
 

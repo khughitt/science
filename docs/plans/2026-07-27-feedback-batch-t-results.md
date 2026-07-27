@@ -319,11 +319,12 @@ the corpus has materially adopted Cost Gates and can falsify it.
 
 Downstream toolkit consumers will see these changes:
 
-- `study-design-cost-gate-certification` is a registered skill and generated
-  Codex skill. It teaches frozen geometry, the monotonicity tell, p90 over at
-  least five repeats at one geometry, steady-state/target-concurrency
-  measurement, schedule calibration domains, bottleneck-first remedy ladders,
-  and the positive verdict-blind-gate pattern.
+- `study-design-cost-gate-certification` is a registered canonical skill,
+  discoverable through `skills/INDEX.md` and routed to agents. It teaches
+  frozen geometry, the monotonicity tell, p90 over at least five repeats at one
+  geometry, steady-state/target-concurrency measurement, schedule calibration
+  domains, bottleneck-first remedy ladders, and the positive verdict-blind-gate
+  pattern.
 - `skills/study-design/estimator-certification.md` now routes its “price the
   design” step to the cost doctrine, and `skills/pipelines/SKILL.md` routes
   compile/contention work there without duplicating the doctrine.
@@ -331,8 +332,8 @@ Downstream toolkit consumers will see these changes:
   `cost-gate` section, headed `Cost Gate (execution geometry)`. It is
   `required: false`: analyses with no cost or schedule decision may delete it.
   Users who keep it get explicit rows for target geometry, calibration domain,
-  statistic, repeats, steady state/concurrency, transfer, invalidation, and the
-  resulting budget or schedule decision.
+  statistic (including repeat guidance), steady state, monotonicity, bottleneck
+  profile, transfer, and invalidation.
 - `science validate` now loads `prereg.schedule-calibration-domain`. For a
   frozen pre-registration whose content declares burn-in, thinning, R-hat, or
   ESS, it emits an ungated **WARN** when the canonical Cost Gate is absent or
