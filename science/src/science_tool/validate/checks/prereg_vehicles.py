@@ -191,6 +191,27 @@ def _candidate_paths(body: str) -> list[str]:
     return found
 
 
+def _nondurable_state(root: Path, relative: str) -> str | None:
+    """'ignored' or 'untracked', or None when durable or undeterminable.
+
+    Ignored is asked first because it is the stronger statement. Note that
+    `git check-ignore` suppresses paths git considers tracked, so an ignored
+    directory holding a force-added file answers "not ignored" here and is then
+    called durable by the tracked query below. That composition is deliberate:
+    it agrees with `_is_ignored` above, so the two rules can never disagree
+    about one path, and under-reporting is the right error for an advisory rule.
+    """
+    ignored = _git_query(root, "check-ignore", "-q", "--", relative)
+    if ignored is None:
+        return None
+    if ignored:
+        return "ignored"
+    matched = _git_query(root, "ls-files", "--error-unmatch", "--", relative)
+    if matched is None or matched:
+        return None
+    return "untracked"
+
+
 @Check(section="discussion documents...", order=13)
 def check_prereg_vehicles(ctx: ValidateContext) -> Iterator[Result]:
     entities_root = ctx.project_root / resolve_path_policy("pre-registration").root

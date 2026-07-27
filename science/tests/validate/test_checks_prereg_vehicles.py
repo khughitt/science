@@ -505,3 +505,108 @@ def test_candidate_paths_deduplicates_preserving_first_appearance() -> None:
     body = "`b/two.json` then `a/one.json` then `b/two.json`"
 
     assert _candidate_paths(body) == ["b/two.json", "a/one.json"]
+
+
+def test_nondurable_state_reports_an_ignored_file(project: Path) -> None:
+    from science_tool.validate.checks.prereg_vehicles import _nondurable_state
+
+    project.joinpath(".gitignore").write_text("build/\n", encoding="utf-8")
+    _write_vehicle(project, "build/a.json")
+
+    assert _nondurable_state(project, "build/a.json") == "ignored"
+
+
+def test_nondurable_state_reports_an_untracked_file(project: Path) -> None:
+    from science_tool.validate.checks.prereg_vehicles import _nondurable_state
+
+    _write_vehicle(project, "inputs/a.json")
+
+    assert _nondurable_state(project, "inputs/a.json") == "untracked"
+
+
+def test_nondurable_state_is_silent_for_a_tracked_file(project: Path) -> None:
+    from science_tool.validate.checks.prereg_vehicles import _nondurable_state
+
+    _write_vehicle(project, "inputs/a.json")
+    _git(project, "add", "inputs/a.json")
+    _git(project, "commit", "-qm", "add")
+
+    assert _nondurable_state(project, "inputs/a.json") is None
+
+
+def test_nondurable_state_treats_a_directory_with_a_tracked_descendant_as_durable(
+    project: Path,
+) -> None:
+    """`ls-files --error-unmatch` is a pathspec query, so one command answers
+    both "is this file tracked" and "does this directory hold a tracked file"."""
+    from science_tool.validate.checks.prereg_vehicles import _nondurable_state
+
+    _write_vehicle(project, "inputs/a.json")
+    _git(project, "add", "inputs/a.json")
+    _git(project, "commit", "-qm", "add")
+
+    assert _nondurable_state(project, "inputs") is None
+
+
+def test_nondurable_state_reports_a_directory_with_no_tracked_descendant(
+    project: Path,
+) -> None:
+    from science_tool.validate.checks.prereg_vehicles import _nondurable_state
+
+    _write_vehicle(project, "inputs/a.json")
+
+    assert _nondurable_state(project, "inputs") == "untracked"
+
+
+def test_an_ignored_directory_holding_a_force_added_file_is_treated_as_durable(
+    project: Path,
+) -> None:
+    """Pins the adopted composition, which is emergent rather than written.
+
+    `git check-ignore` suppresses paths git considers tracked, so an ignored
+    directory holding a force-added file exits 1 (not ignored) under the
+    default query -- `--no-index` would exit 0 -- and falls through to the
+    tracked query, which matches the force-added file. Adopted deliberately:
+    it keeps this rule in agreement with `_is_ignored` in the declared-vehicle
+    rules, and under-reporting is the right error for an advisory rule. Verified
+    against natural-systems `data/processed/arxiv`.
+    """
+    from science_tool.validate.checks.prereg_vehicles import _nondurable_state
+
+    project.joinpath(".gitignore").write_text("build/\n", encoding="utf-8")
+    _write_vehicle(project, "build/kept.json")
+    _git(project, "add", "-f", "build/kept.json")
+    _git(project, "commit", "-qm", "force-add")
+
+    assert _nondurable_state(project, "build") is None
+
+
+def test_nondurable_state_is_silent_when_the_ignore_query_fails(
+    project: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """First query fails: a git failure must never become a finding."""
+    from science_tool.validate.checks import prereg_vehicles
+
+    monkeypatch.setattr(prereg_vehicles, "_git_query", lambda *args, **kwargs: None)
+
+    assert prereg_vehicles._nondurable_state(project, "inputs/a.json") is None
+
+
+def test_nondurable_state_is_silent_when_the_tracked_query_fails(
+    project: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """SECOND query fails, which a blanket `lambda: None` never reaches.
+
+    Without this arm the `matched is None` branch is untested: the function
+    short-circuits at `check-ignore`, so an implementation written as a bare
+    `if matched:` would pass the whole suite while silently reporting every
+    unverifiable path as untracked.
+    """
+    from science_tool.validate.checks import prereg_vehicles
+
+    def fake_query(root: Path, *args: str) -> bool | None:
+        return False if args[0] == "check-ignore" else None
+
+    monkeypatch.setattr(prereg_vehicles, "_git_query", fake_query)
+
+    assert prereg_vehicles._nondurable_state(project, "inputs/a.json") is None
