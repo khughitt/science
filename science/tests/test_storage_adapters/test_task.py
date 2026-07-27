@@ -1,4 +1,4 @@
-"""Tests for TaskAdapter — wraps the existing task DSL parser."""
+"""Tests for TaskAdapter — strict-YAML active files plus DSL done ledgers."""
 
 from __future__ import annotations
 
