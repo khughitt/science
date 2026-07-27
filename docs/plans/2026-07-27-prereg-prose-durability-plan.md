@@ -1,0 +1,1096 @@
+# `prereg.prose-path-nondurable` Implementation Plan
+
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+
+**Goal:** Report, as an ungated WARN, when a frozen pre-registration names a
+slash-containing repo-relative path in prose that resolves to a real file or
+directory git will not preserve.
+
+**Architecture:** Four pure-ish helpers plus one integration point, all added to
+the existing `validate/checks/prereg_vehicles.py`. Text extraction narrows a
+document's inline code spans to candidate paths; a tri-state git wrapper
+answers *ignored* / *untracked* / *could not determine*; the check yields one
+WARN per `(document, path)`. No existing rule changes behaviour.
+
+**Tech Stack:** Python 3.13, pydantic-free plain stdlib (`re`, `subprocess`,
+`pathlib`), pytest with real `git init` repositories in `tmp_path`.
+
+**Design:** `docs/plans/2026-07-27-prereg-prose-durability-design.md`. Read it
+before starting. Where this plan and the design disagree, the design wins and
+the plan is the bug.
+
+## Global Constraints
+
+- **Rule name is exactly `prereg.prose-path-nondurable`.** Not `vehicle-`
+  prefixed. It is a public contract (JSON output, acceptance entries,
+  downstream docs).
+- **Severity is `Severity.WARN`, and the rule name is added to NO tier in
+  `gates.py`.** Adding it to a tier is a plan violation.
+- **The message must never assert the path is a substrate or a vehicle.** It
+  reports a durability fact and conditions everything else on *"if this
+  document's claims depend on it"*.
+- **Never read a git failure as a negative answer.** Exit 0 and exit 1 are
+  answers; anything else means *not determined* and produces no finding.
+- **No existing test may change.** The only permitted edit to an existing test
+  is the one added assertion in Task 5.
+- Working directory for all commands: `science/` inside the worktree
+  (`.worktrees/prereg-prose-durability/science`).
+- Test command: `uv run --frozen pytest <path> -q`.
+- Commit style: conventional commits. **No AI-attribution trailer or footer.**
+
+## File Structure
+
+| File | Responsibility |
+|---|---|
+| `science/src/science_tool/validate/checks/prereg_vehicles.py` | *(modify)* all new helpers and the integration point. The rule belongs beside the durability doctrine it completes; the file is ~180 lines and stays readable. |
+| `science/tests/validate/test_checks_prereg_vehicles.py` | *(modify)* all new tests, appended. Existing tests untouched except Task 5's single added assertion. |
+| `science/src/science_tool/validate/gates.py` | *(modify)* comment only — records that the rule is deliberately absent, and why. |
+| `docs/plans/2026-07-27-prereg-prose-durability-results.md` | *(create)* corpus certification results. |
+
+---
+
+### Task 1: Tri-state git wrapper
+
+The existing `_git_ok` collapses every non-zero exit into `False`. Reusing it
+would read a git failure as "not tracked" and manufacture a finding out of an
+error. Verified exit codes: `check-ignore -q` and `ls-files --error-unmatch`
+both return **0** (yes), **1** (no), **128** (failure, e.g. a path outside the
+worktree).
+
+**Files:**
+- Modify: `science/src/science_tool/validate/checks/prereg_vehicles.py`
+- Test: `science/tests/validate/test_checks_prereg_vehicles.py`
+
+**Interfaces:**
+- Consumes: nothing.
+- Produces: `_git_query(root: Path, *args: str) -> bool | None` — `True` on
+  exit 0, `False` on exit 1, `None` on any other exit.
+
+- [ ] **Step 1: Write the failing tests**
+
+Append to `science/tests/validate/test_checks_prereg_vehicles.py`:
+
+```python
+def test_git_query_maps_zero_to_true(project: Path) -> None:
+    from science_tool.validate.checks.prereg_vehicles import _git_query
+
+    project.joinpath(".gitignore").write_text("build/\n", encoding="utf-8")
+    _write_vehicle(project, "build/a.json")
+
+    assert _git_query(project, "check-ignore", "-q", "--", "build/a.json") is True
+
+
+def test_git_query_maps_one_to_false(project: Path) -> None:
+    from science_tool.validate.checks.prereg_vehicles import _git_query
+
+    _write_vehicle(project, "inputs/a.json")
+
+    assert _git_query(project, "check-ignore", "-q", "--", "inputs/a.json") is False
+
+
+def test_git_query_maps_any_other_exit_to_none(project: Path) -> None:
+    """A git failure is not a negative answer.
+
+    `_git_ok` returns False for exit 128, which would let an out-of-worktree
+    path or a broken repository be reported as non-durable.
+    """
+    from science_tool.validate.checks.prereg_vehicles import _git_query
+
+    assert _git_query(project, "check-ignore", "-q", "--", "../outside") is None
+    assert _git_query(project, "ls-files", "--error-unmatch", "--", "../outside") is None
+```
+
+- [ ] **Step 2: Run tests to verify they fail**
+
+Run: `uv run --frozen pytest tests/validate/test_checks_prereg_vehicles.py -q -k git_query`
+
+Expected: FAIL — `ImportError: cannot import name '_git_query'`.
+
+- [ ] **Step 3: Write the implementation**
+
+In `science/src/science_tool/validate/checks/prereg_vehicles.py`, immediately
+after the existing `_git_ok` function:
+
+```python
+def _git_query(root: Path, *args: str) -> bool | None:
+    """git's answer, or None when git did not answer at all.
+
+    `_git_ok` above collapses every non-zero exit into False, which is right
+    for its two callers because they act only on a positive. It is WRONG for a
+    rule whose finding asserts that git demonstrably will not preserve a path:
+    `check-ignore` and `ls-files --error-unmatch` both exit 128 on failure (an
+    out-of-worktree path, a broken repository), and reading that as "no" would
+    manufacture findings out of errors.
+    """
+    completed = subprocess.run(["git", *args], cwd=root, capture_output=True)
+    if completed.returncode == 0:
+        return True
+    if completed.returncode == 1:
+        return False
+    return None
+```
+
+- [ ] **Step 4: Run tests to verify they pass**
+
+Run: `uv run --frozen pytest tests/validate/test_checks_prereg_vehicles.py -q`
+
+Expected: PASS, 24 tests (21 existing + 3 new).
+
+- [ ] **Step 5: Commit**
+
+```bash
+git add science/src/science_tool/validate/checks/prereg_vehicles.py \
+        science/tests/validate/test_checks_prereg_vehicles.py
+git commit -m "feat(validate): tri-state git wrapper for durability queries"
+```
+
+---
+
+### Task 2: Candidate path extraction
+
+Pure text functions, no filesystem or git. The grammar is fixed by the design
+because the corpus count depends on it.
+
+**Files:**
+- Modify: `science/src/science_tool/validate/checks/prereg_vehicles.py`
+- Test: `science/tests/validate/test_checks_prereg_vehicles.py`
+
+**Interfaces:**
+- Consumes: nothing.
+- Produces: `_candidate_paths(body: str) -> list[str]` — normalized,
+  order-preserving, de-duplicated repo-relative paths.
+
+- [ ] **Step 1: Write the failing tests**
+
+Append to `science/tests/validate/test_checks_prereg_vehicles.py`:
+
+```python
+def test_candidate_paths_accepts_a_bare_backticked_path() -> None:
+    from science_tool.validate.checks.prereg_vehicles import _candidate_paths
+
+    assert _candidate_paths("uses `data/raw/foo.json` as input") == ["data/raw/foo.json"]
+
+
+def test_candidate_paths_rejects_a_span_that_is_not_only_a_path() -> None:
+    """Path-shaped arguments are not mined out of commands."""
+    from science_tool.validate.checks.prereg_vehicles import _candidate_paths
+
+    assert _candidate_paths("run `python x.py --in data/raw/foo`") == []
+
+
+def test_candidate_paths_rejects_urls_and_root_level_names() -> None:
+    """`:` is outside the grammar; a path with no `/` is out of scope by design."""
+    from science_tool.validate.checks.prereg_vehicles import _candidate_paths
+
+    assert _candidate_paths("see `https://example.com/x` and `input.parquet`") == []
+
+
+def test_candidate_paths_ignores_fenced_blocks() -> None:
+    from science_tool.validate.checks.prereg_vehicles import _candidate_paths
+
+    body = "before\n\n```\n`data/raw/foo.json`\n```\n\nafter\n"
+
+    assert _candidate_paths(body) == []
+
+
+def test_candidate_paths_ignores_html_comments() -> None:
+    """A commented-out path is body text but is not something the document says."""
+    from science_tool.validate.checks.prereg_vehicles import _candidate_paths
+
+    assert _candidate_paths("<!-- was `data/raw/foo.json` -->") == []
+
+
+def test_candidate_paths_ignores_a_fence_inside_an_html_comment() -> None:
+    """Comments are stripped first, so a commented fence cannot desynchronise
+    the fence toggle and swallow the rest of the document."""
+    from science_tool.validate.checks.prereg_vehicles import _candidate_paths
+
+    body = "<!--\n```\n-->\n\nuses `data/raw/foo.json`\n"
+
+    assert _candidate_paths(body) == ["data/raw/foo.json"]
+
+
+def test_candidate_paths_normalizes_leading_dot_slash_and_trailing_slash() -> None:
+    from science_tool.validate.checks.prereg_vehicles import _candidate_paths
+
+    assert _candidate_paths("`./data/raw/` and `data/raw`") == ["data/raw"]
+
+
+def test_candidate_paths_rejects_absolute_and_parent_traversal() -> None:
+    """The `..` rejection is load-bearing: `.` is in the grammar's leading class."""
+    from science_tool.validate.checks.prereg_vehicles import _candidate_paths
+
+    assert _candidate_paths("`/etc/passwd` and `../secrets/x`") == []
+
+
+def test_candidate_paths_deduplicates_preserving_first_appearance() -> None:
+    from science_tool.validate.checks.prereg_vehicles import _candidate_paths
+
+    body = "`b/two.json` then `a/one.json` then `b/two.json`"
+
+    assert _candidate_paths(body) == ["b/two.json", "a/one.json"]
+```
+
+- [ ] **Step 2: Run tests to verify they fail**
+
+Run: `uv run --frozen pytest tests/validate/test_checks_prereg_vehicles.py -q -k candidate_paths`
+
+Expected: FAIL — `ImportError: cannot import name '_candidate_paths'`.
+
+- [ ] **Step 3: Write the implementation**
+
+Add `import re` to the imports in
+`science/src/science_tool/validate/checks/prereg_vehicles.py` (alphabetically
+after `hashlib`), then add these module constants below `_DATA_GATED_MARKER`:
+
+```python
+_RULE_PROSE = "prereg.prose-path-nondurable"
+
+_HTML_COMMENT = re.compile(r"<!--.*?-->", re.DOTALL)
+_FENCE_LINE = re.compile(r"^[ \t]*(?:```|~~~)")
+_INLINE_CODE = re.compile(r"`([^`\n]+)`")
+# The exact grammar behind the design's 23-finding corpus survey. Anchored at
+# both ends: a span containing a command, flag, argument or prose fails as a
+# whole, so path-shaped arguments are never mined out of a command example. The
+# closed class also excludes URLs, since `:` is not in it. Requiring a `/` puts
+# root-level filenames out of scope, which is what keeps ordinary backticked
+# prose (`README.md`, `beta_1`) from becoming a candidate.
+_PATH_GRAMMAR = re.compile(r"^[A-Za-z0-9_.][A-Za-z0-9_./+-]*/[A-Za-z0-9_./+-]*$")
+```
+
+Then add the functions, after `_vehicle_entries`:
+
+```python
+def _strip_fenced_blocks(body: str) -> str:
+    lines: list[str] = []
+    inside = False
+    for line in body.splitlines():
+        if _FENCE_LINE.match(line):
+            inside = not inside
+            continue
+        lines.append("" if inside else line)
+    return "\n".join(lines)
+
+
+def _normalize(token: str) -> str | None:
+    """A lexically repo-relative path, or None if the token cannot be one.
+
+    The `..` rejection is load-bearing: `.` is in the grammar's leading
+    character class, so `../secrets/x` matches the grammar and is stopped only
+    here. The absolute-path rejection is belt and braces -- a leading `/`
+    already fails the grammar -- and is kept so the guarantee does not depend
+    on one regex's first character class.
+    """
+    candidate = token.strip()
+    if candidate.startswith("/"):
+        return None
+    if candidate.startswith("./"):
+        candidate = candidate[2:]
+    candidate = candidate.rstrip("/")
+    if not candidate or ".." in candidate.split("/"):
+        return None
+    return candidate
+
+
+def _candidate_paths(body: str) -> list[str]:
+    """Normalized repo-relative paths this document names in prose.
+
+    HTML comments are stripped BEFORE fences: a comment may contain a fence
+    marker, and toggling on it would desynchronise the fence state and swallow
+    the rest of the document.
+    """
+    text = _strip_fenced_blocks(_HTML_COMMENT.sub("", body))
+    found: list[str] = []
+    seen: set[str] = set()
+    for span in _INLINE_CODE.findall(text):
+        stripped = span.strip()
+        if not _PATH_GRAMMAR.match(stripped):
+            continue
+        candidate = _normalize(stripped)
+        if candidate is None or candidate in seen:
+            continue
+        seen.add(candidate)
+        found.append(candidate)
+    return found
+```
+
+- [ ] **Step 4: Run tests to verify they pass**
+
+Run: `uv run --frozen pytest tests/validate/test_checks_prereg_vehicles.py -q`
+
+Expected: PASS, 33 tests.
+
+- [ ] **Step 5: Commit**
+
+```bash
+git add science/src/science_tool/validate/checks/prereg_vehicles.py \
+        science/tests/validate/test_checks_prereg_vehicles.py
+git commit -m "feat(validate): extract candidate repo-relative paths from prereg prose"
+```
+
+---
+
+### Task 3: Durability resolution
+
+Turns a candidate path into `"ignored"`, `"untracked"`, or nothing. The
+directory behaviour here is the subtle part and must be pinned by test, because
+it is emergent from git's defaults rather than written in our code.
+
+**Files:**
+- Modify: `science/src/science_tool/validate/checks/prereg_vehicles.py`
+- Test: `science/tests/validate/test_checks_prereg_vehicles.py`
+
+**Interfaces:**
+- Consumes: `_git_query` (Task 1).
+- Produces: `_nondurable_state(root: Path, relative: str) -> str | None` —
+  `"ignored"`, `"untracked"`, or `None` when durable or undeterminable.
+
+- [ ] **Step 1: Write the failing tests**
+
+Append to `science/tests/validate/test_checks_prereg_vehicles.py`:
+
+```python
+def test_nondurable_state_reports_an_ignored_file(project: Path) -> None:
+    from science_tool.validate.checks.prereg_vehicles import _nondurable_state
+
+    project.joinpath(".gitignore").write_text("build/\n", encoding="utf-8")
+    _write_vehicle(project, "build/a.json")
+
+    assert _nondurable_state(project, "build/a.json") == "ignored"
+
+
+def test_nondurable_state_reports_an_untracked_file(project: Path) -> None:
+    from science_tool.validate.checks.prereg_vehicles import _nondurable_state
+
+    _write_vehicle(project, "inputs/a.json")
+
+    assert _nondurable_state(project, "inputs/a.json") == "untracked"
+
+
+def test_nondurable_state_is_silent_for_a_tracked_file(project: Path) -> None:
+    from science_tool.validate.checks.prereg_vehicles import _nondurable_state
+
+    _write_vehicle(project, "inputs/a.json")
+    _git(project, "add", "inputs/a.json")
+    _git(project, "commit", "-qm", "add")
+
+    assert _nondurable_state(project, "inputs/a.json") is None
+
+
+def test_nondurable_state_treats_a_directory_with_a_tracked_descendant_as_durable(
+    project: Path,
+) -> None:
+    """`ls-files --error-unmatch` is a pathspec query, so one command answers
+    both "is this file tracked" and "does this directory hold a tracked file"."""
+    from science_tool.validate.checks.prereg_vehicles import _nondurable_state
+
+    _write_vehicle(project, "inputs/a.json")
+    _git(project, "add", "inputs/a.json")
+    _git(project, "commit", "-qm", "add")
+
+    assert _nondurable_state(project, "inputs") is None
+
+
+def test_nondurable_state_reports_a_directory_with_no_tracked_descendant(
+    project: Path,
+) -> None:
+    from science_tool.validate.checks.prereg_vehicles import _nondurable_state
+
+    _write_vehicle(project, "inputs/a.json")
+
+    assert _nondurable_state(project, "inputs") == "untracked"
+
+
+def test_an_ignored_directory_holding_a_force_added_file_is_treated_as_durable(
+    project: Path,
+) -> None:
+    """Pins the adopted composition, which is emergent rather than written.
+
+    `git check-ignore` suppresses paths git considers tracked, so an ignored
+    directory holding a force-added file exits 1 (not ignored) under the
+    default query -- `--no-index` would exit 0 -- and falls through to the
+    tracked query, which matches the force-added file. Adopted deliberately:
+    it keeps this rule in agreement with `_is_ignored` in the declared-vehicle
+    rules, and under-reporting is the right error for an advisory rule. Verified
+    against natural-systems `data/processed/arxiv`.
+    """
+    from science_tool.validate.checks.prereg_vehicles import _nondurable_state
+
+    project.joinpath(".gitignore").write_text("build/\n", encoding="utf-8")
+    _write_vehicle(project, "build/kept.json")
+    _git(project, "add", "-f", "build/kept.json")
+    _git(project, "commit", "-qm", "force-add")
+
+    assert _nondurable_state(project, "build") is None
+
+
+def test_nondurable_state_is_silent_when_git_cannot_answer(
+    project: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A git failure must never become a finding."""
+    from science_tool.validate.checks import prereg_vehicles
+
+    monkeypatch.setattr(prereg_vehicles, "_git_query", lambda *args, **kwargs: None)
+
+    assert prereg_vehicles._nondurable_state(project, "inputs/a.json") is None
+```
+
+- [ ] **Step 2: Run tests to verify they fail**
+
+Run: `uv run --frozen pytest tests/validate/test_checks_prereg_vehicles.py -q -k "nondurable_state or force_added"`
+
+(The `-k` expression must be quoted — an unquoted `or` is shell syntax.)
+
+Expected: FAIL — `ImportError: cannot import name '_nondurable_state'`.
+
+- [ ] **Step 3: Write the implementation**
+
+Add after `_candidate_paths` in
+`science/src/science_tool/validate/checks/prereg_vehicles.py`:
+
+```python
+def _nondurable_state(root: Path, relative: str) -> str | None:
+    """'ignored' or 'untracked', or None when durable or undeterminable.
+
+    Ignored is asked first because it is the stronger statement. Note that
+    `git check-ignore` suppresses paths git considers tracked, so an ignored
+    directory holding a force-added file answers "not ignored" here and is then
+    called durable by the tracked query below. That composition is deliberate:
+    it agrees with `_is_ignored` above, so the two rules can never disagree
+    about one path, and under-reporting is the right error for an advisory rule.
+    """
+    ignored = _git_query(root, "check-ignore", "-q", "--", relative)
+    if ignored is None:
+        return None
+    if ignored:
+        return "ignored"
+    matched = _git_query(root, "ls-files", "--error-unmatch", "--", relative)
+    if matched is None or matched:
+        return None
+    return "untracked"
+```
+
+- [ ] **Step 4: Run tests to verify they pass**
+
+Run: `uv run --frozen pytest tests/validate/test_checks_prereg_vehicles.py -q`
+
+Expected: PASS, 40 tests.
+
+- [ ] **Step 5: Commit**
+
+```bash
+git add science/src/science_tool/validate/checks/prereg_vehicles.py \
+        science/tests/validate/test_checks_prereg_vehicles.py
+git commit -m "feat(validate): resolve a repo path to its git durability state"
+```
+
+---
+
+### Task 4: The rule
+
+Wires the helpers into `check_prereg_vehicles` and produces the finding. The
+integration restructures three `continue` statements into `if/elif/else` so the
+prose scan can run for **both** the declared and undeclared branches, and yields
+its findings last per document.
+
+**Files:**
+- Modify: `science/src/science_tool/validate/checks/prereg_vehicles.py:69-109`
+- Test: `science/tests/validate/test_checks_prereg_vehicles.py`
+
+**Interfaces:**
+- Consumes: `_candidate_paths` (Task 2), `_nondurable_state` (Task 3),
+  `_result`, `_vehicle_entries`, `frozen_because`, `_DATA_GATED_MARKER`,
+  `_RULE_PROSE` (all existing or from Tasks 1–3).
+- Produces: findings on rule `prereg.prose-path-nondurable`, severity WARN.
+
+- [ ] **Step 1: Write the failing tests**
+
+Append to `science/tests/validate/test_checks_prereg_vehicles.py`:
+
+```python
+def test_frozen_prereg_naming_an_ignored_path_in_prose_warns(project: Path) -> None:
+    """The `fb-2026-07-11-024` shape, in a bullet instead of frontmatter."""
+    project.joinpath(".gitignore").write_text("pipeline/**/data/\n", encoding="utf-8")
+    _write_vehicle(project, "pipeline/graph-analysis/data/graph-export.json")
+    vehicle = _write_vehicle(project, "inputs/ok.json")
+    _git(project, "add", "inputs/ok.json")
+    _git(project, "commit", "-qm", "add vehicle")
+    _write_prereg(
+        project,
+        vehicles=_vehicle_block("inputs/ok.json", _sha256(vehicle)),
+        body="- **Source:** `pipeline/graph-analysis/data/graph-export.json`\n",
+    )
+
+    results = list(check_prereg_vehicles(_ctx(project)))
+
+    assert _rules(results) == ["prereg.prose-path-nondurable"]
+    assert results[0].severity.value == "warn"
+    assert "pipeline/graph-analysis/data/graph-export.json" in results[0].message
+
+
+def test_frozen_prereg_naming_an_untracked_path_in_prose_warns(project: Path) -> None:
+    """Not ignored, but never committed -- still not durable."""
+    _write_vehicle(project, "data/processed/frame.parquet")
+    _write_prereg(project, body="built from `data/processed/frame.parquet`\n")
+
+    results = list(check_prereg_vehicles(_ctx(project)))
+
+    assert _rules(results) == ["prereg.vehicle-undeclared", "prereg.prose-path-nondurable"]
+    assert "not tracked by git" in results[1].message
+
+
+def test_the_prose_message_does_not_assert_the_path_is_a_substrate(project: Path) -> None:
+    """The rule proves a durability fact, not that the path is load-bearing.
+
+    Selecting by rule matters: `vehicle-undeclared` is yielded first for this
+    document, so `results[0]` is not the finding under test.
+    """
+    project.joinpath(".gitignore").write_text("build/\n", encoding="utf-8")
+    _write_vehicle(project, "build/out.json")
+    _write_prereg(project, body="results land in `build/out.json`\n")
+
+    results = list(check_prereg_vehicles(_ctx(project)))
+    prose = [r for r in results if r.rule == "prereg.prose-path-nondurable"]
+
+    assert len(prose) == 1
+    message = prose[0].message
+    # The remedy legitimately names the `vehicles:` FIELD, so a blanket ban on
+    # the word would be wrong. What is forbidden is calling the PATH one.
+    assert "substrate" not in message
+    assert f"vehicle {'build/out.json'!r}" not in message
+    assert "if this document's claims depend on" in message.lower()
+
+
+def test_a_tracked_prose_path_is_silent(project: Path) -> None:
+    _write_vehicle(project, "workflows/breadth/config.yaml")
+    _git(project, "add", "workflows/breadth/config.yaml")
+    _git(project, "commit", "-qm", "add config")
+    _write_prereg(project, body="settings from `workflows/breadth/config.yaml`\n")
+
+    assert _rules(list(check_prereg_vehicles(_ctx(project)))) == ["prereg.vehicle-undeclared"]
+
+
+def test_a_prose_path_that_does_not_resolve_is_silent(project: Path) -> None:
+    """"Destroyed", "illustrative" and "renamed" are indistinguishable."""
+    _write_prereg(project, body="once lived at `pipeline/gone/export.json`\n")
+
+    assert _rules(list(check_prereg_vehicles(_ctx(project)))) == ["prereg.vehicle-undeclared"]
+
+
+def test_a_declared_vehicle_is_not_also_reported_as_a_prose_path(project: Path) -> None:
+    """One file, one rule. Exact normalized match, including `./` forms."""
+    project.joinpath(".gitignore").write_text("build/\n", encoding="utf-8")
+    vehicle = _write_vehicle(project, "build/a.json")
+    _write_prereg(
+        project,
+        vehicles=_vehicle_block("build/a.json", _sha256(vehicle)),
+        body="the vehicle is `./build/a.json`\n",
+    )
+
+    assert _rules(list(check_prereg_vehicles(_ctx(project)))) == ["prereg.vehicle-gitignored"]
+
+
+def test_an_ignored_directory_holding_a_defective_declared_vehicle_is_reported(
+    project: Path,
+) -> None:
+    """No parent-directory suppression: the containing root is real information."""
+    project.joinpath(".gitignore").write_text("build/\n", encoding="utf-8")
+    vehicle = _write_vehicle(project, "build/a.json")
+    _write_prereg(
+        project,
+        vehicles=_vehicle_block("build/a.json", _sha256(vehicle)),
+        body="under `build`\n",
+    )
+
+    assert _rules(list(check_prereg_vehicles(_ctx(project)))) == [
+        "prereg.vehicle-gitignored",
+        "prereg.prose-path-nondurable",
+    ]
+
+
+def test_a_prose_path_named_five_times_is_one_finding(project: Path) -> None:
+    project.joinpath(".gitignore").write_text("build/\n", encoding="utf-8")
+    _write_vehicle(project, "build/a.json")
+    body = "".join(f"line {n} mentions `build/a.json`\n" for n in range(5))
+    _write_prereg(project, body=body)
+
+    results = list(check_prereg_vehicles(_ctx(project)))
+
+    assert _rules(results) == ["prereg.vehicle-undeclared", "prereg.prose-path-nondurable"]
+
+
+def test_an_unfrozen_prereg_naming_an_ignored_path_is_silent(project: Path) -> None:
+    """A prose path is an inferred commitment; before freezing it is normal work."""
+    project.joinpath(".gitignore").write_text("build/\n", encoding="utf-8")
+    _write_vehicle(project, "build/a.json")
+    _write_prereg(project, status="active", body="working from `build/a.json`\n")
+
+    assert list(check_prereg_vehicles(_ctx(project))) == []
+
+
+def test_a_data_gated_prereg_naming_an_ignored_path_is_silent(project: Path) -> None:
+    """Data-gated mode legitimately discusses candidate paths."""
+    project.joinpath(".gitignore").write_text("build/\n", encoding="utf-8")
+    _write_vehicle(project, "build/a.json")
+    _write_prereg(
+        project,
+        body="## Vehicle-Admissibility Gate (data-gated mode)\n\ncandidate `build/a.json`\n",
+    )
+
+    assert list(check_prereg_vehicles(_ctx(project))) == []
+
+
+def test_prose_paths_outside_a_git_repository_are_silent(tmp_path: Path) -> None:
+    """Never claim non-durability when git has not answered."""
+    tmp_path.joinpath("science.yaml").write_text("name: f\nprofile: research\n", encoding="utf-8")
+    tmp_path.joinpath("entities", "pre-registrations").mkdir(parents=True)
+    _write_vehicle(tmp_path, "build/a.json")
+    _write_prereg(tmp_path, body="from `build/a.json`\n")
+
+    assert _rules(list(check_prereg_vehicles(_ctx(tmp_path)))) == ["prereg.vehicle-undeclared"]
+
+
+def test_the_rule_is_silent_when_git_cannot_answer(
+    project: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The caller's half of the tri-state contract."""
+    from science_tool.validate.checks import prereg_vehicles
+
+    project.joinpath(".gitignore").write_text("build/\n", encoding="utf-8")
+    _write_vehicle(project, "build/a.json")
+    _write_prereg(project, body="from `build/a.json`\n")
+    monkeypatch.setattr(prereg_vehicles, "_git_query", lambda *args, **kwargs: None)
+
+    assert _rules(list(check_prereg_vehicles(_ctx(project)))) == ["prereg.vehicle-undeclared"]
+```
+
+- [ ] **Step 2: Run tests to verify they fail**
+
+Run: `uv run --frozen pytest tests/validate/test_checks_prereg_vehicles.py -q`
+
+Expected: the twelve new tests FAIL (findings list is missing
+`prereg.prose-path-nondurable`); the 40 earlier tests still PASS.
+
+- [ ] **Step 3: Write the message builder and the prose scan**
+
+Add after `_nondurable_state` in
+`science/src/science_tool/validate/checks/prereg_vehicles.py`:
+
+```python
+def _prose_message(relative: str, candidate: str, state: str) -> str:
+    """State the durability fact; condition everything else on the author's call.
+
+    The rule proves that a frozen document names a path git will not preserve.
+    It does NOT prove the path is a substrate -- a frozen pre-registration may
+    legitimately name an ignored output directory -- so the message must not
+    call it one.
+    """
+    detail = (
+        "gitignored, so regenerating it destroys the named content irrecoverably"
+        if state == "ignored"
+        else "not tracked by git, so it cannot be recovered once overwritten"
+    )
+    return (
+        f"{relative} is frozen and names {candidate!r} in prose, which is {detail}. "
+        f"If this document's claims depend on {candidate!r}, it is frozen by path rather "
+        f"than by content: commit the file, commit and register its descriptor, or declare "
+        f"it as a content-addressed dataset entity and add it to 'vehicles:'. If the document "
+        f"does not depend on it -- an output location, an illustration -- record that and "
+        f"accept this finding."
+    )
+
+
+def _check_prose_paths(
+    ctx: ValidateContext,
+    relative: str,
+    body: str,
+    entries: list[Any],
+) -> Iterator[Result]:
+    declared: set[str] = set()
+    for entry in entries:
+        if not isinstance(entry, dict) or not entry.get("path"):
+            continue
+        normalized = _normalize(str(entry["path"]))
+        if normalized is not None:
+            declared.add(normalized)
+
+    for candidate in _candidate_paths(body):
+        if candidate in declared:
+            continue
+        if not (ctx.project_root / candidate).exists():
+            continue
+        state = _nondurable_state(ctx.project_root, candidate)
+        if state is None:
+            continue
+        yield _result(Severity.WARN, relative, _prose_message(relative, candidate, state), _RULE_PROSE)
+```
+
+- [ ] **Step 4: Restructure the loop body to call it**
+
+In `check_prereg_vehicles`, replace the block from `entries = _vehicle_entries(frontmatter)`
+through the closing `yield from _check_vehicle(ctx, relative, entry)` with:
+
+```python
+        entries = _vehicle_entries(frontmatter)
+        freeze_reason = frozen_because(frontmatter)
+        body = ctx.body(path)
+        data_gated = _DATA_GATED_MARKER in body
+
+        # `continue` became `elif` so the prose scan below runs for BOTH the
+        # declared and the undeclared branch. A document that declares one
+        # vehicle is exactly where the prose gap hides: declaring the
+        # recoverable substrate silences `vehicle-undeclared` while a
+        # non-durable path named in prose goes unexamined.
+        if not entries:
+            if freeze_reason is not None and not data_gated:
+                yield _result(
+                    Severity.WARN,
+                    relative,
+                    f"{relative} is frozen ({freeze_reason}) but declares no 'vehicles:'. A "
+                    f"pre-registration that names its data only in prose is frozen by path, not by "
+                    f"content: declare each vehicle as 'path' + 'sha256', or state the "
+                    f"'{_DATA_GATED_MARKER} (data-gated mode)' section if no vehicle is admissible yet.",
+                    "prereg.vehicle-undeclared",
+                )
+        elif not is_repo:
+            yield _result(
+                Severity.WARN,
+                relative,
+                f"{relative} declares vehicles but {ctx.project_root} is not a git repository, so "
+                f"their durability cannot be verified.",
+                "prereg.vehicle-unverifiable",
+            )
+        else:
+            for entry in entries:
+                yield from _check_vehicle(ctx, relative, entry)
+
+        if is_repo and freeze_reason is not None and not data_gated:
+            yield from _check_prose_paths(ctx, relative, body, entries)
+```
+
+- [ ] **Step 5: Run the full check suite**
+
+Run: `uv run --frozen pytest tests/validate/test_checks_prereg_vehicles.py -q`
+
+Expected: PASS, 52 tests. If an *existing* test now fails, the restructure
+changed behaviour — revert Step 4 and redo it, do not edit the existing test.
+
+- [ ] **Step 6: Run the whole validate suite and typecheck**
+
+```bash
+uv run --frozen pytest tests/validate -q
+uv run --frozen pyright src/science_tool/validate/checks/prereg_vehicles.py
+```
+
+Expected: all pass, no new type errors.
+
+- [ ] **Step 7: Commit**
+
+```bash
+git add science/src/science_tool/validate/checks/prereg_vehicles.py \
+        science/tests/validate/test_checks_prereg_vehicles.py
+git commit -m "feat(validate): prereg.prose-path-nondurable"
+```
+
+---
+
+### Task 5: Record the deliberate gate absence
+
+**Files:**
+- Modify: `science/src/science_tool/validate/gates.py:82-87`
+- Modify: `science/tests/validate/test_checks_prereg_vehicles.py` (one added assertion)
+
+**Interfaces:**
+- Consumes: the rule name from Task 4.
+- Produces: nothing. This task adds a comment and an assertion; it must NOT add
+  the rule to any tier set.
+
+- [ ] **Step 1: Write the failing assertion**
+
+In `science/tests/validate/test_checks_prereg_vehicles.py`, in
+`test_durability_failures_gate_the_build_but_undeclared_does_not`, add after
+the existing `assert "prereg.vehicle-unverifiable" not in gated` line:
+
+```python
+    assert "prereg.prose-path-nondurable" not in gated
+```
+
+- [ ] **Step 2: Run it and confirm it already passes**
+
+Run: `uv run --frozen pytest tests/validate/test_checks_prereg_vehicles.py -q -k gate`
+
+Expected: PASS. This assertion is a **regression pin**, not a red-green cycle —
+it passes on day one and its job is to fail if someone later adds the rule to a
+tier. Confirm it can fail by temporarily adding the rule name to the `hygiene`
+frozenset in `gates.py`, re-running (expect FAIL), then reverting.
+
+- [ ] **Step 3: Add the explanatory comment**
+
+In `science/src/science_tool/validate/gates.py`, immediately after the existing
+`prereg.vehicle-unverifiable` comment lines that close the `hygiene` frozenset:
+
+```python
+            # `prereg.prose-path-nondurable` is deliberately ABSENT from every tier, for two
+            # independent reasons. (1) It is advisory by construction: it proves that a frozen
+            # document names a path git will not preserve, NOT that the path is load-bearing.
+            # A pre-registration may legitimately name an ignored OUTPUT directory, so an ERROR
+            # would assert a contradiction the predicate does not establish. This reason does not
+            # expire when the corpus is clean. (2) Certification forbids it today anyway: 23
+            # findings across 4 projects. A ratchet is therefore not merely deferred pending
+            # migration -- it would first require a narrower predicate that genuinely implies
+            # contradiction. See docs/plans/2026-07-27-prereg-prose-durability-design.md.
+```
+
+- [ ] **Step 4: Verify nothing changed behaviourally**
+
+Run: `uv run --frozen pytest tests/validate -q`
+
+Expected: PASS.
+
+- [ ] **Step 5: Commit**
+
+```bash
+git add science/src/science_tool/validate/gates.py \
+        science/tests/validate/test_checks_prereg_vehicles.py
+git commit -m "docs(gates): record why prose-path-nondurable is ungated"
+```
+
+---
+
+### Task 6: Corpus certification
+
+Reproduce the design's table with the shipped code. If the numbers differ from
+the design, **the results document records the measured numbers** and the
+discrepancy is investigated before the branch merges — do not edit the design
+to match a surprise.
+
+**Files:**
+- Create: `docs/plans/2026-07-27-prereg-prose-durability-results.md`
+
+**Interfaces:**
+- Consumes: the shipped rule from Tasks 4–5.
+- Produces: nothing consumed by later tasks.
+
+- [ ] **Step 1: Confirm the snapshot fixture is unaffected**
+
+Run: `uv run --frozen pytest tests/validate -q -m snapshot`
+
+Expected: PASS with no snapshot diff. `tests/validate/fixtures/_combined` has no
+`entities/pre-registrations/` directory, so the check returns before reading any
+document. **A snapshot diff here means something unintended changed — investigate
+it; do not run `scripts/update-validate-snapshots.py`.**
+
+- [ ] **Step 2: Run the validator across the corpus**
+
+From `.worktrees/prereg-prose-durability/science`:
+
+```bash
+for p in ~/d/natural-systems ~/d/protein-landscape ~/d/seq-feats \
+         ~/d/3d-attention-bias ~/d/multiple-myeloma; do
+  uv run --frozen science validate --project-root "$p" --format json \
+    --output "$CLAUDE_JOB_DIR/tmp/prose-path-$(basename $p).json"
+done
+```
+
+- [ ] **Step 3: Select findings by exact rule equality**
+
+Substring counting on rendered output is not acceptable — it silently
+miscounts. Run:
+
+```bash
+uv run --frozen python - <<'PY'
+import json, glob, os, collections
+base = os.path.expandvars("$CLAUDE_JOB_DIR/tmp")
+for path in sorted(glob.glob(f"{base}/prose-path-*.json")):
+    payload = json.load(open(path))
+    hits = [r for r in payload["results"]
+            if r.get("rule") == "prereg.prose-path-nondurable"]
+    docs = collections.Counter(r.get("path") for r in hits)
+    print(f"=== {os.path.basename(path)}: {len(hits)} findings, {len(docs)} documents")
+    for r in hits:
+        print(f"  {r.get('path')}\n    {r.get('message')}")
+PY
+```
+
+- [ ] **Step 4: Write the results document**
+
+Create `docs/plans/2026-07-27-prereg-prose-durability-results.md` from this
+skeleton, filling every `«…»` from the Step 3 output. Do not leave a `«…»` in
+the committed file.
+
+```markdown
+# `prereg.prose-path-nondurable` — certification results
+
+Measured against `docs/plans/2026-07-27-prereg-prose-durability-design.md` at
+commit «sha».
+
+## Measurement method
+
+The validator ran against every project in the measured fleet. Each complete
+report was retained as JSON and findings were selected by exact `rule`
+equality; no rendered-output substring count was used.
+
+    «paste the Step 2 and Step 3 commands verbatim»
+
+## Result
+
+| project | pre-registrations | documents | findings |
+|---|---:|---:|---:|
+| natural-systems | «n» | «n» | «n» |
+| protein-landscape | «n» | «n» | «n» |
+| seq-feats | «n» | «n» | «n» |
+| 3d-attention-bias | «n» | «n» | «n» |
+| multiple-myeloma | — | — | 0 (no `entities/pre-registrations/` directory; the check returns before any document is read) |
+| **total** | **«n»** | **«n»** | **«n»** |
+
+Design predicted 23 findings across 9 documents. Measured: «n»/«n» — «matches,
+or: differs because …».
+
+## Findings
+
+| project | document | path | state |
+|---|---|---|---|
+| «…» | «…» | «…» | «ignored/untracked» |
+
+## Gate status
+
+`prereg.prose-path-nondurable` appears in no tier of `gates.py`; pinned by
+`test_durability_failures_gate_the_build_but_undeclared_does_not`.
+
+## Snapshots
+
+`tests/validate/fixtures/_combined` has no `entities/pre-registrations/`
+directory, so `-m snapshot` produced no diff, as predicted.
+```
+
+If the measured total differs from 23/9, record the measured numbers here and
+investigate before merging. Do not edit the design to match a surprise — a
+discrepancy means either the implementation or the design's survey is wrong,
+and which one it is matters.
+
+- [ ] **Step 5: Commit**
+
+```bash
+git add docs/plans/2026-07-27-prereg-prose-durability-results.md
+git commit -m "docs(plans): certify prose-path-nondurable against the corpus"
+```
+
+---
+
+### Task 7: File and close the feedback entry
+
+**Files:**
+- Create: `~/.config/science/feedback/fb-2026-07-27-0NN.yaml` (via CLI; the id
+  is assigned by the tool)
+- Modify: `docs/plans/2026-07-27-prereg-prose-durability-results.md`
+
+**Interfaces:**
+- Consumes: the certification numbers from Task 6.
+- Produces: nothing.
+
+The store is CLI-managed and lives outside every project tree, at
+`~/.config/science/feedback/`. **Do not hand-write a YAML file there** — the id
+must be allocated by the tool.
+
+- [ ] **Step 1: Reuse an existing target string rather than inventing one**
+
+Run: `uv run --frozen science feedback targets`
+
+Confirm `check:prereg.vehicle-undeclared` is the existing spelling and use it
+verbatim. If it is absent, use the closest existing `check:` target rather than
+coining a new namespace.
+
+- [ ] **Step 2: File the entry**
+
+```bash
+uv run --frozen science feedback add \
+  --target "check:prereg.vehicle-undeclared" \
+  --category gap \
+  --concern tooling \
+  --project natural-systems \
+  --summary "prereg.vehicle-undeclared is satisfied by one declared vehicle, so its remedy can be discharged against the most convenient artifact while the load-bearing substrate stays undeclared" \
+  --detail "$(cat <<'EOF'
+Surfaced by natural-systems task:t896.
+
+pre-registration:0014's Primary Beta Operationalization section -- the section
+enumerating the LOCKED settings -- names its corpus in a bullet:
+
+  - local arXiv corpus with the corpus hash recorded in
+    `data/processed/arxiv/datapackage.json`;
+
+data/processed/ is gitignored in that project. task:t629 regenerated the corpus
+on 2026-05-30, the registered hash stopped matching, and NOTHING IN THE
+REPOSITORY CHANGED, because the descriptor recording the hash was itself
+untracked. The hand-run guard scripts/t392/validate_freeze.py went red and was
+not run again for eight weeks. The corpus is unrecoverable.
+
+Had that bullet been a vehicles: entry, prereg.vehicle-gitignored (ERROR, gated
+at the hygiene tier) would have failed the build in May, before the loss.
+
+THE EVASION, DEMONSTRATED LIVE. 0014 declared no vehicles, so
+prereg.vehicle-undeclared fired once frozen_because began reading amendments:
+(fb-2026-07-26-019). The remedy applied in t896 was to declare the two
+substrates that had SURVIVED. That silenced the warning without touching the
+path that caused the loss, which remains named in the same frozen document,
+still gitignored, still unchecked. No bad faith is required -- declaring the
+recoverable substrates was correct -- and the document is still mis-certified.
+
+THE CHECK FAMILY CANNOT SEE ITS OWN FOUNDING INCIDENT. pre-registration:0001
+and 0026 both still name pipeline/graph-analysis/data/graph-export.json, the
+artifact destroyed in fb-2026-07-11-024 that caused these rules to exist. 0001
+names it as a declaration, not a reminiscence: "**Source:**
+`pipeline/graph-analysis/data/graph-export.json` field .limitRelations".
+science validate reports nothing about either.
+
+RESOLUTION. Shipped prereg.prose-path-nondurable (WARN, ungated): a frozen
+pre-registration naming a slash-containing repo-relative path in prose that
+resolves to a real file or directory git will not preserve. Corpus survey found
+23 findings across 9 of 46 pre-registrations in 4 projects.
+
+EXPLICIT LIMIT. The new rule is ADVISORY. It proves a durability fact; it does
+NOT establish that a reported path is load-bearing -- a frozen document may
+legitimately name an ignored OUTPUT directory. It therefore does not close the
+completeness gap in general, and is deliberately absent from every gate tier.
+EOF
+)"
+```
+
+- [ ] **Step 3: Record the filing id in the results document**
+
+The command prints the allocated id. Append a `## Filing` section to
+`docs/plans/2026-07-27-prereg-prose-durability-results.md` naming that `fb-` id,
+the target, and the one-line resolution.
+
+- [ ] **Step 4: Mark the filing addressed**
+
+```bash
+uv run --frozen science feedback update «fb-id» \
+  --status addressed \
+  --resolution "Shipped prereg.prose-path-nondurable (WARN, ungated): a frozen pre-registration naming a non-durable repo-relative path in prose is now reported. Advisory by construction -- it proves the durability fact and leaves the load-bearing question to the author -- so the general completeness gap in vehicle-undeclared remains open by design."
+```
+
+- [ ] **Step 5: Verify the entry reads correctly**
+
+Run: `uv run --frozen science feedback show «fb-id»`
+
+Confirm the detail survived the heredoc intact and the status is `addressed`.
+
+- [ ] **Step 6: Commit**
+
+```bash
+git add docs/plans/2026-07-27-prereg-prose-durability-results.md
+git commit -m "docs(feedback): close the prereg vehicle-completeness filing"
+```
+
+---
+
+## Final verification
+
+- [ ] `uv run --frozen pytest -q` from `science/` — full suite green.
+- [ ] `uv run --frozen pytest -q -m snapshot` — no snapshot diff.
+- [ ] `git diff --check` — clean.
+- [ ] `grep -rn "vehicle-prose" science/ docs/plans/*-design.md` — no hits; the
+      rule is `prereg.prose-path-nondurable` everywhere. (Scoped away from this
+      plan, which names the old string once in this very line.)
+- [ ] `grep -n "prose-path-nondurable" science/src/science_tool/validate/gates.py`
+      — appears in a comment only, never inside a `frozenset({...})`.
