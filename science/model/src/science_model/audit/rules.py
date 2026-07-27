@@ -13,13 +13,20 @@ from __future__ import annotations
 import re
 import typing
 from collections.abc import Mapping
-from typing import Literal
+from typing import Literal, cast
 
 from pydantic import BaseModel, ConfigDict, ValidationError, model_validator
 
 from science_model.audit.evidence import Evidence
-from science_model.audit.finding import AuditFinding, Severity
-from science_model.audit.subjects import FindingSubject
+from science_model.audit.finding import AuditFinding, Severity, thaw_json_value
+from science_model.audit.fingerprint import (
+    FingerprintError,
+    normalize_identity_value,
+)
+from science_model.audit.subjects import (
+    FindingSubject,
+    normalize_identifier_namespace,
+)
 
 _RULE_ID_RE = re.compile(r"^[a-z0-9]+(?:-[a-z0-9]+)*(?:\.[a-z0-9]+(?:-[a-z0-9]+)*)+$")
 _SECTION_ID_RE = re.compile(r"^[a-z0-9]+(?:-[a-z0-9]+)*$")
@@ -29,6 +36,7 @@ _ALLOWED_IDENTITY_TYPES: tuple[type, ...] = (str, bool, int)
 
 Remediation = Literal["none", "producer"]
 Visibility = Literal["visible", "hidden"]
+SubjectType = Literal["entity", "path", "identifier", "project"]
 
 
 class RuleDeclarationError(ValueError):
@@ -58,7 +66,7 @@ class FindingRule(BaseModel):
 
     id: str
     severities: frozenset[Severity]
-    subject_types: frozenset[str]
+    subject_types: frozenset[SubjectType]
     identifier_namespaces: frozenset[str] = frozenset()
     qualifier_schema: type[BaseModel]
     identity_qualifiers: tuple[str, ...] = ()
@@ -74,9 +82,15 @@ class FindingRule(BaseModel):
     @classmethod
     def _freeze_sets(cls, data: object) -> object:
         if isinstance(data, dict):
+            data = dict(data)
             for key in ("severities", "subject_types", "identifier_namespaces"):
                 if key in data and data[key] is not None:
                     data[key] = frozenset(data[key])
+            if "identifier_namespaces" in data:
+                data["identifier_namespaces"] = frozenset(
+                    normalize_identifier_namespace(value)
+                    for value in data["identifier_namespaces"]
+                )
         return data
 
     @model_validator(mode="after")
@@ -89,6 +103,16 @@ class FindingRule(BaseModel):
             raise RuleDeclarationError(f"{self.id}: severities must not be empty")
         if not self.subject_types:
             raise RuleDeclarationError(f"{self.id}: subject_types must not be empty")
+        if "identifier" in self.subject_types and not self.identifier_namespaces:
+            raise RuleDeclarationError(
+                f"{self.id}: identifier subject_types require nonempty "
+                "identifier_namespaces"
+            )
+        if "identifier" not in self.subject_types and self.identifier_namespaces:
+            raise RuleDeclarationError(
+                f"{self.id}: identifier_namespaces are forbidden when identifier is "
+                "not a permitted subject type"
+            )
         if self.qualifier_schema.model_config.get("extra") != "forbid":
             raise RuleDeclarationError(
                 f"{self.id}: qualifier schema {self.qualifier_schema.__name__} must set "
@@ -146,20 +170,30 @@ class FindingRule(BaseModel):
                 f"{self.id}: subject type {subject.type!r} is not in "
                 f"{set(self.subject_types)}"
             )
-        if subject.type == "identifier" and self.identifier_namespaces:
+        if subject.type == "identifier":
             if subject.namespace not in self.identifier_namespaces:
                 raise RuleDeclarationError(
                     f"{self.id}: namespace {subject.namespace!r} is not in "
                     f"{set(self.identifier_namespaces)}"
                 )
         self.validate_qualifiers(qualifiers)
-        self.identity_subset(qualifiers)
-        return finding
+        canonical_qualifiers = self.canonicalize_identity_qualifiers(
+            finding.qualifiers
+        )
+        return AuditFinding(
+            rule_id=finding.rule_id,
+            subject=finding.subject,
+            severity=finding.severity,
+            qualifiers=canonical_qualifiers,
+            message=finding.message,
+            evidence=finding.evidence,
+        )
 
     def validate_qualifiers(self, qualifiers: Mapping[str, object]) -> None:
         """Validate input against the declared schema strictly without coercing it."""
         try:
-            self.qualifier_schema.model_validate(dict(qualifiers), strict=True)
+            thawed = cast(dict[str, object], thaw_json_value(qualifiers))
+            self.qualifier_schema.model_validate(thawed, strict=True)
         except ValidationError as exc:
             raise RuleDeclarationError(f"{self.id}: qualifiers invalid: {exc}") from exc
 
@@ -173,7 +207,23 @@ class FindingRule(BaseModel):
                 "explicitly, even when the schema would default it: an omitted key and "
                 "an explicit default produce different fingerprints."
             )
-        return {key: qualifiers[key] for key in self.identity_qualifiers}
+        try:
+            return {
+                key: normalize_identity_value(qualifiers[key])
+                for key in self.identity_qualifiers
+            }
+        except FingerprintError as exc:
+            raise RuleDeclarationError(
+                f"{self.id}: identity qualifiers invalid: {exc}"
+            ) from exc
+
+    def canonicalize_identity_qualifiers(
+        self, qualifiers: Mapping[str, object]
+    ) -> dict[str, object]:
+        """Canonicalize identity-bearing values in the full observed mapping."""
+        thawed = cast(dict[str, object], thaw_json_value(qualifiers))
+        thawed.update(self.identity_subset(qualifiers))
+        return thawed
 
 
 def _identity_type_permitted(hint: object) -> bool:

@@ -6,7 +6,11 @@ from science_model.audit.rules import (
     FindingSection,
     RuleDeclarationError,
 )
-from science_model.audit.subjects import EntitySubject, ProjectSubject
+from science_model.audit.subjects import (
+    EntitySubject,
+    IdentifierSubject,
+    ProjectSubject,
+)
 
 
 class FieldQualifier(BaseModel):
@@ -245,3 +249,64 @@ def test_identity_subset_returns_declared_qualifiers_in_declaration_order():
     assert rule.identity_subset({"field": "year", "extra": "ignored"}) == {
         "field": "year"
     }
+
+
+def test_build_stores_identity_qualifiers_in_the_fingerprinted_nfc_form():
+    class UnicodeQualifier(BaseModel):
+        model_config = ConfigDict(extra="forbid")
+        label: str
+        note: str
+
+    rule = _rule(
+        qualifier_schema=UnicodeQualifier,
+        identity_qualifiers=("label",),
+        remediation="none",
+        remediator=None,
+    )
+    finding = rule.build(
+        subject=EntitySubject(ref="dataset:a"),
+        severity="warn",
+        qualifiers={"label": "cafe\u0301", "note": "re\u0301sume\u0301"},
+        message="m",
+    )
+
+    assert finding.qualifiers["label"] == "café"
+    assert finding.qualifiers["note"] == "re\u0301sume\u0301"
+    assert rule.identity_subset(finding.qualifiers) == {"label": "café"}
+
+
+def test_subject_type_declarations_use_the_closed_four_value_vocabulary():
+    with pytest.raises(ValidationError, match="subject_types"):
+        _rule(subject_types={"enttiy"})
+
+
+def test_identifier_subject_rules_require_a_namespace_vocabulary():
+    with pytest.raises(ValidationError, match="identifier_namespaces"):
+        _rule(subject_types={"identifier"}, identifier_namespaces=set())
+
+
+def test_non_identifier_rules_may_not_declare_identifier_namespaces():
+    with pytest.raises(ValidationError, match="identifier_namespaces"):
+        _rule(subject_types={"entity"}, identifier_namespaces={"reference"})
+
+
+def test_identifier_namespace_declarations_use_the_subject_vocabulary():
+    with pytest.raises(ValidationError, match="kebab-case"):
+        _rule(
+            subject_types={"identifier"},
+            identifier_namespaces={"not_a_namespace"},
+        )
+
+
+def test_identifier_namespace_membership_is_unconditional():
+    rule = _rule(
+        subject_types={"identifier"},
+        identifier_namespaces={"reference"},
+    )
+    with pytest.raises(RuleDeclarationError, match="namespace"):
+        rule.build(
+            subject=IdentifierSubject(namespace="managed-artifact", value="validate.sh"),
+            severity="warn",
+            qualifiers={"field": "year"},
+            message="m",
+        )

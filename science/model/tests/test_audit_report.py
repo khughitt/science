@@ -4,8 +4,11 @@ from pydantic import ValidationError
 from science_model.audit.finding import AuditFinding
 from science_model.audit.report import (
     REPORT_SCHEMA_VERSION,
+    AcceptedFinding,
     AuditReport,
+    ProducerMetrics,
     ReportedFinding,
+    UnwiredProducer,
 )
 from science_model.audit.subjects import EntitySubject
 
@@ -110,6 +113,11 @@ def test_the_report_does_not_try_to_dedup_by_identity():
             "accepted_total": 0,
             "unwired_total": 0,
         },
+        meta={
+            "producers_run": ["p"],
+            "total_duration_seconds": 0.5,
+            "timings": [],
+        },
     )
     assert len(report.findings) == 2
 
@@ -126,6 +134,11 @@ def test_two_producers_may_emit_the_same_finding():
             "findings_by_severity": {"warn": 2},
             "accepted_total": 0,
             "unwired_total": 0,
+        },
+        meta={
+            "producers_run": ["p1", "p2"],
+            "total_duration_seconds": 0.5,
+            "timings": [],
         },
     )
     assert len(report.findings) == 2
@@ -148,6 +161,11 @@ def test_accepted_findings_carry_provenance_and_an_acceptance_key():
             "findings_by_severity": {"warn": 1},
             "accepted_total": 1,
             "unwired_total": 0,
+        },
+        meta={
+            "producers_run": ["dataset_anomalies", "p"],
+            "total_duration_seconds": 0.5,
+            "timings": [],
         },
     )
     assert report.accepted[0].acceptance_key == "b" * 32
@@ -237,3 +255,162 @@ def test_the_finding_ceiling_applies_across_both_channels():
                 "unwired_total": 0,
             },
         )
+
+
+@pytest.mark.parametrize("producers_run", [[" "], ["p", "p"]])
+def test_producers_run_is_nonblank_and_unique(producers_run):
+    with pytest.raises(ValidationError, match="producers_run"):
+        _report(
+            findings=[],
+            totals={
+                "findings_total": 0,
+                "findings_by_severity": {},
+                "accepted_total": 0,
+                "unwired_total": 0,
+            },
+            meta={
+                "producers_run": producers_run,
+                "total_duration_seconds": 0.5,
+                "timings": [],
+            },
+        )
+
+
+def test_successful_and_unwired_producer_sets_are_disjoint_and_unique():
+    unwired = UnwiredProducer(producer_id="dataset_anomalies", code="not-wired")
+    with pytest.raises(ValidationError, match="both producers_run and unwired"):
+        _report(
+            unwired=[unwired],
+            totals={
+                "findings_total": 1,
+                "findings_by_severity": {"warn": 1},
+                "accepted_total": 0,
+                "unwired_total": 1,
+            },
+        )
+    with pytest.raises(ValidationError, match="duplicate unwired"):
+        _report(
+            findings=[],
+            unwired=[unwired, unwired],
+            totals={
+                "findings_total": 0,
+                "findings_by_severity": {},
+                "accepted_total": 0,
+                "unwired_total": 2,
+            },
+            meta={
+                "producers_run": ["other"],
+                "total_duration_seconds": 0.5,
+                "timings": [],
+            },
+        )
+
+
+@pytest.mark.parametrize("channel", ["findings", "accepted", "metrics"])
+def test_every_output_producer_is_named_in_producers_run(channel):
+    overrides = {}
+    if channel == "findings":
+        overrides["findings"] = [
+            ReportedFinding(producer_id="other", finding=_finding())
+        ]
+    elif channel == "accepted":
+        overrides["accepted"] = [
+            AcceptedFinding(
+                producer_id="other",
+                finding=_finding(),
+                acceptance_key="b" * 32,
+                reason="known",
+            )
+        ]
+        overrides["totals"] = {
+            "findings_total": 1,
+            "findings_by_severity": {"warn": 1},
+            "accepted_total": 1,
+            "unwired_total": 0,
+        }
+    else:
+        overrides["metrics"] = {"other": ProducerMetrics(scanned=1)}
+
+    with pytest.raises(ValidationError, match="producers_run"):
+        _report(**overrides)
+
+
+def test_a_successfully_run_producer_may_emit_no_output():
+    report = _report(
+        findings=[],
+        totals={
+            "findings_total": 0,
+            "findings_by_severity": {},
+            "accepted_total": 0,
+            "unwired_total": 0,
+        },
+    )
+    assert tuple(report.meta.producers_run) == ("dataset_anomalies",)
+
+
+def test_report_nested_collections_are_copied_and_materially_immutable():
+    findings = [ReportedFinding(producer_id="dataset_anomalies", finding=_finding())]
+    accepted = []
+    metrics = {
+        "dataset_anomalies": ProducerMetrics(
+            scanned=1,
+            nested={"counts": [1, 2]},
+        )
+    }
+    unwired = []
+    severities = {"warn": 1}
+    producers_run = ["dataset_anomalies"]
+    timings = [{"producer_id": "dataset_anomalies", "seconds": 0.1}]
+
+    report = _report(
+        findings=findings,
+        accepted=accepted,
+        metrics=metrics,
+        unwired=unwired,
+        totals={
+            "findings_total": 1,
+            "findings_by_severity": severities,
+            "accepted_total": 0,
+            "unwired_total": 0,
+        },
+        meta={
+            "producers_run": producers_run,
+            "total_duration_seconds": 0.5,
+            "timings": timings,
+        },
+    )
+
+    original_finding = findings[0]
+    findings.clear()
+    metrics.clear()
+    severities["warn"] = 99
+    producers_run.clear()
+    timings[0]["seconds"] = 99
+
+    assert len(report.findings) == 1
+    assert report.totals.findings_by_severity == {"warn": 1}
+    assert tuple(report.meta.producers_run) == ("dataset_anomalies",)
+    assert report.meta.timings[0]["seconds"] == 0.1
+    assert report.metrics["dataset_anomalies"].model_dump(mode="json") == {
+        "scanned": 1,
+        "nested": {"counts": [1, 2]},
+    }
+
+    with pytest.raises(AttributeError):
+        report.findings.append(original_finding)  # type: ignore[attr-defined]
+    with pytest.raises(TypeError):
+        report.metrics["other"] = ProducerMetrics(scanned=2)  # type: ignore[index]
+    with pytest.raises(TypeError):
+        report.totals.findings_by_severity["warn"] = 99
+    with pytest.raises(TypeError):
+        report.meta.timings[0]["seconds"] = 99
+    with pytest.raises(TypeError):
+        report.metrics["dataset_anomalies"].nested["counts"][0] = 99
+
+    dumped = report.model_dump(mode="json")
+    assert type(dumped["findings"]) is list
+    assert type(dumped["accepted"]) is list
+    assert type(dumped["unwired"]) is list
+    assert type(dumped["meta"]["producers_run"]) is list
+    assert type(dumped["meta"]["timings"]) is list
+    assert type(dumped["metrics"]) is dict

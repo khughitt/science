@@ -59,3 +59,28 @@ def test_normalize_project_path_is_idempotent():
     once = normalize_project_path("entities//papers/./x.md")
     assert once == "entities/papers/x.md"
     assert normalize_project_path(once) == once
+
+
+def test_identity_subject_strings_are_stored_in_nfc():
+    assert PathSubject(path="doc/cafe\u0301.md", pointer="field.cafe\u0301") == PathSubject(
+        path="doc/café.md",
+        pointer="field.café",
+    )
+    assert IdentifierSubject(
+        namespace="REFERENCE",
+        value="cafe\u0301",
+    ) == IdentifierSubject(namespace="reference", value="café")
+
+
+@pytest.mark.parametrize(
+    "build",
+    [
+        lambda: EntitySubject(ref="dataset:\ud800"),
+        lambda: PathSubject(path="doc/\ud800.md"),
+        lambda: PathSubject(path="doc/a.md", pointer="\ud800"),
+        lambda: IdentifierSubject(namespace="reference", value="\ud800"),
+    ],
+)
+def test_unencodable_subject_strings_use_the_validation_error_channel(build):
+    with pytest.raises(ValidationError, match="UTF-8"):
+        build()

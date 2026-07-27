@@ -12,10 +12,18 @@ from __future__ import annotations
 
 import hashlib
 import json
+from collections.abc import Mapping
 from datetime import UTC, datetime
-from typing import Annotated, Literal, get_args
+from typing import Annotated, Literal, cast, get_args
 
-from pydantic import AfterValidator, BaseModel, ConfigDict, Field, model_validator
+from pydantic import (
+    AfterValidator,
+    BaseModel,
+    ConfigDict,
+    Field,
+    field_validator,
+    model_validator,
+)
 
 from science_model.audit.evidence import MAX_EVIDENCE_ENTRIES, Evidence
 from science_model.audit.finding import (
@@ -23,8 +31,14 @@ from science_model.audit.finding import (
     QualifierMap,
     Severity,
     reject_nul,
+    thaw_json_value,
 )
-from science_model.audit.subjects import FindingSubject
+from science_model.audit.fingerprint import (
+    FingerprintError,
+    normalize_identity_qualifiers,
+    normalize_identity_value,
+)
+from science_model.audit.subjects import FindingSubject, normalize_utf8_nfc
 
 DOC_KIND = "audit-case"
 
@@ -77,6 +91,24 @@ PERMITTED_TRANSITIONS: frozenset[tuple[CaseStatus | None, CaseStatus]] = frozens
 
 class RecordError(ValueError):
     """A stored case is malformed."""
+
+
+def _reject_blank_or_padded(value: str) -> str:
+    if not value.strip():
+        raise ValueError("authored provenance must not be blank")
+    if value != value.strip():
+        raise ValueError(
+            "authored provenance must not contain surrounding whitespace; "
+            "refuse rather than silently rewrite authorship"
+        )
+    return value
+
+
+AuthoredProvenance = Annotated[str, AfterValidator(_reject_blank_or_padded)]
+AuthoredHashComponent = Annotated[
+    HashComponent,
+    AfterValidator(_reject_blank_or_padded),
+]
 
 
 def _components(**parts: str) -> None:
@@ -226,10 +258,10 @@ def canonical_occurrence_content(occurrence: Occurrence) -> str:
 class Transition(_Base):
     from_status: CaseStatus | None
     to_status: CaseStatus
-    actor: str
+    actor: AuthoredProvenance
     at: Instant
-    reason: str = Field(min_length=1)
-    task_ref: str | None = None
+    reason: AuthoredProvenance
+    task_ref: AuthoredProvenance | None = None
 
     @model_validator(mode="after")
     def _validate(self) -> Transition:
@@ -251,13 +283,13 @@ class Review(_Base):
     #: `reviewer_kind` is a `Literal`, so it cannot carry a NUL; the other three are
     #: free strings joined into `review_id`, so they are `HashComponent`.
     reviewer_kind: ReviewerKind
-    reviewer_ref: HashComponent
-    lens: HashComponent | None = None
-    model: str | None = None
-    run_ref: HashComponent
+    reviewer_ref: AuthoredHashComponent
+    lens: AuthoredHashComponent | None = None
+    model: AuthoredProvenance | None = None
+    run_ref: AuthoredHashComponent
     at: Instant
     outcome: ReviewOutcome
-    note: str = Field(min_length=1)
+    note: AuthoredProvenance
 
     @model_validator(mode="after")
     def _agent_provenance(self) -> Review:
@@ -312,6 +344,53 @@ class AuditFindingRecord(BaseModel):
 
     status: CaseStatus
     promoted_task: str | None = None
+
+    @model_validator(mode="before")
+    @classmethod
+    def _canonicalize_stored_identity(cls, data: object) -> object:
+        if not isinstance(data, Mapping):
+            return data
+        detached = dict(data)
+        raw_identity = detached.get("identity_qualifiers")
+        if not isinstance(raw_identity, Mapping):
+            return detached
+        try:
+            identity = normalize_identity_qualifiers(raw_identity)
+        except FingerprintError as exc:
+            raise RecordError(f"identity qualifiers are invalid: {exc}") from exc
+        detached["identity_qualifiers"] = identity
+
+        occurrences = detached.get("occurrences")
+        if not isinstance(occurrences, (list, tuple)):
+            return detached
+        normalized_occurrences: list[object] = []
+        for occurrence in occurrences:
+            raw_occurrence: object = (
+                occurrence.model_dump(mode="python")
+                if isinstance(occurrence, Occurrence)
+                else occurrence
+            )
+            if not isinstance(raw_occurrence, Mapping):
+                normalized_occurrences.append(raw_occurrence)
+                continue
+            occurrence_data = dict(raw_occurrence)
+            raw_qualifiers = occurrence_data.get("qualifiers")
+            if isinstance(raw_qualifiers, Mapping):
+                qualifiers = cast(
+                    dict[str, object], thaw_json_value(raw_qualifiers)
+                )
+                for key in identity:
+                    if key in qualifiers:
+                        qualifiers[key] = normalize_identity_value(qualifiers[key])
+                occurrence_data["qualifiers"] = qualifiers
+            normalized_occurrences.append(occurrence_data)
+        detached["occurrences"] = tuple(normalized_occurrences)
+        return detached
+
+    @field_validator("rule_id")
+    @classmethod
+    def _normalize_rule_id(cls, value: str) -> str:
+        return normalize_utf8_nfc(value)
 
     @model_validator(mode="after")
     def _validate(self) -> AuditFindingRecord:

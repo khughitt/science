@@ -49,6 +49,17 @@ GOLDEN = (
         '"rule_id":"layered-claim.coverage-incomplete","subject":{"type":"project"}}',
         "c0e10a4a0c9647f84c922addd40c7356ef6e78a2639b417d063d7d6926f9bd17",
     ),
+    (
+        "identifier-unicode-nfc",
+        "refs.unresolved",
+        IdentifierSubject(namespace="REFERENCE", value="cafe\u0301"),
+        {"key": "résumé"},
+        '{"qualifiers":{"key":"résumé"},"rule_id":"refs.unresolved",'
+        '"subject":{"namespace":"reference","type":"identifier","value":"café"}}',
+        # Independent oracle:
+        # printf '%s' $'science.finding.v1\n<expected-bytes>' | sha256sum
+        "b472390a7dd4b213e44a693b368276c7138bf0748dc92c11530447edf34b56ac",
+    ),
 )
 
 
@@ -111,6 +122,29 @@ def test_fingerprint_accepts_str_bool_int_and_arrays_of_those():
         subject=ProjectSubject(),
         identity_qualifiers={"s": "a", "b": True, "i": 3, "l": ["a", "b"]},
     )
+
+
+def test_fingerprint_normalizes_identity_strings_recursively():
+    composed = finding_fingerprint(
+        rule_id="refs.unresolved",
+        subject=IdentifierSubject(namespace="reference", value="café"),
+        identity_qualifiers={"labels": ["résumé"]},
+    )
+    decomposed = finding_fingerprint(
+        rule_id="refs.unresolved",
+        subject=IdentifierSubject(namespace="reference", value="cafe\u0301"),
+        identity_qualifiers={"labels": ["re\u0301sume\u0301"]},
+    )
+    assert decomposed == composed
+
+
+def test_unencodable_identity_qualifier_uses_fingerprint_error():
+    with pytest.raises(FingerprintError, match="UTF-8"):
+        finding_fingerprint(
+            rule_id="refs.unresolved",
+            subject=ProjectSubject(),
+            identity_qualifiers={"key": "\ud800"},
+        )
 
 
 def test_rule_slug_is_frozen():

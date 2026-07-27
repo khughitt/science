@@ -131,3 +131,22 @@ def test_qualifiers_serialize_as_a_plain_dict():
     dumped = _finding().model_dump(mode="json")["qualifiers"]
     assert type(dumped) is dict
     assert dumped == {"field": "year"}
+
+
+def test_rule_id_is_stored_in_nfc_and_must_be_utf8():
+    assert _finding(rule_id="dataset.cafe\u0301").rule_id == "dataset.café"
+    with pytest.raises(ValidationError, match="UTF-8"):
+        _finding(rule_id="dataset.\ud800")
+
+
+def test_evidence_is_copied_and_immutable_but_serializes_as_an_array():
+    source = [TextEvidence(text="first")]
+    finding = _finding(evidence=source)
+    source.append(TextEvidence(text="caller-added"))
+
+    assert tuple(item.text for item in finding.evidence) == ("first",)
+    with pytest.raises(AttributeError):
+        finding.evidence.append(TextEvidence(text="mutated"))  # type: ignore[attr-defined]
+    dumped = finding.model_dump(mode="json")
+    assert type(dumped["evidence"]) is list
+    assert dumped["evidence"] == [{"type": "text", "label": None, "text": "first"}]

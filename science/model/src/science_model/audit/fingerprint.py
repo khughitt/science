@@ -15,11 +15,14 @@ from __future__ import annotations
 import hashlib
 import json
 import re
-import unicodedata
 from collections.abc import Mapping
 from typing import Any
 
-from science_model.audit.subjects import FindingSubject
+from science_model.audit.subjects import (
+    FindingSubject,
+    SubjectError,
+    normalize_utf8_nfc,
+)
 
 FINDING_DOMAIN = "science.finding.v1"
 FINGERPRINT_VERSION = 1
@@ -50,13 +53,34 @@ def normalize_identity_value(value: Any) -> Any:
     if isinstance(value, int):
         return value
     if isinstance(value, str):
-        return unicodedata.normalize("NFC", value)
+        try:
+            return normalize_utf8_nfc(value)
+        except SubjectError as exc:
+            raise FingerprintError(str(exc)) from exc
     if isinstance(value, (list, tuple)):
         return [normalize_identity_value(item) for item in value]
     raise FingerprintError(
         f"identity qualifier value of type {type(value).__name__} is not permitted; "
         "use str, bool, int, or an array of those (design §3)"
     )
+
+
+def normalize_identity_qualifiers(
+    values: Mapping[str, object],
+) -> dict[str, object]:
+    """Normalize the complete identity subset, including its string keys."""
+    normalized: dict[str, object] = {}
+    for key, value in values.items():
+        try:
+            normalized_key = normalize_utf8_nfc(key)
+        except SubjectError as exc:
+            raise FingerprintError(str(exc)) from exc
+        if normalized_key in normalized:
+            raise FingerprintError(
+                f"identity qualifier keys collide after NFC normalization: {key!r}"
+            )
+        normalized[normalized_key] = normalize_identity_value(value)
+    return normalized
 
 
 def _prune(value: object) -> object:
@@ -75,12 +99,15 @@ def canonical_json(value: object) -> bytes:
     while `model_dump(exclude_none=True)` omitted it, so the same logical value would
     have two encodings depending on which path produced it.
     """
-    return json.dumps(
-        _prune(value),
-        sort_keys=True,
-        separators=(",", ":"),
-        ensure_ascii=False,
-    ).encode("utf-8")
+    try:
+        return json.dumps(
+            _prune(value),
+            sort_keys=True,
+            separators=(",", ":"),
+            ensure_ascii=False,
+        ).encode("utf-8")
+    except UnicodeEncodeError as exc:
+        raise FingerprintError("canonical identity must be encodable as UTF-8") from exc
 
 
 def finding_fingerprint(
@@ -90,13 +117,16 @@ def finding_fingerprint(
     identity_qualifiers: Mapping[str, object],
 ) -> str:
     """The v1 digest: 64 lowercase hex characters."""
+    try:
+        normalized_rule_id = normalize_utf8_nfc(rule_id)
+    except SubjectError as exc:
+        raise FingerprintError(str(exc)) from exc
     payload = {
-        "rule_id": unicodedata.normalize("NFC", rule_id),
+        "rule_id": normalized_rule_id,
         "subject": subject.model_dump(mode="json", exclude_none=True),
-        "qualifiers": {
-            key: normalize_identity_value(value)
-            for key, value in sorted(identity_qualifiers.items())
-        },
+        "qualifiers": dict(
+            sorted(normalize_identity_qualifiers(identity_qualifiers).items())
+        ),
     }
     digest = hashlib.sha256(
         f"{FINDING_DOMAIN}\n".encode("utf-8") + canonical_json(payload)

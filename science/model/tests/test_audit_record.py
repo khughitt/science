@@ -585,6 +585,17 @@ def test_identity_agreement_compares_normalized_values():
     assert record.status == "proposed"
 
 
+def test_stored_identity_qualifier_copies_use_one_nfc_spelling():
+    record = _record(
+        identity_qualifiers={"field": "anne\u0301e"},
+        occurrences=[_occurrence(qualifiers={"field": "anne\u0301e"})],
+    )
+
+    dumped = record.model_dump(mode="json")
+    assert dumped["identity_qualifiers"] == {"field": "année"}
+    assert dumped["occurrences"][0]["qualifiers"]["field"] == "année"
+
+
 def test_occurrence_content_includes_observed_at():
     from datetime import timedelta
 
@@ -705,3 +716,101 @@ def test_occurrence_content_normalizes_the_instant_spelling():
     assert canonical_occurrence_content(_occurrence()) == canonical_occurrence_content(
         shifted
     )
+
+
+@pytest.mark.parametrize(
+    ("field", "value"),
+    [
+        ("actor", ""),
+        ("actor", " "),
+        ("actor", " keith"),
+        ("reason", ""),
+        ("reason", "\t"),
+        ("reason", " checked"),
+    ],
+)
+def test_transition_provenance_is_nonblank_and_not_silently_trimmed(field, value):
+    kwargs = dict(
+        from_status=None,
+        to_status="proposed",
+        actor="keith",
+        at=NOW,
+        reason="checked",
+    )
+    kwargs[field] = value
+    with pytest.raises(ValidationError, match=field):
+        Transition(**kwargs)
+
+
+@pytest.mark.parametrize("task_ref", ["", " ", " task:t001", "task:t001 "])
+def test_optional_transition_task_ref_is_nonblank_and_not_silently_trimmed(task_ref):
+    with pytest.raises(ValidationError, match="task_ref"):
+        Transition(
+            from_status="confirmed",
+            to_status="promoted",
+            actor="keith",
+            at=NOW,
+            reason="confirmed defect",
+            task_ref=task_ref,
+        )
+
+
+@pytest.mark.parametrize(
+    ("field", "value"),
+    [
+        ("reviewer_ref", ""),
+        ("reviewer_ref", " "),
+        ("reviewer_ref", " keith"),
+        ("run_ref", ""),
+        ("run_ref", "\t"),
+        ("run_ref", " run:x"),
+        ("note", ""),
+        ("note", " "),
+        ("note", " checked"),
+        ("lens", ""),
+        ("lens", " "),
+        ("lens", " grounding"),
+        ("model", ""),
+        ("model", " "),
+        ("model", " opus"),
+    ],
+)
+def test_review_provenance_is_nonblank_and_not_silently_trimmed(field, value):
+    kwargs = dict(
+        review_id="c" * 64,
+        reviewer_kind="agent",
+        reviewer_ref="curation-sweep",
+        lens="grounding",
+        model="claude-opus-5",
+        run_ref="run:x",
+        at=NOW,
+        outcome="confirms",
+        note="checked",
+    )
+    kwargs[field] = value
+    with pytest.raises(ValidationError, match=field):
+        Review(**kwargs)
+
+
+def test_authored_provenance_accepts_exact_nonblank_values():
+    transition = Transition(
+        from_status="confirmed",
+        to_status="promoted",
+        actor="keith",
+        at=NOW,
+        reason="confirmed defect",
+        task_ref="task:t001",
+    )
+    review = Review(
+        review_id="c" * 64,
+        reviewer_kind="agent",
+        reviewer_ref="curation-sweep",
+        lens="grounding",
+        model="claude-opus-5",
+        run_ref="run:x",
+        at=NOW,
+        outcome="confirms",
+        note="checked",
+    )
+    assert transition.actor == "keith"
+    assert review.note == "checked"

@@ -8,6 +8,7 @@ degrading to a path, which would change a case's identity unnoticed.
 from __future__ import annotations
 
 import re
+import unicodedata
 from typing import Annotated, Literal, Union
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
@@ -23,6 +24,24 @@ class SubjectError(ValueError):
     """A subject could not be normalized or is not permitted."""
 
 
+def normalize_utf8_nfc(value: str) -> str:
+    """Return the one storable NFC spelling, refusing invalid UTF-8 text."""
+    normalized = unicodedata.normalize("NFC", value)
+    try:
+        normalized.encode("utf-8")
+    except UnicodeEncodeError as exc:
+        raise SubjectError("identity string must be encodable as UTF-8") from exc
+    return normalized
+
+
+def normalize_identifier_namespace(value: str) -> str:
+    """The one kebab-case namespace spelling accepted by declarations and subjects."""
+    lowered = normalize_utf8_nfc(value).lower()
+    if not _NAMESPACE_RE.match(lowered):
+        raise SubjectError(f"namespace must be kebab-case, got {value!r}")
+    return lowered
+
+
 def normalize_project_path(raw: str) -> str:
     """Project-relative POSIX form.
 
@@ -31,7 +50,7 @@ def normalize_project_path(raw: str) -> str:
     on the strength of where it happens to land rather than on what it says. `.` and
     duplicate separators are collapsed, because neither is traversal.
     """
-    candidate = raw.replace("\\", "/")
+    candidate = normalize_utf8_nfc(raw).replace("\\", "/")
     if candidate.startswith("/"):
         raise SubjectError(f"path must be project-relative, got {raw!r}")
     segments = [s for s in candidate.split("/") if s not in ("", ".")]
@@ -55,9 +74,12 @@ class EntitySubject(_Base):
     @field_validator("ref")
     @classmethod
     def _canonical_ref(cls, value: str) -> str:
-        if not _ENTITY_REF_RE.match(value):
-            raise SubjectError(f"entity ref must be `<prefix>:<slug>`, got {value!r}")
-        return value
+        normalized = normalize_utf8_nfc(value)
+        if not _ENTITY_REF_RE.match(normalized):
+            raise SubjectError(
+                f"entity ref must be `<prefix>:<slug>`, got {normalized!r}"
+            )
+        return normalized
 
 
 class PathSubject(_Base):
@@ -75,16 +97,17 @@ class PathSubject(_Base):
     def _stable_pointer(cls, value: str | None) -> str | None:
         if value is None:
             return None
-        if not value.strip():
+        normalized = normalize_utf8_nfc(value)
+        if not normalized.strip():
             raise SubjectError("pointer must not be blank; omit it instead")
-        if len(value) > MAX_POINTER_LENGTH:
+        if len(normalized) > MAX_POINTER_LENGTH:
             raise SubjectError(f"pointer exceeds {MAX_POINTER_LENGTH} characters")
-        if _POSITIONAL_RE.search(value):
+        if _POSITIONAL_RE.search(normalized):
             raise SubjectError(
-                f"pointer {value!r} contains a positional segment; identity must not "
+                f"pointer {normalized!r} contains a positional segment; identity must not "
                 "depend on list position (design §2)"
             )
-        return value
+        return normalized
 
 
 class IdentifierSubject(_Base):
@@ -95,17 +118,15 @@ class IdentifierSubject(_Base):
     @field_validator("namespace")
     @classmethod
     def _lower_namespace(cls, value: str) -> str:
-        lowered = value.lower()
-        if not _NAMESPACE_RE.match(lowered):
-            raise SubjectError(f"namespace must be kebab-case, got {value!r}")
-        return lowered
+        return normalize_identifier_namespace(value)
 
     @field_validator("value")
     @classmethod
     def _nonblank(cls, value: str) -> str:
-        if not value.strip():
+        normalized = normalize_utf8_nfc(value)
+        if not normalized.strip():
             raise SubjectError("identifier value must not be blank")
-        return value
+        return normalized
 
 
 class ProjectSubject(_Base):

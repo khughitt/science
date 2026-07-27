@@ -9,6 +9,7 @@ from typing import Annotated, Literal
 from pydantic import (
     AfterValidator,
     BaseModel,
+    BeforeValidator,
     ConfigDict,
     Field,
     PlainSerializer,
@@ -16,46 +17,50 @@ from pydantic import (
 )
 
 from science_model.audit.evidence import MAX_EVIDENCE_ENTRIES, Evidence
-from science_model.audit.subjects import FindingSubject
+from science_model.audit.subjects import FindingSubject, normalize_utf8_nfc
 
 Severity = Literal["error", "warn", "info"]
 
 _SEVERITY_ALIASES = {"warning": "warn", "warn": "warn", "error": "error", "info": "info"}
 
 
-def _freeze_qualifier_value(value: object) -> object:
-    """Recursively copy qualifier containers into immutable equivalents."""
+def freeze_json_value(value: object) -> object:
+    """Recursively copy JSON containers into immutable equivalents."""
     if isinstance(value, Mapping):
         return MappingProxyType(
-            {key: _freeze_qualifier_value(item) for key, item in value.items()}
+            {key: freeze_json_value(item) for key, item in value.items()}
         )
     if isinstance(value, (list, tuple)):
-        return tuple(_freeze_qualifier_value(item) for item in value)
+        return tuple(freeze_json_value(item) for item in value)
     return value
 
 
 def _freeze_qualifiers(value: Mapping[str, object]) -> Mapping[str, object]:
     """Return a recursively immutable copy of a qualifier mapping."""
     return MappingProxyType(
-        {key: _freeze_qualifier_value(item) for key, item in value.items()}
+        {key: freeze_json_value(item) for key, item in value.items()}
     )
 
 
-def _serialize_qualifier_value(value: object) -> object:
-    """Restore immutable qualifier containers to JSON-ready dicts and arrays."""
+def thaw_json_value(value: object) -> object:
+    """Return a detached JSON-shaped copy of recursively frozen data.
+
+    Strict schema validation must inspect the wire representation, where arrays are
+    lists. Feeding the immutable internal tuples to a schema declaring ``list[T]``
+    makes one valid payload fail merely because it has already crossed a model
+    boundary.
+    """
     if isinstance(value, Mapping):
         return {
-            key: _serialize_qualifier_value(item) for key, item in value.items()
+            key: thaw_json_value(item) for key, item in value.items()
         }
     if isinstance(value, (list, tuple)):
-        return [_serialize_qualifier_value(item) for item in value]
+        return [thaw_json_value(item) for item in value]
     return value
 
 
 def _serialize_qualifiers(value: Mapping[str, object]) -> dict[str, object]:
-    return {
-        key: _serialize_qualifier_value(item) for key, item in value.items()
-    }
+    return {key: thaw_json_value(item) for key, item in value.items()}
 
 
 QualifierMap = Annotated[
@@ -64,6 +69,18 @@ QualifierMap = Annotated[
     PlainSerializer(_serialize_qualifiers, return_type=dict, when_used="always"),
 ]
 """A frozen, JSON-serializable qualifier mapping."""
+
+
+def _tuple_input(value: object) -> object:
+    if isinstance(value, (list, tuple)):
+        return tuple(value)
+    return value
+
+
+EvidenceArray = Annotated[
+    tuple[Evidence, ...],
+    BeforeValidator(_tuple_input),
+]
 
 
 def reject_nul(value: str) -> str:
@@ -99,7 +116,16 @@ class AuditFinding(BaseModel):
     severity: Severity
     qualifiers: QualifierMap = Field(default_factory=dict, validate_default=True)
     message: str
-    evidence: list[Evidence] = Field(default_factory=list, max_length=MAX_EVIDENCE_ENTRIES)
+    evidence: EvidenceArray = Field(
+        default=(),
+        max_length=MAX_EVIDENCE_ENTRIES,
+        validate_default=True,
+    )
+
+    @field_validator("rule_id")
+    @classmethod
+    def _normalize_rule_id(cls, value: str) -> str:
+        return normalize_utf8_nfc(value)
 
     @field_validator("severity", mode="before")
     @classmethod

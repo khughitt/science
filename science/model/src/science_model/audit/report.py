@@ -12,12 +12,29 @@ supervisor or the ingesting command, never by a finding.
 from __future__ import annotations
 
 from collections import Counter
+from collections.abc import Mapping
 from datetime import datetime
-from typing import Literal
+from types import MappingProxyType
+from typing import Annotated, Literal
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+from pydantic import (
+    AfterValidator,
+    BaseModel,
+    BeforeValidator,
+    ConfigDict,
+    Field,
+    PlainSerializer,
+    field_validator,
+    model_serializer,
+    model_validator,
+)
 
-from science_model.audit.finding import AuditFinding, HashComponent
+from science_model.audit.finding import (
+    AuditFinding,
+    HashComponent,
+    freeze_json_value,
+    thaw_json_value,
+)
 
 REPORT_SCHEMA_VERSION = 2
 
@@ -25,6 +42,38 @@ REPORT_SCHEMA_VERSION = 2
 #: (design §8), so a bound on one alone is a bound on nothing: 5000 accepted
 #: observations cost exactly what 5000 unsuppressed ones cost.
 MAX_REPORT_FINDINGS = 5000
+
+
+def _nonblank_producer_id(value: str) -> str:
+    if not value.strip():
+        raise ValueError("producer id must not be blank")
+    return value
+
+
+ProducerId = Annotated[
+    HashComponent,
+    AfterValidator(_nonblank_producer_id),
+]
+
+
+def _tuple_input(value: object) -> object:
+    if isinstance(value, (list, tuple)):
+        return tuple(value)
+    return value
+
+
+def _freeze_mapping(value: Mapping[str, object]) -> Mapping[str, object]:
+    return MappingProxyType(dict(value))
+
+
+def _freeze_json_mapping(value: Mapping[str, object]) -> Mapping[str, object]:
+    return MappingProxyType(
+        {key: freeze_json_value(item) for key, item in value.items()}
+    )
+
+
+def _serialize_mapping(value: Mapping[str, object]) -> dict[str, object]:
+    return {key: thaw_json_value(item) for key, item in value.items()}
 
 
 class _Base(BaseModel):
@@ -36,19 +85,19 @@ class ReportedFinding(_Base):
     #: is joined with `\0` into the idempotency key. Refusing here rather than there
     #: keeps the failure a report-validation error the caller asked for, instead of a
     #: `ValidationError` surfacing from inside the write path.
-    producer_id: HashComponent = Field(min_length=1)
+    producer_id: ProducerId
     finding: AuditFinding
 
 
 class AcceptedFinding(_Base):
-    producer_id: HashComponent = Field(min_length=1)
+    producer_id: ProducerId
     finding: AuditFinding
     acceptance_key: str = Field(pattern=r"^[0-9a-f]{32}$")
     reason: str = Field(min_length=1)
 
 
 class UnwiredProducer(_Base):
-    producer_id: HashComponent
+    producer_id: ProducerId
     code: str = Field(min_length=1)
     reason: str | None = None
 
@@ -62,20 +111,83 @@ class ProducerMetrics(BaseModel):
     registry.
     """
 
-    model_config = ConfigDict(extra="allow")
+    model_config = ConfigDict(extra="allow", frozen=True)
+
+    @model_validator(mode="after")
+    def _freeze_extras(self) -> "ProducerMetrics":
+        extra = self.__pydantic_extra__ or {}
+        object.__setattr__(
+            self,
+            "__pydantic_extra__",
+            MappingProxyType(
+                {key: freeze_json_value(value) for key, value in extra.items()}
+            ),
+        )
+        return self
+
+    @model_serializer(mode="plain")
+    def _serialize(self) -> dict[str, object]:
+        return _serialize_mapping(self.__pydantic_extra__ or {})
+
+
+FrozenSeverityCounts = Annotated[
+    Mapping[str, int],
+    AfterValidator(_freeze_mapping),
+    PlainSerializer(_serialize_mapping, return_type=dict, when_used="always"),
+]
+FrozenTiming = Annotated[
+    Mapping[str, object],
+    AfterValidator(_freeze_json_mapping),
+    PlainSerializer(_serialize_mapping, return_type=dict, when_used="always"),
+]
+ReportedArray = Annotated[
+    tuple[ReportedFinding, ...],
+    BeforeValidator(_tuple_input),
+]
+AcceptedArray = Annotated[
+    tuple[AcceptedFinding, ...],
+    BeforeValidator(_tuple_input),
+]
+UnwiredArray = Annotated[
+    tuple[UnwiredProducer, ...],
+    BeforeValidator(_tuple_input),
+]
+ProducerIdArray = Annotated[
+    tuple[ProducerId, ...],
+    BeforeValidator(_tuple_input),
+]
+TimingArray = Annotated[
+    tuple[FrozenTiming, ...],
+    BeforeValidator(_tuple_input),
+]
+FrozenMetrics = Annotated[
+    Mapping[str, ProducerMetrics],
+    AfterValidator(_freeze_mapping),
+    PlainSerializer(_serialize_mapping, return_type=dict, when_used="always"),
+]
 
 
 class ReportTotals(_Base):
     findings_total: int = Field(ge=0)
-    findings_by_severity: dict[str, int] = Field(default_factory=dict)
+    findings_by_severity: FrozenSeverityCounts = Field(
+        default_factory=dict,
+        validate_default=True,
+    )
     accepted_total: int = Field(ge=0)
     unwired_total: int = Field(ge=0)
 
 
 class ReportMeta(_Base):
-    producers_run: list[str] = Field(default_factory=list)
+    producers_run: ProducerIdArray = Field(default=(), validate_default=True)
     total_duration_seconds: float
-    timings: list[dict[str, object]] = Field(default_factory=list)
+    timings: TimingArray = Field(default=(), validate_default=True)
+
+    @field_validator("producers_run")
+    @classmethod
+    def _unique_producers_run(cls, value: tuple[str, ...]) -> tuple[str, ...]:
+        if len(value) != len(set(value)):
+            raise ValueError("producers_run contains duplicate producer ids")
+        return value
 
 
 class AuditReport(BaseModel):
@@ -90,12 +202,12 @@ class AuditReport(BaseModel):
     #: raw `ValueError` from `datetime.fromisoformat` out of the write path, where it
     #: is neither an `IngestError` nor a validation failure the caller can report.
     generated_at: str = Field(min_length=1)
-    findings: list[ReportedFinding] = Field(max_length=MAX_REPORT_FINDINGS)
-    accepted: list[AcceptedFinding] = Field(
-        default_factory=list, max_length=MAX_REPORT_FINDINGS
+    findings: ReportedArray = Field(max_length=MAX_REPORT_FINDINGS)
+    accepted: AcceptedArray = Field(
+        default=(), max_length=MAX_REPORT_FINDINGS, validate_default=True
     )
-    metrics: dict[str, ProducerMetrics] = Field(default_factory=dict)
-    unwired: list[UnwiredProducer] = Field(default_factory=list)
+    metrics: FrozenMetrics = Field(default_factory=dict, validate_default=True)
+    unwired: UnwiredArray = Field(default=(), validate_default=True)
     totals: ReportTotals
     meta: ReportMeta
 
@@ -144,5 +256,26 @@ class AuditReport(BaseModel):
             raise ValueError(
                 f"totals.findings_by_severity {dict(self.totals.findings_by_severity)} "
                 f"disagrees with the findings channel {dict(actual)}"
+            )
+        producers_run = set(self.meta.producers_run)
+        unwired = [item.producer_id for item in self.unwired]
+        if len(unwired) != len(set(unwired)):
+            raise ValueError("duplicate unwired producer ids are forbidden")
+        overlap = producers_run & set(unwired)
+        if overlap:
+            raise ValueError(
+                f"producer ids cannot appear in both producers_run and unwired: "
+                f"{sorted(overlap)}"
+            )
+        output_producers = {
+            *(item.producer_id for item in self.findings),
+            *(item.producer_id for item in self.accepted),
+            *self.metrics,
+        }
+        missing = output_producers - producers_run
+        if missing:
+            raise ValueError(
+                f"output producer ids must be named in meta.producers_run; missing "
+                f"{sorted(missing)}"
             )
         return self
