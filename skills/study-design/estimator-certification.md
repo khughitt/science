@@ -27,8 +27,8 @@ correctness-first — not a coincidence.
 | **2. Reproducibility** | Is the answer a function of the data, or of the run? | moderate |
 | **3. Threshold calibration** | Does the decision rule have the null it claims? | expensive |
 
-**Ordering rule: establish well-posedness → certify the estimator → price the design → commit the
-budget.** A budget committed before certification is not a constraint on the analysis; it is a
+**Ordering rule: establish well-posedness → certify the estimator → price the design (see
+[`cost-gate-certification.md`](cost-gate-certification.md)) → commit the budget.** A budget committed before certification is not a constraint on the analysis; it is a
 consequence of an untested assumption, and it can be wrong by orders of magnitude. If you must
 commit early, mark the budget **CONDITIONAL** and name what invalidates it.
 

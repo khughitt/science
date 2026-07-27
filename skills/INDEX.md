@@ -64,6 +64,7 @@ Do not load every leaf "just in case"; that defeats progressive disclosure.
 - `study-design-replicate-count-justification`: `skills/study-design/replicate-count-justification.md`
 - `study-design-power-floor-acknowledgement`: `skills/study-design/power-floor-acknowledgement.md`
 - `study-design-estimator-certification`: `skills/study-design/estimator-certification.md`
+- `study-design-cost-gate-certification`: `skills/study-design/cost-gate-certification.md`
 - `study-design-sensitivity-arbitration`: `skills/study-design/sensitivity-arbitration.md`
 - `study-design-causal-identification`: `skills/study-design/causal-identification.md`
 - `study-design-bias-vs-variance-decomposition`: `skills/study-design/bias-vs-variance-decomposition.md`

@@ -52,6 +52,7 @@ compose order when leaves combine), and construction-rigor questions route to
 
 ## Companion Skills
 
+- [`../study-design/cost-gate-certification.md`](../study-design/cost-gate-certification.md) — route here when a pipeline's schedule, compute budget, or feasibility gate decides affordability.
 - [`../data-management/conventions.md`](../data-management/conventions.md) — data/result layout: read from `data/raw/`, write processed outputs and workflow-result packages under `results/<workflow>/<slug>/`.
 - [`../research-package/research-package-spec.md`](../research-package/research-package-spec.md) — **only when** the pipeline's deliverable is a narrative research package under `research/packages/{name}/`; ordinary workflow results do not need one.
 - [`../statistics/SKILL.md`](../statistics/SKILL.md) — statistical decisions that should be made before pipeline construction.

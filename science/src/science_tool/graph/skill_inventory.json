@@ -626,6 +626,10 @@
       "companions": [
         {
           "role": "leaf",
+          "target": "study-design-cost-gate-certification"
+        },
+        {
+          "role": "leaf",
           "target": "data-management-conventions"
         },
         {
@@ -1053,6 +1057,24 @@
         "vanderweele-ding-evalue",
         "rosenbaum-sensitivity"
       ]
+    },
+    {
+      "archetype": "analysis-discipline",
+      "companions": [
+        {
+          "role": "leaf",
+          "target": "study-design-estimator-certification"
+        },
+        {
+          "role": "leaf",
+          "target": "study-design-replicate-count-justification"
+        }
+      ],
+      "description": "Use when a sampling schedule, compute budget, or feasibility gate decides whether an analysis is affordable \u2014 especially when the benchmark, pilot, or schedule was measured at a different batch size, concurrency, substrate, or run phase than the one that will execute.",
+      "id": "study-design-cost-gate-certification",
+      "name": "study-design-cost-gate-certification",
+      "path": "skills/study-design/cost-gate-certification.md",
+      "role": "leaf"
     },
     {
       "archetype": "analysis-discipline",

@@ -28,6 +28,7 @@ arbitration, causal identification, and bias/variance reasoning. Excludes model 
 | `replicate-count-justification.md` | choosing R/B/m from a pilot rule | count already externally fixed |
 | `power-floor-acknowledgement.md` | wording a null/weak result under a detectability floor | strong positive effect |
 | `estimator-certification.md` | certifying a numeric fit against the E ≤ ρ·σ_null budget | no numeric verdict at stake |
+| `cost-gate-certification.md` | a schedule / budget / feasibility gate decides affordability | no cost or schedule decision at stake |
 | `sensitivity-arbitration.md` | applying a pre-committed sensitivity/veto table | no pre-committed table |
 | `causal-identification.md` | certifying an adjustment set / identification | purely descriptive analysis |
 | `bias-vs-variance-decomposition.md` | deciding whether more replicates vs bias correction is legitimate | no error-source ambiguity |
