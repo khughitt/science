@@ -16,7 +16,7 @@ Before executing any research command:
    - `software` → `doc/`, `specs/`, `tasks/`, `knowledge/`, plus native implementation roots such as `src/` and `tests/`
 2. Load the `science-command-preamble` skill. Use its
    `references/role-prompts/discussant.md` role prompt and its aspect definitions.
-3. Load the `science-scientific-writing` skill. For research methodology, read the `science-command-preamble` skill's `references/methodology-index.md` and load the relevant generated methodology router skills (e.g. `science-literature`, `science-literature`, `science-epistemics`).
+3. Load the `science-scientific-writing` skill. For research methodology, read the `science-command-preamble` skill's `references/methodology-index.md` and load the emitted methodology router skills that own the relevant leaf guidance (for example, load the `science-literature` skill for `literature-evaluation` and `literature-citation-discipline` guidance, and load the `science-epistemics` skill for `epistemics-proposition-graph-reasoning` guidance).
 4. Read project context from current entity roots:
    - `entities/questions/` for active research questions.
    - `entities/hypotheses/` for hypotheses.

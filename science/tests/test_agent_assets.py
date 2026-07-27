@@ -73,16 +73,6 @@ def _methodology_names() -> set[str]:
     return expected
 
 
-def _canonical_skill_names() -> set[str]:
-    return set(
-        re.findall(
-            r"^- `([a-z0-9-]+)`: `skills/[A-Za-z0-9._/-]+\.md`$",
-            (ROOT / "skills" / "INDEX.md").read_text(encoding="utf-8"),
-            re.MULTILINE,
-        )
-    )
-
-
 def _write_minimal_generation_repo(
     repo_root: Path,
     *,
@@ -658,17 +648,67 @@ def test_opencode_adapter_frontmatter_is_valid_yaml(
 
 
 def test_generated_command_skill_loads_name_emitted_packages(
-    generated: GenerationResult,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    validated_dependencies: dict[str, set[str]] = {}
+    validate_dependencies = agent_assets._validate_dependencies
+
+    def capture_dependencies(
+        dependencies: dict[str, set[str]],
+        generated_names: set[str],
+    ) -> None:
+        validated_dependencies.update({name: set(targets) for name, targets in dependencies.items()})
+        validate_dependencies(dependencies, generated_names)
+
+    monkeypatch.setattr(
+        agent_assets,
+        "_validate_dependencies",
+        capture_dependencies,
+    )
+    generated = _generate(tmp_path)
     emitted_names = set(generated.skill_paths)
-    canonical_names = _canonical_skill_names()
     command_names = {command_to_skill_name(path) for path in sorted((ROOT / "commands").glob("*.md"))}
     for command_name in sorted(command_names):
         text = generated.skill_paths[command_name].read_text(encoding="utf-8")
-        explicit_loads = set(re.findall(r"`([a-z][a-z0-9-]+)` skill", text))
+        explicit_loads = set(
+            re.findall(
+                r"\b[Ll]oad(?: and execute)? (?:the )?"
+                r"`([a-z][a-z0-9-]+)` skill\b",
+                text,
+            )
+        )
         assert explicit_loads <= emitted_names, command_name
-        unresolved = {name for name in canonical_names if f"`{name}`" in text}
-        assert unresolved == set(), command_name
+        assert explicit_loads <= validated_dependencies[command_name], command_name
+
+
+def test_explicit_leaf_load_names_emitted_owner_and_records_dependency() -> None:
+    dependencies: set[str] = set()
+
+    rewritten = agent_assets._rewrite_explicit_skill_loads(
+        ("For this planning decision — load `study-design-prereg-amendment-vs-fresh` to decide."),
+        {
+            "study-design-prereg-amendment-vs-fresh": "science-study-design",
+        },
+        dependencies,
+    )
+
+    assert rewritten == (
+        "For this planning decision — load the `science-study-design` skill for "
+        "`study-design-prereg-amendment-vs-fresh` guidance to decide."
+    )
+    assert dependencies == {"science-study-design"}
+
+
+def test_generated_command_preamble_loads_routers_and_preserves_leaf_guidance(
+    skills_root: Path,
+) -> None:
+    text = _read_skill(skills_root, "science-health")
+
+    assert (
+        "load the `science-literature` skill for `literature-evaluation` and `literature-citation-discipline` guidance"
+    ) in text
+    assert ("load the `science-epistemics` skill for `epistemics-proposition-graph-reasoning` guidance") in text
 
 
 def test_generated_tree_has_no_toolkit_checkout_file_references(
@@ -886,10 +926,14 @@ def test_generated_plan_analysis_skill_routes_proteomics_and_sensor_time_series(
 
     expected_strings = (
         "Proteomics, phosphoproteomics, mass spectrometry, peptide intensity, TMT, LFQ",
-        "`science-bio`",
-        "`science-study-design`",
+        ("`proteomics-qa`, `study-design-bias-vs-variance-decomposition`, `study-design-sensitivity-arbitration`"),
         "Wearable, behavioral, actigraphy, EMA, symptom diary, sensor time series, sleep/activity rhythms, or cross-lag coupling",
-        "`science-statistics`",
+        (
+            "`statistics-time-series-and-longitudinal-models`, "
+            "`study-design-bias-vs-variance-decomposition`, "
+            "`study-design-power-floor-acknowledgement`, and "
+            "`study-design-sensitivity-arbitration`"
+        ),
     )
     for expected in expected_strings:
         assert expected in text
@@ -903,11 +947,27 @@ def test_generated_plan_analysis_skill_routes_network_dyadic_permutation_designs
 
     expected_strings = (
         "Network/graph edges, dyadic data, edge prediction, node-label permutation, QAP/MRQAP",
-        "`science-study-design`",
+        (
+            "`study-design-power-floor-acknowledgement`, "
+            "`study-design-replicate-count-justification`, "
+            "`study-design-sensitivity-arbitration`"
+        ),
         "treat dyads as dependent observations",
     )
     for expected in expected_strings:
         assert expected in text
+
+
+def test_generated_command_skills_preserve_domain_and_entity_vocabulary(
+    skills_root: Path,
+) -> None:
+    health = _read_skill(skills_root, "science-health")
+    review = _read_skill(skills_root, "science-review")
+
+    assert "Pure short words (`genomics`, `protein`)" in health
+    assert "Pure short words (`science-bio`, `protein`)" not in health
+    assert "`workflow-run`, `research-package`, `task`, `plan`" in review
+    assert "`science-research-package`" not in review
 
 
 def test_catalog_datasets_generated_skill_is_layout_v3_aware(tmp_path: Path) -> None:

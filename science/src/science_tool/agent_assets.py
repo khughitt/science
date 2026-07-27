@@ -45,7 +45,20 @@ _CANONICAL_SKILL_ENTRY_RE = re.compile(
     r"^- `([a-z0-9-]+)`: `(skills/[A-Za-z0-9._/-]+\.md)`$",
     re.MULTILINE,
 )
-_BACKTICKED_NAME_RE = re.compile(r"`([a-z][a-z0-9-]+)`")
+_EXPLICIT_SKILL_LOAD_RE = re.compile(r"\b(?P<verb>[Ll]oad) the `(?P<name>[a-z][a-z0-9-]+)` skill")
+_EXPLICIT_LEAF_LOAD_RE = re.compile(r"\b(?P<verb>[Ll]oad) `(?P<name>[a-z][a-z0-9-]+)`")
+_EXAMPLE_LEAF_LOAD_INSTRUCTION = (
+    "load the leaves relevant to the task "
+    "(e.g. `literature-evaluation`, `literature-citation-discipline`, "
+    "`epistemics-proposition-graph-reasoning`)"
+)
+_EMITTED_EXAMPLE_LEAF_LOAD_INSTRUCTION = (
+    "load the emitted methodology router skills that own the relevant leaf "
+    "guidance (for example, load the `science-literature` skill for "
+    "`literature-evaluation` and `literature-citation-discipline` guidance, "
+    "and load the `science-epistemics` skill for "
+    "`epistemics-proposition-graph-reasoning` guidance)"
+)
 _TOOLKIT_CHECKOUT_RESOURCE_RE = re.compile(
     r"`(?:~/d/science|/home/keith/d/science|/mnt/ssd/Dropbox/science)"
     r"/((?:docs|references|templates|skills)/[A-Za-z0-9._/-]+\.md)`"
@@ -535,10 +548,6 @@ def _load_command_preamble(repo_root: Path) -> str:
         ("the `science-command-preamble` skill's `references/methodology-index.md`"),
     )
     text = text.replace(
-        "and load the leaves relevant to the task",
-        "and load the relevant generated methodology router skills",
-    )
-    text = text.replace(
         "`${CLAUDE_PLUGIN_ROOT}/aspects/<name>/<name>.md`",
         ("the `science-command-preamble` skill's `references/aspects/<name>/<name>.md`"),
     )
@@ -633,7 +642,7 @@ def _render_command_skill(
     canonical_skill_owners: Mapping[str, str],
     dependencies: set[str],
 ) -> str:
-    rewritten_preamble = _rewrite_canonical_skill_names(
+    rewritten_preamble = _rewrite_explicit_skill_loads(
         preamble.replace("<role>", role),
         canonical_skill_owners,
         dependencies,
@@ -784,27 +793,47 @@ def _rewrite_command_toolkit_references(
     text = _PLUGIN_SKILL_PATH_RE.sub(replace_plugin_skill, text)
     text = _BARE_SKILL_PATH_RE.sub(replace_bare_skill, text)
     text = _PLUGIN_RESOURCE_PATH_RE.sub(replace_plugin_resource, text)
-    return _rewrite_canonical_skill_names(
+    return _rewrite_explicit_skill_loads(
         text,
         canonical_skill_owners,
         dependencies,
     )
 
 
-def _rewrite_canonical_skill_names(
+def _rewrite_explicit_skill_loads(
     text: str,
     canonical_skill_owners: Mapping[str, str],
     dependencies: set[str],
 ) -> str:
-    def replace(match: re.Match[str]) -> str:
-        name = match.group(1)
+    emitted_names = set(canonical_skill_owners.values())
+    text = text.replace(
+        _EXAMPLE_LEAF_LOAD_INSTRUCTION,
+        _EMITTED_EXAMPLE_LEAF_LOAD_INSTRUCTION,
+    )
+
+    def replace_skill_load(match: re.Match[str]) -> str:
+        verb = match.group("verb")
+        name = match.group("name")
+        dependency = canonical_skill_owners.get(name)
+        if dependency is not None:
+            dependencies.add(dependency)
+            return f"{verb} the `{dependency}` skill"
+        if name in emitted_names:
+            dependencies.add(name)
+            return match.group(0)
+        return match.group(0)
+
+    def replace_leaf_load(match: re.Match[str]) -> str:
+        verb = match.group("verb")
+        name = match.group("name")
         dependency = canonical_skill_owners.get(name)
         if dependency is None:
             return match.group(0)
         dependencies.add(dependency)
-        return f"`{dependency}`"
+        return f"{verb} the `{dependency}` skill for `{name}` guidance"
 
-    return _BACKTICKED_NAME_RE.sub(replace, text)
+    text = _EXPLICIT_SKILL_LOAD_RE.sub(replace_skill_load, text)
+    return _EXPLICIT_LEAF_LOAD_RE.sub(replace_leaf_load, text)
 
 
 def _methodology_skill_name(
