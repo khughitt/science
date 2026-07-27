@@ -237,13 +237,23 @@ def test_big_picture_task_queries_apply_research_aspects_in_the_cli() -> None:
 
 def test_create_graph_updates_task_refs_through_the_live_cli() -> None:
     text = _read("commands/create-graph.md")
-    step = next(line for line in text.splitlines() if line.startswith("2. "))
+    lines = text.splitlines()
+    start = next(index for index, line in enumerate(lines) if line.startswith("2. "))
+    end = next(index for index, line in enumerate(lines[start + 1 :], start + 1) if line.startswith("3. "))
+    step = "\n".join(lines[start:end])
 
     assert "science tasks show <task-id>" in step
     assert "science tasks edit <task-id>" in step
+    assert "non-empty replacement set" in step
     assert "--related <canonical-id>" in step
     assert "--blocked-by <canonical-id>" in step
-    assert "full desired sets" in step
+    assert "Omitting either repeated option leaves that field unchanged" in step
+    assert "--status blocked" in step
+    assert "science tasks unblock <task-id>" in step
+    assert "--clear-blockers" in step
+    assert "retaining its current status" in step
+    assert "cannot clear a non-empty `related` set to empty" in step
+    assert "Report that limitation" in step
     assert "tasks/*.md" not in step
     assert "`blocked-by:`" not in step
 

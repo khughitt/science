@@ -197,7 +197,10 @@ For each project entity:
    - questions in `entities/questions/`
    - interpretations, discussions, pre-registrations, bias audits, methods,
      datasets, and similar entities in their typed `entities/<kind>/` locations
-2. Run `science tasks show <task-id>`, then `science tasks edit <task-id>` with the full desired sets through repeated `--related <canonical-id>` and `--blocked-by <canonical-id>` options. Editing replaces those list fields, so preserve existing references; do not edit task-store files directly.
+2. Inspect task links with `science tasks show <task-id>` and change them only through the live CLI:
+   - For each non-empty replacement set, run `science tasks edit <task-id>` with every desired reference through repeated `--related <canonical-id>` or `--blocked-by <canonical-id>` options. Omitting either repeated option leaves that field unchanged. When a non-empty blocker set should make the task blocked, also pass `--status blocked`; `--blocked-by` alone does not change status.
+   - To empty the blocker set and transition the task to active, run `science tasks unblock <task-id>`. Use `science tasks edit <task-id> --clear-blockers` only when clearing blockers while intentionally retaining its current status.
+   - The CLI cannot clear a non-empty `related` set to empty. Report that limitation rather than editing task-store files directly.
 3. Put unresolved but legitimate project-local semantics in `knowledge/sources/<local-profile>/`:
    - `external_refs.yaml` for external authority rows
    - `mappings.yaml` for explicit aliases during migration
