@@ -48,6 +48,7 @@ from science_tool.boundary.gitio import (
     visible_paths,
 )
 from science_tool.boundary.walk import iter_repo_files, manifest_candidates
+from science_tool.data_root import PROJECT_CONFIG_FILENAME
 from science_tool.project_config import ProjectConfigError, load_project_config
 from science_tool.validate.checks import Check
 from science_tool.validate.context import ValidateContext
@@ -195,7 +196,7 @@ def check_boundary(ctx: ValidateContext) -> Iterator[Result]:
         # disable four checks exactly when the configuration is wrong.
         yield Result(
             severity=Severity.ERROR,
-            path=Path("science.yaml"),
+            path=Path(PROJECT_CONFIG_FILENAME),
             line=None,
             message=(
                 "boundary declaration is invalid, so no declared-root check can run: "
@@ -241,7 +242,7 @@ def check_boundary(ctx: ValidateContext) -> Iterator[Result]:
         if entry.source not in governed:
             yield Result(
                 severity=Severity.ERROR,
-                path=Path("science.yaml"),
+                path=Path(PROJECT_CONFIG_FILENAME),
                 line=None,
                 message=(
                     f"boundary.unmanaged_allow names {entry.source!r}, which is not a tracked "

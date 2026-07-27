@@ -49,6 +49,10 @@ def propose_declaration(project_root: Path) -> dict:
     observed: dict[str, set[str]] = {}
 
     for path in _walk_candidates(project_root):
+        candidate = path.as_posix()
+        if candidate in {"", "."}:
+            raise ValueError("candidate path must not be empty")
+        parts = candidate.split("/")
         try:
             size = (project_root / path).stat().st_size
         except OSError:
@@ -57,7 +61,7 @@ def propose_declaration(project_root: Path) -> dict:
             # weakens a suggestion, whereas swallowing an unreadable RULE SOURCE
             # would silently drop governance. Rule sources raise; races skip.
             continue
-        top = "/".join(path.parts[:2]) if len(path.parts) > 2 else path.parts[0]
+        top = "/".join(parts[:2]) if len(parts) > 2 else parts[0]
         if path.name in _RECORD_NAMES:
             manifest_dirs[top] += 1
             observed.setdefault(top, set()).add(path.name)

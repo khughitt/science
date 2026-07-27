@@ -24,7 +24,7 @@ from science_tool.cli import main
 EXPECTED_CLASSIFICATION_COUNTS = {
     "budgeted": 68,
     "exempt": 118,
-    "deferred": 95,
+    "deferred": 98,
 }
 
 
@@ -131,7 +131,11 @@ def test_classification_partition_has_the_audited_cardinality() -> None:
 
     The autonomy supervisor then added two deferred leaves: `autonomy start` emits one
     fixed summary record, and `autonomy finish` emits one row per basis delta, gate
-    denial, and commit-mark issue. The live partition is therefore 68/118/95 = 281.
+    denial, and commit-mark issue. The VCS storage boundary then adds three deferred
+    leaves: `boundary check` emits one warning per unanchored unmanaged rule, `boundary
+    init` emits one proposal entry per discovered candidate root, and `boundary sync
+    --verify-current-tree` emits one row per changed filesystem or synthetic-probe ignore
+    decision. The live partition is therefore 68/118/98 = 284.
     """
     actual = {
         "budgeted": len(BUDGETS),
