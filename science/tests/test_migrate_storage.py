@@ -1164,18 +1164,22 @@ def test_migration_atomic_write_cleans_random_temp_when_replace_fails(
     target.parent.mkdir(parents=True)
     target.write_text("original ledger\n", encoding="utf-8")
     target_before = target.read_bytes()
+    replacement = "replacement ledger\n"
     captured_temp: Path | None = None
 
     def fail_replace(source: str | Path, destination: str | Path) -> None:
         nonlocal captured_temp
         captured_temp = Path(source)
         assert Path(destination) == target
+        assert not captured_temp.is_symlink()
+        assert captured_temp.is_file()
+        assert captured_temp.read_bytes() == replacement.encode()
         raise OSError("simulated replace failure")
 
     monkeypatch.setattr(migrate.os, "replace", fail_replace)
 
     with pytest.raises(OSError, match="simulated replace failure"):
-        migrate.atomic_write_text(target, "replacement ledger\n")
+        migrate.atomic_write_text(target, replacement)
 
     assert target.read_bytes() == target_before
     assert captured_temp is not None

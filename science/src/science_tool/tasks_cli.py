@@ -981,10 +981,10 @@ def tasks_list(
             "sort_order": "status_rank,id",
             "applied_filters": applied_filters,
         }
-        # active_total counts only open task files in tasks/active/ and is
-        # meaningless for a --since query, whose rows come from active/ plus
-        # selected monthly done ledgers. Omit it rather than ship an invalid
-        # "curated vs full" ratio.
+        # active_total counts only open task files in tasks/active/. A --since
+        # candidate pool combines those open tasks with selected monthly done
+        # ledgers, but its final closed/date filter returns ledger rows only.
+        # Omit active_total rather than ship an invalid "curated vs full" ratio.
         if since is None:
             meta["active_total"] = active_total
         emit_query_rows(
