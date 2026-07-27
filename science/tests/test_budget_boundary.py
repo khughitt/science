@@ -23,7 +23,7 @@ from science_tool.cli import main
 
 EXPECTED_CLASSIFICATION_COUNTS = {
     "budgeted": 69,
-    "exempt": 120,
+    "exempt": 122,
     "deferred": 95,
 }
 
@@ -135,8 +135,15 @@ def test_classification_partition_has_the_audited_cardinality() -> None:
 
     Batch R then added `explore-ideas seed-coverage` (fb-2026-07-25-004), BUDGETED
     rather than exempt: it carries the same per-topic `topics` list as `project
-    topic-coverage`, so it grows with the project's topic count. The live partition is
-    therefore 69/119/95 = 283.
+    topic-coverage`, so it grows with the project's topic count. `project spec-path`
+    then added one exempt leaf: it resolves one slug to a fixed three-field record,
+    taking the partition to 69/120/95 = 284.
+
+    The coding-agent support work then added two exempt leaves. `agents generate`
+    reports only the generated skill and OpenCode-command counts, while `agents
+    install` reports only installed and already-current link counts. Both counts are
+    bounded by the toolkit's shipped distribution rather than project size. The live
+    partition is therefore 69/122/95 = 286.
     """
     actual = {
         "budgeted": len(BUDGETS),
