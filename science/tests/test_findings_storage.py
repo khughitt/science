@@ -90,6 +90,16 @@ def test_write_then_load_round_trips(tmp_path):
     assert load_case(tmp_path, path) == record
 
 
+def test_exposed_case_serialization_is_the_exact_checked_write_payload(tmp_path):
+    record = _record()
+
+    name, encoded = finding_storage.serialize_case(record)
+    path = write_case(tmp_path, record)
+
+    assert path.name == name
+    assert path.read_bytes() == encoded
+
+
 def test_write_is_an_upsert_not_a_write_once(tmp_path):
     record = _record()
     write_case(tmp_path, record)

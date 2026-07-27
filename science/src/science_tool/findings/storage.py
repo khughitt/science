@@ -77,6 +77,29 @@ def case_path(project_root: Path, record: AuditFindingRecord) -> Path:
     return cases_dir(project_root) / case_filename(record)
 
 
+def serialize_case(record: AuditFindingRecord) -> tuple[str, bytes]:
+    """Return the deterministic, size-checked bytes written for one case.
+
+    This is the shared write-feasibility boundary: ingestion can preflight every
+    classified record before beginning its write phase, and `CaseStore.write` consumes
+    the exact same serialization contract.
+    """
+    name = case_filename(record)
+    payload = {
+        "doc_kind": DOC_KIND,
+        # `Transition.from_status=None` is required for the genesis transition.
+        # Recursive `exclude_none` would silently make the stored record invalid.
+        **record.model_dump(mode="json"),
+    }
+    encoded = render_frontmatter(payload, _BODY).encode("utf-8")
+    if len(encoded) > MAX_CASE_BYTES:
+        raise CaseStorageError(
+            f"case {name!r} is {len(encoded)} bytes, which exceeds "
+            f"{MAX_CASE_BYTES}"
+        )
+    return name, encoded
+
+
 def _parse_case(name: str, text: str) -> AuditFindingRecord:
     """Validate one case's text against its own filename.
 
@@ -178,20 +201,7 @@ class CaseStore:
         return _parse_case(name, text)
 
     def write(self, record: AuditFindingRecord) -> str:
-        name = case_filename(record)
-        payload = {
-            "doc_kind": DOC_KIND,
-            # `Transition.from_status=None` is required for the genesis transition.
-            # Recursive `exclude_none` would silently make the stored record invalid.
-            **record.model_dump(mode="json"),
-        }
-        text = render_frontmatter(payload, _BODY)
-        encoded = text.encode("utf-8")
-        if len(encoded) > MAX_CASE_BYTES:
-            raise CaseStorageError(
-                f"case {name!r} is {len(encoded)} bytes, which exceeds "
-                f"{MAX_CASE_BYTES}"
-            )
+        name, encoded = serialize_case(record)
         try:
             temp, descriptor = self._create_temp(name)
             try:

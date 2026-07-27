@@ -11,6 +11,7 @@ Disagreement is a load error, not a repair.
 from __future__ import annotations
 
 import hashlib
+import json
 from datetime import UTC, datetime
 from typing import Annotated, Literal, get_args
 
@@ -176,6 +177,21 @@ def normalized_instant(value: datetime) -> str:
     return _to_utc(value).isoformat(timespec="microseconds")
 
 
+def _canonical_occurrence_json(value: object) -> str:
+    """Canonical JSON for COMPLETE occurrence content.
+
+    Unlike the frozen finding-fingerprint encoder, this deliberately retains null
+    mapping members. An explicitly reported qualifier with value null is observation
+    content; it is not the same payload as an omitted qualifier.
+    """
+    return json.dumps(
+        value,
+        sort_keys=True,
+        separators=(",", ":"),
+        ensure_ascii=False,
+    )
+
+
 def canonical_occurrence_content(occurrence: Occurrence) -> str:
     """The COMPLETE observation, which is what an idempotency key promises.
 
@@ -189,15 +205,14 @@ def canonical_occurrence_content(occurrence: Occurrence) -> str:
     absent: they are the KEY, not the content, and comparing a key against itself
     proves nothing.
     """
-    from science_model.audit.fingerprint import canonical_json
-
-    return canonical_json(
+    dumped = occurrence.model_dump(mode="json")
+    return _canonical_occurrence_json(
         {
             "observed_at": normalized_instant(occurrence.observed_at),
             "severity": occurrence.severity,
             "message": occurrence.message,
             "qualifiers": {
-                key: value for key, value in sorted(occurrence.qualifiers.items())
+                key: value for key, value in sorted(dumped["qualifiers"].items())
             },
             "evidence": [
                 evidence.model_dump(mode="json", exclude_none=True)
@@ -205,7 +220,7 @@ def canonical_occurrence_content(occurrence: Occurrence) -> str:
             ],
             "acceptance_key": occurrence.acceptance_key,
         }
-    ).decode("utf-8")
+    )
 
 
 class Transition(_Base):

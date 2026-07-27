@@ -51,6 +51,7 @@ from science_tool.findings.storage import (
     CaseStore,
     case_filename,
     case_store,
+    serialize_case,
 )
 
 MAX_REPORT_BYTES = 8 * 1024 * 1024
@@ -277,7 +278,6 @@ def _new_record(
     item: _Planned,
     report: AuditReport,
     observed_at: datetime,
-    actor: str,
 ) -> AuditFindingRecord:
     occurrence = Occurrence(
         idempotency_key=occurrence_key(
@@ -302,7 +302,7 @@ def _new_record(
         identity_qualifiers=item.identity_qualifiers,
         occurrences=(occurrence,),
         transitions=(
-            _genesis_transition(occurrence, actor),
+            _genesis_transition(occurrence),
         ),
         status="proposed",
     )
@@ -315,11 +315,11 @@ def _occurrence_order(occurrence: Occurrence) -> tuple[str, str]:
     )
 
 
-def _genesis_transition(occurrence: Occurrence, actor: str) -> Transition:
+def _genesis_transition(occurrence: Occurrence) -> Transition:
     return Transition(
         from_status=None,
         to_status="proposed",
-        actor=actor,
+        actor=occurrence.producer_id,
         at=occurrence.observed_at,
         reason=f"detected by {occurrence.producer_id}",
     )
@@ -328,7 +328,6 @@ def _genesis_transition(occurrence: Occurrence, actor: str) -> Transition:
 def _with_canonical_occurrences(
     template: AuditFindingRecord,
     occurrences: tuple[Occurrence, ...],
-    actor: str,
 ) -> AuditFindingRecord:
     ordered = tuple(sorted(occurrences, key=_occurrence_order))
     return AuditFindingRecord.model_validate(
@@ -336,7 +335,7 @@ def _with_canonical_occurrences(
             **template.model_dump(mode="python"),
             "occurrences": ordered,
             "transitions": (
-                _genesis_transition(ordered[0], actor),
+                _genesis_transition(ordered[0]),
                 *template.transitions[1:],
             ),
         }
@@ -346,7 +345,6 @@ def _with_canonical_occurrences(
 def _classify_writes(
     store: CaseStore,
     probes: list[AuditFindingRecord],
-    actor: str,
 ) -> tuple[list[AuditFindingRecord], int, int, int]:
     """Resolve every logical conflict before the first case write.
 
@@ -369,7 +367,7 @@ def _classify_writes(
 
         if existing is None:
             writes.append(
-                _with_canonical_occurrences(incoming_probes[0], incoming, actor)
+                _with_canonical_occurrences(incoming_probes[0], incoming)
             )
             written += 1
             appended += len(incoming)
@@ -401,7 +399,6 @@ def _classify_writes(
                 _with_canonical_occurrences(
                     existing,
                     (*existing.occurrences, *additions),
-                    actor,
                 )
             )
             appended += len(additions)
@@ -413,8 +410,6 @@ def ingest_report(
     project_root: Path,
     report: AuditReport,
     registry: FindingRegistry,
-    *,
-    actor: str = "ingest",
 ) -> IngestOutcome:
     report = _snapshot_report(report)
     planned = _plan(project_root, report, registry)
@@ -422,16 +417,14 @@ def ingest_report(
     if observed_at.tzinfo is None:
         observed_at = observed_at.replace(tzinfo=UTC)
 
-    probes = [
-        _new_record(item, report, observed_at, actor)
-        for item in planned
-    ]
+    probes = [_new_record(item, report, observed_at) for item in planned]
     with _locked_store(project_root) as store:
         writes, written, appended, skipped = _classify_writes(
             store,
             probes,
-            actor,
         )
+        for record in writes:
+            serialize_case(record)
         for record in writes:
             store.write(record)
 

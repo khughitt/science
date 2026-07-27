@@ -1,4 +1,5 @@
 import json
+import inspect
 from collections import Counter
 
 import pytest
@@ -10,11 +11,12 @@ from science_model.audit import (
     FindingRule,
     FindingSection,
     ReportedFinding,
+    finding_fingerprint,
 )
 
 from science_tool.findings.ingest import IngestError, ingest_report, load_report
 from science_tool.findings.producers import FindingProducer, build_registry
-from science_tool.findings.storage import load_cases
+from science_tool.findings.storage import CASES_DIRNAME, MAX_CASE_BYTES, load_cases
 
 
 class Q(BaseModel):
@@ -23,7 +25,7 @@ class Q(BaseModel):
     #: Declared on the schema but deliberately absent from `RULE.identity_qualifiers`.
     #: This is the non-identity qualifier the collision and survival tests turn on; a
     #: qualifier the schema rejects would fail validation before identity ever matters.
-    note: str = ""
+    note: str | None = ""
     #: An INT field, so the strict-validation test has a type lax mode would coerce.
     #: `str` is the wrong probe: pydantic's lax mode already refuses an int for a
     #: `str` field, so `field=1` would fail either way and prove nothing.
@@ -109,7 +111,12 @@ def test_ingest_writes_a_case_with_a_genesis_transition(tmp_path):
     record = load_cases(tmp_path)[0]
     assert record.status == "proposed"
     assert record.transitions[0].from_status is None
+    assert record.transitions[0].actor == "dataset_anomalies"
     assert len(record.occurrences) == 1
+
+
+def test_ingest_exposes_no_actor_override():
+    assert "actor" not in inspect.signature(ingest_report).parameters
 
 
 def test_reingesting_an_identical_report_appends_nothing(tmp_path):
@@ -138,6 +145,42 @@ def test_same_key_with_different_content_is_an_error_not_a_retry(tmp_path):
     )
     with pytest.raises(IngestError, match="idempotency"):
         ingest_report(tmp_path, conflicting, REGISTRY)
+
+
+@pytest.mark.parametrize(
+    ("first_qualifiers", "retry_qualifiers"),
+    [
+        ({"field": "year"}, {"field": "year", "note": None}),
+        ({"field": "year", "note": None}, {"field": "year"}),
+    ],
+)
+def test_absent_and_explicit_null_qualifiers_are_an_idempotency_conflict(
+    tmp_path,
+    first_qualifiers,
+    retry_qualifiers,
+):
+    first = _report(
+        findings=[
+            ReportedFinding(
+                producer_id="dataset_anomalies",
+                finding=_finding(qualifiers=first_qualifiers),
+            )
+        ]
+    )
+    retry = _report(
+        findings=[
+            ReportedFinding(
+                producer_id="dataset_anomalies",
+                finding=_finding(qualifiers=retry_qualifiers),
+            )
+        ]
+    )
+
+    ingest_report(tmp_path, first, REGISTRY)
+    with pytest.raises(IngestError, match="idempotency"):
+        ingest_report(tmp_path, retry, REGISTRY)
+
+    assert len(load_cases(tmp_path)[0].occurrences) == 1
 
 
 def test_reusing_an_ingestion_ref_with_a_NEW_TIMESTAMP_is_a_conflict(tmp_path):
@@ -288,12 +331,16 @@ def test_no_arrival_order_dependence_with_distinct_times_and_producers(tmp_path)
     ingest_report(a, early, registry)
     ingest_report(a, late, registry)
     ingest_report(b, late, registry)
+    prior = load_cases(b)[0]
+    assert prior.transitions[0].actor == "dataset_anomalies"
     ingest_report(b, early, registry)
 
     first = load_cases(a)[0]
     second = load_cases(b)[0]
     assert _normalized(first) == _normalized(second)
     assert first.transitions[0].at.isoformat() == "2026-07-27T10:00:00+00:00"
+    assert first.transitions[0].actor == "curation_lens"
+    assert second.transitions[0].actor == "curation_lens"
     assert first.transitions[0].reason == "detected by curation_lens"
     assert [
         (occurrence.observed_at, occurrence.idempotency_key)
@@ -547,6 +594,55 @@ def test_partial_failure_is_repaired_by_rerunning_the_same_report(tmp_path):
     assert len(load_cases(tmp_path)) == 2
     for record in load_cases(tmp_path):
         assert len(record.occurrences) == 1
+
+
+def test_oversized_second_record_is_preflighted_before_any_case_write(tmp_path):
+    subjects = [EntitySubject(ref="dataset:a"), EntitySubject(ref="dataset:b")]
+    first_subject, second_subject = sorted(
+        subjects,
+        key=lambda subject: finding_fingerprint(
+            rule_id=RULE.id,
+            subject=subject,
+            identity_qualifiers={"field": "year"},
+        ),
+    )
+    oversized = "é" * (MAX_CASE_BYTES // 2 + 1)
+    report = _report(
+        findings=[
+            ReportedFinding(
+                producer_id="dataset_anomalies",
+                finding=_finding(subject=first_subject),
+            ),
+            ReportedFinding(
+                producer_id="dataset_anomalies",
+                finding=_finding(subject=second_subject, message=oversized),
+            ),
+        ]
+    )
+
+    with pytest.raises(IngestError, match="exceeds"):
+        ingest_report(tmp_path, report, REGISTRY)
+
+    assert load_cases(tmp_path) == []
+    cases = tmp_path / CASES_DIRNAME
+    assert sorted(entry.name for entry in cases.iterdir()) == [".ingest.lock"]
+
+    repaired = _report(
+        findings=[
+            ReportedFinding(
+                producer_id="dataset_anomalies",
+                finding=_finding(subject=first_subject),
+            ),
+            ReportedFinding(
+                producer_id="dataset_anomalies",
+                finding=_finding(subject=second_subject),
+            ),
+        ]
+    )
+    outcome = ingest_report(tmp_path, repaired, REGISTRY)
+    assert outcome.records_written == 2
+    assert len(load_cases(tmp_path)) == 2
+    assert not any(entry.name.endswith(".tmp") for entry in cases.iterdir())
 
 
 def test_a_late_idempotency_conflict_writes_no_earlier_new_case(tmp_path):

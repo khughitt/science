@@ -599,6 +599,19 @@ def test_occurrence_content_includes_observed_at():
     assert canonical_occurrence_content(first) != canonical_occurrence_content(later)
 
 
+def test_occurrence_content_distinguishes_absent_from_explicit_null_qualifiers():
+    from science_model.audit.record import canonical_occurrence_content
+
+    absent = _occurrence(qualifiers={"field": "year"})
+    explicit_null = _occurrence(qualifiers={"field": "year", "note": None})
+
+    assert absent.idempotency_key == explicit_null.idempotency_key
+    assert canonical_occurrence_content(absent) != canonical_occurrence_content(
+        explicit_null
+    )
+    assert '"note":null' in canonical_occurrence_content(explicit_null)
+
+
 def test_current_severity_survives_a_mix_of_naive_and_aware_timestamps():
     # `current_severity()` compares `observed_at` with `>`, and Python raises
     # TypeError on a naive/aware pair. Frontmatter and JSON both round-trip through
