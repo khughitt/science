@@ -28,42 +28,88 @@ def companion_to_skill_name(canonical_name: str) -> str:
     return f"science-{canonical_name}"
 
 
-def generate_codex_skills(repo_root: Path, output_root: Path) -> dict[str, Path]:
+def generate_agent_skills(
+    repo_root: Path,
+    output_root: Path,
+    *,
+    agent: str = "codex",
+    format: str = "skill",
+) -> dict[str, Path]:
+    """Generate agent-specific skill files from Science commands and companion skills.
+
+    Args:
+        repo_root: Root of the Science toolkit repository
+        output_root: Where to write generated skills
+        agent: Target agent ("codex", "crush", "opencode")
+        format: Output format ("skill" for SKILL.md, "command" for .md commands)
+
+    Returns:
+        Dict mapping skill name to generated file path
+    """
     command_preamble = _load_command_preamble(repo_root)
     output_root.mkdir(parents=True, exist_ok=True)
 
     generated: dict[str, Path] = {}
-    command_paths = sorted((repo_root / "commands").glob("*.md"))
-    for command_path in command_paths:
-        skill_name = command_to_skill_name(command_path)
-        title, description, body = _parse_command(command_path)
-        skill_text = _build_skill_text(
-            skill_name=skill_name,
-            command_name=command_path.stem,
-            title=title,
-            description=description,
-            body=body,
-            command_preamble=command_preamble,
-        )
-        skill_dir = output_root / skill_name
-        skill_dir.mkdir(parents=True, exist_ok=True)
-        skill_path = skill_dir / "SKILL.md"
-        skill_path.write_text(skill_text, encoding="utf-8")
-        generated[skill_name] = skill_path
 
-    for companion in COMPANION_SKILLS:
-        skill_name = companion_to_skill_name(companion.canonical_name)
-        skill_path = _generate_companion_skill(repo_root, output_root, companion)
-        generated[skill_name] = skill_path
+    if format == "skill":
+        # Generate skills from commands (SKILL.md format)
+        command_paths = sorted((repo_root / "commands").glob("*.md"))
+        for command_path in command_paths:
+            skill_name = command_to_skill_name(command_path)
+            title, description, body = _parse_command(command_path)
+            skill_text = _build_skill_text(
+                skill_name=skill_name,
+                command_name=command_path.stem,
+                title=title,
+                description=description,
+                body=body,
+                command_preamble=command_preamble,
+                agent=agent,
+            )
+            skill_dir = output_root / skill_name
+            skill_dir.mkdir(parents=True, exist_ok=True)
+            skill_path = skill_dir / "SKILL.md"
+            skill_path.write_text(skill_text, encoding="utf-8")
+            generated[skill_name] = skill_path
 
-    _write_index(output_root, command_paths, COMPANION_SKILLS)
+        # Generate companion skills
+        for companion in COMPANION_SKILLS:
+            skill_name = companion_to_skill_name(companion.canonical_name)
+            skill_path = _generate_companion_skill(repo_root, output_root, companion)
+            generated[skill_name] = skill_path
 
-    generated_dirs = {output_root / name for name in generated}
-    for child in output_root.iterdir():
-        if child.is_dir() and child.name.startswith("science-") and child not in generated_dirs:
-            shutil.rmtree(child)
+        _write_index(output_root, command_paths, COMPANION_SKILLS, agent)
+
+    elif format == "command":
+        # Generate commands (.md files with frontmatter)
+        command_paths = sorted((repo_root / "commands").glob("*.md"))
+        for command_path in command_paths:
+            command_name = command_path.stem
+            _, description, body = _parse_command(command_path)
+            command_text = _build_command_text(
+                command_name=command_name,
+                description=description,
+                body=body,
+                command_preamble=command_preamble,
+            )
+            command_path_out = output_root / f"{command_name}.md"
+            command_path_out.write_text(command_text, encoding="utf-8")
+            generated[command_name] = command_path_out
+
+    # Clean up stale files
+    if format == "skill":
+        generated_dirs = {output_root / name for name in generated}
+        for child in output_root.iterdir():
+            if child.is_dir() and child.name.startswith("science-") and child not in generated_dirs:
+                shutil.rmtree(child)
 
     return generated
+
+
+# Backward compatibility
+def generate_codex_skills(repo_root: Path, output_root: Path) -> dict[str, Path]:
+    """Legacy wrapper for Codex skill generation."""
+    return generate_agent_skills(repo_root, output_root, agent="codex", format="skill")
 
 
 def _load_command_preamble(repo_root: Path) -> str:
@@ -131,6 +177,7 @@ def _build_skill_text(
     description: str,
     body: str,
     command_preamble: str,
+    agent: str = "codex",
 ) -> str:
     rewritten_body = _replace_command_preamble_instructions(body)
     rewritten_body = _rewrite_claude_specific_text(rewritten_body)
@@ -139,6 +186,14 @@ def _build_skill_text(
     rewritten_body = re.sub(r"^#\s+.+\n\n", "", rewritten_body)
 
     escaped_description = description.replace('"', '\\"')
+    
+    # Agent-specific preamble heading
+    preamble_heading = {
+        "codex": "## Science Codex Command Preamble",
+        "crush": "## Science Crush Command Preamble",
+        "opencode": "## Science OpenCode Command Preamble",
+    }.get(agent, "## Science Command Preamble")
+    
     header = [
         "---",
         f"name: {skill_name}",
@@ -152,7 +207,7 @@ def _build_skill_text(
         "",
         f"Converted from Claude command `/science:{command_name}`.",
         "",
-        COMMAND_PREAMBLE_HEADING,
+        preamble_heading,
         "",
         command_preamble,
         "",
@@ -162,7 +217,35 @@ def _build_skill_text(
     return "\n".join(header + sections)
 
 
-def _generate_companion_skill(repo_root: Path, output_root: Path, companion: CompanionSkill) -> Path:
+def _build_command_text(
+    *,
+    command_name: str,
+    description: str,
+    body: str,
+    command_preamble: str,
+) -> str:
+    """Build OpenCode command format (.md with YAML frontmatter)."""
+    rewritten_body = _replace_command_preamble_instructions(body)
+    rewritten_body = _rewrite_claude_specific_text(rewritten_body)
+    
+    # OpenCode uses $ARGUMENTS directly, which matches Claude's format
+    # so we don't need to rewrite those
+    
+    header = [
+        "---",
+        f"description: {description}",
+        "---",
+        "",
+    ]
+    
+    sections = [
+        rewritten_body,
+        "",
+    ]
+    return "\n".join(header + sections)
+
+
+def _generate_companion_skill(repo_root: Path, output_root: Path, companion: CompanionSkill, agent: str = "codex") -> Path:
     source_path = repo_root / companion.source_path
     source_name, description, body = _parse_skill(source_path)
     if source_name != companion.canonical_name:
@@ -259,7 +342,12 @@ def _insert_adapted_note(body: str, source_path: Path) -> str:
     return re.sub(r"^(#\s+.+\n\n)", rf"\1{note}\n\n", body, count=1)
 
 
-def _write_index(output_root: Path, command_paths: list[Path], companion_skills: tuple[CompanionSkill, ...]) -> None:
+def _write_index(
+    output_root: Path,
+    command_paths: list[Path],
+    companion_skills: tuple[CompanionSkill, ...],
+    agent: str = "codex",
+) -> None:
     lines = [
         "# Science Codex Skills",
         "",

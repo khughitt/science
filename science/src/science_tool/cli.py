@@ -6,6 +6,7 @@ from typing import Any
 import click
 
 from science_tool.annotation.cli import annotate_group
+from science_tool.agents_cli import agents_group
 from science_tool.autonomy.cli import autonomy_group
 from science_tool.belief_cli import belief_group
 from science_tool.benchmark_cli import benchmark_group
@@ -238,6 +239,7 @@ main.add_command(bib_group)
 main.add_command(sync_group)
 main.add_command(paper_group)
 main.add_command(paper_fetch_command)
+main.add_command(agents_group)
 
 # Retired commands are declared in cli_retirement.RETIREMENTS, not here. This must run
 # after every group is attached: the manifest resolves parents by walking the live tree.
