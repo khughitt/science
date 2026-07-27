@@ -43,6 +43,7 @@ _template:
     - { key: exploratory-vs-confirmatory, name: "Exploratory vs. Confirmatory", required: true }
     - { key: total-comparison-count, name: "Total Comparison Count", required: true }
     - { key: estimator-certification-gate, name: "Estimator Certification Gate", required: true }
+    - { key: cost-gate, name: "Cost Gate (execution geometry)", required: false }
     - { key: execution-readiness-gate, name: "Execution-Readiness Gate (runnable-now mode)", required: false }
     - { key: vehicle-admissibility-gate, name: "Vehicle-Admissibility Gate (data-gated mode)", required: false }
 ---
@@ -206,6 +207,34 @@ If the count is high (>10), specify the correction method
 | Indeterminate band | units with |T - c| <= E are INDETERMINATE | <report the count; they are not silently decided> |
 | Compute budget | <cost> | <certified | CONDITIONAL on ...> |
 | Invalidation | <what re-opens this certificate> | <estimator, forward model, tolerances, hardware, libraries> |
+
+## Cost Gate (execution geometry)
+
+<!-- Applies when a sampling schedule, compute budget, or feasibility gate decides whether
+     the analysis is affordable. If no cost decision is at stake, DELETE this section.
+
+     A measurement taken at a different execution geometry than the one it authorizes is
+     not evidence about that geometry. The mismatch has NO fixed direction -- a
+     compile-dominated pilot overstates per-unit cost; a batched benchmark charged to a
+     sequential workload understates it. What makes the error reliably optimistic is
+     favourable probe selection: the max over a sweep, the convenient batch size, the fast
+     part of the run.
+
+     Order, extending estimator-certification's: well-posedness -> certify the estimator ->
+     price the design AT THE GEOMETRY THAT WILL EXECUTE -> commit the budget.
+
+     See skills/study-design/cost-gate-certification.md. -->
+
+| Axis / commitment | Value | Reference / domain |
+|---|---|---|
+| Target geometry | <the geometry that will execute: batch size, call pattern, sequencing, target concurrency> | <frozen BEFORE measuring. The geometry is set by the budget being decided, so choosing it after measuring is circular -- and the circularity resolves favourably every time.> |
+| Calibration domain | <the substrate and geometry the schedule/benchmark was ACTUALLY measured on: dimensions, sparsity, hardware, library stack> | <if this differs from Target geometry, this gate does not authorize the budget. Recalibrate, or state the transfer argument and what would falsify it.> |
+| Statistic | <near-worst over R >= 5 repeats at the ONE target geometry, e.g. p90 of wall time> | <NEVER the best across a configuration sweep. A cost gate exists to REFUSE work; selecting the favourable configuration is what makes it unable to.> |
+| Steady state | <warmup / JIT / compile excluded; measured after amortisation> | <early iterations adapt to parameters the run does not ultimately use, and compile time masks multi-process contention entirely> |
+| Monotonicity | <throughput is monotone in the work parameter> | <non-monotonicity -- N=64 faster than N=32 -- proves the measurement tracks per-call dispatch overhead, not the computation> |
+| Bottleneck profile | <measured per-iteration cost split across components> | <a remedy targeting a negligible cost fraction cannot help regardless of theoretical merit; order any remedy ladder by measured bottleneck> |
+| Transfer | <EXECUTED recalibration probe | CONDITIONAL on ...> | <a schedule validated on another substrate is a hypothesis about this one until probed> |
+| Invalidation | <what re-opens this gate> | <substrate size or sparsity, hardware, library stack, concurrency, estimator> |
 
 ## Execution-Readiness Gate (runnable-now mode)
 
