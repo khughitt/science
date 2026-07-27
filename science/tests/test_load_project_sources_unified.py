@@ -39,9 +39,18 @@ def test_load_produces_typed_entity_instances(tmp_path: Path) -> None:
         '---\nid: "hypothesis:h1"\nkind: "hypothesis"\ntitle: "H1"\n---\n',
         encoding="utf-8",
     )
-    (tmp_path / "tasks").mkdir()
-    (tmp_path / "tasks" / "active.md").write_text(
-        "## [t001] T001\n- type: research\n- priority: P1\n- status: active\n- created: 2026-04-20\n",
+    active_dir = tmp_path / "tasks" / "active"
+    active_dir.mkdir(parents=True)
+    (active_dir / "t001-task.md").write_text(
+        "---\n"
+        "id: t001\n"
+        "title: T001\n"
+        "type: research\n"
+        "priority: P1\n"
+        "status: active\n"
+        "aspects: []\n"
+        "created: 2026-04-20\n"
+        "---\n",
         encoding="utf-8",
     )
     sources = load_project_sources(tmp_path)

@@ -42,10 +42,10 @@ def project(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
             related=[
                 "question:q0000-a-long-question-slug",
                 "hypothesis:h0000-another-long-slug",
-                # Preserve one task-specific validation finding per row so the
-                # complete health-output assertions retain their original load.
-                f"task:t{i:03d}.bad",
             ],
+            # Preserve one task-specific validation finding per row without also
+            # creating an unresolved graph edge now that split tasks materialize.
+            parent="bad",
             created=date(2026, 1, 1),
             description=(
                 f"Body paragraph for task {i}, long enough to matter multiplied "
@@ -182,23 +182,6 @@ def test_health_table_output_file_is_complete_and_unprojected(project: Path) -> 
 
 
 def test_inventory_output_file_contains_every_entity(project: Path) -> None:
-    # The storage adapter's split-active support lands in Task 15. Exercise its
-    # already-supported done-ledger path here without weakening the 400-task oracle.
-    active_dir = project / "tasks" / "active"
-    tasks = [task_module.parse_task_file(path) for path in sorted(active_dir.glob("*.md"))]
-    for path in active_dir.glob("*.md"):
-        path.unlink()
-    done_dir = project / "tasks" / "done"
-    done_dir.mkdir()
-    done_tasks = [
-        task.model_copy(update={"status": "done", "completed": date(2026, 1, 2)})
-        for task in tasks
-    ]
-    (done_dir / "2026-01.md").write_text(
-        task_module.render_tasks(done_tasks),
-        encoding="utf-8",
-    )
-
     target = project / "inventory.json"
     result = _invoke(
         [

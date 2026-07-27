@@ -51,7 +51,7 @@ def _write_demo_project(
     )
     (project_root / "entities" / "hypotheses").mkdir(parents=True)
     (project_root / "entities" / "questions").mkdir(parents=True)
-    (project_root / "tasks").mkdir(parents=True)
+    (project_root / "tasks" / "active").mkdir(parents=True)
 
     related = '["question:q01-demo", "GO:0008150"]'
     if include_missing_relation:
@@ -127,16 +127,20 @@ def _write_demo_project(
             encoding="utf-8",
         )
 
-    (project_root / "tasks" / "active.md").write_text(
+    (project_root / "tasks" / "active" / "t001-validate-h01.md").write_text(
         "\n".join(
             [
-                "## [t001] Validate H01",
-                "- type: research",
-                "- priority: P1",
-                "- status: active",
-                "- related: [hypothesis:h01-demo, question:q01-demo]",
-                "- blocked-by: [task:t002]",
-                "- created: 2026-03-12",
+                "---",
+                "id: t001",
+                "title: Validate H01",
+                "type: research",
+                "priority: P1",
+                "status: active",
+                "aspects: []",
+                "related: [hypothesis:h01-demo, question:q01-demo]",
+                "blocked_by: [task:t002]",
+                "created: 2026-03-12",
+                "---",
                 "",
                 "Do it.",
                 "",
