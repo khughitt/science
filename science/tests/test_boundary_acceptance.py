@@ -9,6 +9,7 @@ been hiding. No MM30 content, only its layout.
 from __future__ import annotations
 
 import os
+import stat
 import subprocess
 from collections.abc import Iterator
 from contextlib import contextmanager
@@ -61,6 +62,45 @@ class _GitState:
     index: bytes
     worktree_diff: bytes
     staged_diff: bytes
+
+
+@dataclass(frozen=True)
+class _TreeEntry:
+    path: str
+    file_type: int
+    mode: int
+    content: bytes | None
+    link_target: str | None
+
+
+def _tree_snapshot(root: Path) -> tuple[_TreeEntry, ...]:
+    entries: list[_TreeEntry] = []
+
+    def visit(directory: Path, prefix: str) -> None:
+        with os.scandir(directory) as scanned:
+            children = sorted(scanned, key=lambda entry: os.fsencode(entry.name))
+        for child in children:
+            if not prefix and child.name == ".git":
+                continue
+            relative = child.name if not prefix else f"{prefix}/{child.name}"
+            metadata = child.stat(follow_symlinks=False)
+            file_type = stat.S_IFMT(metadata.st_mode)
+            content = Path(child.path).read_bytes() if stat.S_ISREG(metadata.st_mode) else None
+            link_target = os.readlink(child.path) if stat.S_ISLNK(metadata.st_mode) else None
+            entries.append(
+                _TreeEntry(
+                    path=relative,
+                    file_type=file_type,
+                    mode=stat.S_IMODE(metadata.st_mode),
+                    content=content,
+                    link_target=link_target,
+                )
+            )
+            if stat.S_ISDIR(metadata.st_mode):
+                visit(Path(child.path), relative)
+
+    visit(root, "")
+    return tuple(entries)
 
 
 def _git_process_env() -> dict[str, str]:
@@ -202,6 +242,33 @@ def test_acceptance_verify_current_tree_is_transactional(tmp_path: Path):
     assert state_before.status == b""
     assert state_before.worktree_diff == b""
     assert state_before.staged_diff == b""
+    tree_before = _tree_snapshot(repo)
+    assert {
+        "data/external/opentargets/25.03/datapackage.json",
+        "data/external/opentargets/25.03/mm-associations.parquet",
+        "data/raw/GSE1234_series_matrix.txt",
+        "entities/hypotheses/h0001.md",
+        "pdfs/2024_Author_Title.pdf",
+        "tests/migration/archive/test_pilot.py",
+    } <= {entry.path for entry in tree_before}
+    hidden_source = repo / "tests/migration/archive/test_pilot.py"
+    hidden_source_before = hidden_source.read_bytes()
+    hidden_source.write_bytes(hidden_source_before + b"# snapshot seam\n")
+    assert _tree_snapshot(repo) != tree_before
+    hidden_source.write_bytes(hidden_source_before)
+    assert _tree_snapshot(repo) == tree_before
+    link_target = "tests/migration/archive/test_pilot.py"
+    snapshot_link = repo / "snapshot-link"
+    snapshot_link.symlink_to(link_target)
+    tree_with_link = _tree_snapshot(repo)
+    assert tree_with_link != tree_before
+    link_entry = next(entry for entry in tree_with_link if entry.path == "snapshot-link")
+    assert link_entry.file_type == stat.S_IFLNK
+    assert link_entry.mode == stat.S_IMODE(snapshot_link.lstat().st_mode)
+    assert link_entry.content is None
+    assert link_entry.link_target == link_target
+    snapshot_link.unlink()
+    assert _tree_snapshot(repo) == tree_before
 
     result = _invoke(repo, "sync", "--verify-current-tree")
     assert result.exit_code == 1, result.output
@@ -230,6 +297,7 @@ def test_acceptance_verify_current_tree_is_transactional(tmp_path: Path):
     assert (repo / ".gitignore").read_bytes() == ignore_before_bytes
     assert (repo / ".gitignore").read_text() == ignore_before_text
     assert _git_state(repo) == state_before
+    assert _tree_snapshot(repo) == tree_before
 
 
 def test_acceptance_init_proposes_the_same_shape(tmp_path: Path):
@@ -240,6 +308,7 @@ def test_acceptance_init_proposes_the_same_shape(tmp_path: Path):
     ignore_before_bytes = (repo / ".gitignore").read_bytes()
     ignore_before_text = (repo / ".gitignore").read_text()
     state_before = _git_state(repo)
+    tree_before = _tree_snapshot(repo)
 
     result = _invoke(repo, "init")
     assert result.exit_code == 0, result.output
@@ -261,6 +330,7 @@ def test_acceptance_init_proposes_the_same_shape(tmp_path: Path):
     assert (repo / ".gitignore").read_bytes() == ignore_before_bytes
     assert (repo / ".gitignore").read_text() == ignore_before_text
     assert _git_state(repo) == state_before
+    assert _tree_snapshot(repo) == tree_before
 
 
 def test_acceptance_hostile_global_git_config_cannot_alter_fixture(tmp_path: Path, monkeypatch):
