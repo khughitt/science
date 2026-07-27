@@ -487,7 +487,9 @@ git commit -m "feat(audit): freeze the evidence wire types, forbidding unknown f
 
 **Interfaces:**
 - Consumes: `FindingSubject` from Task 1.
-- Produces: `FINDING_DOMAIN = "science.finding.v1"`, `FINGERPRINT_VERSION = 1`, `canonical_json(value: object) -> bytes`, `finding_fingerprint(*, rule_id: str, subject: FindingSubject, identity_qualifiers: Mapping[str, object]) -> str`, `rule_slug(rule_id: str) -> str`, `FingerprintError`.
+- Produces: `FINDING_DOMAIN = "science.finding.v1"`, `FINGERPRINT_VERSION = 1`, `canonical_json(value: object) -> bytes`, `finding_fingerprint(*, rule_id: str, subject: FindingSubject, identity_qualifiers: Mapping[str, object]) -> str`, `normalize_identity_value(value: Any) -> Any`, `rule_slug(rule_id: str) -> str`, `FingerprintError`.
+
+`normalize_identity_value` is public because Task 6 compares an occurrence's qualifiers against the record's identity and must use the *same* normalization the digest uses. A second implementation would be a second answer to what a finding is.
 
 The golden vectors in Step 1 are the frozen API (§3). Changing normalization must break this test.
 
@@ -694,12 +696,17 @@ class FingerprintError(ValueError):
     """A value cannot participate in an identity."""
 
 
-def _normalize_scalar(value: Any) -> Any:
+def normalize_identity_value(value: Any) -> Any:
     """Permit str / bool / int and arrays of those. Nothing else.
 
     Floats are refused so no identity depends on float formatting; nulls are refused
     because §3 omits absent fields rather than encoding them; nested objects are
     refused so no identity depends on a nested key order.
+
+    Public because `AuditFindingRecord` compares an occurrence's qualifiers against
+    the record's identity in exactly this form. Two implementations of "the normalized
+    value" would be two answers to what a finding IS. The golden vectors pin the digest
+    independently, so this naming cannot move it.
     """
     if isinstance(value, bool):  # before int — bool is a subclass of int
         return value
@@ -708,7 +715,7 @@ def _normalize_scalar(value: Any) -> Any:
     if isinstance(value, str):
         return unicodedata.normalize("NFC", value)
     if isinstance(value, (list, tuple)):
-        return [_normalize_scalar(item) for item in value]
+        return [normalize_identity_value(item) for item in value]
     raise FingerprintError(
         f"identity qualifier value of type {type(value).__name__} is not permitted; "
         "use str, bool, int, or an array of those (design §3)"
@@ -750,7 +757,8 @@ def finding_fingerprint(
         "rule_id": unicodedata.normalize("NFC", rule_id),
         "subject": subject.model_dump(mode="json", exclude_none=True),
         "qualifiers": {
-            key: _normalize_scalar(val) for key, val in sorted(identity_qualifiers.items())
+            key: normalize_identity_value(val)
+            for key, val in sorted(identity_qualifiers.items())
         },
     }
     digest = hashlib.sha256(f"{FINDING_DOMAIN}\n".encode("utf-8") + canonical_json(payload))
@@ -1359,7 +1367,7 @@ git commit -m "feat(audit): rule and section declarations with a build() that ca
 
 **Interfaces:**
 - Consumes: Tasks 1–4.
-- Produces: `AuditFindingRecord` (frozen, with `with_occurrence` / `with_review` / `with_transition` / `current_severity` / `confirmation_count`), `Occurrence`, `Transition`, `Review`, `CaseStatus`, `RecordError`, `occurrence_key(...)`, `review_id(...)`, `PERMITTED_TRANSITIONS`, `DOC_KIND = "audit-case"`.
+- Produces: `AuditFindingRecord` (frozen, with `with_occurrence` / `with_review` / `with_transition` / `current_severity` / `confirmation_count`), `Occurrence`, `Transition`, `Review`, `CaseStatus`, `RecordError`, `occurrence_key(...)`, `review_id(...)`, `canonical_occurrence_content(occurrence) -> str`, `normalized_instant(value) -> str`, `PERMITTED_TRANSITIONS`, `DOC_KIND = "audit-case"`.
 
 - [ ] **Step 1: Write the failing test**
 
@@ -1682,6 +1690,72 @@ def test_a_record_round_trips_through_a_plain_dict_dump():
     # how `with_occurrence` appends -- works on the dumped form.
     record = _record()
     assert AuditFindingRecord.model_validate(record.model_dump(mode="json")) == record
+
+
+def test_an_unimplemented_fingerprint_version_is_refused():
+    # A stored v2 record's finding_id is a digest under rules this toolkit cannot
+    # reproduce, so every derived check would be comparing against a scheme it does
+    # not have. `int` would have accepted it and then silently mis-validated.
+    with pytest.raises(ValidationError):
+        _record(fingerprint_version=2)
+
+
+def test_acceptance_key_must_have_the_same_shape_the_report_requires():
+    with pytest.raises(ValidationError):
+        _record(occurrences=[_occurrence(acceptance_key="not-a-key")])
+    with pytest.raises(ValidationError):
+        _record(occurrences=[_occurrence(acceptance_key="B" * 32)])  # uppercase
+    _record(occurrences=[_occurrence(acceptance_key="b" * 32)])
+
+
+def test_an_occurrence_must_agree_with_the_records_identity():
+    # The record says this case is about `field: year`; the occurrence reports
+    # `field: month`. That is a different finding filed under this one's digest.
+    with pytest.raises(ValidationError, match="different findings"):
+        _record(occurrences=[_occurrence(qualifiers={"field": "month"})])
+
+
+def test_an_occurrence_may_not_omit_an_identity_qualifier():
+    with pytest.raises(ValidationError, match="omits identity qualifier"):
+        _record(occurrences=[_occurrence(qualifiers={"note": "no field at all"})])
+
+
+def test_identity_agreement_compares_normalized_values():
+    # U+00E9 and "e" + U+0301 are the same string after NFC, and the fingerprint
+    # hashes the NFC form. Comparing raw would split one finding into two.
+    record = _record(
+        identity_qualifiers={"field": "année"},
+        occurrences=[_occurrence(qualifiers={"field": "année"})],
+    )
+    assert record.status == "proposed"
+
+
+def test_occurrence_content_includes_observed_at():
+    from science_model.audit.record import canonical_occurrence_content
+
+    from datetime import timedelta
+
+    first = _occurrence()
+    later = _occurrence(observed_at=NOW + timedelta(seconds=1))
+    # Same producer, same ingestion ref -- so the SAME idempotency key -- but a
+    # different moment. If the content signature ignored `observed_at`, ingestion
+    # would treat the second as an identical retry of the first.
+    assert first.idempotency_key == later.idempotency_key
+    assert canonical_occurrence_content(first) != canonical_occurrence_content(later)
+
+
+def test_occurrence_content_normalizes_the_instant_spelling():
+    from datetime import timedelta, timezone
+
+    from science_model.audit.record import canonical_occurrence_content
+
+    # 13:00+01:00 is the same instant as 12:00Z. One instant, one signature.
+    shifted = _occurrence(
+        observed_at=datetime(2026, 7, 27, 13, 0, tzinfo=timezone(timedelta(hours=1)))
+    )
+    assert canonical_occurrence_content(_occurrence()) == canonical_occurrence_content(
+        shifted
+    )
 ```
 
 - [ ] **Step 2: Run test to verify it fails**
@@ -1706,7 +1780,7 @@ Disagreement is a load error, not a repair.
 from __future__ import annotations
 
 import hashlib
-from datetime import datetime
+from datetime import UTC, datetime
 from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
@@ -1782,8 +1856,10 @@ class Occurrence(_Base):
     #: history that can be edited in place is not history.
     qualifiers: QualifierMap = Field(default_factory=dict, validate_default=True)
     evidence: tuple[Evidence, ...] = Field(default=(), max_length=MAX_EVIDENCE_ENTRIES)
-    #: Present when the observation arrived on the report's `accepted` channel.
-    acceptance_key: str | None = None
+    #: Present when the observation arrived on the report's `accepted` channel. Same
+    #: 32-hex shape the report's `AcceptedFinding` requires -- a stored key with a
+    #: different shape could never match the entry that produced it.
+    acceptance_key: str | None = Field(default=None, pattern=r"^[0-9a-f]{32}$")
 
     def content_signature(self) -> str:
         """What must match for an identical idempotency key to be a genuine retry."""
@@ -1792,11 +1868,35 @@ class Occurrence(_Base):
         ).hexdigest()
 
 
+def normalized_instant(value: datetime) -> str:
+    """One spelling per instant: UTC, microsecond precision.
+
+    A naive datetime is read as UTC, matching what ingestion does with a report's
+    `generated_at`. Without this, the same instant written `+00:00`, `Z`, or as
+    `+01:00` with a shifted clock time would compare as three different observations.
+    """
+    aware = value if value.tzinfo is not None else value.replace(tzinfo=UTC)
+    return aware.astimezone(UTC).isoformat(timespec="microseconds")
+
+
 def canonical_occurrence_content(occurrence: Occurrence) -> str:
+    """The COMPLETE observation, which is what an idempotency key promises.
+
+    `observed_at` is included. Omitting it meant that reusing an ingestion ref with a
+    different timestamp -- the same run identifier claiming a different moment -- was
+    silently accepted as an identical retry. The docstring above calls an occurrence
+    one complete observation; a comparison that skipped a field it stores would make
+    that false.
+
+    `producer_id`, `ingestion_ref`, and the record's `finding_id` are deliberately
+    absent: they are the KEY, not the content, and comparing a key against itself
+    proves nothing.
+    """
     from science_model.audit.fingerprint import canonical_json
 
     return canonical_json(
         {
+            "observed_at": normalized_instant(occurrence.observed_at),
             "severity": occurrence.severity,
             "message": occurrence.message,
             "qualifiers": {k: v for k, v in sorted(occurrence.qualifiers.items())},
@@ -1870,7 +1970,12 @@ class AuditFindingRecord(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
 
     finding_id: str = Field(pattern=r"^[0-9a-f]{64}$")
-    fingerprint_version: int
+    #: `Literal[1]`, not `int`. A stored record naming a fingerprint version this
+    #: toolkit does not implement must not validate: its `finding_id` would be a
+    #: digest under rules nothing here can reproduce, so every derived check below
+    #: would be comparing against a scheme it cannot compute. Adding v2 means editing
+    #: this line deliberately, which is the point.
+    fingerprint_version: Literal[1]
     rule_id: str
     subject: FindingSubject
     #: The identity-bearing subset. `finding_id` is a digest OVER this mapping, so a
@@ -1941,6 +2046,34 @@ class AuditFindingRecord(BaseModel):
                     f"duplicate occurrence idempotency_key {occurrence.idempotency_key!r}"
                 )
             seen.add(occurrence.idempotency_key)
+            self._validate_identity_agreement(occurrence)
+
+    def _validate_identity_agreement(self, occurrence: Occurrence) -> None:
+        """Every occurrence must agree with the record on the identity-bearing keys.
+
+        `finding_id` is a digest over `identity_qualifiers`, and an occurrence carries
+        the producer's FULL qualifier mapping. If the two disagree on a key that bears
+        identity, the record is claiming an identity its own evidence contradicts --
+        an occurrence about `field: year` filed under the digest for `field: month`.
+        Comparison is on NFC-normalized values, the same form the fingerprint hashes,
+        so two spellings of one string are not read as two different facts.
+        """
+        from science_model.audit.fingerprint import normalize_identity_value
+
+        for key, value in self.identity_qualifiers.items():
+            if key not in occurrence.qualifiers:
+                raise RecordError(
+                    f"occurrence {occurrence.idempotency_key!r} omits identity "
+                    f"qualifier {key!r}, which this case's finding_id is derived from"
+                )
+            if normalize_identity_value(
+                occurrence.qualifiers[key]
+            ) != normalize_identity_value(value):
+                raise RecordError(
+                    f"occurrence {occurrence.idempotency_key!r} reports {key!r}="
+                    f"{occurrence.qualifiers[key]!r} but this case's identity is "
+                    f"{key!r}={value!r}; they are different findings"
+                )
 
     def _validate_reviews(self) -> None:
         seen: set[str] = set()
@@ -2018,7 +2151,7 @@ class AuditFindingRecord(BaseModel):
 - [ ] **Step 4: Run tests to verify they pass**
 
 Run: `cd science/model && uv run --frozen pytest tests/test_audit_record.py -v`
-Expected: PASS, 24 tests
+Expected: PASS, 31 tests
 
 Then: `cd science/model && uv run --frozen pytest tests/test_audit_*.py -q`
 Expected: PASS, all audit model tests
@@ -2804,26 +2937,20 @@ git commit -m "feat(findings): derive the frozen rule registry from producer dec
 
 **Interfaces:**
 - Consumes: `AuditFindingRecord`, `DOC_KIND`, `rule_slug`, `finding_fingerprint` from `science_model.audit`.
-- Produces (paths): `PathSafetyError`, `resolve_inside(project_root, rel_path) -> Path`, `mkdir_inside(project_root, rel_dir) -> Path`, `project_relative(project_root, path) -> str`, `read_inside_bounded(project_root, path, max_bytes) -> str`, `open_read_bounded(path, max_bytes) -> str`, `open_write_nofollow(path) -> int`.
-- Produces (storage): `CASES_DIRNAME = "doc/audits/cases"`, `MAX_CASE_BYTES`, `case_path(...)`, `write_case(project_root, record)`, `load_case(project_root, path)`, `load_cases(project_root)`, `CaseStorageError`.
+- Produces (paths): `PathSafetyError`; the walk — `open_dir_inside(project_root, rel_dir, *, create=False)` (context manager yielding a `dir_fd`), `dir_exists_inside(project_root, rel_dir) -> bool`, `mkdir_inside(project_root, rel_dir) -> Path`; the anchored operations — `read_regular_file_at(dir_fd, name, max_bytes) -> str`, `create_regular_file_at(dir_fd, name) -> int`, `open_lock_at(dir_fd, name) -> int`, `unlink_at(dir_fd, name)`, `replace_at(dir_fd, source, target)`; and the two name helpers — `project_relative(project_root, path) -> str`, `resolve_inside(project_root, rel_path) -> Path` (**check-only**), plus the convenience `read_inside_bounded(project_root, path, max_bytes) -> str`.
+- Produces (storage): `CASES_DIRNAME`, `LOCK_NAME`, `MAX_CASE_BYTES`, `CaseStore`, `case_store(project_root, *, create)`, `case_path(...)`, `case_filename(...)`, `write_case(project_root, record)`, `load_case(project_root, path)`, `load_cases(project_root)`, `CaseStorageError`.
 
-Three reasons `paths.py` exists rather than inlining the checks:
+**The organising idea: a validated pathname is not a validated file.** Walking the components of a path and then calling `open()` on that string resolves every component a *second* time, and whatever was swapped in between is what gets opened. So the walk returns a **directory descriptor**, and every read, write, listing, lock, and rename runs through it with `dir_fd=`. `resolve_inside` survives only as a *check-only* primitive for judging the paths an incoming report names; it must never supply a name for a subsequent operation.
 
-1. **Checking only the final component is not symlink refusal.** A link at `doc/` or
-   `doc/audits/` redirects the whole operation while `path.is_symlink()` on the leaf
-   returns `False`. `resolve_inside` walks **every** component from the project root.
-2. **Validating after mutating is not validating.** `Path.mkdir(parents=True)` follows
-   links, so a linked `doc/audits` gets a real `cases/` created in its target — outside
-   the project — before any check runs. `mkdir_inside` creates one component at a time
-   through directory descriptors opened `O_DIRECTORY | O_NOFOLLOW`, so it stops *at* the
-   link having created nothing beyond it.
-3. **`stat()`-then-`read()` is a race.** `open_read_bounded` opens once with
-   `O_NOFOLLOW`, then `fstat`s *that descriptor* and reads from it, so the file it
-   sized is the file it read.
+Five failures this shape prevents, each reproduced before being written down:
 
-`load_case` takes the **project root**, not just a path, for the same reason: given a
-bare path it would have to open it directly, which is precisely what following a link
-looks like.
+1. **Checking only the final component is not symlink refusal.** A link at `doc/` or `doc/audits/` redirects the whole operation while `is_symlink()` on the leaf returns `False`.
+2. **Deciding absence before walking.** `lstat`/`exists()` on a full pathname follow every component but the last, so a symlinked `doc/audits` whose target lacks `cases/` raises `FileNotFoundError` — and a caller reading that as "no cases" reports clean about a store that was **redirected**. `dir_exists_inside` answers only from the walk.
+3. **Validating after mutating is not validating.** `mkdir(parents=True)` follows links and creates directories in the target before any check runs.
+4. **`O_TRUNC` through a hard link.** `O_NOFOLLOW` is silent about hard links: a planted `.ingest.lock` or predictable temp name that is a second link to a real file gets that file emptied. Temp files are `O_EXCL`; the lock is opened **without** `O_TRUNC` and then `fstat`ed.
+5. **Blocking and non-file objects.** A FIFO under a report or case name makes a plain `O_RDONLY` hang forever. Reads use `O_NONBLOCK` then require `S_ISREG`.
+
+`load_case` and `load_report` take the **project root**, not just a path: given a bare path they would have to open it directly, which is exactly what following a link looks like.
 
 Unlike `write_run_record`, which is write-once (`O_EXCL`), a case is **upserted** — occurrences accumulate — so the write is temp-file-plus-rename rather than exclusive-create.
 
@@ -2831,18 +2958,26 @@ Unlike `write_run_record`, which is write-once (`O_EXCL`), a case is **upserted*
 
 ```python
 # science/tests/test_findings_paths.py
+import os
 from pathlib import Path
 
 import pytest
 
 from science_tool.findings.paths import (
     PathSafetyError,
+    create_regular_file_at,
+    dir_exists_inside,
     mkdir_inside,
-    open_read_bounded,
+    open_dir_inside,
+    open_lock_at,
     project_relative,
     read_inside_bounded,
+    read_regular_file_at,
+    replace_at,
     resolve_inside,
 )
+
+# --- resolve_inside: the check-only primitive -------------------------------------
 
 
 def test_resolve_inside_returns_the_path_when_every_component_is_real(tmp_path):
@@ -2882,26 +3017,7 @@ def test_resolve_inside_tolerates_a_not_yet_existing_leaf(tmp_path):
     assert resolve_inside(tmp_path, "doc/audits/cases/new.md").name == "new.md"
 
 
-def test_open_read_bounded_reads_a_small_file(tmp_path):
-    path = tmp_path / "a.json"
-    path.write_text("{}", encoding="utf-8")
-    assert open_read_bounded(path, 1024) == "{}"
-
-
-def test_open_read_bounded_refuses_an_oversize_file(tmp_path):
-    path = tmp_path / "a.json"
-    path.write_text("x" * 100, encoding="utf-8")
-    with pytest.raises(PathSafetyError, match="exceeds"):
-        open_read_bounded(path, 10)
-
-
-def test_open_read_bounded_refuses_a_symlink(tmp_path):
-    real = tmp_path / "real.json"
-    real.write_text("{}", encoding="utf-8")
-    link = tmp_path / "link.json"
-    link.symlink_to(real)
-    with pytest.raises(PathSafetyError, match="symlink"):
-        open_read_bounded(link, 1024)
+# --- mkdir_inside: refuse before mutating ------------------------------------------
 
 
 def test_mkdir_inside_creates_the_whole_chain(tmp_path):
@@ -2937,6 +3053,58 @@ def test_mkdir_inside_refuses_a_component_that_is_a_regular_file(tmp_path):
         mkdir_inside(tmp_path, "doc/audits/cases")
 
 
+# --- dir_exists_inside: absence is decided by the WALK ------------------------------
+
+
+def test_dir_exists_inside_is_true_for_a_real_chain(tmp_path):
+    (tmp_path / "doc" / "audits" / "cases").mkdir(parents=True)
+    assert dir_exists_inside(tmp_path, "doc/audits/cases") is True
+
+
+def test_dir_exists_inside_is_false_only_when_a_component_is_genuinely_missing(tmp_path):
+    assert dir_exists_inside(tmp_path, "doc/audits/cases") is False
+    (tmp_path / "doc").mkdir()
+    assert dir_exists_inside(tmp_path, "doc/audits/cases") is False
+
+
+def test_dir_exists_inside_REFUSES_an_intermediate_link_whose_target_lacks_the_rest(
+    tmp_path,
+):
+    # THE silent-empty case. `doc/audits` is a link to a real directory that has no
+    # `cases/`. `lstat` on the full pathname follows `doc/audits`, finds no `cases`,
+    # and raises FileNotFoundError -- which a caller reads as "nothing stored". The
+    # store was redirected, not emptied, and that must be loud.
+    target = tmp_path / "elsewhere"
+    target.mkdir()
+    (tmp_path / "doc").mkdir()
+    (tmp_path / "doc" / "audits").symlink_to(target, target_is_directory=True)
+
+    with pytest.raises(FileNotFoundError):
+        os.lstat(tmp_path / "doc" / "audits" / "cases")   # what the naive check does
+
+    with pytest.raises(PathSafetyError, match="symlink or not a directory"):
+        dir_exists_inside(tmp_path, "doc/audits/cases")
+
+
+def test_dir_exists_inside_refuses_a_DANGLING_intermediate_link(tmp_path):
+    (tmp_path / "doc").mkdir()
+    (tmp_path / "doc" / "audits").symlink_to(tmp_path / "gone", target_is_directory=True)
+    with pytest.raises(PathSafetyError, match="symlink or not a directory"):
+        dir_exists_inside(tmp_path, "doc/audits/cases")
+
+
+def test_dir_exists_inside_refuses_a_DANGLING_final_link(tmp_path):
+    (tmp_path / "doc" / "audits").mkdir(parents=True)
+    (tmp_path / "doc" / "audits" / "cases").symlink_to(
+        tmp_path / "gone", target_is_directory=True
+    )
+    with pytest.raises(PathSafetyError, match="symlink or not a directory"):
+        dir_exists_inside(tmp_path, "doc/audits/cases")
+
+
+# --- project_relative ---------------------------------------------------------------
+
+
 def test_project_relative_returns_the_relative_spelling(tmp_path):
     assert project_relative(tmp_path, tmp_path / "doc" / "x.md") == "doc/x.md"
     assert project_relative(tmp_path, Path("doc/x.md")) == "doc/x.md"
@@ -2950,6 +3118,15 @@ def test_project_relative_refuses_a_path_outside_the_project(tmp_path):
         project_relative(tmp_path, tmp_path / ".." / "escape.json")
 
 
+# --- reads: regular files only, never blocking, never following ---------------------
+
+
+def test_read_inside_bounded_reads_a_real_file(tmp_path):
+    (tmp_path / "runs").mkdir()
+    (tmp_path / "runs" / "report.json").write_text("{}", encoding="utf-8")
+    assert read_inside_bounded(tmp_path, tmp_path / "runs" / "report.json", 1024) == "{}"
+
+
 def test_read_inside_bounded_refuses_a_symlinked_PARENT(tmp_path):
     # The leaf is a real file inside the link target, so a leaf-only `O_NOFOLLOW`
     # check reads it happily.
@@ -2957,14 +3134,103 @@ def test_read_inside_bounded_refuses_a_symlinked_PARENT(tmp_path):
     target.mkdir()
     (target / "report.json").write_text("{}", encoding="utf-8")
     (tmp_path / "runs").symlink_to(target, target_is_directory=True)
-    with pytest.raises(PathSafetyError, match="symlink"):
+    with pytest.raises(PathSafetyError, match="symlink or not a directory"):
         read_inside_bounded(tmp_path, tmp_path / "runs" / "report.json", 1024)
 
 
-def test_read_inside_bounded_reads_a_real_file(tmp_path):
-    (tmp_path / "runs").mkdir()
-    (tmp_path / "runs" / "report.json").write_text("{}", encoding="utf-8")
-    assert read_inside_bounded(tmp_path, tmp_path / "runs" / "report.json", 1024) == "{}"
+def test_read_inside_bounded_refuses_a_symlinked_leaf(tmp_path):
+    (tmp_path / "real.json").write_text("{}", encoding="utf-8")
+    (tmp_path / "link.json").symlink_to(tmp_path / "real.json")
+    with pytest.raises(PathSafetyError, match="following a link"):
+        read_inside_bounded(tmp_path, tmp_path / "link.json", 1024)
+
+
+def test_read_inside_bounded_refuses_an_oversize_file(tmp_path):
+    (tmp_path / "a.json").write_text("x" * 100, encoding="utf-8")
+    with pytest.raises(PathSafetyError, match="exceeds"):
+        read_inside_bounded(tmp_path, tmp_path / "a.json", 10)
+
+
+def test_read_inside_bounded_refuses_invalid_utf8_as_a_path_error(tmp_path):
+    # A raw UnicodeDecodeError would escape this module's declared error channel and
+    # reach the CLI as an unhandled exception.
+    (tmp_path / "a.json").write_bytes(b"\xff\xfe not utf-8")
+    with pytest.raises(PathSafetyError, match="not valid UTF-8"):
+        read_inside_bounded(tmp_path, tmp_path / "a.json", 1024)
+
+
+def test_read_refuses_a_FIFO_instead_of_blocking_on_it(tmp_path):
+    # A plain O_RDONLY on a FIFO with no writer blocks forever. O_NONBLOCK plus an
+    # S_ISREG check turns a hang into a refusal.
+    os.mkfifo(tmp_path / "report.json")
+    with pytest.raises(PathSafetyError, match="not a regular file"):
+        read_inside_bounded(tmp_path, tmp_path / "report.json", 1024)
+
+
+def test_read_refuses_a_directory(tmp_path):
+    (tmp_path / "a.json").mkdir()
+    with pytest.raises(PathSafetyError, match="not a regular file"):
+        read_inside_bounded(tmp_path, tmp_path / "a.json", 1024)
+
+
+# --- writes and locks: never truncate anything --------------------------------------
+
+
+def test_create_regular_file_at_refuses_a_planted_HARD_LINK(tmp_path):
+    # O_NOFOLLOW is silent about hard links, so an O_TRUNC open here would empty
+    # `victim.txt` through its second name. O_EXCL refuses instead.
+    victim = tmp_path / "victim.txt"
+    victim.write_text("KEEP", encoding="utf-8")
+    os.link(victim, tmp_path / ".case.md.tmp")
+    with open_dir_inside(tmp_path, "") as dir_fd:
+        with pytest.raises(PathSafetyError, match="could not create"):
+            create_regular_file_at(dir_fd, ".case.md.tmp")
+    assert victim.read_text(encoding="utf-8") == "KEEP"
+
+
+def test_open_lock_at_does_not_truncate_an_existing_file(tmp_path):
+    victim = tmp_path / "victim.txt"
+    victim.write_text("KEEP", encoding="utf-8")
+    os.link(victim, tmp_path / ".ingest.lock")
+    with open_dir_inside(tmp_path, "") as dir_fd:
+        descriptor = open_lock_at(dir_fd, ".ingest.lock")
+        os.close(descriptor)
+    assert victim.read_text(encoding="utf-8") == "KEEP"
+
+
+def test_open_lock_at_refuses_a_FIFO(tmp_path):
+    os.mkfifo(tmp_path / ".ingest.lock")
+    with open_dir_inside(tmp_path, "") as dir_fd:
+        with pytest.raises(PathSafetyError, match="not a regular file"):
+            open_lock_at(dir_fd, ".ingest.lock")
+
+
+def test_open_lock_at_refuses_a_symlinked_lock(tmp_path):
+    (tmp_path / "outside.lock").write_text("", encoding="utf-8")
+    (tmp_path / ".ingest.lock").symlink_to(tmp_path / "outside.lock")
+    with open_dir_inside(tmp_path, "") as dir_fd:
+        with pytest.raises(PathSafetyError, match="could not open lock"):
+            open_lock_at(dir_fd, ".ingest.lock")
+
+
+def test_a_held_descriptor_keeps_operating_in_the_directory_it_verified(tmp_path):
+    # THE reason operations are anchored rather than re-resolved. The pathname
+    # `real/` is swapped for a different directory after the walk; a pathname-based
+    # write would land in the attacker's directory, the descriptor does not.
+    (tmp_path / "real").mkdir()
+    (tmp_path / "evil").mkdir()
+    with open_dir_inside(tmp_path, "real") as dir_fd:
+        (tmp_path / "real").rename(tmp_path / "moved")
+        (tmp_path / "evil").rename(tmp_path / "real")
+
+        descriptor = create_regular_file_at(dir_fd, ".x.tmp")
+        with os.fdopen(descriptor, "w", encoding="utf-8") as handle:
+            handle.write("written")
+        replace_at(dir_fd, ".x.tmp", "x.md")
+        assert read_regular_file_at(dir_fd, "x.md", 1024) == "written"
+
+    assert (tmp_path / "moved" / "x.md").exists(), "the write followed the pathname"
+    assert not (tmp_path / "real" / "x.md").exists()
 ```
 
 - [ ] **Step 1b: Write the failing storage test**
@@ -2998,7 +3264,11 @@ RULE = "dataset.cached-field-drift"
 QUALS = {"field": "year"}
 
 
-def _occurrence(finding_id: str, *, ingestion_ref: str = "ing:1") -> Occurrence:
+def _occurrence(
+    finding_id: str, *, ingestion_ref: str = "ing:1", quals: dict | None = None
+) -> Occurrence:
+    # The occurrence's qualifiers must agree with the record's identity on every
+    # identity-bearing key, so this helper takes them rather than hardcoding one set.
     return Occurrence(
         idempotency_key=occurrence_key(
             producer_id="dataset_anomalies",
@@ -3010,7 +3280,7 @@ def _occurrence(finding_id: str, *, ingestion_ref: str = "ing:1") -> Occurrence:
         observed_at=NOW,
         severity="warn",
         message="drifted",
-        qualifiers={"field": "year"},
+        qualifiers=dict(QUALS if quals is None else quals),
         evidence=(),
     )
 
@@ -3026,7 +3296,7 @@ def _record(quals: dict | None = None) -> AuditFindingRecord:
         rule_id=RULE,
         subject=SUBJECT,
         identity_qualifiers=quals,
-        occurrences=(_occurrence(finding_id),),
+        occurrences=(_occurrence(finding_id, quals=quals),),
         transitions=(
             Transition(from_status=None, to_status="proposed", actor="ingest", at=NOW,
                        reason="detected"),
@@ -3164,6 +3434,26 @@ def test_load_cases_refuses_a_DANGLING_cases_symlink(tmp_path):
         load_cases(tmp_path)
 
 
+def test_load_cases_refuses_an_INTERMEDIATE_link_whose_target_lacks_cases(tmp_path):
+    # `doc/audits` is a link to a real directory with no `cases/` in it. Any check
+    # that asks the filesystem about the FULL pathname before walking gets
+    # FileNotFoundError here -- indistinguishable from "nothing stored yet" -- and
+    # reports clean about a store that was redirected.
+    target = tmp_path / "elsewhere"
+    target.mkdir()
+    (tmp_path / "doc").mkdir()
+    (tmp_path / "doc" / "audits").symlink_to(target, target_is_directory=True)
+    with pytest.raises(CaseStorageError, match="symlink"):
+        load_cases(tmp_path)
+
+
+def test_load_cases_refuses_a_DANGLING_intermediate_link(tmp_path):
+    (tmp_path / "doc").mkdir()
+    (tmp_path / "doc" / "audits").symlink_to(tmp_path / "gone", target_is_directory=True)
+    with pytest.raises(CaseStorageError, match="symlink"):
+        load_cases(tmp_path)
+
+
 def test_load_cases_refuses_a_cases_path_that_is_not_a_directory(tmp_path):
     (tmp_path / "doc" / "audits").mkdir(parents=True)
     (tmp_path / "doc" / "audits" / "cases").write_text("nope", encoding="utf-8")
@@ -3195,6 +3485,40 @@ def test_load_case_refuses_a_file_with_no_frontmatter(tmp_path):
     path.write_text("just a body, no frontmatter\n", encoding="utf-8")
     with pytest.raises(CaseStorageError, match="frontmatter"):
         load_case(tmp_path, path)
+
+
+def test_load_case_refuses_malformed_yaml_as_a_storage_error(tmp_path):
+    # `yaml.YAMLError` is not in this module's declared error channel; unwrapped, it
+    # would reach the CLI as an unhandled exception.
+    path = write_case(tmp_path, _record())
+    path.write_text("---\ndoc_kind: [unclosed\n---\nbody\n", encoding="utf-8")
+    with pytest.raises(CaseStorageError, match="not valid YAML"):
+        load_case(tmp_path, path)
+
+
+def test_load_case_refuses_a_path_outside_the_case_store(tmp_path):
+    # Inside the project, but not in `cases/`. Cases are read only from the canonical
+    # store, so a case-shaped file elsewhere in the tree is not one.
+    (tmp_path / "doc").mkdir()
+    stray = tmp_path / "doc" / "x.md"
+    stray.write_text("---\ndoc_kind: audit-case\n---\n", encoding="utf-8")
+    with pytest.raises(CaseStorageError, match="not under doc/audits/cases"):
+        load_case(tmp_path, stray)
+
+
+def test_write_recovers_from_a_leftover_temp_file(tmp_path):
+    # A crash between create and rename leaves `.<name>.tmp` behind. Because the temp
+    # is created O_EXCL, the next write must clear that one name and retry rather than
+    # truncating whatever is under it.
+    record = _record()
+    write_case(tmp_path, record)
+    temp = case_path(tmp_path, record).with_name(
+        f".{case_path(tmp_path, record).name}.tmp"
+    )
+    temp.write_text("stale", encoding="utf-8")
+    write_case(tmp_path, record)
+    assert not temp.exists()
+    assert load_case(tmp_path, case_path(tmp_path, record)) == record
 ```
 
 - [ ] **Step 2: Run both tests to verify they fail**
@@ -3206,56 +3530,155 @@ Expected: FAIL — `ModuleNotFoundError: No module named 'science_tool.findings.
 
 ```python
 # science/src/science_tool/findings/paths.py
-"""One hardened path primitive, used for every filesystem touch in this package.
+"""Anchored filesystem primitives -- the only way this package touches disk.
 
-Three failures this exists to prevent:
+The organising idea: **a validated pathname is not a validated file.** Walking the
+components of `doc/audits/cases/x.md` and then calling `open()` on that string
+resolves every component a SECOND time, and anything swapped in between is what
+actually gets opened. So the walk here does not return a name to be re-resolved; it
+returns a *directory descriptor*, and every subsequent read, write, listing, lock,
+and rename happens through it with `dir_fd=`. The kernel then operates inside the
+directory the walk verified, whatever that pathname now refers to.
+
+Five concrete failures this shape prevents, each reproduced before being written down:
 
 1. **Partial symlink checks.** `path.is_symlink()` on a leaf says nothing about
-   `doc/` or `doc/audits/`. A link at any component redirects the whole operation
-   while the leaf check passes, so `resolve_inside` walks EVERY component.
-2. **Mutating before validating.** `Path.mkdir(parents=True)` FOLLOWS links: if
-   `doc/audits` is a link, it happily creates `cases/` in the target, outside the
-   project, and only then does a later check refuse the path. The damage is already
-   done. `mkdir_inside` therefore creates one component at a time through directory
-   descriptors opened `O_DIRECTORY | O_NOFOLLOW`, so it stops AT the link having
-   created nothing beyond it.
-3. **stat-then-read races.** Sizing a path and then opening it are two lookups of a
-   name that can change in between. `open_read_bounded` opens ONCE with `O_NOFOLLOW`
-   and `fstat`s that descriptor, so the file it sized is the file it read.
+   `doc/` or `doc/audits/`. `_walk_dirs` opens EVERY component `O_NOFOLLOW`.
+2. **Deciding absence before walking.** `lstat` on a full pathname follows every
+   component but the last, so a symlinked `doc/audits` whose target lacks `cases/`
+   raises `FileNotFoundError` -- and a caller reading that as "no cases" reports
+   clean about a store that was redirected. Absence is decided ONLY by the walk.
+3. **Mutating before validating.** `Path.mkdir(parents=True)` follows links and
+   creates directories in the target before any check runs. `_walk_dirs(create=True)`
+   makes one component at a time and stops AT a link having created nothing beyond it.
+4. **`O_TRUNC` through a hard link.** `O_NOFOLLOW` says nothing about hard links: a
+   planted `.ingest.lock` or predictable temp name that is a second link to a real
+   file gets that file truncated. Temp files are created `O_EXCL`; the lock is opened
+   WITHOUT `O_TRUNC` and then `fstat`ed. Neither ever truncates anything.
+5. **Blocking and non-file objects.** A FIFO planted under a report or case name makes
+   a plain `O_RDONLY` hang forever. Reads use `O_NONBLOCK` and then require
+   `S_ISREG`, so a FIFO, device, or directory is refused rather than waited on.
 """
 
 from __future__ import annotations
 
 import os
+import stat
+from collections.abc import Iterator
+from contextlib import contextmanager
 from pathlib import Path
 
 
 class PathSafetyError(ValueError):
-    """A path is absolute, escapes the project, or passes through a symlink."""
+    """A path escapes the project, passes through a link, or is not a regular file."""
+
+
+def _dir_segments(rel_dir: str) -> list[str]:
+    """The validated components of a project-relative DIRECTORY path.
+
+    `..` is REFUSED, never collapsed: collapsing `a/../b` lexically answers a question
+    about the filesystem (what is `a`?) with string arithmetic. The empty string is
+    legal here and names the project root itself.
+    """
+    candidate = rel_dir.replace("\\", "/")
+    if candidate.startswith("/"):
+        raise PathSafetyError(f"path must be project-relative, got {rel_dir!r}")
+    parts = [s for s in candidate.split("/") if s not in ("", ".")]
+    if any(segment == ".." for segment in parts):
+        raise PathSafetyError(f"path contains a `..` segment: {rel_dir!r}")
+    return parts
 
 
 def _segments(rel_path: str) -> list[str]:
-    """The validated components of a project-relative path.
-
-    `..` is REFUSED, never collapsed: collapsing `a/../b` lexically answers a question
-    about the filesystem (what is `a`?) with string arithmetic.
-    """
-    candidate = rel_path.replace("\\", "/")
-    if candidate.startswith("/"):
-        raise PathSafetyError(f"path must be project-relative, got {rel_path!r}")
-    parts = [s for s in candidate.split("/") if s not in ("", ".")]
-    if any(segment == ".." for segment in parts):
-        raise PathSafetyError(f"path contains a `..` segment: {rel_path!r}")
+    """As `_dir_segments`, but the path must name something."""
+    parts = _dir_segments(rel_path)
     if not parts:
         raise PathSafetyError(f"path names no file, got {rel_path!r}")
     return parts
 
 
-def resolve_inside(project_root: Path, rel_path: str) -> Path:
-    """Return `project_root / rel_path`, refusing a symlink at ANY component.
+def _walk_dirs(project_root: Path, segments: list[str], *, create: bool) -> int:
+    """Open the directory one component at a time and return ITS descriptor.
 
-    The leaf need not exist -- callers create case files. Every component that DOES
-    exist, including the leaf, must be a real entry rather than a link.
+    Raises `FileNotFoundError` when a component is genuinely absent and
+    `PathSafetyError` when one is a link or not a directory. Callers MUST tell these
+    apart: the first may legitimately mean "nothing stored yet", the second never does.
+    """
+    root = project_root.resolve()
+    walked = root
+    parent_fd = os.open(root, os.O_RDONLY | os.O_DIRECTORY)
+    try:
+        for segment in segments:
+            walked = walked / segment
+            if create:
+                try:
+                    os.mkdir(segment, mode=0o755, dir_fd=parent_fd)
+                except FileExistsError:
+                    pass  # may be a real directory -- the reopen below decides
+                except OSError as exc:
+                    raise PathSafetyError(f"could not create {walked}: {exc}") from exc
+            try:
+                child_fd = os.open(
+                    segment,
+                    os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW,
+                    dir_fd=parent_fd,
+                )
+            except FileNotFoundError:
+                raise  # genuine absence -- NOT a safety failure, and not conflated
+            except OSError as exc:
+                raise PathSafetyError(
+                    f"{walked} is a symlink or not a directory; every component of "
+                    f"{'/'.join(segments)!r} must be a real directory inside the "
+                    f"project ({exc})"
+                ) from exc
+            os.close(parent_fd)
+            parent_fd = child_fd
+    except BaseException:
+        os.close(parent_fd)
+        raise
+    return parent_fd
+
+
+@contextmanager
+def open_dir_inside(
+    project_root: Path, rel_dir: str, *, create: bool = False
+) -> Iterator[int]:
+    """Yield a descriptor for `rel_dir`, held open for the whole operation."""
+    descriptor = _walk_dirs(project_root, _dir_segments(rel_dir), create=create)
+    try:
+        yield descriptor
+    finally:
+        os.close(descriptor)
+
+
+def dir_exists_inside(project_root: Path, rel_dir: str) -> bool:
+    """Whether the directory is there -- answered by the WALK, never by `lstat`.
+
+    `False` means a component is genuinely missing. A link or non-directory at any
+    component raises instead, because "redirected" is not "empty".
+    """
+    try:
+        descriptor = _walk_dirs(project_root, _dir_segments(rel_dir), create=False)
+    except FileNotFoundError:
+        return False
+    os.close(descriptor)
+    return True
+
+
+def mkdir_inside(project_root: Path, rel_dir: str) -> Path:
+    """Create every component of `rel_dir`, never traversing or creating a link."""
+    segments = _dir_segments(rel_dir)
+    os.close(_walk_dirs(project_root, segments, create=True))
+    return project_root.resolve().joinpath(*segments)
+
+
+def resolve_inside(project_root: Path, rel_path: str) -> Path:
+    """Validate a path's components and return the name. **Check-only.**
+
+    Used where a path is being *judged* rather than opened -- the `PathSubject` and
+    `LocationEvidence` entries of an incoming report. It must NOT be used to obtain a
+    name for a subsequent read or write: that is precisely the check/use gap the
+    directory descriptors above exist to close. The leaf need not exist.
     """
     root = project_root.resolve()
     current = root
@@ -3269,59 +3692,16 @@ def resolve_inside(project_root: Path, rel_path: str) -> Path:
     return current
 
 
-def mkdir_inside(project_root: Path, rel_dir: str) -> Path:
-    """Create every component of `rel_dir`, never traversing or creating a link.
-
-    Each component is created relative to a descriptor for its parent and then
-    REOPENED `O_DIRECTORY | O_NOFOLLOW`. `mkdir` does not follow a final symlink, so a
-    linked component raises `FileExistsError`, and the reopen then fails with `ELOOP`
-    -- refusing BEFORE any deeper component is created. `Path.mkdir(parents=True)`
-    followed by a check cannot offer this: by the time the check runs, directories
-    have already been created wherever the link pointed.
-    """
-    segments = _segments(rel_dir)
-    root = project_root.resolve()
-    current = root
-    parent_fd = os.open(root, os.O_RDONLY | os.O_DIRECTORY)
-    try:
-        for segment in segments:
-            current = current / segment
-            try:
-                os.mkdir(segment, mode=0o755, dir_fd=parent_fd)
-            except FileExistsError:
-                pass  # may be a real directory -- the reopen below decides
-            except OSError as exc:
-                raise PathSafetyError(f"could not create {current}: {exc}") from exc
-            try:
-                child_fd = os.open(
-                    segment,
-                    os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW,
-                    dir_fd=parent_fd,
-                )
-            except OSError as exc:
-                raise PathSafetyError(
-                    f"{current} is a symlink or not a directory; every component of "
-                    f"{rel_dir!r} must be a real directory inside the project ({exc})"
-                ) from exc
-            os.close(parent_fd)
-            parent_fd = child_fd
-    finally:
-        os.close(parent_fd)
-    return current
-
-
 def project_relative(project_root: Path, path: Path) -> str:
     """The project-relative spelling of an absolute-or-relative `path`, or refuse.
 
-    Used for caller-supplied paths -- the report file, a case file handed back by
-    `case_path` -- so they go through the same component walk as everything else.
     `path` is NOT resolved: resolving would follow the very links this refuses, and a
     symlinked report would silently be read as its target.
 
     Both spellings of the root are accepted because the caller may name the project
     with an unresolved prefix (`/tmp/...` where `/tmp` is a link) while the walk
-    starts from the resolved one. Which spelling matched changes nothing: the
-    authoritative refusal is `resolve_inside`, below.
+    starts from the resolved one. Which spelling matched changes nothing -- the
+    authoritative refusal is the component walk.
     """
     candidate = path if path.is_absolute() else (project_root / path)
     if ".." in candidate.parts:
@@ -3335,42 +3715,117 @@ def project_relative(project_root: Path, path: Path) -> str:
     raise PathSafetyError(f"{path} is outside the project root {project_root}")
 
 
-def read_inside_bounded(project_root: Path, path: Path, max_bytes: int) -> str:
-    """Read a caller-supplied path after the full inside-the-project component walk."""
-    return open_read_bounded(
-        resolve_inside(project_root, project_relative(project_root, path)), max_bytes
-    )
+def read_regular_file_at(dir_fd: int, name: str, max_bytes: int) -> str:
+    """Read one regular file inside an ALREADY-ANCHORED directory.
 
+    `O_NONBLOCK` so a planted FIFO cannot hang the open; `S_ISREG` so a FIFO, device,
+    or directory is refused rather than read; and the `fstat` is of THIS descriptor,
+    so the object that was type-checked and sized is the object that is read.
 
-def open_read_bounded(path: Path, max_bytes: int) -> str:
-    """Read at most `max_bytes`, refusing symlinks, with no stat/read race."""
+    Decoding failures are raised as `PathSafetyError` rather than `UnicodeDecodeError`
+    so that malformed bytes stay inside this module's declared error channel.
+    """
     try:
-        descriptor = os.open(path, os.O_RDONLY | os.O_NOFOLLOW)
+        descriptor = os.open(
+            name, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK, dir_fd=dir_fd
+        )
     except OSError as exc:
         # ELOOP is what O_NOFOLLOW raises on a symlinked final component.
         raise PathSafetyError(
-            f"could not open {path} without following a symlink: {exc}"
+            f"could not open {name!r} without following a link: {exc}"
         ) from exc
     try:
-        size = os.fstat(descriptor).st_size
-        if size > max_bytes:
-            raise PathSafetyError(f"{path} is {size} bytes, which exceeds {max_bytes}")
+        info = os.fstat(descriptor)
+        if not stat.S_ISREG(info.st_mode):
+            raise PathSafetyError(f"{name!r} is not a regular file; refusing to read it")
+        if info.st_size > max_bytes:
+            raise PathSafetyError(
+                f"{name!r} is {info.st_size} bytes, which exceeds {max_bytes}"
+            )
         data = os.read(descriptor, max_bytes + 1)
     finally:
         os.close(descriptor)
     if len(data) > max_bytes:
-        raise PathSafetyError(f"{path} exceeds {max_bytes} bytes")
-    return data.decode("utf-8")
+        raise PathSafetyError(f"{name!r} exceeds {max_bytes} bytes")
+    try:
+        return data.decode("utf-8")
+    except UnicodeDecodeError as exc:
+        raise PathSafetyError(f"{name!r} is not valid UTF-8: {exc}") from exc
 
 
-def open_write_nofollow(path: Path) -> int:
-    """Open for writing, refusing to follow a symlink at the final component."""
+def create_regular_file_at(dir_fd: int, name: str) -> int:
+    """Create a file that must NOT already exist, inside an anchored directory.
+
+    `O_EXCL`, never `O_TRUNC`. The temp-file name is predictable, and a planted HARD
+    LINK under it is not a symlink -- `O_NOFOLLOW` is silent about hard links -- so an
+    `O_TRUNC` open would empty the file's other name. With `O_EXCL` the open simply
+    fails unless this call created the entry itself.
+    """
     try:
         return os.open(
-            path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC | os.O_NOFOLLOW, 0o644
+            name,
+            os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW,
+            0o644,
+            dir_fd=dir_fd,
         )
     except OSError as exc:
-        raise PathSafetyError(f"could not write {path} without following a link: {exc}") from exc
+        raise PathSafetyError(f"could not create {name!r}: {exc}") from exc
+
+
+def open_lock_at(dir_fd: int, name: str) -> int:
+    """Open (creating if absent) a lock file, WITHOUT truncating it.
+
+    A lock file's contents are irrelevant, which is exactly why truncating one is
+    indefensible: if the name is a hard link to something that matters, `O_TRUNC`
+    destroys that for no benefit whatsoever. The `fstat` then refuses anything that
+    is not a regular file, so a planted FIFO cannot stand in for the lock.
+    """
+    try:
+        descriptor = os.open(
+            name,
+            os.O_RDWR | os.O_CREAT | os.O_NOFOLLOW | os.O_NONBLOCK,
+            0o644,
+            dir_fd=dir_fd,
+        )
+    except OSError as exc:
+        raise PathSafetyError(f"could not open lock {name!r}: {exc}") from exc
+    try:
+        if not stat.S_ISREG(os.fstat(descriptor).st_mode):
+            raise PathSafetyError(f"lock {name!r} is not a regular file")
+    except BaseException:
+        os.close(descriptor)
+        raise
+    return descriptor
+
+
+def unlink_at(dir_fd: int, name: str) -> None:
+    """Remove one name. Never follows a link and never truncates anything."""
+    try:
+        os.unlink(name, dir_fd=dir_fd)
+    except FileNotFoundError:
+        pass
+    except OSError as exc:
+        raise PathSafetyError(f"could not remove {name!r}: {exc}") from exc
+
+
+def replace_at(dir_fd: int, source: str, target: str) -> None:
+    """Atomically commit `source` over `target`, both inside the anchored directory."""
+    try:
+        os.replace(source, target, src_dir_fd=dir_fd, dst_dir_fd=dir_fd)
+    except OSError as exc:
+        raise PathSafetyError(
+            f"could not commit {source!r} to {target!r}: {exc}"
+        ) from exc
+
+
+def read_inside_bounded(project_root: Path, path: Path, max_bytes: int) -> str:
+    """Read a caller-supplied path: relativize, anchor the parent, then read."""
+    relative = project_relative(project_root, path)
+    parent, _, name = relative.rpartition("/")
+    if not name:
+        raise PathSafetyError(f"{path} names no file")
+    with open_dir_inside(project_root, parent) as dir_fd:
+        return read_regular_file_at(dir_fd, name, max_bytes)
 ```
 
 ```python
@@ -3383,8 +3838,13 @@ root anchoring, so a `findings/` directory anywhere would infer that kind. `case
 is absent from `_DIR_TO_KIND`.
 
 Unlike `write_run_record`, which is write-once via `O_EXCL`, a case is UPSERTED:
-occurrences accumulate. The write is therefore temp-file-plus-rename, with symlink
-refusal on the directory and on the target.
+occurrences accumulate. The write is therefore temp-file-plus-rename -- but the temp
+file is created `O_EXCL` and the rename is `os.replace(..., src_dir_fd=, dst_dir_fd=)`,
+both inside the SAME held descriptor as the read that preceded them.
+
+`CaseStore` exists so that the directory is walked ONCE per operation and every
+subsequent access goes through that descriptor. Functions that take a `project_root`
+and a name would each re-resolve the path, which is the check/use gap in miniature.
 
 Loaders validate the filename against the contents. A case whose slug, digest, or
 stored `finding_id` disagrees with the fingerprint recomputed from its own immutable
@@ -3394,20 +3854,28 @@ fields is a LOAD ERROR -- never a silent repair or rename.
 from __future__ import annotations
 
 import os
+from collections.abc import Iterator
+from contextlib import contextmanager
 from pathlib import Path
 
+import yaml
 from science_model.audit import DOC_KIND, AuditFindingRecord, finding_fingerprint, rule_slug
 from science_model.frontmatter import render_frontmatter, split_frontmatter
 
 from science_tool.findings.paths import (
     PathSafetyError,
-    mkdir_inside,
-    open_write_nofollow,
-    read_inside_bounded,
-    resolve_inside,
+    create_regular_file_at,
+    dir_exists_inside,
+    open_dir_inside,
+    open_lock_at,
+    project_relative,
+    read_regular_file_at,
+    replace_at,
+    unlink_at,
 )
 
 CASES_DIRNAME = "doc/audits/cases"
+LOCK_NAME = ".ingest.lock"
 
 #: A case is frontmatter plus one comment line. Anything approaching this is a file
 #: someone else's tooling wrote into `cases/`, and reading it unbounded is the same
@@ -3438,76 +3906,42 @@ def case_path(project_root: Path, record: AuditFindingRecord) -> Path:
     return cases_dir(project_root) / case_filename(record)
 
 
-def write_case(project_root: Path, record: AuditFindingRecord) -> Path:
-    relative = f"{CASES_DIRNAME}/{case_filename(record)}"
-    try:
-        # `mkdir_inside`, NOT `mkdir(parents=True)` then a check: the latter follows a
-        # linked component and creates directories in its target before anything has
-        # been validated. Validation that runs after the mutation it was meant to
-        # prevent is not validation.
-        mkdir_inside(project_root, CASES_DIRNAME)
-        path = resolve_inside(project_root, relative)
-    except PathSafetyError as exc:
-        raise CaseStorageError(str(exc)) from exc
-    except OSError as exc:
-        raise CaseStorageError(
-            f"could not create {cases_dir(project_root)}: {exc}"
-        ) from exc
+def _parse_case(name: str, text: str) -> AuditFindingRecord:
+    """Validate one case's text against its own filename.
 
-    payload = {"doc_kind": DOC_KIND, **record.model_dump(mode="json", exclude_none=True)}
-    text = render_frontmatter(payload, _BODY)
-    temp = path.with_name(f".{path.name}.tmp")
+    YAML errors are wrapped: `split_frontmatter` calls `yaml.safe_load`, which raises
+    `yaml.YAMLError` -- a type no caller of this module has any reason to catch, and
+    one that would escape the CLI's declared error channel entirely.
+    """
     try:
-        descriptor = open_write_nofollow(temp)
-        with os.fdopen(descriptor, "w", encoding="utf-8") as handle:
-            handle.write(text)
-        os.replace(temp, path)
-    except PathSafetyError as exc:
-        temp.unlink(missing_ok=True)
-        raise CaseStorageError(str(exc)) from exc
-    except OSError as exc:
-        temp.unlink(missing_ok=True)
-        raise CaseStorageError(f"could not write case to {path}: {exc}") from exc
-    return path
-
-
-def load_case(project_root: Path, path: Path) -> AuditFindingRecord:
-    """Read one case. Takes the project root so it uses the SAME component walk as
-    every other filesystem touch here -- `parse_frontmatter(path)` would open the path
-    directly, following any link on the way to it."""
-    try:
-        text = read_inside_bounded(project_root, path, MAX_CASE_BYTES)
-    except PathSafetyError as exc:
-        raise CaseStorageError(str(exc)) from exc
-    except OSError as exc:
-        raise CaseStorageError(f"could not read {path}: {exc}") from exc
-    frontmatter, _body = split_frontmatter(text)
+        frontmatter, _body = split_frontmatter(text)
+    except yaml.YAMLError as exc:
+        raise CaseStorageError(f"{name}: frontmatter is not valid YAML: {exc}") from exc
     if not frontmatter:
-        raise CaseStorageError(f"{path} has no parsable frontmatter")
+        raise CaseStorageError(f"{name} has no parsable frontmatter")
     if frontmatter.get("doc_kind") != DOC_KIND:
         raise CaseStorageError(
-            f"{path} is not a {DOC_KIND}; got doc_kind={frontmatter.get('doc_kind')!r}"
+            f"{name} is not a {DOC_KIND}; got doc_kind={frontmatter.get('doc_kind')!r}"
         )
     fields = {k: v for k, v in frontmatter.items() if k != "doc_kind"}
     try:
         record = AuditFindingRecord.model_validate(fields)
     except Exception as exc:  # pydantic ValidationError or RecordError
-        raise CaseStorageError(f"{path} is not a valid case: {exc}") from exc
+        raise CaseStorageError(f"{name} is not a valid case: {exc}") from exc
 
-    expected_slug = rule_slug(record.rule_id)
-    stem = path.stem
+    stem = name[: -len(".md")] if name.endswith(".md") else name
     if "--" not in stem:
-        raise CaseStorageError(f"{path.name} is not `<rule-slug>--<digest>.md`")
+        raise CaseStorageError(f"{name} is not `<rule-slug>--<digest>.md`")
     slug, _, digest = stem.rpartition("--")
+    expected_slug = rule_slug(record.rule_id)
     if slug != expected_slug:
         raise CaseStorageError(
-            f"{path.name}: filename slug {slug!r} != {expected_slug!r} for rule "
+            f"{name}: filename slug {slug!r} != {expected_slug!r} for rule "
             f"{record.rule_id!r}"
         )
     if digest != record.finding_id:
         raise CaseStorageError(
-            f"{path.name}: filename digest does not match finding_id "
-            f"{record.finding_id!r}"
+            f"{name}: filename digest does not match finding_id {record.finding_id!r}"
         )
     recomputed = finding_fingerprint(
         rule_id=record.rule_id,
@@ -3516,38 +3950,151 @@ def load_case(project_root: Path, path: Path) -> AuditFindingRecord:
     )
     if recomputed != record.finding_id:
         raise CaseStorageError(
-            f"{path.name}: recomputed fingerprint {recomputed!r} != stored finding_id "
+            f"{name}: recomputed fingerprint {recomputed!r} != stored finding_id "
             f"{record.finding_id!r}; a case never acquires a new identity by being edited"
         )
     return record
 
 
-def load_cases(project_root: Path) -> list[AuditFindingRecord]:
-    directory = cases_dir(project_root)
-    # `lstat`, not `exists()`: `exists()` follows links, so a DANGLING `cases` symlink
-    # reads as absent and the caller is told "no findings" about a store that was
-    # redirected out from under it. Absence must mean nothing is there under ANY name.
-    try:
-        os.lstat(directory)
-    except FileNotFoundError:
-        return []
-    except OSError as exc:
-        raise CaseStorageError(f"could not stat {directory}: {exc}") from exc
+class CaseStore:
+    """Case operations anchored to ONE directory descriptor.
 
-    # Something is there. It must be a real directory reached without a link -- a
-    # redirected or replaced case store is an unavailable instrument, not an empty one.
+    A validated pathname is not a validated file: every later `open()` of that string
+    resolves its components again, and whatever was swapped in between is what gets
+    opened. Holding the descriptor removes the second resolution -- `os.listdir(fd)`,
+    `os.open(..., dir_fd=fd)`, and `os.replace(..., src_dir_fd=fd, dst_dir_fd=fd)` all
+    act inside the directory the walk actually verified, whatever its pathname now
+    names.
+    """
+
+    def __init__(self, dir_fd: int) -> None:
+        self._dir_fd = dir_fd
+
+    def names(self) -> list[str]:
+        return sorted(n for n in os.listdir(self._dir_fd) if n.endswith(".md"))
+
+    def has(self, name: str) -> bool:
+        """`lstat`, not `stat`: a DANGLING link is present under its own name, and
+        treating it as absent would write straight through it."""
+        try:
+            os.lstat(name, dir_fd=self._dir_fd)
+        except FileNotFoundError:
+            return False
+        except OSError as exc:
+            raise CaseStorageError(f"could not stat {name!r}: {exc}") from exc
+        return True
+
+    def read(self, name: str) -> AuditFindingRecord:
+        try:
+            text = read_regular_file_at(self._dir_fd, name, MAX_CASE_BYTES)
+        except PathSafetyError as exc:
+            raise CaseStorageError(str(exc)) from exc
+        except OSError as exc:
+            raise CaseStorageError(f"could not read {name!r}: {exc}") from exc
+        return _parse_case(name, text)
+
+    def write(self, record: AuditFindingRecord) -> str:
+        name = case_filename(record)
+        temp = f".{name}.tmp"
+        payload = {
+            "doc_kind": DOC_KIND,
+            **record.model_dump(mode="json", exclude_none=True),
+        }
+        text = render_frontmatter(payload, _BODY)
+        try:
+            descriptor = self._create_temp(temp)
+            try:
+                with os.fdopen(descriptor, "w", encoding="utf-8") as handle:
+                    handle.write(text)
+            except BaseException:
+                unlink_at(self._dir_fd, temp)
+                raise
+            replace_at(self._dir_fd, temp, name)
+        except PathSafetyError as exc:
+            raise CaseStorageError(str(exc)) from exc
+        except OSError as exc:
+            unlink_at(self._dir_fd, temp)
+            raise CaseStorageError(f"could not write case {name!r}: {exc}") from exc
+        return name
+
+    def _create_temp(self, temp: str) -> int:
+        """Create the temp file `O_EXCL`, clearing one stale entry if needed.
+
+        `O_EXCL` means a leftover from a crashed run makes the first attempt fail.
+        Removing that NAME is safe -- `unlink` never follows a link and never
+        truncates, so a planted hard link loses this name and keeps its other one --
+        and the retry still refuses to reuse an entry it did not create itself.
+        """
+        try:
+            return create_regular_file_at(self._dir_fd, temp)
+        except PathSafetyError:
+            unlink_at(self._dir_fd, temp)
+            return create_regular_file_at(self._dir_fd, temp)
+
+    def lock(self) -> int:
+        """The caller owns the returned descriptor and must close it."""
+        return open_lock_at(self._dir_fd, LOCK_NAME)
+
+
+@contextmanager
+def case_store(project_root: Path, *, create: bool) -> Iterator[CaseStore]:
+    """Walk to `doc/audits/cases/` once and hold it open for the whole operation.
+
+    Both failure modes of the walk are converted here so nothing outside this module's
+    declared error channel escapes. The only `FileNotFoundError` the walk itself can
+    raise is a missing component; every operation on the yielded store converts its own
+    `OSError` before it could reach this handler.
+    """
     try:
-        resolved = resolve_inside(project_root, CASES_DIRNAME)
+        with open_dir_inside(project_root, CASES_DIRNAME, create=create) as dir_fd:
+            yield CaseStore(dir_fd)
+    except FileNotFoundError as exc:
+        raise CaseStorageError(f"{cases_dir(project_root)} does not exist") from exc
     except PathSafetyError as exc:
         raise CaseStorageError(str(exc)) from exc
-    if not resolved.is_dir():
+
+
+def write_case(project_root: Path, record: AuditFindingRecord) -> Path:
+    with case_store(project_root, create=True) as store:
+        name = store.write(record)
+    # A display path for callers and tests. It is NOT re-opened by this module: every
+    # operation above happened through the descriptor.
+    return cases_dir(project_root) / name
+
+
+def load_case(project_root: Path, path: Path) -> AuditFindingRecord:
+    """Read one case named by path. The path is relativized and its directory walked;
+    the read itself happens through the resulting descriptor."""
+    try:
+        relative = project_relative(project_root, path)
+    except PathSafetyError as exc:
+        raise CaseStorageError(str(exc)) from exc
+    parent, _, name = relative.rpartition("/")
+    if parent != CASES_DIRNAME:
         raise CaseStorageError(
-            f"{resolved} exists but is not a directory; refusing to report zero cases "
-            "from a path that cannot hold any"
+            f"{path} is not under {CASES_DIRNAME}; cases are read only from the "
+            "canonical store"
         )
-    records = [
-        load_case(project_root, path) for path in sorted(resolved.glob("*.md"))
-    ]
+    with case_store(project_root, create=False) as store:
+        return store.read(name)
+
+
+def load_cases(project_root: Path) -> list[AuditFindingRecord]:
+    """Every stored case, or `[]` only when the store is GENUINELY absent.
+
+    Absence is decided by the component walk, never by `lstat`/`exists()` on the full
+    pathname: those follow every intermediate component, so a symlinked `doc/audits`
+    whose target has no `cases/` raises `FileNotFoundError` and would be reported as
+    "no findings" for a store that was redirected. A redirected or replaced store is
+    an unavailable instrument and must fail loudly.
+    """
+    try:
+        if not dir_exists_inside(project_root, CASES_DIRNAME):
+            return []
+    except PathSafetyError as exc:
+        raise CaseStorageError(str(exc)) from exc
+    with case_store(project_root, create=False) as store:
+        records = [store.read(name) for name in store.names()]
     return sorted(records, key=lambda r: r.finding_id)
 ```
 
@@ -3577,7 +4124,7 @@ DEFAULT_REVISION_MANIFEST_EXCLUDES: tuple[str, ...] = (
 - [ ] **Step 4: Run tests to verify they pass**
 
 Run: `cd science && uv run --frozen pytest tests/test_findings_paths.py tests/test_findings_storage.py -v`
-Expected: PASS — 15 path tests, 18 storage tests
+Expected: PASS — 27 path tests, 23 storage tests
 
 Then the manifest-exclude guard, to confirm the new glob broke nothing:
 Run: `cd science && uv run --frozen pytest tests/test_graph_io_revision_manifest.py tests/test_graph_io.py -q`
@@ -3717,6 +4264,29 @@ def test_same_key_with_different_content_is_an_error_not_a_retry(tmp_path):
         ingest_report(tmp_path, conflicting, REGISTRY)
 
 
+def test_reusing_an_ingestion_ref_with_a_NEW_TIMESTAMP_is_a_conflict(tmp_path):
+    # Same run identifier claiming a different moment. The idempotency key is derived
+    # from (producer, ingestion_ref, finding_id) and so is unchanged -- only the
+    # content comparison can catch this, and only if it includes `observed_at`.
+    ingest_report(tmp_path, _report(), REGISTRY)
+    with pytest.raises(IngestError, match="idempotency"):
+        ingest_report(
+            tmp_path, _report(generated_at="2026-07-27T18:30:00+00:00"), REGISTRY
+        )
+    assert len(load_cases(tmp_path)[0].occurrences) == 1
+
+
+def test_the_same_instant_spelled_differently_is_still_a_retry(tmp_path):
+    # 13:30+01:00 IS 12:30Z. Normalizing the instant is what keeps the check above
+    # from firing on a mere change of timezone spelling.
+    ingest_report(tmp_path, _report(generated_at="2026-07-27T12:30:00+00:00"), REGISTRY)
+    outcome = ingest_report(
+        tmp_path, _report(generated_at="2026-07-27T13:30:00+01:00"), REGISTRY
+    )
+    assert outcome.occurrences_skipped == 1
+    assert outcome.occurrences_appended == 0
+
+
 def test_two_producers_upsert_one_record_with_two_occurrences(tmp_path):
     registry = build_registry([
         FindingProducer(
@@ -3740,6 +4310,17 @@ def test_two_producers_upsert_one_record_with_two_occurrences(tmp_path):
     }
 
 
+def _normalized(record) -> dict:
+    """The COMPLETE record, with history sorted so the comparison is order-insensitive
+    without being blind: any field differing anywhere still fails."""
+    payload = record.model_dump(mode="json")
+    payload["occurrences"] = sorted(
+        payload["occurrences"], key=lambda o: o["idempotency_key"]
+    )
+    payload["reviews"] = sorted(payload["reviews"], key=lambda r: r["review_id"])
+    return payload
+
+
 def test_no_arrival_order_dependence(tmp_path):
     a = tmp_path / "a"
     b = tmp_path / "b"
@@ -3757,11 +4338,10 @@ def test_no_arrival_order_dependence(tmp_path):
     ingest_report(a, second, REGISTRY)
     ingest_report(b, second, REGISTRY)
     ingest_report(b, first, REGISTRY)
-    ra, rb = load_cases(a)[0], load_cases(b)[0]
-    assert ra.finding_id == rb.finding_id
-    assert sorted(o.idempotency_key for o in ra.occurrences) == sorted(
-        o.idempotency_key for o in rb.occurrences
-    )
+    # Compare the WHOLE record. Matching only finding ids and occurrence keys would
+    # pass even if the two orders produced different statuses, transitions, severities,
+    # or messages -- which is the entire class of thing this test is about.
+    assert _normalized(load_cases(a)[0]) == _normalized(load_cases(b)[0])
 
 
 def test_non_identity_qualifiers_survive_on_the_occurrence(tmp_path):
@@ -4090,19 +4670,15 @@ from science_model.audit.record import canonical_occurrence_content
 
 from science_tool.findings.paths import (
     PathSafetyError,
-    mkdir_inside,
-    open_write_nofollow,
     read_inside_bounded,
     resolve_inside,
 )
 from science_tool.findings.producers import FindingRegistry, RegistryError
 from science_tool.findings.storage import (
-    CASES_DIRNAME,
+    CaseStore,
     CaseStorageError,
-    case_path,
-    cases_dir,
-    load_case,
-    write_case,
+    case_filename,
+    case_store,
 )
 
 MAX_REPORT_BYTES = 8 * 1024 * 1024
@@ -4154,33 +4730,31 @@ def load_report(project_root: Path, path: Path) -> AuditReport:
 
 
 @contextmanager
-def _project_lock(project_root: Path) -> Iterator[None]:
-    """Serialize ingestion per project; concurrent runs queue rather than interleave.
+def _locked_store(project_root: Path) -> Iterator[CaseStore]:
+    """Serialize ingestion per project and hand back the SAME anchored store.
 
-    The lock file is opened with `O_NOFOLLOW` like every other write here. A plain
-    `open(..., "w")` would happily follow a planted link and write outside the project.
+    The lock and every case operation act through ONE directory descriptor. Taking the
+    lock and then obtaining a store from a second walk would reintroduce exactly the
+    check/use gap the descriptor exists to close -- the lock would be held on one
+    directory while the writes went to whatever the pathname named by then.
+
+    The lock file is opened without `O_TRUNC` and required to be a regular file. Its
+    contents do not matter, which is why truncating it would be indefensible: if the
+    name were a hard link to something real, `O_TRUNC` would empty that for no benefit.
     """
-    directory = cases_dir(project_root)
     try:
-        mkdir_inside(project_root, CASES_DIRNAME)
-        lock_path = resolve_inside(project_root, f"{CASES_DIRNAME}/.ingest.lock")
-    except PathSafetyError as exc:
+        with case_store(project_root, create=True) as store:
+            descriptor = store.lock()
+            try:
+                fcntl.flock(descriptor, fcntl.LOCK_EX)
+                try:
+                    yield store
+                finally:
+                    fcntl.flock(descriptor, fcntl.LOCK_UN)
+            finally:
+                os.close(descriptor)
+    except (CaseStorageError, PathSafetyError) as exc:
         raise IngestError(str(exc)) from exc
-    except OSError as exc:
-        raise IngestError(f"could not create {directory}: {exc}") from exc
-
-    try:
-        descriptor = open_write_nofollow(lock_path)
-    except PathSafetyError as exc:
-        raise IngestError(str(exc)) from exc
-    try:
-        fcntl.flock(descriptor, fcntl.LOCK_EX)
-        try:
-            yield
-        finally:
-            fcntl.flock(descriptor, fcntl.LOCK_UN)
-    finally:
-        os.close(descriptor)
 
 
 class _Planned(BaseModel):
@@ -4310,7 +4884,7 @@ def ingest_report(
         observed_at = observed_at.replace(tzinfo=UTC)
 
     written = appended = skipped = 0
-    with _project_lock(project_root):
+    with _locked_store(project_root) as store:
         for item in planned:
             occurrence = Occurrence(
                 idempotency_key=occurrence_key(
@@ -4345,18 +4919,18 @@ def ingest_report(
                 ),
                 status="proposed",
             )
-            path = case_path(project_root, probe)
-            # `lexists`, not `exists()`: a case path that is a DANGLING link is present
-            # under its own name, and treating it as absent would overwrite whatever
-            # the link points at. `load_case` below refuses it explicitly instead.
-            if not os.path.lexists(path):
-                write_case(project_root, probe)
+            name = case_filename(probe)
+            # `store.has` is an `lstat` through the held descriptor: a DANGLING link is
+            # present under its own name, and treating it as absent would write
+            # straight through it. `store.read` below refuses it explicitly instead.
+            if not store.has(name):
+                store.write(probe)
                 written += 1
                 appended += 1
                 continue
 
             try:
-                existing = load_case(project_root, path)
+                existing = store.read(name)
             except CaseStorageError as exc:
                 raise IngestError(str(exc)) from exc
 
@@ -4377,7 +4951,7 @@ def ingest_report(
 
             # `with_occurrence`, not `model_copy(update=...)`: the latter bypasses every
             # validator, so a malformed append would reach disk unchecked.
-            write_case(project_root, existing.with_occurrence(occurrence))
+            store.write(existing.with_occurrence(occurrence))
             appended += 1
 
     return IngestOutcome(
@@ -4390,7 +4964,7 @@ def ingest_report(
 - [ ] **Step 4: Run tests to verify they pass**
 
 Run: `cd science && uv run --frozen pytest tests/test_findings_ingest.py -v`
-Expected: PASS, 26 tests
+Expected: PASS, 28 tests
 
 Then: `cd science && uv run ruff check && uv run pyright`
 Expected: no findings
@@ -4923,23 +5497,46 @@ The ratchet is not a placeholder, and Plan 2 must **replace** it with the real e
 | CLI registration | root group is `main` (`cli.py:170,184`); `main.add_command(findings_group)`, joining the run at `cli.py:194` |
 | Manifest test | `science/tests/test_graph_io_revision_manifest.py` |
 
-**Filesystem-safety invariants, stated once here so a reviewer can check them in one place.** Every filesystem touch in this package goes through `paths.py` — there is no `Path.open`, `read_text`, `mkdir`, or `parse_frontmatter(path)` anywhere in `science_tool/findings/`:
+**Filesystem-safety invariants, stated once here so a reviewer can check them in one place.** Every filesystem touch in this package goes through `paths.py` — there is no `Path.open`, `read_text`, `mkdir`, `os.replace`, or `parse_frontmatter(path)` anywhere in `science_tool/findings/`.
+
+The organising idea is that **a validated pathname is not a validated file**. The walk therefore returns a *directory descriptor*, not a name, and every operation runs through it:
 
 | Primitive | Guarantee |
 |---|---|
-| `resolve_inside` | walks *every* component from the project root; a symlink at any of them is refused |
-| `mkdir_inside` | creates one component at a time through `O_DIRECTORY \| O_NOFOLLOW` descriptors, so it **stops at a link having created nothing beyond it** |
+| `_walk_dirs` | opens each component `O_DIRECTORY \| O_NOFOLLOW` relative to its parent's descriptor; distinguishes genuine absence (`FileNotFoundError`) from a link or non-directory (`PathSafetyError`) |
+| `open_dir_inside` | holds that descriptor open for the whole operation |
+| `dir_exists_inside` | answers presence **from the walk**, never from `lstat` on a full pathname |
+| `mkdir_inside` | creates one component at a time, so it **stops at a link having created nothing beyond it** |
+| `read_regular_file_at` | `O_NOFOLLOW \| O_NONBLOCK` + `S_ISREG` + `fstat` of *that* descriptor; wraps invalid UTF-8 |
+| `create_regular_file_at` | `O_CREAT \| O_EXCL` — never `O_TRUNC`, so a planted hard link is refused rather than emptied |
+| `open_lock_at` | creates if absent, **never truncates**, then requires `S_ISREG` |
+| `replace_at` | `os.replace(..., src_dir_fd=, dst_dir_fd=)` — the commit lands in the walked directory |
 | `project_relative` | a caller-supplied path is refused unless it is inside the project, with no `..` |
-| `read_inside_bounded` | `project_relative` → `resolve_inside` → `open_read_bounded`, in that order |
-| `open_read_bounded` | opens once with `O_NOFOLLOW` and `fstat`s *that* descriptor, so no stat/read race |
-| `open_write_nofollow` | refuses a symlinked final component |
+| `resolve_inside` | **check-only.** Judges the paths a report *names*; must never supply a name for an operation |
 
-Three orderings this gets right, each of which the obvious code gets wrong:
+Five orderings and assumptions this gets right, each of which the obvious code gets wrong, and each reproduced before being written down:
 
-1. **Create, then validate, is not validation.** `mkdir(parents=True)` followed by a check has already created directories in a link's target by the time the check refuses. `mkdir_inside` refuses first. Asserted by `test_write_creates_nothing_inside_a_symlinked_parents_target`, which checks the *target is still empty* — not merely that an error was raised.
-2. **`exists()` is not presence.** It follows links, so a dangling `cases` symlink reads as absent and `load_cases` would report zero findings for a store that was redirected. `load_cases` uses `lstat`; ingestion uses `os.path.lexists` before deciding a case is new.
-3. **A leaf check is not a path check.** `load_report` and `load_case` both take the **project root**, because given only a path they would have to open it directly — which is what following a link looks like.
+1. **Create, then validate, is not validation.** `mkdir(parents=True)` followed by a check has already created directories in a link's target by the time the check refuses. Asserted by `test_write_creates_nothing_inside_a_symlinked_parents_target`, which checks the *target is still empty* — not merely that an error was raised.
+2. **Absence must be decided by the walk.** `lstat`/`exists()` on a full pathname follow every component but the last. A symlinked `doc/audits` whose target lacks `cases/` therefore raises `FileNotFoundError`, which reads as "nothing stored" for a store that was **redirected**. `test_dir_exists_inside_REFUSES_an_intermediate_link_whose_target_lacks_the_rest` asserts the naive `os.lstat` failure *and* the correct refusal side by side.
+3. **`O_NOFOLLOW` says nothing about hard links.** An `O_TRUNC` open of a predictable temp name or the lock file empties whatever else is linked there. Temp files are `O_EXCL`; the lock is never truncated. Both are asserted by checking the victim file still reads `"KEEP"`.
+4. **A read can hang.** A FIFO under a report or case name blocks a plain `O_RDONLY` indefinitely. `O_NONBLOCK` plus `S_ISREG` turns that into a refusal.
+5. **A leaf check is not a path check.** `load_report` and `load_case` both take the **project root**, because given only a path they would have to open it directly — which is what following a link looks like.
+
+`test_a_held_descriptor_keeps_operating_in_the_directory_it_verified` is the one that states the whole point: it swaps the pathname out from under an open descriptor mid-operation and asserts the write landed in the directory that was actually verified.
 
 **Immutability invariants.** Pydantic's `frozen=True` is shallow: it blocks attribute assignment and nothing else. `AuditFinding.qualifiers`, `Occurrence.qualifiers`, and `AuditFindingRecord.identity_qualifiers` are therefore `QualifierMap` — a `MappingProxyType` over a private copy — so identity cannot be edited in place while `finding_id` keeps claiming otherwise. `validate_default=True` is required on all three and is not decoration: verified against pydantic 2.12.5, an omitted field without it is a plain mutable `dict`.
 
 **Report-boundary invariants.** `generated_at` is validated as ISO-8601 at the model, so `datetime.fromisoformat` in the write path cannot leak a raw `ValueError`; the `MAX_REPORT_FINDINGS` ceiling applies to `findings + accepted` **together**, because §8 ingests both; and `findings_by_severity` must equal the actual breakdown of the unsuppressed channel exactly. Checking the scalar total while leaving the breakdown unchecked is how a summary comes to disagree with the rows beneath it.
+
+**Stored-record invariants.** A stored case is validated as completely as it is derived:
+
+| Field | Constraint | Why not looser |
+|---|---|---|
+| `fingerprint_version` | `Literal[1]` | A v2 `finding_id` is a digest under rules this toolkit cannot reproduce, so every derived check below would compare against a scheme it does not have |
+| `Occurrence.acceptance_key` | `^[0-9a-f]{32}$` | The report's `AcceptedFinding` requires that shape; a stored key of another shape could never match the entry that produced it |
+| occurrence ↔ identity | every identity-bearing key present and NFC-equal | Otherwise a record claims an identity its own evidence contradicts — an occurrence about `field: year` filed under the digest for `field: month` |
+| `canonical_occurrence_content` | includes normalized `observed_at` | An occurrence is documented as *one complete observation*; a comparison that skipped a field it stores would make that false, and reusing an ingestion ref with a new timestamp would pass as an identical retry |
+
+`normalize_identity_value` is public for the third row: the record must compare in *exactly* the form the digest hashes. Two implementations of "the normalized value" would be two answers to what a finding is.
+
+**Error-channel invariants.** Every failure leaves this package as `PathSafetyError`, `CaseStorageError`, `RecordError`, `IngestError`, or a pydantic `ValidationError`. The two that previously escaped are wrapped at their source: `UnicodeDecodeError` in `read_regular_file_at`, and `yaml.YAMLError` in `_parse_case`. Neither is a type any caller of `science findings` has reason to catch.
