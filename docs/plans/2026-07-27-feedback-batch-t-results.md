@@ -202,15 +202,20 @@ filled canonical gate, and malformed required-row boundaries. The final
 toolkit code commit is `06e3b4bc`:
 `fix(validate): require explicit schedule cost gates`.
 
-The same implementation produced this direct before/after audit:
+The same implementation produced this exact-rule before/after audit:
 
 ```text
 unamended 5 [0007, 0025, 0026, 0032, 0034]
 amended   4 [0007,       0026, 0032, 0034]
 ```
 
-The unamended source was the untouched natural-systems main checkout; the
-amended source was the isolated worktree at commit `d4112f545`.
+The unamended source was a temporary clean detached worktree at committed
+owning-project base `f733755b`; the amended source was the persistent isolated
+worktree at commit `d4112f545`. The retained JSON reports were
+`/tmp/batch-t-control-natural-systems.json` and
+`/tmp/batch-t-final-natural-systems.json`. Their path-set difference is exactly
+`0025`: no finding was added, and `0034` remains present. The temporary control
+worktree was removed after measurement.
 
 ### Re-verification and final measured findings
 
