@@ -1025,7 +1025,9 @@ git commit -m "feat(audit): the AuditFinding payload, with rule_id as its wire f
 
 **Interfaces:**
 - Consumes: `Severity` (Task 4), `FingerprintError` (Task 3).
-- Produces: `FindingRule`, `FindingSection`, `RuleDeclarationError`, and `FindingRule.build(...) -> AuditFinding` — the producer-side factory that makes emitting an undeclared rule impossible.
+- Produces: `FindingRule`, `FindingSection`, `RuleDeclarationError`, `FindingRule.build(...) -> AuditFinding` — the producer-side factory that makes emitting an undeclared rule impossible — and `FindingRule.identity_subset(qualifiers) -> dict`, which **requires every declared identity qualifier to be explicitly present**.
+
+`build()` calls `identity_subset()` itself, so the producer side and the write boundary run the same routine and cannot disagree about what a finding's identity is. Schema validation does not cover this: a Pydantic field with a default accepts `{}` and reports `field=""`, while the fingerprint would receive `{}` — a different digest.
 
 - [ ] **Step 1: Write the failing test**
 
@@ -1151,6 +1153,54 @@ def test_ordered_identity_qualifier_collections_are_permitted():
 def test_section_order_is_declared_not_derived_from_the_name():
     section = FindingSection(id="datasets", title="Datasets", section_order=300)
     assert section.section_order == 300
+
+
+def test_an_identity_qualifier_must_be_stated_even_when_the_schema_defaults_it():
+    # The trap: schema validation is NOT protection here. `{}` validates against a
+    # field with a default and reports `field=""`, but the fingerprint would receive
+    # `{}` -- a different digest from `{"field": ""}`, so identity would depend on
+    # whether the producer happened to spell out a value the schema supplies anyway.
+    class Defaulted(BaseModel):
+        model_config = ConfigDict(extra="forbid")
+        field: str = ""
+
+    assert Defaulted.model_validate({}).field == ""     # the schema is happy
+
+    rule = _rule(qualifier_schema=Defaulted, remediation="none", remediator=None)
+    with pytest.raises(RuleDeclarationError, match="declared but absent"):
+        rule.identity_subset({})
+    with pytest.raises(RuleDeclarationError, match="declared but absent"):
+        rule.build(
+            subject=EntitySubject(ref="dataset:a"), severity="warn",
+            qualifiers={}, message="m",
+        )
+    # Stated explicitly, it is accepted -- and it is the empty string, not nothing.
+    assert rule.identity_subset({"field": ""}) == {"field": ""}
+
+
+def test_omitting_and_defaulting_an_identity_qualifier_are_different_identities():
+    from science_model.audit.fingerprint import finding_fingerprint
+
+    subject = EntitySubject(ref="dataset:a")
+    omitted = finding_fingerprint(
+        rule_id="dataset.cached-field-drift", subject=subject, identity_qualifiers={}
+    )
+    explicit = finding_fingerprint(
+        rule_id="dataset.cached-field-drift",
+        subject=subject,
+        identity_qualifiers={"field": ""},
+    )
+    assert omitted != explicit, (
+        "if these were equal, silently dropping an absent identity qualifier would be "
+        "harmless -- they are not, which is why identity_subset refuses instead"
+    )
+
+
+def test_identity_subset_returns_declared_qualifiers_in_declaration_order():
+    rule = _rule(identity_qualifiers=("field",))
+    assert rule.identity_subset({"field": "year", "extra": "ignored"}) == {
+        "field": "year"
+    }
 ```
 
 - [ ] **Step 2: Run test to verify it fails**
@@ -1181,7 +1231,7 @@ import typing
 from collections.abc import Mapping
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, Field, ValidationError, model_validator
+from pydantic import BaseModel, ConfigDict, ValidationError, model_validator
 
 from science_model.audit.finding import AuditFinding, Severity
 from science_model.audit.subjects import FindingSubject
@@ -1321,11 +1371,34 @@ class FindingRule(BaseModel):
             self.qualifier_schema.model_validate(dict(qualifiers))
         except ValidationError as exc:
             raise RuleDeclarationError(f"{self.id}: qualifiers invalid: {exc}") from exc
+        # Compute the identity here too, so a producer cannot build a finding that
+        # ingestion would later refuse. Same routine, one answer.
+        self.identity_subset(qualifiers)
         return finding
 
     def identity_subset(self, qualifiers: Mapping[str, object]) -> dict[str, object]:
-        """The identity-bearing qualifier subset consumed by the fingerprint."""
-        return {k: qualifiers[k] for k in self.identity_qualifiers if k in qualifiers}
+        """The identity-bearing qualifier subset consumed by the fingerprint.
+
+        Every declared identity qualifier must be EXPLICITLY present. Skipping absent
+        keys looks harmless and is not: schema validation is no protection, because a
+        Pydantic field with a default accepts `{}` and reports `field=""`, while the
+        fingerprint would receive `{}` -- a different digest from `{"field": ""}`, and
+        therefore a different case. The identity of a finding would then depend on
+        whether its producer happened to spell out a value the schema would have
+        supplied anyway.
+
+        The schema's default is the right place to decide what a missing qualifier
+        MEANS; it is the wrong place to decide whether identity includes it.
+        """
+        missing = [k for k in self.identity_qualifiers if k not in qualifiers]
+        if missing:
+            raise RuleDeclarationError(
+                f"{self.id}: identity qualifier(s) {missing} are declared but absent "
+                "from the emitted qualifiers. An identity qualifier must be stated "
+                "explicitly, even when the schema would default it: an omitted key and "
+                "an explicit default produce different fingerprints."
+            )
+        return {k: qualifiers[k] for k in self.identity_qualifiers}
 
 
 def _identity_type_permitted(hint: object) -> bool:
@@ -1348,7 +1421,7 @@ def _identity_type_permitted(hint: object) -> bool:
 - [ ] **Step 4: Run tests to verify they pass**
 
 Run: `cd science/model && uv run --frozen pytest tests/test_audit_rules.py -v`
-Expected: PASS, 12 tests
+Expected: PASS, 15 tests
 
 - [ ] **Step 5: Commit**
 
@@ -1744,6 +1817,42 @@ def test_occurrence_content_includes_observed_at():
     assert canonical_occurrence_content(first) != canonical_occurrence_content(later)
 
 
+def test_current_severity_survives_a_mix_of_naive_and_aware_timestamps():
+    # `current_severity()` compares `observed_at` with `>`, and Python raises
+    # TypeError on a naive/aware pair. Frontmatter and JSON both round-trip through
+    # parsers that may or may not attach a timezone, so the model cannot assume one
+    # was attached -- it normalizes at validation instead.
+    record = _record(
+        occurrences=[
+            _occurrence(ingestion_ref="r1", severity="error"),
+            _occurrence(
+                ingestion_ref="r2",
+                severity="warn",
+                observed_at=datetime(2026, 7, 27, 13, 0),   # NAIVE, and later
+            ),
+        ]
+    )
+    assert all(o.observed_at.tzinfo is not None for o in record.occurrences)
+    assert record.current_severity() == "warn"
+
+
+def test_every_stored_moment_is_normalized_to_aware_utc():
+    from datetime import timedelta, timezone
+
+    record = _record(
+        occurrences=[_occurrence(observed_at=datetime(2026, 7, 27, 12, 0))],
+        transitions=[
+            Transition(
+                from_status=None, to_status="proposed", actor="ingest",
+                at=datetime(2026, 7, 27, 13, 0, tzinfo=timezone(timedelta(hours=1))),
+                reason="detected",
+            )
+        ],
+    )
+    assert record.occurrences[0].observed_at == NOW
+    assert record.transitions[0].at == NOW
+
+
 def test_occurrence_content_normalizes_the_instant_spelling():
     from datetime import timedelta, timezone
 
@@ -1781,9 +1890,9 @@ from __future__ import annotations
 
 import hashlib
 from datetime import UTC, datetime
-from typing import Literal
+from typing import Annotated, Literal
 
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import AfterValidator, BaseModel, ConfigDict, Field, model_validator
 
 from science_model.audit.evidence import MAX_EVIDENCE_ENTRIES, Evidence
 from science_model.audit.finding import QualifierMap, Severity
@@ -1793,6 +1902,26 @@ DOC_KIND = "audit-case"
 
 OCCURRENCE_DOMAIN = "science.occurrence.v1"
 REVIEW_DOMAIN = "science.review.v1"
+
+def _to_utc(value: datetime) -> datetime:
+    """Every stored moment is an AWARE datetime in UTC.
+
+    Normalizing at validation rather than at each use is the difference between a
+    property and a convention. `current_severity()` compares `observed_at` values with
+    `>`, and Python raises `TypeError` on a naive/aware pair -- so a record holding one
+    of each would crash a method the design describes as a defined function of the log.
+    Frontmatter and JSON both round-trip through parsers that may or may not attach a
+    timezone, which is precisely why the model cannot assume one was attached.
+
+    A naive value is READ AS UTC, matching what ingestion does with a report's
+    `generated_at`. That is a decision, not a guess, and it lives in one place.
+    """
+    aware = value if value.tzinfo is not None else value.replace(tzinfo=UTC)
+    return aware.astimezone(UTC)
+
+
+#: Applied to every moment this module stores.
+Instant = Annotated[datetime, AfterValidator(_to_utc)]
 
 CaseStatus = Literal["proposed", "confirmed", "dismissed", "promoted"]
 ReviewerKind = Literal["human", "agent", "deterministic"]
@@ -1849,7 +1978,7 @@ class Occurrence(_Base):
     idempotency_key: str = Field(pattern=r"^[0-9a-f]{64}$")
     producer_id: str = Field(min_length=1)
     ingestion_ref: str = Field(min_length=1)
-    observed_at: datetime
+    observed_at: Instant
     severity: Severity
     message: str
     #: Frozen like every qualifier mapping here: a stored observation is history, and
@@ -1869,14 +1998,14 @@ class Occurrence(_Base):
 
 
 def normalized_instant(value: datetime) -> str:
-    """One spelling per instant: UTC, microsecond precision.
+    """One SPELLING per instant: UTC, microsecond precision.
 
-    A naive datetime is read as UTC, matching what ingestion does with a report's
-    `generated_at`. Without this, the same instant written `+00:00`, `Z`, or as
-    `+01:00` with a shifted clock time would compare as three different observations.
+    `Instant` already guarantees an aware UTC value on anything stored; this fixes the
+    textual form as well, so `12:00` and `12:00:00.000000` cannot hash differently.
+    `_to_utc` is applied again rather than assumed, because this is also called on
+    freshly built occurrences before they are attached to a record.
     """
-    aware = value if value.tzinfo is not None else value.replace(tzinfo=UTC)
-    return aware.astimezone(UTC).isoformat(timespec="microseconds")
+    return _to_utc(value).isoformat(timespec="microseconds")
 
 
 def canonical_occurrence_content(occurrence: Occurrence) -> str:
@@ -1910,7 +2039,7 @@ class Transition(_Base):
     from_status: CaseStatus | None
     to_status: CaseStatus
     actor: str
-    at: datetime
+    at: Instant
     reason: str = Field(min_length=1)
     task_ref: str | None = None
 
@@ -1934,7 +2063,7 @@ class Review(_Base):
     lens: str | None = None
     model: str | None = None
     run_ref: str
-    at: datetime
+    at: Instant
     outcome: ReviewOutcome
     note: str = Field(min_length=1)
 
@@ -2151,7 +2280,7 @@ class AuditFindingRecord(BaseModel):
 - [ ] **Step 4: Run tests to verify they pass**
 
 Run: `cd science/model && uv run --frozen pytest tests/test_audit_record.py -v`
-Expected: PASS, 31 tests
+Expected: PASS, 33 tests
 
 Then: `cd science/model && uv run --frozen pytest tests/test_audit_*.py -q`
 Expected: PASS, all audit model tests
@@ -2937,18 +3066,19 @@ git commit -m "feat(findings): derive the frozen rule registry from producer dec
 
 **Interfaces:**
 - Consumes: `AuditFindingRecord`, `DOC_KIND`, `rule_slug`, `finding_fingerprint` from `science_model.audit`.
-- Produces (paths): `PathSafetyError`; the walk — `open_dir_inside(project_root, rel_dir, *, create=False)` (context manager yielding a `dir_fd`), `dir_exists_inside(project_root, rel_dir) -> bool`, `mkdir_inside(project_root, rel_dir) -> Path`; the anchored operations — `read_regular_file_at(dir_fd, name, max_bytes) -> str`, `create_regular_file_at(dir_fd, name) -> int`, `open_lock_at(dir_fd, name) -> int`, `unlink_at(dir_fd, name)`, `replace_at(dir_fd, source, target)`; and the two name helpers — `project_relative(project_root, path) -> str`, `resolve_inside(project_root, rel_path) -> Path` (**check-only**), plus the convenience `read_inside_bounded(project_root, path, max_bytes) -> str`.
-- Produces (storage): `CASES_DIRNAME`, `LOCK_NAME`, `MAX_CASE_BYTES`, `CaseStore`, `case_store(project_root, *, create)`, `case_path(...)`, `case_filename(...)`, `write_case(project_root, record)`, `load_case(project_root, path)`, `load_cases(project_root)`, `CaseStorageError`.
+- Produces (paths): `PathSafetyError` and `PathExistsError`; the walk — `open_dir_inside(project_root, rel_dir, *, create=False)` and `open_dir_inside_if_present(project_root, rel_dir)` (context managers yielding a `dir_fd` / `dir_fd | None`), `mkdir_inside(project_root, rel_dir) -> Path`; the anchored operations, every one guarded by `_leaf_name` — `read_regular_file_at(dir_fd, name, max_bytes) -> str`, `create_regular_file_at(dir_fd, name) -> int`, `open_lock_at(dir_fd, name) -> int`, `unlink_at(dir_fd, name)`, `replace_at(dir_fd, source, target)`; and the two name helpers — `project_relative(project_root, path) -> str`, `resolve_inside(project_root, rel_path) -> Path` (**check-only**), plus the convenience `read_inside_bounded(project_root, path, max_bytes) -> str`.
+- Produces (storage): `CASES_DIRNAME`, `LOCK_NAME`, `MAX_CASE_BYTES`, `CaseStore`, `case_store(project_root, *, create)`, `optional_case_store(project_root)`, `case_path(...)`, `case_filename(...)`, `write_case(project_root, record)`, `load_case(project_root, path)`, `load_cases(project_root)`, `CaseStorageError`.
 
 **The organising idea: a validated pathname is not a validated file.** Walking the components of a path and then calling `open()` on that string resolves every component a *second* time, and whatever was swapped in between is what gets opened. So the walk returns a **directory descriptor**, and every read, write, listing, lock, and rename runs through it with `dir_fd=`. `resolve_inside` survives only as a *check-only* primitive for judging the paths an incoming report names; it must never supply a name for a subsequent operation.
 
-Five failures this shape prevents, each reproduced before being written down:
+Six failures this shape prevents, each reproduced before being written down:
 
 1. **Checking only the final component is not symlink refusal.** A link at `doc/` or `doc/audits/` redirects the whole operation while `is_symlink()` on the leaf returns `False`.
-2. **Deciding absence before walking.** `lstat`/`exists()` on a full pathname follow every component but the last, so a symlinked `doc/audits` whose target lacks `cases/` raises `FileNotFoundError` — and a caller reading that as "no cases" reports clean about a store that was **redirected**. `dir_exists_inside` answers only from the walk.
+2. **Deciding absence before walking.** `lstat`/`exists()` on a full pathname follow every component but the last, so a symlinked `doc/audits` whose target lacks `cases/` raises `FileNotFoundError` — and a caller reading that as "no cases" reports clean about a store that was **redirected**. `open_dir_inside_if_present` answers presence and access from **one** walk, so the two can never disagree.
 3. **Validating after mutating is not validating.** `mkdir(parents=True)` follows links and creates directories in the target before any check runs.
-4. **`O_TRUNC` through a hard link.** `O_NOFOLLOW` is silent about hard links: a planted `.ingest.lock` or predictable temp name that is a second link to a real file gets that file emptied. Temp files are `O_EXCL`; the lock is opened **without** `O_TRUNC` and then `fstat`ed.
-5. **Blocking and non-file objects.** A FIFO under a report or case name makes a plain `O_RDONLY` hang forever. Reads use `O_NONBLOCK` then require `S_ISREG`.
+4. **A `*_at` name that is a path.** `openat` resolves relative to the descriptor, so `"../outside.txt"` escapes the anchor entirely. `_leaf_name` guards every anchored operation.
+5. **`O_TRUNC` through a hard link.** `O_NOFOLLOW` is silent about hard links: a planted `.ingest.lock` or predictable temp name that is a second link to a real file gets that file emptied. Temp files are `O_EXCL`; the lock is opened **without** `O_TRUNC`, `fstat`ed, and required to have `st_nlink == 1` so ingestion never serializes on an inode someone else chose.
+6. **Blocking and non-file objects.** A FIFO under a report or case name makes a plain `O_RDONLY` hang forever. Reads use `O_NONBLOCK` then require `S_ISREG`.
 
 `load_case` and `load_report` take the **project root**, not just a path: given a bare path they would have to open it directly, which is exactly what following a link looks like.
 
@@ -2964,17 +3094,19 @@ from pathlib import Path
 import pytest
 
 from science_tool.findings.paths import (
+    PathExistsError,
     PathSafetyError,
     create_regular_file_at,
-    dir_exists_inside,
     mkdir_inside,
     open_dir_inside,
+    open_dir_inside_if_present,
     open_lock_at,
     project_relative,
     read_inside_bounded,
     read_regular_file_at,
     replace_at,
     resolve_inside,
+    unlink_at,
 )
 
 # --- resolve_inside: the check-only primitive -------------------------------------
@@ -3053,23 +3185,25 @@ def test_mkdir_inside_refuses_a_component_that_is_a_regular_file(tmp_path):
         mkdir_inside(tmp_path, "doc/audits/cases")
 
 
-# --- dir_exists_inside: absence is decided by the WALK ------------------------------
+# --- open_dir_inside_if_present: absence and access, from ONE walk ------------------
 
 
-def test_dir_exists_inside_is_true_for_a_real_chain(tmp_path):
+def test_if_present_yields_a_descriptor_for_a_real_chain(tmp_path):
     (tmp_path / "doc" / "audits" / "cases").mkdir(parents=True)
-    assert dir_exists_inside(tmp_path, "doc/audits/cases") is True
+    with open_dir_inside_if_present(tmp_path, "doc/audits/cases") as dir_fd:
+        assert dir_fd is not None
+        assert os.listdir(dir_fd) == []
 
 
-def test_dir_exists_inside_is_false_only_when_a_component_is_genuinely_missing(tmp_path):
-    assert dir_exists_inside(tmp_path, "doc/audits/cases") is False
+def test_if_present_yields_None_only_when_a_component_is_genuinely_missing(tmp_path):
+    with open_dir_inside_if_present(tmp_path, "doc/audits/cases") as dir_fd:
+        assert dir_fd is None
     (tmp_path / "doc").mkdir()
-    assert dir_exists_inside(tmp_path, "doc/audits/cases") is False
+    with open_dir_inside_if_present(tmp_path, "doc/audits/cases") as dir_fd:
+        assert dir_fd is None
 
 
-def test_dir_exists_inside_REFUSES_an_intermediate_link_whose_target_lacks_the_rest(
-    tmp_path,
-):
+def test_if_present_REFUSES_an_intermediate_link_whose_target_lacks_the_rest(tmp_path):
     # THE silent-empty case. `doc/audits` is a link to a real directory that has no
     # `cases/`. `lstat` on the full pathname follows `doc/audits`, finds no `cases`,
     # and raises FileNotFoundError -- which a caller reads as "nothing stored". The
@@ -3083,23 +3217,60 @@ def test_dir_exists_inside_REFUSES_an_intermediate_link_whose_target_lacks_the_r
         os.lstat(tmp_path / "doc" / "audits" / "cases")   # what the naive check does
 
     with pytest.raises(PathSafetyError, match="symlink or not a directory"):
-        dir_exists_inside(tmp_path, "doc/audits/cases")
+        with open_dir_inside_if_present(tmp_path, "doc/audits/cases"):
+            pass
 
 
-def test_dir_exists_inside_refuses_a_DANGLING_intermediate_link(tmp_path):
+def test_if_present_refuses_a_DANGLING_intermediate_link(tmp_path):
     (tmp_path / "doc").mkdir()
     (tmp_path / "doc" / "audits").symlink_to(tmp_path / "gone", target_is_directory=True)
     with pytest.raises(PathSafetyError, match="symlink or not a directory"):
-        dir_exists_inside(tmp_path, "doc/audits/cases")
+        with open_dir_inside_if_present(tmp_path, "doc/audits/cases"):
+            pass
 
 
-def test_dir_exists_inside_refuses_a_DANGLING_final_link(tmp_path):
+def test_if_present_refuses_a_DANGLING_final_link(tmp_path):
     (tmp_path / "doc" / "audits").mkdir(parents=True)
     (tmp_path / "doc" / "audits" / "cases").symlink_to(
         tmp_path / "gone", target_is_directory=True
     )
     with pytest.raises(PathSafetyError, match="symlink or not a directory"):
-        dir_exists_inside(tmp_path, "doc/audits/cases")
+        with open_dir_inside_if_present(tmp_path, "doc/audits/cases"):
+            pass
+
+
+def test_an_inaccessible_project_root_is_a_safety_error_not_absence(tmp_path):
+    # "The project does not exist" must not be reachable through the same branch as
+    # "the project has no cases yet", or a typo'd root reports a clean audit.
+    with pytest.raises(PathSafetyError, match="project root"):
+        with open_dir_inside_if_present(tmp_path / "no-such-project", "doc"):
+            pass
+
+
+# --- leaf names: a `*_at` argument is one entry, never a path -----------------------
+
+
+def test_every_at_operation_refuses_a_name_that_escapes_the_anchor(tmp_path):
+    # `openat` resolves relative to the descriptor, so `../outside.txt` walks straight
+    # back out and the anchoring guarantee is void. Reproduced before this check
+    # existed: the read below returned the outside file's contents.
+    (tmp_path / "anchored").mkdir()
+    (tmp_path / "outside.txt").write_text("SECRET", encoding="utf-8")
+    with open_dir_inside(tmp_path, "anchored") as dir_fd:
+        for bad in ("../outside.txt", "a/b", "", ".", "..", "a\\b"):
+            with pytest.raises(PathSafetyError):
+                read_regular_file_at(dir_fd, bad, 1024)
+            with pytest.raises(PathSafetyError):
+                create_regular_file_at(dir_fd, bad)
+            with pytest.raises(PathSafetyError):
+                open_lock_at(dir_fd, bad)
+            with pytest.raises(PathSafetyError):
+                unlink_at(dir_fd, bad)
+            with pytest.raises(PathSafetyError):
+                replace_at(dir_fd, bad, "ok.md")
+            with pytest.raises(PathSafetyError):
+                replace_at(dir_fd, "ok.md", bad)
+    assert (tmp_path / "outside.txt").read_text(encoding="utf-8") == "SECRET"
 
 
 # --- project_relative ---------------------------------------------------------------
@@ -3183,9 +3354,19 @@ def test_create_regular_file_at_refuses_a_planted_HARD_LINK(tmp_path):
     victim.write_text("KEEP", encoding="utf-8")
     os.link(victim, tmp_path / ".case.md.tmp")
     with open_dir_inside(tmp_path, "") as dir_fd:
-        with pytest.raises(PathSafetyError, match="could not create"):
+        with pytest.raises(PathExistsError, match="already exists"):
             create_regular_file_at(dir_fd, ".case.md.tmp")
     assert victim.read_text(encoding="utf-8") == "KEEP"
+
+
+def test_an_existing_entry_raises_the_narrow_error_a_retry_may_catch(tmp_path):
+    # `PathExistsError` is a `PathSafetyError`, but catching the base class around an
+    # exclusive create would "recover" from a redirected directory by deleting a name.
+    (tmp_path / "x.tmp").write_text("", encoding="utf-8")
+    with open_dir_inside(tmp_path, "") as dir_fd:
+        with pytest.raises(PathExistsError):
+            create_regular_file_at(dir_fd, "x.tmp")
+    assert issubclass(PathExistsError, PathSafetyError)
 
 
 def test_open_lock_at_does_not_truncate_an_existing_file(tmp_path):
@@ -3193,9 +3374,29 @@ def test_open_lock_at_does_not_truncate_an_existing_file(tmp_path):
     victim.write_text("KEEP", encoding="utf-8")
     os.link(victim, tmp_path / ".ingest.lock")
     with open_dir_inside(tmp_path, "") as dir_fd:
-        descriptor = open_lock_at(dir_fd, ".ingest.lock")
-        os.close(descriptor)
+        with pytest.raises(PathSafetyError, match="links"):
+            open_lock_at(dir_fd, ".ingest.lock")
     assert victim.read_text(encoding="utf-8") == "KEEP"
+
+
+def test_open_lock_at_refuses_a_HARD_LINKED_lock(tmp_path):
+    # Not truncating prevents the data loss, but a hard-linked lock is still a lock on
+    # somebody else's inode: whoever planted the link chooses what this project
+    # serializes against, and can hold that flock to stall or observe ingestion.
+    victim = tmp_path / "elsewhere.dat"
+    victim.write_text("x", encoding="utf-8")
+    os.link(victim, tmp_path / ".ingest.lock")
+    with open_dir_inside(tmp_path, "") as dir_fd:
+        with pytest.raises(PathSafetyError, match="has 2 links"):
+            open_lock_at(dir_fd, ".ingest.lock")
+
+
+def test_open_lock_at_accepts_a_lock_the_project_solely_owns(tmp_path):
+    with open_dir_inside(tmp_path, "") as dir_fd:
+        first = open_lock_at(dir_fd, ".ingest.lock")   # creates it
+        os.close(first)
+        second = open_lock_at(dir_fd, ".ingest.lock")  # reopens the same one
+        os.close(second)
 
 
 def test_open_lock_at_refuses_a_FIFO(tmp_path):
@@ -3558,6 +3759,10 @@ Five concrete failures this shape prevents, each reproduced before being written
 5. **Blocking and non-file objects.** A FIFO planted under a report or case name makes
    a plain `O_RDONLY` hang forever. Reads use `O_NONBLOCK` and then require
    `S_ISREG`, so a FIFO, device, or directory is refused rather than waited on.
+6. **An anchored name that is not a name.** `openat` resolves its argument relative to
+   the descriptor, so `../outside.txt` walks straight back out and the anchoring
+   guarantee evaporates. Every `*_at` operation puts its argument through
+   `_leaf_name` first.
 """
 
 from __future__ import annotations
@@ -3571,6 +3776,32 @@ from pathlib import Path
 
 class PathSafetyError(ValueError):
     """A path escapes the project, passes through a link, or is not a regular file."""
+
+
+class PathExistsError(PathSafetyError):
+    """An exclusive create found an entry already there.
+
+    Distinct so a caller can retry on THIS and only this. `except PathSafetyError`
+    around an exclusive create would also swallow a symlinked or unreachable
+    directory and "recover" from it by deleting a name.
+    """
+
+
+def _leaf_name(name: str) -> str:
+    """One entry INSIDE the anchored directory -- never a path.
+
+    `openat` resolves its name relative to the descriptor, so `../outside.txt` walks
+    straight back out. A `*_at` primitive that accepted separators would not be
+    anchored at all: its "inside the anchored directory" guarantee would be a comment
+    rather than a property.
+    """
+    if not name or name in (".", ".."):
+        raise PathSafetyError(f"{name!r} does not name an entry")
+    if "/" in name or "\\" in name or "\0" in name:
+        raise PathSafetyError(
+            f"{name!r} must name ONE entry inside the anchored directory, not a path"
+        )
+    return name
 
 
 def _dir_segments(rel_dir: str) -> list[str]:
@@ -3603,10 +3834,19 @@ def _walk_dirs(project_root: Path, segments: list[str], *, create: bool) -> int:
     Raises `FileNotFoundError` when a component is genuinely absent and
     `PathSafetyError` when one is a link or not a directory. Callers MUST tell these
     apart: the first may legitimately mean "nothing stored yet", the second never does.
+
+    A project root that cannot be opened is a `PathSafetyError`, deliberately NOT a
+    `FileNotFoundError`: "the project does not exist" must never be reachable through
+    the same branch as "the project has no cases yet".
     """
     root = project_root.resolve()
     walked = root
-    parent_fd = os.open(root, os.O_RDONLY | os.O_DIRECTORY)
+    try:
+        parent_fd = os.open(root, os.O_RDONLY | os.O_DIRECTORY)
+    except OSError as exc:
+        raise PathSafetyError(
+            f"project root {root} is not an accessible directory: {exc}"
+        ) from exc
     try:
         for segment in segments:
             walked = walked / segment
@@ -3651,18 +3891,30 @@ def open_dir_inside(
         os.close(descriptor)
 
 
-def dir_exists_inside(project_root: Path, rel_dir: str) -> bool:
-    """Whether the directory is there -- answered by the WALK, never by `lstat`.
+@contextmanager
+def open_dir_inside_if_present(
+    project_root: Path, rel_dir: str
+) -> Iterator[int | None]:
+    """As `open_dir_inside`, but yields `None` when the directory is GENUINELY absent.
 
-    `False` means a component is genuinely missing. A link or non-directory at any
+    ONE walk answers both questions. A separate `exists()` helper followed by an open
+    is two walks of the same name, and the name can refer to two different real
+    directories across them -- reopening the exact gap the descriptor exists to close.
+    That is why there is no `dir_exists_inside`: presence and access are the same
+    question, so they get one answer.
+
+    `None` means a component was genuinely missing. A link or non-directory at any
     component raises instead, because "redirected" is not "empty".
     """
     try:
         descriptor = _walk_dirs(project_root, _dir_segments(rel_dir), create=False)
     except FileNotFoundError:
-        return False
-    os.close(descriptor)
-    return True
+        yield None
+        return
+    try:
+        yield descriptor
+    finally:
+        os.close(descriptor)
 
 
 def mkdir_inside(project_root: Path, rel_dir: str) -> Path:
@@ -3725,6 +3977,7 @@ def read_regular_file_at(dir_fd: int, name: str, max_bytes: int) -> str:
     Decoding failures are raised as `PathSafetyError` rather than `UnicodeDecodeError`
     so that malformed bytes stay inside this module's declared error channel.
     """
+    name = _leaf_name(name)
     try:
         descriptor = os.open(
             name, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK, dir_fd=dir_fd
@@ -3760,7 +4013,11 @@ def create_regular_file_at(dir_fd: int, name: str) -> int:
     LINK under it is not a symlink -- `O_NOFOLLOW` is silent about hard links -- so an
     `O_TRUNC` open would empty the file's other name. With `O_EXCL` the open simply
     fails unless this call created the entry itself.
+
+    An existing entry raises `PathExistsError` specifically, so a caller may retry on
+    that alone without also "recovering" from a redirected directory.
     """
+    name = _leaf_name(name)
     try:
         return os.open(
             name,
@@ -3768,6 +4025,8 @@ def create_regular_file_at(dir_fd: int, name: str) -> int:
             0o644,
             dir_fd=dir_fd,
         )
+    except FileExistsError as exc:
+        raise PathExistsError(f"{name!r} already exists") from exc
     except OSError as exc:
         raise PathSafetyError(f"could not create {name!r}: {exc}") from exc
 
@@ -3779,7 +4038,14 @@ def open_lock_at(dir_fd: int, name: str) -> int:
     indefensible: if the name is a hard link to something that matters, `O_TRUNC`
     destroys that for no benefit whatsoever. The `fstat` then refuses anything that
     is not a regular file, so a planted FIFO cannot stand in for the lock.
+
+    `st_nlink` must be exactly 1. Not truncating prevents the data loss, but a
+    hard-linked lock is still a lock on somebody else's inode: whoever planted the
+    link chooses what this project's ingestion serializes against, and can hold that
+    `flock` to stall it or watch it. A lock the project does not solely own is not
+    this project's lock.
     """
+    name = _leaf_name(name)
     try:
         descriptor = os.open(
             name,
@@ -3790,8 +4056,14 @@ def open_lock_at(dir_fd: int, name: str) -> int:
     except OSError as exc:
         raise PathSafetyError(f"could not open lock {name!r}: {exc}") from exc
     try:
-        if not stat.S_ISREG(os.fstat(descriptor).st_mode):
+        info = os.fstat(descriptor)
+        if not stat.S_ISREG(info.st_mode):
             raise PathSafetyError(f"lock {name!r} is not a regular file")
+        if info.st_nlink != 1:
+            raise PathSafetyError(
+                f"lock {name!r} has {info.st_nlink} links; a hard-linked lock lets "
+                "whoever planted it choose the inode this project serializes on"
+            )
     except BaseException:
         os.close(descriptor)
         raise
@@ -3801,7 +4073,7 @@ def open_lock_at(dir_fd: int, name: str) -> int:
 def unlink_at(dir_fd: int, name: str) -> None:
     """Remove one name. Never follows a link and never truncates anything."""
     try:
-        os.unlink(name, dir_fd=dir_fd)
+        os.unlink(_leaf_name(name), dir_fd=dir_fd)
     except FileNotFoundError:
         pass
     except OSError as exc:
@@ -3811,7 +4083,9 @@ def unlink_at(dir_fd: int, name: str) -> None:
 def replace_at(dir_fd: int, source: str, target: str) -> None:
     """Atomically commit `source` over `target`, both inside the anchored directory."""
     try:
-        os.replace(source, target, src_dir_fd=dir_fd, dst_dir_fd=dir_fd)
+        os.replace(
+            _leaf_name(source), _leaf_name(target), src_dir_fd=dir_fd, dst_dir_fd=dir_fd
+        )
     except OSError as exc:
         raise PathSafetyError(
             f"could not commit {source!r} to {target!r}: {exc}"
@@ -3864,9 +4138,10 @@ from science_model.frontmatter import render_frontmatter, split_frontmatter
 
 from science_tool.findings.paths import (
     PathSafetyError,
+    PathExistsError,
     create_regular_file_at,
-    dir_exists_inside,
     open_dir_inside,
+    open_dir_inside_if_present,
     open_lock_at,
     project_relative,
     read_regular_file_at,
@@ -3971,7 +4246,11 @@ class CaseStore:
         self._dir_fd = dir_fd
 
     def names(self) -> list[str]:
-        return sorted(n for n in os.listdir(self._dir_fd) if n.endswith(".md"))
+        try:
+            entries = os.listdir(self._dir_fd)
+        except OSError as exc:
+            raise CaseStorageError(f"could not list the case store: {exc}") from exc
+        return sorted(n for n in entries if n.endswith(".md"))
 
     def has(self, name: str) -> bool:
         """`lstat`, not `stat`: a DANGLING link is present under its own name, and
@@ -4024,10 +4303,15 @@ class CaseStore:
         Removing that NAME is safe -- `unlink` never follows a link and never
         truncates, so a planted hard link loses this name and keeps its other one --
         and the retry still refuses to reuse an entry it did not create itself.
+
+        The catch is `PathExistsError`, NOT `PathSafetyError`: "something is already
+        there" is the one condition deleting a name can fix. Catching the base class
+        would answer a symlinked or unreachable directory by unlinking and trying
+        again, which is a retry loop over a safety failure.
         """
         try:
             return create_regular_file_at(self._dir_fd, temp)
-        except PathSafetyError:
+        except PathExistsError:
             unlink_at(self._dir_fd, temp)
             return create_regular_file_at(self._dir_fd, temp)
 
@@ -4079,21 +4363,34 @@ def load_case(project_root: Path, path: Path) -> AuditFindingRecord:
         return store.read(name)
 
 
+@contextmanager
+def optional_case_store(project_root: Path) -> Iterator[CaseStore | None]:
+    """`None` when the store is GENUINELY absent -- decided by the SAME walk that
+    opens it, so presence and access are never two separate answers."""
+    try:
+        with open_dir_inside_if_present(project_root, CASES_DIRNAME) as dir_fd:
+            yield None if dir_fd is None else CaseStore(dir_fd)
+    except PathSafetyError as exc:
+        raise CaseStorageError(str(exc)) from exc
+
+
 def load_cases(project_root: Path) -> list[AuditFindingRecord]:
     """Every stored case, or `[]` only when the store is GENUINELY absent.
 
-    Absence is decided by the component walk, never by `lstat`/`exists()` on the full
-    pathname: those follow every intermediate component, so a symlinked `doc/audits`
-    whose target has no `cases/` raises `FileNotFoundError` and would be reported as
-    "no findings" for a store that was redirected. A redirected or replaced store is
-    an unavailable instrument and must fail loudly.
+    ONE walk. Asking "does it exist?" and then opening it are two resolutions of the
+    same name, and the name can refer to two different real directories across them --
+    which is the check/use gap `CaseStore` exists to close, reintroduced at a larger
+    granularity.
+
+    Absence is never decided by `lstat`/`exists()` on the full pathname: those follow
+    every intermediate component, so a symlinked `doc/audits` whose target has no
+    `cases/` raises `FileNotFoundError` and would be reported as "no findings" for a
+    store that was redirected. A redirected or replaced store is an unavailable
+    instrument and must fail loudly.
     """
-    try:
-        if not dir_exists_inside(project_root, CASES_DIRNAME):
+    with optional_case_store(project_root) as store:
+        if store is None:
             return []
-    except PathSafetyError as exc:
-        raise CaseStorageError(str(exc)) from exc
-    with case_store(project_root, create=False) as store:
         records = [store.read(name) for name in store.names()]
     return sorted(records, key=lambda r: r.finding_id)
 ```
@@ -4124,7 +4421,7 @@ DEFAULT_REVISION_MANIFEST_EXCLUDES: tuple[str, ...] = (
 - [ ] **Step 4: Run tests to verify they pass**
 
 Run: `cd science && uv run --frozen pytest tests/test_findings_paths.py tests/test_findings_storage.py -v`
-Expected: PASS — 27 path tests, 23 storage tests
+Expected: PASS — 32 path tests, 23 storage tests
 
 Then the manifest-exclude guard, to confirm the new glob broke nothing:
 Run: `cd science && uv run --frozen pytest tests/test_graph_io_revision_manifest.py tests/test_graph_io.py -q`
@@ -4390,6 +4687,20 @@ def test_the_same_observation_accepted_and_unsuppressed_conflicts(tmp_path):
             ]),
             REGISTRY,
         )
+
+
+def test_an_omitted_identity_qualifier_is_refused_despite_the_schemas_default(tmp_path):
+    # `Q.field` has a default, so `{}` passes schema validation and reports `field=""`.
+    # The fingerprint would nonetheless be computed over `{}`, giving this observation
+    # a different identity from an otherwise identical one that stated `field: ""`.
+    report = _report(findings=[
+        ReportedFinding(
+            producer_id="dataset_anomalies", finding=_finding(qualifiers={})
+        )
+    ])
+    with pytest.raises(IngestError, match="declared but absent"):
+        ingest_report(tmp_path, report, REGISTRY)
+    assert load_cases(tmp_path) == []
 
 
 def test_an_undeclared_rule_is_refused(tmp_path):
@@ -4662,6 +4973,7 @@ from science_model.audit import (
     AuditFinding,
     AuditFindingRecord,
     Occurrence,
+    RuleDeclarationError,
     Transition,
     finding_fingerprint,
     occurrence_key,
@@ -4819,7 +5131,12 @@ def _plan(
 
         _assert_paths_are_safe(project_root, finding)
 
-        identity = rule.identity_subset(finding.qualifiers)
+        try:
+            # The SAME routine `FindingRule.build()` runs, so a producer and the write
+            # boundary cannot disagree about what this finding's identity is.
+            identity = rule.identity_subset(finding.qualifiers)
+        except RuleDeclarationError as exc:
+            raise IngestError(str(exc)) from exc
         planned.append(
             _Planned(
                 finding_id=finding_fingerprint(
@@ -4964,7 +5281,7 @@ def ingest_report(
 - [ ] **Step 4: Run tests to verify they pass**
 
 Run: `cd science && uv run --frozen pytest tests/test_findings_ingest.py -v`
-Expected: PASS, 28 tests
+Expected: PASS, 29 tests
 
 Then: `cd science && uv run ruff check && uv run pyright`
 Expected: no findings
@@ -5503,24 +5820,27 @@ The organising idea is that **a validated pathname is not a validated file**. Th
 
 | Primitive | Guarantee |
 |---|---|
-| `_walk_dirs` | opens each component `O_DIRECTORY \| O_NOFOLLOW` relative to its parent's descriptor; distinguishes genuine absence (`FileNotFoundError`) from a link or non-directory (`PathSafetyError`) |
+| `_walk_dirs` | opens each component `O_DIRECTORY \| O_NOFOLLOW` relative to its parent's descriptor; distinguishes genuine absence (`FileNotFoundError`) from a link, non-directory, or unreachable project root (`PathSafetyError`) |
 | `open_dir_inside` | holds that descriptor open for the whole operation |
-| `dir_exists_inside` | answers presence **from the walk**, never from `lstat` on a full pathname |
+| `open_dir_inside_if_present` | **one** walk answers presence *and* access; `None` only for genuine absence |
 | `mkdir_inside` | creates one component at a time, so it **stops at a link having created nothing beyond it** |
+| `_leaf_name` | every `*_at` argument is one entry — no separators, no `.`/`..`, non-empty |
 | `read_regular_file_at` | `O_NOFOLLOW \| O_NONBLOCK` + `S_ISREG` + `fstat` of *that* descriptor; wraps invalid UTF-8 |
-| `create_regular_file_at` | `O_CREAT \| O_EXCL` — never `O_TRUNC`, so a planted hard link is refused rather than emptied |
-| `open_lock_at` | creates if absent, **never truncates**, then requires `S_ISREG` |
+| `create_regular_file_at` | `O_CREAT \| O_EXCL` — never `O_TRUNC`, so a planted hard link is refused rather than emptied; an existing entry raises the narrow `PathExistsError` |
+| `open_lock_at` | creates if absent, **never truncates**, then requires `S_ISREG` **and `st_nlink == 1`** |
 | `replace_at` | `os.replace(..., src_dir_fd=, dst_dir_fd=)` — the commit lands in the walked directory |
 | `project_relative` | a caller-supplied path is refused unless it is inside the project, with no `..` |
 | `resolve_inside` | **check-only.** Judges the paths a report *names*; must never supply a name for an operation |
 
-Five orderings and assumptions this gets right, each of which the obvious code gets wrong, and each reproduced before being written down:
+Seven orderings and assumptions this gets right, each of which the obvious code gets wrong, and each reproduced before being written down:
 
 1. **Create, then validate, is not validation.** `mkdir(parents=True)` followed by a check has already created directories in a link's target by the time the check refuses. Asserted by `test_write_creates_nothing_inside_a_symlinked_parents_target`, which checks the *target is still empty* — not merely that an error was raised.
-2. **Absence must be decided by the walk.** `lstat`/`exists()` on a full pathname follow every component but the last. A symlinked `doc/audits` whose target lacks `cases/` therefore raises `FileNotFoundError`, which reads as "nothing stored" for a store that was **redirected**. `test_dir_exists_inside_REFUSES_an_intermediate_link_whose_target_lacks_the_rest` asserts the naive `os.lstat` failure *and* the correct refusal side by side.
-3. **`O_NOFOLLOW` says nothing about hard links.** An `O_TRUNC` open of a predictable temp name or the lock file empties whatever else is linked there. Temp files are `O_EXCL`; the lock is never truncated. Both are asserted by checking the victim file still reads `"KEEP"`.
-4. **A read can hang.** A FIFO under a report or case name blocks a plain `O_RDONLY` indefinitely. `O_NONBLOCK` plus `S_ISREG` turns that into a refusal.
-5. **A leaf check is not a path check.** `load_report` and `load_case` both take the **project root**, because given only a path they would have to open it directly — which is what following a link looks like.
+2. **Absence must be decided by the walk.** `lstat`/`exists()` on a full pathname follow every component but the last. A symlinked `doc/audits` whose target lacks `cases/` therefore raises `FileNotFoundError`, which reads as "nothing stored" for a store that was **redirected**. `test_if_present_REFUSES_an_intermediate_link_whose_target_lacks_the_rest` asserts the naive `os.lstat` failure *and* the correct refusal side by side.
+3. **Asking twice is asking about two things.** An `exists()` helper followed by an open is two resolutions of one name, and the name can denote two different real directories across them — the check/use gap at a larger granularity. There is deliberately **no** `dir_exists_inside`: presence and access are the same question, so `open_dir_inside_if_present` gives them one answer, and `load_cases` holds that descriptor through listing and every read.
+4. **An anchored name that is not a name is not anchored.** `openat` resolves relative to the descriptor, so `read_regular_file_at(fd, "../outside.txt")` walked straight out — reproduced. `_leaf_name` guards every `*_at` operation, and one test sweeps all six against six bad names.
+5. **`O_NOFOLLOW` says nothing about hard links.** An `O_TRUNC` open of a predictable temp name or the lock file empties whatever else is linked there. Beyond not truncating, the lock requires `st_nlink == 1`: a hard-linked lock is a lock on an inode somebody else chose, and they can hold that `flock` to stall or observe ingestion.
+6. **A read can hang.** A FIFO under a report or case name blocks a plain `O_RDONLY` indefinitely. `O_NONBLOCK` plus `S_ISREG` turns that into a refusal.
+7. **A leaf check is not a path check.** `load_report` and `load_case` both take the **project root**, because given only a path they would have to open it directly — which is what following a link looks like.
 
 `test_a_held_descriptor_keeps_operating_in_the_directory_it_verified` is the one that states the whole point: it swaps the pathname out from under an open descriptor mid-operation and asserts the write landed in the directory that was actually verified.
 
@@ -5535,8 +5855,13 @@ Five orderings and assumptions this gets right, each of which the obvious code g
 | `fingerprint_version` | `Literal[1]` | A v2 `finding_id` is a digest under rules this toolkit cannot reproduce, so every derived check below would compare against a scheme it does not have |
 | `Occurrence.acceptance_key` | `^[0-9a-f]{32}$` | The report's `AcceptedFinding` requires that shape; a stored key of another shape could never match the entry that produced it |
 | occurrence ↔ identity | every identity-bearing key present and NFC-equal | Otherwise a record claims an identity its own evidence contradicts — an occurrence about `field: year` filed under the digest for `field: month` |
+| every stored moment | `Instant` — aware, UTC, normalized at validation | `current_severity()` compares `observed_at` with `>`, and Python raises `TypeError` on a naive/aware pair; frontmatter and JSON both round-trip through parsers that may or may not attach a timezone |
 | `canonical_occurrence_content` | includes normalized `observed_at` | An occurrence is documented as *one complete observation*; a comparison that skipped a field it stores would make that false, and reusing an ingestion ref with a new timestamp would pass as an identical retry |
 
 `normalize_identity_value` is public for the third row: the record must compare in *exactly* the form the digest hashes. Two implementations of "the normalized value" would be two answers to what a finding is.
 
-**Error-channel invariants.** Every failure leaves this package as `PathSafetyError`, `CaseStorageError`, `RecordError`, `IngestError`, or a pydantic `ValidationError`. The two that previously escaped are wrapped at their source: `UnicodeDecodeError` in `read_regular_file_at`, and `yaml.YAMLError` in `_parse_case`. Neither is a type any caller of `science findings` has reason to catch.
+**Identity-completeness invariant.** `FindingRule.identity_subset()` requires every declared identity qualifier to be **explicitly present**, and `build()` runs the same routine so a producer cannot construct what ingestion would refuse. Schema validation does not cover this and cannot: a Pydantic field with a default accepts `{}` and reports `field=""`, while the fingerprint would receive `{}`. `test_omitting_and_defaulting_an_identity_qualifier_are_different_identities` asserts those two digests actually differ — without which the refusal would be pointless ceremony. The schema's default decides what a missing qualifier *means*; it does not get to decide whether identity includes it.
+
+**Error-channel invariants.** Every failure leaves this package as `PathSafetyError` (or its subclass `PathExistsError`), `CaseStorageError`, `RecordError`, `RuleDeclarationError`, `IngestError`, or a pydantic `ValidationError`. Four that would otherwise escape are wrapped at their source: `UnicodeDecodeError` in `read_regular_file_at`, `yaml.YAMLError` in `_parse_case`, the `OSError` from `os.listdir` in `CaseStore.names()`, and the `OSError` from opening the project root in `_walk_dirs`. None is a type a caller of `science findings` has reason to catch.
+
+`PathExistsError` exists so `_create_temp` can retry on *"something is already there"* alone. Catching the base `PathSafetyError` there would answer a redirected or unreachable directory by unlinking a name and trying again — a retry loop over a safety failure.
