@@ -752,7 +752,7 @@ Implements spec §2 lock bullet + `_move_task_to_done` + move-recovery predicate
 
 - [ ] **Step 2: Run, verify failure.**
 
-- [ ] **Step 3: Implement predicate** — same id; `ledger.status == target_status`; all transition-stable fields equal (compare `model_copy(update={"status": ..., "completed": ..., "description": ...})` cleared on both, i.e. equality ignoring `status`/`completed`/`description`); and `ledger.description.strip().startswith(active.description.strip())` (prefix match). 
+- [ ] **Step 3: Implement predicate** — same id; `ledger.status == target_status`; all transition-stable fields equal (compare `model_copy(update={"status": ..., "completed": ..., "description": ...})` cleared on both, i.e. equality ignoring `status`/`completed`/`description`); and `ledger.description.strip().startswith(active.description.strip())` (prefix match).
 
 - [ ] **Step 4: Implement `_move_task_to_done`** — search all `done/*.md` for the id; classify occurrences via the predicate; exactly-one-equivalent → skip append, delete active; failing/multiple → raise; else append to `_destination_for(task, date.today())` ledger and delete the active file (`delete_task_file`). Assert (comment) the caller holds the lock; do not acquire.
 
