@@ -98,7 +98,7 @@ class FindingRegistry:
                 )
             return
         try:
-            producer.metrics_schema.model_validate(metrics, strict=True)
+            producer.metrics_schema.model_validate(dict(metrics), strict=True)
         except ValidationError as exc:
             raise RegistryError(f"{producer_id!r} metrics invalid: {exc}") from exc
 

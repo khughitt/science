@@ -1,5 +1,5 @@
 import pytest
-from pydantic import BaseModel, ConfigDict, ValidationError
+from pydantic import BaseModel, ConfigDict, ValidationError, model_validator
 from science_model.audit import FindingRule, FindingSection
 
 from science_tool.findings.producers import (
@@ -21,6 +21,17 @@ class M(BaseModel):
 
 class OpenMetrics(BaseModel):
     scanned: int
+
+
+class MutatingMetrics(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    scanned: int
+
+    @model_validator(mode="before")
+    @classmethod
+    def _change_input(cls, value):
+        value["scanned"] = 4
+        return value
 
 
 SECTION = FindingSection(id="datasets", title="Datasets", section_order=300)
@@ -128,6 +139,15 @@ def test_metrics_are_validated_against_the_declared_schema():
     registry.validate_metrics("dataset_anomalies", {"scanned": 3})
     with pytest.raises(RegistryError, match="metrics"):
         registry.validate_metrics("dataset_anomalies", {"scaned": 3})
+
+
+def test_metrics_validation_does_not_mutate_the_authoritative_mapping():
+    registry = build_registry([_producer(metrics_schema=MutatingMetrics)])
+    metrics = {"scanned": 3}
+
+    registry.validate_metrics("dataset_anomalies", metrics)
+
+    assert metrics == {"scanned": 3}
 
 
 def test_a_metric_of_the_wrong_type_is_refused_not_quietly_coerced():
