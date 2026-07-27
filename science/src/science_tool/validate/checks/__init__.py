@@ -83,6 +83,7 @@ CANONICAL_CHECK_MODULES = (
     "correspondence_drift",
     "accepted_validation",
     "autonomous_runs",
+    "boundary",
 )
 
 

@@ -320,14 +320,11 @@ configuration. Science itself is resolved from the tracked manifest and lock.
 
 ### `.gitignore`
 
-Include at minimum:
+Include at minimum the tooling, OS, and secret noise that is not project data:
 
 ```gitignore
 # Secrets
 .env
-
-# Large files
-papers/pdfs/
 
 # Python
 __pycache__/
@@ -360,24 +357,45 @@ default and stay out of version control unless explicitly promoted. If one
 becomes durable project evidence, promote it deliberately by renaming it to a
 tracked report/plan path and adding it explicitly.
 
-For research projects, also ignore raw/processed data payloads while keeping descriptors or `.gitkeep` files as appropriate.
+**Do not hand-write ignore rules for project data.** Declare a storage class in
+`science.yaml` and let `science boundary sync` generate them:
 
-Use this pattern:
-
-```gitignore
-data/raw/*
-!data/raw/.gitkeep
-data/processed/*
-!data/processed/.gitkeep
-data/external/*
-!data/external/.gitkeep
+```yaml
+boundary:
+  roots:
+    - path: data/raw
+      class: payload
+    - path: data/external
+      class: manifest
+      tracked: [datapackage.json]
 ```
 
-Keep version-controlled provenance outside the configured data root. Prefer
-`provenance/` or `research/packages/` for lightweight manifests, QA reports,
-and small summary frames. Do not use `data/provenance/` when the project uses
-the default `./data` data root, because that puts committed provenance inside
-the non-version-controlled root.
+`versioned` is the implicit default, so only exceptions are declared. `payload`
+means nothing under the path is tracked; `manifest` means the declared
+descriptor globs are tracked and everything else is not.
+
+Generated patterns are anchored, so an unanchored `archive` cannot match a
+directory of that name at any depth. A `manifest` root emits the
+descend-preserving `dir/**` + `!dir/**/` form, so its negations actually apply —
+hand-writing a bare `dir/` exclude is the classic trap, because git does not
+descend into a fully-excluded directory and a `git add` then appears to succeed
+while committing nothing.
+
+Prefer separating payload from records by directory rather than mixing them: put
+regenerable dumps in their own root and keep the source directory fully tracked.
+Where a descriptor genuinely belongs beside its payload, `manifest` expresses
+that once, uniformly, instead of per-dataset negations.
+
+Keep other version-controlled provenance outside the configured data root.
+Prefer `provenance/` or `research/packages/` for lightweight manifests, QA
+reports, and small summary frames. Do not use `data/provenance/` when the
+project uses the default `./data` data root, because that mixes provenance into
+the project's data area.
+
+Declared `payload` roots keep their contents untracked. `manifest` roots track
+only their declared descriptor globs. Paths outside declared roots use the
+implicit `versioned` default and are tracked normally, including the provenance
+locations above.
 
 When a project configures an out-of-tree data root, document the same resolution
 order in local onboarding notes: `SCIENCE_DATA_ROOT`, then `science.yaml`
@@ -385,26 +403,6 @@ order in local onboarding notes: `SCIENCE_DATA_ROOT`, then `science.yaml`
 logical references stable: `data/raw` maps to `<resolved-root>/raw`,
 `data/processed` maps to `<resolved-root>/processed`, and `data/external` maps
 to `<resolved-root>/external`.
-
-**Do not exclude a directory wholesale when it also holds version-controlled
-sources.** A whole-directory entry like `models/` is a trap: git does not
-descend into a fully-excluded directory, so a later child `models/.gitignore`
-with `!*.dot` has no effect and a `git add` appears to succeed while committing
-nothing. In particular, `models/` holds causal DAG sources (`.dot`/`.json`) that
-must stay tracked. If a directory mixes regenerable artifacts with sources, use
-the `dir/*` + explicit-negation idiom so git still descends:
-
-```gitignore
-# Regenerable model dumps, but keep DAG sources tracked
-models/*
-!models/README.md
-!models/*.dot
-!models/*.json
-```
-
-Alternatively, write regenerable dumps to a separate ignored directory (e.g.
-`results/models/`) and keep `models/` fully tracked. Either way, never emit a
-bare `models/` exclude.
 
 ### `CLAUDE.md`
 
@@ -515,6 +513,14 @@ Only create `.ai/prompts/` or `.ai/templates/` when the project needs project-sp
 ```bash
 cd <project>
 git init
+```
+
+After `git init`, run the sync only when `science.yaml` declares one or more
+`boundary.roots` entries. This establishes the generated ignore rules before
+the first bulk stage:
+
+```bash
+science boundary sync
 git add -A
 git commit -m "Initialize Science project: <project name>"
 ```

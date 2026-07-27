@@ -19,7 +19,12 @@ For interactive exploration, prefer marimo notebooks instead.
 For project pipelines, write bulk outputs under the resolved data root. The
 resolver honors `SCIENCE_DATA_ROOT`, then `science.yaml` `data.root`, then
 global `data.root`, then `./data`. Keep logical references as relative
-`data/raw`, `data/processed`, or `data/external` paths in manifests. Never commit files under the resolved data root.
+`data/raw`, `data/processed`, or `data/external` paths in manifests. Declare
+the storage boundary under `boundary:` in `science.yaml` and run `science
+boundary sync`. Declare every bulk-output root, including `data/processed`, as
+`class: payload`; `versioned` is the default and would otherwise allow payload
+bytes to be tracked. Use `class: manifest` only where its declared descriptor
+globs should be tracked beside otherwise untracked payload bytes.
 
 ## Project Structure
 

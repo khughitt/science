@@ -738,25 +738,23 @@ health:
         ]
         assert report["total_issues"] == 1
 
-    def test_build_health_report_validate_check_disables_legacy_sidecar_subprocess(
-        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
-        import subprocess
+    def test_build_health_report_validate_check_disables_legacy_sidecar_subprocess(self, tmp_path: Path) -> None:
+        import shlex
 
         from science_tool.graph.health import build_health_report
 
         (tmp_path / "science.yaml").write_text("name: test\n", encoding="utf-8")
+        sidecar_marker = tmp_path / "legacy-sidecar-ran"
         sidecar = tmp_path / "validate.local.sh"
-        sidecar.write_text("#!/usr/bin/env bash\necho sidecar >&2\n", encoding="utf-8")
+        sidecar.write_text(
+            "#!/usr/bin/env bash\nprintf ran > " + shlex.quote(str(sidecar_marker)) + "\n",
+            encoding="utf-8",
+        )
         sidecar.chmod(0o755)
-
-        def fail_subprocess_run(*_args: object, **_kwargs: object) -> object:
-            raise AssertionError("science health validation must not run legacy sidecar subprocesses")
-
-        monkeypatch.setattr(subprocess, "run", fail_subprocess_run)
 
         report = build_health_report(tmp_path, checks={"validate"})
 
+        assert not sidecar_marker.exists()
         assert all("sidecar" not in finding["message"] for finding in report["validation"])
 
     def test_build_health_report_validate_check_skips_registered_post_hooks(self, tmp_path: Path) -> None:

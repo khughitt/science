@@ -19,21 +19,34 @@ reproducibility.
 
 ## Policy
 
-`science data audit` uses a single data policy to classify project paths:
+Declare the version-control storage boundary in `science.yaml` under
+`boundary:`. Each root has a storage class; `science boundary sync` generates
+the corresponding managed `.gitignore` block. The declaration, not a
+hand-written ignore rule, is the authority. See
+[`docs/plans/2026-07-26-vcs-storage-boundary-design.md`](../plans/2026-07-26-vcs-storage-boundary-design.md).
+
+## Advisory `data_policy:` Overrides
+
+The version-control `boundary:` declaration above and the advisory
+`data_policy:` configuration serve different purposes. `data_policy:` tunes only
+the advisory classifier used by `science data audit`. It does not generate
+`.gitignore` rules, and no validate check consults it.
+
+The classifier labels paths as:
 
 - `record`: lightweight durable material that belongs in tracked source.
 - `payload`: large or regenerable material that belongs under ignored data
   roots.
 - `flag`: ambiguous material that needs a human decision.
 
-The default policy is intentionally conservative. It recognizes record-like
-patterns such as datapackage descriptors, result reports, QA JSON, rubrics,
-worksheets, verdicts, labels, notes, and interpretations. It recognizes common
-payload extensions such as `.parquet`, `.feather`, `.pkl`, `.pdf`, `.npy`,
-`.npz`, archives, videos, and MATLAB files. Unknown small files are flagged;
-unknown large files are treated as payloads.
+The default is intentionally conservative. It recognizes record-like patterns
+such as datapackage descriptors, result reports, QA JSON, rubrics, worksheets,
+verdicts, labels, notes, and interpretations. It recognizes common payload
+extensions such as `.parquet`, `.feather`, `.pkl`, `.pdf`, `.npy`, `.npz`,
+archives, videos, and MATLAB files. Unknown small files are flagged; unknown
+large files are treated as payloads.
 
-Projects may override the defaults in `science.yaml`:
+Projects may override those heuristics in `science.yaml`:
 
 ```yaml
 data_policy:
@@ -61,8 +74,8 @@ science data audit [--project <root>] [--fix] [--json]
 ```
 
 Without `--project`, the command uses `SCIENCE_PROJECT_ROOT` or the current
-directory. The read-only audit exits `1` when it reports violations and `0` when
-clean.
+directory. The audit is advisory discovery: it classifies files heuristically
+to surface candidates, but it does not enforce the storage boundary.
 
 The audit reports these quadrants:
 
@@ -104,7 +117,23 @@ tracked source files into a deterministic bundle and records excluded data
 payload hashes in `manifest.json`; it does not include payload bytes. See
 [`docs/user-guide/project-packaging.md`](../user-guide/project-packaging.md).
 
-Deferred follow-ups include a pre-commit size guard that consumes the same
-policy, validate-time warnings for ignored provenance or evidence records,
-project health summaries for boundary violations, scaffold and `.gitignore`
-template updates, and downstream cleanup sweeps.
+## Enforcement
+
+The boundary is declared in `science.yaml` under `boundary:` and generated into
+a managed block in `.gitignore` by `science boundary sync`. Seven validate checks
+enforce it — `boundary.tracked-ignored` and `boundary.unanchored-pattern` on
+every project. Once a project declares roots, `boundary.index-violation`
+ensures indexed paths obey their declared storage class, while
+`boundary.generated-drift`, `boundary.declaration-conflict`,
+`boundary.unreachable-tracked`, and `boundary.ignored-undeclared` enforce the
+generated and unmanaged-rule surfaces. `boundary.generated-drift` also
+requires the root `.gitignore` to be tracked, present, and regular so clones
+receive the managed block instead of relying on machine-local ignore state. Its
+index entry must be one stage-0 regular blob containing the current managed
+block; intent-to-add, unmerged, symlink, gitlink, and stale-blob entries are
+drift. See
+`docs/plans/2026-07-26-vcs-storage-boundary-design.md`.
+
+`science data audit` is advisory discovery, not enforcement. It classifies files
+heuristically to surface candidates; it blocks nothing and no validate check
+consults its classifier.

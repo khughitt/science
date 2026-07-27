@@ -286,6 +286,18 @@ DEFERRED: dict[str, DeferredCommand] = {
         "one output member per basis delta, gate denial, and commit-mark issue",
         "1b",
     ),
+    "boundary check": DeferredCommand(
+        "one warning per unanchored unmanaged ignore rule; the warning list is uncapped",
+        "1b",
+    ),
+    "boundary init": DeferredCommand(
+        "one proposal entry per discovered candidate root",
+        "1b",
+    ),
+    "boundary sync": DeferredCommand(
+        "--verify-current-tree emits one row per changed filesystem or synthetic-probe ignore decision",
+        "1b",
+    ),
 }
 
 DEFERRED.update(

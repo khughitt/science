@@ -602,8 +602,10 @@ Logical `data/raw`, `data/processed`, and `data/external` map to
 `<resolved-root>/raw`, `<resolved-root>/processed`, and
 `<resolved-root>/external`.
 
-Never commit files under the resolved data root. Keep version-controlled
-provenance outside that root, using `provenance/` or `research/packages/` for
-manifests, QA reports, and small frames. Do not use `data/provenance/` when the
-resolved root is the default `./data`.
-
+Declare the storage boundary in `science.yaml` under `boundary:` and generate
+the managed `.gitignore` block with `science boundary sync`. Payload bytes
+remain untracked; a `manifest` root may track only its declared descriptor globs
+alongside those payloads. Keep other version-controlled provenance outside the
+data root, using `provenance/` or `research/packages/` for manifests, QA reports,
+and small frames. Do not use `data/provenance/` when the resolved root is the
+default `./data`.

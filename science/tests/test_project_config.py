@@ -7,6 +7,7 @@ from science_model.skill_coverage import EnrollmentStatus
 from science_tool.project_config import (
     PlanReproducibilityPolicy,
     ProjectConfig,
+    ProjectConfigError,
     ProjectRole,
     ReproducibilityPolicyConfig,
     ReproducibilityWaiver,
@@ -20,6 +21,19 @@ from science_tool.project_config import (
 )
 
 
+@pytest.mark.parametrize("contents", ("- name: p\n", "p\n", "1\n", "[]\n", "false\n", "0\n"))
+def test_load_project_config_rejects_non_mapping_yaml(tmp_path, contents):
+    (tmp_path / "science.yaml").write_text(contents, encoding="utf-8")
+    with pytest.raises(ProjectConfigError, match="top-level mapping"):
+        load_project_config(tmp_path)
+
+
+def test_load_project_config_accepts_empty_document(tmp_path):
+    (tmp_path / "science.yaml").write_text("", encoding="utf-8")
+    with pytest.raises(ValidationError, match="name"):
+        load_project_config(tmp_path)
+
+
 def test_project_entity_schema_version_reads_pin(tmp_path):
     (tmp_path / "science.yaml").write_text(
         "name: p\nentity_schema_version: 3\nknowledge_profiles: {}\n", encoding="utf-8"
@@ -28,9 +42,7 @@ def test_project_entity_schema_version_reads_pin(tmp_path):
 
 
 def test_project_entity_schema_version_absent_is_none(tmp_path):
-    (tmp_path / "science.yaml").write_text(
-        "name: p\nknowledge_profiles: {}\n", encoding="utf-8"
-    )
+    (tmp_path / "science.yaml").write_text("name: p\nknowledge_profiles: {}\n", encoding="utf-8")
     assert project_entity_schema_version(tmp_path) is None
 
 
@@ -56,9 +68,7 @@ def test_domain_enrollment_undeclared_when_block_absent():
 
 
 def test_domain_enrollment_undeclared_when_key_absent():
-    config = ProjectConfig.model_validate(
-        {"name": "demo", "skill_coverage": {"domains": {}}}
-    )
+    config = ProjectConfig.model_validate({"name": "demo", "skill_coverage": {"domains": {}}})
     assert domain_enrollment(config, "molecular-measurement") == "undeclared"
 
 
@@ -90,6 +100,12 @@ def test_skill_coverage_null_is_rejected():
         ProjectConfig.model_validate({"name": "demo", "skill_coverage": None})
 
 
+def test_boundary_null_is_rejected():
+    # Authored null must not collapse to the absence state (undeclared).
+    with pytest.raises(ValidationError, match="boundary is present but null"):
+        ProjectConfig.model_validate({"name": "demo", "boundary": None})
+
+
 def test_skill_coverage_block_without_domains_is_rejected():
     # An empty block `{}` is a malformed declaration -- `domains` is required.
     with pytest.raises(ValidationError):
@@ -98,9 +114,7 @@ def test_skill_coverage_block_without_domains_is_rejected():
 
 def test_skill_coverage_intentional_empty_domains_is_accepted():
     # The way to declare an intentionally empty block: domains present but empty.
-    config = ProjectConfig.model_validate(
-        {"name": "demo", "skill_coverage": {"domains": {}}}
-    )
+    config = ProjectConfig.model_validate({"name": "demo", "skill_coverage": {"domains": {}}})
     assert config.skill_coverage is not None
     assert config.skill_coverage.domains == {}
 
@@ -114,9 +128,7 @@ def test_skill_coverage_parses_enrolled_domain():
         }
     )
     assert isinstance(config.skill_coverage, SkillCoverageConfig)
-    assert config.skill_coverage.domains == {
-        "molecular-measurement": EnrollmentStatus.ENROLLED
-    }
+    assert config.skill_coverage.domains == {"molecular-measurement": EnrollmentStatus.ENROLLED}
 
 
 def test_enrolled_domain_requires_generation_3():
@@ -160,9 +172,7 @@ def test_out_of_domain_does_not_require_generation_3():
             "skill_coverage": {"domains": {"molecular-measurement": "out-of-domain"}},
         }
     )
-    assert config.skill_coverage.domains == {
-        "molecular-measurement": EnrollmentStatus.OUT_OF_DOMAIN
-    }
+    assert config.skill_coverage.domains == {"molecular-measurement": EnrollmentStatus.OUT_OF_DOMAIN}
 
 
 def test_skill_coverage_rejects_unknown_domain_key():
@@ -210,11 +220,7 @@ def test_yaml_enrolled_domain_loads(tmp_path: Path) -> None:
     root = tmp_path / "enrolled"
     _write_yaml(
         root,
-        "name: enrolled\n"
-        "entity_schema_version: 3\n"
-        "skill_coverage:\n"
-        "  domains:\n"
-        "    molecular-measurement: enrolled\n",
+        "name: enrolled\nentity_schema_version: 3\nskill_coverage:\n  domains:\n    molecular-measurement: enrolled\n",
     )
     config = load_project_config(root)
     assert domain_enrollment(config, "molecular-measurement") is EnrollmentStatus.ENROLLED
@@ -241,16 +247,10 @@ def test_yaml_out_of_domain_loads(tmp_path: Path) -> None:
     root = tmp_path / "outofdomain"
     _write_yaml(
         root,
-        "name: outofdomain\n"
-        "skill_coverage:\n"
-        "  domains:\n"
-        "    molecular-measurement: out-of-domain\n",
+        "name: outofdomain\nskill_coverage:\n  domains:\n    molecular-measurement: out-of-domain\n",
     )
     config = load_project_config(root)
-    assert (
-        domain_enrollment(config, "molecular-measurement")
-        is EnrollmentStatus.OUT_OF_DOMAIN
-    )
+    assert domain_enrollment(config, "molecular-measurement") is EnrollmentStatus.OUT_OF_DOMAIN
 
 
 def test_yaml_absent_block_is_undeclared(tmp_path: Path) -> None:
@@ -586,9 +586,7 @@ children:
 def _config(tmp_path: Path, body: str) -> Path:
     project_root = tmp_path / "proj"
     project_root.mkdir()
-    (project_root / "science.yaml").write_text(
-        f"name: proj\nprofile: research\n{body}", encoding="utf-8"
-    )
+    (project_root / "science.yaml").write_text(f"name: proj\nprofile: research\n{body}", encoding="utf-8")
     return project_root
 
 

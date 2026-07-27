@@ -282,7 +282,13 @@ protein-landscape: `data` is a symlink to `/data/proj/protein-landscape`; tracke
 
 ### 7.5 `.gitignore` exception patterns — P2
 
-natural-systems' `src/chapters/generated/{guide-data,...}.json` allow-list (six explicit re-includes after the bulk `src/chapters/generated/*` ignore) and protein-landscape's `!data/processed/entities/.gitkeep` cookie are the same pattern: ignore-then-pin specific outputs. **Recommendation:** document this as the canonical pattern for "we ignore this directory but ship these specific files."
+> **Superseded (2026-07-26).** This recommendation — bless ignore-then-pin as
+> the canonical pattern — was reversed. The pattern requires per-case
+> adjudication and `git add -f`, and its whole-directory form silently disables
+> its own negations. Replaced by the declared storage boundary in
+> `docs/plans/2026-07-26-vcs-storage-boundary-design.md`.
+
+natural-systems' `src/chapters/generated/{guide-data,...}.json` allow-list (six explicit re-includes after the bulk `src/chapters/generated/*` ignore) and protein-landscape's `!data/processed/entities/.gitkeep` cookie are examples of the retired pattern. Their project-specific details remain audit evidence; new projects declare the boundary instead.
 
 ### 7.6 Reproducibility evidence — informational
 

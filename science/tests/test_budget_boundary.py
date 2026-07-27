@@ -24,7 +24,7 @@ from science_tool.cli import main
 EXPECTED_CLASSIFICATION_COUNTS = {
     "budgeted": 69,
     "exempt": 120,
-    "deferred": 95,
+    "deferred": 98,
 }
 
 
@@ -135,8 +135,14 @@ def test_classification_partition_has_the_audited_cardinality() -> None:
 
     Batch R then added `explore-ideas seed-coverage` (fb-2026-07-25-004), BUDGETED
     rather than exempt: it carries the same per-topic `topics` list as `project
-    topic-coverage`, so it grows with the project's topic count. The live partition is
-    therefore 69/119/95 = 283.
+    topic-coverage`, so it grows with the project's topic count. `entity kinds` and
+    `project spec-path` add two exempt leaves, taking the partition to 69/120/95 = 284.
+
+    The VCS storage boundary then adds three deferred
+    leaves: `boundary check` emits one warning per unanchored unmanaged rule, `boundary
+    init` emits one proposal entry per discovered candidate root, and `boundary sync
+    --verify-current-tree` emits one row per changed filesystem or synthetic-probe ignore
+    decision. The live partition is therefore 69/120/98 = 287.
     """
     actual = {
         "budgeted": len(BUDGETS),

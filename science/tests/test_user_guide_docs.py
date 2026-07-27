@@ -63,12 +63,16 @@ def _core_kinds_by_class() -> dict[str, list[str]]:
 
 def test_datasets_doc_documents_split_storage_data_root() -> None:
     text = (ROOT / "docs/user-guide/datasets.md").read_text(encoding="utf-8")
+    normalized = _norm(text)
     assert "## Split storage: version-controlled provenance vs out-of-tree bulk" in text
     assert "SCIENCE_DATA_ROOT" in text
     assert "science.yaml" in text
     assert "data.root" in text
     assert "./data" in text
-    assert "Never commit files under the resolved data root" in text
+    assert "boundary:" in text
+    assert "`manifest`" in text
+    assert "Payload bytes remain untracked" in normalized
+    assert "Never commit files under the resolved data root" not in text
     assert "provenance/" in text
 
 

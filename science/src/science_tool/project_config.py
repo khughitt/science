@@ -13,8 +13,13 @@ from pydantic.functional_validators import BeforeValidator
 
 from science_model.frontmatter import parse_frontmatter, project_config_path
 from science_model.skill_coverage import DOMAIN_KEYS, GENERATION_3_DOMAINS, EnrollmentStatus
+from science_tool.boundary.config import BoundaryConfig
 from science_tool.data_policy import DataPolicy, DEFAULT_DATA_POLICY
 from science_tool.datasets.semantics import OrdinalReproClass
+
+
+class ProjectConfigError(ValueError):
+    """Raised when science.yaml is not a project-configuration mapping."""
 
 
 class ProjectRole(StrEnum):
@@ -260,6 +265,7 @@ class ProjectConfig(BaseModel):
     refs: RefsConfig | None = None
     data: ProjectDataConfig | None = None
     data_policy: DataPolicyConfig | None = None
+    boundary: BoundaryConfig | None = None
     reproducibility_policy: ReproducibilityPolicyConfig | None = None
     skill_coverage: SkillCoverageConfig | None = None
     entity_extensions: dict[str, list[str]] = Field(default_factory=dict)
@@ -298,6 +304,17 @@ class ProjectConfig(BaseModel):
                 "science.yaml: skill_coverage is present but null. An authored-but-empty declaration "
                 "is `skill_coverage: {domains: {}}`, not null -- null would collapse to the same state "
                 "as absence (undeclared), hiding a malformed declaration."
+            )
+        return raw
+
+    @model_validator(mode="before")
+    @classmethod
+    def _reject_null_boundary(cls, raw: Any) -> Any:
+        if isinstance(raw, dict) and "boundary" in raw and raw["boundary"] is None:
+            raise ValueError(
+                "science.yaml: boundary is present but null. An authored-but-empty declaration is "
+                "`boundary: {roots: []}`, not null -- null would collapse to the same state as "
+                "absence (undeclared), hiding a malformed declaration."
             )
         return raw
 
@@ -405,7 +422,11 @@ def validated_entity_schema_version(raw: Any) -> int | None:
 def load_project_config(project_root: Path) -> ProjectConfig:
     """Load and validate science.yaml at ``project_root``. Defaults id to dirname."""
     yaml_path = project_config_path(project_root)
-    raw = yaml.safe_load(yaml_path.read_text(encoding="utf-8")) or {}
+    raw = yaml.safe_load(yaml_path.read_text(encoding="utf-8"))
+    if raw is None:
+        raw = {}
+    if not isinstance(raw, dict):
+        raise ProjectConfigError("science.yaml must contain a top-level mapping")
     if "id" not in raw or raw["id"] is None:
         raw["id"] = project_root.resolve().name
     return ProjectConfig.model_validate(raw)
@@ -428,9 +449,7 @@ def project_entity_schema_version(project_root: Path) -> int | None:
     return validated_entity_schema_version(raw)
 
 
-def domain_enrollment(
-    config: ProjectConfig, domain: str
-) -> EnrollmentStatus | Literal["undeclared"]:
+def domain_enrollment(config: ProjectConfig, domain: str) -> EnrollmentStatus | Literal["undeclared"]:
     """Resolve a project's enrollment status for one coverage domain.
 
     Absence of the `skill_coverage` block, or of this domain key within it, is `undeclared` -- never
@@ -439,9 +458,7 @@ def domain_enrollment(
     `undeclared`.
     """
     if domain not in DOMAIN_KEYS:
-        raise ValueError(
-            f"unknown skill-coverage domain {domain!r}; known domains: {sorted(DOMAIN_KEYS)}"
-        )
+        raise ValueError(f"unknown skill-coverage domain {domain!r}; known domains: {sorted(DOMAIN_KEYS)}")
     if config.skill_coverage is None:
         return "undeclared"
     status = config.skill_coverage.domains.get(domain)

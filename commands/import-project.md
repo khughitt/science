@@ -268,19 +268,22 @@ Only create `.ai/prompts/` and `.ai/templates/` if the project needs project-spe
 Ensure the project ignores:
 
 - `.env`
-- `papers/pdfs/`
 - `.worktrees/`
 - `*.pre-update*.bak`
 
-Add profile-specific ignores only when they match the project's actual layout.
+For project data, do not add a hand-written ignore rule. Run `science boundary
+init`, review its proposed roots, and declare the approved storage classes under
+`boundary:` in `science.yaml`.
 
-Never exclude a directory wholesale when it also holds version-controlled
-sources. A bare `models/` entry is a trap: git won't descend into a
-fully-excluded directory, so child negations silently fail and `git add`
-commits nothing. `models/` holds causal DAG sources (`.dot`/`.json`) that must
-stay tracked — if it also holds regenerable dumps, use `models/*` plus
-`!models/*.dot` / `!models/*.json` negations, or write dumps to a separate
-ignored directory.
+Keep the legacy `.gitignore` unchanged and committed while checking the proposed
+declaration. Run `science boundary sync --verify-current-tree` first and review
+every reported ignore-decision change. This verification is transactional and
+refuses an uncommitted `.gitignore`, so do not rewrite the file before it runs.
+
+After accepting the verification result, remove every existing hand-written
+`.gitignore` rule that affects a declared root; retain unrelated tooling, OS,
+and secret rules. Then run `science boundary sync` to update the managed block.
+The declaration now owns data storage.
 
 ## Step 6: Verify
 
