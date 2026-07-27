@@ -1,6 +1,6 @@
 # Big-Picture Synthesis
 
-the `science-big-picture` skill creates a research synthesis from authored project
+The `science-big-picture` skill creates a research synthesis from authored project
 sources. It is a derived report surface: edit questions, hypotheses,
 interpretations, tasks, topics, papers, evidence, and graph sources first, then
 regenerate the synthesis.
@@ -78,7 +78,7 @@ rollup and then refresh it.
 
 ## Generation Contract
 
-the `science-big-picture` skill is an orchestrated generation workflow rather than a
+The `science-big-picture` skill is an orchestrated generation workflow rather than a
 single Python renderer. The Python CLI provides inspectable support surfaces:
 
 ```bash
@@ -214,7 +214,7 @@ science big-picture knowledge-gaps --project-root .
 science big-picture knowledge-gaps --project-root . --limit 10
 ```
 
-the `science-big-picture` skill renders knowledge gaps in two places:
+The `science-big-picture` skill renders knowledge gaps in two places:
 
 - Per-hypothesis files receive a Knowledge Gaps item inside Research Fronts
   when that hypothesis's question set drives topic demand.

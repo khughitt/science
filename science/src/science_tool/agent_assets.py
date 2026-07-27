@@ -58,14 +58,18 @@ _INLINE_AGENT_INVOCATION_RE = re.compile(
 _BARE_AGENT_INVOCATION_RE = re.compile(
     r"(?P<article>\b[Tt]he\s+)?"
     r"(?<![`\w])/science:(?P<name>[a-z0-9-]+)"
+    r"(?P<arguments>(?:\s+(?:\[[^\]\n]+\]|<[^>\n]+>))+)?"
     r"(?:\s+(?:slash\s+)?(?:command|skill))?"
+)
+_COLON_COMMAND_REFERENCE_RE = re.compile(
+    r"`science:(?P<name>[a-z0-9-]+)`(?:\s+skill)?"
 )
 _DUPLICATE_SKILL_REFERENCE_RE = re.compile(
     r"(?P<first>(?:[Tt]he\s+)?`(?P<name>science-[a-z0-9-]+)` skill)"
     r"(?:\s+and|,\s+the)\s+`(?P=name)` skill"
 )
 _REDUNDANT_GENERIC_SKILL_RE = re.compile(
-    r"(?P<reference>[Tt]he\s+`science-[a-z0-9-]+` skill),\s+the skill\b"
+    r"(?P<reference>[Tt]he\s+`science-[a-z0-9-]+` skill),\s+(?:the|its) skill\b"
 )
 _CANONICAL_SKILL_ENTRY_RE = re.compile(
     r"^- `([a-z0-9-]+)`: `(skills/[A-Za-z0-9._/-]+\.md)`$",
@@ -789,6 +793,7 @@ def _render_command_skill(
     rewritten_preamble = _rewrite_agent_specific_text(
         preamble.replace("<role>", role),
         dependencies,
+        repo_root,
     )
     rewritten_preamble = _rewrite_explicit_skill_loads(
         rewritten_preamble,
@@ -807,6 +812,7 @@ def _render_command_skill(
     rewritten_body = _rewrite_agent_specific_text(
         rewritten_body,
         dependencies,
+        repo_root,
     )
     rewritten_body = re.sub(r"^#\s+.+\n\n", "", rewritten_body)
 
@@ -1061,7 +1067,7 @@ def _bundle_command_resource(
         skill_owners,
         dependencies,
     )
-    text = _rewrite_agent_specific_text(text, dependencies)
+    text = _rewrite_agent_specific_text(text, dependencies, repo_root)
     target.write_text(text, encoding="utf-8")
     return reference.as_posix()
 
@@ -1121,6 +1127,7 @@ def _rewrite_bundled_resource_links(
 def _rewrite_agent_specific_text(
     text: str,
     dependencies: set[str],
+    repo_root: Path,
 ) -> str:
     replacements = (
         ("`${CLAUDE_PLUGIN_ROOT}`", "the Science toolkit"),
@@ -1154,7 +1161,11 @@ def _rewrite_agent_specific_text(
     )
     for source, target in replacements:
         text = text.replace(source, target)
-    return _rewrite_methodology_command_references(text, dependencies)
+    return _rewrite_methodology_command_references(
+        text,
+        dependencies,
+        {path.stem for path in (repo_root / "commands").glob("*.md")},
+    )
 
 
 def _generate_methodology_skills(
@@ -1179,6 +1190,7 @@ def _generate_methodology_skills(
         description = _rewrite_methodology_command_references(
             description,
             package_dependencies,
+            {path.stem for path in (repo_root / "commands").glob("*.md")},
         )
         source_targets = {
             source.resolve(): _methodology_source_target(
@@ -1346,17 +1358,32 @@ def _rewrite_methodology_references(
         replace_backtick,
         rewritten,
     )
-    return _rewrite_methodology_command_references(rewritten, dependencies)
+    return _rewrite_methodology_command_references(
+        rewritten,
+        dependencies,
+        {path.stem for path in (repo_root / "commands").glob("*.md")},
+    )
 
 
 def _rewrite_methodology_command_references(
     text: str,
     dependencies: set[str],
+    known_command_stems: set[str] | None = None,
 ) -> str:
     def replace_invocation(match: re.Match[str]) -> str:
         dependency = f"science-{match.group('name')}"
         dependencies.add(dependency)
-        article = match.group("article") or "the "
+        article = match.group("article")
+        if article is None:
+            prefix = text[: match.start()].rstrip()
+            line_prefix = text[text.rfind("\n", 0, match.start()) + 1 : match.start()]
+            at_structural_start = (
+                not prefix
+                or prefix[-1] in ".!?:|"
+                or re.fullmatch(r"\s*(?:[-*+]|\d+[.)])?\s*", line_prefix)
+                is not None
+            )
+            article = "The " if at_structural_start else "the "
         arguments = match.groupdict().get("arguments")
         rendered = f"{article}`{dependency}` skill"
         if arguments is not None:
@@ -1365,6 +1392,15 @@ def _rewrite_methodology_command_references(
 
     text = _INLINE_AGENT_INVOCATION_RE.sub(replace_invocation, text)
     text = _BARE_AGENT_INVOCATION_RE.sub(replace_invocation, text)
+    if known_command_stems is not None:
+        text = _COLON_COMMAND_REFERENCE_RE.sub(
+            lambda match: (
+                f"`science-{match.group('name')}` skill"
+                if match.group("name") in known_command_stems
+                else match.group(0)
+            ),
+            text,
+        )
     text = _DUPLICATE_SKILL_REFERENCE_RE.sub(
         lambda match: match.group("first"),
         text,
@@ -1584,6 +1620,7 @@ def _copy_support_tree(
                     dependencies,
                 ),
                 dependencies,
+                repo_root,
             ),
             encoding="utf-8",
         )

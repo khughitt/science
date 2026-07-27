@@ -445,7 +445,7 @@ If sync is stale, include a note in the Recommended Next Actions table:
 
 | Priority | Action | Rationale | Command |
 |---|---|---|---|
-| P2 | Cross-project sync | Sync is N days stale; N projects may have relevant updates | the `science-sync` skill |
+| P2 | Cross-project sync | Sync is N days stale; N projects may have relevant updates | The `science-sync` skill |
 
 ## After Writing
 

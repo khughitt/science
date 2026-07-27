@@ -14,7 +14,7 @@ Science projects accumulate durable research memory: questions, hypotheses, inte
 - paper notes and discussions contain insights that later questions should surface but do not;
 - graph and frontmatter links under-represent the real conceptual connections in the project.
 
-the `science-big-picture` skill produces a high-level synthesis. the `science-next-steps` skill prioritizes future work. the `science-review-tasks` skill audits the backlog. None of these performs a systematic memory curation pass.
+The `science-big-picture` skill produces a high-level synthesis. The `science-next-steps` skill prioritizes future work. The `science-review-tasks` skill audits the backlog. None of these performs a systematic memory curation pass.
 
 ## Goal
 
@@ -47,7 +47,7 @@ The command should behave like a careful research librarian and project maintain
 ## Command Interface
 
 ```text
-the `science-curate` skill [--dry-run] [--no-write] [--scope <scope>] [--since <date>] [--apply-obvious] [--commit]
+The `science-curate` skill with input `[--dry-run] [--no-write] [--scope <scope>] [--since <date>] [--apply-obvious] [--commit]`
 ```
 
 - Default: run an agent-led sweep, do not mutate files unless the agent reaches an explicit approval checkpoint.
@@ -139,7 +139,7 @@ Suggested body:
 7. **Actioned Fixes** - exact files changed, before/after summary, and rationale.
 8. **Pending Decisions** - items that need user judgement.
 9. **Suggested Follow-Ups** - task additions, commands to run, or synthesis updates.
-10. **Self-Reflection** - improvements noticed for the `science-curate` skill, its skill, prompts, or CLI helpers.
+10. **Self-Reflection** - improvements noticed for the `science-curate` skill, prompts, or CLI helpers.
 
 ## Workflow
 
@@ -229,12 +229,12 @@ The response belongs in the ledger's **Self-Reflection** section. It should be o
 
 | Command | Relationship |
 |---|---|
-| the `science-big-picture` skill | Consumes curated project memory better after the `science-curate` skill; remains the synthesis generator. |
-| the `science-next-steps` skill | Uses curation findings as inputs to recommendations; remains forward-looking. |
-| the `science-review-tasks` skill | Overlaps on stale task detection, but the `science-curate` skill is broader and semantic. |
-| the `science-health` skill | Provides structural health signals consumed during inventory. |
-| the `science-update-graph` skill | Applies graph/materialization repairs after curation changes source metadata. |
-| the `science-dag-audit` skill | Handles detailed DAG evidence drift; the `science-curate` skill can surface candidates and defer to DAG audit. |
+| The `science-big-picture` skill | Consumes curated project memory better after the `science-curate` skill; remains the synthesis generator. |
+| The `science-next-steps` skill | Uses curation findings as inputs to recommendations; remains forward-looking. |
+| The `science-review-tasks` skill | Overlaps on stale task detection, but the `science-curate` skill is broader and semantic. |
+| The `science-health` skill | Provides structural health signals consumed during inventory. |
+| The `science-update-graph` skill | Applies graph/materialization repairs after curation changes source metadata. |
+| The `science-dag-audit` skill | Handles detailed DAG evidence drift; the `science-curate` skill can surface candidates and defer to DAG audit. |
 
 ## Acceptance Criteria
 

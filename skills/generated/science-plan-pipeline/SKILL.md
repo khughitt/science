@@ -527,10 +527,10 @@ the compiled graph and revision metadata from authored sources.
 ### Step 6: Suggest next steps
 
 1. **Track plan tasks:** For each task in the plan that isn't tracked in the task queue (`science tasks list --all`), offer to create one via `science tasks add`. Implementation tasks buried in plan docs should be surfaced as trackable tasks.
-2. If no pre-registration exists for the target hypothesis, suggest: the `science-pre-register` skill — to formalize expectations before running the analysis
-3. the `science-review-pipeline` skill with input `<slug>` — get critical review before implementation
+2. If no pre-registration exists for the target hypothesis, suggest: The `science-pre-register` skill — to formalize expectations before running the analysis
+3. The `science-review-pipeline` skill with input `<slug>` — get critical review before implementation
 4. Execute the plan using `superpowers:executing-plans`
-5. the `science-discuss` skill — discuss specific aspects of the plan
+5. The `science-discuss` skill — discuss specific aspects of the plan
 
 ## Important Notes
 

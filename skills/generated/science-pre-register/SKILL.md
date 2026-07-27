@@ -149,7 +149,7 @@ Before anything else, identify which class the pre-reg primarily commits to. The
 
 Mixed targets are common (e.g., "we will run analysis A, and treat H as supported if effect > 0.3"). Treat the procedure portion and the interpretation portion separately:
 
-- **Operational portion:** stays as an amendment-gate check. `science:interpret-results` confirms the analysis ran as committed (or that any deviation has a corresponding `amendments:` record). No `bears_on` edge — operational targets are not `bears_on` sinks; the materializer rejects authored `bears_on` edges to non-epistemic targets.
+- **Operational portion:** stays as an amendment-gate check. `science-interpret-results` skill confirms the analysis ran as committed (or that any deviation has a corresponding `amendments:` record). No `bears_on` edge — operational targets are not `bears_on` sinks; the materializer rejects authored `bears_on` edges to non-epistemic targets.
 - **Epistemic portion:** materializes as a `bears_on` edge from the pre-reg into the epistemic target via the auto-derivation rule registered in `science_tool/graph/materialize.py`. This is the load-bearing graph effect.
 
 #### Sub-prompt: which `related:` entries are commitment targets vs. navigation context?
@@ -333,7 +333,7 @@ Frame decision criteria according to the target class identified in § 0.
 - Is the analysis sufficiently powered to detect the expected effect?
 - What would you do next if results are ambiguous?
 
-**For epistemic targets:** A null result is evidence, weighted by the pre-reg's commitment. It is not a verdict on the hypothesis. Frame the null-result plan as "what update should this trigger?" rather than "would this kill the hypothesis?" The result feeds the target's evidence base via a `bears_on` edge derived at graph-build time; downstream `science:status` and `science:next-steps` then surface the target for review under the recast freshness/attention semantics.
+**For epistemic targets:** A null result is evidence, weighted by the pre-reg's commitment. It is not a verdict on the hypothesis. Frame the null-result plan as "what update should this trigger?" rather than "would this kill the hypothesis?" The result feeds the target's evidence base via a `bears_on` edge derived at graph-build time; downstream `science-status` skill and `science-next-steps` skill then surface the target for review under the recast freshness/attention semantics.
 
 **Pilot experiments:** If this is a pilot (1-2 seeds, small N, exploratory scope), explicitly state what it CAN and CANNOT establish. A pilot can suggest directions and calibrate effect sizes but cannot confirm or refute a hypothesis. Frame decision criteria accordingly — a pilot's null result means "insufficient signal to justify scaling up", not "hypothesis is wrong."
 
@@ -421,9 +421,9 @@ Use the hypothesis ID, inquiry slug, or task ID as the basis:
 1. Save to `entities/pre-registrations/<slug>.md`. The frontmatter must declare `kind: "pre-registration"` and `id: "pre-registration:<slug>"` per the template.
 2. If relevant hypotheses exist, note in the output that pre-registration is now on record.
 3. Suggest next steps:
-   - the `science-plan-pipeline` skill — if no pipeline plan exists yet
-   - the `science-bias-audit` skill — to check for blind spots before running the analysis
-   - the `science-discuss` skill — to stress-test the expectations themselves
+   - The `science-plan-pipeline` skill — if no pipeline plan exists yet
+   - The `science-bias-audit` skill — to check for blind spots before running the analysis
+   - The `science-discuss` skill — to stress-test the expectations themselves
 4. Commit: `git add -A && git commit -m "doc: pre-register expectations for <slug>"`
 
 ## Process Reflection

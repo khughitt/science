@@ -34,7 +34,7 @@ _template:
 # Synthesis: {{title}}
 
 <!--
-  Body skeleton — `science:big-picture` writes these procedurally. Hand-edits
+  Body skeleton — `science-big-picture` skill writes these procedurally. Hand-edits
   may populate the same headings to keep the shape consistent across runs.
 -->
 

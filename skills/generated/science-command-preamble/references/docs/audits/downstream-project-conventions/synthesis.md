@@ -28,13 +28,13 @@ The audit does not surface any P0 findings — no project is blocked from safe d
 | 1 | Multi-axis project profile (or formalized aspect-bundle archetype) | §2, §6 | 4/4 projects use `aspects:` as a profile-axis workaround |
 | 2 | First-class `pre-registration` type (not `type: plan` with `id: pre-registration:*`) | §6, §8 | 4/4 use it; 3/4 overload `type: plan`; placement varies (`doc/pre-registrations/`, `doc/meta/pre-registration-*`, hypothesis body section) |
 | 3 | Sanctioned project-local entity-kind extension (formalize `knowledge/sources/local/manifest.yaml` `typed-extension` pattern) | §6, §10 | 2/4 register explicitly; 4/4 need it (other 2 do it via inline conventions) |
-| 4 | `synthesis` rollup convention with `report_kind` discriminator + structured provenance frontmatter | §6, §8 | 2/4 produce structured rollups (mm30 as `type: report`, protein-landscape as `type: synthesis`); canonize the cleaner `type: synthesis` shape; tied to `science:big-picture` |
+| 4 | `synthesis` rollup convention with `report_kind` discriminator + structured provenance frontmatter | §6, §8 | 2/4 produce structured rollups (mm30 as `type: report`, protein-landscape as `type: synthesis`); canonize the cleaner `type: synthesis` shape; tied to `science-big-picture` skill |
 | 5 | Per-type / multi-axis status enums (separate work-status from reading-state, qualifier blocks, phase) | §6 | 4/4 hit status sprawl (9-25 distinct values); cbioportal's reading-state (`read|abstract-read|summarized|unread`) is the cleanest example of axis collision |
 | 6 | Auto-archive of done tasks from `tasks/active.md` to `tasks/done/YYYY-MM.md` | §8, §10 | 3/4 lag (49% / 30% / 44%); cbioportal proves enforceability |
 | 7 | `validate.sh` MAV adoption with explicit knobs for genuine local needs | §9 | 1/4 byte-identical (cbioportal); 3/4 carry mostly-generic drift; concrete `mav-input` set is forming |
 | 8 | Output-anchored sha256-sealed descriptor sidecars (Frictionless-flavor) + datapackage `<project>:` extension block | §7 | 4/4 either ship the pattern (3/4) or have an active task to adopt it (cbioportal `t128`) |
 | 9 | Code/notebook → task back-link convention (sidecar or comment-block, case-by-case) | §6, §8 | 4/4 have weak code-side linkage; reverse direction (entity → code) is fine |
-| 10 | Chained-prior next-steps ledger (`prior:` / `prior_analyses:`) | §8 | 4/4 produce date-stamped `next-steps-*.md`; 3/4 chain via prior field; tied to `science:next-steps` |
+| 10 | Chained-prior next-steps ledger (`prior:` / `prior_analyses:`) | §8 | 4/4 produce date-stamped `next-steps-*.md`; 3/4 chain via prior field; tied to `science-next-steps` skill |
 
 ---
 
@@ -88,7 +88,7 @@ Three of four projects type these as `type: plan` with `id: pre-registration:<sl
 - **natural-systems** has 87 `doc/reports/` files, several of which read as syntheses but without the structured rollup frontmatter.
 - **cbioportal** has one synthesis file (placement under `doc/papers/` rather than `doc/reports/synthesis/` — cbioportal-internal cleanup, not a recurring pattern).
 
-The two projects ship the same *shape* (provenance-tracked frontmatter + per-hyp rollups + emergent-threads files), but with incompatible `type:` naming. Tied to `science:big-picture`.
+The two projects ship the same *shape* (provenance-tracked frontmatter + per-hyp rollups + emergent-threads files), but with incompatible `type:` naming. Tied to `science-big-picture` skill.
 
 **Recommendation:** canonize the cleaner shape — `type: "synthesis"` for all artifacts with `report_kind: "hypothesis-synthesis | synthesis-rollup | emergent-threads"` discriminator; `id` prefix `synthesis:`. `synthesized_from: [{hypothesis, file, sha}]` is required only on `report_kind: synthesis-rollup` (where it carries the cross-hypothesis sha-tracked provenance); per-hypothesis files carry `hypothesis:` instead, threads files carry `orphan_ids:` and counts. **Both downstream projects need migration to the canonical shape**: mm30 from `type: report` + `report_kind:` to `type: synthesis` + `report_kind:` (and `report:synthesis-*` ids → `synthesis:*`); protein-landscape from `type: emergent-threads` to `type: synthesis` + `report_kind: emergent-threads`. Track both as follow-on tasks; the validator does not warn on legacy `type: report` files in synthesis paths so existing files do not turn the validator red on first managed update.
 
@@ -111,7 +111,7 @@ Plan #4's canonical shape (`type: synthesis` + `report_kind:` discriminator + pe
 
 All four projects produce date-stamped `doc/meta/next-steps-YYYY-MM-DD.md` files. Three chain via a `prior:` (mm30) or `prior_analyses:` (protein-landscape) field; natural-systems uses the same temporal cadence without an explicit chain field; cbioportal's four files don't currently chain.
 
-Tied to `science:next-steps`. **Recommendation:** standardize the chained-prior field name and let `science:next-steps` populate it automatically.
+Tied to `science-next-steps` skill. **Recommendation:** standardize the chained-prior field name and let `science-next-steps` skill populate it automatically.
 
 ### 3.5 Frictionless-flavor provenance sidecars (4/4 with shape variation) — P1
 
@@ -231,7 +231,7 @@ Once this lands, several specific kinds become candidates for **promotion to can
 
 - `pre-registration` (4/4) — promote now, see §3.2.
 - `synthesis` (2/4 with structured rollup frontmatter — mm30 as `type: report`, protein-landscape as `type: synthesis` + separate `type: emergent-threads`; the divergence itself is the canonization motivator) — promote, see §3.3.
-- `curation-sweep` (2/4 explicit, mm30 + cbioportal) — P2; cbioportal explicitly cites mm30 as origin. Tied to `science:curate`.
+- `curation-sweep` (2/4 explicit, mm30 + cbioportal) — P2; cbioportal explicitly cites mm30 as origin. Tied to `science-curate` skill.
 - `guide` / `modality-guide` (2/4 explicit, mm30 + cbioportal) — P2; same origin lineage as curation-sweep.
 - `proposition` / `finding` / `claim` — see §6.4.
 
@@ -420,7 +420,7 @@ These need a focused design pass before implementation, not just synthesis:
 
 ### 11.1 Atomic-claim modeling: inline vs first-class entity
 
-Recommendation in §6.4 is "decide between two design directions." The decision has graph-shape implications (first-class is graph-cleaner; inline is faster) and migration-cost implications (mm30 has 15 propositions in production; protein-landscape has 17 inline findings; natural-systems has none; cbioportal has verdict tokens but no claims). A two-page design doc weighing the options against `science:big-picture` and verdict-rollup needs is the right next step.
+Recommendation in §6.4 is "decide between two design directions." The decision has graph-shape implications (first-class is graph-cleaner; inline is faster) and migration-cost implications (mm30 has 15 propositions in production; protein-landscape has 17 inline findings; natural-systems has none; cbioportal has verdict tokens but no claims). A two-page design doc weighing the options against `science-big-picture` skill and verdict-rollup needs is the right next step.
 
 ### 11.2 Profile-axis design
 
@@ -454,7 +454,7 @@ For reviewers checking the priority assignments:
 
 - §3.2 pre-registration (P1): present in 4/4 projects with substantial body-shape convergence; 3/4 carry the type/id mismatch that resolves to the same fix. Strong P1.
 - §3.3 synthesis rollups (P1): mm30 + protein-landscape both ship structured rollups but with divergent `type:` naming (mm30 `type: report` + `report_kind:`, protein-landscape `type: synthesis` + separate `type: emergent-threads`). The divergence itself is the strongest evidence that Science needs a canonical shape. Justified P1; canonize the cleaner `type: synthesis` form, accept downstream migration cost as a follow-on.
-- §3.4 chained next-steps (P1): 4/4 produce the files; 2/4 chain via explicit field. P1 because the field convention is straightforward and tied to `science:next-steps`.
+- §3.4 chained next-steps (P1): 4/4 produce the files; 2/4 chain via explicit field. P1 because the field convention is straightforward and tied to `science-next-steps` skill.
 - §3.5 datapackage extension + descriptors (P1): 3/4 ship the pattern, 1/4 has an active task to adopt it. The "+1 acknowledged gap" upgrades 3/4 to a P1 candidate per the convention threshold's "evidence is unusually strong" clause.
 - §6.1 status enum split (P1): 4/4 affected; the recommendation is the only path that reconciles the four observed behaviors.
 - §6.3 sanctioned local entity kinds (P1): 2/4 explicit + 2/4 implicit. The 2/4 explicit cases (mm30 + cbioportal, with cbioportal explicitly citing mm30 as origin) prove cross-project transferability; upgrading to P1 with the justification that the implicit 2/4 would benefit from the same surface.

@@ -371,10 +371,10 @@ No separate revision-stamping command is needed. `science graph build` already
 writes the compiled graph and revision metadata from authored sources.
 
 Suggest next steps:
-1. the `science-specify-model` skill with input `<slug>` to formalize claims and attach evidence
-2. the `science-critique-approach` skill with input `<slug>` if causal structure needs skeptical review
-3. the `science-add-hypothesis` skill if the sketch revealed a new organizing conjecture
-4. the `science-research-topic` skill or the `science-search-literature` skill if the main gap is background evidence
+1. The `science-specify-model` skill with input `<slug>` to formalize claims and attach evidence
+2. The `science-critique-approach` skill with input `<slug>` if causal structure needs skeptical review
+3. The `science-add-hypothesis` skill if the sketch revealed a new organizing conjecture
+4. The `science-research-topic` skill or the `science-search-literature` skill if the main gap is background evidence
 
 ## Important Notes
 

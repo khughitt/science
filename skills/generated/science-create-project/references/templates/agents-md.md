@@ -11,7 +11,7 @@ markers is managed by the `science-curate` skill — edit core/decisions.md inst
 let curate refresh the digest.
 
 Update mechanism (read this before "fixing" the template for an existing
-project): the `science-curate` skill only refreshes the load-bearing-constraints
+project): The `science-curate` skill only refreshes the load-bearing-constraints
 digest between the BEGIN/END markers below, from that project's
 `core/decisions.md`. The static body of this template — everything else on
 this page — only applies at create/import time; it is written once when a

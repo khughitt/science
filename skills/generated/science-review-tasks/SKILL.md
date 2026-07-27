@@ -257,5 +257,5 @@ git add tasks/ && git commit -m "tasks: backlog review — N status corrections,
 - Use subagents to parallelize codebase searches for multiple tasks
 - Check recently completed tasks (`science tasks list --status done --since <window-start>`) for context that might inform gap analysis
 - Cross-reference `entities/discussions/` and `entities/interpretations/` for research context
-- The `science:next-steps` skill produces complementary forward-looking analysis; this skill is backward-looking (auditing what exists)
+- The `science-next-steps` skill produces complementary forward-looking analysis; this skill is backward-looking (auditing what exists)
 - For a broader project audit beyond just tasks (unresolved references, lingering tags, knowledge gaps), use the `science-health` skill.

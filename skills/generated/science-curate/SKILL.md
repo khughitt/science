@@ -381,9 +381,9 @@ Be concrete. Name the friction, where it appeared, and the smallest improvement 
 
 | Command | Relationship |
 |---|---|
-| the `science-big-picture` skill | Uses curated project memory as input to synthesis; the `science-curate` skill repairs the memory layer. |
-| the `science-next-steps` skill | Consumes curation findings as one input to future priorities. |
-| the `science-review-tasks` skill | Overlaps on stale tasks, but the `science-curate` skill is broader and semantic. |
-| the `science-health` skill | Supplies structural health signals during inventory. |
-| the `science-update-graph` skill | Applies graph/materialization repairs after curation changes source metadata. |
-| the `science-dag-audit` skill | Handles detailed DAG drift; the `science-curate` skill can surface candidates and defer to DAG audit. |
+| The `science-big-picture` skill | Uses curated project memory as input to synthesis; the `science-curate` skill repairs the memory layer. |
+| The `science-next-steps` skill | Consumes curation findings as one input to future priorities. |
+| The `science-review-tasks` skill | Overlaps on stale tasks, but the `science-curate` skill is broader and semantic. |
+| The `science-health` skill | Supplies structural health signals during inventory. |
+| The `science-update-graph` skill | Applies graph/materialization repairs after curation changes source metadata. |
+| The `science-dag-audit` skill | Handles detailed DAG drift; the `science-curate` skill can surface candidates and defer to DAG audit. |

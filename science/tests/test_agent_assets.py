@@ -1062,6 +1062,28 @@ def test_slash_rewrite_collapses_duplicate_skill_prose() -> None:
     }
 
 
+def test_known_colon_command_mentions_normalize_without_dependencies() -> None:
+    dependencies: set[str] = set()
+    text = (
+        "`science:next-steps` and `science:curate` are commands; "
+        "`science:code`, `science:end`, and `science:idea-lens-researcher` "
+        "are vocabulary."
+    )
+
+    rewritten = agent_assets._rewrite_methodology_command_references(
+        text,
+        dependencies,
+        {"next-steps", "curate"},
+    )
+
+    assert "`science-next-steps` skill" in rewritten
+    assert "`science-curate` skill" in rewritten
+    assert "`science:code`" in rewritten
+    assert "`science:end`" in rewritten
+    assert "`science:idea-lens-researcher`" in rewritten
+    assert dependencies == set()
+
+
 def test_generated_command_skill_loads_name_emitted_packages(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -1158,6 +1180,30 @@ def test_cited_generated_prose_has_no_command_skill_duplicates(
     assert (
         "improvements noticed for the `science-curate` skill, prompts"
     ) in curate
+
+
+def test_generated_corpus_has_sentence_aware_articles_and_no_known_colon_aliases(
+    generated: GenerationResult,
+) -> None:
+    root = next(iter(generated.skill_paths.values())).parent.parent
+    known = {path.stem for path in (ROOT / "commands").glob("*.md")}
+    for path in root.rglob("*.md"):
+        text = path.read_text(encoding="utf-8")
+        assert "its skill" not in text
+        assert re.search(r"`science-[a-z0-9-]+` skill \[[^\]\n]+\]", text) is None
+        for stem in known:
+            assert f"`science:{stem}`" not in text
+    big_picture = (
+        generated.skill_paths["science-big-picture"].parent
+        / "references/docs/user-guide/big-picture-synthesis.md"
+    ).read_text(encoding="utf-8")
+    assert big_picture.count("The `science-big-picture` skill") >= 3
+    curate = (
+        generated.skill_paths["science-curate"].parent
+        / "references/docs/plans/historical/2026-04-21-project-curation-design.md"
+    ).read_text(encoding="utf-8")
+    assert "The `science-big-picture` skill produces" in curate
+    assert "The `science-curate` skill with input `[--dry-run]" in curate
 
 
 def test_project_agents_md_scaffolds_use_neutral_skill_names(

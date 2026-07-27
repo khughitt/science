@@ -275,7 +275,10 @@ own duplicated article or `skill` suffix into the surrounding sentence.
 Inline-code slash invocations are parsed through their closing backtick, so
 arguments are retained as an explicit generated-skill input rather than left
 outside an unmatched delimiter. Bare slash tokens are rewritten separately and
-do not consume surrounding punctuation.
+do not consume surrounding punctuation. Article casing is derived from the
+match's structural position. Backticked `science:<name>` aliases normalize only
+when `<name>` is an actual canonical command stem; descriptive normalization
+does not itself create a dependency edge.
 
 Generated methodology bodies omit "Adapted from canonical Science skill ..."
 notes. The generated index remains the provenance map. Generation fails if two

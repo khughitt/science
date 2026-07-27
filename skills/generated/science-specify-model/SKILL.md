@@ -351,9 +351,9 @@ the compiled graph and its revision metadata from the authored sources.
 
 ### Step 7: Suggest Next Steps
 
-1. the `science-interpret-results` skill when new empirical results should update support/dispute
-2. the `science-compare-hypotheses` skill when competing claim bundles need head-to-head evaluation
-3. the `science-discuss` skill when a claim remains contested or structurally important but weakly evidenced
+1. The `science-interpret-results` skill when new empirical results should update support/dispute
+2. The `science-compare-hypotheses` skill when competing claim bundles need head-to-head evaluation
+3. The `science-discuss` skill when a claim remains contested or structurally important but weakly evidenced
 
 ## Important Notes
 
