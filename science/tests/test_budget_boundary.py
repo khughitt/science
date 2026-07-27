@@ -133,13 +133,16 @@ def test_classification_partition_has_the_audited_cardinality() -> None:
     fixed summary record, and `autonomy finish` emits one row per basis delta, gate
     denial, and commit-mark issue. That took the partition to 68/118/95 = 281.
 
-    Batch R then added `explore-ideas seed-coverage` (fb-2026-07-25-004), BUDGETED
-    rather than exempt: it carries the same per-topic `topics` list as `project
-    topic-coverage`, so it grows with the project's topic count. The live partition is
-    therefore 69/120/95 = 284. The audit-case command family adds `findings ingest`
-    as an exemption because it emits a fixed-shape ingestion summary or refusal, and
-    `findings list` as deferred because it emits one row per stored audit case. The
-    live partition is therefore 69/121/96 = 286.
+    `entity kinds` then added one exempt leaf: it enumerates declared kinds rather than
+    project entities, taking the partition to 68/119/95 = 282. Batch R then added
+    `explore-ideas seed-coverage` (fb-2026-07-25-004), BUDGETED rather than exempt:
+    it carries the same per-topic `topics` list as `project topic-coverage`, so it
+    grows with the project's topic count. That took the partition to 69/119/95 = 283.
+    `project spec-path` then added one exempt leaf because it resolves one slug to a
+    fixed three-field record, taking the partition to 69/120/95 = 284. The audit-case
+    command family adds `findings ingest` as an exemption because it emits a fixed-shape
+    ingestion summary or refusal, and `findings list` as deferred because it emits one
+    row per stored audit case. The live partition is therefore 69/121/96 = 286.
     """
     actual = {
         "budgeted": len(BUDGETS),
