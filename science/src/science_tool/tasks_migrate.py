@@ -10,16 +10,19 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
 import re
+import secrets
 from collections import Counter
 from dataclasses import dataclass
 from datetime import date
 from pathlib import Path
 
-from science_model.frontmatter import atomic_write_text
 from science_tool.tasks import (
+    _ANY_TASK_HEADER_RE,
     _MIGRATION_JOURNAL,
     _TASK_ID_PATTERN,
+    _TASK_HEADING_PREFIX_RE,
     _parse_tasks_text,
     _slug_for,
     _task_allocation_lock,
@@ -41,6 +44,8 @@ __all__ = [
     "MigrationEntry",
     "MigrationPlan",
     "MigrationRefused",
+    "MigrationResumeEntry",
+    "MigrationResumeResult",
     "apply_migration",
     "migration_mode_refusal",
     "plan_migration",
@@ -89,6 +94,22 @@ class MigrationPlan:
 
 
 @dataclass(frozen=True)
+class MigrationResumeEntry:
+    """One journal target and the recovery action taken for it."""
+
+    destination: Path
+    action: str
+
+
+@dataclass(frozen=True)
+class MigrationResumeResult:
+    """Complete recovery outcome, including exact targets that needed no write."""
+
+    entries: list[MigrationResumeEntry]
+    written: list[Path]
+
+
+@dataclass(frozen=True)
 class _JournalPostImage:
     relative_path: Path
     content: str
@@ -109,6 +130,85 @@ class _ResolvedPostImage:
 
 def _sha256(content: bytes) -> str:
     return hashlib.sha256(content).hexdigest()
+
+
+def _display_path(path: Path, *, tasks_dir: Path) -> str:
+    try:
+        return f"tasks/{path.relative_to(tasks_dir).as_posix()}"
+    except ValueError:
+        return str(path)
+
+
+def _raise_if_symlink(path: Path, *, tasks_dir: Path) -> None:
+    if path.is_symlink():
+        raise MigrationRefused(
+            f"{_display_path(path, tasks_dir=tasks_dir)} is a symlink; "
+            "migration transaction paths must be real files and directories"
+        )
+
+
+def _validate_transaction_paths(tasks_dir: Path) -> None:
+    """Reject redirected transaction paths before acquiring the allocation lock."""
+    _raise_if_symlink(tasks_dir, tasks_dir=tasks_dir)
+    paths = [
+        tasks_dir / "active.md",
+        tasks_dir / "active",
+        tasks_dir / "done",
+        tasks_dir / ".science",
+        tasks_dir / _MIGRATION_JOURNAL,
+        tasks_dir / ".tasks.lock",
+    ]
+    journal = tasks_dir / _MIGRATION_JOURNAL
+    paths.append(journal.with_suffix(journal.suffix + ".tmp"))
+    for path in paths:
+        _raise_if_symlink(path, tasks_dir=tasks_dir)
+
+    for namespace in (tasks_dir / "active", tasks_dir / "done"):
+        if not namespace.is_dir():
+            continue
+        try:
+            children = list(namespace.iterdir())
+        except OSError as exc:
+            raise MigrationRefused(
+                f"cannot inspect {_display_path(namespace, tasks_dir=tasks_dir)}: {exc}"
+            ) from exc
+        for child in children:
+            _raise_if_symlink(child, tasks_dir=tasks_dir)
+
+
+def atomic_write_text(path: Path, text: str) -> None:
+    """Atomically write one migration post-image through a private random temp."""
+    tasks_dir = path.parent
+    _raise_if_symlink(path.parent, tasks_dir=tasks_dir)
+    _raise_if_symlink(path, tasks_dir=tasks_dir)
+    legacy_temp = path.with_suffix(path.suffix + ".tmp")
+    _raise_if_symlink(legacy_temp, tasks_dir=tasks_dir)
+
+    descriptor: int | None = None
+    temp_path: Path | None = None
+    flags = os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW | os.O_CLOEXEC
+    for _attempt in range(100):
+        candidate = path.parent / f".{path.name}.{secrets.token_hex(12)}.tmp"
+        try:
+            descriptor = os.open(candidate, flags, 0o666)
+        except FileExistsError:
+            continue
+        temp_path = candidate
+        break
+    if descriptor is None or temp_path is None:
+        raise MigrationRefused(f"could not reserve an atomic temp file for {path}")
+
+    try:
+        with os.fdopen(descriptor, "w", encoding="utf-8") as stream:
+            descriptor = None
+            stream.write(text)
+            stream.flush()
+        os.replace(temp_path, path)
+    finally:
+        if descriptor is not None:
+            os.close(descriptor)
+        if temp_path.is_symlink() or temp_path.exists():
+            temp_path.unlink()
 
 
 def _empty_plan(tasks_dir: Path, *refusals: str) -> MigrationPlan:
@@ -141,17 +241,41 @@ def plan_migration(tasks_dir: Path, *, today: date) -> MigrationPlan:
     """Build the whole migration plan without writing anything."""
     tasks_dir = Path(tasks_dir)
     refusals: list[str] = []
+    if tasks_dir.is_symlink():
+        return _empty_plan(
+            tasks_dir,
+            f"{tasks_dir} is a symlink; migration requires a real task-store directory",
+        )
     source = tasks_dir / "active.md"
     active_dir = tasks_dir / "active"
     journal = tasks_dir / _MIGRATION_JOURNAL
 
-    if journal.exists():
+    if journal.parent.is_symlink():
+        refusals.append(
+            "tasks/.science is a symlink; migration transaction paths must be real directories"
+        )
+    elif journal.is_symlink():
+        refusals.append(
+            f"tasks/{_MIGRATION_JOURNAL.as_posix()} is a symlink; "
+            "migration transaction paths must be real files and directories"
+        )
+    elif journal.exists():
         refusals.append(
             f"{_MIGRATION_JOURNAL.as_posix()} exists; finish the interrupted migration "
             "with `science tasks migrate-storage --resume`"
         )
 
-    if active_dir.exists():
+    if source.is_symlink():
+        refusals.append(
+            "tasks/active.md is a symlink; migration transaction paths must be real files"
+        )
+        return _empty_plan(tasks_dir, *refusals)
+
+    if active_dir.is_symlink():
+        refusals.append(
+            "tasks/active is a symlink; migration transaction paths must be real directories"
+        )
+    elif active_dir.exists():
         if not active_dir.is_dir():
             refusals.append("tasks/active exists but is not a directory")
         elif any(active_dir.iterdir()):
@@ -168,6 +292,11 @@ def plan_migration(tasks_dir: Path, *, today: date) -> MigrationPlan:
         return _empty_plan(tasks_dir, f"cannot read tasks/active.md: {exc}")
 
     source_sha256 = _sha256(source_bytes)
+    for line_number, line in enumerate(source_text.splitlines(), start=1):
+        if _TASK_HEADING_PREFIX_RE.match(line) and _ANY_TASK_HEADER_RE.match(line) is None:
+            refusals.append(
+                f"malformed task heading at tasks/active.md:{line_number}: {line!r}"
+            )
     try:
         source_tasks = _parse_tasks_text(source_text, path=source)
     except ValueError as exc:
@@ -198,15 +327,37 @@ def plan_migration(tasks_dir: Path, *, today: date) -> MigrationPlan:
 
     done_ledgers: dict[Path, tuple[str, list[Task]]] = {}
     done_dir = tasks_dir / "done"
-    for path in sorted(done_dir.glob("*.md")):
-        relative_path = path.relative_to(tasks_dir)
-        if not path.is_file():
-            refusals.append(f"{relative_path.as_posix()} exists but is not a regular file")
-            continue
-        try:
-            done_ledgers[relative_path] = _read_destination(path)
-        except (OSError, ValueError) as exc:
-            refusals.append(f"cannot read {relative_path.as_posix()}: {exc}")
+    if done_dir.is_symlink():
+        refusals.append(
+            "tasks/done is a symlink; migration transaction paths must be real directories"
+        )
+    else:
+        root = tasks_dir.resolve()
+        for path in sorted(done_dir.glob("*.md")):
+            relative_path = path.relative_to(tasks_dir)
+            if path.is_symlink():
+                refusals.append(
+                    f"tasks/{relative_path.as_posix()} is a symlink; "
+                    "done ledgers must be regular in-store files"
+                )
+                continue
+            if not path.is_file():
+                refusals.append(
+                    f"{relative_path.as_posix()} exists but is not a regular file"
+                )
+                continue
+            try:
+                resolved = path.resolve(strict=True)
+                resolved.relative_to(root)
+            except (OSError, ValueError) as exc:
+                refusals.append(
+                    f"done ledger {relative_path.as_posix()} is outside the task store: {exc}"
+                )
+                continue
+            try:
+                done_ledgers[relative_path] = _read_destination(resolved)
+            except (OSError, ValueError) as exc:
+                refusals.append(f"cannot read {relative_path.as_posix()}: {exc}")
 
     ledger_occurrences = _done_occurrences(done_ledgers)
     entries: list[MigrationEntry] = []
@@ -380,7 +531,14 @@ def _resolve_postimages(
     targets: set[Path] = set()
     for postimage in postimages:
         relative_path = postimage.relative_path
-        target = (root / relative_path).resolve()
+        lexical_target = root / relative_path
+        _raise_if_symlink(lexical_target.parent, tasks_dir=root)
+        _raise_if_symlink(lexical_target, tasks_dir=root)
+        _raise_if_symlink(
+            lexical_target.with_suffix(lexical_target.suffix + ".tmp"),
+            tasks_dir=root,
+        )
+        target = lexical_target.resolve()
         try:
             target.relative_to(root)
         except ValueError as exc:
@@ -421,12 +579,21 @@ def _write_journal(
         ],
     }
     journal = tasks_dir / _MIGRATION_JOURNAL
+    _raise_if_symlink(journal.parent, tasks_dir=tasks_dir)
+    _raise_if_symlink(journal, tasks_dir=tasks_dir)
+    _raise_if_symlink(
+        journal.with_suffix(journal.suffix + ".tmp"),
+        tasks_dir=tasks_dir,
+    )
     journal.parent.mkdir(parents=True, exist_ok=True)
+    _raise_if_symlink(journal.parent, tasks_dir=tasks_dir)
     atomic_write_text(journal, json.dumps(payload, indent=2) + "\n")
 
 
 def _load_journal(tasks_dir: Path) -> _Journal:
     journal_path = tasks_dir / _MIGRATION_JOURNAL
+    _raise_if_symlink(journal_path.parent, tasks_dir=tasks_dir)
+    _raise_if_symlink(journal_path, tasks_dir=tasks_dir)
     if not journal_path.is_file():
         raise MigrationRefused(
             f"{_MIGRATION_JOURNAL.as_posix()} does not exist; there is nothing to resume"
@@ -498,7 +665,9 @@ def _clear_journal(tasks_dir: Path) -> None:
 def apply_migration(tasks_dir: Path, *, today: date) -> MigrationPlan:
     """Plan and apply one migration under one allocation-lock window."""
     tasks_dir = Path(tasks_dir)
+    _validate_transaction_paths(tasks_dir)
     with _task_allocation_lock(tasks_dir):
+        _validate_transaction_paths(tasks_dir)
         state = _tasks_storage_state(tasks_dir)
         refusal = migration_mode_refusal(state, "apply")
         if refusal is not None:
@@ -521,7 +690,9 @@ def apply_migration(tasks_dir: Path, *, today: date) -> MigrationPlan:
         )
 
         for postimage in resolved:
+            _raise_if_symlink(postimage.target.parent, tasks_dir=tasks_dir)
             postimage.target.parent.mkdir(parents=True, exist_ok=True)
+            _raise_if_symlink(postimage.target.parent, tasks_dir=tasks_dir)
             atomic_write_text(postimage.target, postimage.content)
 
         if _current_source_hash(tasks_dir) != plan.source_sha256:
@@ -535,10 +706,12 @@ def apply_migration(tasks_dir: Path, *, today: date) -> MigrationPlan:
         return plan
 
 
-def resume_migration(tasks_dir: Path) -> list[Path]:
+def resume_migration(tasks_dir: Path) -> MigrationResumeResult:
     """Finish an interrupted apply from its journal without re-planning."""
     tasks_dir = Path(tasks_dir)
+    _validate_transaction_paths(tasks_dir)
     with _task_allocation_lock(tasks_dir):
+        _validate_transaction_paths(tasks_dir)
         state = _tasks_storage_state(tasks_dir)
         refusal = migration_mode_refusal(state, "resume")
         if refusal is not None:
@@ -577,7 +750,9 @@ def resume_migration(tasks_dir: Path) -> list[Path]:
 
         written: list[Path] = []
         for postimage in absent:
+            _raise_if_symlink(postimage.target.parent, tasks_dir=tasks_dir)
             postimage.target.parent.mkdir(parents=True, exist_ok=True)
+            _raise_if_symlink(postimage.target.parent, tasks_dir=tasks_dir)
             atomic_write_text(postimage.target, postimage.content)
             written.append(postimage.target)
 
@@ -593,4 +768,14 @@ def resume_migration(tasks_dir: Path) -> list[Path]:
 
         _delete_source(tasks_dir)
         _clear_journal(tasks_dir)
-        return written
+        written_set = set(written)
+        return MigrationResumeResult(
+            entries=[
+                MigrationResumeEntry(
+                    destination=postimage.relative_path,
+                    action="written" if postimage.target in written_set else "already exact",
+                )
+                for postimage in resolved
+            ],
+            written=written,
+        )

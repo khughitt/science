@@ -207,6 +207,52 @@ def test_plan_refuses_invalid_source_title(tmp_path: Path) -> None:
     assert plan.post_images == {}
 
 
+def test_plan_refuses_malformed_task_heading_instead_of_treating_source_as_empty(
+    tmp_path: Path,
+) -> None:
+    migrate = _migrate_module()
+    tasks_dir = tmp_path / "tasks"
+    source = _write_raw_legacy(
+        tasks_dir,
+        "## [t001]\n"
+        "- priority: P1\n"
+        "- status: active\n"
+        "- aspects: []\n"
+        "- created: 2026-07-01\n\n"
+        "Body.\n",
+    )
+    before = source.read_bytes()
+
+    plan = migrate.plan_migration(tasks_dir, today=TODAY)
+
+    assert any("malformed task heading" in reason for reason in plan.refusals)
+    assert plan.post_images == {}
+    assert source.read_bytes() == before
+
+
+def test_apply_refuses_malformed_task_heading_without_deleting_source(
+    tmp_path: Path,
+) -> None:
+    migrate = _migrate_module()
+    tasks_dir = tmp_path / "tasks"
+    source = _write_raw_legacy(
+        tasks_dir,
+        "## [t001]\n"
+        "- priority: P1\n"
+        "- status: active\n"
+        "- aspects: []\n"
+        "- created: 2026-07-01\n\n"
+        "Body.\n",
+    )
+    before = source.read_bytes()
+
+    with pytest.raises(migrate.MigrationRefused, match="malformed task heading"):
+        migrate.apply_migration(tasks_dir, today=TODAY)
+
+    assert source.read_bytes() == before
+    assert not (tasks_dir / JOURNAL).exists()
+
+
 def test_plan_refuses_nonempty_active_dir_and_existing_open_target(tmp_path: Path) -> None:
     migrate = _migrate_module()
     tasks_dir = tmp_path / "tasks"
@@ -306,6 +352,130 @@ def test_apply_deduplicates_undated_terminal_task_across_all_done_months(tmp_pat
     assert [task.id for task in parse_tasks(previous)] == ["t010"]
     assert not (tasks_dir / "done" / "2026-07.md").exists()
     assert not (tasks_dir / "active.md").exists()
+
+
+@pytest.mark.parametrize("symlink_kind", ["done-directory", "ledger-file"])
+def test_apply_refuses_out_of_store_done_ledger_even_when_task_is_structurally_equal(
+    tmp_path: Path,
+    symlink_kind: str,
+) -> None:
+    migrate = _migrate_module()
+    tasks_dir = tmp_path / "tasks"
+    terminal = _task(
+        "t010",
+        "Already archived",
+        status="done",
+        completed=date(2026, 6, 2),
+    )
+    source = _write_legacy(tasks_dir, [terminal])
+    outside_dir = tmp_path / "outside-done"
+    outside_dir.mkdir()
+    outside_ledger = outside_dir / "2026-06.md"
+    outside_ledger.write_text(render_task(terminal), encoding="utf-8")
+    before = outside_ledger.read_bytes()
+
+    if symlink_kind == "done-directory":
+        (tasks_dir / "done").symlink_to(outside_dir, target_is_directory=True)
+    else:
+        done_dir = tasks_dir / "done"
+        done_dir.mkdir()
+        (done_dir / "2026-06.md").symlink_to(outside_ledger)
+
+    plan = migrate.plan_migration(tasks_dir, today=TODAY)
+
+    assert any("symlink" in reason and "done" in reason for reason in plan.refusals)
+    with pytest.raises(migrate.MigrationRefused, match="symlink"):
+        migrate.apply_migration(tasks_dir, today=TODAY)
+    assert source.is_file()
+    assert outside_ledger.read_bytes() == before
+    assert not (tasks_dir / JOURNAL).exists()
+    assert not (tasks_dir / ".tasks.lock").exists()
+
+
+def test_apply_rejects_symlinked_lock_without_mutating_outside_file(
+    tmp_path: Path,
+) -> None:
+    migrate = _migrate_module()
+    tasks_dir = tmp_path / "tasks"
+    source = _write_legacy(tasks_dir, [_task("t001", "Open analysis")])
+    outside = tmp_path / "outside-lock"
+    outside.write_text("do not truncate\n", encoding="utf-8")
+    before = outside.read_bytes()
+    (tasks_dir / ".tasks.lock").symlink_to(outside)
+
+    with pytest.raises(migrate.MigrationRefused, match="symlink"):
+        migrate.apply_migration(tasks_dir, today=TODAY)
+
+    assert outside.read_bytes() == before
+    assert source.is_file()
+    assert not (tasks_dir / JOURNAL).exists()
+
+
+def test_task_allocation_lock_itself_uses_no_follow_and_does_not_truncate_symlink(
+    tmp_path: Path,
+) -> None:
+    tasks_dir = tmp_path / "tasks"
+    tasks_dir.mkdir()
+    outside = tmp_path / "outside-lock"
+    outside.write_text("do not truncate\n", encoding="utf-8")
+    before = outside.read_bytes()
+    (tasks_dir / ".tasks.lock").symlink_to(outside)
+
+    with pytest.raises(ValueError, match="safely|symlink"):
+        with task_module._task_allocation_lock(tasks_dir):
+            pytest.fail("symlinked allocation lock must never be acquired")
+
+    assert outside.read_bytes() == before
+
+
+def test_apply_rejects_symlinked_journal_temp_without_mutating_outside_file(
+    tmp_path: Path,
+) -> None:
+    migrate = _migrate_module()
+    tasks_dir = tmp_path / "tasks"
+    source = _write_legacy(tasks_dir, [_task("t001", "Open analysis")])
+    outside = tmp_path / "outside-journal"
+    outside.write_text("do not overwrite\n", encoding="utf-8")
+    before = outside.read_bytes()
+    journal = tasks_dir / JOURNAL
+    journal.parent.mkdir()
+    journal.with_suffix(journal.suffix + ".tmp").symlink_to(outside)
+
+    with pytest.raises(migrate.MigrationRefused, match="symlink"):
+        migrate.apply_migration(tasks_dir, today=TODAY)
+
+    assert outside.read_bytes() == before
+    assert source.is_file()
+    assert not journal.exists()
+    assert not (tasks_dir / ".tasks.lock").exists()
+
+
+def test_apply_rejects_symlinked_destination_temp_without_mutating_outside_file(
+    tmp_path: Path,
+) -> None:
+    migrate = _migrate_module()
+    tasks_dir = tmp_path / "tasks"
+    terminal = _task(
+        "t001",
+        "Completed analysis",
+        status="done",
+        completed=date(2026, 7, 2),
+    )
+    source = _write_legacy(tasks_dir, [terminal])
+    outside = tmp_path / "outside-ledger"
+    outside.write_text("do not overwrite\n", encoding="utf-8")
+    before = outside.read_bytes()
+    target = tasks_dir / "done" / "2026-07.md"
+    target.parent.mkdir()
+    target.with_suffix(target.suffix + ".tmp").symlink_to(outside)
+
+    with pytest.raises(migrate.MigrationRefused, match="symlink"):
+        migrate.apply_migration(tasks_dir, today=TODAY)
+
+    assert outside.read_bytes() == before
+    assert source.is_file()
+    assert not (tasks_dir / JOURNAL).exists()
+    assert not (tasks_dir / ".tasks.lock").exists()
 
 
 def test_non_cwd_tasks_dir_preserves_same_month_ledger_preamble_and_tasks(
@@ -418,10 +588,11 @@ def test_resume_writes_absent_postimage_without_replanning(
 
     monkeypatch.setattr(migrate, "plan_migration", forbidden_replan)
 
-    written = migrate.resume_migration(tasks_dir)
+    result = migrate.resume_migration(tasks_dir)
 
     target = tasks_dir / "active" / "t001-open-analysis.md"
-    assert written == [target]
+    assert result.written == [target]
+    assert [entry.action for entry in result.entries] == ["written"]
     assert target.is_file()
     assert not source.exists()
     assert not (tasks_dir / JOURNAL).exists()
@@ -447,9 +618,10 @@ def test_resume_accepts_exact_postimage_without_rewriting_it(
 
     monkeypatch.setattr(migrate, "atomic_write_text", track_writes)
 
-    written = migrate.resume_migration(tasks_dir)
+    result = migrate.resume_migration(tasks_dir)
 
-    assert written == []
+    assert result.written == []
+    assert [entry.action for entry in result.entries] == ["already exact"]
     assert writes == []
     assert not (tasks_dir / "active.md").exists()
     assert not (tasks_dir / JOURNAL).exists()
@@ -473,6 +645,73 @@ def test_resume_refuses_different_postimage_and_retains_source_and_journal(
     assert target.read_text(encoding="utf-8") == "changed under migration\n"
     assert source.is_file()
     assert (tasks_dir / JOURNAL).is_file()
+
+
+@pytest.mark.parametrize(
+    ("ledger_state", "expected_written"),
+    [
+        ("absent", "done"),
+        ("exact", "active"),
+        ("different", None),
+    ],
+)
+def test_resume_mixed_open_and_terminal_recovery_classifies_done_postimage(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    ledger_state: str,
+    expected_written: str | None,
+) -> None:
+    tasks_dir = tmp_path / "tasks"
+    source = _write_legacy(
+        tasks_dir,
+        [
+            _task("t001", "Open analysis"),
+            _task(
+                "t002",
+                "Completed analysis",
+                status="done",
+                completed=date(2026, 7, 2),
+            ),
+        ],
+    )
+    migrate = _interrupt_before_first_postimage(tasks_dir, monkeypatch)
+    postimages = {
+        item["path"]: item["content"]
+        for item in _postimages(_journal_payload(tasks_dir))
+    }
+    open_relative = next(path for path in postimages if path.startswith("active/"))
+    done_relative = next(path for path in postimages if path.startswith("done/"))
+    open_target = tasks_dir / open_relative
+    done_target = tasks_dir / done_relative
+
+    if ledger_state == "absent":
+        open_target.parent.mkdir(exist_ok=True)
+        open_target.write_text(postimages[open_relative], encoding="utf-8")
+    elif ledger_state == "exact":
+        done_target.parent.mkdir(exist_ok=True)
+        done_target.write_text(postimages[done_relative], encoding="utf-8")
+    else:
+        open_target.parent.mkdir(exist_ok=True)
+        open_target.write_text(postimages[open_relative], encoding="utf-8")
+        done_target.parent.mkdir(exist_ok=True)
+        done_target.write_text("different ledger\n", encoding="utf-8")
+
+    if expected_written is None:
+        with pytest.raises(migrate.MigrationRefused, match="different"):
+            migrate.resume_migration(tasks_dir)
+        assert source.is_file()
+        assert (tasks_dir / JOURNAL).is_file()
+        assert done_target.read_text(encoding="utf-8") == "different ledger\n"
+        return
+
+    result = migrate.resume_migration(tasks_dir)
+
+    expected_target = done_target if expected_written == "done" else open_target
+    assert result.written == [expected_target]
+    assert open_target.read_text(encoding="utf-8") == postimages[open_relative]
+    assert done_target.read_text(encoding="utf-8") == postimages[done_relative]
+    assert not source.exists()
+    assert not (tasks_dir / JOURNAL).exists()
 
 
 def test_resume_refuses_changed_present_source_before_writing_targets(
@@ -514,9 +753,9 @@ def test_resume_clears_journal_after_crash_following_source_delete(
     assert (tasks_dir / "active" / "t001-open-analysis.md").is_file()
     assert (tasks_dir / JOURNAL).is_file()
 
-    written = migrate.resume_migration(tasks_dir)
+    result = migrate.resume_migration(tasks_dir)
 
-    assert written == []
+    assert result.written == []
     assert not (tasks_dir / JOURNAL).exists()
 
 
@@ -838,6 +1077,97 @@ def test_cli_dry_run_stdout_is_bounded_and_output_file_is_complete(tmp_path: Pat
     payload = json.loads(target.read_text(encoding="utf-8"))
     assert len(payload["rows"]) == 60
     assert {row["id"] for row in payload["rows"]} == {task.id for task in source_tasks}
+    assert "truncation" not in payload
+
+
+def test_cli_many_task_apply_has_fixed_stdout_and_complete_reserved_output(
+    tmp_path: Path,
+) -> None:
+    source_tasks = [
+        _task(f"t{index:03d}", f"Apply migration task {index}")
+        for index in range(1, 61)
+    ]
+    stdout_dir = tmp_path / "stdout" / "tasks"
+    output_dir = tmp_path / "output" / "tasks"
+    _write_legacy(stdout_dir, source_tasks)
+    _write_legacy(output_dir, source_tasks)
+    target = tmp_path / "applied.json"
+
+    stdout_result = CliRunner().invoke(
+        main,
+        ["tasks", "migrate-storage", "--apply", "--tasks-dir", str(stdout_dir)],
+    )
+    output_result = CliRunner().invoke(
+        main,
+        [
+            "tasks",
+            "migrate-storage",
+            "--apply",
+            "--tasks-dir",
+            str(output_dir),
+            "--format",
+            "json",
+            "--output",
+            str(target),
+        ],
+    )
+
+    assert stdout_result.exit_code == 0, stdout_result.output
+    assert "Migrated 60 task(s)." in stdout_result.output
+    assert "showing" not in stdout_result.output
+    assert "complete output:" not in stdout_result.output
+    assert "--apply" not in stdout_result.output
+    assert output_result.exit_code == 0, output_result.output
+    payload = json.loads(target.read_text(encoding="utf-8"))
+    assert len(payload["rows"]) == 60
+    assert {row["id"] for row in payload["rows"]} == {task.id for task in source_tasks}
+    assert "truncation" not in payload
+
+
+def test_cli_many_target_resume_has_fixed_stdout_and_complete_reserved_output(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    source_tasks = [
+        _task(f"t{index:03d}", f"Resume migration task {index}")
+        for index in range(1, 61)
+    ]
+    stdout_dir = tmp_path / "stdout" / "tasks"
+    output_dir = tmp_path / "output" / "tasks"
+    _write_legacy(stdout_dir, source_tasks)
+    _write_legacy(output_dir, source_tasks)
+    _interrupt_before_first_postimage(stdout_dir, monkeypatch)
+    _interrupt_before_first_postimage(output_dir, monkeypatch)
+    target = tmp_path / "resumed.json"
+
+    stdout_result = CliRunner().invoke(
+        main,
+        ["tasks", "migrate-storage", "--resume", "--tasks-dir", str(stdout_dir)],
+    )
+    output_result = CliRunner().invoke(
+        main,
+        [
+            "tasks",
+            "migrate-storage",
+            "--resume",
+            "--tasks-dir",
+            str(output_dir),
+            "--format",
+            "json",
+            "--output",
+            str(target),
+        ],
+    )
+
+    assert stdout_result.exit_code == 0, stdout_result.output
+    assert "Resumed storage migration" in stdout_result.output
+    assert "showing" not in stdout_result.output
+    assert "complete output:" not in stdout_result.output
+    assert "--resume" not in stdout_result.output
+    assert output_result.exit_code == 0, output_result.output
+    payload = json.loads(target.read_text(encoding="utf-8"))
+    assert len(payload["rows"]) == 60
+    assert {row["action"] for row in payload["rows"]} == {"written"}
     assert "truncation" not in payload
 
 

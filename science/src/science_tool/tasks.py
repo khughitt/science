@@ -748,9 +748,21 @@ def _task_allocation_lock(tasks_dir: Path) -> Iterator[None]:
     deadlocks when the same process takes the lock through a second file
     descriptor. The lock auto-releases if its holder crashes.
     """
+    if tasks_dir.is_symlink():
+        raise ValueError(f"{tasks_dir} is a symlink; refusing to create a task lock through it")
     tasks_dir.mkdir(parents=True, exist_ok=True)
     lock_path = tasks_dir / ".tasks.lock"
-    with open(lock_path, "w") as lock_file:
+    try:
+        descriptor = os.open(
+            lock_path,
+            os.O_WRONLY | os.O_CREAT | os.O_NOFOLLOW | os.O_CLOEXEC,
+            0o666,
+        )
+    except OSError as exc:
+        raise ValueError(
+            f"cannot safely open task allocation lock {lock_path}: {exc}"
+        ) from exc
+    with os.fdopen(descriptor, "w") as lock_file:
         fcntl.flock(lock_file.fileno(), fcntl.LOCK_EX)
         try:
             yield

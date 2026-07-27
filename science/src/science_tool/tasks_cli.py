@@ -557,6 +557,25 @@ def tasks_migrate_storage(
                 bounded_control_notice(f"wrote {row_count} {noun} rows to {output_path}")
             )
 
+    def _emit_mutation_summary(
+        *,
+        mode: str,
+        source_count: int,
+        written_count: int,
+        summary: str,
+    ) -> None:
+        emit(
+            output_format=output_format,
+            payload={
+                "format": "json",
+                "mode": mode,
+                "source_count": source_count,
+                "written_count": written_count,
+            },
+            render_text=lambda: sink.echo(summary),
+            sink=sink,
+        )
+
     def _exit_with_refusal(exc: MigrationRefused, *, mode: str) -> None:
         reasons = [line.strip() for line in str(exc).splitlines() if line.strip()]
         rows = [
@@ -585,26 +604,37 @@ def tasks_migrate_storage(
         try:
             reservation = sink.reserve_output() if sink.is_file_sink else nullcontext()
             with reservation:
-                written = resume_migration(tasks_dir)
-                rows = [
-                    {
-                        "id": "",
-                        "status": "",
-                        "destination": str(path),
-                        "action": "written",
-                    }
-                    for path in written
-                ]
-                _emit_rows(
-                    rows,
-                    title="Task Storage Migration Resume",
-                    mode="resumed",
-                    summary=(
-                        "Resumed storage migration; "
-                        f"wrote {len(written)} missing post-image(s)."
-                    ),
+                result = resume_migration(tasks_dir)
+                summary = (
+                    "Resumed storage migration; "
+                    f"wrote {len(result.written)} missing post-image(s), "
+                    f"verified {len(result.entries)} total."
                 )
-                _flush_with_notice(len(rows), noun="migration-resume")
+                if sink.is_file_sink:
+                    rows = [
+                        {
+                            "id": "",
+                            "status": "",
+                            "destination": entry.destination.as_posix(),
+                            "action": entry.action,
+                        }
+                        for entry in result.entries
+                    ]
+                    _emit_rows(
+                        rows,
+                        title="Task Storage Migration Resume",
+                        mode="resumed",
+                        summary=summary,
+                    )
+                    _flush_with_notice(len(rows), noun="migration-resume")
+                else:
+                    _emit_mutation_summary(
+                        mode="resumed",
+                        source_count=len(result.entries),
+                        written_count=len(result.written),
+                        summary=summary,
+                    )
+                    _flush_with_notice(0, noun="migration-resume")
         except MigrationRefused as exc:
             _exit_with_refusal(exc, mode="resume")
         return
@@ -618,13 +648,23 @@ def tasks_migrate_storage(
             with reservation:
                 plan = apply_migration(tasks_dir, today=date.today())
                 rows = _plan_rows(plan)
-                _emit_rows(
-                    rows,
-                    title="Task Storage Migration Applied",
-                    mode="applied",
-                    summary=f"Migrated {len(rows)} task(s).",
-                )
-                _flush_with_notice(len(rows), noun="migration-plan")
+                summary = f"Migrated {len(rows)} task(s)."
+                if sink.is_file_sink:
+                    _emit_rows(
+                        rows,
+                        title="Task Storage Migration Applied",
+                        mode="applied",
+                        summary=summary,
+                    )
+                    _flush_with_notice(len(rows), noun="migration-plan")
+                else:
+                    _emit_mutation_summary(
+                        mode="applied",
+                        source_count=len(rows),
+                        written_count=len(plan.post_images),
+                        summary=summary,
+                    )
+                    _flush_with_notice(0, noun="migration-plan")
         except MigrationRefused as exc:
             _exit_with_refusal(exc, mode="apply")
         return
