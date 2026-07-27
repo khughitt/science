@@ -53,6 +53,12 @@ def _break_config(repo: Path, kind: str) -> None:
         config.write_text("- name: D\n")
     elif kind == "top-level-scalar":
         config.write_text("D\n")
+    elif kind == "top-level-empty-list":
+        config.write_text("[]\n")
+    elif kind == "top-level-false":
+        config.write_text("false\n")
+    elif kind == "top-level-zero":
+        config.write_text("0\n")
     elif kind == "missing":
         config.unlink()
     elif kind == "unreadable":
@@ -110,12 +116,25 @@ def test_check_reports_tracked_ignored_before_deferred_config_error(tmp_path: Pa
 @pytest.mark.parametrize("command", _COMMANDS)
 @pytest.mark.parametrize(
     "kind",
-    ("malformed-yaml", "invalid-schema", "top-level-list", "top-level-scalar", "missing", "unreadable"),
+    (
+        "malformed-yaml",
+        "invalid-schema",
+        "top-level-list",
+        "top-level-scalar",
+        "top-level-empty-list",
+        "top-level-false",
+        "top-level-zero",
+        "missing",
+        "unreadable",
+    ),
 )
 def test_commands_render_project_config_failures(tmp_path: Path, command: tuple[str, ...], kind: str):
     repo = _repo(tmp_path, DECL)
     _break_config(repo, kind)
-    _assert_boundary_error(_invoke(repo, command))
+    result = _invoke(repo, command)
+    _assert_boundary_error(result)
+    if kind in {"top-level-empty-list", "top-level-false", "top-level-zero"}:
+        assert "top-level mapping" in result.output
 
 
 def test_check_renders_malformed_managed_block(tmp_path: Path):

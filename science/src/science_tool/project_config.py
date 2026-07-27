@@ -411,7 +411,9 @@ def validated_entity_schema_version(raw: Any) -> int | None:
 def load_project_config(project_root: Path) -> ProjectConfig:
     """Load and validate science.yaml at ``project_root``. Defaults id to dirname."""
     yaml_path = project_config_path(project_root)
-    raw = yaml.safe_load(yaml_path.read_text(encoding="utf-8")) or {}
+    raw = yaml.safe_load(yaml_path.read_text(encoding="utf-8"))
+    if raw is None:
+        raw = {}
     if not isinstance(raw, dict):
         raise ProjectConfigError("science.yaml must contain a top-level mapping")
     if "id" not in raw or raw["id"] is None:

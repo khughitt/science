@@ -21,10 +21,16 @@ from science_tool.project_config import (
 )
 
 
-@pytest.mark.parametrize("contents", ("- name: p\n", "p\n", "1\n"))
+@pytest.mark.parametrize("contents", ("- name: p\n", "p\n", "1\n", "[]\n", "false\n", "0\n"))
 def test_load_project_config_rejects_non_mapping_yaml(tmp_path, contents):
     (tmp_path / "science.yaml").write_text(contents, encoding="utf-8")
     with pytest.raises(ProjectConfigError, match="top-level mapping"):
+        load_project_config(tmp_path)
+
+
+def test_load_project_config_accepts_empty_document(tmp_path):
+    (tmp_path / "science.yaml").write_text("", encoding="utf-8")
+    with pytest.raises(ValidationError, match="name"):
         load_project_config(tmp_path)
 
 
