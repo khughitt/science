@@ -69,6 +69,6 @@ uv run --frozen science validate --verbose
 
 - Decisions: `core/decisions.md`
 - Project overview: `core/overview.md`
-- Active tasks: `tasks/active.md`
+- Active tasks: `science tasks list` (`tasks/active/`, one file per open task)
 - Hypotheses: `entities/hypotheses/`
 - Strategic plan: `README.md`
