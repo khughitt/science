@@ -19,7 +19,7 @@ import json
 import os
 from contextlib import contextmanager
 from datetime import UTC, datetime
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 from typing import Iterator
 
 from pydantic import BaseModel, ConfigDict, ValidationError
@@ -40,10 +40,17 @@ from science_model.audit.record import (
     canonical_occurrence_content,
     normalized_instant,
 )
+from science_model.profiles import CORE_PROFILE, ProfileManifest
 
 from science_tool.findings.paths import (
     PathSafetyError,
+    exists_at,
+    list_names_at,
+    open_child_dir_at_if_present,
+    open_dir_inside,
+    open_dir_inside_if_present,
     read_inside_bounded,
+    read_regular_file_at,
     resolve_inside,
 )
 from science_tool.findings.producers import FindingRegistry, RegistryError
@@ -54,12 +61,32 @@ from science_tool.findings.storage import (
     case_store,
     serialize_case,
 )
-from science_tool.entity_scan import iter_entity_markdown
-from science_tool.tasks import known_task_ids
-from science_model.frontmatter import parse_frontmatter
+from science_tool.tasks import strict_task_ids_in_text
 
 MAX_REPORT_BYTES = 8 * 1024 * 1024
+MAX_SUBJECT_RECORD_BYTES = 4 * 1024 * 1024
 SUPPORTED_FINGERPRINT_VERSIONS = frozenset({1})
+
+_ENTITY_MARKDOWN_HOMES: tuple[str, ...] = tuple(
+    sorted(
+        {
+            kind.home
+            for kind in CORE_PROFILE.entity_kinds
+            if kind.home
+            and (
+                not PurePosixPath(kind.home).suffix
+                or PurePosixPath(kind.home).suffix == ".md"
+            )
+        }
+    )
+)
+_CORE_ENTITY_NAMES = frozenset(kind.name for kind in CORE_PROFILE.entity_kinds)
+_CORE_HOME_NAMES = frozenset(
+    PurePosixPath(home).name for home in _ENTITY_MARKDOWN_HOMES
+)
+_LOCAL_MARKDOWN_STRATEGIES = frozenset(
+    {"numeric", "citekey", "slug", "id-local"}
+)
 
 
 class IngestError(ValueError):
@@ -264,10 +291,10 @@ def _plan(
             # about what its identity is. `validate_qualifiers` is strict: a report
             # carrying `"1"` where the schema declares `int` is refused rather than
             # coerced-then-discarded, so what is fingerprinted is what was declared.
-            rule.validate_qualifiers(finding.qualifiers)
             canonical_qualifiers = rule.canonicalize_identity_qualifiers(
                 finding.qualifiers
             )
+            rule.validate_qualifiers(canonical_qualifiers)
             identity = rule.identity_subset(canonical_qualifiers)
         except RuleDeclarationError as exc:
             raise IngestError(str(exc)) from exc
@@ -312,26 +339,212 @@ def _plan(
 
 
 def _known_canonical_entity_refs(project_root: Path) -> frozenset[str]:
-    """Exact live frontmatter IDs plus active/done task IDs; never aliases or graph."""
-    refs: set[str] = set()
+    """Exact declared-home frontmatter IDs plus active/done task IDs.
+
+    Every read stays relative to a held directory descriptor. No recursive scanner,
+    pathname reopen, alias, archive, or `graph.trig` participates.
+    """
     try:
-        for path in iter_entity_markdown(project_root / "entities"):
-            parsed = parse_frontmatter(path)
-            if parsed is None:
-                continue
-            frontmatter, _body = parsed
-            entity_id = frontmatter.get("id")
-            if isinstance(entity_id, str):
-                refs.add(entity_id)
-        refs.update(
-            f"task:{task_id}"
-            for task_id in known_task_ids(project_root / "tasks")
-        )
-    except (OSError, UnicodeError, yaml.YAMLError) as exc:
+        refs = _declared_entity_ids(project_root)
+        refs.update(_live_task_refs(project_root))
+    except IngestError:
+        raise
+    except (
+        PathSafetyError,
+        ValidationError,
+        OSError,
+        UnicodeError,
+        yaml.YAMLError,
+    ) as exc:
         raise IngestError(
             f"could not resolve canonical entity subjects from project records: {exc}"
         ) from exc
     return frozenset(refs)
+
+
+def _declared_entity_ids(project_root: Path) -> set[str]:
+    refs: set[str] = set()
+    for home in _ENTITY_MARKDOWN_HOMES:
+        path = PurePosixPath(home)
+        _add_ids_from_home(
+            project_root,
+            refs,
+            home,
+            singleton=path.suffix == ".md",
+        )
+    for home in _local_entity_homes(project_root):
+        _add_ids_from_home(project_root, refs, home, singleton=False)
+    return refs
+
+
+def _add_ids_from_home(
+    project_root: Path,
+    refs: set[str],
+    home: str,
+    *,
+    singleton: bool,
+) -> None:
+    path = PurePosixPath(home)
+    if singleton:
+        with open_dir_inside_if_present(
+            project_root,
+            path.parent.as_posix(),
+        ) as dir_fd:
+            if dir_fd is None or not exists_at(dir_fd, path.name):
+                return
+            text = read_regular_file_at(
+                dir_fd,
+                path.name,
+                MAX_SUBJECT_RECORD_BYTES,
+            )
+            _add_frontmatter_id(refs, text, home)
+        return
+
+    with open_dir_inside_if_present(project_root, home) as dir_fd:
+        if dir_fd is None:
+            return
+        for name in list_names_at(dir_fd):
+            if not name.endswith(".md"):
+                continue
+            text = read_regular_file_at(
+                dir_fd,
+                name,
+                MAX_SUBJECT_RECORD_BYTES,
+            )
+            _add_frontmatter_id(refs, text, f"{home}/{name}")
+
+
+def _local_entity_homes(project_root: Path) -> tuple[str, ...]:
+    profile_name = _local_profile_name(project_root)
+    manifest_parent = f"knowledge/sources/{profile_name}"
+    with open_dir_inside_if_present(project_root, manifest_parent) as dir_fd:
+        if dir_fd is None or not exists_at(dir_fd, "manifest.yaml"):
+            return ()
+        text = read_regular_file_at(
+            dir_fd,
+            "manifest.yaml",
+            MAX_SUBJECT_RECORD_BYTES,
+        )
+    loaded = yaml.safe_load(text)
+    if not isinstance(loaded, dict):
+        raise IngestError(
+            f"{manifest_parent}/manifest.yaml: profile manifest must be a mapping"
+        )
+    manifest = ProfileManifest.model_validate(loaded)
+
+    homes: set[str] = set()
+    for kind in manifest.entity_kinds:
+        if kind.name != kind.canonical_prefix or kind.name in _CORE_ENTITY_NAMES:
+            continue
+        if (
+            kind.strategy is not None
+            and kind.strategy not in _LOCAL_MARKDOWN_STRATEGIES
+        ):
+            continue
+        home = kind.home or f"entities/{kind.name}"
+        candidate = PurePosixPath(home)
+        if (
+            candidate.is_absolute()
+            or ".." in candidate.parts
+            or len(candidate.parts) < 2
+            or candidate.parts[0] != "entities"
+            or any(part.startswith("_") for part in candidate.parts)
+            or candidate.name in _CORE_HOME_NAMES
+        ):
+            continue
+        homes.add(candidate.as_posix())
+    return tuple(sorted(homes))
+
+
+def _local_profile_name(project_root: Path) -> str:
+    with open_dir_inside(project_root, "") as root_fd:
+        if not exists_at(root_fd, "science.yaml"):
+            return "local"
+        text = read_regular_file_at(
+            root_fd,
+            "science.yaml",
+            MAX_SUBJECT_RECORD_BYTES,
+        )
+    loaded = yaml.safe_load(text)
+    if not isinstance(loaded, dict):
+        raise IngestError("science.yaml must be a mapping")
+    profiles = loaded.get("knowledge_profiles")
+    raw_name = profiles.get("local") if isinstance(profiles, dict) else "local"
+    profile_name = str(raw_name) if raw_name is not None else "local"
+    normalized = profile_name.replace("\\", "/")
+    candidate = PurePosixPath(normalized)
+    if (
+        not normalized
+        or candidate.is_absolute()
+        or ".." in candidate.parts
+        or any(part in ("", ".") for part in candidate.parts)
+    ):
+        raise IngestError(
+            f"science.yaml knowledge_profiles.local is not a safe relative "
+            f"profile name: {profile_name!r}"
+        )
+    return candidate.as_posix()
+
+
+def _add_frontmatter_id(refs: set[str], text: str, source: str) -> None:
+    frontmatter = _entity_frontmatter(text, source)
+    entity_id = frontmatter.get("id")
+    if isinstance(entity_id, str):
+        refs.add(entity_id)
+
+
+def _entity_frontmatter(text: str, source: str) -> dict[object, object]:
+    """Parse raw frontmatter without hiding a list/scalar behind an empty mapping."""
+    if text.startswith("---\r\n"):
+        newline = "\r\n"
+    elif text.startswith("---\n"):
+        newline = "\n"
+    else:
+        return {}
+    after_opening = text[len("---" + newline) :]
+    closing = f"{newline}---{newline}"
+    closing_index = after_opening.find(closing)
+    if closing_index == -1:
+        return {}
+    loaded = yaml.safe_load(after_opening[:closing_index])
+    if loaded is None:
+        return {}
+    if not isinstance(loaded, dict):
+        raise IngestError(
+            f"{source}: entity frontmatter must be a mapping, got "
+            f"{type(loaded).__name__}"
+        )
+    return loaded
+
+
+def _live_task_refs(project_root: Path) -> set[str]:
+    refs: set[str] = set()
+    with open_dir_inside_if_present(project_root, "tasks") as tasks_fd:
+        if tasks_fd is None:
+            return refs
+        if exists_at(tasks_fd, "active.md"):
+            text = read_regular_file_at(
+                tasks_fd,
+                "active.md",
+                MAX_SUBJECT_RECORD_BYTES,
+            )
+            refs.update(f"task:{task_id}" for task_id in strict_task_ids_in_text(text))
+        with open_child_dir_at_if_present(tasks_fd, "done") as done_fd:
+            if done_fd is None:
+                return refs
+            for name in list_names_at(done_fd):
+                if not name.endswith(".md"):
+                    continue
+                text = read_regular_file_at(
+                    done_fd,
+                    name,
+                    MAX_SUBJECT_RECORD_BYTES,
+                )
+                refs.update(
+                    f"task:{task_id}"
+                    for task_id in strict_task_ids_in_text(text)
+                )
+    return refs
 
 
 def _assert_paths_are_safe(project_root: Path, finding: AuditFinding) -> None:

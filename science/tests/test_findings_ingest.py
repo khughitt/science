@@ -3,7 +3,7 @@ import inspect
 from collections import Counter
 
 import pytest
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
 from science_model.audit import (
     AuditFinding,
     AuditReport,
@@ -37,6 +37,11 @@ class ListQ(BaseModel):
     tags: list[str]
 
 
+class TupleQ(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    tags: tuple[str, ...]
+
+
 SECTION = FindingSection(id="datasets", title="Datasets", section_order=300)
 RULE = FindingRule(
     id="dataset.stale-review",
@@ -57,6 +62,16 @@ LIST_RULE = FindingRule(
     title="t",
     section="datasets",
     display_order=101,
+)
+TUPLE_RULE = FindingRule(
+    id="dataset.tag-tuple",
+    severities={"warn"},
+    subject_types={"entity"},
+    qualifier_schema=TupleQ,
+    identity_qualifiers=("tags",),
+    title="t",
+    section="datasets",
+    display_order=102,
 )
 REGISTRY = build_registry(
     [
@@ -92,20 +107,27 @@ def _canonical_entity_fixture(tmp_path):
     _seed_entity(tmp_path, "dataset:b")
 
 
-def test_array_identity_qualifier_round_trips_from_build_through_ingestion(tmp_path):
+@pytest.mark.parametrize(
+    "array_rule",
+    [pytest.param(LIST_RULE, id="list"), pytest.param(TUPLE_RULE, id="tuple")],
+)
+def test_array_identity_qualifier_round_trips_from_build_through_ingestion(
+    tmp_path,
+    array_rule,
+):
     registry = build_registry(
         [
             FindingProducer(
                 producer_id="dataset_anomalies",
                 namespace="health_checks",
-                rules=(RULE, LIST_RULE),
+                rules=(RULE, array_rule),
                 sections=(SECTION,),
                 metrics_schema=None,
                 remediators=frozenset(),
             )
         ]
     )
-    finding = LIST_RULE.build(
+    finding = array_rule.build(
         subject=EntitySubject(ref="dataset:a"),
         severity="warn",
         qualifiers={"tags": ["raw", "derived"]},
@@ -250,6 +272,185 @@ def test_entity_subject_does_not_resolve_aliases_or_short_prefixes(tmp_path):
             )
 
 
+@pytest.mark.parametrize("link_site", ["entity-file", "entity-home"])
+def test_entity_subject_resolution_refuses_symlinked_entity_records(
+    tmp_path,
+    link_site,
+):
+    project = tmp_path / "project"
+    project.mkdir()
+    outside = tmp_path / "outside"
+    outside.mkdir()
+    outside_record = outside / "outside.md"
+    outside_record.write_text(
+        "---\nid: dataset:outside\nkind: dataset\ntitle: outside\n---\n",
+        encoding="utf-8",
+    )
+
+    if link_site == "entity-file":
+        home = project / "entities" / "datasets"
+        home.mkdir(parents=True)
+        (home / "outside.md").symlink_to(outside_record)
+    else:
+        (project / "entities").mkdir()
+        (project / "entities" / "datasets").symlink_to(
+            outside,
+            target_is_directory=True,
+        )
+
+    report = _report(
+        findings=[
+            ReportedFinding(
+                producer_id="dataset_anomalies",
+                finding=_finding(subject=EntitySubject(ref="dataset:outside")),
+            )
+        ]
+    )
+    with pytest.raises(IngestError, match="symlink"):
+        ingest_report(project, report, REGISTRY)
+    assert not (project / CASES_DIRNAME).exists()
+
+
+def test_entity_subject_resolution_ignores_records_outside_declared_homes(
+    tmp_path,
+):
+    project = tmp_path / "project"
+    project.mkdir()
+    outside_home = project / "entities" / "misc"
+    outside_home.mkdir(parents=True)
+    (outside_home / "hidden.md").write_text(
+        "---\nid: dataset:hidden\nkind: dataset\ntitle: hidden\n---\n",
+        encoding="utf-8",
+    )
+    report = _report(
+        findings=[
+            ReportedFinding(
+                producer_id="dataset_anomalies",
+                finding=_finding(subject=EntitySubject(ref="dataset:hidden")),
+            )
+        ]
+    )
+
+    with pytest.raises(IngestError, match="known canonical"):
+        ingest_report(project, report, REGISTRY)
+    assert not (project / CASES_DIRNAME).exists()
+
+
+@pytest.mark.parametrize(
+    "frontmatter",
+    ["- list-item\n- another\n", "scalar-value\n"],
+    ids=["list", "scalar"],
+)
+def test_non_mapping_entity_frontmatter_is_an_ingest_error_before_store_mutation(
+    tmp_path,
+    frontmatter,
+):
+    malformed = tmp_path / "entities" / "datasets" / "malformed.md"
+    malformed.write_text(f"---\n{frontmatter}---\n", encoding="utf-8")
+
+    with pytest.raises(IngestError, match="frontmatter must be a mapping"):
+        ingest_report(tmp_path, _report(), REGISTRY)
+    assert not (tmp_path / CASES_DIRNAME).exists()
+
+
+def _seed_local_kind_profile(project, *, manifest_path=None):
+    (project / "science.yaml").write_text(
+        "name: local-kind-project\nknowledge_profiles:\n  local: custom\n",
+        encoding="utf-8",
+    )
+    manifest = (
+        manifest_path
+        if manifest_path is not None
+        else project / "knowledge" / "sources" / "custom" / "manifest.yaml"
+    )
+    manifest.parent.mkdir(parents=True, exist_ok=True)
+    manifest.write_text(
+        "name: custom\n"
+        "imports: [core]\n"
+        "strictness: typed-extension\n"
+        "entity_kinds:\n"
+        "  - name: design-note\n"
+        "    canonical_prefix: design-note\n"
+        "    layer: layer/local\n"
+        "    description: Local design note\n"
+        "    home: entities/design-notes\n"
+        "    strategy: numeric\n"
+        "relation_kinds: []\n",
+        encoding="utf-8",
+    )
+    return manifest
+
+
+def _local_kind_report():
+    return _report(
+        findings=[
+            ReportedFinding(
+                producer_id="dataset_anomalies",
+                finding=_finding(
+                    subject=EntitySubject(ref="design-note:0001-local")
+                ),
+            )
+        ]
+    )
+
+
+def test_entity_subject_accepts_an_exact_project_declared_local_kind(tmp_path):
+    project = tmp_path / "project"
+    project.mkdir()
+    _seed_local_kind_profile(project)
+    record = project / "entities" / "design-notes" / "0001-local.md"
+    record.parent.mkdir(parents=True)
+    record.write_text(
+        "---\n"
+        "id: design-note:0001-local\n"
+        "kind: design-note\n"
+        "title: Local\n"
+        "---\n",
+        encoding="utf-8",
+    )
+
+    assert ingest_report(project, _local_kind_report(), REGISTRY).records_written == 1
+
+
+def test_entity_subject_resolution_refuses_a_symlinked_local_profile_manifest(
+    tmp_path,
+):
+    project = tmp_path / "project"
+    project.mkdir()
+    outside = _seed_local_kind_profile(
+        project,
+        manifest_path=tmp_path / "outside-manifest.yaml",
+    )
+    profile_dir = project / "knowledge" / "sources" / "custom"
+    profile_dir.mkdir(parents=True)
+    (profile_dir / "manifest.yaml").symlink_to(outside)
+
+    with pytest.raises(IngestError, match="symlink"):
+        ingest_report(project, _local_kind_report(), REGISTRY)
+    assert not (project / CASES_DIRNAME).exists()
+
+
+def test_entity_subject_resolution_refuses_a_symlinked_local_kind_home(tmp_path):
+    project = tmp_path / "project"
+    project.mkdir()
+    _seed_local_kind_profile(project)
+    outside = tmp_path / "outside-local-kind"
+    outside.mkdir()
+    (outside / "0001-local.md").write_text(
+        "---\nid: design-note:0001-local\nkind: design-note\n---\n",
+        encoding="utf-8",
+    )
+    (project / "entities").mkdir()
+    (project / "entities" / "design-notes").symlink_to(
+        outside,
+        target_is_directory=True,
+    )
+
+    with pytest.raises(IngestError, match="symlink"):
+        ingest_report(project, _local_kind_report(), REGISTRY)
+    assert not (project / CASES_DIRNAME).exists()
+
+
 @pytest.mark.parametrize("ledger", ["active.md", "done/2026-07.md"])
 def test_entity_subject_accepts_exact_live_task_ids(tmp_path, ledger):
     path = tmp_path / "tasks" / ledger
@@ -271,6 +472,69 @@ def test_entity_subject_accepts_exact_live_task_ids(tmp_path, ledger):
     )
 
     assert ingest_report(tmp_path, report, REGISTRY).records_written == 1
+
+
+def test_entity_subject_resolution_refuses_a_symlinked_active_task_ledger(
+    tmp_path,
+):
+    project = tmp_path / "project"
+    project.mkdir()
+    tasks = project / "tasks"
+    tasks.mkdir()
+    outside = tmp_path / "outside-active.md"
+    outside.write_text(
+        "## [t123] Outside active task\n- status: active\n",
+        encoding="utf-8",
+    )
+    (tasks / "active.md").symlink_to(outside)
+    report = _report(
+        findings=[
+            ReportedFinding(
+                producer_id="dataset_anomalies",
+                finding=_finding(subject=EntitySubject(ref="task:t123")),
+            )
+        ]
+    )
+
+    with pytest.raises(IngestError, match="symlink"):
+        ingest_report(project, report, REGISTRY)
+    assert not (project / CASES_DIRNAME).exists()
+
+
+@pytest.mark.parametrize("link_site", ["done-directory", "done-leaf"])
+def test_entity_subject_resolution_refuses_symlinked_done_task_ledgers(
+    tmp_path,
+    link_site,
+):
+    project = tmp_path / "project"
+    project.mkdir()
+    tasks = project / "tasks"
+    tasks.mkdir()
+    outside = tmp_path / "outside-done"
+    outside.mkdir()
+    outside_ledger = outside / "2026-07.md"
+    outside_ledger.write_text(
+        "## [t124] Outside done task\n- status: done\n",
+        encoding="utf-8",
+    )
+    if link_site == "done-directory":
+        (tasks / "done").symlink_to(outside, target_is_directory=True)
+    else:
+        done = tasks / "done"
+        done.mkdir()
+        (done / "2026-07.md").symlink_to(outside_ledger)
+    report = _report(
+        findings=[
+            ReportedFinding(
+                producer_id="dataset_anomalies",
+                finding=_finding(subject=EntitySubject(ref="task:t124")),
+            )
+        ]
+    )
+
+    with pytest.raises(IngestError, match="symlink"):
+        ingest_report(project, report, REGISTRY)
+    assert not (project / CASES_DIRNAME).exists()
 
 
 def test_entity_subject_rejects_archived_task_aliases(tmp_path):
@@ -637,13 +901,64 @@ def test_unicode_identity_spellings_are_arrival_order_independent(tmp_path, subj
     ingest_report(projects[1], late, registry)
     ingest_report(projects[1], early, registry)
 
+    left_path = next((projects[0] / CASES_DIRNAME).glob("*.md"))
+    right_path = next((projects[1] / CASES_DIRNAME).glob("*.md"))
+    assert left_path.read_bytes() == right_path.read_bytes()
+
     left = load_cases(projects[0])[0]
-    right = load_cases(projects[1])[0]
-    assert _normalized(left) == _normalized(right)
     assert left.identity_qualifiers["field"] == "année"
     assert {
         occurrence.qualifiers["field"] for occurrence in left.occurrences
     } == {"année"}
+
+
+def test_direct_ingestion_validates_the_canonical_identity_value_before_writing(
+    tmp_path,
+):
+    class DecomposedOnlyQualifier(BaseModel):
+        model_config = ConfigDict(extra="forbid")
+        field: str = Field(pattern="^cafe\u0301$")
+
+    rule = FindingRule(
+        id="dataset.nfc-constrained",
+        severities={"warn"},
+        subject_types={"entity"},
+        qualifier_schema=DecomposedOnlyQualifier,
+        identity_qualifiers=("field",),
+        title="t",
+        section="datasets",
+        display_order=103,
+    )
+    registry = build_registry(
+        [
+            FindingProducer(
+                producer_id="dataset_anomalies",
+                namespace="health_checks",
+                rules=(rule,),
+                sections=(SECTION,),
+                metrics_schema=None,
+                remediators=frozenset(),
+            )
+        ]
+    )
+    report = _report(
+        findings=[
+            ReportedFinding(
+                producer_id="dataset_anomalies",
+                finding=AuditFinding(
+                    rule_id=rule.id,
+                    subject=EntitySubject(ref="dataset:a"),
+                    severity="warn",
+                    qualifiers={"field": "cafe\u0301"},
+                    message="raw spelling passes; canonical spelling must not",
+                ),
+            )
+        ]
+    )
+
+    with pytest.raises(IngestError, match="qualifiers invalid"):
+        ingest_report(tmp_path, report, registry)
+    assert not (tmp_path / CASES_DIRNAME).exists()
 
 
 def test_non_identity_qualifiers_survive_on_the_occurrence(tmp_path):

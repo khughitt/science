@@ -2,9 +2,10 @@
 
 from __future__ import annotations
 
+import math
 from collections.abc import Mapping
 from types import MappingProxyType
-from typing import Annotated, Literal
+from typing import Annotated, Literal, cast
 
 from pydantic import (
     AfterValidator,
@@ -24,22 +25,61 @@ Severity = Literal["error", "warn", "info"]
 _SEVERITY_ALIASES = {"warning": "warn", "warn": "warn", "error": "error", "info": "info"}
 
 
+class JsonValueError(ValueError):
+    """A value is outside the deterministic JSON data model."""
+
+
 def freeze_json_value(value: object) -> object:
-    """Recursively copy JSON containers into immutable equivalents."""
+    """Validate and recursively freeze one deterministic JSON value."""
+    return _freeze_json_value(value, set())
+
+
+def _freeze_json_value(value: object, active: set[int]) -> object:
+    if value is None or type(value) in (str, bool, int):
+        return value
+    if type(value) is float:
+        if not math.isfinite(value):
+            raise JsonValueError(
+                "JSON numbers must be finite; NaN and infinities are forbidden"
+            )
+        return value
     if isinstance(value, Mapping):
-        return MappingProxyType(
-            {key: freeze_json_value(item) for key, item in value.items()}
-        )
-    if isinstance(value, (list, tuple)):
-        return tuple(freeze_json_value(item) for item in value)
-    return value
+        marker = id(value)
+        if marker in active:
+            raise JsonValueError("JSON containers must not be cyclic")
+        active.add(marker)
+        try:
+            frozen: dict[str, object] = {}
+            for key, item in value.items():
+                if type(key) is not str:
+                    raise JsonValueError(
+                        f"JSON object keys must be strings, got {type(key).__name__}"
+                    )
+                frozen[key] = _freeze_json_value(item, active)
+            return MappingProxyType(frozen)
+        finally:
+            active.remove(marker)
+    if type(value) in (list, tuple):
+        sequence = cast(list[object] | tuple[object, ...], value)
+        marker = id(value)
+        if marker in active:
+            raise JsonValueError("JSON containers must not be cyclic")
+        active.add(marker)
+        try:
+            return tuple(_freeze_json_value(item, active) for item in sequence)
+        finally:
+            active.remove(marker)
+    raise JsonValueError(
+        f"value of type {type(value).__name__} is not in the deterministic JSON domain"
+    )
 
 
 def _freeze_qualifiers(value: Mapping[str, object]) -> Mapping[str, object]:
     """Return a recursively immutable copy of a qualifier mapping."""
-    return MappingProxyType(
-        {key: freeze_json_value(item) for key, item in value.items()}
-    )
+    frozen = freeze_json_value(value)
+    if not isinstance(frozen, Mapping):
+        raise JsonValueError("qualifiers must be a JSON object")
+    return frozen
 
 
 def thaw_json_value(value: object) -> object:

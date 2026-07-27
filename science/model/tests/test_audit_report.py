@@ -414,3 +414,22 @@ def test_report_nested_collections_are_copied_and_materially_immutable():
     assert type(dumped["meta"]["producers_run"]) is list
     assert type(dumped["meta"]["timings"]) is list
     assert type(dumped["metrics"]) is dict
+
+
+def test_timings_and_metrics_reject_values_outside_the_json_domain():
+    with pytest.raises(ValidationError, match="JSON"):
+        ProducerMetrics(nested={"unordered": {"a", "b"}})
+
+    with pytest.raises(ValidationError, match="JSON"):
+        _report(
+            meta={
+                "producers_run": ["dataset_anomalies"],
+                "total_duration_seconds": 0.5,
+                "timings": [
+                    {
+                        "producer_id": "dataset_anomalies",
+                        "opaque": object(),
+                    }
+                ],
+            }
+        )

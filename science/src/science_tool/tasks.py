@@ -326,7 +326,8 @@ def render_tasks(tasks: list[Task]) -> str:
     return "\n".join(render_task(t) for t in tasks)
 
 
-def _strict_task_ids_in_text(text: str) -> list[str]:
+def strict_task_ids_in_text(text: str) -> list[str]:
+    """Return valid `tNNN` task IDs declared by headings in one ledger text."""
     ids: list[str] = []
     for line in text.splitlines():
         match = _HEADER_RE.match(line)
@@ -360,13 +361,13 @@ def next_task_id(tasks_dir: Path) -> str:
 
     active = tasks_dir / "active.md"
     if active.is_file():
-        for task_id in _strict_task_ids_in_text(active.read_text()):
+        for task_id in strict_task_ids_in_text(active.read_text()):
             max_num = max(max_num, int(task_id[1:]))
 
     done_dir = tasks_dir / "done"
     if done_dir.is_dir():
         for f in done_dir.glob("*.md"):
-            for task_id in _strict_task_ids_in_text(f.read_text()):
+            for task_id in strict_task_ids_in_text(f.read_text()):
                 max_num = max(max_num, int(task_id[1:]))
 
     return f"t{max_num + 1:03d}"
@@ -429,10 +430,7 @@ def known_task_ids(tasks_dir: Path) -> set[str]:
     for path in _task_search_paths(tasks_dir):
         if not path.is_file():
             continue
-        for line in path.read_text(encoding="utf-8").splitlines():
-            match = _HEADER_RE.match(line)
-            if match:
-                ids.add(match.group(1))
+        ids.update(strict_task_ids_in_text(path.read_text(encoding="utf-8")))
     return ids
 
 

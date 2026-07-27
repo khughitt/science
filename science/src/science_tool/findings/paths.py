@@ -268,6 +268,45 @@ def exists_at(dir_fd: int, name: str) -> bool:
     return True
 
 
+def list_names_at(dir_fd: int) -> tuple[str, ...]:
+    """List one anchored directory without resolving its pathname again."""
+    try:
+        return tuple(sorted(os.listdir(dir_fd)))
+    except OSError as exc:
+        raise PathSafetyError(f"could not list anchored directory: {exc}") from exc
+
+
+@contextmanager
+def open_child_dir_at_if_present(
+    parent_fd: int,
+    name: str,
+) -> Iterator[int | None]:
+    """Open one child directory relative to an already-verified parent.
+
+    `None` means the name is genuinely absent. A symlink or non-directory is a
+    safety failure, not an empty directory.
+    """
+    name = _leaf_name(name)
+    try:
+        descriptor = os.open(
+            name,
+            os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW,
+            dir_fd=parent_fd,
+        )
+    except FileNotFoundError:
+        yield None
+        return
+    except OSError as exc:
+        raise PathSafetyError(
+            f"{name!r} is a symlink or not a directory inside the anchored "
+            f"parent: {exc}"
+        ) from exc
+    try:
+        yield descriptor
+    finally:
+        os.close(descriptor)
+
+
 def read_regular_file_at(dir_fd: int, name: str, max_bytes: int) -> str:
     """Read one regular file inside an ALREADY-ANCHORED directory.
 

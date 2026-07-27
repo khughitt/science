@@ -114,6 +114,25 @@ def test_nested_qualifier_arrays_cannot_be_mutated_through_a_finding():
     assert type(dumped["metadata"]["labels"]) is list
 
 
+@pytest.mark.parametrize(
+    "invalid",
+    [
+        pytest.param({"unordered"}, id="set"),
+        pytest.param(frozenset({"unordered"}), id="frozenset"),
+        pytest.param(b"bytes", id="bytes"),
+        pytest.param(bytearray(b"bytes"), id="bytearray"),
+        pytest.param(object(), id="opaque-object"),
+        pytest.param({1: "non-string-key"}, id="non-string-mapping-key"),
+        pytest.param(float("nan"), id="nan"),
+        pytest.param(float("inf"), id="positive-infinity"),
+        pytest.param(float("-inf"), id="negative-infinity"),
+    ],
+)
+def test_qualifiers_reject_values_outside_the_deterministic_json_domain(invalid):
+    with pytest.raises(ValidationError, match="JSON"):
+        _finding(qualifiers={"nested": invalid})
+
+
 def test_an_omitted_qualifier_mapping_is_frozen_too():
     finding = _finding(qualifiers={})
     bare = AuditFinding(

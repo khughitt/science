@@ -1,5 +1,5 @@
 import pytest
-from pydantic import BaseModel, ConfigDict, ValidationError
+from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
 from science_model.audit.rules import (
     FindingRule,
@@ -173,6 +173,29 @@ def test_a_qualifier_of_the_wrong_type_is_refused_not_quietly_coerced():
         subject=EntitySubject(ref="dataset:a"), severity="warn",
         qualifiers={"count": 1}, message="m",
     ).qualifiers["count"] == 1
+
+
+def test_build_validates_the_canonical_identity_value_that_it_would_store():
+    class DecomposedOnlyQualifier(BaseModel):
+        model_config = ConfigDict(extra="forbid")
+        field: str = Field(pattern="^cafe\u0301$")
+
+    rule = _rule(qualifier_schema=DecomposedOnlyQualifier)
+
+    # The authored spelling satisfies the schema, but the identity contract stores
+    # NFC ("café"), which does not. Validation must judge that canonical mapping,
+    # rather than validate one spelling and return a different invalid one.
+    assert DecomposedOnlyQualifier.model_validate(
+        {"field": "cafe\u0301"},
+        strict=True,
+    ).field == "cafe\u0301"
+    with pytest.raises(RuleDeclarationError, match="qualifiers invalid"):
+        rule.build(
+            subject=EntitySubject(ref="dataset:x"),
+            severity="warn",
+            qualifiers={"field": "cafe\u0301"},
+            message="m",
+        )
 
 
 def test_strict_validation_leaves_every_identity_bearing_type_untouched():

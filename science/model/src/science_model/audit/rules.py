@@ -10,15 +10,21 @@ to construct an `AuditFinding` in production code is through a declaration objec
 
 from __future__ import annotations
 
+import json
 import re
 import typing
 from collections.abc import Mapping
 from typing import Literal, cast
 
-from pydantic import BaseModel, ConfigDict, ValidationError, model_validator
+from pydantic import BaseModel, ConfigDict, model_validator
 
 from science_model.audit.evidence import Evidence
-from science_model.audit.finding import AuditFinding, Severity, thaw_json_value
+from science_model.audit.finding import (
+    AuditFinding,
+    Severity,
+    freeze_json_value,
+    thaw_json_value,
+)
 from science_model.audit.fingerprint import (
     FingerprintError,
     normalize_identity_value,
@@ -176,10 +182,10 @@ class FindingRule(BaseModel):
                     f"{self.id}: namespace {subject.namespace!r} is not in "
                     f"{set(self.identifier_namespaces)}"
                 )
-        self.validate_qualifiers(qualifiers)
         canonical_qualifiers = self.canonicalize_identity_qualifiers(
             finding.qualifiers
         )
+        self.validate_qualifiers(canonical_qualifiers)
         return AuditFinding(
             rule_id=finding.rule_id,
             subject=finding.subject,
@@ -190,11 +196,23 @@ class FindingRule(BaseModel):
         )
 
     def validate_qualifiers(self, qualifiers: Mapping[str, object]) -> None:
-        """Validate input against the declared schema strictly without coercing it."""
+        """Validate the JSON wire value strictly against the declared schema.
+
+        Internally frozen arrays are tuples, while JSON has one array type. Pydantic's
+        JSON-mode strict validator accepts that array for either a declared ``list``
+        or ``tuple`` without coercing scalar values.
+        """
         try:
-            thawed = cast(dict[str, object], thaw_json_value(qualifiers))
-            self.qualifier_schema.model_validate(thawed, strict=True)
-        except ValidationError as exc:
+            frozen = freeze_json_value(qualifiers)
+            thawed = cast(dict[str, object], thaw_json_value(frozen))
+            payload = json.dumps(
+                thawed,
+                allow_nan=False,
+                ensure_ascii=False,
+                separators=(",", ":"),
+            )
+            self.qualifier_schema.model_validate_json(payload, strict=True)
+        except (TypeError, ValueError) as exc:
             raise RuleDeclarationError(f"{self.id}: qualifiers invalid: {exc}") from exc
 
     def identity_subset(self, qualifiers: Mapping[str, object]) -> dict[str, object]:

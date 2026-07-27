@@ -67,9 +67,10 @@ def _freeze_mapping(value: Mapping[str, object]) -> Mapping[str, object]:
 
 
 def _freeze_json_mapping(value: Mapping[str, object]) -> Mapping[str, object]:
-    return MappingProxyType(
-        {key: freeze_json_value(item) for key, item in value.items()}
-    )
+    frozen = freeze_json_value(value)
+    if not isinstance(frozen, Mapping):
+        raise ValueError("expected a JSON object")
+    return frozen
 
 
 def _serialize_mapping(value: Mapping[str, object]) -> dict[str, object]:
@@ -116,12 +117,13 @@ class ProducerMetrics(BaseModel):
     @model_validator(mode="after")
     def _freeze_extras(self) -> "ProducerMetrics":
         extra = self.__pydantic_extra__ or {}
+        frozen = freeze_json_value(extra)
+        if not isinstance(frozen, Mapping):
+            raise ValueError("metrics extras must be a JSON object")
         object.__setattr__(
             self,
             "__pydantic_extra__",
-            MappingProxyType(
-                {key: freeze_json_value(value) for key, value in extra.items()}
-            ),
+            frozen,
         )
         return self
 
