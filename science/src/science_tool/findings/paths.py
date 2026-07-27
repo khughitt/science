@@ -286,7 +286,7 @@ def read_regular_file_at(dir_fd: int, name: str, max_bytes: int) -> str:
     except OSError as exc:
         # ELOOP is what O_NOFOLLOW raises on a symlinked final component.
         raise PathSafetyError(
-            f"could not open {name!r} without following a link: {exc}"
+            f"could not open {name!r} without following a symlink: {exc}"
         ) from exc
     try:
         info = os.fstat(descriptor)

@@ -318,7 +318,7 @@ def test_read_inside_bounded_refuses_a_symlinked_PARENT(tmp_path):
 def test_read_inside_bounded_refuses_a_symlinked_leaf(tmp_path):
     (tmp_path / "real.json").write_text("{}", encoding="utf-8")
     (tmp_path / "link.json").symlink_to(tmp_path / "real.json")
-    with pytest.raises(PathSafetyError, match="following a link"):
+    with pytest.raises(PathSafetyError, match="following a symlink"):
         read_inside_bounded(tmp_path, tmp_path / "link.json", 1024)
 
 
