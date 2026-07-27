@@ -7,6 +7,7 @@ import yaml
 import pytest
 from pydantic import ValidationError
 
+from science_tool.boundary.gitio import BoundaryGitError
 from science_tool.data_audit import audit_project
 
 
@@ -61,4 +62,30 @@ def test_missing_config_is_undeclared(tmp_path: Path):
 def test_non_git_project_audits_all_paths(tmp_path: Path):
     (tmp_path / "science.yaml").write_text("name: D\nid: d\n")
     (tmp_path / "keep.csv").write_text("x")
-    assert "keep.csv" in [violation.path for violation in audit_project(tmp_path)]
+    (tmp_path / ".venv").mkdir()
+    (tmp_path / ".venv/tool.csv").write_text("x")
+    paths = [violation.path for violation in audit_project(tmp_path)]
+    assert "keep.csv" in paths
+    assert ".venv/tool.csv" in paths
+
+
+def test_nested_project_uses_parent_git_visibility(tmp_path: Path):
+    repo = tmp_path / "parent"
+    repo.mkdir()
+    _repo(repo, gitignore="nested/build/\n")
+    project = repo / "nested"
+    project.mkdir()
+    (project / "science.yaml").write_text("name: D\nid: d\n")
+    (project / "build").mkdir()
+    (project / "build/x.csv").write_text("x")
+    (project / "keep.csv").write_text("x")
+    paths = [violation.path for violation in audit_project(project)]
+    assert "keep.csv" in paths
+    assert "build/x.csv" not in paths
+
+
+def test_corrupt_git_marker_fails_closed(tmp_path: Path):
+    (tmp_path / "science.yaml").write_text("name: D\nid: d\n")
+    (tmp_path / ".git").write_text("not a gitdir\n")
+    with pytest.raises(BoundaryGitError):
+        audit_project(tmp_path)

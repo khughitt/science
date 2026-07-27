@@ -19,7 +19,7 @@ from typing import Literal
 import yaml
 from science_model.frontmatter import project_config_path
 
-from science_tool.boundary.gitio import visible_paths
+from science_tool.boundary.gitio import BoundaryGitError, visible_paths
 from science_tool.data_root import resolve_data_root
 from science_tool.data_policy import (
     DEFAULT_DATA_POLICY,
@@ -63,6 +63,45 @@ def git_tracked_set(project_root: Path) -> set[str]:
     except (subprocess.CalledProcessError, FileNotFoundError):
         return set()
     return {p for p in out.decode("utf-8").split("\0") if p}
+
+
+_NOT_A_GIT_REPOSITORY = "fatal: not a git repository (or any of the parent directories): .git"
+
+
+def _discover_git_root(project_root: Path) -> Path | None:
+    """Return the containing worktree root, or None for a genuine non-repository.
+
+    The C locale makes the one documented non-repository diagnostic stable. Any
+    other probe failure -- including a corrupt `.git` marker -- is operational
+    and must reach the caller rather than silently expanding audit scope.
+    """
+    try:
+        proc = subprocess.run(
+            ["git", "-C", str(project_root), "rev-parse", "--is-inside-work-tree", "--show-toplevel"],
+            capture_output=True,
+            check=False,
+            env={**os.environ, "LC_ALL": "C", "LANG": "C"},
+        )
+    except OSError as exc:
+        raise BoundaryGitError(f"git discovery failed: {exc}") from exc
+
+    stderr = proc.stderr.decode("utf-8", "replace").strip()
+    if proc.returncode == 128 and stderr == _NOT_A_GIT_REPOSITORY:
+        if any(os.path.lexists(parent / ".git") for parent in (project_root, *project_root.parents)):
+            raise BoundaryGitError(
+                "git discovery reported no repository despite a .git marker; refusing all-path fallback"
+            )
+        return None
+    if proc.returncode != 0:
+        raise BoundaryGitError(f"git discovery failed ({proc.returncode}): {stderr}")
+
+    fields = proc.stdout.decode("utf-8", "replace").splitlines()
+    if len(fields) != 2 or fields[0] != "true":
+        raise BoundaryGitError("git discovery returned malformed worktree metadata")
+    root = Path(fields[1])
+    if not root.is_absolute():
+        raise BoundaryGitError(f"git discovery returned a non-absolute worktree root: {root!s}")
+    return root.resolve()
 
 
 def location(rel_path: Path, data_dirs: tuple[Path, ...]) -> str:
@@ -176,7 +215,8 @@ def audit_project(
     a stranded record inside an ignored payload root is exactly what it exists to
     find -- so blanket-pruning ignored paths would be wrong.
     """
-    tracked = git_tracked_set(project_root)
+    git_root = _discover_git_root(project_root)
+    tracked = git_tracked_set(project_root) if git_root is not None else set()
     # Deliberately NOT wrapped: treating an invalid declaration as absent would
     # drop every declared root out of scope and hide the stranded records inside
     # them -- failing open exactly where the config is broken.
@@ -185,7 +225,7 @@ def audit_project(
     declared = tuple(r.path for r in boundary.roots) if boundary else ()
     # `data audit` also supports bare project directories, which have no Git
     # ignore semantics; in that case every walked path remains in scope.
-    visible = visible_paths(project_root) if (project_root / ".git").exists() else None
+    visible = visible_paths(project_root) if git_root is not None else None
     hydrated_data_dirs = tuple(d for d in data_dirs if (project_root / d).is_symlink())
 
     violations: list[Violation] = []
