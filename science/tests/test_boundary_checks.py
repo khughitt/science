@@ -106,9 +106,7 @@ def test_negation_outside_a_declared_root_is_not_ignored_undeclared(tmp_path: Pa
     decl = {"roots": [{"path": "data/raw", "class": "payload"}]}
     repo = _repo(tmp_path, decl)
     cfg = BoundaryConfig.model_validate(decl)
-    (repo / ".gitignore").write_text(
-        splice_managed_block("!/papers/keep.pdf\n", render_managed_block(cfg))
-    )
+    (repo / ".gitignore").write_text(splice_managed_block("!/papers/keep.pdf\n", render_managed_block(cfg)))
     subprocess.run(["git", "-C", str(repo), "add", ".gitignore"], check=True)
     assert "boundary.ignored-undeclared" not in _rules(repo)
 
@@ -143,9 +141,7 @@ def test_declaration_conflict_catches_a_bare_wildcard(tmp_path: Path):
     }
     repo = _repo(tmp_path, decl)
     cfg = BoundaryConfig.model_validate(decl)
-    (repo / ".gitignore").write_text(
-        splice_managed_block("*.parquet\n", render_managed_block(cfg))
-    )
+    (repo / ".gitignore").write_text(splice_managed_block("*.parquet\n", render_managed_block(cfg)))
     subprocess.run(["git", "-C", str(repo), "add", ".gitignore"], check=True)
     assert "boundary.declaration-conflict" in _rules(repo)
 
@@ -165,11 +161,7 @@ def test_declaration_conflict_catches_a_subdirectory_scoped_rule(tmp_path: Path)
     cfg = BoundaryConfig.model_validate(decl)
     (repo / "data/external/foo").mkdir(parents=True)
     (repo / "data/external/foo/part.parquet").write_text("x")
-    (repo / ".gitignore").write_text(
-        splice_managed_block(
-            "data/external/foo/*.parquet\n", render_managed_block(cfg)
-        )
-    )
+    (repo / ".gitignore").write_text(splice_managed_block("data/external/foo/*.parquet\n", render_managed_block(cfg)))
     subprocess.run(["git", "-C", str(repo), "add", ".gitignore"], check=True)
     assert "boundary.declaration-conflict" in _rules(repo)
 
@@ -182,9 +174,7 @@ def test_nested_gitignore_scope_is_not_a_false_conflict(tmp_path: Path):
     (repo / ".gitignore").write_text(splice_managed_block("", render_managed_block(cfg)))
     (repo / "inc").mkdir()
     (repo / "inc/.gitignore").write_text("data/raw\n")
-    subprocess.run(
-        ["git", "-C", str(repo), "add", ".gitignore", "inc/.gitignore"], check=True
-    )
+    subprocess.run(["git", "-C", str(repo), "add", ".gitignore", "inc/.gitignore"], check=True)
     assert "boundary.declaration-conflict" not in _rules(repo)
 
 
@@ -203,9 +193,7 @@ def test_allowlist_cannot_excuse_a_conflict(tmp_path: Path):
     }
     repo = _repo(tmp_path, decl)
     cfg = BoundaryConfig.model_validate(decl)
-    (repo / ".gitignore").write_text(
-        splice_managed_block("*.parquet\n", render_managed_block(cfg))
-    )
+    (repo / ".gitignore").write_text(splice_managed_block("*.parquet\n", render_managed_block(cfg)))
     subprocess.run(["git", "-C", str(repo), "add", ".gitignore"], check=True)
     assert "boundary.declaration-conflict" in _rules(repo)
 
@@ -219,9 +207,7 @@ def test_declaration_conflict_catches_a_hand_written_pin(tmp_path: Path):
     cfg = BoundaryConfig.model_validate(decl)
     (repo / "data/raw").mkdir(parents=True)
     (repo / "data/raw/keep.csv").write_text("x")
-    (repo / ".gitignore").write_text(
-        splice_managed_block("!/data/raw/keep.csv\n", render_managed_block(cfg))
-    )
+    (repo / ".gitignore").write_text(splice_managed_block("!/data/raw/keep.csv\n", render_managed_block(cfg)))
     subprocess.run(["git", "-C", str(repo), "add", ".gitignore"], check=True)
     assert "boundary.declaration-conflict" in _rules(repo)
 
@@ -236,15 +222,9 @@ def test_declaration_conflict_sees_a_rule_shadowed_by_a_hand_written_negation(
     cfg = BoundaryConfig.model_validate(decl)
     (repo / "data/raw").mkdir(parents=True)
     (repo / "data/raw/x.csv").write_text("x")
-    (repo / ".gitignore").write_text(
-        splice_managed_block(
-            "/data/raw/**\n!/data/raw/**\n", render_managed_block(cfg)
-        )
-    )
+    (repo / ".gitignore").write_text(splice_managed_block("/data/raw/**\n!/data/raw/**\n", render_managed_block(cfg)))
     subprocess.run(["git", "-C", str(repo), "add", ".gitignore"], check=True)
-    findings = [
-        r for r in _results(repo) if r.rule == "boundary.declaration-conflict"
-    ]
+    findings = [r for r in _results(repo) if r.rule == "boundary.declaration-conflict"]
     assert sorted(f.line for f in findings) == [
         1,
         2,
@@ -255,9 +235,7 @@ def test_duplicate_of_a_generated_line_is_a_conflict(tmp_path: Path):
     decl = {"roots": [{"path": "data/raw", "class": "payload"}]}
     repo = _repo(tmp_path, decl)
     cfg = BoundaryConfig.model_validate(decl)
-    (repo / ".gitignore").write_text(
-        splice_managed_block("/data/raw/\n", render_managed_block(cfg))
-    )
+    (repo / ".gitignore").write_text(splice_managed_block("/data/raw/\n", render_managed_block(cfg)))
     subprocess.run(["git", "-C", str(repo), "add", ".gitignore"], check=True)
     assert "boundary.declaration-conflict" in _rules(repo)
 
@@ -285,9 +263,7 @@ def test_declaration_is_loaded_once_per_validation(tmp_path: Path, monkeypatch):
     two declarations or let an unguarded second parse escape."""
     import science_tool.validate.checks.boundary as boundary_mod
 
-    repo = _repo(
-        tmp_path, {"roots": [{"path": "data/raw", "class": "payload"}]}
-    )
+    repo = _repo(tmp_path, {"roots": [{"path": "data/raw", "class": "payload"}]})
     real_load = boundary_mod.load_project_config
     calls = 0
 
@@ -337,17 +313,13 @@ def test_ignored_undeclared_warns_and_allowlist_silences_it(tmp_path: Path):
     decl = {"roots": [{"path": "data/raw", "class": "payload"}]}
     repo = _repo(tmp_path, decl)
     cfg = BoundaryConfig.model_validate(decl)
-    (repo / ".gitignore").write_text(
-        splice_managed_block("/papers/pdfs/\n", render_managed_block(cfg))
-    )
+    (repo / ".gitignore").write_text(splice_managed_block("/papers/pdfs/\n", render_managed_block(cfg)))
     subprocess.run(["git", "-C", str(repo), "add", ".gitignore"], check=True)
     assert "boundary.ignored-undeclared" in _rules(repo)
 
     decl_allowed = dict(decl, unmanaged_allow=["/papers/pdfs/"])
     repo2 = _repo(tmp_path / "two", decl_allowed)
-    (repo2 / ".gitignore").write_text(
-        splice_managed_block("/papers/pdfs/\n", render_managed_block(cfg))
-    )
+    (repo2 / ".gitignore").write_text(splice_managed_block("/papers/pdfs/\n", render_managed_block(cfg)))
     subprocess.run(["git", "-C", str(repo2), "add", ".gitignore"], check=True)
     assert "boundary.ignored-undeclared" not in _rules(repo2)
 
@@ -360,18 +332,12 @@ def test_allowlist_is_source_scoped(tmp_path: Path):
     }
     repo = _repo(tmp_path, decl)
     cfg = BoundaryConfig.model_validate(decl)
-    (repo / ".gitignore").write_text(
-        splice_managed_block("build/\n", render_managed_block(cfg))
-    )
+    (repo / ".gitignore").write_text(splice_managed_block("build/\n", render_managed_block(cfg)))
     (repo / "inc").mkdir()
     (repo / "inc/.gitignore").write_text("build/\n")
-    subprocess.run(
-        ["git", "-C", str(repo), "add", ".gitignore", "inc/.gitignore"], check=True
-    )
+    subprocess.run(["git", "-C", str(repo), "add", ".gitignore", "inc/.gitignore"], check=True)
     ctx = ValidateContext.from_project_root(repo, strict=False, verbose=False)
-    findings = [
-        r for r in check_boundary(ctx) if r.rule == "boundary.ignored-undeclared"
-    ]
+    findings = [r for r in check_boundary(ctx) if r.rule == "boundary.ignored-undeclared"]
     assert len(findings) == 1
     assert "inc/.gitignore" in str(findings[0].path)
 
@@ -390,11 +356,10 @@ def test_unreachable_tracked_fires_on_shadowed_descriptor(tmp_path: Path):
     (repo / "data/external/ot").mkdir(parents=True)
     (repo / "data/external/ot/datapackage.json").write_text("{}")
     # Bare exclude instead of the descend-preserving form: descriptor unreachable.
-    (repo / ".gitignore").write_text(
-        splice_managed_block("", "/data/external/\n")
-    )
+    (repo / ".gitignore").write_text(splice_managed_block("", "/data/external/\n"))
     subprocess.run(["git", "-C", str(repo), "add", ".gitignore"], check=True)
     assert "boundary.unreachable-tracked" in _rules(repo)
+
 
 def test_unreachable_tracked_quiet_on_correct_generation(tmp_path: Path):
     decl = {
@@ -418,16 +383,10 @@ def test_unreachable_tracked_quiet_on_correct_generation(tmp_path: Path):
 def test_unreachable_tracked_catches_glob_negation_case(tmp_path: Path):
     """`!build/**/README.md` under `/build/` -- no parent-directory analysis
     could evaluate this; the oracle can."""
-    decl = {
-        "roots": [
-            {"path": "build", "class": "manifest", "tracked": ["README.md"]}
-        ]
-    }
+    decl = {"roots": [{"path": "build", "class": "manifest", "tracked": ["README.md"]}]}
     repo = _repo(tmp_path, decl)
     (repo / "build/sub").mkdir(parents=True)
     (repo / "build/sub/README.md").write_text("x")
-    (repo / ".gitignore").write_text(
-        splice_managed_block("", "/build/\n!build/**/README.md\n")
-    )
+    (repo / ".gitignore").write_text(splice_managed_block("", "/build/\n!build/**/README.md\n"))
     subprocess.run(["git", "-C", str(repo), "add", ".gitignore"], check=True)
     assert "boundary.unreachable-tracked" in _rules(repo)

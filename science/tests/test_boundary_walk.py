@@ -128,9 +128,7 @@ def test_symlinked_root_is_not_traversed(tmp_path: Path):
 
 
 def test_multi_segment_glob_is_matched(tmp_path: Path):
-    root = BoundaryRoot.model_validate(
-        {"path": "data/external", "class": "manifest", "tracked": ["schemas/*.json"]}
-    )
+    root = BoundaryRoot.model_validate({"path": "data/external", "class": "manifest", "tracked": ["schemas/*.json"]})
     _mk(tmp_path, "data/external/ds/schemas/x.json")
     _mk(tmp_path, "data/external/ds/other.json")
     assert manifest_candidates(tmp_path, root) == ["data/external/ds/schemas/x.json"]

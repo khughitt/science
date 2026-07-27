@@ -65,8 +65,4 @@ def manifest_candidates(project_root: Path, root: BoundaryRoot) -> list[str]:
     """Return repo-relative tracked-glob matches under a manifest root."""
     base = project_root / root.path
     prefix = f"{root.path}/"
-    return [
-        rel
-        for rel in iter_repo_files(project_root, base)
-        if _matches(rel[len(prefix) :], root.tracked)
-    ]
+    return [rel for rel in iter_repo_files(project_root, base) if _matches(rel[len(prefix) :], root.tracked)]

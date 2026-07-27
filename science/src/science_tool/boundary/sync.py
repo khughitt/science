@@ -311,13 +311,17 @@ def _install_candidate(project_root: Path, original: _IgnoreState | None, conten
     try:
         candidate = _snapshot_ignore_file(project_root)
         if not _same_inode_and_content(candidate, staged_candidate):
-            raise BoundaryGitError("root .gitignore changed during candidate installation; preserving concurrent content")
+            raise BoundaryGitError(
+                "root .gitignore changed during candidate installation; preserving concurrent content"
+            )
         assert candidate is not None
         return _IgnoreTransaction(project_root=project_root, original=original, candidate=candidate)
     except BaseException:
         current = _snapshot_ignore_file(project_root)
         if not _same_inode_and_content(current, staged_candidate):
-            raise BoundaryGitError("root .gitignore changed during candidate installation; preserving concurrent content")
+            raise BoundaryGitError(
+                "root .gitignore changed during candidate installation; preserving concurrent content"
+            )
         assert current is not None
         _restore_candidate(project_root, original, current)
         raise

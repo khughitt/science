@@ -104,12 +104,7 @@ def unanchored_findings(
     drift. They did: the CLI applied neither the sign filter nor the allowlist,
     so a freshly scaffolded project printed six warnings and then "clean".
     """
-    return [
-        r
-        for r in rules
-        if (r.source, r.pattern) not in allowed
-        and _is_unanchored_dir_pattern(r.pattern)
-    ]
+    return [r for r in rules if (r.source, r.pattern) not in allowed and _is_unanchored_dir_pattern(r.pattern)]
 
 
 def _conflict_subjects(project_root: Path, root_path: str) -> list[str]:
@@ -198,10 +193,7 @@ def check_boundary(ctx: ValidateContext) -> Iterator[Result]:
             severity=Severity.ERROR,
             path=Path(PROJECT_CONFIG_FILENAME),
             line=None,
-            message=(
-                "boundary declaration is invalid, so no declared-root check can run: "
-                f"{cfg_error}"
-            ),
+            message=(f"boundary declaration is invalid, so no declared-root check can run: {cfg_error}"),
             rule="boundary.invalid-declaration",
             task=None,
         )
@@ -265,9 +257,7 @@ def check_boundary(ctx: ValidateContext) -> Iterator[Result]:
     conflicted: set[tuple[str, int]] = set()
     for declared_root in declared:
         subjects = _conflict_subjects(root, declared_root)
-        for probe, owners in sorted(
-            matching_unmanaged_rules(root, subjects).items()
-        ):
+        for probe, owners in sorted(matching_unmanaged_rules(root, subjects).items()):
             for owner in owners:
                 key = (owner.source, owner.line)
                 if key not in by_location or key in conflicted:

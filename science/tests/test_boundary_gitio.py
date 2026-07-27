@@ -56,9 +56,7 @@ def test_visible_paths_matches_git_add_for_file_level_negation(tmp_path: Path):
     _write(repo, ".gitignore", "!/s/m/archive/a.py\n")
     assert "s/m/archive/a.py" not in visible_paths(repo)
     subprocess.run(["git", "-C", str(repo), "add", "."], check=True)
-    staged = subprocess.run(
-        ["git", "-C", str(repo), "ls-files"], capture_output=True, text=True
-    ).stdout.split()
+    staged = subprocess.run(["git", "-C", str(repo), "ls-files"], capture_output=True, text=True).stdout.split()
     assert "s/m/archive/a.py" not in staged
 
 
@@ -401,9 +399,7 @@ def test_rule_parser_matches_git_line_and_whitespace_semantics(tmp_path: Path):
         "terminal/x",
     ]
     for subject in subjects:
-        rc = subprocess.run(
-            ["git", "-C", str(repo), "check-ignore", "--no-index", "-q", subject]
-        ).returncode
+        rc = subprocess.run(["git", "-C", str(repo), "check-ignore", "--no-index", "-q", subject]).returncode
         assert rc == 0, f"real-repository precondition: git must match {subject!r}"
     assert set(matching_unmanaged_rules(repo, subjects)) == set(subjects)
 
@@ -475,9 +471,7 @@ def test_matching_rules_ignore_git_init_templates(
     monkeypatch.setenv("GIT_TEMPLATE_DIR", str(template))
 
     hits = matching_unmanaged_rules(repo, ["inc/x.parquet"])
-    assert [(r.source, r.pattern) for r in hits["inc/x.parquet"]] == [
-        ("inc/.gitignore", "*.parquet")
-    ]
+    assert [(r.source, r.pattern) for r in hits["inc/x.parquet"]] == [("inc/.gitignore", "*.parquet")]
 
 
 def test_matching_rules_reject_unexpected_scratch_source(
@@ -499,7 +493,7 @@ def test_matching_rules_reject_unexpected_scratch_source(
         ok: tuple[int, ...] = (0,),
     ) -> bytes:
         if project_root != repo and args[:2] == ("check-ignore", "--no-index"):
-            return b".git/info/exclude\0" b"1\0" b"*.parquet\0" b"x.parquet\0"
+            return b".git/info/exclude\0" + b"1\0" + b"*.parquet\0" + b"x.parquet\0"
         return real_git(project_root, *args, stdin=stdin, ok=ok)
 
     monkeypatch.setattr(gitio, "_git", fake_git)
@@ -540,7 +534,7 @@ def test_tracked_ignored_rejects_incomplete_verbose_record(
         calls += 1
         if calls == 1:
             return b"a.parquet\0"
-        return b".gitignore\0" b"1\0" b"*.parquet\0"
+        return b".gitignore\0" + b"1\0" + b"*.parquet\0"
 
     monkeypatch.setattr(gitio, "_git", fake_git)
     with pytest.raises(BoundaryGitError, match="expected four fields"):
@@ -600,7 +594,7 @@ def test_tracked_ignored_rejects_invalid_verbose_line_number(
         calls += 1
         if calls == 1:
             return b"a.parquet\0"
-        return b".gitignore\0" b"not-a-line\0" b"*.parquet\0" b"a.parquet\0"
+        return b".gitignore\0" + b"not-a-line\0" + b"*.parquet\0" + b"a.parquet\0"
 
     monkeypatch.setattr(gitio, "_git", fake_git)
     with pytest.raises(BoundaryGitError, match="invalid line number"):
@@ -626,7 +620,7 @@ def test_matching_rules_reject_incomplete_verbose_record(
         ok: tuple[int, ...] = (0,),
     ) -> bytes:
         if project_root != repo and args[:2] == ("check-ignore", "--no-index"):
-            return b".gitignore\0" b"1\0" b"*.parquet\0"
+            return b".gitignore\0" + b"1\0" + b"*.parquet\0"
         return real_git(project_root, *args, stdin=stdin, ok=ok)
 
     monkeypatch.setattr(gitio, "_git", fake_git)

@@ -135,19 +135,13 @@ def _open_governed(project_root: Path, rel: str, *, missing_ok: bool) -> int | N
                     return None
                 raise BoundaryGitError(f"cannot read governed ignore file {rel}: path disappeared")
             except OSError as exc:
-                raise BoundaryGitError(
-                    f"cannot inspect governed ignore file {rel}: {exc}"
-                ) from exc
+                raise BoundaryGitError(f"cannot inspect governed ignore file {rel}: {exc}") from exc
             if stat.S_ISLNK(metadata.st_mode):
                 if missing_ok:
                     return None
-                raise BoundaryGitError(
-                    f"cannot read governed ignore file {rel}: parent is a symlink"
-                )
+                raise BoundaryGitError(f"cannot read governed ignore file {rel}: parent is a symlink")
             if not stat.S_ISDIR(metadata.st_mode):
-                raise BoundaryGitError(
-                    f"cannot inspect governed ignore file {rel}: parent is not a directory"
-                )
+                raise BoundaryGitError(f"cannot inspect governed ignore file {rel}: parent is not a directory")
             try:
                 child_fd = os.open(
                     part,
@@ -159,9 +153,7 @@ def _open_governed(project_root: Path, rel: str, *, missing_ok: bool) -> int | N
                     return None
                 raise BoundaryGitError(f"cannot read governed ignore file {rel}: path disappeared")
             except OSError as exc:
-                raise BoundaryGitError(
-                    f"cannot inspect governed ignore file {rel}: {exc}"
-                ) from exc
+                raise BoundaryGitError(f"cannot inspect governed ignore file {rel}: {exc}") from exc
             os.close(directory_fd)
             directory_fd = child_fd
 
@@ -179,9 +171,7 @@ def _open_governed(project_root: Path, rel: str, *, missing_ok: bool) -> int | N
                 return None
             raise BoundaryGitError(f"cannot read governed ignore file {rel}: source is a symlink")
         if not stat.S_ISREG(metadata.st_mode):
-            raise BoundaryGitError(
-                f"cannot inspect governed ignore file {rel}: source is not a regular file"
-            )
+            raise BoundaryGitError(f"cannot inspect governed ignore file {rel}: source is not a regular file")
         try:
             return os.open(name, os.O_RDONLY | nofollow, dir_fd=directory_fd)
         except FileNotFoundError:
@@ -207,9 +197,7 @@ def _ignore_case(project_root: Path) -> str | None:
     )
     value = _scalar_z(raw, label="git config core.ignoreCase output")
     if value not in {None, "true", "false"}:
-        raise BoundaryGitError(
-            f"git config returned invalid normalized core.ignoreCase value {value!r}"
-        )
+        raise BoundaryGitError(f"git config returned invalid normalized core.ignoreCase value {value!r}")
     return value
 
 
@@ -237,22 +225,16 @@ def _check_ignore_records(payload: bytes) -> list[tuple[str, int, str, str]]:
     """Parse exact four-field `check-ignore -v -z` records."""
     fields = _split_z(payload)
     if len(fields) % 4:
-        raise BoundaryGitError(
-            "malformed git check-ignore output: expected four fields per record"
-        )
+        raise BoundaryGitError("malformed git check-ignore output: expected four fields per record")
     records: list[tuple[str, int, str, str]] = []
     for index in range(0, len(fields), 4):
         line = fields[index + 1]
         try:
             number = int(line)
         except ValueError as exc:
-            raise BoundaryGitError(
-                f"git check-ignore returned invalid line number {line!r}"
-            ) from exc
+            raise BoundaryGitError(f"git check-ignore returned invalid line number {line!r}") from exc
         if number < 1:
-            raise BoundaryGitError(
-                f"git check-ignore returned invalid line number {line!r}"
-            )
+            raise BoundaryGitError(f"git check-ignore returned invalid line number {line!r}")
         records.append((fields[index], number, fields[index + 2], fields[index + 3]))
     return records
 
@@ -393,8 +375,7 @@ def matching_unmanaged_rules(
     matches: dict[str, list[IgnoreRule]] = {}
     unique_paths = list(dict.fromkeys(paths))
     blanked_by_path = {
-        path: {source: set(lines) for source, lines in initially_blanked.items()}
-        for path in unique_paths
+        path: {source: set(lines) for source, lines in initially_blanked.items()} for path in unique_paths
     }
 
     with tempfile.TemporaryDirectory() as tmp:
@@ -415,10 +396,7 @@ def matching_unmanaged_rules(
         while active:
             groups: dict[tuple[tuple[str, tuple[int, ...]], ...], list[str]] = {}
             for path in active:
-                state = tuple(
-                    (source, tuple(sorted(lines)))
-                    for source, lines in sorted(blanked_by_path[path].items())
-                )
+                state = tuple((source, tuple(sorted(lines))) for source, lines in sorted(blanked_by_path[path].items()))
                 groups.setdefault(state, []).append(path)
 
             next_active: list[str] = []
@@ -427,8 +405,7 @@ def matching_unmanaged_rules(
                 group_blanked = blanked_by_path[group[0]]
                 for rel, lines in sources.items():
                     rendered = [
-                        "" if number in group_blanked[rel] else raw
-                        for number, raw in enumerate(lines, start=1)
+                        "" if number in group_blanked[rel] else raw for number, raw in enumerate(lines, start=1)
                     ]
                     target = scratch / rel
                     target.parent.mkdir(parents=True, exist_ok=True)
@@ -448,29 +425,17 @@ def matching_unmanaged_rules(
                 reported: set[str] = set()
                 for source, number, pattern, path in _check_ignore_records(raw_out):
                     if path not in group_paths:
-                        raise BoundaryGitError(
-                            f"git check-ignore returned unexpected path {path!r}"
-                        )
+                        raise BoundaryGitError(f"git check-ignore returned unexpected path {path!r}")
                     if path in reported:
-                        raise BoundaryGitError(
-                            f"git check-ignore returned duplicate path {path!r}"
-                        )
+                        raise BoundaryGitError(f"git check-ignore returned duplicate path {path!r}")
                     reported.add(path)
                     if source not in sources:
-                        raise BoundaryGitError(
-                            f"git check-ignore returned unexpected ignore source {source!r}"
-                        )
+                        raise BoundaryGitError(f"git check-ignore returned unexpected ignore source {source!r}")
                     if number < 1 or number > len(sources[source]):
-                        raise BoundaryGitError(
-                            f"git check-ignore returned out-of-range line {number} for {source}"
-                        )
+                        raise BoundaryGitError(f"git check-ignore returned out-of-range line {number} for {source}")
                     if number in blanked_by_path[path][source]:
-                        raise BoundaryGitError(
-                            f"git check-ignore returned an already-peeled rule {source}:{number}"
-                        )
-                    matches.setdefault(path, []).append(
-                        IgnoreRule(source=source, line=number, pattern=pattern)
-                    )
+                        raise BoundaryGitError(f"git check-ignore returned an already-peeled rule {source}:{number}")
+                    matches.setdefault(path, []).append(IgnoreRule(source=source, line=number, pattern=pattern))
                     blanked_by_path[path][source].add(number)
                     next_active.append(path)
             active = next_active

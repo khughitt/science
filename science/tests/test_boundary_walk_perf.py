@@ -26,9 +26,7 @@ def big_tree(tmp_path: Path) -> Path:
 
 
 def test_walk_stays_within_budget(big_tree: Path):
-    root = BoundaryRoot.model_validate(
-        {"path": "data/external", "class": "manifest", "tracked": ["datapackage.json"]}
-    )
+    root = BoundaryRoot.model_validate({"path": "data/external", "class": "manifest", "tracked": ["datapackage.json"]})
     start = time.perf_counter()
     found = manifest_candidates(big_tree, root)
     elapsed = time.perf_counter() - start
@@ -45,9 +43,7 @@ def test_conflict_detection_stays_within_budget(big_tree: Path):
 
     subprocess.run(["git", "init", "-q", str(big_tree)], check=True)
     (big_tree / ".gitignore").write_text("*.parquet\n")
-    subprocess.run(
-        ["git", "-C", str(big_tree), "add", "-f", ".gitignore"], check=True
-    )
+    subprocess.run(["git", "-C", str(big_tree), "add", "-f", ".gitignore"], check=True)
 
     start = time.perf_counter()
     subjects = _conflict_subjects(big_tree, "data/external")
@@ -56,9 +52,7 @@ def test_conflict_detection_stays_within_budget(big_tree: Path):
 
     assert len(subjects) >= FILE_COUNT, "every extant path must be fed in, not a sample"
     assert hits, "the wildcard rule must be detected"
-    assert elapsed < CONFLICT_BUDGET_SECONDS, (
-        f"conflict pass took {elapsed:.2f}s over {FILE_COUNT} files"
-    )
+    assert elapsed < CONFLICT_BUDGET_SECONDS, f"conflict pass took {elapsed:.2f}s over {FILE_COUNT} files"
 
 
 def test_conflict_detection_worst_case_peeling_stays_within_budget(big_tree: Path):
@@ -69,26 +63,16 @@ def test_conflict_detection_worst_case_peeling_stays_within_budget(big_tree: Pat
     from science_tool.validate.checks.boundary import _conflict_subjects
 
     subprocess.run(["git", "init", "-q", str(big_tree)], check=True)
-    rules = "\n".join(
-        f"*.parquet\n!/data/external/ds/{shard:03d}/**" for shard in range(20)
-    )
+    rules = "\n".join(f"*.parquet\n!/data/external/ds/{shard:03d}/**" for shard in range(20))
     (big_tree / ".gitignore").write_text(rules + "\n")
-    subprocess.run(
-        ["git", "-C", str(big_tree), "add", "-f", ".gitignore"], check=True
-    )
+    subprocess.run(["git", "-C", str(big_tree), "add", "-f", ".gitignore"], check=True)
 
     start = time.perf_counter()
-    hits = matching_unmanaged_rules(
-        big_tree, _conflict_subjects(big_tree, "data/external")
-    )
+    hits = matching_unmanaged_rules(big_tree, _conflict_subjects(big_tree, "data/external"))
     elapsed = time.perf_counter() - start
 
-    recovered = {
-        (r.source, r.line) for rule_list in hits.values() for r in rule_list
-    }
+    recovered = {(r.source, r.line) for rule_list in hits.values() for r in rule_list}
     assert recovered == {(".gitignore", n) for n in range(1, 41)}, (
         f"expected all 40 unmanaged rule lines, recovered {len(recovered)}"
     )
-    assert elapsed < CONFLICT_BUDGET_SECONDS, (
-        f"peeling took {elapsed:.2f}s over 40 rules"
-    )
+    assert elapsed < CONFLICT_BUDGET_SECONDS, f"peeling took {elapsed:.2f}s over 40 rules"
