@@ -1445,15 +1445,22 @@ def test_critique_approach_documents_pre_dag_mode() -> None:
         assert expected in text
 
 
-def test_create_project_docs_keep_data_payload_dirs_gitignored() -> None:
+def test_create_project_docs_declare_data_payload_boundary() -> None:
     text = _read("commands/create-project.md")
 
-    assert "data/raw/*" in text
-    assert "!data/raw/.gitkeep" in text
-    assert "data/processed/*" in text
-    assert "!data/processed/.gitkeep" in text
-    assert "data/external/*" in text
-    assert "!data/external/.gitkeep" in text
+    # The declaration replaces the hand-written ignore-then-pin idiom.
+    assert "boundary:" in text
+    assert "class: payload" in text
+    assert "class: manifest" in text
+    assert "science boundary sync" in text
+    assert "tracked: [datapackage.json]" in text
+
+    # Retired: per-case negation adjudication.
+    assert "data/raw/*" not in text
+    assert "!data/raw/.gitkeep" not in text
+    assert "never emit a bare" not in text
+
+    # Retained: data-root resolution guidance, which is orthogonal.
     assert "provenance/" in text
     assert "data/provenance/" in text
     assert "SCIENCE_DATA_ROOT" in text

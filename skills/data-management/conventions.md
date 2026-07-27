@@ -81,8 +81,10 @@ result package, annotated with EDAM terms.
   than redefining it.
 - **Provenance is recorded** — every processed file documents which
   script/pipeline produced it, from what inputs.
-- **Results are version-controlled and never under the data root**; bulk data
-  under the resolved data root is never committed.
+- **Results are version-controlled and never under the data root**; payload
+  bytes under the resolved data root remain untracked. A declared `manifest`
+  boundary root may track only its declared descriptor globs beside those
+  payloads.
 
 ## Conformance rules
 
@@ -92,11 +94,14 @@ result package, annotated with EDAM terms.
   JSON).
 - Each data / result / QA directory carries its descriptor.
 - Respect `SCIENCE_DATA_ROOT` and `science.yaml` `data.root`.
-- Never commit files under the resolved data root.
+- Declare data storage under `boundary:` in `science.yaml` and run `science
+  boundary sync`; payload bytes remain untracked, while a `manifest` root may
+  track only its declared descriptor globs.
 
 ## Examples
 
-A logical `data/` tree (physically under `<resolved-root>/`, out of git):
+A logical payload-data tree (physically under `<resolved-root>/`, with payload
+bytes out of git; a declared `manifest` root may track its descriptor):
 
 ```
 data/
@@ -153,8 +158,9 @@ This contract references them rather than restating their schemas.
 - An analysis result written outside `results/<workflow>/<slug>/`.
 - **Conflating a workflow-result package with a research package** — wrong path
   (`results/…` vs `research/packages/…`), profile, or descriptor form.
-- Committing files under the resolved data root, or treating `results/` as
-  relative to the resolved data root.
+- Committing payload bytes under the resolved data root outside a declared
+  `manifest` descriptor glob, or treating `results/` as relative to the
+  resolved data root.
 
 ## Success test
 

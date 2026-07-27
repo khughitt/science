@@ -65,7 +65,8 @@ knowledge, and generated-write commands for materialization or reports.
 | `benchmark` | Specialized | Read-only | Benchmark metadata reports, opportunities, gaps, and test triage. |
 | `annotate` | Specialized | Mixed | Annotation sidecars, prose decomposition, PubTator seeding, proposition reconciliation, promotion, and synthesis. |
 | `verdict` | Specialized | Read-only | Parse and roll up verdict interpretation frontmatter. |
-| `data` | Canonical | Mixed | Audit tracked-source vs payload data boundary. |
+| `boundary` | Canonical | Generated-write / Read-only | Declare project-data storage classes, generate their managed `.gitignore` rules, and check the version-control boundary. |
+| `data` | Canonical | Mixed | Advisory heuristic audit of tracked-source and payload-data candidates. |
 | `dataset` | Canonical | Source-write / Read-only | Local dataset entity lifecycle. |
 | `datasets` | Specialized | Mixed | External dataset discovery, download, datapackage validation, schema inference, and QA. |
 | `commons` | Specialized | External-write / Read-only | Shared commons store, overlays, promotion, and commons-born dataset packages. |
@@ -82,7 +83,8 @@ Dataset-related command names encode distinct layers:
 
 | Command | Use |
 |---|---|
-| `science data audit` | Check whether tracked source records and ignored payload data are separated correctly. |
+| `science boundary init`, `science boundary sync`, `science boundary check` | Propose the storage declaration, generate its managed `.gitignore` block, and check the version-control boundary. |
+| `science data audit` | Surface heuristic candidates where tracked source records and payload data may be mixed; it does not enforce the boundary. |
 | `science dataset ...` | Manage local dataset entity records under the Science entity lifecycle. |
 | `science datasets ...` | Search external repositories, inspect/download files, validate datapackages, infer schema, run package-level QA, or hydrate worktree data. |
 | `science commons dataset ...` | Build and validate commons-born dataset packages in the shared commons store. |
