@@ -1,6 +1,6 @@
 # Finding Convergence — Design
 
-> **Status:** design, revision 2. **Spec 1 of three** in the autonomous-audit program,
+> **Status:** design, revision 4. **Spec 1 of three** in the autonomous-audit program,
 > and a prerequisite for the autonomy envelope's S5 harness slice. **Spec 1 ships no
 > agent** and adds no autonomy: it converges the deterministic audit surface onto one
 > emitted contract so that Spec 2 (unattended lens agents) consumes a type already
@@ -23,6 +23,13 @@
 > matches its guarantee (§8), section ordering (§6, §11), the `dataset.anomaly.*`
 > enumeration (§9), fingerprint type constraints and filename validation (§3), and two
 > internal contradictions (§Out of scope, §Open questions).
+>
+> **Revision 4** closes five narrow contract issues: the acceptance key omitted matching
+> fields the matcher actually consults (§10), `evidence` had no wire schema despite
+> ingestion promising to validate its paths (§1, §8), review identity collapsed distinct
+> lenses (§4), `dataset.invariant-violation` could still reduce counts (§9), and the
+> ingestion behaviour of accepted observations was unspecified (§8). The no-journal
+> ingestion design of §8 is approved as proportionate and is unchanged.
 
 ## Motivation
 
@@ -215,13 +222,36 @@ observation; it is not what is stored.
 | `severity` | `str` | Must be a member of the rule's declared `severities`. |
 | `qualifiers` | object | Typed, rule-specific, stable. Validated against the rule's `qualifier_schema`. |
 | `message` | `str` | Human-readable. **Never** identity-bearing. |
-| `evidence` | list | Supporting paths, excerpts, locations, prose. **Never** identity-bearing. |
+| `evidence` | list of tagged objects | Supporting locations and text (below). **Never** identity-bearing. |
 
 Producer-side factories still take a `FindingRule` **object** and derive `rule_id` from
 it, so a producer cannot emit an undeclared rule; only the wire form is a string.
 
 `message` and `evidence` are excluded from identity so that rewording a diagnostic does
 not fork a case — the defect that makes `message_contains` acceptance fragile today.
+
+**Evidence is a discriminated union, not a free-form list.** Ingestion promises to
+validate every evidence path (§8), which is impossible against a list that cannot
+distinguish a path from prose:
+
+```python
+Evidence = LocationEvidence | TextEvidence
+
+LocationEvidence(type="location", path=..., pointer=None, line=None, span=None)
+TextEvidence(type="text", label=None, text=...)
+```
+
+`LocationEvidence.path` is subject to the same normalization and safety rules as
+`PathSubject.path`; `line` and `span` are permitted here precisely because evidence is
+not identity-bearing. Bounds: at most 100 evidence entries per finding, `text` at most
+4 000 characters, `label` at most 200. A producer with more locations than the bound
+summarizes rather than truncating silently.
+
+**At most one `ReportedFinding` per `(producer_id, finding_id)` per report.** A producer
+that would emit two must either aggregate them into one finding's evidence or declare
+sufficient identity qualifiers to tell them apart. Without this rule the collision
+surfaces only at ingestion, as two occurrences sharing an idempotency key with different
+content — an error (§8) raised far from the producer that caused it.
 
 ### 2. `FindingSubject` — one required, discriminated primary subject
 
@@ -367,6 +397,14 @@ special case for "no transitions yet".
 | `dismissed` | `proposed` *(reopen)* |
 | `promoted` | `dismissed` |
 
+`promoted → dismissed` is retained deliberately — a case can be promoted and later judged
+unreal — and it has a consequence worth stating: because `promoted_task` is present **iff**
+status is `promoted`, dismissing a promoted case removes the task reference from current
+state. It remains recoverable from the transition log, which records the `task_ref` on the
+original promotion. Current state answers *what is true now*; history answers *what was
+done*. If that recovery path ever proves insufficient in practice, the fix is to make
+`promoted` terminal, not to weaken the `iff`.
+
 **Lifecycle rulings:**
 
 - Dismissed cases are **retained indefinitely** in Spec 1. Nothing is deleted.
@@ -384,11 +422,11 @@ support a count, so the shape is fixed here rather than in Spec 3:
 
 | Field | Meaning |
 |---|---|
-| `review_id` | Stable id, `sha256("science.review.v1\n" + reviewer_ref + "\0" + run_ref + "\0" + finding_id)`. |
+| `review_id` | Stable id, `sha256("science.review.v1\n" + reviewer_kind + "\0" + reviewer_ref + "\0" + normalized_lens + "\0" + run_ref + "\0" + finding_id)`. `normalized_lens` is the empty string when the reviewer has no lens. |
 | `reviewer_kind` | `human` \| `agent` \| `deterministic`. |
 | `reviewer_ref` | Human identity, or the agent role. Never a bare model name. |
-| `lens` | The analytical lens, where the reviewer had one. Required when `reviewer_kind == "agent"`. |
-| `model` | Model provenance, where applicable. Recorded, never an eligibility input on its own. |
+| `lens` | The analytical lens. **Required** when `reviewer_kind == "agent"`, and part of review identity — two reviews by one role in one run under different lenses are two reviews, not a collision. |
+| `model` | Model provenance. **Required** when `reviewer_kind == "agent"`, so the correlation caution below stays measurable rather than aspirational. Recorded; never an eligibility input on its own. |
 | `run_ref` | The run this review was produced in. |
 | `at` | Timestamp. |
 | `outcome` | `confirms` \| `refutes` \| `abstains`. |
@@ -537,6 +575,24 @@ widens.
 stays purely read-only and gains no persist flag; a diagnostic run never writes cases as
 a side effect.
 
+**Both channels are ingested.** A report carries unsuppressed `findings` and `accepted`
+observations (§11), and **both become occurrences**. Acceptance governs report totals and
+visibility — whether an observation is *shown* — not whether it happened or whether the
+case exists. Suppressing a case out of existence would mean an accepted rule's history
+vanishes the moment someone accepts it, which is the silent direction this design refuses
+everywhere else.
+
+Concretely:
+
+- An accepted observation upserts its record and appends an occurrence exactly as an
+  unsuppressed one does.
+- The occurrence retains the `acceptance_key` that suppressed it, so provenance answers
+  *which entry accepted this, and when*.
+- **Acceptance never triggers a lifecycle transition.** An accepted finding does not
+  become `dismissed`; the two mechanisms are independent and mean different things —
+  acceptance is a display decision recorded in `science.yaml`, dismissal is a judgement
+  recorded in the transition log.
+
 Because this is a trust boundary crossed by untrusted output, ingestion enforces:
 
 - **Schema and version validation.** The report declares `schema_version` and
@@ -614,7 +670,7 @@ construction because producers must build findings from declaration objects (§6
 | `dataset.stale-review` | `EntitySubject` | — |
 | `dataset.missing-source-url` | `EntitySubject` | — |
 | `dataset.cached-field-drift` | `EntitySubject` | `field` |
-| `dataset.invariant-violation` | `EntitySubject` | `invariant` |
+| `dataset.invariant-violation` | `EntitySubject` | `invariant`, `counterpart` |
 | `dataset.derived-missing-workflow-run` | `EntitySubject` | — |
 | `dataset.derived-asymmetric-edge` | `EntitySubject` | `counterpart` |
 | `dataset.derived-input-chain-broken` | `EntitySubject` | `counterpart` |
@@ -625,8 +681,15 @@ construction because producers must build findings from declaration objects (§6
 
 Rules taking a `counterpart` or `field` identity qualifier are those the producer can emit
 more than once per dataset; without the qualifier those emissions would collapse into one
-case. The mapping from each emission site to its qualifier value is a plan-writing detail;
-the rule set and its identity keys are fixed here.
+case and reduce counts. `dataset.invariant-violation` needs **both**: it is emitted from
+loops over `consumed_by` (umbrella invariant #1) and over `siblings` (lineage invariant
+#5), so one dataset can violate one invariant against several counterparts. The mapping
+from each emission site to its qualifier value is a plan-writing detail; the rule set and
+its identity keys are fixed here.
+
+The §1 rule — at most one `ReportedFinding` per `(producer_id, finding_id)` — is what
+makes this checkable at the producer rather than at ingestion: a missing qualifier shows
+up as two findings colliding in one report, in the producer's own tests.
 
 **Net count effect.** Two entries are net-new count increases (`legacy_task_type`,
 `invalid_entity_aspects`), both approved above as omissions rather than a third exclusion
@@ -700,9 +763,20 @@ An acceptance entry's own subject, when it becomes a hygiene finding, is
 (`validate/acceptance.py:26`) whose indices move when any earlier entry is deleted.
 
 **The acceptance key is frozen** as
-`sha256("science.acceptance.v1\n" + canonical_json(entry))[:32]`, over the entry's own
-content under the §3 canonical encoding — for a pre-migration entry that is
-`{rule, severity, message_contains}`, for a migrated one `{finding_id, severity_scope}`.
+`sha256("science.acceptance.v1\n" + canonical_json(key_fields))[:32]` under the §3
+canonical encoding. `key_fields` is **every semantic matching field** that
+`entry_matches` (`acceptance.py:69`) consults, and nothing else:
+
+| Pre-migration entry | Migrated entry |
+|---|---|
+| `rule` (normalized), `severity` (normalized `warning`→`warn`, per `_severity_matches`), `path` if present, `task` if present, `message_contains` (normalized, list order preserved) | `finding_id`, `severity_scope` |
+
+`reason` is excluded — it is a validity precondition (`entry_matches` rejects a blank
+one), not a discriminator — and list position is excluded for the reasons in §3. Omitting
+`path` and `task` would let two path-scoped acceptances of the same rule collide on one
+key, which is why the key is defined over the matcher's fields rather than over an
+abbreviation of them.
+
 Content-derived, so it survives reordering and deletion of siblings; truncated to 32 hex
 characters because it names a config entry rather than identifying a stored record, and
 nothing resolves by scanning it.
@@ -797,43 +871,52 @@ class AuditReport(TypedDict):
     `producer_id` from the report envelope.
 14. **Report provenance is required** — a report whose finding lacks a `producer_id`, or
     which omits `ingestion_ref` or `generated_at`, is refused; a `producer_id` naming an
-    unregistered producer is refused.
+    unregistered producer is refused; two `ReportedFinding`s sharing a
+    `(producer_id, finding_id)` in one report are refused at the producer boundary, not
+    at occurrence upsert.
 15. **Producer metrics are validated** — a metrics object violating the schema the
     producer declared at registration fails.
-16. **Subject discrimination is total and strict** — an invalid entity ref fails rather
+16. **Evidence is typed and bounded** — a `LocationEvidence` path that is absolute,
+    traverses `..`, or resolves through a symlink is refused; evidence exceeding the entry
+    count or text-length bounds is refused; prose in a `TextEvidence` is never treated as
+    a path.
+17. **Accepted observations are ingested** — an accepted finding upserts its record and
+    appends an occurrence carrying the `acceptance_key`, and leaves `status` untouched at
+    `proposed`.
+18. **Subject discrimination is total and strict** — an invalid entity ref fails rather
     than degrading to a path subject.
-17. **Lifecycle** — every record opens with a `None → proposed` genesis transition; a
+19. **Lifecycle** — every record opens with a `None → proposed` genesis transition; a
     transition pair outside the §4 graph is rejected; re-detection of a dismissed case
     appends an occurrence and leaves status `dismissed`; `promoted_task` present without
     `promoted` status fails, and vice versa; a `status` disagreeing with the transition
     log fails to load.
-18. **Review record** — a review missing `lens` when `reviewer_kind == "agent"` fails;
+20. **Review record** — a review missing `lens` when `reviewer_kind == "agent"` fails;
     two reviews from the same `(reviewer_ref, run_ref)` on one finding collapse to one
     `review_id`.
-19. **Ingestion hardening** — absolute path, `..` traversal, symlinked path, unknown
+21. **Ingestion hardening** — absolute path, `..` traversal, symlinked path, unknown
     `schema_version`, unimplemented `fingerprint_version`, oversize report, and excess
     finding count are each refused, and a *validation* failure writes nothing.
-20. **Layer 1 unchanged** — a write to `doc/audits/cases/…` in an autonomous commit range
+22. **Layer 1 unchanged** — a write to `doc/audits/cases/…` in an autonomous commit range
     is denied by the existing path gate, with no edit to `autonomy/policy.py`.
-21. **Graph isolation** — no finding triple appears in any named graph; cases are absent
+23. **Graph isolation** — no finding triple appears in any named graph; cases are absent
     from attention candidates; ingesting cases does not stale the revision manifest.
-22. **Acceptance migration** — all four outcomes; the severity-scope invariant (an
+24. **Acceptance migration** — all four outcomes; the severity-scope invariant (an
     accepted warning does not suppress a later error at the same fingerprint); the
     unsuppressibility of the two hygiene rules; **one stale entry among many valid ones
     aborts the entire `--apply` with `science.yaml` unmodified**; duplicate
     `(finding_id, severity_scope)` after rewriting is rejected; dry-run reports every
     problem entry rather than the first.
-23. **Count ledger** — a test asserting the §9 table: for a fixture project, each
+25. **Count ledger** — a test asserting the §9 table: for a fixture project, each
     producer's contribution to `totals.findings_total` matches the enumerated
     expectation. This is what makes the count changes approved rather than absorbed.
-24. **Presentation order is preserved** — rendering order matches the current
+26. **Presentation order is preserved** — rendering order matches the current
     `HEALTH_CHECKS` order for the sections that exist today, and is unaffected by renaming
     a section identifier.
-25. **Metrics are not findings** — coverage, counts, and nested summaries survive as
+27. **Metrics are not findings** — coverage, counts, and nested summaries survive as
     metrics and are absent from the finding stream.
-26. **Producer-namespace completeness** — every namespace contributing to the derived
+28. **Producer-namespace completeness** — every namespace contributing to the derived
     registry has a filesystem-derived guard.
-27. **All twelve dataset rules are declared and reachable** — the emitted-code set equals
+29. **All twelve dataset rules are declared and reachable** — the emitted-code set equals
     the declared-rule set, asserted as equality rather than as a subset, which is the
     assertion shape that let `dataset_access_invalid` drift.
 
