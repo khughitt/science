@@ -384,6 +384,12 @@ def _task_id_from_frontmatter(data: dict[str, object], *, path: Path) -> str:
     return task_id
 
 
+def _validate_active_filename(path: Path, task_id: str) -> None:
+    """Require an active filename to carry the same canonical id as its task."""
+    if not path.name.startswith(f"{task_id}-") and path.name != f"{task_id}.md":
+        raise ValueError(f"{path}: filename does not match id {task_id!r}")
+
+
 def parse_task_file(path: Path) -> Task:
     """Parse one canonical open-task file with strict identity validation."""
     text = path.read_text(encoding="utf-8")
@@ -398,8 +404,7 @@ def parse_task_file(path: Path) -> Task:
             raise ValueError(f"{path}: missing required key: {key}")
 
     task_id = _task_id_from_frontmatter(data, path=path)
-    if not path.name.startswith(f"{task_id}-") and path.name != f"{task_id}.md":
-        raise ValueError(f"{path}: filename does not match id {task_id!r}")
+    _validate_active_filename(path, task_id)
 
     title = str(data["title"])
     try:
@@ -563,7 +568,11 @@ def _find_active_file(tasks_dir: Path, task_id: str) -> Path | None:
     if len(matches) > 1:
         locations = ", ".join(str(path) for path in matches)
         raise ValueError(f"duplicate active task files for {task_id}: {locations}")
-    return matches[0] if matches else None
+    if not matches:
+        return None
+    existing = matches[0]
+    parse_task_file(existing)
+    return existing
 
 
 def _slug_for(title: str) -> str | None:
@@ -739,7 +748,9 @@ def _strict_task_ids_in_path(path: Path) -> list[str]:
     text = path.read_text(encoding="utf-8")
     if path.parent.name == "active":
         data, _body = _load_task_frontmatter(text, path=path)
-        return [_task_id_from_frontmatter(data, path=path)]
+        task_id = _task_id_from_frontmatter(data, path=path)
+        _validate_active_filename(path, task_id)
+        return [task_id]
     return _strict_task_ids_in_text(text)
 
 
@@ -780,10 +791,17 @@ def next_task_id(tasks_dir: Path, *, require_split: bool = True) -> str:
     max_num = 0
 
     active = _active_dir(tasks_dir)
+    active_ids: list[str] = []
     if active.is_dir():
         for path in active.glob("*.md"):
-            for task_id in _strict_task_ids_in_path(path):
-                max_num = max(max_num, int(task_id[1:]))
+            active_ids.extend(_strict_task_ids_in_path(path))
+    duplicates = sorted(
+        task_id for task_id in set(active_ids) if active_ids.count(task_id) > 1
+    )
+    if duplicates:
+        raise ValueError(f"duplicate task ids in {active}: {duplicates}")
+    for task_id in active_ids:
+        max_num = max(max_num, int(task_id[1:]))
 
     done_dir = tasks_dir / "done"
     if done_dir.is_dir():
@@ -829,14 +847,6 @@ def _render_task_file(path: Path, tasks: list[Task]) -> str:
     preamble = _task_file_preamble(path)
     rendered = render_tasks(tasks) if tasks else ""
     return preamble + rendered
-
-
-def _write_active(tasks_dir: Path, tasks: list[Task]) -> None:
-    tasks_dir.mkdir(parents=True, exist_ok=True)
-    active = tasks_dir / "active.md"
-    text = _render_task_file(active, tasks)
-    _verify_round_trip(text, tasks, path=active)
-    active.write_text(text)
 
 
 @dataclass(frozen=True)

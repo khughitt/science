@@ -965,6 +965,83 @@ def test_apply_refuses_malformed_task_heading_without_deleting_source(
     assert not (tasks_dir / JOURNAL).exists()
 
 
+def test_plan_refuses_malformed_done_ledger_instead_of_planning_a_rewrite(
+    tmp_path: Path,
+) -> None:
+    migrate = _migrate_module()
+    tasks_dir = tmp_path / "tasks"
+    _write_legacy(
+        tasks_dir,
+        [
+            _task(
+                "t001",
+                "Completed task",
+                status="done",
+                completed=TODAY,
+            )
+        ],
+    )
+    ledger = tasks_dir / "done" / "2026-07.md"
+    ledger.parent.mkdir()
+    ledger.write_text(
+        "# Existing ledger\n\n"
+        "## [t01] Noncanonical task\n"
+        "- priority: P1\n"
+        "- status: done\n"
+        "- aspects: []\n"
+        "- created: 2026-07-01\n\n"
+        "Do not erase this block.\n",
+        encoding="utf-8",
+    )
+
+    plan = migrate.plan_migration(tasks_dir, today=TODAY)
+
+    assert any(
+        "cannot read done/2026-07.md" in reason and "Invalid task id 't01'" in reason
+        for reason in plan.refusals
+    )
+    assert plan.ledger_post_images == {}
+
+
+def test_apply_refuses_malformed_done_ledger_without_mutation(
+    tmp_path: Path,
+) -> None:
+    migrate = _migrate_module()
+    tasks_dir = tmp_path / "tasks"
+    source = _write_legacy(
+        tasks_dir,
+        [
+            _task(
+                "t001",
+                "Completed task",
+                status="done",
+                completed=TODAY,
+            )
+        ],
+    )
+    ledger = tasks_dir / "done" / "2026-07.md"
+    ledger.parent.mkdir()
+    ledger.write_text(
+        "# Existing ledger\n\n"
+        "## [t01] Noncanonical task\n"
+        "- priority: P1\n"
+        "- status: done\n"
+        "- aspects: []\n"
+        "- created: 2026-07-01\n\n"
+        "Do not erase this block.\n",
+        encoding="utf-8",
+    )
+    source_before = source.read_bytes()
+    ledger_before = ledger.read_bytes()
+
+    with pytest.raises(migrate.MigrationRefused, match=r"Invalid task id 't01'"):
+        migrate.apply_migration(tasks_dir, today=TODAY)
+
+    assert source.read_bytes() == source_before
+    assert ledger.read_bytes() == ledger_before
+    assert not (tasks_dir / JOURNAL).exists()
+
+
 def test_plan_refuses_nonempty_active_dir_and_existing_open_target(tmp_path: Path) -> None:
     migrate = _migrate_module()
     tasks_dir = tmp_path / "tasks"

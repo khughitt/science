@@ -68,6 +68,25 @@ def test_add_allocates_from_active_and_done_and_creates_one_task_file(tmp_path: 
     assert not (tasks_dir / "active.md").exists()
 
 
+def test_add_refuses_filename_frontmatter_mismatch_without_overwriting(
+    tmp_path: Path,
+) -> None:
+    tasks_dir = tmp_path / "tasks"
+    malformed = tasks_dir / "active" / "t002-old.md"
+    malformed.parent.mkdir(parents=True)
+    malformed.write_text(
+        task_module.render_task_file(_task("t001")),
+        encoding="utf-8",
+    )
+    before = malformed.read_bytes()
+
+    with pytest.raises(ValueError, match=r"filename does not match id 't001'"):
+        task_module.add_task(tmp_path, tasks_dir, "New task", "P2")
+
+    assert malformed.read_bytes() == before
+    assert list((tasks_dir / "active").glob("*.md")) == [malformed]
+
+
 def test_append_note_rewrites_only_the_active_task_file(tmp_path: Path) -> None:
     tasks_dir = tmp_path / "tasks"
     target = _write_active(tasks_dir, _task("t001"))
@@ -121,6 +140,33 @@ def test_complete_moves_task_to_done_and_deletes_active_file(tmp_path: Path) -> 
     assert not active.exists()
     done = tasks_dir / "done" / f"{date.today():%Y-%m}.md"
     assert task_module.parse_tasks(done) == [task]
+
+
+def test_complete_refuses_malformed_done_ledger_without_mutation(
+    tmp_path: Path,
+) -> None:
+    tasks_dir = tmp_path / "tasks"
+    active = _write_active(tasks_dir, _task("t001"))
+    active_before = active.read_bytes()
+    ledger = tasks_dir / "done" / f"{date.today():%Y-%m}.md"
+    ledger.parent.mkdir(parents=True)
+    ledger.write_text(
+        "# Existing ledger\n\n"
+        "## [t01] Noncanonical task\n"
+        "- priority: P1\n"
+        "- status: done\n"
+        "- aspects: []\n"
+        "- created: 2026-07-01\n\n"
+        "Do not erase this block.\n",
+        encoding="utf-8",
+    )
+    ledger_before = ledger.read_bytes()
+
+    with pytest.raises(ValueError, match=r"Invalid task id 't01'"):
+        task_module.complete_task(tasks_dir, "t001")
+
+    assert active.read_bytes() == active_before
+    assert ledger.read_bytes() == ledger_before
 
 
 def test_retire_moves_task_to_done_and_deletes_active_file(tmp_path: Path) -> None:

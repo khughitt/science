@@ -69,6 +69,26 @@ def test_write_task_file_rejects_duplicate_id_paths_without_mutation(tmp_path: P
     assert (active / "t042-second.md").read_text(encoding="utf-8") == "second"
 
 
+def test_write_task_file_rejects_existing_filename_frontmatter_mismatch_without_mutation(
+    tmp_path: Path,
+) -> None:
+    tasks_dir = tmp_path / "tasks"
+    active = tasks_dir / "active"
+    active.mkdir(parents=True)
+    malformed = active / "t042-old.md"
+    malformed.write_text(
+        task_module.render_task_file(_task().model_copy(update={"id": "t041"})),
+        encoding="utf-8",
+    )
+    before = malformed.read_bytes()
+
+    with pytest.raises(ValueError, match=r"filename does not match id 't041'"):
+        task_module.write_task_file(tasks_dir, _task(title="Replacement"))
+
+    assert malformed.read_bytes() == before
+    assert list(active.glob("*.md")) == [malformed]
+
+
 def test_delete_task_file_removes_single_file(tmp_path: Path) -> None:
     tasks_dir = tmp_path / "tasks"
     task_module.write_task_file(tasks_dir, _task())

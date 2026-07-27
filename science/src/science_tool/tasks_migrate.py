@@ -360,6 +360,7 @@ def plan_migration(tasks_dir: Path, *, today: date) -> MigrationPlan:
             )
 
     done_ledgers: dict[Path, tuple[str, list[Task]]] = {}
+    done_ledgers_valid = True
     done_dir = tasks_dir / "done"
     if done_dir.is_symlink():
         refusals.append(
@@ -391,6 +392,7 @@ def plan_migration(tasks_dir: Path, *, today: date) -> MigrationPlan:
             try:
                 done_ledgers[relative_path] = _read_destination(resolved)
             except (OSError, ValueError) as exc:
+                done_ledgers_valid = False
                 refusals.append(f"cannot read {relative_path.as_posix()}: {exc}")
 
     ledger_occurrences = _done_occurrences(done_ledgers)
@@ -443,11 +445,14 @@ def plan_migration(tasks_dir: Path, *, today: date) -> MigrationPlan:
                 + ", ".join(task_ids)
             )
 
-    ledger_post_images, terminal_conflicts = plan_ledger_appends(
-        terminal_tasks,
-        done_ledgers,
-        today=today,
-    )
+    ledger_post_images: dict[Path, str] = {}
+    terminal_conflicts: list[str] = []
+    if done_ledgers_valid:
+        ledger_post_images, terminal_conflicts = plan_ledger_appends(
+            terminal_tasks,
+            done_ledgers,
+            today=today,
+        )
     for task_id in sorted(terminal_conflicts):
         refusals.append(
             f"terminal task {task_id} conflicts with existing done-ledger occurrence(s)"

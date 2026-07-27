@@ -150,8 +150,12 @@ def test_id_scans_use_yaml_semantics_for_quoted_and_commented_active_ids(
     tmp_path: Path,
 ) -> None:
     tasks_dir = tmp_path / "tasks"
-    _write_active_text(tasks_dir, "quoted.md", '---\nid: "t040"\n---\n\nbody\n')
-    _write_active_text(tasks_dir, "commented.md", "---\nid: t050 # reserved\n---\n\nbody\n")
+    _write_active_text(tasks_dir, "t040-quoted.md", '---\nid: "t040"\n---\n\nbody\n')
+    _write_active_text(
+        tasks_dir,
+        "t050-commented.md",
+        "---\nid: t050 # reserved\n---\n\nbody\n",
+    )
 
     assert task_module.known_task_ids(tasks_dir) == {"t040", "t050"}
     assert task_module.next_task_id(tasks_dir) == "t051"

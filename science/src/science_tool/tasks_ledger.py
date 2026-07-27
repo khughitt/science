@@ -6,7 +6,7 @@ import re
 from datetime import date
 from pathlib import Path
 
-from science_tool.tasks import _HEADER_RE, Task, _parse_task_block, _tasks_equal, render_tasks
+from science_tool.tasks import Task, _parse_task_block, _tasks_equal, render_tasks
 
 
 _HEADING_PREFIX_RE = re.compile(r"^##\s+\[", re.MULTILINE)
@@ -33,7 +33,7 @@ def _split_preamble_and_blocks(text: str) -> tuple[str, list[list[str]]]:
     blocks: list[list[str]] = []
     current: list[str] = []
     for line in lines:
-        if _HEADER_RE.match(line):
+        if _HEADING_PREFIX_RE.match(line):
             if current:
                 blocks.append(current)
             current = [line]
