@@ -27,6 +27,10 @@ PROPOSITION_MODEL_DOC = "docs/" + "proposition-and-evidence-model.md"
 CLAIM_MODEL_DOC = "docs/" + "claim-and-evidence-model.md"
 
 
+def _canonical_command_paths() -> list[Path]:
+    return sorted((ROOT / "commands").glob("*.md"))
+
+
 def _read(path: str) -> str:
     return (ROOT / path).read_text(encoding="utf-8")
 
@@ -41,6 +45,14 @@ def _slice_between(text: str, start: str, end: str) -> str:
 
 def _norm(text: str) -> str:
     return " ".join(text.split())
+
+
+def test_generated_opencode_adapters_are_not_canonical_commands() -> None:
+    canonical = _canonical_command_paths()
+
+    assert canonical
+    assert all(path.parent == ROOT / "commands" for path in canonical)
+    assert not any("opencode" in path.parts for path in canonical)
 
 
 def test_catalog_datasets_setup_is_layout_v3_aware() -> None:
@@ -679,7 +691,7 @@ def test_command_docs_do_not_reference_retired_user_docs() -> None:
         CLAIM_MODEL_DOC,
     )
     offenders: list[str] = []
-    for path in (ROOT / "commands").glob("*.md"):
+    for path in _canonical_command_paths():
         text = path.read_text(encoding="utf-8")
         if any(token in text for token in retired):
             offenders.append(path.relative_to(ROOT).as_posix())
@@ -1101,7 +1113,7 @@ def test_command_docs_do_not_reference_legacy_relation_claim_commands() -> None:
         "Claim And Graph Uncertainty",
     )
     offenders: list[str] = []
-    for path in sorted((ROOT / "commands").glob("*.md")):
+    for path in _canonical_command_paths():
         text = path.read_text(encoding="utf-8")
         for forbidden in forbidden_strings:
             if forbidden in text:

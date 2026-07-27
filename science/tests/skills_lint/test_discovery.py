@@ -28,6 +28,21 @@ def test_iter_skill_files_excludes_meta_templates_keeps_index(tmp_path: Path) ->
     assert {"data/SKILL.md", "meta/SKILL.md", "meta/skill-taxonomy.md"} <= found
 
 
+def test_iter_skill_files_excludes_generated_distribution(tmp_path: Path) -> None:
+    for rel in (
+        "INDEX.md",
+        "data/SKILL.md",
+        "generated/INDEX.md",
+        "generated/science-status/SKILL.md",
+        "generated/science-status/references/context.md",
+    ):
+        _touch(tmp_path / rel)
+
+    found = {path.relative_to(tmp_path).as_posix() for path in iter_skill_files(tmp_path)}
+
+    assert found == {"INDEX.md", "data/SKILL.md"}
+
+
 def test_iter_skill_files_is_sorted(tmp_path: Path) -> None:
     for rel in ("b/SKILL.md", "a/SKILL.md", "INDEX.md"):
         _touch(tmp_path / rel)

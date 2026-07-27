@@ -108,6 +108,14 @@ def test_real_skill_paths_excludes_index_and_templates(tmp_path: Path) -> None:
     assert real_skill_paths(tmp_path) == {"skills/bio/x-qa.md"}
 
 
+def test_real_skill_paths_excludes_generated_distribution(tmp_path: Path) -> None:
+    _write(tmp_path, "skills/bio/x-qa.md")
+    _write(tmp_path, "skills/generated/INDEX.md")
+    _write(tmp_path, "skills/generated/science-status/SKILL.md")
+
+    assert real_skill_paths(tmp_path) == {"skills/bio/x-qa.md"}
+
+
 def test_registry_rejects_duplicate_id(tmp_path: Path) -> None:
     _write(tmp_path, "skills/a.md")
     _write(tmp_path, "skills/b.md")
