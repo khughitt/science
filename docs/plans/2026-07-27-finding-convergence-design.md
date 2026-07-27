@@ -1,6 +1,7 @@
 # Finding Convergence — Design
 
-> **Status:** design, revision 4. **Spec 1 of three** in the autonomous-audit program,
+> **Status:** design, revision 5 — **approved for implementation planning**. **Spec 1 of
+> three** in the autonomous-audit program,
 > and a prerequisite for the autonomy envelope's S5 harness slice. **Spec 1 ships no
 > agent** and adds no autonomy: it converges the deterministic audit surface onto one
 > emitted contract so that Spec 2 (unattended lens agents) consumes a type already
@@ -30,6 +31,12 @@
 > lenses (§4), `dataset.invariant-violation` could still reduce counts (§9), and the
 > ingestion behaviour of accepted observations was unspecified (§8). The no-journal
 > ingestion design of §8 is approved as proportionate and is unchanged.
+>
+> **Revision 5** closes four narrow contract corrections: `acceptance_key` was required by
+> §8 but missing from the occurrence schema (§4), test 20 still asserted the pre-lens
+> review identity (§Testing), the evidence union named fields without freezing their wire
+> types (§1), and the pre-migration acceptance key did not define absent `severity` or
+> `message_contains`, both of which the matcher treats as wildcards (§10).
 
 ## Motivation
 
@@ -241,11 +248,41 @@ LocationEvidence(type="location", path=..., pointer=None, line=None, span=None)
 TextEvidence(type="text", label=None, text=...)
 ```
 
-`LocationEvidence.path` is subject to the same normalization and safety rules as
-`PathSubject.path`; `line` and `span` are permitted here precisely because evidence is
-not identity-bearing. Bounds: at most 100 evidence entries per finding, `text` at most
-4 000 characters, `label` at most 200. A producer with more locations than the bound
-summarizes rather than truncating silently.
+Both variants are frozen here because ingestion validates them and §11 serializes them
+publicly. **Both reject unknown fields** (`extra="forbid"`): `Entity` uses `extra=ignore`,
+and that is why a `phase:` value could be written by hand and never reach the graph — a
+silently dropped field on an audit record would be the same failure with the same
+diagnosis cost.
+
+`LocationEvidence`:
+
+| Field | Type and constraints |
+|---|---|
+| `type` | Literal `"location"`. |
+| `path` | Required `str`. Same normalization and safety rules as `PathSubject.path`: project-relative, POSIX separators, no `.`/`..`, no trailing slash, refused if it resolves through a symlink. |
+| `pointer` | Optional `str`, ≤200 chars. A semantic key or logical location. **Unlike `PathSubject.pointer`, positional segments are permitted**, because evidence is not identity-bearing. |
+| `line` | Optional `int`, **1-based**, ≥1. |
+| `span` | Optional object, below. |
+
+`span` is `{start_line, start_col, end_line, end_col}`: all `int`, all **1-based**, all
+≥1, ends **inclusive**. `end_line ≥ start_line`, and when they are equal,
+`end_col ≥ start_col`. `start_col`/`end_col` are optional as a pair — supplying one
+without the other is rejected — and their absence means whole-line extent.
+
+**`line` and `span` are mutually exclusive**; supplying both is rejected rather than
+resolved by precedence. `pointer` may accompany either, or stand alone.
+
+`TextEvidence`:
+
+| Field | Type and constraints |
+|---|---|
+| `type` | Literal `"text"`. |
+| `label` | Optional `str`, ≤200 chars. |
+| `text` | Required `str`, ≤4 000 chars. |
+
+**Collection bound:** at most 100 evidence entries per finding. A producer with more
+locations than that summarizes — in a `TextEvidence` stating the true total — rather than
+truncating silently.
 
 **At most one `ReportedFinding` per `(producer_id, finding_id)` per report.** A producer
 that would emit two must either aggregate them into one finding's evidence or declare
@@ -367,6 +404,7 @@ discarded, and a severity change would have no defined effect.
 | `message` | As emitted. |
 | `qualifiers` | The **complete** observed qualifier object, not only the identity subset. Non-identity qualifiers are recorded here or they are not recorded at all. |
 | `evidence` | As emitted, including locations and line numbers. |
+| `acceptance_key` | Optional. Present when the observation arrived on the report's `accepted` channel, naming the entry that suppressed it (§10); **absent** otherwise. Part of idempotency-content comparison, so the same observation arriving once accepted and once not is a conflict rather than a silent retry. |
 
 Current severity for display and for acceptance scoping is the **maximum severity over
 occurrences from the most recent ingestion of each producer** — a defined function of the
@@ -767,15 +805,39 @@ An acceptance entry's own subject, when it becomes a hygiene finding, is
 canonical encoding. `key_fields` is **every semantic matching field** that
 `entry_matches` (`acceptance.py:69`) consults, and nothing else:
 
-| Pre-migration entry | Migrated entry |
-|---|---|
-| `rule` (normalized), `severity` (normalized `warning`→`warn`, per `_severity_matches`), `path` if present, `task` if present, `message_contains` (normalized, list order preserved) | `finding_id`, `severity_scope` |
+**Migrated entry:** `{finding_id, severity_scope}`.
 
-`reason` is excluded — it is a validity precondition (`entry_matches` rejects a blank
-one), not a discriminator — and list position is excluded for the reasons in §3. Omitting
-`path` and `task` would let two path-scoped acceptances of the same rule collide on one
-key, which is why the key is defined over the matcher's fields rather than over an
-abbreviation of them.
+**Pre-migration entry**, field by field. The representation encodes the matcher's
+*semantics*, not the raw YAML, because two spellings that behave identically must key
+identically:
+
+| Field | Frozen representation |
+|---|---|
+| `rule` | Required `str`; encoded as-is. An entry without a string `rule` never matches (`entry_matches` returns `False`), so it cannot be migrated. |
+| `severity` | **Omitted when the entry's `severity` is absent *or* not a string** — `_severity_matches` returns `True` for anything non-string, so both are wildcards and behave identically. Otherwise the normalized value (`warning`→`warn`). |
+| `path` | Omitted when absent or non-string (wildcard, per `isinstance` guard); otherwise as-is. |
+| `task` | Same rule as `path`. |
+| `message_contains` | **Omitted when absent or `None`** — `_text_matches` returns `True` for `None`. When a `str`, a one-element list; when a list, the string members in **original order**. |
+
+Per §3, an omitted field is omitted rather than encoded as null, so wildcard and
+non-wildcard entries cannot collide.
+
+**The two wildcard asymmetries are deliberate, and one of them blocks migration.**
+`_severity_matches` treats a malformed `severity` as a wildcard, so it is representable
+and migratable. `_text_matches` returns **`False`** for a `message_contains` that is
+present but neither a string nor a list of strings — such an entry matches nothing by
+construction, lands in the `stale` outcome, and aborts the migration (§10) rather than
+acquiring a sentinel representation. Fail-loud on an entry that was already dead.
+
+Collapsing "absent severity" and "malformed severity" onto one key is intentional: they
+are the same acceptance, so §10's duplicate-`(finding_id, severity_scope)` rejection will
+correctly flag them as duplicates rather than silently keeping both.
+
+`reason` is excluded — it is a validity precondition (`entry_matches` rejects a blank one),
+not a discriminator — and list position is excluded for the reasons in §3. Omitting `path`
+and `task` would let two path-scoped acceptances of the same rule collide on one key, which
+is why the key is defined over the matcher's fields rather than over an abbreviation of
+them.
 
 Content-derived, so it survives reordering and deletion of siblings; truncated to 32 hex
 characters because it names a config entry rather than identifying a stored record, and
@@ -876,13 +938,17 @@ class AuditReport(TypedDict):
     at occurrence upsert.
 15. **Producer metrics are validated** — a metrics object violating the schema the
     producer declared at registration fails.
-16. **Evidence is typed and bounded** — a `LocationEvidence` path that is absolute,
-    traverses `..`, or resolves through a symlink is refused; evidence exceeding the entry
-    count or text-length bounds is refused; prose in a `TextEvidence` is never treated as
-    a path.
+16. **Evidence is typed, frozen, and bounded** — a `LocationEvidence` path that is
+    absolute, traverses `..`, or resolves through a symlink is refused; `line` and `span`
+    together are refused; a `span` with `end_line < start_line`, with equal lines and
+    `end_col < start_col`, with a `0` index, or with one column of the pair supplied is
+    refused; an unknown field on either variant is refused rather than ignored; evidence
+    exceeding the entry-count or text-length bounds is refused; prose in a `TextEvidence`
+    is never treated as a path.
 17. **Accepted observations are ingested** — an accepted finding upserts its record and
     appends an occurrence carrying the `acceptance_key`, and leaves `status` untouched at
-    `proposed`.
+    `proposed`. The same observation arriving once accepted and once unsuppressed is an
+    idempotency conflict, not a retry.
 18. **Subject discrimination is total and strict** — an invalid entity ref fails rather
     than degrading to a path subject.
 19. **Lifecycle** — every record opens with a `None → proposed` genesis transition; a
@@ -890,9 +956,12 @@ class AuditReport(TypedDict):
     appends an occurrence and leaves status `dismissed`; `promoted_task` present without
     `promoted` status fails, and vice versa; a `status` disagreeing with the transition
     log fails to load.
-20. **Review record** — a review missing `lens` when `reviewer_kind == "agent"` fails;
-    two reviews from the same `(reviewer_ref, run_ref)` on one finding collapse to one
-    `review_id`.
+20. **Review record** — `review_id` is a function of the complete tuple
+    `(reviewer_kind, reviewer_ref, normalized_lens, run_ref, finding_id)`: two reviews by
+    one role in one run under **different lenses** produce **different** ids, and two
+    identical tuples produce one. A review missing `lens` when
+    `reviewer_kind == "agent"` fails; a review missing `model` when
+    `reviewer_kind == "agent"` fails.
 21. **Ingestion hardening** — absolute path, `..` traversal, symlinked path, unknown
     `schema_version`, unimplemented `fingerprint_version`, oversize report, and excess
     finding count are each refused, and a *validation* failure writes nothing.
@@ -900,23 +969,27 @@ class AuditReport(TypedDict):
     is denied by the existing path gate, with no edit to `autonomy/policy.py`.
 23. **Graph isolation** — no finding triple appears in any named graph; cases are absent
     from attention candidates; ingesting cases does not stale the revision manifest.
-24. **Acceptance migration** — all four outcomes; the severity-scope invariant (an
+24. **Acceptance-key wildcards** — an entry with absent `severity` and one with a
+    non-string `severity` produce the same key and are reported as duplicates; an entry
+    with absent `message_contains` keys as a wildcard and matches; an entry whose
+    `message_contains` is present but malformed is reported `stale` and aborts.
+25. **Acceptance migration** — all four outcomes; the severity-scope invariant (an
     accepted warning does not suppress a later error at the same fingerprint); the
     unsuppressibility of the two hygiene rules; **one stale entry among many valid ones
     aborts the entire `--apply` with `science.yaml` unmodified**; duplicate
     `(finding_id, severity_scope)` after rewriting is rejected; dry-run reports every
     problem entry rather than the first.
-25. **Count ledger** — a test asserting the §9 table: for a fixture project, each
+26. **Count ledger** — a test asserting the §9 table: for a fixture project, each
     producer's contribution to `totals.findings_total` matches the enumerated
     expectation. This is what makes the count changes approved rather than absorbed.
-26. **Presentation order is preserved** — rendering order matches the current
+27. **Presentation order is preserved** — rendering order matches the current
     `HEALTH_CHECKS` order for the sections that exist today, and is unaffected by renaming
     a section identifier.
-27. **Metrics are not findings** — coverage, counts, and nested summaries survive as
+28. **Metrics are not findings** — coverage, counts, and nested summaries survive as
     metrics and are absent from the finding stream.
-28. **Producer-namespace completeness** — every namespace contributing to the derived
+29. **Producer-namespace completeness** — every namespace contributing to the derived
     registry has a filesystem-derived guard.
-29. **All twelve dataset rules are declared and reachable** — the emitted-code set equals
+30. **All twelve dataset rules are declared and reachable** — the emitted-code set equals
     the declared-rule set, asserted as equality rather than as a subset, which is the
     assertion shape that let `dataset_access_invalid` drift.
 
