@@ -121,6 +121,38 @@ def test_command_resources_are_bundled_inside_their_package(
     assert resource in skill_path.read_text(encoding="utf-8")
 
 
+def test_unresolved_bundled_resource_link_fails_generation(tmp_path: Path) -> None:
+    repo_root = tmp_path / "repo"
+    (repo_root / "commands").mkdir(parents=True)
+    (repo_root / "skills").mkdir()
+    (repo_root / "references" / "role-prompts").mkdir(parents=True)
+    (repo_root / "aspects").mkdir()
+    (repo_root / "docs").mkdir()
+    (repo_root / "skills" / "INDEX.md").write_text("# Skills\n", encoding="utf-8")
+    (repo_root / "references" / "command-preamble.md").write_text(
+        "# Command Preamble\n\nFollow the command.",
+        encoding="utf-8",
+    )
+    (repo_root / "commands" / "broken.md").write_text(
+        "---\ndescription: Broken resource link\n---\n\n# Broken\n\nRead `docs/source.md`.\n",
+        encoding="utf-8",
+    )
+    (repo_root / "docs" / "source.md").write_text(
+        "See [missing guidance](missing.md).\n",
+        encoding="utf-8",
+    )
+
+    with pytest.raises(
+        ValueError,
+        match=r"unresolved bundled resource link in docs/source\.md: missing\.md",
+    ):
+        generate_agent_assets(
+            repo_root,
+            tmp_path / "skills-output",
+            tmp_path / "commands-output",
+        )
+
+
 def test_command_markdown_links_do_not_escape_their_package(
     generated: GenerationResult,
 ) -> None:

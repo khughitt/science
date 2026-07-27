@@ -5,7 +5,9 @@
 
 ## 1. Overview
 
-> This document is a companion to the main planning document [docs/plan.md](../plan.md), providing detailed specifications for the Phase 3 knowledge graph layer.
+> This document provides the detailed specifications for the Phase 3 knowledge graph layer.
+> The surviving phase-gate context is preserved in the
+> [Phase 3 Completion Checkpoint](../../audits/plans-cleanup/phase3-completion-checkpoint.md).
 
 A knowledge graph layer for the science agent that serves as a **shared knowledge representation between the human researcher and the AI agent**. The graph encodes entities, semantic relations, causal structure, provenance, and links to available datasets — supporting research exploration, hypothesis development, and progression toward formal causal/Bayesian models.
 

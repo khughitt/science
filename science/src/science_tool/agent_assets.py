@@ -402,12 +402,13 @@ def _rewrite_bundled_resource_links(
             return match.group(0)
 
         candidate = (source.parent / target_path).resolve()
+        unresolved_message = f"unresolved bundled resource link in {source_relative.as_posix()}: {raw_target}"
         try:
             relative = candidate.relative_to(repo_root)
-        except ValueError:
-            return label
+        except ValueError as error:
+            raise ValueError(unresolved_message) from error
         if not candidate.is_file():
-            return label
+            raise ValueError(unresolved_message)
         if relative.parts[0] == "skills":
             dependency = _methodology_skill_name(repo_root, relative)
             return f"`{label}` guidance from the `{dependency}` skill"
