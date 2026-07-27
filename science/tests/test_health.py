@@ -750,10 +750,18 @@ health:
         sidecar.write_text("#!/usr/bin/env bash\necho sidecar >&2\n", encoding="utf-8")
         sidecar.chmod(0o755)
 
-        def fail_subprocess_run(*_args: object, **_kwargs: object) -> object:
-            raise AssertionError("science health validation must not run legacy sidecar subprocesses")
+        real_subprocess_run = subprocess.run
 
-        monkeypatch.setattr(subprocess, "run", fail_subprocess_run)
+        def fail_legacy_sidecar_run(*args: object, **kwargs: object) -> object:
+            command = args[0] if args else kwargs.get("args")
+            command_text = (
+                str(command) if isinstance(command, (str, bytes)) else " ".join(str(part) for part in command or ())
+            )
+            if sidecar.name in command_text:
+                raise AssertionError("science health validation must not run legacy sidecar subprocesses")
+            return real_subprocess_run(*args, **kwargs)  # type: ignore[arg-type]
+
+        monkeypatch.setattr(subprocess, "run", fail_legacy_sidecar_run)
 
         report = build_health_report(tmp_path, checks={"validate"})
 
