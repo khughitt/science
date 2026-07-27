@@ -78,7 +78,7 @@ For each project entity:
    - questions in `entities/questions/`
    - interpretations, discussions, pre-registrations, bias audits, methods,
      datasets, and similar entities in their typed `entities/<kind>/` locations
-2. Keep task links in `tasks/*.md` `related:` / `blocked-by:` fields using canonical IDs.
+2. Run `science tasks show <task-id>`, then `science tasks edit <task-id>` with the full desired sets through repeated `--related <canonical-id>` and `--blocked-by <canonical-id>` options. Editing replaces those list fields, so preserve existing references; do not edit task-store files directly.
 3. Put unresolved but legitimate project-local semantics in `knowledge/sources/<local-profile>/`:
    - `external_refs.yaml` for external authority rows
    - `mappings.yaml` for explicit aliases during migration

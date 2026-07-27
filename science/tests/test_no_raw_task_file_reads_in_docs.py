@@ -22,16 +22,29 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
 
-# Agent-facing surface only. docs/ (design/plan prose) and codex-skills/
-# (generated mirror of commands/) are intentionally excluded.
-_SCAN_DIRS = ("commands", "skills", "templates", "agents", "references")
-_CURRENT_DOC_DIRS = (*_SCAN_DIRS, "docs/user-guide", "docs/conventions")
+# Current agent- and user-facing surface only. Historical design/plan prose and
+# codex-skills/ (a generated mirror of commands/) are intentionally excluded.
+_CURRENT_DOC_DIRS = (
+    "commands",
+    "skills",
+    "templates",
+    "agents",
+    "references",
+    "docs/user-guide",
+    "docs/conventions",
+)
 
 # Broad catch: any mention of the CLI-owned task-file paths at all. Fails
 # closed — a brand new mention (legitimate or not) trips this and forces a
 # classification decision rather than silently passing.
-_MENTION = re.compile(r"tasks/(?:active(?:\.md|/)|done|\*\.md|\*)")
-_LEGACY_ACTIVE_STORE = "tasks/active.md"
+_MENTION = re.compile(
+    r"tasks/(?:active(?:\.md|/)|done|\*\.md|\*)|\bactive\.md priorities\b",
+    flags=re.IGNORECASE,
+)
+_LEGACY_ACTIVE_STORE = re.compile(
+    r"tasks/active\.md|\bactive\.md priorities\b",
+    flags=re.IGNORECASE,
+)
 _RETIRED_ARCHIVE_SURFACE = re.compile(
     r"\bscience tasks archive\b|`tasks archive(?:\s[^`]*)?`|count_archivable|archive_lag"
 )
@@ -52,12 +65,14 @@ _ALLOWLIST: set[tuple[str, str]] = {
     (
         "commands/big-picture.md",
         "- `tasks`: for this hypothesis and each resolved question, run `uv run "
-        "science tasks list --all --related=<ref> --format json` to collect open "
-        "work. For terminal work, derive `<task-window-start>` from `--since` "
-        "when present or the project's `created` date otherwise, then run the "
-        "same related filters with `--status done --since <task-window-start>` "
-        "and `--status retired --since <task-window-start>`. Merge by task ID and "
-        "include entries whose resolved aspects intersect `research_filter`. The "
+        "science tasks list --all <research-aspect-flags> --related=<ref> "
+        "--format json` to collect open work. For terminal work, derive "
+        "`<task-window-start>` from `--since` when present or the project's "
+        "`created` date otherwise, then run `uv run science tasks list --status "
+        "done --since <task-window-start> <research-aspect-flags> --related=<ref> "
+        "--format json` and `uv run science tasks list --status retired --since "
+        "<task-window-start> <research-aspect-flags> --related=<ref> --format "
+        "json`. Merge and deduplicate the already aspect-filtered rows by task ID. The "
         "CLI reads one YAML-frontmatter file per open task under `tasks/active/`; "
         "do not open task-store files directly.",
     ),
@@ -66,10 +81,6 @@ _ALLOWLIST: set[tuple[str, str]] = {
         "- Task records: one YAML-frontmatter file per open task under `tasks/active/`,",
     ),
     ("commands/create-graph.md", "plus monthly done ledgers under `tasks/done/*.md`"),
-    (
-        "commands/create-graph.md",
-        "2. Keep task links in `tasks/*.md` `related:` / `blocked-by:` fields using canonical IDs.",
-    ),
     ("commands/create-project.md", "### `tasks/active/`"),
     (
         "commands/create-project.md",
@@ -122,6 +133,18 @@ _ALLOWLIST: set[tuple[str, str]] = {
         "references/project-structure.md",
         "- `tasks/done/YYYY-MM.md` — monthly ledgers for completed and retired tasks",
     ),
+    (
+        "docs/user-guide/big-picture.md",
+        "Open work follows the same small-record principle: `tasks/active/` stores one",
+    ),
+    (
+        "docs/user-guide/big-picture.md",
+        "directly to a monthly `tasks/done/YYYY-MM.md` ledger. Keeping each open record",
+    ),
+    (
+        "docs/user-guide/project-layout.md",
+        "| `tasks/` | Operational work: one YAML-frontmatter file per open task under `tasks/active/`, with terminal records in monthly `tasks/done/YYYY-MM.md` ledgers. |",
+    ),
 }
 
 
@@ -134,17 +157,22 @@ def _is_offender(relpath: str, line: str) -> bool:
     return bool(_MENTION.search(line)) and not _is_allowlisted(relpath, line)
 
 
-def test_no_raw_task_file_read_instructions_in_docs() -> None:
+def _raw_read_offenders(root: Path = ROOT) -> list[str]:
     offenders: list[str] = []
-    for dirname in _SCAN_DIRS:
-        base = ROOT / dirname
+    for dirname in _CURRENT_DOC_DIRS:
+        base = root / dirname
         if not base.is_dir():
             continue
         for md in sorted(base.rglob("*.md")):
-            relpath = md.relative_to(ROOT).as_posix()
+            relpath = md.relative_to(root).as_posix()
             for lineno, line in enumerate(md.read_text(encoding="utf-8").splitlines(), start=1):
                 if _is_offender(relpath, line):
                     offenders.append(f"  {relpath}:{lineno}: {line.strip()}")
+    return offenders
+
+
+def test_no_raw_task_file_read_instructions_in_docs() -> None:
+    offenders = _raw_read_offenders()
     assert not offenders, (
         "Found agent-facing doc line(s) that look like a raw-task-file read "
         "directive for a CLI-owned task file (`tasks/active.md` / "
@@ -153,6 +181,26 @@ def test_no_raw_task_file_read_instructions_in_docs() -> None:
         "or if it is a legitimate store/location description or command-internal "
         "spec, add it to _ALLOWLIST with a reason:\n" + "\n".join(offenders)
     )
+
+
+def test_raw_read_scan_includes_user_guide_and_conventions(tmp_path: Path) -> None:
+    samples = {
+        "docs/user-guide/future.md": "Read every `tasks/active/*.md` file.",
+        "docs/conventions/future.md": "Scan `tasks/done/` before starting.",
+    }
+    for relpath, text in samples.items():
+        path = tmp_path / relpath
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(text, encoding="utf-8")
+
+    offenders = "\n".join(_raw_read_offenders(tmp_path))
+    assert "docs/user-guide/future.md" in offenders
+    assert "docs/conventions/future.md" in offenders
+
+
+def test_bare_aggregate_priority_wording_is_flagged() -> None:
+    sample = "These should match the active.md priorities."
+    assert _is_offender("templates/example.md", sample)
 
 
 def _current_markdown_lines() -> list[tuple[str, int, str]]:
@@ -177,7 +225,7 @@ def test_current_docs_do_not_describe_the_legacy_aggregate_active_store() -> Non
     offenders = [
         f"  {relpath}:{lineno}: {line.strip()}"
         for relpath, lineno, line in _current_markdown_lines()
-        if _LEGACY_ACTIVE_STORE in line
+        if _LEGACY_ACTIVE_STORE.search(line)
     ]
     assert not offenders, (
         "Current user, command, template, and reference docs must describe "
@@ -253,6 +301,7 @@ _FORBIDDEN_SAMPLES = (
     "   - `tasks/active.md`",
     "4. `tasks/active.md`",
     "3. `tasks/active.md`",
+    "These should match the active.md priorities.",
 )
 
 

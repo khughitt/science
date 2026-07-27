@@ -216,6 +216,38 @@ def test_task_command_docs_allow_task_scoped_aspects_without_project_declaration
     assert "project-wide aspect behavior" in text
 
 
+def test_big_picture_task_queries_apply_research_aspects_in_the_cli() -> None:
+    text = _read("commands/big-picture.md")
+    task_line = next(line for line in text.splitlines() if line.startswith("- `tasks`:"))
+
+    assert "one `--aspect <aspect>` option per member of `research_filter`" in text
+    assert "--all <research-aspect-flags> --related=<ref> --format json" in task_line
+    assert (
+        "--status done --since <task-window-start> <research-aspect-flags> "
+        "--related=<ref> --format json"
+        in task_line
+    )
+    assert (
+        "--status retired --since <task-window-start> <research-aspect-flags> "
+        "--related=<ref> --format json"
+        in task_line
+    )
+    assert "include entries whose resolved aspects intersect" not in task_line
+
+
+def test_create_graph_updates_task_refs_through_the_live_cli() -> None:
+    text = _read("commands/create-graph.md")
+    step = next(line for line in text.splitlines() if line.startswith("2. "))
+
+    assert "science tasks show <task-id>" in step
+    assert "science tasks edit <task-id>" in step
+    assert "--related <canonical-id>" in step
+    assert "--blocked-by <canonical-id>" in step
+    assert "full desired sets" in step
+    assert "tasks/*.md" not in step
+    assert "`blocked-by:`" not in step
+
+
 def test_create_project_gitignore_excludes_transient_agent_artifacts() -> None:
     text = _read("commands/create-project.md")
 
