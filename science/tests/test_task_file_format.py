@@ -37,6 +37,70 @@ def _task_text(
     )
 
 
+def _canonical_file_text(description: str) -> str:
+    frontmatter = """\
+---
+id: t042
+project: ''
+title: Canonical task
+type: ''
+aspects: []
+priority: P1
+status: active
+blocked_by: []
+related: []
+parent: ''
+group: ''
+artifacts: []
+findings: []
+created: '2026-07-20'
+completed: null
+---
+"""
+    if not description:
+        return frontmatter
+    return f"{frontmatter}\n{description}\n"
+
+
+def test_render_empty_description_has_exact_canonical_output_and_round_trips(
+    tmp_path: Path,
+) -> None:
+    task = Task(
+        id="t042",
+        title="Canonical task",
+        status="active",
+        priority="P1",
+        aspects=[],
+        created=date(2026, 7, 20),
+        description="",
+    )
+
+    rendered = task_module.render_task_file(task)
+
+    assert rendered == _canonical_file_text("")
+    assert task_module.parse_task_file(_write(tmp_path / "t042-canonical-task.md", rendered)) == task
+
+
+def test_render_nonempty_description_has_exact_canonical_output_and_round_trips(
+    tmp_path: Path,
+) -> None:
+    description = "First paragraph.\n\nSecond paragraph."
+    task = Task(
+        id="t042",
+        title="Canonical task",
+        status="active",
+        priority="P1",
+        aspects=[],
+        created=date(2026, 7, 20),
+        description=description,
+    )
+
+    rendered = task_module.render_task_file(task)
+
+    assert rendered == _canonical_file_text(description)
+    assert task_module.parse_task_file(_write(tmp_path / "t042-canonical-task.md", rendered)) == task
+
+
 def test_render_parse_roundtrip(tmp_path: Path) -> None:
     task = Task(
         id="t042",

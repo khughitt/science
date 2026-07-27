@@ -39,6 +39,7 @@ from science_tool.tasks_ledger import (
     _read_destination,
     plan_ledger_appends,
 )
+from science_tool.markdown_scan import iter_prose_matches
 
 __all__ = [
     "MigrationEntry",
@@ -57,6 +58,14 @@ _OPEN_STATUSES = frozenset({"proposed", "active", "blocked", "deferred"})
 _TERMINAL_STATUSES = frozenset({"done", "retired"})
 _JOURNAL_VERSION = 1
 _SHA256_RE = re.compile(r"[0-9a-f]{64}")
+_INLINE_MARKDOWN_DESTINATION_RE = re.compile(
+    r"!?\[[^\]\n]*\]\(\s*(?P<destination><[^>\n]+>|[^)\s\n]+)"
+)
+_REFERENCE_MARKDOWN_DESTINATION_RE = re.compile(
+    r"^[ ]{0,3}\[[^\]\n]+\]:[ \t]*(?P<destination><[^>\n]+>|[^\s\n]+)",
+    re.MULTILINE,
+)
+_URI_SCHEME_RE = re.compile(r"[A-Za-z][A-Za-z0-9+.-]*:")
 
 
 class MigrationRefused(ValueError):
@@ -237,6 +246,27 @@ def _done_occurrences(
     return occurrences
 
 
+def _relative_markdown_destinations(description: str) -> list[str]:
+    destinations: list[str] = []
+    for pattern in (
+        _INLINE_MARKDOWN_DESTINATION_RE,
+        _REFERENCE_MARKDOWN_DESTINATION_RE,
+    ):
+        for match in iter_prose_matches(pattern, description):
+            destination = match.group("destination")
+            if destination.startswith("<") and destination.endswith(">"):
+                destination = destination[1:-1].strip()
+            if (
+                not destination
+                or destination.startswith(("#", "/"))
+                or _URI_SCHEME_RE.match(destination)
+                or destination in destinations
+            ):
+                continue
+            destinations.append(destination)
+    return destinations
+
+
 def plan_migration(tasks_dir: Path, *, today: date) -> MigrationPlan:
     """Build the whole migration plan without writing anything."""
     tasks_dir = Path(tasks_dir)
@@ -324,6 +354,14 @@ def plan_migration(tasks_dir: Path, *, today: date) -> MigrationPlan:
             refusals.append(f"task {task.id} has an invalid title: {exc}")
         else:
             valid_titles.add(index)
+        relative_destinations = _relative_markdown_destinations(task.description)
+        if relative_destinations:
+            rendered = ", ".join(repr(destination) for destination in relative_destinations)
+            refusals.append(
+                f"task {task.id} has relative Markdown destination(s) whose meaning would "
+                f"change when moving out of tasks/active.md: {rendered}; rewrite the "
+                "link(s) before migration"
+            )
 
     done_ledgers: dict[Path, tuple[str, list[Task]]] = {}
     done_dir = tasks_dir / "done"

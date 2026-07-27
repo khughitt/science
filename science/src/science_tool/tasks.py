@@ -715,7 +715,10 @@ def render_task_file(task: Task) -> str:
         allow_unicode=True,
         default_flow_style=False,
     )
-    return f"---\n{rendered_frontmatter}---\n\n{task.description}"
+    description = _canonical_description(task.description)
+    if not description:
+        return f"---\n{rendered_frontmatter}---\n"
+    return f"---\n{rendered_frontmatter}---\n\n{description}\n"
 
 
 def render_tasks(tasks: list[Task]) -> str:

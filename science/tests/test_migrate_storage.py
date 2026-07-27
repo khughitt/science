@@ -207,6 +207,92 @@ def test_plan_refuses_invalid_source_title(tmp_path: Path) -> None:
     assert plan.post_images == {}
 
 
+def test_plan_refuses_live_relative_markdown_destinations_without_writing(
+    tmp_path: Path,
+) -> None:
+    migrate = _migrate_module()
+    tasks_dir = tmp_path / "tasks"
+    source = _write_legacy(
+        tasks_dir,
+        [
+            _task(
+                "t001",
+                "Relative links",
+                description=(
+                    "Live [inline](../docs/guide.md), "
+                    "![image](images/plot.png), and [manual][manual].\n\n"
+                    "[manual]: ./manual.md\n\n"
+                    "Exempt [web](https://example.test/guide), "
+                    "[mail](mailto:owner@example.test), [anchor](#section), "
+                    "and [root](/docs/root.md).\n\n"
+                    "Literal `[inline](inline-code.md)`.\n\n"
+                    "```markdown\n"
+                    "[fenced](fenced.md)\n"
+                    "![fenced image](fenced.png)\n"
+                    "[fenced-ref]: fenced-ref.md\n"
+                    "```"
+                ),
+            )
+        ],
+    )
+    before = source.read_bytes()
+
+    plan = migrate.plan_migration(tasks_dir, today=TODAY)
+
+    reasons = "\n".join(plan.refusals)
+    assert "t001" in reasons
+    assert "../docs/guide.md" in reasons
+    assert "images/plot.png" in reasons
+    assert "./manual.md" in reasons
+    for exempt in (
+        "https://example.test/guide",
+        "mailto:owner@example.test",
+        "#section",
+        "/docs/root.md",
+        "inline-code.md",
+        "fenced.md",
+        "fenced.png",
+        "fenced-ref.md",
+    ):
+        assert exempt not in reasons
+    assert source.read_bytes() == before
+    assert not (tasks_dir / "active").exists()
+    assert not (tasks_dir / "done").exists()
+    assert not (tasks_dir / JOURNAL).exists()
+
+
+@pytest.mark.parametrize("status", ["active", "done"])
+def test_apply_refuses_relative_markdown_destination_and_preserves_source(
+    tmp_path: Path,
+    status: str,
+) -> None:
+    migrate = _migrate_module()
+    tasks_dir = tmp_path / "tasks"
+    source = _write_legacy(
+        tasks_dir,
+        [
+            _task(
+                "t001",
+                "Relative link",
+                status=status,
+                description="See [guide](guide.md).",
+            )
+        ],
+    )
+    before = source.read_bytes()
+
+    with pytest.raises(
+        migrate.MigrationRefused,
+        match=r"t001.*relative Markdown destination.*guide\.md",
+    ):
+        migrate.apply_migration(tasks_dir, today=TODAY)
+
+    assert source.read_bytes() == before
+    assert not (tasks_dir / "active").exists()
+    assert not (tasks_dir / "done").exists()
+    assert not (tasks_dir / JOURNAL).exists()
+
+
 def test_plan_refuses_malformed_task_heading_instead_of_treating_source_as_empty(
     tmp_path: Path,
 ) -> None:

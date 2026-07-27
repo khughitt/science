@@ -18,10 +18,10 @@ completed: null
 ---
 
 A bundle hypothesis composes its verdict by conjunctive weakest-link over its CORE members
-([bundle_belief.py](../../science/src/science_tool/graph/bundle_belief.py):75). A bare
-`discusses` ref means CORE ([epistemic-model.md](../../docs/user-guide/epistemic-model.md):434),
+([bundle_belief.py](../../../science/src/science_tool/graph/bundle_belief.py):75). A bare
+`discusses` ref means CORE ([epistemic-model.md](../../../docs/user-guide/epistemic-model.md):434),
 while workbench `focal_hypothesis` currently handles routing by emitting that bare membership
-([workbench.py](../../science/src/science_tool/dag/workbench.py):221). Generation therefore
+([workbench.py](../../../science/src/science_tool/dag/workbench.py):221). Generation therefore
 silently makes every routed DAG relation-edge a load-bearing member.
 
 MM30 t900 exposed why neither universal role is correct. Its two flagship hypotheses had 41
