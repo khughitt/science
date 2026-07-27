@@ -1447,6 +1447,7 @@ def test_critique_approach_documents_pre_dag_mode() -> None:
 
 def test_create_project_docs_declare_data_payload_boundary() -> None:
     text = _read("commands/create-project.md")
+    normalized = " ".join(text.split())
 
     # The declaration replaces the hand-written ignore-then-pin idiom.
     assert "boundary:" in text
@@ -1468,8 +1469,9 @@ def test_create_project_docs_declare_data_payload_boundary() -> None:
     assert "data.root" in text
     assert "`data/raw` maps to" in text
     assert "other version-controlled provenance" in text
-    assert "payload bytes and" in text
-    assert "non-declared files remain untracked" in text
+    assert "non-declared files remain untracked" not in text
+    assert "Declared `payload` roots keep their contents untracked" in text
+    assert "Paths outside declared roots use the implicit `versioned` default" in normalized
     assert "non-version-controlled root" not in text
 
 

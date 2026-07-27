@@ -269,8 +269,13 @@ that once, uniformly, instead of per-dataset negations.
 Keep other version-controlled provenance outside the configured data root.
 Prefer `provenance/` or `research/packages/` for lightweight manifests, QA
 reports, and small summary frames. Do not use `data/provenance/` when the
-project uses the default `./data` data root, because its payload bytes and
-non-declared files remain untracked.
+project uses the default `./data` data root, because that mixes provenance into
+the project's data area.
+
+Declared `payload` roots keep their contents untracked. `manifest` roots track
+only their declared descriptor globs. Paths outside declared roots use the
+implicit `versioned` default and are tracked normally, including the provenance
+locations above.
 
 When a project configures an out-of-tree data root, document the same resolution
 order in local onboarding notes: `SCIENCE_DATA_ROOT`, then `science.yaml`
