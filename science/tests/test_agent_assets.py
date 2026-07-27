@@ -4,6 +4,7 @@ import re
 from pathlib import Path
 
 import pytest
+import science_tool.agent_assets as agent_assets
 
 from science_tool.agent_assets import (
     GenerationResult,
@@ -48,6 +49,25 @@ def _slice_between(text: str, start_marker: str, end_marker: str) -> str:
 
 def _norm(text: str) -> str:
     return " ".join(text.split())
+
+
+def _frontmatter_name(path: Path) -> str:
+    match = re.search(
+        r"^name:\s*['\"]?([^'\"\n]+)['\"]?\s*$",
+        path.read_text(encoding="utf-8"),
+        re.MULTILINE,
+    )
+    assert match is not None, path
+    return match.group(1)
+
+
+def _methodology_names() -> set[str]:
+    expected = {
+        f"science-{_frontmatter_name(path)}"
+        for path in sorted((ROOT / "skills").glob("*/SKILL.md"))
+    }
+    expected.add("science-scientific-writing")
+    return expected
 
 
 def test_command_to_skill_name_uses_science_namespace() -> None:
@@ -102,6 +122,59 @@ def test_command_support_skill_is_non_invocable_and_resource_only(
     ]
 
 
+def test_every_top_level_router_has_one_generated_package(
+    generated: GenerationResult,
+) -> None:
+    assert _methodology_names() <= set(generated.skill_paths)
+
+
+@pytest.mark.parametrize(
+    ("skill_name", "resource"),
+    (
+        ("science-bio", "references/genomics/somatic-mutation-qa.md"),
+        ("science-literature", "references/sources/openalex.md"),
+        ("science-skill-development", "references/templates/router.md"),
+    ),
+)
+def test_methodology_resources_are_recursive(
+    generated: GenerationResult,
+    skill_name: str,
+    resource: str,
+) -> None:
+    assert (generated.skill_paths[skill_name].parent / resource).is_file()
+
+
+def test_writing_router_delegates_scientific_writing_to_standalone_skill(
+    generated: GenerationResult,
+) -> None:
+    writing = generated.skill_paths["science-writing"].parent
+    text = (writing / "SKILL.md").read_text(encoding="utf-8")
+
+    assert "science-scientific-writing" in text
+    assert not (writing / "references" / "scientific-writing.md").exists()
+
+
+def test_generated_methodology_and_support_skills_are_not_user_invocable(
+    generated: GenerationResult,
+) -> None:
+    for name in sorted(_methodology_names() | {"science-command-preamble"}):
+        text = generated.skill_paths[name].read_text(encoding="utf-8")
+        assert "user-invocable" not in text, name
+        assert "Adapted from canonical Science skill" not in text, name
+
+
+def test_support_methodology_index_lists_every_generated_methodology_skill(
+    generated: GenerationResult,
+) -> None:
+    support = generated.skill_paths["science-command-preamble"].parent
+    index = (support / "references" / "methodology-index.md").read_text(encoding="utf-8")
+    expected = "# Science Methodology Skills\n\n" + "\n".join(
+        f"- `{name}`" for name in sorted(_methodology_names())
+    )
+
+    assert index == f"{expected}\n"
+
+
 @pytest.mark.parametrize(
     ("skill_name", "resource"),
     (
@@ -153,23 +226,70 @@ def test_unresolved_bundled_resource_link_fails_generation(tmp_path: Path) -> No
         )
 
 
-def test_command_markdown_links_do_not_escape_their_package(
+@pytest.mark.parametrize("installed", (False, True), ids=("generated", "installed-symlink"))
+def test_generated_skill_markdown_links_are_package_portable(
     generated: GenerationResult,
+    tmp_path: Path,
+    installed: bool,
 ) -> None:
-    command_names = {command_to_skill_name(path) for path in sorted((ROOT / "commands").glob("*.md"))}
-    for name in sorted(command_names):
+    emitted_names = set(generated.skill_paths)
+    install_root = tmp_path / ".agents" / "skills"
+    install_root.mkdir(parents=True)
+    for name in sorted(emitted_names):
         skill_path = generated.skill_paths[name]
         package_root = skill_path.parent.resolve()
-        for markdown in sorted(package_root.rglob("*.md")):
+        relative_markdown = [
+            markdown.relative_to(package_root)
+            for markdown in sorted(package_root.rglob("*.md"))
+        ]
+        checked_root = package_root
+        if installed:
+            checked_root = install_root / name
+            checked_root.symlink_to(package_root, target_is_directory=True)
+        for relative in relative_markdown:
+            markdown = checked_root / relative
             text = markdown.read_text(encoding="utf-8")
             for raw in re.findall(r"]\(([^)]+)\)", text):
                 target = raw.split("#", 1)[0]
                 if not target or target.startswith("/") or re.match(r"^[a-z]+:", target):
                     continue
                 resolved = (markdown.parent / target).resolve()
-                source = markdown.relative_to(package_root)
-                assert resolved.is_relative_to(package_root), f"{name}/{source}: {raw}"
-                assert resolved.exists(), f"{name}/{source}: {raw}"
+                assert resolved.is_relative_to(package_root), f"{name}/{relative}: {raw}"
+                assert resolved.exists(), f"{name}/{relative}: {raw}"
+            for sibling in re.findall(r"`(science-[a-z0-9-]+)` skill", text):
+                assert sibling in emitted_names, f"{name}/{relative}: {sibling}"
+
+
+def test_duplicate_canonical_skill_source_owner_is_rejected(tmp_path: Path) -> None:
+    repo_root = tmp_path / "repo"
+    shared = repo_root / "skills" / "shared" / "leaf.md"
+    shared.parent.mkdir(parents=True)
+    shared.write_text("# Shared\n", encoding="utf-8")
+    packages = (
+        agent_assets.MethodologyPackage("science-first", shared.parent / "SKILL.md", (shared,)),
+        agent_assets.MethodologyPackage("science-second", shared.parent / "other.md", (shared,)),
+    )
+
+    with pytest.raises(ValueError, match="canonical skill source has multiple owners"):
+        agent_assets._validate_unique_skill_owners(packages, repo_root)
+
+
+def test_missing_generated_skill_dependency_is_rejected() -> None:
+    with pytest.raises(ValueError, match="missing generated skill dependency"):
+        agent_assets._validate_dependencies(
+            {"science-plan-analysis": {"science-study-design"}},
+            {"science-plan-analysis"},
+        )
+
+
+def test_command_skill_references_to_canonical_skills_become_router_loads(
+    generated: GenerationResult,
+) -> None:
+    for command in ("science-plan-analysis", "science-pre-register"):
+        root = generated.skill_paths[command].parent
+        text = (root / "SKILL.md").read_text(encoding="utf-8")
+        assert "science-study-design" in text
+        assert not list(root.rglob("estimator-certification.md"))
 
 
 @pytest.mark.parametrize(
@@ -324,13 +444,14 @@ def test_generate_agent_assets_rewrites_arguments_and_template_paths(
     assert "$ARGUMENTS" not in text
 
 
-def test_generate_agent_assets_emits_all_commands_and_support(
+def test_generate_agent_assets_emits_all_commands_support_and_methodology(
     generated: GenerationResult,
     skills_root: Path,
 ) -> None:
     command_count = len(list((ROOT / "commands").glob("*.md")))
-    assert len(generated.skill_paths) == command_count + 1
-    assert len(list(skills_root.glob("science-*/SKILL.md"))) == command_count + 1
+    generated_count = command_count + len(_methodology_names()) + 1
+    assert len(generated.skill_paths) == generated_count
+    assert len(list(skills_root.glob("science-*/SKILL.md"))) == generated_count
     assert generated.opencode_command_paths == {}
 
 
