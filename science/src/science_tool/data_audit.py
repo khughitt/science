@@ -17,7 +17,9 @@ from pathlib import Path
 from typing import Literal
 
 import yaml
+from science_model.frontmatter import project_config_path
 
+from science_tool.boundary.gitio import visible_paths
 from science_tool.data_root import resolve_data_root
 from science_tool.data_policy import (
     DEFAULT_DATA_POLICY,
@@ -26,6 +28,7 @@ from science_tool.data_policy import (
     classify,
 )
 from science_tool.data_worktree import DEFAULT_DATA_DIRS
+from science_tool.project_config import load_project_config
 
 
 class Quadrant(StrEnum):
@@ -166,16 +169,47 @@ def audit_project(
     policy: DataPolicy = DEFAULT_DATA_POLICY,
     data_dirs: tuple[Path, ...] = DEFAULT_DATA_DIRS,
 ) -> list[Violation]:
+    """Advisory discovery pass. Blocks nothing; enforcement is the boundary checks.
+
+    SCOPE: skip a path that is ignored AND outside every declared boundary root.
+    Ignored tooling noise (.venv, node_modules) is not the audit's business, but
+    a stranded record inside an ignored payload root is exactly what it exists to
+    find -- so blanket-pruning ignored paths would be wrong.
+    """
     tracked = git_tracked_set(project_root)
+    # Deliberately NOT wrapped: treating an invalid declaration as absent would
+    # drop every declared root out of scope and hide the stranded records inside
+    # them -- failing open exactly where the config is broken.
+    config_path = project_config_path(project_root)
+    boundary = load_project_config(project_root).boundary if config_path.exists() else None
+    declared = tuple(r.path for r in boundary.roots) if boundary else ()
+    # `data audit` also supports bare project directories, which have no Git
+    # ignore semantics; in that case every walked path remains in scope.
+    visible = visible_paths(project_root) if (project_root / ".git").exists() else None
+    hydrated_data_dirs = tuple(d for d in data_dirs if (project_root / d).is_symlink())
+
     violations: list[Violation] = []
     for abs_path, rel in _iter_project_files(project_root, data_dirs):
+        posix = rel.as_posix()
+        in_declared_root = any(posix == d or posix.startswith(d + "/") for d in declared)
+        # Git exposes the untracked symlink but not its descendants. Those
+        # descendants are not ignored, and the walk explicitly promises to
+        # report their records.
+        in_hydrated_data_dir = any(rel == d or d in rel.parents for d in hydrated_data_dirs)
+        if (
+            visible is not None
+            and posix not in visible
+            and not in_declared_root
+            and not in_hydrated_data_dir
+        ):
+            continue
         try:
             size = abs_path.stat().st_size
         except OSError:
             continue
         cls = classify(rel, size, policy)
         loc = location(rel, data_dirs)
-        is_tracked = rel.as_posix() in tracked
+        is_tracked = posix in tracked
         v = _violation_for(project_root, rel, cls, loc, is_tracked, data_dirs)
         if v is not None:
             violations.append(v)
