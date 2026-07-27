@@ -927,6 +927,68 @@ def test_allowlist_is_source_scoped(tmp_path: Path):
     assert "inc/.gitignore" in str(findings[0].path)
 
 
+def test_allowlist_rejects_previously_committed_intent_to_add_source(tmp_path: Path):
+    decl = {
+        "roots": [{"path": "data/raw", "class": "payload"}],
+        "unmanaged_allow": [
+            {
+                "source": "inc/.gitignore",
+                "pattern": "vendor/",
+            }
+        ],
+    }
+    repo = _repo(tmp_path, decl)
+    cfg = BoundaryConfig.model_validate(decl)
+    (repo / ".gitignore").write_text(
+        splice_managed_block("", render_managed_block(cfg)),
+        encoding="utf-8",
+    )
+    (repo / "inc").mkdir()
+    (repo / "inc/.gitignore").write_text("vendor/\n", encoding="utf-8")
+    subprocess.run(
+        [
+            "git",
+            "-C",
+            str(repo),
+            "add",
+            ".gitignore",
+            "inc/.gitignore",
+            "science.yaml",
+        ],
+        check=True,
+    )
+    subprocess.run(
+        ["git", "-C", str(repo), "commit", "-qm", "fixture"],
+        check=True,
+    )
+    subprocess.run(
+        ["git", "-C", str(repo), "rm", "--cached", "inc/.gitignore"],
+        check=True,
+    )
+    subprocess.run(
+        ["git", "-C", str(repo), "add", "-N", "inc/.gitignore"],
+        check=True,
+    )
+    tree = subprocess.run(
+        ["git", "-C", str(repo), "write-tree"],
+        check=True,
+        capture_output=True,
+        text=True,
+    ).stdout.strip()
+    names = subprocess.run(
+        ["git", "-C", str(repo), "ls-tree", "-r", "--name-only", "-z", tree],
+        check=True,
+        capture_output=True,
+    ).stdout.split(b"\0")
+    assert b"inc/.gitignore" not in names
+
+    findings = [result for result in _results(repo) if result.rule == "boundary.invalid-declaration"]
+
+    assert len(findings) == 1
+    assert findings[0].severity is Severity.ERROR
+    assert "inc/.gitignore" in findings[0].message
+
+
 def test_unreachable_tracked_fires_on_shadowed_descriptor(tmp_path: Path):
     decl = {
         "roots": [

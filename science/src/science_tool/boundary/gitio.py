@@ -334,28 +334,31 @@ def _index_entries(project_root: Path, *paths: str) -> list[_IndexEntry]:
 
 def _intent_to_add_paths(project_root: Path) -> set[str]:
     """Paths Git omits from a tree because they are only intent-to-add."""
-    common = ("diff", "--cached", "--name-only", "-z", "--no-renames")
-    visible = set(
-        _split_z(
-            _git(
-                project_root,
-                *common,
-                "--ita-visible-in-index",
-                "--",
-            )
-        )
+
+    def name_status(*args: str) -> dict[str, str]:
+        fields = _split_z(_git(project_root, *args))
+        if len(fields) % 2:
+            raise BoundaryGitError("malformed git diff --name-status output")
+        records: dict[str, str] = {}
+        for index in range(0, len(fields), 2):
+            status, path = fields[index : index + 2]
+            if path in records:
+                raise BoundaryGitError(f"git diff --name-status returned duplicate path {path!r}")
+            records[path] = status
+        return records
+
+    common = ("diff", "--cached", "--name-status", "-z", "--no-renames")
+    visible = name_status(
+        *common,
+        "--ita-visible-in-index",
+        "--",
     )
-    durable = set(
-        _split_z(
-            _git(
-                project_root,
-                *common,
-                "--ita-invisible-in-index",
-                "--",
-            )
-        )
+    durable = name_status(
+        *common,
+        "--ita-invisible-in-index",
+        "--",
     )
-    return visible - durable
+    return {path for path in visible.keys() | durable.keys() if visible.get(path) != durable.get(path)}
 
 
 def _check_ignore_records(payload: bytes) -> list[tuple[str, int, str, str]]:

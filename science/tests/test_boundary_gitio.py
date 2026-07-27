@@ -367,6 +367,67 @@ def test_governed_ignore_files_skip_intent_to_add(tmp_path: Path):
     assert unmanaged_rules(repo) == []
 
 
+def test_governed_ignore_files_skip_previously_committed_intent_to_add(tmp_path: Path):
+    """Both ITA views name a former tree path, but only their statuses expose it."""
+    repo = _repo(tmp_path)
+    _write(repo, "inc/.gitignore", "*.parquet\n")
+    subprocess.run(["git", "-C", str(repo), "add", "inc/.gitignore"], check=True)
+    subprocess.run(["git", "-C", str(repo), "commit", "-qm", "fixture"], check=True)
+    subprocess.run(["git", "-C", str(repo), "rm", "--cached", "inc/.gitignore"], check=True)
+    subprocess.run(["git", "-C", str(repo), "add", "-N", "inc/.gitignore"], check=True)
+
+    visible = subprocess.run(
+        [
+            "git",
+            "-C",
+            str(repo),
+            "diff",
+            "--cached",
+            "--name-status",
+            "-z",
+            "--no-renames",
+            "--ita-visible-in-index",
+            "--",
+        ],
+        check=True,
+        capture_output=True,
+    ).stdout
+    invisible = subprocess.run(
+        [
+            "git",
+            "-C",
+            str(repo),
+            "diff",
+            "--cached",
+            "--name-status",
+            "-z",
+            "--no-renames",
+            "--ita-invisible-in-index",
+            "--",
+        ],
+        check=True,
+        capture_output=True,
+    ).stdout
+    assert visible == b"M\0inc/.gitignore\0"
+    assert invisible == b"D\0inc/.gitignore\0"
+
+    tree = subprocess.run(
+        ["git", "-C", str(repo), "write-tree"],
+        check=True,
+        capture_output=True,
+        text=True,
+    ).stdout.strip()
+    names = subprocess.run(
+        ["git", "-C", str(repo), "ls-tree", "-r", "--name-only", "-z", tree],
+        check=True,
+        capture_output=True,
+    ).stdout.split(b"\0")
+    assert b"inc/.gitignore" not in names
+
+    assert governed_ignore_files(repo) == []
+    assert unmanaged_rules(repo) == []
+
+
 def test_governed_ignore_files_skip_a_symlinked_parent(tmp_path: Path):
     """No parent component may redirect governed reads outside the repository."""
     repo = _repo(tmp_path)
