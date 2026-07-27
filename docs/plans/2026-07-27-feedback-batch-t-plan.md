@@ -41,12 +41,15 @@ Slice 0 (D0) already shipped standalone — `a3611ed2`, merged `c6a57e70`.
 2. **An unbounded antecedent selects the whole corpus and looks like success.**
    The first draft's schedule regex matched **34 of 34** natural-systems
    pre-registrations — `thin ` inside "within", `ess` inside "unless". Tokens
-   are word-bounded, and test 8 is the corpus-derived regression.
+   are word-bounded, and test 5 is the corpus-derived regression.
 3. **A heading with no `_template.sections` descriptor breaks the renderer
    unconditionally** — this is what D0 repaired. Task 3 adds both together and
    the D0 guard proves it.
-4. **Deleting a row must not be cheaper than filling it.** Absent, empty, and
-   placeholder are one verdict, with a test each.
+4. **Deleting a row must not be cheaper than filling it, and the coverage must
+   be symmetric.** Absent, empty, and placeholder are one verdict for *both*
+   required rows — a 2×3 parametrized matrix. Testing three states for one row
+   and one state for the other would let an implementation check `Target
+   geometry` for placeholders only while every test stayed green.
 5. **A fixture that writes the reader's own convention cannot falsify the
    reader.** Task 6 certifies against the four real projects, not fixtures, and
    has explicit authority to send the check back to code.
@@ -302,35 +305,47 @@ print('opt-in confirmed')
 Write these RED before any implementation. Model the fixtures on
 `tests/validate/test_checks_prereg_vehicles.py`.
 
-- [ ] **Step 1: Write the tests.** Nine cases, each a frozen pre-registration
+- [ ] **Step 1: Write the tests.** Six test functions, 11 cases (test 2 parametrizes to 6), each a frozen pre-registration
   (`status: committed`) under `entities/pre-registrations/`:
 
 1. `test_schedule_without_cost_gate_warns` — body declares a schedule
    (`burn-in = 5 x ones`, `thinning`, `ESS >= 400`), no `## Cost Gate`.
    Expect one WARN, rule `prereg.schedule-calibration-domain`, message naming
    the absent gate.
-2. `test_cost_gate_with_placeholder_calibration_domain_warns` — gate present,
-   `Calibration domain` cell still `<...>`. **Expect a WARN.** This is the
-   test that makes the check content-level; without it the rule validates a
-   heading.
-3. `test_cost_gate_with_placeholder_target_geometry_warns` — same for the other
-   load-bearing row.
-4. `test_cost_gate_with_absent_calibration_domain_row_warns` — gate present,
-   `Target geometry` filled, and the `Calibration domain` row **deleted
-   entirely**. Expect a WARN. Without this, deleting a row is a cheaper way to
-   pass than filling it.
-5. `test_cost_gate_with_empty_calibration_domain_cell_warns` — the row is
-   present with an empty value cell. Expect a WARN.
-6. `test_filled_cost_gate_passes` — both rows filled with prose. Expect no
+2. `test_unfilled_required_row_warns` — **parametrized over both axes, 2 rows ×
+   3 states = 6 cases.** The contract makes absent, empty, and placeholder one
+   verdict for *both* load-bearing rows, so the tests must cross them. Covering
+   three states for one row and one state for the other lets an implementation
+   check `Target geometry` for placeholders only, and every test still passes.
+
+```python
+@pytest.mark.parametrize("row", ["Target geometry", "Calibration domain"])
+@pytest.mark.parametrize("state", ["absent", "empty", "placeholder"])
+def test_unfilled_required_row_warns(tmp_path: Path, row: str, state: str) -> None:
+    """Both required rows, all three unfilled states, one verdict.
+
+    The other row is FILLED in every case, so the finding can only come from the
+    row under test -- otherwise a check that ignores `Target geometry` entirely
+    would still pass, carried by its sibling.
+    """
+```
+
+   Build the gate with the sibling row filled with real prose, and the row
+   under test deleted (`absent`), present with an empty value cell (`empty`),
+   or carrying `<...>` (`placeholder`). Assert exactly one WARN, rule
+   `prereg.schedule-calibration-domain`, whose message names the row under test
+   — not merely that some row was unfilled.
+
+3. `test_filled_cost_gate_passes` — both rows filled with prose. Expect no
    results.
-7. `test_no_schedule_declared_emits_nothing` — no schedule terms, no gate.
+4. `test_no_schedule_declared_emits_nothing` — no schedule terms, no gate.
    Expect no results — the antecedent must gate the rule.
-8. `test_ordinary_prose_does_not_trip_the_antecedent` — a frozen
+5. `test_ordinary_prose_does_not_trip_the_antecedent` — a frozen
    pre-registration with **no** schedule whose body contains "within",
    "unless", "process", and "assess", and no Cost Gate. Expect no results.
    This is the corpus-derived regression: the unbounded draft matched 34 of 34
    natural-systems pre-registrations on exactly these substrings.
-9. `test_unfrozen_pre_registration_emits_nothing` — schedule declared, no gate,
+6. `test_unfrozen_pre_registration_emits_nothing` — schedule declared, no gate,
    but `status: draft` and no `amendments:`. Expect no results: the obligation
    attaches at freeze, matching `prereg.vehicle-undeclared`.
 
@@ -339,7 +354,7 @@ Write these RED before any implementation. Model the fixtures on
 ```bash
 cd ~/d/science/.worktrees/feedback-batch-t/science && uv run --frozen pytest tests/validate/test_checks_prereg_schedule.py -q
 ```
-Expected: all 9 FAIL on import (`prereg_schedule` does not exist).
+Expected: all 11 FAIL on import (`prereg_schedule` does not exist).
 
 - [ ] **Step 3: Record the red run — do NOT commit yet.** Save the failure
   output as evidence for the results doc. Committing tests that cannot import
