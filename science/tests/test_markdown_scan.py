@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import re
 
+import pytest
+
 from science_tool import markdown_scan
 from science_tool.markdown_scan import iter_prose_matches, prose_spans
 
@@ -145,6 +147,45 @@ def test_markdown_destinations_support_complex_reference_definitions() -> None:
     ]
 
 
+@pytest.mark.parametrize(
+    ("first_destination", "live_destination"),
+    [
+        ("https://example.test", "external-tail.md"),
+        ("/root.md", "root-tail.md"),
+        ("#anchor", "anchor-tail.md"),
+    ],
+)
+def test_invalid_reference_tail_does_not_hide_later_inline_destination(
+    first_destination: str,
+    live_destination: str,
+) -> None:
+    text = (
+        f"[ref]: {first_destination} trailing "
+        f"[live]({live_destination})\n"
+    )
+
+    assert list(markdown_scan.iter_markdown_destinations(text)) == [
+        first_destination,
+        live_destination,
+    ]
+
+
+@pytest.mark.parametrize(
+    "title",
+    [
+        '"title [literal](double-quoted.md)"',
+        "'title [literal](single-quoted.md)'",
+        "(title [literal](parenthesized.md))",
+    ],
+)
+def test_valid_reference_title_hides_link_like_title_text(title: str) -> None:
+    text = f"[ref]: https://example.test {title}   \n"
+
+    assert list(markdown_scan.iter_markdown_destinations(text)) == [
+        "https://example.test",
+    ]
+
+
 def test_markdown_destinations_ignore_escaped_literals_and_code() -> None:
     text = (
         r"\[literal](escaped-literal.md)" "\n"
@@ -175,6 +216,28 @@ def test_markdown_destination_prefix_never_crosses_a_code_mask() -> None:
     assert list(markdown_scan.iter_markdown_destinations(text)) == [
         "../prefix\\",
     ]
+
+
+def test_nested_inner_link_is_found_when_outer_bracket_group_is_not_a_link() -> None:
+    text = "[outer [inner](nested.md) suffix]"
+
+    assert list(markdown_scan.iter_markdown_destinations(text)) == ["nested.md"]
+
+
+class _CountingText(str):
+    indexed_reads = 0
+
+    def __getitem__(self, key: object) -> str:
+        if isinstance(key, int):
+            self.indexed_reads += 1
+        return super().__getitem__(key)  # type: ignore[call-overload]
+
+
+def test_deeply_nested_non_link_brackets_have_linear_scanner_work() -> None:
+    text = _CountingText("[" * 512 + "label" + "]" * 512)
+
+    assert list(markdown_scan.iter_markdown_destinations(text)) == []
+    assert text.indexed_reads <= 4 * len(text)
 
 
 def test_scans_this_repositorys_own_plan_corpus() -> None:

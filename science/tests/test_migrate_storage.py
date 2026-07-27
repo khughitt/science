@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import re
 from contextlib import contextmanager
 from datetime import date
 from pathlib import Path
@@ -304,6 +305,84 @@ def test_plan_refuses_complex_relative_markdown_destinations_without_writing(
         assert destination in reasons
     assert "escaped-literal.md" not in reasons
     assert "escaped-reference.md" not in reasons
+    assert source.read_bytes() == before
+    assert not (tasks_dir / "active").exists()
+    assert not (tasks_dir / "done").exists()
+    assert not (tasks_dir / JOURNAL).exists()
+
+
+@pytest.mark.parametrize(
+    ("first_destination", "live_destination"),
+    [
+        ("https://example.test", "external-tail.md"),
+        ("/root.md", "root-tail.md"),
+        ("#anchor", "anchor-tail.md"),
+    ],
+)
+def test_apply_refuses_live_link_after_invalid_reference_tail_without_writing(
+    tmp_path: Path,
+    first_destination: str,
+    live_destination: str,
+) -> None:
+    migrate = _migrate_module()
+    tasks_dir = tmp_path / "tasks"
+    source = _write_legacy(
+        tasks_dir,
+        [
+            _task(
+                "t001",
+                "Reference tail",
+                description=(
+                    f"[ref]: {first_destination} trailing "
+                    f"[live]({live_destination})"
+                ),
+            )
+        ],
+    )
+    before = source.read_bytes()
+
+    with pytest.raises(
+        migrate.MigrationRefused,
+        match=rf"t001.*relative Markdown destination.*{re.escape(live_destination)}",
+    ) as exc_info:
+        migrate.apply_migration(tasks_dir, today=TODAY)
+
+    assert first_destination not in str(exc_info.value)
+    assert source.read_bytes() == before
+    assert not (tasks_dir / "active").exists()
+    assert not (tasks_dir / "done").exists()
+    assert not (tasks_dir / JOURNAL).exists()
+
+
+@pytest.mark.parametrize(
+    "title",
+    [
+        '"title [literal](double-quoted.md)"',
+        "'title [literal](single-quoted.md)'",
+        "(title [literal](parenthesized.md))",
+    ],
+)
+def test_plan_ignores_link_like_text_in_valid_reference_title_without_writing(
+    tmp_path: Path,
+    title: str,
+) -> None:
+    migrate = _migrate_module()
+    tasks_dir = tmp_path / "tasks"
+    source = _write_legacy(
+        tasks_dir,
+        [
+            _task(
+                "t001",
+                "Reference title",
+                description=f"[ref]: https://example.test {title}",
+            )
+        ],
+    )
+    before = source.read_bytes()
+
+    plan = migrate.plan_migration(tasks_dir, today=TODAY)
+
+    assert plan.refusals == []
     assert source.read_bytes() == before
     assert not (tasks_dir / "active").exists()
     assert not (tasks_dir / "done").exists()

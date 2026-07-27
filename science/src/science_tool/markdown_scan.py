@@ -146,37 +146,72 @@ def iter_prose_matches(pattern: re.Pattern[str], text: str) -> Iterator[re.Match
             yield match
 
 
-def _is_escaped(text: str, index: int) -> bool:
-    backslashes = 0
+def _reference_indent_at_span_start(text: str, index: int) -> int | None:
+    """Leading-space count when ``index`` is still in a reference prefix."""
+    spaces = 0
     cursor = index - 1
-    while cursor >= 0 and text[cursor] == "\\":
-        backslashes += 1
+    while cursor >= 0 and text[cursor] == " ":
+        spaces += 1
+        if spaces > 3:
+            return None
         cursor -= 1
-    return backslashes % 2 == 1
+    return spaces if cursor < 0 or text[cursor] == "\n" else None
+
+
+def _bracket_pairs(
+    text: str,
+    start: int,
+    stop: int,
+) -> tuple[dict[int, int], set[int]]:
+    """Pair live brackets and identify reference-definition label openers.
+
+    One forward pass handles escaping, nesting, and the at-most-three-space
+    reference prefix. Callers can then inspect any opener in O(1), including an
+    inner opener whose enclosing bracket group is not itself a link.
+    """
+    pairs: dict[int, int] = {}
+    reference_openers: set[int] = set()
+    stack: list[int] = []
+    reference_indent = _reference_indent_at_span_start(text, start)
+    escaped = False
+
+    cursor = start
+    while cursor < stop:
+        character = text[cursor]
+        if escaped:
+            escaped = False
+            if character == "\n":
+                reference_indent = 0
+            cursor += 1
+            continue
+
+        if character == "\\":
+            escaped = True
+            reference_indent = None
+        elif character == "\n":
+            reference_indent = 0
+        elif character == "[":
+            if reference_indent is not None:
+                reference_openers.add(cursor)
+            stack.append(cursor)
+            reference_indent = None
+        elif character == "]":
+            if stack:
+                pairs[stack.pop()] = cursor
+            reference_indent = None
+        elif character == " " and reference_indent is not None:
+            reference_indent += 1
+            if reference_indent > 3:
+                reference_indent = None
+        else:
+            reference_indent = None
+        cursor += 1
+    return pairs, reference_openers
 
 
 def _after_escape(index: int, stop: int) -> int:
     """Skip an escape pair without crossing the current prose span."""
     return min(index + 2, stop)
-
-
-def _label_end(text: str, start: int, stop: int) -> int | None:
-    """Return the closing bracket for a balanced, escape-aware label."""
-    depth = 1
-    cursor = start + 1
-    while cursor < stop:
-        character = text[cursor]
-        if character == "\\":
-            cursor = _after_escape(cursor, stop)
-            continue
-        if character == "[":
-            depth += 1
-        elif character == "]":
-            depth -= 1
-            if depth == 0:
-                return cursor
-        cursor += 1
-    return None
 
 
 def _angle_destination(
@@ -199,17 +234,10 @@ def _angle_destination(
     return text[start + 1 : cursor].strip(), cursor, False
 
 
-def _inline_close_after_destination(text: str, start: int, stop: int) -> int | None:
-    """Return the offset after an outer ``)`` following whitespace/title."""
+def _title_end(text: str, start: int, stop: int) -> int | None:
+    """Offset after one syntactically closed supported Markdown title."""
+    delimiter = text[start]
     cursor = start
-    while cursor < stop and text[cursor].isspace():
-        cursor += 1
-    if cursor >= stop:
-        return None
-    if text[cursor] == ")":
-        return cursor + 1
-
-    delimiter = text[cursor]
     if delimiter in {'"', "'"}:
         cursor += 1
         while cursor < stop:
@@ -241,10 +269,51 @@ def _inline_close_after_destination(text: str, start: int, stop: int) -> int | N
             return None
     else:
         return None
+    return cursor
 
+
+def _inline_close_after_destination(text: str, start: int, stop: int) -> int | None:
+    """Return the offset after an outer ``)`` following whitespace/title."""
+    cursor = start
+    while cursor < stop and text[cursor].isspace():
+        cursor += 1
+    if cursor >= stop:
+        return None
+    if text[cursor] == ")":
+        return cursor + 1
+    if cursor == start:
+        return None
+
+    title_end = _title_end(text, cursor, stop)
+    if title_end is None:
+        return None
+    cursor = title_end
     while cursor < stop and text[cursor].isspace():
         cursor += 1
     return cursor + 1 if cursor < stop and text[cursor] == ")" else None
+
+
+def _reference_resume_offset(
+    text: str,
+    destination_end: int,
+    line_end: int,
+) -> int:
+    """Skip only whitespace or one valid attached title after a destination."""
+    cursor = destination_end
+    while cursor < line_end and text[cursor] in " \t":
+        cursor += 1
+    if cursor == line_end:
+        return line_end
+    if cursor == destination_end:
+        return destination_end
+
+    title_end = _title_end(text, cursor, line_end)
+    if title_end is None:
+        return destination_end
+    cursor = title_end
+    while cursor < line_end and text[cursor] in " \t":
+        cursor += 1
+    return line_end if cursor == line_end else destination_end
 
 
 def _inline_destination(
@@ -317,12 +386,19 @@ def _reference_destination(
     if line_end == -1:
         line_end = stop
     if text[cursor] == "<":
-        destination, _after_destination, _complete = _angle_destination(
+        destination, after_destination, complete = _angle_destination(
             text,
             cursor,
             line_end,
         )
-        return (destination, line_end) if destination else None
+        if not destination:
+            return None
+        next_cursor = (
+            _reference_resume_offset(text, after_destination, line_end)
+            if complete
+            else after_destination
+        )
+        return destination, next_cursor
 
     destination_start = cursor
     depth = 0
@@ -345,19 +421,18 @@ def _reference_destination(
             break
         cursor += 1
     destination = text[destination_start:cursor]
-    return (destination, line_end) if destination else None
-
-
-def _is_reference_definition_start(text: str, index: int) -> bool:
-    line_start = text.rfind("\n", 0, index) + 1
-    prefix = text[line_start:index]
-    return len(prefix) <= 3 and not prefix.strip(" ")
+    if not destination:
+        return None
+    return destination, _reference_resume_offset(text, cursor, line_end)
 
 
 def iter_markdown_destinations(text: str) -> Iterator[str]:
     """Yield source destinations from live Markdown prose.
 
     This is an intentionally small CommonMark-oriented scanner, not a renderer.
+    It pairs escaped/nested brackets once per prose span, then scans forward
+    without rescanning label suffixes: within each prose span, destination
+    scanning work is linear in the span length plus emitted destination slices.
     It recognises inline links and images with balanced, escaped, or multiline
     labels; reference definitions indented by at most three spaces; angle
     destinations; and ordinary destinations with escaped or balanced
@@ -365,19 +440,21 @@ def iter_markdown_destinations(text: str) -> Iterator[str]:
     literal and therefore ignored.
 
     Reference uses are not resolved because their definition is scanned
-    directly. Optional titles attached to a destination are consumed but not
-    validated; continuation-line reference titles, autolinks, and raw HTML are
-    outside this interface. Malformed live syntax yields any safely readable
-    destination prefix so callers can fail closed.
+    directly. A reference tail is consumed only when it is whitespace or one
+    syntactically closed double-quoted, single-quoted, or parenthesized title
+    followed by whitespace. Continuation-line reference titles, autolinks, and
+    raw HTML are outside this interface. Malformed live syntax yields any safely
+    readable destination prefix so callers can fail closed.
     """
     for span_start, span_stop in prose_spans(text):
+        bracket_pairs, reference_openers = _bracket_pairs(
+            text,
+            span_start,
+            span_stop,
+        )
         cursor = span_start
         while cursor < span_stop:
-            if text[cursor] != "[" or _is_escaped(text, cursor):
-                cursor += 1
-                continue
-
-            end = _label_end(text, cursor, span_stop)
+            end = bracket_pairs.get(cursor)
             if end is None:
                 cursor += 1
                 continue
@@ -385,7 +462,7 @@ def iter_markdown_destinations(text: str) -> Iterator[str]:
             after_label = end + 1
             parsed: tuple[str, int] | None = None
             if (
-                _is_reference_definition_start(text, cursor)
+                cursor in reference_openers
                 and after_label < span_stop
                 and text[after_label] == ":"
             ):
