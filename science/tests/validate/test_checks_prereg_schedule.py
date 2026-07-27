@@ -81,7 +81,7 @@ def _cost_gate(
     calibration_domain: str | None = "Calibrated on sparse graphs of this scale.",
 ) -> str:
     rows = [
-        "## Cost Gate",
+        "## Cost Gate (execution geometry)",
         "",
         "| Field | Declaration | Rationale |",
         "|---|---|---|",
@@ -141,7 +141,7 @@ def test_unfilled_required_row_warns(project: Path, row: str, state: str) -> Non
     assert state in result.message
 
 
-def test_filled_cost_gate_passes(project: Path) -> None:
+def test_filled_canonical_cost_gate_passes(project: Path) -> None:
     _write_prereg(project, body=f"{_SCHEDULE}\n{_cost_gate()}")
 
     assert _results(project) == []

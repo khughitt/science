@@ -27,7 +27,10 @@ from science_tool.validate.result import Result, Severity
 # schedule. It remains a PROSE HEURISTIC, which is why the rule is WARN and
 # ungated.
 _SCHEDULE_TOKENS = re.compile(r"\bburn[- ]in\b|\bthinning\b|\bR[_-]?hat\b|\bESS\b")
-_COST_GATE_HEADING = re.compile(r"^##[ \t]+Cost Gate[ \t]*$", re.MULTILINE)
+_COST_GATE_HEADING = re.compile(
+    r"^## Cost Gate \(execution geometry\)[ \t]*$",
+    re.MULTILINE,
+)
 _NEXT_SECTION = re.compile(r"^##[ \t]+", re.MULTILINE)
 _PLACEHOLDER = re.compile(r"^<.*>$")
 _REQUIRED_ROWS = ("Target geometry", "Calibration domain")
